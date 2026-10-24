@@ -100,6 +100,12 @@ def test_aligns_lines_within_150_ms(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     for line, truth in zip(lines, truths):
         assert abs(line.start_ms - truth) <= TOLERANCE_MS, f"{line.text}: {line.start_ms} vs {truth}"
         assert line.confidence > 0.3
+    # Word level: no word reaches into the next line, and none is implausibly long (a swallowed gap).
+    for line, following in zip(lines, lines[1:]):
+        assert line.end_ms <= following.start_ms, f"{line.text!r} ends after {following.text!r} starts"
+    for line in lines:
+        for w in line.words:
+            assert w.end_ms - w.start_ms <= 1_500, f"{w.text!r} lasts {w.end_ms - w.start_ms} ms"
 
 
 def test_chunked_model_matches_the_whole_audio() -> None:

@@ -33,7 +33,17 @@ def test_a_word_that_absorbed_a_gap_starts_where_the_voice_starts() -> None:
     refined = refine_words(words, audio, SR)
     assert refined[0] == words[0]  # a normal word is left alone
     assert refined[1]["start"] == pytest.approx(3.0, abs=0.05)
-    assert refined[1]["end"] == 3.42 and refined[1]["score"] == 0.6 and refined[1]["word"] == "Hope"
+    assert refined[1]["end"] == pytest.approx(3.42, abs=0.05)
+    assert refined[1]["score"] == 0.6 and refined[1]["word"] == "Hope"
+
+
+def test_a_last_word_stretched_into_the_next_line_ends_where_its_voice_ends() -> None:
+    # "arrive" is sung 3.0-3.5 s; the aligner stretched it to 6.54 s, where the next line starts (6.5 s).
+    audio = _voice([(2.0, 3.5), (6.5, 7.5)], total_s=8.0, blips=[4.0, 4.5, 5.0, 5.5, 6.0])
+    word = {"word": "arrive", "start": 3.0, "end": 6.54}
+    refined = refine_words([word], audio, SR)[0]
+    assert refined["start"] == pytest.approx(3.0, abs=0.01)  # never earlier than aligned
+    assert refined["end"] == pytest.approx(3.5, abs=0.06)
 
 
 def test_a_held_note_keeps_its_length() -> None:
