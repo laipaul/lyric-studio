@@ -1,7 +1,7 @@
 // Real renders of the LyricVideo composition (headless Chrome via Remotion). Clips are solid colours
 // so every frame's content can be checked exactly.
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -161,6 +161,7 @@ describe("LyricVideo render", () => {
       },
       media: { workspaceDir: dir },
       outFile: out,
+      videoCacheBytes: 256 * 2 ** 20, // capped clip cache (as pnpm make sets it)
     });
     const probe = JSON.parse(
       execFileSync(ffprobeBin(), ["-v", "error", "-print_format", "json", "-show_streams", "-show_format", out]).toString(),
@@ -191,6 +192,20 @@ describe("LyricVideo render", () => {
     expect(rms(0, 0.05)).toBeLessThan(middle * 0.3);
     expect(rms(2.95, 3.0)).toBeLessThan(middle * 0.3);
   }, 300_000);
+
+  it("a render that makes no progress is stopped by the watchdog (no partial file left)", async () => {
+    const out = path.join(dir, "stalled.mp4");
+    await expect(
+      renderLyricVideo({
+        props: { ...baseProps({}), shots: [shot({ src: "red.mp4", start: 0, duration: 90 })], cutFrames: [] },
+        media: { workspaceDir: dir },
+        outFile: out,
+        stallTimeoutMs: 1, // no progress within 1 ms: stopped at once
+      }),
+    ).rejects.toThrow(/made no progress .* and was stopped/);
+    expect(existsSync(out)).toBe(false);
+    expect(existsSync(`${out}.part.mp4`)).toBe(false);
+  });
 
   it("cuts on exactly the frames from getCutPoints", async () => {
     const beats = grid(120, 16, 500); // downbeats at 0.5 s, 2.5 s, ...

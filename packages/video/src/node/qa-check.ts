@@ -39,7 +39,7 @@ export function detectBadFrames(file: string, durationSeconds: number): Promise<
     execFile(
       ffmpegBin(),
       ["-hide_banner", "-nostats", "-v", "info", "-i", file, "-an", "-vf", filter, "-f", "null", "-"],
-      { windowsHide: true, maxBuffer: 64 * 1024 * 1024 },
+      { windowsHide: true, maxBuffer: 64 * 1024 * 1024, timeout: 10 * 60_000 }, // never wait forever
       (error, _out, stderr) => (error ? reject(new Error(`ffmpeg frame check failed: ${stderr.trim() || error.message}`)) : resolve(parseFrameDetect(stderr, durationSeconds))),
     ),
   );

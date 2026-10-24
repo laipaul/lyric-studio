@@ -3,7 +3,7 @@
 // (stored, never rewritten) -> section -> collection import -> cuts -> N variations rendered in
 // parallel -> QA -> manifest.
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -28,7 +28,7 @@ import { VIDEO } from "../config";
 import { getCutPoints, type CutRate, type Energy } from "../cuts";
 import { matchPinClips, parsePins } from "../pins";
 import type { LyricVideoProps } from "../props";
-import { formatQa, LOW_CONFIDENCE, runQa, type QaReport } from "../qa";
+import { formatQa, LOW_CONFIDENCE, qaReasons, runQa, type QaReport } from "../qa";
 import { autoSection, clockText, finishedBeforeStart, type SectionLine } from "../section";
 import type { ClipOrder } from "../shots";
 import { analyzeSong } from "./analysis";
@@ -39,7 +39,7 @@ import { resolveMediaPath, type MediaRoots } from "./media";
 import { tooLongLines } from "./measure";
 import { loadStyles, lyricLineNumbers, parseSection, snapToDownbeat, songMedia, type StyleFaces } from "./prepare";
 import { detectBadFrames, measureLyrics } from "./qa-check";
-import { getBundle, renderLyricVideo } from "./render";
+import { getBundle, renderLyricVideo, type RenderOptions } from "./render";
 import { ensureAlignment, findOrCreateSongProject, matchReport, type Alignment, type AlignRunner } from "./song-project";
 
 export type MakeOptions = {
@@ -63,13 +63,17 @@ export type MakeOptions = {
   pins?: string;
   parallel?: number;
   frameCheck?: boolean; // default true
+  resume?: boolean; // render only the missing or failed variations of the latest export folder
   workspaceDir?: string;
   command?: string;
   now?: Date;
   align?: AlignRunner;
+  renderer?: (options: RenderOptions) => Promise<string>; // tests: a stand-in for renderLyricVideo
+  platform?: NodeJS.Platform;
   log?: (message: string) => void;
   onRenderProgress?: (state: RenderState[]) => void;
   onReady?: (info: MakePlan) => void; // everything decided, rendering starts
+  onRetry?: (name: string, error: string, concurrency: number) => void;
 };
 
 export type MakePlan = {
@@ -83,6 +87,7 @@ export type MakePlan = {
   cuts: number;
   limit: RenderLimit;
   exportDir: string;
+  resume: { done: number; toRender: string[] } | null;
   warnings: string[];
   notes: string[];
 };
@@ -97,7 +102,10 @@ export type VariationResult = VariationSpec & {
   qaFile: string;
   durationS: number;
   qa: QaReport | null;
+  qaSummary: string; // "PASS", "WARN (reasons)" or "" when it failed
   error: string | null;
+  kept: boolean; // --resume: already done in the export folder, not rendered again
+  retried: boolean; // the first attempt failed and it was rendered again with less memory
 };
 
 export type MakeResult = {
@@ -125,24 +133,72 @@ export function planVariations(count: number): VariationSpec[] {
   });
 }
 
-export type RenderLimit = { parallel: number; concurrency: number; explanation: string };
+export type RenderLimit = { parallel: number; concurrency: number; videoCacheBytes: number; estimateGB: number; explanation: string };
+
+// Memory model for one render: each browser tab drawing frames at 1080x1920 takes about 0.75 GB, the
+// rest (FFmpeg encoding, the clip decoder, Node) about 1.5 GB, plus the cache of decoded clip frames,
+// which is capped (Remotion's default is half of the free memory per render, which is what ran a
+// 32 GB Windows PC out of memory with two renders at once). Everything together stays under 40% of
+// the PC's memory.
+export const RENDER_MEMORY = { perTabGB: 0.75, perRenderGB: 1.5, shareOfMemory: 0.4, maxCacheGB: 2, minCacheGB: 0.25 } as const;
 
 // How many videos to render at the same time. One Remotion render already uses several CPU threads
-// (one browser tab per thread, "concurrency"), so a second render in parallel helps keep the CPU busy
-// between frames and while FFmpeg encodes; more than two only adds memory. Each tab at 1080x1920
-// needs about 0.5 GB, plus about 1 GB per render for FFmpeg and the video decoder; the total is kept
-// under half of the PC's memory.
-export function renderLimit(cpus = os.cpus().length, memoryGB = os.totalmem() / 2 ** 30, requested?: number): RenderLimit {
-  const recommended = cpus >= 8 && memoryGB >= 16 ? 2 : 1;
-  const parallel = Math.max(1, requested ?? recommended);
+// (one browser tab per thread, "concurrency"). On Windows one video at a time (renders in parallel
+// ran out of memory there); elsewhere two on 8+ threads and 16+ GB.
+export function renderLimit(
+  options: { cpus?: number; memoryGB?: number; platform?: NodeJS.Platform; requested?: number } = {},
+): RenderLimit {
+  const cpus = options.cpus ?? os.cpus().length;
+  const memoryGB = options.memoryGB ?? os.totalmem() / 2 ** 30;
+  const platform = options.platform ?? process.platform;
+  const m = RENDER_MEMORY;
+  const recommended = platform === "win32" ? 1 : cpus >= 8 && memoryGB >= 16 ? 2 : 1;
+  const parallel = Math.max(1, options.requested ?? recommended);
+  const budget = memoryGB * m.shareOfMemory;
+  let cacheGB = Math.min(m.maxCacheGB, Math.max(m.minCacheGB, (budget / parallel) * 0.25));
   let concurrency = Math.max(1, Math.min(8, Math.floor(cpus / parallel)));
-  const estimate = () => parallel * (concurrency * 0.5 + 1);
-  while (concurrency > 1 && estimate() > memoryGB / 2) concurrency -= 1;
+  const estimate = () => parallel * (concurrency * m.perTabGB + m.perRenderGB + cacheGB);
+  while (concurrency > 1 && estimate() > budget) concurrency -= 1;
+  while (cacheGB > m.minCacheGB && estimate() > budget) cacheGB = Math.max(m.minCacheGB, cacheGB / 2);
+  const why = platform === "win32" && !options.requested ? "; one at a time on Windows" : "";
   const explanation =
-    `${parallel} video${parallel > 1 ? "s" : ""} at a time, ${concurrency} frame${concurrency > 1 ? "s" : ""} in parallel each ` +
-    `(${cpus} CPU threads, ${Math.round(memoryGB)} GB memory; about ${Math.round(estimate())} GB used at most)` +
-    (requested ? (requested > recommended ? `; --parallel ${requested} is above the recommended ${recommended}` : "") : "");
-  return { parallel, concurrency, explanation };
+    `${parallel} video${parallel > 1 ? "s" : ""} at a time, ${concurrency} frame${concurrency > 1 ? "s" : ""} in parallel each, ` +
+    `clip cache ${cacheGB.toFixed(1)} GB (${cpus} CPU threads, ${Math.round(memoryGB)} GB memory; about ${estimate().toFixed(1)} GB used at most${why})` +
+    (options.requested && options.requested > recommended ? `; --parallel ${options.requested} is above the recommended ${recommended}` : "") +
+    (estimate() > budget ? "; WARNING: this may not fit in memory" : "");
+  return { parallel, concurrency, videoCacheBytes: Math.round(cacheGB * 2 ** 30), estimateGB: estimate(), explanation };
+}
+
+// A retry after a failed render uses half the browser tabs and half the clip cache.
+export function retryLimit(limit: RenderLimit): Pick<RenderLimit, "concurrency" | "videoCacheBytes"> {
+  return {
+    concurrency: Math.max(1, Math.floor(limit.concurrency / 2)),
+    videoCacheBytes: Math.max(Math.round(RENDER_MEMORY.minCacheGB * 2 ** 30), Math.round(limit.videoCacheBytes / 2)),
+  };
+}
+
+// The newest export folder of a project (folder names sort by date and time), or null.
+export function latestExportFolder(ws: Workspace, projectId: string): string | null {
+  const base = absPath(ws, `projects/${projectId}/exports`);
+  if (!existsSync(base)) return null;
+  const dirs = readdirSync(base, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && /^\d{4}-\d{2}-\d{2}_\d{4}(-\d+)?$/.test(d.name))
+    .map((d) => d.name)
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  return dirs.length ? path.join(base, dirs[dirs.length - 1]) : null;
+}
+
+// A variation is finished when its video, manifest and QA report are all there.
+export function variationDone(dir: string, name: string): boolean {
+  return ["mp4", "manifest.json", "qa.txt"].every((ext) => existsSync(path.join(dir, `${name}.${ext}`)));
+}
+
+// "Summary: WARN - A; B" in a QA report -> "WARN (a, b)".
+export function qaSummaryFromFile(file: string): string {
+  const line = readFileSync(file, "utf8").split(/\r?\n/).find((l) => l.startsWith("Summary: ")) ?? "";
+  const m = /^Summary: (PASS|WARN)(?: - (.*))?$/.exec(line.trim());
+  if (!m) return "?";
+  return m[1] === "PASS" ? "PASS" : `WARN (${(m[2] ?? "").split("; ").map((r) => r.toLowerCase()).join(", ")})`;
 }
 
 // WORKSPACE_DIR\projects\<id>\exports\<YYYY-MM-DD_HHmm>\ (with -2, -3, ... if that minute exists).
@@ -300,9 +356,28 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       }
     }
 
-    const exportDir = exportFolder(ws, project.id, now);
-    const limit = renderLimit(undefined, undefined, options.parallel);
-    const specs = planVariations(count);
+    const allSpecs = planVariations(count);
+    let exportDir: string;
+    let specs = allSpecs;
+    if (options.resume) {
+      const latest = latestExportFolder(ws, project.id);
+      if (!latest) throw new Error("--resume: this project has no earlier export folder; run without --resume.");
+      exportDir = latest;
+      const changed = resumeMismatch(exportDir, allSpecs, {
+        section: chosen,
+        lrcHash: alignment.lrcHash,
+        leadMs,
+        lyricsOffsetMs,
+        cutFrames: plan.cuts.map((c) => c.frame - plan.start_frame),
+        clipHashes: new Set(collection.clips.map((c) => c.hash)),
+        settings: { cut_rate: options.rate ?? "1x", energy: options.energy ?? "medium", font: options.font ?? null, font_hook: options.fontHook ?? null },
+      });
+      if (changed) throw new Error(`--resume: ${changed} since the run in ${exportDir}; run without --resume to make a new set.`);
+      specs = allSpecs.filter((s) => !variationDone(exportDir, s.name));
+    } else {
+      exportDir = exportFolder(ws, project.id, now);
+    }
+    const limit = renderLimit({ platform: options.platform, requested: options.parallel });
     const tool = toolInfo();
     options.onReady?.({
       project: { title: project.title, created: sp.created },
@@ -329,12 +404,20 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       cuts: plan.cuts.length,
       limit,
       exportDir,
+      resume: options.resume ? { done: allSpecs.length - specs.length, toRender: specs.map((s) => s.name) } : null,
       warnings: [...warnings],
       notes,
     });
     const states: RenderState[] = specs.map((s) => ({ name: s.name, status: "queued", progress: 0 }));
     const report = () => options.onRenderProgress?.(states.map((s) => ({ ...s })));
-    const results: VariationResult[] = [];
+    const results: VariationResult[] = allSpecs
+      .filter((spec) => !specs.includes(spec))
+      .map((spec) => {
+        const manifestFile = path.join(exportDir, `${spec.name}.manifest.json`);
+        const durationS = (JSON.parse(readFileSync(manifestFile, "utf8")) as Manifest).output.duration_s;
+        const qaFile = path.join(exportDir, `${spec.name}.qa.txt`);
+        return { ...spec, file: path.join(exportDir, `${spec.name}.mp4`), manifestFile, qaFile, durationS, qa: null, qaSummary: qaSummaryFromFile(qaFile), error: null, kept: true, retried: false };
+      });
 
     const jobs = specs.map((spec) => {
       const composed = composeProps(base, { seed: spec.seed, style: spec.style, order: spec.order, leadMs, lyricsOffsetMs, cinematicBars: spec.bars });
@@ -363,7 +446,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       ws.db.update(renderJobTable).set(values).where(eq(renderJobTable.id, id)).run();
 
     await runPool(jobs, limit.parallel, async ({ spec, props, jobId }) => {
-      const state = states[spec.index - 1];
+      const state = states.find((st) => st.name === spec.name)!;
       const file = path.join(exportDir, `${spec.name}.mp4`);
       const result: VariationResult = {
         ...spec,
@@ -372,20 +455,24 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
         qaFile: path.join(exportDir, `${spec.name}.qa.txt`),
         durationS: props.durationInFrames / VIDEO.fps,
         qa: null,
+        qaSummary: "",
         error: null,
+        kept: false,
+        retried: false,
       };
       results.push(result);
       state.status = "rendering";
       report();
       updateJob(jobId, { status: "rendering", started_at: new Date(), progress: 0 });
       let lastSaved = 0;
-      try {
-        await getBundle(log); // built once, shared by the parallel renders
-        await renderLyricVideo({
+      const render = options.renderer ?? renderLyricVideo;
+      const attempt = (settings: Pick<RenderLimit, "concurrency" | "videoCacheBytes">) =>
+        render({
           props,
           media,
           outFile: file,
-          concurrency: limit.concurrency,
+          concurrency: settings.concurrency,
+          videoCacheBytes: settings.videoCacheBytes,
           onProgress: (p) => {
             state.progress = p;
             report();
@@ -395,10 +482,28 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
             }
           },
         });
+      try {
+        if (!options.renderer) await getBundle(log); // built once, shared by the parallel renders
+        try {
+          await attempt(limit);
+        } catch (first) {
+          // One retry with less memory; a second failure is reported and the others carry on.
+          const lower = retryLimit(limit);
+          result.retried = true;
+          options.onRetry?.(spec.name, (first as Error).message, lower.concurrency);
+          state.progress = 0;
+          lastSaved = 0;
+          try {
+            await attempt(lower);
+          } catch (second) {
+            throw new Error(`${(second as Error).message} (also after a retry with ${lower.concurrency} frame${lower.concurrency > 1 ? "s" : ""} in parallel)`);
+          }
+        }
         state.status = "checking";
         report();
         const qa = await checkVariation(spec, props, file, { lines, visible, numbers, reports, styles, collection, frameCheck: options.frameCheck ?? true });
         result.qa = qa;
+        result.qaSummary = qa.status === "PASS" ? "PASS" : `WARN (${qaReasons(qa)})`;
         writeFileSync(result.qaFile, formatQa(qa, qaTitle(spec, project.title, chosen)));
         writeManifest(
           result.manifestFile,
@@ -595,4 +700,35 @@ function buildManifest(c: {
     output: { file: path.basename(c.file), duration_s: props.durationInFrames / VIDEO.fps, qa: c.qa.status },
     warnings: c.warnings,
   };
+}
+
+// --resume: what changed since the earlier run in `dir` (compared with one of its manifests), or null.
+export function resumeMismatch(
+  dir: string,
+  specs: readonly VariationSpec[],
+  now: {
+    section: { start_ms: number; end_ms: number };
+    lrcHash: string;
+    leadMs: number;
+    lyricsOffsetMs: number;
+    cutFrames: number[];
+    clipHashes: Set<string>;
+    settings: Record<string, unknown>;
+  },
+): string | null {
+  const existing = specs.map((s) => path.join(dir, `${s.name}.manifest.json`)).find((f) => existsSync(f));
+  if (!existing) return null; // nothing finished yet: nothing to compare with
+  const m = JSON.parse(readFileSync(existing, "utf8")) as Manifest;
+  if (m.section.start_ms !== now.section.start_ms || m.section.end_ms !== now.section.end_ms) {
+    return `the section changed (${clockText(m.section.start_ms)}-${clockText(m.section.end_ms)} then, ${clockText(now.section.start_ms)}-${clockText(now.section.end_ms)} now)`;
+  }
+  if (m.lyrics.lrc_sha256 !== now.lrcHash) return "the lyric timings changed";
+  if (m.lyrics.lead_ms !== now.leadMs || m.lyrics.lyrics_offset_ms !== now.lyricsOffsetMs) return "the lyric lead or offset changed";
+  if (JSON.stringify(m.cuts.frames) !== JSON.stringify(now.cutFrames)) return "the cuts changed";
+  for (const key of Object.keys(now.settings)) {
+    if (JSON.stringify(m.settings[key] ?? null) !== JSON.stringify(now.settings[key])) return `the setting ${key} changed`;
+  }
+  const gone = m.clips.filter((c) => !now.clipHashes.has(c.sha256)).map((c) => c.name);
+  if (gone.length) return `clip(s) changed or removed: ${gone.join(", ")}`;
+  return null;
 }

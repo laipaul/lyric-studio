@@ -1,12 +1,12 @@
 // pnpm make <song> <lyrics.txt> --collection <name> [--collection-path <folder>] [--variations 6]
 //   [--section auto|full|0:11-1:10] [--hint <taps.lrc>] [--realign] [--lrc <file.lrc>] [--lang en|fr]
 //   [--rate 1x] [--energy medium] [--lead 0.25] [--lyrics-offset 0] [--downbeat-offset N]
-//   [--font "Family"] [--font-hook "Family"] [--pins pins.txt] [--parallel N] [--no-open]
+//   [--font "Family"] [--font-hook "Family"] [--pins pins.txt] [--parallel N] [--resume] [--no-open]
 // One command from a song to N finished variations with manifests and QA reports.
 import path from "node:path";
 import { parseArgs } from "node:util";
 
-import { clockText, qaReasons, type CutRate, type Energy } from "../src";
+import { clockText, type CutRate, type Energy } from "../src";
 import { makeVideos, openFolder, type RenderState } from "../src/node";
 
 function fail(message: string): never {
@@ -38,6 +38,7 @@ try {
       parallel: { type: "string" },
       "no-open": { type: "boolean", default: false },
       "no-frame-check": { type: "boolean", default: false },
+      resume: { type: "boolean", default: false },
     },
   });
 } catch (error) {
@@ -109,6 +110,12 @@ try {
     pins: resolve(values.pins),
     parallel,
     frameCheck: !values["no-frame-check"],
+    resume: values.resume,
+    onRetry: (name, error, concurrency) => {
+      process.stdout.write("\n");
+      console.log(`  ${name} failed (${error.split("\n")[0]}); retrying once with ${concurrency} frame${concurrency > 1 ? "s" : ""} in parallel and a smaller clip cache`);
+      lastLine = "";
+    },
     command: `pnpm make ${process.argv.slice(2).map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ")}`,
     log,
     onReady: (p) => {
@@ -128,6 +135,12 @@ try {
       );
       console.log(`Cuts:      ${p.cuts} cuts, rate ${rate}, energy ${energy}`);
       console.log(`Rendering: ${p.limit.explanation}`);
+      if (p.resume) {
+        console.log(
+          `Resume:    ${p.exportDir}: ${p.resume.done} already done` +
+            (p.resume.toRender.length ? `, rendering ${p.resume.toRender.join(", ")}` : ", nothing left to render"),
+        );
+      }
       for (const n of p.notes) console.log(`Note:      ${n}`);
       for (const w of p.warnings) console.log(`WARNING: ${w}`);
       console.log("");
@@ -145,7 +158,7 @@ const rows = result.variations.map((v) => [
   v.order === "story" ? "story" : `shuffle (seed ${v.seed})`,
   v.bars ? "yes" : "-",
   `${v.durationS.toFixed(1)} s`,
-  v.error ? `FAILED: ${v.error}` : v.qa!.status === "PASS" ? "PASS" : `WARN (${qaReasons(v.qa!)})`,
+  v.error ? `FAILED: ${v.error}` : `${v.qaSummary}${v.kept ? "   (kept from the earlier run)" : ""}${v.retried ? "   (rendered on the retry)" : ""}`,
 ]);
 const header = ["Variation", "Style", "Order", "Bars", "Duration", "QA"];
 const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => (i < 5 ? r[i].length : 0))));
@@ -156,4 +169,10 @@ console.log(`Done in ${((Date.now() - started) / 1000).toFixed(0)} s`);
 console.log(`Output:    ${result.exportDir}`);
 console.log("           v1.mp4 ... with v1.manifest.json (rerender with: pnpm rerender <manifest>) and v1.qa.txt");
 if (!values["no-open"]) openFolder(result.exportDir);
-if (result.variations.some((v) => v.error)) process.exit(1);
+const failed = result.variations.filter((v) => v.error);
+if (failed.length) {
+  console.log("");
+  console.log(`${failed.length} variation(s) failed: ${failed.map((v) => v.name).join(", ")}. The others are finished.`);
+  console.log("Render only the missing ones with the same command plus --resume (add --parallel 1 if it was higher).");
+  process.exit(1);
+}

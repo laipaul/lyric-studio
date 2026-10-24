@@ -236,8 +236,11 @@ What it does, in order:
 6. **Variations** (`--variations 6`): v1 in story order, v2… shuffled with different seeds; Simple
    and Bold alternate; cinematic bars on every other one (v2, v4, v6). `--font` / `--font-hook`
    apply to all.
-7. **Rendering**: 2 videos at a time on a PC like yours (see the `Rendering:` line it prints;
-   `--parallel N` to change).
+7. **Rendering**: on Windows one video at a time (two at once ran out of memory), using up to 8
+   frames in parallel and a capped clip cache, staying under 40% of the PC's memory (see the
+   `Rendering:` line it prints; `--parallel N` to change). A video that fails is tried once more with
+   half the frames in parallel; a render with no progress for 5 minutes is stopped. The other videos
+   always carry on, and failures are listed at the end.
 8. **Output**: `workspace\projects\<id>\exports\<YYYY-MM-DD_HHmm>\` with `v1.mp4 … v6.mp4`, and for
    each a `v1.manifest.json` (everything needed to make the same video again) and `v1.qa.txt`. At
    the end a table (variation, style, order, duration, QA) is printed and the folder opens in
@@ -261,7 +264,8 @@ changed since.
 | `--lrc <file.lrc>` | | use this LRC instead of aligning (stored as-is) |
 | `--lyrics-offset S` | `0` | move all lines (seconds); saved to the project, the LRC stays unchanged |
 | `--lead`, `--rate`, `--energy`, `--font`, `--font-hook`, `--pins`, `--downbeat-offset` | | as for `pnpm render:test` |
-| `--parallel N` | `2` (PC dependent) | videos rendered at the same time |
+| `--parallel N` | `1` on Windows | videos rendered at the same time |
+| `--resume` | | in the latest export folder, render only the videos that are missing or failed (refused if the section, lyrics, cuts, settings or clips changed since) |
 | `--no-open` | | do not open the folder at the end |
 
 ## Test render (`pnpm render:test`)

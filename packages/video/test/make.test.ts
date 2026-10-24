@@ -15,12 +15,18 @@ import {
   makeVideos,
   planVariations,
   readManifest,
+  latestExportFolder,
+  qaSummaryFromFile,
   renderLimit,
   rerender,
+  retryLimit,
+  watchProgress,
   sha256File,
   syncCollection,
   type AlignRunner,
+  type MakeOptions,
   type MakeResult,
+  type RenderOptions,
 } from "../src/node";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-make-"));
@@ -190,13 +196,48 @@ describe("variations and render limit", () => {
     ]);
   });
 
-  it("2 renders at a time on a 24-thread / 32 GB PC, 1 on a small one, and memory stays under half", () => {
-    expect(renderLimit(24, 32)).toMatchObject({ parallel: 2, concurrency: 8 });
-    expect(renderLimit(22, 32)).toMatchObject({ parallel: 2, concurrency: 8 });
-    expect(renderLimit(4, 8)).toMatchObject({ parallel: 1 });
-    const tight = renderLimit(32, 12, 2);
-    expect(tight.parallel * (tight.concurrency * 0.5 + 1)).toBeLessThanOrEqual(6);
-    expect(renderLimit(24, 32, 4).explanation).toContain("--parallel 4 is above the recommended 2");
+  it("Windows: one video at a time; the clip cache is capped and memory stays under 40%", () => {
+    const win = renderLimit({ cpus: 24, memoryGB: 32, platform: "win32" });
+    expect(win).toMatchObject({ parallel: 1, concurrency: 8, videoCacheBytes: 2 * 2 ** 30 });
+    expect(win.estimateGB).toBeLessThanOrEqual(32 * 0.4);
+    expect(win.explanation).toContain("one at a time on Windows");
+    // --parallel 2 on the same PC: fewer frames in parallel and a smaller cache so it still fits.
+    const two = renderLimit({ cpus: 24, memoryGB: 32, platform: "win32", requested: 2 });
+    expect(two.parallel).toBe(2);
+    expect(two.concurrency).toBeLessThan(8);
+    expect(two.estimateGB).toBeLessThanOrEqual(32 * 0.4);
+    expect(two.explanation).toContain("--parallel 2 is above the recommended 1");
+  });
+
+  it("elsewhere: 2 renders at a time on a big PC, 1 on a small one; never more than 40% of memory", () => {
+    expect(renderLimit({ cpus: 24, memoryGB: 32, platform: "linux" }).parallel).toBe(2);
+    expect(renderLimit({ cpus: 4, memoryGB: 8, platform: "linux" }).parallel).toBe(1);
+    for (const memoryGB of [8, 16, 32, 64]) {
+      for (const requested of [undefined, 1, 2]) {
+        const l = renderLimit({ cpus: 24, memoryGB, platform: "linux", requested });
+        if (l.concurrency > 1) expect(l.estimateGB).toBeLessThanOrEqual(memoryGB * 0.4);
+        expect(l.videoCacheBytes).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("a retry uses half the frames in parallel and half the clip cache", () => {
+    const l = renderLimit({ cpus: 24, memoryGB: 32, platform: "win32" });
+    expect(retryLimit(l)).toEqual({ concurrency: 4, videoCacheBytes: 2 ** 30 });
+    expect(retryLimit({ ...l, concurrency: 1 }).concurrency).toBe(1);
+  });
+
+  it("the stall watchdog fires once when progress stops, and not while it continues", async () => {
+    let stalls = 0;
+    const w = watchProgress(200, () => (stalls += 1));
+    for (let i = 0; i < 5; i++) {
+      await new Promise((r) => setTimeout(r, 60));
+      w.tick();
+    }
+    expect(stalls).toBe(0);
+    await new Promise((r) => setTimeout(r, 450));
+    expect(stalls).toBe(1);
+    w.stop();
   });
 
   it("export folders are named by date and time and never reused", () => {
@@ -321,5 +362,93 @@ describe("pnpm make + pnpm rerender (real renders)", () => {
     await expect(rerender(result.variations[0].manifestFile, { workspaceDir: wsDir })).rejects.toThrow(
       new RegExp(`clip ${m.clips[0].name.replace(".", "\\.")} has changed since the render`),
     );
+  });
+});
+
+describe("failures, retry and --resume (stand-in renderer)", () => {
+  const sample = path.join(root, "sample.mp4");
+  const rendered: { name: string; concurrency?: number; cacheBytes?: number }[] = [];
+  let failures: Record<string, number> = {};
+  // Copies a small video to the output, or fails while `failures[name]` is above 0.
+  const renderer = async (o: RenderOptions) => {
+    const name = path.basename(o.outFile, ".mp4");
+    rendered.push({ name, concurrency: o.concurrency, cacheBytes: o.videoCacheBytes });
+    o.onProgress?.(0.5);
+    if ((failures[name] ?? 0) > 0) {
+      failures[name] -= 1;
+      throw new Error("Compositor quit: memory allocation of 2088960 bytes failed");
+    }
+    copyFileSync(sample, o.outFile);
+    o.onProgress?.(1);
+    return o.outFile;
+  };
+  const run = (extra: Partial<MakeOptions> = {}) =>
+    makeVideos({
+      workspaceDir: wsDir,
+      song: path.join(inDir, "song.wav"),
+      lyrics: path.join(inDir, "lyrics.txt"),
+      collection: "beach",
+      variations: 4,
+      section: "0:02-0:05",
+      align: fakeAlign,
+      frameCheck: false,
+      renderer,
+      platform: "win32",
+      ...extra,
+    });
+
+  beforeAll(() => {
+    ffmpeg("-f", "lavfi", "-i", "testsrc2=s=216x384:r=30:d=3", "-pix_fmt", "yuv420p", sample);
+  });
+
+  let first: MakeResult;
+  it("retries a failed variation once with less memory, continues after a second failure and reports it", async () => {
+    rendered.length = 0;
+    failures = { v2: 1, v3: 5 }; // v2 fails once, v3 every time
+    const retries: string[] = [];
+    first = await run({ onRetry: (name) => retries.push(name) });
+    expect(first.limit.parallel).toBe(1);
+    const byName = Object.fromEntries(first.variations.map((v) => [v.name, v]));
+    expect([byName.v1.error, byName.v2.error, byName.v4.error]).toEqual([null, null, null]);
+    expect(byName.v2.retried).toBe(true);
+    expect(byName.v3.error).toMatch(/memory allocation .* \(also after a retry with \d+ frames? in parallel\)/);
+    expect(retries).toEqual(["v2", "v3"]);
+    const v2 = rendered.filter((r) => r.name === "v2");
+    expect(v2).toHaveLength(2);
+    expect(v2[1].concurrency).toBe(Math.max(1, Math.floor(v2[0].concurrency! / 2)));
+    expect(v2[1].cacheBytes).toBeLessThan(v2[0].cacheBytes!);
+    expect(rendered.map((r) => r.name)).toEqual(["v1", "v2", "v2", "v3", "v3", "v4"]); // v4 still rendered
+    expect(existsSync(path.join(first.exportDir, "v3.mp4"))).toBe(false);
+    expect(existsSync(path.join(first.exportDir, "v4.manifest.json"))).toBe(true);
+    const jobs = ws.db.select().from(renderJob).all().filter((j) => j.error?.includes("also after a retry"));
+    expect(jobs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("--resume renders only the missing or failed variations, into the same folder", async () => {
+    rendered.length = 0;
+    failures = {};
+    rmSync(path.join(first.exportDir, "v4.qa.txt")); // an interrupted variation: video without its QA report
+    const resumed = await run({ resume: true });
+    expect(resumed.exportDir).toBe(first.exportDir);
+    expect(latestExportFolder(ws, readManifest(path.join(first.exportDir, "v1.manifest.json")).project.id)).toBe(first.exportDir);
+    expect(rendered.map((r) => r.name)).toEqual(["v3", "v4"]);
+    expect(resumed.variations.map((v) => [v.name, v.kept, v.error])).toEqual([
+      ["v1", true, null],
+      ["v2", true, null],
+      ["v3", false, null],
+      ["v4", false, null],
+    ]);
+    expect(resumed.variations[0].qaSummary).toBe(qaSummaryFromFile(path.join(first.exportDir, "v1.qa.txt")));
+
+    rendered.length = 0;
+    const again = await run({ resume: true });
+    expect(rendered).toEqual([]); // all done: nothing rendered
+    expect(again.variations.every((v) => v.kept)).toBe(true);
+  });
+
+  it("--resume refuses when the inputs changed since that run", async () => {
+    rmSync(path.join(first.exportDir, "v4.mp4"));
+    await expect(run({ resume: true, section: "0:02-0:06" })).rejects.toThrow(/--resume: the section changed .* run without --resume/);
+    await expect(run({ resume: true, lyricsOffsetMs: 100 })).rejects.toThrow(/the lyric lead or offset changed/);
   });
 });

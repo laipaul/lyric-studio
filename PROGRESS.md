@@ -230,13 +230,29 @@
 - Cloud check: a 60 s, 2-variation run of a synthetic song rendered and passed QA; the rerender
   of v1 was frame-identical (all 1800 frames). Cloud machine: 4 threads, ~3 min per 60 s video.
 
+### Step 5d.1 — Windows memory, retry, `--resume` ✅ (to verify on the Windows PC)
+- Cause of "Compositor quit: memory allocation … failed" with `--parallel 2`: Remotion's clip-frame
+  cache defaults to half of the free memory **per render**, so two renders each claimed half.
+- Now: `--parallel 1` by default on Windows; the clip cache is capped (2 GB with one render, smaller
+  with more); the estimate counts 0.75 GB per browser tab + 1.5 GB per render + the cache and stays
+  under 40% of RAM (your PC: 1 video, 8 frames in parallel, about 9.5 GB at most).
+- A failed variation is retried once with half the frames in parallel and half the cache; a render
+  with no progress for 5 minutes is cancelled (watchdog); the FFmpeg QA check has a 10-minute limit.
+  The other variations always continue; failures are listed with a hint to use `--resume`.
+- `pnpm make … --resume`: reuses the latest export folder and renders only variations without all
+  three files (mp4, manifest, qa); refuses with the reason if the section, LRC, lead/offset, cuts,
+  settings or clips changed since that run. The summary marks kept and retried variations.
+- Tests: render limit on Windows and Linux (memory always ≤ 40%), retry settings, watchdog (timer
+  and a real Remotion render cancelled with no partial file left), capped cache in a real render,
+  failure + retry + carry-on, --resume (only missing, interrupted, nothing left), --resume refused.
+
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
 - `pnpm analyze <file>` (also `--click`, `--downbeat-offset`), `POST /analyze`, `pnpm test:audio`.
 - `pnpm cuts <file> --section a-b`.
 - `pnpm tap`, `pnpm render:test`, http://localhost:3000/preview.
-- `pnpm make`, `pnpm rerender`.
+- `pnpm make` (verified on the Windows PC: 6 videos, all QA PASS, 444 s with --parallel 1), `pnpm rerender`.
 - `pnpm lrc:shift`, `pnpm lrc:hook`, `pnpm fonts`.
 - `pnpm audio:setup --ai`, `pnpm align` (GPU path to be verified on the Windows PC).
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.

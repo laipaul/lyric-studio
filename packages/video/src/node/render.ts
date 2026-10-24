@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { ffmpegBin } from "@lyric/db";
 import { bundle } from "@remotion/bundler";
-import { renderMedia, selectComposition } from "@remotion/renderer";
+import { makeCancelSignal, renderMedia, selectComposition } from "@remotion/renderer";
 
 import { COMPOSITION_ID } from "../config";
 import type { LyricVideoProps } from "../props";
@@ -51,7 +51,27 @@ export type RenderOptions = {
   log?: (message: string) => void;
   frameRange?: [number, number];
   concurrency?: number; // browser tabs rendering frames at the same time (default: Remotion's choice)
+  // Memory for decoded clip frames. Remotion's default is half of the free memory PER RENDER, so two
+  // renders at once can run the PC out of memory: "pnpm make" always sets it.
+  videoCacheBytes?: number;
+  stallTimeoutMs?: number; // cancel the render if it makes no progress for this long (default 5 min)
 };
+
+export const STALL_TIMEOUT_MS = 5 * 60_000;
+
+// Calls `onStall` once if `tick` has not been called for `timeoutMs`. `stop` ends the watch.
+export function watchProgress(timeoutMs: number, onStall: () => void): { tick: () => void; stop: () => void } {
+  let last = Date.now();
+  let fired = false;
+  const timer = setInterval(() => {
+    if (!fired && Date.now() - last > timeoutMs) {
+      fired = true;
+      onStall();
+    }
+  }, Math.min(10_000, Math.max(50, timeoutMs / 10)));
+  timer.unref?.();
+  return { tick: () => (last = Date.now()), stop: () => clearInterval(timer) };
+}
 
 export async function renderLyricVideo(options: RenderOptions): Promise<string> {
   const log = options.log ?? (() => {});
@@ -73,24 +93,44 @@ export async function renderLyricVideo(options: RenderOptions): Promise<string> 
       },
     });
     const tmp = `${options.outFile}.part.mp4`;
-    await renderMedia({
-      port,
-      serveUrl,
-      composition,
-      inputProps,
-      codec: "h264",
-      audioCodec: "aac",
-      audioBitrate: "192k",
-      pixelFormat: "yuv420p",
-      colorSpace: "bt709", // standard (limited) range: plain yuv420p, not full-range yuvj420p
-      logLevel: "error",
-      outputLocation: tmp,
-      overwrite: true,
-      browserExecutable: browserExecutable(),
-      frameRange: options.frameRange ?? null,
-      concurrency: options.concurrency ?? null,
-      onProgress: ({ progress }) => options.onProgress?.(progress),
+    const { cancelSignal, cancel } = makeCancelSignal();
+    const stallMs = options.stallTimeoutMs ?? STALL_TIMEOUT_MS;
+    let stalled = false;
+    const watch = watchProgress(stallMs, () => {
+      stalled = true;
+      cancel();
     });
+    try {
+      await renderMedia({
+        port,
+        serveUrl,
+        composition,
+        inputProps,
+        codec: "h264",
+        audioCodec: "aac",
+        audioBitrate: "192k",
+        pixelFormat: "yuv420p",
+        colorSpace: "bt709", // standard (limited) range: plain yuv420p, not full-range yuvj420p
+        logLevel: "error",
+        outputLocation: tmp,
+        overwrite: true,
+        browserExecutable: browserExecutable(),
+        frameRange: options.frameRange ?? null,
+        concurrency: options.concurrency ?? null,
+        offthreadVideoCacheSizeInBytes: options.videoCacheBytes ?? null,
+        cancelSignal,
+        onProgress: ({ progress }) => {
+          watch.tick();
+          options.onProgress?.(progress);
+        },
+      });
+    } catch (error) {
+      rmSync(tmp, { force: true });
+      if (stalled) throw new Error(`the render made no progress for ${Math.round(stallMs / 60_000)} minutes and was stopped`);
+      throw error;
+    } finally {
+      watch.stop();
+    }
     await ensureFaststart(tmp);
     rmSync(options.outFile, { force: true });
     renameSync(tmp, options.outFile);
