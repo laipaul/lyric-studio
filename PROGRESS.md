@@ -141,6 +141,29 @@
   accents, serving), Bold update, tap default shift and hook marker, renders: line visible exactly
   0.25 s early, user font + hook font drawn.
 
+### Step 5c — Automatic lyric alignment (`pnpm align`) ✅
+- `pnpm audio:setup --ai`: optional AI extra in the same `.venv`. PyTorch 2.8.0 from the PyTorch
+  index (CUDA 12.8 build on Windows for RTX 50-series/Blackwell, CPU build on Linux; `--torch cpu`
+  for the smaller CPU build), then pinned `requirements-ai-<platform>.txt` (WhisperX 3.8.6,
+  Demucs 4.1.0; all with ready-made wheels; checked in CI that the Windows cu128 wheels exist).
+- Models download on first use into `services/audio/models` (HF_HOME, TORCH_HOME, NLTK_DATA).
+- Device line at start (GPU name, CUDA version, compute capability, or CPU with the reason);
+  GPU failures retry on the CPU with a message; `--device auto|cuda|cpu`.
+- Demucs htdemucs vocal stem cached by song hash (`workspace/cache/stems`); WhisperX forced
+  alignment (en: WAV2VEC2_ASR_BASE_960H, fr: jonatasgrosman/wav2vec2-large-xlsr-53-french,
+  `--align-model` to change), audio processed in 30 s windows so an 8 GB GPU is plenty; alignment
+  cached (`workspace/cache/align`).
+- `--trim on|off` (default on): a word that swallowed a silent gap starts where the voice starts.
+- Output: enhanced LRC (line stamps + `<mm:ss.xx>` word tags), hooks and pauses kept, `.bak`;
+  per-line confidence, < 0.5 in orange; `--compare` (per-line diff, median, worst 5, typical
+  offset + `pnpm lrc:shift` suggestion, tapped time next to low-confidence lines); never overwrites
+  the comparison file (writes `<lyrics>.aligned.lrc` instead).
+- LRC reader/`lrc:shift`/`lrc:hook` understand word tags.
+- Tests: 20+ Python unit tests (LRC output, word mapping, compare, path safety, device choice and
+  fallback, gap trim, switch); real-model tests in the "AI alignment" GitHub workflow (Demucs +
+  WhisperX on CPU, synthetic espeak-ng song in English and French; windowed processing identical
+  to whole-audio processing).
+
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -148,6 +171,7 @@
 - `pnpm cuts <file> --section a-b`.
 - `pnpm tap`, `pnpm render:test`, http://localhost:3000/preview.
 - `pnpm lrc:shift`, `pnpm lrc:hook`, `pnpm fonts`.
+- `pnpm audio:setup --ai`, `pnpm align` (GPU path to be verified on the Windows PC).
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
 
 ## Known issues
