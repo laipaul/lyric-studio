@@ -37,7 +37,7 @@ ALIGN_MODELS = {
 }
 ALIGN_SAMPLE_RATE = 16_000
 FRAME_SAMPLES = 320  # wav2vec2: one output frame per 20 ms
-ALIGN_CACHE_VERSION = 2  # bump when the alignment method changes (2: words tightened to the voice)
+ALIGN_CACHE_VERSION = 3  # bump when the alignment method changes (3: gap-swallowing words fixed)
 
 
 # --------------------------------------------------------------------------- output helpers

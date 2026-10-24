@@ -87,8 +87,16 @@ def test_aligns_lines_within_150_ms(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     texts = LINES[lang]
     words, _ = align_words(vocals, " ".join(texts), lang, ALIGN_MODELS[lang], device, log)
     lines = words_to_lines(texts, [False] * len(texts), words)
+    import librosa
+
+    from app.refine import loudness_report
+
+    voice, _ = librosa.load(str(vocals), sr=16_000, mono=True)
     for line, truth in zip(lines, truths):
         print(f"{lang}: {line.text!r}: aligned {line.start_ms} ms, true {truth} ms, confidence {line.confidence:.2f}")
+        print(f"    words: {[(w.text, w.start_ms, w.end_ms, round(w.score, 2)) for w in line.words]}")
+        if abs(line.start_ms - truth) > TOLERANCE_MS:
+            print(f"    vocal loudness: {loudness_report(voice, 16_000, line.start_ms / 1000 - 0.5, truth / 1000 + 0.5)}")
     for line, truth in zip(lines, truths):
         assert abs(line.start_ms - truth) <= TOLERANCE_MS, f"{line.text}: {line.start_ms} vs {truth}"
         assert line.confidence > 0.3
