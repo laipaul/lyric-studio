@@ -16,26 +16,22 @@ Everything runs on your own PC. See `CLAUDE.md` for the full brief and `PROGRESS
 
 ## One-time setup on Windows
 
-Install these once. They are normal Windows installers.
+You need these installed once (normal Windows installers):
 
-1. **Git**: https://git-scm.com/download/win (default options).
-2. **Node.js 22 LTS**: https://nodejs.org (the "LTS" Windows installer, default options).
-3. **Python 3.12**: https://www.python.org/downloads/windows/ — in the installer, tick
-   **"Add python.exe to PATH"** and leave the **"py launcher"** option ticked.
-4. **pnpm** (the package manager this project uses). Open PowerShell **as Administrator** once and run:
-   ```powershell
-   corepack enable
-   ```
-   (Corepack ships with Node.js. This only switches on the `pnpm` command.)
+| Tool | Version | Check in Cursor's terminal |
+| --- | --- | --- |
+| Git | any recent | `git --version` |
+| Node.js | 22 or 24 (LTS) — https://nodejs.org | `node --version` |
+| pnpm | 10, 11 or 12 | `pnpm --version` |
+| Python | **3.12** (other versions may also be installed) | `py -0` must list `-V:3.12` |
+| FFmpeg | any recent (needed from the render steps on) | `ffmpeg -version` |
 
-Close and reopen Cursor afterwards so it picks up the new commands. Check them in Cursor's terminal:
-
-```powershell
-git --version
-node --version     # v22.x or newer
-pnpm --version     # 10.x
-py -3 --version    # Python 3.10 or newer (3.12 recommended)
-```
+Notes:
+- **Python 3.12 is required.** The audio service always uses `py -3.12`, never the default `python`,
+  so it is fine if Python 3.14 (or another version) is your default. If `py -0` does not show
+  `-V:3.12`, install Python 3.12 from https://www.python.org/downloads/windows/.
+- **pnpm**: if `pnpm --version` does not work, open PowerShell **as Administrator** once and run
+  `corepack enable` (Corepack ships with Node.js), then reopen Cursor.
 
 ## Get the code (first time)
 
@@ -47,8 +43,9 @@ pnpm install
 pnpm audio:setup
 ```
 
-`pnpm audio:setup` creates a private Python environment in `services\audio\.venv`.
-Nothing is installed globally.
+`pnpm audio:setup` creates a private Python 3.12 environment in `services\audio\.venv`
+(using `py -3.12`). Nothing is installed globally. If an old `.venv` was made with another
+Python version, it is removed and rebuilt automatically.
 
 ## Get the latest changes
 
@@ -86,8 +83,8 @@ pnpm typecheck   # TypeScript checks
 
 - **"running scripts is disabled on this system"** when typing `pnpm`: PowerShell is blocking scripts.
   Run once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then reopen the terminal.
-- **"Python 3.10 or newer was not found"**: install Python 3.12 (step 3 above), reopen Cursor,
-  then run `pnpm audio:setup`.
+- **"Python 3.12 was not found"**: run `py -0`. If `-V:3.12` is missing, install Python 3.12
+  (see the table above), reopen Cursor, then run `pnpm audio:setup`.
 - **"Port 3000 (or 8001) is already in use"**: an earlier `pnpm dev` is still running.
   Close other terminals that run it, or restart Cursor.
 - **Windows Firewall pop-up for Node.js or Python**: choose "Allow" for private networks. Everything stays on your PC.

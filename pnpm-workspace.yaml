@@ -2,6 +2,15 @@ packages:
   - apps/*
   - packages/*
 
+# Packages allowed to run install scripts (pnpm 11+).
+allowBuilds:
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
+  "@remotion/compositor-linux-x64-gnu": true
+  "@remotion/compositor-win32-x64-msvc": true
+
+# Same list for pnpm 10.
 onlyBuiltDependencies:
   - esbuild
   - sharp

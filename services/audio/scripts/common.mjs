@@ -8,30 +8,29 @@ export const serviceDir = path.resolve(path.dirname(fileURLToPath(import.meta.ur
 export const venvDir = path.join(serviceDir, ".venv");
 export const isWindows = process.platform === "win32";
 
+// The audio service always runs on Python 3.12 (librosa, WhisperX and Demucs support it).
+export const PYTHON_VERSION = "3.12";
+
+// The command used to create the venv. On Windows this is always "py -3.12",
+// never the default "python", which may be a different version.
+export const systemPython = isWindows
+  ? { cmd: "py", args: [`-${PYTHON_VERSION}`], label: `py -${PYTHON_VERSION}` }
+  : { cmd: `python${PYTHON_VERSION}`, args: [], label: `python${PYTHON_VERSION}` };
+
 // Python inside the project-local virtual environment.
 export const venvPython = isWindows
   ? path.join(venvDir, "Scripts", "python.exe")
   : path.join(venvDir, "bin", "python");
 
-export function venvExists() {
-  return existsSync(venvPython);
+const VERSION_SNIPPET = "import sys; print('%d.%d' % sys.version_info[:2])";
+
+// Returns "3.12" etc., or null if the command does not run.
+export function pythonVersion(cmd, args = []) {
+  const result = spawnSync(cmd, [...args, "-c", VERSION_SNIPPET], { encoding: "utf8" });
+  return result.status === 0 ? result.stdout.trim() : null;
 }
 
-// Find a system Python 3.10+ to create the venv with.
-// On Windows the "py" launcher is preferred because "python" may be the Microsoft Store stub.
-export function findSystemPython() {
-  const candidates = isWindows
-    ? [["py", "-3"], ["python"], ["python3"]]
-    : [["python3"], ["python"]];
-  for (const [cmd, ...args] of candidates) {
-    const result = spawnSync(
-      cmd,
-      [...args, "-c", "import sys; print('%d.%d' % sys.version_info[:2])"],
-      { encoding: "utf8" },
-    );
-    if (result.status !== 0) continue;
-    const [major, minor] = result.stdout.trim().split(".").map(Number);
-    if (major === 3 && minor >= 10) return { cmd, args, version: `${major}.${minor}` };
-  }
-  return null;
+// True when .venv exists and was built with the required Python version.
+export function venvReady() {
+  return existsSync(venvPython) && pythonVersion(venvPython) === PYTHON_VERSION;
 }

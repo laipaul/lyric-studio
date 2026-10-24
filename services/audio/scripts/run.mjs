@@ -1,10 +1,10 @@
 // Starts the audio service on http://127.0.0.1:8001 using the project-local .venv.
-// Creates the .venv first if it does not exist yet.
+// Creates (or rebuilds) the .venv with Python 3.12 first if needed.
 import { spawn } from "node:child_process";
-import { serviceDir, venvExists, venvPython } from "./common.mjs";
+import { serviceDir, venvPython, venvReady } from "./common.mjs";
 import { setup } from "./setup.mjs";
 
-if (!venvExists()) setup();
+if (!venvReady()) setup();
 
 const child = spawn(
   venvPython,
