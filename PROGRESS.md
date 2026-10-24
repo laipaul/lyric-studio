@@ -153,7 +153,8 @@
   alignment (en: WAV2VEC2_ASR_BASE_960H, fr: jonatasgrosman/wav2vec2-large-xlsr-53-french,
   `--align-model` to change), audio processed in 30 s windows so an 8 GB GPU is plenty; alignment
   cached (`workspace/cache/align`).
-- `--trim on|off` (default on): a word that swallowed a silent gap starts where the voice starts.
+- `--trim on|off` (default on): a word stretched across a silent gap (before or after it) is cut
+  back to its strongest burst of voice on the vocal track.
 - Output: enhanced LRC (line stamps + `<mm:ss.xx>` word tags), hooks and pauses kept, `.bak`;
   per-line confidence, < 0.5 in orange; `--compare` (per-line diff, median, worst 5, typical
   offset + `pnpm lrc:shift` suggestion, tapped time next to low-confidence lines); never overwrites
@@ -162,7 +163,8 @@
 - Tests: 20+ Python unit tests (LRC output, word mapping, compare, path safety, device choice and
   fallback, gap trim, switch); real-model tests in the "AI alignment" GitHub workflow (Demucs +
   WhisperX on CPU, synthetic espeak-ng song in English and French; windowed processing identical
-  to whole-audio processing).
+  to whole-audio processing). Latest run: all 8 line starts within 15-65 ms of the truth, no word
+  reaching into the next line.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -183,6 +185,10 @@
 - The preview shows Remotion's license note in the browser console (free for individuals).
 - After `git pull`, run `pnpm db:setup` (or `pnpm dev`) before `pnpm analyze` so the new
   `downbeat_offset` column exists; otherwise `pnpm analyze` notes it and ignores project settings.
+- `pnpm align` is verified only on a synthetic, spoken (espeak-ng) test song on CPU. Real sung
+  vocals and the Windows GPU path still need the real acceptance test (your song with --compare).
+- The cloud session cannot download the AI models (network policy), so `pnpm align` is tested in the
+  "AI alignment" GitHub workflow instead.
 - Downbeats assume 4/4. When the kick is equally strong on beats 1 and 3 (and nothing else
   marks the bar), beat 1 vs 3 is a guess; the confidence value shows this.
 - Beats are placed on the attack of each hit, typically within ~10 ms.
