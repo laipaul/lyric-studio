@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Python virtual environment
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Workspace data (songs, clips, renders, database) - keep the folder only
+workspace/*
+!workspace/.gitkeep
+
+# Secrets
+.env
+.env.*
+
+# Build output
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+coverage/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log

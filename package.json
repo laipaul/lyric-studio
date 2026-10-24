@@ -1,0 +1,19 @@
+{
+  "name": "lyric-studio",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=20.9"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n studio,worker,audio -c cyan,magenta,yellow \"pnpm --filter @lyric/studio dev\" \"pnpm --filter @lyric/worker dev\" \"node services/audio/scripts/run.mjs\"",
+    "audio:setup": "node services/audio/scripts/setup.mjs",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  }
+}
