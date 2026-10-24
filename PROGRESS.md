@@ -51,12 +51,40 @@
   from ~1 s by using a clip that is black for its first 0.5 s), short-clip thumbnail, non-video
   rejected, WORKSPACE_DIR resolution, Windows-safe names.
 
+### Step 3 — Audio analysis service ✅
+- `services/audio` (Python 3.12, librosa 1.0.0): `POST /analyze` with a workspace-relative
+  `path`, optional `project_id` and optional manual `bpm`. Returns `bpm`, `bpm_source`
+  (detected | manual), `bpm_alternatives` (half / double), `duration_ms`, `downbeat_confidence`,
+  `beats` [{time_ms, strength 0–1, is_downbeat}], `file_hash`, `cached`.
+- Method: librosa beat tracking → each beat snapped to the actual hit (short 512-sample window,
+  sub-frame interpolation) → exact BPM from a straight-line fit of the beat grid → second
+  tracking pass at that exact BPM. Downbeats (4/4): the beat phase with the strongest
+  low-frequency (< 150 Hz) onsets; confidence = how much it beats the runner-up.
+- Manual BPM: half/double of the detected tempo is derived from the detected beats (half keeps
+  the stronger beats); any other value re-tracks around it. Fine-tuned by at most 3%.
+- Cache: `<workspace>/cache/analysis/<sha256>-v<version>[-bpm<n>].json`.
+- With `project_id`: updates project.bpm / duration_ms and replaces its beats in one transaction.
+- Paths outside the workspace are refused (400); missing file 404; unreadable audio 422.
+- `pnpm analyze <file> [--bpm N] [--json]` runs the analysis directly (no server needed).
+- Python packages pinned in `requirements.txt` (generated from `requirements.in`); all 46 have
+  Windows x64 / Python 3.12 wheels (verified) and install with `--only-binary=:all:`.
+  The `.venv` reinstalls automatically when `requirements.txt` changes.
+- Tests (`services/audio/tests`, 25, run by `pnpm test` / `pnpm test:audio`): click tracks at
+  90 / 120 / 128 BPM with accented downbeats and a pickup beat (BPM ±1, every beat and downbeat
+  within 50 ms), other pickups, a 100-bar song (BPM ±0.1), a realistic groove with kick on 1 and 3,
+  MP3 input, manual half/double/near BPM, cache, path safety, saving to Project/Beat tables.
+
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
+- `pnpm analyze <file>`, `POST /analyze`, `pnpm test:audio`.
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
 
 ## Known issues
+- Downbeats assume 4/4. When the kick is equally strong on beats 1 and 3 (and nothing else
+  marks the bar), beat 1 vs 3 is a guess; the confidence value shows this.
+- Beats are placed on the attack of each hit, typically within ~10 ms; real songs not yet validated
+  (to be checked on the user's PC).
 - shadcn/ui components (button, card, input, tabs) were added by hand in the same format the
   shadcn CLI produces, because the build environment could not reach the shadcn website.
   `pnpm dlx shadcn@latest add <name>` works normally on your PC for future components.
@@ -64,4 +92,4 @@
 - The workspace service is used by tests only so far; commands and UI that use it come in later steps.
 
 ## Next
-- Step 3 — waiting for instructions.
+- Step 4 — waiting for instructions.

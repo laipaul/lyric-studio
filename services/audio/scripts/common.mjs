@@ -1,6 +1,7 @@
 // Shared helpers for the audio service scripts (Windows, macOS and Linux).
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -30,7 +31,21 @@ export function pythonVersion(cmd, args = []) {
   return result.status === 0 ? result.stdout.trim() : null;
 }
 
-// True when .venv exists and was built with the required Python version.
+// Fingerprint of requirements.txt, saved in .venv after a successful install.
+export const requirementsFile = path.join(serviceDir, "requirements.txt");
+export const installedMarker = path.join(venvDir, ".requirements-sha256");
+
+export function requirementsHash() {
+  return createHash("sha256").update(readFileSync(requirementsFile)).digest("hex");
+}
+
+// True when .venv exists, was built with the required Python version, and has the current
+// requirements.txt installed (so a "git pull" that adds packages triggers a reinstall).
 export function venvReady() {
-  return existsSync(venvPython) && pythonVersion(venvPython) === PYTHON_VERSION;
+  return (
+    existsSync(venvPython) &&
+    pythonVersion(venvPython) === PYTHON_VERSION &&
+    existsSync(installedMarker) &&
+    readFileSync(installedMarker, "utf8").trim() === requirementsHash()
+  );
 }

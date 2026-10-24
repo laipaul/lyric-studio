@@ -1,0 +1,10 @@
+# Top-level dependencies of the audio service. The exact pinned list is requirements.txt,
+# generated from this file (see the header of requirements.txt).
+fastapi
+uvicorn
+librosa
+soundfile
+python-dotenv
+# tests
+pytest
+httpx

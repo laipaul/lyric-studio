@@ -1,16 +1,17 @@
 // Creates services/audio/.venv with Python 3.12 and installs requirements.txt into it.
 import { spawnSync } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
-import path from "node:path";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
 import {
   PYTHON_VERSION,
+  installedMarker,
   isWindows,
   pythonVersion,
+  requirementsFile,
+  requirementsHash,
   serviceDir,
   systemPython,
   venvDir,
   venvPython,
-  venvReady,
 } from "./common.mjs";
 
 function run(cmd, args) {
@@ -40,7 +41,7 @@ function failMissingPython() {
 }
 
 export function setup() {
-  if (!venvReady()) {
+  if (!existsSync(venvPython) || pythonVersion(venvPython) !== PYTHON_VERSION) {
     const found = pythonVersion(systemPython.cmd, systemPython.args);
     if (found !== PYTHON_VERSION) failMissingPython();
 
@@ -55,8 +56,14 @@ export function setup() {
     run(systemPython.cmd, [...systemPython.args, "-m", "venv", venvDir]);
   }
   console.log(`[audio setup] using Python ${pythonVersion(venvPython)} from .venv`);
-  console.log("[audio setup] installing requirements");
-  run(venvPython, ["-m", "pip", "install", "--disable-pip-version-check", "-q", "-r", path.join(serviceDir, "requirements.txt")]);
+  console.log("[audio setup] installing requirements (first time can take a few minutes)");
+  // --only-binary: use ready-made wheels only, never compile anything from source.
+  run(venvPython, [
+    "-m", "pip", "install", "--disable-pip-version-check", "-q",
+    "--only-binary=:all:",
+    "-r", requirementsFile,
+  ]);
+  writeFileSync(installedMarker, requirementsHash());
   console.log("[audio setup] done");
 }
 
