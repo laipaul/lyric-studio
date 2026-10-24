@@ -5,6 +5,7 @@ uvicorn
 librosa
 soundfile
 python-dotenv
+sounddevice
 # tests
 pytest
 httpx

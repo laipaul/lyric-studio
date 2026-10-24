@@ -1,0 +1,45 @@
+# Runs all tests (TypeScript, Python and real Remotion renders) on every push to main.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/audio/requirements.txt
+
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - name: Install packages
+        run: pnpm install --frozen-lockfile
+
+      - name: Set up the audio service (.venv, Python 3.12)
+        run: pnpm audio:setup
+
+      - name: Typecheck and lint
+        run: |
+          pnpm typecheck
+          pnpm --filter @lyric/studio lint
+
+      - name: Tests
+        run: pnpm test

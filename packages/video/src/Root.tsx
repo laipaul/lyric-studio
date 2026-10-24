@@ -1,15 +1,18 @@
 import { Composition } from "remotion";
+
 import { LyricVideo } from "./LyricVideo";
-import { COMPOSITION_ID, VIDEO, defaultLyricVideoProps } from "./config";
+import { COMPOSITION_ID, VIDEO } from "./config";
+import { defaultLyricVideoProps, type LyricVideoProps } from "./props";
 
 export const RemotionRoot: React.FC = () => (
   <Composition
     id={COMPOSITION_ID}
     component={LyricVideo}
-    durationInFrames={VIDEO.fps * 5}
+    durationInFrames={defaultLyricVideoProps.durationInFrames}
     fps={VIDEO.fps}
     width={VIDEO.width}
     height={VIDEO.height}
     defaultProps={defaultLyricVideoProps}
+    calculateMetadata={({ props }: { props: LyricVideoProps }) => ({ durationInFrames: props.durationInFrames })}
   />
 );

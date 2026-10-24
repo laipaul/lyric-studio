@@ -124,6 +124,60 @@ cut, the beat number, the bar and beat in the bar (`7.1` = bar 7, beat 1), and e
 No shot is shorter than 0.8 s: if the cuts would be too fast, the whole section switches to the next
 slower even rhythm (every beat → every 2 beats → every bar) and the command says so.
 
+## Lyric timing (`pnpm tap`)
+
+Write the lyrics in a text file, one lyric line per line. A blank line means a pause (the previous
+line disappears there, e.g. for an instrumental part). Then:
+
+```powershell
+cd D:\videomaker
+pnpm tap "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test\lyrics.txt" --section 0:11-0:59
+```
+
+The section plays. Press **Enter** exactly when each line starts (the next line is always shown).
+After the last line, press **Enter** once more where it ends. **Backspace** redoes the last stamp,
+**r** restarts the section, **q** quits without saving. Each stamp is printed as you go, and at the
+end `lyrics.lrc` is written next to `lyrics.txt` (the previous one is kept as `lyrics.lrc.bak`).
+If you tend to tap late, `--shift -0.15` moves all stamps 0.15 s earlier.
+
+Before playing, every line is checked for phone screens. A line that would need 3 lines on screen
+prints e.g. `WARNING: Line 3 is too long for phone screens (Bold style); split it in lyrics.txt`.
+
+## Test render (`pnpm render:test`)
+
+Put the test material in `workspace\test\`: `song.wav` (or `song.mp3`), a `clips\` folder with video
+clips, and `lyrics.lrc` (from `pnpm tap`). Then:
+
+```powershell
+cd D:\videomaker
+pnpm render:test
+pnpm render:test --seed 7 --style bold --bars --rate 2x --energy high
+```
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--song`, `--clips`, `--lrc` | files in `workspace\test\` | other files |
+| `--section 0:11-0:59` | first to last lyric line | part of the song (the start snaps to the nearest bar) |
+| `--rate`, `--energy` | `1x`, `medium` | as for `pnpm cuts`; `--rate off` = one shot per lyric line |
+| `--seed` | `1` | which clips go where (same seed = same video) |
+| `--style` | `simple` | `simple` or `bold` |
+| `--bars` | off | cinematic black bars top and bottom |
+| `--downbeat-offset` | from analysis | move bar 1 |
+| `--out` | `workspace\test\renders\<style>-seed<seed>.mp4` | output file |
+
+The output is 1080x1920, 30 fps, H.264, AAC 192 kbps, yuv420p, faststart. The first render
+downloads Remotion's headless Chrome once (~100 MB, inside the project) and prepares the clips
+(converted copies are kept in `workspace\cache\normalised\`), so later renders are faster.
+
+## Preview page
+
+With `pnpm dev` running, open http://localhost:3000/preview. It plays the same video as
+`pnpm render:test` (same files, same composition, same props). **Shuffle** picks a new seed, **Simple /
+Bold** switches the text style, and the page shows the exact `pnpm render:test` command to export what
+you see. Tick **Show safe-zone guides** (or open http://localhost:3000/preview?safe-guides) to see the
+areas covered by TikTok / Reels / Shorts buttons (red) and the lyric area (blue); guides are never
+rendered into the export. **Reload files** picks up changed songs, clips or lyrics.
+
 ## Database
 
 | Command | What it does |
@@ -151,6 +205,8 @@ notepad .env
 - `FFMPEG_PATH` / `FFPROBE_PATH` — only if `ffmpeg -version` does not work in the terminal.
 
 ## Tests and checks
+
+Tests also run automatically on GitHub (Actions → "Tests") after every push to `main`.
 
 ```powershell
 pnpm test        # automated tests

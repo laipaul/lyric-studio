@@ -45,6 +45,9 @@ Workspace folder layout: `workspace/projects/<id>/audio`, `workspace/projects/<i
 - Shuffle is DETERMINISTIC: same seed + same inputs = same clip sequence. Use a seeded PRNG (e.g. mulberry32). Avoid the same clip twice in a row, and avoid the last 3 clips when the pool allows.
 - Clips are cover-cropped to 9:16 and start at a random (seeded) offset inside the clip.
 - Preview and render must use the exact same composition and props.
+- Lyrics stay out of the platform UI: never in the bottom 20% or the right 12% of the frame; centred in the safe area around 62.5% of the height. Lyric lines appear on the vocal (no early cut).
+- Long lyric lines: one line if it fits, else two balanced lines, then shrink up to 25%. Only as an absolute last resort three lines (never more), with a warning naming the line ("Line 3 is too long for phone screens; split it in lyrics.txt") from pnpm tap and render:test.
+- Audio: the section start snaps to the nearest downbeat (report the adjusted time); 0.3 s fade-in, 0.5 s fade-out.
 - Video: 30 fps, H.264, AAC 192 kbps, yuv420p, faststart.
 
 ## How to work with me (the user)

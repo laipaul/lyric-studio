@@ -95,16 +95,47 @@
   spaced, edge shots, offsets inside clips, slow-down and hold cases; verified that deliberately
   broken code makes them fail. 5 Python (click file, offset, saving). 1 DB upgrade test.
 
+### Step 5 — Composition, first real render, preview ✅
+- `LyricVideo` (packages/video): 1080x1920, 30 fps. Shots from `getCutPoints` + `assignClips`
+  (cover-cropped, seeded start, `playbackRate`, hold last frame via `Freeze`), song audio from the
+  section start with 0.3 s fade-in / 0.5 s fade-out, lyric lines on the vocal (Simple = Inter 600
+  fade, Bold = Montserrat 900 upper-case shadow pop), text size, colour, cinematic bars.
+- Safe zones: lyrics never in the bottom 20% / right 12%; centred in the safe area at 62.5% height.
+  Long lines: 1 line → 2 balanced lines → shrink ≤ 25% → 3 lines only as a last resort (never more)
+  with "Line N is too long for phone screens; split it in lyrics.txt" warnings (tap + render:test).
+  Text is measured in Node with fontkit using the same font files (matches the browser in tests).
+- Fonts from @fontsource (served locally, works offline). Props hold workspace-relative paths +
+  `mediaBaseUrl`; render uses a local media server, preview uses `/api/media` (Range support).
+- `composeProps(base, seed, style)` is the single function used by both render:test and /preview.
+- `pnpm render:test`: imports clips into collection "test", normalises them (FFmpeg: H.264
+  1080x1920 30 fps cover-crop, cached in `workspace/cache/normalised`), snaps the section start to
+  the nearest downbeat (reported), renders with Remotion (h264, aac 192k, yuv420p bt709 limited range,
+  faststart verified).
+- `pnpm tap`: Python (sounddevice) player using the sound card clock; Enter / Backspace / r / q;
+  blank line = pause; writes `lyrics.lrc` (backup `.lrc.bak`); `--shift`.
+- `/preview` page (approved UI exception): @remotion/player, Shuffle, Simple/Bold, safe-zone guides,
+  shows the matching render:test command.
+- GitHub Actions (`.github/workflows/test.yml`): ubuntu-latest, pnpm + pip caches, 20 min, on push to main.
+- Tests: render tests with real Remotion renders (3 s sample format check incl. faststart + audio
+  fades, cuts on exact getCutPoints frames, lyric visible exactly from first to last frame, long
+  lines inside the safe zone on 2 lines, 3-line last resort, never more than 3, playbackRate and
+  start offset, hold last frame); layout/LRC unit tests; 9 Python tap tests (simulated keys/clock).
+
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
 - `pnpm analyze <file>` (also `--click`, `--downbeat-offset`), `POST /analyze`, `pnpm test:audio`.
 - `pnpm cuts <file> --section a-b`.
+- `pnpm tap`, `pnpm render:test`, http://localhost:3000/preview.
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
 
 ## Known issues
-- `pnpm cuts` cannot show `--rate off` or the lyric-line hold yet (no lyric timings until a later
-  step); both are covered by tests. It shows cuts only; clip assignment needs clips (Step 5).
+- `pnpm cuts` does not read lyrics yet (`--rate off` / hold are available in render:test via the LRC).
+- Bold at its preset size (84 px) is large: lines over ~40 characters need the 3-line fallback.
+- Only the Simple and Bold styles are implemented; other presets fall back to Inter.
+- `pnpm tap` real playback and keys can only be tested on the PC (logic is tested with a simulated
+  keyboard and clock); the cloud machine has no sound card.
+- The preview shows Remotion's license note in the browser console (free for individuals).
 - After `git pull`, run `pnpm db:setup` (or `pnpm dev`) before `pnpm analyze` so the new
   `downbeat_offset` column exists; otherwise `pnpm analyze` notes it and ignores project settings.
 - Downbeats assume 4/4. When the kick is equally strong on beats 1 and 3 (and nothing else
@@ -120,4 +151,4 @@
 - The workspace service is used by tests only so far; commands and UI that use it come in later steps.
 
 ## Next
-- Step 5 — waiting for instructions.
+- Phase 1 complete (beat-synced MP4 renders from the command line). Waiting for instructions.
