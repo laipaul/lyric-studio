@@ -29,7 +29,7 @@ export async function importClipsFromFolder(
   folder: string,
   collectionName: string,
   log: (message: string) => void = () => {},
-): Promise<Clip[]> {
+): Promise<{ clip: Clip; sourceName: string }[]> {
   if (!existsSync(folder)) throw new Error(`Clips folder not found: ${folder}`);
   const files = readdirSync(folder).filter((f) => VIDEO_FILE.test(f)).sort();
   if (!files.length) throw new Error(`No video files in ${folder}`);
@@ -39,7 +39,7 @@ export async function importClipsFromFolder(
     createCollection(ws, collectionName);
   const existing = ws.db.select().from(clipTable).where(eq(clipTable.collection_id, coll.id)).all();
 
-  const clips: Clip[] = [];
+  const clips: { clip: Clip; sourceName: string }[] = [];
   for (const file of files) {
     const source = path.join(folder, file);
     // Already imported: same file name and size in this collection.
@@ -50,11 +50,11 @@ export async function importClipsFromFolder(
         statSync(absPath(ws, c.path)).size === statSync(source).size,
     );
     if (match) {
-      clips.push(match);
+      clips.push({ clip: match, sourceName: file });
       continue;
     }
     log(`importing clip ${file}`);
-    clips.push(await addClip(ws, { collectionId: coll.id, file: source }));
+    clips.push({ clip: await addClip(ws, { collectionId: coll.id, file: source }), sourceName: file });
   }
   return clips;
 }
@@ -67,9 +67,14 @@ function run(bin: string, args: string[]): Promise<void> {
   );
 }
 
-export type NormalisedClip = { clip: Clip; path: string; durationFrames: number; durationMs: number };
+export type NormalisedClip = { clip: Clip; name: string; path: string; durationFrames: number; durationMs: number };
 
-export async function normaliseClip(ws: Workspace, clip: Clip, log: (m: string) => void = () => {}): Promise<NormalisedClip> {
+export async function normaliseClip(
+  ws: Workspace,
+  clip: Clip,
+  name: string,
+  log: (m: string) => void = () => {},
+): Promise<NormalisedClip> {
   const relative = `cache/normalised/${clip.id}-v${NORMALISE_VERSION}.mp4`;
   const out = absPath(ws, relative);
   if (!existsSync(out)) {
@@ -93,7 +98,7 @@ export async function normaliseClip(ws: Workspace, clip: Clip, log: (m: string) 
     }
   }
   const info = await probeMedia(out);
-  return { clip, path: relative, durationMs: info.durationMs, durationFrames: Math.floor((info.durationMs * VIDEO.fps) / 1000) };
+  return { clip, name, path: relative, durationMs: info.durationMs, durationFrames: Math.floor((info.durationMs * VIDEO.fps) / 1000) };
 }
 
 export async function prepareClips(
@@ -104,7 +109,7 @@ export async function prepareClips(
 ): Promise<NormalisedClip[]> {
   const clips = await importClipsFromFolder(ws, folder, collectionName, log);
   const out: NormalisedClip[] = [];
-  for (const c of clips) out.push(await normaliseClip(ws, c, log));
+  for (const c of clips) out.push(await normaliseClip(ws, c.clip, c.sourceName, log));
   return out;
 }
 

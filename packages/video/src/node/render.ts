@@ -10,7 +10,7 @@ import { renderMedia, selectComposition } from "@remotion/renderer";
 
 import { COMPOSITION_ID } from "../config";
 import type { LyricVideoProps } from "../props";
-import { defaultFontDirs } from "./font-dirs";
+import { bundledFontDirs } from "./font-catalog";
 import { startMediaServer, type MediaRoots } from "./media";
 
 export const ENTRY_POINT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../entry.ts");
@@ -40,7 +40,7 @@ export type RenderOptions = {
 
 export async function renderLyricVideo(options: RenderOptions): Promise<string> {
   const log = options.log ?? (() => {});
-  const server = await startMediaServer({ ...options.media, fontDirs: options.media.fontDirs ?? defaultFontDirs() });
+  const server = await startMediaServer({ ...options.media, fontDirs: options.media.fontDirs ?? bundledFontDirs() });
   try {
     const inputProps: LyricVideoProps = { ...options.props, mediaBaseUrl: server.url, showSafeGuides: false };
     const serveUrl = await getBundle(log);

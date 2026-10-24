@@ -1,3 +1,5 @@
+import type { FontFileRef } from "./font-files";
+
 // Everything LyricVideo needs. Preview (@remotion/player) and export (renderMedia) receive the same
 // object; media paths are relative to `mediaBaseUrl`, which is the only thing that differs.
 export type TextCase = "none" | "upper" | "lower" | "title";
@@ -14,13 +16,14 @@ export type ShotProps = {
 
 export type LyricLineProps = {
   text: string;
-  startFrame: number; // composition frames, on the vocal (no early cut)
+  startFrame: number; // composition frames (lead / offset already applied, no early cut)
   endFrame: number; // exclusive
+  isHook?: boolean; // shown in the hook font when one is set
 };
 
 export type StyleProps = {
   name: string;
-  font: string;
+  font: string; // font family (one of `fonts`)
   weight: number;
   textCase: TextCase;
   effect: string;
@@ -35,6 +38,8 @@ export type LyricVideoProps = {
   shots: ShotProps[];
   lyrics: LyricLineProps[];
   style: StyleProps;
+  hookFont?: { font: string; weight: number } | null; // font for hook lines (default: the style's)
+  fonts: FontFileRef[]; // every font file the lyrics need (loaded before rendering)
   textSize: number; // px on the 1080x1920 canvas
   colour: string;
   cinematicBars: boolean;
@@ -58,6 +63,7 @@ export const defaultLyricVideoProps: LyricVideoProps = {
   shots: [],
   lyrics: [{ text: "Life Lyrics", startFrame: 0, endFrame: 90 }],
   style: SIMPLE_STYLE,
+  fonts: [],
   textSize: 64,
   colour: "#ffffff",
   cinematicBars: false,

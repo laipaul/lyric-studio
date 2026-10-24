@@ -3,12 +3,13 @@
 import { DEFAULT_SEED, prepareRender } from "../src/node";
 
 try {
-  const { base, media, report } = await prepareRender({ log: (m) => console.error(`[preview] ${m}`) });
+  const { base, media, report, setupWarnings } = await prepareRender({ log: (m) => console.error(`[preview] ${m}`) });
   console.log(
     JSON.stringify({
       base,
       media,
       defaultSeed: DEFAULT_SEED,
+      setupWarnings,
       report: {
         song: report.song,
         bpm: report.bpm,

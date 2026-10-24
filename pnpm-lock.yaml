@@ -127,10 +127,52 @@ importers:
 
   packages/video:
     dependencies:
+      '@fontsource/bebas-neue':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/caveat':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/caveat-brush':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/cormorant-garamond':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/courier-prime':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/dm-serif-display':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/fraunces':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@fontsource/inter':
         specifier: ^5.3.0
         version: 5.3.0
+      '@fontsource/kalam':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/kaushan-script':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/manrope':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@fontsource/montserrat':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/patrick-hand':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/playfair-display':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/special-elite':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/yellowtail':
         specifier: ^5.3.0
         version: 5.3.0
       '@lyric/db':
@@ -959,11 +1001,53 @@ packages:
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
 
+  '@fontsource/bebas-neue@5.3.0':
+    resolution: {integrity: sha512-nCxMEb9Bg9sjNWm9TIOsvHKDMLRUfEZPWpLgYu6m9KavZZVSA/WoHzI5wROwqA+eNwEi/PNBAcB5Co7HA3S0Cw==}
+
+  '@fontsource/caveat-brush@5.3.0':
+    resolution: {integrity: sha512-BHSP/9EKNUtnSj7h4TXuYKOrQWgnkCGm7QMHYiie0xSxtlWKbND6wLkhAgwUtUpbz5k8XL8CWPRrL6tDV+JC8w==}
+
+  '@fontsource/caveat@5.3.0':
+    resolution: {integrity: sha512-eHTfzQxFSW9ABERRLNruHoNJmKed2J7pqTUc5lp4a4POMgXGKpxmWj3d9Hz10kmAg6iuTTLe6UagbA4bnsmfQw==}
+
+  '@fontsource/cormorant-garamond@5.3.0':
+    resolution: {integrity: sha512-weuGsCirGVWBWqpt6YUp0yLThTe4G8YO45noq8wxeJCRvEpq5lFrxNMFSTxcyOyV5k5otzJ8guDzYegdYlcLMQ==}
+
+  '@fontsource/courier-prime@5.3.0':
+    resolution: {integrity: sha512-KIi1k4VG1Wv+/CGpb1AUpLkUuOAQA6zmvthqxOZGN0AV8BEgQgbK7qAtquv14zsBJAY1bb5BHIEbWVFLgENh0w==}
+
+  '@fontsource/dm-serif-display@5.3.0':
+    resolution: {integrity: sha512-ecRclUcYeto9fB7ghkB36H4MtUoaUYFjjornWYYeLCMHzaWEDPk2kIWgZOq0mKBNRxclRSieKcFeLonlMYDTKg==}
+
+  '@fontsource/fraunces@5.3.0':
+    resolution: {integrity: sha512-LEHTOBiZufQzAvnAe2rZ8ZknbDS28Q9kzwb0L+gZJEmjLGr8hhZ/5NuHXwDuHBWhVXYoiGGXmrb0H6Ko/RrHTg==}
+
   '@fontsource/inter@5.3.0':
     resolution: {integrity: sha512-RofMylZmjlJEfELXeNHFWBRcSs75rGU/6bV2S2jfnvv/3rPXPGe0LgUJTklcHZ9lM4OZmAVFhcJPnACfb91A3g==}
 
+  '@fontsource/kalam@5.3.0':
+    resolution: {integrity: sha512-FDkVoDfPDCSN/eO81FOYtUI67eMgpVBJmjBtAqSL0PmEhJyeFY2biC+CR+yEttksgXR9+swpFdYmQTyjwBq80Q==}
+
+  '@fontsource/kaushan-script@5.3.0':
+    resolution: {integrity: sha512-Kdcvr76wOGp2jgKkkmAOETmPcw/a34RU/qcGW2+gSKzkKyr03vEaLWSbSABoVKWuyuoqWoulcmC4571vq3BYvg==}
+
+  '@fontsource/manrope@5.3.0':
+    resolution: {integrity: sha512-obJ1Dv3+uCA6HlHgW8u4BGYxJR9In2HW7gjJhlflEvkrj1X1iSEwu0fToL+JYGC/FEKFfIz1sBuPduvcL2gIAA==}
+
   '@fontsource/montserrat@5.3.0':
     resolution: {integrity: sha512-iQPDtZOnmM5ih4JBGaMSXisRap0ixb9bAUw2hDtY7EjVfaqiiNlKtVuJl9XclxUwtwMMHNcWXfQR6zI9x05+Tg==}
+
+  '@fontsource/patrick-hand@5.3.0':
+    resolution: {integrity: sha512-V8C38IlIFfdWg0Xtri3F7sLCVpm069rUwn6w4n+oyn38gt7H4arOJmuReg3tAw1Q6jHqZp89wTnAAJagq4Atxw==}
+
+  '@fontsource/playfair-display@5.3.0':
+    resolution: {integrity: sha512-uJSABalvdWc10fEPppQjQocamT21LEyRfzzWfRfqbkPz+sRv+kKpYDKyluBUskvJREkJTos9epj1WjQROGu99Q==}
+
+  '@fontsource/special-elite@5.3.0':
+    resolution: {integrity: sha512-fOQ9XU8m4KnqzcLibAXCxTsKzbxePNDjPqVss5GSMcPVCY1TuCv+Wq8gm1ebqIR6XS1rhMbQ7ECP9ocKVEEpTA==}
+
+  '@fontsource/yellowtail@5.3.0':
+    resolution: {integrity: sha512-atz4CIdbP7otppxRaObJiygnkyJzIuLFpPRjWspXvXhBWLB0sk35cCu5r6gSkDomRtEWakJ8//bWbyBjJbilGg==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -5532,9 +5616,37 @@ snapshots:
 
   '@floating-ui/utils@0.2.12': {}
 
+  '@fontsource/bebas-neue@5.3.0': {}
+
+  '@fontsource/caveat-brush@5.3.0': {}
+
+  '@fontsource/caveat@5.3.0': {}
+
+  '@fontsource/cormorant-garamond@5.3.0': {}
+
+  '@fontsource/courier-prime@5.3.0': {}
+
+  '@fontsource/dm-serif-display@5.3.0': {}
+
+  '@fontsource/fraunces@5.3.0': {}
+
   '@fontsource/inter@5.3.0': {}
 
+  '@fontsource/kalam@5.3.0': {}
+
+  '@fontsource/kaushan-script@5.3.0': {}
+
+  '@fontsource/manrope@5.3.0': {}
+
   '@fontsource/montserrat@5.3.0': {}
+
+  '@fontsource/patrick-hand@5.3.0': {}
+
+  '@fontsource/playfair-display@5.3.0': {}
+
+  '@fontsource/special-elite@5.3.0': {}
+
+  '@fontsource/yellowtail@5.3.0': {}
 
   '@humanfs/core@0.19.2':
     dependencies:

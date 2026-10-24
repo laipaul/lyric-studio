@@ -42,11 +42,15 @@ Workspace folder layout: `workspace/projects/<id>/audio`, `workspace/projects/<i
 - Every cut lands earlyCutFrames (default 2, range 0-4, at 30 fps) before its beat. Section energy low halves the cut rate, high doubles it. Optional holdOnLyricLines: never cut inside a lyric line; cut at the next line start, snapped to the nearest beat.
 - Minimum shot length 0.8 s. If the grid is too fast, step to the next coarser REGULAR grid (every beat -> every 2 beats -> every bar ...) instead of dropping single cuts.
 - A clip shorter than its shot is slowed down to fit (playbackRate, minimum 0.5x); only if 0.5x is still too short, its last frame is held.
+- Clip order: "story" (default) = clips in file-name order (01_, 02_, ...; numbers compared as numbers), cycling, a clip shown again continues where it stopped; "shuffle" = seeded random.
 - Shuffle is DETERMINISTIC: same seed + same inputs = same clip sequence. Use a seeded PRNG (e.g. mulberry32). Avoid the same clip twice in a row, and avoid the last 3 clips when the pool allows.
+- Pins (pins.txt: "lyric line = clip file") force a clip onto the shot where that line appears on screen, at every occurrence; pins override the order mode. Lyric lines are matched ignoring case, punctuation and extra spaces. Warn when a line or clip is not found.
 - Clips are cover-cropped to 9:16 and start at a random (seeded) offset inside the clip.
 - Preview and render must use the exact same composition and props.
-- Lyrics stay out of the platform UI: never in the bottom 20% or the right 12% of the frame; centred in the safe area around 62.5% of the height. Lyric lines appear on the vocal (no early cut).
+- Lyrics stay out of the platform UI: never in the bottom 20% or the right 12% of the frame; centred in the safe area around 62.5% of the height. Lyric lines appear 0.25 s before their stamp (lead, configurable), plus an optional lyrics offset; no early cut.
 - Long lyric lines: one line if it fits, else two balanced lines, then shrink up to 25%. Only as an absolute last resort three lines (never more), with a warning naming the line ("Line 3 is too long for phone screens; split it in lyrics.txt") from pnpm tap and render:test.
+- Hook lines: "* " at the start of a line in lyrics.txt or after the time stamp in the .lrc; every line with the same words is a hook too. Hook lines can use their own font.
+- Fonts: bundled @fontsource families plus any .ttf/.otf/.woff/.woff2 in WORKSPACE_DIR\fonts; props list the exact font files, so preview and render load the same ones.
 - Audio: the section start snaps to the nearest downbeat (report the adjusted time); 0.3 s fade-in, 0.5 s fade-out.
 - Video: 30 fps, H.264, AAC 192 kbps, yuv420p, faststart.
 

@@ -13,7 +13,7 @@ import {
 } from "remotion";
 
 import { CINEMATIC_BAR_HEIGHT, LYRIC_AREA, SAFE_ZONE, VIDEO } from "./config";
-import { resolveFont, useFont } from "./fonts";
+import { useFonts } from "./fonts";
 import { activeLyricLine, applyTextCase, layoutLyric } from "./lyrics";
 import { mediaUrl, type LyricLineProps, type LyricVideoProps, type ShotProps, type StyleProps } from "./props";
 
@@ -58,16 +58,16 @@ const textShadows: Record<string, string> = {
   shadow: "0 6px 0 rgba(0,0,0,0.35), 0 0 28px rgba(0,0,0,0.65)",
 };
 
-function LyricText({ line, style, textSize, colour, ready }: {
+function LyricText({ line, style, font, textSize, colour, ready }: {
   line: LyricLineProps;
   style: StyleProps;
+  font: { family: string; weight: number };
   textSize: number;
   colour: string;
   ready: boolean;
 }) {
   const frame = useCurrentFrame(); // relative to the line's Sequence: 0 = first frame of the line
   const { fps } = useVideoConfig();
-  const font = resolveFont(style.font, style.weight);
   const text = applyTextCase(line.text, style.textCase);
   const maxWidth = LYRIC_AREA.right - LYRIC_AREA.left;
 
@@ -164,9 +164,12 @@ function SafeGuides() {
 export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
   const { mediaBaseUrl, audio, shots, lyrics, style, textSize, colour, cinematicBars, durationInFrames } = props;
   const frame = useCurrentFrame();
-  const font = resolveFont(style.font, style.weight);
-  const ready = useFont(mediaBaseUrl, font.family, font.weight);
+  const ready = useFonts(mediaBaseUrl, props.fonts);
   const line = activeLyricLine(lyrics, frame);
+  const font =
+    line?.isHook && props.hookFont
+      ? { family: props.hookFont.font, weight: props.hookFont.weight }
+      : { family: style.font, weight: style.weight };
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
@@ -203,7 +206,7 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
 
       {line ? (
         <Sequence key={line.startFrame} from={line.startFrame} durationInFrames={line.endFrame - line.startFrame} layout="none">
-          <LyricText line={line} style={style} textSize={textSize} colour={colour} ready={ready} />
+          <LyricText line={line} style={style} font={font} textSize={textSize} colour={colour} ready={ready} />
         </Sequence>
       ) : null}
 

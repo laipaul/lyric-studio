@@ -1,7 +1,7 @@
 // Real renders of the LyricVideo composition (headless Chrome via Remotion). Clips are solid colours
 // so every frame's content can be checked exactly.
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -15,11 +15,23 @@ import {
   SAFE_ZONE,
   VIDEO,
   assignClips,
+  composeProps,
   getCutPoints,
   type LyricVideoProps,
   type ShotProps,
 } from "../src";
-import { defaultFontDirs, getBundle, isFaststart, layoutForStyle, renderLyricVideo, startMediaServer, type MediaServer } from "../src/node";
+import {
+  bundledFontDirs,
+  fontFileRefs,
+  getBundle,
+  isFaststart,
+  layoutWithFace,
+  loadFontCatalog,
+  renderLyricVideo,
+  resolveFace,
+  startMediaServer,
+  type MediaServer,
+} from "../src/node";
 import { grid } from "./helpers";
 
 const dir = mkdtempSync(path.join(os.tmpdir(), "lyric-render-"));
@@ -47,8 +59,14 @@ let server: MediaServer;
 let browser: Awaited<ReturnType<typeof openBrowser>>;
 let serveUrl: string;
 
+const catalog = loadFontCatalog(dir);
+const SIMPLE = { name: "Simple", font: "Inter", weight: 600, textCase: "none" as const, effect: "none", animation: "fade" };
+const BOLD = { name: "Bold", font: "Montserrat", weight: 900, textCase: "upper" as const, effect: "shadow", animation: "pop" };
+const fontsFor = (...faces: [string, number][]) => faces.flatMap(([family, weight]) => fontFileRefs(resolveFace(catalog, family, weight)));
+
 const baseProps = (over: Partial<LyricVideoProps>): LyricVideoProps => ({
   mediaBaseUrl: server.url,
+  fonts: fontsFor(["Inter", 600], ["Montserrat", 900]),
   audio: null,
   durationInFrames: 90,
   cutFrames: [],
@@ -119,7 +137,7 @@ beforeAll(async () => {
   solidClip("red-then-lime.mp4", [["red", 1], ["lime", 2]]); // switches colour at exactly 1.0 s (frame 30)
   solidClip("yellow-then-cyan.mp4", [["yellow", 0.5], ["cyan", 0.5]]); // 1 s, ends cyan
   ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=4:sample_rate=48000", "-ac", "2", path.join(dir, "tone.wav"));
-  server = await startMediaServer({ workspaceDir: dir, fontDirs: defaultFontDirs() });
+  server = await startMediaServer({ workspaceDir: dir, fontDirs: bundledFontDirs() });
   serveUrl = await getBundle();
   browser = await openBrowser("chrome", { browserExecutable, logLevel: "error" });
 }, 300_000);
@@ -198,13 +216,11 @@ describe("LyricVideo render", () => {
     expect(await magentaBox(props, 50)).toBeNull();
   }, 300_000);
 
-  const SIMPLE = { name: "Simple", font: "Inter", weight: 600, textCase: "none" as const, effect: "none", animation: "fade" };
-  const BOLD = { name: "Bold", font: "Montserrat", weight: 900, textCase: "upper" as const, effect: "shadow", animation: "pop" };
 
   // Renders `text` and checks: inside the safe zone and the lyric area, centred around 62.5% of the
   // height, and exactly as many lines as the Node-side layout predicts.
   async function checkLongLine(text: string, style: typeof SIMPLE | typeof BOLD, textSize: number, expectedLines: number) {
-    const layout = layoutForStyle(text, style, textSize);
+    const layout = layoutWithFace(text, resolveFace(catalog, style.font, style.weight), style.textCase, textSize);
     expect(layout.lines).toHaveLength(expectedLines);
     const props = baseProps({ colour: "#ff00ff", style, textSize, lyrics: [{ text, startFrame: 0, endFrame: 90 }] });
     const box = (await magentaBox(props, 30))!;
@@ -233,6 +249,53 @@ describe("LyricVideo render", () => {
     expect(layout.tooLong).toBe(true);
     const absurd = Array.from({ length: 60 }, (_, i) => `word${i}`).join(" ");
     await checkLongLine(absurd, BOLD, 84, 3);
+  }, 300_000);
+
+  it("shows a line 0.25 s (8 frames) before its stamp with the default lead", async () => {
+    // Stamp at 2.0 s into a section starting at 0.5 s: composition frame 45; lead 0.25 s -> frame 38.
+    const plan = getCutPoints(grid(120, 8, 500), { start_ms: 500, end_ms: 4_500 }, { cutRate: "1x" });
+    const base = {
+      plan,
+      clips: [{ id: "black", name: "black.mp4", duration_ms: 5_000, path: "none.mp4", durationFrames: 150 }],
+      audio: null,
+      durationInFrames: plan.end_frame - plan.start_frame,
+      lyrics: [{ text: "On the beat", start_ms: 2_500, end_ms: 4_000, isHook: false }],
+      styles: {
+        simple: { style: SIMPLE, textSize: 64, hookFont: null, fonts: fontsFor(["Inter", 600]) },
+        bold: { style: BOLD, textSize: 72, hookFont: null, fonts: fontsFor(["Montserrat", 900]) },
+      },
+      colour: "#ff00ff",
+      cinematicBars: false,
+      pins: [],
+    };
+    const { props } = composeProps(base, { seed: 1, style: "simple" });
+    const first = Math.round((2_250 * 30) / 1000) - plan.start_frame;
+    expect(props.lyrics[0].startFrame).toBe(first);
+    const withMedia = { ...props, shots: [], mediaBaseUrl: server.url };
+    expect(await magentaBox(withMedia, first - 1)).toBeNull();
+    expect(await magentaBox(withMedia, first)).not.toBeNull();
+  }, 300_000);
+
+  it("draws lyrics in a user font and hook lines in the hook font", async () => {
+    // A user font in WORKSPACE_DIR\fonts (a copy of Bebas Neue under another name), used for hooks.
+    mkdirSync(path.join(dir, "fonts"), { recursive: true });
+    copyFileSync(path.join(bundledFontDirs()["bebas-neue"], "bebas-neue-latin-400-normal.woff2"), path.join(dir, "fonts", "MyPoster.woff2"));
+    const userCatalog = loadFontCatalog(dir);
+    const hookFace = resolveFace(userCatalog, "Bebas Neue", 600);
+    expect(userCatalog.families.find((f) => f.source === "user")?.family).toBe("Bebas Neue");
+    const props = baseProps({
+      colour: "#ff00ff",
+      fonts: [...fontsFor(["Inter", 600]), ...fontFileRefs(hookFace)],
+      hookFont: { font: hookFace.family, weight: hookFace.weight },
+      lyrics: [
+        { text: "Same words here", startFrame: 0, endFrame: 30 },
+        { text: "Same words here", startFrame: 30, endFrame: 60, isHook: true },
+      ],
+    });
+    const normal = (await magentaBox(props, 10))!;
+    const hook = (await magentaBox(props, 40))!;
+    // Bebas Neue is a condensed capitals font: much narrower and different from Inter.
+    expect(hook.maxX - hook.minX).toBeLessThan((normal.maxX - normal.minX) * 0.85);
   }, 300_000);
 
   it("applies playbackRate and the start offset inside the clip", async () => {

@@ -55,6 +55,18 @@ describe("database", () => {
     expect(STYLE_PRESETS).toHaveLength(10);
   });
 
+  it("Bold is 72 px: new databases get it, existing ones still at 84 px are updated, a changed size is kept", () => {
+    const boldSize = () => ws.db.select().from(stylePreset).where(eq(stylePreset.name, "Bold")).get()!.default_size;
+    expect(boldSize()).toBe(72);
+    ws.db.update(stylePreset).set({ default_size: 84 }).where(eq(stylePreset.name, "Bold")).run(); // old database
+    seedStylePresets(ws.db);
+    expect(boldSize()).toBe(72);
+    ws.db.update(stylePreset).set({ default_size: 90 }).where(eq(stylePreset.name, "Bold")).run(); // user's choice
+    seedStylePresets(ws.db);
+    expect(boldSize()).toBe(90);
+    ws.db.update(stylePreset).set({ default_size: 72 }).where(eq(stylePreset.name, "Bold")).run();
+  });
+
   it("rejects values outside the allowed lists", () => {
     expect(() =>
       ws.db.$client.prepare("insert into render_job (id, variation_id, status) values ('x', 'y', 'paused')").run(),

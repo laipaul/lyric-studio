@@ -89,3 +89,49 @@ describe("assignClips", () => {
     }
   });
 });
+
+describe("story order", () => {
+  const named = [
+    { id: "x", name: "10_end.mp4", duration_ms: 6_000 },
+    { id: "y", name: "2_middle.mp4", duration_ms: 6_000 },
+    { id: "z", name: "01_start.mp4", duration_ms: 6_000 },
+  ];
+
+  it("plays clips in file-name order (numbers compared as numbers), cycling", () => {
+    const ids = assignClips(plan, named, 1, { order: "story" }).map((s) => s.clip_id);
+    expect(ids.slice(0, 7)).toEqual(["z", "y", "x", "z", "y", "x", "z"]);
+    // Independent of the seed and of the input order.
+    expect(assignClips(plan, [...named].reverse(), 99, { order: "story" }).map((s) => s.clip_id)).toEqual(ids);
+  });
+
+  it("a clip shown again continues where it stopped, wrapping to the start when it runs out", () => {
+    const shots = assignClips(plan, named, 1, { order: "story" });
+    const clipFrames = 180;
+    const used = new Map<string, number>();
+    for (const s of shots) {
+      const resume = used.get(s.clip_id) ?? 0;
+      const expected = resume + s.duration_frames <= clipFrames ? resume : 0;
+      expect(s.clip_start_frame).toBe(expected);
+      expect(s.clip_start_frame + s.duration_frames).toBeLessThanOrEqual(clipFrames);
+      used.set(s.clip_id, expected + s.duration_frames);
+    }
+  });
+
+  it("never the same clip twice in a row, also around pins", () => {
+    const pins = new Map([
+      [1, "z"], // story would put y here; z is forced, so shot 2 must not be z
+      [4, "x"],
+    ]);
+    for (const order of ["story", "shuffle"] as const) {
+      const shots = assignClips(plan, named, 5, { order, pins });
+      expect(shots[1].clip_id).toBe("z");
+      expect(shots[1].pinned).toBe(true);
+      expect(shots[4].clip_id).toBe("x");
+      shots.slice(1).forEach((s, i) => expect(s.clip_id).not.toBe(shots[i].clip_id));
+    }
+  });
+
+  it("shuffle stays the default and unchanged", () => {
+    expect(assignClips(plan, clips, 42)).toEqual(assignClips(plan, clips, 42, { order: "shuffle" }));
+  });
+});

@@ -121,18 +121,39 @@
   lines inside the safe zone on 2 lines, 3-line last resort, never more than 3, playbackRate and
   start offset, hold last frame); layout/LRC unit tests; 9 Python tap tests (simulated keys/clock).
 
+### Step 5b — Timing, clip order, pins, fonts ✅
+- Lyric timing: lines appear 0.25 s before their stamp (`--lead`), plus `--lyrics-offset`;
+  `/preview` slider (−1…+1 s) with the matching command; `pnpm lrc:shift <lrc> <s>` (keeps `.bak`);
+  `pnpm tap` defaults to `--shift -0.15`.
+- Hooks: `* ` in lyrics.txt or after the stamp in the .lrc; all identical lines become hooks
+  (case/punctuation/spaces ignored); `pnpm lrc:hook <lrc> "<line>"`.
+- Bold preset 72 px (existing databases updated only if still 84 px).
+- Clip order `--order story|shuffle` (default story: natural file-name order, cycling, resumes inside
+  a clip, never twice in a row); `/preview` toggle.
+- Pins (`pins.txt`): clip forced onto the shot where the line appears (after lead/offset), at every
+  occurrence; override the order; warnings for unknown lines/clips, outside the section, conflicts.
+- Fonts: 14 Google Fonts bundled via @fontsource (+ Inter, Montserrat), italics where published;
+  user fonts in `WORKSPACE_DIR\fonts` (family/weight/italic read with fontkit); `pnpm fonts`;
+  `--font`, `--font-hook`; props carry the exact font files. All 16 bundled families have
+  é è à ç œ and their capitals.
+- Tests: LRC shift/hook, lead/offset frames, pins (parse, match, every occurrence, both orders,
+  follows timing, warnings), story order, font catalog (user fonts, italics, nearest weight,
+  accents, serving), Bold update, tap default shift and hook marker, renders: line visible exactly
+  0.25 s early, user font + hook font drawn.
+
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
 - `pnpm analyze <file>` (also `--click`, `--downbeat-offset`), `POST /analyze`, `pnpm test:audio`.
 - `pnpm cuts <file> --section a-b`.
 - `pnpm tap`, `pnpm render:test`, http://localhost:3000/preview.
+- `pnpm lrc:shift`, `pnpm lrc:hook`, `pnpm fonts`.
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
 
 ## Known issues
 - `pnpm cuts` does not read lyrics yet (`--rate off` / hold are available in render:test via the LRC).
-- Bold at its preset size (84 px) is large: lines over ~40 characters need the 3-line fallback.
-- Only the Simple and Bold styles are implemented; other presets fall back to Inter.
+- Only the Simple and Bold styles are implemented (any font can be used with them via --font).
+- Hook lines change font only (same size, colour and animation).
 - `pnpm tap` real playback and keys can only be tested on the PC (logic is tested with a simulated
   keyboard and clock); the cloud machine has no sound card.
 - The preview shows Remotion's license note in the browser console (free for individuals).

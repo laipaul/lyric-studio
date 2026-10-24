@@ -138,7 +138,24 @@ The section plays. Press **Enter** exactly when each line starts (the next line 
 After the last line, press **Enter** once more where it ends. **Backspace** redoes the last stamp,
 **r** restarts the section, **q** quits without saving. Each stamp is printed as you go, and at the
 end `lyrics.lrc` is written next to `lyrics.txt` (the previous one is kept as `lyrics.lrc.bak`).
-If you tend to tap late, `--shift -0.15` moves all stamps 0.15 s earlier.
+Stamps are moved 0.15 s earlier by default to make up for reaction time (`--shift 0` turns
+that off, `--shift -0.25` moves them more).
+
+A line starting with `* ` in `lyrics.txt` is a **hook** (it can get its own font). Every line with
+the same words is then a hook too, so marking one chorus is enough.
+
+### Fixing timing and hooks in an existing .lrc
+
+```powershell
+cd D:\videomaker
+pnpm lrc:shift workspace\test\lyrics.lrc -0.3
+pnpm lrc:hook workspace\test\lyrics.lrc "Hope is a good thing"
+```
+
+- `lrc:shift` moves every stamp (negative = earlier) and keeps the old file as `lyrics.lrc.bak`.
+- `lrc:hook` marks that line and all its repeats as hook (`[00:14.00]* Hope is a good thing`).
+  Matching ignores upper/lower case, punctuation and extra spaces. You can also type the `* `
+  yourself in the .lrc, right after the time stamp.
 
 Before playing, every line is checked for phone screens. A line that would need 3 lines on screen
 prints e.g. `WARNING: Line 3 is too long for phone screens (Bold style); split it in lyrics.txt`.
@@ -159,11 +176,34 @@ pnpm render:test --seed 7 --style bold --bars --rate 2x --energy high
 | `--song`, `--clips`, `--lrc` | files in `workspace\test\` | other files |
 | `--section 0:11-0:59` | first to last lyric line | part of the song (the start snaps to the nearest bar) |
 | `--rate`, `--energy` | `1x`, `medium` | as for `pnpm cuts`; `--rate off` = one shot per lyric line |
-| `--seed` | `1` | which clips go where (same seed = same video) |
+| `--order` | `story` | `story` = clips in file-name order (01_, 02_, …), `shuffle` = random by seed |
+| `--seed` | `1` | shuffle only: which clips go where (same seed = same video) |
+| `--pins` | `workspace\test\pins.txt` if present | force clips onto lyric lines (see below) |
+| `--lead` | `0.25` | lines appear this many seconds before their stamp |
+| `--lyrics-offset` | `0` | move all lines (seconds; negative = earlier), e.g. `-0.3` |
+| `--font`, `--font-hook` | the style's font | font family for the lyrics / for hook lines (see `pnpm fonts`) |
 | `--style` | `simple` | `simple` or `bold` |
 | `--bars` | off | cinematic black bars top and bottom |
 | `--downbeat-offset` | from analysis | move bar 1 |
 | `--out` | `workspace\test\renders\<style>-seed<seed>.mp4` | output file |
+
+**Story order**: name your clips `01_intro.mp4`, `02_walk.mp4`, … and they play in that order,
+cycling when the section has more shots than clips (a clip shown again continues where it stopped).
+
+**Pins** (`workspace\test\pins.txt`), one per line:
+
+```
+Love is a good thing = 07_hero.mp4
+Another line = 03_city
+```
+
+The clip goes onto the shot where that lyric line appears on screen, every time the line occurs.
+Pins beat the order mode. Lines starting with `#` are comments. Warnings are printed when a line or
+clip is not found, a line is outside the section, or two pins hit the same shot.
+
+**Fonts**: `pnpm fonts` lists every font with its weights, italics and whether it has é è à ç œ.
+Put your own `.ttf`, `.otf` or `.woff2` files in `workspace\fonts\`; they appear in that list under
+their real family name. Example: `pnpm render:test --font "Playfair Display" --font-hook "Caveat Brush"`.
 
 The output is 1080x1920, 30 fps, H.264, AAC 192 kbps, yuv420p, faststart. The first render
 downloads Remotion's headless Chrome once (~100 MB, inside the project) and prepares the clips
@@ -172,8 +212,10 @@ downloads Remotion's headless Chrome once (~100 MB, inside the project) and prep
 ## Preview page
 
 With `pnpm dev` running, open http://localhost:3000/preview. It plays the same video as
-`pnpm render:test` (same files, same composition, same props). **Shuffle** picks a new seed, **Simple /
-Bold** switches the text style, and the page shows the exact `pnpm render:test` command to export what
+`pnpm render:test` (same files, same composition, same props). **Story / Shuffle** switches the clip
+order (**Shuffle** button = new seed), **Simple / Bold** switches the text style, the **Lyrics offset**
+slider moves the lines (it shows the `pnpm lrc:shift` command to make it permanent), pin warnings
+are listed, and the page shows the exact `pnpm render:test` command to export what
 you see. Tick **Show safe-zone guides** (or open http://localhost:3000/preview?safe-guides) to see the
 areas covered by TikTok / Reels / Shorts buttons (red) and the lyric area (blue); guides are never
 rendered into the export. **Reload files** picks up changed songs, clips or lyrics.

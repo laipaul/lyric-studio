@@ -6,8 +6,8 @@ import path from "node:path";
 
 import { openWorkspace, stylePreset } from "@lyric/db";
 
-import { tooLongLines, tooLongMessage } from "../src/node";
-import type { StyleProps, TextCase } from "../src";
+import { loadFontCatalog, resolveFace, tooLongLines, tooLongMessage } from "../src/node";
+import type { TextCase } from "../src";
 
 const file = process.argv[2];
 if (!file) {
@@ -18,30 +18,27 @@ if (!file) {
 const lines = readFileSync(file, "utf8")
   .replace(/^﻿/, "")
   .split(/\r?\n/)
-  .map((text, i) => ({ text: text.trim(), number: i + 1 }))
+  .map((text, i) => ({ text: text.trim().replace(/^\*\s+/, ""), number: i + 1 }))
   .filter((l) => l.text);
 
 const ws = openWorkspace();
-const styles = ws.db.select().from(stylePreset).all().filter((s) => s.name === "Simple" || s.name === "Bold");
+const presets = ws.db.select().from(stylePreset).all().filter((s) => s.name === "Simple" || s.name === "Bold");
+const catalog = loadFontCatalog(ws.dir);
 ws.close();
 
 const tooLong = new Map<number, string[]>();
-for (const preset of styles) {
-  const style: StyleProps = {
-    name: preset.name,
-    font: preset.font,
-    weight: preset.weight,
+for (const preset of presets) {
+  const fonts = {
+    main: resolveFace(catalog, preset.font, preset.weight),
     textCase: preset.text_case as TextCase,
-    effect: preset.effect,
-    animation: preset.animation,
+    textSize: preset.default_size,
   };
-  for (const { text } of tooLongLines(lines.map((l) => l.text), style, preset.default_size)) {
-    for (const l of lines.filter((x) => x.text === text)) tooLong.set(l.number, [...(tooLong.get(l.number) ?? []), preset.name]);
-  }
+  for (const l of tooLongLines(lines, fonts)) tooLong.set(l.number, [...(tooLong.get(l.number) ?? []), preset.name]);
 }
 
 for (const [number, styleNames] of [...tooLong.entries()].sort((a, b) => a[0] - b[0])) {
   const text = lines.find((l) => l.number === number)!.text;
-  console.log(`WARNING: ${tooLongMessage(number, path.basename(file), text, styleNames.join(" and "))}`.replace("and Bold style", "and Bold styles"));
+  const label = `${styleNames.join(" and ")} style${styleNames.length > 1 ? "s" : ""}`;
+  console.log(`WARNING: ${tooLongMessage(number, path.basename(file), text, label)}`);
 }
 if (tooLong.size) console.log("         (press q to quit and edit the file, or carry on tapping)\n");

@@ -10,6 +10,7 @@ export type PreviewData = {
   base: RenderBase;
   media: MediaRoots;
   defaultSeed: number;
+  setupWarnings: string[];
   report: {
     song: string;
     bpm: number;

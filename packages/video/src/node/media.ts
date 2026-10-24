@@ -6,21 +6,16 @@ import type { AddressInfo } from "node:net";
 import path from "node:path";
 import type { Readable } from "node:stream";
 
-import { FONT_FILES } from "../font-files";
 
 export type MediaRoots = {
   workspaceDir: string;
   // Files outside the workspace (e.g. a song elsewhere on disk), served as "_ext/<name>".
   extraFiles?: Record<string, string>;
-  // Folders with the font files, per family prefix ("inter", "montserrat"); see defaultFontDirs()
-  // in ./font-dirs (kept separate so the studio can import this file without Node module lookups).
+  // Folders with the bundled font files, per @fontsource package slug ("inter", "bebas-neue"); see
+  // bundledFontDirs() in ./font-catalog (kept separate so the studio can import this file).
   fontDirs?: Record<string, string>;
 };
 
-
-const KNOWN_FONT_FILES = new Set(
-  Object.values(FONT_FILES).flatMap((w) => Object.values(w).flatMap((f) => [f.latin, f.latinExt])),
-);
 
 const CONTENT_TYPES: Record<string, string> = {
   ".mp4": "video/mp4",
@@ -35,6 +30,9 @@ const CONTENT_TYPES: Record<string, string> = {
   ".jpg": "image/jpeg",
   ".png": "image/png",
   ".woff2": "font/woff2",
+  ".woff": "font/woff",
+  ".ttf": "font/ttf",
+  ".otf": "font/otf",
 };
 
 // Maps a URL path ("clips/x.mp4", "_fonts/inter-...woff2", "_ext/song.wav") to a file on disk, or
@@ -48,9 +46,12 @@ export function resolveMediaPath(urlPath: string, roots: MediaRoots): string | n
   }
   if (relative.startsWith("_fonts/")) {
     const file = relative.slice("_fonts/".length);
-    if (!KNOWN_FONT_FILES.has(file)) return null;
-    const dir = roots.fontDirs?.[file.split("-")[0]];
-    return dir ? path.join(dir, file) : null;
+    if (!/^[a-z0-9-]+\.woff2$/.test(file)) return null;
+    // The package whose slug is the longest prefix of the file name ("caveat-brush-..." before "caveat-...").
+    const slug = Object.keys(roots.fontDirs ?? {})
+      .filter((s) => file.startsWith(`${s}-`))
+      .sort((a, b) => b.length - a.length)[0];
+    return slug ? path.join(roots.fontDirs![slug], file) : null;
   }
   if (relative.startsWith("_ext/")) {
     return roots.extraFiles?.[relative.slice("_ext/".length)] ?? null;

@@ -101,3 +101,18 @@ def test_parse_clock() -> None:
     assert parse_clock("0:11") == 11_000
     assert parse_clock("1:02.5") == 62_500
     assert parse_clock("42") == 42_000
+
+
+def test_default_shift_compensates_reaction_time() -> None:
+    from app.tap import DEFAULT_SHIFT_SECONDS, build_parser
+
+    assert DEFAULT_SHIFT_SECONDS == -0.15
+    assert build_parser().parse_args(["song.wav", "lyrics.txt"]).shift == -0.15
+    assert build_parser().parse_args(["song.wav", "lyrics.txt", "--shift", "0"]).shift == 0
+
+
+def test_hook_marker_is_kept_in_the_lrc() -> None:
+    session = TapSession(parse_lyrics_txt("Verse\n* Love is a good thing\n"))
+    for ms in (1_000, 2_000, 3_000):
+        handle_key(session, ENTER, ms)
+    assert "[00:02.00]* Love is a good thing" in session.to_lrc()

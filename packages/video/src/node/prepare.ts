@@ -7,15 +7,17 @@ import { openWorkspace, resolveWorkspaceDir, stylePreset, type StylePreset } fro
 import { eq } from "drizzle-orm";
 
 import type { Beat } from "../beats";
+import { composeProps, DEFAULT_LEAD_MS, type RenderBase, type StyleChoice, type StyleEntry } from "../compose";
 import { AUDIO_FADE, VIDEO } from "../config";
 import { getCutPoints, type CutPlan, type CutRate, type Energy } from "../cuts";
 import { parseLrc, type TimedLine } from "../lrc";
-import { composeProps, type RenderBase, type StyleChoice } from "../compose";
+import { matchPinClips, parsePins } from "../pins";
 import type { LyricVideoProps, StyleProps, TextCase } from "../props";
+import type { ClipOrder } from "../shots";
 import { analyzeSong } from "./analysis";
 import { prepareClips } from "./clips";
+import { fontFileRefs, loadFontCatalog, resolveFace, type FontCatalog, type FontFaceInfo } from "./font-catalog";
 import { tooLongLines } from "./measure";
-import { defaultFontDirs } from "./font-dirs";
 import type { MediaRoots } from "./media";
 
 export type { StyleChoice };
@@ -24,14 +26,20 @@ export type PrepareOptions = {
   song?: string;
   clips?: string;
   lrc?: string;
+  pins?: string; // default: pins.txt next to the default test files, if it exists
   section?: string; // "0:11-0:59"; default: from the first to the last lyric line
   rate?: CutRate;
   energy?: Energy;
   seed?: number;
+  order?: ClipOrder;
   style?: StyleChoice;
   bars?: boolean;
   downbeatOffset?: number;
   earlyCutFrames?: number;
+  leadMs?: number;
+  lyricsOffsetMs?: number;
+  font?: string; // font family for the lyrics (instead of the style's)
+  fontHook?: string; // font family for hook lines
   textSize?: number;
   colour?: string;
   collection?: string;
@@ -40,43 +48,31 @@ export type PrepareOptions = {
 };
 
 export type PrepareResult = {
-  base: RenderBase; // everything except seed/style choices (used by the /preview page)
-  props: Omit<LyricVideoProps, "mediaBaseUrl">; // composeProps(base, seed, style)
+  base: RenderBase; // everything except the quick choices (used by the /preview page)
+  props: Omit<LyricVideoProps, "mediaBaseUrl">; // composeProps(base, choices)
   media: MediaRoots;
+  warnings: string[]; // pins, too-long lines
+  setupWarnings: string[]; // pins.txt problems found while preparing (shown on /preview too)
   report: {
     song: string;
     lrc: string;
     clipsFolder: string;
+    pinsFile: string | null;
     bpm: number;
     downbeatConfidence: number;
     requestedSection: { start_ms: number; end_ms: number };
     section: { start_ms: number; end_ms: number }; // start snapped to the nearest bar start
     plan: CutPlan;
     seed: number;
+    order: ClipOrder;
     style: StyleChoice;
     clipCount: number;
     lyricLines: number;
-    // Lines that need the 3-line last resort, with their line number in the lyrics file.
-    longLines: { lineNumber: number; file: string; text: string }[];
+    hookLines: number;
+    pins: number;
+    fonts: { main: string; hook: string | null };
   };
 };
-
-// Finds each lyric line in the lyrics text file (lyrics.txt next to lyrics.lrc) so warnings can name
-// the line number the user edits; falls back to the line number in the LRC file.
-export function lyricLineNumbers(texts: readonly string[], lrcFile: string): { file: string; numbers: number[] } {
-  const txt = lrcFile.replace(/\.lrc$/i, ".txt");
-  const useTxt = txt !== lrcFile && existsSync(txt);
-  const file = useTxt ? txt : lrcFile;
-  const fileLines = readFileSync(file, "utf8").split(/\r?\n/).map((l) => (useTxt ? l : l.replace(/\[[^\]]*\]/g, "")).trim());
-  let from = 0;
-  const numbers = texts.map((text) => {
-    const index = fileLines.findIndex((l, i) => i >= from && l === text.trim());
-    if (index < 0) return 0;
-    from = index + 1;
-    return index + 1;
-  });
-  return { file, numbers };
-}
 
 export const DEFAULT_SEED = 1;
 
@@ -87,6 +83,7 @@ export function testDefaults(workspaceDir = resolveWorkspaceDir()) {
     song: song ?? path.join(dir, "song.wav"),
     clips: path.join(dir, "clips"),
     lrc: path.join(dir, "lyrics.lrc"),
+    pins: path.join(dir, "pins.txt"),
     out: path.join(dir, "renders"),
   };
 }
@@ -102,7 +99,7 @@ export function parseClock(text: string): number {
 
 export function parseSection(text: string): { start_ms: number; end_ms: number } {
   const [from, to] = text.split("-");
-  if (to === undefined) throw new Error('A section looks like 0:11-0:59');
+  if (to === undefined) throw new Error("A section looks like 0:11-0:59");
   const section = { start_ms: parseClock(from), end_ms: parseClock(to) };
   if (section.end_ms <= section.start_ms) throw new Error("The section must end after it starts.");
   return section;
@@ -117,20 +114,57 @@ export function snapToDownbeat(beats: readonly Beat[], ms: number): number {
   return best ?? ms;
 }
 
-function styleProps(row: StylePreset | undefined, choice: StyleChoice): StyleProps {
-  const fallback: Record<StyleChoice, StyleProps> = {
-    simple: { name: "Simple", font: "Inter", weight: 600, textCase: "none", effect: "none", animation: "fade" },
-    bold: { name: "Bold", font: "Montserrat", weight: 900, textCase: "upper", effect: "shadow", animation: "pop" },
+const FALLBACK_STYLES: Record<StyleChoice, StylePresetLike> = {
+  simple: { name: "Simple", font: "Inter", weight: 600, text_case: "none", effect: "none", animation: "fade", default_size: 64 },
+  bold: { name: "Bold", font: "Montserrat", weight: 900, text_case: "upper", effect: "shadow", animation: "pop", default_size: 72 },
+};
+type StylePresetLike = Pick<StylePreset, "name" | "font" | "weight" | "text_case" | "effect" | "animation" | "default_size">;
+
+// Style + fonts for one preset: the lyric font (preset font, or --font) and an optional hook font.
+function styleEntry(
+  catalog: FontCatalog,
+  preset: StylePresetLike,
+  options: { font?: string; fontHook?: string; textSize?: number },
+): { entry: StyleEntry; main: FontFaceInfo; hook: FontFaceInfo | null } {
+  const main = resolveFace(catalog, options.font ?? preset.font, preset.weight);
+  const hook = options.fontHook ? resolveFace(catalog, options.fontHook, preset.weight) : null;
+  const style: StyleProps = {
+    name: preset.name,
+    font: main.family,
+    weight: main.weight,
+    textCase: preset.text_case as TextCase,
+    effect: preset.effect,
+    animation: preset.animation,
   };
-  if (!row) return fallback[choice];
   return {
-    name: row.name,
-    font: row.font,
-    weight: row.weight,
-    textCase: row.text_case as TextCase,
-    effect: row.effect,
-    animation: row.animation,
+    entry: {
+      style,
+      textSize: options.textSize ?? preset.default_size,
+      hookFont: hook ? { font: hook.family, weight: hook.weight } : null,
+      fonts: [...fontFileRefs(main), ...(hook ? fontFileRefs(hook) : [])],
+    },
+    main,
+    hook,
   };
+}
+
+// Finds each lyric line in the lyrics text file (lyrics.txt next to lyrics.lrc) so warnings can name
+// the line number the user edits; falls back to the line number in the LRC file.
+export function lyricLineNumbers(texts: readonly string[], lrcFile: string): { file: string; numbers: number[] } {
+  const txt = lrcFile.replace(/\.lrc$/i, ".txt");
+  const useTxt = txt !== lrcFile && existsSync(txt);
+  const file = useTxt ? txt : lrcFile;
+  const fileLines = readFileSync(file, "utf8")
+    .split(/\r?\n/)
+    .map((l) => (useTxt ? l : l.replace(/\[[^\]]*\]/g, "")).trim().replace(/^\*\s+/, ""));
+  let from = 0;
+  const numbers = texts.map((text) => {
+    const index = fileLines.findIndex((l, i) => i >= from && l === text.trim());
+    if (index < 0) return 0;
+    from = index + 1;
+    return index + 1;
+  });
+  return { file, numbers };
 }
 
 export async function prepareRender(options: PrepareOptions = {}): Promise<PrepareResult> {
@@ -141,9 +175,22 @@ export async function prepareRender(options: PrepareOptions = {}): Promise<Prepa
     const song = path.resolve(options.song ?? defaults.song);
     const clipsFolder = path.resolve(options.clips ?? defaults.clips);
     const lrcFile = path.resolve(options.lrc ?? defaults.lrc);
+    const pinsFile = options.pins ? path.resolve(options.pins) : existsSync(defaults.pins) ? defaults.pins : null;
     const style = options.style ?? "simple";
+    const order = options.order ?? "story";
     const seed = options.seed ?? DEFAULT_SEED;
     if (!existsSync(song)) throw new Error(`Song not found: ${song}`);
+    if (pinsFile && !existsSync(pinsFile)) throw new Error(`Pins file not found: ${pinsFile}`);
+
+    // Fonts first: a wrong --font name should fail before the slow steps.
+    const catalog = loadFontCatalog(ws.dir);
+    for (const problem of catalog.problems) log(`font file skipped: ${problem}`);
+    const presetFor = (choice: StyleChoice): StylePresetLike =>
+      ws.db.select().from(stylePreset).where(eq(stylePreset.name, FALLBACK_STYLES[choice].name)).get() ?? FALLBACK_STYLES[choice];
+    const styles = {
+      simple: styleEntry(catalog, presetFor("simple"), options),
+      bold: styleEntry(catalog, presetFor("bold"), options),
+    };
 
     log("analysing the song (cached after the first time)");
     const analysis = analyzeSong(song, { downbeatOffset: options.downbeatOffset });
@@ -171,19 +218,23 @@ export async function prepareRender(options: PrepareOptions = {}): Promise<Prepa
     });
 
     const clips = await prepareClips(ws, clipsFolder, options.collection ?? "test", log);
+    const preparedClips = clips.map((c) => ({
+      id: c.clip.id,
+      name: c.name,
+      duration_ms: c.durationMs,
+      path: c.path,
+      durationFrames: c.durationFrames,
+    }));
 
-    const durationInFrames = plan.end_frame - plan.start_frame;
-    const toFrame = (ms: number) => Math.round((ms * VIDEO.fps) / 1000) - plan.start_frame;
-    const lyrics = lines
-      .map((l) => ({ text: l.text, startFrame: Math.max(0, toFrame(l.start_ms)), endFrame: Math.min(durationInFrames, toFrame(l.end_ms)) }))
-      .filter((l) => l.endFrame > l.startFrame);
-
-    const presetFor = (choice: StyleChoice) =>
-      ws.db.select().from(stylePreset).where(eq(stylePreset.name, choice === "bold" ? "Bold" : "Simple")).get();
-    const styleEntry = (choice: StyleChoice) => {
-      const preset = presetFor(choice);
-      return { style: styleProps(preset, choice), textSize: preset?.default_size ?? (choice === "bold" ? 84 : 64) };
-    };
+    const setupWarnings: string[] = [];
+    let pins: RenderBase["pins"] = [];
+    if (pinsFile) {
+      const parsed = parsePins(readFileSync(pinsFile, "utf8"));
+      const matched = matchPinClips(parsed.rules, preparedClips);
+      pins = matched.pins;
+      setupWarnings.push(...parsed.warnings, ...matched.warnings);
+    }
+    const warnings = [...setupWarnings];
 
     // The song is served from the workspace if it lives there, otherwise as an extra file.
     const insideWorkspace = path.relative(ws.dir, song);
@@ -192,51 +243,78 @@ export async function prepareRender(options: PrepareOptions = {}): Promise<Prepa
     const media: MediaRoots = {
       workspaceDir: ws.dir,
       extraFiles: songInWorkspace ? {} : { [`song${path.extname(song)}`]: song },
-      fontDirs: defaultFontDirs(),
+      fontDirs: catalog.fontDirs,
     };
 
     const base: RenderBase = {
       plan,
-      clips: clips.map((c) => ({ id: c.clip.id, duration_ms: c.durationMs, path: c.path, durationFrames: c.durationFrames })),
+      clips: preparedClips,
       audio: {
         src: audioSrc,
         startFrame: plan.start_frame,
         fadeInFrames: Math.round(AUDIO_FADE.inSeconds * VIDEO.fps),
         fadeOutFrames: Math.round(AUDIO_FADE.outSeconds * VIDEO.fps),
       },
-      durationInFrames,
-      lyrics,
-      styles: { simple: styleEntry("simple"), bold: styleEntry("bold") },
+      durationInFrames: plan.end_frame - plan.start_frame,
+      lyrics: lines,
+      styles: { simple: styles.simple.entry, bold: styles.bold.entry },
       colour: options.colour ?? "#ffffff",
       cinematicBars: options.bars ?? false,
+      pins,
     };
-    const props = composeProps(base, { seed, style, textSize: options.textSize });
+    const composed = composeProps(base, {
+      seed,
+      style,
+      order,
+      leadMs: options.leadMs ?? DEFAULT_LEAD_MS,
+      lyricsOffsetMs: options.lyricsOffsetMs ?? 0,
+      textSize: options.textSize,
+    });
+    warnings.push(...composed.warnings);
+
+    // Lines too long for phone screens with the chosen fonts (in the section).
+    const chosen = styles[style];
+    const visible = new Set(composed.props.lyrics.map((l) => l.text));
+    const tooLong = tooLongLines(
+      lines.filter((l) => visible.has(l.text)),
+      { main: chosen.main, hook: chosen.hook, textCase: chosen.entry.style.textCase, textSize: composed.props.textSize },
+    );
+    if (tooLong.length) {
+      const { file, numbers } = lyricLineNumbers(lines.map((l) => l.text), lrcFile);
+      const tooLongSet = new Set(tooLong);
+      lines.forEach((l, i) => {
+        if (tooLongSet.has(l)) {
+          warnings.push(
+            `Line ${numbers[i] || i + 1} is too long for phone screens; split it in ${path.basename(file)}: "${l.text}"`,
+          );
+        }
+      });
+    }
 
     return {
       base,
-      props,
+      props: composed.props,
       media,
+      warnings,
+      setupWarnings,
       report: {
         song,
         lrc: lrcFile,
         clipsFolder,
+        pinsFile,
         bpm: analysis.bpm,
         downbeatConfidence: analysis.downbeat_confidence,
         requestedSection: requested,
         section,
         plan,
         seed,
+        order,
         style,
         clipCount: clips.length,
-        lyricLines: lyrics.length,
-        longLines: (() => {
-          const tooLong = new Set(tooLongLines(lines.map((l) => l.text), props.style, props.textSize).map((l) => l.text));
-          if (!tooLong.size) return [];
-          const { file, numbers } = lyricLineNumbers(lines.map((l) => l.text), lrcFile);
-          return lines
-            .map((l, i) => ({ lineNumber: numbers[i] || i + 1, file: path.basename(file), text: l.text }))
-            .filter((l) => tooLong.has(l.text));
-        })(),
+        lyricLines: composed.props.lyrics.length,
+        hookLines: composed.props.lyrics.filter((l) => l.isHook).length,
+        pins: pins.length,
+        fonts: { main: `${chosen.main.family} ${chosen.main.weight}`, hook: chosen.hook ? `${chosen.hook.family} ${chosen.hook.weight}` : null },
       },
     };
   } finally {

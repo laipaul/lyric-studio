@@ -1,6 +1,15 @@
 "use client";
 
-import { LyricVideo, VIDEO, composeProps, type LyricVideoProps, type RenderBase, type StyleChoice } from "@lyric/video";
+import {
+  DEFAULT_LEAD_MS,
+  LyricVideo,
+  VIDEO,
+  composeProps,
+  type ClipOrder,
+  type LyricVideoProps,
+  type RenderBase,
+  type StyleChoice,
+} from "@lyric/video";
 import { Player } from "@remotion/player";
 import { Shuffle } from "lucide-react";
 import { useSearchParams } from "next/navigation";
@@ -12,6 +21,7 @@ import { cn } from "@/lib/utils";
 type Data = {
   base: RenderBase;
   defaultSeed: number;
+  setupWarnings: string[];
   report: {
     song: string;
     bpm: number;
@@ -32,6 +42,8 @@ export function PreviewClient() {
   const [error, setError] = useState<string | null>(null);
   const [seed, setSeed] = useState<number | null>(null);
   const [style, setStyle] = useState<StyleChoice>("simple");
+  const [order, setOrder] = useState<ClipOrder>("story");
+  const [offset, setOffset] = useState(0); // seconds
   const [safeGuides, setSafeGuides] = useState(searchParams.has("safe-guides"));
   const [reloading, setReloading] = useState(false);
 
@@ -54,14 +66,26 @@ export function PreviewClient() {
     fetchData(false);
   }, []);
 
-  // Same function as "pnpm render:test": identical props for the same seed and style.
-  const props: LyricVideoProps | null = useMemo(
+  // Same function as "pnpm render:test": identical props for the same choices.
+  const composed = useMemo(
     () =>
       data && seed !== null
-        ? { ...composeProps(data.base, { seed, style }), mediaBaseUrl: "/api/media", showSafeGuides: safeGuides }
+        ? composeProps(data.base, { seed, style, order, leadMs: DEFAULT_LEAD_MS, lyricsOffsetMs: Math.round(offset * 1000) })
         : null,
-    [data, seed, style, safeGuides],
+    [data, seed, style, order, offset],
   );
+  const props: LyricVideoProps | null = composed
+    ? { ...composed.props, mediaBaseUrl: "/api/media", showSafeGuides: safeGuides }
+    : null;
+  const command = [
+    "pnpm render:test",
+    `--order ${order}`,
+    order === "shuffle" ? `--seed ${seed}` : null,
+    `--style ${style}`,
+    offset !== 0 ? `--lyrics-offset ${offset.toFixed(2)}` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   if (error) {
     return (
@@ -107,32 +131,44 @@ export function PreviewClient() {
         </div>
 
         <div className="flex flex-col gap-2">
-          <span className="text-muted-foreground text-xs font-medium uppercase">Clips</span>
-          <div className="flex items-center gap-3">
-            <Button onClick={() => setSeed(Math.floor(Math.random() * 1_000_000))}>
-              <Shuffle />
-              Shuffle
-            </Button>
-            <span className="font-mono">seed {seed}</span>
-          </div>
+          <span className="text-muted-foreground text-xs font-medium uppercase">Clip order</span>
+          <Toggle options={["story", "shuffle"] as const} value={order} onChange={setOrder} />
+          {order === "shuffle" ? (
+            <div className="flex items-center gap-3">
+              <Button onClick={() => setSeed(Math.floor(Math.random() * 1_000_000))}>
+                <Shuffle />
+                Shuffle
+              </Button>
+              <span className="font-mono">seed {seed}</span>
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-xs">Clips in file-name order (01_, 02_, …); pins.txt overrides.</p>
+          )}
         </div>
 
         <div className="flex flex-col gap-2">
           <span className="text-muted-foreground text-xs font-medium uppercase">Text style</span>
-          <div className="bg-muted inline-flex w-fit rounded-lg p-1">
-            {(["simple", "bold"] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setStyle(s)}
-                className={cn(
-                  "rounded-md px-4 py-1.5 font-medium capitalize",
-                  style === s ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
-                )}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
+          <Toggle options={["simple", "bold"] as const} value={style} onChange={setStyle} />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <span className="text-muted-foreground text-xs font-medium uppercase">
+            Lyrics offset: {offset > 0 ? "+" : ""}
+            {offset.toFixed(2)} s
+          </span>
+          <input
+            type="range"
+            min={-1}
+            max={1}
+            step={0.05}
+            value={offset}
+            onChange={(e) => setOffset(Number(e.target.value))}
+            aria-label="Lyrics offset in seconds"
+          />
+          <p className="text-muted-foreground text-xs">
+            Negative = earlier. Lines already appear {DEFAULT_LEAD_MS / 1000} s before their stamp. To keep a value for good:{" "}
+            <code>pnpm lrc:shift workspace\test\lyrics.lrc {offset.toFixed(2)}</code>
+          </p>
         </div>
 
         <label className="flex items-center gap-2">
@@ -143,9 +179,17 @@ export function PreviewClient() {
         <div className="flex flex-col gap-1">
           <span className="text-muted-foreground text-xs font-medium uppercase">Export exactly this</span>
           <code className="bg-muted rounded-md p-2 text-xs break-all">
-            pnpm render:test --seed {seed} --style {style}
+            {command}
           </code>
         </div>
+
+        {data.setupWarnings.length || composed?.warnings.length ? (
+          <ul className="space-y-1 text-xs text-amber-400">
+            {[...data.setupWarnings, ...(composed?.warnings ?? [])].map((w) => (
+              <li key={w}>⚠ {w}</li>
+            ))}
+          </ul>
+        ) : null}
 
         <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
           <dt>Song</dt>
@@ -169,6 +213,25 @@ export function PreviewClient() {
           {reloading ? "Reloading…" : "Reload files"}
         </Button>
       </aside>
+    </div>
+  );
+}
+
+function Toggle<T extends string>({ options, value, onChange }: { options: readonly T[]; value: T; onChange: (v: T) => void }) {
+  return (
+    <div className="bg-muted inline-flex w-fit rounded-lg p-1">
+      {options.map((o) => (
+        <button
+          key={o}
+          onClick={() => onChange(o)}
+          className={cn(
+            "rounded-md px-4 py-1.5 font-medium capitalize",
+            value === o ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
+          )}
+        >
+          {o}
+        </button>
+      ))}
     </div>
   );
 }

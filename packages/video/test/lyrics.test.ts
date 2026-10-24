@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { activeLyricLine, applyTextCase, formatLrcTime, layoutLyric, parseLrc } from "../src";
-import { layoutForStyle, tooLongLines } from "../src/node";
+import { layoutWithFace, loadFontCatalog, resolveFace, tooLongLines } from "../src/node";
 
 // Fake font: every character is 0.5 em wide (so 20 px at size 40).
 const measure = (text: string, size: number) => text.length * size * 0.5;
@@ -57,11 +57,12 @@ describe("layoutLyric", () => {
 });
 
 describe("with the real fonts", () => {
-  const simple = { name: "Simple", font: "Inter", weight: 600, textCase: "none", effect: "none", animation: "fade" } as const;
-  const bold = { name: "Bold", font: "Montserrat", weight: 900, textCase: "upper", effect: "shadow", animation: "pop" } as const;
+  const catalog = loadFontCatalog("/nonexistent-workspace");
+  const inter = resolveFace(catalog, "Inter", 600);
+  const montserrat = resolveFace(catalog, "Montserrat", 900);
 
   it("a deliberately long line wraps to 2 balanced lines and shrinks (Simple)", () => {
-    const layout = layoutForStyle("Every single night I keep on dreaming of the summer days", simple, 64);
+    const layout = layoutWithFace("Every single night I keep on dreaming of the summer days", inter, "none", 64);
     expect(layout.lines).toEqual(["Every single night I keep on", "dreaming of the summer days"]);
     expect(layout.fontSize).toBeLessThan(64);
     expect(layout.fontSize).toBeGreaterThanOrEqual(48);
@@ -69,9 +70,17 @@ describe("with the real fonts", () => {
   });
 
   it("flags lines that need 3 lines", () => {
-    const texts = ["Short line", "Every single night I keep on dreaming of the summer days we lost together"];
-    expect(tooLongLines(texts, simple, 64).map((l) => l.text)).toEqual([texts[1]]);
-    expect(tooLongLines(["DANCING IN THE MOONLIGHT WITH YOU"], bold, 84)).toEqual([]);
+    const lines = [{ text: "Short line" }, { text: "Every single night I keep on dreaming of the summer days we lost together" }];
+    expect(tooLongLines(lines, { main: inter, textCase: "none", textSize: 64 })).toEqual([lines[1]]);
+    expect(tooLongLines([{ text: "Dancing in the moonlight with you" }], { main: montserrat, textCase: "upper", textSize: 84 })).toEqual([]);
+    // Bold at 72 px: a 49-character line now fits on 2 lines (at 84 px it needed 3).
+    const line2 = [{ text: "Second line is a little bit longer than the first" }];
+    expect(tooLongLines(line2, { main: montserrat, textCase: "upper", textSize: 84 })).toHaveLength(1);
+    expect(tooLongLines(line2, { main: montserrat, textCase: "upper", textSize: 72 })).toEqual([]);
+    // Hook lines are measured with the hook font.
+    const hook = resolveFace(catalog, "Bebas Neue", 400);
+    const longHook = [{ text: "Every single night I keep on dreaming of the summer days we lost together", isHook: true }];
+    expect(tooLongLines(longHook, { main: inter, hook, textCase: "none", textSize: 64 })).toEqual([]);
   });
 });
 
@@ -92,11 +101,11 @@ describe("lyric timing", () => {
   it("parses LRC: lines end at the next stamp, an empty stamp is a pause/end", () => {
     const lrc = "[ar:Life Lyrics]\n[00:01.00]One\n[00:03.50]Two\n[00:06.00]\n[00:08.25]Three\n[00:10.00]\n";
     expect(parseLrc(lrc)).toEqual([
-      { text: "One", start_ms: 1000, end_ms: 3500 },
-      { text: "Two", start_ms: 3500, end_ms: 6000 },
-      { text: "Three", start_ms: 8250, end_ms: 10000 },
+      { text: "One", start_ms: 1000, end_ms: 3500, isHook: false },
+      { text: "Two", start_ms: 3500, end_ms: 6000, isHook: false },
+      { text: "Three", start_ms: 8250, end_ms: 10000, isHook: false },
     ]);
-    expect(parseLrc("[00:01.00]Only\n", 5000)).toEqual([{ text: "Only", start_ms: 1000, end_ms: 5000 }]);
+    expect(parseLrc("[00:01.00]Only\n", 5000)).toEqual([{ text: "Only", start_ms: 1000, end_ms: 5000, isHook: false }]);
     expect(formatLrcTime(83_456)).toBe("[01:23.46]");
   });
 

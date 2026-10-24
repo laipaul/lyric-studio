@@ -1,5 +1,7 @@
 """pnpm tap <song> <lyrics.txt> [--section 0:11-0:59] [--shift -0.15]
 
+--shift defaults to -0.15 s to compensate for typical human reaction time (taps come slightly late).
+
 Plays the section; press Enter at the start of each lyric line. Writes <lyrics>.lrc next to the
 .txt. Backspace = redo the last stamp, r = restart the section, q = quit without saving.
 
@@ -240,14 +242,27 @@ class KeyReader:
         return None
 
 
-def main(argv: list[str] | None = None) -> int:
+# Taps come late by roughly a human reaction time; stamps are moved this much earlier by default.
+DEFAULT_SHIFT_SECONDS = -0.15
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pnpm tap", description="Tap the start of each lyric line while the song plays.")
     parser.add_argument("song")
-    parser.add_argument("lyrics", help="lyrics.txt: one lyric line per line, blank line = pause")
+    parser.add_argument("lyrics", help='lyrics.txt: one lyric line per line, blank line = pause, "* " = hook')
     parser.add_argument("--section", help="part of the song to play, e.g. 0:11-0:59 (default: whole song)")
-    parser.add_argument("--shift", type=float, default=0.0, help="move all stamps by this many seconds (e.g. -0.15)")
+    parser.add_argument(
+        "--shift",
+        type=float,
+        default=DEFAULT_SHIFT_SECONDS,
+        help=f"move all stamps by this many seconds (default {DEFAULT_SHIFT_SECONDS}, reaction time)",
+    )
     parser.add_argument("--cwd", help=argparse.SUPPRESS)
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
 
     def resolve(p: str) -> Path:
         path = Path(p)
@@ -288,6 +303,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Song:    {song}")
     print(f"Section: {format_time(start_ms)[1:-1]} - {format_time(end_ms)[1:-1]}   Lyrics: {lines} lines from {lyrics.name}")
     print("Keys:    Enter = stamp the next line   Backspace = redo the last stamp   r = restart   q = quit")
+    print(f"Shift:   stamps are moved {args.shift:+.2f} s (reaction time; change with --shift)")
     print()
     print(f"Next: {session.next_item.label()}")
 
