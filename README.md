@@ -194,7 +194,7 @@ pnpm align "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test
   offset with the matching `pnpm lrc:shift` command, and your tapped time next to low-confidence
   lines. If the output would overwrite the comparison file (on Windows `lyrics.lrc` = `Lyrics.lrc`),
   it writes `lyrics.aligned.lrc` instead.
-- `--diagnose 2,9`: for those lines, what the aligner heard: words with scores, a loudness chart of
+- `--diagnose "2,9"` (quote the list in PowerShell; `"2 9"` also works): for those lines, what the aligner heard: words with scores, a loudness chart of
   the vocal track (A = aligned, T = tapped), the bursts of voice nearby, a best guess (reverb tail,
   breath, quieter backing vocal, …) and two WAV snippets of the vocals only (at the aligned and at
   the tapped time) in `workspace\cache\diagnose\` — listen to them.

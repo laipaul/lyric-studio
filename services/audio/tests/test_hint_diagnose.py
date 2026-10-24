@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from app.align import build_parser, output_path
+from app.align import build_parser, output_path, parse_line_list
 from app.compare import compare
 from app.diagnose import Burst, bursts_between, chart, diagnose_line, guess
 from app.hint import HINT_CONFIDENCE, plan_hints, shift_line, voice_onsets
@@ -112,7 +112,18 @@ def test_hint_file_is_never_overwritten_and_options_parse(tmp_path: Path) -> Non
     taps.write_text("[00:01.00]x\n")
     assert output_path(lyrics, None, [None, taps], tmp_path).name == "lyrics.aligned.lrc"
     args = build_parser().parse_args(["s.wav", "l.txt", "--hint", "taps.lrc", "--diagnose", "2,9"])
-    assert args.hint == "taps.lrc" and args.diagnose == "2,9"
+    assert args.hint == "taps.lrc" and parse_line_list(args.diagnose) == [2, 9]
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [["--diagnose", "2,9"], ["--diagnose", "2 9"], ["--diagnose", "2, 9"], ["--diagnose", "2", "9"], ["--diagnose", "9,2,2"]],
+)
+def test_line_lists_accept_commas_spaces_or_both(argv: list[str]) -> None:
+    # PowerShell turns an unquoted 2,9 into the two arguments "2" "9".
+    assert parse_line_list(build_parser().parse_args(["s.wav", "l.txt", *argv]).diagnose) == [2, 9]
+    with pytest.raises(ValueError):
+        parse_line_list(["two"])
 
 
 def test_low_confidence_lines_close_to_their_tap_are_kept() -> None:

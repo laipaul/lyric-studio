@@ -1,6 +1,7 @@
 // Renders LyricVideo to MP4 with Remotion: H.264, AAC 192 kbps, yuv420p, faststart (see CLAUDE.md).
 import { execFile } from "node:child_process";
 import { closeSync, openSync, readSync, renameSync, rmSync, statSync } from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -14,6 +15,19 @@ import { bundledFontDirs } from "./font-catalog";
 import { startMediaServer, type MediaRoots } from "./media";
 
 export const ENTRY_POINT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../entry.ts");
+
+// A free port chosen by the operating system for Remotion's internal server, so it never competes
+// with the studio on port 3000 (or anything else) while "pnpm dev" is running.
+export function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once("error", reject);
+    probe.listen(0, "127.0.0.1", () => {
+      const { port } = probe.address() as net.AddressInfo;
+      probe.close(() => resolve(port));
+    });
+  });
+}
 
 // Optional: a Chrome/Chromium headless shell to use instead of Remotion's own download.
 const browserExecutable = () => process.env.REMOTION_BROWSER_EXECUTABLE || null;
@@ -44,7 +58,9 @@ export async function renderLyricVideo(options: RenderOptions): Promise<string> 
   try {
     const inputProps: LyricVideoProps = { ...options.props, mediaBaseUrl: server.url, showSafeGuides: false };
     const serveUrl = await getBundle(log);
+    const port = await freePort();
     const composition = await selectComposition({
+      port,
       serveUrl,
       id: COMPOSITION_ID,
       inputProps,
@@ -57,6 +73,7 @@ export async function renderLyricVideo(options: RenderOptions): Promise<string> 
     });
     const tmp = `${options.outFile}.part.mp4`;
     await renderMedia({
+      port,
       serveUrl,
       composition,
       inputProps,

@@ -352,6 +352,15 @@ def print_comparison(c: Comparison, reference: Path) -> None:
 
 # --------------------------------------------------------------------------- main
 
+def parse_line_list(values: list[str] | str | None) -> list[int]:
+    """Line numbers from "2,9", "2 9", "2, 9" or separate arguments (PowerShell turns an unquoted
+    2,9 into two arguments)."""
+    if not values:
+        return []
+    text = " ".join(values) if isinstance(values, list) else values
+    return sorted({int(part) for part in text.replace(",", " ").split()})
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="pnpm align", description="Align known lyrics to a song automatically.")
     p.add_argument("song")
@@ -372,7 +381,12 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="TAPS.lrc",
         help=f"use hand-tapped times to fix lines below {HINT_CONFIDENCE} confidence (nearest voice onset to the tap)",
     )
-    p.add_argument("--diagnose", metavar="LINES", help="explain what the aligner heard for these lines, e.g. 2,9")
+    p.add_argument(
+        "--diagnose",
+        metavar="LINES",
+        nargs="+",
+        help='explain what the aligner heard for these lines: "2,9" or "2 9" (quote the list in PowerShell)',
+    )
     p.add_argument("--cwd", help=argparse.SUPPRESS)
     return p
 
@@ -387,9 +401,9 @@ def main(argv: list[str] | None = None) -> int:
     if hint_file and not reference:
         reference = hint_file  # also show the comparison with the taps
     try:
-        diagnose = sorted({int(n) for n in args.diagnose.split(",")}) if args.diagnose else []
+        diagnose = parse_line_list(args.diagnose)
     except ValueError:
-        print("--diagnose takes line numbers, e.g. 2,9", file=sys.stderr)
+        print('--diagnose takes line numbers, e.g. "2,9" or "2 9"', file=sys.stderr)
         return 1
     for f in [song, lyrics, *([reference] if reference else []), *([hint_file] if hint_file else [])]:
         if not f.is_file():

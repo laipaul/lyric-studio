@@ -141,7 +141,7 @@
   accents, serving), Bold update, tap default shift and hook marker, renders: line visible exactly
   0.25 s early, user font + hook font drawn.
 
-### Step 5c — Automatic lyric alignment (`pnpm align`) ✅
+### Step 5c — Automatic lyric alignment (`pnpm align`) ✅ (accepted, verified on the Windows PC)
 - `pnpm audio:setup --ai`: optional AI extra in the same `.venv`. PyTorch 2.8.0 from the PyTorch
   index (CUDA 12.8 build on Windows for RTX 50-series/Blackwell, CPU build on Linux; `--torch cpu`
   for the smaller CPU build), then pinned `requirements-ai-<platform>.txt` (WhisperX 3.8.6,
@@ -162,9 +162,27 @@
 - LRC reader/`lrc:shift`/`lrc:hook` understand word tags.
 - `--diagnose <lines>`: words + scores, loudness chart around aligned/tapped time, voice bursts,
   best-guess label (reverb tail / breath / quieter backing vocal / earlier phrase), WAV snippets.
-- `--hint <taps.lrc>`: lines < 0.7 confidence are moved to the voice onset nearest to
-  (tap + typical offset), within ±1.5 s, and re-aligned on their own (fallback: words shifted);
-  adjusted lines reported. Real-model test: a line forced 2.8 s early is restored to 11 ms.
+- `--hint <taps.lrc>`: lines < 0.7 confidence (threshold confirmed by the user) are moved to the
+  voice onset nearest to (tap + typical offset), within ±1.5 s, and re-aligned on their own
+  (fallback: words shifted); adjusted lines reported. Real-model test: a line forced 2.8 s early is
+  restored to 11 ms.
+- List options accept commas, spaces or both (`--diagnose "2,9"`, `"2 9"`, or PowerShell's unquoted
+  `2,9`, which arrives as two arguments). Windows examples quote lists.
+
+#### Results on the user's song (Windows, RTX 5060)
+- Plain alignment was audibly right except lines 2 ("When the night won't let you sleep", 0.55)
+  and 9 ("When the world has moved along", 0.67): both ~2.8 s before the taps.
+- `--hint workspace\test\Lyrics.lrc` moved lines 2, 9 and 19; line 2 is now at 15.82 s, matching
+  an independent reference. Re-rendered with `Lyrics.aligned.lrc`: sync judged perfect by the user.
+
+#### Recommended workflow for lyric timing
+1. Write `lyrics.txt` (one line per lyric line, blank line = pause, `* ` = hook).
+2. If you have tapped times (`pnpm tap`), align with them as hints:
+   `pnpm align <song> <lyrics.txt> --hint <taps.lrc>` (writes `<lyrics>.aligned.lrc` when the
+   taps file would otherwise be overwritten). Without taps: `pnpm align <song> <lyrics.txt>`.
+3. Check orange (low-confidence) lines; for any that still sound off, `--diagnose "<line numbers>"`
+   and listen to the snippets in `workspace\cache\diagnose\`.
+4. Render with that file: `pnpm render:test --lrc <lyrics>.aligned.lrc`.
 - Tests: 20+ Python unit tests (LRC output, word mapping, compare, path safety, device choice and
   fallback, gap trim, switch); real-model tests in the "AI alignment" GitHub workflow (Demucs +
   WhisperX on CPU, synthetic espeak-ng song in English and French; windowed processing identical
@@ -190,10 +208,13 @@
 - The preview shows Remotion's license note in the browser console (free for individuals).
 - After `git pull`, run `pnpm db:setup` (or `pnpm dev`) before `pnpm analyze` so the new
   `downbeat_offset` column exists; otherwise `pnpm analyze` notes it and ignores project settings.
-- On the user's song, lines 2 and 9 (confidence 0.55 / 0.67) aligned ~2.8 s before the taps; to be
-  diagnosed with `--diagnose 2,9` and fixed with `--hint` on the PC (the song is not in the repo).
-- `pnpm align` is verified only on a synthetic, spoken (espeak-ng) test song on CPU. Real sung
-  vocals and the Windows GPU path still need the real acceptance test (your song with --compare).
+- Real sung vocals: verified on one song (the user's). Lines can still latch onto the wrong part of
+  the vocal track when confidence is low; `--hint` with taps fixes that, and confidence < 0.7 is the
+  signal to check.
+- "Port 3000" render problem: reported by the user, but no details of it reached this session and it
+  did not reproduce here (rendering works while `pnpm dev` holds port 3000). As a safeguard,
+  Remotion's internal server now uses a free port chosen by the system instead of searching from
+  3000. If it happens again, note the exact error message.
 - The cloud session cannot download the AI models (network policy), so `pnpm align` is tested in the
   "AI alignment" GitHub workflow instead.
 - Downbeats assume 4/4. When the kick is equally strong on beats 1 and 3 (and nothing else
@@ -209,4 +230,5 @@
 - The workspace service is used by tests only so far; commands and UI that use it come in later steps.
 
 ## Next
-- Phase 1 complete (beat-synced MP4 renders from the command line). Waiting for instructions.
+- Step 5e (timing editor on /preview) — plan sent; open questions: store corrections in an
+  automatically created "test" project? Step 5d (`pnpm make` + manifest) never arrived: resend or skip?
