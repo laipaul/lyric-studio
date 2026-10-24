@@ -189,3 +189,19 @@ def test_trim_switch() -> None:
     assert build_parser().parse_args(["s.wav", "l.txt", "--trim", "off"]).trim == "off"
     with pytest.raises(SystemExit):
         build_parser().parse_args(["s.wav", "l.txt", "--trim", "maybe"])
+
+
+def test_report_has_confidence_and_sung_times_per_line() -> None:
+    from app.align import build_parser, line_report
+
+    a = _line("First line here", 1_000, score=0.9)
+    b = _line("Hope is good", 3_000, score=0.4, hook=True)
+    report = line_report([a, b], "MODEL", "en")
+    assert report["low_confidence"] == LOW_CONFIDENCE
+    assert report["lines"] == [
+        {"number": 1, "text": "First line here", "is_hook": False, "start_ms": 1_000, "end_ms": 1_850, "confidence": 0.9},
+        {"number": 2, "text": "Hope is good", "is_hook": True, "start_ms": 3_000, "end_ms": 3_850, "confidence": 0.4},
+    ]
+    args = build_parser().parse_args(["s.wav", "l.txt", "--report", "r.json", "--fresh"])
+    assert (args.report, args.fresh) == ("r.json", True)
+    assert build_parser().parse_args(["s.wav", "l.txt"]).fresh is False

@@ -11,3 +11,5 @@ export * from "./cuts";
 export * from "./shots";
 export * from "./compose";
 export * from "./pins";
+export * from "./section";
+export * from "./qa";

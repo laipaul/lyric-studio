@@ -8,8 +8,8 @@
 //   <workspace>/thumbs/<clip id>.jpg
 //
 // Paths in the database are relative to the workspace folder, so the folder can be moved.
-import { randomUUID } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { copyFileSync, createReadStream, existsSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { eq } from "drizzle-orm";
 
@@ -32,9 +32,30 @@ export function openWorkspace(dir: string = resolveWorkspaceDir()): Workspace {
   return { dir, db, close: () => db.$client.close() };
 }
 
-// Stored paths use "/" on every OS; this turns one back into a full path on this PC.
+// Stored paths use "/" on every OS; this turns one back into a full path on this PC. Files outside
+// the workspace (a clips folder given with --collection-path) are stored as full paths.
 export function absPath(ws: Workspace, relative: string): string {
+  if (path.isAbsolute(relative) || /^[a-zA-Z]:[\\/]/.test(relative)) return path.resolve(relative);
   return path.join(ws.dir, ...relative.split("/"));
+}
+
+// How a file is stored in the database: relative to the workspace ("/" separators) when it is
+// inside it, otherwise its full path.
+export function storedPath(ws: Workspace, file: string): string {
+  const relative = path.relative(ws.dir, path.resolve(file));
+  if (relative.startsWith("..") || path.isAbsolute(relative)) return path.resolve(file);
+  return relative.split(path.sep).join("/");
+}
+
+// SHA-256 of a file's content (streamed, so large videos do not need to fit in memory).
+export function fileHash(file: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = createHash("sha256");
+    createReadStream(file)
+      .on("data", (chunk) => hash.update(chunk))
+      .on("error", reject)
+      .on("end", () => resolve(hash.digest("hex")));
+  });
 }
 
 const rel = (...parts: string[]) => parts.join("/");
@@ -124,8 +145,10 @@ export function createCollection(ws: Workspace, name: string): Collection {
 
 export type AddClipInput = {
   collectionId: string;
-  file: string; // the video on disk; it is copied into the collection folder
+  file: string; // the video on disk; it is copied into the collection folder (unless inPlace)
   source?: ClipSource;
+  inPlace?: boolean; // the file already is where it belongs (a collection folder): record it, do not copy
+  contentHash?: string;
 };
 
 export async function addClip(ws: Workspace, input: AddClipInput): Promise<Clip> {
@@ -137,12 +160,17 @@ export async function addClip(ws: Workspace, input: AddClipInput): Promise<Clip>
   if (!info.hasVideo || !info.width || !info.height) throw new Error(`No video found in ${input.file}`);
 
   const id = randomUUID();
-  const folder = collectionDir(coll);
-  mkdirSync(absPath(ws, folder), { recursive: true });
-  const clipPath = rel(folder, uniqueFileName(absPath(ws, folder), path.basename(input.file)));
+  let clipPath: string;
+  if (input.inPlace) {
+    clipPath = storedPath(ws, input.file);
+  } else {
+    const folder = collectionDir(coll);
+    mkdirSync(absPath(ws, folder), { recursive: true });
+    clipPath = rel(folder, uniqueFileName(absPath(ws, folder), path.basename(input.file)));
+    copyFileSync(input.file, absPath(ws, clipPath));
+  }
   const thumbPath = rel("thumbs", `${id}.jpg`);
 
-  copyFileSync(input.file, absPath(ws, clipPath));
   try {
     await makeThumbnail(absPath(ws, clipPath), absPath(ws, thumbPath), thumbnailTimeSeconds(info.durationMs));
     return ws.db
@@ -156,12 +184,29 @@ export async function addClip(ws: Workspace, input: AddClipInput): Promise<Clip>
         height: info.height,
         thumb_path: thumbPath,
         source: input.source ?? "upload",
+        content_hash: input.contentHash ?? null,
       })
       .returning()
       .get();
   } catch (error) {
-    rmSync(absPath(ws, clipPath), { force: true });
+    if (!input.inPlace) rmSync(absPath(ws, clipPath), { force: true });
     rmSync(absPath(ws, thumbPath), { force: true });
     throw error;
   }
+}
+
+// The clip's file changed on disk: read its size and duration again, make a new thumbnail and store
+// the new content hash. The clip keeps its id.
+export async function refreshClip(ws: Workspace, existing: Clip, contentHash: string): Promise<Clip> {
+  const file = absPath(ws, existing.path);
+  const info = await probeMedia(file);
+  if (!info.hasVideo || !info.width || !info.height) throw new Error(`No video found in ${file}`);
+  const thumbPath = existing.thumb_path ?? rel("thumbs", `${existing.id}.jpg`);
+  await makeThumbnail(file, absPath(ws, thumbPath), thumbnailTimeSeconds(info.durationMs));
+  return ws.db
+    .update(clip)
+    .set({ duration_ms: info.durationMs, width: info.width, height: info.height, thumb_path: thumbPath, content_hash: contentHash })
+    .where(eq(clip.id, existing.id))
+    .returning()
+    .get();
 }

@@ -48,11 +48,19 @@ export const project = sqliteTable(
     duration_ms: integer("duration_ms"),
     // Bar 1 starts this many beats (0-3) later than the detected downbeats.
     downbeat_offset: integer("downbeat_offset").notNull().default(0),
+    // SHA-256 of the song file: "pnpm make" reuses the project when the same song comes back.
+    audio_hash: text("audio_hash"),
+    // Moves every lyric line later (positive) or earlier, applied at render time. The aligned LRC
+    // itself is never rewritten.
+    lyrics_offset_ms: integer("lyrics_offset_ms").notNull().default(0),
     created_at: integer("created_at", { mode: "timestamp_ms" })
       .notNull()
       .$defaultFn(() => new Date()),
   },
-  (t) => [check("project_downbeat_offset", sql.raw("downbeat_offset between 0 and 3"))],
+  (t) => [
+    check("project_downbeat_offset", sql.raw("downbeat_offset between 0 and 3")),
+    index("project_audio_hash").on(t.audio_hash),
+  ],
 );
 
 export const lyricLine = sqliteTable(
@@ -123,9 +131,12 @@ export const clip = sqliteTable(
     height: integer("height").notNull(),
     thumb_path: text("thumb_path"),
     source: text("source", { enum: CLIP_SOURCES }).notNull().default("upload"),
+    // SHA-256 of the video file: "pnpm make" re-imports a clip only when its content changes.
+    content_hash: text("content_hash"),
   },
   (t) => [
     index("clip_collection").on(t.collection_id),
+    index("clip_content_hash").on(t.content_hash),
     check("clip_source", inList("source", CLIP_SOURCES)),
   ],
 );

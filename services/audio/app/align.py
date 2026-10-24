@@ -1,5 +1,5 @@
 """pnpm align <song> <lyrics.txt> [--lang en|fr] [--compare taps.lrc] [--hint taps.lrc] [--diagnose 2,9]
-                  [--trim on|off] [--out file.lrc]
+                  [--trim on|off] [--out file.lrc] [--report file.json] [--fresh]
 
 Writes <lyrics>.lrc automatically: Demucs (htdemucs) separates the vocals, then WhisperX forced
 alignment (wav2vec2) places every word of the known lyrics on the vocal track. Output is standard
@@ -387,8 +387,30 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         help='explain what the aligner heard for these lines: "2,9" or "2 9" (quote the list in PowerShell)',
     )
+    p.add_argument("--report", metavar="FILE.json", help="also write per-line confidence and timings as JSON (used by pnpm make)")
+    p.add_argument("--fresh", action="store_true", help="ignore the cached alignment and align again")
     p.add_argument("--cwd", help=argparse.SUPPRESS)
     return p
+
+
+def line_report(aligned: list[AlignedLine], model_name: str, lang: str) -> dict:
+    """Per-line confidence and sung times (start of the first word, end of the last word)."""
+    return {
+        "model": model_name,
+        "lang": lang,
+        "low_confidence": LOW_CONFIDENCE,
+        "lines": [
+            {
+                "number": n,
+                "text": line.text,
+                "is_hook": line.is_hook,
+                "start_ms": line.start_ms,
+                "end_ms": line.end_ms,
+                "confidence": round(line.confidence, 3),
+            }
+            for n, line in enumerate(aligned, start=1)
+        ],
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -432,7 +454,7 @@ def main(argv: list[str] | None = None) -> int:
         f"v{ALIGN_CACHE_VERSION}|trim-{args.trim}|{vocals.name}|{model_name}|{json.dumps(texts)}".encode()
     ).hexdigest()[:24]
     cache = workspace_dir() / "cache" / "align" / f"{key}.json"
-    if cache.exists():
+    if cache.exists() and not args.fresh:
         log("alignment: cached")
         words = json.loads(cache.read_text(encoding="utf-8"))
     else:
@@ -475,6 +497,10 @@ def main(argv: list[str] | None = None) -> int:
         build_lrc(ordered, duration_ms, header=["[ar:Life Lyrics]", f"[re:Lyric Studio - pnpm align ({model_name})]"]),
         encoding="utf-8",
     )
+
+    if args.report:
+        report = resolve(args.report)
+        report.write_text(json.dumps(line_report(aligned, model_name, args.lang), indent=1), encoding="utf-8")
 
     comparison = compare(aligned, parse_lrc(reference.read_text(encoding="utf-8-sig"))) if reference else None
     print_lines(aligned, comparison)

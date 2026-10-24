@@ -202,8 +202,67 @@ pnpm align "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test
   typical offset) and moves the line to the nearest start of the voice, re-aligning that line on its
   own. The adjusted lines are listed. The hint file is never overwritten.
 - `--trim off` turns off the correction for words stretched over a silent gap.
+- `--report file.json` also writes each line's confidence and sung times; `--fresh` ignores the
+  cached alignment (both used by `pnpm make`).
 - The vocal track and the alignment are cached (`workspace\cache\stems`, `workspace\cache\align`),
   so running it again is quick.
+
+## One-click videos (`pnpm make`)
+
+One command from a song to several finished videos. Copy your clips into a collection folder
+`workspace\clips\<name>\` (for example `workspace\clips\beach\`), then:
+
+```powershell
+cd D:\videomaker
+pnpm make "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test\lyrics.txt" --collection beach
+```
+
+What it does, in order:
+
+1. **Project**: finds the song's project by its content (or creates one) — renaming or moving the
+   song file does not matter.
+2. **Beats**: the analysis from `pnpm analyze` (cached).
+3. **Lyrics**: runs `pnpm align` automatically (needs `pnpm audio:setup --ai` once). The result is
+   stored in `workspace\projects\<id>\lyrics\aligned-….lrc` and **never rewritten**: the next run with
+   the same `lyrics.txt` reuses it. `--realign` makes a new alignment (a new file; the old one stays).
+   `--hint <taps.lrc>` passes tapped times to the aligner. Hook lines: `* ` in `lyrics.txt`.
+4. **Section** (`--section auto`, the default): starts one bar before the first hook line (the first
+   chorus) and ends on the first bar after a lyric line finishes, 45-60 s later, preferably after a
+   chorus line. It never ends in the middle of a line: if needed it goes up to 65 s. Without hooks it
+   uses the most repeated block of lines. The reason is printed. `--section full` = whole song,
+   `--section 0:11-1:10` = exactly that part (the start snaps to the nearest bar).
+5. **Clips**: new or changed clips in the collection folder are imported automatically (compared by
+   content); deleted ones are dropped. `--collection-path D:\clips\beach` uses another folder.
+6. **Variations** (`--variations 6`): v1 in story order, v2… shuffled with different seeds; Simple
+   and Bold alternate; cinematic bars on every other one (v2, v4, v6). `--font` / `--font-hook`
+   apply to all.
+7. **Rendering**: 2 videos at a time on a PC like yours (see the `Rendering:` line it prints;
+   `--parallel N` to change).
+8. **Output**: `workspace\projects\<id>\exports\<YYYY-MM-DD_HHmm>\` with `v1.mp4 … v6.mp4`, and for
+   each a `v1.manifest.json` (everything needed to make the same video again) and `v1.qa.txt`. At
+   the end a table (variation, style, order, duration, QA) is printed and the folder opens in
+   Explorer (`--no-open` to skip).
+
+**QA** checks per video: lyric lines with low alignment confidence (< 0.5), the same clip again
+within 3 shots, black or frozen frames, lyric lines on more than 2 lines, shots under 0.8 s, lyrics
+outside the safe zone. Result: `PASS`, or `WARN` with the reasons.
+
+**Same video again**: `pnpm rerender "<export folder>\v1.manifest.json"` renders `v1.rerender.mp4`
+next to it, identical to v1. It refuses (and says which file) if the song, a clip or a font has
+changed since.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--collection <name>` | (required) | the folder `workspace\clips\<name>\` |
+| `--collection-path <folder>` | | clips from another folder (not copied) |
+| `--variations N` | `6` | number of videos |
+| `--section` | `auto` | `auto`, `full` or `0:11-1:10` |
+| `--hint <taps.lrc>`, `--realign`, `--lang fr` | | passed to `pnpm align` (see above) |
+| `--lrc <file.lrc>` | | use this LRC instead of aligning (stored as-is) |
+| `--lyrics-offset S` | `0` | move all lines (seconds); saved to the project, the LRC stays unchanged |
+| `--lead`, `--rate`, `--energy`, `--font`, `--font-hook`, `--pins`, `--downbeat-offset` | | as for `pnpm render:test` |
+| `--parallel N` | `2` (PC dependent) | videos rendered at the same time |
+| `--no-open` | | do not open the folder at the end |
 
 ## Test render (`pnpm render:test`)
 

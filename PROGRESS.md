@@ -189,17 +189,64 @@
   to whole-audio processing). Latest run: all 8 line starts within 15-65 ms of the truth, no word
   reaching into the next line.
 
+### Step 5d — One-click Auto Generate (`pnpm make`, `pnpm rerender`) ✅ (to verify on the Windows PC)
+- `pnpm make <song> <lyrics.txt> --collection <name> [--collection-path] [--variations 6]
+  [--section auto|full|a-b] [--hint] [--realign] [--lrc] [--lang] [--rate] [--energy] [--lead]
+  [--lyrics-offset] [--font] [--font-hook] [--pins] [--parallel N] [--no-open]`.
+- Migration `0002_hashes_and_lyrics_offset` (in place, data kept): `project.audio_hash`,
+  `project.lyrics_offset_ms` (default 0), `clip.content_hash`.
+- Project found again by the song's SHA-256 (rename/move does not matter). Beats from the cached analysis.
+- Collections: `WORKSPACE_DIR\clips\<name>\` (or `--collection-path`), clips recorded in place (not
+  copied); new / changed / unchanged / removed by content hash (hashes cached by size + date in
+  `cache\hashes.json`); prepared 1080x1920 copies are keyed by content hash.
+- Lyrics: `pnpm align` runs automatically (`--report` JSON with per-line confidence and sung end,
+  `--fresh` for `--realign`); each alignment is stored once in `projects\<id>\lyrics\aligned-<key>-<time>.lrc`
+  and never rewritten (key = lyrics.txt + hint + language). Project lyrics offset applied at render
+  time. Hooks from `* ` in lyrics.txt. `--lrc` stores a given LRC as-is (no AI needed).
+- Section auto: anchor = first hook line (one marked line per chorus is enough), else the most
+  repeated block, else line 1. Start = one bar before the anchor; if the line before it is still being
+  sung there, the bar before that line (at most 2 lines back, else a warning). End = first bar after a
+  lyric line finishes, 45-60 s, chorus line preferred; up to 65 s rather than cutting a line; reason printed.
+  A line whose singing is over but still on screen at the start (an LRC line lasts until the next
+  stamp) is not shown.
+- Variations: v1 story, v2..vN shuffle seed N; Simple/Bold alternate; bars on v2, v4, ...; all share
+  one section, audio and cut grid (tested). Variation + RenderJob rows written (status, progress, output).
+- Parallel rendering: 2 videos at a time with up to 8 frames in parallel each on 8+ threads / 16+ GB
+  (your PC: 2 x 8, about 10 GB at most); memory kept under half of RAM; `--parallel N` overrides.
+- Output `projects\<id>\exports\<YYYY-MM-DD_HHmm>\v1.mp4`, `v1.manifest.json` (tool version + git
+  commit, clip files + hashes, in/out frames, playbackRate, cuts, lyric timings incl. lead/offset,
+  style, font files + hashes, settings, full props), `v1.qa.txt`. Summary table; Explorer opens.
+- QA: confidence < 0.5, clip repeated within 3 shots, black/frozen frames (FFmpeg blackdetect /
+  freezedetect, 10 frames per second sampled; held last frames named as cause), > 2 text lines,
+  shots < 0.8 s, lyric box outside the safe zone (measured with the real fonts). PASS / WARN + reasons.
+- `pnpm rerender <manifest>`: checks song, clips and fonts by hash (clear error naming the changed
+  file), remakes a deleted prepared copy, renders the stored props to `v1.rerender.mp4`.
+- Tests: 14 section (hook lead-in, pickup, never mid-line start/end, 65 s extension, cut-line warning,
+  repeated block, no hooks, short song, lingering line), 10 QA (each check with a bad case, real FFmpeg
+  black/frozen detection), 16 make (collection new/changed/removed/outside, project by hash, stored /
+  realign / hint / given LRC, variations, render limit, full run with renders, manifest contents,
+  identical section across variations, rerender = same props + identical sampled frames, LRC hash
+  unchanged after make and rerender, changed clip refused), 1 Python report test, 1 DB upgrade test.
+- Cloud check: a 60 s, 2-variation run of a synthetic song rendered and passed QA; the rerender
+  of v1 was frame-identical (all 1800 frames). Cloud machine: 4 threads, ~3 min per 60 s video.
+
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
 - `pnpm analyze <file>` (also `--click`, `--downbeat-offset`), `POST /analyze`, `pnpm test:audio`.
 - `pnpm cuts <file> --section a-b`.
 - `pnpm tap`, `pnpm render:test`, http://localhost:3000/preview.
+- `pnpm make`, `pnpm rerender`.
 - `pnpm lrc:shift`, `pnpm lrc:hook`, `pnpm fonts`.
 - `pnpm audio:setup --ai`, `pnpm align` (GPU path to be verified on the Windows PC).
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
 
 ## Known issues
+- `pnpm make`: cinematic bars on every other variation together with Simple/Bold alternating means
+  bars always come with Bold (v2, v4, v6). Easy to change if you want other pairs.
+- `pnpm rerender` renders the stored props with the current composition; after a Lyric Studio update
+  that changes the composition, the video can differ (a note with both git versions is printed).
+- QA "frozen frames" also flags a clip that is truly still (e.g. a static shot) for 1 s or more.
 - `pnpm cuts` does not read lyrics yet (`--rate off` / hold are available in render:test via the LRC).
 - Only the Simple and Bold styles are implemented (any font can be used with them via --font).
 - Hook lines change font only (same size, colour and animation).
@@ -230,5 +277,5 @@
 - The workspace service is used by tests only so far; commands and UI that use it come in later steps.
 
 ## Next
-- Step 5e (timing editor on /preview) — plan sent; open questions: store corrections in an
-  automatically created "test" project? Step 5d (`pnpm make` + manifest) never arrived: resend or skip?
+- Step 5e (timing editor on /preview), as planned; corrections go into an automatically created
+  "test" project (confirmed by the user) and plug into the same render-time layer as the lyrics offset.

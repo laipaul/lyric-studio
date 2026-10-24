@@ -50,6 +50,7 @@ export type RenderOptions = {
   onProgress?: (fraction: number) => void;
   log?: (message: string) => void;
   frameRange?: [number, number];
+  concurrency?: number; // browser tabs rendering frames at the same time (default: Remotion's choice)
 };
 
 export async function renderLyricVideo(options: RenderOptions): Promise<string> {
@@ -87,6 +88,7 @@ export async function renderLyricVideo(options: RenderOptions): Promise<string> 
       overwrite: true,
       browserExecutable: browserExecutable(),
       frameRange: options.frameRange ?? null,
+      concurrency: options.concurrency ?? null,
       onProgress: ({ progress }) => options.onProgress?.(progress),
     });
     await ensureFaststart(tmp);

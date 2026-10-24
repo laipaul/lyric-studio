@@ -43,3 +43,26 @@ describe("database upgrades", () => {
     sqlite.close();
   });
 });
+
+describe("hashes and lyrics offset upgrade", () => {
+  it("keeps existing projects and clips; new columns get their defaults", () => {
+    const sqlite = new Database(path.join(temp.dir, "upgrade-2.db"));
+    sqlite.pragma("foreign_keys = ON");
+    migrate(drizzle(sqlite), { migrationsFolder: migrationsUpTo(2) });
+    sqlite.exec(`
+      insert into project (id, title, artist, created_at, downbeat_offset) values ('p', 'Song', 'Life Lyrics', 0, 2);
+      insert into collection (id, name) values ('c', 'beach');
+      insert into clip (id, collection_id, path, duration_ms, width, height) values ('k', 'c', 'clips/beach/a.mp4', 1000, 1080, 1920);
+    `);
+
+    migrate(drizzle(sqlite), { migrationsFolder: MIGRATIONS_DIR });
+
+    expect(sqlite.prepare("select downbeat_offset, audio_hash, lyrics_offset_ms from project").get()).toEqual({
+      downbeat_offset: 2,
+      audio_hash: null,
+      lyrics_offset_ms: 0,
+    });
+    expect(sqlite.prepare("select path, content_hash from clip").get()).toEqual({ path: "clips/beach/a.mp4", content_hash: null });
+    sqlite.close();
+  });
+});

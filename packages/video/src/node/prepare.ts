@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { openWorkspace, resolveWorkspaceDir, stylePreset, type StylePreset } from "@lyric/db";
+import { openWorkspace, resolveWorkspaceDir, stylePreset, type StylePreset, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
 import type { Beat } from "../beats";
@@ -120,6 +120,22 @@ const FALLBACK_STYLES: Record<StyleChoice, StylePresetLike> = {
 };
 type StylePresetLike = Pick<StylePreset, "name" | "font" | "weight" | "text_case" | "effect" | "animation" | "default_size">;
 
+export type StyleFaces = Record<StyleChoice, { entry: StyleEntry; main: FontFaceInfo; hook: FontFaceInfo | null }>;
+
+// Simple and Bold from the database (or built-in defaults), with --font / --font-hook applied.
+export function loadStyles(
+  ws: Workspace,
+  catalog: FontCatalog,
+  options: { font?: string; fontHook?: string; textSize?: number },
+): StyleFaces {
+  const presetFor = (choice: StyleChoice): StylePresetLike =>
+    ws.db.select().from(stylePreset).where(eq(stylePreset.name, FALLBACK_STYLES[choice].name)).get() ?? FALLBACK_STYLES[choice];
+  return {
+    simple: styleEntry(catalog, presetFor("simple"), options),
+    bold: styleEntry(catalog, presetFor("bold"), options),
+  };
+}
+
 // Style + fonts for one preset: the lyric font (preset font, or --font) and an optional hook font.
 function styleEntry(
   catalog: FontCatalog,
@@ -150,8 +166,8 @@ function styleEntry(
 
 // Finds each lyric line in the lyrics text file (lyrics.txt next to lyrics.lrc) so warnings can name
 // the line number the user edits; falls back to the line number in the LRC file.
-export function lyricLineNumbers(texts: readonly string[], lrcFile: string): { file: string; numbers: number[] } {
-  const txt = lrcFile.replace(/\.lrc$/i, ".txt");
+export function lyricLineNumbers(texts: readonly string[], lrcFile: string, txtFile?: string): { file: string; numbers: number[] } {
+  const txt = txtFile ?? lrcFile.replace(/\.lrc$/i, ".txt");
   const useTxt = txt !== lrcFile && existsSync(txt);
   const file = useTxt ? txt : lrcFile;
   const fileLines = readFileSync(file, "utf8")
@@ -165,6 +181,31 @@ export function lyricLineNumbers(texts: readonly string[], lrcFile: string): { f
     return index + 1;
   });
   return { file, numbers };
+}
+
+// The song is served from the workspace if it lives there, otherwise as an extra file.
+export function songMedia(
+  workspaceDir: string,
+  song: string,
+  plan: CutPlan,
+  catalog: Pick<FontCatalog, "fontDirs">,
+): { media: MediaRoots; audio: NonNullable<RenderBase["audio"]> } {
+  const insideWorkspace = path.relative(workspaceDir, song);
+  const songInWorkspace = !insideWorkspace.startsWith("..") && !path.isAbsolute(insideWorkspace);
+  const audioSrc = songInWorkspace ? insideWorkspace.split(path.sep).join("/") : `_ext/song${path.extname(song)}`;
+  return {
+    media: {
+      workspaceDir,
+      extraFiles: songInWorkspace ? {} : { [`song${path.extname(song)}`]: song },
+      fontDirs: catalog.fontDirs,
+    },
+    audio: {
+      src: audioSrc,
+      startFrame: plan.start_frame,
+      fadeInFrames: Math.round(AUDIO_FADE.inSeconds * VIDEO.fps),
+      fadeOutFrames: Math.round(AUDIO_FADE.outSeconds * VIDEO.fps),
+    },
+  };
 }
 
 export async function prepareRender(options: PrepareOptions = {}): Promise<PrepareResult> {
@@ -185,12 +226,7 @@ export async function prepareRender(options: PrepareOptions = {}): Promise<Prepa
     // Fonts first: a wrong --font name should fail before the slow steps.
     const catalog = loadFontCatalog(ws.dir);
     for (const problem of catalog.problems) log(`font file skipped: ${problem}`);
-    const presetFor = (choice: StyleChoice): StylePresetLike =>
-      ws.db.select().from(stylePreset).where(eq(stylePreset.name, FALLBACK_STYLES[choice].name)).get() ?? FALLBACK_STYLES[choice];
-    const styles = {
-      simple: styleEntry(catalog, presetFor("simple"), options),
-      bold: styleEntry(catalog, presetFor("bold"), options),
-    };
+    const styles = loadStyles(ws, catalog, options);
 
     log("analysing the song (cached after the first time)");
     const analysis = analyzeSong(song, { downbeatOffset: options.downbeatOffset });
@@ -236,25 +272,11 @@ export async function prepareRender(options: PrepareOptions = {}): Promise<Prepa
     }
     const warnings = [...setupWarnings];
 
-    // The song is served from the workspace if it lives there, otherwise as an extra file.
-    const insideWorkspace = path.relative(ws.dir, song);
-    const songInWorkspace = !insideWorkspace.startsWith("..") && !path.isAbsolute(insideWorkspace);
-    const audioSrc = songInWorkspace ? insideWorkspace.split(path.sep).join("/") : `_ext/song${path.extname(song)}`;
-    const media: MediaRoots = {
-      workspaceDir: ws.dir,
-      extraFiles: songInWorkspace ? {} : { [`song${path.extname(song)}`]: song },
-      fontDirs: catalog.fontDirs,
-    };
-
+    const { media, audio } = songMedia(ws.dir, song, plan, catalog);
     const base: RenderBase = {
       plan,
       clips: preparedClips,
-      audio: {
-        src: audioSrc,
-        startFrame: plan.start_frame,
-        fadeInFrames: Math.round(AUDIO_FADE.inSeconds * VIDEO.fps),
-        fadeOutFrames: Math.round(AUDIO_FADE.outSeconds * VIDEO.fps),
-      },
+      audio,
       durationInFrames: plan.end_frame - plan.start_frame,
       lyrics: lines,
       styles: { simple: styles.simple.entry, bold: styles.bold.entry },

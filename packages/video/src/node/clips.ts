@@ -75,7 +75,9 @@ export async function normaliseClip(
   name: string,
   log: (m: string) => void = () => {},
 ): Promise<NormalisedClip> {
-  const relative = `cache/normalised/${clip.id}-v${NORMALISE_VERSION}.mp4`;
+  // By content when known, so a clip whose file changed gets a new normalised copy.
+  const key = clip.content_hash ? clip.content_hash.slice(0, 24) : clip.id;
+  const relative = `cache/normalised/${key}-v${NORMALISE_VERSION}.mp4`;
   const out = absPath(ws, relative);
   if (!existsSync(out)) {
     log(`preparing clip ${path.posix.basename(clip.path)} (1080x1920, 30 fps)`);
