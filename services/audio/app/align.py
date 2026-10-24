@@ -1,4 +1,5 @@
-"""pnpm align <song> <lyrics.txt> [--lang en|fr] [--compare reference.lrc] [--out file.lrc]
+"""pnpm align <song> <lyrics.txt> [--lang en|fr] [--compare taps.lrc] [--hint taps.lrc] [--diagnose 2,9]
+                  [--trim on|off] [--out file.lrc]
 
 Writes <lyrics>.lrc automatically: Demucs (htdemucs) separates the vocals, then WhisperX forced
 alignment (wav2vec2) places every word of the known lyrics on the vocal track. Output is standard
@@ -24,7 +25,9 @@ from .cache import file_hash
 from .compare import Comparison, compare
 from .config import workspace_dir
 from .lrc import AlignedLine, Word, build_lrc, format_stamp, parse_lrc
-from .refine import refine_words
+from .diagnose import diagnose_line
+from .hint import HINT_CONFIDENCE, HintDecision, plan_hints, shift_line, voice_onsets
+from .refine import loudness_envelope, refine_words, voice_threshold
 from .tap import parse_lyrics_txt
 
 LOW_CONFIDENCE = 0.5
@@ -143,6 +146,51 @@ def ensure_nltk_data(log: Callable[[str], None]) -> None:
         nltk.download("punkt_tab", download_dir=str(target), quiet=True)
 
 
+class Aligner:
+    """WhisperX forced alignment against the vocal track. The model is loaded once (on first use) and
+    can align the whole song or a single line inside a time window (used by --hint)."""
+
+    def __init__(self, vocals: Path, language: str, model_name: str, device: Device, log: Callable[[str], None]):
+        import librosa
+
+        self.language, self.model_name, self.device, self.log = language, model_name, device, log
+        self.audio, _ = librosa.load(str(vocals), sr=ALIGN_SAMPLE_RATE, mono=True)
+        self.duration = len(self.audio) / ALIGN_SAMPLE_RATE
+        self._loaded: tuple[str, Any, dict] | None = None
+
+    def _model(self, device_name: str):
+        import whisperx
+
+        if self._loaded is None or self._loaded[0] != device_name:
+            ensure_nltk_data(self.log)
+            self.log(f"loading the alignment model {self.model_name} on {device_name.upper()} (downloads on first use)")
+            model, metadata = whisperx.load_align_model(
+                self.language, device_name, model_name=self.model_name, model_dir=str(MODELS_DIR / "align")
+            )
+            self._loaded = (device_name, chunked_model(model, metadata["type"]), metadata)
+        return self._loaded[1], self._loaded[2]
+
+    def align(self, text: str, start_s: float = 0.0, end_s: float | None = None) -> list[dict]:
+        import whisperx
+
+        end_s = self.duration if end_s is None else min(end_s, self.duration)
+
+        def run(device_name: str):
+            model, metadata = self._model(device_name)
+            result = whisperx.align(
+                [{"text": text, "start": max(0.0, start_s), "end": end_s}],
+                model,
+                metadata,
+                self.audio,
+                device_name,
+                return_char_alignments=False,
+            )
+            return result["word_segments"]
+
+        words, self.device = with_cpu_fallback(self.device, "Alignment", run, self.log)
+        return words
+
+
 def align_words(
     vocals: Path,
     text: str,
@@ -153,32 +201,50 @@ def align_words(
     trim: bool = True,
 ):
     """WhisperX forced alignment of `text` against the vocal track. Returns (words, device).
-    With `trim`, words that swallowed a silent gap start where the voice starts (app/refine.py)."""
-    import librosa
-    import whisperx
+    With `trim`, words that swallowed a silent gap are cut back to their voice (app/refine.py)."""
+    aligner = Aligner(vocals, language, model_name, device, log)
+    log(f"aligning the lyrics with {model_name}")
+    words = aligner.align(text)
+    return (refine_words(words, aligner.audio, ALIGN_SAMPLE_RATE) if trim else words), aligner.device
 
-    ensure_nltk_data(log)
-    audio, _ = librosa.load(str(vocals), sr=ALIGN_SAMPLE_RATE, mono=True)
-    duration = len(audio) / ALIGN_SAMPLE_RATE
 
-    def run(device_name: str):
-        log(f"aligning the lyrics with {model_name} on {device_name.upper()} (model downloads on first use)")
-        model, metadata = whisperx.load_align_model(
-            language, device_name, model_name=model_name, model_dir=str(MODELS_DIR / "align")
+def apply_hints(
+    aligned: list[AlignedLine],
+    decisions: list[HintDecision],
+    aligner: Aligner,
+    trim: bool,
+) -> list[AlignedLine]:
+    """Re-aligns each hinted line on its own, starting at its target; falls back to moving the line's
+    words if the re-alignment does not land near the target."""
+    lines = list(aligned)
+    for d in sorted(decisions, key=lambda d: d.number):
+        i = d.number - 1
+        limit_ms = lines[i + 1].start_ms - 50 if i + 1 < len(lines) else None
+        window_end = (limit_ms / 1000) if limit_ms is not None else d.target_ms / 1000 + max(4.0, 0.7 * len(lines[i].words))
+        words = aligner.align(lines[i].text, d.target_ms / 1000 - 0.2, window_end)
+        if trim:
+            words = refine_words(words, aligner.audio, ALIGN_SAMPLE_RATE)
+        candidate = words_to_lines([lines[i].text], [lines[i].is_hook], words)[0]
+        if abs(candidate.start_ms - d.target_ms) <= 300 and (limit_ms is None or candidate.end_ms <= limit_ms + 50):
+            lines[i], d.method = candidate, "re-aligned"
+        else:
+            lines[i], d.method = shift_line(lines[i], d.target_ms, limit_ms), "shifted"
+        d.new_ms = lines[i].start_ms
+    return lines
+
+
+def print_hints(decisions: list[HintDecision], offset_ms: float, hint_file: Path) -> None:
+    print()
+    print(f"Hints from {hint_file.name} (lines below {HINT_CONFIDENCE} confidence; typical offset {offset_ms:+.0f} ms):")
+    if not decisions:
+        print("  no line needed adjusting")
+        return
+    for d in decisions:
+        print(
+            f"  line {d.number:>3}: {clock(d.aligned_ms)} -> {clock(d.new_ms or d.target_ms)}"
+            f"  ({(d.new_ms or d.target_ms) - d.aligned_ms:+} ms; tapped {clock(d.tapped_ms)}, prior {clock(d.prior_ms)};"
+            f" {d.source}, {d.method})  {d.text}"
         )
-        wrapped = chunked_model(model, metadata["type"])
-        result = whisperx.align(
-            [{"text": text, "start": 0.0, "end": duration}],
-            wrapped,
-            metadata,
-            audio,
-            device_name,
-            return_char_alignments=False,
-        )
-        return result["word_segments"]
-
-    words, device = with_cpu_fallback(device, "Alignment", run, log)
-    return (refine_words(words, audio, ALIGN_SAMPLE_RATE) if trim else words), device
 
 
 def words_to_lines(texts: list[str], hooks: list[bool], words: list[dict]) -> list[AlignedLine]:
@@ -224,11 +290,12 @@ def match_words(flat: list[str], words: list[dict]) -> list[dict]:
     return out
 
 
-def output_path(lyrics: Path, out: str | None, reference: Path | None, cwd: Path) -> Path:
-    """<lyrics>.lrc, unless that is the --compare reference (on Windows lyrics.lrc and Lyrics.lrc
-    are the same file): then <lyrics>.aligned.lrc, so the reference is never overwritten."""
+def output_path(lyrics: Path, out: str | None, protected: Path | list[Path | None] | None, cwd: Path) -> Path:
+    """<lyrics>.lrc, unless that is a --compare / --hint file (on Windows lyrics.lrc and Lyrics.lrc
+    are the same file): then <lyrics>.aligned.lrc, so those files are never overwritten."""
     target = (cwd / out).resolve() if out else lyrics.with_suffix(".lrc")
-    if reference is not None and same_file(target, reference):
+    keep = [p for p in (protected if isinstance(protected, list) else [protected]) if p is not None]
+    if any(same_file(target, p) for p in keep):
         target = lyrics.with_name(f"{lyrics.stem}.aligned.lrc")
     return target
 
@@ -300,6 +367,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="on",
         help="move words that swallowed a silent gap to where the voice starts (default on)",
     )
+    p.add_argument(
+        "--hint",
+        metavar="TAPS.lrc",
+        help=f"use hand-tapped times to fix lines below {HINT_CONFIDENCE} confidence (nearest voice onset to the tap)",
+    )
+    p.add_argument("--diagnose", metavar="LINES", help="explain what the aligner heard for these lines, e.g. 2,9")
     p.add_argument("--cwd", help=argparse.SUPPRESS)
     return p
 
@@ -310,7 +383,15 @@ def main(argv: list[str] | None = None) -> int:
     resolve = lambda p: (cwd / p).resolve()  # noqa: E731
     song, lyrics = resolve(args.song), resolve(args.lyrics)
     reference = resolve(args.compare) if args.compare else None
-    for f in [song, lyrics, *( [reference] if reference else [])]:
+    hint_file = resolve(args.hint) if args.hint else None
+    if hint_file and not reference:
+        reference = hint_file  # also show the comparison with the taps
+    try:
+        diagnose = sorted({int(n) for n in args.diagnose.split(",")}) if args.diagnose else []
+    except ValueError:
+        print("--diagnose takes line numbers, e.g. 2,9", file=sys.stderr)
+        return 1
+    for f in [song, lyrics, *([reference] if reference else []), *([hint_file] if hint_file else [])]:
         if not f.is_file():
             print(f"File not found: {f}", file=sys.stderr)
             return 1
@@ -347,13 +428,33 @@ def main(argv: list[str] | None = None) -> int:
         cache.write_text(json.dumps(words), encoding="utf-8")
 
     aligned = words_to_lines(texts, hooks, words)
+    original = list(aligned)  # before --hint (what --diagnose explains)
+
+    taps = parse_lrc(hint_file.read_text(encoding="utf-8-sig")) if hint_file else None
+    decisions: list[HintDecision] = []
+    hint_offset = 0.0
+    voice = None
+    if taps is not None or diagnose:
+        import librosa
+
+        voice, _ = librosa.load(str(vocals), sr=ALIGN_SAMPLE_RATE, mono=True)
+    if taps is not None:
+        tap_match = compare(aligned, taps)
+        hint_offset = tap_match.typical_offset_ms
+        env = loudness_envelope(voice, ALIGN_SAMPLE_RATE)
+        decisions = plan_hints(aligned, tap_match, voice_onsets(env, voice_threshold(env)))
+        if decisions:
+            aligner = Aligner(vocals, args.lang, model_name, device, log)
+            aligned = apply_hints(aligned, decisions, aligner, trim=args.trim == "on")
+            device = aligner.device
+
     lines_iter = iter(aligned)
     ordered = [("line", next(lines_iter)) if i.kind == "line" else ("pause", None) for i in items if i.kind != "end"]
 
     import soundfile as sf
 
     duration_ms = int(sf.info(str(song)).duration * 1000)
-    out = output_path(lyrics, args.out, reference, cwd)
+    out = output_path(lyrics, args.out, [reference, hint_file], cwd)
     if out.exists():
         out.with_suffix(".lrc.bak").write_text(out.read_text(encoding="utf-8"), encoding="utf-8")
     out.write_text(
@@ -363,11 +464,33 @@ def main(argv: list[str] | None = None) -> int:
 
     comparison = compare(aligned, parse_lrc(reference.read_text(encoding="utf-8-sig"))) if reference else None
     print_lines(aligned, comparison)
+    if hint_file:
+        print_hints(decisions, hint_offset, hint_file)
     if comparison and reference:
         print_comparison(comparison, reference)
+    if diagnose and voice is not None:
+        snippets = workspace_dir() / "cache" / "diagnose"
+        for n in diagnose:
+            if not 1 <= n <= len(aligned):
+                print(f"--diagnose: there is no line {n} (1-{len(aligned)})")
+                continue
+            print()
+            for row in diagnose_line(
+                n,
+                original[n - 1],
+                original[n - 2] if n > 1 else None,
+                comparison.tapped_for(n) if comparison else None,
+                voice,
+                ALIGN_SAMPLE_RATE,
+                snippets,
+            ):
+                print(row)
+            moved = next((d for d in decisions if d.number == n), None)
+            if moved:
+                print(f"  --hint moved this line to {clock(moved.new_ms or moved.target_ms)} ({moved.source}, {moved.method})")
     print()
-    if reference and out.name.endswith(".aligned.lrc"):
-        print(f"Note: {reference.name} is your reference, so the result was written to {out.name} instead.")
+    if out.name.endswith(".aligned.lrc"):
+        print(f"Note: {out.with_suffix('').with_suffix('.lrc').name} is your comparison/hint file, so the result was written to {out.name} instead.")
     print(f"Saved {len(aligned)} lines with word timings to {out}   ({time.time() - started:.0f} s, {device.description})")
     return 0
 

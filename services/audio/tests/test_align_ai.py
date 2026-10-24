@@ -124,3 +124,44 @@ def test_chunked_model_matches_the_whole_audio() -> None:
     assert chunked.shape[1] == -(-audio.shape[-1] // 320)  # one frame per 20 ms
     n = whole.shape[1]
     assert torch.allclose(chunked[:, : n - 1], whole[:, : n - 1])
+
+
+def test_hint_rescues_a_line_aligned_too_early(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Simulates the real-song failure: one line aligned 2.8 s early with low confidence. --hint with
+    taps (true times + 180 ms reaction lag) must put it back, by re-aligning that line only."""
+    from app.align import Aligner, apply_hints
+    from app.compare import compare
+    from app.diagnose import diagnose_line
+    from app.hint import plan_hints, voice_onsets
+    from app.lrc import AlignedLine, Word, parse_lrc
+    from app.refine import loudness_envelope, voice_threshold
+
+    monkeypatch.setenv("WORKSPACE_DIR", str(tmp_path / "workspace"))
+    song = tmp_path / "song-en.wav"
+    truths = make_song(song, "en")
+    log = lambda m: print(m)  # noqa: E731
+    device = Device("cpu", "CPU (test)")
+    vocals, _ = separate_vocals(song, device, log)
+    texts = LINES["en"]
+    words, _ = align_words(vocals, " ".join(texts), "en", ALIGN_MODELS["en"], device, log)
+    lines = words_to_lines(texts, [False] * len(texts), words)
+
+    broken = lines[2]  # "Hope is a good thing"
+    lines[2] = AlignedLine(broken.text, False, [Word(w.text, w.start_ms - 2_800, w.end_ms - 2_800, 0.5) for w in broken.words])
+    taps = parse_lrc("".join(f"[00:{(t + 180) / 1000:05.2f}]{text}\n" for t, text in zip(truths, texts)))
+
+    import librosa
+
+    voice, _ = librosa.load(str(vocals), sr=16_000, mono=True)
+    env = loudness_envelope(voice, 16_000)
+    decisions = plan_hints(lines, compare(lines, taps), voice_onsets(env, voice_threshold(env)))
+    assert [d.number for d in decisions] == [3]
+    fixed = apply_hints(lines, decisions, Aligner(vocals, "en", ALIGN_MODELS["en"], device, log), trim=True)
+    print(f"hint: {decisions[0]}")
+    assert abs(fixed[2].start_ms - truths[2]) <= TOLERANCE_MS, f"{fixed[2].start_ms} vs {truths[2]}"
+    assert fixed[2].end_ms <= fixed[3].start_ms
+    assert [l.start_ms for i, l in enumerate(fixed) if i != 2] == [l.start_ms for i, l in enumerate(lines) if i != 2]
+
+    rows = diagnose_line(3, lines[2], lines[1], truths[2] + 180, voice, 16_000, tmp_path / "diagnose")
+    print("\n".join(rows))
+    assert any(r.startswith("  best guess:") for r in rows)
