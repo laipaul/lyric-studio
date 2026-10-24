@@ -230,7 +230,7 @@
 - Cloud check: a 60 s, 2-variation run of a synthetic song rendered and passed QA; the rerender
   of v1 was frame-identical (all 1800 frames). Cloud machine: 4 threads, ~3 min per 60 s video.
 
-### Step 5d.1 — Windows memory, retry, `--resume` ✅ (to verify on the Windows PC)
+### Step 5d.1 — Windows memory, retry, `--resume` ✅ (verified on the Windows PC)
 - Cause of "Compositor quit: memory allocation … failed" with `--parallel 2`: Remotion's clip-frame
   cache defaults to half of the free memory **per render**, so two renders each claimed half.
 - Now: `--parallel 1` by default on Windows; the clip cache is capped (2 GB with one render, smaller
@@ -293,5 +293,8 @@
 - The workspace service is used by tests only so far; commands and UI that use it come in later steps.
 
 ## Next
-- Step 5e (timing editor on /preview), as planned; corrections go into an automatically created
-  "test" project (confirmed by the user) and plug into the same render-time layer as the lyrics offset.
+Order changed by the user: platform presets first, then the timing editor.
+1. Step 5g (platform presets: `pnpm make --platforms reels,tiktok,shorts,youtube,canvas`) — plan sent,
+   waiting for approval.
+2. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project
+   (confirmed by the user) and plug into the same render-time layer as the lyrics offset.
