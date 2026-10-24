@@ -246,13 +246,54 @@
   and a real Remotion render cancelled with no partial file left), capped cache in a real render,
   failure + retry + carry-on, --resume (only missing, interrupted, nothing left), --resume refused.
 
+### Step 5g.1 — Platform presets: Reels, TikTok, Shorts ✅ (to verify on the Windows PC)
+- `presets/platforms.json` (editable, checked at start; every mistake named with platform and field):
+  standard (today's behaviour), reels, tiktok, shorts; youtube and canvas are listed but marked
+  "comes in Step 5g.2 / 5g.3". Per platform: size, aspect, length (target +-tolerance / range / full /
+  loop), anchor (lead-in or centre), variations, safe zones (top/bottom/left/right), lyricsAt, text
+  scale, video bitrate, fade-out, loop ending, lyrics/audio switches.
+- `pnpm make … --platforms reels,tiktok,shorts` (or `all`): one subfolder per platform in the run's
+  folder, each with its own videos, manifests (with the preset and brand) and QA; "standard" (no
+  --platforms) stays directly in the run's folder. `--variations` overrides the preset's number.
+- Composition: frame size, safe zones and lyric area come from the props (Root uses calculateMetadata),
+  so preview and render stay identical. Lyric area computed from the safe zones: centred in the usable
+  area at 45% (slightly above middle); with cinematic bars the bars count as covered.
+  Note: this moves the lyrics of the standard preset from 62.5% to ~41.5% of the height (top 10%,
+  bottom 20% safe zones), as asked ("never a fixed percentage").
+- Sections per preset: target +-15% on bars, never mid-line (up to +30% with a warning rather than
+  cutting a line), the clean end nearest the target. Reels: centred on the first chorus (hook line +
+  following repeated lines). Reels loop ending: ends on a bar, 0.12 s fade-out, last shot = the first
+  clip's frames right before shot 1 (or the same photo ending where its move starts); the loop clip
+  is kept out of the 3 shots before; a warning if the first clip is too short for a seamless loop.
+- Sources by orientation (width/height at import): 9:16 = vertical/square, horizontal only at >= 2x
+  the output height; others skipped (listed) or, with `--allow-fill`, shown whole over a blurred copy.
+  QA check "Sources for this format": WARN with the count needed; no usable source = clear error.
+- Photos (jpg/png/webp) in any collection: size recorded, thumbnail, prepared JPEG (max 3000 px),
+  seeded Ken Burns move (zoom 1.00-1.12, gentle pan, never shows an edge) over exactly the shot.
+- Brand: `workspace\brand\brand.json` created with Cinzel (title, wide spacing) / Cormorant Garamond
+  (verse) / Kaushan Script (hook) / #E8A3B5 / logo bottom-left 8%; lyrics use the brand fonts unless
+  --font/--font-hook (or "useForLyrics": false). Cinzel bundled (@fontsource, OFL). Logo, title font
+  and accent colour are used from Step 5g.2 (thumbnails, title cards).
+- Clean synced `<song>.lrc` in the run's folder (title/artist/length tags, offset applied, pauses, no
+  word tags or hook markers) for Musixmatch / LyricFind.
+- Fixes found while building: FFmpeg writes no thumbnail for a photo when asked to seek (`-ss 0`).
+- Tests: presets file (defaults, edits respected, errors), --platforms parsing, lyric area per
+  platform, no lyric block in any platform's safe zone (1-3 lines, largest text, bars, pop overshoot),
+  orientation rules, Ken Burns bounds (500 seeds), loop ending (story/shuffle, too-short fallback,
+  no repeat before it), platform sections (length window, bars, never mid-line, Reels centred), clean
+  LRC; real renders: photo motion without edges, blurred fill, output at the preset's size; make with
+  3 platforms (folders, variations, sizes, safe zones, fades, lengths, loop, photos, LRC), --allow-fill,
+  too few / no sources, edited presets file, --resume per platform; photo import in the DB.
+
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
 - `pnpm analyze <file>` (also `--click`, `--downbeat-offset`), `POST /analyze`, `pnpm test:audio`.
 - `pnpm cuts <file> --section a-b`.
 - `pnpm tap`, `pnpm render:test`, http://localhost:3000/preview.
-- `pnpm make` (verified on the Windows PC: 6 videos, all QA PASS, 444 s with --parallel 1), `pnpm rerender`.
+- `pnpm make --platforms reels,tiktok,shorts`, `--allow-fill`, photos in collections.
+- `pnpm make` (verified on the Windows PC: 6 videos, all QA PASS, 444 s with --parallel 1; after 5d.1
+  with the defaults: all 6 PASS, no memory errors, one at a time with a 2 GB clip cache, 469 s), `pnpm rerender`.
 - `pnpm lrc:shift`, `pnpm lrc:hook`, `pnpm fonts`.
 - `pnpm audio:setup --ai`, `pnpm align` (GPU path to be verified on the Windows PC).
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
@@ -294,7 +335,7 @@
 
 ## Next
 Order changed by the user: platform presets first, then the timing editor.
-1. Step 5g (platform presets: `pnpm make --platforms reels,tiktok,shorts,youtube,canvas`) — plan sent,
-   waiting for approval.
+1. Step 5g.2 (YouTube 16:9: cover / stills / clips layouts, end-screen area, 1280x720 thumbnail) —
+   after 5g.1 is verified on the PC. Then Step 5g.3 (Spotify Canvas loop).
 2. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project
    (confirmed by the user) and plug into the same render-time layer as the lyrics offset.

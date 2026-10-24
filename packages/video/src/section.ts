@@ -26,6 +26,8 @@ export type AutoSectionOptions = {
   maxMs?: number; // default 60 s
   hardMaxMs?: number; // default 65 s: allowed only so that no line is cut
   leadMs?: number; // lines appear this much before their stamp (default 250 ms)
+  targetMs?: number; // platform presets: prefer the clean end nearest this length (else the latest)
+  anchorMode?: "lead-in" | "centre"; // centre: the first chorus sits in the middle of the section
 };
 
 export type SectionChoice = {
@@ -164,6 +166,35 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
     startNote = `; moved back to the bar before line ${first + 1} "${lines[first].text}" so it is not cut`;
     start = candidate;
   }
+  // Centre mode (Reels): the first chorus (the hook line and the lines sung right after it) sits in
+  // the middle of the section, starting on a bar where no line is cut.
+  if (options.anchorMode === "centre" && options.targetMs && anchor.line !== null) {
+    // The chorus: the hook line and the lines right after it that are sung again later in the song
+    // (verse lines are unique), up to a pause.
+    const a = anchor.line - 1;
+    const counts = new Map<string, number>();
+    for (const l of lines) counts.set(normalizeLyric(l.text), (counts.get(normalizeLyric(l.text)) ?? 0) + 1);
+    let last = a;
+    while (
+      last + 1 < lines.length &&
+      lines[last + 1].start_ms <= lines[last].end_ms + 250 &&
+      (counts.get(normalizeLyric(lines[last + 1].text)) ?? 0) >= 2 &&
+      ends[last + 1] - lines[a].start_ms <= options.targetMs
+    ) {
+      last += 1;
+    }
+    const middle = (lines[a].start_ms + ends[last]) / 2;
+    const desired = middle - options.targetMs / 2;
+    const clean = downbeats.filter((d) => d <= lines[a].start_ms - leadMs && isCut(d) < 0);
+    if (clean.length) {
+      start = clean.reduce((best, d) => (Math.abs(d - desired) < Math.abs(best - desired) ? d : best), clean[0]);
+      anchorText =
+        `centred on the first chorus (line${last > a ? `s ${a + 1}-${last + 1}` : ` ${a + 1}`}, ` +
+        `${clockText(lines[a].start_ms)}-${clockText(ends[last])}, from the hook line "${lines[a].text}")`;
+      startNote = "";
+    }
+  }
+
   const startCut = isCut(start);
   if (startCut >= 0) {
     warnings.push(`The section start (${clockText(start)}) cuts line ${startCut + 1} "${lines[startCut].text}"; choose a section with --section.`);
@@ -202,12 +233,15 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
     const extended = after(candidates.filter(inExtension));
     const quiet = candidates.filter(inWindow);
     const quietExtended = candidates.filter(inExtension);
+    // Range presets: the latest clean end; target presets: the clean end nearest the target.
+    const pick = (pool: Candidate[]) =>
+      options.targetMs ? pool.reduce((best, c) => (Math.abs(length(c) - options.targetMs!) < Math.abs(length(best) - options.targetMs!) ? c : best)) : pool[pool.length - 1];
     if (chorusEnds.length) {
-      const c = chorusEnds[chorusEnds.length - 1];
+      const c = pick(chorusEnds);
       [end, endKind] = [c.at, "chorus-line"];
       endText = `the first bar after chorus ${describeLine(c.afterLine)} finishes`;
     } else if (windowed.length) {
-      const c = windowed[windowed.length - 1];
+      const c = pick(windowed);
       [end, endKind] = [c.at, "line"];
       endText = `the first bar after ${describeLine(c.afterLine)} finishes (no chorus line ends between ${seconds(minMs)} and ${seconds(maxMs)})`;
     } else if (extended.length) {
@@ -231,6 +265,10 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
     }
   }
 
+  const total = end - start;
+  if (options.targetMs && endKind !== "song-end" && (total < minMs || total > maxMs)) {
+    warnings.push(`The section is ${seconds(total)}, outside ${seconds(minMs)}-${seconds(maxMs)}: no clean bar to end on inside that range.`);
+  }
   const reason =
     `start ${clockText(start)}: ${anchorText}${startNote}; ` +
     `end ${clockText(end)}: ${endText}; ${seconds(end - start)}`;

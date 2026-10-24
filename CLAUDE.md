@@ -3,7 +3,7 @@
 ## What we are building
 A personal, single-user, LOCAL lyric-video studio for the artist "Life Lyrics".
 Input: one song (WAV/MP3) + lyrics + a pool of video clips.
-Output: several 9:16 (1080x1920) beat-synced lyric videos as MP4, ready for Instagram Reels, TikTok, YouTube Shorts.
+Output: several beat-synced lyric videos as MP4, ready for Instagram Reels, TikTok, YouTube Shorts (9:16, 1080x1920), YouTube (16:9) and Spotify Canvas. Size, length, variations, safe zones, text scale and bitrate come per platform from `presets/platforms.json` (editable); without --platforms the "standard" preset applies.
 
 Three screens:
 - **Home**: drop a song to create a project; list recent projects.
@@ -21,7 +21,7 @@ Payments, credits, user accounts, login, multi-user, cloud hosting, cloud render
 - `services/audio`: Python FastAPI on port 8001 — librosa for BPM/beats/downbeats; later WhisperX + Demucs for lyric alignment
 - `apps/worker`: Node render worker that processes RenderJob rows
 - SQLite via Drizzle ORM, file `workspace/studio.db`
-- FFmpeg for thumbnails and clip normalisation (30 fps, 1080x1920, cover-crop)
+- FFmpeg for thumbnails and clip normalisation (30 fps, the platform's size, cover-crop; photos as JPEG)
 - One `pnpm dev` command starts studio + worker + audio service
 
 ## Data model
@@ -47,13 +47,16 @@ Workspace folder layout: `workspace/projects/<id>/audio`, `workspace/projects/<i
 - Pins (pins.txt: "lyric line = clip file") force a clip onto the shot where that line appears on screen, at every occurrence; pins override the order mode. Lyric lines are matched ignoring case, punctuation and extra spaces. Warn when a line or clip is not found.
 - Clips are cover-cropped to 9:16 and start at a random (seeded) offset inside the clip.
 - Preview and render must use the exact same composition and props.
-- Lyrics stay out of the platform UI: never in the bottom 20% or the right 12% of the frame; centred in the safe area around 62.5% of the height. Lyric lines appear 0.25 s before their stamp (lead, configurable), plus an optional lyrics offset; no early cut.
+- Lyrics stay out of each platform's UI: never inside its safe zones (presets/platforms.json, fractions of the frame per side). The vertical position is computed from those safe zones: centred in the usable area, slightly above its middle (lyricsAt, default 0.45) — never a fixed percentage.
+- Sources by orientation: 9:16 uses vertical (and square) sources, horizontal ones only if at least 2x the output height; 16:9 uses horizontal sources. Too few: QA WARN with the count needed; blurred fill only with --allow-fill. Photos (jpg/png/webp) are valid sources with a slow seeded Ken Burns move (zoom 1.0-1.12, gentle pan) fitted to the shot.
+- Brand: WORKSPACE_DIR\brand\brand.json (title font Cinzel, verse font Cormorant Garamond, hook font Kaushan Script, accent colour, logo position and size) + logo.png. Lyrics use the brand fonts; --font/--font-hook override. Thumbnails and title cards use the brand title font. Lyric lines appear 0.25 s before their stamp (lead, configurable), plus an optional lyrics offset; no early cut.
 - Long lyric lines: one line if it fits, else two balanced lines, then shrink up to 25%. Only as an absolute last resort three lines (never more), with a warning naming the line ("Line 3 is too long for phone screens; split it in lyrics.txt") from pnpm tap and render:test.
 - Hook lines: "* " at the start of a line in lyrics.txt or after the time stamp in the .lrc; every line with the same words is a hook too. Hook lines can use their own font.
 - Fonts: bundled @fontsource families plus any .ttf/.otf/.woff/.woff2 in WORKSPACE_DIR\fonts; props list the exact font files, so preview and render load the same ones.
 - Automatic lyric timing: `pnpm align` (Demucs htdemucs vocals + WhisperX wav2vec2 forced alignment, en/fr) writes enhanced LRC (line stamps + <mm:ss.xx> word tags), keeps hooks and pauses, flags lines below 0.5 confidence. AI packages are an optional extra (`pnpm audio:setup --ai`; PyTorch 2.8 cu128 on Windows); models live in services/audio/models.
-- Audio: the section start snaps to the nearest downbeat (report the adjusted time); 0.3 s fade-in, 0.5 s fade-out.
-- Video: 30 fps, H.264, AAC 192 kbps, yuv420p, faststart.
+- Audio: the section start snaps to the nearest downbeat (report the adjusted time); 0.3 s fade-in, fade-out per platform preset (default 0.5 s; Reels 0.1-0.15 s, ending exactly on a bar, with the last shot continuing into the first clip for a seamless loop).
+- Platform sections: the best clean section near the preset's target length (snap to bars, never cut a line, within +-15%); Reels centred on the first chorus. Every song also gets a clean synced .lrc (for Musixmatch / LyricFind) next to the videos.
+- Video: 30 fps, H.264, AAC 192 kbps, yuv420p, faststart; size and bitrate per platform preset.
 
 ## How to work with me (the user)
 - I am an experienced IT consultant but NOT a developer. I am on Windows, using Cursor's terminal.

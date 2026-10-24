@@ -19,8 +19,8 @@ writeFileSync(path.join(ws, "fonts", "notes.txt"), "ignored");
 describe("font catalog", () => {
   const catalog = loadFontCatalog(ws);
 
-  it("has all 16 bundled families with their weights and italics", () => {
-    expect(BUNDLED_FONTS).toHaveLength(16);
+  it("has all 17 bundled families with their weights and italics", () => {
+    expect(BUNDLED_FONTS).toHaveLength(17);
     for (const [, family] of BUNDLED_FONTS) expect(findFamily(catalog, family)?.faces.length).toBeGreaterThan(0);
     const italics = (family: string) => findFamily(catalog, family)!.faces.some((f) => f.style === "italic");
     expect(italics("Cormorant Garamond")).toBe(true);

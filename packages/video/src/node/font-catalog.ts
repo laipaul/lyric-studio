@@ -26,6 +26,7 @@ export const BUNDLED_FONTS: [string, string][] = [
   ["yellowtail", "Yellowtail"],
   ["special-elite", "Special Elite"],
   ["courier-prime", "Courier Prime"],
+  ["cinzel", "Cinzel"], // brand title font (OFL)
 ];
 
 export type FontFaceFile = { path: string; src: string; unicodeRange?: string };

@@ -15,7 +15,7 @@ import { eq } from "drizzle-orm";
 
 import { openDb, runMigrations, type Db } from "./client";
 import { resolveWorkspaceDir } from "./config";
-import { makeThumbnail, probeMedia, thumbnailTimeSeconds } from "./ffmpeg";
+import { makeThumbnail, PHOTO_EXTENSION, probeMedia, thumbnailTimeSeconds } from "./ffmpeg";
 import { clip, collection, project, type Clip, type ClipSource, type Collection, type Project } from "./schema";
 
 export type Workspace = {
@@ -157,7 +157,7 @@ export async function addClip(ws: Workspace, input: AddClipInput): Promise<Clip>
   if (!existsSync(input.file)) throw new Error(`Video file not found: ${input.file}`);
 
   const info = await probeMedia(input.file);
-  if (!info.hasVideo || !info.width || !info.height) throw new Error(`No video found in ${input.file}`);
+  if (!info.hasVideo || !info.width || !info.height) throw new Error(`No video or photo found in ${input.file}`);
 
   const id = randomUUID();
   let clipPath: string;
@@ -172,7 +172,7 @@ export async function addClip(ws: Workspace, input: AddClipInput): Promise<Clip>
   const thumbPath = rel("thumbs", `${id}.jpg`);
 
   try {
-    await makeThumbnail(absPath(ws, clipPath), absPath(ws, thumbPath), thumbnailTimeSeconds(info.durationMs));
+    await makeThumbnail(absPath(ws, clipPath), absPath(ws, thumbPath), PHOTO_EXTENSION.test(clipPath) ? 0 : thumbnailTimeSeconds(info.durationMs));
     return ws.db
       .insert(clip)
       .values({
@@ -202,7 +202,7 @@ export async function refreshClip(ws: Workspace, existing: Clip, contentHash: st
   const info = await probeMedia(file);
   if (!info.hasVideo || !info.width || !info.height) throw new Error(`No video found in ${file}`);
   const thumbPath = existing.thumb_path ?? rel("thumbs", `${existing.id}.jpg`);
-  await makeThumbnail(file, absPath(ws, thumbPath), thumbnailTimeSeconds(info.durationMs));
+  await makeThumbnail(file, absPath(ws, thumbPath), PHOTO_EXTENSION.test(file) ? 0 : thumbnailTimeSeconds(info.durationMs));
   return ws.db
     .update(clip)
     .set({ duration_ms: info.durationMs, width: info.width, height: info.height, thumb_path: thumbPath, content_hash: contentHash })

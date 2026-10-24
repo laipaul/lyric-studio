@@ -1,6 +1,7 @@
 // Quality checks for a finished variation ("pnpm make"), written to v<N>.qa.txt. Pure: the frame
 // analysis (FFmpeg) and text measuring happen in Node and are passed in.
-import { CINEMATIC_BAR_HEIGHT, LYRIC_AREA, SAFE_ZONE, VIDEO } from "./config";
+import { VIDEO } from "./config";
+import { cinematicBarHeight, DEFAULT_FORMAT, DEFAULT_LYRIC_AREA, DEFAULT_SAFE_ZONE, type Format, type LyricArea, type SafeZone } from "./platform";
 import { MAX_LINES } from "./lyrics";
 import type { LyricVideoProps } from "./props";
 import { RECENT_WINDOW } from "./shots";
@@ -20,11 +21,12 @@ export type QaLyric = {
 };
 
 export type QaInput = {
-  props: Pick<LyricVideoProps, "shots" | "lyrics" | "cinematicBars" | "durationInFrames">;
+  props: Pick<LyricVideoProps, "shots" | "lyrics" | "cinematicBars" | "durationInFrames" | "format" | "safeZone">;
   shotClips: string[]; // clip file name of each shot
   poolSize: number; // clips in the collection
   lyrics: QaLyric[]; // lines visible in this variation
   frames: { black: TimeRange[]; frozen: TimeRange[] } | null; // null: frame check not run
+  sources?: { usable: number; needed: number; kind: string; platform: string } | null; // clips that suit this format
 };
 
 export type QaCheck = { name: string; ok: boolean; details: string[] };
@@ -33,23 +35,32 @@ export type QaReport = { status: "PASS" | "WARN"; checks: QaCheck[] };
 const t = (seconds: number) => `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
 const frameTime = (frame: number) => t(frame / VIDEO.fps);
 
-// The area the text block covers: centred in the lyric area at LYRIC_AREA.centerY, scaled by the
+// The area the text block covers: centred in the lyric area at area.centerY, scaled by the
 // animation's largest scale (the pop animation overshoots slightly).
-export function lyricBox(lineCount: number, fontSize: number, widestPx: number, maxScale = 1): Box {
-  const cx = LYRIC_AREA.left + (LYRIC_AREA.right - LYRIC_AREA.left) / 2;
-  const height = lineCount * fontSize * LYRIC_AREA.lineHeight * maxScale;
+export function lyricBox(lineCount: number, fontSize: number, widestPx: number, maxScale = 1, area: LyricArea = DEFAULT_LYRIC_AREA): Box {
+  const cx = area.left + (area.right - area.left) / 2;
+  const height = lineCount * fontSize * area.lineHeight * maxScale;
   const width = widestPx * maxScale;
-  return { left: cx - width / 2, right: cx + width / 2, top: LYRIC_AREA.centerY - height / 2, bottom: LYRIC_AREA.centerY + height / 2 };
+  return { left: cx - width / 2, right: cx + width / 2, top: area.centerY - height / 2, bottom: area.centerY + height / 2 };
 }
 
-export function safeZoneProblem(box: Box, cinematicBars: boolean): string | null {
-  const right = VIDEO.width * (1 - SAFE_ZONE.right);
-  const bottom = VIDEO.height * (1 - SAFE_ZONE.bottom);
-  const top = cinematicBars ? CINEMATIC_BAR_HEIGHT : 0;
-  if (box.right > right) return `reaches ${Math.ceil(box.right)} px from the left (limit ${Math.floor(right)} px, right 12%)`;
-  if (box.bottom > bottom) return `reaches ${Math.ceil(box.bottom)} px from the top (limit ${Math.floor(bottom)} px, bottom 20%)`;
-  if (box.left < 0) return "starts outside the left edge";
-  if (box.top < top) return cinematicBars ? "reaches into the top cinematic bar" : "starts above the top edge";
+const pct = (v: number) => `${Math.round(v * 100)}%`;
+
+export function safeZoneProblem(box: Box, cinematicBars: boolean, format: Format = DEFAULT_FORMAT, safe: SafeZone = DEFAULT_SAFE_ZONE): string | null {
+  const bar = cinematicBars ? cinematicBarHeight(format) : 0;
+  const right = format.width * (1 - safe.right);
+  const bottom = Math.min(format.height * (1 - safe.bottom), format.height - bar);
+  const left = format.width * safe.left;
+  const top = Math.max(format.height * safe.top, bar);
+  if (box.right > right) return `reaches ${Math.ceil(box.right)} px from the left (limit ${Math.floor(right)} px, right ${pct(safe.right)})`;
+  if (box.bottom > bottom) {
+    return `reaches ${Math.ceil(box.bottom)} px from the top (limit ${Math.floor(bottom)} px, ${bar && bottom === format.height - bar ? "bottom cinematic bar" : `bottom ${pct(safe.bottom)}`})`;
+  }
+  if (box.left < left) return safe.left ? `starts left of ${Math.floor(left)} px (left ${pct(safe.left)})` : "starts outside the left edge";
+  if (box.top < top) {
+    if (bar && top === bar) return "reaches into the top cinematic bar";
+    return safe.top ? `starts above ${Math.floor(top)} px (top ${pct(safe.top)})` : "starts above the top edge";
+  }
   return null;
 }
 
@@ -140,10 +151,23 @@ export function runQa(input: QaInput): QaReport {
 
   // 6. Lyrics outside the platform safe zone.
   const outside = input.lyrics
-    .map((l) => ({ l, problem: safeZoneProblem(l.box, props.cinematicBars) }))
+    .map((l) => ({ l, problem: safeZoneProblem(l.box, props.cinematicBars, props.format, props.safeZone) }))
     .filter((x) => x.problem)
     .map(({ l, problem }) => `line ${l.number} "${l.text}" ${problem}`);
   checks.push({ name: "Lyrics inside the safe zone", ok: outside.length === 0, details: outside });
+
+  // 7. Enough clips that suit this format (vertical sources for 9:16, horizontal for 16:9).
+  if (input.sources) {
+    const src = input.sources;
+    checks.push({
+      name: "Sources for this format",
+      ok: src.usable >= src.needed,
+      details:
+        src.usable >= src.needed
+          ? []
+          : [`only ${src.usable} ${src.kind} source(s) for ${src.platform}; at least ${src.needed} needed so no clip repeats within 3 shots`],
+    });
+  }
 
   return { status: checks.every((c) => c.ok) ? "PASS" : "WARN", checks };
 }

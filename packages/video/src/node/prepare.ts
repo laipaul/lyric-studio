@@ -126,8 +126,12 @@ export type StyleFaces = Record<StyleChoice, { entry: StyleEntry; main: FontFace
 export function loadStyles(
   ws: Workspace,
   catalog: FontCatalog,
-  options: { font?: string; fontHook?: string; textSize?: number },
+  options: { font?: string; fontHook?: string; textSize?: number; brandFonts?: { verse: string; hook: string } },
 ): StyleFaces {
+  // Brand fonts (brand.json) replace the styles' own fonts; --font / --font-hook win over both.
+  if (options.brandFonts) {
+    options = { ...options, font: options.font ?? options.brandFonts.verse, fontHook: options.fontHook ?? options.brandFonts.hook };
+  }
   const presetFor = (choice: StyleChoice): StylePresetLike =>
     ws.db.select().from(stylePreset).where(eq(stylePreset.name, FALLBACK_STYLES[choice].name)).get() ?? FALLBACK_STYLES[choice];
   return {
@@ -189,6 +193,7 @@ export function songMedia(
   song: string,
   plan: CutPlan,
   catalog: Pick<FontCatalog, "fontDirs">,
+  fadeOutSeconds: number = AUDIO_FADE.outSeconds,
 ): { media: MediaRoots; audio: NonNullable<RenderBase["audio"]> } {
   const insideWorkspace = path.relative(workspaceDir, song);
   const songInWorkspace = !insideWorkspace.startsWith("..") && !path.isAbsolute(insideWorkspace);
@@ -203,7 +208,7 @@ export function songMedia(
       src: audioSrc,
       startFrame: plan.start_frame,
       fadeInFrames: Math.round(AUDIO_FADE.inSeconds * VIDEO.fps),
-      fadeOutFrames: Math.round(AUDIO_FADE.outSeconds * VIDEO.fps),
+      fadeOutFrames: Math.round(fadeOutSeconds * VIDEO.fps),
     },
   };
 }

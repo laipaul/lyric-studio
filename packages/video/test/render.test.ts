@@ -11,8 +11,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   COMPOSITION_ID,
-  LYRIC_AREA,
-  SAFE_ZONE,
+  DEFAULT_LYRIC_AREA,
+  DEFAULT_SAFE_ZONE,
   VIDEO,
   assignClips,
   composeProps,
@@ -240,13 +240,13 @@ describe("LyricVideo render", () => {
     const props = baseProps({ colour: "#ff00ff", style, textSize, lyrics: [{ text, startFrame: 0, endFrame: 90 }] });
     const box = (await magentaBox(props, 30))!;
     expect(box).not.toBeNull();
-    expect(box.maxX).toBeLessThan(VIDEO.width * (1 - SAFE_ZONE.right));
-    expect(box.maxY).toBeLessThan(VIDEO.height * (1 - SAFE_ZONE.bottom));
-    expect(box.minX).toBeGreaterThanOrEqual(LYRIC_AREA.left - 2);
-    expect(box.maxX).toBeLessThanOrEqual(LYRIC_AREA.right + 2);
-    expect(Math.abs((box.minY + box.maxY) / 2 - LYRIC_AREA.centerY)).toBeLessThan(40);
+    expect(box.maxX).toBeLessThan(VIDEO.width * (1 - DEFAULT_SAFE_ZONE.right));
+    expect(box.maxY).toBeLessThan(VIDEO.height * (1 - DEFAULT_SAFE_ZONE.bottom));
+    expect(box.minX).toBeGreaterThanOrEqual(DEFAULT_LYRIC_AREA.left - 2);
+    expect(box.maxX).toBeLessThanOrEqual(DEFAULT_LYRIC_AREA.right + 2);
+    expect(Math.abs((box.minY + box.maxY) / 2 - DEFAULT_LYRIC_AREA.centerY)).toBeLessThan(40);
     // Height of the text block matches the number of lines at the chosen font size.
-    const lineHeight = LYRIC_AREA.lineHeight * layout.fontSize;
+    const lineHeight = DEFAULT_LYRIC_AREA.lineHeight * layout.fontSize;
     expect(box.maxY - box.minY).toBeLessThan(expectedLines * lineHeight);
     expect(box.maxY - box.minY).toBeGreaterThan((expectedLines - 1) * lineHeight);
     return layout;
@@ -335,5 +335,50 @@ describe("LyricVideo render", () => {
     expect(await centreColour(props, 45)).toBe("cyan");
     expect(await centreColour(props, 75)).toBe("cyan");
     expect(await centreColour(props, 89)).toBe("cyan");
+  }, 300_000);
+
+  it("photo shot: the Ken Burns move changes the picture over the shot and never shows an edge", async () => {
+    // Left half red, right half blue, 1080x1920.
+    ffmpeg("-f", "lavfi", "-i", "color=c=red:s=540x1920", "-f", "lavfi", "-i", "color=c=blue:s=540x1920", "-filter_complex", "[0:v][1:v]hstack=inputs=2", "-frames:v", "1", path.join(dir, "halves.jpg"));
+    const motion = { fromZoom: 1, toZoom: 1.12, fromX: 0, fromY: 0, toX: 0.05, toY: 0 };
+    const props = baseProps({ shots: [shot({ src: "halves.jpg", start: 0, duration: 90, kind: "photo", motion })] });
+    const redInRow = async (frame: number) => {
+      const { raw } = await frameRegion(props, frame, { x: 0, y: 960, w: 1080, h: 1 });
+      let red = 0;
+      for (let i = 0; i < raw.length; i += 3) if (raw[i] > 150 && raw[i + 2] < 100) red += 1;
+      return red;
+    };
+    const atStart = await redInRow(0);
+    const atEnd = await redInRow(89);
+    expect(Math.abs(atStart - 540)).toBeLessThan(6); // no zoom at the start: the boundary is in the middle
+    expect(atEnd - atStart).toBeGreaterThan(40); // zoomed in and panned right: more red
+    for (const frame of [0, 45, 89]) {
+      for (const [x, y] of [[0, 0], [1076, 0], [0, 1916], [1076, 1916]]) {
+        const { raw } = await frameRegion(props, frame, { x, y, w: 4, h: 4 });
+        expect(Math.max(raw[0], raw[2]), `corner ${x},${y} at frame ${frame}`).toBeGreaterThan(150); // red or blue, never black
+      }
+    }
+  }, 300_000);
+
+  it("fill: a horizontal source is shown whole over a blurred copy instead of black bars", async () => {
+    ffmpeg("-f", "lavfi", "-i", "color=c=lime:s=384x216:r=30:d=3", "-c:v", "libx264", "-pix_fmt", "yuv420p", path.join(dir, "wide-lime.mp4"));
+    const props = baseProps({ shots: [shot({ src: "wide-lime.mp4", start: 0, duration: 90, fit: "fill" })] });
+    const { raw: middle } = await frameRegion(props, 30, { x: 520, y: 940, w: 40, h: 40 });
+    expect(middle[1]).toBeGreaterThan(200); // the picture itself, full brightness
+    const { raw: top } = await frameRegion(props, 30, { x: 520, y: 100, w: 40, h: 40 });
+    expect(top[1]).toBeGreaterThan(60); // the blurred, darkened copy above it - not black
+    expect(top[1]).toBeLessThan(middle[1]);
+  }, 300_000);
+
+  it("renders at the size the platform preset asks for", async () => {
+    const out = path.join(dir, "small.mp4");
+    await renderLyricVideo({
+      props: { ...baseProps({ shots: [shot({ src: "red.mp4", start: 0, duration: 30 })], durationInFrames: 30 }), format: { width: 540, height: 960 } },
+      media: { workspaceDir: dir },
+      outFile: out,
+      videoBitrate: "4M",
+    });
+    const probe = JSON.parse(execFileSync(ffprobeBin(), ["-v", "error", "-print_format", "json", "-show_streams", out]).toString());
+    expect([probe.streams[0].width, probe.streams[0].height]).toEqual([540, 960]);
   }, 300_000);
 });

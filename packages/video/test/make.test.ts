@@ -5,8 +5,10 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFile
 import os from "node:os";
 import path from "node:path";
 
-import { clip, ffmpegBin, lyricLine, openWorkspace, renderJob, seedStylePresets, variation, type Workspace } from "@lyric/db";
+import { REPO_ROOT, clip, ffmpegBin, lyricLine, openWorkspace, renderJob, seedStylePresets, variation, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { lyricArea, sectionWindow } from "../src";
 
 import {
   ensureAlignment,
@@ -23,8 +25,10 @@ import {
   watchProgress,
   sha256File,
   syncCollection,
+  loadPresets,
   type AlignRunner,
   type MakeOptions,
+  type MakePlan,
   type MakeResult,
   type RenderOptions,
 } from "../src/node";
@@ -271,7 +275,12 @@ describe("pnpm make + pnpm rerender (real renders)", () => {
   }, 600_000);
 
   it("writes v1.mp4/v2.mp4 with a manifest and a QA report each, and records the jobs", () => {
-    expect(readdirSync(result.exportDir).sort()).toEqual(["v1.manifest.json", "v1.mp4", "v1.qa.txt", "v2.manifest.json", "v2.mp4", "v2.qa.txt"]);
+    expect(readdirSync(result.exportDir).sort()).toEqual(["song.lrc", "v1.manifest.json", "v1.mp4", "v1.qa.txt", "v2.manifest.json", "v2.mp4", "v2.qa.txt"]);
+    // Clean synced lyrics for lyric services: no word tags, no hook markers.
+    const lrc = readFileSync(result.lrcFile, "utf8");
+    expect(lrc).toContain("[ti:song]");
+    expect(lrc).toContain("[00:02.50]Hold on to me");
+    expect(lrc).not.toMatch(/<\d|\* /);
     expect(result.variations.map((v) => [v.name, v.error])).toEqual([["v1", null], ["v2", null]]);
     const jobs = ws.db.select().from(renderJob).all().filter((j) => j.output_path?.includes(path.basename(result.exportDir)));
     expect(jobs.map((j) => [j.status, j.progress])).toEqual([["done", 1], ["done", 1]]);
@@ -450,5 +459,138 @@ describe("failures, retry and --resume (stand-in renderer)", () => {
     rmSync(path.join(first.exportDir, "v4.mp4"));
     await expect(run({ resume: true, section: "0:02-0:06" })).rejects.toThrow(/--resume: the section changed .* run without --resume/);
     await expect(run({ resume: true, lyricsOffsetMs: 100 })).rejects.toThrow(/the lyric lead or offset changed/);
+  });
+});
+
+describe("platform presets (stand-in renderer)", () => {
+  const song = path.join(root, "long-song.wav");
+  const lyricsFile = path.join(root, "long-lyrics.txt");
+  const sample = path.join(root, "sample2.mp4");
+  const chorus = ["* Hold on to me", "Through the night", "We will rise", "Into the light"];
+  const verse = (n: number) => [`Verse ${n} line one`, `Verse ${n} line two`, `Verse ${n} line three`, `Verse ${n} line four`];
+  const texts = [...verse(1), ...chorus, ...verse(2), ...chorus, ...verse(3), ...chorus, ...verse(4), ...chorus];
+  // Lines every 2 s from 0.9 s, each sung for 1 s: every bar start (0.25 + 2k s) is free of singing.
+  const align2s: AlignRunner = async (a) => {
+    const raw = readFileSync(a.lyrics, "utf8").split(/\r?\n/).filter(Boolean);
+    const stamp = (ms: number) => `${String(Math.floor(ms / 60000)).padStart(2, "0")}:${((ms % 60000) / 1000).toFixed(2).padStart(5, "0")}`;
+    const rows = raw.map((r, i) => ({ r, start: 900 + i * 2000 }));
+    writeFileSync(a.out, rows.map(({ r, start }) => `[${stamp(start)}]${r}`).join("\n") + `\n[${stamp(900 + raw.length * 2000)}]\n`);
+    const lines = rows.map(({ r, start }, i) => ({ number: i + 1, text: r.replace(/^\*\s+/, ""), is_hook: r.startsWith("* "), start_ms: start, end_ms: start + 1000, confidence: 0.9 }));
+    writeFileSync(a.report, JSON.stringify({ model: "fake", lang: "en", low_confidence: 0.5, lines }));
+  };
+  const rendered: string[] = [];
+  const renderer = async (o: RenderOptions) => {
+    rendered.push(path.relative(root, o.outFile));
+    copyFileSync(sample, o.outFile);
+    return o.outFile;
+  };
+  const run = (extra: Partial<MakeOptions> = {}) =>
+    makeVideos({
+      workspaceDir: wsDir, song, lyrics: lyricsFile, collection: "mixed", align: align2s, frameCheck: false, renderer, platform: "win32", ...extra,
+    });
+
+  beforeAll(() => {
+    makeSong(song, 75);
+    writeFileSync(lyricsFile, `${texts.join("\n")}\n`);
+    ffmpeg("-f", "lavfi", "-i", "testsrc2=s=216x384:r=30:d=2", "-pix_fmt", "yuv420p", sample);
+    const dir = path.join(wsDir, "clips", "mixed");
+    mkdirSync(dir, { recursive: true });
+    makeClip(path.join(dir, "01_a.mp4"), 6, "blue"); // 6 s: long enough to continue into the first shot
+    makeClip(path.join(dir, "02_b.mp4"), 6, "yellow");
+    makeClip(path.join(dir, "03_c.mp4"), 6, "red");
+    ffmpeg("-f", "lavfi", "-i", "testsrc2=s=384x216:r=30:d=3", "-c:v", "libx264", "-pix_fmt", "yuv420p", path.join(dir, "04_wide.mp4"));
+    ffmpeg("-f", "lavfi", "-i", "testsrc2=s=600x1000", "-frames:v", "1", path.join(dir, "05_portrait.jpg"));
+    ffmpeg("-f", "lavfi", "-i", "testsrc2=s=1000x600", "-frames:v", "1", path.join(dir, "06_landscape.jpg"));
+  });
+
+  let all: MakeResult;
+  it("--platforms reels,tiktok,shorts: one folder each, with the preset's size, length, variations, safe zones and fade", async () => {
+    const plans: MakePlan[] = [];
+    all = await run({ platforms: "reels,tiktok,shorts", onReady: (p) => plans.push(p) });
+    expect(all.platforms.map((p) => [p.name, p.error, p.variations.length])).toEqual([["reels", null, 3], ["tiktok", null, 3], ["shorts", null, 2]]);
+    const presets = loadPresets();
+    for (const p of all.platforms) {
+      expect(p.exportDir).toBe(path.join(all.exportDir, p.name));
+      const preset = presets[p.name];
+      const w = sectionWindow(preset)!;
+      for (const v of p.variations) {
+        const m = readManifest(v.manifestFile);
+        expect(m.platform?.name).toBe(p.name);
+        expect(m.props.format).toEqual({ width: 1080, height: 1920 });
+        expect(m.props.safeZone).toEqual(preset.safeZone);
+        expect(m.props.lyricArea).toEqual(lyricArea(preset, preset.safeZone, preset.lyricsAt, m.props.cinematicBars));
+        expect(m.props.audio?.fadeOutFrames).toBe(Math.round(preset.fadeOutSeconds * 30));
+        const length = m.section.end_ms - m.section.start_ms;
+        expect(length).toBeGreaterThanOrEqual(w.minMs);
+        expect(length).toBeLessThanOrEqual(w.maxMs);
+        expect(readFileSync(v.qaFile, "utf8")).toContain(preset.label);
+      }
+    }
+    expect(plans.map((p) => p.platform.name)).toEqual(["reels", "tiktok", "shorts"]);
+    // 3 vertical clips + 1 vertical photo are usable; the wide clip and the landscape photo are not.
+    expect(plans[0].sources).toMatchObject({ usable: 4, needed: 4, kind: "vertical", skipped: ["04_wide.mp4", "06_landscape.jpg"] });
+    expect(readdirSync(all.exportDir).filter((f) => f.endsWith(".lrc"))).toEqual(["long-song.lrc"]);
+  });
+
+  it("reels: the last shot continues into the first (seamless loop) and photos move", () => {
+    const reels = all.platforms.find((p) => p.name === "reels")!;
+    for (const v of reels.variations) {
+      const shots = readManifest(v.manifestFile).props.shots;
+      const first = shots[0];
+      const last = shots[shots.length - 1];
+      expect(last.src).toBe(first.src);
+      if (first.kind !== "photo") expect(last.clipStartFrame + last.duration).toBe(first.clipStartFrame);
+      else expect([last.motion?.toZoom, last.motion?.toX]).toEqual([first.motion?.fromZoom, first.motion?.fromX]);
+    }
+    const photos = all.variations.flatMap((v) => readManifest(v.manifestFile).props.shots.filter((s) => s.kind === "photo"));
+    expect(photos.length).toBeGreaterThan(0);
+    for (const s of photos) expect(s.motion && s.motion.fromZoom !== s.motion.toZoom).toBe(true);
+    const tiktokLast = readManifest(all.platforms[1].variations[1].manifestFile).props.shots;
+    expect(tiktokLast.at(-1)?.src === tiktokLast[0].src && tiktokLast.at(-1)!.clipStartFrame + tiktokLast.at(-1)!.duration === tiktokLast[0].clipStartFrame).toBe(false);
+  });
+
+  it("--allow-fill uses the other orientation too, shown whole over a blurred copy", async () => {
+    const r = await run({ platforms: "tiktok", variations: 2, allowFill: true });
+    const m = readManifest(r.variations[1].manifestFile);
+    expect(m.settings.collection).toMatchObject({ clips: 6, usable: 6 });
+    const filled = [...r.variations].flatMap((v) => readManifest(v.manifestFile).props.shots).filter((s) => s.fit === "fill");
+    expect(filled.length).toBeGreaterThan(0);
+  });
+
+  it("too few or no suitable sources: QA WARN with the count needed, or a clear error", async () => {
+    const dir = path.join(wsDir, "clips", "wide-only");
+    mkdirSync(dir, { recursive: true });
+    ffmpeg("-f", "lavfi", "-i", "testsrc2=s=384x216:r=30:d=3", "-c:v", "libx264", "-pix_fmt", "yuv420p", path.join(dir, "w1.mp4"));
+    ffmpeg("-f", "lavfi", "-i", "testsrc2=s=384x216:r=30:d=3", "-c:v", "libx264", "-pix_fmt", "yuv420p", path.join(dir, "w2.mp4"));
+    makeClip(path.join(dir, "v1.mp4"), 3, "blue");
+    const few = await run({ platforms: "tiktok", variations: 1, collection: "wide-only" });
+    expect(readFileSync(few.variations[0].qaFile, "utf8")).toContain("only 1 vertical source(s) for TikTok; at least 3 needed");
+    rmSync(path.join(dir, "v1.mp4"));
+    await expect(run({ platforms: "tiktok", variations: 1, collection: "wide-only" })).rejects.toThrow(/none of the 2 source\(s\) in "wide-only" is vertical .*--allow-fill/);
+  });
+
+  it("an edited presets file is respected: size, variations and safe zones", async () => {
+    const json = JSON.parse(readFileSync(path.join(REPO_ROOT, "presets", "platforms.json"), "utf8"));
+    json.platforms.reels = { ...json.platforms.reels, width: 540, height: 960, variations: 2, safeZone: { top: 0.2, bottom: 0.4, left: 0, right: 0.1 } };
+    const file = path.join(root, "my-presets.json");
+    writeFileSync(file, JSON.stringify(json));
+    const r = await run({ platforms: "reels", presetsFile: file });
+    expect(r.variations).toHaveLength(2);
+    const m = readManifest(r.variations[0].manifestFile);
+    expect(m.props.format).toEqual({ width: 540, height: 960 });
+    expect(m.props.lyricArea?.bottom).toBe(Math.round(960 * 0.6));
+    expect(m.clips.every((c) => c.normalised.includes("cover540x960") || c.normalised.endsWith(".jpg"))).toBe(true);
+  });
+
+  it("--resume per platform renders only what is missing in each platform folder", async () => {
+    const tiktok = all.platforms.find((p) => p.name === "tiktok")!;
+    rmSync(path.join(tiktok.exportDir, "v2.qa.txt"));
+    // The newest run folder must be the one from the first test: remove the later ones.
+    const exportsDir = path.dirname(all.exportDir);
+    for (const d of readdirSync(exportsDir)) if (path.join(exportsDir, d) !== all.exportDir) rmSync(path.join(exportsDir, d), { recursive: true });
+    rendered.length = 0;
+    const resumed = await run({ platforms: "reels,tiktok,shorts", resume: true });
+    expect(resumed.exportDir).toBe(all.exportDir);
+    expect(rendered).toEqual([path.relative(root, path.join(tiktok.exportDir, "v2.mp4"))]);
   });
 });

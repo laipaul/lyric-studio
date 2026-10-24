@@ -55,6 +55,7 @@ export type RenderOptions = {
   // renders at once can run the PC out of memory: "pnpm make" always sets it.
   videoCacheBytes?: number;
   stallTimeoutMs?: number; // cancel the render if it makes no progress for this long (default 5 min)
+  videoBitrate?: string | null; // e.g. "10M" (platform presets); default: constant quality
 };
 
 export const STALL_TIMEOUT_MS = 5 * 60_000;
@@ -118,6 +119,9 @@ export async function renderLyricVideo(options: RenderOptions): Promise<string> 
         frameRange: options.frameRange ?? null,
         concurrency: options.concurrency ?? null,
         offthreadVideoCacheSizeInBytes: options.videoCacheBytes ?? null,
+        videoBitrate: options.videoBitrate ?? null,
+        // A silent video (Spotify Canvas) has no audio track at all.
+        ...(options.props.audio ? {} : { muted: true }),
         cancelSignal,
         onProgress: ({ progress }) => {
           watch.tick();

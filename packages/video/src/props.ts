@@ -1,4 +1,6 @@
 import type { FontFileRef } from "./font-files";
+import type { KenBurns } from "./photo";
+import type { Format, LyricArea, SafeZone } from "./platform";
 
 // Everything LyricVideo needs. Preview (@remotion/player) and export (renderMedia) receive the same
 // object; media paths are relative to `mediaBaseUrl`, which is the only thing that differs.
@@ -12,6 +14,9 @@ export type ShotProps = {
   clipDurationFrames: number;
   playbackRate: number; // 0.5 - 1
   holdLastFrame: boolean; // freeze the clip's last frame once it runs out
+  kind?: "video" | "photo"; // photo: a still image with a slow Ken Burns move (`motion`)
+  motion?: KenBurns;
+  fit?: "cover" | "fill"; // fill: whole picture shown over a blurred, enlarged copy (--allow-fill)
 };
 
 export type LyricLineProps = {
@@ -44,6 +49,9 @@ export type LyricVideoProps = {
   colour: string;
   cinematicBars: boolean;
   showSafeGuides?: boolean; // preview only: outline the platform safe zone
+  format?: Format; // frame size (default 1080x1920)
+  safeZone?: SafeZone; // covered by the platform's buttons and captions (preview guides, QA)
+  lyricArea?: LyricArea; // where lyrics go, computed from the safe zones (see lyricArea())
 };
 
 export const SIMPLE_STYLE: StyleProps = {

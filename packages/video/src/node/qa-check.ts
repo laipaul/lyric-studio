@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 import { ffmpegBin } from "@lyric/db";
 
 import { parseFrameDetect, lyricBox, type QaLyric, type TimeRange } from "../qa";
+import type { LyricArea } from "../platform";
 import type { LyricLineProps, TextCase } from "../props";
 import type { FontFaceInfo } from "./font-catalog";
 import { faceMeasure, layoutWithFace } from "./measure";
@@ -13,11 +14,11 @@ export const POP_MAX_SCALE = 1.02; // the pop animation's spring overshoots the 
 
 export function measureLyrics(
   lyrics: readonly (LyricLineProps & { number: number; confidence: number | null })[],
-  fonts: { main: FontFaceInfo; hook: FontFaceInfo | null; textCase: TextCase; textSize: number; animation: string },
+  fonts: { main: FontFaceInfo; hook: FontFaceInfo | null; textCase: TextCase; textSize: number; animation: string; area?: LyricArea },
 ): QaLyric[] {
   return lyrics.map((l) => {
     const face = l.isHook && fonts.hook ? fonts.hook : fonts.main;
-    const layout = layoutWithFace(l.text, face, fonts.textCase, fonts.textSize);
+    const layout = layoutWithFace(l.text, face, fonts.textCase, fonts.textSize, fonts.area);
     const measure = faceMeasure(face);
     const widest = Math.max(...layout.lines.map((line) => measure(line, layout.fontSize)));
     const scale = fonts.animation === "pop" ? POP_MAX_SCALE : 1;
@@ -26,7 +27,7 @@ export function measureLyrics(
       text: l.text,
       confidence: l.confidence,
       lines: layout.lines.length,
-      box: lyricBox(layout.lines.length, layout.fontSize, widest, scale),
+      box: lyricBox(layout.lines.length, layout.fontSize, widest, scale, fonts.area),
     };
   });
 }

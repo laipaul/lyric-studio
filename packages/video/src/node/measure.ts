@@ -2,7 +2,7 @@
 // "pnpm render:test" can warn about lines that are too long before anything is rendered.
 import * as fontkit from "fontkit";
 
-import { LYRIC_AREA } from "../config";
+import { DEFAULT_LYRIC_AREA, type LyricArea } from "../platform";
 import { applyTextCase, layoutLyric, type LyricLayout, type MeasureFn } from "../lyrics";
 import type { TextCase } from "../props";
 import type { FontFaceInfo } from "./font-catalog";
@@ -42,23 +42,17 @@ export function faceMeasure(face: FontFaceInfo): MeasureFn {
   };
 }
 
-export function layoutWithFace(text: string, face: FontFaceInfo, textCase: TextCase, textSize: number): LyricLayout {
-  return layoutLyric(
-    applyTextCase(text, textCase),
-    textSize,
-    LYRIC_AREA.right - LYRIC_AREA.left,
-    faceMeasure(face),
-    LYRIC_AREA.minScale,
-  );
+export function layoutWithFace(text: string, face: FontFaceInfo, textCase: TextCase, textSize: number, area: LyricArea = DEFAULT_LYRIC_AREA): LyricLayout {
+  return layoutLyric(applyTextCase(text, textCase), textSize, area.right - area.left, faceMeasure(face), area.minScale);
 }
 
-export type LyricFonts = { main: FontFaceInfo; hook?: FontFaceInfo | null; textCase: TextCase; textSize: number };
+export type LyricFonts = { main: FontFaceInfo; hook?: FontFaceInfo | null; textCase: TextCase; textSize: number; area?: LyricArea };
 
 // Lines that need the 3-line last resort (hook lines measured with the hook font).
 export function tooLongLines<T extends { text: string; isHook?: boolean }>(lines: readonly T[], fonts: LyricFonts): T[] {
   return lines.filter((l) => {
     const face = l.isHook && fonts.hook ? fonts.hook : fonts.main;
-    return layoutWithFace(l.text.replace(/^\*\s+/, ""), face, fonts.textCase, fonts.textSize).tooLong;
+    return layoutWithFace(l.text.replace(/^\*\s+/, ""), face, fonts.textCase, fonts.textSize, fonts.area).tooLong;
   });
 }
 

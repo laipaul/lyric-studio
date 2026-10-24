@@ -13,3 +13,5 @@ export * from "./compose";
 export * from "./pins";
 export * from "./section";
 export * from "./qa";
+export * from "./platform";
+export * from "./photo";

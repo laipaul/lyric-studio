@@ -43,6 +43,9 @@ type ProbeStream = {
   disposition?: { attached_pic?: number };
 };
 
+// Photos (jpg, png, webp) are valid clips too: they have a size but no duration.
+export const PHOTO_EXTENSION = /\.(jpe?g|png|webp)$/i;
+
 export async function probeMedia(file: string): Promise<MediaInfo> {
   const out = await run(ffprobeBin(), ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", file]);
   const info = JSON.parse(out) as { format?: { duration?: string }; streams?: ProbeStream[] };
@@ -51,7 +54,8 @@ export async function probeMedia(file: string): Promise<MediaInfo> {
   const video = streams.find((s) => s.codec_type === "video" && !s.disposition?.attached_pic);
   const audio = streams.find((s) => s.codec_type === "audio");
 
-  const seconds = Number(info.format?.duration ?? video?.duration ?? audio?.duration ?? NaN);
+  const photo = PHOTO_EXTENSION.test(file) && !!video;
+  const seconds = photo ? 0 : Number(info.format?.duration ?? video?.duration ?? audio?.duration ?? NaN);
   if (!Number.isFinite(seconds)) throw new Error(`Could not read the duration of ${file}`);
 
   let width = video?.width ?? null;
@@ -70,10 +74,12 @@ export function thumbnailTimeSeconds(durationMs: number): number {
 const THUMB_MAX_SIZE = 480;
 
 export async function makeThumbnail(input: string, output: string, atSeconds: number): Promise<void> {
+  // A photo is one frame: seeking ("-ss", even to 0) makes FFmpeg write nothing, so do not seek.
+  const photo = PHOTO_EXTENSION.test(input);
   const grab = (seconds: number) =>
     run(ffmpegBin(), [
       "-y", "-v", "error",
-      "-ss", seconds.toFixed(3),
+      ...(photo ? [] : ["-ss", seconds.toFixed(3)]),
       "-i", input,
       "-frames:v", "1",
       "-vf", `scale=w=${THUMB_MAX_SIZE}:h=${THUMB_MAX_SIZE}:force_original_aspect_ratio=decrease`,

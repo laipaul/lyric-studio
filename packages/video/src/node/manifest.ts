@@ -10,7 +10,9 @@ import path from "node:path";
 import { REPO_ROOT, absPath, fileHash, type Clip, type Workspace } from "@lyric/db";
 import { VERSION as REMOTION_VERSION } from "remotion";
 
+import type { PlatformPreset } from "../platform";
 import type { LyricVideoProps } from "../props";
+import type { Brand } from "./brand";
 import { normaliseClip, NORMALISE_VERSION } from "./clips";
 import { loadFontCatalog } from "./font-catalog";
 import type { MediaRoots } from "./media";
@@ -32,6 +34,8 @@ export type Manifest = {
   created_at: string;
   command: string;
   variation: { index: number; name: string; order: "story" | "shuffle"; seed: number; style: string; cinematic_bars: boolean };
+  platform?: { name: string; preset: PlatformPreset };
+  brand?: Brand;
   project: { id: string; title: string };
   song: { file: string; sha256: string; duration_ms: number };
   analysis: { bpm: number; downbeat_offset: number; downbeat_confidence: number };

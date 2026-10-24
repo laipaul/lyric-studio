@@ -90,3 +90,18 @@ export function markHookInLrc(content: string, lineText: string): { content: str
   });
   return { content: out.join(""), matched };
 }
+
+// Plain synced lyrics for lyric services (Musixmatch, LyricFind): title/artist/length tags, one
+// stamp per line (with the project's lyrics offset), an empty stamp for each pause and at the end;
+// no word tags and no "* " hook markers.
+export function cleanLrc(lines: readonly TimedLine[], meta: { title: string; artist: string; durationMs: number; offsetMs?: number }): string {
+  const offset = meta.offsetMs ?? 0;
+  const total = Math.round(meta.durationMs / 1000);
+  const out = [`[ti:${meta.title}]`, `[ar:${meta.artist}]`, `[length:${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}]`, "[re:Lyric Studio]"];
+  lines.forEach((l, i) => {
+    out.push(`${formatLrcTime(l.start_ms + offset)}${l.text}`);
+    const next = lines[i + 1];
+    if (!next || l.end_ms < next.start_ms) out.push(formatLrcTime(l.end_ms + offset));
+  });
+  return `${out.join("\n")}\n`;
+}

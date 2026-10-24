@@ -13,6 +13,10 @@ export const RemotionRoot: React.FC = () => (
     width={VIDEO.width}
     height={VIDEO.height}
     defaultProps={defaultLyricVideoProps}
-    calculateMetadata={({ props }: { props: LyricVideoProps }) => ({ durationInFrames: props.durationInFrames })}
+    calculateMetadata={({ props }: { props: LyricVideoProps }) => ({
+      durationInFrames: props.durationInFrames,
+      width: props.format?.width ?? VIDEO.width,
+      height: props.format?.height ?? VIDEO.height,
+    })}
   />
 );

@@ -2,7 +2,8 @@
 //   [--section auto|full|0:11-1:10] [--hint <taps.lrc>] [--realign] [--lrc <file.lrc>] [--lang en|fr]
 //   [--rate 1x] [--energy medium] [--lead 0.25] [--lyrics-offset 0] [--downbeat-offset N]
 //   [--font "Family"] [--font-hook "Family"] [--pins pins.txt] [--parallel N] [--resume] [--no-open]
-// One command from a song to N finished variations with manifests and QA reports.
+//   [--platforms reels,tiktok,shorts | all] [--allow-fill]
+// One command from a song to N finished variations with manifests and QA reports, per platform.
 import path from "node:path";
 import { parseArgs } from "node:util";
 
@@ -21,7 +22,9 @@ try {
     options: {
       collection: { type: "string" },
       "collection-path": { type: "string" },
-      variations: { type: "string", default: "6" },
+      variations: { type: "string" },
+      platforms: { type: "string" },
+      "allow-fill": { type: "boolean", default: false },
       section: { type: "string", default: "auto" },
       hint: { type: "string" },
       realign: { type: "boolean", default: false },
@@ -53,8 +56,8 @@ if (!["0.5x", "1x", "2x", "off"].includes(rate)) fail("--rate must be 0.5x, 1x, 
 const energy = values.energy as Energy;
 if (!["low", "medium", "high"].includes(energy)) fail("--energy must be low, medium or high");
 if (!["en", "fr"].includes(values.lang!)) fail("--lang must be en or fr");
-const variations = Number(values.variations);
-if (!Number.isInteger(variations) || variations < 1 || variations > 24) fail("--variations must be a whole number from 1 to 24");
+const variations = values.variations === undefined ? undefined : Number(values.variations);
+if (variations !== undefined && (!Number.isInteger(variations) || variations < 1 || variations > 24)) fail("--variations must be a whole number from 1 to 24");
 const seconds = (name: string, text: string) => {
   const n = Number(text);
   if (!Number.isFinite(n) || Math.abs(n) > 10) fail(`--${name} must be a number of seconds, e.g. 0.25 or -0.3`);
@@ -95,6 +98,8 @@ try {
     collection: values.collection,
     collectionPath: resolve(values["collection-path"]),
     variations,
+    platforms: values.platforms,
+    allowFill: values["allow-fill"],
     section: values.section,
     hint: resolve(values.hint),
     realign: values.realign,
@@ -120,21 +125,35 @@ try {
     log,
     onReady: (p) => {
       const c = p.collection;
+      if (lastLine) process.stdout.write("\n");
+      lastLine = "";
       console.log("");
-      console.log(`Project:   ${p.project.title}${p.project.created ? " (new)" : ""}`);
-      console.log(`BPM:       ${p.bpm}   downbeat confidence ${p.downbeatConfidence.toFixed(2)}`);
-      const how = { aligned: "aligned now", stored: "stored alignment", given: "given with --lrc" }[p.lyrics.source];
-      console.log(`Lyrics:    ${p.lyrics.lines} lines (${p.lyrics.hooks} hook), ${how}: ${p.lyrics.file}`);
-      if (p.lyricsOffsetMs) console.log(`           lyrics offset ${p.lyricsOffsetMs / 1000} s (project setting)`);
-      for (const l of p.lyrics.low) console.log(`           low confidence ${l.confidence.toFixed(2)}: line ${l.number} "${l.text}"`);
+      if (p.platform.index === 0) {
+        console.log(`Project:   ${p.project.title}${p.project.created ? " (new)" : ""}`);
+        console.log(`BPM:       ${p.bpm}   downbeat confidence ${p.downbeatConfidence.toFixed(2)}`);
+        const how = { aligned: "aligned now", stored: "stored alignment", given: "given with --lrc" }[p.lyrics.source];
+        console.log(`Lyrics:    ${p.lyrics.lines} lines (${p.lyrics.hooks} hook), ${how}: ${p.lyrics.file}`);
+        if (p.lyricsOffsetMs) console.log(`           lyrics offset ${p.lyricsOffsetMs / 1000} s (project setting)`);
+        for (const l of p.lyrics.low) console.log(`           low confidence ${l.confidence.toFixed(2)}: line ${l.number} "${l.text}"`);
+        console.log(
+          `Clips:     ${c.clips} in "${c.name}" (${c.added} new, ${c.changed} changed, ${c.unchanged} unchanged` +
+            `${c.removed ? `, ${c.removed} removed from the collection` : ""}) from ${c.folder}`,
+        );
+        console.log(`Brand:     ${p.brand.file}${p.brand.created ? " (created with the defaults)" : ""}`);
+        console.log(`Rendering: ${p.limit.explanation}`);
+        console.log("");
+      }
+      const s = p.sources;
+      console.log(`== ${p.platform.label} (${p.platform.index + 1}/${p.platform.count}) -> ${p.platform.folder}`);
       console.log(`Section:   ${clockText(p.section.start_ms)} - ${clockText(p.section.end_ms)}`);
       console.log(`           ${p.section.reason}`);
       console.log(
-        `Clips:     ${c.clips} in "${c.name}" (${c.added} new, ${c.changed} changed, ${c.unchanged} unchanged` +
-          `${c.removed ? `, ${c.removed} removed from the collection` : ""}) from ${c.folder}`,
+        `Sources:   ${s.usable} ${s.kind} usable` +
+          (s.filled.length ? `, ${s.filled.length} with blurred fill` : "") +
+          (s.skipped.length ? `, ${s.skipped.length} skipped (${s.kind === "vertical" ? "horizontal" : "vertical"}: ${s.skipped.join(", ")}; --allow-fill to use them)` : "") +
+          (s.usable < s.needed ? `   WARNING: at least ${s.needed} needed` : ""),
       );
       console.log(`Cuts:      ${p.cuts} cuts, rate ${rate}, energy ${energy}`);
-      console.log(`Rendering: ${p.limit.explanation}`);
       if (p.resume) {
         console.log(
           `Resume:    ${p.exportDir}: ${p.resume.done} already done` +
@@ -153,6 +172,7 @@ try {
 console.log("\n");
 
 const rows = result.variations.map((v) => [
+  v.platform,
   v.name,
   v.style === "simple" ? "Simple" : "Bold",
   v.order === "story" ? "story" : `shuffle (seed ${v.seed})`,
@@ -160,17 +180,24 @@ const rows = result.variations.map((v) => [
   `${v.durationS.toFixed(1)} s`,
   v.error ? `FAILED: ${v.error}` : `${v.qaSummary}${v.kept ? "   (kept from the earlier run)" : ""}${v.retried ? "   (rendered on the retry)" : ""}`,
 ]);
-const header = ["Variation", "Style", "Order", "Bars", "Duration", "QA"];
-const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => (i < 5 ? r[i].length : 0))));
+const header = ["Platform", "Variation", "Style", "Order", "Bars", "Duration", "QA"];
+const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => (i < 6 ? r[i].length : 0))));
 console.log(header.map((h, i) => pad(h, widths[i])).join("  "));
-for (const r of rows) console.log(r.map((c, i) => (i < 5 ? pad(c, widths[i]) : c)).join("  "));
+for (const r of rows) console.log(r.map((c, i) => (i < 6 ? pad(c, widths[i]) : c)).join("  "));
+for (const p of result.platforms.filter((p) => p.error)) console.log(`${p.name}: FAILED: ${p.error}`);
+for (const w of result.warnings.filter((w) => w.includes(" skipped: "))) console.log(`Note: ${w}`);
 console.log("");
 console.log(`Done in ${((Date.now() - started) / 1000).toFixed(0)} s`);
 console.log(`Output:    ${result.exportDir}`);
-console.log("           v1.mp4 ... with v1.manifest.json (rerender with: pnpm rerender <manifest>) and v1.qa.txt");
+console.log(
+  result.platforms.length > 1 || result.platforms[0]?.name !== "standard"
+    ? "           one folder per platform, each with v1.mp4 ..., v1.manifest.json (pnpm rerender <manifest>) and v1.qa.txt"
+    : "           v1.mp4 ... with v1.manifest.json (rerender with: pnpm rerender <manifest>) and v1.qa.txt",
+);
+console.log(`Lyrics:    ${result.lrcFile} (clean synced LRC for Musixmatch / LyricFind)`);
 if (!values["no-open"]) openFolder(result.exportDir);
 const failed = result.variations.filter((v) => v.error);
-if (failed.length) {
+if (failed.length || result.platforms.some((p) => p.error)) {
   console.log("");
   console.log(`${failed.length} variation(s) failed: ${failed.map((v) => v.name).join(", ")}. The others are finished.`);
   console.log("Render only the missing ones with the same command plus --resume (add --parallel 1 if it was higher).");

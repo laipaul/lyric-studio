@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { eq } from "drizzle-orm";
@@ -11,6 +12,7 @@ import {
   clip,
   createCollection,
   createProject,
+  ffmpegBin,
   openWorkspace,
   project,
   safeName,
@@ -144,5 +146,20 @@ describe("helpers", () => {
     expect(safeName("CON")).toBe("_CON");
     expect(safeName("song. ")).toBe("song");
     expect(safeName("   ")).toBe("untitled");
+  });
+});
+
+describe("photos as clips", () => {
+  it("adds a jpg with its size, no duration and a thumbnail", async () => {
+    const t = tempDir("photo");
+    const ws = openWorkspace(path.join(t.dir, "ws"));
+    const photo = path.join(t.dir, "portrait.jpg");
+    execFileSync(ffmpegBin(), ["-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=600x1000", "-frames:v", "1", photo]);
+    const coll = createCollection(ws, "photos");
+    const c = await addClip(ws, { collectionId: coll.id, file: photo });
+    expect([c.width, c.height, c.duration_ms]).toEqual([600, 1000, 0]);
+    expect(existsSync(absPath(ws, c.thumb_path!))).toBe(true);
+    ws.close();
+    t.cleanup();
   });
 });

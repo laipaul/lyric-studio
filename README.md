@@ -258,15 +258,51 @@ changed since.
 | --- | --- | --- |
 | `--collection <name>` | (required) | the folder `workspace\clips\<name>\` |
 | `--collection-path <folder>` | | clips from another folder (not copied) |
-| `--variations N` | `6` | number of videos |
+| `--variations N` | from the preset (standard: 6) | number of videos (per platform) |
 | `--section` | `auto` | `auto`, `full` or `0:11-1:10` |
 | `--hint <taps.lrc>`, `--realign`, `--lang fr` | | passed to `pnpm align` (see above) |
 | `--lrc <file.lrc>` | | use this LRC instead of aligning (stored as-is) |
 | `--lyrics-offset S` | `0` | move all lines (seconds); saved to the project, the LRC stays unchanged |
 | `--lead`, `--rate`, `--energy`, `--font`, `--font-hook`, `--pins`, `--downbeat-offset` | | as for `pnpm render:test` |
+| `--platforms reels,tiktok,shorts` / `all` | (standard) | one folder per platform, presets from `presets\platforms.json` |
+| `--allow-fill` | | also use sources of the other orientation, shown whole over a blurred copy |
 | `--parallel N` | `1` on Windows | videos rendered at the same time |
 | `--resume` | | in the latest export folder, render only the videos that are missing or failed (refused if the section, lyrics, cuts, settings or clips changed since) |
 | `--no-open` | | do not open the folder at the end |
+
+### Platforms (`--platforms`)
+
+```powershell
+cd D:\videomaker
+pnpm make "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test\lyrics.txt" --collection beach --platforms reels,tiktok,shorts
+```
+
+`--platforms all` makes every platform that is ready. Each platform gets its own folder inside the
+run's folder (`exports\<date>\reels\v1.mp4 …`) with its own manifests and QA, plus one clean
+`<song>.lrc` for Musixmatch / LyricFind. Without `--platforms`, the "standard" preset is used
+(45-60 s, 6 videos, files directly in the run's folder).
+
+| Platform | Size | Length | Videos | Notes |
+| --- | --- | --- | --- | --- |
+| reels | 1080x1920 | ~30 s, centred on the first chorus | 3 | ends on a bar with a 0.12 s fade; the last shot leads into the first (seamless loop) |
+| tiktok | 1080x1920 | ~25 s | 3 | taller caption area at the bottom |
+| shorts | 1080x1920 | ~50 s | 2 | |
+| youtube, canvas | | | | come in Steps 5g.2 / 5g.3 |
+
+Everything above is in `presets\platforms.json` and can be edited (size, length, number of videos,
+safe zones, where the lyrics sit, text scale, bitrate, fade-out). `pnpm make` checks the file and
+names any wrong value. The lyrics are placed from each platform's safe zones (centred in the free
+area, slightly above its middle), never outside them.
+
+**Clips and photos**: a collection may mix vertical and horizontal clips and photos (`.jpg`, `.png`,
+`.webp`). Vertical videos use vertical (or square) sources; horizontal ones are skipped and listed,
+unless `--allow-fill` (shown whole over a blurred copy). With too few suitable sources the QA says how
+many are needed. Photos get a slow zoom and pan (Ken Burns) over exactly their shot.
+
+**Brand**: `workspace\brand\brand.json` (created the first time) holds the fonts — Cinzel for titles,
+Cormorant Garamond for verses, Kaushan Script for hook lines —, the accent colour (#E8A3B5), and the
+logo (`workspace\brand\logo.png`) position and size. The lyrics use the brand fonts; `--font` /
+`--font-hook` still override them, and `"useForLyrics": false` goes back to the Simple/Bold fonts.
 
 ## Test render (`pnpm render:test`)
 

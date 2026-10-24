@@ -6,7 +6,7 @@ import path from "node:path";
 import { ffmpegBin } from "@lyric/db";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { LYRIC_AREA, formatQa, lyricBox, parseFrameDetect, runQa, safeZoneProblem, type QaInput, type ShotProps } from "../src";
+import { DEFAULT_LYRIC_AREA, formatQa, lyricBox, parseFrameDetect, runQa, safeZoneProblem, type QaInput, type ShotProps } from "../src";
 import { detectBadFrames, loadFontCatalog, measureLyrics, resolveFace } from "../src/node";
 
 const shot = (start: number, duration: number, extra: Partial<ShotProps> = {}): ShotProps => ({
@@ -104,7 +104,7 @@ describe("QA checks", () => {
     expect(measured[1].lines).toBeGreaterThanOrEqual(2);
     for (const m of measured) {
       expect(safeZoneProblem(m.box, true)).toBeNull();
-      expect(m.box.left).toBeGreaterThanOrEqual(LYRIC_AREA.left - 20); // pop overshoot of 2%
+      expect(m.box.left).toBeGreaterThanOrEqual(DEFAULT_LYRIC_AREA.left - 20); // pop overshoot of 2%
     }
   });
 

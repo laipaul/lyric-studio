@@ -8,12 +8,14 @@ import os from "node:os";
 import path from "node:path";
 
 import {
+  REPO_ROOT,
   absPath,
   lyricLine as lyricLineTable,
   openWorkspace,
   project as projectTable,
   renderJob as renderJobTable,
   resolveWorkspaceDir,
+  safeName,
   section as sectionTable,
   storedPath,
   stylePreset,
@@ -23,17 +25,20 @@ import {
 import { eq } from "drizzle-orm";
 
 import type { Beat } from "../beats";
-import { composeProps, DEFAULT_LEAD_MS, lyricFrames, type RenderBase, type StyleChoice } from "../compose";
+import { composeProps, DEFAULT_LEAD_MS, lyricFrames, type PlatformLayout, type RenderBase, type StyleChoice } from "../compose";
+import { cleanLrc } from "../lrc";
+import { choosePlatforms, lyricArea, parsePresets, sectionWindow, STANDARD, type PlatformPreset } from "../platform";
 import { VIDEO } from "../config";
 import { getCutPoints, type CutRate, type Energy } from "../cuts";
 import { matchPinClips, parsePins } from "../pins";
 import type { LyricVideoProps } from "../props";
-import { formatQa, LOW_CONFIDENCE, qaReasons, runQa, type QaReport } from "../qa";
+import { formatQa, LOW_CONFIDENCE, qaReasons, runQa, type QaInput, type QaReport } from "../qa";
 import { autoSection, clockText, finishedBeforeStart, type SectionLine } from "../section";
-import type { ClipOrder } from "../shots";
+import { RECENT_WINDOW, type ClipOrder } from "../shots";
 import { analyzeSong } from "./analysis";
-import { syncCollection, type CollectionSync } from "./collection";
-import { loadFontCatalog } from "./font-catalog";
+import { loadBrand, type Brand } from "./brand";
+import { prepareForFormat, syncCollection, type CollectionSync, type PreparedForFormat } from "./collection";
+import { loadFontCatalog, type FontCatalog } from "./font-catalog";
 import { sha256File, toolInfo, writeManifest, type Manifest } from "./manifest";
 import { resolveMediaPath, type MediaRoots } from "./media";
 import { tooLongLines } from "./measure";
@@ -47,7 +52,10 @@ export type MakeOptions = {
   lyrics: string; // lyrics.txt
   collection: string;
   collectionPath?: string;
-  variations?: number; // default 6
+  variations?: number; // default: the platform preset's number (standard: 6)
+  platforms?: string; // "reels,tiktok,shorts" or "all"; default: the "standard" preset
+  allowFill?: boolean; // use sources of the other orientation, shown whole over a blurred copy
+  presetsFile?: string; // default: presets/platforms.json
   section?: string; // "auto" (default) | "full" | "0:11-1:10"
   hint?: string;
   realign?: boolean;
@@ -77,6 +85,9 @@ export type MakeOptions = {
 };
 
 export type MakePlan = {
+  platform: { name: string; label: string; index: number; count: number; folder: string };
+  sources: { usable: number; needed: number; kind: string; filled: string[]; skipped: string[] };
+  brand: { file: string; created: boolean };
   project: { title: string; created: boolean };
   bpm: number;
   downbeatConfidence: number;
@@ -97,6 +108,7 @@ export type RenderState = { name: string; status: "queued" | "rendering" | "chec
 export type VariationSpec = { index: number; name: string; order: ClipOrder; seed: number; style: StyleChoice; bars: boolean };
 
 export type VariationResult = VariationSpec & {
+  platform: string;
   file: string;
   manifestFile: string;
   qaFile: string;
@@ -108,12 +120,25 @@ export type VariationResult = VariationSpec & {
   retried: boolean; // the first attempt failed and it was rendered again with less memory
 };
 
-export type MakeResult = {
-  projectTitle: string;
+export type PlatformResult = {
+  name: string;
+  label: string;
   exportDir: string;
   section: { start_ms: number; end_ms: number; reason: string };
   limit: RenderLimit;
   variations: VariationResult[];
+  warnings: string[];
+  error: string | null; // the platform could not be made at all (e.g. no suitable sources)
+};
+
+export type MakeResult = {
+  projectTitle: string;
+  exportDir: string; // the run's folder (platforms in subfolders; "standard" directly in it)
+  lrcFile: string; // clean synced lyrics for Musixmatch / LyricFind
+  section: { start_ms: number; end_ms: number; reason: string }; // of the first platform
+  limit: RenderLimit;
+  platforms: PlatformResult[];
+  variations: VariationResult[]; // all platforms
   warnings: string[];
 };
 
@@ -233,9 +258,17 @@ export function openFolder(dir: string): void {
 
 type SectionChoiceOut = { mode: string; start_ms: number; end_ms: number; requested: { start_ms: number; end_ms: number } | null; reason: string; warnings: string[] };
 
-function chooseSection(mode: string, lines: SectionLine[], beats: Beat[], durationMs: number, leadMs: number): SectionChoiceOut {
+function chooseSection(mode: string, lines: SectionLine[], beats: Beat[], durationMs: number, leadMs: number, preset?: PlatformPreset): SectionChoiceOut {
+  if (mode === "auto" && preset?.length.mode === "full") mode = "full";
   if (mode === "auto") {
-    const s = autoSection(lines, beats, { durationMs, leadMs });
+    const window = preset ? sectionWindow(preset) : null;
+    const s = autoSection(lines, beats, {
+      durationMs,
+      leadMs,
+      ...(window ? { minMs: window.minMs, maxMs: window.maxMs, hardMaxMs: preset!.length.mode === "target" ? Math.round(window.targetMs * 1.3) : window.hardMaxMs } : {}),
+      ...(window && preset!.length.mode === "target" ? { targetMs: window.targetMs } : {}),
+      anchorMode: preset?.anchor ?? "lead-in",
+    });
     return { mode, start_ms: s.start_ms, end_ms: s.end_ms, requested: null, reason: s.reason, warnings: s.warnings };
   }
   const requested = mode === "full" ? { start_ms: 0, end_ms: durationMs } : parseSection(mode);
@@ -249,18 +282,27 @@ function chooseSection(mode: string, lines: SectionLine[], beats: Beat[], durati
 
 export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
   const log = options.log ?? (() => {});
-  const count = options.variations ?? 6;
-  if (!Number.isInteger(count) || count < 1 || count > 24) throw new Error("--variations must be a whole number from 1 to 24");
+  if (options.variations !== undefined && (!Number.isInteger(options.variations) || options.variations < 1 || options.variations > 24)) {
+    throw new Error("--variations must be a whole number from 1 to 24");
+  }
   const leadMs = options.leadMs ?? DEFAULT_LEAD_MS;
   const now = options.now ?? new Date();
   const ws = openWorkspace(options.workspaceDir ?? resolveWorkspaceDir());
   try {
     for (const f of [options.song, options.lyrics]) if (!existsSync(f)) throw new Error(`File not found: ${f}`);
 
-    // Fonts first: a wrong --font name should fail before the slow steps.
+    // Presets, brand and fonts first: a mistake there should fail before the slow steps.
+    const presets = loadPresets(options.presetsFile);
+    const chosenPlatforms = choosePlatforms(options.platforms, presets);
     const catalog = loadFontCatalog(ws.dir);
     for (const problem of catalog.problems) log(`font file skipped: ${problem}`);
-    const styles = loadStyles(ws, catalog, { font: options.font, fontHook: options.fontHook });
+    const brand = loadBrand(ws.dir, catalog);
+    if (brand.created) log(`brand settings created: ${brand.file} (edit fonts, colour and logo there)`);
+    const styles = loadStyles(ws, catalog, {
+      font: options.font,
+      fontHook: options.fontHook,
+      brandFonts: brand.brand.useForLyrics ? { verse: brand.brand.verseFont.family, hook: brand.brand.hookFont.family } : undefined,
+    });
 
     const sp = await findOrCreateSongProject(ws, path.resolve(options.song), log);
     log(`project "${sp.project.title}" (${sp.created ? "new" : "found by the song's content"})`);
@@ -294,252 +336,390 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     if (!lines.length) throw new Error(`No timed lyric lines in ${alignment.lrcFile}`);
     const reports = matchReport(lines, alignment.report);
     saveLyricLines(ws, project.id, alignment);
-
-    // Section (lines appear `leadMs` early and move by the lyrics offset).
-    const sectionLines: SectionLine[] = lines.map((l, i) => ({ ...l, sung_end_ms: reports[i]?.end_ms }));
-    const chosen = chooseSection(options.section ?? "auto", sectionLines, analysis.beats, analysis.duration_ms, leadMs - lyricsOffsetMs);
-    log(`section ${clockText(chosen.start_ms)} - ${clockText(chosen.end_ms)}`);
-    const sectionRow = ws.db
-      .insert(sectionTable)
-      .values({ project_id: project.id, name: `make (${chosen.mode})`, start_ms: chosen.start_ms, end_ms: chosen.end_ms, energy: options.energy ?? "medium" })
-      .returning()
-      .get();
-
-    const collection = await syncCollection(ws, { name: options.collection, folder: options.collectionPath, log });
-
-    const plan = getCutPoints(analysis.beats, { start_ms: chosen.start_ms, end_ms: chosen.end_ms, energy: options.energy ?? "medium" }, {
-      cutRate: options.rate ?? "1x",
-      lyricLines: lines,
-    });
-    const preparedClips = collection.clips.map((c) => ({ id: c.clip.id, name: c.name, duration_ms: c.durationMs, path: c.path, durationFrames: c.durationFrames }));
-
-    const warnings = [...chosen.warnings];
-    let pins: RenderBase["pins"] = [];
-    if (options.pins) {
-      const parsed = parsePins(readFileSync(options.pins, "utf8"));
-      const matched = matchPinClips(parsed.rules, preparedClips);
-      pins = matched.pins;
-      warnings.push(...parsed.warnings, ...matched.warnings);
-    }
-
-    const { media, audio } = songMedia(ws.dir, sp.songFile, plan, catalog);
-    const allLyrics = lines.map((l) => ({ text: l.text, start_ms: l.start_ms, end_ms: l.end_ms, isHook: l.isHook }));
-    // A line whose singing is over but which is still on screen at the start (it lingers until the
-    // next stamp) is not shown, so the video never opens on the tail of the previous line.
-    const hidden = finishedBeforeStart(sectionLines, chosen.start_ms, leadMs, lyricsOffsetMs);
-    const shown = lines.map((_, i) => i).filter((i) => !hidden.includes(i));
-    const base: RenderBase = {
-      plan,
-      clips: preparedClips,
-      audio,
-      durationInFrames: plan.end_frame - plan.start_frame,
-      lyrics: shown.map((i) => allLyrics[i]),
-      styles: { simple: styles.simple.entry, bold: styles.bold.entry },
-      colour: "#ffffff",
-      cinematicBars: false,
-      pins,
-    };
-
-    // Which lines are on screen (same rule as composeProps) and their numbers in lyrics.txt.
-    const frames = lyricFrames(base, leadMs, lyricsOffsetMs);
-    const visible = frames
-      .map((f, k) => ({ i: shown[k], start: Math.max(0, f.startFrame), end: Math.min(base.durationInFrames, f.endFrame) }))
-      .filter((v) => v.end > v.start)
-      .map((v) => v.i);
     const numbers = lyricLineNumbers(lines.map((l) => l.text), alignment.lrcFile, alignment.lyricsTxt).numbers;
-    const notes = hidden.map((i) => `line ${numbers[i] || i + 1} "${lines[i].text}" is not shown: it was sung before the section starts`);
-    for (const style of ["simple", "bold"] as const) {
-      const s = styles[style];
-      for (const l of tooLongLines(visible.map((i) => lines[i]), { main: s.main, hook: s.hook, textCase: s.entry.style.textCase, textSize: s.entry.textSize })) {
-        const n = numbers[lines.indexOf(l)] || lines.indexOf(l) + 1;
-        warnings.push(`Line ${n} is too long for phone screens (${s.entry.style.name}); split it in ${path.basename(alignment.lyricsTxt)}: "${l.text}"`);
-      }
-    }
+    const sectionLines: SectionLine[] = lines.map((l, i) => ({ ...l, sung_end_ms: reports[i]?.end_ms }));
 
-    const allSpecs = planVariations(count);
-    let exportDir: string;
-    let specs = allSpecs;
+    const collection = await syncCollection(ws, { name: options.collection, folder: options.collectionPath, log, prepare: false });
+
+    // The run's folder; --resume continues the latest one.
+    let rootDir: string;
     if (options.resume) {
       const latest = latestExportFolder(ws, project.id);
       if (!latest) throw new Error("--resume: this project has no earlier export folder; run without --resume.");
-      exportDir = latest;
-      const changed = resumeMismatch(exportDir, allSpecs, {
-        section: chosen,
-        lrcHash: alignment.lrcHash,
-        leadMs,
-        lyricsOffsetMs,
-        cutFrames: plan.cuts.map((c) => c.frame - plan.start_frame),
-        clipHashes: new Set(collection.clips.map((c) => c.hash)),
-        settings: { cut_rate: options.rate ?? "1x", energy: options.energy ?? "medium", font: options.font ?? null, font_hook: options.fontHook ?? null },
-      });
-      if (changed) throw new Error(`--resume: ${changed} since the run in ${exportDir}; run without --resume to make a new set.`);
-      specs = allSpecs.filter((s) => !variationDone(exportDir, s.name));
+      rootDir = latest;
     } else {
-      exportDir = exportFolder(ws, project.id, now);
+      rootDir = exportFolder(ws, project.id, now);
     }
-    const limit = renderLimit({ platform: options.platform, requested: options.parallel });
+    const lrcFile = path.join(rootDir, `${safeName(project.title)}.lrc`);
+    if (!existsSync(lrcFile)) {
+      writeFileSync(lrcFile, cleanLrc(lines, { title: project.title, artist: project.artist, durationMs: analysis.duration_ms, offsetMs: lyricsOffsetMs }));
+    }
+
     const tool = toolInfo();
-    options.onReady?.({
-      project: { title: project.title, created: sp.created },
-      bpm: analysis.bpm,
-      downbeatConfidence: analysis.downbeat_confidence,
-      lyrics: {
-        source: alignment.source,
-        file: alignment.lrcFile,
-        lines: lines.length,
-        hooks: lines.filter((l) => l.isHook).length,
-        low: reports.flatMap((r, i) => (r && r.confidence < LOW_CONFIDENCE ? [{ number: numbers[i] || i + 1, text: lines[i].text, confidence: r.confidence }] : [])),
-      },
-      lyricsOffsetMs,
-      section: { start_ms: chosen.start_ms, end_ms: chosen.end_ms, reason: chosen.reason },
-      collection: {
-        name: collection.collection.name,
-        folder: collection.folder,
-        clips: collection.clips.length,
-        added: collection.added.length,
-        changed: collection.changed.length,
-        unchanged: collection.unchanged.length,
-        removed: collection.removed.length,
-      },
-      cuts: plan.cuts.length,
-      limit,
-      exportDir,
-      resume: options.resume ? { done: allSpecs.length - specs.length, toRender: specs.map((s) => s.name) } : null,
-      warnings: [...warnings],
-      notes,
-    });
-    const states: RenderState[] = specs.map((s) => ({ name: s.name, status: "queued", progress: 0 }));
-    const report = () => options.onRenderProgress?.(states.map((s) => ({ ...s })));
-    const results: VariationResult[] = allSpecs
-      .filter((spec) => !specs.includes(spec))
-      .map((spec) => {
-        const manifestFile = path.join(exportDir, `${spec.name}.manifest.json`);
-        const durationS = (JSON.parse(readFileSync(manifestFile, "utf8")) as Manifest).output.duration_s;
-        const qaFile = path.join(exportDir, `${spec.name}.qa.txt`);
-        return { ...spec, file: path.join(exportDir, `${spec.name}.mp4`), manifestFile, qaFile, durationS, qa: null, qaSummary: qaSummaryFromFile(qaFile), error: null, kept: true, retried: false };
-      });
-
-    const jobs = specs.map((spec) => {
-      const composed = composeProps(base, { seed: spec.seed, style: spec.style, order: spec.order, leadMs, lyricsOffsetMs, cinematicBars: spec.bars });
-      warnings.push(...composed.warnings.map((w) => `${spec.name}: ${w}`));
-      const variationRow = ws.db
-        .insert(variationTable)
-        .values({
-          project_id: project.id,
-          section_id: sectionRow.id,
-          seed: spec.seed,
-          cut_rate: options.rate ?? "1x",
-          style_id: ws.db.select().from(stylePreset).where(eq(stylePreset.name, styles[spec.style].entry.style.name)).get()?.id ?? null,
-          text_size: composed.props.textSize,
-          colour: composed.props.colour,
-          cinematic_bars: spec.bars,
-          overrides_json: { order: spec.order, lead_ms: leadMs, lyrics_offset_ms: lyricsOffsetMs, font: options.font ?? null, font_hook: options.fontHook ?? null, lrc: alignment.lrcStored },
-        })
-        .returning()
-        .get();
-      const job = ws.db.insert(renderJobTable).values({ variation_id: variationRow.id }).returning().get();
-      return { spec, props: composed.props, jobId: job.id };
-    });
-    report();
-
-    const updateJob = (id: string, values: Partial<typeof renderJobTable.$inferInsert>) =>
-      ws.db.update(renderJobTable).set(values).where(eq(renderJobTable.id, id)).run();
-
-    await runPool(jobs, limit.parallel, async ({ spec, props, jobId }) => {
-      const state = states.find((st) => st.name === spec.name)!;
-      const file = path.join(exportDir, `${spec.name}.mp4`);
-      const result: VariationResult = {
-        ...spec,
-        file,
-        manifestFile: path.join(exportDir, `${spec.name}.manifest.json`),
-        qaFile: path.join(exportDir, `${spec.name}.qa.txt`),
-        durationS: props.durationInFrames / VIDEO.fps,
-        qa: null,
-        qaSummary: "",
-        error: null,
-        kept: false,
-        retried: false,
-      };
-      results.push(result);
-      state.status = "rendering";
-      report();
-      updateJob(jobId, { status: "rendering", started_at: new Date(), progress: 0 });
-      let lastSaved = 0;
-      const render = options.renderer ?? renderLyricVideo;
-      const attempt = (settings: Pick<RenderLimit, "concurrency" | "videoCacheBytes">) =>
-        render({
-          props,
-          media,
-          outFile: file,
-          concurrency: settings.concurrency,
-          videoCacheBytes: settings.videoCacheBytes,
-          onProgress: (p) => {
-            state.progress = p;
-            report();
-            if (p - lastSaved >= 0.05) {
-              lastSaved = p;
-              updateJob(jobId, { progress: Math.min(1, p) });
-            }
-          },
-        });
+    const shared: Shared = {
+      ws, options, log, now, leadMs, lyricsOffsetMs, catalog, styles, brand, sp, analysis, alignment, lines, reports, numbers,
+      sectionLines, collection, tool, rootDir, getProject: () => project,
+    };
+    const results: PlatformResult[] = [];
+    for (const [index, name] of chosenPlatforms.names.entries()) {
+      const preset = presets[name];
       try {
-        if (!options.renderer) await getBundle(log); // built once, shared by the parallel renders
-        try {
-          await attempt(limit);
-        } catch (first) {
-          // One retry with less memory; a second failure is reported and the others carry on.
-          const lower = retryLimit(limit);
-          result.retried = true;
-          options.onRetry?.(spec.name, (first as Error).message, lower.concurrency);
-          state.progress = 0;
-          lastSaved = 0;
-          try {
-            await attempt(lower);
-          } catch (second) {
-            throw new Error(`${(second as Error).message} (also after a retry with ${lower.concurrency} frame${lower.concurrency > 1 ? "s" : ""} in parallel)`);
-          }
-        }
-        state.status = "checking";
-        report();
-        const qa = await checkVariation(spec, props, file, { lines, visible, numbers, reports, styles, collection, frameCheck: options.frameCheck ?? true });
-        result.qa = qa;
-        result.qaSummary = qa.status === "PASS" ? "PASS" : `WARN (${qaReasons(qa)})`;
-        writeFileSync(result.qaFile, formatQa(qa, qaTitle(spec, project.title, chosen)));
-        writeManifest(
-          result.manifestFile,
-          buildManifest({
-            ws, tool, spec, props, media, project, songHash: sp.songHash, songFile: sp.songFile, analysis, chosen, alignment, reports, numbers, visible, lines,
-            leadMs, lyricsOffsetMs, options, collection, file, qa, now, warnings,
-          }),
-        );
-        state.status = "done";
-        state.progress = 1;
-        updateJob(jobId, { status: "done", progress: 1, output_path: storedPath(ws, file), finished_at: new Date() });
+        results.push(await makePlatform(shared, preset, { index, count: chosenPlatforms.names.length }));
       } catch (error) {
-        result.error = (error as Error).message;
-        state.status = "failed";
-        updateJob(jobId, { status: "failed", error: result.error, finished_at: new Date() });
+        if (chosenPlatforms.names.length === 1) throw error;
+        // One platform failing (e.g. no suitable clips) never stops the others.
+        results.push({
+          name, label: preset.label, exportDir: platformDir(rootDir, name), section: { start_ms: 0, end_ms: 0, reason: "" },
+          limit: renderLimit({ platform: options.platform, requested: options.parallel }), variations: [], warnings: [], error: (error as Error).message,
+        });
       }
-      report();
-    });
+    }
 
     project = ws.db.select().from(projectTable).where(eq(projectTable.id, project.id)).get()!;
+    const first = results.find((r) => !r.error) ?? results[0];
     return {
       projectTitle: project.title,
-      exportDir,
-      section: { start_ms: chosen.start_ms, end_ms: chosen.end_ms, reason: chosen.reason },
-      limit,
-      variations: results.sort((a, b) => a.index - b.index),
-      warnings,
+      exportDir: rootDir,
+      lrcFile,
+      section: first.section,
+      limit: first.limit,
+      platforms: results,
+      variations: results.flatMap((r) => r.variations),
+      warnings: [...results.flatMap((r) => r.warnings), ...chosenPlatforms.skipped.map((n) => `${n} skipped: ${presets[n].note ?? "not available yet"}`)],
     };
   } finally {
     ws.close();
   }
 }
 
-function qaTitle(spec: VariationSpec, title: string, section: SectionChoiceOut): string {
+type Shared = {
+  ws: Workspace;
+  options: MakeOptions;
+  log: (m: string) => void;
+  now: Date;
+  leadMs: number;
+  lyricsOffsetMs: number;
+  catalog: FontCatalog;
+  styles: StyleFaces;
+  brand: ReturnType<typeof loadBrand>;
+  sp: Awaited<ReturnType<typeof findOrCreateSongProject>>;
+  analysis: Awaited<ReturnType<typeof analyzeSong>>;
+  alignment: Alignment;
+  lines: Alignment["lines"];
+  reports: ReturnType<typeof matchReport>;
+  numbers: number[];
+  sectionLines: SectionLine[];
+  collection: CollectionSync;
+  tool: Manifest["tool"];
+  rootDir: string;
+  getProject: () => { id: string; title: string; artist: string };
+};
+
+// The last shot shows the frames right before the first one (or the same photo, ending where its move starts).
+export function loopsSeamlessly(shots: readonly LyricVideoProps["shots"][number][]): boolean {
+  const first = shots[0];
+  const last = shots[shots.length - 1];
+  if (!first || shots.length < 2 || last.src !== first.src) return false;
+  if (first.kind === "photo") return last.motion?.toZoom === first.motion?.fromZoom;
+  return last.clipStartFrame + last.duration === first.clipStartFrame && last.playbackRate === 1;
+}
+
+// "standard" goes straight into the run's folder, every platform into its own subfolder.
+export function platformDir(rootDir: string, name: string): string {
+  return name === STANDARD ? rootDir : path.join(rootDir, name);
+}
+
+export function loadPresets(file = path.join(REPO_ROOT, "presets", "platforms.json")): Record<string, PlatformPreset> {
+  if (!existsSync(file)) throw new Error(`Platform presets not found: ${file}`);
+  let json: unknown;
+  try {
+    json = JSON.parse(readFileSync(file, "utf8"));
+  } catch (error) {
+    throw new Error(`${file} is not valid JSON (${(error as Error).message})`);
+  }
+  return parsePresets(json, file);
+}
+
+async function makePlatform(sh: Shared, preset: PlatformPreset, position: { index: number; count: number }): Promise<PlatformResult> {
+  const { ws, options, log, leadMs, lyricsOffsetMs, analysis, lines, reports, numbers, alignment, styles } = sh;
+  const project = sh.getProject();
+  const format = { width: preset.width, height: preset.height };
+  const exportDir = platformDir(sh.rootDir, preset.name);
+  mkdirSync(exportDir, { recursive: true });
+
+  // Section (lines appear `leadMs` early and move by the lyrics offset).
+  const chosen = chooseSection(options.section ?? "auto", sh.sectionLines, analysis.beats, analysis.duration_ms, leadMs - lyricsOffsetMs, preset);
+  log(`${preset.name}: section ${clockText(chosen.start_ms)} - ${clockText(chosen.end_ms)}`);
+  const sectionRow = ws.db
+    .insert(sectionTable)
+    .values({ project_id: project.id, name: `make ${preset.name} (${chosen.mode})`, start_ms: chosen.start_ms, end_ms: chosen.end_ms, energy: options.energy ?? "medium" })
+    .returning()
+    .get();
+
+  // Sources that suit this format.
+  const prepared = await prepareForFormat(ws, sh.collection.sources, format, { allowFill: options.allowFill, log });
+  const needed = Math.min(RECENT_WINDOW + 1, Math.max(1, sh.collection.sources.length));
+  if (!prepared.clips.length) {
+    throw new Error(
+      `${preset.name}: none of the ${sh.collection.sources.length} source(s) in "${sh.collection.collection.name}" is ${prepared.kind} ` +
+        `(${format.width}x${format.height}); add ${prepared.kind} clips or photos, or use --allow-fill`,
+    );
+  }
+
+  const plan = getCutPoints(analysis.beats, { start_ms: chosen.start_ms, end_ms: chosen.end_ms, energy: options.energy ?? "medium" }, {
+    cutRate: options.rate ?? "1x",
+    lyricLines: lines,
+  });
+  const preparedClips = prepared.clips.map((c) => ({
+    id: c.clip.id, name: c.name, duration_ms: c.durationMs, path: c.path, durationFrames: c.durationFrames, kind: c.kind, fit: c.fit,
+  }));
+
+  const warnings = [...chosen.warnings.map((w) => `${preset.name}: ${w}`)];
+  let pins: RenderBase["pins"] = [];
+  if (options.pins) {
+    const parsed = parsePins(readFileSync(options.pins, "utf8"));
+    const matched = matchPinClips(parsed.rules, preparedClips);
+    pins = matched.pins;
+    warnings.push(...parsed.warnings, ...matched.warnings);
+  }
+
+  const { media, audio } = songMedia(ws.dir, sh.sp.songFile, plan, sh.catalog, preset.fadeOutSeconds);
+  const allLyrics = lines.map((l) => ({ text: l.text, start_ms: l.start_ms, end_ms: l.end_ms, isHook: l.isHook }));
+  // A line whose singing is over but which is still on screen at the start (it lingers until the
+  // next stamp) is not shown, so the video never opens on the tail of the previous line.
+  const hidden = preset.lyrics ? finishedBeforeStart(sh.sectionLines, chosen.start_ms, leadMs, lyricsOffsetMs) : [];
+  const shown = preset.lyrics ? lines.map((_, i) => i).filter((i) => !hidden.includes(i)) : [];
+  const layout: PlatformLayout = { format, safeZone: preset.safeZone, lyricsAt: preset.lyricsAt, textScale: preset.textScale, loopEnding: preset.loopEnding };
+  const base: RenderBase = {
+    plan,
+    clips: preparedClips,
+    audio: preset.audio ? audio : null,
+    durationInFrames: plan.end_frame - plan.start_frame,
+    lyrics: shown.map((i) => allLyrics[i]),
+    styles: { simple: styles.simple.entry, bold: styles.bold.entry },
+    colour: "#ffffff",
+    cinematicBars: false,
+    pins,
+    platform: layout,
+  };
+
+  // Which lines are on screen (same rule as composeProps).
+  const frames = lyricFrames(base, leadMs, lyricsOffsetMs);
+  const visible = frames
+    .map((f, k) => ({ i: shown[k], start: Math.max(0, f.startFrame), end: Math.min(base.durationInFrames, f.endFrame) }))
+    .filter((v) => v.end > v.start)
+    .map((v) => v.i);
+  const notes = hidden.map((i) => `line ${numbers[i] || i + 1} "${lines[i].text}" is not shown: it was sung before the section starts`);
+  for (const style of ["simple", "bold"] as const) {
+    const s = styles[style];
+    const area = lyricArea(format, preset.safeZone, preset.lyricsAt);
+    const textSize = Math.round(s.entry.textSize * preset.textScale);
+    for (const l of tooLongLines(visible.map((i) => lines[i]), { main: s.main, hook: s.hook, textCase: s.entry.style.textCase, textSize, area })) {
+      const n = numbers[lines.indexOf(l)] || lines.indexOf(l) + 1;
+      warnings.push(`Line ${n} is too long for phone screens (${s.entry.style.name}); split it in ${path.basename(alignment.lyricsTxt)}: "${l.text}"`);
+    }
+  }
+
+  const allSpecs = planVariations(options.variations ?? preset.variations);
+  let specs = allSpecs;
+  if (options.resume) {
+    const changed = resumeMismatch(exportDir, allSpecs, {
+      section: chosen,
+      lrcHash: alignment.lrcHash,
+      leadMs,
+      lyricsOffsetMs,
+      cutFrames: plan.cuts.map((c) => c.frame - plan.start_frame),
+      clipHashes: new Set(prepared.clips.map((c) => c.hash)),
+      settings: { cut_rate: options.rate ?? "1x", energy: options.energy ?? "medium", font: options.font ?? null, font_hook: options.fontHook ?? null },
+    });
+    if (changed) throw new Error(`--resume: ${changed} since the run in ${exportDir}; run without --resume to make a new set.`);
+    specs = allSpecs.filter((s) => !variationDone(exportDir, s.name));
+  }
+  const limit = renderLimit({ platform: options.platform, requested: options.parallel });
+  const sources = { usable: prepared.usable, needed, kind: prepared.kind, filled: prepared.filled, skipped: prepared.skipped };
+  // Compose every variation now, so its warnings are part of the plan printed before rendering.
+  const composedBySpec = new Map(
+    specs.map((spec) => {
+      const composed = composeProps(base, { seed: spec.seed, style: spec.style, order: spec.order, leadMs, lyricsOffsetMs, cinematicBars: spec.bars });
+      warnings.push(...composed.warnings.map((w) => `${spec.name}: ${w}`));
+      if (preset.loopEnding && !loopsSeamlessly(composed.props.shots)) {
+        warnings.push(`${preset.name} ${spec.name}: no seamless loop ending (the first clip is too short to also fill the last shot)`);
+      }
+      return [spec.name, composed] as const;
+    }),
+  );
+  options.onReady?.({
+    platform: { name: preset.name, label: preset.label, index: position.index, count: position.count, folder: exportDir },
+    sources,
+    brand: { file: sh.brand.file, created: sh.brand.created },
+    project: { title: project.title, created: sh.sp.created },
+    bpm: analysis.bpm,
+    downbeatConfidence: analysis.downbeat_confidence,
+    lyrics: {
+      source: alignment.source,
+      file: alignment.lrcFile,
+      lines: lines.length,
+      hooks: lines.filter((l) => l.isHook).length,
+      low: reports.flatMap((r, i) => (r && r.confidence < LOW_CONFIDENCE ? [{ number: numbers[i] || i + 1, text: lines[i].text, confidence: r.confidence }] : [])),
+    },
+    lyricsOffsetMs,
+    section: { start_ms: chosen.start_ms, end_ms: chosen.end_ms, reason: chosen.reason },
+    collection: {
+      name: sh.collection.collection.name,
+      folder: sh.collection.folder,
+      clips: sh.collection.sources.length,
+      added: sh.collection.added.length,
+      changed: sh.collection.changed.length,
+      unchanged: sh.collection.unchanged.length,
+      removed: sh.collection.removed.length,
+    },
+    cuts: plan.cuts.length,
+    limit,
+    exportDir,
+    resume: options.resume ? { done: allSpecs.length - specs.length, toRender: specs.map((s) => s.name) } : null,
+    warnings: [...warnings],
+    notes,
+  });
+  const states: RenderState[] = specs.map((s) => ({ name: s.name, status: "queued", progress: 0 }));
+  const report = () => options.onRenderProgress?.(states.map((s) => ({ ...s })));
+  const results: VariationResult[] = allSpecs
+    .filter((spec) => !specs.includes(spec))
+    .map((spec) => {
+      const manifestFile = path.join(exportDir, `${spec.name}.manifest.json`);
+      const durationS = (JSON.parse(readFileSync(manifestFile, "utf8")) as Manifest).output.duration_s;
+      const qaFile = path.join(exportDir, `${spec.name}.qa.txt`);
+      return {
+        ...spec, platform: preset.name, file: path.join(exportDir, `${spec.name}.mp4`), manifestFile, qaFile, durationS,
+        qa: null, qaSummary: qaSummaryFromFile(qaFile), error: null, kept: true, retried: false,
+      };
+    });
+
+  const jobs = specs.map((spec) => {
+    const composed = composedBySpec.get(spec.name)!;
+    const variationRow = ws.db
+      .insert(variationTable)
+      .values({
+        project_id: project.id,
+        section_id: sectionRow.id,
+        seed: spec.seed,
+        cut_rate: options.rate ?? "1x",
+        style_id: ws.db.select().from(stylePreset).where(eq(stylePreset.name, styles[spec.style].entry.style.name)).get()?.id ?? null,
+        text_size: composed.props.textSize,
+        colour: composed.props.colour,
+        cinematic_bars: spec.bars,
+        overrides_json: {
+          platform: preset.name, order: spec.order, lead_ms: leadMs, lyrics_offset_ms: lyricsOffsetMs,
+          font: options.font ?? null, font_hook: options.fontHook ?? null, lrc: alignment.lrcStored,
+        },
+      })
+      .returning()
+      .get();
+    const job = ws.db.insert(renderJobTable).values({ variation_id: variationRow.id }).returning().get();
+    return { spec, props: composed.props, jobId: job.id };
+  });
+  report();
+
+  const updateJob = (id: string, values: Partial<typeof renderJobTable.$inferInsert>) =>
+    ws.db.update(renderJobTable).set(values).where(eq(renderJobTable.id, id)).run();
+
+  await runPool(jobs, limit.parallel, async ({ spec, props, jobId }) => {
+    const state = states.find((st) => st.name === spec.name)!;
+    const file = path.join(exportDir, `${spec.name}.mp4`);
+    const result: VariationResult = {
+      ...spec,
+      platform: preset.name,
+      file,
+      manifestFile: path.join(exportDir, `${spec.name}.manifest.json`),
+      qaFile: path.join(exportDir, `${spec.name}.qa.txt`),
+      durationS: props.durationInFrames / VIDEO.fps,
+      qa: null,
+      qaSummary: "",
+      error: null,
+      kept: false,
+      retried: false,
+    };
+    results.push(result);
+    state.status = "rendering";
+    report();
+    updateJob(jobId, { status: "rendering", started_at: new Date(), progress: 0 });
+    let lastSaved = 0;
+    const render = options.renderer ?? renderLyricVideo;
+    const attempt = (settings: Pick<RenderLimit, "concurrency" | "videoCacheBytes">) =>
+      render({
+        props,
+        media,
+        outFile: file,
+        concurrency: settings.concurrency,
+        videoCacheBytes: settings.videoCacheBytes,
+        videoBitrate: preset.videoBitrate,
+        onProgress: (p) => {
+          state.progress = p;
+          report();
+          if (p - lastSaved >= 0.05) {
+            lastSaved = p;
+            updateJob(jobId, { progress: Math.min(1, p) });
+          }
+        },
+      });
+    try {
+      if (!options.renderer) await getBundle(log); // built once, shared by the parallel renders
+      try {
+        await attempt(limit);
+      } catch (first) {
+        // One retry with less memory; a second failure is reported and the others carry on.
+        const lower = retryLimit(limit);
+        result.retried = true;
+        options.onRetry?.(spec.name, (first as Error).message, lower.concurrency);
+        state.progress = 0;
+        lastSaved = 0;
+        try {
+          await attempt(lower);
+        } catch (second) {
+          throw new Error(`${(second as Error).message} (also after a retry with ${lower.concurrency} frame${lower.concurrency > 1 ? "s" : ""} in parallel)`);
+        }
+      }
+      state.status = "checking";
+      report();
+      const qa = await checkVariation(spec, props, file, {
+        lines, visible, numbers, reports, styles, clips: prepared.clips, sources: { ...sources, platform: preset.label }, frameCheck: options.frameCheck ?? true,
+      });
+      result.qa = qa;
+      result.qaSummary = qa.status === "PASS" ? "PASS" : `WARN (${qaReasons(qa)})`;
+      writeFileSync(result.qaFile, formatQa(qa, qaTitle(spec, project.title, chosen, preset)));
+      writeManifest(
+        result.manifestFile,
+        buildManifest({
+          ws, tool: sh.tool, spec, props, media, project, songHash: sh.sp.songHash, songFile: sh.sp.songFile, analysis, chosen, alignment, reports, numbers,
+          visible, lines, leadMs, lyricsOffsetMs, options, collection: sh.collection, clips: prepared.clips, file, qa, now: sh.now, warnings, preset,
+          brand: sh.brand.brand,
+        }),
+      );
+      state.status = "done";
+      state.progress = 1;
+      updateJob(jobId, { status: "done", progress: 1, output_path: storedPath(ws, file), finished_at: new Date() });
+    } catch (error) {
+      result.error = (error as Error).message;
+      state.status = "failed";
+      updateJob(jobId, { status: "failed", error: result.error, finished_at: new Date() });
+    }
+    report();
+  });
+
+  return {
+    name: preset.name,
+    label: preset.label,
+    exportDir,
+    section: { start_ms: chosen.start_ms, end_ms: chosen.end_ms, reason: chosen.reason },
+    limit,
+    variations: results.sort((a, b) => a.index - b.index),
+    warnings,
+    error: null,
+  };
+}
+
+function qaTitle(spec: VariationSpec, title: string, section: SectionChoiceOut, preset: PlatformPreset): string {
   return (
-    `${title} - ${spec.name}: ${spec.style === "simple" ? "Simple" : "Bold"}, ${spec.order}` +
+    `${title} - ${preset.name === STANDARD ? "" : `${preset.label} `}${spec.name}: ${spec.style === "simple" ? "Simple" : "Bold"}, ${spec.order}` +
     `${spec.order === "shuffle" ? ` (seed ${spec.seed})` : ""}${spec.bars ? ", cinematic bars" : ""}\n` +
     `Section ${clockText(section.start_ms)} - ${clockText(section.end_ms)}`
   );
@@ -566,12 +746,13 @@ async function checkVariation(
     numbers: number[];
     reports: ReturnType<typeof matchReport>;
     styles: StyleFaces;
-    collection: CollectionSync;
+    clips: PreparedForFormat["clips"];
+    sources: QaInput["sources"];
     frameCheck: boolean;
   },
 ): Promise<QaReport> {
   const style = ctx.styles[spec.style];
-  const nameBySrc = new Map(ctx.collection.clips.map((c) => [c.path, c.name]));
+  const nameBySrc = new Map(ctx.clips.map((c) => [c.path, c.name]));
   const lyrics = ctx.visible.map((i, k) => ({
     ...props.lyrics[k],
     number: ctx.numbers[i] || i + 1,
@@ -580,15 +761,17 @@ async function checkVariation(
   return runQa({
     props,
     shotClips: props.shots.map((s) => nameBySrc.get(s.src) ?? s.src),
-    poolSize: ctx.collection.clips.length,
+    poolSize: ctx.clips.length,
     lyrics: measureLyrics(lyrics, {
       main: style.main,
       hook: style.hook,
       textCase: style.entry.style.textCase,
       textSize: props.textSize,
       animation: style.entry.style.animation,
+      area: props.lyricArea,
     }),
     frames: ctx.frameCheck ? await detectBadFrames(file, props.durationInFrames / VIDEO.fps) : null,
+    sources: ctx.sources,
   });
 }
 
@@ -612,15 +795,18 @@ function buildManifest(c: {
   lyricsOffsetMs: number;
   options: MakeOptions;
   collection: CollectionSync;
+  clips: PreparedForFormat["clips"];
   file: string;
   qa: QaReport;
   now: Date;
   warnings: string[];
+  preset: PlatformPreset;
+  brand: Brand;
 }): Manifest {
   const { props, spec, ws } = c;
-  const startFrame = props.audio?.startFrame ?? 0;
+  const startFrame = props.audio?.startFrame ?? Math.round((c.chosen.start_ms * VIDEO.fps) / 1000);
   const used = new Set(props.shots.map((s) => s.src));
-  const clips = c.collection.clips.filter((k) => used.has(k.path));
+  const clips = c.clips.filter((k) => used.has(k.path));
   const nameBySrc = new Map(clips.map((k) => [k.path, k.name]));
   return {
     manifest_version: 1,
@@ -628,6 +814,8 @@ function buildManifest(c: {
     created_at: c.now.toISOString(),
     command: c.options.command ?? "pnpm make",
     variation: { index: spec.index, name: spec.name, order: spec.order, seed: spec.seed, style: props.style.name, cinematic_bars: spec.bars },
+    platform: { name: c.preset.name, preset: c.preset },
+    brand: c.brand,
     project: { id: c.project.id, title: c.project.title },
     song: { file: storedPath(ws, c.songFile), sha256: c.songHash, duration_ms: c.analysis.duration_ms },
     analysis: { bpm: c.analysis.bpm, downbeat_offset: c.analysis.downbeat_offset, downbeat_confidence: c.analysis.downbeat_confidence },
@@ -657,10 +845,12 @@ function buildManifest(c: {
       font_hook: c.options.fontHook ?? null,
       hook_font: props.hookFont ?? null,
       pins: c.options.pins ? { file: path.resolve(c.options.pins), sha256: sha256File(c.options.pins) } : null,
-      collection: { name: c.collection.collection.name, folder: c.collection.folder, clips: c.collection.clips.length },
+      collection: { name: c.collection.collection.name, folder: c.collection.folder, clips: c.collection.sources.length, usable: c.clips.length },
       fps: VIDEO.fps,
-      size: `${VIDEO.width}x${VIDEO.height}`,
-      video: "H.264, AAC 192 kbps, yuv420p, faststart",
+      size: `${c.preset.width}x${c.preset.height}`,
+      video: `H.264${c.preset.videoBitrate ? ` ${c.preset.videoBitrate}` : ""}, ${props.audio ? "AAC 192 kbps" : "no audio"}, yuv420p, faststart`,
+      safe_zone: c.preset.safeZone,
+      lyric_area: props.lyricArea,
     },
     clips: clips.map((k) => ({
       name: k.name,

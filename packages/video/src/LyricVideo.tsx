@@ -4,6 +4,7 @@ import {
   AbsoluteFill,
   Audio,
   Freeze,
+  Img,
   OffthreadVideo,
   Sequence,
   interpolate,
@@ -12,29 +13,55 @@ import {
   useVideoConfig,
 } from "remotion";
 
-import { CINEMATIC_BAR_HEIGHT, LYRIC_AREA, SAFE_ZONE, VIDEO } from "./config";
 import { useFonts } from "./fonts";
 import { activeLyricLine, applyTextCase, layoutLyric } from "./lyrics";
+import { kenBurnsAt } from "./photo";
+import { cinematicBarHeight, DEFAULT_FORMAT, DEFAULT_LYRIC_AREA, DEFAULT_SAFE_ZONE, type Format, type LyricArea, type SafeZone } from "./platform";
 import { mediaUrl, type LyricLineProps, type LyricVideoProps, type ShotProps, type StyleProps } from "./props";
 
 const cover: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };
+const contain: React.CSSProperties = { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" };
+const blurred: React.CSSProperties = { ...cover, position: "absolute", inset: 0, filter: "blur(40px) brightness(0.6)", transform: "scale(1.15)" };
 
 function ClipVideo({ src, shot }: { src: string; shot: ShotProps }) {
+  const video = (style: React.CSSProperties) => (
+    <OffthreadVideo src={src} muted trimBefore={shot.clipStartFrame} playbackRate={shot.playbackRate} style={style} pauseWhenBuffering />
+  );
+  if (shot.fit !== "fill") return video(cover);
+  // Fill: the whole picture over a blurred, enlarged copy of itself.
   return (
-    <OffthreadVideo
-      src={src}
-      muted
-      trimBefore={shot.clipStartFrame}
-      playbackRate={shot.playbackRate}
-      style={cover}
-      pauseWhenBuffering
-    />
+    <AbsoluteFill style={{ overflow: "hidden" }}>
+      {video(blurred)}
+      {video(contain)}
+    </AbsoluteFill>
+  );
+}
+
+// A photo: cover-cropped, with its Ken Burns move spread over exactly the shot.
+function PhotoShot({ src, shot }: { src: string; shot: ShotProps }) {
+  const frame = useCurrentFrame();
+  const t = shot.duration > 1 ? frame / (shot.duration - 1) : 0;
+  const m = shot.motion ? kenBurnsAt(shot.motion, t) : { zoom: 1, x: 0, y: 0 };
+  const transform = `translate(${(m.x * 100).toFixed(4)}%, ${(m.y * 100).toFixed(4)}%) scale(${m.zoom.toFixed(5)})`;
+  if (shot.fit === "fill") {
+    return (
+      <AbsoluteFill style={{ overflow: "hidden" }}>
+        <Img src={src} style={blurred} />
+        <Img src={src} style={{ ...contain, transform }} />
+      </AbsoluteFill>
+    );
+  }
+  return (
+    <AbsoluteFill style={{ overflow: "hidden" }}>
+      <Img src={src} style={{ ...cover, transform }} />
+    </AbsoluteFill>
   );
 }
 
 // One shot: the clip from its start offset at its playback rate; if it runs out, its last frame holds.
 function Shot({ shot, mediaBaseUrl }: { shot: ShotProps; mediaBaseUrl: string }) {
   const src = mediaUrl(mediaBaseUrl, shot.src);
+  if (shot.kind === "photo") return <PhotoShot src={src} shot={shot} />;
   if (!shot.holdLastFrame) return <ClipVideo src={src} shot={shot} />;
 
   // Last shot frame that still shows a real clip frame at this rate.
@@ -58,8 +85,9 @@ const textShadows: Record<string, string> = {
   shadow: "0 6px 0 rgba(0,0,0,0.35), 0 0 28px rgba(0,0,0,0.65)",
 };
 
-function LyricText({ line, style, font, textSize, colour, ready }: {
+function LyricText({ line, style, font, textSize, colour, ready, area }: {
   line: LyricLineProps;
+  area: LyricArea;
   style: StyleProps;
   font: { family: string; weight: number };
   textSize: number;
@@ -69,7 +97,7 @@ function LyricText({ line, style, font, textSize, colour, ready }: {
   const frame = useCurrentFrame(); // relative to the line's Sequence: 0 = first frame of the line
   const { fps } = useVideoConfig();
   const text = applyTextCase(line.text, style.textCase);
-  const maxWidth = LYRIC_AREA.right - LYRIC_AREA.left;
+  const maxWidth = area.right - area.left;
 
   const layout = useMemo(
     () =>
@@ -79,10 +107,10 @@ function LyricText({ line, style, font, textSize, colour, ready }: {
             textSize,
             maxWidth,
             (t, size) => measureText({ text: t, fontFamily: font.family, fontWeight: font.weight, fontSize: size }).width,
-            LYRIC_AREA.minScale,
+            area.minScale,
           )
         : null,
-    [ready, text, textSize, maxWidth, font.family, font.weight],
+    [ready, text, textSize, maxWidth, font.family, font.weight, area.minScale],
   );
   if (!layout) return null;
 
@@ -104,16 +132,16 @@ function LyricText({ line, style, font, textSize, colour, ready }: {
       data-lyric={line.text}
       style={{
         position: "absolute",
-        left: LYRIC_AREA.left,
+        left: area.left,
         width: maxWidth,
-        top: LYRIC_AREA.centerY,
+        top: area.centerY,
         transform: `translateY(-50%) scale(${scale})`,
         textAlign: "center",
         color: colour,
         fontFamily: `"${font.family}", sans-serif`,
         fontWeight: font.weight,
         fontSize: layout.fontSize,
-        lineHeight: LYRIC_AREA.lineHeight,
+        lineHeight: area.lineHeight,
         textShadow: textShadows[style.effect] ?? textShadows.none,
         opacity,
       }}
@@ -127,21 +155,22 @@ function LyricText({ line, style, font, textSize, colour, ready }: {
   );
 }
 
-function SafeGuides() {
-  const right = VIDEO.width * SAFE_ZONE.right;
-  const bottom = VIDEO.height * SAFE_ZONE.bottom;
+function SafeGuides({ format, safe, area }: { format: Format; safe: SafeZone; area: LyricArea }) {
   const zone: React.CSSProperties = { position: "absolute", background: "rgba(255,40,40,0.18)" };
+  const px = { top: format.height * safe.top, bottom: format.height * safe.bottom, left: format.width * safe.left, right: format.width * safe.right };
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>
-      <div style={{ ...zone, right: 0, top: 0, width: right, bottom }} />
-      <div style={{ ...zone, left: 0, right: 0, bottom: 0, height: bottom }} />
+      <div style={{ ...zone, left: 0, right: 0, top: 0, height: px.top }} />
+      <div style={{ ...zone, left: 0, right: 0, bottom: 0, height: px.bottom }} />
+      <div style={{ ...zone, left: 0, top: px.top, bottom: px.bottom, width: px.left }} />
+      <div style={{ ...zone, right: 0, top: px.top, bottom: px.bottom, width: px.right }} />
       <div
         style={{
           position: "absolute",
-          left: 0,
-          top: 0,
-          width: VIDEO.width - right,
-          height: VIDEO.height - bottom,
+          left: px.left,
+          top: px.top,
+          width: format.width - px.left - px.right,
+          height: format.height - px.top - px.bottom,
           border: "4px dashed rgba(255,80,80,0.9)",
           boxSizing: "border-box",
         }}
@@ -149,9 +178,9 @@ function SafeGuides() {
       <div
         style={{
           position: "absolute",
-          left: LYRIC_AREA.left,
-          width: LYRIC_AREA.right - LYRIC_AREA.left,
-          top: LYRIC_AREA.centerY - 160,
+          left: area.left,
+          width: area.right - area.left,
+          top: area.centerY - 160,
           height: 320,
           border: "3px dashed rgba(80,200,255,0.9)",
           boxSizing: "border-box",
@@ -166,6 +195,9 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
   const frame = useCurrentFrame();
   const ready = useFonts(mediaBaseUrl, props.fonts);
   const line = activeLyricLine(lyrics, frame);
+  const format = props.format ?? DEFAULT_FORMAT;
+  const area = props.lyricArea ?? DEFAULT_LYRIC_AREA;
+  const barHeight = cinematicBarHeight(format);
   const font =
     line?.isHook && props.hookFont
       ? { family: props.hookFont.font, weight: props.hookFont.weight }
@@ -199,18 +231,18 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
 
       {cinematicBars ? (
         <>
-          <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: CINEMATIC_BAR_HEIGHT, background: "#000" }} />
-          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: CINEMATIC_BAR_HEIGHT, background: "#000" }} />
+          <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: barHeight, background: "#000" }} />
+          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: barHeight, background: "#000" }} />
         </>
       ) : null}
 
       {line ? (
         <Sequence key={line.startFrame} from={line.startFrame} durationInFrames={line.endFrame - line.startFrame} layout="none">
-          <LyricText line={line} style={style} font={font} textSize={textSize} colour={colour} ready={ready} />
+          <LyricText line={line} style={style} font={font} textSize={textSize} colour={colour} ready={ready} area={area} />
         </Sequence>
       ) : null}
 
-      {props.showSafeGuides ? <SafeGuides /> : null}
+      {props.showSafeGuides ? <SafeGuides format={format} safe={props.safeZone ?? DEFAULT_SAFE_ZONE} area={area} /> : null}
     </AbsoluteFill>
   );
 };
