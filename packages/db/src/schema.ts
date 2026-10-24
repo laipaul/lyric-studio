@@ -1,0 +1,201 @@
+// Database schema. Mirrors the data model in CLAUDE.md exactly (table and column names in snake_case).
+// File paths are stored RELATIVE to the workspace folder (with "/" separators), so the
+// workspace can be moved to another drive by changing WORKSPACE_DIR.
+import { sql } from "drizzle-orm";
+import {
+  check,
+  index,
+  integer,
+  primaryKey,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
+
+const id = () =>
+  text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID());
+
+export const CLIP_SOURCES = ["upload", "stock", "ai"] as const;
+export const CUT_RATES = ["0.5x", "1x", "2x", "off"] as const;
+export const RENDER_STATUSES = ["queued", "rendering", "done", "failed"] as const;
+export const TEXT_CASES = ["none", "upper", "lower", "title"] as const;
+
+export type ClipSource = (typeof CLIP_SOURCES)[number];
+export type CutRate = (typeof CUT_RATES)[number];
+export type RenderStatus = (typeof RENDER_STATUSES)[number];
+export type TextCase = (typeof TEXT_CASES)[number];
+
+// Optional word-level timings inside a lyric line.
+export type WordTiming = { text: string; start_ms: number; end_ms: number };
+
+const inList = (column: string, values: readonly string[]) =>
+  sql.raw(`${column} in (${values.map((v) => `'${v}'`).join(", ")})`);
+
+export const project = sqliteTable("project", {
+  id: id(),
+  title: text("title").notNull(),
+  artist: text("artist").notNull(),
+  cover_path: text("cover_path"),
+  audio_path: text("audio_path"),
+  bpm: real("bpm"),
+  duration_ms: integer("duration_ms"),
+  created_at: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+export const lyricLine = sqliteTable(
+  "lyric_line",
+  {
+    id: id(),
+    project_id: text("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    index: integer("index").notNull(),
+    text: text("text").notNull(),
+    start_ms: integer("start_ms"),
+    end_ms: integer("end_ms"),
+    is_hook: integer("is_hook", { mode: "boolean" }).notNull().default(false),
+    words_json: text("words_json", { mode: "json" }).$type<WordTiming[]>(),
+  },
+  (t) => [uniqueIndex("lyric_line_project_index").on(t.project_id, t.index)],
+);
+
+export const beat = sqliteTable(
+  "beat",
+  {
+    project_id: text("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    time_ms: integer("time_ms").notNull(),
+    strength: real("strength").notNull().default(1),
+    is_downbeat: integer("is_downbeat", { mode: "boolean" }).notNull().default(false),
+  },
+  (t) => [primaryKey({ columns: [t.project_id, t.time_ms] })],
+);
+
+export const section = sqliteTable(
+  "section",
+  {
+    id: id(),
+    project_id: text("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    start_ms: integer("start_ms").notNull(),
+    end_ms: integer("end_ms").notNull(),
+  },
+  (t) => [
+    index("section_project").on(t.project_id),
+    check("section_range", sql.raw("end_ms > start_ms")),
+  ],
+);
+
+export const collection = sqliteTable("collection", {
+  id: id(),
+  name: text("name").notNull().unique(),
+});
+
+export const clip = sqliteTable(
+  "clip",
+  {
+    id: id(),
+    collection_id: text("collection_id")
+      .notNull()
+      .references(() => collection.id, { onDelete: "cascade" }),
+    path: text("path").notNull(),
+    duration_ms: integer("duration_ms").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    thumb_path: text("thumb_path"),
+    source: text("source", { enum: CLIP_SOURCES }).notNull().default("upload"),
+  },
+  (t) => [
+    index("clip_collection").on(t.collection_id),
+    check("clip_source", inList("source", CLIP_SOURCES)),
+  ],
+);
+
+export const stylePreset = sqliteTable(
+  "style_preset",
+  {
+    id: id(),
+    name: text("name").notNull().unique(),
+    font: text("font").notNull(),
+    weight: integer("weight").notNull(),
+    text_case: text("text_case", { enum: TEXT_CASES }).notNull(),
+    effect: text("effect").notNull(),
+    animation: text("animation").notNull(),
+    default_size: integer("default_size").notNull(),
+  },
+  (t) => [check("style_preset_text_case", inList("text_case", TEXT_CASES))],
+);
+
+export const variation = sqliteTable(
+  "variation",
+  {
+    id: id(),
+    project_id: text("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    section_id: text("section_id").references(() => section.id, { onDelete: "set null" }),
+    seed: integer("seed").notNull(),
+    cut_rate: text("cut_rate", { enum: CUT_RATES }).notNull().default("1x"),
+    style_id: text("style_id").references(() => stylePreset.id, { onDelete: "set null" }),
+    text_size: integer("text_size"),
+    colour: text("colour"),
+    cinematic_bars: integer("cinematic_bars", { mode: "boolean" }).notNull().default(false),
+    overrides_json: text("overrides_json", { mode: "json" }).$type<Record<string, unknown>>(),
+  },
+  (t) => [
+    index("variation_project").on(t.project_id),
+    check("variation_cut_rate", inList("cut_rate", CUT_RATES)),
+  ],
+);
+
+export const renderJob = sqliteTable(
+  "render_job",
+  {
+    id: id(),
+    variation_id: text("variation_id")
+      .notNull()
+      .references(() => variation.id, { onDelete: "cascade" }),
+    status: text("status", { enum: RENDER_STATUSES }).notNull().default("queued"),
+    progress: real("progress").notNull().default(0),
+    output_path: text("output_path"),
+    error: text("error"),
+    started_at: integer("started_at", { mode: "timestamp_ms" }),
+    finished_at: integer("finished_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [
+    index("render_job_status").on(t.status),
+    check("render_job_status_values", inList("status", RENDER_STATUSES)),
+    check("render_job_progress", sql.raw("progress >= 0 and progress <= 1")),
+  ],
+);
+
+// Every table, in display order (used by db:show and tests).
+export const TABLES = {
+  project,
+  lyric_line: lyricLine,
+  beat,
+  section,
+  collection,
+  clip,
+  style_preset: stylePreset,
+  variation,
+  render_job: renderJob,
+} as const;
+
+export type Project = typeof project.$inferSelect;
+export type LyricLine = typeof lyricLine.$inferSelect;
+export type Beat = typeof beat.$inferSelect;
+export type Section = typeof section.$inferSelect;
+export type Collection = typeof collection.$inferSelect;
+export type Clip = typeof clip.$inferSelect;
+export type StylePreset = typeof stylePreset.$inferSelect;
+export type Variation = typeof variation.$inferSelect;
+export type RenderJob = typeof renderJob.$inferSelect;

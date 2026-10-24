@@ -26,15 +26,42 @@
 - Next.js telemetry is disabled for this project (`NEXT_TELEMETRY_DISABLED=1` via `cross-env`
   in the studio scripts). Check with `pnpm --filter @lyric/studio telemetry`.
 
+### Step 2 — Database and workspace ✅
+- `packages/db`: Drizzle ORM + SQLite (`better-sqlite3` 13, which includes a ready-built Windows
+  x64 file — no compiler or download needed) at `<workspace>/studio.db`.
+- All 9 tables from CLAUDE.md: project, lyric_line, beat, section, collection, clip,
+  style_preset, variation, render_job. Foreign keys with cascade delete; checks on clip.source,
+  variation.cut_rate (0.5x / 1x / 2x / off), render_job.status, render_job.progress (0–1),
+  style_preset.text_case, section end > start.
+- Migration `packages/db/drizzle/0000_init.sql` (regenerate after schema changes with `pnpm db:generate`).
+- Seed: 10 style presets (Simple, Bold, Blur, Brat, TikTok, Inked, Hollow, Subtitle, Matrix,
+  Elegant). Safe to re-run.
+- Workspace service (`packages/db/src/workspace.ts`): `openWorkspace`, `createProject` (copies the
+  song to `projects/<id>/audio`, creates `exports`, reads duration), `createCollection`
+  (`clips/<name>/`), `addClip` (copies the video, reads duration/width/height incl. phone rotation,
+  JPG thumbnail to `thumbs/<clip id>.jpg` taken at 1 s, or the middle of clips under 2 s).
+  File names are made Windows-safe and never overwrite existing files.
+- Paths in the database are relative to the workspace, so `WORKSPACE_DIR` (in `.env`, default
+  `./workspace`) can point to another drive.
+- FFmpeg/ffprobe from the PATH (override with `FFMPEG_PATH` / `FFPROBE_PATH`).
+- Commands: `pnpm db:show`, `pnpm db:setup`, `pnpm db:migrate`, `pnpm db:seed`, `pnpm db:generate`.
+  `pnpm dev` runs `db:setup` first.
+- Tests (`packages/db/test`, 12): all tables created, seed gives exactly 10 presets twice,
+  invalid status rejected, project creation, clip + thumbnail creation (checks the thumbnail is
+  from ~1 s by using a clip that is black for its first 0.5 s), short-clip thumbnail, non-video
+  rejected, WORKSPACE_DIR resolution, Windows-safe names.
+
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
+- `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
 
 ## Known issues
 - shadcn/ui components (button, card, input, tabs) were added by hand in the same format the
   shadcn CLI produces, because the build environment could not reach the shadcn website.
   `pnpm dlx shadcn@latest add <name>` works normally on your PC for future components.
-- FFmpeg is not needed yet. It will be needed from the render steps onwards.
+- FFmpeg (and ffprobe) must be on the PATH for adding clips and for the db tests.
+- The workspace service is used by tests only so far; commands and UI that use it come in later steps.
 
 ## Next
-- Step 2 (database and workspace) — plan sent, waiting for approval.
+- Step 3 — waiting for instructions.

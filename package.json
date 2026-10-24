@@ -7,8 +7,13 @@
     "pnpm": ">=10"
   },
   "scripts": {
-    "dev": "concurrently -k -n studio,worker,audio -c cyan,magenta,yellow \"pnpm --filter @lyric/studio dev\" \"pnpm --filter @lyric/worker dev\" \"node services/audio/scripts/run.mjs\"",
+    "dev": "pnpm db:setup && concurrently -k -n studio,worker,audio -c cyan,magenta,yellow \"pnpm --filter @lyric/studio dev\" \"pnpm --filter @lyric/worker dev\" \"node services/audio/scripts/run.mjs\"",
     "audio:setup": "node services/audio/scripts/setup.mjs",
+    "db:setup": "pnpm -s --filter @lyric/db run setup",
+    "db:migrate": "pnpm -s --filter @lyric/db run migrate",
+    "db:seed": "pnpm -s --filter @lyric/db run seed",
+    "db:show": "pnpm -s --filter @lyric/db run show",
+    "db:generate": "pnpm --filter @lyric/db run generate",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck"

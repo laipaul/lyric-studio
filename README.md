@@ -11,8 +11,8 @@ Everything runs on your own PC. See `CLAUDE.md` for the full brief and `PROGRESS
 | `apps/worker` | Background render worker (Node) | (no web page; prints `worker ready`) |
 | `services/audio` | Audio analysis service (Python FastAPI) | http://127.0.0.1:8001/health |
 | `packages/video` | The Remotion video composition `LyricVideo` | |
-| `packages/db` | Database code (SQLite, empty for now) | |
-| `workspace/` | Your songs, clips, renders and database (not saved to git) | |
+| `packages/db` | Database (SQLite + Drizzle) and the workspace file service | `workspace/studio.db` |
+| `workspace/` | Your songs, clips, thumbnails, renders and database (not saved to git) | |
 
 ## One-time setup on Windows
 
@@ -62,7 +62,7 @@ pnpm audio:setup
 pnpm dev
 ```
 
-This starts all three parts in one terminal. Each line is tagged `[studio]`, `[worker]` or `[audio]`.
+This first prepares the database (`[db] ready: ...`), then starts all three parts in one terminal. Each line is tagged `[studio]`, `[worker]` or `[audio]`.
 You should see:
 
 - `[worker] worker ready`
@@ -71,6 +71,32 @@ You should see:
   and you should see `{"status":"ok","service":"audio"}`
 
 Stop everything with **Ctrl+C**.
+
+## Database
+
+| Command | What it does |
+| --- | --- |
+| `pnpm db:show` | Shows the database location, the number of rows in each table, and the 10 style presets |
+| `pnpm db:setup` | Creates or updates the database and adds the style presets (also done by `pnpm dev`) |
+| `pnpm db:migrate` | Only applies database updates (migrations) |
+| `pnpm db:seed` | Only adds missing style presets |
+
+Running these again is always safe; nothing is duplicated or deleted.
+
+## Settings (.env)
+
+Optional. Copy `.env.example` to `.env` and edit it:
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+```
+
+- `WORKSPACE_DIR` — where songs, clips, thumbnails, renders and the database live.
+  Default `./workspace`. To use another drive: `WORKSPACE_DIR=D:\LyricStudio\workspace`.
+  To move existing media, stop `pnpm dev`, move the whole folder, then update this line.
+  (The database stores paths relative to this folder, so nothing else needs changing.)
+- `FFMPEG_PATH` / `FFPROBE_PATH` — only if `ffmpeg -version` does not work in the terminal.
 
 ## Tests and checks
 
@@ -88,6 +114,8 @@ Next.js telemetry (anonymous usage data) is switched off for this project. To co
   Run once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then reopen the terminal.
 - **"Python 3.12 was not found"**: run `py -0`. If `-V:3.12` is missing, install Python 3.12
   (see the table above), reopen Cursor, then run `pnpm audio:setup`.
+- **"FFmpeg was not found"**: check that `ffmpeg -version` and `ffprobe -version` work in Cursor's
+  terminal (reopen Cursor after installing FFmpeg), or set `FFMPEG_PATH` / `FFPROBE_PATH` in `.env`.
 - **"Port 3000 (or 8001) is already in use"**: an earlier `pnpm dev` is still running.
   Close other terminals that run it, or restart Cursor.
 - **Windows Firewall pop-up for Node.js or Python**: choose "Allow" for private networks. Everything stays on your PC.
