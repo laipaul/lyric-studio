@@ -160,6 +160,11 @@
   offset + `pnpm lrc:shift` suggestion, tapped time next to low-confidence lines); never overwrites
   the comparison file (writes `<lyrics>.aligned.lrc` instead).
 - LRC reader/`lrc:shift`/`lrc:hook` understand word tags.
+- `--diagnose <lines>`: words + scores, loudness chart around aligned/tapped time, voice bursts,
+  best-guess label (reverb tail / breath / quieter backing vocal / earlier phrase), WAV snippets.
+- `--hint <taps.lrc>`: lines < 0.7 confidence are moved to the voice onset nearest to
+  (tap + typical offset), within ±1.5 s, and re-aligned on their own (fallback: words shifted);
+  adjusted lines reported. Real-model test: a line forced 2.8 s early is restored to 11 ms.
 - Tests: 20+ Python unit tests (LRC output, word mapping, compare, path safety, device choice and
   fallback, gap trim, switch); real-model tests in the "AI alignment" GitHub workflow (Demucs +
   WhisperX on CPU, synthetic espeak-ng song in English and French; windowed processing identical
@@ -185,6 +190,8 @@
 - The preview shows Remotion's license note in the browser console (free for individuals).
 - After `git pull`, run `pnpm db:setup` (or `pnpm dev`) before `pnpm analyze` so the new
   `downbeat_offset` column exists; otherwise `pnpm analyze` notes it and ignores project settings.
+- On the user's song, lines 2 and 9 (confidence 0.55 / 0.67) aligned ~2.8 s before the taps; to be
+  diagnosed with `--diagnose 2,9` and fixed with `--hint` on the PC (the song is not in the repo).
 - `pnpm align` is verified only on a synthetic, spoken (espeak-ng) test song on CPU. Real sung
   vocals and the Windows GPU path still need the real acceptance test (your song with --compare).
 - The cloud session cannot download the AI models (network policy), so `pnpm align` is tested in the

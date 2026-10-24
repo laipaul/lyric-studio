@@ -194,6 +194,14 @@ pnpm align "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test
   offset with the matching `pnpm lrc:shift` command, and your tapped time next to low-confidence
   lines. If the output would overwrite the comparison file (on Windows `lyrics.lrc` = `Lyrics.lrc`),
   it writes `lyrics.aligned.lrc` instead.
+- `--diagnose 2,9`: for those lines, what the aligner heard: words with scores, a loudness chart of
+  the vocal track (A = aligned, T = tapped), the bursts of voice nearby, a best guess (reverb tail,
+  breath, quieter backing vocal, …) and two WAV snippets of the vocals only (at the aligned and at
+  the tapped time) in `workspace\cache\diagnose\` — listen to them.
+- `--hint <taps.lrc>`: for lines below 0.7 confidence only, uses your tapped time (corrected by the
+  typical offset) and moves the line to the nearest start of the voice, re-aligning that line on its
+  own. The adjusted lines are listed. The hint file is never overwritten.
+- `--trim off` turns off the correction for words stretched over a silent gap.
 - The vocal track and the alignment are cached (`workspace\cache\stems`, `workspace\cache\align`),
   so running it again is quick.
 
