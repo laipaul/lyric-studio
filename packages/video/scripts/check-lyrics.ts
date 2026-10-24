@@ -16,7 +16,7 @@ if (!file) {
 }
 
 const lines = readFileSync(file, "utf8")
-  .replace(/^﻿/, "")
+  .replace(/^\uFEFF/, "")
   .split(/\r?\n/)
   .map((text, i) => ({ text: text.trim().replace(/^\*\s+/, ""), number: i + 1 }))
   .filter((l) => l.text);

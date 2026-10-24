@@ -1,0 +1,8 @@
+# Optional AI packages for "pnpm align" (installed by "pnpm audio:setup --ai").
+# torch / torchaudio / torchvision are installed first from the PyTorch index
+# (CUDA 12.8 build on Windows, CPU build on Linux) and are not pinned in requirements-ai.txt.
+whisperx==3.8.6
+demucs==4.1.0
+torch==2.8.0
+torchaudio==2.8.0
+torchvision==0.23.0

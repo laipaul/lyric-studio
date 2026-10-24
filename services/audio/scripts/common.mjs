@@ -49,3 +49,35 @@ export function venvReady() {
     readFileSync(installedMarker, "utf8").trim() === requirementsHash()
   );
 }
+
+// ---------------------------------------------------------------- optional AI packages (pnpm align)
+
+// PyTorch 2.8 (required by WhisperX 3.8): CUDA 12.8 build on Windows (RTX 50-series / Blackwell
+// support, and it also runs on CPU), CPU build on Linux, default build on macOS.
+export const TORCH_VERSIONS = { torch: "2.8.0", torchaudio: "2.8.0", torchvision: "0.23.0" };
+export function torchVariant(override) {
+  if (override) return override;
+  if (isWindows) return "cu128";
+  if (process.platform === "linux") return "cpu";
+  return "default";
+}
+
+export const aiRequirementsFile = path.join(
+  serviceDir,
+  isWindows ? "requirements-ai-windows.txt" : "requirements-ai-linux.txt",
+);
+export const aiInstalledMarker = path.join(venvDir, ".ai-requirements-sha256");
+
+export function aiRequirementsHash(variant) {
+  return createHash("sha256").update(readFileSync(aiRequirementsFile)).update(variant).digest("hex");
+}
+
+// True when the AI packages for the current requirements file are installed (any torch variant).
+export function aiReady() {
+  if (!venvReady() || !existsSync(aiInstalledMarker)) return false;
+  const [hash, variant] = readFileSync(aiInstalledMarker, "utf8").trim().split(" ");
+  return hash === aiRequirementsHash(variant ?? "");
+}
+
+// Models download here on first use (inside the project, not the user profile).
+export const modelsDir = path.join(serviceDir, "models");

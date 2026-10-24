@@ -9,7 +9,7 @@ export function parsePins(content: string): { rules: PinRule[]; warnings: string
   const rules: PinRule[] = [];
   const warnings: string[] = [];
   content
-    .replace(/^﻿/, "")
+    .replace(/^\uFEFF/, "")
     .split(/\r?\n/)
     .forEach((raw, i) => {
       const line = raw.trim();

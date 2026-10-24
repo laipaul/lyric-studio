@@ -51,3 +51,28 @@ describe("lrc:shift", () => {
     expect(shiftLrc(shiftLrc(lrc, 250), -250)).toBe(lrc.replace("[00:00.20]", "[00:00.20]"));
   });
 });
+
+describe("enhanced LRC (word tags from pnpm align)", () => {
+  const lrc = "[00:14.00]* <00:14.00>Hope <00:14.42>is <00:14.60>a <00:14.71>good <00:15.02>thing\n[00:17.00]\n";
+
+  it("reads the line text without word tags and keeps the word timings", () => {
+    const [line] = parseLrc(lrc);
+    expect(line.text).toBe("Hope is a good thing");
+    expect(line.isHook).toBe(true);
+    expect(line.words?.map((w) => [w.text, w.start_ms])).toEqual([
+      ["Hope", 14_000],
+      ["is", 14_420],
+      ["a", 14_600],
+      ["good", 14_710],
+      ["thing", 15_020],
+    ]);
+  });
+
+  it("lrc:shift moves the word tags too, and lrc:hook ignores them when matching", () => {
+    expect(shiftLrc(lrc, -500)).toBe("[00:13.50]* <00:13.50>Hope <00:13.92>is <00:14.10>a <00:14.21>good <00:14.52>thing\n[00:16.50]\n");
+    const plain = lrc.replace("* ", "");
+    const { content, matched } = markHookInLrc(plain, "hope is a good thing");
+    expect(matched).toBe(1);
+    expect(content.startsWith("[00:14.00]* <00:14.00>Hope")).toBe(true);
+  });
+});

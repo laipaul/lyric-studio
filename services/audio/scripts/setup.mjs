@@ -3,6 +3,11 @@ import { spawnSync } from "node:child_process";
 import { existsSync, rmSync, writeFileSync } from "node:fs";
 import {
   PYTHON_VERSION,
+  TORCH_VERSIONS,
+  aiInstalledMarker,
+  aiRequirementsFile,
+  aiRequirementsHash,
+  torchVariant,
   installedMarker,
   isWindows,
   pythonVersion,
@@ -68,7 +73,40 @@ export function setup() {
   console.error("[audio setup] done");
 }
 
-// Run directly (pnpm audio:setup) rather than imported by run.mjs.
-if (process.argv[1]?.endsWith("setup.mjs")) {
+// pnpm audio:setup --ai [--torch cpu|cu128]: PyTorch first (from the PyTorch index), then the pinned
+// AI packages. Large download the first time (Windows CUDA build: about 3 GB).
+export function setupAi(variantOverride) {
   setup();
+  const variant = torchVariant(variantOverride);
+  const pkgs = Object.entries(TORCH_VERSIONS).map(([name, version]) =>
+    variant === "default" ? `${name}==${version}` : `${name}==${version}+${variant}`,
+  );
+  const index = variant === "default" ? [] : ["--index-url", `https://download.pytorch.org/whl/${variant}`];
+  console.error(`[audio setup] installing PyTorch ${TORCH_VERSIONS.torch} (${variant === "cu128" ? "CUDA 12.8 build for NVIDIA GPUs" : variant === "cpu" ? "CPU build" : "default build"})`);
+  console.error("[audio setup] this is a large download the first time (Windows CUDA build: about 3 GB)");
+  run(venvPython, ["-m", "pip", "install", "--disable-pip-version-check", "--only-binary=:all:", ...index, ...pkgs]);
+  console.error("[audio setup] installing the AI packages (WhisperX, Demucs)");
+  run(venvPython, [
+    "-m", "pip", "install", "--disable-pip-version-check", "-q",
+    "--only-binary=:all:",
+    "-r", aiRequirementsFile,
+  ]);
+  writeFileSync(aiInstalledMarker, `${aiRequirementsHash(variant)} ${variant}`);
+  console.error("[audio setup] AI packages ready. Models download on first use into services/audio/models.");
+}
+
+// Run directly (pnpm audio:setup [--ai] [--torch cpu|cu128]) rather than imported by run.mjs.
+if (process.argv[1]?.endsWith("setup.mjs")) {
+  const args = process.argv.slice(2);
+  if (args.includes("--ai")) {
+    const t = args.indexOf("--torch");
+    const variant = t >= 0 ? args[t + 1] : undefined;
+    if (variant !== undefined && !["cpu", "cu128", "cu126", "default"].includes(variant)) {
+      console.error("--torch must be cpu, cu128 or default");
+      process.exit(1);
+    }
+    setupAi(variant);
+  } else {
+    setup();
+  }
 }

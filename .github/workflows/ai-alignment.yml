@@ -1,0 +1,54 @@
+# Real-model tests for "pnpm align" (Demucs + WhisperX on CPU, English and French).
+# Runs on demand (Actions -> AI alignment -> Run workflow) and when the audio service changes.
+name: AI alignment
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "services/audio/**"
+      - ".github/workflows/ai-alignment.yml"
+
+jobs:
+  align:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            services/audio/requirements.txt
+            services/audio/requirements-ai-linux.txt
+
+      - name: Install FFmpeg and espeak-ng (for the synthetic test song)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg espeak-ng
+
+      - name: Check that the Windows CUDA 12.8 PyTorch files exist
+        run: |
+          for pkg in torch-2.8.0%2Bcu128 torchaudio-2.8.0%2Bcu128 torchvision-0.23.0%2Bcu128; do
+            name=${pkg%%-*}
+            curl -sf "https://download.pytorch.org/whl/cu128/${name}/" | grep -q "${pkg}-cp312-cp312-win_amd64.whl" \
+              && echo "found ${pkg} for Windows / Python 3.12" \
+              || { echo "missing ${pkg}-cp312-cp312-win_amd64.whl"; exit 1; }
+          done
+
+      - name: Cache the AI models
+        uses: actions/cache@v4
+        with:
+          path: services/audio/models
+          key: ai-models-v1
+
+      - name: Install the AI packages (CPU PyTorch)
+        run: node services/audio/scripts/setup.mjs --ai
+
+      - name: Real-model alignment tests
+        run: node services/audio/scripts/test.mjs -m ai -s -v

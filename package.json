@@ -11,6 +11,7 @@
     "audio:setup": "node services/audio/scripts/setup.mjs",
     "analyze": "node services/audio/scripts/analyze.mjs",
     "tap": "node services/audio/scripts/tap.mjs",
+    "align": "node services/audio/scripts/align.mjs",
     "lrc:shift": "tsx packages/video/scripts/lrc-shift.ts",
     "lrc:hook": "tsx packages/video/scripts/lrc-hook.ts",
     "cuts": "tsx packages/video/scripts/cuts.ts",
