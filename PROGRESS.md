@@ -51,7 +51,7 @@
   from ~1 s by using a clip that is black for its first 0.5 s), short-clip thumbnail, non-video
   rejected, WORKSPACE_DIR resolution, Windows-safe names.
 
-### Step 3 — Audio analysis service ✅
+### Step 3 — Audio analysis service ✅ (verified on Windows)
 - `services/audio` (Python 3.12, librosa 1.0.0): `POST /analyze` with a workspace-relative
   `path`, optional `project_id` and optional manual `bpm`. Returns `bpm`, `bpm_source`
   (detected | manual), `bpm_alternatives` (half / double), `duration_ms`, `downbeat_confidence`,
@@ -83,8 +83,10 @@
 ## Known issues
 - Downbeats assume 4/4. When the kick is equally strong on beats 1 and 3 (and nothing else
   marks the bar), beat 1 vs 3 is a guess; the confidence value shows this.
-- Beats are placed on the attack of each hit, typically within ~10 ms; real songs not yet validated
-  (to be checked on the user's PC).
+- Beats are placed on the attack of each hit, typically within ~10 ms.
+- Validated on a real song (acoustic, low energy) on the user's PC: 106.63 BPM vs 107 from an
+  independent tool, duration 4:01 correct, downbeat confidence 0.14 (low, as expected for a track
+  without a clear kick on beat 1). Low-confidence songs may need manual bar alignment later.
 - shadcn/ui components (button, card, input, tabs) were added by hand in the same format the
   shadcn CLI produces, because the build environment could not reach the shadcn website.
   `pnpm dlx shadcn@latest add <name>` works normally on your PC for future components.
