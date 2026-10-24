@@ -24,6 +24,7 @@ from .cache import file_hash
 from .compare import Comparison, compare
 from .config import workspace_dir
 from .lrc import AlignedLine, Word, build_lrc, format_stamp, parse_lrc
+from .refine import refine_words
 from .tap import parse_lyrics_txt
 
 LOW_CONFIDENCE = 0.5
@@ -36,6 +37,7 @@ ALIGN_MODELS = {
 }
 ALIGN_SAMPLE_RATE = 16_000
 FRAME_SAMPLES = 320  # wav2vec2: one output frame per 20 ms
+ALIGN_CACHE_VERSION = 2  # bump when the alignment method changes (2: words tightened to the voice)
 
 
 # --------------------------------------------------------------------------- output helpers
@@ -166,7 +168,9 @@ def align_words(vocals: Path, text: str, language: str, model_name: str, device:
         )
         return result["word_segments"]
 
-    return with_cpu_fallback(device, "Alignment", run, log)
+    words, device = with_cpu_fallback(device, "Alignment", run, log)
+    # Words that absorbed a silent gap are tightened to where the voice is audible.
+    return refine_words(words, audio, ALIGN_SAMPLE_RATE), device
 
 
 def words_to_lines(texts: list[str], hooks: list[bool], words: list[dict]) -> list[AlignedLine]:
@@ -315,7 +319,7 @@ def main(argv: list[str] | None = None) -> int:
     vocals, device = separate_vocals(song, device, log)
 
     # Cache: same vocals + same lyrics + same model = same alignment.
-    key = hashlib.sha256(f"{vocals.name}|{model_name}|{json.dumps(texts)}".encode()).hexdigest()[:24]
+    key = hashlib.sha256(f"v{ALIGN_CACHE_VERSION}|{vocals.name}|{model_name}|{json.dumps(texts)}".encode()).hexdigest()[:24]
     cache = workspace_dir() / "cache" / "align" / f"{key}.json"
     if cache.exists():
         log("alignment: cached")

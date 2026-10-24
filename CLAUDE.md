@@ -51,6 +51,7 @@ Workspace folder layout: `workspace/projects/<id>/audio`, `workspace/projects/<i
 - Long lyric lines: one line if it fits, else two balanced lines, then shrink up to 25%. Only as an absolute last resort three lines (never more), with a warning naming the line ("Line 3 is too long for phone screens; split it in lyrics.txt") from pnpm tap and render:test.
 - Hook lines: "* " at the start of a line in lyrics.txt or after the time stamp in the .lrc; every line with the same words is a hook too. Hook lines can use their own font.
 - Fonts: bundled @fontsource families plus any .ttf/.otf/.woff/.woff2 in WORKSPACE_DIR\fonts; props list the exact font files, so preview and render load the same ones.
+- Automatic lyric timing: `pnpm align` (Demucs htdemucs vocals + WhisperX wav2vec2 forced alignment, en/fr) writes enhanced LRC (line stamps + <mm:ss.xx> word tags), keeps hooks and pauses, flags lines below 0.5 confidence. AI packages are an optional extra (`pnpm audio:setup --ai`; PyTorch 2.8 cu128 on Windows); models live in services/audio/models.
 - Audio: the section start snaps to the nearest downbeat (report the adjusted time); 0.3 s fade-in, 0.5 s fade-out.
 - Video: 30 fps, H.264, AAC 192 kbps, yuv420p, faststart.
 

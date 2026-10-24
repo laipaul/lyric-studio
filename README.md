@@ -160,6 +160,43 @@ pnpm lrc:hook workspace\test\lyrics.lrc "Hope is a good thing"
 Before playing, every line is checked for phone screens. A line that would need 3 lines on screen
 prints e.g. `WARNING: Line 3 is too long for phone screens (Bold style); split it in lyrics.txt`.
 
+## Automatic lyric timing (`pnpm align`)
+
+Instead of tapping, the computer can place the lyrics itself: Demucs separates the vocals, then
+WhisperX lines up every word of your `lyrics.txt` with the voice.
+
+**One-time install** of the AI packages (large: PyTorch with CUDA is about 3 GB):
+
+```powershell
+cd D:\videomaker
+pnpm audio:setup --ai
+```
+
+On Windows this installs the CUDA 12.8 build of PyTorch, which runs on NVIDIA RTX 50-series GPUs
+(and also on the CPU). `pnpm audio:setup --ai --torch cpu` installs the smaller CPU-only build.
+The AI models (Demucs ~80 MB, English alignment ~360 MB, French alignment ~1.2 GB) download on
+first use into `services\audio\models\` with a progress bar.
+
+```powershell
+cd D:\videomaker
+pnpm align "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test\lyrics.txt"
+pnpm align "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test\lyrics.txt" --lang fr
+pnpm align "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test\lyrics.txt" --compare "D:\videomaker\workspace\test\Lyrics.lrc"
+```
+
+- It first prints the device: `GPU: NVIDIA GeForce RTX 5060 Laptop GPU (CUDA 12.8, …)` or
+  `CPU (reason)`. If the GPU fails, it retries on the CPU and says so. `--device cpu` forces the CPU.
+- Writes `lyrics.lrc` next to `lyrics.txt` (old one kept as `lyrics.lrc.bak`), with word timings
+  (`[00:14.00]* <00:14.00>Hope <00:14.42>is …`). `* ` hooks and blank-line pauses are kept.
+- Lists every line with its confidence; lines below 0.5 are shown in orange. Check them by ear and
+  re-tap or edit their stamp.
+- `--compare <tapped.lrc>`: per-line differences in ms, the median, the worst 5, the typical
+  offset with the matching `pnpm lrc:shift` command, and your tapped time next to low-confidence
+  lines. If the output would overwrite the comparison file (on Windows `lyrics.lrc` = `Lyrics.lrc`),
+  it writes `lyrics.aligned.lrc` instead.
+- The vocal track and the alignment are cached (`workspace\cache\stems`, `workspace\cache\align`),
+  so running it again is quick.
+
 ## Test render (`pnpm render:test`)
 
 Put the test material in `workspace\test\`: `song.wav` (or `song.mp3`), a `clips\` folder with video
@@ -248,7 +285,9 @@ notepad .env
 
 ## Tests and checks
 
-Tests also run automatically on GitHub (Actions → "Tests") after every push to `main`.
+Tests also run automatically on GitHub (Actions → "Tests") after every push to `main`. The real AI
+model tests for `pnpm align` run in a separate workflow (Actions → "AI alignment"), on demand and
+when the audio service changes. Locally: `pnpm test:audio -m ai` (needs `pnpm audio:setup --ai`).
 
 ```powershell
 pnpm test        # automated tests
@@ -257,6 +296,14 @@ pnpm typecheck   # TypeScript checks
 
 Next.js telemetry (anonymous usage data) is switched off for this project. To confirm:
 `pnpm --filter @lyric/studio telemetry` prints "You have opted-out".
+
+### Updating the AI packages
+
+`services/audio/requirements-ai.in` lists them; the exact versions are in
+`requirements-ai-windows.txt` / `requirements-ai-linux.txt`, generated with
+`uv pip compile --python-platform <x86_64-pc-windows-msvc | x86_64-manylinux_2_28> --python-version 3.12
+requirements-ai.in -c requirements.txt --no-emit-package torch --no-emit-package torchaudio
+--no-emit-package torchvision` (plus `--no-emit-package nvidia-…` for Linux).
 
 ## Troubleshooting
 
