@@ -43,7 +43,6 @@ py -3 --version    # Python 3.10 or newer (3.12 recommended)
 cd $HOME\Documents
 git clone https://github.com/laipaul/videomaker.git
 cd videomaker
-git checkout claude/zen-cray-bhmrvm
 pnpm install
 pnpm audio:setup
 ```
