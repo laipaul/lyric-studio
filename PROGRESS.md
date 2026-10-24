@@ -23,6 +23,8 @@
   in the last 24 hours, and the old lockfile contained some).
 - Audio service always uses Python 3.12 (`py -3.12` on Windows, `python3.12` elsewhere). An
   existing `.venv` built with another version is rebuilt; a clear error is shown if 3.12 is missing.
+- Next.js telemetry is disabled for this project (`NEXT_TELEMETRY_DISABLED=1` via `cross-env`
+  in the studio scripts). Check with `pnpm --filter @lyric/studio telemetry`.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -33,8 +35,6 @@
   shadcn CLI produces, because the build environment could not reach the shadcn website.
   `pnpm dlx shadcn@latest add <name>` works normally on your PC for future components.
 - FFmpeg is not needed yet. It will be needed from the render steps onwards.
-- The `py -3.12` path is written for Windows but could only be tested on Linux here
-  (`python3.12`); please confirm `pnpm audio:setup` on your PC.
 
 ## Next
 - Step 2 (database and workspace) — plan sent, waiting for approval.

@@ -79,6 +79,9 @@ pnpm test        # automated tests
 pnpm typecheck   # TypeScript checks
 ```
 
+Next.js telemetry (anonymous usage data) is switched off for this project. To confirm:
+`pnpm --filter @lyric/studio telemetry` prints "You have opted-out".
+
 ## Troubleshooting
 
 - **"running scripts is disabled on this system"** when typing `pnpm`: PowerShell is blocking scripts.
