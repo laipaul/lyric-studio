@@ -25,10 +25,10 @@ Payments, credits, user accounts, login, multi-user, cloud hosting, cloud render
 - One `pnpm dev` command starts studio + worker + audio service
 
 ## Data model
-- Project: id, title, artist, cover_path, audio_path, bpm, duration_ms, created_at
+- Project: id, title, artist, cover_path, audio_path, bpm, duration_ms, downbeat_offset (0-3: bar 1 starts N beats later than detected), created_at
 - LyricLine: id, project_id, index, text, start_ms, end_ms, is_hook, words_json (optional word timings)
-- Beat: project_id, time_ms, strength, is_downbeat
-- Section: id, project_id, name, start_ms, end_ms
+- Beat: project_id, time_ms, strength, is_downbeat (as detected; Project.downbeat_offset is applied when read)
+- Section: id, project_id, name, start_ms, end_ms, energy (low | medium | high: low halves the cut rate, high doubles it)
 - Collection: id, name
 - Clip: id, collection_id, path, duration_ms, width, height, thumb_path, source (upload | stock | ai)
 - StylePreset: id, name, font, weight, text_case, effect, animation, default_size
@@ -39,7 +39,10 @@ Workspace folder layout: `workspace/projects/<id>/audio`, `workspace/projects/<i
 
 ## Core logic rules
 - Cut points come from beats inside the selected section. Cut rate 1x = cut every downbeat (every bar), 2x = every half bar, 0.5x = every 2 bars, Off = one clip per lyric line.
-- Shuffle is DETERMINISTIC: same seed + same inputs = same clip sequence. Use a seeded PRNG (e.g. mulberry32). Avoid the same clip twice in a row.
+- Every cut lands earlyCutFrames (default 2, range 0-4, at 30 fps) before its beat. Section energy low halves the cut rate, high doubles it. Optional holdOnLyricLines: never cut inside a lyric line; cut at the next line start, snapped to the nearest beat.
+- Minimum shot length 0.8 s. If the grid is too fast, step to the next coarser REGULAR grid (every beat -> every 2 beats -> every bar ...) instead of dropping single cuts.
+- A clip shorter than its shot is slowed down to fit (playbackRate, minimum 0.5x); only if 0.5x is still too short, its last frame is held.
+- Shuffle is DETERMINISTIC: same seed + same inputs = same clip sequence. Use a seeded PRNG (e.g. mulberry32). Avoid the same clip twice in a row, and avoid the last 3 clips when the pool allows.
 - Clips are cover-cropped to 9:16 and start at a random (seeded) offset inside the clip.
 - Preview and render must use the exact same composition and props.
 - Video: 30 fps, H.264, AAC 192 kbps, yuv420p, faststart.

@@ -19,9 +19,11 @@
   },
   "devDependencies": {
     "@remotion/cli": "4.0.538",
+    "@types/node": "^22",
     "@types/react": "^19",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.0.5"
   }

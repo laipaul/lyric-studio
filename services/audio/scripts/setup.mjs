@@ -15,7 +15,8 @@ import {
 } from "./common.mjs";
 
 function run(cmd, args) {
-  const result = spawnSync(cmd, args, { stdio: "inherit", cwd: serviceDir });
+  // Output goes to stderr so commands that print JSON on stdout (pnpm cuts) stay clean.
+  const result = spawnSync(cmd, args, { stdio: ["inherit", process.stderr, process.stderr], cwd: serviceDir });
   if (result.status !== 0) {
     console.error(`[audio setup] failed: ${cmd} ${args.join(" ")}`);
     process.exit(result.status ?? 1);
@@ -47,16 +48,16 @@ export function setup() {
 
     if (existsSync(venvDir)) {
       const old = existsSync(venvPython) ? pythonVersion(venvPython) : null;
-      console.log(
+      console.error(
         `[audio setup] removing old .venv (Python ${old ?? "unknown"}) to rebuild it with Python ${PYTHON_VERSION}`,
       );
       rmSync(venvDir, { recursive: true, force: true });
     }
-    console.log(`[audio setup] creating ${venvDir} with ${systemPython.label}`);
+    console.error(`[audio setup] creating ${venvDir} with ${systemPython.label}`);
     run(systemPython.cmd, [...systemPython.args, "-m", "venv", venvDir]);
   }
-  console.log(`[audio setup] using Python ${pythonVersion(venvPython)} from .venv`);
-  console.log("[audio setup] installing requirements (first time can take a few minutes)");
+  console.error(`[audio setup] using Python ${pythonVersion(venvPython)} from .venv`);
+  console.error("[audio setup] installing requirements (first time can take a few minutes)");
   // --only-binary: use ready-made wheels only, never compile anything from source.
   run(venvPython, [
     "-m", "pip", "install", "--disable-pip-version-check", "-q",
@@ -64,7 +65,7 @@ export function setup() {
     "-r", requirementsFile,
   ]);
   writeFileSync(installedMarker, requirementsHash());
-  console.log("[audio setup] done");
+  console.error("[audio setup] done");
 }
 
 // Run directly (pnpm audio:setup) rather than imported by run.mjs.

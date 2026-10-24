@@ -74,13 +74,39 @@
   within 50 ms), other pickups, a 100-bar song (BPM ±0.1), a realistic groove with kick on 1 and 3,
   MP3 input, manual half/double/near BPM, cache, path safety, saving to Project/Beat tables.
 
+### Step 4 — Cut points, seeded shuffle, beat-grid checks ✅
+- Migration `0001_downbeat_offset_and_energy` (hand-written `ALTER TABLE ... ADD`, so existing data
+  is kept; the generated version would have rebuilt tables): `project.downbeat_offset` (0–3),
+  `section.energy` (low | medium | high). Upgrade tested with existing rows.
+- Beat table keeps detected downbeats; the project's offset is applied when reading
+  (`applyDownbeatOffset` in TS, `apply_downbeat_offset` in Python — same rule).
+- `pnpm analyze --click` writes `<song>_click.wav` (original quality and channels, music at 70%,
+  1 kHz click per beat, louder 2 kHz click per downbeat). `--downbeat-offset N` changes bars, the
+  click file and, for a project's song, saves the offset. `/analyze` accepts `downbeat_offset`.
+- `packages/video`: `getCutPoints(beats, section, options)` — rate 0.5x/1x/2x/off, energy factor,
+  frame-accurate early cut, grid anchored on the section's first bar, minimum shot 0.8 s by
+  stepping to the next coarser regular grid (edge shots merged), holdOnLyricLines.
+  `assignClips(plan, clips, seed)` — mulberry32, clips sorted by id, never the same clip twice in
+  a row, avoids the last 3 when possible, prefers clips long enough, seeded start offset inside the
+  clip; a too-short clip is slowed down (playback_rate ≥ 0.5) or plays at 0.5x and holds its last frame.
+- `pnpm cuts <song> --section a-b [--rate --energy --early --downbeat-offset --json]`.
+- Tests: 25 TypeScript (video) — same/different seed, early-cut frames, offset, 2x doubles,
+  low halves, hold never inside a line, min shot for all rates/energies/tempos, thinned cuts evenly
+  spaced, edge shots, offsets inside clips, slow-down and hold cases; verified that deliberately
+  broken code makes them fail. 5 Python (click file, offset, saving). 1 DB upgrade test.
+
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
-- `pnpm analyze <file>`, `POST /analyze`, `pnpm test:audio`.
+- `pnpm analyze <file>` (also `--click`, `--downbeat-offset`), `POST /analyze`, `pnpm test:audio`.
+- `pnpm cuts <file> --section a-b`.
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
 
 ## Known issues
+- `pnpm cuts` cannot show `--rate off` or the lyric-line hold yet (no lyric timings until a later
+  step); both are covered by tests. It shows cuts only; clip assignment needs clips (Step 5).
+- After `git pull`, run `pnpm db:setup` (or `pnpm dev`) before `pnpm analyze` so the new
+  `downbeat_offset` column exists; otherwise `pnpm analyze` notes it and ignores project settings.
 - Downbeats assume 4/4. When the kick is equally strong on beats 1 and 3 (and nothing else
   marks the bar), beat 1 vs 3 is a guess; the confidence value shows this.
 - Beats are placed on the attack of each hit, typically within ~10 ms.
@@ -94,4 +120,4 @@
 - The workspace service is used by tests only so far; commands and UI that use it come in later steps.
 
 ## Next
-- Step 4 — waiting for instructions.
+- Step 5 — waiting for instructions.

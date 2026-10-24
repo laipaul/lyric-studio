@@ -10,6 +10,7 @@
     "dev": "pnpm db:setup && concurrently -k -n studio,worker,audio -c cyan,magenta,yellow \"pnpm --filter @lyric/studio dev\" \"pnpm --filter @lyric/worker dev\" \"node services/audio/scripts/run.mjs\"",
     "audio:setup": "node services/audio/scripts/setup.mjs",
     "analyze": "node services/audio/scripts/analyze.mjs",
+    "cuts": "tsx packages/video/scripts/cuts.ts",
     "db:setup": "pnpm -s --filter @lyric/db run setup",
     "db:migrate": "pnpm -s --filter @lyric/db run migrate",
     "db:seed": "pnpm -s --filter @lyric/db run seed",
@@ -21,6 +22,7 @@
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
-    "concurrently": "^10.0.6"
+    "concurrently": "^10.0.6",
+    "tsx": "^4.23.15"
   }
 }

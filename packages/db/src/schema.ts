@@ -22,11 +22,13 @@ export const CLIP_SOURCES = ["upload", "stock", "ai"] as const;
 export const CUT_RATES = ["0.5x", "1x", "2x", "off"] as const;
 export const RENDER_STATUSES = ["queued", "rendering", "done", "failed"] as const;
 export const TEXT_CASES = ["none", "upper", "lower", "title"] as const;
+export const ENERGY_LEVELS = ["low", "medium", "high"] as const;
 
 export type ClipSource = (typeof CLIP_SOURCES)[number];
 export type CutRate = (typeof CUT_RATES)[number];
 export type RenderStatus = (typeof RENDER_STATUSES)[number];
 export type TextCase = (typeof TEXT_CASES)[number];
+export type Energy = (typeof ENERGY_LEVELS)[number];
 
 // Optional word-level timings inside a lyric line.
 export type WordTiming = { text: string; start_ms: number; end_ms: number };
@@ -34,18 +36,24 @@ export type WordTiming = { text: string; start_ms: number; end_ms: number };
 const inList = (column: string, values: readonly string[]) =>
   sql.raw(`${column} in (${values.map((v) => `'${v}'`).join(", ")})`);
 
-export const project = sqliteTable("project", {
-  id: id(),
-  title: text("title").notNull(),
-  artist: text("artist").notNull(),
-  cover_path: text("cover_path"),
-  audio_path: text("audio_path"),
-  bpm: real("bpm"),
-  duration_ms: integer("duration_ms"),
-  created_at: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
+export const project = sqliteTable(
+  "project",
+  {
+    id: id(),
+    title: text("title").notNull(),
+    artist: text("artist").notNull(),
+    cover_path: text("cover_path"),
+    audio_path: text("audio_path"),
+    bpm: real("bpm"),
+    duration_ms: integer("duration_ms"),
+    // Bar 1 starts this many beats (0-3) later than the detected downbeats.
+    downbeat_offset: integer("downbeat_offset").notNull().default(0),
+    created_at: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [check("project_downbeat_offset", sql.raw("downbeat_offset between 0 and 3"))],
+);
 
 export const lyricLine = sqliteTable(
   "lyric_line",
@@ -87,10 +95,13 @@ export const section = sqliteTable(
     name: text("name").notNull(),
     start_ms: integer("start_ms").notNull(),
     end_ms: integer("end_ms").notNull(),
+    // Low halves the cut rate, high doubles it.
+    energy: text("energy", { enum: ENERGY_LEVELS }).notNull().default("medium"),
   },
   (t) => [
     index("section_project").on(t.project_id),
     check("section_range", sql.raw("end_ms > start_ms")),
+    check("section_energy", inList("energy", ENERGY_LEVELS)),
   ],
 );
 

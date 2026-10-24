@@ -79,6 +79,8 @@ Stop everything with **Ctrl+C**.
 pnpm analyze "D:\Music\my song.mp3"
 pnpm analyze "D:\Music\my song.mp3" --bpm 140
 pnpm analyze "D:\Music\my song.mp3" --json
+pnpm analyze "D:\Music\my song.mp3" --click
+pnpm analyze "D:\Music\my song.mp3" --downbeat-offset 1
 ```
 
 Prints the BPM, the half/double alternatives, the duration, the downbeat confidence and the first
@@ -92,11 +94,35 @@ Prints the BPM, the half/double alternatives, the duration, the downbeat confide
   common when the kick is equally strong on beats 1 and 3). The method assumes 4/4.
 - **Cache**: results are saved in `workspace\cache\analysis\` by the file's content, so the same
   song is analysed only once (even if renamed). Delete that folder to force a fresh analysis.
+- **Check the beat grid by ear**: `--click` writes `<song>_click.wav` next to the song: the song
+  with a low click on every beat and a louder, higher click on every bar start (downbeat).
+- **Bar 1 in the wrong place?** `--downbeat-offset 1`, `2` or `3` makes bar 1 start that many beats
+  later. If the file is a project's song, the offset is saved to that project and used from then on.
 - WAV, MP3 and FLAC work.
 
 The service also offers `POST http://127.0.0.1:8001/analyze` with
 `{"path": "<path inside the workspace>", "project_id": "<optional>", "bpm": <optional>}`.
 With `project_id` it stores the BPM and duration on the project and replaces its beats.
+
+## Cut points
+
+```powershell
+pnpm cuts "D:\Music\my song.mp3" --section 0:11-0:59
+pnpm cuts "D:\Music\my song.mp3" --section 0:11-0:59 --rate 2x --energy high --early 2 --downbeat-offset 1
+```
+
+Prints where the video would cut inside that part of the song: the time and video frame of each
+cut, the beat number, the bar and beat in the bar (`7.1` = bar 7, beat 1), and each shot's length.
+
+| Option | Values | Meaning |
+| --- | --- | --- |
+| `--rate` | `0.5x`, `1x` (default), `2x` | cut every 2 bars / every bar / every half bar |
+| `--energy` | `low`, `medium` (default), `high` | low = half as many cuts, high = twice as many |
+| `--early` | `0`–`4` (default `2`) | cut this many frames (1/30 s) before the beat; slightly early feels on time |
+| `--downbeat-offset` | `0`–`3` | move bar 1 (as for `pnpm analyze`) |
+
+No shot is shorter than 0.8 s: if the cuts would be too fast, the whole section switches to the next
+slower even rhythm (every beat → every 2 beats → every bar) and the command says so.
 
 ## Database
 

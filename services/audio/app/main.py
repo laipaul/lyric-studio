@@ -8,9 +8,10 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from .analysis import MAX_BPM, MIN_BPM
+from .beatgrid import apply_downbeat_offset
 from .cache import analyze_cached
 from .config import resolve_workspace_path
-from .store import DatabaseMissing, ProjectNotFound, save_analysis
+from .store import DatabaseMissing, ProjectNotFound, get_downbeat_offset, save_analysis, set_downbeat_offset
 
 app = FastAPI(title="Lyric Studio audio service")
 
@@ -25,6 +26,11 @@ class AnalyzeRequest(BaseModel):
     project_id: str | None = Field(default=None, description="If given, save BPM, duration and beats to this project")
     bpm: Annotated[float, Field(ge=MIN_BPM, le=MAX_BPM)] | None = Field(
         default=None, description="Manual BPM: re-run beat tracking around this tempo"
+    )
+    downbeat_offset: Annotated[int, Field(ge=0, le=3)] | None = Field(
+        default=None,
+        description="Bar 1 starts this many beats later than detected (0-3). Saved to the project if project_id is given; "
+        "if left out, the project's saved offset is used.",
     )
 
 
@@ -44,13 +50,26 @@ def analyze(request: AnalyzeRequest) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail=f"could not analyse {request.path}: {error}") from error
 
     saved = False
+    offset = request.downbeat_offset
     if request.project_id:
         try:
-            save_analysis(request.project_id, result)
+            save_analysis(request.project_id, result)  # beats are stored as detected
+            if offset is not None:
+                set_downbeat_offset(request.project_id, offset)
+            else:
+                offset = get_downbeat_offset(request.project_id)
             saved = True
         except ProjectNotFound as error:
             raise HTTPException(status_code=404, detail=f"project not found: {request.project_id}") from error
         except DatabaseMissing as error:
             raise HTTPException(status_code=503, detail=str(error)) from error
 
-    return {**result, "path": request.path, "project_id": request.project_id, "saved_to_project": saved}
+    offset = offset or 0
+    return {
+        **result,
+        "beats": apply_downbeat_offset(result["beats"], offset),
+        "downbeat_offset": offset,
+        "path": request.path,
+        "project_id": request.project_id,
+        "saved_to_project": saved,
+    }
