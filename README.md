@@ -36,9 +36,9 @@ Notes:
 ## Get the code (first time)
 
 ```powershell
-cd $HOME\Documents
+cd D:\
 git clone https://github.com/laipaul/videomaker.git
-cd videomaker
+cd D:\videomaker
 pnpm install
 pnpm audio:setup
 ```
@@ -50,7 +50,7 @@ Python version, it is removed and rebuilt automatically.
 ## Get the latest changes
 
 ```powershell
-cd $HOME\Documents\videomaker
+cd D:\videomaker
 git pull
 pnpm install
 pnpm audio:setup

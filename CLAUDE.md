@@ -54,6 +54,7 @@ Workspace folder layout: `workspace/projects/<id>/audio`, `workspace/projects/<i
 - If something fails, explain the cause in plain words, then fix it.
 - Keep `PROGRESS.md` updated: steps done, what works, known issues.
 - Workflow: Claude builds and tests in a cloud session and commits and pushes every step directly to the `main` branch of GitHub `laipaul/videomaker`, so I only ever need `git pull`. I pull and run on Windows in Cursor's terminal (PowerShell). After each step, give me the exact Windows commands to pull and run it.
+- My project lives at `D:\videomaker`. Always start Windows commands with `cd D:\videomaker`.
 - Follow the steps strictly in the order I give. Never merge steps and never pull UI work forward.
 - Phase 1 (Steps 2–5) has no UI. It ends when a beat-synced MP4 renders from the command line.
 - After finishing a step, stop and wait for my next message. Do not start the next step on your own.
