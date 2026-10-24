@@ -143,8 +143,17 @@ def ensure_nltk_data(log: Callable[[str], None]) -> None:
         nltk.download("punkt_tab", download_dir=str(target), quiet=True)
 
 
-def align_words(vocals: Path, text: str, language: str, model_name: str, device: Device, log: Callable[[str], None]):
-    """WhisperX forced alignment of `text` against the vocal track. Returns (words, device)."""
+def align_words(
+    vocals: Path,
+    text: str,
+    language: str,
+    model_name: str,
+    device: Device,
+    log: Callable[[str], None],
+    trim: bool = True,
+):
+    """WhisperX forced alignment of `text` against the vocal track. Returns (words, device).
+    With `trim`, words that swallowed a silent gap start where the voice starts (app/refine.py)."""
     import librosa
     import whisperx
 
@@ -169,8 +178,7 @@ def align_words(vocals: Path, text: str, language: str, model_name: str, device:
         return result["word_segments"]
 
     words, device = with_cpu_fallback(device, "Alignment", run, log)
-    # Words that absorbed a silent gap are tightened to where the voice is audible.
-    return refine_words(words, audio, ALIGN_SAMPLE_RATE), device
+    return (refine_words(words, audio, ALIGN_SAMPLE_RATE) if trim else words), device
 
 
 def words_to_lines(texts: list[str], hooks: list[bool], words: list[dict]) -> list[AlignedLine]:
@@ -286,6 +294,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", help="output .lrc (default: next to lyrics.txt)")
     p.add_argument("--device", choices=["auto", "cuda", "cpu"], default="auto")
     p.add_argument("--align-model", help="another wav2vec2 alignment model (torchaudio or Hugging Face name)")
+    p.add_argument(
+        "--trim",
+        choices=["on", "off"],
+        default="on",
+        help="move words that swallowed a silent gap to where the voice starts (default on)",
+    )
     p.add_argument("--cwd", help=argparse.SUPPRESS)
     return p
 
@@ -314,18 +328,20 @@ def main(argv: list[str] | None = None) -> int:
     device = choose_device(torch, args.device)
     print(f"Device:  {device.description}")
     print(f"Song:    {song}")
-    print(f"Lyrics:  {len(texts)} lines from {lyrics.name} ({args.lang})")
+    print(f"Lyrics:  {len(texts)} lines from {lyrics.name} ({args.lang}, gap trim {args.trim})")
 
     vocals, device = separate_vocals(song, device, log)
 
     # Cache: same vocals + same lyrics + same model = same alignment.
-    key = hashlib.sha256(f"v{ALIGN_CACHE_VERSION}|{vocals.name}|{model_name}|{json.dumps(texts)}".encode()).hexdigest()[:24]
+    key = hashlib.sha256(
+        f"v{ALIGN_CACHE_VERSION}|trim-{args.trim}|{vocals.name}|{model_name}|{json.dumps(texts)}".encode()
+    ).hexdigest()[:24]
     cache = workspace_dir() / "cache" / "align" / f"{key}.json"
     if cache.exists():
         log("alignment: cached")
         words = json.loads(cache.read_text(encoding="utf-8"))
     else:
-        words, device = align_words(vocals, " ".join(texts), args.lang, model_name, device, log)
+        words, device = align_words(vocals, " ".join(texts), args.lang, model_name, device, log, trim=args.trim == "on")
         words = [{k: (float(v) if k in ("start", "end", "score") and v is not None else v) for k, v in w.items()} for w in words]
         cache.parent.mkdir(parents=True, exist_ok=True)
         cache.write_text(json.dumps(words), encoding="utf-8")

@@ -180,3 +180,12 @@ def test_gpu_failure_retries_on_cpu() -> None:
     result, device = with_cpu_fallback(Device("cuda", "GPU"), "Alignment", run, messages.append)
     assert (result, device.name, calls) == ("done", "cpu", ["cuda", "cpu"])
     assert messages == ["Alignment failed on the GPU (CUDA out of memory); retrying on the CPU"]
+
+
+def test_trim_switch() -> None:
+    from app.align import build_parser
+
+    assert build_parser().parse_args(["s.wav", "l.txt"]).trim == "on"
+    assert build_parser().parse_args(["s.wav", "l.txt", "--trim", "off"]).trim == "off"
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["s.wav", "l.txt", "--trim", "maybe"])
