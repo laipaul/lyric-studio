@@ -432,7 +432,10 @@ Cause: a line was treated as sung until the next line started (and the next line
 - Logo: YouTube only by default (brand.json `logo.platforms: ["youtube"]`, add a platform to show it
   there); always in a frame corner, 3% of the width from both edges (the old "auto" put it inside
   the Reels safe zone, on the subject). New QA check "Logo in a frame corner".
-- Tests: each canvas fallback (pure and in pnpm make), a slowed loop rendered and checked seamless,
+- `--collection` is remembered per project (`workspace\projects\<id>\settings.json`, with
+  `--collection-path`): later runs may leave it out and print "using collection wedding (remembered)";
+  the first run of a project without it stops with a clear message.
+- Tests: the remembered collection, each canvas fallback (pure and in pnpm make), a slowed loop rendered and checked seamless,
   the summary, logo placement on every platform and corner, QA catching a mid-frame logo, logo off on
   9:16 by default and on when listed.
 

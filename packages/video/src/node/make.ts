@@ -70,7 +70,7 @@ import {
 export type MakeOptions = {
   song: string;
   lyrics: string; // lyrics.txt
-  collection: string;
+  collection?: string; // default: the collection this project used last time (remembered)
   collectionPath?: string;
   variations?: number; // default: the platform preset's number (standard: 6)
   platforms?: string; // "reels,tiktok,shorts" or "all"; default: the "standard" preset
@@ -128,7 +128,7 @@ export type MakePlan = {
   lyricsOffsetMs: number;
   effects: { verse: string; hook: string; from: { verse: string; hook: string }; showNextLine: boolean } | null; // null: no lyrics (Canvas)
   section: { start_ms: number; end_ms: number; reason: string };
-  collection: { name: string; folder: string; clips: number; added: number; changed: number; unchanged: number; removed: number };
+  collection: { name: string; folder: string; clips: number; added: number; changed: number; unchanged: number; removed: number; remembered: boolean };
   cuts: number;
   limit: RenderLimit;
   exportDir: string;
@@ -296,6 +296,25 @@ export function chooseEffects(
   return { verse: verse.choice, hook: hook.choice, from: { verse: verse.from, hook: hook.from } };
 }
 
+// The collection a project used last ("--collection" becomes optional): projects/<id>/settings.json.
+const settingsFile = (ws: Workspace, projectId: string) => absPath(ws, `projects/${projectId}/settings.json`);
+function readSettings(ws: Workspace, projectId: string): Record<string, unknown> {
+  try {
+    return JSON.parse(readFileSync(settingsFile(ws, projectId), "utf8")) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+export function rememberedCollection(ws: Workspace, projectId: string): { name: string; folder?: string } | null {
+  const c = readSettings(ws, projectId).collection as { name?: unknown; folder?: unknown } | undefined;
+  return c && typeof c.name === "string" ? { name: c.name, ...(typeof c.folder === "string" ? { folder: c.folder } : {}) } : null;
+}
+export function rememberCollection(ws: Workspace, projectId: string, collection: { name: string; folder?: string }): void {
+  const file = settingsFile(ws, projectId);
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, `${JSON.stringify({ ...readSettings(ws, projectId), collection }, null, 2)}\n`);
+}
+
 export function exportFolder(ws: Workspace, projectId: string, now: Date): string {
   const p = (n: number) => String(n).padStart(2, "0");
   const name = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}_${p(now.getHours())}${p(now.getMinutes())}`;
@@ -392,6 +411,14 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
 
     const sp = await findOrCreateSongProject(ws, path.resolve(options.song), log);
     log(`project "${sp.project.title}" (${sp.created ? "new" : "found by the song's content"})`);
+    // The clip collection: --collection, else the one this project used last time.
+    const remembered = options.collection ? null : rememberedCollection(ws, sp.project.id);
+    if (!options.collection && !remembered) {
+      throw new Error(`--collection <name> is needed the first time for "${sp.project.title}" (the folder WORKSPACE_DIR\\clips\\<name>); after that it is remembered.`);
+    }
+    const collectionName = options.collection ?? remembered!.name;
+    const collectionPath = options.collection ? options.collectionPath : (options.collectionPath ?? remembered!.folder);
+    if (remembered) log(`using collection ${remembered.name} (remembered)`);
 
     log("analysing the song (cached after the first time)");
     const analysis = analyzeSong(sp.songFile, { downbeatOffset: options.downbeatOffset });
@@ -429,7 +456,8 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const numbers = lyricLineNumbers(lines.map((l) => l.text), alignment.lrcFile, alignment.lyricsTxt).numbers;
     const sectionLines: SectionLine[] = lines.map((l, i) => ({ ...l, sung_end_ms: reports[i]?.end_ms }));
 
-    const collection = await syncCollection(ws, { name: options.collection, folder: options.collectionPath, log, prepare: false });
+    const collection = await syncCollection(ws, { name: collectionName, folder: collectionPath, log, prepare: false });
+    rememberCollection(ws, project.id, { name: collectionName, ...(collectionPath ? { folder: collectionPath } : {}) });
 
     // The run's folder; --resume continues the latest one.
     let rootDir: string;
@@ -454,7 +482,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     }
     const shared: Shared = {
       ws, options, log, now, leadMs, lyricsOffsetMs, catalog, styles, brand, logo, sp, analysis, alignment, lines, reports, numbers,
-      sectionLines, collection, tool, rootDir, getProject: () => project,
+      sectionLines, collection, collectionRemembered: !!remembered, tool, rootDir, getProject: () => project,
     };
     const results: PlatformResult[] = [];
     for (const [index, name] of chosenPlatforms.names.entries()) {
@@ -507,6 +535,7 @@ type Shared = {
   numbers: number[];
   sectionLines: SectionLine[];
   collection: CollectionSync;
+  collectionRemembered: boolean; // --collection not given: the one this project used last time
   tool: Manifest["tool"];
   rootDir: string;
   getProject: () => { id: string; title: string; artist: string };
@@ -760,6 +789,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
       changed: sh.collection.changed.length,
       unchanged: sh.collection.unchanged.length,
       removed: sh.collection.removed.length,
+      remembered: sh.collectionRemembered,
     },
     cuts: plan.cuts.length,
     limit,

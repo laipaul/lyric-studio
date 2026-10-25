@@ -834,6 +834,20 @@ describe("platform presets (stand-in renderer)", () => {
     }
   });
 
+  it("--collection is remembered per project: later runs may leave it out", async () => {
+    await run({ platforms: "tiktok", variations: 1, collection: "mixed" });
+    const messages: string[] = [];
+    const plans: MakePlan[] = [];
+    const again = await run({ platforms: "tiktok", variations: 1, collection: undefined, log: (m) => messages.push(m), onReady: (p) => plans.push(p) });
+    expect(messages).toContain("using collection mixed (remembered)");
+    expect(plans[0].collection).toMatchObject({ name: "mixed", remembered: true });
+    expect(readManifest(again.variations[0].manifestFile).settings.collection).toMatchObject({ name: "mixed" });
+    // A project that never had one: a clear message.
+    const fresh = path.join(root, "fresh-song.wav");
+    makeSong(fresh, 14);
+    await expect(run({ song: fresh, platforms: "tiktok", variations: 1, collection: undefined })).rejects.toThrow(/--collection <name> is needed the first time for "fresh-song"/);
+  });
+
   it("--resume per platform renders only what is missing in each platform folder", async () => {
     const tiktok = all.platforms.find((p) => p.name === "tiktok")!;
     rmSync(path.join(tiktok.exportDir, "v2.qa.txt"));

@@ -1,4 +1,5 @@
-// pnpm make <song> <lyrics.txt> --collection <name> [--collection-path <folder>] [--variations 6]
+// pnpm make <song> <lyrics.txt> [--collection <name>] [--collection-path <folder>] [--variations 6]
+//   (--collection is needed the first time per project; after that the last one is remembered)
 //   [--section auto|full|0:11-1:10] [--hint <taps.lrc> | --no-hint] [--realign] [--lrc <file.lrc>] [--lang en|fr]
 //   [--rate 1x] [--energy medium] [--lead 0.25] [--lyrics-offset 0] [--downbeat-offset N]
 //   [--font "Family"] [--font-hook "Family"] [--pins pins.txt] [--parallel N] [--resume] [--no-open]
@@ -61,8 +62,7 @@ try {
 }
 const { values, positionals } = parsed;
 
-if (positionals.length !== 2) fail('Usage: pnpm make <song> <lyrics.txt> --collection <name>   (e.g. pnpm make "workspace\\test\\song.wav" "workspace\\test\\lyrics.txt" --collection beach)');
-if (!values.collection) fail("--collection <name> is required (the folder WORKSPACE_DIR\\clips\\<name>)");
+if (positionals.length !== 2) fail('Usage: pnpm make <song> <lyrics.txt> --collection <name>   (e.g. pnpm make "workspace\\test\\song.wav" "workspace\\test\\lyrics.txt" --collection wedding)');
 const rate = values.rate as CutRate;
 if (!["0.5x", "1x", "2x", "off"].includes(rate)) fail("--rate must be 0.5x, 1x, 2x or off");
 const energy = values.energy as Energy;
@@ -160,7 +160,7 @@ try {
         if (p.lyricsOffsetMs) console.log(`           lyrics offset ${p.lyricsOffsetMs / 1000} s (project setting)`);
         for (const l of p.lyrics.low) console.log(`           low confidence ${l.confidence.toFixed(2)}: line ${l.number} "${l.text}"`);
         console.log(
-          `Clips:     ${c.clips} in "${c.name}" (${c.added} new, ${c.changed} changed, ${c.unchanged} unchanged` +
+          `Clips:     ${c.clips} in "${c.name}"${c.remembered ? " (remembered)" : ""} (${c.added} new, ${c.changed} changed, ${c.unchanged} unchanged` +
             `${c.removed ? `, ${c.removed} removed from the collection` : ""}) from ${c.folder}`,
         );
         console.log(`Brand:     ${p.brand.file}${p.brand.created ? " (created with the defaults)" : ""}`);

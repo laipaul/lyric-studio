@@ -212,11 +212,11 @@ pnpm align "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test
 ## One-click videos (`pnpm make`)
 
 One command from a song to several finished videos. Copy your clips into a collection folder
-`workspace\clips\<name>\` (for example `workspace\clips\beach\`), then:
+`workspace\clips\<name>\` (for example `workspace\clips\wedding\`), then:
 
 ```powershell
 cd D:\videomaker
-pnpm make "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test\lyrics.txt" --collection beach
+pnpm make "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test\lyrics.txt" --collection wedding
 ```
 
 What it does, in order:
@@ -261,8 +261,8 @@ changed since.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `--collection <name>` | (required) | the folder `workspace\clips\<name>\` |
-| `--collection-path <folder>` | | clips from another folder (not copied) |
+| `--collection <name>` | the project's last one | the folder `workspace\clips\<name>\`; needed the first time per project, then remembered ("using collection wedding (remembered)") |
+| `--collection-path <folder>` | the project's last one | clips from another folder (not copied); remembered with the collection |
 | `--variations N` | from the preset (standard: 6) | number of videos (per platform) |
 | `--section` | `auto` | `auto`, `full` or `0:11-1:10` |
 | `--hint <taps.lrc>`, `--realign`, `--lang fr` | | passed to `pnpm align` (see above); the hint is remembered by the project |
@@ -286,7 +286,7 @@ changed since.
 
 ```powershell
 cd D:\videomaker
-pnpm make "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test\lyrics.txt" --collection beach --platforms reels,tiktok,shorts
+pnpm make "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test\lyrics.txt" --collection wedding --platforms reels,tiktok,shorts
 ```
 
 `--platforms all` makes every platform that is ready. Each platform gets its own folder inside the
@@ -317,7 +317,7 @@ area, slightly above its middle), never outside them.
 
 ```powershell
 cd D:\videomaker
-pnpm make "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test\lyrics.txt" --collection beach --platforms youtube --cover "D:\videomaker\workspace\test\cover.jpg" --title "My Song"
+pnpm make "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test\lyrics.txt" --collection wedding --platforms youtube --cover "D:\videomaker\workspace\test\cover.jpg" --title "My Song"
 ```
 
 A 1920x1080 video of the whole song (from 0:00) in `exports\<date>\youtube\`, with:
@@ -367,7 +367,7 @@ logo (`workspace\brand\logo.png`) position and size. The lyrics use the brand fo
 
 ```powershell
 cd D:\videomaker
-pnpm make "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test\lyrics.txt" --collection beach --platforms canvas
+pnpm make "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test\lyrics.txt" --collection wedding --platforms canvas
 ```
 
 One silent 1080x1920 loop in `exports\<date>\canvas\` (`v1.mp4`, manifest, QA; no .srt):
