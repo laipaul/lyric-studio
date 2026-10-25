@@ -329,7 +329,7 @@ Cause: a line was treated as sung until the next line started (and the next line
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
 
 ## Known issues
-- TikTok (target 25 s) ended at 31.6 s like Reels on the user's song: no bar falls inside a gap between
+- TikTok (target 25 s) ended at 31.6 s like Reels on the user's song. Most likely no bar falls inside a gap between
   lines between ~19 and ~29 s after the start, so the longer fallback (up to +30%) was used. Possible
   later option: allow ending on a beat (not only a bar) for short-form.
 - `pnpm make`: cinematic bars on every other variation together with Simple/Bold alternating means
