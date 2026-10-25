@@ -31,3 +31,7 @@ Thumbs.db
 
 # AI models downloaded on first use (pnpm align)
 services/audio/models/
+
+# Lyric Studio launcher log and the desktop shortcut icon (made from your logo)
+/logs/
+/Lyric Studio.ico

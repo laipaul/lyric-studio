@@ -55,6 +55,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./node": "./src/node/index.ts",
-    "./media": "./src/node/media.ts"
+    "./media": "./src/node/media.ts",
+    "./library": "./src/node/library.ts",
+    "./app-icons": "./src/node/app-icons.ts"
   }
 }

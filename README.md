@@ -71,7 +71,50 @@ You should see:
 - `[audio] Uvicorn running on http://127.0.0.1:8001`  → open http://127.0.0.1:8001/health
   and you should see `{"status":"ok","service":"audio"}`
 
-Stop everything with **Ctrl+C**.
+Stop everything with **Ctrl+C**. The studio listens on this PC only (http://localhost:3000 works,
+other devices on your network cannot reach it); set `STUDIO_HOST=0.0.0.0` in `.env` only if you ever
+want that.
+
+## The Lyric Studio app
+
+### Start and stop (no terminal needed)
+
+- Double-click **`Start Lyric Studio.cmd`** in `D:\videomaker`. It starts the studio, the worker and
+  the audio service in a minimised window ("LyricStudioServer"), waits until they answer, then opens
+  Lyric Studio in its own Edge window. The first start after a `git pull` builds the app first
+  (1-2 minutes); later starts take a few seconds. If it is already running, it just opens the window.
+  The log is in `logs\lyric-studio.log`.
+- Double-click **`Stop Lyric Studio.cmd`** to stop everything.
+- **Desktop shortcut** with the Life Lyrics icon: double-click **`Create Desktop Shortcut.cmd`** once
+  (run it again after changing `workspace\brand\logo.png`). By hand instead: right-click the desktop →
+  New → Shortcut → `D:\videomaker\Start Lyric Studio.cmd` → name it "Lyric Studio" → Properties →
+  Change Icon → `D:\videomaker\Lyric Studio.ico` (made by `pnpm app:icons`), Run: Minimized.
+
+### Install as an app
+
+With Lyric Studio open in Edge or Chrome: menu **…** → **Apps** → **Install Lyric Studio** (Chrome: the
+install icon in the address bar). It then has its own window and taskbar icon (the flower from
+`workspace\brand\logo.png`, remade automatically when the logo changes). It needs no internet; the
+app still needs `Start Lyric Studio.cmd` to be running (it is the local server).
+
+### Library
+
+The start page: one card per song with its cover, title, artist (and EP) and, per platform, how many
+videos its latest run made and their state (green PASS, amber WARN, red FAILED, pink "…" while
+rendering, "—" not made yet). Search finds songs by title, artist or EP.
+
+**+ New song**: the song (WAV/MP3) and `lyrics.txt` are required; a cover, a hints file (tapped
+`.lrc`), the title (default: the song's file name), the artist (default "Life Lyrics"; the list shows
+every artist used so far) and the EP are optional. Everything is stored with the project, so
+`pnpm make` uses it too (the hints, the EP, the cover). Adding the same song again (even under another
+file name) updates that song instead of making a second one.
+
+### Artists
+
+Each song has its artist (Life Lyrics, Pômé, a client, ...): titles, thumbnails, the title overlay and
+`publish.txt` use it. `pnpm make --artist "Pômé"` sets it from the command line. An artist can have
+their own brand: `workspace\brand\<artist>\brand.json` (plus `logo.png` and
+`publish-template.txt` there); without one, the Life Lyrics brand in `workspace\brand\` is used.
 
 ## Audio analysis
 

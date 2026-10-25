@@ -34,6 +34,7 @@ import {
 } from "../youtube";
 import type { Brand } from "./brand";
 import { brandDir } from "./brand";
+import { storeCover } from "./project-settings";
 import type { PreparedForFormat } from "./collection";
 
 export type YouTubeLayout = "cover" | "stills" | "clips";
@@ -43,13 +44,7 @@ const COVER_NAMES = ["cover.jpg", "cover.jpeg", "cover.png", "cover.webp"];
 // The cover for the cover layout: --cover (stored with the project), else the project's stored
 // cover, else cover.jpg/.png next to the song file (stored too). null when there is none.
 export function resolveCover(ws: Workspace, project: Project, options: { cover?: string; songFile: string }): { stored: string; from: string } | null {
-  const store = (file: string) => {
-    const relative = `projects/${project.id}/audio/cover${path.extname(file).toLowerCase()}`;
-    mkdirSync(path.dirname(absPath(ws, relative)), { recursive: true });
-    if (path.resolve(file) !== path.resolve(absPath(ws, relative))) copyFileSync(file, absPath(ws, relative));
-    ws.db.update(projectTable).set({ cover_path: relative }).where(eq(projectTable.id, project.id)).run();
-    return relative;
-  };
+  const store = (file: string) => storeCover(ws, project.id, file);
   if (options.cover) {
     if (!existsSync(options.cover)) throw new Error(`Cover not found: ${options.cover}`);
     return { stored: store(options.cover), from: options.cover };
@@ -265,8 +260,9 @@ Listen on Spotify: https://open.spotify.com/ (add the link to the song)
 export function publishText(
   workspaceDir: string,
   values: { song: string; artist: string; lyricsTxt: string; year: number; ep?: string },
+  folder: string = brandDir(workspaceDir), // the artist's brand folder
 ): { text: string; template: string; created: boolean } {
-  const template = path.join(brandDir(workspaceDir), "publish-template.txt");
+  const template = path.join(folder, "publish-template.txt");
   let created = false;
   if (!existsSync(template)) {
     mkdirSync(path.dirname(template), { recursive: true });

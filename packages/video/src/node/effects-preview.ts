@@ -161,7 +161,7 @@ export async function effectsPreview(options: {
     const notes: string[] = [];
     if (!lines.slice(ex.first, ex.last + 1).some((l) => l.words?.length)) notes.push("these lines have no word timings (align with pnpm make / pnpm align): word effects are spread over each line");
     const catalog = loadFontCatalog(ws.dir);
-    const brand = loadBrand(ws.dir, catalog).brand; // the effects you chose (marked in the grid) and the accent colour
+    const brand = loadBrand(ws.dir, catalog, project.artist).brand; // the effects you chose (marked in the grid) and the accent colour
     const accent = brand.accentColour;
 
     const now = options.now ?? new Date();

@@ -16,3 +16,6 @@ export * from "./brand";
 export * from "./youtube";
 export * from "./canvas";
 export * from "./effects-preview";
+export * from "./project-settings";
+export * from "./library";
+export * from "./app-icons";

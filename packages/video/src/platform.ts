@@ -2,7 +2,7 @@
 // bitrate and special rules per platform. Pure: the file is read in Node and validated here, and the
 // lyric area of every platform is computed from its safe zones (never a fixed percentage).
 import { VIDEO } from "./config";
-import { checkEffectChoice, type EffectChoice } from "./effects";
+import { checkEffectChoice, type EffectChoice } from "./effects/names";
 
 export type SafeZone = { top: number; bottom: number; left: number; right: number }; // fractions of the frame
 export type Format = { width: number; height: number };

@@ -39,6 +39,7 @@ import { autoSection, clockText, finishedBeforeStart, sectionCuts, startsAfterEn
 import { RECENT_WINDOW, type ClipOrder } from "../shots";
 import { analyzeSong } from "./analysis";
 import { loadBrand, type Brand } from "./brand";
+import { readProjectSettings, rememberCollection, rememberedCollection, updateProjectSettings } from "./project-settings";
 import { prepareForFormat, syncCollection, type CollectionSync, type PreparedForFormat } from "./collection";
 import { fontFileRefs, loadFontCatalog, resolveFace, type FontCatalog } from "./font-catalog";
 import { sha256File, toolInfo, writeManifest, type Manifest } from "./manifest";
@@ -76,6 +77,7 @@ export type MakeOptions = {
   platforms?: string; // "reels,tiktok,shorts" or "all"; default: the "standard" preset
   allowFill?: boolean; // use sources of the other orientation, shown whole over a blurred copy
   title?: string; // song title (saved to the project; default: the song's file name)
+  artist?: string; // saved to the project (default "Life Lyrics"); its brand folder brand\<artist>\ if there is one
   ep?: string; // publish.txt: 'From the EP "<name>"'
   cover?: string; // YouTube cover layout: the square cover image (stored with the project)
   layout?: YouTubeLayout; // YouTube layout (default from the preset: cover)
@@ -281,7 +283,6 @@ export function qaSummaryFromFile(file: string): string {
   return m[1] === "PASS" ? "PASS" : `WARN (${(m[2] ?? "").split("; ").map((r) => r.toLowerCase()).join(", ")})`;
 }
 
-// WORKSPACE_DIR\projects\<id>\exports\<YYYY-MM-DD_HHmm>\ (with -2, -3, ... if that minute exists).
 // Lyric effects: --line-effect / --hook-effect, else the platform's motion (platforms.json), else
 // brand.json motion (glide verses, karaoke-highlight hooks by default).
 export function chooseEffects(
@@ -296,25 +297,7 @@ export function chooseEffects(
   return { verse: verse.choice, hook: hook.choice, from: { verse: verse.from, hook: hook.from } };
 }
 
-// The collection a project used last ("--collection" becomes optional): projects/<id>/settings.json.
-const settingsFile = (ws: Workspace, projectId: string) => absPath(ws, `projects/${projectId}/settings.json`);
-function readSettings(ws: Workspace, projectId: string): Record<string, unknown> {
-  try {
-    return JSON.parse(readFileSync(settingsFile(ws, projectId), "utf8")) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
-export function rememberedCollection(ws: Workspace, projectId: string): { name: string; folder?: string } | null {
-  const c = readSettings(ws, projectId).collection as { name?: unknown; folder?: unknown } | undefined;
-  return c && typeof c.name === "string" ? { name: c.name, ...(typeof c.folder === "string" ? { folder: c.folder } : {}) } : null;
-}
-export function rememberCollection(ws: Workspace, projectId: string, collection: { name: string; folder?: string }): void {
-  const file = settingsFile(ws, projectId);
-  mkdirSync(path.dirname(file), { recursive: true });
-  writeFileSync(file, `${JSON.stringify({ ...readSettings(ws, projectId), collection }, null, 2)}\n`);
-}
-
+// WORKSPACE_DIR\projects\<id>\exports\<YYYY-MM-DD_HHmm>\ (with -2, -3, ... if that minute exists).
 export function exportFolder(ws: Workspace, projectId: string, now: Date): string {
   const p = (n: number) => String(n).padStart(2, "0");
   const name = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}_${p(now.getHours())}${p(now.getMinutes())}`;
@@ -396,21 +379,28 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
   try {
     for (const f of [options.song, options.lyrics]) if (!existsSync(f)) throw new Error(`File not found: ${f}`);
 
-    // Presets, brand and fonts first: a mistake there should fail before the slow steps.
+    // Presets and fonts first: a mistake there should fail before the slow steps.
     const presets = loadPresets(options.presetsFile);
     const chosenPlatforms = choosePlatforms(options.platforms, presets);
     const catalog = loadFontCatalog(ws.dir);
     for (const problem of catalog.problems) log(`font file skipped: ${problem}`);
-    const brand = loadBrand(ws.dir, catalog);
+
+    const sp = await findOrCreateSongProject(ws, path.resolve(options.song), log);
+    log(`project "${sp.project.title}" (${sp.created ? "new" : "found by the song's content"})`);
+    if (options.artist?.trim() && options.artist.trim() !== sp.project.artist) {
+      sp.project = ws.db.update(projectTable).set({ artist: options.artist.trim() }).where(eq(projectTable.id, sp.project.id)).returning().get();
+    }
+    // The artist's brand (brand\<artist>\brand.json if there is one, else brand\brand.json).
+    const brand = loadBrand(ws.dir, catalog, sp.project.artist);
     if (brand.created) log(`brand settings created: ${brand.file} (edit fonts, colour and logo there)`);
     const styles = loadStyles(ws, catalog, {
       font: options.font,
       fontHook: options.fontHook,
       brandFonts: brand.brand.useForLyrics ? { verse: brand.brand.verseFont.family, hook: brand.brand.hookFont.family } : undefined,
     });
-
-    const sp = await findOrCreateSongProject(ws, path.resolve(options.song), log);
-    log(`project "${sp.project.title}" (${sp.created ? "new" : "found by the song's content"})`);
+    // The EP: --ep (remembered with the project), else the project's (from the studio or an earlier run).
+    if (options.ep?.trim()) updateProjectSettings(ws, sp.project.id, { ep: options.ep.trim() });
+    const ep = options.ep?.trim() || readProjectSettings(ws, sp.project.id).ep;
     // The clip collection: --collection, else the one this project used last time.
     const remembered = options.collection ? null : rememberedCollection(ws, sp.project.id);
     if (!options.collection && !remembered) {
@@ -482,7 +472,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     }
     const shared: Shared = {
       ws, options, log, now, leadMs, lyricsOffsetMs, catalog, styles, brand, logo, sp, analysis, alignment, lines, reports, numbers,
-      sectionLines, collection, collectionRemembered: !!remembered, tool, rootDir, getProject: () => project,
+      sectionLines, collection, collectionRemembered: !!remembered, ep, tool, rootDir, getProject: () => project,
     };
     const results: PlatformResult[] = [];
     for (const [index, name] of chosenPlatforms.names.entries()) {
@@ -526,6 +516,7 @@ type Shared = {
   catalog: FontCatalog;
   styles: StyleFaces;
   brand: ReturnType<typeof loadBrand>;
+  ep: string | undefined; // --ep or the project's remembered EP
   logo: LogoImage | null;
   sp: Awaited<ReturnType<typeof findOrCreateSongProject>>;
   analysis: Awaited<ReturnType<typeof analyzeSong>>;
@@ -943,7 +934,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
           outFile: result.thumbnailFile,
           log,
         });
-        const pack = publishText(ws.dir, { song: project.title, artist: project.artist, lyricsTxt: readFileSync(alignment.lyricsTxt, "utf8"), year: sh.now.getFullYear(), ep: options.ep });
+        const pack = publishText(ws.dir, { song: project.title, artist: project.artist, lyricsTxt: readFileSync(alignment.lyricsTxt, "utf8"), year: sh.now.getFullYear(), ep: sh.ep }, sh.brand.dir);
         if (pack.created) log(`publishing template created: ${pack.template} (edit it to change publish.txt)`);
         result.publishFile = path.join(exportDir, one ? "publish.txt" : `${spec.name}.publish.txt`);
         writeFileSync(result.publishFile, pack.text);

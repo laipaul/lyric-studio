@@ -4,7 +4,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { checkEffectChoice, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, type EffectChoice } from "../effects";
+import { checkEffectChoice, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, type EffectChoice } from "../effects/names";
+import { safeName } from "@lyric/db";
+
 import type { Corner } from "../youtube";
 import type { FontCatalog } from "./font-catalog";
 import { findFamily } from "./font-catalog";
@@ -48,8 +50,25 @@ export function brandDir(workspaceDir: string): string {
   return path.join(workspaceDir, "brand");
 }
 
-export function loadBrand(workspaceDir: string, catalog: FontCatalog): { brand: Brand; file: string; created: boolean; logoFile: string | null } {
-  const dir = brandDir(workspaceDir);
+export const DEFAULT_ARTIST = "Life Lyrics";
+
+// The brand folder for an artist: brand\<artist>\ when it has a brand.json (e.g. brand\Pômé\),
+// otherwise the default brand\ (Life Lyrics).
+export function brandDirFor(workspaceDir: string, artist?: string | null): string {
+  const base = brandDir(workspaceDir);
+  if (artist && artist.trim() && artist.trim() !== DEFAULT_ARTIST) {
+    const own = path.join(base, safeName(artist.trim()));
+    if (existsSync(path.join(own, "brand.json"))) return own;
+  }
+  return base;
+}
+
+export function loadBrand(
+  workspaceDir: string,
+  catalog: FontCatalog,
+  artist?: string | null,
+): { brand: Brand; file: string; dir: string; created: boolean; logoFile: string | null } {
+  const dir = brandDirFor(workspaceDir, artist);
   const file = path.join(dir, "brand.json");
   let created = false;
   if (!existsSync(file)) {
@@ -93,5 +112,5 @@ export function loadBrand(workspaceDir: string, catalog: FontCatalog): { brand: 
   if (!(brand.logo.size > 0 && brand.logo.size <= 0.5)) problems.push("logo.size must be between 0 and 0.5 (a fraction of the video width)");
   if (problems.length) throw new Error(`Problems in ${file}:\n  - ${problems.join("\n  - ")}`);
   const logo = path.join(dir, brand.logo.file);
-  return { brand, file, created, logoFile: existsSync(logo) ? logo : null };
+  return { brand, file, dir, created, logoFile: existsSync(logo) ? logo : null };
 }

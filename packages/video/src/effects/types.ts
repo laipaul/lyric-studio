@@ -3,12 +3,12 @@
 // interpolate / Easing, no timers), so preview, render and tests give identical results.
 import { Easing } from "remotion";
 
-export type Intensity = "subtle" | "balanced" | "expressive";
-export const INTENSITIES: readonly Intensity[] = ["subtle", "balanced", "expressive"];
+import type { EasingName, EffectChoice, Intensity } from "./names";
+
+export type { EasingName, EffectChoice, Intensity };
 // How strongly an effect moves, blurs or glows: subtle = 0.6x, balanced = 1x, expressive = 1.5x.
 export const AMOUNT: Record<Intensity, number> = { subtle: 0.6, balanced: 1, expressive: 1.5 };
 
-export type EasingName = "ease-in-out" | "ease-out" | "ease-in" | "linear";
 export const EASINGS: Record<EasingName, (t: number) => number> = {
   "ease-in-out": Easing.bezier(0.42, 0, 0.58, 1), // CSS ease-in-out
   "ease-out": Easing.bezier(0, 0, 0.58, 1),
@@ -16,8 +16,6 @@ export const EASINGS: Record<EasingName, (t: number) => number> = {
   linear: (t) => t,
 };
 
-// What the user picks (brand.json motion, platforms.json motion, --line-effect / --hook-effect).
-export type EffectChoice = { name: string; intensity: Intensity; durationMs?: number; easing?: EasingName };
 
 // The look of a whole line. y / x in px (added to its resting place), blur in px, glow 0-1.
 export type LineLook = { opacity: number; x: number; y: number; scale: number; blur: number; glow: number };

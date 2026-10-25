@@ -5,7 +5,7 @@
 //   [--font "Family"] [--font-hook "Family"] [--pins pins.txt] [--parallel N] [--resume] [--no-open]
 //   [--line-effect glide[:subtle|balanced|expressive]] [--hook-effect karaoke-highlight[:...]]
 //   [--platforms reels,tiktok,shorts,youtube | all] [--allow-fill] [--title "Song title"]
-//   [--cover cover.jpg] [--layout cover|stills|clips] [--stills stills.txt] [--no-grain] [--no-glow] [--ep "EP name"]
+//   [--cover cover.jpg] [--layout cover|stills|clips] [--stills stills.txt] [--no-grain] [--no-glow] [--ep "EP name"] [--artist "Pômé"]
 // One command from a song to N finished variations with manifests and QA reports, per platform.
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -30,6 +30,7 @@ try {
       "allow-fill": { type: "boolean", default: false },
       title: { type: "string" },
       ep: { type: "string" },
+      artist: { type: "string" },
       cover: { type: "string" },
       layout: { type: "string" },
       stills: { type: "string" },
@@ -116,6 +117,7 @@ try {
     allowFill: values["allow-fill"],
     title: values.title,
     ep: values.ep,
+    artist: values.artist,
     cover: resolve(values.cover),
     layout: values.layout as "cover" | "stills" | "clips" | undefined,
     stills: resolve(values.stills),

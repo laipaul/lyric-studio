@@ -1,28 +1,22 @@
-import { Music } from "lucide-react";
+import { connection } from "next/server";
+import { Suspense } from "react";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { knownArtists, listSongs } from "@lyric/video/library";
 
-// Home: placeholder. Song drop and recent projects arrive in a later step.
-export default function HomePage() {
+import { LibraryView } from "@/components/library-view";
+import { withWorkspace } from "@/lib/workspace";
+
+// The start page: the Library of songs (from studio.db and the folders "pnpm make" writes).
+export default function LibraryPage() {
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 p-8">
-      <div>
-        <h1 className="text-2xl font-semibold">Home</h1>
-        <p className="text-muted-foreground text-sm">Create a project from a song.</p>
-      </div>
-
-      <div className="text-muted-foreground flex h-48 flex-col items-center justify-center gap-2 rounded-xl border border-dashed">
-        <Music className="size-8" />
-        <p className="text-sm">Drop a song here (coming in a later step)</p>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent projects</CardTitle>
-          <CardDescription>No projects yet.</CardDescription>
-        </CardHeader>
-        <CardContent />
-      </Card>
-    </div>
+    <Suspense fallback={<div className="text-muted-foreground p-8 text-sm">Loading your library…</div>}>
+      <Library />
+    </Suspense>
   );
+}
+
+async function Library() {
+  await connection(); // always fresh: read the workspace on every visit
+  const { songs, artists } = withWorkspace((ws) => ({ songs: listSongs(ws), artists: knownArtists(ws) }));
+  return <LibraryView songs={songs} artists={artists} />;
 }

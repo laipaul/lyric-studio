@@ -439,6 +439,31 @@ Cause: a line was treated as sung until the next line started (and the next line
   the summary, logo placement on every platform and corner, QA catching a mid-frame logo, logo off on
   9:16 by default and on when listed.
 
+### Step 6.1 — Library, New song, desktop app ✅ (to verify on the Windows PC)
+- The Library is the start page: a card per song (cover or Cinzel title, artist / EP / length,
+  per-platform videos of the latest run with PASS / WARN / FAILED / Rendering / — and the run count,
+  last made date), search, Life Lyrics look (near-black, Cinzel headings, accent pink #E8A3B5, bundled
+  Inter + Cinzel). Data from studio.db and the export folders (no rendering changes).
+- "+ New song": song + lyrics.txt required, cover / hints .lrc / title / artist / EP optional; stored
+  with the project (lyrics in projects\<id>\lyrics\lyrics.txt, cover, hints as the stored hint, EP in
+  settings.json); the same song again updates it (no duplicates); clear messages for wrong files.
+  The song page is a placeholder until 6.2; the Tasks menu is in the header (live in 6.2).
+- Artist per project with a dropdown of used artists (and brand folders); `pnpm make --artist`;
+  per-artist brand folder workspace\brand\<artist>\ (brand.json, logo, publish template), else the
+  default Life Lyrics brand. The EP is remembered with the project and used by publish.txt.
+- Desktop app: "Start Lyric Studio.cmd" (background, minimised, builds after an update, waits until
+  studio and audio answer, opens Edge in app mode; already running: just opens), "Stop Lyric
+  Studio.cmd", "Create Desktop Shortcut.cmd" (icon from the logo). PWA: manifest, icons (192, 512,
+  maskable, .ico) made by FFmpeg from workspace\brand\logo.png and cached by its content, service
+  worker; Chromium reports no installability errors. The studio listens on 127.0.0.1 only
+  (`pnpm dev` too; STUDIO_HOST to change).
+- Effect-name checks moved to a Remotion-free module (effects/names.ts) so the studio's server can
+  read brand settings; rendering is unchanged.
+- Tests: new-song checks, create / update without duplicates, artists list, song card counts and
+  status, per-artist brand, app icons (and remade on a new logo), localhost default, --artist / --ep in
+  pnpm make. Cloud check: built app, browser run (library, dialog, upload, duplicate, wrong file,
+  song page), localhost-only, app:serve start in 12 s and 4 s without a rebuild.
+
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -493,7 +518,9 @@ Cause: a line was treated as sung until the next line started (and the next line
 - The workspace service is used by tests only so far; commands and UI that use it come in later steps.
 
 ## Next
-1. Verify Step 5g.3 + 5g.3b (Canvas with fallbacks, logo rule) on the PC.
-2. Step 5g.4 (loop layout).
-3. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project
+1. Verify Step 6.1 on the PC (and 5g.3 + 5g.3b, Canvas with fallbacks and the logo rule).
+2. Step 6.2 (song page: Generate via the worker, exports, compare, ready to post), then 6.3 (content
+   board with manually entered results).
+3. Step 5g.4 (loop layout).
+4. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project
    (confirmed by the user) and plug into the same render-time layer as the lyrics offset.

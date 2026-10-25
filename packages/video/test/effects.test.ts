@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   EFFECTS,
+  EFFECT_NAMES,
   GAP_FADE_FRAMES,
   GLIDE_LIFT_PX,
   INTENSITIES,
@@ -73,6 +74,7 @@ describe("lyric effects registry", () => {
   it("has the 8 effects, glide first (the default)", () => {
     expect(EFFECTS.map((e) => e.name)).toEqual(["glide", "cinematic-fade", "soft-blur", "dreamy-glow", "word-reveal", "karaoke-highlight", "floating", "typewriter"]);
     expect(EFFECTS.filter((e) => e.unit === "word").map((e) => e.name)).toEqual(["word-reveal", "karaoke-highlight", "typewriter"]);
+    expect(EFFECTS.map((e) => e.name)).toEqual([...EFFECT_NAMES]); // the settings checks know every module
   });
 
   it("parses name[:intensity] and JSON choices, with clear messages", () => {

@@ -206,6 +206,15 @@ type StoredHint = { source: string; copy: string; sha256: string; stored_at: str
 
 // The hint file for this alignment: a new --hint is stored for the project; without --hint the
 // stored one is reused; --no-hint (or a lost copy) aligns without it, with a clear warning.
+// Stores a hints file (tapped times) with the project, as the first --hint does: later alignments
+// use it automatically. Returns the stored copy's name.
+export function storeProjectHint(ws: Workspace, projectId: string, hintFile: string): string {
+  const dir = absPath(ws, `projects/${projectId}/lyrics`);
+  mkdirSync(dir, { recursive: true });
+  projectHint(dir, { hint: hintFile }, () => {}, []);
+  return (JSON.parse(readFileSync(path.join(dir, "hint.json"), "utf8")) as StoredHint).copy;
+}
+
 function projectHint(
   dir: string,
   options: { hint?: string; noHint?: boolean },

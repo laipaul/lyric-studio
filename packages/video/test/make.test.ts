@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { REPO_ROOT, clip, ffmpegBin, lyricLine, project, openWorkspace, renderJob, seedStylePresets, variation, type Workspace } from "@lyric/db";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { EFFECTS, lyricArea, sectionWindow, toSrt, type EffectsPreviewProps } from "../src";
@@ -19,6 +20,7 @@ import {
   makeVideos,
   planVariations,
   readManifest,
+  readProjectSettings,
   latestExportFolder,
   qaSummaryFromFile,
   publishText,
@@ -650,12 +652,10 @@ describe("platform presets (stand-in renderer)", () => {
     expect(existsSync(path.join(wsDir, "brand", "publish-template.txt"))).toBe(true);
     expect(readFileSync(path.join(yt.exportDir, "v1.qa.txt"), "utf8")).toContain("End-screen area clear");
 
-    // The next run finds the stored cover without --cover; without --ep there is no EP line.
+    // The next run finds the stored cover and EP without --cover / --ep (both stored with the project).
     const again = await run({ platforms: "youtube", thumbnailRenderer: async (o) => (writeFileSync(o.outFile, "jpg"), o.outFile) });
     expect(readManifest(again.variations[0].manifestFile).props.layout).toBe("cover");
-    const plain = readFileSync(again.variations[0].publishFile!, "utf8");
-    expect(plain).not.toContain("From the EP");
-    expect(plain).toContain("the official lyric video.\n\nVerse 1 line one");
+    expect(readFileSync(again.variations[0].publishFile!, "utf8")).toContain('the official lyric video.\nFrom the EP "In The Mood for Life"\n\nVerse 1 line one');
   });
 
   it("canvas: a seamless loop of whole bars, no lyrics, no text, no logo, no audio, no .srt", async () => {
@@ -846,6 +846,23 @@ describe("platform presets (stand-in renderer)", () => {
     const fresh = path.join(root, "fresh-song.wav");
     makeSong(fresh, 14);
     await expect(run({ song: fresh, platforms: "tiktok", variations: 1, collection: undefined })).rejects.toThrow(/--collection <name> is needed the first time for "fresh-song"/);
+  });
+
+  it("--artist is stored with the project and picks that artist's brand folder; --ep is remembered", async () => {
+    const own = path.join(wsDir, "brand", "Pômé");
+    mkdirSync(own, { recursive: true });
+    writeFileSync(path.join(own, "brand.json"), JSON.stringify({ accentColour: "#88AACC" }));
+    try {
+      const r = await run({ platforms: "reels", variations: 1, artist: "Pômé", ep: "Night Songs" });
+      const m = readManifest(r.variations[0].manifestFile);
+      expect(m.props.lyricEffects!.accent).toBe("#88AACC"); // brand\Pômé\brand.json
+      const p = ws.db.select().from(project).where(eq(project.title, r.projectTitle)).get()!;
+      expect(p.artist).toBe("Pômé");
+      expect(readProjectSettings(ws, p.id).ep).toBe("Night Songs");
+    } finally {
+      await run({ platforms: "reels", variations: 1, artist: "Life Lyrics" }); // back to the default for the other tests
+      rmSync(own, { recursive: true, force: true });
+    }
   });
 
   it("--resume per platform renders only what is missing in each platform folder", async () => {

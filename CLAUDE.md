@@ -5,10 +5,11 @@ A personal, single-user, LOCAL lyric-video studio for the artist "Life Lyrics".
 Input: one song (WAV/MP3) + lyrics + a pool of video clips.
 Output: several beat-synced lyric videos as MP4, ready for Instagram Reels, TikTok, YouTube Shorts (9:16, 1080x1920), YouTube (16:9) and Spotify Canvas. Size, length, variations, safe zones, text scale and bitrate come per platform from `presets/platforms.json` (editable); without --platforms the "standard" preset applies.
 
-Three screens:
-- **Home**: drop a song to create a project; list recent projects.
+Screens (Step 6, in the Life Lyrics look: dark, Cinzel headings, accent pink):
+- **Library** (start page): song cards (cover, title, artist/EP, per-platform video counts and status) with search; "+ New song" (WAV/MP3 + lyrics.txt required; cover, hints .lrc, title, artist with a dropdown of used artists, EP optional) creates or updates the project (found by the song's content).
+- **Song page**: Generate panel, exports grid, compare, "ready to post" (Step 6.2).
+- **Content board**: Generated -> Approved -> Scheduled -> Published, with manually entered results (Step 6.3).
 - **Studio**: left panel (project, sections, lyrics, text styles, cinematic bars), centre phone-shaped live preview with "Render video", right panel (media collections, add clips, filter all / in use / unused), bottom bar (play, undo, shuffle, Beat Synced with cut rate 0.5x / 1x / 2x / Off, timeline with clip thumbnails and beat ruler), variations strip under the preview.
-- **Library**: tabs Projects, Exports, Uploads, Collections, with search.
 A header "Tasks" menu shows render progress.
 
 ## Out of scope — never build these
@@ -22,7 +23,7 @@ Payments, credits, user accounts, login, multi-user, cloud hosting, cloud render
 - `apps/worker`: Node render worker that processes RenderJob rows
 - SQLite via Drizzle ORM, file `workspace/studio.db`
 - FFmpeg for thumbnails and clip normalisation (30 fps, the platform's size, cover-crop; photos as JPEG)
-- One `pnpm dev` command starts studio + worker + audio service
+- One `pnpm dev` command starts studio + worker + audio service; "Start Lyric Studio.cmd" / "Stop Lyric Studio.cmd" do the same in the background (production build, rebuilt after an update) and open the app; the studio listens on 127.0.0.1 only (STUDIO_HOST to change); installable PWA (manifest, icons made from workspace\brand\logo.png, service worker), no internet needed
 
 ## Data model
 - Project: id, title, artist, cover_path, audio_path, bpm, duration_ms, downbeat_offset (0-3: bar 1 starts N beats later than detected), created_at
@@ -60,6 +61,7 @@ Workspace folder layout: `workspace/projects/<id>/audio`, `workspace/projects/<i
 - Clean cuts: a line's singing ends at its last word's end time (word timings from the aligned LRC: `pnpm align` writes a trailing end tag per line). A cut is clean at any bar boundary after the last word ends and before the next line's first word. Only without word timings: line-start logic (a line lasts until the next starts).
 - Section ends: on a bar; TikTok and Shorts may end on any beat when no bar is clean (bars preferred); Reels keeps bar ends for the seamless loop.
 - YouTube (16:9, full song from 0:00 so the intro is kept): layouts "cover" (default: --cover, else the project's cover, else cover.jpg/cover.png next to the song; else stills, else clips, with a message), "stills" (one horizontal picture per lyric section from pauses and hooks, stills.txt or name order, 1.5 s crossfade on the downbeat nearest each section start, slow Ken Burns, subtle grain and a beat-pulsed glow, switchable) and "clips" (beat-cut montage of horizontal sources). Title + artist in the brand title font (Cinzel, wide spacing, accent colour): small at the top in the cover layout (centred over the lyrics column), over the opening seconds (gone by ~4 s) otherwise; no separate title card. Logo from WORKSPACE_DIR\brand. Cover layout: cover 0.672 of the height, active lyric 1.18x and next line 1.1x the 5g.2 sizes, zoom 1.00-1.08 with a gentle seeded drift and the background moving 30% the opposite way (parallax). Section mood on YouTube: a warm, light veil on hook (chorus) sections and a soft dark veil on verses, 2 s eased changes centred on the downbeat nearest each section start, never flashing. A full-song video must be as long as the song (QA "Video length"). The last 20 s keep the bottom-right end-screen area clear (lyrics move to a band above it). Each YouTube video gets a 1280x720 thumbnail (brand title font, logo) and publish.txt (title "<Song> (Lyrics) - Life Lyrics", description with an optional "From the EP <name>" line (--ep), the full lyrics, credits, Spotify placeholder, hashtags, tags) from WORKSPACE_DIR\brand\publish-template.txt.
+- Artist per project (default "Life Lyrics"; --artist or the New song form): titles, thumbnails, overlays and publish texts use it; its brand is workspace\brand\<artist>\brand.json when present, else workspace\brand\ (Life Lyrics). The EP is stored with the project too (--ep or the form) and reused.
 - The clip collection (and --collection-path) is remembered per project (workspace/projects/<id>/settings.json): --collection is needed the first time, later runs may leave it out ("using collection wedding (remembered)").
 - Every video on every platform gets a .srt (except the Spotify Canvas: no lyrics) with its lyric lines (times from the video's first frame).
 - Spotify Canvas (--platforms canvas): 9:16, a seamless loop of the longest whole number of bars in 3-8 s (whole beats only at very slow tempos), the strongest visual moment (FFmpeg motion/colour/contrast score, no hard scene change inside); clips too short: 1) fewer bars (loop still >= 3 s), 2) slowed down (>= 0.6x) for that loop, 3) a vertical photo with slow motion, only then an error naming what would work; the fallback used is printed; NO lyrics, NO text, NO logo, NO audio; the last 0.5 s blends into the clip frames just before the start (photos: a Ken Burns move out and back). QA: Seamless loop, No audio, Length 3-8 s.
