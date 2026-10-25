@@ -284,7 +284,7 @@
   3 platforms (folders, variations, sizes, safe zones, fades, lengths, loop, photos, LRC), --allow-fill,
   too few / no sources, edited presets file, --resume per platform; photo import in the DB.
 
-### Step 5g.1b — Timing fixes ✅ (to verify on the Windows PC)
+### Step 5g.1b — Timing fixes ✅ (accepted: tested on the Windows PC — all 8 PASS, hook-first at 0:10.8 (1.0 s before the hook), reels 31.6 s, shorts 45.2 s, no cut lines, hints stored)
 Problems seen on the PC: Reels 38.4 s (window 25.5-34.5), Shorts 63.2 s (42.5-57.5), TikTok cut
 line 7 "Still burning through the dark", Reels started 0:04.0, ~8 s before the hook.
 Cause: a line was treated as sung until the next line started (and the next line counted from
@@ -329,6 +329,9 @@ Cause: a line was treated as sung until the next line started (and the next line
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
 
 ## Known issues
+- TikTok (target 25 s) ended at 31.6 s like Reels on the user's song: no bar falls inside a gap between
+  lines between ~19 and ~29 s after the start, so the longer fallback (up to +30%) was used. Possible
+  later option: allow ending on a beat (not only a bar) for short-form.
 - `pnpm make`: cinematic bars on every other variation together with Simple/Bold alternating means
   bars always come with Bold (v2, v4, v6). Easy to change if you want other pairs.
 - `pnpm rerender` renders the stored props with the current composition; after a Lyric Studio update
