@@ -272,6 +272,10 @@ changed since.
 | `--lead`, `--rate`, `--energy`, `--font`, `--font-hook`, `--pins`, `--downbeat-offset` | | as for `pnpm render:test` |
 | `--platforms reels,tiktok,shorts` / `all` | (standard) | one folder per platform, presets from `presets\platforms.json` |
 | `--allow-fill` | | also use sources of the other orientation, shown whole over a blurred copy |
+| `--title "My Song"` | file name | the song's title (title overlay, thumbnail, publish.txt; saved) |
+| `--cover <image>` | stored cover | YouTube cover layout (stored with the project) |
+| `--layout cover\|stills\|clips` | `cover` | YouTube layout |
+| `--stills <file>`, `--no-grain`, `--no-glow` | | YouTube stills layout |
 | `--parallel N` | `1` on Windows | videos rendered at the same time |
 | `--resume` | | in the latest export folder, render only the videos that are missing or failed (refused if the section, lyrics, cuts, settings or clips changed since) |
 | `--no-open` | | do not open the folder at the end |
@@ -295,16 +299,47 @@ run's folder (`exports\<date>\reels\v1.mp4 …`) with its own manifests and QA, 
 | shorts | 1080x1920 | ~50 s, hook-first | 2 | |
 
 Hook-first: the video starts at most one bar before the first hook line, so the hook is heard
-within about 2.5 s. It ends on a bar after a line's last word has ended and before the next line
-starts (never mid-word), within ±15% of the target; if that is impossible, a clean end up to 25%
+within about 2.5 s. It ends on a bar (TikTok and Shorts: on any beat if no bar fits) after a line's
+last word has ended and before the next line starts (never mid-word), within ±15% of the target; if that is impossible, a clean end up to 25%
 shorter is chosen before a longer one, and the reason line says so. A video that does cut a sung
 line gets QA WARN with the line named.
-| youtube, canvas | | | | come in Steps 5g.2 / 5g.3 |
+| youtube | 1920x1080 | the whole song | 1 | cover / stills / clips layouts, end-screen area, thumbnail, publish.txt (see below) |
+| canvas | | | | comes in Step 5g.3 |
 
 Everything above is in `presets\platforms.json` and can be edited (size, length, number of videos,
 safe zones, where the lyrics sit, text scale, bitrate, fade-out). `pnpm make` checks the file and
 names any wrong value. The lyrics are placed from each platform's safe zones (centred in the free
 area, slightly above its middle), never outside them.
+
+### YouTube (`--platforms youtube`)
+
+```powershell
+cd D:\videomaker
+pnpm make "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test\lyrics.txt" --collection beach --platforms youtube --cover "D:\videomaker\workspace\test\cover.jpg" --title "My Song"
+```
+
+A 1920x1080 video of the whole song (from 0:00) in `exports\<date>\youtube\`, with:
+
+- **Layout** (`--layout cover|stills|clips`, default `cover`):
+  - **cover**: your square cover on the left with a very slow zoom and a soft shadow, the same cover
+    blurred and darkened behind it, the lyrics on the right (current line large, next line faded),
+    title and "Life Lyrics" small at the top, your logo. The cover comes from `--cover` (stored with
+    the project, so next time it is found by itself), else `cover.jpg` / `cover.png` next to the song.
+    Without a cover it switches to stills, then clips, and says so.
+  - **stills**: one horizontal photo per lyric section (intro, verse 1, chorus 1, …, found from the
+    blank lines and `* ` hooks). Choose them in `stills.txt` next to `lyrics.txt` (or in the collection
+    folder; or `--stills <file>`): `chorus = 03_bride.jpg`, `chorus 2 = 07_dance.jpg`, `verse = …`,
+    `bridge = …`, `intro = …`, `outro = …`; otherwise in file-name order. 1.5 s crossfades on the beat,
+    slow zoom and pan, subtle film grain and a soft glow pulsing on the beat (`--no-grain`, `--no-glow`).
+  - **clips**: the beat-cut montage with horizontal clips and photos.
+- The title and "Life Lyrics" over the opening seconds (gone by ~4 s) in Cinzel and the accent colour.
+- In the **last 20 s** the bottom-right stays free for YouTube's end-screen elements (the lyrics move up).
+- `thumbnail.jpg` (1280x720) and `publish.txt` (title, description with the full lyrics, credits,
+  Spotify link placeholder, hashtags, tags). Edit `workspace\brand\publish-template.txt` to change
+  the wording; placeholders: `{{song}}`, `{{artist}}`, `{{lyrics}}`, `{{songTag}}`, `{{artistTag}}`, `{{year}}`.
+- `--title "My Song"` sets the song's title (saved with the project); otherwise it is the file name.
+
+Every video on every platform also gets a `.srt` caption file next to it (`v1.srt`, …).
 
 **Clips and photos**: a collection may mix vertical and horizontal clips and photos (`.jpg`, `.png`,
 `.webp`). Vertical videos use vertical (or square) sources; horizontal ones are skipped and listed,

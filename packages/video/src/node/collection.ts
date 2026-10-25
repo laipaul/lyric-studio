@@ -61,6 +61,7 @@ export type CollectionSync = {
   changed: string[];
   unchanged: string[];
   removed: string[];
+  duplicates: string[][]; // files with identical content (they look like the same clip)
 };
 
 export async function syncCollection(
@@ -85,7 +86,7 @@ export async function syncCollection(
   const rows = ws.db.select().from(clipTable).where(eq(clipTable.collection_id, coll.id)).all();
   const byPath = new Map(rows.map((r) => [r.path, r]));
 
-  const result: CollectionSync = { collection: coll, folder, sources: [], clips: [], added: [], changed: [], unchanged: [], removed: [] };
+  const result: CollectionSync = { collection: coll, folder, sources: [], clips: [], added: [], changed: [], unchanged: [], removed: [], duplicates: [] };
   const seen = new Set<string>();
   for (const name of files) {
     const file = path.join(folder, name);
@@ -109,6 +110,10 @@ export async function syncCollection(
     result.sources.push({ clip: clipRow, name, file, hash });
     if (options.prepare !== false) result.clips.push({ ...(await normaliseClip(ws, clipRow, name, log)), file, hash });
   }
+
+  const byHash = new Map<string, string[]>();
+  for (const src of result.sources) byHash.set(src.hash, [...(byHash.get(src.hash) ?? []), src.name]);
+  result.duplicates = [...byHash.values()].filter((names) => names.length > 1);
 
   const gone = rows.filter((r) => !seen.has(r.path));
   if (gone.length) {

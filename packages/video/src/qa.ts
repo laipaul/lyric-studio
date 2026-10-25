@@ -28,6 +28,8 @@ export type QaInput = {
   frames: { black: TimeRange[]; frozen: TimeRange[] } | null; // null: frame check not run
   sources?: { usable: number; needed: number; kind: string; platform: string } | null; // clips that suit this format
   sectionCuts?: { at: "start" | "end"; line: number; text: string; time_ms: number }[]; // sung lines cut by the section
+  endScreen?: { clear: Box; lines: number[] } | null; // YouTube: the area kept free for end-screen elements
+  frozenCheckSkipped?: boolean; // still pictures by design (YouTube cover / stills)
 };
 
 export type QaCheck = { name: string; ok: boolean; details: string[] };
@@ -130,7 +132,8 @@ export function runQa(input: QaInput): QaReport {
           (held >= 0 ? ` - shot ${held + 1} holds the last frame of ${input.shotClips[held]} (clip too short)` : ""),
       );
     }
-    checks.push({ name: "Black or frozen frames", ok: details.length === 0, details });
+    if (input.frozenCheckSkipped) details.push("frozen-frame check skipped: still pictures by design (cover / stills layout)");
+    checks.push({ name: "Black or frozen frames", ok: details.filter((d) => !d.startsWith("frozen-frame check skipped")).length === 0, details });
   } else {
     checks.push({ name: "Black or frozen frames", ok: true, details: ["not checked"] });
   }
@@ -156,6 +159,19 @@ export function runQa(input: QaInput): QaReport {
     .filter((x) => x.problem)
     .map(({ l, problem }) => `line ${l.number} "${l.text}" ${problem}`);
   checks.push({ name: "Lyrics inside the safe zone", ok: outside.length === 0, details: outside });
+
+  // YouTube: lyrics in the last seconds stay out of the end-screen area (bottom right).
+  if (input.endScreen) {
+    const c = input.endScreen.clear;
+    const overlap = input.lyrics.filter(
+      (l) => input.endScreen!.lines.includes(l.number) && l.box.right > c.left && l.box.left < c.right && l.box.bottom > c.top && l.box.top < c.bottom,
+    );
+    checks.push({
+      name: "End-screen area clear",
+      ok: overlap.length === 0,
+      details: overlap.map((l) => `line ${l.number} "${l.text}" reaches into the end-screen area (bottom right) in the last seconds`),
+    });
+  }
 
   // 7. The section never cuts a sung line at its start or end (WARN, never PASS, naming the line).
   if (input.sectionCuts) {

@@ -14,7 +14,8 @@ export type PlatformPreset = {
   aspect: string; // "9:16" (checked against width/height)
   layout: "vertical" | "youtube" | "canvas";
   length: { mode: "target"; seconds: number; tolerance: number } | { mode: "range"; min: number; max: number; hardMax: number } | { mode: "full" } | { mode: "loop"; min: number; max: number };
-  anchor: "lead-in" | "hook-first"; // lead-in: one bar before the first hook (more if a line is still sung); hook-first: at most 1 bar before it
+  anchor: "lead-in" | "hook-first";
+  endOn: "bar" | "beat"; // beat: TikTok/Shorts may end on any beat when no bar is clean (bars preferred) // lead-in: one bar before the first hook (more if a line is still sung); hook-first: at most 1 bar before it
   variations: number;
   safeZone: SafeZone;
   lyricsAt: number; // vertical position of the lyrics inside the usable area: 0 = top, 0.5 = middle
@@ -26,6 +27,25 @@ export type PlatformPreset = {
   audio: boolean;
   available: boolean; // false: comes in a later step
   note?: string;
+  youtube?: YouTubeOptions; // layout "youtube" only
+};
+
+export type YouTubeOptions = {
+  defaultLayout: "cover" | "stills" | "clips";
+  endScreen: { seconds: number; clear: { left: number; top: number } }; // bottom-right area kept free
+  grain: boolean; // stills layout
+  glow: boolean; // stills layout: beat-pulsed glow on the lyrics
+  coverZoom: [number, number]; // cover layout: from - to over the whole song
+  titleSeconds: number; // title + artist over the opening seconds (stills, clips)
+};
+
+export const DEFAULT_YOUTUBE: YouTubeOptions = {
+  defaultLayout: "cover",
+  endScreen: { seconds: 20, clear: { left: 0.5, top: 0.35 } },
+  grain: true,
+  glow: true,
+  coverZoom: [1, 1.05],
+  titleSeconds: 4,
 };
 
 // Applies when "pnpm make" runs without --platforms: today's behaviour (45-60 s, 6 variations).
@@ -125,6 +145,7 @@ export function parsePresets(json: unknown, file = "presets/platforms.json"): Re
       if (!isNum(len.min, 1, 60) || !isNum(len.max, 1, 60) || (len.min as number) > (len.max as number)) errors.push(`${where}: loop length needs min <= max (seconds)`);
     } else if (len.mode !== "full") errors.push(`${where}: length.mode must be "target", "range", "full" or "loop"`);
     if (!["lead-in", "hook-first"].includes((p.anchor as string) ?? "lead-in")) bad("anchor", 'must be "lead-in" or "hook-first"');
+    if (!["bar", "beat"].includes((p.endOn as string) ?? "bar")) bad("endOn", 'must be "bar" or "beat"');
     if (!isNum(p.variations, 1, 24) || !Number.isInteger(p.variations)) bad("variations", "must be a whole number 1-24");
     const safe = p.safeZone as Record<string, unknown> | undefined;
     if (!safe || typeof safe !== "object") bad("safeZone", "must be { top, bottom, left, right } as fractions (0.2 = 20%)");
@@ -135,6 +156,20 @@ export function parsePresets(json: unknown, file = "presets/platforms.json"): Re
     if (!isNum(p.textScale ?? 1, 0.5, 2)) bad("textScale", "must be 0.5-2");
     if (p.videoBitrate !== null && p.videoBitrate !== undefined && !(typeof p.videoBitrate === "string" && /^\d+(\.\d+)?[kKmM]$/.test(p.videoBitrate))) bad("videoBitrate", 'must be like "10M", "8000k" or null');
     if (!isNum(p.fadeOutSeconds ?? 0.5, 0, 3)) bad("fadeOutSeconds", "must be 0-3");
+    let youtube: YouTubeOptions | undefined;
+    if (p.layout === "youtube") {
+      const y = (p.youtube ?? {}) as Partial<YouTubeOptions>;
+      youtube = {
+        ...DEFAULT_YOUTUBE,
+        ...y,
+        endScreen: { ...DEFAULT_YOUTUBE.endScreen, ...y.endScreen, clear: { ...DEFAULT_YOUTUBE.endScreen.clear, ...y.endScreen?.clear } },
+      };
+      if (!["cover", "stills", "clips"].includes(youtube.defaultLayout)) errors.push(`${where}: youtube.defaultLayout must be "cover", "stills" or "clips"`);
+      if (!isNum(youtube.endScreen.seconds, 0, 60)) errors.push(`${where}: youtube.endScreen.seconds must be 0-60`);
+      if (!isNum(youtube.endScreen.clear.left, 0, 1) || !isNum(youtube.endScreen.clear.top, 0.2, 1)) errors.push(`${where}: youtube.endScreen.clear needs left 0-1 and top 0.2-1 (fractions of the frame)`);
+      if (!Array.isArray(youtube.coverZoom) || !isNum(youtube.coverZoom[0], 1, 1.3) || !isNum(youtube.coverZoom[1], 1, 1.3)) errors.push(`${where}: youtube.coverZoom must be [from, to] between 1 and 1.3`);
+      if (!isNum(youtube.titleSeconds, 0, 30)) errors.push(`${where}: youtube.titleSeconds must be 0-30`);
+    }
     if (errors.length) continue;
     out[name] = {
       name,
@@ -145,6 +180,7 @@ export function parsePresets(json: unknown, file = "presets/platforms.json"): Re
       layout: p.layout as PlatformPreset["layout"],
       length: len as PlatformPreset["length"],
       anchor: ((p.anchor as string) ?? "lead-in") as PlatformPreset["anchor"],
+      endOn: ((p.endOn as string) ?? "bar") as PlatformPreset["endOn"],
       variations: p.variations as number,
       safeZone: { top: 0, bottom: 0, left: 0, right: 0, ...(safe as Partial<SafeZone>) },
       lyricsAt: (p.lyricsAt as number) ?? 0.45,
@@ -156,6 +192,7 @@ export function parsePresets(json: unknown, file = "presets/platforms.json"): Re
       audio: p.audio !== false,
       available: p.available !== false,
       ...(typeof p.note === "string" ? { note: p.note } : {}),
+      ...(youtube ? { youtube } : {}),
     };
   }
   if (!out[STANDARD] && !errors.length) errors.push(`${file}: the "${STANDARD}" platform is missing (used when --platforms is not given)`);

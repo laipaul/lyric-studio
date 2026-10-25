@@ -27,7 +27,7 @@ import { eq } from "drizzle-orm";
 import type { Beat } from "../beats";
 import { composeProps, DEFAULT_LEAD_MS, lyricFrames, type PlatformLayout, type RenderBase, type StyleChoice } from "../compose";
 import { cleanLrc } from "../lrc";
-import { choosePlatforms, lyricArea, parsePresets, sectionWindow, STANDARD, type PlatformPreset } from "../platform";
+import { choosePlatforms, lyricArea, parsePresets, sectionWindow, STANDARD, type LyricArea, type PlatformPreset } from "../platform";
 import { VIDEO } from "../config";
 import { getCutPoints, type CutRate, type Energy } from "../cuts";
 import { matchPinClips, parsePins } from "../pins";
@@ -38,14 +38,27 @@ import { RECENT_WINDOW, type ClipOrder } from "../shots";
 import { analyzeSong } from "./analysis";
 import { loadBrand, type Brand } from "./brand";
 import { prepareForFormat, syncCollection, type CollectionSync, type PreparedForFormat } from "./collection";
-import { loadFontCatalog, type FontCatalog } from "./font-catalog";
+import { fontFileRefs, loadFontCatalog, resolveFace, type FontCatalog } from "./font-catalog";
 import { sha256File, toolInfo, writeManifest, type Manifest } from "./manifest";
 import { resolveMediaPath, type MediaRoots } from "./media";
 import { tooLongLines } from "./measure";
 import { loadStyles, lyricLineNumbers, parseSection, snapToDownbeat, songMedia, type StyleFaces } from "./prepare";
 import { detectBadFrames, measureLyrics } from "./qa-check";
-import { getBundle, renderLyricVideo, type RenderOptions } from "./render";
+import { getBundle, renderLyricVideo, renderThumbnail, type RenderOptions } from "./render";
 import { ensureAlignment, findOrCreateSongProject, matchReport, type Alignment, type AlignRunner } from "./song-project";
+import {
+  blurredBackground,
+  chooseLayout,
+  lyricAreaFor,
+  planStills,
+  publishText,
+  resolveCover,
+  thumbnailBackground,
+  writeSrt,
+  youtubeExtras,
+  youtubeLyricSafeZone,
+  type YouTubeLayout,
+} from "./youtube";
 
 export type MakeOptions = {
   song: string;
@@ -55,6 +68,12 @@ export type MakeOptions = {
   variations?: number; // default: the platform preset's number (standard: 6)
   platforms?: string; // "reels,tiktok,shorts" or "all"; default: the "standard" preset
   allowFill?: boolean; // use sources of the other orientation, shown whole over a blurred copy
+  title?: string; // song title (saved to the project; default: the song's file name)
+  cover?: string; // YouTube cover layout: the square cover image (stored with the project)
+  layout?: YouTubeLayout; // YouTube layout (default from the preset: cover)
+  stills?: string; // YouTube stills layout: stills.txt (default: next to lyrics.txt, else in the collection folder)
+  grain?: boolean; // YouTube stills: film grain (default from the preset)
+  glow?: boolean; // YouTube stills: beat-pulsed glow (default from the preset)
   presetsFile?: string; // default: presets/platforms.json
   section?: string; // "auto" (default) | "full" | "0:11-1:10"
   hint?: string;
@@ -78,6 +97,7 @@ export type MakeOptions = {
   now?: Date;
   align?: AlignRunner;
   renderer?: (options: RenderOptions) => Promise<string>; // tests: a stand-in for renderLyricVideo
+  thumbnailRenderer?: typeof renderThumbnail; // tests: a stand-in for renderThumbnail
   platform?: NodeJS.Platform;
   log?: (message: string) => void;
   onRenderProgress?: (state: RenderState[]) => void;
@@ -87,7 +107,8 @@ export type MakeOptions = {
 
 export type MakePlan = {
   platform: { name: string; label: string; index: number; count: number; folder: string };
-  sources: { usable: number; needed: number; kind: string; filled: string[]; skipped: string[] };
+  sources: { usable: number; needed: number; kind: string; filled: string[]; skipped: string[] } | null; // null: no clips used (YouTube cover / stills)
+  layout: string | null; // YouTube layout used
   brand: { file: string; created: boolean };
   project: { title: string; created: boolean };
   bpm: number;
@@ -111,6 +132,9 @@ export type VariationSpec = { index: number; name: string; order: ClipOrder; see
 export type VariationResult = VariationSpec & {
   platform: string;
   file: string;
+  srtFile: string;
+  thumbnailFile?: string; // YouTube
+  publishFile?: string; // YouTube
   manifestFile: string;
   qaFile: string;
   durationS: number;
@@ -277,11 +301,16 @@ function chooseSection(mode: string, lines: SectionLine[], beats: Beat[], durati
       ...(window ? { minMs: window.minMs, maxMs: window.maxMs, hardMaxMs: window.hardMaxMs, shortestMs: window.shortestMs } : {}),
       ...(window && preset!.length.mode === "target" ? { targetMs: window.targetMs } : {}),
       anchorMode: preset?.anchor ?? "lead-in",
+      endOn: preset?.endOn ?? "bar",
     });
     return { mode, start_ms: s.start_ms, end_ms: s.end_ms, requested: null, reason: s.reason, warnings: s.warnings, cuts: s.cuts };
   }
   const requested = mode === "full" ? { start_ms: 0, end_ms: durationMs } : parseSection(mode);
   requested.end_ms = Math.min(requested.end_ms, durationMs);
+  if (mode === "full" && preset?.length.mode === "full") {
+    // A full-song video (YouTube) starts at 0:00: snapping to the first bar would cut the intro.
+    return { mode, start_ms: 0, end_ms: requested.end_ms, requested, reason: `whole song: 0:00 - ${clockText(requested.end_ms)} (from the very start, so the intro is kept)`, warnings: [], cuts: [] };
+  }
   const start = snapToDownbeat(beats, requested.start_ms);
   const snapped = start !== requested.start_ms ? ` (start snapped from ${clockText(requested.start_ms)} to the nearest bar start)` : "";
   const reason = `${mode === "full" ? "whole song" : "as given"}: ${clockText(start)} - ${clockText(requested.end_ms)}${snapped}; ${((requested.end_ms - start) / 1000).toFixed(1)} s`;
@@ -330,6 +359,9 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       .where(eq(projectTable.id, sp.project.id))
       .returning()
       .get();
+    if (options.title && options.title !== project.title) {
+      project = ws.db.update(projectTable).set({ title: options.title }).where(eq(projectTable.id, project.id)).returning().get();
+    }
     const lyricsOffsetMs = project.lyrics_offset_ms;
 
     const alignment = await ensureAlignment(ws, { ...sp, project }, {
@@ -470,7 +502,38 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
   // Sources that suit this format.
   const prepared = await prepareForFormat(ws, sh.collection.sources, format, { allowFill: options.allowFill, log });
   const needed = Math.min(RECENT_WINDOW + 1, Math.max(1, sh.collection.sources.length));
-  if (!prepared.clips.length) {
+  const ytWarnings: string[] = [];
+  let ytLayout: YouTubeLayout | null = null;
+  let coverSrc: string | null = null;
+  let coverBackground: string | null = null;
+  let stillsPlan: ReturnType<typeof planStills> | null = null;
+  if (preset.layout === "youtube") {
+    const row = ws.db.select().from(projectTable).where(eq(projectTable.id, project.id)).get()!;
+    const cover = resolveCover(ws, row, { cover: options.cover, songFile: path.resolve(options.song) });
+    const photos = prepared.clips.filter((c) => c.kind === "photo" && c.fit === "cover");
+    const choice = chooseLayout(options.layout ?? preset.youtube!.defaultLayout, { cover: !!cover, photos: photos.length, sources: prepared.clips.length });
+    if (!choice.layout) throw new Error(`${preset.name}: ${choice.message}`);
+    if (choice.message) ytWarnings.push(`${preset.name}: ${choice.message}`);
+    ytLayout = choice.layout;
+    coverSrc = ytLayout === "cover" && cover ? cover.stored : null;
+    if (coverSrc) {
+      log(`${preset.name}: cover from ${cover!.from}`);
+      coverBackground = await blurredBackground(ws, coverSrc, format);
+    }
+    if (ytLayout === "stills") {
+      const stillsFile =
+        options.stills ?? [path.join(path.dirname(alignment.lyricsTxt), "stills.txt"), path.join(sh.collection.folder, "stills.txt")].find((f) => existsSync(f));
+      if (options.stills && !existsSync(options.stills)) throw new Error(`stills.txt not found: ${options.stills}`);
+      stillsPlan = planStills({
+        lines, beats: analysis.beats, photos, stillsText: stillsFile ? readFileSync(stillsFile, "utf8") : null, durationMs: analysis.duration_ms,
+        startMs: chosen.start_ms, durationInFrames: Math.round(((chosen.end_ms - chosen.start_ms) * VIDEO.fps) / 1000), seed: 1,
+      });
+      ytWarnings.push(...stillsPlan.warnings);
+      log(`${preset.name}: stills ${stillsPlan.sections.join(", ")}${stillsFile ? ` (from ${stillsFile})` : " (file-name order)"}`);
+    }
+  }
+  const usesClips = ytLayout === null || ytLayout === "clips";
+  if (usesClips && !prepared.clips.length) {
     throw new Error(
       `${preset.name}: none of the ${sh.collection.sources.length} source(s) in "${sh.collection.collection.name}" is ${prepared.kind} ` +
         `(${format.width}x${format.height}); add ${prepared.kind} clips or photos, or use --allow-fill`,
@@ -485,7 +548,12 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
     id: c.clip.id, name: c.name, duration_ms: c.durationMs, path: c.path, durationFrames: c.durationFrames, kind: c.kind, fit: c.fit,
   }));
 
-  const warnings = [...(position.index === 0 ? sh.alignment.warnings : []), ...chosen.warnings.map((w) => `${preset.name}: ${w}`)];
+  const warnings = [
+    ...(position.index === 0 ? sh.alignment.warnings : []),
+    ...(position.index === 0 ? sh.collection.duplicates.map((d) => `these files have identical content (the same clip twice): ${d.join(", ")}`) : []),
+    ...chosen.warnings.map((w) => `${preset.name}: ${w}`),
+    ...ytWarnings,
+  ];
   let pins: RenderBase["pins"] = [];
   if (options.pins) {
     const parsed = parsePins(readFileSync(options.pins, "utf8"));
@@ -503,10 +571,17 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
     ? [...finishedBeforeStart(sh.sectionLines, chosen.start_ms, leadMs, lyricsOffsetMs), ...startsAfterEnd(sh.sectionLines, chosen.end_ms, leadMs, lyricsOffsetMs)]
     : [];
   const shown = preset.lyrics ? lines.map((_, i) => i).filter((i) => !hidden.includes(i)) : [];
-  const layout: PlatformLayout = { format, safeZone: preset.safeZone, lyricsAt: preset.lyricsAt, textScale: preset.textScale, loopEnding: preset.loopEnding };
+  const layout: PlatformLayout = {
+    format,
+    safeZone: preset.safeZone,
+    lyricsAt: preset.lyricsAt,
+    textScale: preset.textScale,
+    loopEnding: preset.loopEnding,
+    ...(ytLayout ? { lyricSafeZone: youtubeLyricSafeZone(ytLayout, preset.safeZone) } : {}),
+  };
   const base: RenderBase = {
     plan,
-    clips: preparedClips,
+    clips: usesClips ? preparedClips : [],
     audio: preset.audio ? audio : null,
     durationInFrames: plan.end_frame - plan.start_frame,
     lyrics: shown.map((i) => allLyrics[i]),
@@ -528,7 +603,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
   );
   for (const style of ["simple", "bold"] as const) {
     const s = styles[style];
-    const area = lyricArea(format, preset.safeZone, preset.lyricsAt);
+    const area = ytLayout ? lyricAreaFor(ytLayout, preset) : lyricArea(format, preset.safeZone, preset.lyricsAt);
     const textSize = Math.round(s.entry.textSize * preset.textScale);
     for (const l of tooLongLines(visible.map((i) => lines[i]), { main: s.main, hook: s.hook, textCase: s.entry.style.textCase, textSize, area })) {
       const n = numbers[lines.indexOf(l)] || lines.indexOf(l) + 1;
@@ -556,8 +631,20 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
   // Compose every variation now, so its warnings are part of the plan printed before rendering.
   const composedBySpec = new Map(
     specs.map((spec) => {
-      const composed = composeProps(base, { seed: spec.seed, style: spec.style, order: spec.order, leadMs, lyricsOffsetMs, cinematicBars: spec.bars });
+      const composed = composeProps(base, { seed: spec.seed, style: spec.style, order: spec.order, leadMs, lyricsOffsetMs, cinematicBars: ytLayout ? false : spec.bars });
       warnings.push(...composed.warnings.map((w) => `${spec.name}: ${w}`));
+      if (ytLayout) {
+        const title = sh.brand.brand.titleFont;
+        composed.props = {
+          ...composed.props,
+          ...youtubeExtras({
+            layout: ytLayout, preset, props: composed.props, brand: sh.brand.brand, logoFile: sh.brand.logoFile, ws, title: project.title, artist: project.artist,
+            cover: coverSrc, coverBackground, stills: stillsPlan?.stills ?? null, beats: analysis.beats, startMs: chosen.start_ms,
+            grain: options.grain ?? preset.youtube!.grain, glow: options.glow ?? preset.youtube!.glow,
+          }),
+          fonts: [...composed.props.fonts, ...fontFileRefs(resolveFace(sh.catalog, title.family, title.weight))],
+        };
+      }
       if (preset.loopEnding && !loopsSeamlessly(composed.props.shots)) {
         warnings.push(`${preset.name} ${spec.name}: no seamless loop ending (the first clip is too short to also fill the last shot)`);
       }
@@ -566,7 +653,8 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
   );
   options.onReady?.({
     platform: { name: preset.name, label: preset.label, index: position.index, count: position.count, folder: exportDir },
-    sources,
+    sources: usesClips ? sources : null,
+    layout: ytLayout,
     brand: { file: sh.brand.file, created: sh.brand.created },
     project: { title: project.title, created: sh.sp.created },
     bpm: analysis.bpm,
@@ -605,7 +693,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
       const durationS = (JSON.parse(readFileSync(manifestFile, "utf8")) as Manifest).output.duration_s;
       const qaFile = path.join(exportDir, `${spec.name}.qa.txt`);
       return {
-        ...spec, platform: preset.name, file: path.join(exportDir, `${spec.name}.mp4`), manifestFile, qaFile, durationS,
+        ...spec, platform: preset.name, file: path.join(exportDir, `${spec.name}.mp4`), manifestFile, qaFile, srtFile: path.join(exportDir, `${spec.name}.srt`), durationS,
         qa: null, qaSummary: qaSummaryFromFile(qaFile), error: null, kept: true, retried: false,
       };
     });
@@ -647,6 +735,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
       file,
       manifestFile: path.join(exportDir, `${spec.name}.manifest.json`),
       qaFile: path.join(exportDir, `${spec.name}.qa.txt`),
+      srtFile: path.join(exportDir, `${spec.name}.srt`),
       durationS: props.durationInFrames / VIDEO.fps,
       qa: null,
       qaSummary: "",
@@ -697,7 +786,10 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
       state.status = "checking";
       report();
       const qa = await checkVariation(spec, props, file, {
-        lines, visible, numbers, reports, styles, clips: prepared.clips, sources: { ...sources, platform: preset.label }, frameCheck: options.frameCheck ?? true,
+        lines, visible, numbers, reports, styles, clips: prepared.clips,
+        sources: usesClips ? { ...sources, platform: preset.label } : null,
+        frameCheck: options.frameCheck ?? true,
+        stillPictures: ytLayout === "cover" || ytLayout === "stills",
         sectionCuts: chosen.cuts.map((c) => ({ ...c, line: numbers[c.line - 1] || c.line })),
       });
       result.qa = qa;
@@ -711,6 +803,34 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
           brand: sh.brand.brand,
         }),
       );
+      // Captions for every video; YouTube also gets a thumbnail and a publishing pack.
+      writeSrt(result.srtFile, props);
+      if (ytLayout) {
+        const one = allSpecs.length === 1;
+        const hookIndex = lines.findIndex((l) => l.isHook);
+        const hookFrame = hookIndex >= 0 ? Math.round(((lines[hookIndex].start_ms - chosen.start_ms) * VIDEO.fps) / 1000) : 0;
+        const background = await thumbnailBackground(ws, props, hookFrame, `${sh.sp.songHash.slice(0, 16)}-${preset.name}-${spec.name}`);
+        const titleFont = sh.brand.brand.titleFont;
+        result.thumbnailFile = path.join(exportDir, one ? "thumbnail.jpg" : `${spec.name}.thumbnail.jpg`);
+        await (options.thumbnailRenderer ?? renderThumbnail)({
+          props: {
+            background: background ?? "",
+            title: project.title,
+            artist: project.artist,
+            font: { family: titleFont.family, weight: titleFont.weight, letterSpacing: titleFont.letterSpacing ?? 0.18 },
+            colour: sh.brand.brand.accentColour,
+            fonts: fontFileRefs(resolveFace(sh.catalog, titleFont.family, titleFont.weight)),
+            logo: props.logo ? { ...props.logo, width: Math.round(sh.brand.brand.logo.size * 1280) } : null,
+          },
+          media,
+          outFile: result.thumbnailFile,
+          log,
+        });
+        const pack = publishText(ws.dir, { song: project.title, artist: project.artist, lyricsTxt: readFileSync(alignment.lyricsTxt, "utf8"), year: sh.now.getFullYear() });
+        if (pack.created) log(`publishing template created: ${pack.template} (edit it to change publish.txt)`);
+        result.publishFile = path.join(exportDir, one ? "publish.txt" : `${spec.name}.publish.txt`);
+        writeFileSync(result.publishFile, pack.text);
+      }
       state.status = "done";
       state.progress = 1;
       updateJob(jobId, { status: "done", progress: 1, output_path: storedPath(ws, file), finished_at: new Date() });
@@ -766,6 +886,7 @@ async function checkVariation(
     clips: PreparedForFormat["clips"];
     sources: QaInput["sources"];
     frameCheck: boolean;
+    stillPictures?: boolean; // cover / stills layouts: still by design, so no frozen-frame check
     sectionCuts: SectionCut[];
   },
 ): Promise<QaReport> {
@@ -776,21 +897,24 @@ async function checkVariation(
     number: ctx.numbers[i] || i + 1,
     confidence: ctx.reports[i]?.confidence ?? null,
   }));
+  // Lines reaching into the end-screen time are drawn (and measured) in the end-screen area.
+  const end = props.endScreen;
+  const inEnd = (l: (typeof lyrics)[number]) => !!end && l.endFrame > end.fromFrame;
+  const measure = (ls: typeof lyrics, area: LyricArea | undefined) =>
+    measureLyrics(ls, { main: style.main, hook: style.hook, textCase: style.entry.style.textCase, textSize: props.textSize, animation: style.entry.style.animation, area });
+  const measured = [...measure(lyrics.filter((l) => !inEnd(l)), props.lyricArea), ...(end ? measure(lyrics.filter(inEnd), end.lyricArea) : [])];
+  let frames = ctx.frameCheck ? await detectBadFrames(file, props.durationInFrames / VIDEO.fps) : null;
+  if (frames && ctx.stillPictures) frames = { black: frames.black, frozen: [] };
   return runQa({
     props,
     shotClips: props.shots.map((s) => nameBySrc.get(s.src) ?? s.src),
     poolSize: ctx.clips.length,
-    lyrics: measureLyrics(lyrics, {
-      main: style.main,
-      hook: style.hook,
-      textCase: style.entry.style.textCase,
-      textSize: props.textSize,
-      animation: style.entry.style.animation,
-      area: props.lyricArea,
-    }),
-    frames: ctx.frameCheck ? await detectBadFrames(file, props.durationInFrames / VIDEO.fps) : null,
+    lyrics: measured.sort((a, b) => a.number - b.number),
+    frames,
     sources: ctx.sources,
     sectionCuts: ctx.sectionCuts,
+    endScreen: end ? { clear: end.clear, lines: lyrics.filter(inEnd).map((l) => l.number) } : null,
+    frozenCheckSkipped: ctx.stillPictures,
   });
 }
 

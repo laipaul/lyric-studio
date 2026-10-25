@@ -20,6 +20,7 @@ import {
   type LyricVideoProps,
   type ShotProps,
 } from "../src";
+import { endScreenLayout, lyricArea } from "../src";
 import {
   bundledFontDirs,
   fontFileRefs,
@@ -27,7 +28,10 @@ import {
   isFaststart,
   layoutWithFace,
   loadFontCatalog,
+  loadPresets,
   renderLyricVideo,
+  renderThumbnail,
+  youtubeLyricSafeZone,
   resolveFace,
   startMediaServer,
   type MediaServer,
@@ -60,6 +64,7 @@ let browser: Awaited<ReturnType<typeof openBrowser>>;
 let serveUrl: string;
 
 const catalog = loadFontCatalog(dir);
+const presets = loadPresets();
 const SIMPLE = { name: "Simple", font: "Inter", weight: 600, textCase: "none" as const, effect: "none", animation: "fade" };
 const BOLD = { name: "Bold", font: "Montserrat", weight: 900, textCase: "upper" as const, effect: "shadow", animation: "pop" };
 const fontsFor = (...faces: [string, number][]) => faces.flatMap(([family, weight]) => fontFileRefs(resolveFace(catalog, family, weight)));
@@ -380,5 +385,103 @@ describe("LyricVideo render", () => {
     });
     const probe = JSON.parse(execFileSync(ffprobeBin(), ["-v", "error", "-print_format", "json", "-show_streams", out]).toString());
     expect([probe.streams[0].width, probe.streams[0].height]).toEqual([540, 960]);
+  }, 300_000);
+
+  // ---- YouTube (16:9) ------------------------------------------------------------------------
+  const YT = { width: 1920, height: 1080 };
+  async function ytPixels(props: LyricVideoProps, frame: number) {
+    const composition = await selectComposition({ serveUrl, id: COMPOSITION_ID, inputProps: props, puppeteerInstance: browser, logLevel: "error" });
+    expect([composition.width, composition.height]).toEqual([1920, 1080]);
+    const file = path.join(dir, `yt-${Math.random().toString(36).slice(2)}.png`);
+    await renderStill({ serveUrl, composition, frame, output: file, inputProps: props, puppeteerInstance: browser, logLevel: "error" });
+    const raw = execFileSync(ffmpegBin(), ["-v", "error", "-i", file, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], { maxBuffer: 64 * 1024 * 1024 });
+    rmSync(file);
+    const at = (x: number, y: number) => [0, 1, 2].map((c) => raw[(y * 1920 + x) * 3 + c]);
+    let box: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
+    for (let y = 0; y < 1080; y += 2) {
+      for (let x = 0; x < 1920; x += 2) {
+        const [r, g, b] = at(x, y);
+        if (r > 150 && b > 150 && g < 60) box = box ? { minX: Math.min(box.minX, x), minY: Math.min(box.minY, y), maxX: Math.max(box.maxX, x), maxY: Math.max(box.maxY, y) } : { minX: x, minY: y, maxX: x, maxY: y };
+      }
+    }
+    return { at, magenta: box };
+  }
+  const ytBase = (over: Partial<LyricVideoProps>): LyricVideoProps =>
+    baseProps({
+      format: YT,
+      colour: "#ff00ff",
+      durationInFrames: 90,
+      lyrics: [{ text: "Hold on to me", startFrame: 0, endFrame: 90 }],
+      ...over,
+    });
+
+  it("YouTube cover layout: the cover in the left part, lyrics on the right; end screen: lyrics above the bottom-right area", async () => {
+    ffmpeg("-f", "lavfi", "-i", "color=c=yellow:s=800x800", "-frames:v", "1", path.join(dir, "cover.jpg"));
+    ffmpeg("-f", "lavfi", "-i", "color=c=lime:s=300x120", "-frames:v", "1", path.join(dir, "logo.png"));
+    const area = lyricArea(YT, youtubeLyricSafeZone("cover", presets.youtube.safeZone), 0.45);
+    const props = ytBase({
+      layout: "cover",
+      cover: { src: "cover.jpg", zoomFrom: 1, zoomTo: 1.05 },
+      lyricArea: area,
+      logo: { src: "logo.png", position: "bottom-left", width: 154 },
+    });
+    const { at, magenta } = await ytPixels(props, 10);
+    const [r, g, b] = at(Math.round(1920 * 0.22), 540); // centre of the cover
+    expect(r > 200 && g > 200 && b < 80).toBe(true);
+    expect(magenta!.minX).toBeGreaterThan(1920 * 0.43); // lyrics right of the cover
+    const [lr, lg, lb] = at(70, 1080 - 70); // logo, bottom left
+    expect(lg > 200 && lr < 80 && lb < 80).toBe(true);
+
+    const end = endScreenLayout(YT, { ...presets.youtube.safeZone, top: 0.14 }, area, 30, 90, { seconds: 3, clear: { left: 0.5, top: 0.35 } });
+    const late = await ytPixels({ ...props, endScreen: end }, 10);
+    expect(late.magenta!.maxY).toBeLessThan(end.clear.top); // out of the end-screen area
+    expect(late.magenta!.minY).toBeGreaterThan(1080 * 0.14); // below the title at the top
+  }, 300_000);
+
+  it("YouTube stills layout: crossfade between two pictures, grain and glow render", async () => {
+    ffmpeg("-f", "lavfi", "-i", "color=c=red:s=1600x900", "-frames:v", "1", path.join(dir, "still-red.jpg"));
+    ffmpeg("-f", "lavfi", "-i", "color=c=blue:s=1600x900", "-frames:v", "1", path.join(dir, "still-blue.jpg"));
+    const props = ytBase({
+      layout: "stills",
+      stills: [
+        { src: "still-red.jpg", startFrame: 0, endFrame: 60, fadeFrames: 30, section: "verse 1" },
+        { src: "still-blue.jpg", startFrame: 30, endFrame: 90, fadeFrames: 30, section: "chorus 1" },
+      ],
+      lyrics: [],
+      grain: true,
+      glow: { colour: "#E8A3B5", beatFrames: [0, 15, 30] },
+    });
+    const before = (await ytPixels(props, 20)).at(960, 540);
+    const middle = (await ytPixels(props, 45)).at(960, 540);
+    const after = (await ytPixels(props, 75)).at(960, 540);
+    expect(before[0]).toBeGreaterThan(180);
+    expect(after[2]).toBeGreaterThan(180);
+    // Mid-crossfade: blue fading in over a still fully visible red, so no dark dip.
+    expect(middle[0]).toBeGreaterThan(90);
+    expect(middle[2]).toBeGreaterThan(90);
+    expect(middle[0] + middle[2]).toBeGreaterThan(230);
+  }, 300_000);
+
+  it("YouTube thumbnail: 1280x720 JPEG with the title in the accent colour", async () => {
+    const out = path.join(dir, "thumbnail.jpg");
+    await renderThumbnail({
+      props: {
+        background: "cover.jpg",
+        title: "Hold On",
+        artist: "Life Lyrics",
+        font: { family: "Cinzel", weight: 700, letterSpacing: 0.18 },
+        colour: "#ff00ff",
+        fonts: fontFileRefs(resolveFace(catalog, "Cinzel", 700)),
+        logo: null,
+      },
+      media: { workspaceDir: dir },
+      outFile: out,
+    });
+    const probe = JSON.parse(execFileSync(ffprobeBin(), ["-v", "error", "-print_format", "json", "-show_streams", out]).toString());
+    expect([probe.streams[0].codec_name, probe.streams[0].width, probe.streams[0].height]).toEqual(["mjpeg", 1280, 720]);
+    const raw = execFileSync(ffmpegBin(), ["-v", "error", "-i", out, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], { maxBuffer: 64 * 1024 * 1024 });
+    let accent = 0;
+    for (let i = 0; i < raw.length; i += 3) if (raw[i] > 170 && raw[i + 2] > 170 && raw[i + 1] < 90) accent += 1;
+    expect(accent).toBeGreaterThan(2000); // the title's letters
   }, 300_000);
 });

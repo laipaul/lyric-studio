@@ -35,6 +35,7 @@ export type AutoSectionOptions = {
   targetMs?: number; // platform presets: prefer the clean end nearest this length (else the latest)
   shortestMs?: number; // presets: a clean end down to this length is preferred over a longer one
   anchorMode?: "lead-in" | "hook-first"; // hook-first: start at most 1 bar before the hook
+  endOn?: "bar" | "beat"; // beat: when no bar is clean, any beat may end the section (bars still preferred)
 };
 
 export type SectionChoice = {
@@ -195,22 +196,28 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
     }
   }
 
-  // 3. End candidates: bar starts where no line is being sung.
-  type Candidate = { at: number; afterLine: number; firstBarAfterLine: boolean; chorusLine: boolean };
-  const candidates: Candidate[] = [];
-  const points = [...downbeats.filter((d) => d > start && d <= duration)];
-  for (const at of points) {
-    if (singing(at) >= 0) continue;
-    let afterLine = -1;
-    for (let i = 0; i < lines.length; i++) if (ends[i] <= at) afterLine = i;
-    const previousBar = downbeats.filter((d) => d < at).pop();
-    const firstBarAfterLine = afterLine >= 0 && (previousBar === undefined || previousBar < ends[afterLine]);
-    candidates.push({ at, afterLine, firstBarAfterLine, chorusLine: afterLine >= 0 && chorus.has(afterLine) });
-  }
+  // 3. End candidates: bar starts (and, with endOn "beat", other beats) where no line is being sung.
+  type Candidate = { at: number; afterLine: number; firstAfterLine: boolean; chorusLine: boolean; unit: "bar" | "beat" };
+  const build = (grid: number[], unit: "bar" | "beat"): Candidate[] => {
+    const out: Candidate[] = [];
+    for (const at of grid) {
+      if (at <= start || at > duration || singing(at) >= 0) continue;
+      let afterLine = -1;
+      for (let i = 0; i < lines.length; i++) if (ends[i] <= at) afterLine = i;
+      const previous = grid.filter((d) => d < at).pop();
+      const firstAfterLine = afterLine >= 0 && (previous === undefined || previous < ends[afterLine]);
+      out.push({ at, afterLine, firstAfterLine, chorusLine: afterLine >= 0 && chorus.has(afterLine), unit });
+    }
+    return out;
+  };
+  const barCandidates = build(downbeats, "bar");
+  const beatGrid = beats.map((b) => b.time_ms).sort((a, b) => a - b);
+  const beatCandidates = options.endOn === "beat" ? build(beatGrid, "beat") : [];
+  const points = downbeats.filter((d) => d > start && d <= duration);
 
   const length = (c: Candidate) => c.at - start;
   const within = (lo: number, hi: number) => (c: Candidate) => length(c) >= lo && length(c) <= hi;
-  const after = (pool: Candidate[]) => pool.filter((c) => c.firstBarAfterLine);
+  const after = (pool: Candidate[]) => pool.filter((c) => c.firstAfterLine);
   const target = options.targetMs;
   const nearest = (pool: Candidate[], to: number) => pool.reduce((best, c) => (Math.abs(length(c) - to) < Math.abs(length(best) - to) ? c : best));
 
@@ -223,43 +230,53 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
     endKind = "song-end";
     endText = `the song ends ${seconds(duration - start)} after the start (shorter than ${seconds(shortestMs)})`;
   } else {
-    const windowed = after(candidates.filter(within(minMs, maxMs)));
-    const chorusEnds = windowed.filter((c) => c.chorusLine);
-    const shorter = target ? after(candidates.filter(within(shortestMs, minMs - 1))) : [];
-    const longer = after(candidates.filter(within(maxMs + 1, hardMaxMs)));
-    const quiet = candidates.filter(within(shortestMs, hardMaxMs));
     // Range presets (standard): the latest clean end; target presets: the clean end nearest the target.
     const pick = (pool: Candidate[]) => (target ? nearest(pool, target) : pool[pool.length - 1]);
     const range = `${seconds(minMs)}-${seconds(maxMs)}`;
-    if (chorusEnds.length) {
-      const c = pick(chorusEnds);
-      [end, endKind] = [c.at, "chorus-line"];
-      endText = `the first bar after chorus ${describeLine(c.afterLine)} finishes`;
-    } else if (windowed.length) {
-      const c = pick(windowed);
-      [end, endKind] = [c.at, "line"];
-      endText = `the first bar after ${describeLine(c.afterLine)} finishes (no chorus line ends within ${range})`;
-    } else if (shorter.length) {
-      const c = shorter[shorter.length - 1];
-      [end, endKind] = [c.at, "shorter"];
-      endText = `shorter than the target: no clean line end within ${range}; the nearest clean end is after ${describeLine(c.afterLine)}`;
-    } else if (longer.length) {
-      const c = longer[0];
-      [end, endKind] = [c.at, "extended"];
+    // Each length tier tries bar ends first, then (TikTok, Shorts) any beat.
+    const grids = [barCandidates, ...(beatCandidates.length ? [beatCandidates] : [])];
+    const tier = (choose: (pool: Candidate[]) => Candidate | undefined) => {
+      for (const g of grids) {
+        const c = choose(g);
+        if (c) return c;
+      }
+      return undefined;
+    };
+    const windowEnd = tier((g) => {
+      const pool = after(g.filter(within(minMs, maxMs)));
+      const chorusPool = pool.filter((c) => c.chorusLine);
+      return chorusPool.length ? pick(chorusPool) : pool.length ? pick(pool) : undefined;
+    });
+    const shorterEnd = target ? tier((g) => after(g.filter(within(shortestMs, minMs - 1))).pop()) : undefined;
+    const longerEnd = tier((g) => after(g.filter(within(maxMs + 1, hardMaxMs)))[0]);
+    const quietEnd = tier((g) => {
+      const pool = g.filter(within(shortestMs, hardMaxMs));
+      return pool.length ? (target ? nearest(pool, target) : pool[0]) : undefined;
+    });
+    if (windowEnd) {
+      end = windowEnd.at;
+      endKind = windowEnd.chorusLine ? "chorus-line" : "line";
+      endText = windowEnd.chorusLine
+        ? `the first ${windowEnd.unit} after chorus ${describeLine(windowEnd.afterLine)} finishes`
+        : `the first ${windowEnd.unit} after ${describeLine(windowEnd.afterLine)} finishes (no chorus line ends within ${range})`;
+    } else if (shorterEnd) {
+      [end, endKind] = [shorterEnd.at, "shorter"];
+      endText = `shorter than the target: no clean line end within ${range}; the nearest clean end is the ${shorterEnd.unit} after ${describeLine(shorterEnd.afterLine)}`;
+    } else if (longerEnd) {
+      [end, endKind] = [longerEnd.at, "extended"];
       endText = target
-        ? `longer than the target: no clean line end within ${range} or up to 25% shorter; the nearest clean end is after ${describeLine(c.afterLine)}`
-        : `no bar within ${range} without cutting a line; extended to the first bar after ${describeLine(c.afterLine)} finishes`;
-    } else if (quiet.length) {
-      const c = target ? nearest(quiet, target) : quiet[0];
-      [end, endKind] = [c.at, "instrumental"];
-      endText = "a bar start where nothing is sung";
+        ? `longer than the target: no clean line end within ${range} or up to 25% shorter; the nearest clean end is the ${longerEnd.unit} after ${describeLine(longerEnd.afterLine)}`
+        : `no bar within ${range} without cutting a line; extended to the first bar after ${describeLine(longerEnd.afterLine)} finishes`;
+    } else if (quietEnd) {
+      [end, endKind] = [quietEnd.at, "instrumental"];
+      endText = `a ${quietEnd.unit} where nothing is sung`;
     } else {
       // No bar start in reach is free of singing: end on the bar nearest the target and name the cut line.
       const goal = target ?? maxMs;
       const pool = points.filter((d) => d - start <= hardMaxMs);
       end = pool.reduce((best, d) => (Math.abs(d - start - goal) < Math.abs(best - start - goal) ? d : best), pool[0] ?? start + goal);
       endKind = "cuts-line";
-      endText = `every bar start up to ${seconds(hardMaxMs)} is inside a sung line; ending at the bar nearest ${seconds(goal)}`;
+      endText = `every ${beatCandidates.length ? "beat" : "bar start"} up to ${seconds(hardMaxMs)} is inside a sung line; ending at the bar nearest ${seconds(goal)}`;
     }
   }
 

@@ -5,10 +5,10 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFile
 import os from "node:os";
 import path from "node:path";
 
-import { REPO_ROOT, clip, ffmpegBin, lyricLine, openWorkspace, renderJob, seedStylePresets, variation, type Workspace } from "@lyric/db";
+import { REPO_ROOT, clip, ffmpegBin, lyricLine, project, openWorkspace, renderJob, seedStylePresets, variation, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { lyricArea, sectionWindow } from "../src";
+import { lyricArea, sectionWindow, toSrt } from "../src";
 
 import {
   ensureAlignment,
@@ -19,6 +19,7 @@ import {
   readManifest,
   latestExportFolder,
   qaSummaryFromFile,
+  resolveCover,
   renderLimit,
   rerender,
   retryLimit,
@@ -276,7 +277,7 @@ describe("pnpm make + pnpm rerender (real renders)", () => {
   }, 600_000);
 
   it("writes v1.mp4/v2.mp4 with a manifest and a QA report each, and records the jobs", () => {
-    expect(readdirSync(result.exportDir).sort()).toEqual(["song.lrc", "v1.manifest.json", "v1.mp4", "v1.qa.txt", "v2.manifest.json", "v2.mp4", "v2.qa.txt"]);
+    expect(readdirSync(result.exportDir).sort()).toEqual(["song.lrc", "v1.manifest.json", "v1.mp4", "v1.qa.txt", "v1.srt", "v2.manifest.json", "v2.mp4", "v2.qa.txt", "v2.srt"]);
     // Clean synced lyrics for lyric services: no word tags, no hook markers.
     const lrc = readFileSync(result.lrcFile, "utf8");
     expect(lrc).toContain("[ti:song]");
@@ -583,6 +584,55 @@ describe("platform presets (stand-in renderer)", () => {
     expect(m.clips.every((c) => c.normalised.includes("cover540x960") || c.normalised.endsWith(".jpg"))).toBe(true);
   });
 
+  it("every video gets a .srt with the lines exactly as it shows them", () => {
+    for (const v of all.variations) {
+      const srt = readFileSync(v.srtFile, "utf8");
+      const lyrics = readManifest(v.manifestFile).props.lyrics.filter((l) => l.endFrame > l.startFrame);
+      expect(srt.match(/ --> /g)?.length).toBe(lyrics.length);
+      expect(srt.startsWith(`1\n${toSrt(lyrics, 30).split("\n")[1]}`)).toBe(true);
+    }
+  });
+
+  it("youtube: --cover and --title give the cover layout, a full-song video, .srt, thumbnail and publish.txt", async () => {
+    const cover = path.join(root, "my-cover.jpg");
+    ffmpeg("-f", "lavfi", "-i", "color=c=0x7a2e4d:s=800x800", "-frames:v", "1", cover);
+    const thumbs: string[] = [];
+    const r = await run({
+      platforms: "youtube", cover, title: "Long Song",
+      thumbnailRenderer: async (o) => {
+        thumbs.push(o.props.background);
+        writeFileSync(o.outFile, "jpg");
+        return o.outFile;
+      },
+    });
+    const yt = r.platforms[0];
+    expect(yt.exportDir).toBe(path.join(r.exportDir, "youtube"));
+    expect(readdirSync(yt.exportDir).sort()).toEqual(["publish.txt", "thumbnail.jpg", "v1.manifest.json", "v1.mp4", "v1.qa.txt", "v1.srt"]);
+    const m = readManifest(yt.variations[0].manifestFile);
+    expect(m.props.layout).toBe("cover");
+    expect(m.props.format).toEqual({ width: 1920, height: 1080 });
+    expect([m.section.start_ms, m.section.end_ms]).toEqual([0, 75_000]); // the whole song from 0:00
+    expect(existsSync(path.join(wsDir, ...m.props.cover!.src.split("/")))).toBe(true); // stored with the project
+    expect(existsSync(path.join(wsDir, ...m.props.cover!.backgroundSrc!.split("/")))).toBe(true); // blurred once
+    expect(m.props.titleOverlay).toMatchObject({ title: "Long Song", artist: "Life Lyrics", font: "Cinzel", colour: "#E8A3B5" });
+    expect(m.props.endScreen?.fromFrame).toBe(m.props.durationInFrames - 600);
+    expect(m.props.nextLine).toBe(true);
+    expect(m.props.fonts.some((f) => f.family === "Cinzel")).toBe(true);
+    expect(thumbs).toEqual([m.props.cover!.src]);
+    const publish = readFileSync(path.join(yt.exportDir, "publish.txt"), "utf8");
+    expect(publish).toContain("== Title ==\nLong Song (Lyrics) - Life Lyrics");
+    expect(publish).toContain("Hold on to me\nThrough the night"); // the full lyrics, without "* "
+    expect(publish).not.toContain("* Hold");
+    expect(publish).toContain("#LifeLyrics #LongSong");
+    expect(publish).toContain("== Tags ==");
+    expect(existsSync(path.join(wsDir, "brand", "publish-template.txt"))).toBe(true);
+    expect(readFileSync(path.join(yt.exportDir, "v1.qa.txt"), "utf8")).toContain("End-screen area clear");
+
+    // The next run finds the stored cover without --cover.
+    const again = await run({ platforms: "youtube", thumbnailRenderer: async (o) => (writeFileSync(o.outFile, "jpg"), o.outFile) });
+    expect(readManifest(again.variations[0].manifestFile).props.layout).toBe("cover");
+  });
+
   it("--resume per platform renders only what is missing in each platform folder", async () => {
     const tiktok = all.platforms.find((p) => p.name === "tiktok")!;
     rmSync(path.join(tiktok.exportDir, "v2.qa.txt"));
@@ -660,5 +710,45 @@ describe("stored hints and hook-only lyric changes", () => {
     expect(hooks.lrcFile).toBe(base.lrcFile);
     expect(hooks.lines.filter((l) => l.isHook).map((l) => l.text)).toEqual(["Third line"]); // "Hold on" is no longer a hook
     expect(sha256File(base.lrcFile)).toBe(lrcHash); // the stored LRC is untouched
+  });
+});
+
+describe("YouTube cover lookup and layout fallback", () => {
+  it("--cover, then the project's cover, then cover.jpg/.png next to the song; none -> null", async () => {
+    const songDir = path.join(root, "cover-song");
+    mkdirSync(songDir, { recursive: true });
+    const song = path.join(songDir, "tune.wav");
+    makeSong(song, 14);
+    const sp = await findOrCreateSongProject(ws, song);
+    expect(resolveCover(ws, sp.project, { songFile: song })).toBeNull();
+    ffmpeg("-f", "lavfi", "-i", "color=c=blue:s=400x400", "-frames:v", "1", path.join(songDir, "cover.png"));
+    const next = resolveCover(ws, sp.project, { songFile: song })!;
+    expect(next.from).toBe(path.join(songDir, "cover.png"));
+    expect(next.stored).toBe(`projects/${sp.project.id}/audio/cover.png`);
+    const stored = ws.db.select().from(project).all().find((p) => p.id === sp.project.id)!;
+    expect(resolveCover(ws, stored, { songFile: song })).toEqual({ stored: next.stored, from: "the project's stored cover" });
+  });
+
+  it("no cover: stills when there are horizontal photos, else clips, with a clear message", async () => {
+    const song = path.join(root, "nocover.wav");
+    makeSong(song, 16);
+    writeFileSync(path.join(root, "nocover.txt"), "First line\n* Hold on\nThird line\n");
+    const base = {
+      workspaceDir: wsDir, song, lyrics: path.join(root, "nocover.txt"), align: fakeAlign, frameCheck: false, platform: "win32" as const, platforms: "youtube",
+      renderer: async (o: RenderOptions) => (copyFileSync(path.join(root, "sample.mp4"), o.outFile), o.outFile),
+      thumbnailRenderer: async (o: { outFile: string }) => (writeFileSync(o.outFile, "jpg"), o.outFile),
+    };
+    const warnings: string[] = [];
+    const stills = await makeVideos({ ...base, collection: "mixed", onReady: (p) => warnings.push(...p.warnings) });
+    const sm = readManifest(stills.variations[0].manifestFile);
+    expect(sm.props.layout).toBe("stills");
+    expect(sm.props.stills!.every((x) => x.src.endsWith(".jpg"))).toBe(true);
+    expect(sm.props.grain).toBe(true);
+    expect(sm.props.glow?.colour).toBe("#E8A3B5");
+    expect(warnings.some((w) => w.includes("cover layout: no cover") && w.includes("using the stills layout instead"))).toBe(true);
+
+    const clips = await makeVideos({ ...base, collection: "wide-only" });
+    expect(readManifest(clips.variations[0].manifestFile).props.layout).toBe("clips");
+    expect(readManifest(clips.variations[0].manifestFile).props.shots.length).toBeGreaterThan(0);
   });
 });

@@ -13,3 +13,4 @@ export * from "./qa-check";
 export * from "./make";
 export * from "./rerender";
 export * from "./brand";
+export * from "./youtube";

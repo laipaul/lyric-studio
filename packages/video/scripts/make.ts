@@ -2,7 +2,8 @@
 //   [--section auto|full|0:11-1:10] [--hint <taps.lrc> | --no-hint] [--realign] [--lrc <file.lrc>] [--lang en|fr]
 //   [--rate 1x] [--energy medium] [--lead 0.25] [--lyrics-offset 0] [--downbeat-offset N]
 //   [--font "Family"] [--font-hook "Family"] [--pins pins.txt] [--parallel N] [--resume] [--no-open]
-//   [--platforms reels,tiktok,shorts | all] [--allow-fill]
+//   [--platforms reels,tiktok,shorts,youtube | all] [--allow-fill] [--title "Song title"]
+//   [--cover cover.jpg] [--layout cover|stills|clips] [--stills stills.txt] [--no-grain] [--no-glow]
 // One command from a song to N finished variations with manifests and QA reports, per platform.
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -25,6 +26,12 @@ try {
       variations: { type: "string" },
       platforms: { type: "string" },
       "allow-fill": { type: "boolean", default: false },
+      title: { type: "string" },
+      cover: { type: "string" },
+      layout: { type: "string" },
+      stills: { type: "string" },
+      "no-grain": { type: "boolean", default: false },
+      "no-glow": { type: "boolean", default: false },
       section: { type: "string", default: "auto" },
       hint: { type: "string" },
       "no-hint": { type: "boolean", default: false },
@@ -70,6 +77,7 @@ const parallel = values.parallel === undefined ? undefined : Number(values.paral
 if (parallel !== undefined && (!Number.isInteger(parallel) || parallel < 1 || parallel > 6)) fail("--parallel must be a whole number from 1 to 6");
 if (values.realign && values.lrc) fail("--realign and --lrc cannot be used together");
 if (values.hint && values["no-hint"]) fail("--hint and --no-hint cannot be used together");
+if (values.layout && !["cover", "stills", "clips"].includes(values.layout)) fail("--layout must be cover, stills or clips");
 
 // Relative paths are relative to the folder the command was typed in.
 const userCwd = process.env.INIT_CWD ?? process.cwd();
@@ -102,6 +110,12 @@ try {
     variations,
     platforms: values.platforms,
     allowFill: values["allow-fill"],
+    title: values.title,
+    cover: resolve(values.cover),
+    layout: values.layout as "cover" | "stills" | "clips" | undefined,
+    stills: resolve(values.stills),
+    grain: values["no-grain"] ? false : undefined,
+    glow: values["no-glow"] ? false : undefined,
     section: values.section,
     hint: resolve(values.hint),
     noHint: values["no-hint"],
@@ -150,13 +164,16 @@ try {
       console.log(`== ${p.platform.label} (${p.platform.index + 1}/${p.platform.count}) -> ${p.platform.folder}`);
       console.log(`Section:   ${clockText(p.section.start_ms)} - ${clockText(p.section.end_ms)}`);
       console.log(`           ${p.section.reason}`);
-      console.log(
-        `Sources:   ${s.usable} ${s.kind} usable` +
-          (s.filled.length ? `, ${s.filled.length} with blurred fill` : "") +
-          (s.skipped.length ? `, ${s.skipped.length} skipped (${s.kind === "vertical" ? "horizontal" : "vertical"}: ${s.skipped.join(", ")}; --allow-fill to use them)` : "") +
-          (s.usable < s.needed ? `   WARNING: at least ${s.needed} needed` : ""),
-      );
-      console.log(`Cuts:      ${p.cuts} cuts, rate ${rate}, energy ${energy}`);
+      if (p.layout) console.log(`Layout:    ${p.layout}`);
+      if (s) {
+        console.log(
+          `Sources:   ${s.usable} ${s.kind} usable` +
+            (s.filled.length ? `, ${s.filled.length} with blurred fill` : "") +
+            (s.skipped.length ? `, ${s.skipped.length} skipped (${s.kind === "vertical" ? "horizontal" : "vertical"}: ${s.skipped.join(", ")}; --allow-fill to use them)` : "") +
+            (s.usable < s.needed ? `   WARNING: at least ${s.needed} needed` : ""),
+        );
+        console.log(`Cuts:      ${p.cuts} cuts, rate ${rate}, energy ${energy}`);
+      }
       if (p.resume) {
         console.log(
           `Resume:    ${p.exportDir}: ${p.resume.done} already done` +
@@ -198,6 +215,10 @@ console.log(
     : "           v1.mp4 ... with v1.manifest.json (rerender with: pnpm rerender <manifest>) and v1.qa.txt",
 );
 console.log(`Lyrics:    ${result.lrcFile} (clean synced LRC for Musixmatch / LyricFind)`);
+console.log("Captions:  a .srt next to every video (v1.srt, ...)");
+for (const v of result.variations.filter((x) => x.thumbnailFile && !x.error)) {
+  console.log(`YouTube:   ${v.thumbnailFile} (1280x720) and ${v.publishFile} (title, description, tags)`);
+}
 if (!values["no-open"]) openFolder(result.exportDir);
 const failed = result.variations.filter((v) => v.error);
 if (failed.length || result.platforms.some((p) => p.error)) {

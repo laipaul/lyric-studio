@@ -16,10 +16,13 @@ import {
 import { useFonts } from "./fonts";
 import { activeLyricLine, applyTextCase, layoutLyric } from "./lyrics";
 import { kenBurnsAt } from "./photo";
+import { beatPulse, stillOpacity } from "./youtube";
+import { COVER_CENTRE_X, coverSide } from "./youtube-layout";
 import { cinematicBarHeight, DEFAULT_FORMAT, DEFAULT_LYRIC_AREA, DEFAULT_SAFE_ZONE, type Format, type LyricArea, type SafeZone } from "./platform";
 import { mediaUrl, type LyricLineProps, type LyricVideoProps, type ShotProps, type StyleProps } from "./props";
 
 const cover: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };
+const cover_ = cover;
 const contain: React.CSSProperties = { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" };
 const blurred: React.CSSProperties = { ...cover, position: "absolute", inset: 0, filter: "blur(40px) brightness(0.6)", transform: "scale(1.15)" };
 
@@ -85,9 +88,11 @@ const textShadows: Record<string, string> = {
   shadow: "0 6px 0 rgba(0,0,0,0.35), 0 0 28px rgba(0,0,0,0.65)",
 };
 
-function LyricText({ line, style, font, textSize, colour, ready, area }: {
+function LyricText({ line, style, font, textSize, colour, ready, area, glow, next }: {
   line: LyricLineProps;
   area: LyricArea;
+  glow?: string; // extra text-shadow (beat-pulsed glow)
+  next?: string | null; // the next line, shown small and faded underneath
   style: StyleProps;
   font: { family: string; weight: number };
   textSize: number;
@@ -142,7 +147,7 @@ function LyricText({ line, style, font, textSize, colour, ready, area }: {
         fontWeight: font.weight,
         fontSize: layout.fontSize,
         lineHeight: area.lineHeight,
-        textShadow: textShadows[style.effect] ?? textShadows.none,
+        textShadow: [textShadows[style.effect] ?? textShadows.none, ...(glow ? [glow] : [])].join(", "),
         opacity,
       }}
     >
@@ -151,7 +156,147 @@ function LyricText({ line, style, font, textSize, colour, ready, area }: {
           {l}
         </div>
       ))}
+      {next ? (
+        // Positioned below the current line without changing its centring.
+        <div
+          data-next-lyric={next}
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: "100%",
+            marginTop: layout.fontSize * 0.35,
+            fontSize: layout.fontSize * 0.55,
+            opacity: 0.45,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {applyTextCase(next, style.textCase)}
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+// Cover layout: the square cover in the left part with a very slow zoom and a soft shadow, over the
+// same cover blurred and darkened.
+function CoverLayout({ cover, mediaBaseUrl, format }: { cover: NonNullable<LyricVideoProps["cover"]>; mediaBaseUrl: string; format: Format }) {
+  const frame = useCurrentFrame();
+  const { durationInFrames } = useVideoConfig();
+  const zoom = cover.zoomFrom + ((cover.zoomTo - cover.zoomFrom) * frame) / Math.max(1, durationInFrames - 1);
+  const src = mediaUrl(mediaBaseUrl, cover.src);
+  const side = coverSide(format);
+  return (
+    <AbsoluteFill style={{ overflow: "hidden" }}>
+      {cover.backgroundSrc ? (
+        // Blurred and darkened once by FFmpeg: much faster than a CSS blur on every frame.
+        <Img src={mediaUrl(mediaBaseUrl, cover.backgroundSrc)} style={{ ...cover_, position: "absolute", inset: 0 }} />
+      ) : (
+        <Img src={src} style={{ ...cover_, position: "absolute", inset: 0, filter: "blur(48px) brightness(0.45)", transform: "scale(1.2)" }} />
+      )}
+      <div
+        data-cover
+        style={{
+          position: "absolute",
+          left: Math.round(format.width * COVER_CENTRE_X - side / 2),
+          top: Math.round((format.height - side) / 2),
+          width: side,
+          height: side,
+          overflow: "hidden",
+          borderRadius: 6,
+          boxShadow: "0 30px 90px rgba(0,0,0,0.65), 0 8px 24px rgba(0,0,0,0.45)",
+          transform: `scale(${zoom.toFixed(5)})`,
+        }}
+      >
+        <Img src={src} style={cover_} />
+      </div>
+    </AbsoluteFill>
+  );
+}
+
+// Stills layout: one picture per lyric section, crossfaded, each with a slow Ken Burns move.
+function StillsLayout({ stills, mediaBaseUrl }: { stills: NonNullable<LyricVideoProps["stills"]>; mediaBaseUrl: string }) {
+  const frame = useCurrentFrame();
+  return (
+    <AbsoluteFill style={{ overflow: "hidden" }}>
+      {stills.map((s, i) => {
+        const opacity = stillOpacity(s, frame, i === 0, i === stills.length - 1);
+        if (opacity <= 0) return null;
+        const t = (frame - s.startFrame) / Math.max(1, s.endFrame - s.startFrame - 1);
+        const m = s.motion ? kenBurnsAt(s.motion, t) : { zoom: 1, x: 0, y: 0 };
+        return (
+          <Img
+            key={`${s.src}-${s.startFrame}`}
+            src={mediaUrl(mediaBaseUrl, s.src)}
+            style={{
+              ...cover_,
+              position: "absolute",
+              inset: 0,
+              opacity,
+              transform: `translate(${(m.x * 100).toFixed(4)}%, ${(m.y * 100).toFixed(4)}%) scale(${m.zoom.toFixed(5)})`,
+            }}
+          />
+        );
+      })}
+    </AbsoluteFill>
+  );
+}
+
+// Subtle film grain: SVG noise that changes every frame (the same frame always looks the same).
+function Grain() {
+  const frame = useCurrentFrame();
+  return (
+    <AbsoluteFill style={{ pointerEvents: "none", opacity: 0.07, mixBlendMode: "overlay" }}>
+      <svg width="100%" height="100%">
+        <filter id="lyric-grain">
+          <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves={2} seed={frame % 97} stitchTiles="stitch" />
+        </filter>
+        <rect width="100%" height="100%" filter="url(#lyric-grain)" />
+      </svg>
+    </AbsoluteFill>
+  );
+}
+
+// Song title and artist (brand title font, wide spacing, accent colour) over the opening seconds.
+function TitleOverlay({ t, format }: { t: NonNullable<LyricVideoProps["titleOverlay"]>; format: Format }) {
+  const frame = useCurrentFrame();
+  const opacity = interpolate(frame, [t.untilFrame - 30, t.untilFrame], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  if (opacity <= 0) return null;
+  return (
+    <div
+      data-title
+      style={{
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: t.position === "top" ? Math.round(format.height * 0.07) : "50%",
+        transform: t.position === "top" ? undefined : "translateY(-50%)",
+        textAlign: "center",
+        fontFamily: `"${t.font}", serif`,
+        fontWeight: t.weight,
+        color: t.colour,
+        letterSpacing: `${t.letterSpacing}em`,
+        textShadow: "0 2px 18px rgba(0,0,0,0.6)",
+        opacity,
+      }}
+    >
+      <div style={{ fontSize: t.size, textTransform: "uppercase" }}>{t.title}</div>
+      <div style={{ fontSize: Math.round(t.size * 0.45), marginTop: t.size * 0.25, color: "#ffffff", opacity: 0.85 }}>{t.artist}</div>
+    </div>
+  );
+}
+
+function Logo({ logo, mediaBaseUrl, format }: { logo: NonNullable<LyricVideoProps["logo"]>; mediaBaseUrl: string; format: Format }) {
+  const margin = Math.round(format.width * 0.03);
+  const [v, h] = logo.position.split("-") as ["top" | "bottom", "left" | "right"];
+  return (
+    <Img
+      data-logo
+      src={mediaUrl(mediaBaseUrl, logo.src)}
+      style={{ position: "absolute", width: logo.width, height: "auto", [v]: margin, [h]: margin, opacity: 0.9 }}
+    />
   );
 }
 
@@ -196,7 +341,17 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
   const ready = useFonts(mediaBaseUrl, props.fonts);
   const line = activeLyricLine(lyrics, frame);
   const format = props.format ?? DEFAULT_FORMAT;
-  const area = props.lyricArea ?? DEFAULT_LYRIC_AREA;
+  // In the last seconds of a YouTube video the lyrics move out of the end-screen area; a line that
+  // reaches into that time is placed there from its start (it never jumps).
+  const endScreen = props.endScreen;
+  const area = line && endScreen && line.endFrame > endScreen.fromFrame ? endScreen.lyricArea : (props.lyricArea ?? DEFAULT_LYRIC_AREA);
+  const next = props.nextLine && line ? lyrics.find((l) => l.startFrame > line.startFrame)?.text ?? null : null;
+  const glow = props.glow
+    ? (() => {
+        const p = beatPulse(frame, props.glow.beatFrames);
+        return `0 0 ${Math.round(14 + 22 * p)}px ${hexAlpha(props.glow.colour, 0.35 + 0.4 * p)}`;
+      })()
+    : undefined;
   const barHeight = cinematicBarHeight(format);
   const font =
     line?.isHook && props.hookFont
@@ -205,6 +360,8 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
+      {props.layout === "cover" && props.cover ? <CoverLayout cover={props.cover} mediaBaseUrl={mediaBaseUrl} format={format} /> : null}
+      {props.layout === "stills" && props.stills ? <StillsLayout stills={props.stills} mediaBaseUrl={mediaBaseUrl} /> : null}
       {shots.map((shot) => (
         <Sequence key={shot.start} from={shot.start} durationInFrames={shot.duration} premountFor={30}>
           <Shot shot={shot} mediaBaseUrl={mediaBaseUrl} />
@@ -238,11 +395,23 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
 
       {line ? (
         <Sequence key={line.startFrame} from={line.startFrame} durationInFrames={line.endFrame - line.startFrame} layout="none">
-          <LyricText line={line} style={style} font={font} textSize={textSize} colour={colour} ready={ready} area={area} />
+          <LyricText line={line} style={style} font={font} textSize={textSize} colour={colour} ready={ready} area={area} glow={glow} next={next} />
         </Sequence>
+      ) : null}
+
+      {props.grain ? <Grain /> : null}
+      {props.titleOverlay ? <TitleOverlay t={props.titleOverlay} format={format} /> : null}
+      {props.logo && !(endScreen && frame >= endScreen.fromFrame && props.logo.position === "bottom-right") ? (
+        <Logo logo={props.logo} mediaBaseUrl={mediaBaseUrl} format={format} />
       ) : null}
 
       {props.showSafeGuides ? <SafeGuides format={format} safe={props.safeZone ?? DEFAULT_SAFE_ZONE} area={area} /> : null}
     </AbsoluteFill>
   );
 };
+
+// "#E8A3B5" + alpha -> "rgba(232,163,181,0.5)"
+function hexAlpha(hex: string, alpha: number): string {
+  const n = Number.parseInt(hex.replace("#", ""), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha.toFixed(3)})`;
+}

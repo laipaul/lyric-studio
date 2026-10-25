@@ -7,9 +7,10 @@ import { fileURLToPath } from "node:url";
 
 import { ffmpegBin } from "@lyric/db";
 import { bundle } from "@remotion/bundler";
-import { makeCancelSignal, renderMedia, selectComposition } from "@remotion/renderer";
+import { makeCancelSignal, renderMedia, renderStill, selectComposition } from "@remotion/renderer";
 
 import { COMPOSITION_ID } from "../config";
+import { THUMBNAIL_ID, type ThumbnailProps } from "../Thumbnail";
 import type { LyricVideoProps } from "../props";
 import { bundledFontDirs } from "./font-catalog";
 import { startMediaServer, type MediaRoots } from "./media";
@@ -177,4 +178,30 @@ async function ensureFaststart(file: string): Promise<void> {
     ),
   );
   renameSync(fixed, file);
+}
+
+// The YouTube thumbnail (1280x720 JPEG) from the Thumbnail composition.
+export async function renderThumbnail(options: { props: Omit<ThumbnailProps, "mediaBaseUrl">; media: MediaRoots; outFile: string; log?: (m: string) => void }): Promise<string> {
+  const server = await startMediaServer({ ...options.media, fontDirs: options.media.fontDirs ?? bundledFontDirs() });
+  try {
+    const inputProps: ThumbnailProps = { ...options.props, mediaBaseUrl: server.url };
+    const serveUrl = await getBundle(options.log);
+    const port = await freePort();
+    const composition = await selectComposition({ port, serveUrl, id: THUMBNAIL_ID, inputProps, browserExecutable: browserExecutable(), logLevel: "error" });
+    await renderStill({
+      port,
+      serveUrl,
+      composition,
+      inputProps,
+      output: options.outFile,
+      imageFormat: "jpeg",
+      jpegQuality: 92,
+      overwrite: true,
+      browserExecutable: browserExecutable(),
+      logLevel: "error",
+    });
+    return options.outFile;
+  } finally {
+    await server.close();
+  }
 }

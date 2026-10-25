@@ -1,5 +1,5 @@
 {
-  "_help": "Platform presets for pnpm make --platforms. Edit the values; pnpm make checks this file and names any wrong entry. Safe zones are fractions of the frame (0.35 = 35%) covered by the platform's buttons and captions; lyrics stay outside them. lyricsAt: where the lyrics sit inside the usable area (0 = top, 0.5 = middle). length: target = seconds +- tolerance (if no clean line end is in there: up to 25% shorter is preferred, then up to 30% longer), range = min/max/hardMax seconds, full = whole song, loop = min/max seconds. anchor: hook-first = start at most 1 bar before the first hook line; lead-in = one bar before it (earlier if a line is still being sung).",
+  "_help": "Platform presets for pnpm make --platforms. Edit the values; pnpm make checks this file and names any wrong entry. Safe zones are fractions of the frame (0.35 = 35%) covered by the platform's buttons and captions; lyrics stay outside them. lyricsAt: where the lyrics sit inside the usable area (0 = top, 0.5 = middle). length: target = seconds +- tolerance (if no clean line end is in there: up to 25% shorter is preferred, then up to 30% longer), range = min/max/hardMax seconds, full = whole song, loop = min/max seconds. anchor: hook-first = start at most 1 bar before the first hook line; lead-in = one bar before it (earlier if a line is still being sung). endOn: bar = end on a bar start; beat = end on any beat when no bar is clean (bars preferred).",
   "platforms": {
     "standard": {
       "label": "Standard (no --platforms)",
@@ -40,6 +40,7 @@
       "layout": "vertical",
       "length": { "mode": "target", "seconds": 25, "tolerance": 0.15 },
       "anchor": "hook-first",
+      "endOn": "beat",
       "variations": 3,
       "safeZone": { "top": 0.1, "bottom": 0.3, "left": 0, "right": 0.15 },
       "lyricsAt": 0.45,
@@ -55,6 +56,7 @@
       "layout": "vertical",
       "length": { "mode": "target", "seconds": 50, "tolerance": 0.15 },
       "anchor": "hook-first",
+      "endOn": "beat",
       "variations": 2,
       "safeZone": { "top": 0.12, "bottom": 0.25, "left": 0, "right": 0.15 },
       "lyricsAt": 0.45,
@@ -72,12 +74,18 @@
       "anchor": "lead-in",
       "variations": 1,
       "safeZone": { "top": 0.06, "bottom": 0.1, "left": 0.04, "right": 0.04 },
-      "lyricsAt": 0.5,
+      "lyricsAt": 0.45,
       "textScale": 1,
       "videoBitrate": "16M",
       "fadeOutSeconds": 1.5,
-      "available": false,
-      "note": "comes in Step 5g.2"
+      "youtube": {
+        "defaultLayout": "cover",
+        "endScreen": { "seconds": 20, "clear": { "left": 0.5, "top": 0.35 } },
+        "grain": true,
+        "glow": true,
+        "coverZoom": [1, 1.05],
+        "titleSeconds": 4
+      }
     },
     "canvas": {
       "label": "Spotify Canvas (loop, no lyrics, no audio)",

@@ -24,7 +24,14 @@ export type PreparedClip = {
 };
 
 // Size and safe zones of the platform (default: 1080x1920 "standard").
-export type PlatformLayout = { format: Format; safeZone: SafeZone; lyricsAt: number; textScale: number; loopEnding?: boolean };
+export type PlatformLayout = {
+  format: Format;
+  safeZone: SafeZone;
+  lyricsAt: number;
+  textScale: number;
+  loopEnding?: boolean;
+  lyricSafeZone?: SafeZone; // where the lyrics may go, if narrower than the safe zone (YouTube cover layout)
+};
 export type RawLyric = { text: string; start_ms: number; end_ms: number; isHook: boolean };
 export type StyleEntry = {
   style: StyleProps;
@@ -81,7 +88,8 @@ export function composeProps(
 
   const platform = base.platform ?? { format: DEFAULT_FORMAT, safeZone: DEFAULT_SAFE_ZONE, lyricsAt: 0.45, textScale: 1 };
   const byId = new Map(base.clips.map((c) => [c.id, c]));
-  const assigned = assignClips(
+  // No clips (YouTube cover / stills layouts): no shots; the background comes from other props.
+  const assigned = !base.clips.length ? [] : assignClips(
     plan,
     base.clips.map((c) => ({ id: c.id, name: c.name, duration_ms: c.duration_ms, still: c.kind === "photo" })),
     choices.seed,
@@ -128,7 +136,7 @@ export function composeProps(
       cinematicBars: bars,
       format: platform.format,
       safeZone: platform.safeZone,
-      lyricArea: lyricArea(platform.format, platform.safeZone, platform.lyricsAt, bars),
+      lyricArea: lyricArea(platform.format, platform.lyricSafeZone ?? platform.safeZone, platform.lyricsAt, bars),
     },
     warnings,
   };

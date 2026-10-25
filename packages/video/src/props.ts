@@ -26,6 +26,20 @@ export type LyricLineProps = {
   isHook?: boolean; // shown in the hook font when one is set
 };
 
+export type StillProps = { src: string; startFrame: number; endFrame: number; fadeFrames: number; motion?: KenBurns; section: string };
+
+export type TitleOverlayProps = {
+  title: string;
+  artist: string;
+  font: string;
+  weight: number;
+  letterSpacing: number; // em
+  colour: string;
+  untilFrame: number; // fully gone by this frame (Infinity-like large value = always shown)
+  size: number; // px for the title; the artist is smaller
+  position: "top" | "centre";
+};
+
 export type StyleProps = {
   name: string;
   font: string; // font family (one of `fonts`)
@@ -50,6 +64,16 @@ export type LyricVideoProps = {
   cinematicBars: boolean;
   showSafeGuides?: boolean; // preview only: outline the platform safe zone
   format?: Format; // frame size (default 1080x1920)
+  // YouTube (16:9) extras; all optional, so vertical videos are unchanged.
+  layout?: "vertical" | "cover" | "stills" | "clips";
+  cover?: { src: string; zoomFrom: number; zoomTo: number; backgroundSrc?: string } | null; // cover layout: square cover, left third; backgroundSrc: the cover blurred and darkened in advance
+  stills?: StillProps[]; // stills layout: one picture per lyric section, crossfaded on downbeats
+  titleOverlay?: TitleOverlayProps | null; // song title + artist over the opening seconds
+  logo?: { src: string; position: "top-left" | "top-right" | "bottom-left" | "bottom-right"; width: number } | null;
+  endScreen?: { fromFrame: number; lyricArea: LyricArea; clear: { left: number; top: number; right: number; bottom: number } } | null;
+  nextLine?: boolean; // show the next lyric line, small and faded, under the current one
+  grain?: boolean; // subtle film grain
+  glow?: { colour: string; beatFrames: number[] } | null; // soft glow on the lyrics, pulsing on the beats
   safeZone?: SafeZone; // covered by the platform's buttons and captions (preview guides, QA)
   lyricArea?: LyricArea; // where lyrics go, computed from the safe zones (see lyricArea())
 };

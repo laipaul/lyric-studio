@@ -315,13 +315,51 @@ Cause: a line was treated as sung until the next line started (and the next line
 - The regression case is a reconstruction (the cloud session cannot read the user's files); a
   fixture from the real aligned LRC and beat analysis can replace it.
 
+### Step 5g.2 — YouTube (16:9) ✅ (to verify on the Windows PC)
+- `youtube` preset available: 1920x1080, the whole song from 0:00 (not snapped to a bar, so the
+  intro is kept), 1 video, horizontal sources, 16 Mbit/s, 1.5 s fade-out. Settings in
+  presets/platforms.json ("youtube": defaultLayout, endScreen seconds + clear area, grain, glow,
+  coverZoom, titleSeconds).
+- Layouts (`--layout`, default cover):
+  - cover: square cover centred at 22% of the width (60% of the height) with a 1.00-1.05 zoom over the
+    song and a soft shadow, background = the cover blurred/darkened once by FFmpeg (cached; a CSS blur
+    per frame was ~3.5x slower), lyrics right of the cover (from 43% of the width), current line large,
+    next line small and faded, title + artist small at the top (Cinzel, accent colour), logo.
+    Cover from --cover (stored with the project), else the project's cover, else cover.jpg/.png next
+    to the song; else stills, else clips, with a message.
+  - stills: sections from pauses and hooks (without pauses: at hook lines and where repeated lines
+    change to unique ones; unique block after the 2nd chorus = bridge), pictures from stills.txt
+    (next to lyrics.txt, in the collection folder, or --stills) or file-name order (unused pictures,
+    never the same twice in a row), crossfade 1.5 s centred on the downbeat nearest each section start
+    (the new picture fades in over the old one: no dark dip), Ken Burns, grain, beat-pulsed glow.
+  - clips: beat-cut montage with horizontal clips/photos.
+- Title + "Life Lyrics" over the opening seconds (fading out by 4 s) in stills/clips; no title card.
+- Last 20 s: lyrics move to a band above the bottom-right end-screen area (and below the title);
+  QA check "End-screen area clear". Frozen-frame QA is skipped for cover/stills (still by design).
+- thumbnail.jpg 1280x720 (Thumbnail composition: cover / chorus still / frame at the first hook,
+  title in Cinzel + accent colour, artist, logo) and publish.txt from
+  workspace\brand\publish-template.txt (created the first time).
+- .srt captions for every video on every platform.
+- TikTok and Shorts may end on any beat when no bar is clean (bars preferred in each length tier);
+  Reels and standard keep bar ends.
+- `--title` (saved to the project) for the title overlay, thumbnail, publish.txt and the LRC name.
+- Collection import warns about files with identical content.
+- Tests: 15 YouTube/beat-end unit tests (sections, stills.txt, crossfades, mid-song start, end-screen
+  band for every layout, glow, .srt, layout fallback, beat ends and bar preference), 3 real renders
+  (cover layout incl. logo and end-screen position, stills crossfade with grain/glow, thumbnail),
+  make tests (cover layout run with title/thumbnail/publish/srt and the stored cover, cover lookup
+  order, stills and clips fallbacks, .srt everywhere).
+- Cloud check: 100 s cover-layout video rendered and checked frame by frame (cover, lyrics right,
+  next line, hook font, end-screen band, logo, thumbnail).
+
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
 - `pnpm analyze <file>` (also `--click`, `--downbeat-offset`), `POST /analyze`, `pnpm test:audio`.
 - `pnpm cuts <file> --section a-b`.
 - `pnpm tap`, `pnpm render:test`, http://localhost:3000/preview.
-- `pnpm make --platforms reels,tiktok,shorts`, `--allow-fill`, photos in collections.
+- `pnpm make --platforms reels,tiktok,shorts,youtube` (or `all`), `--allow-fill`, photos in collections,
+  YouTube cover / stills / clips layouts, thumbnails, publish.txt, .srt captions.
 - `pnpm make` (verified on the Windows PC: 6 videos, all QA PASS, 444 s with --parallel 1; after 5d.1
   with the defaults: all 6 PASS, no memory errors, one at a time with a 2 GB clip cache, 469 s), `pnpm rerender`.
 - `pnpm lrc:shift`, `pnpm lrc:hook`, `pnpm fonts`.
@@ -329,9 +367,10 @@ Cause: a line was treated as sung until the next line started (and the next line
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
 
 ## Known issues
-- TikTok (target 25 s) ended at 31.6 s like Reels on the user's song. Most likely no bar falls inside a gap between
-  lines between ~19 and ~29 s after the start, so the longer fallback (up to +30%) was used. Possible
-  later option: allow ending on a beat (not only a bar) for short-form.
+- TikTok (target 25 s) ended at 31.6 s like Reels on the user's song (most likely no bar inside a gap
+  between lines). Since 5g.2 TikTok and Shorts may end on any beat, which should fix it.
+- Full-song YouTube videos render slowly in the cloud check (cover layout ~1.5 s per second of video on
+  4 threads); expect a few minutes for a 4-minute song on the PC.
 - `pnpm make`: cinematic bars on every other variation together with Simple/Bold alternating means
   bars always come with Bold (v2, v4, v6). Easy to change if you want other pairs.
 - `pnpm rerender` renders the stored props with the current composition; after a Lyric Studio update
@@ -367,8 +406,6 @@ Cause: a line was treated as sung until the next line started (and the next line
 - The workspace service is used by tests only so far; commands and UI that use it come in later steps.
 
 ## Next
-Order changed by the user: platform presets first, then the timing editor.
-1. Step 5g.2 (YouTube 16:9: cover / stills / clips layouts, .srt captions, title cards and thumbnail
-   with the brand, end-screen-safe last 20 s) — plan to be approved first. Then Step 5g.3 (Canvas).
+1. Step 5g.3 (Spotify Canvas loop) — after 5g.2 is verified on the PC.
 2. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project
    (confirmed by the user) and plug into the same render-time layer as the lyrics offset.

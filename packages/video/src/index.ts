@@ -15,3 +15,6 @@ export * from "./section";
 export * from "./qa";
 export * from "./platform";
 export * from "./photo";
+export * from "./youtube";
+export * from "./youtube-layout";
+export * from "./Thumbnail";
