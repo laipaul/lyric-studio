@@ -57,6 +57,7 @@ export type RenderOptions = {
   videoCacheBytes?: number;
   stallTimeoutMs?: number; // cancel the render if it makes no progress for this long (default 5 min)
   videoBitrate?: string | null; // e.g. "10M" (platform presets); default: constant quality
+  compositionId?: string; // default LyricVideo (pnpm effects:preview renders its grid composition)
 };
 
 export const STALL_TIMEOUT_MS = 5 * 60_000;
@@ -85,7 +86,7 @@ export async function renderLyricVideo(options: RenderOptions): Promise<string> 
     const composition = await selectComposition({
       port,
       serveUrl,
-      id: COMPOSITION_ID,
+      id: options.compositionId ?? COMPOSITION_ID,
       inputProps,
       browserExecutable: browserExecutable(),
       logLevel: "error",

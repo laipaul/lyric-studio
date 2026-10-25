@@ -18,6 +18,7 @@
     "render:test": "tsx packages/video/scripts/render-test.ts",
     "make": "tsx packages/video/scripts/make.ts",
     "rerender": "tsx packages/video/scripts/rerender.ts",
+    "effects:preview": "tsx packages/video/scripts/effects-preview.ts",
     "fonts": "tsx packages/video/scripts/fonts.ts",
     "db:setup": "pnpm -s --filter @lyric/db run setup",
     "db:migrate": "pnpm -s --filter @lyric/db run migrate",

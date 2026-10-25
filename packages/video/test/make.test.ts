@@ -8,9 +8,10 @@ import path from "node:path";
 import { REPO_ROOT, clip, ffmpegBin, lyricLine, project, openWorkspace, renderJob, seedStylePresets, variation, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { lyricArea, sectionWindow, toSrt } from "../src";
+import { EFFECTS, lyricArea, sectionWindow, toSrt, type EffectsPreviewProps } from "../src";
 
 import {
+  effectsPreview,
   ensureAlignment,
   exportFolder,
   findOrCreateSongProject,
@@ -695,6 +696,90 @@ describe("platform presets (stand-in renderer)", () => {
     mkdirSync(none, { recursive: true });
     makeClip(path.join(none, "a.mp4"), 3, "blue");
     await expect(run({ platforms: "canvas", collection: "canvas-short" })).rejects.toThrow(/needs a vertical clip of at least 8\.5 s \(the longest is 3\.0 s\) or a vertical photo/);
+  });
+
+  it("lyric effects: brand.json, then platforms.json, then --line-effect / --hook-effect; next line per platform", async () => {
+    const brandFile = path.join(wsDir, "brand", "brand.json");
+    const plans: MakePlan[] = [];
+    const first = await run({ platforms: "reels", variations: 1, onReady: (p) => plans.push(p) });
+    const brandBefore = readFileSync(brandFile, "utf8"); // created with the defaults by the first run
+    const m = readManifest(first.variations[0].manifestFile);
+    expect(m.props.lyricEffects).toEqual({ verse: { name: "glide", intensity: "balanced" }, hook: { name: "karaoke-highlight", intensity: "balanced" }, accent: "#E8A3B5" });
+    expect(m.props.nextLine).toBe(true);
+    expect(plans[0].effects).toEqual({ verse: "glide", hook: "karaoke-highlight", from: { verse: "brand.json", hook: "brand.json" }, showNextLine: true });
+    expect(m.settings).toMatchObject({ line_effect: "glide", hook_effect: "karaoke-highlight", show_next_line: true });
+    // Every shown line knows when it is sung and when its singing ends (from the alignment report).
+    for (const l of m.props.lyrics.filter((x) => x.startFrame > 0)) {
+      expect(l.stampFrame! - l.startFrame).toBeGreaterThanOrEqual(7); // the 0.25 s lead (7.5 frames, rounded)
+      expect(l.stampFrame! - l.startFrame).toBeLessThanOrEqual(8);
+      expect(l.sungEndFrame! - l.stampFrame!).toBe(30); // sung for 1 s
+    }
+    expect(readFileSync(first.variations[0].qaFile, "utf8")).toContain("[ok  ] Lyrics inside the safe zone"); // incl. the waiting next line
+
+    // brand.json motion, then a platform's motion, then the command line.
+    const brand = JSON.parse(brandBefore);
+    writeFileSync(brandFile, JSON.stringify({ ...brand, motion: { verseEffect: "floating:subtle", hookEffect: "word-reveal" } }));
+    try {
+      const fromBrand = readManifest((await run({ platforms: "reels", variations: 1 })).variations[0].manifestFile);
+      expect([fromBrand.props.lyricEffects!.verse, fromBrand.props.lyricEffects!.hook]).toEqual([{ name: "floating", intensity: "subtle" }, { name: "word-reveal", intensity: "balanced" }]);
+      const json = JSON.parse(readFileSync(path.join(REPO_ROOT, "presets", "platforms.json"), "utf8"));
+      json.platforms.tiktok = { ...json.platforms.tiktok, motion: { verseEffect: "cinematic-fade" }, showNextLine: false };
+      const file = path.join(root, "motion-presets.json");
+      writeFileSync(file, JSON.stringify(json));
+      const fromPlatform = await run({ platforms: "tiktok", variations: 1, presetsFile: file });
+      const pm = readManifest(fromPlatform.variations[0].manifestFile);
+      expect(pm.props.lyricEffects!.verse).toEqual({ name: "cinematic-fade", intensity: "balanced" });
+      expect(pm.props.lyricEffects!.hook).toEqual({ name: "word-reveal", intensity: "balanced" }); // not set there: brand.json
+      expect(pm.props.nextLine).toBe(false);
+      const cli = readManifest((await run({ platforms: "tiktok", variations: 1, presetsFile: file, lineEffect: "soft-blur:expressive", hookEffect: "typewriter" })).variations[0].manifestFile);
+      expect([cli.props.lyricEffects!.verse, cli.props.lyricEffects!.hook]).toEqual([{ name: "soft-blur", intensity: "expressive" }, { name: "typewriter", intensity: "balanced" }]);
+      writeFileSync(brandFile, JSON.stringify({ ...brand, motion: { verseEffect: "spin" } }));
+      await expect(run({ platforms: "reels", variations: 1 })).rejects.toThrow(/motion.verseEffect: unknown effect "spin"/);
+    } finally {
+      writeFileSync(brandFile, brandBefore);
+    }
+    await expect(run({ platforms: "reels", lineEffect: "wobble" })).rejects.toThrow(/--line-effect: unknown effect "wobble"/);
+  });
+
+  it("pnpm effects:preview: all effects side by side on 2-3 real lines, or one effect full-size in 9:16 and 16:9", async () => {
+    const seen: RenderOptions[] = [];
+    const renderer = async (o: RenderOptions) => {
+      seen.push(o);
+      writeFileSync(o.outFile, "mp4");
+      return o.outFile;
+    };
+    // The project by title (ignoring case; an earlier test may have renamed it with --title) or by song file.
+    const ws2 = openWorkspace(wsDir);
+    const title = ws2.db.select().from(project).all().find((x) => x.audio_path?.includes("long-song"))!.title;
+    ws2.close();
+    const grid = await effectsPreview({ project: title.toUpperCase(), workspaceDir: wsDir, renderer });
+    expect(seen).toHaveLength(1);
+    expect(seen[0].compositionId).toBe("EffectsPreview");
+    expect(path.basename(grid.files[0])).toBe("effects-preview.mp4");
+    expect(path.basename(grid.folder)).toMatch(/^effects-\d{4}-\d{2}-\d{2}_\d{6}$/);
+    expect(grid.lines).toEqual(["Verse 1 line four", "* Hold on to me", "Through the night"]); // around the first hook
+    const p = seen[0].props as unknown as EffectsPreviewProps;
+    expect(p.format).toEqual({ width: 1920, height: 1080 });
+    expect(p.panels.map((x) => x.label)).toEqual(EFFECTS.map((e) => e.label));
+    expect(p.panels[0].note).toBe("(your verses)");
+    expect(p.panels.find((x) => x.label === "Karaoke highlight")!.note).toBe("(your hooks)");
+    expect(p.durationInFrames).toBeLessThanOrEqual(12 * 30);
+    for (const [i, panel] of p.panels.entries()) {
+      expect(panel.props.lyricEffects!.verse).toEqual({ name: EFFECTS[i].name, intensity: "balanced" });
+      expect(panel.props.lyricEffects!.hook).toEqual({ name: EFFECTS[i].name, intensity: "balanced" });
+      expect(panel.props.lyrics.map((l) => l.text)).toEqual(["Verse 1 line four", "Hold on to me", "Through the night"]);
+      expect(panel.props.shots.at(-1)!.start + panel.props.shots.at(-1)!.duration).toBe(p.durationInFrames); // clips fill the sample
+    }
+    expect(p.audio!.startFrame).toBe(Math.round(((900 + 3 * 2000 - 1500) * 30) / 1000)); // 1.5 s before the first line
+
+    seen.length = 0;
+    const one = await effectsPreview({ project: song, effect: "soft-blur:subtle", workspaceDir: wsDir, renderer });
+    expect(one.files.map((f) => path.basename(f))).toEqual(["soft-blur-subtle-9x16.mp4", "soft-blur-subtle-16x9.mp4"]);
+    expect(seen.map((o) => o.props.format)).toEqual([{ width: 1080, height: 1920 }, { width: 1920, height: 1080 }]);
+    for (const o of seen) expect(o.props.lyricEffects!.verse).toEqual({ name: "soft-blur", intensity: "subtle" });
+
+    await expect(effectsPreview({ project: "nope", workspaceDir: wsDir, renderer })).rejects.toThrow(new RegExp(`No project "nope". Projects: .*"${title}"`));
+    await expect(effectsPreview({ project: title, effect: "spin", workspaceDir: wsDir, renderer })).rejects.toThrow(/--effect: unknown effect "spin"/);
   });
 
   it("--resume per platform renders only what is missing in each platform folder", async () => {

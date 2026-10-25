@@ -408,6 +408,49 @@ describe("LyricVideo render", () => {
     expect(b.lastToFirst).toBeGreaterThan(a.lastToFirst * 3); // without the blend the jump is obvious
   }, 300_000);
 
+  it("lyric effects: glide moves the text smoothly frame by frame (no jumps), deterministic; karaoke uses the accent", async () => {
+    // Three lines 2 s apart on black; line 2 is a hook (karaoke-highlight) with word timings.
+    const words = (stamp: number, ws: string[]) => ws.map((text, k) => ({ text, startFrame: stamp + 8 * k, endFrame: stamp + 8 * (k + 1) }));
+    const props = baseProps({
+      colour: "#ff00ff",
+      durationInFrames: 200,
+      nextLine: true,
+      lyricEffects: { verse: { name: "glide", intensity: "balanced" }, hook: { name: "karaoke-highlight", intensity: "balanced" }, accent: "#00ff00" },
+      lyrics: [
+        { text: "First line here", startFrame: 20, endFrame: 80, stampFrame: 28, words: words(28, ["First", "line", "here"]) },
+        { text: "Hold on", startFrame: 80, endFrame: 140, stampFrame: 88, isHook: true, words: words(88, ["Hold", "on"]) },
+        { text: "Third line", startFrame: 140, endFrame: 200, stampFrame: 148, words: words(148, ["Third", "line"]) },
+      ],
+    });
+    // Lyric "mass" on black: total brightness of the magenta text and its brightness-weighted mean
+    // height (both change continuously while lines fade and move; a jump would show as a step).
+    const mass = async (frame: number) => {
+      const { raw, w, h } = await frameRegion(props, frame, { x: 0, y: 500, w: 1080, h: 900 });
+      let n = 0, sy = 0, green = 0;
+      for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) {
+        const i = (y * w + x) * 3;
+        n += raw[i];
+        sy += raw[i] * y;
+        if (raw[i + 1] > 120 && raw[i] < 90 && raw[i + 2] < 90) green++;
+      }
+      return { n, y: n ? sy / n : 0, green };
+    };
+    const samples = [];
+    for (let f = 62; f <= 82; f++) samples.push(await mass(f)); // the glide into line 2 (settled at 80)
+    for (let k = 1; k < samples.length; k++) {
+      expect(Math.abs(samples[k].y - samples[k - 1].y), `frame ${62 + k} height`).toBeLessThan(25); // moves, never jumps
+      expect(Math.abs(samples[k].n - samples[k - 1].n) / samples[0].n, `frame ${62 + k} brightness`).toBeLessThan(0.3); // fades, never pops
+      expect(samples[k].n, `frame ${62 + k}`).toBeGreaterThan(0); // never a blank frame mid-transition
+    }
+    // Karaoke: the word being sung ("Hold", frames 88-96) is in the accent colour.
+    expect((await mass(90)).green).toBeGreaterThan(50);
+    expect((await mass(84)).green).toBeLessThan(5);
+    // Deterministic: the same frame twice is pixel-identical.
+    const a = await frameRegion(props, 70);
+    const b = await frameRegion(props, 70);
+    expect(Buffer.compare(a.raw, b.raw)).toBe(0);
+  }, 300_000);
+
   // ---- YouTube (16:9) ------------------------------------------------------------------------
   const YT = { width: 1920, height: 1080 };
   async function ytPixels(props: LyricVideoProps, frame: number) {

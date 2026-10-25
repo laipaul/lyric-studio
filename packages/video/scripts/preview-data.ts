@@ -3,10 +3,11 @@
 import { DEFAULT_SEED, prepareRender } from "../src/node";
 
 try {
-  const { base, media, report, setupWarnings } = await prepareRender({ log: (m) => console.error(`[preview] ${m}`) });
+  const { base, effects, media, report, setupWarnings } = await prepareRender({ log: (m) => console.error(`[preview] ${m}`) });
   console.log(
     JSON.stringify({
       base,
+      effects,
       media,
       defaultSeed: DEFAULT_SEED,
       setupWarnings,

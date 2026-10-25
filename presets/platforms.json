@@ -1,5 +1,5 @@
 {
-  "_help": "Platform presets for pnpm make --platforms. Edit the values; pnpm make checks this file and names any wrong entry. Safe zones are fractions of the frame (0.35 = 35%) covered by the platform's buttons and captions; lyrics stay outside them. lyricsAt: where the lyrics sit inside the usable area (0 = top, 0.5 = middle). length: target = seconds +- tolerance (if no clean line end is in there: up to 25% shorter is preferred, then up to 30% longer), range = min/max/hardMax seconds, full = whole song, loop = min/max seconds. anchor: hook-first = start at most 1 bar before the first hook line; lead-in = one bar before it (earlier if a line is still being sung). endOn: bar = end on a bar start; beat = end on any beat when no bar is clean (bars preferred).",
+  "_help": "Platform presets for pnpm make --platforms. Edit the values; pnpm make checks this file and names any wrong entry. Safe zones are fractions of the frame (0.35 = 35%) covered by the platform's buttons and captions; lyrics stay outside them. lyricsAt: where the lyrics sit inside the usable area (0 = top, 0.5 = middle). length: target = seconds +- tolerance (if no clean line end is in there: up to 25% shorter is preferred, then up to 30% longer), range = min/max/hardMax seconds, full = whole song, loop = min/max seconds. anchor: hook-first = start at most 1 bar before the first hook line; lead-in = one bar before it (earlier if a line is still being sung). endOn: bar = end on a bar start; beat = end on any beat when no bar is clean (bars preferred). showNextLine: the next lyric line waits small underneath (true/false). motion (optional): lyric effects for this platform, overriding brand.json, e.g. { \"verseEffect\": \"soft-blur:subtle\", \"hookEffect\": \"karaoke-highlight\" } (see pnpm effects:preview).",
   "platforms": {
     "standard": {
       "label": "Standard (no --platforms)",
@@ -7,6 +7,7 @@
       "height": 1920,
       "aspect": "9:16",
       "layout": "vertical",
+      "showNextLine": true,
       "length": { "mode": "range", "min": 45, "max": 60, "hardMax": 65 },
       "anchor": "lead-in",
       "variations": 6,
@@ -22,6 +23,7 @@
       "height": 1920,
       "aspect": "9:16",
       "layout": "vertical",
+      "showNextLine": true,
       "length": { "mode": "target", "seconds": 30, "tolerance": 0.15 },
       "anchor": "hook-first",
       "variations": 3,
@@ -38,6 +40,7 @@
       "height": 1920,
       "aspect": "9:16",
       "layout": "vertical",
+      "showNextLine": true,
       "length": { "mode": "target", "seconds": 25, "tolerance": 0.15 },
       "anchor": "hook-first",
       "endOn": "beat",
@@ -54,6 +57,7 @@
       "height": 1920,
       "aspect": "9:16",
       "layout": "vertical",
+      "showNextLine": true,
       "length": { "mode": "target", "seconds": 50, "tolerance": 0.15 },
       "anchor": "hook-first",
       "endOn": "beat",
@@ -70,6 +74,7 @@
       "height": 1080,
       "aspect": "16:9",
       "layout": "youtube",
+      "showNextLine": true,
       "length": { "mode": "full" },
       "anchor": "lead-in",
       "variations": 1,

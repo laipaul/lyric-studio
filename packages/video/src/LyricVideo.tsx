@@ -14,6 +14,7 @@ import {
 } from "remotion";
 
 import { useFonts } from "./fonts";
+import { LyricScene } from "./LyricScene";
 import { activeLyricLine, applyTextCase, layoutLyric } from "./lyrics";
 import { kenBurnsAt } from "./photo";
 import { loopBlendOpacity, photoLoopProgress } from "./canvas";
@@ -432,7 +433,21 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
         </>
       ) : null}
 
-      {line ? (
+      {props.lyricEffects ? (
+        <LyricScene
+          lyrics={lyrics}
+          effects={props.lyricEffects}
+          style={style}
+          hookFont={props.hookFont ?? null}
+          textSize={textSize}
+          colour={colour}
+          ready={ready}
+          areaFor={(l) => (endScreen && l.endFrame > endScreen.fromFrame ? endScreen.lyricArea : (props.lyricArea ?? DEFAULT_LYRIC_AREA))}
+          glow={glow}
+          showNext={props.nextLine ?? false}
+          nextScale={props.nextLineScale ?? 0.55}
+        />
+      ) : line ? (
         <Sequence key={line.startFrame} from={line.startFrame} durationInFrames={line.endFrame - line.startFrame} layout="none">
           <LyricText line={line} style={style} font={font} textSize={textSize} colour={colour} ready={ready} area={area} glow={glow} next={next} nextScale={props.nextLineScale} />
         </Sequence>

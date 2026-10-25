@@ -270,6 +270,7 @@ changed since.
 | `--lrc <file.lrc>` | | use this LRC instead of aligning (stored as-is) |
 | `--lyrics-offset S` | `0` | move all lines (seconds); saved to the project, the LRC stays unchanged |
 | `--lead`, `--rate`, `--energy`, `--font`, `--font-hook`, `--pins`, `--downbeat-offset` | | as for `pnpm render:test` |
+| `--line-effect`, `--hook-effect` | brand.json (glide / karaoke-highlight) | lyric effect for verse / hook lines, e.g. `soft-blur:subtle` (see Lyric effects) |
 | `--platforms reels,tiktok,shorts` / `all` | (standard) | one folder per platform, presets from `presets\platforms.json` |
 | `--allow-fill` | | also use sources of the other orientation, shown whole over a blurred copy |
 | `--title "My Song"` | file name | the song's title (title overlay, thumbnail, publish.txt; saved) |
@@ -381,6 +382,48 @@ One silent 1080x1920 loop in `exports\<date>\canvas\` (`v1.mp4`, manifest, QA; n
 - **QA**: "Seamless loop" (the jump from the last frame to the first is no bigger than an ordinary
   frame step), "No audio", "Length 3-8 s".
 - Upload it in Spotify for Artists (Canvas). Spotify shows its own song info over it.
+
+### Lyric effects (`--line-effect`, `--hook-effect`, `pnpm effects:preview`)
+
+How lyric lines come in and go. Default: **glide** for verses (like Apple Music / Spotify: the line
+moves up and fades, the next line, waiting small underneath, rises into place) and
+**karaoke-highlight** for hooks (the word being sung lights up in your accent colour).
+
+| Effect | What it does |
+| --- | --- |
+| glide | lines scroll up; the next line waits small underneath and rises into place |
+| cinematic-fade | slow fade out, then a slow fade in settling from slightly larger |
+| soft-blur | comes into focus from a soft blur (at most 4 px) |
+| dreamy-glow | glows up out of a soft haze, then breathes gently |
+| word-reveal | each word rises in on the voice |
+| karaoke-highlight | the word being sung lights up in the accent colour |
+| floating | drifts in from below, then floats gently |
+| typewriter | letters typed in, each word complete when it is sung |
+
+Each effect has an intensity: `subtle`, `balanced` (default) or `expressive`, e.g. `glide:subtle`.
+Every line is fully readable 0.25 s before it is sung. Before an instrumental pause, the last line
+fades out 1 s after its last word (instead of staying on screen).
+
+Where to choose (the later one wins):
+
+1. `workspace\brand\brand.json`: `"motion": { "verseEffect": "glide", "hookEffect": "karaoke-highlight" }`
+   (also `{ "name": "floating", "intensity": "subtle", "durationMs": 800, "easing": "ease-out" }`).
+2. `presets\platforms.json`, per platform: `"motion": { "verseEffect": "soft-blur:subtle" }`, and
+   `"showNextLine": false` to hide the waiting next line on that platform.
+3. The command line: `--line-effect cinematic-fade --hook-effect word-reveal:expressive`.
+
+Watch them on your own song (uses the clips, fonts and timing of the project's latest `pnpm make`):
+
+```powershell
+cd D:\videomaker
+pnpm effects:preview song
+pnpm effects:preview song --effect soft-blur:subtle
+```
+
+The first makes `effects-preview.mp4` (all 8 side by side, labelled; your current choices are marked);
+the second one effect full-size, 9:16 and 16:9. They are saved in
+`workspace\projects\<id>\exports\effects-<date>\`. `song` is the project title (the song's file
+name), its id, or the song file.
 
 ## Test render (`pnpm render:test`)
 

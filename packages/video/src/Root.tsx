@@ -1,5 +1,6 @@
 import { Composition } from "remotion";
 
+import { defaultEffectsPreviewProps, EffectsPreview, EFFECTS_PREVIEW_ID, type EffectsPreviewProps } from "./EffectsPreview";
 import { LyricVideo } from "./LyricVideo";
 import { COMPOSITION_ID, VIDEO } from "./config";
 import { defaultLyricVideoProps, type LyricVideoProps } from "./props";
@@ -29,6 +30,16 @@ export const RemotionRoot: React.FC = () => (
       width={THUMBNAIL_SIZE.width}
       height={THUMBNAIL_SIZE.height}
       defaultProps={defaultThumbnailProps}
+    />
+    <Composition
+      id={EFFECTS_PREVIEW_ID}
+      component={EffectsPreview}
+      durationInFrames={defaultEffectsPreviewProps.durationInFrames}
+      fps={VIDEO.fps}
+      width={defaultEffectsPreviewProps.format.width}
+      height={defaultEffectsPreviewProps.format.height}
+      defaultProps={defaultEffectsPreviewProps}
+      calculateMetadata={({ props }: { props: EffectsPreviewProps }) => ({ durationInFrames: props.durationInFrames, width: props.format.width, height: props.format.height })}
     />
   </>
 );

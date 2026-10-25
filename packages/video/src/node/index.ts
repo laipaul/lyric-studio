@@ -15,3 +15,4 @@ export * from "./rerender";
 export * from "./brand";
 export * from "./youtube";
 export * from "./canvas";
+export * from "./effects-preview";

@@ -64,6 +64,22 @@ describe("presets file", () => {
     expect(after.centerY).toBeLessThan(before.centerY); // a taller caption area moves the lyrics up
   });
 
+  it("showNextLine (default on) and an optional motion per platform, checked like the rest", () => {
+    for (const name of ["standard", "reels", "tiktok", "shorts", "youtube"]) expect(presets[name].showNextLine, name).toBe(true);
+    const json = fileJson();
+    json.platforms.tiktok.showNextLine = false;
+    json.platforms.reels.motion = { verseEffect: "soft-blur:subtle", hookEffect: { name: "typewriter", intensity: "expressive" } };
+    delete json.platforms.shorts.showNextLine;
+    const edited = parsePresets(json);
+    expect(edited.tiktok.showNextLine).toBe(false);
+    expect(edited.shorts.showNextLine).toBe(true);
+    expect(edited.reels.motion).toEqual({ verseEffect: { name: "soft-blur", intensity: "subtle" }, hookEffect: { name: "typewriter", intensity: "expressive" } });
+    json.platforms.reels.motion = { verseEffect: "wobble" };
+    json.platforms.tiktok.showNextLine = "yes";
+    expect(() => parsePresets(json)).toThrow(/platform "reels": motion.verseEffect: unknown effect "wobble"/);
+    expect(() => parsePresets(json)).toThrow(/platform "tiktok": "showNextLine" must be true or false/);
+  });
+
   it("names the platform and field of every mistake", () => {
     const json = fileJson();
     json.platforms.tiktok.width = 1081;

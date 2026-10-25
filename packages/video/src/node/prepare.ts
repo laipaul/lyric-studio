@@ -7,7 +7,10 @@ import { openWorkspace, resolveWorkspaceDir, stylePreset, type StylePreset, type
 import { eq } from "drizzle-orm";
 
 import type { Beat } from "../beats";
-import { composeProps, DEFAULT_LEAD_MS, type RenderBase, type StyleChoice, type StyleEntry } from "../compose";
+import { composeProps, DEFAULT_LEAD_MS, rawLyric, type RenderBase, type StyleChoice, type StyleEntry } from "../compose";
+import { DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT } from "../effects";
+import type { LyricEffectsProps } from "../props";
+import { DEFAULT_BRAND } from "./brand";
 import { AUDIO_FADE, VIDEO } from "../config";
 import { getCutPoints, type CutPlan, type CutRate, type Energy } from "../cuts";
 import { parseLrc, type TimedLine } from "../lrc";
@@ -45,10 +48,14 @@ export type PrepareOptions = {
   collection?: string;
   workspaceDir?: string;
   log?: (message: string) => void;
+  effects?: LyricEffectsProps | null; // default: glide verses, karaoke-highlight hooks; null: the old fade
 };
+
+export const DEFAULT_EFFECTS: LyricEffectsProps = { verse: DEFAULT_VERSE_EFFECT, hook: DEFAULT_HOOK_EFFECT, accent: DEFAULT_BRAND.accentColour };
 
 export type PrepareResult = {
   base: RenderBase; // everything except the quick choices (used by the /preview page)
+  effects: LyricEffectsProps | null; // lyric effects passed to composeProps (the /preview page uses the same)
   props: Omit<LyricVideoProps, "mediaBaseUrl">; // composeProps(base, choices)
   media: MediaRoots;
   warnings: string[]; // pins, too-long lines
@@ -278,12 +285,13 @@ export async function prepareRender(options: PrepareOptions = {}): Promise<Prepa
     const warnings = [...setupWarnings];
 
     const { media, audio } = songMedia(ws.dir, song, plan, catalog);
+    const effects = options.effects === undefined ? DEFAULT_EFFECTS : options.effects;
     const base: RenderBase = {
       plan,
       clips: preparedClips,
       audio,
       durationInFrames: plan.end_frame - plan.start_frame,
-      lyrics: lines,
+      lyrics: lines.map(rawLyric),
       styles: { simple: styles.simple.entry, bold: styles.bold.entry },
       colour: options.colour ?? "#ffffff",
       cinematicBars: options.bars ?? false,
@@ -296,6 +304,7 @@ export async function prepareRender(options: PrepareOptions = {}): Promise<Prepa
       leadMs: options.leadMs ?? DEFAULT_LEAD_MS,
       lyricsOffsetMs: options.lyricsOffsetMs ?? 0,
       textSize: options.textSize,
+      ...(effects ? { effects } : {}),
     });
     warnings.push(...composed.warnings);
 
@@ -320,6 +329,7 @@ export async function prepareRender(options: PrepareOptions = {}): Promise<Prepa
 
     return {
       base,
+      effects,
       props: composed.props,
       media,
       warnings,

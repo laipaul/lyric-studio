@@ -4,10 +4,11 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 
 import type { MediaRoots } from "@lyric/video/media";
-import type { RenderBase } from "@lyric/video";
+import type { LyricEffectsProps, RenderBase } from "@lyric/video";
 
 export type PreviewData = {
   base: RenderBase;
+  effects?: LyricEffectsProps | null;
   media: MediaRoots;
   defaultSeed: number;
   setupWarnings: string[];

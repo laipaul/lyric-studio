@@ -394,6 +394,33 @@ Cause: a line was treated as sung until the next line started (and the next line
   folder, warnings, photo fallback, error), a real render (no audio stream; the blended loop's jump
   is within the QA limit, the unblended one is several times larger).
 
+### Step 5j — Lyric effects library (pulled forward) ✅ (to verify on the Windows PC)
+- `packages/video/src/effects`: one module per effect (glide, cinematic-fade, soft-blur, dreamy-glow,
+  word-reveal, karaoke-highlight, floating, typewriter), each with duration, easing and intensity
+  (subtle 0.6x / balanced 1x / expressive 1.5x), per line or per word. Only Remotion's own
+  interpolate / Easing (no GSAP, no Framer Motion). `scene.ts` decides for every frame which lines are
+  shown (leaving, active, waiting next) and how; `LyricScene.tsx` draws exactly that.
+- Timing: every line is settled 0.25 s before its stamp; transitions (glide 500 ms) end there and get
+  shorter when lines come fast, so a line is never moving at its own stamp. Word effects use the
+  aligned word times (LRC word tags), else words spread from the stamp.
+- Pauses: a line followed by a pause leaves 1 s after its last word ends (0.4 s fade).
+- Choice: brand.json `motion` (glide verses, karaoke-highlight hooks), platforms.json `motion` per
+  platform, `--line-effect` / `--hook-effect`; `showNextLine` per platform (default true). The plan
+  prints "Effects: verses glide (brand.json), hooks karaoke-highlight (brand.json), next line shown".
+  Manifests store the choice (`pnpm rerender` reproduces it); older manifests keep the old fade/pop.
+- QA "Lyrics inside the safe zone" measures the space each effect moves the line and the waiting
+  next line.
+- `pnpm effects:preview <project>`: all 8 side by side (1920x1080, labelled, your choices marked) on
+  2-3 real lines around the first hook, with your clips, fonts and song (about 12 s, ~2.5 min in the
+  cloud); `--effect <name[:intensity]>`: one effect full-size, 9:16 and 16:9.
+- /preview and `pnpm render:test` use the same effects (glide / karaoke-highlight).
+- Tests: no frame-to-frame jumps beyond the easing (every effect x intensity, next line on/off),
+  active line fully readable at its stamp (relaxed, fast and very fast lines), glide geometry,
+  karaoke / word-reveal / typewriter on the word times, word fallback, pauses clear the screen,
+  deterministic output, settings order (brand -> platform -> command line), QA box with the waiting
+  line, effects:preview, and a real render (smooth movement and brightness, accent colour on the sung
+  word, pixel-identical frames).
+
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -401,7 +428,7 @@ Cause: a line was treated as sung until the next line started (and the next line
 - `pnpm cuts <file> --section a-b`.
 - `pnpm tap`, `pnpm render:test`, http://localhost:3000/preview.
 - `pnpm make --platforms reels,tiktok,shorts,youtube` (or `all`), `--allow-fill`, photos in collections,
-  YouTube cover / stills / clips layouts, thumbnails, publish.txt, .srt captions, Spotify Canvas loops.
+  YouTube cover / stills / clips layouts, thumbnails, publish.txt, .srt captions, Spotify Canvas loops, lyric effects (`--line-effect`, `--hook-effect`, `pnpm effects:preview`).
 - `pnpm make` (verified on the Windows PC: 6 videos, all QA PASS, 444 s with --parallel 1; after 5d.1
   with the defaults: all 6 PASS, no memory errors, one at a time with a 2 GB clip cache, 469 s), `pnpm rerender`.
 - `pnpm lrc:shift`, `pnpm lrc:hook`, `pnpm fonts`.
@@ -448,5 +475,7 @@ Cause: a line was treated as sung until the next line started (and the next line
 - The workspace service is used by tests only so far; commands and UI that use it come in later steps.
 
 ## Next
-1. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project
+1. Verify Step 5g.3 (Spotify Canvas, already built and pushed) on the PC.
+2. Step 5g.4 (loop layout).
+3. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project
    (confirmed by the user) and plug into the same render-time layer as the lyrics offset.

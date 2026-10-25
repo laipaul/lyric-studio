@@ -7,6 +7,7 @@ import {
   composeProps,
   type ClipOrder,
   type LyricVideoProps,
+  type LyricEffectsProps,
   type RenderBase,
   type StyleChoice,
 } from "@lyric/video";
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 
 type Data = {
   base: RenderBase;
+  effects?: LyricEffectsProps | null;
   defaultSeed: number;
   setupWarnings: string[];
   report: {
@@ -70,7 +72,7 @@ export function PreviewClient() {
   const composed = useMemo(
     () =>
       data && seed !== null
-        ? composeProps(data.base, { seed, style, order, leadMs: DEFAULT_LEAD_MS, lyricsOffsetMs: Math.round(offset * 1000) })
+        ? composeProps(data.base, { seed, style, order, leadMs: DEFAULT_LEAD_MS, lyricsOffsetMs: Math.round(offset * 1000), ...(data.effects ? { effects: data.effects } : {}) })
         : null,
     [data, seed, style, order, offset],
   );

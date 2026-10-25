@@ -26,13 +26,14 @@ import {
 import { eq } from "drizzle-orm";
 
 import type { Beat } from "../beats";
-import { composeProps, DEFAULT_LEAD_MS, lyricFrames, type PlatformLayout, type RenderBase, type StyleChoice } from "../compose";
+import { composeProps, DEFAULT_LEAD_MS, lyricFrames, rawLyric, type PlatformLayout, type RenderBase, type StyleChoice } from "../compose";
+import { choiceText, parseEffectChoice, type EffectChoice } from "../effects";
 import { cleanLrc } from "../lrc";
 import { choosePlatforms, lyricArea, parsePresets, sectionWindow, STANDARD, type LyricArea, type PlatformPreset } from "../platform";
 import { VIDEO } from "../config";
 import { getCutPoints, type CutRate, type Energy } from "../cuts";
 import { matchPinClips, parsePins } from "../pins";
-import type { LyricVideoProps } from "../props";
+import type { LyricEffectsProps, LyricVideoProps } from "../props";
 import { formatQa, LOW_CONFIDENCE, qaReasons, runQa, type QaInput, type QaReport } from "../qa";
 import { autoSection, clockText, finishedBeforeStart, sectionCuts, startsAfterEnd, type SectionCut, type SectionLine } from "../section";
 import { RECENT_WINDOW, type ClipOrder } from "../shots";
@@ -95,6 +96,8 @@ export type MakeOptions = {
   downbeatOffset?: number;
   font?: string;
   fontHook?: string;
+  lineEffect?: string; // lyric effect for verse lines, e.g. "glide" or "soft-blur:subtle" (default: platform / brand)
+  hookEffect?: string; // lyric effect for hook lines (default: platform / brand)
   pins?: string;
   parallel?: number;
   frameCheck?: boolean; // default true
@@ -123,6 +126,7 @@ export type MakePlan = {
   downbeatConfidence: number;
   lyrics: { source: Alignment["source"]; file: string; lines: number; hooks: number; low: { number: number; text: string; confidence: number }[] };
   lyricsOffsetMs: number;
+  effects: { verse: string; hook: string; from: { verse: string; hook: string }; showNextLine: boolean } | null; // null: no lyrics (Canvas)
   section: { start_ms: number; end_ms: number; reason: string };
   collection: { name: string; folder: string; clips: number; added: number; changed: number; unchanged: number; removed: number };
   cuts: number;
@@ -260,6 +264,20 @@ export function qaSummaryFromFile(file: string): string {
 }
 
 // WORKSPACE_DIR\projects\<id>\exports\<YYYY-MM-DD_HHmm>\ (with -2, -3, ... if that minute exists).
+// Lyric effects: --line-effect / --hook-effect, else the platform's motion (platforms.json), else
+// brand.json motion (glide verses, karaoke-highlight hooks by default).
+export function chooseEffects(
+  preset: Pick<PlatformPreset, "motion">,
+  brand: Pick<Brand, "motion">,
+  options: Pick<MakeOptions, "lineEffect" | "hookEffect">,
+): { verse: EffectChoice; hook: EffectChoice; from: { verse: string; hook: string } } {
+  const pick = (cli: string | undefined, flag: string, platform: EffectChoice | undefined, own: EffectChoice) =>
+    cli ? { choice: parseEffectChoice(cli, flag), from: flag } : platform ? { choice: platform, from: "platforms.json" } : { choice: own, from: "brand.json" };
+  const verse = pick(options.lineEffect, "--line-effect", preset.motion?.verseEffect, brand.motion.verseEffect);
+  const hook = pick(options.hookEffect, "--hook-effect", preset.motion?.hookEffect, brand.motion.hookEffect);
+  return { verse: verse.choice, hook: hook.choice, from: { verse: verse.from, hook: hook.from } };
+}
+
 export function exportFolder(ws: Workspace, projectId: string, now: Date): string {
   const p = (n: number) => String(n).padStart(2, "0");
   const name = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}_${p(now.getHours())}${p(now.getMinutes())}`;
@@ -332,6 +350,9 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
   if (options.variations !== undefined && (!Number.isInteger(options.variations) || options.variations < 1 || options.variations > 24)) {
     throw new Error("--variations must be a whole number from 1 to 24");
   }
+  // A wrong effect name should fail before the slow steps.
+  if (options.lineEffect) parseEffectChoice(options.lineEffect, "--line-effect");
+  if (options.hookEffect) parseEffectChoice(options.hookEffect, "--hook-effect");
   const leadMs = options.leadMs ?? DEFAULT_LEAD_MS;
   const now = options.now ?? new Date();
   const ws = openWorkspace(options.workspaceDir ?? resolveWorkspaceDir());
@@ -588,7 +609,10 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
   }
 
   const { media, audio } = songMedia(ws.dir, sh.sp.songFile, plan, sh.catalog, preset.fadeOutSeconds);
-  const allLyrics = lines.map((l) => ({ text: l.text, start_ms: l.start_ms, end_ms: l.end_ms, isHook: l.isHook }));
+  // With word times and the sung end (from the aligned LRC, else the alignment report) for the effects.
+  const allLyrics = lines.map((l, i) => rawLyric({ ...l, sung_end_ms: sh.sectionLines[i].sung_end_ms ?? l.sung_end_ms }));
+  const fx = chooseEffects(preset, sh.brand.brand, options);
+  const effects: LyricEffectsProps = { verse: fx.verse, hook: fx.hook, accent: sh.brand.brand.accentColour };
   // A line whose singing is over but which is still on screen at the start (it lingers until the
   // next stamp) is not shown, so the video never opens on the tail of the previous line.
   // A line whose first word comes after the end would only flash up in the last 0.25 s: not shown either.
@@ -618,7 +642,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
   };
 
   // Which lines are on screen (same rule as composeProps).
-  const frames = lyricFrames(base, leadMs, lyricsOffsetMs);
+  const frames = lyricFrames(base, leadMs, lyricsOffsetMs, true);
   const visible = frames
     .map((f, k) => ({ i: shown[k], start: Math.max(0, f.startFrame), end: Math.min(base.durationInFrames, f.endFrame) }))
     .filter((v) => v.end > v.start)
@@ -646,7 +670,10 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
       lyricsOffsetMs,
       cutFrames: plan.cuts.map((c) => c.frame - plan.start_frame),
       clipHashes: new Set(prepared.clips.map((c) => c.hash)),
-      settings: { cut_rate: options.rate ?? "1x", energy: options.energy ?? "medium", font: options.font ?? null, font_hook: options.fontHook ?? null },
+      settings: {
+        cut_rate: options.rate ?? "1x", energy: options.energy ?? "medium", font: options.font ?? null, font_hook: options.fontHook ?? null,
+        line_effect: choiceText(fx.verse), hook_effect: choiceText(fx.hook),
+      },
     });
     if (changed) throw new Error(`--resume: ${changed} since the run in ${exportDir}; run without --resume to make a new set.`);
     specs = allSpecs.filter((s) => !variationDone(exportDir, s.name));
@@ -656,7 +683,8 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
   // Compose every variation now, so its warnings are part of the plan printed before rendering.
   const composedBySpec = new Map(
     specs.map((spec) => {
-      const composed = composeProps(base, { seed: spec.seed, style: spec.style, order: spec.order, leadMs, lyricsOffsetMs, cinematicBars: ytLayout ? false : spec.bars });
+      const composed = composeProps(base, { seed: spec.seed, style: spec.style, order: spec.order, leadMs, lyricsOffsetMs, cinematicBars: ytLayout ? false : spec.bars, effects });
+      composed.props = { ...composed.props, nextLine: preset.showNextLine };
       warnings.push(...composed.warnings.map((w) => `${spec.name}: ${w}`));
       if (ytLayout) {
         const title = sh.brand.brand.titleFont;
@@ -704,6 +732,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
       low: reports.flatMap((r, i) => (r && r.confidence < LOW_CONFIDENCE ? [{ number: numbers[i] || i + 1, text: lines[i].text, confidence: r.confidence }] : [])),
     },
     lyricsOffsetMs,
+    effects: preset.lyrics ? { verse: choiceText(fx.verse), hook: choiceText(fx.hook), from: fx.from, showNextLine: preset.showNextLine } : null,
     section: { start_ms: chosen.start_ms, end_ms: chosen.end_ms, reason: chosen.reason },
     collection: {
       name: sh.collection.collection.name,
@@ -751,6 +780,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
         overrides_json: {
           platform: preset.name, order: spec.order, lead_ms: leadMs, lyrics_offset_ms: lyricsOffsetMs,
           font: options.font ?? null, font_hook: options.fontHook ?? null, lrc: alignment.lrcStored,
+          line_effect: choiceText(fx.verse), hook_effect: choiceText(fx.hook),
         },
       })
       .returning()
@@ -942,7 +972,10 @@ async function checkVariation(
   const end = props.endScreen;
   const inEnd = (l: (typeof lyrics)[number]) => !!end && l.endFrame > end.fromFrame;
   const measure = (ls: typeof lyrics, area: LyricArea | undefined) =>
-    measureLyrics(ls, { main: style.main, hook: style.hook, textCase: style.entry.style.textCase, textSize: props.textSize, animation: style.entry.style.animation, area });
+    measureLyrics(ls, {
+      main: style.main, hook: style.hook, textCase: style.entry.style.textCase, textSize: props.textSize, animation: style.entry.style.animation, area,
+      effects: props.lyricEffects ?? null, nextLine: props.nextLine ?? false, nextScale: props.nextLineScale ?? 0.55,
+    });
   const measured = [...measure(lyrics.filter((l) => !inEnd(l)), props.lyricArea), ...(end ? measure(lyrics.filter(inEnd), end.lyricArea) : [])];
   let frames = ctx.frameCheck ? await detectBadFrames(file, props.durationInFrames / VIDEO.fps) : null;
   if (frames && ctx.stillPictures) frames = { black: frames.black, frozen: [] };
@@ -1032,6 +1065,9 @@ function buildManifest(c: {
       font: c.options.font ?? null,
       font_hook: c.options.fontHook ?? null,
       hook_font: props.hookFont ?? null,
+      line_effect: props.lyricEffects ? choiceText(props.lyricEffects.verse) : null,
+      hook_effect: props.lyricEffects ? choiceText(props.lyricEffects.hook) : null,
+      show_next_line: props.nextLine ?? false,
       pins: c.options.pins ? { file: path.resolve(c.options.pins), sha256: sha256File(c.options.pins) } : null,
       collection: { name: c.collection.collection.name, folder: c.collection.folder, clips: c.collection.sources.length, usable: c.clips.length },
       fps: VIDEO.fps,

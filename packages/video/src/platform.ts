@@ -2,6 +2,7 @@
 // bitrate and special rules per platform. Pure: the file is read in Node and validated here, and the
 // lyric area of every platform is computed from its safe zones (never a fixed percentage).
 import { VIDEO } from "./config";
+import { checkEffectChoice, type EffectChoice } from "./effects";
 
 export type SafeZone = { top: number; bottom: number; left: number; right: number }; // fractions of the frame
 export type Format = { width: number; height: number };
@@ -28,6 +29,8 @@ export type PlatformPreset = {
   available: boolean; // false: comes in a later step
   note?: string;
   youtube?: YouTubeOptions; // layout "youtube" only
+  showNextLine: boolean; // the next lyric line waits small underneath (default on)
+  motion?: { verseEffect?: EffectChoice; hookEffect?: EffectChoice }; // overrides brand.json motion
 };
 
 export type YouTubeOptions = {
@@ -170,6 +173,23 @@ export function parsePresets(json: unknown, file = "presets/platforms.json"): Re
       if (!Array.isArray(youtube.coverZoom) || !isNum(youtube.coverZoom[0], 1, 1.3) || !isNum(youtube.coverZoom[1], 1, 1.3)) errors.push(`${where}: youtube.coverZoom must be [from, to] between 1 and 1.3`);
       if (!isNum(youtube.titleSeconds, 0, 30)) errors.push(`${where}: youtube.titleSeconds must be 0-30`);
     }
+    let motion: PlatformPreset["motion"];
+    if (p.motion !== undefined) {
+      const m = p.motion as Record<string, unknown>;
+      if (!m || typeof m !== "object") bad("motion", 'must be { "verseEffect": "glide", "hookEffect": "karaoke-highlight" }');
+      else {
+        motion = {};
+        for (const key of ["verseEffect", "hookEffect"] as const) {
+          if (m[key] === undefined) continue;
+          try {
+            motion[key] = checkEffectChoice(m[key], `${where}: motion.${key}`);
+          } catch (error) {
+            errors.push((error as Error).message);
+          }
+        }
+      }
+    }
+    if (p.showNextLine !== undefined && typeof p.showNextLine !== "boolean") bad("showNextLine", "must be true or false");
     if (errors.length) continue;
     out[name] = {
       name,
@@ -193,6 +213,8 @@ export function parsePresets(json: unknown, file = "presets/platforms.json"): Re
       available: p.available !== false,
       ...(typeof p.note === "string" ? { note: p.note } : {}),
       ...(youtube ? { youtube } : {}),
+      showNextLine: p.showNextLine !== false,
+      ...(motion ? { motion } : {}),
     };
   }
   if (!out[STANDARD] && !errors.length) errors.push(`${file}: the "${STANDARD}" platform is missing (used when --platforms is not given)`);

@@ -194,7 +194,7 @@ export function youtubeExtras(o: {
     // Logo in its YouTube corner (inside the safe zone), faded out before the end-screen window.
     logo: o.logo ? { ...placeLogo(o.ws, o.logo, format, o.preset.safeZone, o.brand.logo.youtube, o.brand.logo.size), goneAt: endScreen?.fromFrame ?? null } : null,
     endScreen,
-    nextLine: o.layout === "cover",
+    nextLine: o.preset.showNextLine,
     grain: o.layout === "stills" && o.grain,
     glow: o.layout === "stills" && o.glow ? { colour: o.brand.accentColour, beatFrames } : null,
   };

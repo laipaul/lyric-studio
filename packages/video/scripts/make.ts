@@ -2,6 +2,7 @@
 //   [--section auto|full|0:11-1:10] [--hint <taps.lrc> | --no-hint] [--realign] [--lrc <file.lrc>] [--lang en|fr]
 //   [--rate 1x] [--energy medium] [--lead 0.25] [--lyrics-offset 0] [--downbeat-offset N]
 //   [--font "Family"] [--font-hook "Family"] [--pins pins.txt] [--parallel N] [--resume] [--no-open]
+//   [--line-effect glide[:subtle|balanced|expressive]] [--hook-effect karaoke-highlight[:...]]
 //   [--platforms reels,tiktok,shorts,youtube | all] [--allow-fill] [--title "Song title"]
 //   [--cover cover.jpg] [--layout cover|stills|clips] [--stills stills.txt] [--no-grain] [--no-glow] [--ep "EP name"]
 // One command from a song to N finished variations with manifests and QA reports, per platform.
@@ -46,6 +47,8 @@ try {
       "downbeat-offset": { type: "string" },
       font: { type: "string" },
       "font-hook": { type: "string" },
+      "line-effect": { type: "string" },
+      "hook-effect": { type: "string" },
       pins: { type: "string" },
       parallel: { type: "string" },
       "no-open": { type: "boolean", default: false },
@@ -131,6 +134,8 @@ try {
     downbeatOffset: offset,
     font: values.font,
     fontHook: values["font-hook"],
+    lineEffect: values["line-effect"],
+    hookEffect: values["hook-effect"],
     pins: resolve(values.pins),
     parallel,
     frameCheck: !values["no-frame-check"],
@@ -167,6 +172,10 @@ try {
       console.log(`Section:   ${clockText(p.section.start_ms)} - ${clockText(p.section.end_ms)}`);
       console.log(`           ${p.section.reason}`);
       if (p.layout) console.log(`Layout:    ${p.layout}`);
+      if (p.effects) {
+        const e = p.effects;
+        console.log(`Effects:   verses ${e.verse} (${e.from.verse}), hooks ${e.hook} (${e.from.hook}), next line ${e.showNextLine ? "shown" : "hidden"}`);
+      }
       if (s) {
         console.log(
           `Sources:   ${s.usable} ${s.kind} usable` +

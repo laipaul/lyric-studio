@@ -1,5 +1,6 @@
 import type { FontFileRef } from "./font-files";
 import type { KenBurns } from "./photo";
+import type { EffectChoice } from "./effects/types";
 import type { CoverDrift, MoodSegment } from "./youtube";
 import type { Format, LyricArea, SafeZone } from "./platform";
 
@@ -29,7 +30,16 @@ export type LyricLineProps = {
   startFrame: number; // composition frames (lead / offset already applied, no early cut)
   endFrame: number; // exclusive
   isHook?: boolean; // shown in the hook font when one is set
+  // With lyric effects (Step 5j): when the line is sung (no lead), when its last word ends, and its
+  // words' sung times (from the aligned LRC). All in composition frames.
+  stampFrame?: number;
+  sungEndFrame?: number;
+  words?: { text: string; startFrame: number; endFrame: number }[];
 };
+
+// Lyric effects (src/effects): the verse and hook effect, and the accent colour for karaoke.
+// Without this (manifests from before Step 5j) lines use the style's old fade / pop.
+export type LyricEffectsProps = { verse: EffectChoice; hook: EffectChoice; accent: string };
 
 export type StillProps = { src: string; startFrame: number; endFrame: number; fadeFrames: number; motion?: KenBurns; section: string };
 
@@ -81,6 +91,7 @@ export type LyricVideoProps = {
   logo?: { src: string; left: number; top: number; width: number; height: number; goneAt: number | null } | null; // goneAt: faded out by this frame
   mood?: MoodSegment[]; // section mood: warm/bright on hooks, soft on verses (2 s eased changes)
   endScreen?: { fromFrame: number; lyricArea: LyricArea; clear: { left: number; top: number; right: number; bottom: number } } | null;
+  lyricEffects?: LyricEffectsProps | null;
   nextLine?: boolean; // show the next lyric line, small and faded, under the current one
   nextLineScale?: number; // its size compared with the current line (default 0.55)
   grain?: boolean; // subtle film grain

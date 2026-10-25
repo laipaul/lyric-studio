@@ -8,7 +8,7 @@ import { kenBurns } from "./photo";
 import { pinsToShots, type ResolvedPin } from "./pins";
 import { DEFAULT_FORMAT, DEFAULT_SAFE_ZONE, lyricArea, type Format, type SafeZone } from "./platform";
 import { mulberry32 } from "./prng";
-import type { LyricLineProps, LyricVideoProps, StyleProps } from "./props";
+import type { LyricEffectsProps, LyricLineProps, LyricVideoProps, StyleProps } from "./props";
 import { assignClips, type ClipOrder } from "./shots";
 
 export type StyleChoice = "simple" | "bold";
@@ -32,7 +32,14 @@ export type PlatformLayout = {
   loopEnding?: boolean;
   lyricSafeZone?: SafeZone; // where the lyrics may go, if narrower than the safe zone (YouTube cover layout)
 };
-export type RawLyric = { text: string; start_ms: number; end_ms: number; isHook: boolean };
+export type RawLyric = {
+  text: string;
+  start_ms: number;
+  end_ms: number;
+  isHook: boolean;
+  words?: { text: string; start_ms: number; end_ms: number }[]; // aligned word times (song time)
+  sung_end_ms?: number; // the last word ends here
+};
 export type StyleEntry = {
   style: StyleProps;
   textSize: number;
@@ -65,12 +72,50 @@ export type ComposeChoices = {
   textSize?: number;
   colour?: string;
   cinematicBars?: boolean;
+  // Lyric effects (Step 5j). With them, lines also carry their word times, and a line followed by a
+  // pause leaves the screen 1 s after its last word (instead of staying until the next line).
+  effects?: LyricEffectsProps;
 };
 
+// Before a pause the last line fades out this long after its last word ends (then 0.4 s fade).
+export const GAP_CLEAR_MS = 1000;
+export const GAP_FADE_MS = 400;
+const NEXT_ENTER_MS = 900; // room for the next line to come in after the screen is clear
+
 // Every lyric line with its on-screen frames relative to the section start (not clipped).
-export function lyricFrames(base: RenderBase, leadMs = DEFAULT_LEAD_MS, offsetMs = 0): LyricLineProps[] {
+export function lyricFrames(base: RenderBase, leadMs = DEFAULT_LEAD_MS, offsetMs = 0, withEffects = false): LyricLineProps[] {
   const toFrame = (ms: number) => Math.round(((ms - leadMs + offsetMs) * VIDEO.fps) / 1000) - base.plan.start_frame;
-  return base.lyrics.map((l) => ({ text: l.text, startFrame: toFrame(l.start_ms), endFrame: toFrame(l.end_ms), isHook: l.isHook }));
+  if (!withEffects) return base.lyrics.map((l) => ({ text: l.text, startFrame: toFrame(l.start_ms), endFrame: toFrame(l.end_ms), isHook: l.isHook }));
+  const sung = (ms: number) => toFrame(ms + leadMs); // when it is heard (no lead)
+  return base.lyrics.map((l) => {
+    const sungEnd = l.sung_end_ms ?? l.words?.at(-1)?.end_ms;
+    // A pause follows: clear the screen 1 s after the last word (if the next line is far enough away).
+    const clearMs = sungEnd !== undefined ? sungEnd + GAP_CLEAR_MS + GAP_FADE_MS + leadMs : null;
+    const endMs = clearMs !== null && clearMs + NEXT_ENTER_MS <= l.end_ms ? clearMs : l.end_ms;
+    return {
+      text: l.text,
+      startFrame: toFrame(l.start_ms),
+      endFrame: toFrame(endMs),
+      isHook: l.isHook,
+      stampFrame: sung(l.start_ms),
+      ...(sungEnd !== undefined ? { sungEndFrame: sung(sungEnd) } : {}),
+      ...(l.words?.length ? { words: l.words.map((w) => ({ text: w.text, startFrame: sung(w.start_ms), endFrame: sung(w.end_ms) })) } : {}),
+    };
+  });
+}
+
+// Song lines (from the LRC) -> RawLyric with word end times (a word lasts until the next one starts;
+// the last one until the line's sung end).
+export function rawLyric(l: { text: string; start_ms: number; end_ms: number; isHook: boolean; words?: { text: string; start_ms: number }[]; sung_end_ms?: number }): RawLyric {
+  const sungEnd = l.sung_end_ms;
+  return {
+    text: l.text,
+    start_ms: l.start_ms,
+    end_ms: l.end_ms,
+    isHook: l.isHook,
+    ...(l.words?.length ? { words: l.words.map((w, k) => ({ text: w.text, start_ms: w.start_ms, end_ms: l.words![k + 1]?.start_ms ?? sungEnd ?? l.end_ms })) } : {}),
+    ...(sungEnd !== undefined ? { sung_end_ms: sungEnd } : {}),
+  };
 }
 
 export function composeProps(
@@ -78,7 +123,7 @@ export function composeProps(
   choices: ComposeChoices,
 ): { props: Omit<LyricVideoProps, "mediaBaseUrl">; warnings: string[] } {
   const { plan } = base;
-  const allLines = lyricFrames(base, choices.leadMs ?? DEFAULT_LEAD_MS, choices.lyricsOffsetMs ?? 0);
+  const allLines = lyricFrames(base, choices.leadMs ?? DEFAULT_LEAD_MS, choices.lyricsOffsetMs ?? 0, !!choices.effects);
   const lyrics = allLines
     .map((l) => ({ ...l, startFrame: Math.max(0, l.startFrame), endFrame: Math.min(base.durationInFrames, l.endFrame) }))
     .filter((l) => l.endFrame > l.startFrame);
@@ -137,6 +182,7 @@ export function composeProps(
       format: platform.format,
       safeZone: platform.safeZone,
       lyricArea: lyricArea(platform.format, platform.lyricSafeZone ?? platform.safeZone, platform.lyricsAt, bars),
+      ...(choices.effects ? { lyricEffects: choices.effects } : {}),
     },
     warnings,
   };

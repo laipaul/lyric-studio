@@ -4,6 +4,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import { checkEffectChoice, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, type EffectChoice } from "../effects";
 import type { Corner } from "../youtube";
 import type { FontCatalog } from "./font-catalog";
 import { findFamily } from "./font-catalog";
@@ -18,6 +19,8 @@ export type Brand = {
   // 9:16 videos ("auto" = bottom right inside the safe zone). The old "position" is no longer used.
   logo: { file: string; size: number; youtube: Corner; vertical: Corner | "auto"; position?: string };
   useForLyrics: boolean;
+  // Lyric effects (Step 5j): "glide", "karaoke-highlight:subtle" or { name, intensity, durationMs, easing }.
+  motion: { verseEffect: EffectChoice; hookEffect: EffectChoice };
 };
 
 export const DEFAULT_BRAND: Brand = {
@@ -27,6 +30,7 @@ export const DEFAULT_BRAND: Brand = {
   accentColour: "#E8A3B5",
   logo: { file: "logo.png", size: 0.08, youtube: "bottom-right", vertical: "auto" },
   useForLyrics: true,
+  motion: { verseEffect: DEFAULT_VERSE_EFFECT, hookEffect: DEFAULT_HOOK_EFFECT },
 };
 
 const HELP =
@@ -34,7 +38,9 @@ const HELP =
   "accentColour: #RRGGBB. logo.file: inside this folder; logo.youtube: top-left | top-right | bottom-left | bottom-right " +
   "(YouTube videos; it fades out before the end screen); logo.vertical: auto (bottom right inside the safe zone) or a corner " +
   "(9:16 videos, always inside the platform's safe zone); size: logo width as a fraction of the video width. " +
-  "useForLyrics: false = lyrics keep the Simple/Bold style fonts.";
+  "useForLyrics: false = lyrics keep the Simple/Bold style fonts. " +
+  "motion.verseEffect / motion.hookEffect: glide, cinematic-fade, soft-blur, dreamy-glow, word-reveal, karaoke-highlight, floating, typewriter " +
+  '(optionally ":subtle" or ":expressive", or { "name": ..., "intensity": ..., "durationMs": ..., "easing": ... }); see pnpm effects:preview.';
 
 export function brandDir(workspaceDir: string): string {
   return path.join(workspaceDir, "brand");
@@ -62,8 +68,18 @@ export function loadBrand(workspaceDir: string, catalog: FontCatalog): { brand: 
     verseFont: { ...DEFAULT_BRAND.verseFont, ...raw.verseFont },
     hookFont: { ...DEFAULT_BRAND.hookFont, ...raw.hookFont },
     logo: { ...DEFAULT_BRAND.logo, ...raw.logo },
+    motion: { ...DEFAULT_BRAND.motion },
   };
   const problems: string[] = [];
+  const rawMotion = (raw.motion ?? {}) as Record<string, unknown>;
+  for (const key of ["verseEffect", "hookEffect"] as const) {
+    if (rawMotion[key] === undefined) continue;
+    try {
+      brand.motion[key] = checkEffectChoice(rawMotion[key], `motion.${key}`);
+    } catch (error) {
+      problems.push((error as Error).message);
+    }
+  }
   for (const key of ["titleFont", "verseFont", "hookFont"] as const) {
     if (!findFamily(catalog, brand[key].family)) problems.push(`${key}: font "${brand[key].family}" not found (see pnpm fonts)`);
   }
