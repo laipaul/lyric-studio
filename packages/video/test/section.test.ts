@@ -61,7 +61,7 @@ describe("auto section", () => {
     }));
     const s = autoSection(ls, beats, { durationMs });
     expect(s.start_ms).toBe(38_000);
-    expect(s.warnings[0]).toBe('The section start (0:38.0) cuts line 10 "Line 10"; choose a section with --section.');
+    expect(s.warnings[0]).toBe('The section start (0:38.0) cuts line 10 "Line 10" while it is sung; choose a section with --section.');
   });
 
   it("the lead-in bar also works when the hook starts just before the bar (pickup)", () => {
@@ -113,8 +113,8 @@ describe("auto section", () => {
     expect(s.end_ms).toBe(80_000);
     expect(s.end_ms - s.start_ms).toBe(62_000);
     expect(singingAt(ls, s.end_ms)).toEqual([]);
-    expect(s.reason).toContain("no bar between 45.0 s and 60.0 s without cutting a line; extended");
-    expect(s.warnings).toEqual(['The section start (0:18.0) cuts line 5 "Line 5"; choose a section with --section.']);
+    expect(s.reason).toContain("no bar within 45.0 s-60.0 s without cutting a line; extended");
+    expect(s.warnings).toEqual(['The section start (0:18.0) cuts line 5 "Line 5" while it is sung; choose a section with --section.']);
   });
 
   it("if even 65 s is not enough, ends near 60 s and warns which line is cut", () => {

@@ -27,10 +27,10 @@ def test_writes_enhanced_lrc_with_hooks_pauses_and_end() -> None:
     lrc = build_lrc([("line", a), ("line", b), ("pause", None), ("line", c)], duration_ms=20_000, header=["[ar:Life Lyrics]"])
     assert lrc.splitlines() == [
         "[ar:Life Lyrics]",
-        "[00:01.00]<00:01.00>First <00:01.30>line <00:01.60>here",
-        "[00:03.00]* <00:03.00>Hope <00:03.30>is <00:03.60>good",
+        "[00:01.00]<00:01.00>First <00:01.30>line <00:01.60>here <00:01.85>",  # last tag: where "here" ends
+        "[00:03.00]* <00:03.00>Hope <00:03.30>is <00:03.60>good <00:03.85>",
         "[00:04.15]",  # pause: 0.3 s after the last word of "Hope is good" (ends 3.85 s)
-        "[00:09.00]<00:09.00>After <00:09.30>the <00:09.60>break",
+        "[00:09.00]<00:09.00>After <00:09.30>the <00:09.60>break <00:09.85>",
         "[00:10.35]",  # end of the last line: 0.5 s after its last word
     ]
     parsed = parse_lrc(lrc)
@@ -40,6 +40,8 @@ def test_writes_enhanced_lrc_with_hooks_pauses_and_end() -> None:
         (9_000, "After the break", False),
     ]
     assert parsed[1].words == [(3_000, "Hope"), (3_300, "is"), (3_600, "good")]
+    assert [l.end_ms for l in parsed] == [1_850, 3_850, 9_850]  # read back from the trailing tags
+    assert parse_lrc("[00:01.00]<00:01.00>Old <00:01.40>style\n")[0].end_ms is None
 
 
 def test_pause_never_lands_after_the_next_line() -> None:
@@ -199,8 +201,12 @@ def test_report_has_confidence_and_sung_times_per_line() -> None:
     report = line_report([a, b], "MODEL", "en")
     assert report["low_confidence"] == LOW_CONFIDENCE
     assert report["lines"] == [
-        {"number": 1, "text": "First line here", "is_hook": False, "start_ms": 1_000, "end_ms": 1_850, "confidence": 0.9},
-        {"number": 2, "text": "Hope is good", "is_hook": True, "start_ms": 3_000, "end_ms": 3_850, "confidence": 0.4},
+        {"number": 1, "text": "First line here", "is_hook": False, "start_ms": 1_000, "end_ms": 1_850, "confidence": 0.9,
+         "words": [{"text": "First", "start_ms": 1_000, "end_ms": 1_250}, {"text": "line", "start_ms": 1_300, "end_ms": 1_550},
+                   {"text": "here", "start_ms": 1_600, "end_ms": 1_850}]},
+        {"number": 2, "text": "Hope is good", "is_hook": True, "start_ms": 3_000, "end_ms": 3_850, "confidence": 0.4,
+         "words": [{"text": "Hope", "start_ms": 3_000, "end_ms": 3_250}, {"text": "is", "start_ms": 3_300, "end_ms": 3_550},
+                   {"text": "good", "start_ms": 3_600, "end_ms": 3_850}]},
     ]
     args = build_parser().parse_args(["s.wav", "l.txt", "--report", "r.json", "--fresh"])
     assert (args.report, args.fresh) == ("r.json", True)

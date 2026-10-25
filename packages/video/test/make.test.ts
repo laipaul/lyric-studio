@@ -175,7 +175,8 @@ describe("song project and stored lyric alignment", () => {
     writeFileSync(path.join(root, "taps.lrc"), "[00:01.00]Verse one here\n");
     const hinted = await ensureAlignment(ws, sp, { lyricsTxt, durationMs: 12_000, align: fakeAlign, hint: path.join(root, "taps.lrc") });
     expect(hinted.key).not.toBe(first.key); // a hint is a different input
-    expect(calls.at(-1)?.hint).toBe(path.join(root, "taps.lrc"));
+    expect(hinted.hint?.source).toBe(path.join(root, "taps.lrc"));
+    expect(calls.at(-1)?.hint).toBe(hinted.hint?.file); // the project's stored copy of the taps
   });
 
   it("--lrc: the given file is stored as-is; hooks come from lyrics.txt", async () => {
@@ -592,5 +593,72 @@ describe("platform presets (stand-in renderer)", () => {
     const resumed = await run({ platforms: "reels,tiktok,shorts", resume: true });
     expect(resumed.exportDir).toBe(all.exportDir);
     expect(rendered).toEqual([path.relative(root, path.join(tiktok.exportDir, "v2.mp4"))]);
+  });
+});
+
+describe("stored hints and hook-only lyric changes", () => {
+  const song = path.join(root, "hint-song.wav");
+  const txt = path.join(root, "hint-lyrics.txt");
+  const taps = path.join(root, "my-taps.lrc");
+  const seen: { hint?: string; lyrics: string }[] = [];
+  const recording: AlignRunner = async (a) => {
+    seen.push({ hint: a.hint, lyrics: readFileSync(a.lyrics, "utf8") });
+    await fakeAlign(a);
+  };
+  const align = (extra: Partial<Parameters<typeof ensureAlignment>[2]> = {}) =>
+    findOrCreateSongProject(ws, song).then((sp) => ensureAlignment(ws, sp, { lyricsTxt: txt, durationMs: 13_000, align: recording, ...extra }));
+
+  beforeAll(() => {
+    makeSong(song, 13); // different content: its own project
+    writeFileSync(txt, "First line\n* Hold on\nThird line\n");
+    writeFileSync(taps, "[00:01.00]First line\n[00:02.50]Hold on\n");
+  });
+
+  it("the first --hint is stored with the project and reused automatically, also after lyrics.txt changes", async () => {
+    const first = await align({ hint: taps });
+    expect(first.hint).toMatchObject({ source: taps, stored: false });
+    expect(seen.at(-1)?.hint).toBe(first.hint!.file);
+    expect(path.dirname(first.hint!.file)).toBe(path.dirname(first.lrcFile)); // a copy in the project's lyrics folder
+    const record = JSON.parse(readFileSync(path.join(path.dirname(first.lrcFile), "hint.json"), "utf8"));
+    expect(record).toMatchObject({ source: taps, copy: path.basename(first.hint!.file) });
+
+    rmSync(taps); // the original can go: the project has its own copy
+    writeFileSync(txt, "First line\n* Hold on\nThird line\nA new fourth line\n");
+    const logs: string[] = [];
+    const again = await align({ log: (m) => logs.push(m) });
+    expect(again.source).toBe("aligned"); // the words changed: aligned again ...
+    expect(again.hint).toMatchObject({ source: taps, stored: true }); // ... with the stored hints
+    expect(seen.at(-1)?.hint).toBe(first.hint!.file);
+    expect(logs.some((l) => l.startsWith(`using stored hints from ${taps}`))).toBe(true);
+    expect(again.warnings).toEqual([]);
+  });
+
+  it("--no-hint, or a lost stored copy, aligns without hints and warns clearly", async () => {
+    writeFileSync(txt, "First line\n* Hold on\nThird line\nAnother fourth line\n");
+    const without = await align({ noHint: true });
+    expect(without.hint).toBeNull();
+    expect(seen.at(-1)?.hint).toBeUndefined();
+    expect(without.warnings[0]).toMatch(/normally aligns with the hints from .*my-taps\.lrc; aligning WITHOUT them \(--no-hint\)/);
+
+    const record = JSON.parse(readFileSync(path.join(path.dirname(without.lrcFile), "hint.json"), "utf8"));
+    rmSync(path.join(path.dirname(without.lrcFile), record.copy));
+    writeFileSync(txt, "First line\n* Hold on\nThird line\nYet another line\n");
+    const lost = await align();
+    expect(lost.hint).toBeNull();
+    expect(lost.warnings[0]).toMatch(/stored hints for this project \(from .*my-taps\.lrc\) are missing or changed; aligning WITHOUT hints/);
+  });
+
+  it("a change of hook markers only does not re-align; hooks follow the current lyrics.txt", async () => {
+    writeFileSync(taps, "[00:01.00]First line\n");
+    const base = await align({ hint: taps }); // hints stored again
+    const before = seen.length;
+    const lrcHash = sha256File(base.lrcFile);
+    writeFileSync(txt, readFileSync(txt, "utf8").replace("* Hold on", "Hold on").replace("Third line", "* Third line"));
+    const hooks = await align();
+    expect(seen.length).toBe(before); // not aligned again
+    expect(hooks.source).toBe("stored");
+    expect(hooks.lrcFile).toBe(base.lrcFile);
+    expect(hooks.lines.filter((l) => l.isHook).map((l) => l.text)).toEqual(["Third line"]); // "Hold on" is no longer a hook
+    expect(sha256File(base.lrcFile)).toBe(lrcHash); // the stored LRC is untouched
   });
 });

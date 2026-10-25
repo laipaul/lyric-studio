@@ -204,6 +204,8 @@ pnpm align "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test
 - `--trim off` turns off the correction for words stretched over a silent gap.
 - `--report file.json` also writes each line's confidence and sung times; `--fresh` ignores the
   cached alignment (both used by `pnpm make`).
+- Each line ends with a tag for where its last word ends (`… <00:14.00>is <00:14.90>`), which
+  `pnpm make` uses to cut between lines, never in the middle of one.
 - The vocal track and the alignment are cached (`workspace\cache\stems`, `workspace\cache\align`),
   so running it again is quick.
 
@@ -225,7 +227,10 @@ What it does, in order:
 3. **Lyrics**: runs `pnpm align` automatically (needs `pnpm audio:setup --ai` once). The result is
    stored in `workspace\projects\<id>\lyrics\aligned-….lrc` and **never rewritten**: the next run with
    the same `lyrics.txt` reuses it. `--realign` makes a new alignment (a new file; the old one stays).
-   `--hint <taps.lrc>` passes tapped times to the aligner. Hook lines: `* ` in `lyrics.txt`.
+   `--hint <taps.lrc>` passes tapped times to the aligner **and is remembered by the project**: later
+   runs use it automatically ("using stored hints from …"), also after `lyrics.txt` changes;
+   `--no-hint` aligns once without them (with a warning). Hook lines: `* ` in `lyrics.txt`;
+   changing only the `* ` markers does not align again.
 4. **Section** (`--section auto`, the default): starts one bar before the first hook line (the first
    chorus) and ends on the first bar after a lyric line finishes, 45-60 s later, preferably after a
    chorus line. It never ends in the middle of a line: if needed it goes up to 65 s. Without hooks it
@@ -260,7 +265,8 @@ changed since.
 | `--collection-path <folder>` | | clips from another folder (not copied) |
 | `--variations N` | from the preset (standard: 6) | number of videos (per platform) |
 | `--section` | `auto` | `auto`, `full` or `0:11-1:10` |
-| `--hint <taps.lrc>`, `--realign`, `--lang fr` | | passed to `pnpm align` (see above) |
+| `--hint <taps.lrc>`, `--realign`, `--lang fr` | | passed to `pnpm align` (see above); the hint is remembered by the project |
+| `--no-hint` | | align once without the project's stored hints (warns) |
 | `--lrc <file.lrc>` | | use this LRC instead of aligning (stored as-is) |
 | `--lyrics-offset S` | `0` | move all lines (seconds); saved to the project, the LRC stays unchanged |
 | `--lead`, `--rate`, `--energy`, `--font`, `--font-hook`, `--pins`, `--downbeat-offset` | | as for `pnpm render:test` |
@@ -284,9 +290,15 @@ run's folder (`exports\<date>\reels\v1.mp4 …`) with its own manifests and QA, 
 
 | Platform | Size | Length | Videos | Notes |
 | --- | --- | --- | --- | --- |
-| reels | 1080x1920 | ~30 s, centred on the first chorus | 3 | ends on a bar with a 0.12 s fade; the last shot leads into the first (seamless loop) |
-| tiktok | 1080x1920 | ~25 s | 3 | taller caption area at the bottom |
-| shorts | 1080x1920 | ~50 s | 2 | |
+| reels | 1080x1920 | ~30 s, hook-first | 3 | ends on a bar with a 0.12 s fade; the last shot leads into the first (seamless loop) |
+| tiktok | 1080x1920 | ~25 s, hook-first | 3 | taller caption area at the bottom |
+| shorts | 1080x1920 | ~50 s, hook-first | 2 | |
+
+Hook-first: the video starts at most one bar before the first hook line, so the hook is heard
+within about 2.5 s. It ends on a bar after a line's last word has ended and before the next line
+starts (never mid-word), within ±15% of the target; if that is impossible, a clean end up to 25%
+shorter is chosen before a longer one, and the reason line says so. A video that does cut a sung
+line gets QA WARN with the line named.
 | youtube, canvas | | | | come in Steps 5g.2 / 5g.3 |
 
 Everything above is in `presets\platforms.json` and can be edited (size, length, number of videos,

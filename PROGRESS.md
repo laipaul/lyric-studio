@@ -246,7 +246,7 @@
   and a real Remotion render cancelled with no partial file left), capped cache in a real render,
   failure + retry + carry-on, --resume (only missing, interrupted, nothing left), --resume refused.
 
-### Step 5g.1 — Platform presets: Reels, TikTok, Shorts ✅ (to verify on the Windows PC)
+### Step 5g.1 — Platform presets: Reels, TikTok, Shorts ✅ (tested on the Windows PC: 8 videos, 450 s, all PASS, 6/6 clips vertical-usable, song.lrc exported; timing issues fixed in 5g.1b)
 - `presets/platforms.json` (editable, checked at start; every mistake named with platform and field):
   standard (today's behaviour), reels, tiktok, shorts; youtube and canvas are listed but marked
   "comes in Step 5g.2 / 5g.3". Per platform: size, aspect, length (target +-tolerance / range / full /
@@ -260,9 +260,8 @@
   area at 45% (slightly above middle); with cinematic bars the bars count as covered.
   Note: this moves the lyrics of the standard preset from 62.5% to ~41.5% of the height (top 10%,
   bottom 20% safe zones), as asked ("never a fixed percentage").
-- Sections per preset: target +-15% on bars, never mid-line (up to +30% with a warning rather than
-  cutting a line), the clean end nearest the target. Reels: centred on the first chorus (hook line +
-  following repeated lines). Reels loop ending: ends on a bar, 0.12 s fade-out, last shot = the first
+- Sections per preset: target +-15% on bars (replaced in 5g.1b: hook-first, word-level line ends).
+  Reels loop ending: ends on a bar, 0.12 s fade-out, last shot = the first
   clip's frames right before shot 1 (or the same photo ending where its move starts); the loop clip
   is kept out of the 3 shots before; a warning if the first clip is too short for a seamless loop.
 - Sources by orientation (width/height at import): 9:16 = vertical/square, horizontal only at >= 2x
@@ -284,6 +283,37 @@
   LRC; real renders: photo motion without edges, blurred fill, output at the preset's size; make with
   3 platforms (folders, variations, sizes, safe zones, fades, lengths, loop, photos, LRC), --allow-fill,
   too few / no sources, edited presets file, --resume per platform; photo import in the DB.
+
+### Step 5g.1b — Timing fixes ✅ (to verify on the Windows PC)
+Problems seen on the PC: Reels 38.4 s (window 25.5-34.5), Shorts 63.2 s (42.5-57.5), TikTok cut
+line 7 "Still burning through the dark", Reels started 0:04.0, ~8 s before the hook.
+Cause: a line was treated as sung until the next line started (and the next line counted from
+0.25 s before its stamp), so with lines sung back to back almost no bar was "clean".
+1. Line ends from word timings: `pnpm align` writes a trailing end tag after each line's last word
+   (`<mm:ss.xx>` with no word) and the report lists every word's start and end. A cut is clean at a
+   bar after the last word ends and before the next line's first word. Older LRCs: the end is
+   estimated from the word starts; without word timings the line-start logic stays. A line whose
+   first word is after the video's end is not shown (it would flash up in the last 0.25 s).
+2. Short-form is hook-first (reels, tiktok, shorts; the "centred on the chorus" rule is removed):
+   start at most 1 bar before the hook's first word, never earlier; if the line before is still
+   sung there, the start stays and QA warns. Standard keeps its lead-in rule.
+3. Length: within +-15%; else the nearest clean line end up to 25% shorter; else up to 30% longer;
+   then (last resort) a cut with a warning. The reason line says which.
+4. QA check "Section start/end": a sung line cut at the start or end is WARN with the line named.
+5. Hints remembered per project: the first --hint is copied into `projects\<id>\lyrics\` (hint.json)
+   and reused automatically ("using stored hints from …"), also after lyrics.txt changes; --no-hint
+   or a lost copy warns clearly. Manifests record the hint source and whether it was stored.
+6. Changing only hook markers in lyrics.txt does not re-align (alignments are keyed on the words);
+   hook flags always follow the current lyrics.txt.
+- Note: alignment store version 2 — each song aligns once more on its next run (the vocal track is
+  cached, so it is quick); afterwards LRCs have the word end tags.
+- Tests: 13 timing tests (end tags, clean-cut rule and the line-start fallback, regression case
+  modelled on the user's song — 106.63 BPM, bars from 0:08.6, lines back to back — for reels,
+  tiktok and shorts: start 0:08.6, hook within 2.5 s, lengths in the window, no cut, TikTok ending
+  after line 7; hook-first never more than a bar early; shorter before longer; QA WARN on cuts;
+  late lines hidden), 3 hint/hook tests, Python LRC end tags + report words.
+- The regression case is a reconstruction (the cloud session cannot read the user's files); a
+  fixture from the real aligned LRC and beat analysis can replace it.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -335,7 +365,7 @@
 
 ## Next
 Order changed by the user: platform presets first, then the timing editor.
-1. Step 5g.2 (YouTube 16:9: cover / stills / clips layouts, end-screen area, 1280x720 thumbnail) —
-   after 5g.1 is verified on the PC. Then Step 5g.3 (Spotify Canvas loop).
+1. Step 5g.2 (YouTube 16:9: cover / stills / clips layouts, .srt captions, title cards and thumbnail
+   with the brand, end-screen-safe last 20 s) — plan to be approved first. Then Step 5g.3 (Canvas).
 2. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project
    (confirmed by the user) and plug into the same render-time layer as the lyrics offset.

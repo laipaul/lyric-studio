@@ -14,7 +14,7 @@ export type PlatformPreset = {
   aspect: string; // "9:16" (checked against width/height)
   layout: "vertical" | "youtube" | "canvas";
   length: { mode: "target"; seconds: number; tolerance: number } | { mode: "range"; min: number; max: number; hardMax: number } | { mode: "full" } | { mode: "loop"; min: number; max: number };
-  anchor: "lead-in" | "centre"; // section starts one bar before the first hook, or is centred on the first chorus
+  anchor: "lead-in" | "hook-first"; // lead-in: one bar before the first hook (more if a line is still sung); hook-first: at most 1 bar before it
   variations: number;
   safeZone: SafeZone;
   lyricsAt: number; // vertical position of the lyrics inside the usable area: 0 = top, 0.5 = middle
@@ -63,14 +63,27 @@ export const DEFAULT_FORMAT: Format = { width: VIDEO.width, height: VIDEO.height
 export const DEFAULT_SAFE_ZONE: SafeZone = { top: 0.1, bottom: 0.2, left: 0, right: 0.12 };
 export const DEFAULT_LYRIC_AREA = lyricArea(DEFAULT_FORMAT, DEFAULT_SAFE_ZONE);
 
-// Section length window in ms for a preset (target +-tolerance; hard max = only to avoid cutting a line).
-export function sectionWindow(preset: PlatformPreset): { minMs: number; maxMs: number; hardMaxMs: number; targetMs: number } | null {
+// Section length window in ms for a preset. Target presets: aim for target +-tolerance; if no clean
+// line end is in there, prefer one up to 25% shorter (shortest), then up to 30% longer (hardMax).
+// Range presets (standard): min-max, up to hardMax rather than cutting a line.
+export const SHORTER_SHARE = 0.25;
+export const LONGER_SHARE = 0.3;
+
+export function sectionWindow(preset: PlatformPreset): { minMs: number; maxMs: number; hardMaxMs: number; shortestMs: number; targetMs: number } | null {
   const l = preset.length;
   if (l.mode === "target") {
     const t = l.seconds * 1000;
-    return { minMs: Math.round(t * (1 - l.tolerance)), maxMs: Math.round(t * (1 + l.tolerance)), hardMaxMs: Math.round(t * (1 + l.tolerance)), targetMs: t };
+    return {
+      minMs: Math.round(t * (1 - l.tolerance)),
+      maxMs: Math.round(t * (1 + l.tolerance)),
+      hardMaxMs: Math.round(t * (1 + LONGER_SHARE)),
+      shortestMs: Math.round(t * (1 - SHORTER_SHARE)),
+      targetMs: t,
+    };
   }
-  if (l.mode === "range") return { minMs: l.min * 1000, maxMs: l.max * 1000, hardMaxMs: l.hardMax * 1000, targetMs: ((l.min + l.max) / 2) * 1000 };
+  if (l.mode === "range") {
+    return { minMs: l.min * 1000, maxMs: l.max * 1000, hardMaxMs: l.hardMax * 1000, shortestMs: l.min * 1000, targetMs: ((l.min + l.max) / 2) * 1000 };
+  }
   return null;
 }
 
@@ -111,7 +124,7 @@ export function parsePresets(json: unknown, file = "presets/platforms.json"): Re
     } else if (len.mode === "loop") {
       if (!isNum(len.min, 1, 60) || !isNum(len.max, 1, 60) || (len.min as number) > (len.max as number)) errors.push(`${where}: loop length needs min <= max (seconds)`);
     } else if (len.mode !== "full") errors.push(`${where}: length.mode must be "target", "range", "full" or "loop"`);
-    if (!["lead-in", "centre"].includes((p.anchor as string) ?? "lead-in")) bad("anchor", 'must be "lead-in" or "centre"');
+    if (!["lead-in", "hook-first"].includes((p.anchor as string) ?? "lead-in")) bad("anchor", 'must be "lead-in" or "hook-first"');
     if (!isNum(p.variations, 1, 24) || !Number.isInteger(p.variations)) bad("variations", "must be a whole number 1-24");
     const safe = p.safeZone as Record<string, unknown> | undefined;
     if (!safe || typeof safe !== "object") bad("safeZone", "must be { top, bottom, left, right } as fractions (0.2 = 20%)");

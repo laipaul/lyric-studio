@@ -38,14 +38,16 @@ describe("presets file", () => {
   it("has the standard preset and the platforms with the approved defaults", () => {
     expect(Object.keys(presets)).toEqual(["standard", "reels", "tiktok", "shorts", "youtube", "canvas"]);
     expect(presets.standard).toMatchObject({ width: 1080, height: 1920, variations: 6, length: { mode: "range", min: 45, max: 60, hardMax: 65 }, fadeOutSeconds: 0.5 });
-    expect(presets.reels).toMatchObject({ variations: 3, anchor: "centre", loopEnding: true, length: { seconds: 30, tolerance: 0.15 }, safeZone: { top: 0.14, bottom: 0.35, right: 0.12 } });
+    expect(presets.reels).toMatchObject({ variations: 3, anchor: "hook-first", loopEnding: true, length: { seconds: 30, tolerance: 0.15 }, safeZone: { top: 0.14, bottom: 0.35, right: 0.12 } });
     expect(presets.reels.fadeOutSeconds).toBeGreaterThanOrEqual(0.1);
     expect(presets.reels.fadeOutSeconds).toBeLessThanOrEqual(0.15);
     expect(presets.tiktok).toMatchObject({ variations: 3, length: { seconds: 25 }, safeZone: { top: 0.1, bottom: 0.3, right: 0.15 } });
     expect(presets.shorts).toMatchObject({ variations: 2, length: { seconds: 50 }, safeZone: { top: 0.12, bottom: 0.25, right: 0.15 } });
     expect(presets.youtube).toMatchObject({ width: 1920, height: 1080, aspect: "16:9", available: false });
     expect(presets.canvas).toMatchObject({ lyrics: false, audio: false, available: false });
-    expect(sectionWindow(presets.reels)).toEqual({ minMs: 25_500, maxMs: 34_500, hardMaxMs: 34_500, targetMs: 30_000 });
+    expect(presets.tiktok.anchor).toBe("hook-first");
+    expect(presets.shorts.anchor).toBe("hook-first");
+    expect(sectionWindow(presets.reels)).toEqual({ minMs: 25_500, maxMs: 34_500, hardMaxMs: 39_000, shortestMs: 22_500, targetMs: 30_000 });
   });
 
   it("is respected: edited values come through", () => {
@@ -219,7 +221,8 @@ describe("platform sections", () => {
         durationMs: 240_000,
         minMs: w.minMs,
         maxMs: w.maxMs,
-        hardMaxMs: p.length.mode === "target" ? w.targetMs * 1.3 : w.hardMaxMs,
+        hardMaxMs: w.hardMaxMs,
+        shortestMs: w.shortestMs,
         ...(p.length.mode === "target" ? { targetMs: w.targetMs } : {}),
         anchorMode: p.anchor,
       });
@@ -232,11 +235,11 @@ describe("platform sections", () => {
       if (p.length.mode === "target") expect(Math.abs(s.end_ms - s.start_ms - w.targetMs)).toBeLessThanOrEqual(2000); // nearest bar to the target
       const hook = lines[12];
       expect(s.start_ms).toBeLessThanOrEqual(hook.start_ms - 250); // the first hook is in the section
-      if (p.anchor === "centre") {
-        // Reels: the first chorus (lines 13-16, 48.5-62 s) sits around the middle.
-        const chorusMiddle = (hook.start_ms + sungEnd(lines[15])) / 2;
-        expect(Math.abs((s.start_ms + s.end_ms) / 2 - chorusMiddle)).toBeLessThanOrEqual(2000);
-        expect(s.reason).toContain("centred on the first chorus (lines 13-16");
+      if (p.anchor === "hook-first") {
+        // Hook-first: at most one bar before the first hook line, so it is heard within ~2.5 s.
+        expect(hook.start_ms - s.start_ms).toBeGreaterThanOrEqual(0);
+        expect(hook.start_ms - s.start_ms).toBeLessThanOrEqual(2500);
+        expect(s.reason).toContain("at most one bar before the first hook line (line 13");
       }
     });
   }

@@ -46,7 +46,7 @@ export type Manifest = {
     lrc: string; // workspace-relative, never modified
     lrc_sha256: string;
     source: string;
-    hint: { file: string; sha256: string } | null;
+    hint: { file: string; sha256: string; source?: string; stored?: boolean } | null;
     lang: string;
     lead_ms: number;
     lyrics_offset_ms: number;

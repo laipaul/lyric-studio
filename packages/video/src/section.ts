@@ -1,12 +1,18 @@
-// Automatic section choice for "pnpm make --section auto": the first full chorus, ready for a 45-60 s
-// short video.
+// Automatic section choice for "pnpm make --section auto".
 //   Anchor: the first hook line ("* " in lyrics.txt; a single marked line per chorus is enough). Without
 //           hooks: the first occurrence of the most repeated block of lines. Without repeats: the first line.
-//   Start:  one bar before the anchor line (a musical lead-in), on a bar start (downbeat); if the line
-//           before it is still being sung there, the bar before that line appears (never mid-line).
-//   End:    on the first bar start after a lyric line has finished (never in the middle of a line),
-//           45-60 s after the start; the end of a chorus line is preferred. If no such bar exists, up
-//           to 65 s is allowed rather than cutting a line.
+//   Clean cut: a bar start where no line is being sung, i.e. after a line's LAST WORD ENDS and before
+//           the next line's FIRST WORD (word timings from the aligned LRC). Without word end times the
+//           end is estimated from the word starts; without any word timings a line lasts until the
+//           next line starts (line-start logic).
+//   Start, "lead-in" (standard): one bar before the anchor line; if the line before it is still being
+//           sung there, the bar before that line (at most 2 lines back).
+//   Start, "hook-first" (Reels, TikTok, Shorts): at most one bar before the hook's first word, so the
+//           hook is heard within ~2.5 s; never earlier.
+//   End:    the first bar after a line's last word, inside the length window (standard: the latest,
+//           45-60 s, up to 65 s rather than cutting; presets: nearest the target +-15%, else the nearest
+//           clean line end up to 25% shorter, else up to 30% longer). Cutting a line is the last resort
+//           and always gives a warning naming the line.
 // Pure: the reason is returned as text so the command can print it.
 import type { Beat } from "./beats";
 import { normalizeLyric, type TimedWord } from "./lrc";
@@ -16,7 +22,7 @@ export type SectionLine = {
   start_ms: number;
   end_ms: number; // next stamp (LRC)
   isHook: boolean;
-  sung_end_ms?: number; // end of the last sung word, when known (pnpm align report)
+  sung_end_ms?: number; // end of the last sung word, when known (LRC end tag or pnpm align report)
   words?: TimedWord[];
 };
 
@@ -27,14 +33,16 @@ export type AutoSectionOptions = {
   hardMaxMs?: number; // default 65 s: allowed only so that no line is cut
   leadMs?: number; // lines appear this much before their stamp (default 250 ms)
   targetMs?: number; // platform presets: prefer the clean end nearest this length (else the latest)
-  anchorMode?: "lead-in" | "centre"; // centre: the first chorus sits in the middle of the section
+  shortestMs?: number; // presets: a clean end down to this length is preferred over a longer one
+  anchorMode?: "lead-in" | "hook-first"; // hook-first: start at most 1 bar before the hook
 };
 
 export type SectionChoice = {
   start_ms: number;
   end_ms: number;
   anchor: { kind: "hook" | "repeat" | "first-line" | "none"; line: number | null }; // line: 1-based
-  endKind: "chorus-line" | "line" | "instrumental" | "extended" | "song-end" | "cuts-line";
+  endKind: "chorus-line" | "line" | "shorter" | "instrumental" | "extended" | "song-end" | "cuts-line";
+  cuts: SectionCut[]; // sung lines cut at the start or the end (empty when both are clean)
   reason: string;
   warnings: string[];
 };
@@ -44,8 +52,16 @@ export const SECTION_TARGET = { minMs: 45_000, maxMs: 60_000, hardMaxMs: 65_000 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 export const clockText = (ms: number) => `${Math.floor(ms / 60_000)}:${((ms % 60_000) / 1000).toFixed(1).padStart(4, "0")}`;
 
-// When the singing of a line stops: the aligner's last word end if known; otherwise the last word's
-// start plus a typical word length in this line; otherwise the line's end stamp.
+export type SectionCut = { at: "start" | "end"; line: number; text: string; time_ms: number }; // line: 1-based
+
+// When the singing of a line starts: its first word (the line stamp without word timings).
+export function sungStart(line: SectionLine): number {
+  return line.words?.[0]?.start_ms ?? line.start_ms;
+}
+
+// When the singing of a line stops: the last word's end if known (LRC end tag / aligner report);
+// otherwise the last word's start plus a typical word length in this line; otherwise the line's end
+// stamp (= the next line's start).
 export function sungEnd(line: SectionLine): number {
   if (line.sung_end_ms !== undefined) return Math.min(line.sung_end_ms, line.end_ms);
   const words = line.words ?? [];
@@ -90,48 +106,66 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
   const minMs = options.minMs ?? SECTION_TARGET.minMs;
   const maxMs = options.maxMs ?? SECTION_TARGET.maxMs;
   const hardMaxMs = options.hardMaxMs ?? SECTION_TARGET.hardMaxMs;
+  const shortestMs = options.shortestMs ?? minMs;
   const leadMs = options.leadMs ?? 250;
   const duration = options.durationMs;
+  const hookFirst = options.anchorMode === "hook-first";
   const warnings: string[] = [];
 
   const downbeats = beats.filter((b) => b.is_downbeat).map((b) => b.time_ms).sort((a, b) => a - b);
   const gaps = downbeats.slice(1).map((t, i) => t - downbeats[i]).sort((a, b) => a - b);
   const bar = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 2000;
+  const describeLine = (i: number) => `line ${i + 1} "${lines[i].text}"`;
 
   // 1. Anchor line (and which lines count as "chorus" for the end preference).
   const chorus = new Set<number>();
   let anchor: SectionChoice["anchor"];
   let anchorText: string;
+  const before = hookFirst ? "at most one bar before" : "one bar before";
   const firstHook = lines.findIndex((l) => l.isHook);
   if (firstHook >= 0) {
     lines.forEach((l, i) => l.isHook && chorus.add(i));
     anchor = { kind: "hook", line: firstHook + 1 };
-    anchorText = `one bar before the first hook line (line ${firstHook + 1}, "${lines[firstHook].text}")`;
+    anchorText = `${before} the first hook line (line ${firstHook + 1}, "${lines[firstHook].text}")`;
   } else {
     const block = mostRepeatedBlock(lines.map((l) => l.text));
     if (block) {
       for (const s of block.starts) for (let k = 0; k < block.length; k++) chorus.add(s + k);
       anchor = { kind: "repeat", line: block.starts[0] + 1 };
       anchorText =
-        `one bar before line ${block.starts[0] + 1} "${lines[block.starts[0]].text}" (no hook lines; first of the ` +
+        `${before} line ${block.starts[0] + 1} "${lines[block.starts[0]].text}" (no hook lines; first of the ` +
         `most repeated block: ${block.length} line${block.length > 1 ? "s" : ""}, ${block.starts.length} times)`;
     } else if (lines.length) {
       anchor = { kind: "first-line", line: 1 };
-      anchorText = `one bar before line 1 "${lines[0].text}" (no hook lines and no repeated lines)`;
+      anchorText = `${before} line 1 "${lines[0].text}" (no hook lines and no repeated lines)`;
     } else {
       anchor = { kind: "none", line: null };
       anchorText = "the first bar (no lyrics)";
     }
   }
 
-  // When each line's singing ends, and which line (if any) is being sung or already on screen at `t`.
+  // Which line (if any) is being sung at `t`: after its first word starts and before its last word ends.
+  const starts = lines.map(sungStart);
   const ends = lines.map(sungEnd);
-  const singing = (t: number) => lines.findIndex((l, i) => l.start_ms - leadMs < t && t < ends[i]);
+  const singing = (t: number) => lines.findIndex((_, i) => starts[i] < t && t < ends[i]);
+  const isCut = (t: number) => {
+    const i = singing(t);
+    return i >= 0 && i !== (anchor.line ?? 0) - 1 ? i : -1;
+  };
 
-  // 2. Start: one bar before the anchor line, on a downbeat, and before the line appears on screen.
+  // 2. Start.
   let start: number;
+  let startNote = "";
   if (anchor.line === null) {
     start = downbeats[0] ?? 0;
+  } else if (hookFirst) {
+    // At most one bar before the hook's first word (a little tolerance for the bar grid), on a bar:
+    // the earliest such bar that cuts no line, else the one nearest the hook.
+    const hookAt = starts[anchor.line - 1];
+    const inReach = downbeats.filter((d) => d <= hookAt && d >= hookAt - bar - 150);
+    const clean = inReach.filter((d) => isCut(d) < 0);
+    start = clean[0] ?? inReach[inReach.length - 1] ?? downbeats.filter((d) => d <= hookAt).pop() ?? 0;
+    startNote = ` (${seconds(hookAt - start)} before the hook)`;
   } else {
     const lineStart = lines[anchor.line - 1].start_ms;
     const latest = lineStart - leadMs; // the line must not be on screen before the video starts
@@ -142,65 +176,26 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
       const target = lineStart - bar;
       start = usable.reduce((best, d) => (Math.abs(d - target) < Math.abs(best - target) ? d : best), usable[0]);
     }
-  }
-
-  // Never start in the middle of a line either: if the line before the anchor (e.g. the end of the
-  // pre-chorus) is still being sung at that bar, start at the bar before that line appears instead.
-  // At most 2 lines back; if the singing is continuous even then, keep the 1-bar lead-in and warn.
-  let startNote = "";
-  const isCut = (t: number) => {
-    const i = singing(t);
-    return i >= 0 && i !== (anchor.line ?? 0) - 1 ? i : -1;
-  };
-  let candidate = start;
-  const moved: number[] = [];
-  for (let steps = 0; steps < 2 && isCut(candidate) >= 0; steps++) {
-    const cut = isCut(candidate);
-    const earlier = downbeats.filter((d) => d <= lines[cut].start_ms - leadMs).pop();
-    if (earlier === undefined || earlier >= candidate) break;
-    moved.push(cut);
-    candidate = earlier;
-  }
-  if (moved.length && isCut(candidate) < 0) {
-    const first = moved[moved.length - 1];
-    startNote = `; moved back to the bar before line ${first + 1} "${lines[first].text}" so it is not cut`;
-    start = candidate;
-  }
-  // Centre mode (Reels): the first chorus (the hook line and the lines sung right after it) sits in
-  // the middle of the section, starting on a bar where no line is cut.
-  if (options.anchorMode === "centre" && options.targetMs && anchor.line !== null) {
-    // The chorus: the hook line and the lines right after it that are sung again later in the song
-    // (verse lines are unique), up to a pause.
-    const a = anchor.line - 1;
-    const counts = new Map<string, number>();
-    for (const l of lines) counts.set(normalizeLyric(l.text), (counts.get(normalizeLyric(l.text)) ?? 0) + 1);
-    let last = a;
-    while (
-      last + 1 < lines.length &&
-      lines[last + 1].start_ms <= lines[last].end_ms + 250 &&
-      (counts.get(normalizeLyric(lines[last + 1].text)) ?? 0) >= 2 &&
-      ends[last + 1] - lines[a].start_ms <= options.targetMs
-    ) {
-      last += 1;
+    // Never start in the middle of a line either: if the line before the anchor (e.g. the end of the
+    // pre-chorus) is still being sung at that bar, start at the bar before that line appears instead.
+    // At most 2 lines back; if the singing is continuous even then, keep the 1-bar lead-in and warn.
+    let candidate = start;
+    const moved: number[] = [];
+    for (let steps = 0; steps < 2 && isCut(candidate) >= 0; steps++) {
+      const cut = isCut(candidate);
+      const earlier = downbeats.filter((d) => d <= lines[cut].start_ms - leadMs).pop();
+      if (earlier === undefined || earlier >= candidate) break;
+      moved.push(cut);
+      candidate = earlier;
     }
-    const middle = (lines[a].start_ms + ends[last]) / 2;
-    const desired = middle - options.targetMs / 2;
-    const clean = downbeats.filter((d) => d <= lines[a].start_ms - leadMs && isCut(d) < 0);
-    if (clean.length) {
-      start = clean.reduce((best, d) => (Math.abs(d - desired) < Math.abs(best - desired) ? d : best), clean[0]);
-      anchorText =
-        `centred on the first chorus (line${last > a ? `s ${a + 1}-${last + 1}` : ` ${a + 1}`}, ` +
-        `${clockText(lines[a].start_ms)}-${clockText(ends[last])}, from the hook line "${lines[a].text}")`;
-      startNote = "";
+    if (moved.length && isCut(candidate) < 0) {
+      const first = moved[moved.length - 1];
+      startNote = `; moved back to the bar before line ${first + 1} "${lines[first].text}" so it is not cut`;
+      start = candidate;
     }
   }
 
-  const startCut = isCut(start);
-  if (startCut >= 0) {
-    warnings.push(`The section start (${clockText(start)}) cuts line ${startCut + 1} "${lines[startCut].text}"; choose a section with --section.`);
-  }
-
-  // 3. End candidates: bar starts where no line is being sung or already on screen.
+  // 3. End candidates: bar starts where no line is being sung.
   type Candidate = { at: number; afterLine: number; firstBarAfterLine: boolean; chorusLine: boolean };
   const candidates: Candidate[] = [];
   const points = [...downbeats.filter((d) => d > start && d <= duration)];
@@ -214,28 +209,28 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
   }
 
   const length = (c: Candidate) => c.at - start;
-  const inWindow = (c: Candidate) => length(c) >= minMs && length(c) <= maxMs;
-  const inExtension = (c: Candidate) => length(c) > maxMs && length(c) <= hardMaxMs;
-  const describeLine = (i: number) => `line ${i + 1} "${lines[i].text}"`;
+  const within = (lo: number, hi: number) => (c: Candidate) => length(c) >= lo && length(c) <= hi;
+  const after = (pool: Candidate[]) => pool.filter((c) => c.firstBarAfterLine);
+  const target = options.targetMs;
+  const nearest = (pool: Candidate[], to: number) => pool.reduce((best, c) => (Math.abs(length(c) - to) < Math.abs(length(best) - to) ? c : best));
 
   let end: number;
   let endKind: SectionChoice["endKind"];
   let endText: string;
-  const after = (pool: Candidate[]) => pool.filter((c) => c.firstBarAfterLine);
 
-  if (start + minMs > duration) {
+  if (start + shortestMs > duration) {
     end = duration;
     endKind = "song-end";
-    endText = `the song ends ${seconds(duration - start)} after the start (shorter than ${seconds(minMs)})`;
+    endText = `the song ends ${seconds(duration - start)} after the start (shorter than ${seconds(shortestMs)})`;
   } else {
-    const windowed = after(candidates.filter(inWindow));
+    const windowed = after(candidates.filter(within(minMs, maxMs)));
     const chorusEnds = windowed.filter((c) => c.chorusLine);
-    const extended = after(candidates.filter(inExtension));
-    const quiet = candidates.filter(inWindow);
-    const quietExtended = candidates.filter(inExtension);
-    // Range presets: the latest clean end; target presets: the clean end nearest the target.
-    const pick = (pool: Candidate[]) =>
-      options.targetMs ? pool.reduce((best, c) => (Math.abs(length(c) - options.targetMs!) < Math.abs(length(best) - options.targetMs!) ? c : best)) : pool[pool.length - 1];
+    const shorter = target ? after(candidates.filter(within(shortestMs, minMs - 1))) : [];
+    const longer = after(candidates.filter(within(maxMs + 1, hardMaxMs)));
+    const quiet = candidates.filter(within(shortestMs, hardMaxMs));
+    // Range presets (standard): the latest clean end; target presets: the clean end nearest the target.
+    const pick = (pool: Candidate[]) => (target ? nearest(pool, target) : pool[pool.length - 1]);
+    const range = `${seconds(minMs)}-${seconds(maxMs)}`;
     if (chorusEnds.length) {
       const c = pick(chorusEnds);
       [end, endKind] = [c.at, "chorus-line"];
@@ -243,36 +238,61 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
     } else if (windowed.length) {
       const c = pick(windowed);
       [end, endKind] = [c.at, "line"];
-      endText = `the first bar after ${describeLine(c.afterLine)} finishes (no chorus line ends between ${seconds(minMs)} and ${seconds(maxMs)})`;
-    } else if (extended.length) {
-      const c = extended[0];
+      endText = `the first bar after ${describeLine(c.afterLine)} finishes (no chorus line ends within ${range})`;
+    } else if (shorter.length) {
+      const c = shorter[shorter.length - 1];
+      [end, endKind] = [c.at, "shorter"];
+      endText = `shorter than the target: no clean line end within ${range}; the nearest clean end is after ${describeLine(c.afterLine)}`;
+    } else if (longer.length) {
+      const c = longer[0];
       [end, endKind] = [c.at, "extended"];
-      endText =
-        `no bar between ${seconds(minMs)} and ${seconds(maxMs)} without cutting a line; ` +
-        `extended to the first bar after ${describeLine(c.afterLine)} finishes`;
-    } else if (quiet.length || quietExtended.length) {
-      const c = quiet[0] ?? quietExtended[0];
+      endText = target
+        ? `longer than the target: no clean line end within ${range} or up to 25% shorter; the nearest clean end is after ${describeLine(c.afterLine)}`
+        : `no bar within ${range} without cutting a line; extended to the first bar after ${describeLine(c.afterLine)} finishes`;
+    } else if (quiet.length) {
+      const c = target ? nearest(quiet, target) : quiet[0];
       [end, endKind] = [c.at, "instrumental"];
       endText = "a bar start where nothing is sung";
     } else {
-      // No bar start up to 65 s is free of singing: end on the bar nearest 60 s and say which line is cut.
+      // No bar start in reach is free of singing: end on the bar nearest the target and name the cut line.
+      const goal = target ?? maxMs;
       const pool = points.filter((d) => d - start <= hardMaxMs);
-      end = pool.reduce((best, d) => (Math.abs(d - start - maxMs) < Math.abs(best - start - maxMs) ? d : best), pool[0] ?? start + maxMs);
+      end = pool.reduce((best, d) => (Math.abs(d - start - goal) < Math.abs(best - start - goal) ? d : best), pool[0] ?? start + goal);
       endKind = "cuts-line";
-      const cut = singing(end);
-      endText = `every bar start up to ${seconds(hardMaxMs)} is inside a lyric line; ending at the bar nearest ${seconds(maxMs)}`;
-      if (cut >= 0) warnings.push(`The section end (${clockText(end)}) cuts ${describeLine(cut)}; choose a section with --section.`);
+      endText = `every bar start up to ${seconds(hardMaxMs)} is inside a sung line; ending at the bar nearest ${seconds(goal)}`;
     }
   }
 
-  const total = end - start;
-  if (options.targetMs && endKind !== "song-end" && (total < minMs || total > maxMs)) {
-    warnings.push(`The section is ${seconds(total)}, outside ${seconds(minMs)}-${seconds(maxMs)}: no clean bar to end on inside that range.`);
+  // Sung lines cut at either end (the hook line itself never counts as cut at the start).
+  const cuts: SectionCut[] = [];
+  const startCut = isCut(start);
+  if (startCut >= 0) cuts.push({ at: "start", line: startCut + 1, text: lines[startCut].text, time_ms: start });
+  const endCut = singing(end);
+  if (endCut >= 0 && endKind !== "song-end") cuts.push({ at: "end", line: endCut + 1, text: lines[endCut].text, time_ms: end });
+  for (const c of cuts) {
+    warnings.push(`The section ${c.at} (${clockText(c.time_ms)}) cuts line ${c.line} "${c.text}" while it is sung; choose a section with --section.`);
   }
+
   const reason =
     `start ${clockText(start)}: ${anchorText}${startNote}; ` +
     `end ${clockText(end)}: ${endText}; ${seconds(end - start)}`;
-  return { start_ms: start, end_ms: end, anchor, endKind, reason, warnings };
+  return { start_ms: start, end_ms: end, anchor, endKind, reason, warnings, cuts };
+}
+
+// Sung lines cut by a section chosen by hand (--section), for the QA check.
+export function sectionCuts(lines: readonly SectionLine[], startMs: number, endMs: number): SectionCut[] {
+  const out: SectionCut[] = [];
+  for (const [at, t] of [["start", startMs], ["end", endMs]] as const) {
+    const i = lines.findIndex((l) => sungStart(l) < t && t < sungEnd(l));
+    if (i >= 0) out.push({ at, line: i + 1, text: lines[i].text, time_ms: t });
+  }
+  return out;
+}
+
+// Lines whose first word comes at or after the end of the video: they would only flash up in the
+// last 0.25 s (they appear before their stamp), so they are not shown. Returns their indices.
+export function startsAfterEnd(lines: readonly SectionLine[], endMs: number, leadMs: number, offsetMs = 0): number[] {
+  return lines.flatMap((l, i) => (sungStart(l) + offsetMs >= endMs && l.start_ms - leadMs + offsetMs < endMs ? [i] : []));
 }
 
 // Lines already on screen when the video starts whose singing is over: an LRC line stays on screen

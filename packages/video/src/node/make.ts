@@ -33,7 +33,7 @@ import { getCutPoints, type CutRate, type Energy } from "../cuts";
 import { matchPinClips, parsePins } from "../pins";
 import type { LyricVideoProps } from "../props";
 import { formatQa, LOW_CONFIDENCE, qaReasons, runQa, type QaInput, type QaReport } from "../qa";
-import { autoSection, clockText, finishedBeforeStart, type SectionLine } from "../section";
+import { autoSection, clockText, finishedBeforeStart, sectionCuts, startsAfterEnd, type SectionCut, type SectionLine } from "../section";
 import { RECENT_WINDOW, type ClipOrder } from "../shots";
 import { analyzeSong } from "./analysis";
 import { loadBrand, type Brand } from "./brand";
@@ -58,6 +58,7 @@ export type MakeOptions = {
   presetsFile?: string; // default: presets/platforms.json
   section?: string; // "auto" (default) | "full" | "0:11-1:10"
   hint?: string;
+  noHint?: boolean; // align without the project's stored hints (warns)
   realign?: boolean;
   lrc?: string; // use this LRC instead of aligning
   lang?: string;
@@ -256,7 +257,15 @@ export function openFolder(dir: string): void {
   }
 }
 
-type SectionChoiceOut = { mode: string; start_ms: number; end_ms: number; requested: { start_ms: number; end_ms: number } | null; reason: string; warnings: string[] };
+type SectionChoiceOut = {
+  mode: string;
+  start_ms: number;
+  end_ms: number;
+  requested: { start_ms: number; end_ms: number } | null;
+  reason: string;
+  warnings: string[];
+  cuts: SectionCut[]; // sung lines cut at the start or end (QA: WARN)
+};
 
 function chooseSection(mode: string, lines: SectionLine[], beats: Beat[], durationMs: number, leadMs: number, preset?: PlatformPreset): SectionChoiceOut {
   if (mode === "auto" && preset?.length.mode === "full") mode = "full";
@@ -265,11 +274,11 @@ function chooseSection(mode: string, lines: SectionLine[], beats: Beat[], durati
     const s = autoSection(lines, beats, {
       durationMs,
       leadMs,
-      ...(window ? { minMs: window.minMs, maxMs: window.maxMs, hardMaxMs: preset!.length.mode === "target" ? Math.round(window.targetMs * 1.3) : window.hardMaxMs } : {}),
+      ...(window ? { minMs: window.minMs, maxMs: window.maxMs, hardMaxMs: window.hardMaxMs, shortestMs: window.shortestMs } : {}),
       ...(window && preset!.length.mode === "target" ? { targetMs: window.targetMs } : {}),
       anchorMode: preset?.anchor ?? "lead-in",
     });
-    return { mode, start_ms: s.start_ms, end_ms: s.end_ms, requested: null, reason: s.reason, warnings: s.warnings };
+    return { mode, start_ms: s.start_ms, end_ms: s.end_ms, requested: null, reason: s.reason, warnings: s.warnings, cuts: s.cuts };
   }
   const requested = mode === "full" ? { start_ms: 0, end_ms: durationMs } : parseSection(mode);
   requested.end_ms = Math.min(requested.end_ms, durationMs);
@@ -277,7 +286,8 @@ function chooseSection(mode: string, lines: SectionLine[], beats: Beat[], durati
   const snapped = start !== requested.start_ms ? ` (start snapped from ${clockText(requested.start_ms)} to the nearest bar start)` : "";
   const reason = `${mode === "full" ? "whole song" : "as given"}: ${clockText(start)} - ${clockText(requested.end_ms)}${snapped}; ${((requested.end_ms - start) / 1000).toFixed(1)} s`;
   if (requested.end_ms - start < 1000) throw new Error("The section is shorter than 1 second.");
-  return { mode, start_ms: start, end_ms: requested.end_ms, requested, reason, warnings: [] };
+  const cuts = sectionCuts(lines, start, requested.end_ms).filter((c) => !(mode === "full" && c.at === "end" && requested.end_ms >= durationMs));
+  return { mode, start_ms: start, end_ms: requested.end_ms, requested, reason, warnings: cuts.map((c) => `The section ${c.at} (${clockText(c.time_ms)}) cuts line ${c.line} "${c.text}" while it is sung.`), cuts };
 }
 
 export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
@@ -325,6 +335,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const alignment = await ensureAlignment(ws, { ...sp, project }, {
       lyricsTxt: path.resolve(options.lyrics),
       hint: options.hint ? path.resolve(options.hint) : undefined,
+      noHint: options.noHint,
       lrc: options.lrc ? path.resolve(options.lrc) : undefined,
       realign: options.realign,
       lang: options.lang,
@@ -474,7 +485,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
     id: c.clip.id, name: c.name, duration_ms: c.durationMs, path: c.path, durationFrames: c.durationFrames, kind: c.kind, fit: c.fit,
   }));
 
-  const warnings = [...chosen.warnings.map((w) => `${preset.name}: ${w}`)];
+  const warnings = [...(position.index === 0 ? sh.alignment.warnings : []), ...chosen.warnings.map((w) => `${preset.name}: ${w}`)];
   let pins: RenderBase["pins"] = [];
   if (options.pins) {
     const parsed = parsePins(readFileSync(options.pins, "utf8"));
@@ -487,7 +498,10 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
   const allLyrics = lines.map((l) => ({ text: l.text, start_ms: l.start_ms, end_ms: l.end_ms, isHook: l.isHook }));
   // A line whose singing is over but which is still on screen at the start (it lingers until the
   // next stamp) is not shown, so the video never opens on the tail of the previous line.
-  const hidden = preset.lyrics ? finishedBeforeStart(sh.sectionLines, chosen.start_ms, leadMs, lyricsOffsetMs) : [];
+  // A line whose first word comes after the end would only flash up in the last 0.25 s: not shown either.
+  const hidden = preset.lyrics
+    ? [...finishedBeforeStart(sh.sectionLines, chosen.start_ms, leadMs, lyricsOffsetMs), ...startsAfterEnd(sh.sectionLines, chosen.end_ms, leadMs, lyricsOffsetMs)]
+    : [];
   const shown = preset.lyrics ? lines.map((_, i) => i).filter((i) => !hidden.includes(i)) : [];
   const layout: PlatformLayout = { format, safeZone: preset.safeZone, lyricsAt: preset.lyricsAt, textScale: preset.textScale, loopEnding: preset.loopEnding };
   const base: RenderBase = {
@@ -509,7 +523,9 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
     .map((f, k) => ({ i: shown[k], start: Math.max(0, f.startFrame), end: Math.min(base.durationInFrames, f.endFrame) }))
     .filter((v) => v.end > v.start)
     .map((v) => v.i);
-  const notes = hidden.map((i) => `line ${numbers[i] || i + 1} "${lines[i].text}" is not shown: it was sung before the section starts`);
+  const notes = hidden.map(
+    (i) => `line ${numbers[i] || i + 1} "${lines[i].text}" is not shown: it is sung ${lines[i].start_ms < chosen.start_ms ? "before the section starts" : "after the section ends"}`,
+  );
   for (const style of ["simple", "bold"] as const) {
     const s = styles[style];
     const area = lyricArea(format, preset.safeZone, preset.lyricsAt);
@@ -682,6 +698,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
       report();
       const qa = await checkVariation(spec, props, file, {
         lines, visible, numbers, reports, styles, clips: prepared.clips, sources: { ...sources, platform: preset.label }, frameCheck: options.frameCheck ?? true,
+        sectionCuts: chosen.cuts.map((c) => ({ ...c, line: numbers[c.line - 1] || c.line })),
       });
       result.qa = qa;
       result.qaSummary = qa.status === "PASS" ? "PASS" : `WARN (${qaReasons(qa)})`;
@@ -749,6 +766,7 @@ async function checkVariation(
     clips: PreparedForFormat["clips"];
     sources: QaInput["sources"];
     frameCheck: boolean;
+    sectionCuts: SectionCut[];
   },
 ): Promise<QaReport> {
   const style = ctx.styles[spec.style];
@@ -772,6 +790,7 @@ async function checkVariation(
     }),
     frames: ctx.frameCheck ? await detectBadFrames(file, props.durationInFrames / VIDEO.fps) : null,
     sources: ctx.sources,
+    sectionCuts: ctx.sectionCuts,
   });
 }
 
@@ -826,7 +845,9 @@ function buildManifest(c: {
       lrc: c.alignment.lrcStored,
       lrc_sha256: c.alignment.lrcHash,
       source: c.alignment.source,
-      hint: c.alignment.hint ? { file: c.alignment.hint.file, sha256: c.alignment.hint.hash } : null,
+      hint: c.alignment.hint
+        ? { file: c.alignment.hint.file, sha256: c.alignment.hint.hash, source: c.alignment.hint.source, stored: c.alignment.hint.stored }
+        : null,
       lang: c.options.lang ?? "en",
       lead_ms: c.leadMs,
       lyrics_offset_ms: c.lyricsOffsetMs,

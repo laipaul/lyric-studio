@@ -2,12 +2,17 @@
 //
 // Lyric timings are immutable: every alignment is stored as its own file in
 //   WORKSPACE_DIR\projects\<id>\lyrics\aligned-<key>-<time>.lrc   (+ .report.json with confidences)
-// and is never rewritten afterwards. <key> is made from lyrics.txt, the --hint file and the language,
-// so the same inputs reuse the stored alignment and --realign adds a new file next to it. Corrections
+// and is never rewritten afterwards. <key> is made from the words of lyrics.txt (hook markers "* "
+// ignored: adding or removing a hook does not re-align), the hint file and the language, so the same
+// inputs reuse the stored alignment and --realign adds a new file next to it. Hook lines always come
+// from the current lyrics.txt.
+//
+// Hints (tapped times) are remembered per project: the first --hint is copied into the lyrics folder
+// (hints-<hash>.lrc, recorded in hint.json) and used for every later alignment of the project. Corrections
 // (the project's lyrics offset, and per-line overrides in Step 5e) are applied at render time.
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { REPO_ROOT, absPath, createProject, project as projectTable, type Project, type Workspace } from "@lyric/db";
@@ -16,7 +21,7 @@ import { eq } from "drizzle-orm";
 import { HOOK_MARKER, normalizeLyric, parseLrc, type TimedLine } from "../lrc";
 import { cachedFileHash } from "./collection";
 
-export const ALIGN_STORE_VERSION = 1;
+export const ALIGN_STORE_VERSION = 2; // 2: key without hook markers, LRC with word end tags
 
 export type SongProject = { project: Project; songFile: string; songHash: string; created: boolean };
 
@@ -66,7 +71,8 @@ export type Alignment = {
   key: string;
   lyricsTxt: string; // full path of the lyrics.txt used
   lyricsHash: string;
-  hint: { file: string; hash: string } | null;
+  hint: { file: string; hash: string; source: string; stored: boolean } | null; // stored: reused from an earlier --hint
+  warnings: string[];
   lines: TimedLine[]; // parsed, with hooks from lyrics.txt
 };
 
@@ -94,6 +100,7 @@ export async function ensureAlignment(
   options: {
     lyricsTxt: string;
     hint?: string;
+    noHint?: boolean; // align without the project's stored hints (warns)
     lrc?: string; // use this LRC instead of aligning (stored as-is)
     realign?: boolean;
     lang?: string;
@@ -108,10 +115,11 @@ export async function ensureAlignment(
   for (const f of [options.lyricsTxt, options.hint, options.lrc]) if (f && !existsSync(f)) throw new Error(`File not found: ${f}`);
   const txtContent = readFileSync(options.lyricsTxt);
   const lyricsHash = sha256(txtContent);
-  const hint = options.hint ? { file: path.resolve(options.hint), hash: sha256(readFileSync(options.hint)) } : null;
   const relDir = `projects/${sp.project.id}/lyrics`;
   const dir = absPath(ws, relDir);
   mkdirSync(dir, { recursive: true });
+  const warnings: string[] = [];
+  const hint = options.lrc ? null : projectHint(dir, options, log, warnings);
 
   // Keep a copy of the lyrics.txt this alignment was made from.
   const txtCopy = path.join(dir, `lyrics-${lyricsHash.slice(0, 12)}.txt`);
@@ -127,7 +135,7 @@ export async function ensureAlignment(
     source = "given";
     if (!existsSync(path.join(dir, name))) copyFileSync(options.lrc, path.join(dir, name));
   } else {
-    key = sha256(`v${ALIGN_STORE_VERSION}|${lyricsHash}|${hint?.hash ?? ""}|${lang}`).slice(0, 12);
+    key = sha256(`v${ALIGN_STORE_VERSION}|${sha256(wordsOfLyrics(txtContent.toString("utf8")))}|${hint?.hash ?? ""}|${lang}`).slice(0, 12);
     const stored = readdirSync(dir)
       .filter((f) => f.startsWith(`aligned-${key}-`) && f.endsWith(".lrc") && existsSync(path.join(dir, f.replace(/\.lrc$/, ".report.json"))))
       .sort();
@@ -167,7 +175,8 @@ export async function ensureAlignment(
   const report = source !== "given" && existsSync(reportFile) ? (JSON.parse(readFileSync(reportFile, "utf8")) as AlignReport) : null;
 
   const hooks = hookKeys(txtContent.toString("utf8"));
-  const lines = parseLrc(content, options.durationMs).map((l) => ({ ...l, isHook: l.isHook || hooks.has(normalizeLyric(l.text)) }));
+  // Hooks from the current lyrics.txt only (a "* " removed there is no longer a hook).
+  const lines = parseLrc(content, options.durationMs).map((l) => ({ ...l, isHook: hooks.has(normalizeLyric(l.text)) }));
   return {
     lrcFile,
     lrcStored: `${relDir}/${name}`,
@@ -179,7 +188,55 @@ export async function ensureAlignment(
     lyricsHash,
     hint,
     lines,
+    warnings,
   };
+}
+
+// lyrics.txt without its hook markers: what the alignment depends on.
+export function wordsOfLyrics(text: string): string {
+  return text
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/)
+    .map((l) => l.trim().replace(HOOK_MARKER, ""))
+    .join("\n")
+    .trim();
+}
+
+type StoredHint = { source: string; copy: string; sha256: string; stored_at: string };
+
+// The hint file for this alignment: a new --hint is stored for the project; without --hint the
+// stored one is reused; --no-hint (or a lost copy) aligns without it, with a clear warning.
+function projectHint(
+  dir: string,
+  options: { hint?: string; noHint?: boolean },
+  log: (m: string) => void,
+  warnings: string[],
+): Alignment["hint"] {
+  const record = path.join(dir, "hint.json");
+  const stored = existsSync(record) ? (JSON.parse(readFileSync(record, "utf8")) as StoredHint) : null;
+  if (options.hint) {
+    const content = readFileSync(options.hint);
+    const hash = sha256(content);
+    const copy = `hints-${hash.slice(0, 12)}.lrc`;
+    if (!existsSync(path.join(dir, copy))) writeFileSync(path.join(dir, copy), content);
+    if (stored?.sha256 !== hash) {
+      writeFileSync(record, `${JSON.stringify({ source: path.resolve(options.hint), copy, sha256: hash, stored_at: new Date().toISOString() }, null, 2)}\n`);
+      log(`hints: ${path.basename(options.hint)} stored with the project; later alignments use it automatically`);
+    }
+    return { file: path.join(dir, copy), hash, source: path.resolve(options.hint), stored: false };
+  }
+  if (!stored) return null;
+  if (options.noHint) {
+    warnings.push(`This project normally aligns with the hints from ${stored.source}; aligning WITHOUT them (--no-hint).`);
+    return null;
+  }
+  const file = path.join(dir, stored.copy);
+  if (!existsSync(file) || sha256(readFileSync(file)) !== stored.sha256) {
+    warnings.push(`The stored hints for this project (from ${stored.source}) are missing or changed; aligning WITHOUT hints. Pass --hint again to store them.`);
+    return null;
+  }
+  log(`using stored hints from ${stored.source} (stored ${stored.stored_at.slice(0, 10)})`);
+  return { file, hash: stored.sha256, source: stored.source, stored: true };
 }
 
 // The aligner's per-line values for each parsed line (matched in order by text).

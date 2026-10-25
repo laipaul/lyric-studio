@@ -407,6 +407,7 @@ def line_report(aligned: list[AlignedLine], model_name: str, lang: str) -> dict:
                 "start_ms": line.start_ms,
                 "end_ms": line.end_ms,
                 "confidence": round(line.confidence, 3),
+                "words": [{"text": w.text, "start_ms": w.start_ms, "end_ms": w.end_ms} for w in line.words],
             }
             for n, line in enumerate(aligned, start=1)
         ],

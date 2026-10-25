@@ -1,16 +1,17 @@
 // LRC lyrics: "[mm:ss.xx]text". A stamp with no text ends the previous line (pause / last line end).
 // A line starting with "* " is a hook; every line with the same words (see normalizeLyric) is then
 // a hook too, so marking one chorus occurrence marks them all.
-// Enhanced LRC (from "pnpm align") also has word tags: "[00:14.00]<00:14.00>Hope <00:14.42>is".
+// Enhanced LRC (from "pnpm align") also has word tags: "[00:14.00]<00:14.00>Hope <00:14.42>is <00:14.90>";
+// a last tag with no word after it is where the last word ends (the line's singing stops there).
 export type TimedWord = { text: string; start_ms: number };
-export type TimedLine = { text: string; start_ms: number; end_ms: number; isHook: boolean; words?: TimedWord[] };
+export type TimedLine = { text: string; start_ms: number; end_ms: number; isHook: boolean; words?: TimedWord[]; sung_end_ms?: number };
 
 const STAMP = /\[(\d+):(\d{1,2}(?:\.\d{1,3})?)\]/g;
 const WORD_TAG = /<(\d+):(\d{1,2}(?:\.\d{1,3})?)>/g;
 const tagMs = (m: string, s: string) => Math.round((Number(m) * 60 + Number(s)) * 1000);
 
 // Line text without word tags, and the word timings if there are any.
-function splitWords(body: string): { text: string; words?: TimedWord[] } {
+function splitWords(body: string): { text: string; words?: TimedWord[]; sung_end_ms?: number } {
   const tags = [...body.matchAll(WORD_TAG)];
   const text = body.replace(WORD_TAG, " ").replace(/\s+/g, " ").trim();
   if (!tags.length) return { text };
@@ -18,7 +19,8 @@ function splitWords(body: string): { text: string; words?: TimedWord[] } {
     start_ms: tagMs(t[1], t[2]),
     text: body.slice((t.index ?? 0) + t[0].length, tags[i + 1]?.index ?? body.length).trim(),
   }));
-  return { text, words: words.filter((w) => w.text) };
+  const last = words[words.length - 1];
+  return { text, words: words.filter((w) => w.text), ...(words.length > 1 && !last.text ? { sung_end_ms: last.start_ms } : {}) };
 }
 export const HOOK_MARKER = /^\*\s+/;
 
@@ -35,14 +37,14 @@ export function normalizeLyric(text: string): string {
 }
 
 export function parseLrc(content: string, fallbackEndMs?: number): TimedLine[] {
-  const stamps: { ms: number; text: string; isHook: boolean; words?: TimedWord[] }[] = [];
+  const stamps: { ms: number; text: string; isHook: boolean; words?: TimedWord[]; sung_end_ms?: number }[] = [];
   for (const raw of content.replace(/^\uFEFF/, "").split(/\r?\n/)) {
     const times = [...raw.matchAll(STAMP)];
     if (!times.length) continue;
     const body = raw.replace(STAMP, "").trim();
     const isHook = HOOK_MARKER.test(body);
-    const { text, words } = splitWords(body.replace(HOOK_MARKER, "").trim());
-    for (const t of times) stamps.push({ ms: tagMs(t[1], t[2]), text, isHook, ...(words ? { words } : {}) });
+    const { text, words, sung_end_ms } = splitWords(body.replace(HOOK_MARKER, "").trim());
+    for (const t of times) stamps.push({ ms: tagMs(t[1], t[2]), text, isHook, ...(words ? { words } : {}), ...(sung_end_ms !== undefined ? { sung_end_ms } : {}) });
   }
   stamps.sort((a, b) => a.ms - b.ms);
 
@@ -51,7 +53,14 @@ export function parseLrc(content: string, fallbackEndMs?: number): TimedLine[] {
     if (!s.text) return; // end / pause marker
     const end = stamps[i + 1]?.ms ?? fallbackEndMs;
     if (end !== undefined && end > s.ms) {
-      lines.push({ text: s.text, start_ms: s.ms, end_ms: end, isHook: s.isHook, ...(s.words ? { words: s.words } : {}) });
+      lines.push({
+        text: s.text,
+        start_ms: s.ms,
+        end_ms: end,
+        isHook: s.isHook,
+        ...(s.words ? { words: s.words } : {}),
+        ...(s.sung_end_ms !== undefined ? { sung_end_ms: s.sung_end_ms } : {}),
+      });
     }
   });
 

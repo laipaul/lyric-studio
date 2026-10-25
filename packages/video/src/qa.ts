@@ -27,6 +27,7 @@ export type QaInput = {
   lyrics: QaLyric[]; // lines visible in this variation
   frames: { black: TimeRange[]; frozen: TimeRange[] } | null; // null: frame check not run
   sources?: { usable: number; needed: number; kind: string; platform: string } | null; // clips that suit this format
+  sectionCuts?: { at: "start" | "end"; line: number; text: string; time_ms: number }[]; // sung lines cut by the section
 };
 
 export type QaCheck = { name: string; ok: boolean; details: string[] };
@@ -156,7 +157,18 @@ export function runQa(input: QaInput): QaReport {
     .map(({ l, problem }) => `line ${l.number} "${l.text}" ${problem}`);
   checks.push({ name: "Lyrics inside the safe zone", ok: outside.length === 0, details: outside });
 
-  // 7. Enough clips that suit this format (vertical sources for 9:16, horizontal for 16:9).
+  // 7. The section never cuts a sung line at its start or end (WARN, never PASS, naming the line).
+  if (input.sectionCuts) {
+    checks.push({
+      name: "Section start/end",
+      ok: input.sectionCuts.length === 0,
+      details: input.sectionCuts.map(
+        (c) => `the video ${c.at === "start" ? "starts" : "ends"} at ${t(c.time_ms / 1000)} in the song while line ${c.line} "${c.text}" is sung`,
+      ),
+    });
+  }
+
+  // 8. Enough clips that suit this format (vertical sources for 9:16, horizontal for 16:9).
   if (input.sources) {
     const src = input.sources;
     checks.push({

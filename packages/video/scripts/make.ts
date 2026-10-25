@@ -1,5 +1,5 @@
 // pnpm make <song> <lyrics.txt> --collection <name> [--collection-path <folder>] [--variations 6]
-//   [--section auto|full|0:11-1:10] [--hint <taps.lrc>] [--realign] [--lrc <file.lrc>] [--lang en|fr]
+//   [--section auto|full|0:11-1:10] [--hint <taps.lrc> | --no-hint] [--realign] [--lrc <file.lrc>] [--lang en|fr]
 //   [--rate 1x] [--energy medium] [--lead 0.25] [--lyrics-offset 0] [--downbeat-offset N]
 //   [--font "Family"] [--font-hook "Family"] [--pins pins.txt] [--parallel N] [--resume] [--no-open]
 //   [--platforms reels,tiktok,shorts | all] [--allow-fill]
@@ -27,6 +27,7 @@ try {
       "allow-fill": { type: "boolean", default: false },
       section: { type: "string", default: "auto" },
       hint: { type: "string" },
+      "no-hint": { type: "boolean", default: false },
       realign: { type: "boolean", default: false },
       lrc: { type: "string" },
       lang: { type: "string", default: "en" },
@@ -68,6 +69,7 @@ if (offset !== undefined && ![0, 1, 2, 3].includes(offset)) fail("--downbeat-off
 const parallel = values.parallel === undefined ? undefined : Number(values.parallel);
 if (parallel !== undefined && (!Number.isInteger(parallel) || parallel < 1 || parallel > 6)) fail("--parallel must be a whole number from 1 to 6");
 if (values.realign && values.lrc) fail("--realign and --lrc cannot be used together");
+if (values.hint && values["no-hint"]) fail("--hint and --no-hint cannot be used together");
 
 // Relative paths are relative to the folder the command was typed in.
 const userCwd = process.env.INIT_CWD ?? process.cwd();
@@ -102,6 +104,7 @@ try {
     allowFill: values["allow-fill"],
     section: values.section,
     hint: resolve(values.hint),
+    noHint: values["no-hint"],
     realign: values.realign,
     lrc: resolve(values.lrc),
     lang: values.lang,

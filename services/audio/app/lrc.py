@@ -57,7 +57,9 @@ END_AFTER_MS = 500  # the end of the last line
 
 def build_lrc(items: list[tuple[str, AlignedLine | None]], duration_ms: int, header: list[str] | None = None) -> str:
     """items: ("line", AlignedLine) or ("pause", None), in lyrics.txt order. Writes enhanced LRC:
-    [mm:ss.xx]* <mm:ss.xx>word <mm:ss.xx>word ..."""
+    [mm:ss.xx]* <mm:ss.xx>word <mm:ss.xx>word ... <mm:ss.xx>
+    The last tag (with no word after it) is where the last word ends: the singing of the line stops
+    there, which "pnpm make" needs to cut cleanly between lines."""
     out = list(header or [])
     lines = [line for kind, line in items if kind == "line" and line is not None]
     previous: AlignedLine | None = None
@@ -73,7 +75,7 @@ def build_lrc(items: list[tuple[str, AlignedLine | None]], duration_ms: int, hea
             continue
         assert line is not None
         words = " ".join(f"{format_stamp(w.start_ms, '<>')}{w.text}" for w in line.words)
-        out.append(f"{format_stamp(line.start_ms)}{'* ' if line.is_hook else ''}{words}")
+        out.append(f"{format_stamp(line.start_ms)}{'* ' if line.is_hook else ''}{words} {format_stamp(line.end_ms, '<>')}")
         previous = line
     if lines:
         out.append(format_stamp(min(duration_ms, lines[-1].end_ms + END_AFTER_MS)))
@@ -86,6 +88,7 @@ class LrcLine:
     text: str  # words only (no stamps, word tags or hook marker)
     is_hook: bool
     words: list[tuple[int, str]]  # (start ms, word) from enhanced tags, if any
+    end_ms: int | None = None  # end of the last word (a trailing tag with no word), if written
 
 
 def _ms(minutes: str, seconds: str) -> int:
@@ -105,11 +108,15 @@ def parse_lrc(content: str) -> list[LrcLine]:
         words = [(_ms(m.group(1), m.group(2)), "") for m in WORD_TAG.finditer(body)]
         parts = WORD_TAG.split(body)
         # WORD_TAG.split -> [before, m, s, word, m, s, word, ...]
+        end_ms = None
         if words:
             words = [(_ms(parts[i], parts[i + 1]), parts[i + 2].strip()) for i in range(1, len(parts) - 2, 3)]
+            if words and not words[-1][1]:
+                end_ms = words[-1][0]  # trailing tag: the end of the last word
+            words = [w for w in words if w[1]]
         text = " ".join(WORD_TAG.sub(" ", body).split())
         if not text:
             continue
         for s in stamps:
-            lines.append(LrcLine(_ms(s.group(1), s.group(2)), text, is_hook, words))
+            lines.append(LrcLine(_ms(s.group(1), s.group(2)), text, is_hook, words, end_ms))
     return sorted(lines, key=lambda l: l.start_ms)
