@@ -344,11 +344,12 @@ A 1920x1080 video of the whole song (from 0:00) in `exports\<date>\youtube\`, wi
 - `--title "My Song"` sets the song's title (saved with the project); otherwise it is the file name.
 - `--ep "In The Mood for Life"` adds `From the EP "In The Mood for Life"` to `publish.txt` (template
   placeholder `{{epLine}}`; older templates get the line after the first description line).
-- **Logo**: bottom right on YouTube, fading out just before the last 20 s (end screen). On 9:16
-  videos it sits in a corner inside the platform's safe zone. Set the corners in
-  `workspace\brand\brand.json`: `"logo": { "youtube": "bottom-right", "vertical": "auto", "size": 0.08 }`
-  (`auto` = bottom right inside the safe zone; or `top-left`, `top-right`, `bottom-left`, `bottom-right`).
-  The old `"position"` setting is no longer used.
+- **Logo**: on YouTube videos only (by default), bottom right, fading out just before the last 20 s
+  (end screen). It always sits in a corner of the frame, 3% of the width from both edges (never
+  mid-frame; QA "Logo in a frame corner"). Choose in `workspace\brand\brand.json`:
+  `"logo": { "platforms": ["youtube"], "youtube": "bottom-right", "vertical": "auto", "size": 0.08 }`;
+  add e.g. `"reels"` to `platforms` to show it there too (`vertical`: the corner on 9:16 videos,
+  `auto` = bottom right). The old `"position"` setting is no longer used.
 
 Every video on every platform also gets a `.srt` caption file next to it (`v1.srt`, …).
 
@@ -373,12 +374,16 @@ One silent 1080x1920 loop in `exports\<date>\canvas\` (`v1.mp4`, manifest, QA; n
 
 - **Length**: the longest whole number of bars that fits in 3-8 s at the song's tempo (120 BPM:
   4 bars = 8.00 s; 107 BPM: 3 bars = 6.75 s). Very slow songs: whole beats.
+- **Clips too short?** It does not give up: 1) fewer bars (e.g. 3 -> 2, as long as the loop is at
+  least 3 s); 2) the clip slowed down (down to 0.6x) to fill that loop; 3) a vertical photo moving
+  slowly out and back. Only then it stops, saying what would work. The plan prints which fallback
+  was used ("fallback 1 (fewer bars): ...").
 - **Strongest moment**: every vertical clip is scored with FFmpeg (motion, colour, contrast, 10
   samples a second); the best window without a hard scene change inside wins. `--variations 3` gives
   the best moment of 3 different clips.
 - **Seamless**: the last 0.5 s fades in the 0.5 s of the clip just before the loop's start, so the
-  last frame flows straight into the first. With photos only (or clips too short), a photo moves out
-  and back so it ends where it started (with a warning).
+  last frame flows straight into the first (also for a slowed clip). A photo moves out and back so
+  it ends where it started.
 - **QA**: "Seamless loop" (the jump from the last frame to the first is no bigger than an ordinary
   frame step), "No audio", "Length 3-8 s".
 - Upload it in Spotify for Artists (Canvas). Spotify shows its own song info over it.

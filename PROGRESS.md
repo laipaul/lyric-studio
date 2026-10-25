@@ -394,7 +394,7 @@ Cause: a line was treated as sung until the next line started (and the next line
   folder, warnings, photo fallback, error), a real render (no audio stream; the blended loop's jump
   is within the QA limit, the unblended one is several times larger).
 
-### Step 5j — Lyric effects library (pulled forward) ✅ (to verify on the Windows PC)
+### Step 5j — Lyric effects library (pulled forward) ✅ (verified on the Windows PC: glide + karaoke look right, reels 3 PASS; kept as the defaults)
 - `packages/video/src/effects`: one module per effect (glide, cinematic-fade, soft-blur, dreamy-glow,
   word-reveal, karaoke-highlight, floating, typewriter), each with duration, easing and intensity
   (subtle 0.6x / balanced 1x / expressive 1.5x), per line or per word. Only Remotion's own
@@ -420,6 +420,21 @@ Cause: a line was treated as sung until the next line started (and the next line
   deterministic output, settings order (brand -> platform -> command line), QA box with the waiting
   line, effects:preview, and a real render (smooth movement and brightness, accent colour on the sung
   word, pixel-identical frames).
+
+### Step 5g.3b — Canvas fallbacks, failure summary, logo rule ✅ (to verify on the Windows PC)
+- Canvas no longer gives up when clips are short (your case: 3 bars needed 7.3 s, longest clip 5.2 s):
+  1) fewer bars (3 -> 2 while the loop is >= 3 s; 2 bars = 4.5 s fits a 5.2 s clip), 2) the clip
+  slowed down (down to 0.6x) for the shortest loop, with the seamless blend taken at the same speed,
+  3) a vertical photo moving out and back, 4) only then an error saying what would work. The plan
+  prints "fallback 1 (fewer bars): ..." / "fallback 2 (slowed down): ..." / "fallback 3 (photo): ...".
+- Summary after a failure: "canvas was not made: <reason>" and "run the same command with
+  --platforms canvas" (was "0 variation(s) failed: ."); failed videos are named "reels v2".
+- Logo: YouTube only by default (brand.json `logo.platforms: ["youtube"]`, add a platform to show it
+  there); always in a frame corner, 3% of the width from both edges (the old "auto" put it inside
+  the Reels safe zone, on the subject). New QA check "Logo in a frame corner".
+- Tests: each canvas fallback (pure and in pnpm make), a slowed loop rendered and checked seamless,
+  the summary, logo placement on every platform and corner, QA catching a mid-frame logo, logo off on
+  9:16 by default and on when listed.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -475,7 +490,7 @@ Cause: a line was treated as sung until the next line started (and the next line
 - The workspace service is used by tests only so far; commands and UI that use it come in later steps.
 
 ## Next
-1. Verify Step 5g.3 (Spotify Canvas, already built and pushed) on the PC.
+1. Verify Step 5g.3 + 5g.3b (Canvas with fallbacks, logo rule) on the PC.
 2. Step 5g.4 (loop layout).
 3. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project
    (confirmed by the user) and plug into the same render-time layer as the lyrics offset.

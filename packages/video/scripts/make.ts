@@ -10,7 +10,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 
 import { clockText, type CutRate, type Energy } from "../src";
-import { makeVideos, openFolder, type RenderState } from "../src/node";
+import { failureSummary, makeVideos, openFolder, type RenderState } from "../src/node";
 
 function fail(message: string): never {
   console.error(`\nError: ${message}`);
@@ -231,10 +231,9 @@ for (const v of result.variations.filter((x) => x.thumbnailFile && !x.error)) {
   console.log(`YouTube:   ${v.thumbnailFile} (1280x720) and ${v.publishFile} (title, description, tags)`);
 }
 if (!values["no-open"]) openFolder(result.exportDir);
-const failed = result.variations.filter((v) => v.error);
-if (failed.length || result.platforms.some((p) => p.error)) {
+const failures = failureSummary(result);
+if (failures) {
   console.log("");
-  console.log(`${failed.length} variation(s) failed: ${failed.map((v) => v.name).join(", ")}. The others are finished.`);
-  console.log("Render only the missing ones with the same command plus --resume (add --parallel 1 if it was higher).");
+  for (const line of failures) console.log(line);
   process.exit(1);
 }

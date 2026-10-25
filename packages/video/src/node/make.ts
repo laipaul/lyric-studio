@@ -179,6 +179,24 @@ export type MakeResult = {
   warnings: string[];
 };
 
+// The end of the summary when something failed: every failed video (platform + variation) and every
+// platform that could not be made at all, with what to do. null when everything is finished.
+export function failureSummary(result: Pick<MakeResult, "platforms" | "variations">): string[] | null {
+  const videos = result.variations.filter((v) => v.error);
+  const platforms = result.platforms.filter((p) => p.error);
+  if (!videos.length && !platforms.length) return null;
+  const out: string[] = [];
+  if (videos.length) {
+    out.push(`${videos.length} video(s) failed: ${videos.map((v) => `${v.platform} ${v.name}`).join(", ")}.`);
+    out.push("Render only the missing ones with the same command plus --resume (add --parallel 1 if it was higher).");
+  }
+  for (const p of platforms) out.push(`${p.name} was not made: ${p.error!.split("\n")[0]}`);
+  if (platforms.length) out.push(`Fix the cause above, then run the same command with --platforms ${platforms.map((p) => p.name).join(",")}.`);
+  const finished = result.variations.filter((v) => !v.error).length;
+  out.push(finished ? `The other ${finished} video(s) are finished.` : "No video was finished.");
+  return out;
+}
+
 // v1: story order; v2..vN: shuffle with seed 2..N. Styles alternate Simple / Bold; cinematic bars on
 // every other variation (v2, v4, ...).
 export function planVariations(count: number): VariationSpec[] {
@@ -702,11 +720,11 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
         // The loop itself: one clip window (or a looping photo), nothing else on screen, no sound.
         const loop = canvas.loops[spec.index - 1];
         composed.props = { ...composed.props, shots: [loop.shot], cutFrames: [], lyrics: [], audio: null, durationInFrames: canvas.lengthFrames };
-      } else if (sh.logo && preset.lyrics) {
-        // 9:16: the logo in the configured corner inside the platform's safe zone.
+      } else if (sh.logo && preset.lyrics && sh.brand.brand.logo.platforms.includes(preset.name)) {
+        // 9:16 (only if brand.json logo.platforms lists it): the configured frame corner.
         composed.props = {
           ...composed.props,
-          logo: { ...placeLogo(ws, sh.logo, format, preset.safeZone, sh.brand.brand.logo.vertical, sh.brand.brand.logo.size), goneAt: null },
+          logo: { ...placeLogo(ws, sh.logo, format, sh.brand.brand.logo.vertical, sh.brand.brand.logo.size), goneAt: null },
         };
       }
       if (preset.loopEnding && !loopsSeamlessly(composed.props.shots)) {

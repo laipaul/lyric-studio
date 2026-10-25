@@ -5,7 +5,7 @@ import { execFile } from "node:child_process";
 
 import { absPath, ffmpegBin, ffprobeBin, type Workspace } from "@lyric/db";
 
-import { CANVAS, canvasLength, parseSignalStats, strongestWindows, type FrameStats } from "../canvas";
+import { CANVAS, CANVAS_MIN_RATE, canvasLengths, chooseCanvasFit, lengthText, parseSignalStats, strongestWindows, type CanvasFit, type CanvasLength, type FrameStats } from "../canvas";
 import { VIDEO } from "../config";
 import { kenBurns } from "../photo";
 import { mulberry32 } from "../prng";
@@ -26,64 +26,86 @@ export async function clipStats(file: string): Promise<FrameStats[]> {
   return parseSignalStats(out);
 }
 
-export type CanvasLoop = { shot: ShotProps; clip: string; atSeconds: number; score: number | null };
+export type CanvasLoop = { shot: ShotProps; clip: string; atSeconds: number; score: number | null; rate: number };
 
-export type CanvasPlan = { lengthFrames: number; seconds: number; bars: number | null; loops: CanvasLoop[]; reason: string; warnings: string[] };
+export type CanvasPlan = {
+  lengthFrames: number;
+  seconds: number;
+  bars: number | null;
+  loops: CanvasLoop[];
+  fallback: CanvasFit["fallback"];
+  reason: string;
+  warnings: string[];
+};
 
-// One loop per variation: the strongest window of the best clips (one per clip), or, with photos
-// only, a photo whose move goes out and back.
+// One loop per variation: the strongest window of the best clips (one per clip). If no clip is long
+// enough: fewer bars, then the clips slowed down (to 0.6x), then a photo moving out and back; only
+// then an error saying what would work.
 export async function planCanvas(
   ws: Workspace,
   clips: PreparedForFormat["clips"],
   options: { bpm: number; count: number; min?: number; max?: number },
 ): Promise<CanvasPlan> {
-  const length = canvasLength(options.bpm, options.min, options.max);
-  const lengthFrames = Math.round(length.seconds * VIDEO.fps);
+  const lengths = canvasLengths(options.bpm, options.min, options.max);
   const blend = Math.round(CANVAS.blendSeconds * VIDEO.fps);
   const step = VIDEO.fps / CANVAS.sampleFps; // clip frames per sample
-  const windowSamples = Math.ceil((lengthFrames + blend) / step);
-  const lengthText = length.bars ? `${length.bars} bar${length.bars > 1 ? "s" : ""} (${length.seconds.toFixed(2)} s)` : `${length.beats} beats (${length.seconds.toFixed(2)} s)`;
-  const warnings: string[] = [];
-
   const videos = clips.filter((c) => c.kind === "video" && c.fit === "cover");
-  const stats = await Promise.all(videos.map(async (c) => ({ name: c.name, stats: await clipStats(absPath(ws, c.path)) })));
-  const windows = strongestWindows(stats, windowSamples);
-  const loops: CanvasLoop[] = windows.slice(0, options.count).map((w) => {
-    const c = videos.find((v) => v.name === w.name)!;
-    const start = Math.round(w.startSample * step); // the blend uses the frames before the loop's own start
-    return {
-      clip: c.name,
-      atSeconds: (start + blend) / VIDEO.fps,
-      score: w.score,
-      shot: {
-        start: 0,
-        duration: lengthFrames,
-        src: c.path,
-        clipStartFrame: start + blend,
-        clipDurationFrames: c.durationFrames,
-        playbackRate: 1,
-        holdLastFrame: false,
-        loopBlend: { frames: blend, fromClipFrame: start },
-      },
-    };
-  });
+  const photos = clips.filter((c) => c.kind === "photo" && c.fit === "cover");
+  const fit = chooseCanvasFit(lengths, videos.map((v) => v.durationFrames), blend, photos.length, VIDEO.fps);
+  const length = fit.length;
+  const lengthFrames = Math.round(length.seconds * VIDEO.fps);
+  const longest = Math.max(0, ...videos.map((v) => v.durationFrames)) / VIDEO.fps;
+  const needS = (l: CanvasLength) => (Math.round(l.seconds * VIDEO.fps) + blend) / VIDEO.fps;
+  const warnings: string[] = [];
+  const tooShort = `no vertical clip is long enough for ${lengthText(lengths[0])} (it needs ${needS(lengths[0]).toFixed(1)} s${videos.length ? `, the longest is ${longest.toFixed(1)} s` : ""})`;
 
-  if (!loops.length) {
-    const photos = clips.filter((c) => c.kind === "photo" && c.fit === "cover");
-    if (!photos.length) {
-      const longest = Math.max(0, ...videos.map((v) => v.durationFrames)) / VIDEO.fps;
-      throw new Error(
-        `canvas: a loop of ${lengthText} needs a vertical clip of at least ${((lengthFrames + blend) / VIDEO.fps).toFixed(1)} s` +
-          (videos.length ? ` (the longest is ${longest.toFixed(1)} s)` : "") +
-          " or a vertical photo",
-      );
+  if (fit.fallback === "fail") {
+    const shortest = lengths[lengths.length - 1];
+    throw new Error(
+      `canvas: ${tooShort}, not even for ${lengthText(shortest)} slowed down to ${CANVAS_MIN_RATE}x, and there is no vertical photo. ` +
+        `What would work: a vertical clip of at least ${(needS(shortest) * CANVAS_MIN_RATE).toFixed(1)} s (or ${needS(lengths[0]).toFixed(1)} s for ${lengthText(lengths[0])} at normal speed), ` +
+        "or a vertical photo (jpg/png/webp) in the collection.",
+    );
+  }
+
+  const loops: CanvasLoop[] = [];
+  if (fit.fallback !== "photo") {
+    const usable = videos.map((v, i) => ({ v, rate: fit.rates[i] })).filter((x): x is { v: (typeof videos)[number]; rate: number } => x.rate !== null);
+    const stats = await Promise.all(
+      usable.map(async ({ v, rate }) => ({
+        name: v.name,
+        stats: await clipStats(absPath(ws, v.path)),
+        windowSamples: Math.ceil(((lengthFrames + blend) * rate) / step), // its own frames this loop takes
+      })),
+    );
+    for (const w of strongestWindows(stats, 1).slice(0, options.count)) {
+      const { v: c, rate } = usable.find((u) => u.v.name === w.name)!;
+      const start = Math.round(w.startSample * step); // the blend uses the frames before the loop's own start
+      const blendClipFrames = Math.round(blend * rate);
+      loops.push({
+        clip: c.name,
+        atSeconds: (start + blendClipFrames) / VIDEO.fps,
+        score: w.score,
+        rate,
+        shot: {
+          start: 0,
+          duration: lengthFrames,
+          src: c.path,
+          clipStartFrame: start + blendClipFrames,
+          clipDurationFrames: c.durationFrames,
+          playbackRate: rate,
+          holdLastFrame: false,
+          loopBlend: { frames: blend, fromClipFrame: start },
+        },
+      });
     }
-    warnings.push(`no vertical clip is long enough for ${lengthText}; looping photo(s) instead`);
+  } else {
     photos.slice(0, options.count).forEach((p, i) => {
       loops.push({
         clip: p.name,
         atSeconds: 0,
         score: null,
+        rate: 1,
         shot: {
           start: 0, duration: lengthFrames, src: p.path, clipStartFrame: 0, clipDurationFrames: lengthFrames, playbackRate: 1, holdLastFrame: false,
           kind: "photo", motion: kenBurns(mulberry32(1013 + i)), motionLoop: true,
@@ -91,10 +113,20 @@ export async function planCanvas(
       });
     });
   }
-  if (loops.length < options.count) warnings.push(`only ${loops.length} clip(s) give a loop, so ${loops.length} variation(s) instead of ${options.count}`);
+
   const first = loops[0];
-  const reason = `a seamless loop of ${lengthText} at ${options.bpm} BPM; strongest moment: ${first.clip}${first.score !== null ? ` from ${first.atSeconds.toFixed(1)} s` : " (photo, moving out and back)"}`;
-  return { lengthFrames, seconds: lengthFrames / VIDEO.fps, bars: length.bars, loops, reason, warnings };
+  let fallbackText = "";
+  if (fit.fallback === "fewer-bars") fallbackText = `fallback 1 (fewer bars): ${lengthText(length)} instead of ${lengthText(lengths[0])}, because ${tooShort}`;
+  if (fit.fallback === "slow") {
+    const slowest = Math.min(...loops.map((l) => l.rate));
+    fallbackText = `fallback 2 (slowed down): ${lengthText(length)} with the clip${loops.length > 1 ? "s" : ""} slowed to ${slowest.toFixed(2)}x, because ${tooShort} (not even for ${lengthText(length)} at normal speed)`;
+  }
+  if (fit.fallback === "photo") fallbackText = `fallback 3 (photo): a vertical photo moving out and back, because ${tooShort} (not even slowed down to ${CANVAS_MIN_RATE}x)`;
+  if (fallbackText) warnings.push(fallbackText);
+  if (loops.length < options.count) warnings.push(`only ${loops.length} clip(s) give a loop, so ${loops.length} variation(s) instead of ${options.count}`);
+  const moment = first.score !== null ? ` from ${first.atSeconds.toFixed(1)} s${first.rate < 1 ? ` at ${first.rate.toFixed(2)}x` : ""}` : " (photo, moving out and back)";
+  const reason = `a seamless loop of ${lengthText(length)} at ${options.bpm} BPM; strongest moment: ${first.clip}${moment}${fallbackText ? `; ${fallbackText.split(":")[0]}` : ""}`;
+  return { lengthFrames, seconds: lengthFrames / VIDEO.fps, bars: length.bars, loops, fallback: fit.fallback, reason, warnings };
 }
 
 // For QA: how different the last frame is from the first (mean absolute difference, 0-255) compared

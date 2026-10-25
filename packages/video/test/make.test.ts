@@ -14,6 +14,7 @@ import {
   effectsPreview,
   ensureAlignment,
   exportFolder,
+  failureSummary,
   findOrCreateSongProject,
   makeVideos,
   planVariations,
@@ -531,13 +532,9 @@ describe("platform presets (stand-in renderer)", () => {
         expect(length).toBeGreaterThanOrEqual(w.minMs);
         expect(length).toBeLessThanOrEqual(w.maxMs);
         expect(readFileSync(v.qaFile, "utf8")).toContain(preset.label);
-        // Logo in the bottom-right corner inside this platform's safe zone, never over the lyrics.
-        const lg = m.props.logo!;
-        expect(lg.left + lg.width).toBeLessThanOrEqual(1080 * (1 - preset.safeZone.right));
-        expect(lg.top + lg.height).toBeLessThanOrEqual(1920 * (1 - preset.safeZone.bottom));
-        expect(lg.left).toBeGreaterThan(540);
-        expect(lg.goneAt).toBeNull();
-        expect(readFileSync(v.qaFile, "utf8")).toContain("[ok  ] Logo clear of the lyrics");
+        // No logo on 9:16 by default (brand.json logo.platforms = ["youtube"]).
+        expect(m.props.logo ?? null).toBeNull();
+        expect(readFileSync(v.qaFile, "utf8")).not.toContain("Logo");
       }
     }
     expect(plans.map((p) => p.platform.name)).toEqual(["reels", "tiktok", "shorts"]);
@@ -638,6 +635,9 @@ describe("platform presets (stand-in renderer)", () => {
     expect(m.props.mood?.some((x) => x.kind === "hook")).toBe(true);
     expect(m.props.logo!.left).toBeGreaterThan(960); // bottom right
     expect(m.props.logo!.goneAt).toBe(m.props.endScreen!.fromFrame); // gone before the end screen
+    expect(m.props.logo!.left + m.props.logo!.width).toBe(1920 - 58); // in the frame corner, 3% margin
+    expect(m.props.logo!.top + m.props.logo!.height).toBe(1080 - 58);
+    expect(readFileSync(yt.variations[0].qaFile, "utf8")).toContain("[ok  ] Logo in a frame corner");
     expect(m.props.fonts.some((f) => f.family === "Cinzel")).toBe(true);
     expect(thumbs).toEqual([m.props.cover!.src]);
     const publish = readFileSync(path.join(yt.exportDir, "publish.txt"), "utf8");
@@ -687,15 +687,49 @@ describe("platform presets (stand-in renderer)", () => {
     expect(r.warnings.join("\n")).toContain("canvas: only 1 clip(s) give a loop, so 1 variation(s) instead of 2");
     expect(r.warnings.join("\n")).not.toContain("canvas: canvas:");
 
-    // Clips too short: a photo moving out and back instead; nothing usable: a clear error.
-    const photo = await run({ platforms: "canvas", variations: 1 }); // "mixed": 6 s clips and a portrait photo
-    const pm = readManifest(photo.variations[0].manifestFile);
-    expect(pm.props.shots[0]).toMatchObject({ kind: "photo", motionLoop: true, duration: 240 });
-    expect(photo.warnings.join("\n")).toContain("canvas: no vertical clip is long enough for 4 bars (8.00 s); looping photo(s) instead");
-    const none = path.join(wsDir, "clips", "canvas-short");
-    mkdirSync(none, { recursive: true });
-    makeClip(path.join(none, "a.mp4"), 3, "blue");
-    await expect(run({ platforms: "canvas", collection: "canvas-short" })).rejects.toThrow(/needs a vertical clip of at least 8\.5 s \(the longest is 3\.0 s\) or a vertical photo/);
+    // Fallback 1: the 6 s clips of "mixed" cannot make 4 or 3 bars, but 2 bars at normal speed.
+    const fewer = await run({ platforms: "canvas", variations: 1 });
+    const fm = readManifest(fewer.variations[0].manifestFile);
+    expect(fm.props.durationInFrames).toBe(120);
+    expect(fm.props.shots[0]).toMatchObject({ playbackRate: 1, duration: 120 });
+    expect(fewer.warnings.join("\n")).toContain(
+      "canvas: fallback 1 (fewer bars): 2 bars (4.00 s) instead of 4 bars (8.00 s), because no vertical clip is long enough for 4 bars (8.00 s) (it needs 8.5 s, the longest is 6.0 s)",
+    );
+    expect(fm.section.reason).toContain("; fallback 1 (fewer bars)");
+
+    // Fallback 2: a 3 s clip slowed to 0.66x fills 2 bars; the blend frames are taken at that speed too.
+    const folder = (name: string) => {
+      const d = path.join(wsDir, "clips", name);
+      mkdirSync(d, { recursive: true });
+      return d;
+    };
+    makeClip(path.join(folder("canvas-short"), "a.mp4"), 3, "blue");
+    const slow = await run({ platforms: "canvas", collection: "canvas-short" });
+    const sl = readManifest(slow.variations[0].manifestFile).props.shots[0];
+    expect(sl.playbackRate).toBe(0.66);
+    expect(sl.loopBlend).toEqual({ frames: 15, fromClipFrame: sl.clipStartFrame - 10 }); // 15 frames at 0.66x
+    expect(sl.loopBlend!.fromClipFrame + (120 + 15) * 0.66).toBeLessThanOrEqual(sl.clipDurationFrames); // stays inside the clip
+    expect(slow.warnings.join("\n")).toContain("canvas: fallback 2 (slowed down): 2 bars (4.00 s) with the clip slowed to 0.66x");
+
+    // Fallback 3: clips too short even at 0.6x, but a vertical photo.
+    makeClip(path.join(folder("canvas-photo"), "b.mp4"), 2, "red");
+    copyFileSync(path.join(wsDir, "clips", "mixed", "05_portrait.jpg"), path.join(folder("canvas-photo"), "c.jpg"));
+    const photo = await run({ platforms: "canvas", collection: "canvas-photo" });
+    expect(readManifest(photo.variations[0].manifestFile).props.shots[0]).toMatchObject({ kind: "photo", motionLoop: true, duration: 240 });
+    expect(photo.warnings.join("\n")).toContain("canvas: fallback 3 (photo): a vertical photo moving out and back");
+
+    // Nothing usable: a clear error saying what would work.
+    makeClip(path.join(folder("canvas-none"), "d.mp4"), 2, "red");
+    await expect(run({ platforms: "canvas", collection: "canvas-none" })).rejects.toThrow(
+      /What would work: a vertical clip of at least 2\.7 s \(or 8\.5 s for 4 bars \(8\.00 s\) at normal speed\), or a vertical photo/,
+    );
+    // With other platforms the run goes on, and the summary names the platform that was not made.
+    const mixed = await run({ platforms: "tiktok,canvas", collection: "canvas-none", variations: 1 });
+    expect(mixed.platforms.map((p) => [p.name, p.error === null])).toEqual([["tiktok", true], ["canvas", false]]);
+    const summary = failureSummary(mixed)!;
+    expect(summary[0]).toMatch(/^canvas was not made: canvas: no vertical clip is long enough/);
+    expect(summary).toContain("Fix the cause above, then run the same command with --platforms canvas.");
+    expect(summary.at(-1)).toBe("The other 1 video(s) are finished.");
   });
 
   it("lyric effects: brand.json, then platforms.json, then --line-effect / --hook-effect; next line per platform", async () => {
@@ -780,6 +814,24 @@ describe("platform presets (stand-in renderer)", () => {
 
     await expect(effectsPreview({ project: "nope", workspaceDir: wsDir, renderer })).rejects.toThrow(new RegExp(`No project "nope". Projects: .*"${title}"`));
     await expect(effectsPreview({ project: title, effect: "spin", workspaceDir: wsDir, renderer })).rejects.toThrow(/--effect: unknown effect "spin"/);
+  });
+
+  it("logo: YouTube only by default; a 9:16 platform shows it only when brand.json logo.platforms lists it, in the frame corner", async () => {
+    const brandFile = path.join(wsDir, "brand", "brand.json");
+    const before = readFileSync(brandFile, "utf8");
+    const brand = JSON.parse(before);
+    expect(brand.logo.platforms).toEqual(["youtube"]); // written with the defaults
+    writeFileSync(brandFile, JSON.stringify({ ...brand, logo: { ...brand.logo, platforms: ["youtube", "reels"] } }));
+    try {
+      const r = await run({ platforms: "reels", variations: 1 });
+      const lg = readManifest(r.variations[0].manifestFile).props.logo!;
+      expect([lg.left + lg.width, lg.top + lg.height]).toEqual([1080 - 32, 1920 - 32]); // bottom-right frame corner
+      expect(readFileSync(r.variations[0].qaFile, "utf8")).toContain("[ok  ] Logo in a frame corner");
+      writeFileSync(brandFile, JSON.stringify({ ...brand, logo: { ...brand.logo, platforms: "reels" } }));
+      await expect(run({ platforms: "reels", variations: 1 })).rejects.toThrow(/logo.platforms must be a list of platform names/);
+    } finally {
+      writeFileSync(brandFile, before);
+    }
   });
 
   it("--resume per platform renders only what is missing in each platform folder", async () => {

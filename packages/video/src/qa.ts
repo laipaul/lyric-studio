@@ -5,6 +5,7 @@ import { cinematicBarHeight, DEFAULT_FORMAT, DEFAULT_LYRIC_AREA, DEFAULT_SAFE_ZO
 import { MAX_LINES } from "./lyrics";
 import type { LyricVideoProps } from "./props";
 import { RECENT_WINDOW } from "./shots";
+import { logoCornerProblem } from "./youtube";
 
 export const MIN_SHOT_FRAMES = Math.round(0.8 * VIDEO.fps);
 export const LOW_CONFIDENCE = 0.5;
@@ -193,6 +194,8 @@ export function runQa(input: QaInput): QaReport {
     const lg = props.logo;
     const covered = input.lyrics.filter((l) => l.box.right > lg.left && l.box.left < lg.left + lg.width && l.box.bottom > lg.top && l.box.top < lg.top + lg.height);
     checks.push({ name: "Logo clear of the lyrics", ok: covered.length === 0, details: covered.map((l) => `the logo overlaps line ${l.number} "${l.text}"`) });
+    const corner = logoCornerProblem(props.format ?? DEFAULT_FORMAT, lg);
+    checks.push({ name: "Logo in a frame corner", ok: !corner, details: corner ? [corner] : [] });
   }
 
   // YouTube: lyrics in the last seconds stay out of the end-screen area (bottom right).

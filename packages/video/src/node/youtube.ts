@@ -192,7 +192,7 @@ export function youtubeExtras(o: {
       ...(o.layout === "cover" ? { left: area.left, right: area.right } : {}),
     },
     // Logo in its YouTube corner (inside the safe zone), faded out before the end-screen window.
-    logo: o.logo ? { ...placeLogo(o.ws, o.logo, format, o.preset.safeZone, o.brand.logo.youtube, o.brand.logo.size), goneAt: endScreen?.fromFrame ?? null } : null,
+    logo: o.logo && o.brand.logo.platforms.includes(o.preset.name) ? { ...placeLogo(o.ws, o.logo, format, o.brand.logo.youtube, o.brand.logo.size), goneAt: endScreen?.fromFrame ?? null } : null,
     endScreen,
     nextLine: o.preset.showNextLine,
     grain: o.layout === "stills" && o.grain,
@@ -204,10 +204,10 @@ export type LogoImage = { file: string; width: number; height: number }; // the 
 
 // The logo's position and size on a frame: `share` of the width wide, in `corner` of the area inside
 // the safe zones.
-export function placeLogo(ws: Workspace, logo: LogoImage, format: Format, safe: SafeZone, corner: Corner | "auto", share: number) {
+export function placeLogo(ws: Workspace, logo: LogoImage, format: Format, corner: Corner | "auto", share: number) {
   const width = Math.round(share * format.width);
   const height = Math.round((width * logo.height) / logo.width);
-  return { src: storedPath(ws, logo.file), width, height, ...logoPlacement(format, safe, corner, { width, height }) };
+  return { src: storedPath(ws, logo.file), width, height, ...logoPlacement(format, corner, { width, height }) };
 }
 
 // The thumbnail's picture: the cover; the chorus still; or a frame from the clip on screen when the

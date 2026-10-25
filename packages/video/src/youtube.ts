@@ -253,16 +253,27 @@ export function moodAt(frame: number, segments: readonly MoodSegment[], fps: num
 
 export type Corner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
-// Where the logo goes: in the given corner of the area inside the safe zones (so platform buttons
-// never cover it), with a margin. "auto" = bottom right.
-export function logoPlacement(format: Format, safe: SafeZone, corner: Corner | "auto", size: { width: number; height: number }, marginShare = 0.03): { left: number; top: number } {
+// Where the logo goes: always in a corner of the FRAME with a fixed margin (3% of the width), never
+// mid-frame. "auto" = bottom right.
+export const LOGO_MARGIN_SHARE = 0.03;
+export const logoMargin = (format: Format) => Math.round(format.width * LOGO_MARGIN_SHARE);
+
+export function logoPlacement(format: Format, corner: Corner | "auto", size: { width: number; height: number }): { left: number; top: number } {
   const [v, h] = (corner === "auto" ? "bottom-right" : corner).split("-") as ["top" | "bottom", "left" | "right"];
-  const margin = Math.round(format.width * marginShare);
-  const area = { left: format.width * safe.left, right: format.width * (1 - safe.right), top: format.height * safe.top, bottom: format.height * (1 - safe.bottom) };
+  const margin = logoMargin(format);
   return {
-    left: Math.round(h === "left" ? area.left + margin : area.right - margin - size.width),
-    top: Math.round(v === "top" ? area.top + margin : area.bottom - margin - size.height),
+    left: h === "left" ? margin : format.width - margin - size.width,
+    top: v === "top" ? margin : format.height - margin - size.height,
   };
+}
+
+// For QA: is the logo anchored to a frame corner (its fixed margin from two frame edges)?
+export function logoCornerProblem(format: Format, logo: { left: number; top: number; width: number; height: number }): string | null {
+  const margin = logoMargin(format);
+  const x = Math.min(logo.left, format.width - logo.left - logo.width);
+  const y = Math.min(logo.top, format.height - logo.top - logo.height);
+  if (Math.abs(x - margin) <= 1 && Math.abs(y - margin) <= 1) return null;
+  return `the logo is ${Math.round(x)} px from the nearest side and ${Math.round(y)} px from the top/bottom; it must sit in a frame corner, ${margin} px from both edges`;
 }
 
 // Logo opacity: fades out over `fadeFrames` so it is gone by `goneAt` (YouTube's end-screen window).

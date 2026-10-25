@@ -406,6 +406,17 @@ describe("LyricVideo render", () => {
     expect(a.seconds).toBeCloseTo(3, 1);
     expect(a.lastToFirst).toBeLessThanOrEqual(Math.max(6, 2.5 * a.typicalStep)); // the QA "Seamless loop" limit
     expect(b.lastToFirst).toBeGreaterThan(a.lastToFirst * 3); // without the blend the jump is obvious
+    // Slowed down (fallback 2, 0.7x): the blend frames are taken at the same speed, still seamless.
+    const slowed = path.join(dir, "canvas-slow.mp4");
+    const rate = 0.7;
+    const blendClip = Math.round(15 * rate);
+    await renderLyricVideo({
+      props: baseProps({ durationInFrames: 90, shots: [shot({ src: "moving.mp4", start: 0, duration: 90, clipStartFrame: 20 + blendClip, clipDurationFrames: 180, playbackRate: rate, loopBlend: { frames: 15, fromClipFrame: 20 } })] }),
+      media: { workspaceDir: dir },
+      outFile: slowed,
+    });
+    const c = await loopCheck(slowed);
+    expect(c.lastToFirst).toBeLessThanOrEqual(Math.max(6, 2.5 * c.typicalStep));
   }, 300_000);
 
   it("lyric effects: glide moves the text smoothly frame by frame (no jumps), deterministic; karaoke uses the accent", async () => {

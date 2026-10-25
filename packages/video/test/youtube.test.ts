@@ -15,6 +15,7 @@ import {
   coverMotionAt,
   coverSide,
   logoOpacity,
+  logoCornerProblem,
   logoPlacement,
   moodAt,
   moodSegments,
@@ -261,28 +262,29 @@ describe("5g.2b polish: cover sizes, motion, mood, logo, EP line", () => {
     expect(moodAt(change + 30, segs, 30)).toEqual(MOOD_COLOURS.hook);
   });
 
-  it("logo: bottom right on YouTube, faded out (0.5 s) before the end-screen window", () => {
-    const pos = logoPlacement(yt, yt.safeZone, "bottom-right", { width: 154, height: 62 });
-    expect(pos.left + 154).toBeLessThanOrEqual(1920 * (1 - yt.safeZone.right));
-    expect(pos.left).toBeGreaterThan(1920 / 2);
-    expect(pos.top + 62).toBeLessThanOrEqual(1080 * (1 - yt.safeZone.bottom));
+  it("logo: bottom right on YouTube, in the frame corner with a fixed margin, faded out (0.5 s) before the end-screen window", () => {
+    const pos = logoPlacement(yt, "bottom-right", { width: 154, height: 62 });
+    expect(pos).toEqual({ left: 1920 - 58 - 154, top: 1080 - 58 - 62 }); // 3% of the width
     expect(logoOpacity(1000, 1200, 15)).toBe(1);
     expect(logoOpacity(1192, 1200, 15)).toBeCloseTo(8 / 15, 5);
     expect(logoOpacity(1200, 1200, 15)).toBe(0);
     expect(logoOpacity(5000, null, 15)).toBe(1);
   });
 
-  it("logo on 9:16: the configured corner inside each platform's safe zone (auto = bottom right)", () => {
-    for (const name of ["standard", "reels", "tiktok", "shorts"]) {
+  it("logo always anchored to a frame corner (never mid-frame, whatever the safe zones); QA catches anything else", () => {
+    for (const name of ["standard", "reels", "tiktok", "shorts", "youtube"]) {
       const p = presets[name];
-      for (const corner of ["auto", "top-left", "bottom-right"] as const) {
-        const { left, top } = logoPlacement(p, p.safeZone, corner, { width: 86, height: 35 });
-        expect(left).toBeGreaterThanOrEqual(p.width * p.safeZone.left);
-        expect(left + 86).toBeLessThanOrEqual(p.width * (1 - p.safeZone.right));
-        expect(top).toBeGreaterThanOrEqual(p.height * p.safeZone.top);
-        expect(top + 35).toBeLessThanOrEqual(p.height * (1 - p.safeZone.bottom));
+      for (const corner of ["auto", "top-left", "top-right", "bottom-left", "bottom-right"] as const) {
+        const size = { width: 86, height: 35 };
+        const { left, top } = logoPlacement(p, corner, size);
+        const m = Math.round(p.width * 0.03);
+        expect(left === m || left === p.width - m - size.width, `${name} ${corner}`).toBe(true);
+        expect(top === m || top === p.height - m - size.height, `${name} ${corner}`).toBe(true);
+        expect(logoCornerProblem(p, { left, top, ...size })).toBeNull();
       }
-      expect(logoPlacement(p, p.safeZone, "auto", { width: 86, height: 35 })).toEqual(logoPlacement(p, p.safeZone, "bottom-right", { width: 86, height: 35 }));
+      expect(logoPlacement(p, "auto", { width: 86, height: 35 })).toEqual(logoPlacement(p, "bottom-right", { width: 86, height: 35 }));
     }
+    // The old "auto" spot on Reels (inside the 35% bottom safe zone, on the subject) is now a QA failure.
+    expect(logoCornerProblem(presets.reels, { left: 922, top: 1153, width: 86, height: 35 })).toMatch(/must sit in a frame corner, 32 px from both edges/);
   });
 });

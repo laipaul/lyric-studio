@@ -2,7 +2,7 @@
 // choice of the strongest clip window.
 import { describe, expect, it } from "vitest";
 
-import { CANVAS, canvasLength, loopBlendOpacity, parseSignalStats, photoLoopProgress, strongestWindows, type FrameStats } from "../src";
+import { CANVAS, canvasLength, canvasLengths, chooseCanvasFit, loopBlendOpacity, parseSignalStats, photoLoopProgress, strongestWindows, type FrameStats } from "../src";
 
 describe("canvas loop length", () => {
   it("the longest whole number of bars within 3-8 s", () => {
@@ -23,6 +23,37 @@ describe("canvas loop length", () => {
     expect(slow.bars).toBeNull();
     expect(slow.beats).toBe(3);
     expect(slow.seconds).toBeCloseTo(7.2, 5);
+  });
+});
+
+describe("canvas fallbacks: fewer bars, then slowed down, then a photo, then a clear error", () => {
+  const lengths = canvasLengths(106.63); // 2.25 s bars: 3 bars (6.75 s), then 2 bars (4.50 s)
+  const frames = (s: number) => Math.round(s * 30);
+  it("lists every whole-bar loop of at least 3 s, longest first", () => {
+    expect(lengths.map((l) => l.bars)).toEqual([3, 2]);
+    expect(canvasLengths(120).map((l) => l.bars)).toEqual([4, 3, 2]); // 1 bar = 2 s is too short
+  });
+
+  it("a clip long enough: the longest loop at normal speed", () => {
+    expect(chooseCanvasFit(lengths, [frames(8)], 15, 0)).toMatchObject({ fallback: "none", length: { bars: 3 }, rates: [1] });
+  });
+
+  it("1) fewer bars: a 5.2 s clip cannot make 3 bars (needs 7.3 s) but makes 2 bars at normal speed", () => {
+    expect(chooseCanvasFit(lengths, [frames(5.2), frames(2)], 15, 1)).toMatchObject({ fallback: "fewer-bars", length: { bars: 2 }, rates: [1, null] });
+  });
+
+  it("2) slowed down: a 3.5 s clip plays at 0.70x to fill 2 bars (4.5 s + 0.5 s blend); never below 0.6x", () => {
+    const fit = chooseCanvasFit(lengths, [frames(3.5), frames(2.9)], 15, 1);
+    expect(fit.fallback).toBe("slow");
+    expect(fit.length.bars).toBe(2);
+    expect(fit.rates).toEqual([0.7, null]); // 2.9 s would need 0.58x
+    expect(frames(3.5)).toBeGreaterThanOrEqual((frames(4.5) + 15) * fit.rates[0]!); // it really fits
+  });
+
+  it("3) a photo, 4) fail: only when no clip works even at 0.6x", () => {
+    expect(chooseCanvasFit(lengths, [frames(2.9)], 15, 1).fallback).toBe("photo");
+    expect(chooseCanvasFit(lengths, [frames(2.9)], 15, 0).fallback).toBe("fail");
+    expect(chooseCanvasFit(lengths, [], 15, 0).fallback).toBe("fail");
   });
 });
 

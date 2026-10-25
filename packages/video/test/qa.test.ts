@@ -53,6 +53,15 @@ describe("QA checks", () => {
     expect(check(bad, "Length 3-8 s").details[0]).toBe("the loop is 9.20 s");
   });
 
+  it("the logo must sit in a frame corner (fixed margin), never mid-frame", () => {
+    const logo = (left: number, top: number) => ({ src: "logo.png", left, top, width: 86, height: 35, goneAt: null });
+    const props = (l: ReturnType<typeof logo>) => ({ ...input().props, logo: l });
+    expect(check(runQa(input({ props: props(logo(1080 - 32 - 86, 1920 - 32 - 35)) })), "Logo in a frame corner").ok).toBe(true);
+    const mid = runQa(input({ props: props(logo(922, 1153)) }));
+    expect(check(mid, "Logo in a frame corner").ok).toBe(false);
+    expect(mid.status).not.toBe("PASS");
+  });
+
   it("flags lyric lines below 0.5 confidence", () => {
     const report = runQa(input({ lyrics: [{ number: 7, text: "Low one", confidence: 0.42, lines: 1, box: goodBox }] }));
     expect(report.status).toBe("WARN");
