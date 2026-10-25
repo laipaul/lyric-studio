@@ -12,5 +12,9 @@
     "@types/node": "^22",
     "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@lyric/db": "workspace:*",
+    "@lyric/video": "workspace:*"
   }
 }

@@ -22,6 +22,13 @@
       "when": 1792872707437,
       "tag": "0002_hashes_and_lyrics_offset",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1792959878778,
+      "tag": "0003_marks_and_interrupted",
+      "breakpoints": true
     }
   ]
 }

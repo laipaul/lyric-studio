@@ -1,13 +1,29 @@
-// Render worker. For now it only starts and stays alive.
-// Later steps will poll RenderJob rows and render them with Remotion.
+// Render worker. Step 6.2a: at start and every minute it marks render jobs whose process is gone as
+// "interrupted" (a stopped "pnpm make" never shows "rendering" forever). Step 6.2b adds the queue of
+// runs started from the studio.
+import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
+import { markInterruptedJobs } from "@lyric/video/jobs";
 
+function checkJobs() {
+  try {
+    const ws = openWorkspace(resolveWorkspaceDir());
+    try {
+      const n = markInterruptedJobs(ws);
+      if (n) console.log(`marked ${n} render job(s) as interrupted (their process is gone)`);
+    } finally {
+      ws.close();
+    }
+  } catch (error) {
+    console.error(`could not check the render jobs: ${(error as Error).message}`);
+  }
+}
+
+checkJobs();
 console.log("worker ready");
-
-// Keep the process alive until it is stopped (Ctrl+C).
-const heartbeat = setInterval(() => {}, 60_000);
+const timer = setInterval(checkJobs, 60_000);
 
 function shutdown() {
-  clearInterval(heartbeat);
+  clearInterval(timer);
   console.log("worker stopped");
   process.exit(0);
 }

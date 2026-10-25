@@ -7,10 +7,8 @@ import { useState } from "react";
 
 import { cn } from "@/lib/utils";
 
-const NAV = [
-  { href: "/", label: "Library" },
-  { href: "/studio", label: "Studio" },
-];
+// Only menu items that lead somewhere real (the Studio editor and the content board come later).
+const NAV = [{ href: "/", label: "Library" }];
 
 // The header: the app's name and icon, navigation, and the Tasks menu (render progress from Step 6.2).
 export function AppHeader() {

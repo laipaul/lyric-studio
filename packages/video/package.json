@@ -57,6 +57,11 @@
     "./node": "./src/node/index.ts",
     "./media": "./src/node/media.ts",
     "./library": "./src/node/library.ts",
-    "./app-icons": "./src/node/app-icons.ts"
+    "./app-icons": "./src/node/app-icons.ts",
+    "./jobs": "./src/node/jobs.ts",
+    "./exports": "./src/node/exports.ts",
+    "./captions": "./src/node/captions.ts",
+    "./posters": "./src/node/posters.ts",
+    "./project-settings": "./src/node/project-settings.ts"
   }
 }

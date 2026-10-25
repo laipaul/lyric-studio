@@ -20,13 +20,16 @@ const id = () =>
 
 export const CLIP_SOURCES = ["upload", "stock", "ai"] as const;
 export const CUT_RATES = ["0.5x", "1x", "2x", "off"] as const;
-export const RENDER_STATUSES = ["queued", "rendering", "done", "failed"] as const;
+// interrupted: the process rendering it is gone (stopped or crashed); "pnpm make --resume" continues.
+export const RENDER_STATUSES = ["queued", "rendering", "done", "failed", "interrupted"] as const;
+export const VIDEO_MARKS = ["generated", "approved", "discarded"] as const;
 export const TEXT_CASES = ["none", "upper", "lower", "title"] as const;
 export const ENERGY_LEVELS = ["low", "medium", "high"] as const;
 
 export type ClipSource = (typeof CLIP_SOURCES)[number];
 export type CutRate = (typeof CUT_RATES)[number];
 export type RenderStatus = (typeof RENDER_STATUSES)[number];
+export type VideoMarkStatus = (typeof VIDEO_MARKS)[number];
 export type TextCase = (typeof TEXT_CASES)[number];
 export type Energy = (typeof ENERGY_LEVELS)[number];
 
@@ -191,6 +194,8 @@ export const renderJob = sqliteTable(
     error: text("error"),
     started_at: integer("started_at", { mode: "timestamp_ms" }),
     finished_at: integer("finished_at", { mode: "timestamp_ms" }),
+    // The process (pnpm make / the worker) that owns the job, to detect interrupted runs.
+    pid: integer("pid"),
   },
   (t) => [
     index("render_job_status").on(t.status),
@@ -200,6 +205,25 @@ export const renderJob = sqliteTable(
 );
 
 // Every table, in display order (used by db:show and tests).
+// The user's marks on a finished video (studio exports grid): favourite, and generated / approved /
+// discarded (discarded = hidden, never deleted). `video` is the workspace-relative manifest path.
+export const videoMark = sqliteTable(
+  "video_mark",
+  {
+    id: id(),
+    project_id: text("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    video: text("video").notNull().unique(),
+    favourite: integer("favourite", { mode: "boolean" }).notNull().default(false),
+    status: text("status", { enum: VIDEO_MARKS }).notNull().default("generated"),
+    updated_at: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("video_mark_project").on(t.project_id), check("video_mark_status", inList("status", VIDEO_MARKS))],
+);
+
 export const TABLES = {
   project,
   lyric_line: lyricLine,
@@ -210,9 +234,11 @@ export const TABLES = {
   style_preset: stylePreset,
   variation,
   render_job: renderJob,
+  video_mark: videoMark,
 } as const;
 
 export type Project = typeof project.$inferSelect;
+export type VideoMark = typeof videoMark.$inferSelect;
 export type LyricLine = typeof lyricLine.$inferSelect;
 export type Beat = typeof beat.$inferSelect;
 export type Section = typeof section.$inferSelect;

@@ -439,7 +439,7 @@ Cause: a line was treated as sung until the next line started (and the next line
   the summary, logo placement on every platform and corner, QA catching a mid-frame logo, logo off on
   9:16 by default and on when listed.
 
-### Step 6.1 — Library, New song, desktop app ✅ (to verify on the Windows PC)
+### Step 6.1 — Library, New song, desktop app ✅ (verified on the Windows PC: shortcut, start, own window, Library)
 - The Library is the start page: a card per song (cover or Cinzel title, artist / EP / length,
   per-platform videos of the latest run with PASS / WARN / FAILED / Rendering / — and the run count,
   last made date), search, Life Lyrics look (near-black, Cinzel headings, accent pink #E8A3B5, bundled
@@ -463,6 +463,31 @@ Cause: a line was treated as sung until the next line started (and the next line
   status, per-artist brand, app icons (and remade on a new logo), localhost default, --artist / --ep in
   pnpm make. Cloud check: built app, browser run (library, dialog, upload, duplicate, wrong file,
   song page), localhost-only, app:serve start in 12 s and 4 s without a rebuild.
+
+### Step 6.2a — Song page: exports, marks, compare, ready to post; 6.1 fixes ✅ (to verify on the Windows PC)
+- 6.1 fixes: jobs record their process (pid) and run folder; queued/rendering jobs whose process is
+  gone become "interrupted" (worker at start and every minute; the studio whenever it reads them), so
+  a stopped run never shows "…" forever. Old jobs without a pid (your stuck Standard) count as
+  interrupted. Badge "interrupted" (orange "!") with the missing videos and the resume command
+  (copy; one click in 6.2b). Every WARN / FAILED / interrupted badge shows its reasons on hover and on
+  click (from the vN.qa.txt files, per video, with details).
+- Song page: every run (also from the command line), newest first, grouped by platform; tiles with a
+  poster frame (FFmpeg, cached) that play muted on hover; QA badge with reasons; style / order /
+  effects / length; favourite, approve, discard (hidden, never deleted; show / restore); filters
+  (platform with counts, favourites only, show discarded); compare 2-3 side by side (one play/pause and
+  timeline, drift-corrected, differences highlighted); "ready to post" (caption + hashtags from the
+  artist's template per platform, YouTube title / description / tags from publish.txt, downloads with
+  clear names, open folder in Explorer, "make <artist>'s own template").
+- New tables: video_mark; render_job: status "interrupted" and pid (migration 0003, data kept).
+- Menu: only "Library" (the Studio placeholder is gone; /studio leads to the Library).
+- Caption templates per artist: brand\<artist>\publish-<platform>.txt else brand\publish-<platform>.txt;
+  the YouTube publish template follows the same rule.
+- Tests: QA parsing, interrupted detection (alive / dead / unknown process), resume command, run
+  scanning (files, settings, marks, missing videos, run links), platform state and reasons, marks
+  (incl. guards), caption templates (default, artist's own, French example, placeholders, notes),
+  posting pack (caption / YouTube / Canvas), posters, the studio's file guard, jobs record pid and run.
+  Cloud check: browser run on a workspace with 14 runs (badges, reasons on hover and click,
+  interrupted resume, marks, discard / restore, compare playing in sync, post window, download).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -518,8 +543,8 @@ Cause: a line was treated as sung until the next line started (and the next line
 - The workspace service is used by tests only so far; commands and UI that use it come in later steps.
 
 ## Next
-1. Verify Step 6.1 on the PC (and 5g.3 + 5g.3b, Canvas with fallbacks and the logo rule).
-2. Step 6.2 (song page: Generate via the worker, exports, compare, ready to post), then 6.3 (content
+1. Verify Step 6.2a on the PC.
+2. Step 6.2b (worker queue, Generate panel, live Tasks menu, one-click resume), then 6.3 (content
    board with manually entered results).
 3. Step 5g.4 (loop layout).
 4. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project

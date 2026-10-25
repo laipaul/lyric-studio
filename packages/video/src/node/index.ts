@@ -19,3 +19,7 @@ export * from "./effects-preview";
 export * from "./project-settings";
 export * from "./library";
 export * from "./app-icons";
+export * from "./jobs";
+export * from "./exports";
+export * from "./captions";
+export * from "./posters";

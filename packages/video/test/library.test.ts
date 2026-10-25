@@ -80,7 +80,12 @@ describe("song cards", () => {
   const touch = (dir: string, names: string[], qa: "PASS" | "WARN" = "PASS") => {
     mkdirSync(dir, { recursive: true });
     for (const n of names) {
-      writeFileSync(path.join(dir, n), n.endsWith(".qa.txt") ? `x\nSummary: ${qa}${qa === "WARN" ? " - Clips repeated within 3 shots" : ""}\n` : "x");
+      const content = n.endsWith(".qa.txt")
+        ? `x\n${qa === "WARN" ? "[WARN] Clips repeated within 3 shots\n" : ""}Summary: ${qa}${qa === "WARN" ? " - Clips repeated within 3 shots" : ""}\n`
+        : n.endsWith(".manifest.json")
+          ? JSON.stringify({ manifest_version: 1, created_at: "2026-01-03T09:00:00Z", command: "pnpm make song.wav lyrics.txt", variation: { order: "story", seed: 1, style: "Simple", cinematic_bars: false }, props: {} })
+          : "x";
+      writeFileSync(path.join(dir, n), content);
     }
   };
 
@@ -94,13 +99,13 @@ describe("song cards", () => {
     touch(path.join(exportsDir, "2026-01-03_0900"), ["v1.mp4", "v1.manifest.json", "v1.qa.txt", "v2.mp4"]); // standard: v2 never finished
     touch(path.join(exportsDir, "2026-01-03_0900", "youtube"), ["v1.mp4", "v1.manifest.json", "v1.qa.txt"]);
     const v = ws.db.insert(variation).values({ project_id: id, seed: 1, cut_rate: "1x", text_size: 64, colour: "#fff", cinematic_bars: false, overrides_json: { platform: "tiktok" } }).returning().get();
-    ws.db.insert(renderJob).values({ variation_id: v.id, status: "rendering" }).run();
+    ws.db.insert(renderJob).values({ variation_id: v.id, status: "rendering", pid: process.pid }).run(); // this process: alive
 
     const card = listSongs(ws)[0];
     const by = Object.fromEntries(card.platforms.map((p) => [p.name, p]));
     expect(card.platforms.map((p) => p.label)).toEqual(["Standard", "Reels", "TikTok", "Shorts", "YouTube", "Canvas"]);
-    expect(by.reels).toMatchObject({ videos: 2, status: "WARN", runs: 2 });
-    expect(by.standard).toMatchObject({ videos: 1, status: "FAILED" });
+    expect(by.reels).toMatchObject({ videos: 2, status: "WARN", runs: 2, details: ["v2: Clips repeated within 3 shots"] });
+    expect(by.standard).toMatchObject({ videos: 1, status: "FAILED", details: ["v2 not finished"] });
     expect(by.youtube).toMatchObject({ videos: 1, status: "PASS" });
     expect(by.tiktok).toMatchObject({ videos: 0, status: "Rendering" });
     expect(by.canvas).toMatchObject({ videos: 0, status: "none" });

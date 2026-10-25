@@ -109,6 +109,31 @@ every artist used so far) and the EP are optional. Everything is stored with the
 `pnpm make` uses it too (the hints, the EP, the cover). Adding the same song again (even under another
 file name) updates that song instead of making a second one.
 
+### Song page
+
+Click a song card. You see every run of the song, also the ones made with `pnpm make` in the
+terminal, newest first, grouped by platform:
+
+- **Tiles**: a still frame of each video; hover to play it (muted). The QA badge (PASS / WARN) shows
+  its reasons on hover or click, and so does every WARN / FAILED / interrupted badge on the cards.
+- **Marks**: ☆ favourite, **Approve**, **Discard** (hides the video; nothing is deleted; "Show
+  discarded" brings it back, **Restore** undoes it). Filters: platform, favourites only.
+- **Compare**: tick 2-3 videos and press **Compare**: they play side by side with one play button and
+  one timeline (sound from the first), with what differs highlighted (style, order, effects, bars, QA).
+- **Post** ("ready to post"): the caption and hashtags to copy, the video / .srt / (YouTube) thumbnail
+  and publish.txt to download, and **Open folder** (Explorer with the file selected).
+- **Interrupted** (orange "!"): a run that was stopped (window closed, PC restarted). It never shows
+  "rendering" forever; the badge shows which videos are missing and the exact command to finish them
+  (`... --resume`; one click from Step 6.2b).
+
+Captions come from text templates per platform, per artist: `workspace\brand\publish-reels.txt`,
+`publish-tiktok.txt`, `publish-shorts.txt` (English defaults, made the first time). For an artist's
+own captions (Pômé in French) press **Make Pômé's own template** in the Post window: it copies the
+template to `workspace\brand\Pômé\` to edit there. Placeholders: `{{song}} {{artist}} {{ep}}
+{{epLine}} {{hook}} {{songTag}} {{artistTag}} {{year}}` (`{{hook}}` is the first hook line; a line with
+an empty value disappears; lines starting with `# ` are notes). YouTube uses the `publish.txt` made
+with each video.
+
 ### Artists
 
 Each song has its artist (Life Lyrics, Pômé, a client, ...): titles, thumbnails, the title overlay and

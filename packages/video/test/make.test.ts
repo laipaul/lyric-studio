@@ -842,6 +842,11 @@ describe("platform presets (stand-in renderer)", () => {
     expect(messages).toContain("using collection mixed (remembered)");
     expect(plans[0].collection).toMatchObject({ name: "mixed", remembered: true });
     expect(readManifest(again.variations[0].manifestFile).settings.collection).toMatchObject({ name: "mixed" });
+    // Its jobs record this process (for interrupted-run detection) and their run folder (for the studio).
+    const jobs = ws.db.select({ pid: renderJob.pid, status: renderJob.status, overrides: variation.overrides_json }).from(renderJob).innerJoin(variation, eq(renderJob.variation_id, variation.id)).all();
+    const mine = jobs.filter((j) => j.overrides?.run === path.relative(wsDir, again.exportDir).split(path.sep).join("/"));
+    expect(mine.length).toBeGreaterThan(0);
+    expect(mine.every((j) => j.pid === process.pid && j.status === "done")).toBe(true);
     // A project that never had one: a clear message.
     const fresh = path.join(root, "fresh-song.wav");
     makeSong(fresh, 14);

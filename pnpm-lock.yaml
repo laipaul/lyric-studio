@@ -95,6 +95,13 @@ importers:
         version: 5.9.3
 
   apps/worker:
+    dependencies:
+      '@lyric/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@lyric/video':
+        specifier: workspace:*
+        version: link:../../packages/video
     devDependencies:
       '@types/node':
         specifier: ^22

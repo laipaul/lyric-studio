@@ -4,16 +4,25 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { REPO_ROOT, absPath, project as projectTable, renderJob, variation, type Workspace } from "@lyric/db";
+import { REPO_ROOT, absPath, project as projectTable, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
 import { parsePresets } from "../platform";
 import { brandDir, DEFAULT_ARTIST } from "./brand";
+import { renderingPlatforms, SHORT_LABELS, songRuns, type PlatformRun } from "./exports";
 import { readProjectSettings, storeCover, storeLyricsTxt, updateProjectSettings } from "./project-settings";
 import { findOrCreateSongProject, storeProjectHint } from "./song-project";
 
-export type PlatformStatus = "PASS" | "WARN" | "FAILED" | "Rendering" | "none";
-export type PlatformCount = { name: string; label: string; videos: number; status: PlatformStatus; runs: number };
+export type PlatformStatus = "PASS" | "WARN" | "FAILED" | "interrupted" | "Rendering" | "none";
+export type PlatformCount = {
+  name: string;
+  label: string;
+  videos: number; // finished, not discarded, in its latest run
+  status: PlatformStatus;
+  runs: number;
+  details: string[]; // why WARN / FAILED / interrupted (per video, from its QA report)
+  resumeCommand: string | null; // interrupted: the command that finishes the run
+};
 export type SongCard = {
   id: string;
   title: string;
@@ -27,9 +36,6 @@ export type SongCard = {
   platforms: PlatformCount[];
 };
 
-const SHORT_LABELS: Record<string, string> = { standard: "Standard", reels: "Reels", tiktok: "TikTok", shorts: "Shorts", youtube: "YouTube", canvas: "Canvas" };
-const RUN_FOLDER = /^(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(-\d+)?$/;
-
 // Platform names and labels in the presets file's order.
 export function platformLabels(file = path.join(REPO_ROOT, "presets", "platforms.json")): { name: string; label: string }[] {
   try {
@@ -39,83 +45,43 @@ export function platformLabels(file = path.join(REPO_ROOT, "presets", "platforms
   }
 }
 
-const runTime = (name: string) => {
-  const m = RUN_FOLDER.exec(name);
-  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5])) : null;
-};
-
-// "Summary: PASS" / "Summary: WARN - ..." in a vN.qa.txt.
-function qaStatus(file: string): "PASS" | "WARN" | null {
-  try {
-    const line = readFileSync(file, "utf8").split(/\r?\n/).find((l) => l.startsWith("Summary: ")) ?? "";
-    return line.includes("PASS") ? "PASS" : line.includes("WARN") ? "WARN" : null;
-  } catch {
-    return null;
+// One platform's state in a run: interrupted > FAILED > WARN > PASS, with the reasons.
+export function platformState(pr: PlatformRun): { status: Exclude<PlatformStatus, "Rendering" | "none">; details: string[] } {
+  const details: string[] = [];
+  if (pr.interrupted) {
+    details.push(pr.missing.length ? `${pr.missing.join(", ")} not finished: the run was stopped` : "the run was stopped before all videos were made");
+    return { status: "interrupted", details };
   }
-}
-
-// The videos of one platform in one run folder: vN.mp4 with its manifest and QA report.
-function platformVideos(dir: string): { done: number; warn: boolean; incomplete: boolean } | null {
-  if (!existsSync(dir)) return null;
-  const files = readdirSync(dir);
-  const names = new Set(files.filter((f) => /^v\d+\.(mp4|manifest\.json|qa\.txt)$/.test(f)).map((f) => f.split(".")[0]));
-  if (!names.size) return null;
-  let done = 0;
-  let warn = false;
-  let incomplete = false;
-  for (const n of names) {
-    const ok = ["mp4", "manifest.json", "qa.txt"].every((ext) => files.includes(`${n}.${ext}`));
-    if (!ok) {
-      incomplete = true;
-      continue;
-    }
-    done++;
-    if (qaStatus(path.join(dir, `${n}.qa.txt`)) === "WARN") warn = true;
+  if (pr.failed.length || pr.missing.length) {
+    for (const e of pr.failed) details.push(`failed: ${e.split("\n")[0]}`);
+    if (pr.missing.length) details.push(`${pr.missing.join(", ")} not finished`);
+    return { status: "FAILED", details };
   }
-  return { done, warn, incomplete };
+  for (const v of pr.videos) for (const p of v.qa.problems) details.push(`${v.name}: ${p.check}${p.details.length ? ` (${p.details.join("; ")})` : ""}`);
+  return { status: pr.videos.some((v) => v.qa.status === "WARN") ? "WARN" : "PASS", details };
 }
 
 export function songCard(ws: Workspace, p: typeof projectTable.$inferSelect, labels = platformLabels()): SongCard {
-  const exportsDir = absPath(ws, `projects/${p.id}/exports`);
-  const runs = existsSync(exportsDir)
-    ? readdirSync(exportsDir, { withFileTypes: true })
-        .filter((d) => d.isDirectory() && RUN_FOLDER.test(d.name))
-        .map((d) => d.name)
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-    : [];
-  // Render jobs still queued or rendering, and failed ones, per platform.
-  const jobs = ws.db
-    .select({ status: renderJob.status, started: renderJob.started_at, overrides: variation.overrides_json })
-    .from(renderJob)
-    .innerJoin(variation, eq(renderJob.variation_id, variation.id))
-    .where(eq(variation.project_id, p.id))
-    .all();
-  const jobsFor = (name: string) => jobs.filter((j) => (j.overrides?.platform ?? "standard") === name);
-
+  const runs = songRuns(ws, p.id, Object.fromEntries(labels.map((l) => [l.name, l.label])));
+  const rendering = renderingPlatforms(ws, p.id);
   const platforms = labels.map(({ name, label }): PlatformCount => {
-    // The latest run that made this platform ("standard" lives directly in the run folder).
-    let latest: { run: string; videos: NonNullable<ReturnType<typeof platformVideos>> } | null = null;
-    let count = 0;
-    for (const run of runs) {
-      const v = platformVideos(name === "standard" ? path.join(exportsDir, run) : path.join(exportsDir, run, name));
-      if (v) {
-        count++;
-        latest = { run, videos: v };
-      }
-    }
-    const pending = jobsFor(name).some((j) => j.status === "queued" || j.status === "rendering");
-    let status: PlatformStatus = "none";
-    if (latest) {
-      const since = runTime(latest.run);
-      const failed = latest.videos.incomplete || jobsFor(name).some((j) => j.status === "failed" && (!since || !j.started || j.started >= since));
-      status = failed ? "FAILED" : latest.videos.warn ? "WARN" : "PASS";
-    }
-    if (pending) status = "Rendering";
-    return { name, label, videos: latest?.videos.done ?? 0, status, runs: count };
+    const withIt = runs.map((r) => ({ run: r, pr: r.platforms.find((x) => x.name === name) })).filter((x) => x.pr);
+    const latest = withIt[withIt.length - 1];
+    if (rendering.has(name)) return { name, label, videos: latest?.pr?.videos.length ?? 0, status: "Rendering", runs: withIt.length, details: ["rendering now"], resumeCommand: null };
+    if (!latest?.pr) return { name, label, videos: 0, status: "none", runs: 0, details: [], resumeCommand: null };
+    const state = platformState(latest.pr);
+    return {
+      name,
+      label,
+      videos: latest.pr.videos.filter((v) => v.mark.status !== "discarded").length,
+      status: state.status,
+      runs: withIt.length,
+      details: state.details,
+      resumeCommand: state.status === "interrupted" ? latest.run.resumeCommand : null,
+    };
   });
-
   const settings = readProjectSettings(ws, p.id);
-  const lastRun = runs.length ? runTime(runs[runs.length - 1]) : null;
+  const last = runs[runs.length - 1];
   return {
     id: p.id,
     title: p.title,
@@ -124,7 +90,7 @@ export function songCard(ws: Workspace, p: typeof projectTable.$inferSelect, lab
     cover: p.cover_path && existsSync(absPath(ws, p.cover_path)) ? p.cover_path : null,
     durationMs: p.duration_ms ?? null,
     createdAt: p.created_at.toISOString(),
-    lastRun: lastRun?.toISOString() ?? null,
+    lastRun: last?.time ?? null,
     hasLyrics: !!settings.lyricsTxt || existsSync(absPath(ws, `projects/${p.id}/lyrics`)),
     platforms,
   };

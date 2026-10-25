@@ -39,6 +39,7 @@ import { autoSection, clockText, finishedBeforeStart, sectionCuts, startsAfterEn
 import { RECENT_WINDOW, type ClipOrder } from "../shots";
 import { analyzeSong } from "./analysis";
 import { loadBrand, type Brand } from "./brand";
+import { artistBrandFile } from "./captions";
 import { readProjectSettings, rememberCollection, rememberedCollection, updateProjectSettings } from "./project-settings";
 import { prepareForFormat, syncCollection, type CollectionSync, type PreparedForFormat } from "./collection";
 import { fontFileRefs, loadFontCatalog, resolveFace, type FontCatalog } from "./font-catalog";
@@ -820,11 +821,13 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
           platform: preset.name, order: spec.order, lead_ms: leadMs, lyrics_offset_ms: lyricsOffsetMs,
           font: options.font ?? null, font_hook: options.fontHook ?? null, lrc: alignment.lrcStored,
           line_effect: choiceText(fx.verse), hook_effect: choiceText(fx.hook),
+          run: storedPath(ws, sh.rootDir), // the run folder (the studio links jobs to their videos)
         },
       })
       .returning()
       .get();
-    const job = ws.db.insert(renderJobTable).values({ variation_id: variationRow.id }).returning().get();
+    // pid: this process owns the job; if it disappears, the job counts as interrupted (see jobs.ts).
+    const job = ws.db.insert(renderJobTable).values({ variation_id: variationRow.id, pid: process.pid }).returning().get();
     return { spec, props: composed.props, jobId: job.id };
   });
   report();
@@ -934,7 +937,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
           outFile: result.thumbnailFile,
           log,
         });
-        const pack = publishText(ws.dir, { song: project.title, artist: project.artist, lyricsTxt: readFileSync(alignment.lyricsTxt, "utf8"), year: sh.now.getFullYear(), ep: sh.ep }, sh.brand.dir);
+        const pack = publishText(ws.dir, { song: project.title, artist: project.artist, lyricsTxt: readFileSync(alignment.lyricsTxt, "utf8"), year: sh.now.getFullYear(), ep: sh.ep }, path.dirname(artistBrandFile(ws.dir, project.artist, "publish-template.txt").file));
         if (pack.created) log(`publishing template created: ${pack.template} (edit it to change publish.txt)`);
         result.publishFile = path.join(exportDir, one ? "publish.txt" : `${spec.name}.publish.txt`);
         writeFileSync(result.publishFile, pack.text);

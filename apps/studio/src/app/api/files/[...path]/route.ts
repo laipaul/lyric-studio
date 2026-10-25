@@ -1,18 +1,20 @@
-// Serves files from the workspace to the studio: project covers (and, from Step 6.2, exports).
-// Only files under projects/ are allowed; never the database or anything outside the workspace.
+// Serves workspace files to the studio (covers, videos, captions, thumbnails, publish texts), with
+// Range support so videos can seek. ?download=<name> saves the file under that name.
 import { Readable } from "node:stream";
 
 import { resolveWorkspaceDir } from "@lyric/db";
 import { mediaResponse, resolveMediaPath } from "@lyric/video/media";
 
-const ALLOWED = /^projects\/[0-9a-f-]{36}\/audio\/cover\.(jpg|jpeg|png|webp)$/i;
+import { allowedFile } from "@/lib/files";
 
 export async function GET(request: Request, { params }: { params: Promise<{ path: string[] }> }) {
   const parts = (await params).path;
-  const relative = parts.join("/");
-  if (!ALLOWED.test(relative)) return new Response("Not found", { status: 404 });
+  if (!allowedFile(parts.join("/"))) return new Response("Not found", { status: 404 });
   const file = resolveMediaPath(parts.map(encodeURIComponent).join("/"), { workspaceDir: resolveWorkspaceDir() });
   const response = mediaResponse(file, request.headers.get("range"));
   const body = response.stream ? (Readable.toWeb(response.stream) as ReadableStream) : null;
-  return new Response(body, { status: response.status, headers: { ...response.headers, "Cache-Control": "no-cache" } });
+  const headers: Record<string, string> = { ...response.headers, "Cache-Control": "no-cache" };
+  const download = new URL(request.url).searchParams.get("download");
+  if (download) headers["Content-Disposition"] = `attachment; filename*=UTF-8''${encodeURIComponent(download.replace(/[\\/:*?"<>|]/g, "_"))}`;
+  return new Response(body, { status: response.status, headers });
 }
