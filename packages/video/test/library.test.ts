@@ -10,7 +10,7 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { studioHost } from "../../../apps/studio/scripts/next.mjs";
-import { appIcon, brandDirFor, checkNewSong, createSong, knownArtists, listSongs, loadBrand, loadFontCatalog, readProjectSettings } from "../src/node";
+import { appIcon, appIconSettings, brandDirFor, checkNewSong, icoSizes, visibleBox, createSong, knownArtists, listSongs, loadBrand, loadFontCatalog, readProjectSettings } from "../src/node";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-library-"));
 const inDir = path.join(root, "in");
@@ -128,15 +128,47 @@ describe("artists' brands, app icons, localhost", () => {
     expect(loadBrand(ws.dir, catalog, "Nobody Yet").brand.accentColour).toBe("#E8A3B5");
   });
 
-  it("app icons from the brand logo, remade when the logo changes", async () => {
+  it("app icons: the logo's padding cropped (it fills ~90%), sharp sizes 16-256 in one .ico, style logo or tile", async () => {
     const plain = await appIcon(ws.dir, 192, "any"); // no logo yet: the default icon
-    execFileSync(ffmpegBin(), ["-y", "-v", "error", "-f", "lavfi", "-i", "color=c=0xE8A3B5:s=300x300", "-frames:v", "1", path.join(ws.dir, "brand", "logo.png")]);
+    // A small pink disc in the middle of a big transparent canvas (lots of padding).
+    execFileSync(ffmpegBin(), [
+      "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=black@0.0:s=600x600,format=rgba", "-f", "lavfi", "-i", "color=c=0xE8A3B5:s=200x200",
+      "-filter_complex", "[1:v]format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lte(hypot(X-100,Y-100),100),255,0)'[d];[0:v][d]overlay=150:250",
+      "-frames:v", "1", path.join(ws.dir, "brand", "logo.png"),
+    ]);
     const withLogo = await appIcon(ws.dir, 192, "any");
     expect(withLogo).not.toBe(plain);
-    const probe = (f: string) => execFileSync("ffprobe", ["-v", "error", "-show_entries", "stream=width,height", "-of", "csv=p=0", f]).toString().trim();
-    expect(probe(withLogo)).toBe("192,192");
-    expect(probe(await appIcon(ws.dir, 512, "maskable"))).toBe("512,512");
-    expect(probe(await appIcon(ws.dir, 256, "ico"))).toBe("256,256");
+    const pixels = (f: string) => {
+      const raw = execFileSync(ffmpegBin(), ["-v", "error", "-i", f, "-f", "rawvideo", "-pix_fmt", "rgba", "-"]);
+      const n = Math.round(Math.sqrt(raw.length / 4));
+      return { n, alpha: (x: number, y: number) => raw[(y * n + x) * 4 + 3], box: visibleBox(raw, n, n) };
+    };
+    const any = pixels(withLogo);
+    expect(any.n).toBe(192);
+    expect(any.alpha(0, 0)).toBe(0); // transparent around the logo
+    expect(any.box.w / 192).toBeGreaterThan(0.87); // the disc fills ~90% (it filled 33% of logo.png)
+    expect(any.box.w / 192).toBeLessThan(0.93);
+    expect(Math.abs(any.box.x - (192 - any.box.x - any.box.w))).toBeLessThanOrEqual(1); // centred
+
+    const ico = readFileSync(await appIcon(ws.dir, 256, "ico"));
+    expect(icoSizes(ico)).toEqual([16, 24, 32, 48, 64, 128, 256]);
+    expect(ico.subarray(6 + 16 * 7 + 1, 6 + 16 * 7 + 4).toString()).toBe("PNG"); // PNG images inside
+
+    // "tile": the logo on a rounded square in the accent colour (corners transparent).
+    writeFileSync(path.join(ws.dir, "brand", "brand.json"), JSON.stringify({ appIcon: { style: "tile" }, accentColour: "#88AACC" }));
+    expect(appIconSettings(ws.dir)).toEqual({ style: "tile", accent: "#88AACC" });
+    const tile = pixels(await appIcon(ws.dir, 192, "any"));
+    expect(tile.alpha(0, 0)).toBe(0);
+    expect(tile.alpha(96, 2)).toBe(255); // the square's edge
+    rmSync(path.join(ws.dir, "brand", "brand.json"));
+    expect(appIconSettings(ws.dir).style).toBe("logo");
+  });
+
+  it("the visible part of a logo without transparency is found from its background colour", () => {
+    const n = 10;
+    const raw = Buffer.alloc(n * n * 4, 255); // white, opaque
+    for (let y = 3; y < 6; y++) for (let x = 2; x < 8; x++) raw.set([200, 50, 80, 255], (y * n + x) * 4);
+    expect(visibleBox(raw, n, n)).toEqual({ x: 2, y: 3, w: 6, h: 3 });
   });
 
   it("the studio listens on this PC only unless STUDIO_HOST is set", () => {

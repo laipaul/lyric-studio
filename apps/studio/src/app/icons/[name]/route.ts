@@ -10,11 +10,13 @@ const ICONS: Record<string, { size: number; kind: IconKind }> = {
   "maskable-512.png": { size: 512, kind: "maskable" },
   "apple-touch-icon.png": { size: 180, kind: "maskable" },
   "favicon-32.png": { size: 32, kind: "any" },
+  "favicon.ico": { size: 256, kind: "ico" }, // 16-256 px in one file (the Edge app window, tabs)
 };
 
 export async function GET(_request: Request, { params }: { params: Promise<{ name: string }> }) {
   const icon = ICONS[(await params).name];
   if (!icon) return new Response("Not found", { status: 404 });
   const file = await appIcon(resolveWorkspaceDir(), icon.size, icon.kind);
-  return new Response(readFileSync(file), { headers: { "Content-Type": "image/png", "Cache-Control": "no-cache" } });
+  const type = icon.kind === "ico" ? "image/x-icon" : "image/png";
+  return new Response(readFileSync(file), { headers: { "Content-Type": type, "Cache-Control": "no-cache" } });
 }

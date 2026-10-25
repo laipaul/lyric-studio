@@ -24,7 +24,7 @@ Payments, credits, user accounts, login, multi-user, cloud hosting, cloud render
 - `apps/worker`: Node render worker that processes RenderJob rows
 - SQLite via Drizzle ORM, file `workspace/studio.db`
 - FFmpeg for thumbnails and clip normalisation (30 fps, the platform's size, cover-crop; photos as JPEG)
-- One `pnpm dev` command starts studio + worker + audio service; "Start Lyric Studio.cmd" / "Stop Lyric Studio.cmd" do the same in the background (production build, rebuilt after an update) and open the app; the studio listens on 127.0.0.1 only (STUDIO_HOST to change); installable PWA (manifest, icons made from workspace\brand\logo.png, service worker), no internet needed
+- One `pnpm dev` command starts studio + worker + audio service; "Start Lyric Studio.cmd" / "Stop Lyric Studio.cmd" do the same in the background (production build, rebuilt after an update) and open the app; the studio listens on 127.0.0.1 only (STUDIO_HOST to change); installable PWA (manifest, icons made from workspace\brand\logo.png, service worker), no internet needed; app icons: the logo's transparent padding cropped so it fills ~90%, every size rendered from the full logo (Lanczos), a multi-size .ico (16, 24, 32, 48, 64, 128, 256) for the shortcut and the window, brand.json appIcon.style "logo" (default) or "tile" (rounded square in the accent colour)
 
 ## Data model
 - Project: id, title, artist, cover_path, audio_path, bpm, duration_ms, downbeat_offset (0-3: bar 1 starts N beats later than detected), created_at

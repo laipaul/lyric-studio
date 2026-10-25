@@ -1,6 +1,7 @@
 @echo off
 rem Puts a "Lyric Studio" shortcut with the Life Lyrics icon (made from workspace\brand\logo.png) on
-rem your desktop. It starts "Start Lyric Studio.cmd" minimised. Run it again after changing the logo.
+rem your desktop. It starts "Start Lyric Studio.cmd" minimised. Run it again after changing the logo
+rem or brand.json "appIcon" ("logo" or "tile"): it updates the icon.
 setlocal
 cd /d "%~dp0"
 set "ICON="
@@ -12,5 +13,7 @@ if not defined ICON (
 )
 copy /y "%ICON%" "Lyric Studio.ico" >nul
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$s = (New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop') + '\Lyric Studio.lnk'); $s.TargetPath = '%~dp0Start Lyric Studio.cmd'; $s.WorkingDirectory = '%~dp0'; $s.IconLocation = '%~dp0Lyric Studio.ico'; $s.WindowStyle = 7; $s.Description = 'Lyric Studio'; $s.Save()"
-echo The "Lyric Studio" shortcut is on your desktop.
+rem Let Windows show the new icon now (it keeps old icons in a cache).
+ie4uinit.exe -show >nul 2>&1
+echo The "Lyric Studio" shortcut is on your desktop (icon from workspace\brand\logo.png).
 pause

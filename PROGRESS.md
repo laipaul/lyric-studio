@@ -479,6 +479,11 @@ Cause: a line was treated as sung until the next line started (and the next line
   artist's template per platform, YouTube title / description / tags from publish.txt, downloads with
   clear names, open folder in Explorer, "make <artist>'s own template").
 - New tables: video_mark; render_job: status "interrupted" and pid (migration 0003, data kept).
+- App icon fix (small and fuzzy before): the logo's transparent padding is cropped so it fills ~90% of
+  the icon; every size is rendered straight from the full logo; the shortcut gets a real multi-size
+  .ico (16-256 px) and the Edge window / PWA the same icons (/icons/favicon.ico). brand.json
+  "appIcon": { "style": "logo" | "tile" } (tile = rounded square in the accent colour). "Create
+  Desktop Shortcut.cmd" again updates the icon (and refreshes Windows' icon cache).
 - Menu: only "Library" (the Studio placeholder is gone; /studio leads to the Library).
 - Caption templates per artist: brand\<artist>\publish-<platform>.txt else brand\publish-<platform>.txt;
   the YouTube publish template follows the same rule.

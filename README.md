@@ -86,7 +86,11 @@ want that.
   The log is in `logs\lyric-studio.log`.
 - Double-click **`Stop Lyric Studio.cmd`** to stop everything.
 - **Desktop shortcut** with the Life Lyrics icon: double-click **`Create Desktop Shortcut.cmd`** once
-  (run it again after changing `workspace\brand\logo.png`). By hand instead: right-click the desktop →
+  (run it again after changing `workspace\brand\logo.png` or the icon style: it updates the icon).
+  The icon is made from your logo with its empty border cropped, so the flower fills ~90% of the icon,
+  in every Windows size (16-256 px, each sharp). `workspace\brand\brand.json`:
+  `"appIcon": { "style": "logo" }` (the flower alone, default) or `"tile"` (the flower on a rounded
+  square in your accent colour). The Edge window and the installed app use the same icons. By hand instead: right-click the desktop →
   New → Shortcut → `D:\videomaker\Start Lyric Studio.cmd` → name it "Lyric Studio" → Properties →
   Change Icon → `D:\videomaker\Lyric Studio.ico` (made by `pnpm app:icons`), Run: Minimized.
 

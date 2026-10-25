@@ -24,6 +24,9 @@ export type Brand = {
   useForLyrics: boolean;
   // Lyric effects (Step 5j): "glide", "karaoke-highlight:subtle" or { name, intensity, durationMs, easing }.
   motion: { verseEffect: EffectChoice; hookEffect: EffectChoice };
+  // The app's icon (shortcut, window, taskbar): "logo" = the logo alone, "tile" = on a rounded square
+  // in the accent colour.
+  appIcon: { style: "logo" | "tile" };
 };
 
 export const DEFAULT_BRAND: Brand = {
@@ -34,6 +37,7 @@ export const DEFAULT_BRAND: Brand = {
   logo: { file: "logo.png", size: 0.08, youtube: "bottom-right", vertical: "auto", platforms: ["youtube"] },
   useForLyrics: true,
   motion: { verseEffect: DEFAULT_VERSE_EFFECT, hookEffect: DEFAULT_HOOK_EFFECT },
+  appIcon: { style: "logo" },
 };
 
 const HELP =
@@ -44,7 +48,8 @@ const HELP =
   "the logo always sits in a frame corner with a fixed margin; size: logo width as a fraction of the video width. " +
   "useForLyrics: false = lyrics keep the Simple/Bold style fonts. " +
   "motion.verseEffect / motion.hookEffect: glide, cinematic-fade, soft-blur, dreamy-glow, word-reveal, karaoke-highlight, floating, typewriter " +
-  '(optionally ":subtle" or ":expressive", or { "name": ..., "intensity": ..., "durationMs": ..., "easing": ... }); see pnpm effects:preview.';
+  '(optionally ":subtle" or ":expressive", or { "name": ..., "intensity": ..., "durationMs": ..., "easing": ... }); see pnpm effects:preview. ' +
+  'appIcon.style: "logo" (the logo alone, default) or "tile" (the logo on a rounded square in the accent colour); run Create Desktop Shortcut.cmd again after a change.';
 
 export function brandDir(workspaceDir: string): string {
   return path.join(workspaceDir, "brand");
@@ -90,8 +95,10 @@ export function loadBrand(
     hookFont: { ...DEFAULT_BRAND.hookFont, ...raw.hookFont },
     logo: { ...DEFAULT_BRAND.logo, ...raw.logo },
     motion: { ...DEFAULT_BRAND.motion },
+    appIcon: { ...DEFAULT_BRAND.appIcon, ...raw.appIcon },
   };
   const problems: string[] = [];
+  if (!["logo", "tile"].includes(brand.appIcon.style)) problems.push('appIcon.style must be "logo" (the logo alone) or "tile" (on a rounded square in the accent colour)');
   const rawMotion = (raw.motion ?? {}) as Record<string, unknown>;
   for (const key of ["verseEffect", "hookEffect"] as const) {
     if (rawMotion[key] === undefined) continue;
