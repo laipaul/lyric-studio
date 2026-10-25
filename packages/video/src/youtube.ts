@@ -179,3 +179,95 @@ export function toSrt(lines: readonly { text: string; startFrame: number; endFra
 export function visibleStills<T extends { startFrame: number; endFrame: number }>(stills: readonly T[], durationInFrames: number): T[] {
   return stills.filter((s) => s.endFrame > 0 && s.startFrame < durationInFrames);
 }
+
+// ---- cover motion (zoom + gentle drift, background parallax) --------------------------------
+
+export type CoverDrift = { fromX: number; fromY: number; toX: number; toY: number }; // px
+
+// A seeded drift: from one side to the other, at most `share` of the cover's side in each direction.
+export function coverDrift(random: () => number, side: number, share: number): CoverDrift {
+  const a = side * share;
+  const dx = (random() * 2 - 1) * a;
+  const dy = (random() * 2 - 1) * a * 0.6;
+  return { fromX: -dx, fromY: -dy, toX: dx, toY: dy };
+}
+
+// The cover's zoom and offset at progress t (0 = first frame, 1 = last), eased in and out; the
+// background moves `parallax` as much, the opposite way.
+export function coverMotionAt(
+  cover: { zoomFrom: number; zoomTo: number; drift?: CoverDrift },
+  t: number,
+  parallax: number,
+): { zoom: number; x: number; y: number; backgroundX: number; backgroundY: number } {
+  const e = 0.5 - Math.cos(Math.PI * Math.min(1, Math.max(0, t))) / 2;
+  const d = cover.drift ?? { fromX: 0, fromY: 0, toX: 0, toY: 0 };
+  const x = d.fromX + (d.toX - d.fromX) * e;
+  const y = d.fromY + (d.toY - d.fromY) * e;
+  return { zoom: cover.zoomFrom + (cover.zoomTo - cover.zoomFrom) * e, x, y, backgroundX: -x * parallax, backgroundY: -y * parallax };
+}
+
+// ---- section mood ------------------------------------------------------------------------------
+
+export type MoodKind = "hook" | "verse" | "neutral";
+export type MoodSegment = { startFrame: number; kind: MoodKind };
+export type Rgba = [number, number, number, number];
+
+// A colour laid over the background: warm and light on hook (chorus) sections, a soft dark veil on
+// verses and the bridge, nothing on the intro and outro.
+export const MOOD_COLOURS: Record<MoodKind, Rgba> = {
+  hook: [255, 186, 130, 0.13],
+  verse: [14, 16, 34, 0.18],
+  neutral: [0, 0, 0, 0],
+};
+export const MOOD_TRANSITION_SECONDS = 2;
+
+// Mood sections on the downbeat nearest each lyric section start (frames from the video start).
+export function moodSegments(sections: readonly LyricSection[], beats: readonly Beat[], fps: number, startMs: number): MoodSegment[] {
+  const downbeats = beats.filter((b) => b.is_downbeat).map((b) => b.time_ms);
+  const snap = (ms: number) => downbeats.reduce((best, d) => (Math.abs(d - ms) < Math.abs(best - ms) ? d : best), downbeats[0] ?? ms);
+  return sections.map((s, i) => ({
+    startFrame: i === 0 ? -1_000_000 : Math.round(((snap(s.start_ms) - startMs) * fps) / 1000), // (props are JSON: no -Infinity)
+    kind: s.kind === "chorus" ? "hook" : s.kind === "intro" || s.kind === "outro" ? "neutral" : "verse",
+  }));
+}
+
+// The mood colour at `frame`: each change is a smooth (eased) 2 s blend centred on the section start.
+export function moodAt(frame: number, segments: readonly MoodSegment[], fps: number): Rgba {
+  if (!segments.length) return MOOD_COLOURS.neutral;
+  const half = (MOOD_TRANSITION_SECONDS * fps) / 2;
+  let current = 0;
+  for (let i = 0; i < segments.length; i++) if (segments[i].startFrame - half <= frame) current = i;
+  const seg = segments[current];
+  const to = MOOD_COLOURS[seg.kind];
+  if (current === 0 || frame >= seg.startFrame + half) return to;
+  const from = MOOD_COLOURS[segments[current - 1].kind];
+  const t = (frame - (seg.startFrame - half)) / (2 * half);
+  const e = t * t * (3 - 2 * t); // smoothstep: no sudden change at either end
+  const a = from[3] + (to[3] - from[3]) * e;
+  // Blend the colours weighted by their opacity, so fading from "nothing" does not pass through black.
+  const mix = (i: number) => (a > 0 ? (from[i] * from[3] * (1 - e) + to[i] * to[3] * e) / a : to[i]);
+  return [mix(0), mix(1), mix(2), a];
+}
+
+// ---- logo ----------------------------------------------------------------------------------------
+
+export type Corner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+
+// Where the logo goes: in the given corner of the area inside the safe zones (so platform buttons
+// never cover it), with a margin. "auto" = bottom right.
+export function logoPlacement(format: Format, safe: SafeZone, corner: Corner | "auto", size: { width: number; height: number }, marginShare = 0.03): { left: number; top: number } {
+  const [v, h] = (corner === "auto" ? "bottom-right" : corner).split("-") as ["top" | "bottom", "left" | "right"];
+  const margin = Math.round(format.width * marginShare);
+  const area = { left: format.width * safe.left, right: format.width * (1 - safe.right), top: format.height * safe.top, bottom: format.height * (1 - safe.bottom) };
+  return {
+    left: Math.round(h === "left" ? area.left + margin : area.right - margin - size.width),
+    top: Math.round(v === "top" ? area.top + margin : area.bottom - margin - size.height),
+  };
+}
+
+// Logo opacity: fades out over `fadeFrames` so it is gone by `goneAt` (YouTube's end-screen window).
+export function logoOpacity(frame: number, goneAt: number | null, fadeFrames: number): number {
+  if (goneAt === null) return 1;
+  if (frame >= goneAt) return 0;
+  return Math.min(1, (goneAt - frame) / fadeFrames);
+}

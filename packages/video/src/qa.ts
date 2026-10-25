@@ -21,7 +21,7 @@ export type QaLyric = {
 };
 
 export type QaInput = {
-  props: Pick<LyricVideoProps, "shots" | "lyrics" | "cinematicBars" | "durationInFrames" | "format" | "safeZone">;
+  props: Pick<LyricVideoProps, "shots" | "lyrics" | "cinematicBars" | "durationInFrames" | "format" | "safeZone" | "logo">;
   shotClips: string[]; // clip file name of each shot
   poolSize: number; // clips in the collection
   lyrics: QaLyric[]; // lines visible in this variation
@@ -30,6 +30,7 @@ export type QaInput = {
   sectionCuts?: { at: "start" | "end"; line: number; text: string; time_ms: number }[]; // sung lines cut by the section
   endScreen?: { clear: Box; lines: number[] } | null; // YouTube: the area kept free for end-screen elements
   frozenCheckSkipped?: boolean; // still pictures by design (YouTube cover / stills)
+  length?: { actualS: number; songS: number | null } | null; // the finished file's length (songS: a full-song video)
 };
 
 export type QaCheck = { name: string; ok: boolean; details: string[] };
@@ -159,6 +160,24 @@ export function runQa(input: QaInput): QaReport {
     .filter((x) => x.problem)
     .map(({ l, problem }) => `line ${l.number} "${l.text}" ${problem}`);
   checks.push({ name: "Lyrics inside the safe zone", ok: outside.length === 0, details: outside });
+
+  // The finished video is as long as it should be (a full-song video: as long as the song).
+  if (input.length) {
+    const expected = props.durationInFrames / VIDEO.fps;
+    const details: string[] = [];
+    if (Math.abs(input.length.actualS - expected) > 0.25) details.push(`the file is ${input.length.actualS.toFixed(1)} s long, expected ${expected.toFixed(1)} s`);
+    if (input.length.songS !== null && Math.abs(expected - input.length.songS) > 0.25) {
+      details.push(`the video is ${expected.toFixed(1)} s but the song is ${input.length.songS.toFixed(1)} s`);
+    }
+    checks.push({ name: "Video length", ok: details.length === 0, details });
+  }
+
+  // The logo never covers a lyric line.
+  if (props.logo) {
+    const lg = props.logo;
+    const covered = input.lyrics.filter((l) => l.box.right > lg.left && l.box.left < lg.left + lg.width && l.box.bottom > lg.top && l.box.top < lg.top + lg.height);
+    checks.push({ name: "Logo clear of the lyrics", ok: covered.length === 0, details: covered.map((l) => `the logo overlaps line ${l.number} "${l.text}"`) });
+  }
 
   // YouTube: lyrics in the last seconds stay out of the end-screen area (bottom right).
   if (input.endScreen) {

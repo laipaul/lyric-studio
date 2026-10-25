@@ -423,7 +423,7 @@ describe("LyricVideo render", () => {
       layout: "cover",
       cover: { src: "cover.jpg", zoomFrom: 1, zoomTo: 1.05 },
       lyricArea: area,
-      logo: { src: "logo.png", position: "bottom-left", width: 154 },
+      logo: { src: "logo.png", left: 58, top: 1080 - 58 - 62, width: 154, height: 62, goneAt: null },
     });
     const { at, magenta } = await ytPixels(props, 10);
     const [r, g, b] = at(Math.round(1920 * 0.22), 540); // centre of the cover
@@ -483,5 +483,44 @@ describe("LyricVideo render", () => {
     let accent = 0;
     for (let i = 0; i < raw.length; i += 3) if (raw[i] > 170 && raw[i + 2] > 170 && raw[i + 1] < 90) accent += 1;
     expect(accent).toBeGreaterThan(2000); // the title's letters
+  }, 300_000);
+
+  it("YouTube 5g.2b: cover drift with opposite background parallax, mood veil per section, logo fading out", async () => {
+    // Background: black left of x=1600, white right of it (to see it move).
+    ffmpeg("-f", "lavfi", "-i", "color=c=black:s=1600x1080", "-f", "lavfi", "-i", "color=c=white:s=320x1080", "-filter_complex", "[0:v][1:v]hstack=inputs=2", "-frames:v", "1", path.join(dir, "edge-bg.png"));
+    const props = ytBase({
+      layout: "cover",
+      lyrics: [],
+      cover: { src: "cover.jpg", zoomFrom: 1, zoomTo: 1, backgroundSrc: "edge-bg.png", drift: { fromX: -20, fromY: 0, toX: 20, toY: 0 }, parallax: 0.3 },
+      logo: { src: "logo.png", left: 1700, top: 960, width: 154, height: 62, goneAt: 60 },
+      mood: [{ startFrame: -1_000_000, kind: "verse" }, { startFrame: 45, kind: "hook" }],
+    });
+    const rowEdge = (at: (x: number, y: number) => number[], from: number, to: number, y: number, test: (p: number[]) => boolean) => {
+      for (let x = from; x < to; x++) if (test(at(x, y))) return x;
+      return -1;
+    };
+    const start = await ytPixels(props, 0);
+    const end = await ytPixels(props, 89);
+    const yellow = (p: number[]) => p[0] > 180 && p[1] > 180 && p[2] < 90;
+    const bright = (p: number[]) => p[0] > 120;
+    const coverStart = rowEdge(start.at, 0, 400, 540, yellow);
+    const coverEnd = rowEdge(end.at, 0, 400, 540, yellow);
+    const bgStart = rowEdge(start.at, 1500, 1700, 300, bright);
+    const bgEnd = rowEdge(end.at, 1500, 1700, 300, bright);
+    expect(coverEnd - coverStart).toBeGreaterThan(30); // the cover drifted right (~40 px)
+    expect(bgStart - bgEnd).toBeGreaterThan(8); // the background moved left (~12 px) ...
+    expect(bgStart - bgEnd).toBeLessThan(18); // ... about 30% as much
+    // Mood: the hook veil (warm, light) is brighter than the verse veil on the same background.
+    const verse = (await ytPixels(props, 5)).at(800, 200);
+    const hook = (await ytPixels(props, 85)).at(800, 200);
+    expect(hook[0]).toBeGreaterThan(verse[0] + 15);
+    expect(hook[0]).toBeGreaterThan(hook[2]); // warm
+    // Logo: visible early, gone at goneAt.
+    const logoEarly = (await ytPixels(props, 10)).at(1777, 990);
+    const logoLate = (await ytPixels(props, 60)).at(1777, 990);
+    // The lime logo (low red) over the white part of the background (high red once it is gone).
+    expect(logoEarly[1]).toBeGreaterThan(150);
+    expect(logoEarly[0]).toBeLessThan(90);
+    expect(logoLate[0]).toBeGreaterThan(200);
   }, 300_000);
 });

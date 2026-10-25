@@ -10,6 +10,7 @@ import path from "node:path";
 import {
   REPO_ROOT,
   absPath,
+  probeMedia,
   lyricLine as lyricLineTable,
   openWorkspace,
   project as projectTable,
@@ -46,8 +47,12 @@ import { loadStyles, lyricLineNumbers, parseSection, snapToDownbeat, songMedia, 
 import { detectBadFrames, measureLyrics } from "./qa-check";
 import { getBundle, renderLyricVideo, renderThumbnail, type RenderOptions } from "./render";
 import { ensureAlignment, findOrCreateSongProject, matchReport, type Alignment, type AlignRunner } from "./song-project";
+import { COVER_TEXT_SCALE } from "../youtube-layout";
+import { lyricSections } from "../youtube";
 import {
   blurredBackground,
+  placeLogo,
+  type LogoImage,
   chooseLayout,
   lyricAreaFor,
   planStills,
@@ -69,6 +74,7 @@ export type MakeOptions = {
   platforms?: string; // "reels,tiktok,shorts" or "all"; default: the "standard" preset
   allowFill?: boolean; // use sources of the other orientation, shown whole over a blurred copy
   title?: string; // song title (saved to the project; default: the song's file name)
+  ep?: string; // publish.txt: 'From the EP "<name>"'
   cover?: string; // YouTube cover layout: the square cover image (stored with the project)
   layout?: YouTubeLayout; // YouTube layout (default from the preset: cover)
   stills?: string; // YouTube stills layout: stills.txt (default: next to lyrics.txt, else in the collection folder)
@@ -112,6 +118,7 @@ export type MakePlan = {
   brand: { file: string; created: boolean };
   project: { title: string; created: boolean };
   bpm: number;
+  songMs: number; // the song's measured length
   downbeatConfidence: number;
   lyrics: { source: Alignment["source"]; file: string; lines: number; hooks: number; low: { number: number; text: string; confidence: number }[] };
   lyricsOffsetMs: number;
@@ -399,8 +406,14 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     }
 
     const tool = toolInfo();
+    // The logo's own size (for its height on screen).
+    let logo: LogoImage | null = null;
+    if (brand.logoFile) {
+      const info = await probeMedia(brand.logoFile);
+      if (info.width && info.height) logo = { file: brand.logoFile, width: info.width, height: info.height };
+    }
     const shared: Shared = {
-      ws, options, log, now, leadMs, lyricsOffsetMs, catalog, styles, brand, sp, analysis, alignment, lines, reports, numbers,
+      ws, options, log, now, leadMs, lyricsOffsetMs, catalog, styles, brand, logo, sp, analysis, alignment, lines, reports, numbers,
       sectionLines, collection, tool, rootDir, getProject: () => project,
     };
     const results: PlatformResult[] = [];
@@ -445,6 +458,7 @@ type Shared = {
   catalog: FontCatalog;
   styles: StyleFaces;
   brand: ReturnType<typeof loadBrand>;
+  logo: LogoImage | null;
   sp: Awaited<ReturnType<typeof findOrCreateSongProject>>;
   analysis: Awaited<ReturnType<typeof analyzeSong>>;
   alignment: Alignment;
@@ -604,7 +618,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
   for (const style of ["simple", "bold"] as const) {
     const s = styles[style];
     const area = ytLayout ? lyricAreaFor(ytLayout, preset) : lyricArea(format, preset.safeZone, preset.lyricsAt);
-    const textSize = Math.round(s.entry.textSize * preset.textScale);
+    const textSize = Math.round(s.entry.textSize * preset.textScale * (ytLayout === "cover" ? COVER_TEXT_SCALE : 1));
     for (const l of tooLongLines(visible.map((i) => lines[i]), { main: s.main, hook: s.hook, textCase: s.entry.style.textCase, textSize, area })) {
       const n = numbers[lines.indexOf(l)] || lines.indexOf(l) + 1;
       warnings.push(`Line ${n} is too long for phone screens (${s.entry.style.name}); split it in ${path.basename(alignment.lyricsTxt)}: "${l.text}"`);
@@ -638,11 +652,18 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
         composed.props = {
           ...composed.props,
           ...youtubeExtras({
-            layout: ytLayout, preset, props: composed.props, brand: sh.brand.brand, logoFile: sh.brand.logoFile, ws, title: project.title, artist: project.artist,
+            layout: ytLayout, preset, props: composed.props, brand: sh.brand.brand, logo: sh.logo, ws, title: project.title, artist: project.artist,
             cover: coverSrc, coverBackground, stills: stillsPlan?.stills ?? null, beats: analysis.beats, startMs: chosen.start_ms,
             grain: options.grain ?? preset.youtube!.grain, glow: options.glow ?? preset.youtube!.glow,
+            sections: lyricSections(lines, analysis.duration_ms), seed: spec.seed,
           }),
           fonts: [...composed.props.fonts, ...fontFileRefs(resolveFace(sh.catalog, title.family, title.weight))],
+        };
+      } else if (sh.logo && preset.lyrics) {
+        // 9:16: the logo in the configured corner inside the platform's safe zone.
+        composed.props = {
+          ...composed.props,
+          logo: { ...placeLogo(ws, sh.logo, format, preset.safeZone, sh.brand.brand.logo.vertical, sh.brand.brand.logo.size), goneAt: null },
         };
       }
       if (preset.loopEnding && !loopsSeamlessly(composed.props.shots)) {
@@ -658,6 +679,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
     brand: { file: sh.brand.file, created: sh.brand.created },
     project: { title: project.title, created: sh.sp.created },
     bpm: analysis.bpm,
+    songMs: analysis.duration_ms,
     downbeatConfidence: analysis.downbeat_confidence,
     lyrics: {
       source: alignment.source,
@@ -790,6 +812,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
         sources: usesClips ? { ...sources, platform: preset.label } : null,
         frameCheck: options.frameCheck ?? true,
         stillPictures: ytLayout === "cover" || ytLayout === "stills",
+        songS: chosen.mode === "full" ? analysis.duration_ms / 1000 : null, // whole-song videos only (not --section)
         sectionCuts: chosen.cuts.map((c) => ({ ...c, line: numbers[c.line - 1] || c.line })),
       });
       result.qa = qa;
@@ -820,13 +843,13 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
             font: { family: titleFont.family, weight: titleFont.weight, letterSpacing: titleFont.letterSpacing ?? 0.18 },
             colour: sh.brand.brand.accentColour,
             fonts: fontFileRefs(resolveFace(sh.catalog, titleFont.family, titleFont.weight)),
-            logo: props.logo ? { ...props.logo, width: Math.round(sh.brand.brand.logo.size * 1280) } : null,
+            logo: props.logo ? { src: props.logo.src, position: sh.brand.brand.logo.youtube, width: Math.round(sh.brand.brand.logo.size * 1280) } : null,
           },
           media,
           outFile: result.thumbnailFile,
           log,
         });
-        const pack = publishText(ws.dir, { song: project.title, artist: project.artist, lyricsTxt: readFileSync(alignment.lyricsTxt, "utf8"), year: sh.now.getFullYear() });
+        const pack = publishText(ws.dir, { song: project.title, artist: project.artist, lyricsTxt: readFileSync(alignment.lyricsTxt, "utf8"), year: sh.now.getFullYear(), ep: options.ep });
         if (pack.created) log(`publishing template created: ${pack.template} (edit it to change publish.txt)`);
         result.publishFile = path.join(exportDir, one ? "publish.txt" : `${spec.name}.publish.txt`);
         writeFileSync(result.publishFile, pack.text);
@@ -888,6 +911,7 @@ async function checkVariation(
     frameCheck: boolean;
     stillPictures?: boolean; // cover / stills layouts: still by design, so no frozen-frame check
     sectionCuts: SectionCut[];
+    songS: number | null; // a full-song video: the song's length
   },
 ): Promise<QaReport> {
   const style = ctx.styles[spec.style];
@@ -915,6 +939,7 @@ async function checkVariation(
     sectionCuts: ctx.sectionCuts,
     endScreen: end ? { clear: end.clear, lines: lyrics.filter(inEnd).map((l) => l.number) } : null,
     frozenCheckSkipped: ctx.stillPictures,
+    length: ctx.frameCheck ? { actualS: (await probeMedia(file)).durationMs / 1000, songS: ctx.songS } : null,
   });
 }
 

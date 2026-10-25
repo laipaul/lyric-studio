@@ -17,8 +17,21 @@ import { kenBurns } from "../photo";
 import { lyricArea, type Format, type LyricArea, type PlatformPreset, type SafeZone } from "../platform";
 import { mulberry32 } from "../prng";
 import type { LyricVideoProps, StillProps } from "../props";
-import { COVER_LYRICS_LEFT } from "../youtube-layout";
-import { assignStills, endScreenLayout, lyricSections, parseStills, stillTimings, toSrt, visibleStills } from "../youtube";
+import { COVER_DRIFT, COVER_LYRICS_LEFT, COVER_NEXT_LINE_SCALE, COVER_TEXT_SCALE, coverSide, PARALLAX } from "../youtube-layout";
+import {
+  assignStills,
+  coverDrift,
+  endScreenLayout,
+  logoPlacement,
+  lyricSections,
+  moodSegments,
+  parseStills,
+  stillTimings,
+  toSrt,
+  visibleStills,
+  type Corner,
+  type LyricSection,
+} from "../youtube";
 import type { Brand } from "./brand";
 import { brandDir } from "./brand";
 import type { PreparedForFormat } from "./collection";
@@ -121,7 +134,7 @@ export function youtubeExtras(o: {
   preset: PlatformPreset;
   props: Omit<LyricVideoProps, "mediaBaseUrl">;
   brand: Brand;
-  logoFile: string | null;
+  logo: LogoImage | null;
   ws: Workspace;
   title: string;
   artist: string;
@@ -132,6 +145,8 @@ export function youtubeExtras(o: {
   startMs: number;
   grain: boolean;
   glow: boolean;
+  sections: readonly LyricSection[];
+  seed: number;
 }): Partial<LyricVideoProps> {
   const y = o.preset.youtube!;
   const format: Format = { width: o.preset.width, height: o.preset.height };
@@ -146,8 +161,18 @@ export function youtubeExtras(o: {
     layout: o.layout,
     cover:
       o.layout === "cover" && o.cover
-        ? { src: o.cover, zoomFrom: y.coverZoom[0], zoomTo: y.coverZoom[1], ...(o.coverBackground ? { backgroundSrc: o.coverBackground } : {}) }
+        ? {
+            src: o.cover,
+            zoomFrom: y.coverZoom[0],
+            zoomTo: y.coverZoom[1],
+            ...(o.coverBackground ? { backgroundSrc: o.coverBackground } : {}),
+            drift: coverDrift(mulberry32((o.seed * 7919 + 977) >>> 0), coverSide(format), COVER_DRIFT),
+            parallax: PARALLAX,
+          }
         : null,
+    // Cover layout: active line +18%, next line +10% (compared with Step 5g.2).
+    ...(o.layout === "cover" ? { textSize: Math.round(o.props.textSize * COVER_TEXT_SCALE), nextLineScale: COVER_NEXT_LINE_SCALE } : {}),
+    mood: moodSegments(o.sections, o.beats, fps, o.startMs),
     stills: o.layout === "stills" ? o.stills ?? [] : undefined,
     shots: o.layout === "clips" ? o.props.shots : [],
     cutFrames: o.layout === "clips" ? o.props.cutFrames : [],
@@ -163,13 +188,26 @@ export function youtubeExtras(o: {
       untilFrame: o.layout === "cover" ? o.props.durationInFrames + 1 : Math.round(y.titleSeconds * fps),
       size: o.layout === "cover" ? 40 : 64,
       position: "top",
+      // Cover layout: centred over the lyrics column.
+      ...(o.layout === "cover" ? { left: area.left, right: area.right } : {}),
     },
-    logo: o.logoFile ? { src: storedPath(o.ws, o.logoFile), position: o.brand.logo.position, width: Math.round(o.brand.logo.size * format.width) } : null,
+    // Logo in its YouTube corner (inside the safe zone), faded out before the end-screen window.
+    logo: o.logo ? { ...placeLogo(o.ws, o.logo, format, o.preset.safeZone, o.brand.logo.youtube, o.brand.logo.size), goneAt: endScreen?.fromFrame ?? null } : null,
     endScreen,
     nextLine: o.layout === "cover",
     grain: o.layout === "stills" && o.grain,
     glow: o.layout === "stills" && o.glow ? { colour: o.brand.accentColour, beatFrames } : null,
   };
+}
+
+export type LogoImage = { file: string; width: number; height: number }; // the PNG's own size
+
+// The logo's position and size on a frame: `share` of the width wide, in `corner` of the area inside
+// the safe zones.
+export function placeLogo(ws: Workspace, logo: LogoImage, format: Format, safe: SafeZone, corner: Corner | "auto", share: number) {
+  const width = Math.round(share * format.width);
+  const height = Math.round((width * logo.height) / logo.width);
+  return { src: storedPath(ws, logo.file), width, height, ...logoPlacement(format, safe, corner, { width, height }) };
 }
 
 // The thumbnail's picture: the cover; the chorus still; or a frame from the clip on screen when the
@@ -204,6 +242,7 @@ export const DEFAULT_PUBLISH_TEMPLATE = `== Title ==
 
 == Description ==
 {{song}} by {{artist}} - the official lyric video.
+{{epLine}}
 
 {{lyrics}}
 
@@ -220,8 +259,13 @@ Listen on Spotify: https://open.spotify.com/ (add the link to the song)
 `;
 
 // WORKSPACE_DIR\brand\publish-template.txt (created the first time) filled in for one song.
-// Placeholders: {{song}} {{artist}} {{lyrics}} {{songTag}} {{artistTag}} {{year}}.
-export function publishText(workspaceDir: string, values: { song: string; artist: string; lyricsTxt: string; year: number }): { text: string; template: string; created: boolean } {
+// Placeholders: {{song}} {{artist}} {{lyrics}} {{songTag}} {{artistTag}} {{year}} {{ep}} {{epLine}}.
+// {{epLine}} is 'From the EP "<name>"' with --ep, otherwise its line is left out. A template from
+// before --ep existed gets that line right after the first line of the description.
+export function publishText(
+  workspaceDir: string,
+  values: { song: string; artist: string; lyricsTxt: string; year: number; ep?: string },
+): { text: string; template: string; created: boolean } {
   const template = path.join(brandDir(workspaceDir), "publish-template.txt");
   let created = false;
   if (!existsSync(template)) {
@@ -244,8 +288,17 @@ export function publishText(workspaceDir: string, values: { song: string; artist
     songTag: tag(values.song),
     artistTag: tag(values.artist),
     year: String(values.year),
+    ep: values.ep ?? "",
+    epLine: values.ep ? `From the EP "${values.ep}"` : "",
   };
-  const text = readFileSync(template, "utf8").replace(/\{\{(\w+)\}\}/g, (m, k: string) => map[k] ?? m);
+  let content = readFileSync(template, "utf8").replace(/\r\n/g, "\n");
+  if (!content.includes("{{epLine}}") && values.ep) {
+    const m = /== Description ==\n+[^\n]*\n/.exec(content);
+    if (m) content = `${content.slice(0, m.index + m[0].length)}{{epLine}}\n${content.slice(m.index + m[0].length)}`;
+  }
+  // Without --ep the {{epLine}} line disappears completely (no empty line left behind).
+  if (!values.ep) content = content.replace(/^[ \t]*\{\{epLine\}\}[ \t]*\n/gm, "");
+  const text = content.replace(/\{\{(\w+)\}\}/g, (m, k: string) => map[k] ?? m);
   return { text, template, created };
 }
 

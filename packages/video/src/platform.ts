@@ -44,7 +44,7 @@ export const DEFAULT_YOUTUBE: YouTubeOptions = {
   endScreen: { seconds: 20, clear: { left: 0.5, top: 0.35 } },
   grain: true,
   glow: true,
-  coverZoom: [1, 1.05],
+  coverZoom: [1, 1.08],
   titleSeconds: 4,
 };
 

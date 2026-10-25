@@ -19,6 +19,7 @@ import {
   readManifest,
   latestExportFolder,
   qaSummaryFromFile,
+  publishText,
   resolveCover,
   renderLimit,
   rerender,
@@ -306,8 +307,9 @@ describe("pnpm make + pnpm rerender (real renders)", () => {
     expect(m.command).toBe("pnpm make test");
   });
 
-  it("QA reports the low-confidence line", () => {
+  it("QA reports the low-confidence line and checks the finished video's length", () => {
     const qa = readFileSync(result.variations[0].qaFile, "utf8");
+    expect(qa).toContain("[ok  ] Video length");
     expect(qa).toContain('line 3 "Through the night": confidence 0.31');
     expect(qa).toMatch(/Summary: WARN - .*Lyric timing confidence/);
     expect(result.variations[0].qa?.status).toBe("WARN");
@@ -503,6 +505,8 @@ describe("platform presets (stand-in renderer)", () => {
     ffmpeg("-f", "lavfi", "-i", "testsrc2=s=384x216:r=30:d=3", "-c:v", "libx264", "-pix_fmt", "yuv420p", path.join(dir, "04_wide.mp4"));
     ffmpeg("-f", "lavfi", "-i", "testsrc2=s=600x1000", "-frames:v", "1", path.join(dir, "05_portrait.jpg"));
     ffmpeg("-f", "lavfi", "-i", "testsrc2=s=1000x600", "-frames:v", "1", path.join(dir, "06_landscape.jpg"));
+    mkdirSync(path.join(wsDir, "brand"), { recursive: true });
+    ffmpeg("-f", "lavfi", "-i", "color=c=0xE8A3B5:s=300x120", "-frames:v", "1", path.join(wsDir, "brand", "logo.png"));
   });
 
   let all: MakeResult;
@@ -526,6 +530,13 @@ describe("platform presets (stand-in renderer)", () => {
         expect(length).toBeGreaterThanOrEqual(w.minMs);
         expect(length).toBeLessThanOrEqual(w.maxMs);
         expect(readFileSync(v.qaFile, "utf8")).toContain(preset.label);
+        // Logo in the bottom-right corner inside this platform's safe zone, never over the lyrics.
+        const lg = m.props.logo!;
+        expect(lg.left + lg.width).toBeLessThanOrEqual(1080 * (1 - preset.safeZone.right));
+        expect(lg.top + lg.height).toBeLessThanOrEqual(1920 * (1 - preset.safeZone.bottom));
+        expect(lg.left).toBeGreaterThan(540);
+        expect(lg.goneAt).toBeNull();
+        expect(readFileSync(v.qaFile, "utf8")).toContain("[ok  ] Logo clear of the lyrics");
       }
     }
     expect(plans.map((p) => p.platform.name)).toEqual(["reels", "tiktok", "shorts"]);
@@ -598,7 +609,7 @@ describe("platform presets (stand-in renderer)", () => {
     ffmpeg("-f", "lavfi", "-i", "color=c=0x7a2e4d:s=800x800", "-frames:v", "1", cover);
     const thumbs: string[] = [];
     const r = await run({
-      platforms: "youtube", cover, title: "Long Song",
+      platforms: "youtube", cover, title: "Long Song", ep: "In The Mood for Life",
       thumbnailRenderer: async (o) => {
         thumbs.push(o.props.background);
         writeFileSync(o.outFile, "jpg");
@@ -617,6 +628,15 @@ describe("platform presets (stand-in renderer)", () => {
     expect(m.props.titleOverlay).toMatchObject({ title: "Long Song", artist: "Life Lyrics", font: "Cinzel", colour: "#E8A3B5" });
     expect(m.props.endScreen?.fromFrame).toBe(m.props.durationInFrames - 600);
     expect(m.props.nextLine).toBe(true);
+    // 5g.2b: bigger lyrics, title centred over the lyrics column, drift + parallax, mood, logo.
+    expect(m.props.textSize).toBe(Math.round(64 * 1.18));
+    expect([m.props.titleOverlay?.left, m.props.titleOverlay?.right]).toEqual([m.props.lyricArea!.left, m.props.lyricArea!.right]);
+    expect(m.props.cover?.parallax).toBe(0.3);
+    expect(m.props.cover?.zoomTo).toBe(1.08);
+    expect(m.props.cover?.drift).toBeDefined();
+    expect(m.props.mood?.some((x) => x.kind === "hook")).toBe(true);
+    expect(m.props.logo!.left).toBeGreaterThan(960); // bottom right
+    expect(m.props.logo!.goneAt).toBe(m.props.endScreen!.fromFrame); // gone before the end screen
     expect(m.props.fonts.some((f) => f.family === "Cinzel")).toBe(true);
     expect(thumbs).toEqual([m.props.cover!.src]);
     const publish = readFileSync(path.join(yt.exportDir, "publish.txt"), "utf8");
@@ -624,13 +644,17 @@ describe("platform presets (stand-in renderer)", () => {
     expect(publish).toContain("Hold on to me\nThrough the night"); // the full lyrics, without "* "
     expect(publish).not.toContain("* Hold");
     expect(publish).toContain("#LifeLyrics #LongSong");
+    expect(publish).toContain('Long Song by Life Lyrics - the official lyric video.\nFrom the EP "In The Mood for Life"\n\nVerse 1 line one');
     expect(publish).toContain("== Tags ==");
     expect(existsSync(path.join(wsDir, "brand", "publish-template.txt"))).toBe(true);
     expect(readFileSync(path.join(yt.exportDir, "v1.qa.txt"), "utf8")).toContain("End-screen area clear");
 
-    // The next run finds the stored cover without --cover.
+    // The next run finds the stored cover without --cover; without --ep there is no EP line.
     const again = await run({ platforms: "youtube", thumbnailRenderer: async (o) => (writeFileSync(o.outFile, "jpg"), o.outFile) });
     expect(readManifest(again.variations[0].manifestFile).props.layout).toBe("cover");
+    const plain = readFileSync(again.variations[0].publishFile!, "utf8");
+    expect(plain).not.toContain("From the EP");
+    expect(plain).toContain("the official lyric video.\n\nVerse 1 line one");
   });
 
   it("--resume per platform renders only what is missing in each platform folder", async () => {
@@ -750,5 +774,17 @@ describe("YouTube cover lookup and layout fallback", () => {
     const clips = await makeVideos({ ...base, collection: "wide-only" });
     expect(readManifest(clips.variations[0].manifestFile).props.layout).toBe("clips");
     expect(readManifest(clips.variations[0].manifestFile).props.shots.length).toBeGreaterThan(0);
+  });
+});
+
+describe("publish.txt EP line with an older template", () => {
+  it("adds the EP line after the first description line when the template has no {{epLine}}", () => {
+    const dir = path.join(root, "old-template-ws");
+    mkdirSync(path.join(dir, "brand"), { recursive: true });
+    writeFileSync(path.join(dir, "brand", "publish-template.txt"), "== Title ==\n{{song}}\n\n== Description ==\nIntro for {{song}}.\n\n{{lyrics}}\n");
+    const withEp = publishText(dir, { song: "Hold On", artist: "Life Lyrics", lyricsTxt: "One\n* Two\n", year: 2026, ep: "In The Mood for Life" });
+    expect(withEp.text).toBe('== Title ==\nHold On\n\n== Description ==\nIntro for Hold On.\nFrom the EP "In The Mood for Life"\n\nOne\nTwo\n');
+    const without = publishText(dir, { song: "Hold On", artist: "Life Lyrics", lyricsTxt: "One\n", year: 2026 });
+    expect(without.text).toBe("== Title ==\nHold On\n\n== Description ==\nIntro for Hold On.\n\nOne\n");
   });
 });

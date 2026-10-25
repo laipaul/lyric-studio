@@ -276,6 +276,7 @@ changed since.
 | `--cover <image>` | stored cover | YouTube cover layout (stored with the project) |
 | `--layout cover\|stills\|clips` | `cover` | YouTube layout |
 | `--stills <file>`, `--no-grain`, `--no-glow` | | YouTube stills layout |
+| `--ep "EP name"` | | adds "From the EP …" to publish.txt |
 | `--parallel N` | `1` on Windows | videos rendered at the same time |
 | `--resume` | | in the latest export folder, render only the videos that are missing or failed (refused if the section, lyrics, cuts, settings or clips changed since) |
 | `--no-open` | | do not open the folder at the end |
@@ -321,9 +322,11 @@ pnpm make "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test\
 A 1920x1080 video of the whole song (from 0:00) in `exports\<date>\youtube\`, with:
 
 - **Layout** (`--layout cover|stills|clips`, default `cover`):
-  - **cover**: your square cover on the left with a very slow zoom and a soft shadow, the same cover
-    blurred and darkened behind it, the lyrics on the right (current line large, next line faded),
-    title and "Life Lyrics" small at the top, your logo. The cover comes from `--cover` (stored with
+  - **cover**: your square cover on the left with a very slow zoom (1.00 → 1.08), a gentle drift and a
+    soft shadow, the same cover blurred and darkened behind it (moving slightly the other way), the
+    lyrics on the right (current line large, next line faded), title and "Life Lyrics" small at the top
+    over the lyrics, your logo. Chorus sections get a slightly warmer, brighter background, verses a
+    softer one (smooth 2 s changes). The cover comes from `--cover` (stored with
     the project, so next time it is found by itself), else `cover.jpg` / `cover.png` next to the song.
     Without a cover it switches to stills, then clips, and says so.
   - **stills**: one horizontal photo per lyric section (intro, verse 1, chorus 1, …, found from the
@@ -338,6 +341,13 @@ A 1920x1080 video of the whole song (from 0:00) in `exports\<date>\youtube\`, wi
   Spotify link placeholder, hashtags, tags). Edit `workspace\brand\publish-template.txt` to change
   the wording; placeholders: `{{song}}`, `{{artist}}`, `{{lyrics}}`, `{{songTag}}`, `{{artistTag}}`, `{{year}}`.
 - `--title "My Song"` sets the song's title (saved with the project); otherwise it is the file name.
+- `--ep "In The Mood for Life"` adds `From the EP "In The Mood for Life"` to `publish.txt` (template
+  placeholder `{{epLine}}`; older templates get the line after the first description line).
+- **Logo**: bottom right on YouTube, fading out just before the last 20 s (end screen). On 9:16
+  videos it sits in a corner inside the platform's safe zone. Set the corners in
+  `workspace\brand\brand.json`: `"logo": { "youtube": "bottom-right", "vertical": "auto", "size": 0.08 }`
+  (`auto` = bottom right inside the safe zone; or `top-left`, `top-right`, `bottom-left`, `bottom-right`).
+  The old `"position"` setting is no longer used.
 
 Every video on every platform also gets a `.srt` caption file next to it (`v1.srt`, …).
 

@@ -16,8 +16,10 @@ import {
 import { useFonts } from "./fonts";
 import { activeLyricLine, applyTextCase, layoutLyric } from "./lyrics";
 import { kenBurnsAt } from "./photo";
-import { beatPulse, stillOpacity } from "./youtube";
+import { beatPulse, coverMotionAt, logoOpacity, moodAt, stillOpacity, type Rgba } from "./youtube";
 import { COVER_CENTRE_X, coverSide } from "./youtube-layout";
+
+const LOGO_FADE_FRAMES = 15; // 0.5 s
 import { cinematicBarHeight, DEFAULT_FORMAT, DEFAULT_LYRIC_AREA, DEFAULT_SAFE_ZONE, type Format, type LyricArea, type SafeZone } from "./platform";
 import { mediaUrl, type LyricLineProps, type LyricVideoProps, type ShotProps, type StyleProps } from "./props";
 
@@ -88,11 +90,12 @@ const textShadows: Record<string, string> = {
   shadow: "0 6px 0 rgba(0,0,0,0.35), 0 0 28px rgba(0,0,0,0.65)",
 };
 
-function LyricText({ line, style, font, textSize, colour, ready, area, glow, next }: {
+function LyricText({ line, style, font, textSize, colour, ready, area, glow, next, nextScale = 0.55 }: {
   line: LyricLineProps;
   area: LyricArea;
   glow?: string; // extra text-shadow (beat-pulsed glow)
   next?: string | null; // the next line, shown small and faded underneath
+  nextScale?: number;
   style: StyleProps;
   font: { family: string; weight: number };
   textSize: number;
@@ -166,7 +169,7 @@ function LyricText({ line, style, font, textSize, colour, ready, area, glow, nex
             right: 0,
             top: "100%",
             marginTop: layout.fontSize * 0.35,
-            fontSize: layout.fontSize * 0.55,
+            fontSize: layout.fontSize * nextScale,
             opacity: 0.45,
             whiteSpace: "nowrap",
             overflow: "hidden",
@@ -182,20 +185,23 @@ function LyricText({ line, style, font, textSize, colour, ready, area, glow, nex
 
 // Cover layout: the square cover in the left part with a very slow zoom and a soft shadow, over the
 // same cover blurred and darkened.
-function CoverLayout({ cover, mediaBaseUrl, format }: { cover: NonNullable<LyricVideoProps["cover"]>; mediaBaseUrl: string; format: Format }) {
+function CoverLayout({ cover, mediaBaseUrl, format, mood }: { cover: NonNullable<LyricVideoProps["cover"]>; mediaBaseUrl: string; format: Format; mood: Rgba | null }) {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
-  const zoom = cover.zoomFrom + ((cover.zoomTo - cover.zoomFrom) * frame) / Math.max(1, durationInFrames - 1);
+  const m = coverMotionAt(cover, frame / Math.max(1, durationInFrames - 1), cover.parallax ?? 0);
   const src = mediaUrl(mediaBaseUrl, cover.src);
   const side = coverSide(format);
+  // The background is drawn a little larger so its parallax movement never shows an edge.
+  const backgroundMove = `translate(${m.backgroundX.toFixed(2)}px, ${m.backgroundY.toFixed(2)}px) scale(1.06)`;
   return (
     <AbsoluteFill style={{ overflow: "hidden" }}>
       {cover.backgroundSrc ? (
         // Blurred and darkened once by FFmpeg: much faster than a CSS blur on every frame.
-        <Img src={mediaUrl(mediaBaseUrl, cover.backgroundSrc)} style={{ ...cover_, position: "absolute", inset: 0 }} />
+        <Img src={mediaUrl(mediaBaseUrl, cover.backgroundSrc)} style={{ ...cover_, position: "absolute", inset: 0, transform: backgroundMove }} />
       ) : (
         <Img src={src} style={{ ...cover_, position: "absolute", inset: 0, filter: "blur(48px) brightness(0.45)", transform: "scale(1.2)" }} />
       )}
+      {mood ? <MoodOverlay colour={mood} /> : null}
       <div
         data-cover
         style={{
@@ -207,13 +213,19 @@ function CoverLayout({ cover, mediaBaseUrl, format }: { cover: NonNullable<Lyric
           overflow: "hidden",
           borderRadius: 6,
           boxShadow: "0 30px 90px rgba(0,0,0,0.65), 0 8px 24px rgba(0,0,0,0.45)",
-          transform: `scale(${zoom.toFixed(5)})`,
+          transform: `translate(${m.x.toFixed(2)}px, ${m.y.toFixed(2)}px) scale(${m.zoom.toFixed(5)})`,
         }}
       >
         <Img src={src} style={cover_} />
       </div>
     </AbsoluteFill>
   );
+}
+
+// Section mood: a colour veil over the background (see moodAt: eased 2 s changes, never flashing).
+function MoodOverlay({ colour }: { colour: Rgba }) {
+  if (colour[3] <= 0.001) return null;
+  return <AbsoluteFill data-mood style={{ pointerEvents: "none", backgroundColor: `rgba(${colour.slice(0, 3).map((c) => Math.round(c)).join(",")},${colour[3].toFixed(4)})` }} />;
 }
 
 // Stills layout: one picture per lyric section, crossfaded, each with a slow Ken Burns move.
@@ -269,8 +281,8 @@ function TitleOverlay({ t, format }: { t: NonNullable<LyricVideoProps["titleOver
       data-title
       style={{
         position: "absolute",
-        left: 0,
-        right: 0,
+        left: t.left ?? 0,
+        right: t.right !== undefined ? format.width - t.right : 0,
         top: t.position === "top" ? Math.round(format.height * 0.07) : "50%",
         transform: t.position === "top" ? undefined : "translateY(-50%)",
         textAlign: "center",
@@ -288,14 +300,15 @@ function TitleOverlay({ t, format }: { t: NonNullable<LyricVideoProps["titleOver
   );
 }
 
-function Logo({ logo, mediaBaseUrl, format }: { logo: NonNullable<LyricVideoProps["logo"]>; mediaBaseUrl: string; format: Format }) {
-  const margin = Math.round(format.width * 0.03);
-  const [v, h] = logo.position.split("-") as ["top" | "bottom", "left" | "right"];
+function Logo({ logo, mediaBaseUrl }: { logo: NonNullable<LyricVideoProps["logo"]>; mediaBaseUrl: string }) {
+  const frame = useCurrentFrame();
+  const opacity = 0.9 * logoOpacity(frame, logo.goneAt, LOGO_FADE_FRAMES);
+  if (opacity <= 0) return null;
   return (
     <Img
       data-logo
       src={mediaUrl(mediaBaseUrl, logo.src)}
-      style={{ position: "absolute", width: logo.width, height: "auto", [v]: margin, [h]: margin, opacity: 0.9 }}
+      style={{ position: "absolute", left: logo.left, top: logo.top, width: logo.width, height: logo.height, opacity }}
     />
   );
 }
@@ -345,6 +358,8 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
   // reaches into that time is placed there from its start (it never jumps).
   const endScreen = props.endScreen;
   const area = line && endScreen && line.endFrame > endScreen.fromFrame ? endScreen.lyricArea : (props.lyricArea ?? DEFAULT_LYRIC_AREA);
+  const { fps } = useVideoConfig();
+  const mood = props.mood?.length ? moodAt(frame, props.mood, fps) : null;
   const next = props.nextLine && line ? lyrics.find((l) => l.startFrame > line.startFrame)?.text ?? null : null;
   const glow = props.glow
     ? (() => {
@@ -360,7 +375,7 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
-      {props.layout === "cover" && props.cover ? <CoverLayout cover={props.cover} mediaBaseUrl={mediaBaseUrl} format={format} /> : null}
+      {props.layout === "cover" && props.cover ? <CoverLayout cover={props.cover} mediaBaseUrl={mediaBaseUrl} format={format} mood={mood} /> : null}
       {props.layout === "stills" && props.stills ? <StillsLayout stills={props.stills} mediaBaseUrl={mediaBaseUrl} /> : null}
       {shots.map((shot) => (
         <Sequence key={shot.start} from={shot.start} durationInFrames={shot.duration} premountFor={30}>
@@ -386,6 +401,8 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
         />
       ) : null}
 
+      {mood && props.layout !== "cover" ? <MoodOverlay colour={mood} /> : null}
+
       {cinematicBars ? (
         <>
           <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: barHeight, background: "#000" }} />
@@ -395,15 +412,13 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
 
       {line ? (
         <Sequence key={line.startFrame} from={line.startFrame} durationInFrames={line.endFrame - line.startFrame} layout="none">
-          <LyricText line={line} style={style} font={font} textSize={textSize} colour={colour} ready={ready} area={area} glow={glow} next={next} />
+          <LyricText line={line} style={style} font={font} textSize={textSize} colour={colour} ready={ready} area={area} glow={glow} next={next} nextScale={props.nextLineScale} />
         </Sequence>
       ) : null}
 
       {props.grain ? <Grain /> : null}
       {props.titleOverlay ? <TitleOverlay t={props.titleOverlay} format={format} /> : null}
-      {props.logo && !(endScreen && frame >= endScreen.fromFrame && props.logo.position === "bottom-right") ? (
-        <Logo logo={props.logo} mediaBaseUrl={mediaBaseUrl} format={format} />
-      ) : null}
+      {props.logo ? <Logo logo={props.logo} mediaBaseUrl={mediaBaseUrl} /> : null}
 
       {props.showSafeGuides ? <SafeGuides format={format} safe={props.safeZone ?? DEFAULT_SAFE_ZONE} area={area} /> : null}
     </AbsoluteFill>

@@ -3,7 +3,7 @@
 //   [--rate 1x] [--energy medium] [--lead 0.25] [--lyrics-offset 0] [--downbeat-offset N]
 //   [--font "Family"] [--font-hook "Family"] [--pins pins.txt] [--parallel N] [--resume] [--no-open]
 //   [--platforms reels,tiktok,shorts,youtube | all] [--allow-fill] [--title "Song title"]
-//   [--cover cover.jpg] [--layout cover|stills|clips] [--stills stills.txt] [--no-grain] [--no-glow]
+//   [--cover cover.jpg] [--layout cover|stills|clips] [--stills stills.txt] [--no-grain] [--no-glow] [--ep "EP name"]
 // One command from a song to N finished variations with manifests and QA reports, per platform.
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -27,6 +27,7 @@ try {
       platforms: { type: "string" },
       "allow-fill": { type: "boolean", default: false },
       title: { type: "string" },
+      ep: { type: "string" },
       cover: { type: "string" },
       layout: { type: "string" },
       stills: { type: "string" },
@@ -111,6 +112,7 @@ try {
     platforms: values.platforms,
     allowFill: values["allow-fill"],
     title: values.title,
+    ep: values.ep,
     cover: resolve(values.cover),
     layout: values.layout as "cover" | "stills" | "clips" | undefined,
     stills: resolve(values.stills),
@@ -147,7 +149,7 @@ try {
       console.log("");
       if (p.platform.index === 0) {
         console.log(`Project:   ${p.project.title}${p.project.created ? " (new)" : ""}`);
-        console.log(`BPM:       ${p.bpm}   downbeat confidence ${p.downbeatConfidence.toFixed(2)}`);
+        console.log(`BPM:       ${p.bpm}   downbeat confidence ${p.downbeatConfidence.toFixed(2)}   song length ${clockText(p.songMs)}`);
         const how = { aligned: "aligned now", stored: "stored alignment", given: "given with --lrc" }[p.lyrics.source];
         console.log(`Lyrics:    ${p.lyrics.lines} lines (${p.lyrics.hooks} hook), ${how}: ${p.lyrics.file}`);
         if (p.lyricsOffsetMs) console.log(`           lyrics offset ${p.lyricsOffsetMs / 1000} s (project setting)`);

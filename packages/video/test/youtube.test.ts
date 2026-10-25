@@ -3,8 +3,22 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  COVER_CENTRE_X,
+  COVER_DRIFT,
+  COVER_HEIGHT_SHARE,
+  COVER_NEXT_LINE_SCALE,
+  COVER_TEXT_SCALE,
+  MOOD_COLOURS,
   assignStills,
   autoSection,
+  coverDrift,
+  coverMotionAt,
+  coverSide,
+  logoOpacity,
+  logoPlacement,
+  moodAt,
+  moodSegments,
+  mulberry32,
   beatPulse,
   endScreenLayout,
   lyricArea,
@@ -29,7 +43,7 @@ const line = (text: string, start: number, end: number, isHook = false) => ({ te
 describe("YouTube preset", () => {
   it("is available: 1920x1080, full song, 1 video, cover layout by default, end screen 20 s bottom right", () => {
     expect(yt).toMatchObject({ width: 1920, height: 1080, available: true, variations: 1, length: { mode: "full" } });
-    expect(yt.youtube).toMatchObject({ defaultLayout: "cover", endScreen: { seconds: 20, clear: { left: 0.5, top: 0.35 } }, grain: true, glow: true, coverZoom: [1, 1.05], titleSeconds: 4 });
+    expect(yt.youtube).toMatchObject({ defaultLayout: "cover", endScreen: { seconds: 20, clear: { left: 0.5, top: 0.35 } }, grain: true, glow: true, coverZoom: [1, 1.08], titleSeconds: 4 });
   });
   it("names wrong YouTube settings", () => {
     const bad = { platforms: { standard: { ...presets.standard, length: { mode: "range", min: 45, max: 60, hardMax: 65 } }, youtube: { ...yt, youtube: { defaultLayout: "slides", coverZoom: [1, 2] } } } };
@@ -195,5 +209,80 @@ describe("short-form ends on beats (TikTok, Shorts)", () => {
     const s = run("tiktok", song([28_500, 30_000])); // the gap around 30 s holds a bar
     expect(s.end_ms).toBe(30_000);
     expect(s.reason).toContain("the first bar after");
+  });
+});
+
+describe("5g.2b polish: cover sizes, motion, mood, logo, EP line", () => {
+  it("cover layout sizes: active lyric +18%, next line +10%, cover +12%", () => {
+    expect(COVER_TEXT_SCALE).toBeCloseTo(1.18, 5);
+    expect(COVER_TEXT_SCALE * COVER_NEXT_LINE_SCALE).toBeCloseTo(0.55 * 1.1, 5); // next line, in px, +10%
+    expect(COVER_HEIGHT_SHARE / 0.6).toBeCloseTo(1.12, 5);
+    // The cover at its largest (zoom 1.08 + drift) stays clear of the lyrics column.
+    const side = coverSide(yt);
+    const right = 1920 * COVER_CENTRE_X + (side / 2) * 1.08 + side * COVER_DRIFT;
+    expect(right).toBeLessThan(lyricArea(yt, youtubeLyricSafeZone("cover", yt.safeZone), yt.lyricsAt).left);
+    expect(1920 * COVER_CENTRE_X - (side / 2) * 1.08 - side * COVER_DRIFT).toBeGreaterThan(0);
+  });
+
+  it("cover motion: zoom 1.00 -> 1.08 with a gentle drift; the background moves 30% the opposite way", () => {
+    const drift = coverDrift(mulberry32(3), 726, COVER_DRIFT);
+    expect(Math.max(Math.abs(drift.toX), Math.abs(drift.toY))).toBeLessThanOrEqual(726 * COVER_DRIFT);
+    const cover = { zoomFrom: 1, zoomTo: 1.08, drift };
+    expect(coverMotionAt(cover, 0, 0.3).zoom).toBe(1);
+    expect(coverMotionAt(cover, 1, 0.3).zoom).toBeCloseTo(1.08, 10);
+    for (const t of [0, 0.3, 0.7, 1]) {
+      const m = coverMotionAt(cover, t, 0.3);
+      expect(m.backgroundX).toBeCloseTo(-0.3 * m.x, 10);
+      expect(m.backgroundY).toBeCloseTo(-0.3 * m.y, 10);
+    }
+    expect(presets.youtube.youtube?.coverZoom).toEqual([1, 1.08]);
+  });
+
+  it("section mood: warm on hooks, soft on verses, neutral on intro/outro; 2 s eased changes, never flashing", () => {
+    const lines = [line("Verse a", 5000, 9000), line("Hook", 10_000, 14_000, true), line("Verse b", 15_000, 19_000), line("Hook", 20_000, 24_000, true)];
+    const beats = grid(120, 80, 0);
+    const segs = moodSegments(lyricSections(lines, 30_000), beats, 30, 0);
+    expect(segs.map((x) => x.kind)).toEqual(["neutral", "verse", "hook", "verse", "hook", "neutral"]);
+    expect(moodAt(30 * 12, segs, 30)).toEqual(MOOD_COLOURS.hook); // well inside the first chorus
+    expect(moodAt(30 * 7, segs, 30)).toEqual(MOOD_COLOURS.verse);
+    // Hook colour is lighter/warmer than the verse veil.
+    expect(MOOD_COLOURS.hook[0]).toBeGreaterThan(MOOD_COLOURS.verse[0]);
+    // Never flashing: from frame to frame the veil changes by at most a tiny step.
+    let worst = 0;
+    for (let f = 0; f < 900; f++) {
+      const a = moodAt(f, segs, 30);
+      const b = moodAt(f + 1, segs, 30);
+      const lum = (c: number[]) => (c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11) * c[3];
+      worst = Math.max(worst, Math.abs(lum(a) - lum(b)), Math.abs(a[3] - b[3]));
+    }
+    expect(worst).toBeLessThan(1.5); // < 1.5 of 255 brightness per frame (a full change takes ~2 s)
+    const change = segs[2].startFrame; // the chorus starts: halfway through a 60-frame blend there
+    expect(moodAt(change - 31, segs, 30)).toEqual(MOOD_COLOURS.verse);
+    expect(moodAt(change + 30, segs, 30)).toEqual(MOOD_COLOURS.hook);
+  });
+
+  it("logo: bottom right on YouTube, faded out (0.5 s) before the end-screen window", () => {
+    const pos = logoPlacement(yt, yt.safeZone, "bottom-right", { width: 154, height: 62 });
+    expect(pos.left + 154).toBeLessThanOrEqual(1920 * (1 - yt.safeZone.right));
+    expect(pos.left).toBeGreaterThan(1920 / 2);
+    expect(pos.top + 62).toBeLessThanOrEqual(1080 * (1 - yt.safeZone.bottom));
+    expect(logoOpacity(1000, 1200, 15)).toBe(1);
+    expect(logoOpacity(1192, 1200, 15)).toBeCloseTo(8 / 15, 5);
+    expect(logoOpacity(1200, 1200, 15)).toBe(0);
+    expect(logoOpacity(5000, null, 15)).toBe(1);
+  });
+
+  it("logo on 9:16: the configured corner inside each platform's safe zone (auto = bottom right)", () => {
+    for (const name of ["standard", "reels", "tiktok", "shorts"]) {
+      const p = presets[name];
+      for (const corner of ["auto", "top-left", "bottom-right"] as const) {
+        const { left, top } = logoPlacement(p, p.safeZone, corner, { width: 86, height: 35 });
+        expect(left).toBeGreaterThanOrEqual(p.width * p.safeZone.left);
+        expect(left + 86).toBeLessThanOrEqual(p.width * (1 - p.safeZone.right));
+        expect(top).toBeGreaterThanOrEqual(p.height * p.safeZone.top);
+        expect(top + 35).toBeLessThanOrEqual(p.height * (1 - p.safeZone.bottom));
+      }
+      expect(logoPlacement(p, p.safeZone, "auto", { width: 86, height: 35 })).toEqual(logoPlacement(p, p.safeZone, "bottom-right", { width: 86, height: 35 }));
+    }
   });
 });

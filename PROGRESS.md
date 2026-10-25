@@ -315,7 +315,7 @@ Cause: a line was treated as sung until the next line started (and the next line
 - The regression case is a reconstruction (the cloud session cannot read the user's files); a
   fixture from the real aligned LRC and beat analysis can replace it.
 
-### Step 5g.2 — YouTube (16:9) ✅ (to verify on the Windows PC)
+### Step 5g.2 — YouTube (16:9) ✅ (verified on the Windows PC: "looks professional")
 - `youtube` preset available: 1920x1080, the whole song from 0:00 (not snapped to a bar, so the
   intro is kept), 1 video, horizontal sources, 16 Mbit/s, 1.5 s fade-out. Settings in
   presets/platforms.json ("youtube": defaultLayout, endScreen seconds + clear area, grain, glow,
@@ -351,6 +351,31 @@ Cause: a line was treated as sung until the next line started (and the next line
   order, stills and clips fallbacks, .srt everywhere).
 - Cloud check: 100 s cover-layout video rendered and checked frame by frame (cover, lyrics right,
   next line, hook font, end-screen band, logo, thumbnail).
+
+### Step 5g.2b — YouTube polish ✅ (to verify on the Windows PC)
+1. Length (3:30 vs 4:01 reported): could not be reproduced. The full-song section ends at the song's
+   measured length (librosa, from the audio samples) and the cut plan keeps that end; a 100 s test
+   song gives exactly 100.0 s. Added: the song length in the plan ("song length m:ss") and a QA
+   check "Video length" (the finished file vs. the expected length, and a whole-song video vs. the
+   song) so a short video can never pass silently.
+2. Cover layout: active lyric 1.18x, next line 1.1x (in px), cover 0.672 of the height (+12%, centre
+   at 23.5% of the width), lyrics from 44% of the width, title block centred over the lyrics column.
+3. Motion: zoom 1.00 -> 1.08 (preset coverZoom), a seeded drift of up to 1.8% of the cover's side,
+   the background moving 30% of that the opposite way (parallax; drawn 6% larger so no edge shows).
+4. Section mood (all YouTube layouts): warm light veil on chorus sections, soft dark veil on verses
+   and the bridge, none on intro/outro; 2 s smoothstep blends centred on the downbeat nearest each
+   section start (at most ~1 brightness step per frame: never flashing).
+5. Logo: brand.json logo.youtube (default bottom-right) and logo.vertical ("auto" = bottom right
+   inside the platform's safe zone, or a corner); its height from the PNG's own size. YouTube: fades
+   out over 0.5 s so it is gone when the last-20-s end-screen window starts. 9:16 videos now show the
+   logo too; QA "Logo clear of the lyrics".
+6. publish.txt: --ep "<name>" adds 'From the EP "<name>"' ({{epLine}}; older templates get it after
+   the first description line; without --ep the line disappears).
+- Tests: cover sizes and clearance, motion and parallax, mood (kinds, eased blend, per-frame limit),
+  logo corners inside every platform's safe zone, logo fade, EP line (new and old templates), make
+  runs (props, publish.txt, logo on 9:16 and YouTube, QA checks), a real render (drift vs. opposite
+  parallax, hook veil brighter and warmer than verse, logo gone at its frame).
+- Cloud check: full 100 s cover video, QA PASS (length, logo, end screen), rendered in 146 s.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
