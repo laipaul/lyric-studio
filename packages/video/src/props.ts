@@ -18,6 +18,10 @@ export type ShotProps = {
   kind?: "video" | "photo"; // photo: a still image with a slow Ken Burns move (`motion`)
   motion?: KenBurns;
   fit?: "cover" | "fill"; // fill: whole picture shown over a blurred, enlarged copy (--allow-fill)
+  // Seamless loop (Spotify Canvas): over the last `frames` frames the same clip, from `fromClipFrame`
+  // (the frames right before clipStartFrame), fades in on top, so the last frame flows into the first.
+  loopBlend?: { frames: number; fromClipFrame: number };
+  motionLoop?: boolean; // photo: the Ken Burns move goes out and comes back (first frame = last frame)
 };
 
 export type LyricLineProps = {

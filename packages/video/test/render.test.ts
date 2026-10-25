@@ -29,6 +29,7 @@ import {
   layoutWithFace,
   loadFontCatalog,
   loadPresets,
+  loopCheck,
   renderLyricVideo,
   renderThumbnail,
   youtubeLyricSafeZone,
@@ -140,6 +141,7 @@ beforeAll(async () => {
   mkdirSync(dir, { recursive: true });
   for (const c of ["red", "blue", "lime", "yellow"]) solidClip(`${c}.mp4`, [[c, 3]]);
   solidClip("red-then-lime.mp4", [["red", 1], ["lime", 2]]); // switches colour at exactly 1.0 s (frame 30)
+  ffmpeg("-f", "lavfi", "-i", "testsrc2=s=108x192:r=30:d=6", "-c:v", "libx264", "-g", "1", "-pix_fmt", "yuv420p", path.join(dir, "moving.mp4"));
   solidClip("yellow-then-cyan.mp4", [["yellow", 0.5], ["cyan", 0.5]]); // 1 s, ends cyan
   ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=4:sample_rate=48000", "-ac", "2", path.join(dir, "tone.wav"));
   server = await startMediaServer({ workspaceDir: dir, fontDirs: bundledFontDirs() });
@@ -385,6 +387,25 @@ describe("LyricVideo render", () => {
     });
     const probe = JSON.parse(execFileSync(ffprobeBin(), ["-v", "error", "-print_format", "json", "-show_streams", out]).toString());
     expect([probe.streams[0].width, probe.streams[0].height]).toEqual([540, 960]);
+  }, 300_000);
+
+  it("Spotify Canvas: the loop's last frame blends into its first, with no audio stream", async () => {
+    // 3 s loop from 1.5 s into a moving clip; the last 0.5 s fades in the 0.5 s before the start.
+    const loop = (blend: boolean) =>
+      baseProps({
+        durationInFrames: 90,
+        shots: [shot({ src: "moving.mp4", start: 0, duration: 90, clipStartFrame: 45, clipDurationFrames: 180, ...(blend ? { loopBlend: { frames: 15, fromClipFrame: 30 } } : {}) })],
+      });
+    const blended = path.join(dir, "canvas.mp4");
+    const plain = path.join(dir, "canvas-plain.mp4");
+    await renderLyricVideo({ props: loop(true), media: { workspaceDir: dir }, outFile: blended });
+    await renderLyricVideo({ props: loop(false), media: { workspaceDir: dir }, outFile: plain });
+    const a = await loopCheck(blended);
+    const b = await loopCheck(plain);
+    expect(a.hasAudio).toBe(false);
+    expect(a.seconds).toBeCloseTo(3, 1);
+    expect(a.lastToFirst).toBeLessThanOrEqual(Math.max(6, 2.5 * a.typicalStep)); // the QA "Seamless loop" limit
+    expect(b.lastToFirst).toBeGreaterThan(a.lastToFirst * 3); // without the blend the jump is obvious
   }, 300_000);
 
   // ---- YouTube (16:9) ------------------------------------------------------------------------

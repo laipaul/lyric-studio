@@ -44,7 +44,7 @@ describe("presets file", () => {
     expect(presets.tiktok).toMatchObject({ variations: 3, length: { seconds: 25 }, safeZone: { top: 0.1, bottom: 0.3, right: 0.15 } });
     expect(presets.shorts).toMatchObject({ variations: 2, length: { seconds: 50 }, safeZone: { top: 0.12, bottom: 0.25, right: 0.15 } });
     expect(presets.youtube).toMatchObject({ width: 1920, height: 1080, aspect: "16:9", available: true });
-    expect(presets.canvas).toMatchObject({ lyrics: false, audio: false, available: false });
+    expect(presets.canvas).toMatchObject({ width: 1080, height: 1920, lyrics: false, audio: false, available: true });
     expect(presets.tiktok.anchor).toBe("hook-first");
     expect(presets.shorts.anchor).toBe("hook-first");
     expect(sectionWindow(presets.reels)).toEqual({ minMs: 25_500, maxMs: 34_500, hardMaxMs: 39_000, shortestMs: 22_500, targetMs: 30_000 });
@@ -87,9 +87,11 @@ describe("presets file", () => {
   it("--platforms: names, all, unknown and not-yet-available platforms", () => {
     expect(choosePlatforms(undefined, presets)).toEqual({ names: ["standard"], skipped: [] });
     expect(choosePlatforms("reels, tiktok", presets).names).toEqual(["reels", "tiktok"]);
-    expect(choosePlatforms("all", presets)).toEqual({ names: ["reels", "tiktok", "shorts", "youtube"], skipped: ["canvas"] });
+    expect(choosePlatforms("all", presets)).toEqual({ names: ["reels", "tiktok", "shorts", "youtube", "canvas"], skipped: [] });
     expect(() => choosePlatforms("reels,instagram", presets)).toThrow(/Unknown platform\(s\): instagram/);
-    expect(() => choosePlatforms("canvas", presets)).toThrow(/canvas: comes in Step 5g.3/);
+    const later = { ...presets, canvas: { ...presets.canvas, available: false, note: "comes later" } };
+    expect(choosePlatforms("all", later)).toEqual({ names: ["reels", "tiktok", "shorts", "youtube"], skipped: ["canvas"] });
+    expect(() => choosePlatforms("canvas", later)).toThrow(/canvas: comes later/);
   });
 });
 

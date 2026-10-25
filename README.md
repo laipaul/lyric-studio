@@ -298,14 +298,14 @@ run's folder (`exports\<date>\reels\v1.mp4 …`) with its own manifests and QA, 
 | reels | 1080x1920 | ~30 s, hook-first | 3 | ends on a bar with a 0.12 s fade; the last shot leads into the first (seamless loop) |
 | tiktok | 1080x1920 | ~25 s, hook-first | 3 | taller caption area at the bottom |
 | shorts | 1080x1920 | ~50 s, hook-first | 2 | |
+| youtube | 1920x1080 | the whole song | 1 | cover / stills / clips layouts, end-screen area, thumbnail, publish.txt (see below) |
+| canvas | 1080x1920 | 3-8 s loop, whole bars | 1 | Spotify Canvas: no lyrics, no text, no logo, no audio (see below) |
 
 Hook-first: the video starts at most one bar before the first hook line, so the hook is heard
 within about 2.5 s. It ends on a bar (TikTok and Shorts: on any beat if no bar fits) after a line's
 last word has ended and before the next line starts (never mid-word), within ±15% of the target; if that is impossible, a clean end up to 25%
 shorter is chosen before a longer one, and the reason line says so. A video that does cut a sung
 line gets QA WARN with the line named.
-| youtube | 1920x1080 | the whole song | 1 | cover / stills / clips layouts, end-screen area, thumbnail, publish.txt (see below) |
-| canvas | | | | comes in Step 5g.3 |
 
 Everything above is in `presets\platforms.json` and can be edited (size, length, number of videos,
 safe zones, where the lyrics sit, text scale, bitrate, fade-out). `pnpm make` checks the file and
@@ -360,6 +360,27 @@ many are needed. Photos get a slow zoom and pan (Ken Burns) over exactly their s
 Cormorant Garamond for verses, Kaushan Script for hook lines —, the accent colour (#E8A3B5), and the
 logo (`workspace\brand\logo.png`) position and size. The lyrics use the brand fonts; `--font` /
 `--font-hook` still override them, and `"useForLyrics": false` goes back to the Simple/Bold fonts.
+
+### Spotify Canvas (`--platforms canvas`)
+
+```powershell
+cd D:\videomaker
+pnpm make "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test\lyrics.txt" --collection beach --platforms canvas
+```
+
+One silent 1080x1920 loop in `exports\<date>\canvas\` (`v1.mp4`, manifest, QA; no .srt):
+
+- **Length**: the longest whole number of bars that fits in 3-8 s at the song's tempo (120 BPM:
+  4 bars = 8.00 s; 107 BPM: 3 bars = 6.75 s). Very slow songs: whole beats.
+- **Strongest moment**: every vertical clip is scored with FFmpeg (motion, colour, contrast, 10
+  samples a second); the best window without a hard scene change inside wins. `--variations 3` gives
+  the best moment of 3 different clips.
+- **Seamless**: the last 0.5 s fades in the 0.5 s of the clip just before the loop's start, so the
+  last frame flows straight into the first. With photos only (or clips too short), a photo moves out
+  and back so it ends where it started (with a warning).
+- **QA**: "Seamless loop" (the jump from the last frame to the first is no bigger than an ordinary
+  frame step), "No audio", "Length 3-8 s".
+- Upload it in Spotify for Artists (Canvas). Spotify shows its own song info over it.
 
 ## Test render (`pnpm render:test`)
 

@@ -42,6 +42,17 @@ describe("QA checks", () => {
     expect(formatQa(report, "song - v1")).toContain("Summary: PASS");
   });
 
+  it("Spotify Canvas: seamless loop, no audio and 3-8 s, each failing with a clear reason", () => {
+    const canvas = { lastToFirst: 2, typicalStep: 3, hasAudio: false, seconds: 8, min: 3, max: 8 };
+    const good = runQa(input({ lyrics: [], canvas }));
+    for (const name of ["Seamless loop", "No audio", "Length 3-8 s"]) expect(check(good, name).ok).toBe(true);
+    const bad = runQa(input({ lyrics: [], canvas: { ...canvas, lastToFirst: 40, hasAudio: true, seconds: 9.2 } }));
+    expect(bad.status).not.toBe("PASS");
+    expect(check(bad, "Seamless loop").details[0]).toContain("the jump from the last frame to the first is 40.0");
+    expect(check(bad, "No audio").details[0]).toContain("audio track");
+    expect(check(bad, "Length 3-8 s").details[0]).toBe("the loop is 9.20 s");
+  });
+
   it("flags lyric lines below 0.5 confidence", () => {
     const report = runQa(input({ lyrics: [{ number: 7, text: "Low one", confidence: 0.42, lines: 1, box: goodBox }] }));
     expect(report.status).toBe("WARN");

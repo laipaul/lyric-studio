@@ -657,6 +657,46 @@ describe("platform presets (stand-in renderer)", () => {
     expect(plain).toContain("the official lyric video.\n\nVerse 1 line one");
   });
 
+  it("canvas: a seamless loop of whole bars, no lyrics, no text, no logo, no audio, no .srt", async () => {
+    const dir = path.join(wsDir, "clips", "canvas");
+    mkdirSync(dir, { recursive: true });
+    ffmpeg("-f", "lavfi", "-i", "testsrc2=s=216x384:r=30:d=12", "-c:v", "libx264", "-pix_fmt", "yuv420p", path.join(dir, "01_long.mp4"));
+    makeClip(path.join(dir, "02_short.mp4"), 4, "red"); // too short for an 8 s loop
+    const r = await run({ platforms: "canvas", collection: "canvas", variations: 2 });
+    const c = r.platforms[0];
+    expect([c.name, c.error]).toEqual(["canvas", null]);
+    expect(c.exportDir).toBe(path.join(r.exportDir, "canvas"));
+    expect(readdirSync(c.exportDir).sort()).toEqual(["v1.manifest.json", "v1.mp4", "v1.qa.txt"]); // one usable clip: one loop, no .srt
+    const m = readManifest(c.variations[0].manifestFile);
+    expect(m.props.format).toEqual({ width: 1080, height: 1920 });
+    expect(m.props.durationInFrames).toBe(240); // 4 bars at 120 BPM = 8.00 s
+    expect([m.section.start_ms, m.section.end_ms]).toEqual([0, 8000]);
+    expect(m.props.audio).toBeNull();
+    expect(m.props.lyrics).toEqual([]);
+    expect(m.props.titleOverlay).toBeUndefined();
+    expect(m.props.logo).toBeUndefined();
+    expect(m.props.cutFrames).toEqual([]);
+    expect(m.props.shots).toHaveLength(1);
+    const loop = m.props.shots[0];
+    expect(m.clips.map((x) => x.file)).toEqual([expect.stringContaining("01_long.mp4")]);
+    expect(loop.duration).toBe(240);
+    expect(loop.loopBlend).toEqual({ frames: 15, fromClipFrame: loop.clipStartFrame - 15 }); // the 0.5 s before the start
+    expect(loop.clipStartFrame + 240).toBeLessThanOrEqual(loop.clipDurationFrames);
+    expect(m.section.reason).toMatch(/a seamless loop of 4 bars \(8\.00 s\) at 120 BPM; strongest moment: 01_long\.mp4 from/);
+    expect(r.warnings.join("\n")).toContain("canvas: only 1 clip(s) give a loop, so 1 variation(s) instead of 2");
+    expect(r.warnings.join("\n")).not.toContain("canvas: canvas:");
+
+    // Clips too short: a photo moving out and back instead; nothing usable: a clear error.
+    const photo = await run({ platforms: "canvas", variations: 1 }); // "mixed": 6 s clips and a portrait photo
+    const pm = readManifest(photo.variations[0].manifestFile);
+    expect(pm.props.shots[0]).toMatchObject({ kind: "photo", motionLoop: true, duration: 240 });
+    expect(photo.warnings.join("\n")).toContain("canvas: no vertical clip is long enough for 4 bars (8.00 s); looping photo(s) instead");
+    const none = path.join(wsDir, "clips", "canvas-short");
+    mkdirSync(none, { recursive: true });
+    makeClip(path.join(none, "a.mp4"), 3, "blue");
+    await expect(run({ platforms: "canvas", collection: "canvas-short" })).rejects.toThrow(/needs a vertical clip of at least 8\.5 s \(the longest is 3\.0 s\) or a vertical photo/);
+  });
+
   it("--resume per platform renders only what is missing in each platform folder", async () => {
     const tiktok = all.platforms.find((p) => p.name === "tiktok")!;
     rmSync(path.join(tiktok.exportDir, "v2.qa.txt"));

@@ -16,6 +16,7 @@ import {
 import { useFonts } from "./fonts";
 import { activeLyricLine, applyTextCase, layoutLyric } from "./lyrics";
 import { kenBurnsAt } from "./photo";
+import { loopBlendOpacity, photoLoopProgress } from "./canvas";
 import { beatPulse, coverMotionAt, logoOpacity, moodAt, stillOpacity, type Rgba } from "./youtube";
 import { COVER_CENTRE_X, coverSide } from "./youtube-layout";
 
@@ -45,7 +46,9 @@ function ClipVideo({ src, shot }: { src: string; shot: ShotProps }) {
 // A photo: cover-cropped, with its Ken Burns move spread over exactly the shot.
 function PhotoShot({ src, shot }: { src: string; shot: ShotProps }) {
   const frame = useCurrentFrame();
-  const t = shot.duration > 1 ? frame / (shot.duration - 1) : 0;
+  const progress = shot.duration > 1 ? frame / (shot.duration - 1) : 0;
+  // A looping photo moves out and back, so its last frame matches its first.
+  const t = shot.motionLoop ? photoLoopProgress(progress) : progress;
   const m = shot.motion ? kenBurnsAt(shot.motion, t) : { zoom: 1, x: 0, y: 0 };
   const transform = `translate(${(m.x * 100).toFixed(4)}%, ${(m.y * 100).toFixed(4)}%) scale(${m.zoom.toFixed(5)})`;
   if (shot.fit === "fill") {
@@ -67,6 +70,7 @@ function PhotoShot({ src, shot }: { src: string; shot: ShotProps }) {
 function Shot({ shot, mediaBaseUrl }: { shot: ShotProps; mediaBaseUrl: string }) {
   const src = mediaUrl(mediaBaseUrl, shot.src);
   if (shot.kind === "photo") return <PhotoShot src={src} shot={shot} />;
+  if (shot.loopBlend) return <LoopingClip src={src} shot={shot} blend={shot.loopBlend} />;
   if (!shot.holdLastFrame) return <ClipVideo src={src} shot={shot} />;
 
   // Last shot frame that still shows a real clip frame at this rate.
@@ -80,6 +84,24 @@ function Shot({ shot, mediaBaseUrl }: { shot: ShotProps; mediaBaseUrl: string })
         <Freeze frame={lastPlayable}>
           <ClipVideo src={src} shot={shot} />
         </Freeze>
+      </Sequence>
+    </>
+  );
+}
+
+// Seamless loop: the clip plays from clipStartFrame; over the last `blend.frames` frames the frames
+// right before clipStartFrame fade in on top, so the final frame leads straight into the first one.
+function LoopingClip({ src, shot, blend }: { src: string; shot: ShotProps; blend: NonNullable<ShotProps["loopBlend"]> }) {
+  const frame = useCurrentFrame();
+  const from = shot.duration - blend.frames;
+  const opacity = loopBlendOpacity(frame, shot.duration, blend.frames);
+  return (
+    <>
+      <ClipVideo src={src} shot={shot} />
+      <Sequence from={from} durationInFrames={blend.frames} layout="none">
+        <AbsoluteFill style={{ opacity }}>
+          <ClipVideo src={src} shot={{ ...shot, clipStartFrame: blend.fromClipFrame, loopBlend: undefined }} />
+        </AbsoluteFill>
       </Sequence>
     </>
   );

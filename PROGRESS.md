@@ -248,7 +248,7 @@
 
 ### Step 5g.1 — Platform presets: Reels, TikTok, Shorts ✅ (tested on the Windows PC: 8 videos, 450 s, all PASS, 6/6 clips vertical-usable, song.lrc exported; timing issues fixed in 5g.1b)
 - `presets/platforms.json` (editable, checked at start; every mistake named with platform and field):
-  standard (today's behaviour), reels, tiktok, shorts; youtube and canvas are listed but marked
+  standard (today's behaviour), reels, tiktok, shorts; youtube and canvas were listed but marked
   "comes in Step 5g.2 / 5g.3". Per platform: size, aspect, length (target +-tolerance / range / full /
   loop), anchor (lead-in or centre), variations, safe zones (top/bottom/left/right), lyricsAt, text
   scale, video bitrate, fade-out, loop ending, lyrics/audio switches.
@@ -377,6 +377,23 @@ Cause: a line was treated as sung until the next line started (and the next line
   parallax, hook veil brighter and warmer than verse, logo gone at its frame).
 - Cloud check: full 100 s cover video, QA PASS (length, logo, end screen), rendered in 146 s.
 
+### Step 5g.3 — Spotify Canvas ✅ (to verify on the Windows PC)
+- `pnpm make ... --platforms canvas` (also in `--platforms all`): one silent 1080x1920 loop in
+  `exports\<date>\canvas\` with manifest and QA, no .srt, no lyrics, no title, no logo.
+- Length: the longest whole number of bars in 3-8 s at the song's BPM (120 BPM = 4 bars, 8.00 s;
+  106.63 BPM = 3 bars, 6.75 s); at very slow tempos whole beats.
+- Strongest moment: FFmpeg signalstats per vertical clip (10 samples/s): motion 50%, colour 25%,
+  contrast 25%; a window with a hard scene change inside is penalised; one window per clip, best
+  first (`--variations N` = N different clips).
+- Seamless: the last 0.5 s fades in the 0.5 s of the clip just before the loop start, so the last
+  frame is the one right before the first. Clips too short: a photo moving out and back (warning);
+  nothing usable: a clear error with the length needed.
+- QA: "Seamless loop" (last-to-first jump vs. an ordinary frame step), "No audio", "Length 3-8 s".
+- Tests: loop length (bars, odd tempos, slow tempos), blend opacity (full on the last frame), photo
+  loop, strongest window and scene-change penalty, signalstats parsing, QA checks, make wiring (props,
+  folder, warnings, photo fallback, error), a real render (no audio stream; the blended loop's jump
+  is within the QA limit, the unblended one is several times larger).
+
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -384,7 +401,7 @@ Cause: a line was treated as sung until the next line started (and the next line
 - `pnpm cuts <file> --section a-b`.
 - `pnpm tap`, `pnpm render:test`, http://localhost:3000/preview.
 - `pnpm make --platforms reels,tiktok,shorts,youtube` (or `all`), `--allow-fill`, photos in collections,
-  YouTube cover / stills / clips layouts, thumbnails, publish.txt, .srt captions.
+  YouTube cover / stills / clips layouts, thumbnails, publish.txt, .srt captions, Spotify Canvas loops.
 - `pnpm make` (verified on the Windows PC: 6 videos, all QA PASS, 444 s with --parallel 1; after 5d.1
   with the defaults: all 6 PASS, no memory errors, one at a time with a 2 GB clip cache, 469 s), `pnpm rerender`.
 - `pnpm lrc:shift`, `pnpm lrc:hook`, `pnpm fonts`.
@@ -431,6 +448,5 @@ Cause: a line was treated as sung until the next line started (and the next line
 - The workspace service is used by tests only so far; commands and UI that use it come in later steps.
 
 ## Next
-1. Step 5g.3 (Spotify Canvas loop) — after 5g.2 is verified on the PC.
-2. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project
+1. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project
    (confirmed by the user) and plug into the same render-time layer as the lyrics offset.

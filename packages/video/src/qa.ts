@@ -31,6 +31,7 @@ export type QaInput = {
   endScreen?: { clear: Box; lines: number[] } | null; // YouTube: the area kept free for end-screen elements
   frozenCheckSkipped?: boolean; // still pictures by design (YouTube cover / stills)
   length?: { actualS: number; songS: number | null } | null; // the finished file's length (songS: a full-song video)
+  canvas?: { lastToFirst: number; typicalStep: number; hasAudio: boolean; seconds: number; min: number; max: number } | null; // Spotify Canvas
 };
 
 export type QaCheck = { name: string; ok: boolean; details: string[] };
@@ -170,6 +171,21 @@ export function runQa(input: QaInput): QaReport {
       details.push(`the video is ${expected.toFixed(1)} s but the song is ${input.length.songS.toFixed(1)} s`);
     }
     checks.push({ name: "Video length", ok: details.length === 0, details });
+  }
+
+  // Spotify Canvas: a seamless loop (the jump from the last frame back to the first is no bigger
+  // than an ordinary step between frames), no audio, 3-8 s.
+  if (input.canvas) {
+    const c = input.canvas;
+    const limit = Math.max(6, c.typicalStep * 2.5);
+    checks.push({
+      name: "Seamless loop",
+      ok: c.lastToFirst <= limit,
+      details: c.lastToFirst <= limit ? [] : [`the jump from the last frame to the first is ${c.lastToFirst.toFixed(1)} (an ordinary frame step is ${c.typicalStep.toFixed(1)})`],
+    });
+    checks.push({ name: "No audio", ok: !c.hasAudio, details: c.hasAudio ? ["the file has an audio track (Spotify Canvas must be silent)"] : [] });
+    const okLength = c.seconds >= c.min - 0.05 && c.seconds <= c.max + 0.05;
+    checks.push({ name: `Length ${c.min}-${c.max} s`, ok: okLength, details: okLength ? [] : [`the loop is ${c.seconds.toFixed(2)} s`] });
   }
 
   // The logo never covers a lyric line.

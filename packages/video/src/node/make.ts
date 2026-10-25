@@ -49,6 +49,7 @@ import { getBundle, renderLyricVideo, renderThumbnail, type RenderOptions } from
 import { ensureAlignment, findOrCreateSongProject, matchReport, type Alignment, type AlignRunner } from "./song-project";
 import { COVER_TEXT_SCALE } from "../youtube-layout";
 import { lyricSections } from "../youtube";
+import { loopCheck, planCanvas, type CanvasPlan } from "./canvas";
 import {
   blurredBackground,
   placeLogo,
@@ -504,18 +505,28 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
   const exportDir = platformDir(sh.rootDir, preset.name);
   mkdirSync(exportDir, { recursive: true });
 
+  // Sources that suit this format.
+  const prepared = await prepareForFormat(ws, sh.collection.sources, format, { allowFill: options.allowFill, log });
+  const isCanvas = preset.layout === "canvas";
+  const needed = isCanvas ? 1 : Math.min(RECENT_WINDOW + 1, Math.max(1, sh.collection.sources.length));
+
+  // Spotify Canvas: no song section, but a loop of whole bars from the strongest clip moment.
+  let canvas: CanvasPlan | null = null;
+  if (isCanvas) {
+    const l = preset.length.mode === "loop" ? preset.length : { min: 3, max: 8 };
+    canvas = await planCanvas(ws, prepared.clips, { bpm: analysis.bpm, count: options.variations ?? preset.variations, min: l.min, max: l.max });
+  }
+
   // Section (lines appear `leadMs` early and move by the lyrics offset).
-  const chosen = chooseSection(options.section ?? "auto", sh.sectionLines, analysis.beats, analysis.duration_ms, leadMs - lyricsOffsetMs, preset);
-  log(`${preset.name}: section ${clockText(chosen.start_ms)} - ${clockText(chosen.end_ms)}`);
+  const chosen: SectionChoiceOut = canvas
+    ? { mode: "loop", start_ms: 0, end_ms: Math.round(canvas.seconds * 1000), requested: null, reason: canvas.reason, warnings: canvas.warnings, cuts: [] }
+    : chooseSection(options.section ?? "auto", sh.sectionLines, analysis.beats, analysis.duration_ms, leadMs - lyricsOffsetMs, preset);
+  log(`${preset.name}: ${canvas ? "loop" : "section"} ${clockText(chosen.start_ms)} - ${clockText(chosen.end_ms)}`);
   const sectionRow = ws.db
     .insert(sectionTable)
     .values({ project_id: project.id, name: `make ${preset.name} (${chosen.mode})`, start_ms: chosen.start_ms, end_ms: chosen.end_ms, energy: options.energy ?? "medium" })
     .returning()
     .get();
-
-  // Sources that suit this format.
-  const prepared = await prepareForFormat(ws, sh.collection.sources, format, { allowFill: options.allowFill, log });
-  const needed = Math.min(RECENT_WINDOW + 1, Math.max(1, sh.collection.sources.length));
   const ytWarnings: string[] = [];
   let ytLayout: YouTubeLayout | null = null;
   let coverSrc: string | null = null;
@@ -625,7 +636,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
     }
   }
 
-  const allSpecs = planVariations(options.variations ?? preset.variations);
+  const allSpecs = planVariations(canvas ? Math.max(1, canvas.loops.length) : (options.variations ?? preset.variations));
   let specs = allSpecs;
   if (options.resume) {
     const changed = resumeMismatch(exportDir, allSpecs, {
@@ -659,6 +670,10 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
           }),
           fonts: [...composed.props.fonts, ...fontFileRefs(resolveFace(sh.catalog, title.family, title.weight))],
         };
+      } else if (canvas) {
+        // The loop itself: one clip window (or a looping photo), nothing else on screen, no sound.
+        const loop = canvas.loops[spec.index - 1];
+        composed.props = { ...composed.props, shots: [loop.shot], cutFrames: [], lyrics: [], audio: null, durationInFrames: canvas.lengthFrames };
       } else if (sh.logo && preset.lyrics) {
         // 9:16: the logo in the configured corner inside the platform's safe zone.
         composed.props = {
@@ -811,9 +826,10 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
         lines, visible, numbers, reports, styles, clips: prepared.clips,
         sources: usesClips ? { ...sources, platform: preset.label } : null,
         frameCheck: options.frameCheck ?? true,
-        stillPictures: ytLayout === "cover" || ytLayout === "stills",
+        stillPictures: ytLayout === "cover" || ytLayout === "stills" || (!!canvas && props.shots[0]?.kind === "photo"),
         songS: chosen.mode === "full" ? analysis.duration_ms / 1000 : null, // whole-song videos only (not --section)
         sectionCuts: chosen.cuts.map((c) => ({ ...c, line: numbers[c.line - 1] || c.line })),
+        canvas: canvas ? { min: preset.length.mode === "loop" ? preset.length.min : 3, max: preset.length.mode === "loop" ? preset.length.max : 8 } : null,
       });
       result.qa = qa;
       result.qaSummary = qa.status === "PASS" ? "PASS" : `WARN (${qaReasons(qa)})`;
@@ -827,7 +843,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
         }),
       );
       // Captions for every video; YouTube also gets a thumbnail and a publishing pack.
-      writeSrt(result.srtFile, props);
+      if (preset.lyrics) writeSrt(result.srtFile, props); // (a Canvas has no lyrics: no captions)
       if (ytLayout) {
         const one = allSpecs.length === 1;
         const hookIndex = lines.findIndex((l) => l.isHook);
@@ -912,6 +928,7 @@ async function checkVariation(
     stillPictures?: boolean; // cover / stills layouts: still by design, so no frozen-frame check
     sectionCuts: SectionCut[];
     songS: number | null; // a full-song video: the song's length
+    canvas?: { min: number; max: number } | null; // Spotify Canvas: loop, silence and length checks
   },
 ): Promise<QaReport> {
   const style = ctx.styles[spec.style];
@@ -940,6 +957,7 @@ async function checkVariation(
     endScreen: end ? { clear: end.clear, lines: lyrics.filter(inEnd).map((l) => l.number) } : null,
     frozenCheckSkipped: ctx.stillPictures,
     length: ctx.frameCheck ? { actualS: (await probeMedia(file)).durationMs / 1000, songS: ctx.songS } : null,
+    canvas: ctx.frameCheck && ctx.canvas ? { ...(await loopCheck(file)), ...ctx.canvas } : null,
   });
 }
 
