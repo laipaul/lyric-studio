@@ -30,6 +30,7 @@ export type RunRequest = {
   allowFill?: boolean;
   layout?: "cover" | "stills" | "clips";
   realign?: boolean;
+  saveToSong?: boolean; // keep this run's choices in the song's recipe (song.json; locked settings stay)
 };
 
 // The options a run is made with (MakeOptions without callbacks), stored in make_run.options_json.
@@ -92,7 +93,7 @@ export function generateOptions(ws: Workspace, projectId: string, req: RunReques
     ...(req.title?.trim() ? { title: req.title.trim() } : {}),
     ...(req.artist?.trim() ? { artist: req.artist.trim() } : {}),
     ...(req.ep?.trim() ? { ep: req.ep.trim() } : {}),
-    ...(req.section?.trim() && req.section.trim() !== "auto" ? { section: req.section.trim() } : {}),
+    ...(req.section?.trim() ? { section: req.section.trim() } : {}), // only sent when changed from the recipe
     ...(req.allowFill ? { allowFill: true } : {}),
     ...(req.layout ? { layout: req.layout } : {}),
     ...(req.realign ? { realign: true } : {}),

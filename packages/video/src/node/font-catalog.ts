@@ -4,6 +4,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
+import { REPO_ROOT } from "@lyric/db";
 import * as fontkit from "fontkit";
 
 import { LATIN_EXT_RANGE, LATIN_RANGE, type FontFileRef } from "../font-files";
@@ -41,11 +42,20 @@ export type FontCatalog = {
 
 const USER_FONT_FILE = /\.(ttf|otf|woff2?)$/i;
 
+// The folders with the bundled font files. Found from the project root first: inside the studio's
+// server bundle require.resolve returns a module number, not a path.
 export function bundledFontDirs(): Record<string, string> {
   const require = createRequire(import.meta.url);
-  return Object.fromEntries(
-    BUNDLED_FONTS.map(([slug]) => [slug, path.join(path.dirname(require.resolve(`@fontsource/${slug}/package.json`)), "files")]),
-  );
+  const find = (slug: string) => {
+    for (const base of [path.join(REPO_ROOT, "packages", "video", "node_modules"), path.join(REPO_ROOT, "node_modules")]) {
+      const dir = path.join(base, "@fontsource", slug, "files");
+      if (existsSync(dir)) return dir;
+    }
+    const resolved: unknown = require.resolve(`@fontsource/${slug}/package.json`);
+    if (typeof resolved !== "string") throw new Error(`Bundled font ${slug} not found (run pnpm install).`);
+    return path.join(path.dirname(resolved), "files");
+  };
+  return Object.fromEntries(BUNDLED_FONTS.map(([slug]) => [slug, find(slug)]));
 }
 
 export function loadFontCatalog(workspaceDir: string): FontCatalog {

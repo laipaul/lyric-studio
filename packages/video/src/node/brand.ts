@@ -9,6 +9,7 @@ import { safeName } from "@lyric/db";
 
 import type { Corner } from "../youtube";
 import type { FontCatalog } from "./font-catalog";
+import { checkPerPlatform, type PerPlatform } from "./per-platform";
 import { findFamily } from "./font-catalog";
 
 export type BrandFont = { family: string; weight: number; letterSpacing?: number };
@@ -27,6 +28,9 @@ export type Brand = {
   // The app's icon (shortcut, window, taskbar): "logo" = the logo alone, "tile" = on a rounded square
   // in the accent colour.
   appIcon: { style: "logo" | "tile" };
+  // Per platform (Step 6.2c-2a): { "youtube": { "verseEffect": "cinematic-fade" } } for the effects,
+  // fonts, accent colour and section; above the defaults here and platforms.json, below the song.
+  perPlatform: PerPlatform;
 };
 
 export const DEFAULT_BRAND: Brand = {
@@ -38,6 +42,7 @@ export const DEFAULT_BRAND: Brand = {
   useForLyrics: true,
   motion: { verseEffect: DEFAULT_VERSE_EFFECT, hookEffect: DEFAULT_HOOK_EFFECT },
   appIcon: { style: "logo" },
+  perPlatform: {},
 };
 
 const HELP =
@@ -49,7 +54,9 @@ const HELP =
   "useForLyrics: false = lyrics keep the Simple/Bold style fonts. " +
   "motion.verseEffect / motion.hookEffect: glide, cinematic-fade, soft-blur, dreamy-glow, word-reveal, karaoke-highlight, floating, typewriter " +
   '(optionally ":subtle" or ":expressive", or { "name": ..., "intensity": ..., "durationMs": ..., "easing": ... }); see pnpm effects:preview. ' +
-  'appIcon.style: "logo" (the logo alone, default) or "tile" (the logo on a rounded square in the accent colour); run Create Desktop Shortcut.cmd again after a change.';
+  'appIcon.style: "logo" (the logo alone, default) or "tile" (the logo on a rounded square in the accent colour); run Create Desktop Shortcut.cmd again after a change. ' +
+  'perPlatform: values for one platform only, e.g. { "youtube": { "verseEffect": "cinematic-fade" }, "reels": { "verseEffect": "glide" } } ' +
+  "(verseEffect, hookEffect, verseFont, hookFont, accentColour, section); a song's song.json can still override them.";
 
 export function brandDir(workspaceDir: string): string {
   return path.join(workspaceDir, "brand");
@@ -96,6 +103,7 @@ export function loadBrand(
     logo: { ...DEFAULT_BRAND.logo, ...raw.logo },
     motion: { ...DEFAULT_BRAND.motion },
     appIcon: { ...DEFAULT_BRAND.appIcon, ...raw.appIcon },
+    perPlatform: {},
   };
   const problems: string[] = [];
   if (!["logo", "tile"].includes(brand.appIcon.style)) problems.push('appIcon.style must be "logo" (the logo alone) or "tile" (on a rounded square in the accent colour)');
@@ -110,6 +118,14 @@ export function loadBrand(
   }
   for (const key of ["titleFont", "verseFont", "hookFont"] as const) {
     if (!findFamily(catalog, brand[key].family)) problems.push(`${key}: font "${brand[key].family}" not found (see pnpm fonts)`);
+  }
+  if (raw.perPlatform !== undefined) {
+    const checked = checkPerPlatform(raw.perPlatform, "perPlatform");
+    problems.push(...checked.problems);
+    brand.perPlatform = checked.values;
+    for (const [platform, v] of Object.entries(checked.values)) {
+      for (const k of ["verseFont", "hookFont"] as const) if (v[k] && !findFamily(catalog, v[k]!)) problems.push(`perPlatform.${platform}.${k}: font "${v[k]}" not found (see pnpm fonts)`);
+    }
   }
   if (!/^#[0-9a-fA-F]{6}$/.test(brand.accentColour)) problems.push(`accentColour must look like #E8A3B5 (found ${JSON.stringify(brand.accentColour)})`);
   const corners = ["top-left", "top-right", "bottom-left", "bottom-right"];

@@ -10,25 +10,29 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 const INTENSITIES = ["subtle", "balanced", "expressive"] as const;
-const split = (choice: string) => {
-  const [name, intensity = "balanced"] = choice.split(":");
-  return { name, intensity };
-};
 const join = (name: string, intensity: string) => (intensity === "balanced" ? name : `${name}:${intensity}`);
 
 const label = "flex flex-col gap-1.5 text-sm";
 const select = "bg-input/30 border-input h-9 rounded-md border px-2 text-sm";
 
 // Generate: makes videos for this song through the worker (the same as "pnpm make"); the progress
-// shows in the Tasks menu. Defaults: the song's recipe (song.json), else its last collection and the
-// artist's brand effects. Clips: the song's own clips folder plus the shared collections ticked here.
+// shows in the Tasks menu. It starts from the song's recipe (Style tab: song.json, the artist's brand,
+// per platform where they differ); only what is changed here is sent, for this run only unless "Save
+// these choices to the song" is ticked. Locked settings cannot be changed here. Clips: the song's own
+// clips folder plus the shared collections ticked here.
 export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projectId: string; data: GeneratePanelData; open: boolean }) {
   const [open, setOpen] = useState(initiallyOpen);
-  const [platforms, setPlatforms] = useState<string[]>(data.platforms.some((p) => p.name === "reels") ? ["reels"] : [data.platforms[0]?.name ?? "standard"]);
+  const r = data.recipe;
+  const locked = (field: string) => r.locked.includes(field);
+  const startPlatforms = r.platforms.filter((p) => data.platforms.some((x) => x.name === p));
+  const [platforms, setPlatforms] = useState<string[]>(startPlatforms.length ? startPlatforms : data.platforms.some((p) => p.name === "reels") ? ["reels"] : [data.platforms[0]?.name ?? "standard"]);
+  const videosFor = (name: string, preset: number) => (variations ? Number(variations) : (r.variations[name] ?? r.variations["*"] ?? preset));
   const [collections, setCollections] = useState<string[]>(data.chosen.length || data.songClips ? data.chosen : data.collections.slice(0, 1));
   const [variations, setVariations] = useState("");
-  const [verse, setVerse] = useState(split(data.verseEffect));
-  const [hook, setHook] = useState(split(data.hookEffect));
+  // "" = from the recipe (per platform where it differs); a choice here applies to this run only
+  const [verse, setVerse] = useState({ name: "", intensity: "balanced" });
+  const [hook, setHook] = useState({ name: "", intensity: "balanced" });
+  const [saveToSong, setSaveToSong] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -37,16 +41,21 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
     setBusy(true);
     setNotice(null);
     const f = new FormData(event.currentTarget);
+    // Only what differs from the recipe is sent: the rest comes from song.json / the brand per platform.
+    const changed = <T,>(value: T, recipeValue: T) => (JSON.stringify(value) === JSON.stringify(recipeValue) ? undefined : value);
+    const section = String(f.get("section") ?? r.section).trim() || r.section;
+    const sameCollections = [...collections].sort().join(",") === [...data.chosen].sort().join(",");
     const request = {
       platforms,
-      collection: collections.length ? collections.join(",") : undefined,
+      collection: sameCollections || !collections.length ? undefined : collections.join(","),
       variations: variations ? Number(variations) : undefined,
-      lineEffect: join(verse.name, verse.intensity),
-      hookEffect: join(hook.name, hook.intensity),
+      lineEffect: verse.name ? join(verse.name, verse.intensity) : undefined,
+      hookEffect: hook.name ? join(hook.name, hook.intensity) : undefined,
       title: String(f.get("title") ?? ""),
       artist: String(f.get("artist") ?? ""),
-      ep: String(f.get("ep") ?? ""),
-      section: String(f.get("section") ?? "auto"),
+      ep: changed(String(f.get("ep") ?? ""), data.ep),
+      section: changed(section, r.section),
+      saveToSong,
       allowFill: f.get("allowFill") === "on",
       layout: (String(f.get("layout") ?? "") || undefined) as "cover" | "stills" | "clips" | undefined,
       realign: f.get("realign") === "on",
@@ -57,10 +66,13 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
     const cover = f.get("cover");
     if (cover instanceof File && cover.size) body.set("cover", cover);
     try {
-      const r = await fetch("/api/runs", { method: "POST", body });
-      const result = (await r.json()) as { error?: string; label?: string };
-      if (!r.ok || result.error) throw new Error(result.error ?? `The studio answered ${r.status}`);
-      setNotice({ ok: true, text: `Queued: ${result.label}. Follow it in Tasks (top right); the videos appear here when they are made.` });
+      const res = await fetch("/api/runs", { method: "POST", body });
+      const result = (await res.json()) as { error?: string; label?: string; saved?: { saved: string[]; kept: string[] } | null };
+      if (!res.ok || result.error) throw new Error(result.error ?? `The studio answered ${res.status}`);
+      const saved = result.saved
+        ? `\n${result.saved.saved.length ? `Saved to the song: ${result.saved.saved.join(", ")}.` : "Nothing to save: this run uses the song's recipe."}${result.saved.kept.length ? ` Locked, kept as they are: ${result.saved.kept.join(", ")}.` : ""}`
+        : "";
+      setNotice({ ok: true, text: `Queued: ${result.label}. Follow it in Tasks (top right); the videos appear in the Videos tab when they are made.${saved}` });
       window.dispatchEvent(new Event("lyric-tasks-changed"));
     } catch (e) {
       setNotice({ ok: false, text: (e as Error).message });
@@ -69,16 +81,30 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
     }
   }
 
+  const fromRecipe = (kind: "verse" | "hook") => {
+    const base = kind === "verse" ? data.verseEffect : data.hookEffect;
+    const differ = Object.entries(r.effects)
+      .filter(([name]) => platforms.includes(name))
+      .map(([name, e]) => `${data.platforms.find((p) => p.name === name)?.label ?? name}: ${e[kind]}`);
+    return `From the recipe (${base}${differ.length ? ` · ${differ.join(" · ")}` : ""})`;
+  };
   const effectSelect = (value: { name: string; intensity: string }, set: (v: { name: string; intensity: string }) => void, name: string) => (
     <div className="flex gap-2">
-      <select aria-label={`${name} effect`} className={cn(select, "flex-1")} value={value.name} onChange={(e) => set({ ...value, name: e.target.value })}>
+      <select
+        aria-label={`${name} effect`}
+        className={cn(select, "min-w-0 flex-1")}
+        value={value.name}
+        disabled={locked(name === "Verse" ? "verseEffect" : "hookEffect")}
+        onChange={(e) => set({ ...value, name: e.target.value })}
+      >
+        <option value="">{fromRecipe(name === "Verse" ? "verse" : "hook")}</option>
         {data.effects.map((e) => (
           <option key={e} value={e}>
             {e}
           </option>
         ))}
       </select>
-      <select aria-label={`${name} intensity`} className={select} value={value.intensity} onChange={(e) => set({ ...value, intensity: e.target.value })}>
+      <select aria-label={`${name} intensity`} className={select} value={value.intensity} disabled={!value.name} onChange={(e) => set({ ...value, intensity: e.target.value })}>
         {INTENSITIES.map((i) => (
           <option key={i} value={i}>
             {i}
@@ -117,7 +143,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
                     onClick={() => setPlatforms((list) => (on ? list.filter((x) => x !== p.name) : [...list, p.name]))}
                     className={cn("rounded-full border px-3 py-1.5 text-xs transition-colors", on ? "border-brand/50 bg-brand/15 text-brand" : "text-muted-foreground hover:text-foreground")}
                   >
-                    {p.label} <span className="opacity-60">· {p.variations} video{p.variations === 1 ? "" : "s"}</span>
+                    {p.label} <span className="opacity-60">· {videosFor(p.name, p.variations)} video{videosFor(p.name, p.variations) === 1 ? "" : "s"}</span>
                   </button>
                 );
               })}
@@ -136,6 +162,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
                     <input
                       type="checkbox"
                       data-collection-choice={c}
+                      disabled={locked("collections")}
                       checked={collections.includes(c)}
                       onChange={(e) => setCollections((list) => (e.target.checked ? [...list, c] : list.filter((x) => x !== c)))}
                     />
@@ -146,11 +173,11 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
               </div>
             </fieldset>
             <label className={label}>
-              <span className="font-medium">Verse effect</span>
+              <span className="font-medium">Verse effect{locked("verseEffect") ? " 🔒 locked in the song's recipe" : ""}</span>
               {effectSelect(verse, setVerse, "Verse")}
             </label>
             <label className={label}>
-              <span className="font-medium">Hook effect</span>
+              <span className="font-medium">Hook effect{locked("hookEffect") ? " 🔒 locked in the song's recipe" : ""}</span>
               {effectSelect(hook, setHook, "Hook")}
             </label>
           </div>
@@ -170,7 +197,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
             </label>
             <label className={label}>
               <span className="font-medium">EP</span>
-              <Input name="ep" defaultValue={data.ep} placeholder="optional" />
+              <Input name="ep" defaultValue={data.ep} placeholder="optional" disabled={locked("ep")} />
             </label>
             <label className={label}>
               <span className="font-medium">New cover</span>
@@ -182,16 +209,16 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
             <div className="mt-4 grid gap-4 md:grid-cols-4">
               <label className={label}>
                 <span className="font-medium">Videos per platform</span>
-                <Input type="number" min={1} max={24} placeholder="from the preset" value={variations} onChange={(e) => setVariations(e.target.value)} />
+                <Input type="number" min={1} max={24} placeholder="from the recipe" value={variations} disabled={locked("variations")} onChange={(e) => setVariations(e.target.value)} />
               </label>
               <label className={label}>
                 <span className="font-medium">Section</span>
-                <Input name="section" defaultValue="auto" placeholder="auto, full or 0:11-1:10" />
+                <Input name="section" defaultValue={r.section} placeholder="auto, full or 0:11-1:10" disabled={locked("section")} />
               </label>
               <label className={label}>
                 <span className="font-medium">YouTube layout</span>
-                <select name="layout" className={select} defaultValue="">
-                  <option value="">from the preset (cover)</option>
+                <select name="layout" className={select} defaultValue="" disabled={locked("youtubeLayout")}>
+                  <option value="">from the recipe ({r.youtubeLayout})</option>
                   <option value="cover">cover</option>
                   <option value="stills">stills</option>
                   <option value="clips">clips</option>
@@ -207,6 +234,10 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
               </div>
             </div>
           </details>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" data-save-to-song checked={saveToSong} onChange={(e) => setSaveToSong(e.target.checked)} className="accent-brand" />
+            Save these choices to the song (song.json); locked settings stay as they are
+          </label>
           {notice ? (
             <p role="status" className={cn("rounded-md border p-3 text-sm whitespace-pre-line", notice.ok ? "border-brand/30 bg-brand/10" : "border-red-400/30 bg-red-400/10 text-red-200")}>
               {notice.text}
@@ -214,7 +245,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
           ) : null}
           <div className="flex items-center justify-end gap-3">
             <span className="text-muted-foreground text-xs">
-              {platforms.length ? `${data.platforms.filter((p) => platforms.includes(p.name)).reduce((a, p) => a + (variations ? Number(variations) : p.variations), 0)} video(s)` : "choose a platform"}
+              {platforms.length ? `${data.platforms.filter((p) => platforms.includes(p.name)).reduce((a, p) => a + videosFor(p.name, p.variations), 0)} video(s)` : "choose a platform"}
             </span>
             <Button type="submit" disabled={busy || !platforms.length || !data.lyricsReady}>
               <Sparkles /> {busy ? "Queuing…" : "Generate"}

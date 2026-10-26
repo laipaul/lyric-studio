@@ -80,7 +80,7 @@ describe("Generate: request -> run options", () => {
     expect(o.song).toBe(songPathsById(ws, projectId).audio);
     expect(o.lyrics).toBe(songPathsById(ws, projectId).lyricsTxt);
     expect(o).toMatchObject({ platforms: "reels,canvas", collection: "wedding", lineEffect: "floating:subtle", title: "Hold On", layout: "cover", command: "Lyric Studio: Generate" });
-    expect(o).not.toHaveProperty("section"); // auto = the default
+    expect(o.section).toBe("auto"); // sent only when changed from the recipe, then kept
     expect(o).not.toHaveProperty("collection_path");
   });
 });

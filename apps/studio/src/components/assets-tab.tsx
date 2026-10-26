@@ -93,6 +93,12 @@ export function AssetsTab({ projectId }: { projectId: string }) {
     if (await send(body)) setNotice({ ok: true, text: `${file.name} is now the song's ${kind === "song" ? "song file" : kind === "lyrics" ? "lyrics.txt" : kind === "hints" ? "hints.lrc" : "cover"}${kind === "cover" ? "" : " (the previous one is kept in .studio\\replaced\\)"}.` });
   }
 
+  async function openFolder() {
+    const r = await fetch("/api/open-folder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId }) });
+    const d = (await r.json()) as { error?: string; folder?: string };
+    setNotice(r.ok ? { ok: true, text: `Opened ${d.folder} in Explorer.` } : { ok: false, text: d.error ?? "Could not open the folder." });
+  }
+
   async function remove(name: string) {
     if (!window.confirm(`Move ${name} to clips\\_removed\\? It is not deleted; you can put it back from that folder.`)) return;
     const r = (await send(null, "DELETE", `?name=${encodeURIComponent(name)}`)) as { movedTo: string } | null;
@@ -109,12 +115,17 @@ export function AssetsTab({ projectId }: { projectId: string }) {
     );
   }
 
-  const fileRow = (kind: AssetKind, icon: React.ReactNode, title: string, value: React.ReactNode) => (
-    <li data-asset={kind} className="bg-card flex items-center gap-3 rounded-lg border px-4 py-3">
+  const fileRow = (kind: AssetKind, icon: React.ReactNode, title: string, value: React.ReactNode, warning?: React.ReactNode) => (
+    <li data-asset={kind} className={cn("bg-card flex items-center gap-3 rounded-lg border px-4 py-3", warning && "border-amber-400/40")}>
       <span className="text-brand">{icon}</span>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium">{title}</p>
         <p className="text-muted-foreground truncate text-xs">{value}</p>
+        {warning ? (
+          <p data-warning={kind} className="mt-1 text-xs text-amber-300">
+            {warning}
+          </p>
+        ) : null}
       </div>
       <label className={cn("border-input hover:bg-accent cursor-pointer rounded-md border px-3 py-1.5 text-xs", busy && "pointer-events-none opacity-50")}>
         Replace…
@@ -126,7 +137,10 @@ export function AssetsTab({ projectId }: { projectId: string }) {
   return (
     <div data-assets className="flex flex-col gap-6">
       <p className="text-muted-foreground text-xs">
-        Song folder: <span className="text-foreground">WORKSPACE_DIR\{win(data.folder)}\</span>
+        Song folder:{" "}
+        <button type="button" data-open-folder title="Open in Explorer" onClick={openFolder} className="text-foreground hover:text-brand underline decoration-dotted underline-offset-2">
+          {data.folderPath ?? win(data.folder)}
+        </button>
       </p>
       <ul className="grid gap-3 md:grid-cols-2">
         {fileRow("song", <FileAudio className="size-5" />, "Song", data.song ? `${data.song.name}${data.song.durationMs ? ` · ${clock(data.song.durationMs)}` : ""}${data.song.bpm ? ` · ${Math.round(data.song.bpm)} BPM` : ""}` : "missing")}
@@ -142,7 +156,17 @@ export function AssetsTab({ projectId }: { projectId: string }) {
           "Cover",
           data.cover ? win(data.cover.slice(data.folder.length + 1)) : "none (YouTube uses stills or clips)",
         )}
-        {fileRow("hints", <ListMusic className="size-5" />, "Hints (tapped times)", data.hints ? `hints.lrc · ${data.hints.stamps} time stamp${data.hints.stamps === 1 ? "" : "s"}` : "none (optional)")}
+        {fileRow(
+          "hints",
+          <ListMusic className="size-5" />,
+          "Hints (tapped times)",
+          data.hints
+            ? `hints.lrc · ${data.hints.timed} timed line${data.hints.timed === 1 ? "" : "s"}${data.hints.marks ? ` + ${data.hints.marks} end mark${data.hints.marks === 1 ? "" : "s"} (where the singing stops)` : ""}${data.hints.untapped ? ` · ${data.hints.untapped} lyric line${data.hints.untapped === 1 ? "" : "s"} not tapped (the aligner times them)` : ""}`
+            : "none (optional)",
+          data.hints?.orphans.length
+            ? `${data.hints.orphans.length} tapped line${data.hints.orphans.length === 1 ? " matches" : "s match"} no line of lyrics.txt (left from an older version?): ${data.hints.orphans.map((o) => `“${o}”`).join(", ")}. Replace hints.lrc, or fix the line in lyrics.txt.`
+            : undefined,
+        )}
       </ul>
 
       <section className="flex flex-col gap-3">

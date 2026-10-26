@@ -7,6 +7,7 @@ import { resolveWorkspaceDir, safeName } from "@lyric/db";
 import { platformLabels } from "@lyric/video/library";
 import { storeCover } from "@lyric/video/project-settings";
 import { checkRunRequest, enqueueRun, generateOptions, type RunRequest } from "@lyric/video/runs";
+import { saveRunToSong } from "@lyric/video/style";
 
 import { withWorkspace } from "@/lib/workspace";
 
@@ -31,11 +32,14 @@ export async function POST(request: Request) {
       coverFile = path.join(tmp, safeName(cover.name));
       writeFileSync(coverFile, Buffer.from(await cover.arrayBuffer()));
     }
-    const run = withWorkspace((ws) => {
+    const { run, saved } = withWorkspace((ws) => {
       if (coverFile) storeCover(ws, projectId, coverFile);
-      return enqueueRun(ws, projectId, generateOptions(ws, projectId, req));
+      const options = generateOptions(ws, projectId, req);
+      // "Save to song": this run's choices become the song's own settings (locked ones stay).
+      const saved = req.saveToSong ? saveRunToSong(ws, projectId, options) : null;
+      return { run: enqueueRun(ws, projectId, options), saved };
     });
-    return Response.json({ id: run.id, label: run.label });
+    return Response.json({ id: run.id, label: run.label, saved });
   } catch (error) {
     return Response.json({ error: (error as Error).message }, { status: 400 });
   } finally {

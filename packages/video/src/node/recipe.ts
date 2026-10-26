@@ -3,11 +3,17 @@
 //   -> this run (Generate / command-line options; kept only with "save to song").
 // A locked setting keeps the song's value: a later brand change does not reach it, and a run cannot
 // change it (the run's choice is ignored, with a note).
+// Per platform (Step 6.2c-2a): brand.json and song.json may hold "perPlatform": { "youtube": {
+// "verseEffect": "cinematic-fade" } } for the PLATFORM_FIELDS. For one platform the order is (weakest
+// first): library -> artist -> platforms.json motion -> artist (that platform) -> song -> song (that
+// platform) -> run. A locked field uses only the song's values (its default and per-platform ones).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { choiceText, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT } from "../effects/names";
+import { choiceText, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, parseEffectChoice } from "../effects/names";
+import type { PlatformPreset } from "../platform";
 import { DEFAULT_BRAND, type Brand } from "./brand";
+import { checkPerPlatform, isPlatformField, PLATFORM_FIELDS, type PerPlatform, type PlatformField } from "./per-platform";
 
 export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "accentColour", "collections", "platforms", "variations", "section", "ep", "youtubeLayout"] as const;
 export type RecipeField = (typeof RECIPE_FIELDS)[number];
@@ -26,8 +32,11 @@ export type RecipeValues = {
   youtubeLayout: "cover" | "stills" | "clips";
 };
 
-export type SongRecipe = Partial<RecipeValues> & { locked?: RecipeField[] };
-export type RecipeSource = "library" | "artist" | "song" | "run";
+export { isPlatformField, PLATFORM_FIELDS, type PerPlatform, type PlatformField, type PlatformValues } from "./per-platform";
+
+export type SongRecipe = Partial<RecipeValues> & { perPlatform?: PerPlatform; locked?: RecipeField[] };
+// library | artist | platforms.json | artist:<platform> | song | song:<platform> | run
+export type RecipeSource = string;
 
 export type ResolvedRecipe = {
   values: RecipeValues;
@@ -42,7 +51,8 @@ export const RECIPE_HELP =
   "(a brand change does not reach them, and Generate cannot change them for one run). Fields: verseEffect, hookEffect " +
   '("glide", "soft-blur:subtle", ...), verseFont, hookFont, accentColour ("#E8A3B5"), collections (shared collections used ' +
   'with the clips in clips\\), platforms (["reels", "youtube"]), variations ({ "reels": 3 }), section ("auto", "full", ' +
-  '"0:11-1:10"), ep, youtubeLayout ("cover", "stills", "clips").';
+  '"0:11-1:10"), ep, youtubeLayout ("cover", "stills", "clips"). perPlatform: values for one platform only, e.g. ' +
+  '{ "youtube": { "verseEffect": "cinematic-fade" } } (verseEffect, hookEffect, verseFont, hookFont, accentColour, section).';
 
 // Checks a song.json; every problem is named.
 export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: string[] } {
@@ -56,6 +66,15 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
     else (recipe as Record<string, unknown>)[k] = (r[k] as string).trim();
   };
   for (const k of ["verseEffect", "hookEffect", "verseFont", "hookFont", "section", "ep"] as const) str(k);
+  for (const k of ["verseEffect", "hookEffect"] as const) {
+    if (recipe[k] === undefined) continue;
+    try {
+      parseEffectChoice(recipe[k]!, k);
+    } catch (error) {
+      problems.push((error as Error).message);
+      delete recipe[k];
+    }
+  }
   if (r.ep === "") recipe.ep = "";
   if (r.accentColour !== undefined) {
     if (typeof r.accentColour === "string" && /^#[0-9a-fA-F]{6}$/.test(r.accentColour)) recipe.accentColour = r.accentColour;
@@ -74,6 +93,11 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
   if (r.youtubeLayout !== undefined) {
     if (["cover", "stills", "clips"].includes(String(r.youtubeLayout))) recipe.youtubeLayout = r.youtubeLayout as RecipeValues["youtubeLayout"];
     else problems.push("youtubeLayout must be cover, stills or clips");
+  }
+  if (r.perPlatform !== undefined) {
+    const { values, problems: more } = checkPerPlatform(r.perPlatform, "perPlatform");
+    problems.push(...more);
+    if (Object.keys(values).length) recipe.perPlatform = values;
   }
   if (r.locked !== undefined) {
     if (Array.isArray(r.locked) && r.locked.every((x) => (RECIPE_FIELDS as readonly string[]).includes(String(x)))) recipe.locked = r.locked as RecipeField[];
@@ -100,6 +124,7 @@ export function readRecipe(file: string | null): SongRecipe {
 export function recipeJson(recipe: SongRecipe): string {
   const ordered: Record<string, unknown> = { _help: RECIPE_HELP };
   for (const k of RECIPE_FIELDS) if (recipe[k] !== undefined) ordered[k] = recipe[k];
+  if (recipe.perPlatform && Object.keys(recipe.perPlatform).length) ordered.perPlatform = recipe.perPlatform;
   if (recipe.locked?.length) ordered.locked = recipe.locked;
   return `${JSON.stringify(ordered, null, 2)}\n`;
 }
@@ -109,15 +134,32 @@ export function writeRecipe(file: string, recipe: SongRecipe): void {
   writeFileSync(file, recipeJson(recipe));
 }
 
-// Each setting's value and where it comes from.
-export function resolveRecipe(input: { library: RecipeValues; artist: Partial<RecipeValues>; song: SongRecipe; run?: Partial<RecipeValues> }): ResolvedRecipe {
+// Each setting's value and where it comes from; with `platform`, the values for that platform.
+export type RecipeInput = {
+  library: RecipeValues;
+  artist: Partial<RecipeValues>;
+  artistPlatforms?: PerPlatform; // brand.json perPlatform
+  presets?: PerPlatform; // platforms.json motion (lyric effects) per platform
+  song: SongRecipe;
+  run?: Partial<RecipeValues>;
+};
+
+export function resolveRecipe(input: RecipeInput, platform?: string): ResolvedRecipe {
   const locked = input.song.locked ?? [];
-  const values = { ...input.library } as Record<RecipeField, unknown>;
-  const sources = Object.fromEntries(RECIPE_FIELDS.map((k) => [k, "library"])) as Record<RecipeField, RecipeSource>;
+  const values = {} as Record<RecipeField, unknown>;
+  const sources = {} as Record<RecipeField, RecipeSource>;
   const ignored: ResolvedRecipe["ignored"] = [];
   for (const k of RECIPE_FIELDS) {
-    if (input.artist[k] !== undefined) [values[k], sources[k]] = [input.artist[k], "artist"];
-    if (input.song[k] !== undefined) [values[k], sources[k]] = [input.song[k], "song"];
+    const each = !!platform && isPlatformField(k);
+    let layers: [RecipeSource, unknown][] = [
+      ["library", input.library[k]],
+      ["artist", input.artist[k]],
+      ...(each ? ([["platforms.json", input.presets?.[platform]?.[k as PlatformField]], [`artist:${platform}`, input.artistPlatforms?.[platform]?.[k as PlatformField]]] as [RecipeSource, unknown][]) : []),
+      ["song", input.song[k]],
+      ...(each ? ([[`song:${platform}`, input.song.perPlatform?.[platform]?.[k as PlatformField]]] as [RecipeSource, unknown][]) : []),
+    ];
+    if (locked.includes(k)) layers = layers.filter(([source]) => source === "song" || source.startsWith("song:"));
+    for (const [source, value] of layers) if (value !== undefined) [values[k], sources[k]] = [value, source];
     const run = input.run?.[k];
     if (run === undefined) continue;
     if (locked.includes(k)) {
@@ -127,6 +169,18 @@ export function resolveRecipe(input: { library: RecipeValues; artist: Partial<Re
   return { values: values as RecipeValues, sources, locked, ignored };
 }
 
+// The song's own value of a field (its default, or for one platform), or undefined.
+export function songValue(song: SongRecipe, field: RecipeField, platform?: string): unknown {
+  return platform ? song.perPlatform?.[platform]?.[field as PlatformField] : song[field];
+}
+
+// Sets the song's own value (Style tab), as default or for one platform.
+export function setField(song: SongRecipe, field: RecipeField, value: unknown, platform?: string): SongRecipe {
+  if (!platform) return { ...song, [field]: value } as SongRecipe;
+  if (!isPlatformField(field)) throw new Error(`${field} cannot differ per platform`);
+  return { ...song, perPlatform: { ...song.perPlatform, [platform]: { ...song.perPlatform?.[platform], [field]: value } } };
+}
+
 // "Save to song": the run's choices become the song's own (locked settings are left alone).
 export function saveToSong(song: SongRecipe, run: Partial<RecipeValues>): SongRecipe {
   const next: SongRecipe = { ...song };
@@ -134,8 +188,17 @@ export function saveToSong(song: SongRecipe, run: Partial<RecipeValues>): SongRe
   return next;
 }
 
-// "Reset": back to inherited (and unlocked).
-export function resetField(song: SongRecipe, field: RecipeField): SongRecipe {
+// "Reset": back to inherited (and unlocked); with `platform`, only that platform's own value goes.
+export function resetField(song: SongRecipe, field: RecipeField, platform?: string): SongRecipe {
+  if (platform) {
+    const own = { ...song.perPlatform?.[platform] };
+    delete own[field as PlatformField];
+    const perPlatform = { ...song.perPlatform, [platform]: own };
+    if (!Object.keys(own).length) delete perPlatform[platform];
+    const next: SongRecipe = { ...song, perPlatform };
+    if (!Object.keys(perPlatform).length) delete next.perPlatform;
+    return next;
+  }
   const next: SongRecipe = { ...song };
   delete next[field];
   next.locked = (song.locked ?? []).filter((k) => k !== field);
@@ -143,9 +206,15 @@ export function resetField(song: SongRecipe, field: RecipeField): SongRecipe {
   return next;
 }
 
-// Lock: the current value (also an inherited one) becomes the song's own and stays.
-export function lockField(song: SongRecipe, field: RecipeField, current: unknown): SongRecipe {
-  const next = { ...song, [field]: song[field] ?? current } as SongRecipe;
+// Lock: the current value (also an inherited one) becomes the song's own and stays; for a field that
+// can differ per platform, the current per-platform values that differ from it are kept too.
+export function lockField(song: SongRecipe, field: RecipeField, current: unknown, perPlatformNow: Record<string, unknown> = {}): SongRecipe {
+  let next = { ...song, [field]: song[field] ?? current } as SongRecipe;
+  if (isPlatformField(field)) {
+    for (const [platform, value] of Object.entries(perPlatformNow)) {
+      if (value !== undefined && JSON.stringify(value) !== JSON.stringify(next[field]) && songValue(next, field, platform) === undefined) next = setField(next, field, value, platform);
+    }
+  }
   next.locked = [...new Set([...(song.locked ?? []), field])];
   return next;
 }
@@ -226,3 +295,17 @@ export function recipeSummary(r: ResolvedRecipe): string {
   for (const k of ["platforms", "variations", "ep", "youtubeLayout"] as const) if (r.sources[k] !== "library") show.push(k);
   return show.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]}${r.locked.includes(k) ? ", locked" : ""})`).join(", ");
 }
+
+// platforms.json motion (lyric effects per platform) as recipe values.
+export function presetMotion(presets: Record<string, Pick<PlatformPreset, "name" | "motion">>): PerPlatform {
+  const out: PerPlatform = {};
+  for (const p of Object.values(presets)) {
+    if (!p.motion) continue;
+    out[p.name] = {
+      ...(p.motion.verseEffect ? { verseEffect: choiceText(p.motion.verseEffect) } : {}),
+      ...(p.motion.hookEffect ? { hookEffect: choiceText(p.motion.hookEffect) } : {}),
+    };
+  }
+  return out;
+}
+

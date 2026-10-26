@@ -8,6 +8,7 @@ import path from "node:path";
 import { clip as clipTable, PHOTO_EXTENSION, probeMedia, project as projectTable, uniqueFileName, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
+import { HOOK_MARKER, normalizeLyric } from "../lrc";
 import { cachedFileHash, SOURCE_FILE, syncCollection } from "./collection";
 import { keepReplaced, storeCover, storeLyricsTxt } from "./project-settings";
 import { moveEntry, songPathsById } from "./song-folder";
@@ -29,10 +30,11 @@ export type ClipAsset = {
 
 export type SongAssets = {
   folder: string | null; // workspace-relative song folder (null: not migrated yet)
+  folderPath: string | null; // the same on disk (D:\videomaker\workspace\songs\...)
   song: { name: string; file: string; durationMs: number | null; bpm: number | null } | null;
   lyrics: { file: string; lines: number } | null;
   cover: string | null;
-  hints: { file: string; stamps: number } | null;
+  hints: (HintsCheck & { file: string }) | null;
   clips: ClipAsset[];
   removed: string[]; // in clips\_removed\
   usable: { vertical: number; horizontal: number }; // for 9:16 and 16:9 platforms
@@ -51,11 +53,13 @@ export async function songAssets(ws: Workspace, projectId: string): Promise<Song
   const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
   if (!p) throw new Error("Song not found.");
   const paths = songPathsById(ws, projectId);
-  const out: SongAssets = { folder: paths.legacy ? null : paths.rel, song: null, lyrics: null, cover: null, hints: null, clips: [], removed: [], usable: { vertical: 0, horizontal: 0 } };
+  const out: SongAssets = { folder: paths.legacy ? null : paths.rel, folderPath: paths.legacy ? null : paths.root, song: null, lyrics: null, cover: null, hints: null, clips: [], removed: [], usable: { vertical: 0, horizontal: 0 } };
   if (paths.audio && existsSync(paths.audio)) out.song = { name: path.basename(paths.audio), file: rel(ws, paths.audio), durationMs: p.duration_ms ?? null, bpm: p.bpm ?? null };
   if (existsSync(paths.lyricsTxt)) out.lyrics = { file: rel(ws, paths.lyricsTxt), lines: readFileSync(paths.lyricsTxt, "utf8").split(/\r?\n/).filter((l) => l.replace(/^\*\s+/, "").trim()).length };
   if (paths.cover && existsSync(paths.cover)) out.cover = rel(ws, paths.cover);
-  if (paths.hints && existsSync(paths.hints)) out.hints = { file: rel(ws, paths.hints), stamps: (readFileSync(paths.hints, "utf8").match(/\[\d+:\d{1,2}(\.\d+)?\]/g) ?? []).length };
+  if (paths.hints && existsSync(paths.hints)) {
+    out.hints = { file: rel(ws, paths.hints), ...checkHints(readFileSync(paths.hints, "utf8"), existsSync(paths.lyricsTxt) ? readFileSync(paths.lyricsTxt, "utf8") : "") };
+  }
   if (!paths.clips || !existsSync(paths.clips)) return out;
   const removedDir = path.join(paths.clips, REMOVED_DIR);
   if (existsSync(removedDir)) out.removed = readdirSync(removedDir).filter((f) => SOURCE_FILE.test(f)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
@@ -84,6 +88,43 @@ export async function songAssets(ws: Workspace, projectId: string): Promise<Song
     if (o !== "horizontal" || s.clip.height >= 3840) out.usable.vertical += 1;
     if (o !== "vertical" || s.clip.width >= 3840) out.usable.horizontal += 1;
   }
+  return out;
+}
+
+export type HintsCheck = {
+  stamps: number; // every time stamp in the file
+  timed: number; // stamps with a lyric line after them
+  marks: number; // empty stamps: where the singing of the line before ends (pnpm tap writes one after the last line) or a pause
+  orphans: string[]; // timed lines that match no line of lyrics.txt
+  untapped: number; // lyric lines without a tapped time (the aligner times them on its own)
+};
+
+// hints.lrc against lyrics.txt (lines compared ignoring case, punctuation and "* " hook markers).
+export function checkHints(hints: string, lyricsTxt: string): HintsCheck {
+  const STAMP = /\[\d+:\d{1,2}(?:\.\d+)?\]/g;
+  const out: HintsCheck = { stamps: 0, timed: 0, marks: 0, orphans: [], untapped: 0 };
+  const lyrics = lyricsTxt
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/)
+    .map((l) => l.trim().replace(HOOK_MARKER, "").trim())
+    .filter(Boolean);
+  const known = new Set(lyrics.map(normalizeLyric));
+  const tapped = new Set<string>();
+  for (const raw of hints.replace(/^\uFEFF/, "").split(/\r?\n/)) {
+    const stamps = raw.match(STAMP)?.length ?? 0;
+    if (!stamps || /^\[[a-z]+:/i.test(raw.trim())) continue; // [ti:...] and other tags
+    out.stamps += stamps;
+    const text = raw.replace(STAMP, "").replace(/<[^>]*>/g, "").trim().replace(HOOK_MARKER, "").trim();
+    if (!text) {
+      out.marks += stamps;
+      continue;
+    }
+    out.timed += stamps;
+    const key = normalizeLyric(text);
+    tapped.add(key);
+    if (lyrics.length && !known.has(key)) out.orphans.push(text);
+  }
+  out.untapped = lyrics.filter((l) => !tapped.has(normalizeLyric(l))).length;
   return out;
 }
 

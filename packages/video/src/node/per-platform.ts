@@ -1,0 +1,40 @@
+// Settings that may differ per platform ("perPlatform" in brand.json and song.json), e.g.
+// { "youtube": { "verseEffect": "cinematic-fade" }, "reels": { "verseEffect": "glide" } }.
+import { parseEffectChoice } from "../effects/names";
+
+export const PLATFORM_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "accentColour", "section"] as const;
+export type PlatformField = (typeof PLATFORM_FIELDS)[number];
+export type PlatformValues = Partial<Record<PlatformField, string>>;
+export type PerPlatform = Record<string, PlatformValues>;
+export const isPlatformField = (k: string): k is PlatformField => (PLATFORM_FIELDS as readonly string[]).includes(k);
+
+// "perPlatform": { "<platform>": { <field>: value } } in song.json or brand.json.
+export function checkPerPlatform(raw: unknown, where: string): { values: PerPlatform; problems: string[] } {
+  const problems: string[] = [];
+  const values: PerPlatform = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { values, problems: [`${where} must look like { "youtube": { "verseEffect": "cinematic-fade" } }`] };
+  for (const [platform, fields] of Object.entries(raw as Record<string, unknown>)) {
+    if (!fields || typeof fields !== "object" || Array.isArray(fields)) {
+      problems.push(`${where}.${platform} must be an object of settings`);
+      continue;
+    }
+    const out: PlatformValues = {};
+    for (const [k, v] of Object.entries(fields as Record<string, unknown>)) {
+      const at = `${where}.${platform}.${k}`;
+      if (!isPlatformField(k)) problems.push(`${at}: only ${PLATFORM_FIELDS.join(", ")} can differ per platform`);
+      else if (typeof v !== "string" || !v.trim()) problems.push(`${at} must be text`);
+      else if (k === "accentColour" && !/^#[0-9a-fA-F]{6}$/.test(v)) problems.push(`${at} must look like "#E8A3B5"`);
+      else if (k === "verseEffect" || k === "hookEffect") {
+        try {
+          parseEffectChoice(v, at);
+          out[k] = v.trim();
+        } catch (error) {
+          problems.push((error as Error).message);
+        }
+      } else out[k] = v.trim();
+    }
+    if (Object.keys(out).length) values[platform.toLowerCase()] = out;
+  }
+  return { values, problems };
+}
+

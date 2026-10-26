@@ -313,3 +313,14 @@ export function songFolderFiles(dir: string): { song: string; lyrics: string; hi
   const hints = files.find((f) => f.toLowerCase() === "hints.lrc");
   return { song: path.join(dir, song), lyrics: path.join(dir, lyrics), ...(hints ? { hints: path.join(dir, hints) } : {}) };
 }
+
+// Shared collections: the folders in WORKSPACE_DIR\collections (and in the old clips\ until migrated).
+export function sharedCollections(ws: Workspace): string[] {
+  const names = new Set<string>();
+  for (const dir of [COLLECTIONS_DIR, "clips"]) {
+    const abs = absPath(ws, dir);
+    if (existsSync(abs)) for (const d of readdirSync(abs, { withFileTypes: true })) if (d.isDirectory()) names.add(d.name);
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+

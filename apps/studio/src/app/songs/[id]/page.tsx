@@ -12,11 +12,13 @@ import { eq } from "drizzle-orm";
 import { AssetsTab } from "@/components/assets-tab";
 import { GeneratePanel } from "@/components/generate-panel";
 import { StatusBadge } from "@/components/status-badge";
+import { StyleTab } from "@/components/style-tab";
 import { SongView, type RunView } from "@/components/song-view";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { withWorkspace } from "@/lib/workspace";
 
-// The song page: header, then tabs: Assets (the song folder's files and clips), Generate (the
+// The song page: header, then tabs: Assets (the song folder's files and clips), Style (the song's
+// recipe: song.json with each setting's source, per platform, save / reset / lock), Generate (the
 // worker makes the videos; progress in the Tasks menu) and Videos (exports grid, marks, compare,
 // ready to post).
 export default function SongPage({ params }: { params: Promise<{ id: string }> }) {
@@ -77,11 +79,15 @@ async function Song({ params }: { params: Promise<{ id: string }> }) {
       <Tabs defaultValue={runs.length ? "videos" : "generate"} className="gap-6">
         <TabsList>
           <TabsTrigger value="assets">Assets</TabsTrigger>
+          <TabsTrigger value="style">Style</TabsTrigger>
           <TabsTrigger value="generate">Generate</TabsTrigger>
           <TabsTrigger value="videos">Videos</TabsTrigger>
         </TabsList>
         <TabsContent value="assets">
           <AssetsTab projectId={song.id} />
+        </TabsContent>
+        <TabsContent value="style">
+          <StyleTab projectId={song.id} />
         </TabsContent>
         <TabsContent value="generate">
           <GeneratePanel projectId={song.id} data={panel} open />

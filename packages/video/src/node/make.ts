@@ -41,7 +41,8 @@ import { analyzeSong } from "./analysis";
 import { loadBrand, type Brand } from "./brand";
 import { artistBrandFile } from "./captions";
 import { readProjectSettings, rememberCollection, rememberedCollection, updateProjectSettings } from "./project-settings";
-import { artistRecipe, LIBRARY_RECIPE, readRecipe, recipeSummary, recipeText, resolveRecipe, runRecipe, writeRecipe, type RecipeField } from "./recipe";
+import { PLATFORM_FIELDS, type PlatformField } from "./per-platform";
+import { artistRecipe, LIBRARY_RECIPE, presetMotion, readRecipe, recipeSummary, recipeText, resolveRecipe, runRecipe, writeRecipe, type RecipeField, type RecipeInput, type ResolvedRecipe } from "./recipe";
 import { renameSongFolder, songPathsById } from "./song-folder";
 import { mergeCollections, prepareForFormat, SOURCE_FILE, syncCollection, type CollectionSync, type PreparedForFormat } from "./collection";
 import { fontFileRefs, loadFontCatalog, resolveFace, type FontCatalog } from "./font-catalog";
@@ -421,7 +422,15 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
 
     // The recipe: library -> artist brand -> song.json -> this run (locked song settings win).
     const songRecipe = readRecipe(paths.recipe);
-    const recipe = resolveRecipe({ library: LIBRARY_RECIPE, artist: artistRecipe(brand.brand), song: songRecipe, run: runRecipe(options) });
+    const recipeInput: RecipeInput = {
+      library: LIBRARY_RECIPE,
+      artist: artistRecipe(brand.brand),
+      artistPlatforms: brand.brand.perPlatform,
+      presets: presetMotion(presets),
+      song: songRecipe,
+      run: runRecipe(options),
+    };
+    const recipe = resolveRecipe(recipeInput);
     for (const i of recipe.ignored) log(`song.json locks ${i.field}: keeping ${recipeText(i.kept)} (this run asked for ${recipeText(i.run)})`);
     const own = (k: RecipeField) => recipe.sources[k] === "song" || recipe.sources[k] === "run"; // set for this song or run
     const effective: MakeOptions = {
@@ -442,11 +451,9 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const effectLabels = { verse: recipe.sources.verseEffect === "song" ? "song.json" : "--line-effect", hook: recipe.sources.hookEffect === "song" ? "song.json" : "--hook-effect" };
     log(`recipe: ${recipeSummary(recipe)}`);
 
-    const styles = loadStyles(ws, catalog, {
-      font: effective.font,
-      fontHook: effective.fontHook,
-      brandFonts: brand.brand.useForLyrics ? { verse: brand.brand.verseFont.family, hook: brand.brand.hookFont.family } : undefined,
-    });
+    const stylesFor = (font?: string, fontHook?: string) =>
+      loadStyles(ws, catalog, { font, fontHook, brandFonts: brand.brand.useForLyrics ? { verse: brand.brand.verseFont.family, hook: brand.brand.hookFont.family } : undefined });
+    const styles = stylesFor(effective.font, effective.fontHook);
     // The EP: song.json (--ep is saved there; songs not migrated yet: remembered with the project).
     if (options.ep?.trim() && !recipe.locked.includes("ep")) {
       if (paths.recipe) writeRecipe(paths.recipe, { ...songRecipe, ep: options.ep.trim() });
@@ -540,7 +547,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       if (info.width && info.height) logo = { file: brand.logoFile, width: info.width, height: info.height };
     }
     const shared: Shared = {
-      ws, options: effective, variationsFor, effectLabels, log, now, leadMs, lyricsOffsetMs, catalog, styles, brand, logo, sp, analysis, alignment, lines, reports, numbers,
+      ws, options: effective, variationsFor, effectLabels, recipeFor: (platform: string) => resolveRecipe(recipeInput, platform), stylesFor, log, now, leadMs, lyricsOffsetMs, catalog, styles, brand, logo, sp, analysis, alignment, lines, reports, numbers,
       sectionLines, collection, collectionRemembered, ep, tool, rootDir, getProject: () => project,
     };
     const results: PlatformResult[] = [];
@@ -588,6 +595,8 @@ type Shared = {
   options: MakeOptions; // with the recipe applied
   variationsFor: (preset: PlatformPreset) => number;
   effectLabels: { verse: string; hook: string };
+  recipeFor: (platform: string) => ResolvedRecipe; // the recipe for one platform (perPlatform values)
+  stylesFor: (font?: string, fontHook?: string) => StyleFaces;
   log: (m: string) => void;
   now: Date;
   leadMs: number;
@@ -636,7 +645,33 @@ export function loadPresets(file = path.join(REPO_ROOT, "presets", "platforms.js
   return parsePresets(json, file);
 }
 
-async function makePlatform(sh: Shared, preset: PlatformPreset, position: { index: number; count: number }): Promise<PlatformResult> {
+// The run's settings for one platform: per-platform recipe values (brand.json / song.json perPlatform)
+// for the lyric effects, fonts, accent colour and section.
+function forPlatform(sh: Shared, preset: PlatformPreset): Shared {
+  const r = sh.recipeFor(preset.name);
+  const below = (source: string) => source === "library" || source === "artist" || source === "platforms.json"; // handled by the brand / preset themselves
+  const pick = (k: PlatformField) => (below(r.sources[k]) ? undefined : r.values[k]);
+  const label = (k: PlatformField, flag: string) => {
+    const source = r.sources[k];
+    return source === "run" ? flag : source.startsWith("song") ? `song.json${source.includes(":") ? ` (${preset.name})` : ""}` : `brand.json (${preset.name})`;
+  };
+  const font = pick("verseFont");
+  const fontHook = pick("hookFont");
+  const accent = pick("accentColour");
+  const options: MakeOptions = { ...sh.options, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section: r.values.section };
+  const own = PLATFORM_FIELDS.filter((k) => r.sources[k].includes(":"));
+  if (own.length) sh.log(`${preset.name}: recipe ${own.map((k) => `${k} ${r.values[k]} (${r.sources[k]})`).join(", ")}`);
+  return {
+    ...sh,
+    options,
+    effectLabels: { verse: label("verseEffect", "--line-effect"), hook: label("hookEffect", "--hook-effect") },
+    styles: font === sh.options.font && fontHook === sh.options.fontHook ? sh.styles : sh.stylesFor(font, fontHook),
+    brand: accent ? { ...sh.brand, brand: { ...sh.brand.brand, accentColour: accent } } : sh.brand,
+  };
+}
+
+async function makePlatform(shared: Shared, preset: PlatformPreset, position: { index: number; count: number }): Promise<PlatformResult> {
+  const sh = forPlatform(shared, preset);
   const { ws, options, log, leadMs, lyricsOffsetMs, analysis, lines, reports, numbers, alignment, styles } = sh;
   const project = sh.getProject();
   const format = { width: preset.width, height: preset.height };

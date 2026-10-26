@@ -8,14 +8,15 @@ import { REPO_ROOT, absPath, project as projectTable, type Workspace } from "@ly
 import { eq } from "drizzle-orm";
 
 import { parsePresets } from "../platform";
-import { checkEffectChoice, choiceText, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, EFFECT_NAMES, type EffectChoice } from "../effects/names";
-import { brandDir, brandDirFor, DEFAULT_ARTIST } from "./brand";
+import { EFFECT_NAMES } from "../effects/names";
+import { brandDir, DEFAULT_ARTIST } from "./brand";
 import { renderingPlatforms, SHORT_LABELS, songRuns, type PlatformRun } from "./exports";
 import { keepReplaced, setSongEp, songCollections, songEp, storeCover, storeLyricsTxt } from "./project-settings";
 import { projectLyricsTxt } from "./runs";
 import { SOURCE_FILE } from "./collection";
-import { readRecipe } from "./recipe";
-import { COLLECTIONS_DIR, renameSongFolder, songPathsById } from "./song-folder";
+import { resolveRecipe } from "./recipe";
+import { renameSongFolder, sharedCollections, songPathsById } from "./song-folder";
+import { recipeInputFor } from "./style";
 import { findOrCreateSongProject, storeProjectHint } from "./song-project";
 
 export type PlatformStatus = "PASS" | "WARN" | "FAILED" | "interrupted" | "Rendering" | "none";
@@ -201,8 +202,19 @@ export type GeneratePanelData = {
   chosen: string[]; // the ones this song uses (song.json, else the one it used last)
   songClips: number; // videos and photos in the song folder's own clips\
   effects: string[];
-  verseEffect: string; // the artist's brand defaults
+  verseEffect: string; // the recipe's default (song.json, else the artist's brand)
   hookEffect: string;
+  // Where Generate starts (Step 6.2c-2a): the song's recipe with each value's source, the per-platform
+  // effects, and the locked settings (a run cannot change them).
+  recipe: {
+    platforms: string[];
+    variations: Record<string, number>;
+    section: string;
+    youtubeLayout: string;
+    locked: string[];
+    sources: Record<string, string>;
+    effects: Record<string, { verse: string; hook: string }>; // per platform, when it differs from the default
+  };
   lyricsReady: boolean;
   title: string;
   artist: string;
@@ -218,20 +230,30 @@ export function generatePanelData(ws: Workspace, p: typeof projectTable.$inferSe
   const chosen = songCollections(ws, p.id);
   for (const c of [...chosen].reverse()) if (!collections.includes(c)) collections.unshift(c);
   const paths = songPathsById(ws, p.id);
-  const recipe = paths.recipe ? readRecipe(paths.recipe) : {};
-  const brand = brandMotion(ws.dir, p.artist);
-  const motion = {
-    verseEffect: recipe.verseEffect ? checkEffectChoice(recipe.verseEffect, "verse") : brand.verseEffect,
-    hookEffect: recipe.hookEffect ? checkEffectChoice(recipe.hookEffect, "hook") : brand.hookEffect,
-  };
+  const { input } = recipeInputFor(ws, p.id);
+  const resolved = resolveRecipe(input);
+  const effects: Record<string, { verse: string; hook: string }> = {};
+  for (const x of presets) {
+    const r = resolveRecipe(input, x.name);
+    if (r.values.verseEffect !== resolved.values.verseEffect || r.values.hookEffect !== resolved.values.hookEffect) effects[x.name] = { verse: r.values.verseEffect, hook: r.values.hookEffect };
+  }
   return {
     platforms: presets.map((x) => ({ name: x.name, label: SHORT_LABELS[x.name] ?? x.label, variations: x.variations, lyrics: x.lyrics })),
     collections,
     chosen,
     songClips: paths.clips && existsSync(paths.clips) ? readdirSync(paths.clips).filter((f) => SOURCE_FILE.test(f)).length : 0,
     effects: [...EFFECT_NAMES],
-    verseEffect: choiceText(motion.verseEffect),
-    hookEffect: choiceText(motion.hookEffect),
+    verseEffect: resolved.values.verseEffect,
+    hookEffect: resolved.values.hookEffect,
+    recipe: {
+      platforms: resolved.values.platforms,
+      variations: resolved.values.variations,
+      section: resolved.values.section,
+      youtubeLayout: resolved.values.youtubeLayout,
+      locked: resolved.locked,
+      sources: resolved.sources,
+      effects,
+    },
     lyricsReady: !!projectLyricsTxt(ws, p.id),
     title: p.title,
     artist: p.artist,
@@ -240,26 +262,5 @@ export function generatePanelData(ws: Workspace, p: typeof projectTable.$inferSe
   };
 }
 
-// Shared collections: the folders in WORKSPACE_DIR\collections (and in the old clips\ until migrated).
-export function sharedCollections(ws: Workspace): string[] {
-  const names = new Set<string>();
-  for (const dir of [COLLECTIONS_DIR, "clips"]) {
-    const abs = absPath(ws, dir);
-    if (existsSync(abs)) for (const d of readdirSync(abs, { withFileTypes: true })) if (d.isDirectory()) names.add(d.name);
-  }
-  return [...names].sort((a, b) => a.localeCompare(b));
-}
+export { sharedCollections } from "./song-folder";
 
-// The artist's motion defaults from brand.json (read directly; a broken file falls back to the defaults).
-function brandMotion(workspaceDir: string, artist: string): { verseEffect: EffectChoice; hookEffect: EffectChoice } {
-  const fallback = { verseEffect: DEFAULT_VERSE_EFFECT, hookEffect: DEFAULT_HOOK_EFFECT };
-  try {
-    const raw = JSON.parse(readFileSync(path.join(brandDirFor(workspaceDir, artist), "brand.json"), "utf8")) as { motion?: Record<string, unknown> };
-    return {
-      verseEffect: raw.motion?.verseEffect ? checkEffectChoice(raw.motion.verseEffect, "verse") : fallback.verseEffect,
-      hookEffect: raw.motion?.hookEffect ? checkEffectChoice(raw.motion.hookEffect, "hook") : fallback.hookEffect,
-    };
-  } catch {
-    return fallback;
-  }
-}

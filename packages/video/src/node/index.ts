@@ -30,3 +30,4 @@ export * from "./song-folder";
 export * from "./recipe";
 export * from "./migrate";
 export * from "./assets";
+export * from "./style";
