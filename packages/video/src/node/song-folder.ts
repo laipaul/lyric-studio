@@ -39,7 +39,7 @@ export function songFolderFor(ws: Workspace, artist: string, title: string, proj
   const taken = (rel: string) => {
     const owner = ws.db.select({ id: projectTable.id }).from(projectTable).where(eq(projectTable.folder, rel)).get();
     if (owner) return owner.id !== projectId;
-    return existsSync(absPath(ws, rel));
+    return existsSync(absPath(ws, rel)) && !holdsNoFiles(absPath(ws, rel)); // an empty folder (made by hand) is free
   };
   if (!taken(base)) return base;
   for (let n = 2; ; n++) if (!taken(`${base} (${n})`)) return `${base} (${n})`;
@@ -185,9 +185,17 @@ export function relocatePaths(ws: Workspace, fromRel: string, toRel: string): vo
   writeMoves(ws.dir, [...readMoves(ws.dir), { from, to, at: new Date().toISOString() }]);
 }
 
+// A folder without any file in it (empty sub-folders only), e.g. made by hand in advance.
+export function holdsNoFiles(dir: string): boolean {
+  if (!existsSync(dir) || !statSync(dir).isDirectory()) return false;
+  return readdirSync(dir, { withFileTypes: true }).every((e) => e.isDirectory() && holdsNoFiles(path.join(dir, e.name)));
+}
+
 // Moves a file or folder inside the workspace (same drive: a rename), creating the target's parent.
+// An existing target is never overwritten (only an empty folder is replaced).
 export function moveEntry(fromAbs: string, toAbs: string): void {
   mkdirSync(path.dirname(toAbs), { recursive: true });
+  if (holdsNoFiles(toAbs)) rmSync(toAbs, { recursive: true });
   if (existsSync(toAbs)) throw new Error(`Cannot move ${fromAbs}: ${toAbs} already exists.`);
   renameSync(fromAbs, toAbs);
 }

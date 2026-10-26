@@ -467,7 +467,9 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     }
     const collectionRemembered = !!remembered || recipe.sources.collections === "song";
     if (collectionRemembered) log(`using collection ${collectionNames.join(", ")} (remembered)`);
-    const collectionFolder = (name: string, i: number) => (i === 0 ? (recipe.sources.collections === "run" ? options.collectionPath : (options.collectionPath ?? remembered?.folder)) : undefined);
+    // A collection kept elsewhere (--collection-path) is found again by its name, also after the migration.
+    const lastUsed = rememberedCollection(ws, sp.project.id);
+    const collectionFolder = (name: string, i: number) => (i === 0 && options.collectionPath) || (lastUsed?.name === name ? lastUsed.folder : undefined);
 
     log("analysing the song (cached after the first time)");
     const analysis = analyzeSong(sp.songFile, { downbeatOffset: options.downbeatOffset });
@@ -508,7 +510,8 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     if (songClips) syncs[0] = { ...syncs[0], collection: { ...syncs[0].collection, name: "song clips" } };
     const collection = mergeCollections(syncs);
     if (recipe.sources.collections === "run") {
-      rememberCollection(ws, project.id, { name: collectionNames[0], ...(options.collectionPath ? { folder: options.collectionPath } : {}) });
+      const folder = options.collectionPath ?? collectionFolder(collectionNames[0], 0);
+      rememberCollection(ws, project.id, { name: collectionNames[0], ...(folder ? { folder } : {}) });
       // Remembered in song.json (a locked song.json collection never gets here: the run's choice was ignored).
       if (paths.recipe) writeRecipe(paths.recipe, { ...readRecipe(paths.recipe), collections: collectionNames });
     }

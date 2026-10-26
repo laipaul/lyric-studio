@@ -10,12 +10,15 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
+  applyMigration,
   checkRecipe,
   folderName,
   importSongClips,
   LIBRARY_RECIPE,
   lockField,
   makeVideos,
+  migrationText,
+  planMigration,
   parseMakeArgs,
   readManifest,
   readMoves,
@@ -103,6 +106,7 @@ describe("folder names and layout", () => {
     expect(songFolderFor(ws, "Life Lyrics", "Taken", other.id)).toBe("songs/Life Lyrics/Taken"); // its own
     expect(songFolderFor(ws, "Life Lyrics", "Taken")).toBe("songs/Life Lyrics/Taken (2)");
     mkdirSync(path.join(wsDir, "songs", "Life Lyrics", "Taken (2)"), { recursive: true });
+    writeFileSync(path.join(wsDir, "songs", "Life Lyrics", "Taken (2)", "mine.txt"), "x"); // an empty one would be free
     expect(songFolderFor(ws, "Life Lyrics", "Taken")).toBe("songs/Life Lyrics/Taken (3)");
     ws.db.delete(project).where(eq(project.id, other.id)).run();
     rmSync(path.join(wsDir, "songs", "Life Lyrics", "Taken (2)"), { recursive: true });
@@ -219,6 +223,57 @@ describe("a song's folder in pnpm make", () => {
       ws.db.delete(makeRun).where(eq(makeRun.id, busy.id)).run();
     }
     expect(existsSync(folder)).toBe(true);
+  });
+});
+
+describe("folders made by hand, collections kept elsewhere", () => {
+  it("an empty folder made in advance is not 'taken'; a move replaces it, a folder with files never", () => {
+    const pre = path.join(wsDir, "songs", "Life Lyrics", "Made By Hand");
+    mkdirSync(path.join(pre, "clips"), { recursive: true });
+    expect(songFolderFor(ws, "Life Lyrics", "Made By Hand")).toBe("songs/Life Lyrics/Made By Hand");
+    writeFileSync(path.join(pre, "notes.txt"), "mine");
+    expect(songFolderFor(ws, "Life Lyrics", "Made By Hand")).toBe("songs/Life Lyrics/Made By Hand (2)");
+    rmSync(pre, { recursive: true });
+  });
+
+  it("songs:migrate renames a song folder left with (2) once the name is free; a folder with files is only named", async () => {
+    const base = path.join(wsDir, "songs", "Life Lyrics", "Love Is A Good Thing");
+    mkdirSync(path.join(base, "exports"), { recursive: true }); // empty, made by hand
+    const two = "songs/Life Lyrics/Love Is A Good Thing (2)";
+    mkdirSync(path.join(wsDir, two, "exports"), { recursive: true });
+    writeFileSync(path.join(wsDir, two, "song.mp3"), "x");
+    const p = ws.db.insert(project).values({ title: "Love Is A Good Thing", artist: "Life Lyrics", folder: two, audio_path: `${two}/song.mp3` }).returning().get();
+    const plan = planMigration(ws);
+    expect(plan.renames).toEqual([{ from: two, to: "songs/Life Lyrics/Love Is A Good Thing", what: '"Love Is A Good Thing"' }]);
+    expect(migrationText(plan)).toContain('Rename "Love Is A Good Thing": songs\\Life Lyrics\\Love Is A Good Thing (2)\\  ->  songs\\Life Lyrics\\Love Is A Good Thing\\');
+    const r = await applyMigration(ws);
+    expect(r.renames).toBe(1);
+    expect(ws.db.select().from(project).where(eq(project.id, p.id)).get()).toMatchObject({ folder: "songs/Life Lyrics/Love Is A Good Thing", audio_path: "songs/Life Lyrics/Love Is A Good Thing/song.mp3" });
+    expect(existsSync(path.join(base, "song.mp3"))).toBe(true);
+    expect(existsSync(path.join(wsDir, two))).toBe(false);
+
+    // A folder with files that no song owns is never touched: the song keeps (2) and the dry run says why.
+    const other = "songs/Life Lyrics/Kept (2)";
+    mkdirSync(path.join(wsDir, other), { recursive: true });
+    mkdirSync(path.join(wsDir, "songs", "Life Lyrics", "Kept"), { recursive: true });
+    writeFileSync(path.join(wsDir, "songs", "Life Lyrics", "Kept", "mine.txt"), "x");
+    const q = ws.db.insert(project).values({ title: "Kept", artist: "Life Lyrics", folder: other }).returning().get();
+    const again = planMigration(ws);
+    expect(again.renames).toEqual([]);
+    expect(again.notes[0]).toMatch(/Kept\\ was not made by Lyric Studio and has files in it/);
+    for (const id of [p.id, q.id]) ws.db.delete(project).where(eq(project.id, id)).run();
+  });
+
+  it("a collection kept outside the workspace (--collection-path) is found again on later runs", async () => {
+    const far = path.join(root, "far-away", "wedding2");
+    mkdirSync(far, { recursive: true });
+    makeClip(path.join(far, "01_far.mp4"), 6, "green");
+    await run({ collection: "wedding2", collectionPath: far });
+    const logs: string[] = [];
+    const r = await run({ log: (m) => logs.push(m) });
+    expect(logs).toContain("using collection wedding2 (remembered)");
+    expect(readManifest(r.variations[0].manifestFile).clips.map((c) => c.name)).toContain("01_far.mp4");
+    await run({ collection: "wedding" }); // back to the shared collection for the next tests
   });
 });
 

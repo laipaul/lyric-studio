@@ -590,6 +590,12 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   the database and moved-paths.json; files the migration wrote go to `migrations\<date>\undone\`.
   If a move fails half-way (a file open on Windows), it stops and says to run --undo and try again.
   Runs made after a migration stay on disk after --undo, but their database rows (jobs, marks) are gone.
+- Fixes after the first migration on the PC: a folder made by hand in advance that holds no files is
+  not "taken" (it is used, not given " (2)"); `pnpm songs:migrate --apply` also renames a song folder
+  left with " (2)" once its plain name is free (a folder with files that no song owns is never touched;
+  the dry run names it); an empty `collections\<name>\` no longer blocks moving `clips\<name>\`; a
+  collection kept outside the workspace (`--collection-path`) is found again by its name after the
+  migration (before, song.json's collection lost the remembered path).
 - **Studio**: Library banner "N songs and M collections still use the old folders" with **Preview**
   (dialog with the dry-run text) and **Migrate** (confirm with the backup reminder, then the same as
   --apply). Song page tabs **Assets / Generate / Videos** (Videos is the default when the song has runs).

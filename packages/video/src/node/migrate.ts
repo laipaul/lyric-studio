@@ -14,7 +14,7 @@ import { eq } from "drizzle-orm";
 
 import { processAlive } from "./jobs";
 import { writeRecipe, type SongRecipe } from "./recipe";
-import { COLLECTIONS_DIR, moveEntry, readMoves, relocatePaths, removeEmptyDirs, songBusy, songFolderFor, STUDIO_DIR, writeMoves } from "./song-folder";
+import { COLLECTIONS_DIR, holdsNoFiles, moveEntry, readMoves, relocatePaths, removeEmptyDirs, songBusy, songFolderFor, STUDIO_DIR, writeMoves } from "./song-folder";
 
 export const MIGRATIONS_DIR = "migrations"; // WORKSPACE_DIR\migrations\<date>\: backups and journals
 export const BACKUP_REMINDER = "Make sure your regular backup is recent before continuing (y/n)";
@@ -32,6 +32,7 @@ export type PlannedSong = {
 export type MigrationPlan = {
   songs: PlannedSong[];
   collections: PlannedMove[];
+  renames: PlannedMove[]; // song folders that got " (2)" because the name was taken, now free again
   problems: string[]; // things that stop --apply
   notes: string[]; // left as they are
 };
@@ -42,6 +43,7 @@ export function planMigration(ws: Workspace): MigrationPlan {
   const plan: MigrationPlan = {
     songs: [],
     collections: [],
+    renames: [],
     problems: [],
     notes: [],
   };
@@ -51,13 +53,25 @@ export function planMigration(ws: Workspace): MigrationPlan {
     for (const d of readdirSync(clipsDir, { withFileTypes: true })) {
       if (!d.isDirectory()) continue;
       const to = `${COLLECTIONS_DIR}/${d.name}`;
-      if (existsSync(absPath(ws, to))) plan.problems.push(`collection ${d.name}: both clips\\${d.name} and collections\\${d.name} exist; merge them by hand first`);
+      if (existsSync(absPath(ws, to)) && !holdsNoFiles(absPath(ws, to))) plan.problems.push(`collection ${d.name}: both clips\\${d.name} and collections\\${d.name} exist; merge them by hand first`);
       else
         plan.collections.push({
           from: `clips/${d.name}`,
           to,
           what: `collection ${d.name}`,
         });
+    }
+  }
+  // Song folders named "<title> (2)" because "<title>" was taken (e.g. a folder made by hand): renamed
+  // when that name is free (or holds no files); a folder with files is never touched, only named.
+  for (const p of ws.db.select().from(projectTable).all()) {
+    if (!p.folder || !/ \(\d+\)$/.test(p.folder)) continue;
+    if (songBusy(ws, p.id)) continue; // renamed on a later run
+    const base = p.folder.replace(/ \(\d+\)$/, "");
+    const preferred = songFolderFor(ws, p.artist, p.title, p.id);
+    if (preferred !== p.folder && preferred === base) plan.renames.push({ from: p.folder, to: preferred, what: `"${p.title}"` });
+    else if (existsSync(absPath(ws, base)) && !ws.db.select({ id: projectTable.id }).from(projectTable).where(eq(projectTable.folder, base)).get()) {
+      plan.notes.push(`${win(base)}\\ was not made by Lyric Studio and has files in it, so "${p.title}" is in ${win(p.folder)}\\. Move what you need from it, delete or rename it, then run pnpm songs:migrate --apply again to tidy the name.`);
     }
   }
   // Songs: projects\<id>\ -> songs\<artist>\<title>\.
@@ -187,8 +201,9 @@ const win = (rel: string) => rel.split("/").join("\\");
 
 export function migrationText(plan: MigrationPlan): string[] {
   const out: string[] = [];
-  if (!plan.songs.length && !plan.collections.length) out.push("Nothing to migrate: every song has its own folder in songs\\ and collections are in collections\\.");
+  if (!plan.songs.length && !plan.collections.length && !plan.renames.length) out.push("Nothing to migrate: every song has its own folder in songs\\ and collections are in collections\\.");
   for (const c of plan.collections) out.push(`Collection: ${win(c.from)}\\  ->  ${win(c.to)}\\`);
+  for (const r of plan.renames) out.push(`Rename ${r.what}: ${win(r.from)}\\  ->  ${win(r.to)}\\`);
   for (const s of plan.songs) {
     out.push(`Song "${s.title}" (${s.artist}): ${win(s.from)}\\  ->  ${win(s.to)}\\`);
     for (const m of s.moves) out.push(`    ${win(m.from.slice(s.from.length + 1))}  ->  ${win(m.to.slice(s.to.length + 1))}  (${m.what})`);
@@ -220,6 +235,7 @@ export type MigrationResult = {
   backupDir: string;
   songs: number;
   collections: number;
+  renames: number;
   lines: string[];
 };
 
@@ -227,11 +243,12 @@ export async function applyMigration(ws: Workspace, options: { log?: (m: string)
   const log = options.log ?? (() => {});
   const plan = planMigration(ws);
   if (plan.problems.length) throw new Error(`Cannot migrate now:\n  - ${plan.problems.join("\n  - ")}`);
-  if (!plan.songs.length && !plan.collections.length)
+  if (!plan.songs.length && !plan.collections.length && !plan.renames.length)
     return {
       backupDir: "",
       songs: 0,
       collections: 0,
+      renames: 0,
       lines: migrationText(plan),
     };
 
@@ -295,6 +312,7 @@ export async function applyMigration(ws: Workspace, options: { log?: (m: string)
     backupDir,
     songs: plan.songs.length,
     collections: plan.collections.length,
+    renames: plan.renames.length,
     lines: migrationText(plan),
   };
 
@@ -302,6 +320,11 @@ export async function applyMigration(ws: Workspace, options: { log?: (m: string)
     for (const c of plan.collections) {
       move(c.from, c.to);
       log(`moved ${win(c.from)}\\ -> ${win(c.to)}\\`);
+    }
+    for (const r of plan.renames) {
+      move(r.from, r.to);
+      removeEmptyDirs(path.dirname(absPath(ws, r.from)), absPath(ws, "songs"));
+      log(`renamed ${r.what}: ${win(r.from)}\\ -> ${win(r.to)}\\`);
     }
     for (const s of plan.songs) {
       // Read what the new files need before anything moves.
