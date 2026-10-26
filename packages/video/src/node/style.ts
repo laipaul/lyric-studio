@@ -67,7 +67,7 @@ export type StyleData = {
   recipeFile: string | null; // workspace-relative song.json
   brandFile: string;
   fields: StyleField[];
-  platforms: { name: string; label: string; presetLength: string }[]; // presetLength: "30 s", "45-60 s", "whole song", "loop"
+  platforms: { name: string; label: string; presetLength: string; presetVariations: number }[]; // presetLength: "30 s", "45-60 s", "whole song", "loop"
   effects: { name: string; label: string }[]; // label: "glide · verses"
   brandDefaults: { verseEffect: string; hookEffect: string }; // marked "brand default" in the lists
   fonts: StyleFont[];
@@ -130,7 +130,7 @@ export function styleFonts(catalog: FontCatalog): StyleFont[] {
 export function styleData(ws: Workspace, projectId: string): StyleData {
   const catalog = loadFontCatalog(ws.dir);
   const { input, song, recipeFile, brandFile } = recipeInputFor(ws, projectId, catalog);
-  const platforms = presetsList().map((p) => ({ name: p.name, label: SHORT_LABELS[p.name] ?? p.label, presetLength: presetLengthText(p) }));
+  const platforms = presetsList().map((p) => ({ name: p.name, label: SHORT_LABELS[p.name] ?? p.label, presetLength: presetLengthText(p), presetVariations: p.variations }));
   const withLyrics = new Set(presetsList().filter((p) => p.lyrics).map((p) => p.name)); // Canvas has no lyrics, effects or fonts
   const all = resolveRecipe(input);
   const byPlatform = Object.fromEntries(platforms.map((p) => [p.name, resolveRecipe(input, p.name)]));

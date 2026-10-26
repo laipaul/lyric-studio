@@ -690,6 +690,20 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   é è ç à ô (or capitals) is marked "⚠ no French accents" with a warning naming the missing letters.
 - B6 Effect hints in one format in every list ("glide · verses", "karaoke-highlight · hooks",
   "cinematic-fade · verses, slow songs", ...), the brand default marked; also in pnpm effects:preview.
+- Fixes after the PC test: **Lock did not stick in the app.** Cause: leaving a field (e.g. the Reels
+  length) saves it, and the whole Style tab was disabled while saving, so a padlock click right after was
+  dropped; with no feedback a second click unlocked again (source "This song" with the reset arrow, padlock
+  open, Generate not locked). Now changes are queued and saved in order (nothing is disabled, no click is
+  lost), the padlock switches at once, and "Saving… / Saved to song.json" shows the state. Polish: "videos
+  per platform" inputs wider with the preset's number ("3 (preset)"); "Platforms Generate starts with":
+  nothing ticked = Generate starts with Reels + YouTube (and pnpm make without --platforms makes Standard),
+  said under the boxes; Generate's effect lists show "From the recipe (glide)" with the per-platform values
+  on a line underneath ("YouTube: cinematic-fade").
+- Browser test in the repo: `pnpm test:e2e` (apps/studio/e2e/style-lock.e2e.ts; needs a studio build,
+  FFmpeg and Playwright, as in the cloud check): types a Reels length and clicks the Hook effect padlock
+  right away, then checks the icon (at once and after saving), song.json, Generate (Hook effect greyed
+  out, Reels + YouTube preselected, the short recipe option and the per-platform line), the placeholders
+  and the empty-platforms note, and unlocking.
 - Also: the Assets tab shows the real song-folder path, clickable (Explorer); the Hints card shows timed
   lines + end marks (the empty stamp pnpm tap writes after the last line) and warns about tapped lines that
   match no line of lyrics.txt. Fix: bundled fonts are found from the project root (inside the studio's

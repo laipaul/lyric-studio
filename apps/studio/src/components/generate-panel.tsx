@@ -25,7 +25,9 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
   const r = data.recipe;
   const locked = (field: string) => r.locked.includes(field);
   const startPlatforms = r.platforms.filter((p) => data.platforms.some((x) => x.name === p));
-  const [platforms, setPlatforms] = useState<string[]>(startPlatforms.length ? startPlatforms : data.platforms.some((p) => p.name === "reels") ? ["reels"] : [data.platforms[0]?.name ?? "standard"]);
+  // The recipe's platforms; none set: Reels + YouTube (the Style tab says so).
+  const fallback = ["reels", "youtube"].filter((p) => data.platforms.some((x) => x.name === p));
+  const [platforms, setPlatforms] = useState<string[]>(startPlatforms.length ? startPlatforms : fallback.length ? fallback : [data.platforms[0]?.name ?? "standard"]);
   const videosFor = (name: string, preset: number) => (variations ? Number(variations) : (r.variations[name] ?? r.variations["*"] ?? preset));
   const [collections, setCollections] = useState<string[]>(data.chosen.length || data.songClips ? data.chosen : data.collections.slice(0, 1));
   const [variations, setVariations] = useState("");
@@ -82,13 +84,12 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
     }
   }
 
-  const fromRecipe = (kind: "verse" | "hook") => {
-    const base = kind === "verse" ? data.verseEffect : data.hookEffect;
-    const differ = Object.entries(r.effects)
-      .filter(([name]) => platforms.includes(name))
+  // "From the recipe (glide)"; the platforms with their own value go on a line under the list.
+  const fromRecipe = (kind: "verse" | "hook") => `From the recipe (${kind === "verse" ? data.verseEffect : data.hookEffect})`;
+  const perPlatform = (kind: "verse" | "hook") =>
+    Object.entries(r.effects)
+      .filter(([name, e]) => platforms.includes(name) && e[kind] !== (kind === "verse" ? data.verseEffect : data.hookEffect))
       .map(([name, e]) => `${data.platforms.find((p) => p.name === name)?.label ?? name}: ${e[kind]}`);
-    return `From the recipe (${base}${differ.length ? ` · ${differ.join(" · ")}` : ""})`;
-  };
   const effectSelect = (value: { name: string; intensity: string }, set: (v: { name: string; intensity: string }) => void, name: string) => (
     <div className="flex gap-2">
       <select
@@ -183,10 +184,20 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
             <label className={label}>
               <span className="font-medium">Verse effect{locked("verseEffect") ? " 🔒 locked in the song's recipe" : ""}</span>
               {effectSelect(verse, setVerse, "Verse")}
+              {!verse.name && perPlatform("verse").length ? (
+                <span data-per-platform-effects="verse" className="text-muted-foreground text-xs">
+                  {perPlatform("verse").join(" · ")}
+                </span>
+              ) : null}
             </label>
             <label className={label}>
               <span className="font-medium">Hook effect{locked("hookEffect") ? " 🔒 locked in the song's recipe" : ""}</span>
               {effectSelect(hook, setHook, "Hook")}
+              {!hook.name && perPlatform("hook").length ? (
+                <span data-per-platform-effects="hook" className="text-muted-foreground text-xs">
+                  {perPlatform("hook").join(" · ")}
+                </span>
+              ) : null}
             </label>
           </div>
           <div className="grid gap-4 md:grid-cols-4">

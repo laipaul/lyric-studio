@@ -2,7 +2,7 @@
 
 import { ChevronDown, Lock, LockOpen, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { StyleData, StyleField, StyleFont } from "@lyric/video/style";
 
@@ -31,8 +31,12 @@ export function StyleTab({ projectId }: { projectId: string }) {
   const router = useRouter();
   const [data, setData] = useState<StyleData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState<"idle" | "saving" | "saved">("idle");
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  // Changes are saved one after the other, in the order they were made: leaving a field (which saves
+  // it) and clicking a padlock right after must both count; nothing is disabled while saving.
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const pending = useRef(0);
 
   useEffect(() => {
     let alive = true;
@@ -45,20 +49,35 @@ export function StyleTab({ projectId }: { projectId: string }) {
     };
   }, [projectId]);
 
-  async function act(body: { action: "set" | "reset" | "lock" | "unlock"; field: string; platform?: string; value?: unknown }) {
-    setBusy(true);
-    setError(null);
-    try {
-      const r = await fetch(`/api/songs/${projectId}/recipe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const d = (await r.json()) as StyleData & { error?: string };
-      if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
-      setData(d);
-      router.refresh(); // Generate starts from the recipe
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
+  function act(body: { action: "set" | "reset" | "lock" | "unlock"; field: string; platform?: string; value?: unknown }) {
+    // The padlock shows its new state at once (the save follows).
+    if (body.action === "lock" || body.action === "unlock") {
+      setData((d) => (d ? { ...d, fields: d.fields.map((f) => (f.field === body.field ? { ...f, locked: body.action === "lock" } : f)) } : d));
     }
+    pending.current += 1;
+    setSaving("saving");
+    setError(null);
+    queue.current = queue.current.then(async () => {
+      try {
+        const r = await fetch(`/api/songs/${projectId}/recipe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const d = (await r.json()) as StyleData & { error?: string };
+        if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
+        setData(d);
+      } catch (e) {
+        setError((e as Error).message);
+        // Show what is really saved.
+        const fresh = (await fetch(`/api/songs/${projectId}/recipe`, { cache: "no-store" })
+          .then((r) => r.json())
+          .catch(() => null)) as (StyleData & { error?: string }) | null;
+        if (fresh && !fresh.error) setData(fresh);
+      } finally {
+        pending.current -= 1;
+        if (!pending.current) {
+          setSaving("saved");
+          router.refresh(); // Generate starts from the recipe
+        }
+      }
+    });
   }
 
   // @font-face rules for the preview line (each font loads only when it is shown).
@@ -84,7 +103,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
       const join = (n: string, i: string) => (i === "balanced" ? n : `${n}:${i}`);
       return (
         <div className="flex gap-2">
-          <select aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} className={select} value={name} disabled={busy} onChange={(e) => set(join(e.target.value, intensity))}>
+          <select aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} className={select} value={name} onChange={(e) => set(join(e.target.value, intensity))}>
             {data.effects.map((e) => (
               <option key={e.name} value={e.name}>
                 {e.label}
@@ -92,7 +111,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
               </option>
             ))}
           </select>
-          <select aria-label={`${f.label} intensity ${platform ?? ""}`} className={select} value={intensity} disabled={busy} onChange={(e) => set(join(name, e.target.value))}>
+          <select aria-label={`${f.label} intensity ${platform ?? ""}`} className={select} value={intensity} onChange={(e) => set(join(name, e.target.value))}>
             {INTENSITIES.map((i) => (
               <option key={i} value={i}>
                 {i}
@@ -104,12 +123,12 @@ export function StyleTab({ projectId }: { projectId: string }) {
     }
     if (f.field === "verseFont" || f.field === "hookFont") {
       const font = data.fonts.find((x) => x.family.toLowerCase() === String(value).toLowerCase());
-      return <FontEditor fonts={data.fonts} value={String(value)} font={font} previewLine={data.previewLine} disabled={busy} onChange={set} testId={key} />;
+      return <FontEditor fonts={data.fonts} value={String(value)} font={font} previewLine={data.previewLine} onChange={set} testId={key} />;
     }
     if (f.field === "accentColour") {
       return (
         <div className="flex items-center gap-2">
-          <input type="color" aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} value={String(value)} disabled={busy} onChange={(e) => set(e.target.value.toUpperCase())} className="h-8 w-12 rounded border bg-transparent" />
+          <input type="color" aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} value={String(value)} onChange={(e) => set(e.target.value.toUpperCase())} className="h-8 w-12 rounded border bg-transparent" />
           <span className="text-muted-foreground text-xs tabular-nums">{String(value)}</span>
         </div>
       );
@@ -118,13 +137,20 @@ export function StyleTab({ projectId }: { projectId: string }) {
       const all = f.field === "collections" ? data.collections : data.platforms.map((p) => p.name);
       const list = (value as string[]) ?? [];
       return (
-        <div className="flex flex-wrap gap-x-3 gap-y-1">
-          {all.map((c) => (
-            <label key={c} className="flex items-center gap-1.5 text-sm">
-              <input type="checkbox" data-edit={`${key}-${c}`} checked={list.includes(c)} disabled={busy} onChange={(e) => set(e.target.checked ? [...list, c] : list.filter((x) => x !== c))} />
-              {f.field === "platforms" ? (data.platforms.find((p) => p.name === c)?.label ?? c) : c}
-            </label>
-          ))}
+        <div className="flex flex-col gap-1">
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
+            {all.map((c) => (
+              <label key={c} className="flex items-center gap-1.5 text-sm">
+                <input type="checkbox" data-edit={`${key}-${c}`} checked={list.includes(c)} onChange={(e) => set(e.target.checked ? [...list, c] : list.filter((x) => x !== c))} />
+                {f.field === "platforms" ? (data.platforms.find((p) => p.name === c)?.label ?? c) : c}
+              </label>
+            ))}
+          </div>
+          {f.field === "platforms" && !list.length ? (
+            <p data-platforms-empty className="text-muted-foreground text-xs">
+              Nothing ticked: Generate starts with Reels + YouTube, and pnpm make without --platforms makes the Standard video. Tick platforms to choose your own start.
+            </p>
+          ) : null}
         </div>
       );
     }
@@ -139,11 +165,11 @@ export function StyleTab({ projectId }: { projectId: string }) {
                 type="number"
                 min={1}
                 max={24}
-                placeholder="preset"
+                placeholder={`${p.presetVariations} (preset)`}
                 key={`${p.name}-${v[p.name] ?? ""}`}
                 defaultValue={v[p.name] ?? ""}
-                disabled={busy}
-                className={cn(input, "w-16")}
+               
+                className={cn(input, "w-28")}
                 onBlur={(e) => {
                   const n = e.target.value ? Number(e.target.value) : undefined;
                   if (n === v[p.name]) return;
@@ -171,7 +197,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
             className={cn(input, "w-24")}
             defaultValue={value === null || value === undefined ? "" : String(value)}
             placeholder="preset"
-            disabled={busy}
+           
             onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
             onBlur={(e) => {
               const n = e.target.value ? Number(e.target.value) : null;
@@ -186,7 +212,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
     }
     if (f.field === "youtubeLayout") {
       return (
-        <select aria-label={f.label} data-edit={key} className={select} value={String(value)} disabled={busy} onChange={(e) => set(e.target.value)}>
+        <select aria-label={f.label} data-edit={key} className={select} value={String(value)} onChange={(e) => set(e.target.value)}>
           {["cover", "stills", "clips"].map((l) => (
             <option key={l} value={l}>
               {l}
@@ -203,7 +229,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
         className={cn(input, "w-48")}
         defaultValue={String(value ?? "")}
         placeholder={f.field === "section" ? "auto, full or 0:11-1:10" : ""}
-        disabled={busy}
+       
         onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
         onBlur={(e) => e.target.value.trim() !== String(value ?? "") && set(e.target.value.trim())}
       />
@@ -217,6 +243,9 @@ export function StyleTab({ projectId }: { projectId: string }) {
         This song&apos;s recipe ({data.recipeFile?.split("/").pop()}). A setting comes from the library defaults, the artist&apos;s brand ({data.brandFile.split("/").join("\\")}) or this song; a change here is saved for this song at once. A
         locked setting keeps this song&apos;s value: a brand change does not reach it and Generate cannot change it for one run.
       </p>
+      <p data-saving={saving} className="text-muted-foreground h-4 text-xs" aria-live="polite">
+        {saving === "saving" ? "Saving…" : saving === "saved" ? "Saved to song.json" : ""}
+      </p>
       {error ? <p className="rounded-md border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-200">{error}</p> : null}
       <ul className="flex flex-col gap-2">
         {data.fields.map((f) => (
@@ -229,7 +258,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
               </span>
               <div className="flex items-center gap-1">
                 {f.own && !f.locked ? (
-                  <button type="button" data-reset={f.field} title="Back to the inherited value" disabled={busy} onClick={() => act({ action: "reset", field: f.field })} className="text-muted-foreground hover:text-foreground rounded p-1">
+                  <button type="button" data-reset={f.field} title="Back to the inherited value" onClick={() => act({ action: "reset", field: f.field })} className="text-muted-foreground hover:text-foreground rounded p-1">
                     <RotateCcw className="size-4" />
                   </button>
                 ) : null}
@@ -238,7 +267,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
                   data-lock={f.field}
                   aria-pressed={f.locked}
                   title={f.locked ? "Locked: click to unlock" : "Lock: keep this song's value"}
-                  disabled={busy}
+                 
                   onClick={() => act({ action: f.locked ? "unlock" : "lock", field: f.field })}
                   className={cn("rounded p-1", f.locked ? "text-brand" : "text-muted-foreground hover:text-foreground")}
                 >
@@ -265,7 +294,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
                         <div className="min-w-0 flex-1">{editor(f, p.value, p.platform)}</div>
                         <span className={cn("rounded-full border px-2 py-0.5 text-xs", p.own ? "border-brand/40 text-brand" : "text-muted-foreground")}>{sourceLabel(p.source, data.platforms)}</span>
                         {p.own ? (
-                          <button type="button" data-reset={`${f.field}-${p.platform}`} title="Back to the song's default" disabled={busy} onClick={() => act({ action: "reset", field: f.field, platform: p.platform })} className="text-muted-foreground hover:text-foreground rounded p-1">
+                          <button type="button" data-reset={`${f.field}-${p.platform}`} title="Back to the song's default" onClick={() => act({ action: "reset", field: f.field, platform: p.platform })} className="text-muted-foreground hover:text-foreground rounded p-1">
                             <RotateCcw className="size-4" />
                           </button>
                         ) : (
@@ -285,10 +314,10 @@ export function StyleTab({ projectId }: { projectId: string }) {
 }
 
 // A font list (bundled and your own) with a live preview line and a warning when accents are missing.
-function FontEditor({ fonts, value, font, previewLine, disabled, onChange, testId }: { fonts: StyleFont[]; value: string; font?: StyleFont; previewLine: string; disabled: boolean; onChange: (v: string) => void; testId: string }) {
+function FontEditor({ fonts, value, font, previewLine, onChange, testId }: { fonts: StyleFont[]; value: string; font?: StyleFont; previewLine: string; onChange: (v: string) => void; testId: string }) {
   return (
     <div className="flex flex-col gap-1">
-      <select aria-label="font" data-edit={testId} className={cn(select, "w-64")} value={font?.family ?? value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+      <select aria-label="font" data-edit={testId} className={cn(select, "w-64")} value={font?.family ?? value} onChange={(e) => onChange(e.target.value)}>
         {!font ? <option value={value}>{value} (not found)</option> : null}
         {(["bundled", "user"] as const).map((source) =>
           fonts.some((f) => f.source === source) ? (
