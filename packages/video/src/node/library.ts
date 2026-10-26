@@ -239,7 +239,8 @@ export function generatePanelData(ws: Workspace, p: typeof projectTable.$inferSe
   const lengths: Record<string, number | null> = {};
   for (const x of presets) {
     const r = resolveRecipe(input, x.name);
-    lengths[x.name] = r.values.length;
+    // A target length never applies to YouTube (whole song) or Canvas (loop): their chips keep that.
+    lengths[x.name] = x.length.mode === "full" || x.length.mode === "loop" ? null : r.values.length;
     if (r.values.verseEffect !== resolved.values.verseEffect || r.values.hookEffect !== resolved.values.hookEffect) effects[x.name] = { verse: r.values.verseEffect, hook: r.values.hookEffect };
   }
   return {

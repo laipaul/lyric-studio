@@ -664,7 +664,7 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   worker made 3 Reels (3 PASS) into songs\Life Lyrics\Hold On Tight (Acoustic)\exports\; then
   `pnpm songs:migrate --undo` from the command line.
 
-### Step 6.2c-2a — Style tab, per-platform recipe, target length, Generate from the recipe ✅ (to verify on the Windows PC)
+### Step 6.2c-2a — Style tab, per-platform recipe, target length, Generate from the recipe ✅ (verified on the Windows PC: per-platform verse effect (YouTube cinematic-fade), Reels target length 90 s (1:37, clean ending), lock (pink padlock, Generate greyed), fonts with French accents, Generate from the recipe)
 - B1 Style tab (song page: Assets / Style / Generate / Videos): every recipe field with its value and its
   source (Library default / Artist's brand / Artist's brand (Reels) / This song / This song (Reels)), Reset
   (back to inherited) and Lock; every change is checked and saved to song.json at once. Code:
@@ -699,6 +699,8 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   nothing ticked = Generate starts with Reels + YouTube (and pnpm make without --platforms makes Standard),
   said under the boxes; Generate's effect lists show "From the recipe (glide)" with the per-platform values
   on a line underneath ("YouTube: cinematic-fade").
+- Fix after verification: with a default target length, the Generate chips of YouTube and Canvas showed
+  "90 s" although a length never applies to them; they keep "whole song" / "loop".
 - Browser test in the repo: `pnpm test:e2e` (apps/studio/e2e/style-lock.e2e.ts; needs a studio build,
   FFmpeg and Playwright, as in the cloud check): types a Reels length and clicks the Hook effect padlock
   right away, then checks the icon (at once and after saving), song.json, Generate (Hook effect greyed
@@ -825,7 +827,6 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
 
 ## Next
 1. Verify Steps 6.2a and 6.2b on the PC (6.2c-1 verified).
-2. Verify Step 6.2c-2a on the PC (see the Step 6.2c-2a entry above).
 3. **Step 6.2c-2b — Videos + Post** (after 2a is tested on the PC):
    - C1 Videos tab: each run shows the settings it was made with (from its manifest) next to the current
      recipe; "Use these settings" loads them into Generate.

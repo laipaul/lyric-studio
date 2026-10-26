@@ -337,6 +337,14 @@ describe("target length per platform (B3) and effect hints (B6)", () => {
     expect(d.platforms.find((p) => p.name === "reels")!.presetLength).toBe("30 s");
     const g = generatePanelData(ws, ws.db.select().from(project).where(eq(project.id, id)).get()!);
     expect(g.recipe.lengths).toMatchObject({ reels: 45, tiktok: 20, youtube: null });
+    // A default length for every platform still leaves YouTube "whole song" and Canvas "loop".
+    const file = songPathsById(ws, id).recipe!;
+    const before = readRecipe(file);
+    writeRecipe(file, { ...before, length: 90 });
+    const all = generatePanelData(ws, ws.db.select().from(project).where(eq(project.id, id)).get()!).recipe;
+    expect([all.lengths.standard, all.lengths.youtube, all.lengths.canvas]).toEqual([90, null, null]);
+    expect([all.presetLengths.youtube, all.presetLengths.canvas]).toEqual(["whole song", "loop"]);
+    writeRecipe(file, before);
     expect(g.effects[0]).toEqual({ name: "glide", label: "glide · verses" });
   });
 });
