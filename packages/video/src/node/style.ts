@@ -1,5 +1,5 @@
 // The song page's Style tab (Step 6.2c-2a): every recipe setting with its value and where it comes
-// from (library, the artist's brand, platforms.json, the song), per platform where it can differ, and
+// from (library, the artist's brand, the song), per platform where it can differ, and
 // the song's own changes: set, reset (back to inherited), lock / unlock. Writes song.json only.
 // No rendering code is imported here, so the studio's server can use it directly.
 import { readFileSync } from "node:fs";
@@ -8,7 +8,7 @@ import path from "node:path";
 import { project as projectTable, REPO_ROOT, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
-import { EFFECT_NAMES } from "../effects/names";
+import { EFFECT_NAMES, effectOptionLabel } from "../effects/names";
 import { parsePresets, type PlatformPreset } from "../platform";
 import { loadBrand } from "./brand";
 import { loadFontCatalog, missingCharacters, type FontCatalog } from "./font-catalog";
@@ -18,7 +18,6 @@ import {
   checkRecipe,
   LIBRARY_RECIPE,
   lockField,
-  presetMotion,
   readRecipe,
   resetField,
   resolveRecipe,
@@ -50,6 +49,7 @@ export const FIELD_LABELS: Record<RecipeField, string> = {
   platforms: "Platforms Generate starts with",
   variations: "Videos per platform",
   section: "Section",
+  length: "Target length (auto section)",
   ep: "EP",
   youtubeLayout: "YouTube layout",
 };
@@ -67,8 +67,9 @@ export type StyleData = {
   recipeFile: string | null; // workspace-relative song.json
   brandFile: string;
   fields: StyleField[];
-  platforms: { name: string; label: string }[];
-  effects: string[];
+  platforms: { name: string; label: string; presetLength: string }[]; // presetLength: "30 s", "45-60 s", "whole song", "loop"
+  effects: { name: string; label: string }[]; // label: "glide · verses"
+  brandDefaults: { verseEffect: string; hookEffect: string }; // marked "brand default" in the lists
   fonts: StyleFont[];
   collections: string[];
   previewLine: string;
@@ -79,15 +80,20 @@ function presetsList(): PlatformPreset[] {
   return Object.values(parsePresets(JSON.parse(readFileSync(file, "utf8")), file)).filter((p) => p.available && p.name !== "standard");
 }
 
+// The preset's own length, for "empty = the preset" in the Style tab and Generate.
+export function presetLengthText(p: Pick<PlatformPreset, "length">): string {
+  const l = p.length;
+  return l.mode === "target" ? `${l.seconds} s` : l.mode === "range" ? `${l.min}-${l.max} s` : l.mode === "full" ? "whole song" : "loop";
+}
+
 // Everything the recipe resolution needs for this song (without a run).
 export function recipeInputFor(ws: Workspace, projectId: string, catalog: FontCatalog = loadFontCatalog(ws.dir)): { input: RecipeInput; song: SongRecipe; recipeFile: string | null; brandFile: string } {
   const p = songPathsById(ws, projectId);
   const artist = artistOf(ws, projectId);
   const brand = loadBrand(ws.dir, catalog, artist);
   const song = p.recipe ? readRecipe(p.recipe) : {};
-  const all = Object.fromEntries(presetsList().map((x) => [x.name, x]));
   return {
-    input: { library: LIBRARY_RECIPE, artist: artistRecipe(brand.brand), artistPlatforms: brand.brand.perPlatform, presets: presetMotion(all), song },
+    input: { library: LIBRARY_RECIPE, artist: artistRecipe(brand.brand), artistPlatforms: brand.brand.perPlatform, song },
     song,
     recipeFile: p.recipe ? path.relative(ws.dir, p.recipe).split(path.sep).join("/") : null,
     brandFile: path.relative(ws.dir, brand.file).split(path.sep).join("/"),
@@ -124,7 +130,7 @@ export function styleFonts(catalog: FontCatalog): StyleFont[] {
 export function styleData(ws: Workspace, projectId: string): StyleData {
   const catalog = loadFontCatalog(ws.dir);
   const { input, song, recipeFile, brandFile } = recipeInputFor(ws, projectId, catalog);
-  const platforms = presetsList().map((p) => ({ name: p.name, label: SHORT_LABELS[p.name] ?? p.label }));
+  const platforms = presetsList().map((p) => ({ name: p.name, label: SHORT_LABELS[p.name] ?? p.label, presetLength: presetLengthText(p) }));
   const withLyrics = new Set(presetsList().filter((p) => p.lyrics).map((p) => p.name)); // Canvas has no lyrics, effects or fonts
   const all = resolveRecipe(input);
   const byPlatform = Object.fromEntries(platforms.map((p) => [p.name, resolveRecipe(input, p.name)]));
@@ -151,7 +157,8 @@ export function styleData(ws: Workspace, projectId: string): StyleData {
     brandFile,
     fields,
     platforms,
-    effects: [...EFFECT_NAMES],
+    effects: EFFECT_NAMES.map((name) => ({ name, label: effectOptionLabel(name) })),
+    brandDefaults: { verseEffect: String(input.artist.verseEffect), hookEffect: String(input.artist.hookEffect) },
     fonts: styleFonts(catalog),
     collections: sharedCollections(ws),
     previewLine: PREVIEW_LINE,

@@ -664,6 +664,44 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   worker made 3 Reels (3 PASS) into songs\Life Lyrics\Hold On Tight (Acoustic)\exports\; then
   `pnpm songs:migrate --undo` from the command line.
 
+### Step 6.2c-2a — Style tab, per-platform recipe, target length, Generate from the recipe ✅ (to verify on the Windows PC)
+- B1 Style tab (song page: Assets / Style / Generate / Videos): every recipe field with its value and its
+  source (Library default / Artist's brand / Artist's brand (Reels) / This song / This song (Reels)), Reset
+  (back to inherited) and Lock; every change is checked and saved to song.json at once. Code:
+  `packages/video/src/node/style.ts`, `apps/studio/src/components/style-tab.tsx`, `/api/songs/[id]/recipe`.
+- B2 Per-platform values ("perPlatform" in song.json and brand.json, `per-platform.ts`) for the verse / hook
+  effect + intensity, fonts, accent colour, section and length. Order for one platform: library -> artist ->
+  artist (platform) -> song -> song (platform) -> run. Decision (review point 1): platforms.json is format
+  only (size, length, safe zones, text scale, bitrate, fades) and never sets the style; an old "motion"
+  entry there is ignored with a message. A locked field uses only the song's own values (default and
+  per-platform) and blocks run tweaks (review point 2, tested); locking copies the per-platform values seen.
+  pnpm make applies the values per platform and prints them (`reels: recipe verseEffect soft-blur:subtle (song:reels)`).
+- B3 Target length per platform (`length`, `--length`, Generate "Target length"): shapes an "auto" section
+  only: a target of that length with the preset's tolerance, hook-first start, ending after a complete line
+  (preferably a chorus line), never cutting a sung line. Longer than the song: the whole song, said so.
+  Not used for YouTube / Canvas (said so). A fixed section stays exactly as given; when it is longer than the
+  platform allows: QA WARN "Length for the platform", not trimmed.
+- B4 Generate opens with the resolved recipe: effect lists start on "From the recipe (glide · YouTube:
+  cinematic-fade)", the recipe's platforms, chips with videos and length ("Reels · 3 videos · 90 s"),
+  section, layout; only changes are sent (one-run tweaks); locked fields disabled; "Save these choices to
+  the song" (never over a lock; the notice names what was saved and what a lock kept).
+- B5 Fonts: bundled + WORKSPACE_DIR\fonts only, grouped; live preview line "Où es-tu, mon cœur ? L'été à
+  côté de toi, ça change tout — ÉÈÇÀÔ" in the chosen font (served by `/api/fonts`); a font without
+  é è ç à ô (or capitals) is marked "⚠ no French accents" with a warning naming the missing letters.
+- B6 Effect hints in one format in every list ("glide · verses", "karaoke-highlight · hooks",
+  "cinematic-fade · verses, slow songs", ...), the brand default marked; also in pnpm effects:preview.
+- Also: the Assets tab shows the real song-folder path, clickable (Explorer); the Hints card shows timed
+  lines + end marks (the empty stamp pnpm tap writes after the last line) and warns about tapped lines that
+  match no line of lyrics.txt. Fix: bundled fonts are found from the project root (inside the studio's
+  server bundle require.resolve gave a number, which crashed the song page).
+- Tests (style.test.ts + updated make / platform tests): per-platform order and sources, preset never beats
+  the brand (glide wins), locks with song:reels and blocked run tweaks, set / reset / lock per platform,
+  song.json / brand.json checks, Style data and actions, fonts with the accent check (a real font without
+  accents), Generate data and save-to-song, pnpm make per platform, target lengths (reels 45 s, tiktok 20 s,
+  longer than the song -> whole song), a fixed section over the limit (QA WARN, not trimmed), --length,
+  effect hints. Browser check: Style (per-platform rows, lock, fonts and warning, length), Generate
+  (recipe option, locked hook effect, chips with length), Assets (path, hints).
+
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -773,24 +811,7 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
 
 ## Next
 1. Verify Steps 6.2a and 6.2b on the PC (6.2c-1 verified).
-2. **Step 6.2c-2a — Style tab + Generate from the recipe** (in progress; consolidated roadmap from the
-   review):
-   - B1 Style tab: every recipe field with its value and source (library / brand / song), Reset and
-     Lock; saves to song.json. — built (not yet on main)
-   - B2 Per-platform values (brand.json and song.json `perPlatform`) for the effects + intensity, fonts,
-     accent colour and section; shown in the Style tab; applied per platform by Generate and pnpm make.
-     — built (not yet on main)
-   - B3 Per-platform target length for "auto" (e.g. reels 90 s, tiktok 30 s): a musical section of about
-     that length, starting at / just before a hook, ending after a complete line or chorus, never cutting
-     a sung line. — planned, waiting for approval
-   - B4 Generate opens with the resolved recipe; one-run tweaks marked; locked fields cannot be changed;
-     "Save to song" never overwrites a lock. — built (not yet on main)
-   - B5 Fonts: bundled + own fonts only, live preview line with é è ç à ô, warning when a font lacks
-     them. — built (not yet on main)
-   - B6 Effect lists: a short hint per effect ("best for verses" / "best for hooks"). — planned
-   - Tests for all of the above + a browser check.
-   - Also in this round (asked during it): Assets tab shows the real song-folder path, clickable (opens
-     Explorer); the Hints card separates timed lines from end marks and warns about orphan lines.
+2. Verify Step 6.2c-2a on the PC (see the Step 6.2c-2a entry above).
 3. **Step 6.2c-2b — Videos + Post** (after 2a is tested on the PC):
    - C1 Videos tab: each run shows the settings it was made with (from its manifest) next to the current
      recipe; "Use these settings" loads them into Generate.

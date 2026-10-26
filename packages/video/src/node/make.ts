@@ -42,7 +42,7 @@ import { loadBrand, type Brand } from "./brand";
 import { artistBrandFile } from "./captions";
 import { readProjectSettings, rememberCollection, rememberedCollection, updateProjectSettings } from "./project-settings";
 import { PLATFORM_FIELDS, type PlatformField } from "./per-platform";
-import { artistRecipe, LIBRARY_RECIPE, presetMotion, readRecipe, recipeSummary, recipeText, resolveRecipe, runRecipe, writeRecipe, type RecipeField, type RecipeInput, type ResolvedRecipe } from "./recipe";
+import { artistRecipe, LIBRARY_RECIPE, readRecipe, recipeSummary, recipeText, resolveRecipe, runRecipe, writeRecipe, type RecipeField, type RecipeInput, type ResolvedRecipe } from "./recipe";
 import { renameSongFolder, songPathsById } from "./song-folder";
 import { mergeCollections, prepareForFormat, SOURCE_FILE, syncCollection, type CollectionSync, type PreparedForFormat } from "./collection";
 import { fontFileRefs, loadFontCatalog, resolveFace, type FontCatalog } from "./font-catalog";
@@ -91,6 +91,7 @@ export type MakeOptions = {
   glow?: boolean; // YouTube stills: beat-pulsed glow (default from the preset)
   presetsFile?: string; // default: presets/platforms.json
   section?: string; // "auto" | "full" | "0:11-1:10" (default: song.json, else auto)
+  length?: number; // seconds an "auto" section aims for, on every platform (default: song.json / brand / the preset)
   hint?: string;
   noHint?: boolean; // align without the project's stored hints (warns)
   realign?: boolean;
@@ -291,18 +292,16 @@ export function qaSummaryFromFile(file: string): string {
   return m[1] === "PASS" ? "PASS" : `WARN (${(m[2] ?? "").split("; ").map((r) => r.toLowerCase()).join(", ")})`;
 }
 
-// Lyric effects: --line-effect / --hook-effect, else the platform's motion (platforms.json), else
-// brand.json motion (glide verses, karaoke-highlight hooks by default).
+// Lyric effects: the recipe's choice (--line-effect / --hook-effect, song.json, brand.json perPlatform),
+// else brand.json motion (glide verses, karaoke-highlight hooks by default). platforms.json never sets them.
 export function chooseEffects(
-  preset: Pick<PlatformPreset, "motion">,
   brand: Pick<Brand, "motion">,
   options: Pick<MakeOptions, "lineEffect" | "hookEffect">,
   labels: { verse?: string; hook?: string } = {}, // where the options' effects come from (default: the flags)
 ): { verse: EffectChoice; hook: EffectChoice; from: { verse: string; hook: string } } {
-  const pick = (cli: string | undefined, flag: string, platform: EffectChoice | undefined, own: EffectChoice) =>
-    cli ? { choice: parseEffectChoice(cli, flag), from: flag } : platform ? { choice: platform, from: "platforms.json" } : { choice: own, from: "brand.json" };
-  const verse = pick(options.lineEffect, labels.verse ?? "--line-effect", preset.motion?.verseEffect, brand.motion.verseEffect);
-  const hook = pick(options.hookEffect, labels.hook ?? "--hook-effect", preset.motion?.hookEffect, brand.motion.hookEffect);
+  const pick = (cli: string | undefined, flag: string, own: EffectChoice) => (cli ? { choice: parseEffectChoice(cli, flag), from: flag } : { choice: own, from: "brand.json" });
+  const verse = pick(options.lineEffect, labels.verse ?? "--line-effect", brand.motion.verseEffect);
+  const hook = pick(options.hookEffect, labels.hook ?? "--hook-effect", brand.motion.hookEffect);
   return { verse: verse.choice, hook: hook.choice, from: { verse: verse.from, hook: hook.from } };
 }
 
@@ -391,6 +390,10 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
 
     // Presets and fonts first: a mistake there should fail before the slow steps.
     const presets = loadPresets(options.presetsFile);
+    // platforms.json is format only: its old "motion" (lyric effects) is not used any more.
+    for (const p of Object.values(presets)) {
+      if (p.motion) log(`platforms.json ${p.name}: "motion" is not used any more (platforms.json is format only); put it in brand.json "perPlatform": { "${p.name}": { "verseEffect": "..." } } or in the song's Style tab`);
+    }
     if (options.platforms) choosePlatforms(options.platforms, presets);
     const catalog = loadFontCatalog(ws.dir);
     for (const problem of catalog.problems) log(`font file skipped: ${problem}`);
@@ -426,7 +429,6 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       library: LIBRARY_RECIPE,
       artist: artistRecipe(brand.brand),
       artistPlatforms: brand.brand.perPlatform,
-      presets: presetMotion(presets),
       song: songRecipe,
       run: runRecipe(options),
     };
@@ -647,10 +649,11 @@ export function loadPresets(file = path.join(REPO_ROOT, "presets", "platforms.js
 
 // The run's settings for one platform: per-platform recipe values (brand.json / song.json perPlatform)
 // for the lyric effects, fonts, accent colour and section.
-function forPlatform(sh: Shared, preset: PlatformPreset): Shared {
-  const r = sh.recipeFor(preset.name);
-  const below = (source: string) => source === "library" || source === "artist" || source === "platforms.json"; // handled by the brand / preset themselves
-  const pick = (k: PlatformField) => (below(r.sources[k]) ? undefined : r.values[k]);
+function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: PlatformPreset } {
+  const r = sh.recipeFor(base.name);
+  const below = (source: string) => source === "library" || source === "artist"; // handled by the brand itself
+  const pick = (k: Exclude<PlatformField, "length">) => (below(r.sources[k]) ? undefined : (r.values[k] as string));
+  const preset = base;
   const label = (k: PlatformField, flag: string) => {
     const source = r.sources[k];
     return source === "run" ? flag : source.startsWith("song") ? `song.json${source.includes(":") ? ` (${preset.name})` : ""}` : `brand.json (${preset.name})`;
@@ -658,20 +661,48 @@ function forPlatform(sh: Shared, preset: PlatformPreset): Shared {
   const font = pick("verseFont");
   const fontHook = pick("hookFont");
   const accent = pick("accentColour");
-  const options: MakeOptions = { ...sh.options, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section: r.values.section };
+  // The target length shapes an "auto" section only (a fixed section stays exactly as given).
+  const length = lengthFor(base, r.values.length, sh.analysis.duration_ms);
+  if (length.note) sh.log(`${base.name}: ${length.note}`);
+  const section = r.values.section === "auto" && length.wholeSong ? "full" : r.values.section;
+  const options: MakeOptions = { ...sh.options, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined };
   const own = PLATFORM_FIELDS.filter((k) => r.sources[k].includes(":"));
-  if (own.length) sh.log(`${preset.name}: recipe ${own.map((k) => `${k} ${r.values[k]} (${r.sources[k]})`).join(", ")}`);
-  return {
+  if (own.length) sh.log(`${preset.name}: recipe ${own.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]})`).join(", ")}`);
+  const out: Shared = {
     ...sh,
     options,
     effectLabels: { verse: label("verseEffect", "--line-effect"), hook: label("hookEffect", "--hook-effect") },
     styles: font === sh.options.font && fontHook === sh.options.fontHook ? sh.styles : sh.stylesFor(font, fontHook),
     brand: accent ? { ...sh.brand, brand: { ...sh.brand.brand, accentColour: accent } } : sh.brand,
   };
+  return { sh: out, preset: r.values.section === "auto" ? length.preset : base };
 }
 
-async function makePlatform(shared: Shared, preset: PlatformPreset, position: { index: number; count: number }): Promise<PlatformResult> {
-  const sh = forPlatform(shared, preset);
+// A fixed section ("0:11-1:10") is used exactly as given; QA says when it is longer than the platform
+// allows (target + 30%, or the range's hard maximum). Auto sections and whole songs are not checked here.
+function platformLimit(chosen: SectionChoiceOut, preset: PlatformPreset): { seconds: number; limitS: number; platform: string } | null {
+  const window = sectionWindow(preset);
+  if (!window || !chosen.requested || chosen.mode === "full" || chosen.mode === "auto") return null;
+  return { seconds: (chosen.end_ms - chosen.start_ms) / 1000, limitS: window.hardMaxMs / 1000, platform: preset.label };
+}
+
+// The preset with the recipe's target length (seconds) for an auto section: a target of that length
+// with the preset's tolerance. Longer than the song: the whole song (said so). YouTube (whole song) and
+// Canvas (loop) keep their own length.
+export function lengthFor(preset: PlatformPreset, seconds: number | null, durationMs: number): { preset: PlatformPreset; wholeSong: boolean; note: string | null } {
+  if (!seconds) return { preset, wholeSong: false, note: null };
+  if (preset.length.mode === "full" || preset.length.mode === "loop") {
+    return { preset, wholeSong: false, note: `target length ${seconds} s not used (${preset.length.mode === "full" ? "this platform shows the whole song" : "a Canvas is a short loop"})` };
+  }
+  if (seconds * 1000 >= durationMs) {
+    return { preset, wholeSong: true, note: `target length ${seconds} s is longer than the song (${clockText(durationMs)}): the whole song` };
+  }
+  const tolerance = preset.length.mode === "target" ? preset.length.tolerance : 0.15;
+  return { preset: { ...preset, length: { mode: "target", seconds, tolerance } }, wholeSong: false, note: `target length ${seconds} s (+-${Math.round(tolerance * 100)}%)` };
+}
+
+async function makePlatform(shared: Shared, basePreset: PlatformPreset, position: { index: number; count: number }): Promise<PlatformResult> {
+  const { sh, preset } = forPlatform(shared, basePreset);
   const { ws, options, log, leadMs, lyricsOffsetMs, analysis, lines, reports, numbers, alignment, styles } = sh;
   const project = sh.getProject();
   const format = { width: preset.width, height: preset.height };
@@ -763,7 +794,7 @@ async function makePlatform(shared: Shared, preset: PlatformPreset, position: { 
   const { media, audio } = songMedia(ws.dir, sh.sp.songFile, plan, sh.catalog, preset.fadeOutSeconds);
   // With word times and the sung end (from the aligned LRC, else the alignment report) for the effects.
   const allLyrics = lines.map((l, i) => rawLyric({ ...l, sung_end_ms: sh.sectionLines[i].sung_end_ms ?? l.sung_end_ms }));
-  const fx = chooseEffects(preset, sh.brand.brand, options, sh.effectLabels);
+  const fx = chooseEffects(sh.brand.brand, options, sh.effectLabels);
   const effects: LyricEffectsProps = { verse: fx.verse, hook: fx.hook, accent: sh.brand.brand.accentColour };
   // A line whose singing is over but which is still on screen at the start (it lingers until the
   // next stamp) is not shown, so the video never opens on the tail of the previous line.
@@ -1022,6 +1053,7 @@ async function makePlatform(shared: Shared, preset: PlatformPreset, position: { 
         stillPictures: ytLayout === "cover" || ytLayout === "stills" || (!!canvas && props.shots[0]?.kind === "photo"),
         songS: chosen.mode === "full" ? analysis.duration_ms / 1000 : null, // whole-song videos only (not --section)
         sectionCuts: chosen.cuts.map((c) => ({ ...c, line: numbers[c.line - 1] || c.line })),
+        platformLimit: platformLimit(chosen, preset),
         canvas: canvas ? { min: preset.length.mode === "loop" ? preset.length.min : 3, max: preset.length.mode === "loop" ? preset.length.max : 8 } : null,
       });
       result.qa = qa;
@@ -1120,6 +1152,7 @@ async function checkVariation(
     frameCheck: boolean;
     stillPictures?: boolean; // cover / stills layouts: still by design, so no frozen-frame check
     sectionCuts: SectionCut[];
+    platformLimit: { seconds: number; limitS: number; platform: string } | null;
     songS: number | null; // a full-song video: the song's length
     canvas?: { min: number; max: number } | null; // Spotify Canvas: loop, silence and length checks
   },
@@ -1150,6 +1183,7 @@ async function checkVariation(
     frames,
     sources: ctx.sources,
     sectionCuts: ctx.sectionCuts,
+    platformLimit: ctx.platformLimit,
     endScreen: end ? { clear: end.clear, lines: lyrics.filter(inEnd).map((l) => l.number) } : null,
     frozenCheckSkipped: ctx.stillPictures,
     length: ctx.frameCheck ? { actualS: (await probeMedia(file)).durationMs / 1000, songS: ctx.songS } : null,

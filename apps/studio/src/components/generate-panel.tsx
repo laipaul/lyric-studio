@@ -55,6 +55,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
       artist: String(f.get("artist") ?? ""),
       ep: changed(String(f.get("ep") ?? ""), data.ep),
       section: changed(section, r.section),
+      length: f.get("length") ? Number(f.get("length")) : undefined,
       saveToSong,
       allowFill: f.get("allowFill") === "on",
       layout: (String(f.get("layout") ?? "") || undefined) as "cover" | "stills" | "clips" | undefined,
@@ -98,11 +99,15 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
         onChange={(e) => set({ ...value, name: e.target.value })}
       >
         <option value="">{fromRecipe(name === "Verse" ? "verse" : "hook")}</option>
-        {data.effects.map((e) => (
-          <option key={e} value={e}>
-            {e}
-          </option>
-        ))}
+        {data.effects.map((e) => {
+          const brandDefault = (name === "Verse" ? r.brandDefaults.verseEffect : r.brandDefaults.hookEffect).split(":")[0];
+          return (
+            <option key={e.name} value={e.name}>
+              {e.label}
+              {brandDefault === e.name ? " · brand default" : ""}
+            </option>
+          );
+        })}
       </select>
       <select aria-label={`${name} intensity`} className={select} value={value.intensity} disabled={!value.name} onChange={(e) => set({ ...value, intensity: e.target.value })}>
         {INTENSITIES.map((i) => (
@@ -143,7 +148,10 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
                     onClick={() => setPlatforms((list) => (on ? list.filter((x) => x !== p.name) : [...list, p.name]))}
                     className={cn("rounded-full border px-3 py-1.5 text-xs transition-colors", on ? "border-brand/50 bg-brand/15 text-brand" : "text-muted-foreground hover:text-foreground")}
                   >
-                    {p.label} <span className="opacity-60">· {videosFor(p.name, p.variations)} video{videosFor(p.name, p.variations) === 1 ? "" : "s"}</span>
+                    {p.label}{" "}
+                    <span className="opacity-60">
+                      · {videosFor(p.name, p.variations)} video{videosFor(p.name, p.variations) === 1 ? "" : "s"} · {r.lengths[p.name] ? `${r.lengths[p.name]} s` : r.presetLengths[p.name]}
+                    </span>
                   </button>
                 );
               })}
@@ -210,6 +218,10 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
               <label className={label}>
                 <span className="font-medium">Videos per platform</span>
                 <Input type="number" min={1} max={24} placeholder="from the recipe" value={variations} disabled={locked("variations")} onChange={(e) => setVariations(e.target.value)} />
+              </label>
+              <label className={label}>
+                <span className="font-medium">Target length (s)</span>
+                <Input type="number" name="length" min={3} max={600} placeholder="from the recipe" disabled={locked("length")} />
               </label>
               <label className={label}>
                 <span className="font-medium">Section</span>

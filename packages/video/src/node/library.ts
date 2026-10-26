@@ -8,7 +8,7 @@ import { REPO_ROOT, absPath, project as projectTable, type Workspace } from "@ly
 import { eq } from "drizzle-orm";
 
 import { parsePresets } from "../platform";
-import { EFFECT_NAMES } from "../effects/names";
+import { EFFECT_NAMES, effectOptionLabel } from "../effects/names";
 import { brandDir, DEFAULT_ARTIST } from "./brand";
 import { renderingPlatforms, SHORT_LABELS, songRuns, type PlatformRun } from "./exports";
 import { keepReplaced, setSongEp, songCollections, songEp, storeCover, storeLyricsTxt } from "./project-settings";
@@ -16,7 +16,7 @@ import { projectLyricsTxt } from "./runs";
 import { SOURCE_FILE } from "./collection";
 import { resolveRecipe } from "./recipe";
 import { renameSongFolder, sharedCollections, songPathsById } from "./song-folder";
-import { recipeInputFor } from "./style";
+import { presetLengthText, recipeInputFor } from "./style";
 import { findOrCreateSongProject, storeProjectHint } from "./song-project";
 
 export type PlatformStatus = "PASS" | "WARN" | "FAILED" | "interrupted" | "Rendering" | "none";
@@ -201,7 +201,7 @@ export type GeneratePanelData = {
   collections: string[]; // shared collections: folders in WORKSPACE_DIR\collections (and the old clips\)
   chosen: string[]; // the ones this song uses (song.json, else the one it used last)
   songClips: number; // videos and photos in the song folder's own clips\
-  effects: string[];
+  effects: { name: string; label: string }[]; // label: "glide · verses"
   verseEffect: string; // the recipe's default (song.json, else the artist's brand)
   hookEffect: string;
   // Where Generate starts (Step 6.2c-2a): the song's recipe with each value's source, the per-platform
@@ -214,6 +214,9 @@ export type GeneratePanelData = {
     locked: string[];
     sources: Record<string, string>;
     effects: Record<string, { verse: string; hook: string }>; // per platform, when it differs from the default
+    lengths: Record<string, number | null>; // target length of an auto section per platform (null: the preset's)
+    presetLengths: Record<string, string>; // "30 s", "whole song", ...
+    brandDefaults: { verseEffect: string; hookEffect: string };
   };
   lyricsReady: boolean;
   title: string;
@@ -233,8 +236,10 @@ export function generatePanelData(ws: Workspace, p: typeof projectTable.$inferSe
   const { input } = recipeInputFor(ws, p.id);
   const resolved = resolveRecipe(input);
   const effects: Record<string, { verse: string; hook: string }> = {};
+  const lengths: Record<string, number | null> = {};
   for (const x of presets) {
     const r = resolveRecipe(input, x.name);
+    lengths[x.name] = r.values.length;
     if (r.values.verseEffect !== resolved.values.verseEffect || r.values.hookEffect !== resolved.values.hookEffect) effects[x.name] = { verse: r.values.verseEffect, hook: r.values.hookEffect };
   }
   return {
@@ -242,7 +247,7 @@ export function generatePanelData(ws: Workspace, p: typeof projectTable.$inferSe
     collections,
     chosen,
     songClips: paths.clips && existsSync(paths.clips) ? readdirSync(paths.clips).filter((f) => SOURCE_FILE.test(f)).length : 0,
-    effects: [...EFFECT_NAMES],
+    effects: EFFECT_NAMES.map((name) => ({ name, label: effectOptionLabel(name) })),
     verseEffect: resolved.values.verseEffect,
     hookEffect: resolved.values.hookEffect,
     recipe: {
@@ -253,6 +258,9 @@ export function generatePanelData(ws: Workspace, p: typeof projectTable.$inferSe
       locked: resolved.locked,
       sources: resolved.sources,
       effects,
+      lengths,
+      presetLengths: Object.fromEntries(presets.map((x) => [x.name, presetLengthText(x)])),
+      brandDefaults: { verseEffect: String(input.artist.verseEffect), hookEffect: String(input.artist.hookEffect) },
     },
     lyricsReady: !!projectLyricsTxt(ws, p.id),
     title: p.title,

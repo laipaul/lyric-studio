@@ -30,7 +30,7 @@ export type PlatformPreset = {
   note?: string;
   youtube?: YouTubeOptions; // layout "youtube" only
   showNextLine: boolean; // the next lyric line waits small underneath (default on)
-  motion?: { verseEffect?: EffectChoice; hookEffect?: EffectChoice }; // overrides brand.json motion
+  motion?: { verseEffect?: EffectChoice; hookEffect?: EffectChoice }; // no longer used (style lives in brand.json / song.json perPlatform); read only to say so
 };
 
 export type YouTubeOptions = {

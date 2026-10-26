@@ -31,6 +31,7 @@ import {
   songPathsById,
   styleData,
   writeRecipe,
+  type AlignRunner,
   type RecipeInput,
   type RenderOptions,
 } from "../src/node";
@@ -41,18 +42,17 @@ const input = (extra: Partial<RecipeInput> = {}): RecipeInput => ({
   library: LIBRARY_RECIPE,
   artist,
   artistPlatforms: { youtube: { verseEffect: "cinematic-fade" } },
-  presets: { reels: { hookEffect: "word-reveal" } },
   song: {},
   ...extra,
 });
 
-describe("per-platform values: library -> artist -> platforms.json -> artist (platform) -> song -> song (platform) -> run", () => {
+describe("per-platform values: library -> artist -> artist (platform) -> song -> song (platform) -> run", () => {
   it("each platform gets its own value and source", () => {
     expect(resolveRecipe(input()).values.verseEffect).toBe("glide"); // the default (no platform)
     const yt = resolveRecipe(input(), "youtube");
     expect([yt.values.verseEffect, yt.sources.verseEffect]).toEqual(["cinematic-fade", "artist:youtube"]);
     const reels = resolveRecipe(input(), "reels");
-    expect([reels.values.verseEffect, reels.sources.verseEffect, reels.values.hookEffect, reels.sources.hookEffect]).toEqual(["glide", "artist", "word-reveal", "platforms.json"]);
+    expect([reels.values.verseEffect, reels.sources.verseEffect, reels.values.hookEffect, reels.sources.hookEffect]).toEqual(["glide", "artist", "karaoke-highlight", "artist"]);
     // The song's default is above the brand's per-platform value; the song's per-platform value above that.
     const song = { verseEffect: "soft-blur", perPlatform: { tiktok: { verseEffect: "typewriter" } } };
     expect(resolveRecipe(input({ song }), "youtube").sources.verseEffect).toBe("song");
@@ -67,6 +67,11 @@ describe("per-platform values: library -> artist -> platforms.json -> artist (pl
     const yt = resolveRecipe(brandChanged, "youtube");
     expect([yt.values.verseEffect, yt.sources.verseEffect]).toEqual(["dreamy-glow", "song:youtube"]);
     expect(yt.ignored).toEqual([{ field: "verseEffect", run: "soft-blur", kept: "dreamy-glow" }]);
+    // The song's own per-platform value still counts under a lock (song:reels); a run cannot change it.
+    const reelsLocked = { ...song, perPlatform: { ...song.perPlatform, reels: { verseEffect: "word-reveal:subtle" } } };
+    const reels = resolveRecipe({ ...brandChanged, song: reelsLocked }, "reels");
+    expect([reels.values.verseEffect, reels.sources.verseEffect]).toEqual(["word-reveal:subtle", "song:reels"]);
+    expect(reels.ignored).toEqual([{ field: "verseEffect", run: "soft-blur", kept: "word-reveal:subtle" }]);
   });
 
   it("locking keeps the per-platform values seen now; set / reset per platform", () => {
@@ -81,7 +86,7 @@ describe("per-platform values: library -> artist -> platforms.json -> artist (pl
   it("song.json and brand.json perPlatform are checked", () => {
     expect(checkRecipe({ perPlatform: { youtube: { verseEffect: "spin", collections: ["x"], accentColour: "pink" } } }).problems).toEqual([
       expect.stringMatching(/perPlatform.youtube.verseEffect: unknown effect "spin"/),
-      "perPlatform.youtube.collections: only verseEffect, hookEffect, verseFont, hookFont, accentColour, section can differ per platform",
+      "perPlatform.youtube.collections: only verseEffect, hookEffect, verseFont, hookFont, accentColour, section, length can differ per platform",
       'perPlatform.youtube.accentColour must look like "#E8A3B5"',
     ]);
     expect(checkRecipe({ verseEffect: "wobble" }).problems[0]).toMatch(/verseEffect: unknown effect "wobble"/);
@@ -192,6 +197,38 @@ describe("the Style tab, Generate and pnpm make", () => {
   });
 });
 
+describe("platforms.json never sets the style", () => {
+  it("a preset with another effect (old motion entry) does not beat the brand: glide wins, with a message", async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "lyric-preset-"));
+    const wsDir = path.join(root, "workspace");
+    const presetsFile = path.join(root, "platforms.json");
+    const json = JSON.parse(readFileSync(path.resolve("../../presets/platforms.json"), "utf8"));
+    json.platforms.reels.motion = { verseEffect: "typewriter" };
+    writeFileSync(presetsFile, JSON.stringify(json));
+    const song = path.join(root, "Preset Test.wav");
+    makeSong(song, 20);
+    writeFileSync(path.join(root, "lyrics.txt"), `${LYRICS.join("\n")}\n`);
+    mkdirSync(path.join(wsDir, "collections", "wedding"), { recursive: true });
+    makeClip(path.join(wsDir, "collections", "wedding", "01_a.mp4"), 6, "blue");
+    ffmpeg("-f", "lavfi", "-i", "testsrc2=s=216x384:r=30:d=2", "-pix_fmt", "yuv420p", path.join(root, "s.mp4"));
+    const logs: string[] = [];
+    const previous = process.env.WORKSPACE_DIR;
+    process.env.WORKSPACE_DIR = wsDir;
+    try {
+      const r = await makeVideos({
+        workspaceDir: wsDir, song, lyrics: path.join(root, "lyrics.txt"), presetsFile, platforms: "reels", variations: 1, collection: "wedding",
+        align: fakeAlign, frameCheck: false, renderer: async (o) => (copyFileSync(path.join(root, "s.mp4"), o.outFile), o.outFile), platform: "win32", log: (m) => logs.push(m),
+      });
+      expect(readManifest(r.variations[0].manifestFile).props.lyricEffects!.verse).toEqual({ name: "glide", intensity: "balanced" }); // the brand's
+      expect(logs.some((l) => l.startsWith('platforms.json reels: "motion" is not used any more'))).toBe(true);
+    } finally {
+      if (previous === undefined) delete process.env.WORKSPACE_DIR;
+      else process.env.WORKSPACE_DIR = previous;
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 120_000);
+});
+
 describe("the Assets tab's hints check", () => {
   it("timed lines, end marks (the empty stamp after the last line) and orphans", () => {
     const lyrics = "Verse one here\n* Hold on to me\nThrough the night\n";
@@ -199,5 +236,107 @@ describe("the Assets tab's hints check", () => {
     expect(checkHints(tap, lyrics)).toEqual({ stamps: 4, timed: 3, marks: 1, orphans: [], untapped: 0 });
     const old = "[00:01.00]Verse one here\n[00:02.00]A line that was removed\n[00:04.00]Through the night\n";
     expect(checkHints(old, lyrics)).toEqual({ stamps: 3, timed: 3, marks: 0, orphans: ["A line that was removed"], untapped: 1 });
+  });
+});
+
+describe("target length per platform (B3) and effect hints (B6)", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "lyric-length-"));
+  const wsDir = path.join(root, "workspace");
+  const song = path.join(root, "Long Night.wav");
+  const lyrics = path.join(root, "lyrics.txt");
+  const previousWorkspace = process.env.WORKSPACE_DIR;
+  let ws: Workspace;
+  let id: string;
+  const renderer = async (o: RenderOptions) => (copyFileSync(path.join(root, "s.mp4"), o.outFile), o.outFile);
+  // Like a real song: a line every 3 s (sung 1.1 s), so there are clean bars between lines.
+  const spaced: AlignRunner = async (a) => {
+    const texts = readFileSync(a.lyrics, "utf8").split(/\r?\n/).filter(Boolean);
+    const stamp = (ms: number) => `${String(Math.floor(ms / 60000)).padStart(2, "0")}:${((ms % 60000) / 1000).toFixed(2).padStart(5, "0")}`;
+    const rows = texts.map((raw, i) => {
+      const text = raw.replace(/^\*\s+/, "");
+      const start = 1000 + i * 3000;
+      return { line: `[${stamp(start)}]${raw.startsWith("* ") ? "* " : ""}${text.split(" ").map((w, k) => `<${stamp(start + k * 250)}>${w}`).join(" ")} <${stamp(start + 1100)}>`, report: { number: i + 1, text, is_hook: raw.startsWith("* "), start_ms: start, end_ms: start + 1100, confidence: 0.9 } };
+    });
+    writeFileSync(a.out, `${rows.map((r) => r.line).join("\n")}\n`);
+    writeFileSync(a.report, JSON.stringify({ model: "fake", lang: "en", low_confidence: 0.5, lines: rows.map((r) => r.report) }));
+  };
+  const make = (extra: Record<string, unknown> = {}, logs: string[] = []) =>
+    makeVideos({ workspaceDir: wsDir, song, lyrics, variations: 1, align: spaced, frameCheck: false, renderer, platform: "win32", log: (m) => logs.push(m), ...extra });
+
+  beforeAll(async () => {
+    process.env.WORKSPACE_DIR = wsDir;
+    mkdirSync(root, { recursive: true });
+    makeSong(song, 75);
+    // 24 lines, a line every 3 s from 1 s; every 4th line a hook.
+    writeFileSync(lyrics, `${Array.from({ length: 24 }, (_, i) => `${i % 4 === 3 ? "* " : ""}Line number ${i + 1} sings`).join("\n")}\n`);
+    ffmpeg("-f", "lavfi", "-i", "testsrc2=s=216x384:r=30:d=2", "-pix_fmt", "yuv420p", path.join(root, "s.mp4"));
+    mkdirSync(path.join(wsDir, "collections", "wedding"), { recursive: true });
+    makeClip(path.join(wsDir, "collections", "wedding", "01_a.mp4"), 6, "blue");
+    makeClip(path.join(wsDir, "collections", "wedding", "02_b.mp4"), 6, "red");
+    ws = openWorkspace(wsDir);
+    seedStylePresets(ws.db);
+    id = (await findOrCreateSongProject(ws, song)).project.id;
+    writeRecipe(songPathsById(ws, id).recipe!, { collections: ["wedding"], perPlatform: { reels: { length: 45 }, tiktok: { length: 20 }, shorts: { length: 300 } } });
+  }, 120_000);
+  afterAll(() => {
+    ws?.close();
+    if (previousWorkspace === undefined) delete process.env.WORKSPACE_DIR;
+    else process.env.WORKSPACE_DIR = previousWorkspace;
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("an auto section aims for each platform's length, starts at or just before a hook and cuts no sung line", async () => {
+    const logs: string[] = [];
+    const r = await make({ platforms: "reels,tiktok,shorts" }, logs);
+    const section = (name: string) => readManifest(r.platforms.find((x) => x.name === name)!.variations[0].manifestFile).section;
+    const reels = section("reels");
+    const tiktok = section("tiktok");
+    expect((reels.end_ms - reels.start_ms) / 1000).toBeGreaterThan(45 * 0.75);
+    expect((reels.end_ms - reels.start_ms) / 1000).toBeLessThan(45 * 1.3);
+    expect((tiktok.end_ms - tiktok.start_ms) / 1000).toBeGreaterThan(20 * 0.75);
+    expect((tiktok.end_ms - tiktok.start_ms) / 1000).toBeLessThan(20 * 1.3);
+    for (const s of [reels, tiktok]) expect(s.reason).toMatch(/hook/);
+    expect(logs).toContain("reels: target length 45 s (+-15%)");
+    expect(logs).toContain("tiktok: target length 20 s (+-15%)");
+    // Longer than the song: the whole song, and said so.
+    expect(logs).toContain("shorts: target length 300 s is longer than the song (1:15.0): the whole song");
+    const shorts = section("shorts");
+    expect(shorts.mode).toBe("full");
+    for (const p of r.platforms) expect(readFileSync(p.variations[0].qaFile, "utf8")).toContain("[ok  ] Section start/end"); // no sung line cut
+  }, 300_000);
+
+  it("a fixed section stays exactly as given; longer than the platform allows -> QA WARN, not trimmed", async () => {
+    const r = await make({ platforms: "tiktok", section: "0:01-0:45" });
+    const m = readManifest(r.variations[0].manifestFile);
+    expect((m.section.end_ms - m.section.start_ms) / 1000).toBeGreaterThan(40); // not trimmed to 20-25 s
+    const qa = readFileSync(r.variations[0].qaFile, "utf8");
+    expect(qa).toMatch(/\[WARN\] Length for the platform/);
+    expect(qa).toMatch(/TikTok allows up to \d+ s \(it was not trimmed/);
+  }, 300_000);
+
+  it("--length on the command line; a length never applies to YouTube (whole song) or Canvas (loop)", async () => {
+    const { parseMakeArgs, lengthFor, loadPresets } = await import("../src/node");
+    expect(parseMakeArgs(["a.wav", "b.txt", "--length", "90"], "/").options.length).toBe(90);
+    expect(() => parseMakeArgs(["a.wav", "b.txt", "--length", "1"], "/")).toThrow(/--length must be a number of seconds from 3 to 600/);
+    const presets = loadPresets();
+    expect(lengthFor(presets.youtube, 90, 240_000)).toMatchObject({ wholeSong: false, note: "target length 90 s not used (this platform shows the whole song)" });
+    expect(lengthFor(presets.reels, 90, 240_000).preset.length).toEqual({ mode: "target", seconds: 90, tolerance: 0.15 });
+    expect(lengthFor(presets.standard, 40, 240_000).preset.length).toEqual({ mode: "target", seconds: 40, tolerance: 0.15 });
+  });
+
+  it("every effect has a hint, in one format, and the brand default is marked", async () => {
+    const { EFFECT_NAMES, EFFECT_HINTS, effectOptionLabel } = await import("../src/effects/names");
+    for (const name of EFFECT_NAMES) expect(EFFECT_HINTS[name]).toBeTruthy();
+    expect(effectOptionLabel("glide")).toBe("glide · verses");
+    expect(effectOptionLabel("karaoke-highlight", "karaoke-highlight:subtle")).toBe("karaoke-highlight · hooks · brand default");
+    expect(effectOptionLabel("cinematic-fade")).toBe("cinematic-fade · verses, slow songs");
+    const d = styleData(ws, id);
+    expect(d.effects.find((e) => e.name === "glide")!.label).toBe("glide · verses");
+    expect(d.brandDefaults).toEqual({ verseEffect: "glide", hookEffect: "karaoke-highlight" });
+    expect(d.fields.find((f) => f.field === "length")!.perPlatform!.find((p) => p.platform === "reels")).toMatchObject({ value: 45, source: "song:reels" });
+    expect(d.platforms.find((p) => p.name === "reels")!.presetLength).toBe("30 s");
+    const g = generatePanelData(ws, ws.db.select().from(project).where(eq(project.id, id)).get()!);
+    expect(g.recipe.lengths).toMatchObject({ reels: 45, tiktok: 20, youtube: null });
+    expect(g.effects[0]).toEqual({ name: "glide", label: "glide · verses" });
   });
 });

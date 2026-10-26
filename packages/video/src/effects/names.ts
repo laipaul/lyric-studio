@@ -11,6 +11,24 @@ export type EffectChoice = { name: string; intensity: Intensity; durationMs?: nu
 
 export const EFFECT_NAMES = ["glide", "cinematic-fade", "soft-blur", "dreamy-glow", "word-reveal", "karaoke-highlight", "floating", "typewriter"] as const;
 
+// What each effect is best for, shown next to its name in every list ("glide · verses").
+export const EFFECT_HINTS: Record<(typeof EFFECT_NAMES)[number], string> = {
+  glide: "verses",
+  "cinematic-fade": "verses, slow songs",
+  "soft-blur": "verses, intimate",
+  "dreamy-glow": "hooks, ballads",
+  "word-reveal": "hooks, fast lyrics",
+  "karaoke-highlight": "hooks",
+  floating: "intros, calm verses",
+  typewriter: "spoken or rapid lines",
+};
+
+// "glide · verses", with " · brand default" when it is the artist's default for that kind of line.
+export function effectOptionLabel(name: string, brandDefault?: string): string {
+  const hint = EFFECT_HINTS[name as keyof typeof EFFECT_HINTS];
+  return `${name}${hint ? ` · ${hint}` : ""}${brandDefault && brandDefault.split(":")[0] === name ? " · brand default" : ""}`;
+}
+
 export const DEFAULT_VERSE_EFFECT: EffectChoice = { name: "glide", intensity: "balanced" };
 export const DEFAULT_HOOK_EFFECT: EffectChoice = { name: "karaoke-highlight", intensity: "balanced" };
 

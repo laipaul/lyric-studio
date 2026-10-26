@@ -32,6 +32,7 @@ export type QaInput = {
   endScreen?: { clear: Box; lines: number[] } | null; // YouTube: the area kept free for end-screen elements
   frozenCheckSkipped?: boolean; // still pictures by design (YouTube cover / stills)
   length?: { actualS: number; songS: number | null } | null; // the finished file's length (songS: a full-song video)
+  platformLimit?: { seconds: number; limitS: number; platform: string } | null; // a fixed section (0:11-1:10) against the platform's longest
   canvas?: { lastToFirst: number; typicalStep: number; hasAudio: boolean; seconds: number; min: number; max: number } | null; // Spotify Canvas
 };
 
@@ -220,6 +221,13 @@ export function runQa(input: QaInput): QaReport {
         (c) => `the video ${c.at === "start" ? "starts" : "ends"} at ${t(c.time_ms / 1000)} in the song while line ${c.line} "${c.text}" is sung`,
       ),
     });
+  }
+
+  // 7b. A fixed section (as given, never trimmed) longer than the platform allows: WARN.
+  if (input.platformLimit) {
+    const l = input.platformLimit;
+    const ok = l.seconds <= l.limitS + 0.05;
+    checks.push({ name: "Length for the platform", ok, details: ok ? [] : [`the section is ${l.seconds.toFixed(1)} s; ${l.platform} allows up to ${l.limitS.toFixed(0)} s (it was not trimmed: choose a shorter section or "auto")`] });
   }
 
   // 8. Enough clips that suit this format (vertical sources for 9:16, horizontal for 16:9).

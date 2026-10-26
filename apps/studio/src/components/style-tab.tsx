@@ -23,7 +23,7 @@ function sourceLabel(source: string, platforms: StyleData["platforms"]): string 
   return "Library default";
 }
 
-const show = (v: unknown) => (Array.isArray(v) ? (v.length ? v.join(", ") : "none") : v && typeof v === "object" ? Object.entries(v).map(([k, n]) => `${k === "*" ? "every platform" : k} ${n}`).join(", ") || "each platform's preset" : String(v ?? ""));
+const show = (v: unknown) => (v === null ? "preset" : Array.isArray(v) ? (v.length ? v.join(", ") : "none") : v && typeof v === "object" ? Object.entries(v).map(([k, n]) => `${k === "*" ? "every platform" : k} ${n}`).join(", ") || "each platform's preset" : String(v ?? ""));
 
 // The song's recipe (song.json): every setting with its value and where it comes from; per platform
 // for the effects, fonts, accent colour and section. Changes are saved to song.json at once.
@@ -86,8 +86,9 @@ export function StyleTab({ projectId }: { projectId: string }) {
         <div className="flex gap-2">
           <select aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} className={select} value={name} disabled={busy} onChange={(e) => set(join(e.target.value, intensity))}>
             {data.effects.map((e) => (
-              <option key={e} value={e}>
-                {e}
+              <option key={e.name} value={e.name}>
+                {e.label}
+                {(f.field === "verseEffect" ? data.brandDefaults.verseEffect : data.brandDefaults.hookEffect).split(":")[0] === e.name ? " · brand default" : ""}
               </option>
             ))}
           </select>
@@ -154,6 +155,32 @@ export function StyleTab({ projectId }: { projectId: string }) {
               />
             </label>
           ))}
+        </div>
+      );
+    }
+    if (f.field === "length") {
+      const preset = platform ? data.platforms.find((p) => p.name === platform)?.presetLength : "each platform's preset";
+      return (
+        <div className="flex items-center gap-2">
+          <input
+            key={`${key}-${String(value)}`}
+            type="number"
+            min={3}
+            max={600}
+            data-edit={key}
+            className={cn(input, "w-24")}
+            defaultValue={value === null || value === undefined ? "" : String(value)}
+            placeholder="preset"
+            disabled={busy}
+            onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+            onBlur={(e) => {
+              const n = e.target.value ? Number(e.target.value) : null;
+              if (n === (value ?? null)) return;
+              if (n === null) act({ action: "reset", field: f.field, platform });
+              else set(n);
+            }}
+          />
+          <span className="text-muted-foreground text-xs">s · empty = {preset}; shapes an &quot;auto&quot; section only</span>
         </div>
       );
     }

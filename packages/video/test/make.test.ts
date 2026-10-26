@@ -769,7 +769,7 @@ describe("platform presets (stand-in renderer)", () => {
     expect(summary.at(-1)).toBe("The other 1 video(s) are finished.");
   });
 
-  it("lyric effects: brand.json, then platforms.json, then --line-effect / --hook-effect; next line per platform", async () => {
+  it("lyric effects: brand.json (platforms.json never sets them), then --line-effect / --hook-effect; next line per platform", async () => {
     const brandFile = path.join(wsDir, "brand", "brand.json");
     const plans: MakePlan[] = [];
     const first = await run({ platforms: "reels", variations: 1, onReady: (p) => plans.push(p) });
@@ -787,7 +787,7 @@ describe("platform presets (stand-in renderer)", () => {
     }
     expect(readFileSync(first.variations[0].qaFile, "utf8")).toContain("[ok  ] Lyrics inside the safe zone"); // incl. the waiting next line
 
-    // brand.json motion, then a platform's motion, then the command line.
+    // brand.json motion; a platform's old "motion" in platforms.json is ignored (format only); then the command line.
     const brand = JSON.parse(brandBefore);
     writeFileSync(brandFile, JSON.stringify({ ...brand, motion: { verseEffect: "floating:subtle", hookEffect: "word-reveal" } }));
     try {
@@ -799,8 +799,8 @@ describe("platform presets (stand-in renderer)", () => {
       writeFileSync(file, JSON.stringify(json));
       const fromPlatform = await run({ platforms: "tiktok", variations: 1, presetsFile: file });
       const pm = readManifest(fromPlatform.variations[0].manifestFile);
-      expect(pm.props.lyricEffects!.verse).toEqual({ name: "cinematic-fade", intensity: "balanced" });
-      expect(pm.props.lyricEffects!.hook).toEqual({ name: "word-reveal", intensity: "balanced" }); // not set there: brand.json
+      expect(pm.props.lyricEffects!.verse).toEqual({ name: "floating", intensity: "subtle" }); // the brand's, not the preset's cinematic-fade
+      expect(pm.props.lyricEffects!.hook).toEqual({ name: "word-reveal", intensity: "balanced" });
       expect(pm.props.nextLine).toBe(false);
       const cli = readManifest((await run({ platforms: "tiktok", variations: 1, presetsFile: file, lineEffect: "soft-blur:expressive", hookEffect: "typewriter" })).variations[0].manifestFile);
       expect([cli.props.lyricEffects!.verse, cli.props.lyricEffects!.hook]).toEqual([{ name: "soft-blur", intensity: "expressive" }, { name: "typewriter", intensity: "balanced" }]);
@@ -832,8 +832,8 @@ describe("platform presets (stand-in renderer)", () => {
     const p = seen[0].props as unknown as EffectsPreviewProps;
     expect(p.format).toEqual({ width: 1920, height: 1080 });
     expect(p.panels.map((x) => x.label)).toEqual(EFFECTS.map((e) => e.label));
-    expect(p.panels[0].note).toBe("(your verses)");
-    expect(p.panels.find((x) => x.label === "Karaoke highlight")!.note).toBe("(your hooks)");
+    expect(p.panels[0].note).toBe("verses · your verses");
+    expect(p.panels.find((x) => x.label === "Karaoke highlight")!.note).toBe("hooks · your hooks");
     expect(p.durationInFrames).toBeLessThanOrEqual(12 * 30);
     for (const [i, panel] of p.panels.entries()) {
       expect(panel.props.lyricEffects!.verse).toEqual({ name: EFFECTS[i].name, intensity: "balanced" });

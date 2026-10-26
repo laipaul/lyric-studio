@@ -27,6 +27,7 @@ export type RunRequest = {
   artist?: string;
   ep?: string;
   section?: string; // auto | full | 0:11-1:10
+  length?: number; // seconds an auto section aims for (all chosen platforms)
   allowFill?: boolean;
   layout?: "cover" | "stills" | "clips";
   realign?: boolean;
@@ -51,6 +52,7 @@ export function checkRunRequest(req: RunRequest, platformNames: readonly string[
     }
   }
   if (req.section && !/^(auto|full|\d+:\d{1,2}(\.\d+)?\s*-\s*\d+:\d{1,2}(\.\d+)?)$/.test(req.section.trim())) problems.push('Section must be "auto", "full" or like 0:11-1:10.');
+  if (req.length !== undefined && !(typeof req.length === "number" && req.length >= 3 && req.length <= 600)) problems.push("Target length must be 3-600 seconds.");
   if (req.layout && !["cover", "stills", "clips"].includes(req.layout)) problems.push("YouTube layout must be cover, stills or clips.");
   if (req.collection !== undefined && !/^[^\\/:*?"<>|]+$/.test(req.collection)) problems.push("Choose a collection.");
   return problems;
@@ -94,6 +96,7 @@ export function generateOptions(ws: Workspace, projectId: string, req: RunReques
     ...(req.artist?.trim() ? { artist: req.artist.trim() } : {}),
     ...(req.ep?.trim() ? { ep: req.ep.trim() } : {}),
     ...(req.section?.trim() ? { section: req.section.trim() } : {}), // only sent when changed from the recipe
+    ...(req.length ? { length: Math.round(req.length) } : {}),
     ...(req.allowFill ? { allowFill: true } : {}),
     ...(req.layout ? { layout: req.layout } : {}),
     ...(req.realign ? { realign: true } : {}),

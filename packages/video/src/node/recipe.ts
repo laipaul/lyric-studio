@@ -5,17 +5,17 @@
 // change it (the run's choice is ignored, with a note).
 // Per platform (Step 6.2c-2a): brand.json and song.json may hold "perPlatform": { "youtube": {
 // "verseEffect": "cinematic-fade" } } for the PLATFORM_FIELDS. For one platform the order is (weakest
-// first): library -> artist -> platforms.json motion -> artist (that platform) -> song -> song (that
-// platform) -> run. A locked field uses only the song's values (its default and per-platform ones).
+// first): library -> artist -> artist (that platform) -> song -> song (that platform) -> run.
+// platforms.json is format only (size, length, safe zones, ...): it never sets the style.
+// A locked field uses only the song's values (its default and per-platform ones).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { choiceText, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, parseEffectChoice } from "../effects/names";
-import type { PlatformPreset } from "../platform";
 import { DEFAULT_BRAND, type Brand } from "./brand";
 import { checkPerPlatform, isPlatformField, PLATFORM_FIELDS, type PerPlatform, type PlatformField } from "./per-platform";
 
-export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "accentColour", "collections", "platforms", "variations", "section", "ep", "youtubeLayout"] as const;
+export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "accentColour", "collections", "platforms", "variations", "section", "length", "ep", "youtubeLayout"] as const;
 export type RecipeField = (typeof RECIPE_FIELDS)[number];
 
 export type RecipeValues = {
@@ -28,6 +28,7 @@ export type RecipeValues = {
   platforms: string[]; // the platforms Generate starts with
   variations: Record<string, number>; // videos per platform
   section: string; // auto | full | 0:11-1:10
+  length: number | null; // target seconds for an "auto" section (null: the platform preset's length)
   ep: string;
   youtubeLayout: "cover" | "stills" | "clips";
 };
@@ -35,7 +36,7 @@ export type RecipeValues = {
 export { isPlatformField, PLATFORM_FIELDS, type PerPlatform, type PlatformField, type PlatformValues } from "./per-platform";
 
 export type SongRecipe = Partial<RecipeValues> & { perPlatform?: PerPlatform; locked?: RecipeField[] };
-// library | artist | platforms.json | artist:<platform> | song | song:<platform> | run
+// library | artist | artist:<platform> | song | song:<platform> | run
 export type RecipeSource = string;
 
 export type ResolvedRecipe = {
@@ -51,8 +52,8 @@ export const RECIPE_HELP =
   "(a brand change does not reach them, and Generate cannot change them for one run). Fields: verseEffect, hookEffect " +
   '("glide", "soft-blur:subtle", ...), verseFont, hookFont, accentColour ("#E8A3B5"), collections (shared collections used ' +
   'with the clips in clips\\), platforms (["reels", "youtube"]), variations ({ "reels": 3 }), section ("auto", "full", ' +
-  '"0:11-1:10"), ep, youtubeLayout ("cover", "stills", "clips"). perPlatform: values for one platform only, e.g. ' +
-  '{ "youtube": { "verseEffect": "cinematic-fade" } } (verseEffect, hookEffect, verseFont, hookFont, accentColour, section).';
+  '"0:11-1:10"), length (seconds an "auto" section aims for, e.g. 90; empty = the platform preset), ep, youtubeLayout ("cover", "stills", "clips"). perPlatform: values for one platform only, e.g. ' +
+  '{ "youtube": { "verseEffect": "cinematic-fade" } } (verseEffect, hookEffect, verseFont, hookFont, accentColour, section, length), e.g. { "reels": { "length": 90 }, "tiktok": { "length": 30 } }.';
 
 // Checks a song.json; every problem is named.
 export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: string[] } {
@@ -76,6 +77,10 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
     }
   }
   if (r.ep === "") recipe.ep = "";
+  if (r.length !== undefined && r.length !== null) {
+    if (typeof r.length === "number" && Number.isFinite(r.length) && r.length >= 3 && r.length <= 600) recipe.length = Math.round(r.length);
+    else problems.push("length must be a number of seconds from 3 to 600 (the target for an auto section)");
+  }
   if (r.accentColour !== undefined) {
     if (typeof r.accentColour === "string" && /^#[0-9a-fA-F]{6}$/.test(r.accentColour)) recipe.accentColour = r.accentColour;
     else problems.push('accentColour must look like "#E8A3B5"');
@@ -139,7 +144,6 @@ export type RecipeInput = {
   library: RecipeValues;
   artist: Partial<RecipeValues>;
   artistPlatforms?: PerPlatform; // brand.json perPlatform
-  presets?: PerPlatform; // platforms.json motion (lyric effects) per platform
   song: SongRecipe;
   run?: Partial<RecipeValues>;
 };
@@ -154,7 +158,7 @@ export function resolveRecipe(input: RecipeInput, platform?: string): ResolvedRe
     let layers: [RecipeSource, unknown][] = [
       ["library", input.library[k]],
       ["artist", input.artist[k]],
-      ...(each ? ([["platforms.json", input.presets?.[platform]?.[k as PlatformField]], [`artist:${platform}`, input.artistPlatforms?.[platform]?.[k as PlatformField]]] as [RecipeSource, unknown][]) : []),
+      ...(each ? ([[`artist:${platform}`, input.artistPlatforms?.[platform]?.[k as PlatformField]]] as [RecipeSource, unknown][]) : []),
       ["song", input.song[k]],
       ...(each ? ([[`song:${platform}`, input.song.perPlatform?.[platform]?.[k as PlatformField]]] as [RecipeSource, unknown][]) : []),
     ];
@@ -238,6 +242,7 @@ export const LIBRARY_RECIPE: RecipeValues = {
   platforms: [], // none: the "standard" preset
   variations: {}, // none: each platform preset's number
   section: "auto",
+  length: null,
   ep: "",
   youtubeLayout: "cover",
 };
@@ -263,6 +268,7 @@ export function runRecipe(o: {
   platforms?: string;
   variations?: number;
   section?: string;
+  length?: number;
   ep?: string;
   layout?: RecipeValues["youtubeLayout"];
 }): Partial<RecipeValues> {
@@ -276,6 +282,7 @@ export function runRecipe(o: {
     platforms: list(o.platforms?.toLowerCase()),
     variations: o.variations !== undefined ? { "*": o.variations } : undefined,
     section: o.section,
+    length: o.length,
     ep: o.ep?.trim() || undefined,
     youtubeLayout: o.layout,
   };
@@ -284,6 +291,7 @@ export function runRecipe(o: {
 }
 
 export function recipeText(v: unknown): string {
+  if (v === null) return "preset";
   if (Array.isArray(v)) return v.length ? v.join(", ") : "none";
   if (v && typeof v === "object") return Object.entries(v).map(([k, n]) => `${k === "*" ? "every platform" : k} ${n}`).join(", ") || "preset";
   return v === "" || v === undefined ? "none" : String(v);
@@ -296,16 +304,4 @@ export function recipeSummary(r: ResolvedRecipe): string {
   return show.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]}${r.locked.includes(k) ? ", locked" : ""})`).join(", ");
 }
 
-// platforms.json motion (lyric effects per platform) as recipe values.
-export function presetMotion(presets: Record<string, Pick<PlatformPreset, "name" | "motion">>): PerPlatform {
-  const out: PerPlatform = {};
-  for (const p of Object.values(presets)) {
-    if (!p.motion) continue;
-    out[p.name] = {
-      ...(p.motion.verseEffect ? { verseEffect: choiceText(p.motion.verseEffect) } : {}),
-      ...(p.motion.hookEffect ? { hookEffect: choiceText(p.motion.hookEffect) } : {}),
-    };
-  }
-  return out;
-}
 

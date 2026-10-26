@@ -11,6 +11,7 @@ import { absPath, openWorkspace, project as projectTable, resolveWorkspaceDir, t
 import { lyricFrames, rawLyric, type RawLyric, type RenderBase } from "../compose";
 import { VIDEO } from "../config";
 import { EFFECTS, parseEffectChoice, type EffectChoice } from "../effects";
+import { EFFECT_HINTS } from "../effects/names";
 import type { EffectsPreviewProps } from "../EffectsPreview";
 import { EFFECTS_PREVIEW_ID } from "../EffectsPreview";
 import { normalizeLyric, parseLrc, type TimedLine } from "../lrc";
@@ -194,7 +195,7 @@ export async function effectsPreview(options: {
           const choice: EffectChoice = { name: e.name, intensity: "balanced" };
           const used = [brandFx.verse.name === e.name ? "your verses" : null, brandFx.hook.name === e.name ? "your hooks" : null].filter(Boolean).join(", ");
           const { audio: _audio, ...props } = previewProps(m, lines, ex, choice, accent);
-          return { label: e.label, ...(used ? { note: `(${used})` } : {}), props };
+          return { label: e.label, note: `${EFFECT_HINTS[e.name as keyof typeof EFFECT_HINTS] ?? ""}${used ? ` · ${used}` : ""}`, props };
         }),
       };
       const out = path.join(folder, "effects-preview.mp4");

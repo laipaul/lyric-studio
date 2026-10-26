@@ -157,6 +157,28 @@ then the run (Generate or command-line options). Fields: `verseEffect`, `hookEff
 run cannot change (`"locked": ["verseEffect"]`). `pnpm make` prints a `recipe:` line showing where each
 value came from.
 
+### Style (song page)
+
+The **Style** tab shows the song's recipe: every setting (verse / hook effect, fonts, accent colour,
+collections, platforms, videos per platform, section, target length, EP, YouTube layout) with its value and
+where it comes from: *Library default*, *Artist's brand* (`workspace\brand\<artist>\brand.json`) or *This
+song*. Changes are saved for this song at once. **↺** puts a setting back to the inherited value; the **lock**
+keeps this song's value even if the brand changes later, and Generate cannot change it for one run.
+
+**Per platform**: open "Per platform" under a setting to give one platform its own value, e.g. YouTube
+`cinematic-fade` while Reels keeps `glide`, or a target length of 90 s for Reels and 30 s for TikTok. The
+same works in brand.json for all songs of an artist: `"perPlatform": { "youtube": { "verseEffect":
+"cinematic-fade" } }`. `presets\platforms.json` only describes formats (size, length, safe zones); it never
+changes the style.
+
+**Target length**: what an "auto" section aims for (start at or just before a hook, end after a complete
+line or chorus, never cutting a sung line). Longer than the song = the whole song. A fixed section like
+`0:11-1:10` is always used exactly as given; QA warns when it is longer than the platform allows.
+`pnpm make ... --length 90` does the same from the terminal.
+
+**Fonts**: the bundled fonts and your own (`workspace\fonts`), each with a preview line with French accents;
+a font without é è ç à ô is marked with ⚠.
+
 ### Assets (song page)
 
 The **Assets** tab shows the song folder's files: the song, `lyrics.txt`, the cover and `hints.lrc`,
@@ -167,8 +189,10 @@ moves a clip to `clips\_removed\`. The counts show how many clips 9:16 platforms
 
 ### Generate videos (song page)
 
-Open a song and use the **Generate** tab: choose the platforms (with how many videos each
-makes), the clips (the song's own clips are always used; tick the shared collections to add — the
+Open a song and use the **Generate** tab. It starts from the song's recipe (Style tab): the effect lists
+start on "From the recipe", the platforms, videos and target length come from it, locked settings cannot be
+changed here, and only what you change is used for this run (tick **Save these choices to the song** to keep
+them). Choose the platforms (with how many videos each makes and their length), the clips (the song's own clips are always used; tick the shared collections to add — the
 song's are ticked), the verse and hook effects (your
 brand's defaults preselected), and if you like a new title, artist, EP or cover. **Advanced**: videos
 per platform, section (auto / full / 0:11-1:10), YouTube layout, allow fill, align the lyrics again.

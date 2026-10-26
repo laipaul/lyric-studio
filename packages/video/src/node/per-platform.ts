@@ -2,9 +2,10 @@
 // { "youtube": { "verseEffect": "cinematic-fade" }, "reels": { "verseEffect": "glide" } }.
 import { parseEffectChoice } from "../effects/names";
 
-export const PLATFORM_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "accentColour", "section"] as const;
+export const PLATFORM_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "accentColour", "section", "length"] as const;
 export type PlatformField = (typeof PLATFORM_FIELDS)[number];
-export type PlatformValues = Partial<Record<PlatformField, string>>;
+// length: the target length in seconds for an "auto" section (3-600)
+export type PlatformValues = Partial<Record<Exclude<PlatformField, "length">, string>> & { length?: number };
 export type PerPlatform = Record<string, PlatformValues>;
 export const isPlatformField = (k: string): k is PlatformField => (PLATFORM_FIELDS as readonly string[]).includes(k);
 
@@ -22,7 +23,10 @@ export function checkPerPlatform(raw: unknown, where: string): { values: PerPlat
     for (const [k, v] of Object.entries(fields as Record<string, unknown>)) {
       const at = `${where}.${platform}.${k}`;
       if (!isPlatformField(k)) problems.push(`${at}: only ${PLATFORM_FIELDS.join(", ")} can differ per platform`);
-      else if (typeof v !== "string" || !v.trim()) problems.push(`${at} must be text`);
+      else if (k === "length") {
+        if (typeof v === "number" && Number.isFinite(v) && v >= 3 && v <= 600) out.length = Math.round(v);
+        else problems.push(`${at} must be a number of seconds from 3 to 600`);
+      } else if (typeof v !== "string" || !v.trim()) problems.push(`${at} must be text`);
       else if (k === "accentColour" && !/^#[0-9a-fA-F]{6}$/.test(v)) problems.push(`${at} must look like "#E8A3B5"`);
       else if (k === "verseEffect" || k === "hookEffect") {
         try {

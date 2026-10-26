@@ -34,6 +34,7 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
       "no-grain": { type: "boolean", default: false },
       "no-glow": { type: "boolean", default: false },
       section: { type: "string" }, // default: the song's recipe, else auto
+      length: { type: "string" }, // seconds an auto section aims for
       hint: { type: "string" },
       "no-hint": { type: "boolean", default: false },
       realign: { type: "boolean", default: false },
@@ -80,6 +81,8 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
   };
   const offset = values["downbeat-offset"] === undefined ? undefined : Number(values["downbeat-offset"]);
   if (offset !== undefined && ![0, 1, 2, 3].includes(offset)) fail("--downbeat-offset must be 0, 1, 2 or 3");
+  const length = values.length === undefined ? undefined : Number(values.length);
+  if (length !== undefined && (!Number.isFinite(length) || length < 3 || length > 600)) fail("--length must be a number of seconds from 3 to 600 (the target for an auto section)");
   const parallel = values.parallel === undefined ? undefined : Number(values.parallel);
   if (parallel !== undefined && (!Number.isInteger(parallel) || parallel < 1 || parallel > 6)) fail("--parallel must be a whole number from 1 to 6");
   if (values.realign && values.lrc) fail("--realign and --lrc cannot be used together");
@@ -106,6 +109,7 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
       grain: values["no-grain"] ? false : undefined,
       glow: values["no-glow"] ? false : undefined,
       section: values.section,
+      length,
       hint: resolve(values.hint) ?? (folder?.hints && !values["no-hint"] && !values.lrc ? folder.hints : undefined),
       noHint: values["no-hint"],
       realign: values.realign,
