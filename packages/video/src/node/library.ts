@@ -1,7 +1,7 @@
 // The studio's Library (Step 6.1): song cards from the database and the folders "pnpm make" writes,
 // the artists used so far, and "+ New song". No rendering code is imported here, so the studio's
 // server can use it directly.
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { REPO_ROOT, absPath, project as projectTable, type Workspace } from "@lyric/db";
@@ -11,8 +11,11 @@ import { parsePresets } from "../platform";
 import { checkEffectChoice, choiceText, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, EFFECT_NAMES, type EffectChoice } from "../effects/names";
 import { brandDir, brandDirFor, DEFAULT_ARTIST } from "./brand";
 import { renderingPlatforms, SHORT_LABELS, songRuns, type PlatformRun } from "./exports";
-import { readProjectSettings, rememberedCollection, storeCover, storeLyricsTxt, updateProjectSettings } from "./project-settings";
+import { keepReplaced, setSongEp, songCollections, songEp, storeCover, storeLyricsTxt } from "./project-settings";
 import { projectLyricsTxt } from "./runs";
+import { SOURCE_FILE } from "./collection";
+import { readRecipe } from "./recipe";
+import { COLLECTIONS_DIR, renameSongFolder, songPathsById } from "./song-folder";
 import { findOrCreateSongProject, storeProjectHint } from "./song-project";
 
 export type PlatformStatus = "PASS" | "WARN" | "FAILED" | "interrupted" | "Rendering" | "none";
@@ -84,18 +87,17 @@ export function songCard(ws: Workspace, p: typeof projectTable.$inferSelect, lab
       resumeFolder: state.status === "interrupted" ? latest.run.folder : null,
     };
   });
-  const settings = readProjectSettings(ws, p.id);
   const last = runs[runs.length - 1];
   return {
     id: p.id,
     title: p.title,
     artist: p.artist,
-    ep: settings.ep ?? null,
+    ep: songEp(ws, p.id) ?? null,
     cover: p.cover_path && existsSync(absPath(ws, p.cover_path)) ? p.cover_path : null,
     durationMs: p.duration_ms ?? null,
     createdAt: p.created_at.toISOString(),
     lastRun: last?.time ?? null,
-    hasLyrics: !!settings.lyricsTxt || existsSync(absPath(ws, `projects/${p.id}/lyrics`)),
+    hasLyrics: !!projectLyricsTxt(ws, p.id),
     platforms,
   };
 }
@@ -168,6 +170,7 @@ export async function createSong(ws: Workspace, input: NewSongInput): Promise<{ 
   if (Object.keys(changes).length) {
     ws.db.update(projectTable).set(changes).where(eq(projectTable.id, id)).run();
     updated.push(...Object.keys(changes));
+    renameSongFolder(ws, id); // songs\<artist>\<title>\ follows the new names
   }
   storeLyricsTxt(ws, id, input.lyrics);
   updated.push("lyrics");
@@ -176,11 +179,17 @@ export async function createSong(ws: Workspace, input: NewSongInput): Promise<{ 
     updated.push("cover");
   }
   if (input.hints) {
+    const paths = songPathsById(ws, id);
+    if (paths.hints && path.resolve(input.hints) !== path.resolve(paths.hints)) {
+      // The song folder's hints.lrc (a different earlier one is kept in .studio\replaced\).
+      if (existsSync(paths.hints) && readFileSync(paths.hints, "utf8") !== readFileSync(input.hints, "utf8")) keepReplaced(paths.root, paths.hints);
+      copyFileSync(input.hints, paths.hints);
+    }
     storeProjectHint(ws, id, input.hints, input.hintsName ? `${input.hintsName} (from "+ New song")` : undefined);
     updated.push("hints");
   }
-  if (input.ep !== undefined && input.ep.trim() !== (readProjectSettings(ws, id).ep ?? "")) {
-    updateProjectSettings(ws, id, { ep: input.ep.trim() || undefined });
+  if (input.ep !== undefined && input.ep.trim() !== (songEp(ws, id) ?? "")) {
+    setSongEp(ws, id, input.ep.trim() || undefined);
     updated.push("ep");
   }
   return { id, created: sp.created, updated };
@@ -188,8 +197,9 @@ export async function createSong(ws: Workspace, input: NewSongInput): Promise<{ 
 
 export type GeneratePanelData = {
   platforms: { name: string; label: string; variations: number; lyrics: boolean }[];
-  collections: string[]; // folders in WORKSPACE_DIR\clips
-  collection: string | null; // the one this song used last
+  collections: string[]; // shared collections: folders in WORKSPACE_DIR\collections (and the old clips\)
+  chosen: string[]; // the ones this song uses (song.json, else the one it used last)
+  songClips: number; // videos and photos in the song folder's own clips\
   effects: string[];
   verseEffect: string; // the artist's brand defaults
   hookEffect: string;
@@ -204,24 +214,40 @@ export type GeneratePanelData = {
 export function generatePanelData(ws: Workspace, p: typeof projectTable.$inferSelect): GeneratePanelData {
   const file = path.join(REPO_ROOT, "presets", "platforms.json");
   const presets = Object.values(parsePresets(JSON.parse(readFileSync(file, "utf8")), file)).filter((x) => x.available);
-  const clipsDir = absPath(ws, "clips");
-  const collections = existsSync(clipsDir) ? readdirSync(clipsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort((a, b) => a.localeCompare(b)) : [];
-  const remembered = rememberedCollection(ws, p.id);
-  if (remembered && !collections.includes(remembered.name)) collections.unshift(remembered.name);
-  const motion = brandMotion(ws.dir, p.artist);
+  const collections = sharedCollections(ws);
+  const chosen = songCollections(ws, p.id);
+  for (const c of [...chosen].reverse()) if (!collections.includes(c)) collections.unshift(c);
+  const paths = songPathsById(ws, p.id);
+  const recipe = paths.recipe ? readRecipe(paths.recipe) : {};
+  const brand = brandMotion(ws.dir, p.artist);
+  const motion = {
+    verseEffect: recipe.verseEffect ? checkEffectChoice(recipe.verseEffect, "verse") : brand.verseEffect,
+    hookEffect: recipe.hookEffect ? checkEffectChoice(recipe.hookEffect, "hook") : brand.hookEffect,
+  };
   return {
     platforms: presets.map((x) => ({ name: x.name, label: SHORT_LABELS[x.name] ?? x.label, variations: x.variations, lyrics: x.lyrics })),
     collections,
-    collection: remembered?.name ?? null,
+    chosen,
+    songClips: paths.clips && existsSync(paths.clips) ? readdirSync(paths.clips).filter((f) => SOURCE_FILE.test(f)).length : 0,
     effects: [...EFFECT_NAMES],
     verseEffect: choiceText(motion.verseEffect),
     hookEffect: choiceText(motion.hookEffect),
     lyricsReady: !!projectLyricsTxt(ws, p.id),
     title: p.title,
     artist: p.artist,
-    ep: readProjectSettings(ws, p.id).ep ?? "",
+    ep: songEp(ws, p.id) ?? "",
     artists: knownArtists(ws),
   };
+}
+
+// Shared collections: the folders in WORKSPACE_DIR\collections (and in the old clips\ until migrated).
+export function sharedCollections(ws: Workspace): string[] {
+  const names = new Set<string>();
+  for (const dir of [COLLECTIONS_DIR, "clips"]) {
+    const abs = absPath(ws, dir);
+    if (existsSync(abs)) for (const d of readdirSync(abs, { withFileTypes: true })) if (d.isDirectory()) names.add(d.name);
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
 }
 
 // The artist's motion defaults from brand.json (read directly; a broken file falls back to the defaults).

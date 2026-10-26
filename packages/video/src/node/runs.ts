@@ -13,6 +13,7 @@ import { commandArgs, parseMakeArgs } from "./make-args";
 import type { MakeOptions } from "./make";
 import { readProjectSettings } from "./project-settings";
 import { runFolders } from "./exports";
+import { songPaths, songPathsById } from "./song-folder";
 import type { Manifest } from "./manifest";
 
 // What the Generate panel sends.
@@ -56,9 +57,11 @@ export function checkRunRequest(req: RunRequest, platformNames: readonly string[
 
 // The project's lyrics.txt: the one stored by "+ New song", else the newest copy kept by an alignment.
 export function projectLyricsTxt(ws: Workspace, projectId: string): string | null {
+  const paths = songPathsById(ws, projectId);
+  if (!paths.legacy && existsSync(paths.lyricsTxt)) return paths.lyricsTxt; // the song folder's lyrics.txt
   const stored = readProjectSettings(ws, projectId).lyricsTxt;
   if (stored && existsSync(absPath(ws, stored))) return absPath(ws, stored);
-  const dir = absPath(ws, `projects/${projectId}/lyrics`);
+  const dir = paths.store;
   if (!existsSync(dir)) return null;
   const copies = readdirSync(dir)
     .filter((f) => /^lyrics(-[0-9a-f]{12})?\.txt$/.test(f))
@@ -103,8 +106,9 @@ export function resumeOptions(ws: Workspace, projectId: string, folder: string):
   const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
   if (!p) throw new Error("Song not found.");
   if (!runFolders(ws, projectId).includes(folder)) throw new Error(`No run ${folder} for "${p.title}".`);
-  const runDir = absPath(ws, `projects/${projectId}/exports/${folder}`);
-  const studioRun = ws.db.select().from(makeRun).where(and(eq(makeRun.project_id, projectId), eq(makeRun.export_dir, `projects/${projectId}/exports/${folder}`))).orderBy(desc(makeRun.created_at)).get();
+  const paths = songPaths(ws, p);
+  const runDir = path.join(paths.exports, folder);
+  const studioRun = ws.db.select().from(makeRun).where(and(eq(makeRun.project_id, projectId), eq(makeRun.export_dir, `${paths.exportsRel}/${folder}`))).orderBy(desc(makeRun.created_at)).get();
   let options: RunOptions;
   if (studioRun) {
     options = { ...(studioRun.options_json as RunOptions) };

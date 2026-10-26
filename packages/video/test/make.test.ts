@@ -20,7 +20,11 @@ import {
   makeVideos,
   planVariations,
   readManifest,
-  readProjectSettings,
+  readMoves,
+  readRecipe,
+  resolveMoved,
+  movesSince,
+  songPathsById,
   latestExportFolder,
   qaSummaryFromFile,
   publishText,
@@ -251,10 +255,12 @@ describe("variations and render limit", () => {
     w.stop();
   });
 
-  it("export folders are named by date and time and never reused", () => {
+  it("export folders are named by date and time and never reused", async () => {
     const now = new Date(2026, 9, 24, 9, 5);
-    const a = exportFolder(ws, "p-test", now);
-    const b = exportFolder(ws, "p-test", now);
+    const id = (await findOrCreateSongProject(ws, path.join(inDir, "song.wav"))).project.id;
+    const a = exportFolder(ws, id, now);
+    const b = exportFolder(ws, id, now);
+    expect(path.dirname(a)).toBe(songPathsById(ws, id).exports); // in the song folder's exports\
     expect(path.basename(a)).toBe("2026-10-24_0905");
     expect(path.basename(b)).toBe("2026-10-24_0905-2");
   });
@@ -543,8 +549,10 @@ describe("platform presets (stand-in renderer)", () => {
   });
 
   let all: MakeResult;
+  let allWhen = ""; // when that run started (the song folder is renamed by later tests)
   it("--platforms reels,tiktok,shorts: one folder each, with the preset's size, length, variations, safe zones and fade", async () => {
     const plans: MakePlan[] = [];
+    allWhen = new Date().toISOString();
     all = await run({ platforms: "reels,tiktok,shorts", onReady: (p) => plans.push(p) });
     expect(all.platforms.map((p) => [p.name, p.error, p.variations.length])).toEqual([["reels", null, 3], ["tiktok", null, 3], ["shorts", null, 2]]);
     const presets = loadPresets();
@@ -813,7 +821,7 @@ describe("platform presets (stand-in renderer)", () => {
     };
     // The project by title (ignoring case; an earlier test may have renamed it with --title) or by song file.
     const ws2 = openWorkspace(wsDir);
-    const title = ws2.db.select().from(project).all().find((x) => x.audio_path?.includes("long-song"))!.title;
+    const title = ws2.db.select().from(project).all().find((x) => /long/i.test(x.title))!.title;
     ws2.close();
     const grid = await effectsPreview({ project: title.toUpperCase(), workspaceDir: wsDir, renderer });
     expect(seen).toHaveLength(1);
@@ -892,7 +900,7 @@ describe("platform presets (stand-in renderer)", () => {
       expect(m.props.lyricEffects!.accent).toBe("#88AACC"); // brand\Pômé\brand.json
       const p = ws.db.select().from(project).where(eq(project.title, r.projectTitle)).get()!;
       expect(p.artist).toBe("Pômé");
-      expect(readProjectSettings(ws, p.id).ep).toBe("Night Songs");
+      expect(readRecipe(songPathsById(ws, p.id).recipe).ep).toBe("Night Songs"); // song.json
     } finally {
       await run({ platforms: "reels", variations: 1, artist: "Life Lyrics" }); // back to the default for the other tests
       rmSync(own, { recursive: true, force: true });
@@ -900,15 +908,18 @@ describe("platform presets (stand-in renderer)", () => {
   });
 
   it("--resume per platform renders only what is missing in each platform folder", async () => {
-    const tiktok = all.platforms.find((p) => p.name === "tiktok")!;
-    rmSync(path.join(tiktok.exportDir, "v2.qa.txt"));
+    // The song folder was renamed by an earlier test (--title): its run folders moved with it.
+    const now = (dir: string) => path.join(wsDir, ...resolveMoved(movesSince(readMoves(wsDir), allWhen), path.relative(wsDir, dir).split(path.sep).join("/")).split("/"));
+    const allDir = now(all.exportDir);
+    const tiktokDir = now(all.platforms.find((p) => p.name === "tiktok")!.exportDir);
+    rmSync(path.join(tiktokDir, "v2.qa.txt"));
     // The newest run folder must be the one from the first test: remove the later ones.
-    const exportsDir = path.dirname(all.exportDir);
-    for (const d of readdirSync(exportsDir)) if (path.join(exportsDir, d) !== all.exportDir) rmSync(path.join(exportsDir, d), { recursive: true });
+    const exportsDir = path.dirname(allDir);
+    for (const d of readdirSync(exportsDir)) if (path.join(exportsDir, d) !== allDir) rmSync(path.join(exportsDir, d), { recursive: true });
     rendered.length = 0;
     const resumed = await run({ platforms: "reels,tiktok,shorts", resume: true });
-    expect(resumed.exportDir).toBe(all.exportDir);
-    expect(rendered).toEqual([path.relative(root, path.join(tiktok.exportDir, "v2.mp4"))]);
+    expect(resumed.exportDir).toBe(allDir);
+    expect(rendered).toEqual([path.relative(root, path.join(tiktokDir, "v2.mp4"))]);
   });
 });
 
@@ -990,7 +1001,7 @@ describe("YouTube cover lookup and layout fallback", () => {
     ffmpeg("-f", "lavfi", "-i", "color=c=blue:s=400x400", "-frames:v", "1", path.join(songDir, "cover.png"));
     const next = resolveCover(ws, sp.project, { songFile: song })!;
     expect(next.from).toBe(path.join(songDir, "cover.png"));
-    expect(next.stored).toBe(`projects/${sp.project.id}/audio/cover.png`);
+    expect(next.stored).toBe(`${sp.project.folder}/cover.png`); // in the song folder
     const stored = ws.db.select().from(project).all().find((p) => p.id === sp.project.id)!;
     expect(resolveCover(ws, stored, { songFile: song })).toEqual({ stored: next.stored, from: "the project's stored cover" });
   });

@@ -9,7 +9,7 @@ import { NewSongDialog } from "@/components/new-song-dialog";
 import { SongCard } from "@/components/song-card";
 import { Input } from "@/components/ui/input";
 
-export function LibraryView({ songs, artists }: { songs: Song[]; artists: string[] }) {
+export function LibraryView({ songs, artists, banner }: { songs: Song[]; artists: string[]; banner?: React.ReactNode }) {
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const shown = useMemo(() => {
@@ -35,6 +35,7 @@ export function LibraryView({ songs, artists }: { songs: Song[]; artists: string
         </div>
       </div>
 
+      {banner}
       {notice ? (
         <p role="status" className="border-brand/30 bg-brand/10 text-accent-foreground rounded-md border px-4 py-2 text-sm">
           {notice}

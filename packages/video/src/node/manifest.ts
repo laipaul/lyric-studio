@@ -16,7 +16,8 @@ import type { Brand } from "./brand";
 import { normaliseClip, NORMALISE_VERSION } from "./clips";
 import { loadFontCatalog } from "./font-catalog";
 import type { MediaRoots } from "./media";
-import { resolveMediaPath } from "./media";
+import { movesSince, resolveMediaPath, resolveMoved } from "./media";
+import { readMoves } from "./song-folder";
 
 export const MANIFEST_VERSION = 1;
 
@@ -121,12 +122,15 @@ export async function verifyManifest(ws: Workspace, manifest: Manifest, log: (m:
   const problems: string[] = [];
   const notes: string[] = [];
 
-  const song = absPath(ws, manifest.song.file);
+  // Files of songs and collections that moved since (migration, renamed songs) are looked up where they are now.
+  const moves = movesSince(readMoves(ws.dir), manifest.created_at);
+  const here = (rel: string) => absPath(ws, resolveMoved(moves, rel));
+  const song = here(manifest.song.file);
   if (!existsSync(song)) problems.push(`the song is missing: ${song}`);
   else if ((await fileHash(song)) !== manifest.song.sha256) problems.push(`the song has changed since the render: ${song}`);
 
   for (const c of manifest.clips) {
-    const file = absPath(ws, c.file);
+    const file = here(c.file);
     if (!existsSync(file)) {
       problems.push(`clip ${c.name} is missing: ${file}`);
       continue;
@@ -138,7 +142,7 @@ export async function verifyManifest(ws: Workspace, manifest: Manifest, log: (m:
     const normalised = absPath(ws, c.normalised);
     if (!existsSync(normalised)) {
       // The cached 1080x1920 copy was deleted: make it again from the (unchanged) clip.
-      const pseudo = { id: c.name, path: c.file, content_hash: c.sha256 } as Clip;
+      const pseudo = { id: c.name, path: resolveMoved(moves, c.file), content_hash: c.sha256 } as Clip;
       const made = await normaliseClip(ws, pseudo, c.name, log);
       if (made.path !== c.normalised) problems.push(`clip ${c.name}: its prepared copy would be ${made.path}, not ${c.normalised}`);
     }
@@ -148,7 +152,7 @@ export async function verifyManifest(ws: Workspace, manifest: Manifest, log: (m:
   }
 
   const catalog = loadFontCatalog(ws.dir);
-  const media: MediaRoots = { workspaceDir: ws.dir, extraFiles: {}, fontDirs: catalog.fontDirs };
+  const media: MediaRoots = { workspaceDir: ws.dir, extraFiles: {}, fontDirs: catalog.fontDirs, moves };
   for (const f of manifest.fonts) {
     const file = resolveMediaPath(f.src, media);
     if (!file || !existsSync(file)) problems.push(`font file missing: ${f.family} ${f.weight} (${f.src})`);

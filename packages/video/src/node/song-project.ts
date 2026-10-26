@@ -20,6 +20,7 @@ import { eq } from "drizzle-orm";
 
 import { HOOK_MARKER, normalizeLyric, parseLrc, type TimedLine } from "../lrc";
 import { cachedFileHash } from "./collection";
+import { adoptIntoSongFolder, songPaths, songPathsById } from "./song-folder";
 
 export const ALIGN_STORE_VERSION = 2; // 2: key without hook markers, LRC with word end tags
 
@@ -36,14 +37,16 @@ export async function findOrCreateSongProject(ws: Workspace, song: string, log: 
   }
   if (found) {
     // The project's copy of the song went missing: copy it again.
-    const target = absPath(ws, found.audio_path ?? `projects/${found.id}/audio/${path.basename(song)}`);
+    const target = absPath(ws, found.audio_path ?? (found.folder ? `${found.folder}/song${path.extname(song).toLowerCase()}` : `projects/${found.id}/audio/${path.basename(song)}`));
     mkdirSync(path.dirname(target), { recursive: true });
     copyFileSync(song, target);
     return { project: found, songFile: target, songHash, created: false };
   }
   log(`new project for ${path.basename(song)}`);
   const created = await createProject(ws, { title: path.parse(song).name, audioFile: song });
-  const updated = ws.db.update(projectTable).set({ audio_hash: songHash }).where(eq(projectTable.id, created.id)).returning().get();
+  ws.db.update(projectTable).set({ audio_hash: songHash }).where(eq(projectTable.id, created.id)).run();
+  adoptIntoSongFolder(ws, created.id, song); // its own folder: songs\<artist>\<title>\
+  const updated = ws.db.select().from(projectTable).where(eq(projectTable.id, created.id)).get()!;
   return { project: updated, songFile: absPath(ws, updated.audio_path!), songHash, created: true };
 }
 
@@ -131,7 +134,7 @@ export async function ensureAlignment(
   for (const f of [options.lyricsTxt, options.hint, options.lrc]) if (f && !existsSync(f)) throw new Error(`File not found: ${f}`);
   const txtContent = readFileSync(options.lyricsTxt);
   const lyricsHash = sha256(txtContent);
-  const relDir = `projects/${sp.project.id}/lyrics`;
+  const relDir = songPaths(ws, sp.project).storeRel;
   const dir = absPath(ws, relDir);
   mkdirSync(dir, { recursive: true });
   const warnings: string[] = [];
@@ -226,7 +229,7 @@ type StoredHint = { source: string; copy: string; sha256: string; stored_at: str
 // use it automatically. Returns the stored copy's name.
 // `source`: how the hints are named in messages (default: the file's path).
 export function storeProjectHint(ws: Workspace, projectId: string, hintFile: string, source?: string): string {
-  const dir = absPath(ws, `projects/${projectId}/lyrics`);
+  const dir = songPathsById(ws, projectId).store;
   mkdirSync(dir, { recursive: true });
   projectHint(dir, { hint: hintFile }, () => {}, []);
   const record = path.join(dir, "hint.json");

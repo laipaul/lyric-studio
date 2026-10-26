@@ -41,7 +41,9 @@ import { analyzeSong } from "./analysis";
 import { loadBrand, type Brand } from "./brand";
 import { artistBrandFile } from "./captions";
 import { readProjectSettings, rememberCollection, rememberedCollection, updateProjectSettings } from "./project-settings";
-import { prepareForFormat, syncCollection, type CollectionSync, type PreparedForFormat } from "./collection";
+import { artistRecipe, LIBRARY_RECIPE, readRecipe, recipeSummary, recipeText, resolveRecipe, runRecipe, writeRecipe, type RecipeField } from "./recipe";
+import { renameSongFolder, songPathsById } from "./song-folder";
+import { mergeCollections, prepareForFormat, SOURCE_FILE, syncCollection, type CollectionSync, type PreparedForFormat } from "./collection";
 import { fontFileRefs, loadFontCatalog, resolveFace, type FontCatalog } from "./font-catalog";
 import { sha256File, toolInfo, writeManifest, type Manifest } from "./manifest";
 import { resolveMediaPath, type MediaRoots } from "./media";
@@ -72,7 +74,8 @@ import {
 export type MakeOptions = {
   song: string;
   lyrics: string; // lyrics.txt
-  collection?: string; // default: the collection this project used last time (remembered)
+  songFolder?: string; // "pnpm make <song folder>" (song and lyrics come from it)
+  collection?: string; // shared collection(s), "wedding" or "wedding,beach"; default: song.json, else the one used last time
   collectionPath?: string;
   variations?: number; // default: the platform preset's number (standard: 6)
   platforms?: string; // "reels,tiktok,shorts" or "all"; default: the "standard" preset
@@ -86,7 +89,7 @@ export type MakeOptions = {
   grain?: boolean; // YouTube stills: film grain (default from the preset)
   glow?: boolean; // YouTube stills: beat-pulsed glow (default from the preset)
   presetsFile?: string; // default: presets/platforms.json
-  section?: string; // "auto" (default) | "full" | "0:11-1:10"
+  section?: string; // "auto" | "full" | "0:11-1:10" (default: song.json, else auto)
   hint?: string;
   noHint?: boolean; // align without the project's stored hints (warns)
   realign?: boolean;
@@ -265,7 +268,7 @@ export function retryLimit(limit: RenderLimit): Pick<RenderLimit, "concurrency" 
 
 // The newest export folder of a project (folder names sort by date and time), or null.
 export function latestExportFolder(ws: Workspace, projectId: string): string | null {
-  const base = absPath(ws, `projects/${projectId}/exports`);
+  const base = songPathsById(ws, projectId).exports;
   if (!existsSync(base)) return null;
   const dirs = readdirSync(base, { withFileTypes: true })
     .filter((d) => d.isDirectory() && /^\d{4}-\d{2}-\d{2}_\d{4}(-\d+)?$/.test(d.name))
@@ -293,19 +296,21 @@ export function chooseEffects(
   preset: Pick<PlatformPreset, "motion">,
   brand: Pick<Brand, "motion">,
   options: Pick<MakeOptions, "lineEffect" | "hookEffect">,
+  labels: { verse?: string; hook?: string } = {}, // where the options' effects come from (default: the flags)
 ): { verse: EffectChoice; hook: EffectChoice; from: { verse: string; hook: string } } {
   const pick = (cli: string | undefined, flag: string, platform: EffectChoice | undefined, own: EffectChoice) =>
     cli ? { choice: parseEffectChoice(cli, flag), from: flag } : platform ? { choice: platform, from: "platforms.json" } : { choice: own, from: "brand.json" };
-  const verse = pick(options.lineEffect, "--line-effect", preset.motion?.verseEffect, brand.motion.verseEffect);
-  const hook = pick(options.hookEffect, "--hook-effect", preset.motion?.hookEffect, brand.motion.hookEffect);
+  const verse = pick(options.lineEffect, labels.verse ?? "--line-effect", preset.motion?.verseEffect, brand.motion.verseEffect);
+  const hook = pick(options.hookEffect, labels.hook ?? "--hook-effect", preset.motion?.hookEffect, brand.motion.hookEffect);
   return { verse: verse.choice, hook: hook.choice, from: { verse: verse.from, hook: hook.from } };
 }
 
-// WORKSPACE_DIR\projects\<id>\exports\<YYYY-MM-DD_HHmm>\ (with -2, -3, ... if that minute exists).
+// <song folder>\exports\<YYYY-MM-DD_HHmm>\ (with -2, -3, ... if that minute exists); songs not
+// migrated yet: WORKSPACE_DIR\projects\<id>\exports\.
 export function exportFolder(ws: Workspace, projectId: string, now: Date): string {
   const p = (n: number) => String(n).padStart(2, "0");
   const name = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}_${p(now.getHours())}${p(now.getMinutes())}`;
-  const base = absPath(ws, `projects/${projectId}/exports`);
+  const base = songPathsById(ws, projectId).exports;
   let dir = path.join(base, name);
   for (let n = 2; existsSync(dir); n++) dir = path.join(base, `${name}-${n}`);
   mkdirSync(dir, { recursive: true });
@@ -385,34 +390,84 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
 
     // Presets and fonts first: a mistake there should fail before the slow steps.
     const presets = loadPresets(options.presetsFile);
-    const chosenPlatforms = choosePlatforms(options.platforms, presets);
+    if (options.platforms) choosePlatforms(options.platforms, presets);
     const catalog = loadFontCatalog(ws.dir);
     for (const problem of catalog.problems) log(`font file skipped: ${problem}`);
 
     const sp = await findOrCreateSongProject(ws, path.resolve(options.song), log);
     log(`project "${sp.project.title}" (${sp.created ? "new" : "found by the song's content"})`);
-    if (options.artist?.trim() && options.artist.trim() !== sp.project.artist) {
-      sp.project = ws.db.update(projectTable).set({ artist: options.artist.trim() }).where(eq(projectTable.id, sp.project.id)).returning().get();
+    const renamed: Partial<{ artist: string; title: string }> = {};
+    if (options.artist?.trim() && options.artist.trim() !== sp.project.artist) renamed.artist = options.artist.trim();
+    if (options.title?.trim() && options.title.trim() !== sp.project.title) renamed.title = options.title.trim();
+    if (Object.keys(renamed).length) {
+      const oldRoot = songPathsById(ws, sp.project.id).root;
+      sp.project = ws.db.update(projectTable).set(renamed).where(eq(projectTable.id, sp.project.id)).returning().get();
+      // A new title or artist renames the song folder (songs\<artist>\<title>\).
+      const moved = renameSongFolder(ws, sp.project.id, { selfPid: process.pid });
+      if (moved) {
+        log(`song folder renamed: ${moved}`);
+        sp.project = ws.db.select().from(projectTable).where(eq(projectTable.id, sp.project.id)).get()!;
+        if (sp.project.audio_path) sp.songFile = absPath(ws, sp.project.audio_path);
+        // Files given from the old folder (lyrics.txt, hints.lrc, ...) are in the new one now.
+        const newRoot = songPathsById(ws, sp.project.id).root;
+        const inside = (f?: string) => (f && path.resolve(f).startsWith(oldRoot + path.sep) ? path.join(newRoot, path.relative(oldRoot, path.resolve(f))) : f);
+        options = { ...options, song: sp.songFile, lyrics: inside(options.lyrics)!, hint: inside(options.hint), cover: inside(options.cover), stills: inside(options.stills), pins: inside(options.pins), lrc: inside(options.lrc), songFolder: inside(options.songFolder) };
+      }
     }
+    const paths = songPathsById(ws, sp.project.id);
     // The artist's brand (brand\<artist>\brand.json if there is one, else brand\brand.json).
-    const brand = loadBrand(ws.dir, catalog, sp.project.artist);
+    let brand = loadBrand(ws.dir, catalog, sp.project.artist);
     if (brand.created) log(`brand settings created: ${brand.file} (edit fonts, colour and logo there)`);
+
+    // The recipe: library -> artist brand -> song.json -> this run (locked song settings win).
+    const songRecipe = readRecipe(paths.recipe);
+    const recipe = resolveRecipe({ library: LIBRARY_RECIPE, artist: artistRecipe(brand.brand), song: songRecipe, run: runRecipe(options) });
+    for (const i of recipe.ignored) log(`song.json locks ${i.field}: keeping ${recipeText(i.kept)} (this run asked for ${recipeText(i.run)})`);
+    const own = (k: RecipeField) => recipe.sources[k] === "song" || recipe.sources[k] === "run"; // set for this song or run
+    const effective: MakeOptions = {
+      ...options,
+      lineEffect: own("verseEffect") ? recipe.values.verseEffect : undefined,
+      hookEffect: own("hookEffect") ? recipe.values.hookEffect : undefined,
+      font: own("verseFont") ? recipe.values.verseFont : undefined,
+      fontHook: own("hookFont") ? recipe.values.hookFont : undefined,
+      section: recipe.values.section,
+      layout: own("youtubeLayout") ? recipe.values.youtubeLayout : undefined,
+      platforms: recipe.values.platforms.length ? recipe.values.platforms.join(",") : undefined,
+    };
+    if (effective.lineEffect) parseEffectChoice(effective.lineEffect, "song.json verseEffect");
+    if (effective.hookEffect) parseEffectChoice(effective.hookEffect, "song.json hookEffect");
+    if (own("accentColour")) brand = { ...brand, brand: { ...brand.brand, accentColour: recipe.values.accentColour } };
+    const chosenPlatforms = choosePlatforms(effective.platforms, presets);
+    const variationsFor = (preset: PlatformPreset) => recipe.values.variations[preset.name] ?? recipe.values.variations["*"] ?? preset.variations;
+    const effectLabels = { verse: recipe.sources.verseEffect === "song" ? "song.json" : "--line-effect", hook: recipe.sources.hookEffect === "song" ? "song.json" : "--hook-effect" };
+    log(`recipe: ${recipeSummary(recipe)}`);
+
     const styles = loadStyles(ws, catalog, {
-      font: options.font,
-      fontHook: options.fontHook,
+      font: effective.font,
+      fontHook: effective.fontHook,
       brandFonts: brand.brand.useForLyrics ? { verse: brand.brand.verseFont.family, hook: brand.brand.hookFont.family } : undefined,
     });
-    // The EP: --ep (remembered with the project), else the project's (from the studio or an earlier run).
-    if (options.ep?.trim()) updateProjectSettings(ws, sp.project.id, { ep: options.ep.trim() });
-    const ep = options.ep?.trim() || readProjectSettings(ws, sp.project.id).ep;
-    // The clip collection: --collection, else the one this project used last time.
-    const remembered = options.collection ? null : rememberedCollection(ws, sp.project.id);
-    if (!options.collection && !remembered) {
-      throw new Error(`--collection <name> is needed the first time for "${sp.project.title}" (the folder WORKSPACE_DIR\\clips\\<name>); after that it is remembered.`);
+    // The EP: song.json (--ep is saved there; songs not migrated yet: remembered with the project).
+    if (options.ep?.trim() && !recipe.locked.includes("ep")) {
+      if (paths.recipe) writeRecipe(paths.recipe, { ...songRecipe, ep: options.ep.trim() });
+      else updateProjectSettings(ws, sp.project.id, { ep: options.ep.trim() });
     }
-    const collectionName = options.collection ?? remembered!.name;
-    const collectionPath = options.collection ? options.collectionPath : (options.collectionPath ?? remembered!.folder);
-    if (remembered) log(`using collection ${remembered.name} (remembered)`);
+    const ep = (own("ep") ? recipe.values.ep : undefined) || readProjectSettings(ws, sp.project.id).ep || undefined;
+
+    // The clips: the song's own clips\ plus the shared collections (--collection, else song.json,
+    // else the one this song used last time).
+    const remembered = recipe.sources.collections === "library" ? rememberedCollection(ws, sp.project.id) : null;
+    const collectionNames = recipe.sources.collections === "library" ? (remembered ? [remembered.name] : []) : recipe.values.collections;
+    const songClips = paths.clips && existsSync(paths.clips) && readdirSync(paths.clips).some((f) => SOURCE_FILE.test(f)) ? paths.clips : null;
+    if (!collectionNames.length && !songClips) {
+      throw new Error(
+        `--collection <name> is needed the first time for "${sp.project.title}" (the folder WORKSPACE_DIR\\collections\\<name>)` +
+          `${paths.clips ? `, or put clips in its own clips folder (${paths.clips})` : ""}; after that it is remembered.`,
+      );
+    }
+    const collectionRemembered = !!remembered || recipe.sources.collections === "song";
+    if (collectionRemembered) log(`using collection ${collectionNames.join(", ")} (remembered)`);
+    const collectionFolder = (name: string, i: number) => (i === 0 ? (recipe.sources.collections === "run" ? options.collectionPath : (options.collectionPath ?? remembered?.folder)) : undefined);
 
     log("analysing the song (cached after the first time)");
     const analysis = analyzeSong(sp.songFile, { downbeatOffset: options.downbeatOffset });
@@ -427,9 +482,6 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       .where(eq(projectTable.id, sp.project.id))
       .returning()
       .get();
-    if (options.title && options.title !== project.title) {
-      project = ws.db.update(projectTable).set({ title: options.title }).where(eq(projectTable.id, project.id)).returning().get();
-    }
     const lyricsOffsetMs = project.lyrics_offset_ms;
 
     const alignment = await ensureAlignment(ws, { ...sp, project }, {
@@ -450,13 +502,21 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const numbers = lyricLineNumbers(lines.map((l) => l.text), alignment.lrcFile, alignment.lyricsTxt).numbers;
     const sectionLines: SectionLine[] = lines.map((l, i) => ({ ...l, sung_end_ms: reports[i]?.end_ms }));
 
-    const collection = await syncCollection(ws, { name: collectionName, folder: collectionPath, log, prepare: false });
-    rememberCollection(ws, project.id, { name: collectionName, ...(collectionPath ? { folder: collectionPath } : {}) });
+    const syncs: CollectionSync[] = [];
+    if (songClips) syncs.push(await syncCollection(ws, { name: `song:${project.id}`, folder: songClips, log, prepare: false }));
+    for (const [i, name] of collectionNames.entries()) syncs.push(await syncCollection(ws, { name, folder: collectionFolder(name, i), log, prepare: false }));
+    if (songClips) syncs[0] = { ...syncs[0], collection: { ...syncs[0].collection, name: "song clips" } };
+    const collection = mergeCollections(syncs);
+    if (recipe.sources.collections === "run") {
+      rememberCollection(ws, project.id, { name: collectionNames[0], ...(options.collectionPath ? { folder: options.collectionPath } : {}) });
+      // Remembered in song.json (a locked song.json collection never gets here: the run's choice was ignored).
+      if (paths.recipe) writeRecipe(paths.recipe, { ...readRecipe(paths.recipe), collections: collectionNames });
+    }
 
     // The run's folder; --resume continues the latest one.
     let rootDir: string;
     if (options.resume) {
-      const exportsBase = absPath(ws, `projects/${project.id}/exports`);
+      const exportsBase = songPathsById(ws, project.id).exports;
       const chosenFolder = options.resumeFolder ? path.resolve(options.resumeFolder) : latestExportFolder(ws, project.id);
       if (!chosenFolder) throw new Error("--resume: this project has no earlier export folder; run without --resume.");
       if (path.dirname(chosenFolder) !== path.resolve(exportsBase) || !existsSync(chosenFolder)) throw new Error(`--resume: ${chosenFolder} is not a run folder of "${project.title}".`);
@@ -477,8 +537,8 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       if (info.width && info.height) logo = { file: brand.logoFile, width: info.width, height: info.height };
     }
     const shared: Shared = {
-      ws, options, log, now, leadMs, lyricsOffsetMs, catalog, styles, brand, logo, sp, analysis, alignment, lines, reports, numbers,
-      sectionLines, collection, collectionRemembered: !!remembered, ep, tool, rootDir, getProject: () => project,
+      ws, options: effective, variationsFor, effectLabels, log, now, leadMs, lyricsOffsetMs, catalog, styles, brand, logo, sp, analysis, alignment, lines, reports, numbers,
+      sectionLines, collection, collectionRemembered, ep, tool, rootDir, getProject: () => project,
     };
     const results: PlatformResult[] = [];
     for (const [index, name] of chosenPlatforms.names.entries()) {
@@ -522,7 +582,9 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
 
 type Shared = {
   ws: Workspace;
-  options: MakeOptions;
+  options: MakeOptions; // with the recipe applied
+  variationsFor: (preset: PlatformPreset) => number;
+  effectLabels: { verse: string; hook: string };
   log: (m: string) => void;
   now: Date;
   leadMs: number;
@@ -539,7 +601,7 @@ type Shared = {
   reports: ReturnType<typeof matchReport>;
   numbers: number[];
   sectionLines: SectionLine[];
-  collection: CollectionSync;
+  collection: CollectionSync & { folders: string[] };
   collectionRemembered: boolean; // --collection not given: the one this project used last time
   tool: Manifest["tool"];
   rootDir: string;
@@ -587,7 +649,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
   let canvas: CanvasPlan | null = null;
   if (isCanvas) {
     const l = preset.length.mode === "loop" ? preset.length : { min: 3, max: 8 };
-    canvas = await planCanvas(ws, prepared.clips, { bpm: analysis.bpm, count: options.variations ?? preset.variations, min: l.min, max: l.max });
+    canvas = await planCanvas(ws, prepared.clips, { bpm: analysis.bpm, count: sh.variationsFor(preset), min: l.min, max: l.max });
   }
 
   // Section (lines appear `leadMs` early and move by the lyrics offset).
@@ -620,7 +682,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
     }
     if (ytLayout === "stills") {
       const stillsFile =
-        options.stills ?? [path.join(path.dirname(alignment.lyricsTxt), "stills.txt"), path.join(sh.collection.folder, "stills.txt")].find((f) => existsSync(f));
+        options.stills ?? [path.join(path.dirname(alignment.lyricsTxt), "stills.txt"), ...sh.collection.folders.map((f) => path.join(f, "stills.txt"))].find((f) => existsSync(f));
       if (options.stills && !existsSync(options.stills)) throw new Error(`stills.txt not found: ${options.stills}`);
       stillsPlan = planStills({
         lines, beats: analysis.beats, photos, stillsText: stillsFile ? readFileSync(stillsFile, "utf8") : null, durationMs: analysis.duration_ms,
@@ -663,7 +725,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
   const { media, audio } = songMedia(ws.dir, sh.sp.songFile, plan, sh.catalog, preset.fadeOutSeconds);
   // With word times and the sung end (from the aligned LRC, else the alignment report) for the effects.
   const allLyrics = lines.map((l, i) => rawLyric({ ...l, sung_end_ms: sh.sectionLines[i].sung_end_ms ?? l.sung_end_ms }));
-  const fx = chooseEffects(preset, sh.brand.brand, options);
+  const fx = chooseEffects(preset, sh.brand.brand, options, sh.effectLabels);
   const effects: LyricEffectsProps = { verse: fx.verse, hook: fx.hook, accent: sh.brand.brand.accentColour };
   // A line whose singing is over but which is still on screen at the start (it lingers until the
   // next stamp) is not shown, so the video never opens on the tail of the previous line.
@@ -712,7 +774,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
     }
   }
 
-  const allSpecs = planVariations(canvas ? Math.max(1, canvas.loops.length) : (options.variations ?? preset.variations));
+  const allSpecs = planVariations(canvas ? Math.max(1, canvas.loops.length) : sh.variationsFor(preset));
   let specs = allSpecs;
   if (options.resume) {
     const changed = resumeMismatch(exportDir, allSpecs, {

@@ -5,7 +5,8 @@ import path from "node:path";
 
 import { project } from "@lyric/db";
 import { makeOwnCaptionTemplate, postingPack } from "@lyric/video/captions";
-import { readProjectSettings } from "@lyric/video/project-settings";
+import { songEp } from "@lyric/video/project-settings";
+import { songPathsById } from "@lyric/video/song-folder";
 import { eq } from "drizzle-orm";
 
 import { EXPORT_FILE } from "@/lib/files";
@@ -17,12 +18,13 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const projectId = params.get("projectId") ?? "";
   const video = params.get("video") ?? "";
-  if (!EXPORT_FILE.test(video) || !video.startsWith(`projects/${projectId}/`) || !video.endsWith(".manifest.json")) return Response.json({ error: "Not a video of this song" }, { status: 400 });
+  if (!EXPORT_FILE.test(video) || video.includes("..") || !video.endsWith(".manifest.json")) return Response.json({ error: "Not a video of this song" }, { status: 400 });
   try {
     return Response.json(
       withWorkspace((ws) => {
         const p = ws.db.select().from(project).where(eq(project.id, projectId)).get();
         if (!p) throw new Error("Song not found");
+        if (!video.startsWith(`${songPathsById(ws, projectId).exportsRel}/`)) throw new Error("Not a video of this song");
         const file = path.join(ws.dir, ...video.split("/"));
         const m = JSON.parse(readFileSync(file, "utf8")) as ManifestBits;
         const platform = m.platform?.name ?? "standard";
@@ -30,7 +32,7 @@ export async function GET(request: Request) {
           platform,
           artist: p.artist,
           song: p.title,
-          ep: readProjectSettings(ws, projectId).ep ?? null,
+          ep: songEp(ws, projectId) ?? null,
           hook: m.lyric_timings?.find((l) => l.is_hook)?.text ?? null,
           publishFile: path.join(path.dirname(file), "publish.txt"),
         });

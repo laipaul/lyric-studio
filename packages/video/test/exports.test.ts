@@ -23,6 +23,7 @@ import {
   songCard,
   songRuns,
   videoPoster,
+  songPathsById,
 } from "../src/node";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-exports-"));
@@ -64,7 +65,7 @@ function video(dir: string, n: number, qa: string, extra: Record<string, unknown
 beforeAll(() => {
   ws = openWorkspace(path.join(root, "workspace"));
   projectId = ws.db.insert(project).values({ title: "Hold On", artist: "Pômé" }).returning().get().id;
-  const ex = path.join(ws.dir, "projects", projectId, "exports");
+  const ex = path.join(songPathsById(ws, projectId).exports);
   // A complete run (reels PASS, tiktok with a WARN) ...
   video(path.join(ex, "2026-10-25_1000", "reels"), 1, QA_PASS);
   video(path.join(ex, "2026-10-25_1000", "tiktok"), 1, QA_PASS);
@@ -74,7 +75,7 @@ beforeAll(() => {
   writeFileSync(path.join(ex, "2026-10-26_0900", "reels", "v2.mp4"), "partial");
   writeFileSync(path.join(ex, "2026-10-26_0900", "song.lrc"), "[00:01.00]x\n");
   for (const [status, pid, seed] of [["done", 4242, 1], ["rendering", 4242, 2]] as const) {
-    const v = ws.db.insert(variation).values({ project_id: projectId, seed, cut_rate: "1x", text_size: 64, colour: "#fff", cinematic_bars: false, overrides_json: { platform: "reels", run: `projects/${projectId}/exports/2026-10-26_0900` } }).returning().get();
+    const v = ws.db.insert(variation).values({ project_id: projectId, seed, cut_rate: "1x", text_size: 64, colour: "#fff", cinematic_bars: false, overrides_json: { platform: "reels", run: `${songPathsById(ws, projectId).exportsRel}/2026-10-26_0900` } }).returning().get();
     ws.db.insert(renderJob).values({ variation_id: v.id, status, pid }).run();
   }
 });
@@ -121,9 +122,9 @@ describe("song runs (also from the command line)", () => {
     expect(first.platforms.map((p) => [p.name, p.videos.length])).toEqual([["reels", 1], ["tiktok", 2]]);
     const v2 = first.platforms[1].videos[1];
     expect(v2).toMatchObject({
-      id: `projects/${projectId}/exports/2026-10-25_1000/tiktok/v2.manifest.json`,
-      mp4: `projects/${projectId}/exports/2026-10-25_1000/tiktok/v2.mp4`,
-      srt: `projects/${projectId}/exports/2026-10-25_1000/tiktok/v2.srt`,
+      id: `${songPathsById(ws, projectId).exportsRel}/2026-10-25_1000/tiktok/v2.manifest.json`,
+      mp4: `${songPathsById(ws, projectId).exportsRel}/2026-10-25_1000/tiktok/v2.mp4`,
+      srt: `${songPathsById(ws, projectId).exportsRel}/2026-10-25_1000/tiktok/v2.srt`,
       label: "TikTok",
       style: "Bold",
       order: "shuffle",
@@ -154,7 +155,7 @@ describe("song runs (also from the command line)", () => {
   });
 
   it("marks: favourite, approved, discarded (hidden, counted out), back to generated; only this song's videos", () => {
-    const id = `projects/${projectId}/exports/2026-10-25_1000/tiktok/v1.manifest.json`;
+    const id = `${songPathsById(ws, projectId).exportsRel}/2026-10-25_1000/tiktok/v1.manifest.json`;
     expect(setVideoMark(ws, projectId, id, { favourite: true })).toEqual({ favourite: true, status: "generated" });
     expect(setVideoMark(ws, projectId, id, { status: "approved" })).toEqual({ favourite: true, status: "approved" });
     expect(songRuns(ws, projectId)[0].platforms[1].videos[0].mark).toEqual({ favourite: true, status: "approved" });
@@ -206,9 +207,9 @@ describe("captions per artist and platform", () => {
 
 describe("poster frames", () => {
   it("one JPEG per video, made once and cached", async () => {
-    const dir = path.join(ws.dir, "projects", projectId, "exports", "2026-10-25_1000", "reels");
+    const dir = path.join(songPathsById(ws, projectId).exports, "2026-10-25_1000", "reels");
     execFileSync(ffmpegBin(), ["-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=216x384:r=30:d=3", "-pix_fmt", "yuv420p", path.join(dir, "v1.mp4")]);
-    const rel = `projects/${projectId}/exports/2026-10-25_1000/reels/v1.mp4`;
+    const rel = `${songPathsById(ws, projectId).exportsRel}/2026-10-25_1000/reels/v1.mp4`;
     const a = await videoPoster(ws, rel);
     expect(readFileSync(a).subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8])); // JPEG
     expect(await videoPoster(ws, rel)).toBe(a);

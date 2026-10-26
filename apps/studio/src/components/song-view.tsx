@@ -54,7 +54,7 @@ export function SongView({ projectId, songTitle, runs }: { projectId: string; so
   const compareVideos = selected.map((id) => allVideos.find((v) => v.id === id)).filter((v): v is VideoInfo => !!v);
 
   if (!runs.length) {
-    return <div className="text-muted-foreground flex h-48 items-center justify-center rounded-xl border border-dashed text-sm">No videos yet: choose the platforms above and press Generate.</div>;
+    return <div className="text-muted-foreground flex h-48 items-center justify-center rounded-xl border border-dashed text-sm">No videos yet: choose the platforms in the Generate tab and press Generate.</div>;
   }
 
   return (

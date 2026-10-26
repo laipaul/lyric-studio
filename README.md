@@ -113,10 +113,63 @@ every artist used so far) and the EP are optional. Everything is stored with the
 `pnpm make` uses it too (the hints, the EP, the cover). Adding the same song again (even under another
 file name) updates that song instead of making a second one.
 
+### Song folders (one folder per song)
+
+Everything for a song is in one folder, `workspace\songs\<artist>\<title>\`:
+
+```
+workspace\songs\Life Lyrics\Hold On\
+  song.wav            the song (or song.mp3)
+  lyrics.txt          the lyrics ("* " marks hook lines)
+  cover.jpg           the cover (optional)
+  hints.lrc           tapped times for the aligner (optional)
+  clips\              this song's own clips (removed ones go to clips\_removed\)
+  exports\            every run: exports\2026-10-26_0821\reels\v1.mp4 ...
+  song.json           the song's recipe (see below)
+  .studio\            Lyric Studio's own files (alignments, settings, replaced files): leave as is
+```
+
+Shared clip collections are in `workspace\collections\<name>\` (for example `workspace\collections\wedding\`).
+Renaming a song's title or artist renames its folder. Nothing is ever deleted: replaced files are
+kept in `.studio\replaced\`, removed clips in `clips\_removed\`.
+
+**Moving your existing songs (once).** Songs made before this step are still in `workspace\projects\<id>\`
+and collections in `workspace\clips\<name>\`. The Library shows a banner with **Preview** (what would
+move; nothing changes) and **Migrate**. The same from the terminal:
+
+```powershell
+cd D:\videomaker
+pnpm songs:migrate            # dry run: prints every move, changes nothing
+pnpm songs:migrate --apply    # moves them (asks you to confirm your backup is recent)
+pnpm songs:migrate --undo     # puts everything back as before (stop Lyric Studio first)
+```
+
+`--apply` first saves the database and settings in `workspace\migrations\<date>\`. Old videos still
+re-render exactly (`pnpm rerender` follows the moves recorded in `workspace\.studio\moved-paths.json`).
+
+**The recipe (`song.json`).** Each setting comes from the nearest level that sets it: the library
+defaults, then the artist's brand (`workspace\brand\<artist>\brand.json`), then the song's `song.json`,
+then the run (Generate or command-line options). Fields: `verseEffect`, `hookEffect` (`"glide"`,
+`"soft-blur:subtle"`), `verseFont`, `hookFont`, `accentColour` (`"#E8A3B5"`), `collections`
+(`["wedding"]`), `platforms` (`["reels", "youtube"]`), `variations` (`{ "reels": 3 }`), `section`
+(`"auto"`, `"full"`, `"0:11-1:10"`), `ep`, `youtubeLayout` (`"cover"`, `"stills"`, `"clips"`), and
+`locked`: a list of settings that keep the song's value even if the brand changes later, and that a
+run cannot change (`"locked": ["verseEffect"]`). `pnpm make` prints a `recipe:` line showing where each
+value came from.
+
+### Assets (song page)
+
+The **Assets** tab shows the song folder's files: the song, `lyrics.txt`, the cover and `hints.lrc`,
+each with **Replace…**, and the song's own clips. Drop videos and photos on the clips area (or **Add
+clips**): they are copied into `clips\`, a clip with the same content as one already there is not added
+again (you are told which), and each tile shows the thumbnail, orientation, length and size. **Remove**
+moves a clip to `clips\_removed\`. The counts show how many clips 9:16 platforms and YouTube (16:9) can use.
+
 ### Generate videos (song page)
 
-Open a song and use **Generate videos** at the top: choose the platforms (with how many videos each
-makes), the clips collection (the last one used is preselected), the verse and hook effects (your
+Open a song and use the **Generate** tab: choose the platforms (with how many videos each
+makes), the clips (the song's own clips are always used; tick the shared collections to add — the
+song's are ticked), the verse and hook effects (your
 brand's defaults preselected), and if you like a new title, artist, EP or cover. **Advanced**: videos
 per platform, section (auto / full / 0:11-1:10), YouTube layout, allow fill, align the lyrics again.
 Press **Generate**: the worker makes the videos in the background (the same as `pnpm make`; one run at
@@ -304,12 +357,17 @@ pnpm align "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test
 ## One-click videos (`pnpm make`)
 
 One command from a song to several finished videos. Copy your clips into a collection folder
-`workspace\clips\<name>\` (for example `workspace\clips\wedding\`), then:
+`workspace\collections\<name>\` (for example `workspace\collections\wedding\`) or into the song's own
+`clips\` folder, then:
 
 ```powershell
 cd D:\videomaker
 pnpm make "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test\lyrics.txt" --collection wedding
+pnpm make "D:\videomaker\workspace\songs\Life Lyrics\Hold On"     # a song folder: song, lyrics.txt and hints.lrc from it
 ```
+
+`--collection wedding,beach` uses several collections. The collection is stored in the song's
+`song.json`, so later runs can leave `--collection` out.
 
 What it does, in order:
 
@@ -317,7 +375,7 @@ What it does, in order:
    song file does not matter.
 2. **Beats**: the analysis from `pnpm analyze` (cached).
 3. **Lyrics**: runs `pnpm align` automatically (needs `pnpm audio:setup --ai` once). The result is
-   stored in `workspace\projects\<id>\lyrics\aligned-….lrc` and **never rewritten**: the next run with
+   stored in the song folder's `.studio\lyrics\aligned-….lrc` and **never rewritten**: the next run with
    the same `lyrics.txt` reuses it. `--realign` makes a new alignment (a new file; the old one stays).
    `--hint <taps.lrc>` passes tapped times to the aligner **and is remembered by the project**: later
    runs use it automatically ("using stored hints from …"), also after `lyrics.txt` changes;
@@ -338,7 +396,7 @@ What it does, in order:
    `Rendering:` line it prints; `--parallel N` to change). A video that fails is tried once more with
    half the frames in parallel; a render with no progress for 5 minutes is stopped. The other videos
    always carry on, and failures are listed at the end.
-8. **Output**: `workspace\projects\<id>\exports\<YYYY-MM-DD_HHmm>\` with `v1.mp4 … v6.mp4`, and for
+8. **Output**: the song folder's `exports\<YYYY-MM-DD_HHmm>\` with `v1.mp4 … v6.mp4`, and for
    each a `v1.manifest.json` (everything needed to make the same video again) and `v1.qa.txt`. At
    the end a table (variation, style, order, duration, QA) is printed and the folder opens in
    Explorer (`--no-open` to skip).
@@ -353,7 +411,7 @@ changed since.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `--collection <name>` | the project's last one | the folder `workspace\clips\<name>\`; needed the first time per project, then remembered ("using collection wedding (remembered)") |
+| `--collection <name>` | song.json's (else the last one) | the folder `workspace\collections\<name>\` (several: `a,b`), used together with the song's own `clips\`; needed the first time per song (unless the song has clips of its own), then remembered in song.json ("using collection wedding (remembered)") |
 | `--collection-path <folder>` | the project's last one | clips from another folder (not copied); remembered with the collection |
 | `--variations N` | from the preset (standard: 6) | number of videos (per platform) |
 | `--section` | `auto` | `auto`, `full` or `0:11-1:10` |
@@ -519,7 +577,7 @@ pnpm effects:preview song --effect soft-blur:subtle
 
 The first makes `effects-preview.mp4` (all 8 side by side, labelled; your current choices are marked);
 the second one effect full-size, 9:16 and 16:9. They are saved in
-`workspace\projects\<id>\exports\effects-<date>\`. `song` is the project title (the song's file
+the song folder's `exports\effects-<date>\`. `song` is the project title (the song's file
 name), its id, or the song file.
 
 ## Test render (`pnpm render:test`)

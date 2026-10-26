@@ -19,6 +19,7 @@
     "make": "tsx packages/video/scripts/make.ts",
     "rerender": "tsx packages/video/scripts/rerender.ts",
     "effects:preview": "tsx packages/video/scripts/effects-preview.ts",
+    "songs:migrate": "tsx packages/video/scripts/songs-migrate.ts",
     "app:icons": "tsx packages/video/scripts/app-icons.ts",
     "app:serve": "node scripts/app-serve.mjs",
     "fonts": "tsx packages/video/scripts/fonts.ts",

@@ -58,6 +58,9 @@ export const project = sqliteTable(
     // Moves every lyric line later (positive) or earlier, applied at render time. The aligned LRC
     // itself is never rewritten.
     lyrics_offset_ms: integer("lyrics_offset_ms").notNull().default(0),
+    // The song's own folder (Step 6.2c): workspace-relative, e.g. "songs/Life Lyrics/Hold On". Empty for
+    // songs still in the old layout (projects/<id>/) until "pnpm songs:migrate --apply".
+    folder: text("folder"),
     created_at: integer("created_at", { mode: "timestamp_ms" })
       .notNull()
       .$defaultFn(() => new Date()),

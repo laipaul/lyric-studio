@@ -18,6 +18,7 @@ import { lyricArea } from "../platform";
 import type { LyricVideoProps, ShotProps } from "../props";
 import { loadBrand } from "./brand";
 import { cachedFileHash } from "./collection";
+import { songPathsById } from "./song-folder";
 import { loadFontCatalog } from "./font-catalog";
 import { readManifest, type Manifest } from "./manifest";
 import type { MediaRoots } from "./media";
@@ -45,7 +46,7 @@ export async function findProject(ws: Workspace, ref: string) {
 
 // The newest 9:16 and 16:9 manifests (with lyrics) of the project's "pnpm make" runs.
 export function latestManifests(ws: Workspace, projectId: string): { vertical: { file: string; m: Manifest } | null; wide: { file: string; m: Manifest } | null } {
-  const base = absPath(ws, `projects/${projectId}/exports`);
+  const base = songPathsById(ws, projectId).exports;
   const files: string[] = [];
   const walk = (dir: string, depth: number) => {
     if (!existsSync(dir) || depth > 2) return;
@@ -166,7 +167,7 @@ export async function effectsPreview(options: {
 
     const now = options.now ?? new Date();
     const p2 = (n: number) => String(n).padStart(2, "0");
-    const folder = absPath(ws, `projects/${project.id}/exports/effects-${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}_${p2(now.getHours())}${p2(now.getMinutes())}${p2(now.getSeconds())}`);
+    const folder = path.join(songPathsById(ws, project.id).exports, `effects-${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}_${p2(now.getHours())}${p2(now.getMinutes())}${p2(now.getSeconds())}`);
     mkdirSync(folder, { recursive: true });
     const media: MediaRoots = { workspaceDir: ws.dir, extraFiles: {}, fontDirs: catalog.fontDirs };
     const render = options.renderer ?? renderLyricVideo;

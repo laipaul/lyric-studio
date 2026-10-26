@@ -524,6 +524,97 @@ Cause: a line was treated as sung until the next line started (and the next line
   live Tasks -> Stop after v1 -> Resume -> v2 made in the same folder, badge PASS; a terminal run shown
   in Tasks while rendering.
 
+### Step 6.2c-1 — One folder per song, the recipe, migration, Assets tab ✅ (to verify on the Windows PC)
+Everything for one song now lives in one readable folder, and each song has a recipe (song.json).
+Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other tabs, below in Next).
+- **Song folder** `WORKSPACE_DIR\songs\<artist>\<title>\`:
+  `song.wav|mp3`, `lyrics.txt`, `cover.jpg|png`, `hints.lrc` (optional), `clips\` (the song's own clips;
+  removed ones in `clips\_removed\`), `exports\<YYYY-MM-DD_HHmm>\` (the runs, unchanged inside),
+  `song.json` (the recipe) and a hidden `.studio\` for the tool's files (`lyrics\` = alignments, stored
+  hints, lyrics copies; `settings.json`; `replaced\` = files that were replaced, never deleted;
+  `project-files\` = anything else from the old project folder).
+  Names are readable and Windows-safe (accents kept; `<>:"/\|?*` become `_`; no trailing dots; device
+  names like CON get `_`; max 60 characters); a name already used gets ` (2)`, ` (3)`, ...
+  Code: `packages/video/src/node/song-folder.ts` (`folderName`, `songFolderFor`, `songPaths` /
+  `songPathsById` — EVERY path of a song goes through these, and they also handle songs still in the
+  old layout `projects\<id>\` when `project.folder` is empty).
+- **Database**: `project.folder` (workspace-relative song folder; empty = old layout), migration 0005.
+- **New songs** (`pnpm make` with a new song file, "+ New song") get their folder straight away
+  (`adoptIntoSongFolder`). A song file placed by hand in an unowned `songs\<artist>\<title>\` adopts that
+  folder (title and artist from the folder names).
+- **Renaming** title or artist (`--title`, `--artist`, "+ New song" with the same song) renames the folder
+  (`renameSongFolder`); refused while another process renders the song. Every database path follows
+  (`relocatePaths`: project audio/cover/folder, clip paths, video marks, make_run export_dir + options,
+  variation run/lrc, render_job output) and the move is appended to `WORKSPACE_DIR\.studio\moved-paths.json`.
+- **Old manifests stay re-renderable**: manifests are never edited; `pnpm rerender` / `verifyManifest` and
+  the media server follow `moved-paths.json` (`resolveMoved`, applied in order, only moves made after the
+  manifest's `created_at` — `movesSince`). Also fixed: `pnpm rerender` now uses the platform's video
+  bitrate from the manifest (Reels/TikTok/... re-renders were not frame-identical before).
+- **Shared collections** moved to `WORKSPACE_DIR\collections\<name>\` (`collectionDir` falls back to the
+  old `clips\<name>\` while that folder exists and the new one does not).
+- **Clips of a run** = the song's own `clips\` + the shared collections (merged; the same content in two
+  folders is used once and named in a warning). Collections: `--collection a,b` (several allowed), else
+  song.json `collections`, else the one remembered in `.studio\settings.json` (old songs). The first
+  time, `--collection` (or a song with its own clips) is needed; a `--collection` given on the command
+  line or in Generate is saved into song.json (unless locked), so later runs print
+  "using collection wedding (remembered)".
+- **Recipe** `song.json` (`packages/video/src/node/recipe.ts`): fields `verseEffect`, `hookEffect`
+  ("glide", "soft-blur:subtle"), `verseFont`, `hookFont`, `accentColour`, `collections`, `platforms`,
+  `variations` ({ "reels": 3 }), `section` (auto | full | 0:11-1:10), `ep`, `youtubeLayout`
+  (cover | stills | clips), plus `locked` (list of field names). A `_help` line explains it in the file.
+  Checked on read (every problem named).
+- **Inheritance** (`resolveRecipe`): library defaults (`LIBRARY_RECIPE`) -> the artist's brand
+  (`brand\<artist>\brand.json`: effects, fonts, accent) -> song.json -> this run (command-line options or
+  Generate). Each value records its source (library | artist | song | run); `pnpm make` prints one
+  "recipe: ..." line with the sources. For lyric effects the platform's motion (platforms.json) still sits
+  between artist and song: run > song > platform > artist > library.
+  A **locked** field keeps the song's value: a later brand change does not reach it and a run cannot change
+  it (the run's choice is ignored with "song.json locks verseEffect: keeping glide (this run asked for
+  floating)"). Helpers for the UI (6.2c-2): `saveToSong` (run choices become the song's, locked fields
+  untouched), `resetField` (back to inherited, unlocked), `lockField` (copies the current — possibly
+  inherited — value and locks), `unlockField`. Per-decision locks (a clip on a line, a word timing) come
+  with 6a. `--ep` / the EP field is stored in song.json (old songs: settings). Section default comes from
+  the recipe (`pnpm make` no longer defaults `--section` to auto itself).
+- **`pnpm make <song folder>`** (one argument): song.wav|mp3 (or the only audio file), lyrics.txt and
+  hints.lrc (as `--hint`) come from the folder; all other options work as before.
+- **Migration** (`packages/video/src/node/migrate.ts`, `pnpm songs:migrate`):
+  `pnpm songs:migrate` = dry run (prints every move, changes nothing);
+  `pnpm songs:migrate --apply` = asks "Make sure your regular backup is recent before continuing (y/n)",
+  refuses while a run is queued/rendering, makes a light backup in `WORKSPACE_DIR\migrations\<date>\`
+  (studio.db copy, every settings.json, journal.json of each step), then moves `clips\<name>\` ->
+  `collections\<name>\` and `projects\<id>\` -> `songs\<artist>\<title>\` (audio -> song.<ext>, cover,
+  lyrics -> .studio\lyrics, exports, settings -> .studio\settings.json, the rest -> .studio\project-files\),
+  writes lyrics.txt (the song's newest lyrics), hints.lrc (stored hints) and song.json (EP + collection),
+  updates the database and moved-paths.json, removes the empty old folders, prints what moved;
+  `pnpm songs:migrate --undo` (Lyric Studio stopped) reverses the last apply from its journal, restores
+  the database and moved-paths.json; files the migration wrote go to `migrations\<date>\undone\`.
+  If a move fails half-way (a file open on Windows), it stops and says to run --undo and try again.
+  Runs made after a migration stay on disk after --undo, but their database rows (jobs, marks) are gone.
+- **Studio**: Library banner "N songs and M collections still use the old folders" with **Preview**
+  (dialog with the dry-run text) and **Migrate** (confirm with the backup reminder, then the same as
+  --apply). Song page tabs **Assets / Generate / Videos** (Videos is the default when the song has runs).
+  **Assets tab**: song (duration, BPM), lyrics.txt (lines), cover (thumbnail), hints.lrc (time stamps),
+  each with "Replace…" (old file kept in .studio\replaced\; a new song file updates the song's hash and
+  duration); clips: drag-and-drop or "Add clips" (copied into clips\, free names `name-2.mp4`, the same
+  content again is reported and not copied, non-videos skipped), tiles with thumbnail, orientation,
+  duration (photo), resolution, "same content as ..." warnings, usable counts for 9:16 and 16:9, Remove
+  (moves to clips\_removed\, never deleted; listed under "Removed"). Generate: the song's own clips count
+  plus checkboxes for shared collections (song.json's ticked), effect defaults from song.json.
+  File server allows song folders' cover, exports, clips and thumbs/ (never .studio\ or the database).
+  API: `/api/migrate` (GET dry run, POST apply), `/api/songs/<id>/assets` (GET, POST upload/replace,
+  DELETE ?name=).
+- Tests (`packages/video/test/song-folders.test.ts`, `migrate.test.ts`, updated make/library/runs/db
+  tests): folder names and layout, collisions, recipe inheritance / locks / ignored run / save-to-song /
+  reset / lock / unlock / checks, `pnpm make <folder>` (folder files, own clips + collection, duplicate
+  across folders, lock wins), rename with database paths and move log, rename refused while busy,
+  Assets (list, drop with duplicates and non-videos, remove to _removed, replace keeps old), migration
+  (dry run changes nothing, apply: files + database + song.json + backup, an old manifest re-renders
+  frame-identical, next make uses the folder and the stored alignment, undo restores files and database).
+  Cloud check in the browser on a copy of the old e2e workspace: banner -> Preview -> Migrate -> Assets
+  (drop 3 files: 2 added, duplicate reported; remove) -> Generate (collection ticked from song.json) ->
+  worker made 3 Reels (3 PASS) into songs\Life Lyrics\Hold On Tight (Acoustic)\exports\; then
+  `pnpm songs:migrate --undo` from the command line.
+
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -535,6 +626,7 @@ Cause: a line was treated as sung until the next line started (and the next line
 - `pnpm make` (verified on the Windows PC: 6 videos, all QA PASS, 444 s with --parallel 1; after 5d.1
   with the defaults: all 6 PASS, no memory errors, one at a time with a 2 GB clip cache, 469 s), `pnpm rerender`.
 - `pnpm lrc:shift`, `pnpm lrc:hook`, `pnpm fonts`.
+- `pnpm make "workspace\songs\<artist>\<title>"` (a song folder), `pnpm songs:migrate` (dry run / `--apply` / `--undo`).
 - `pnpm audio:setup --ai`, `pnpm align` (GPU path to be verified on the Windows PC).
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
 
@@ -543,6 +635,10 @@ Cause: a line was treated as sung until the next line started (and the next line
   animated previews rendered on a line of the selected song (cached), an intensity selector, "set as
   default for <artist>" for verses and hooks (writes brand.json), effect descriptions and which
   platforms use each effect.
+- **Effects Builder** (decided: when scheduled it goes straight to "v2"): a keyframe timeline with
+  per-property keyframes, custom easing curves, word / letter targeting (incl. emphasis, odd / even,
+  random), entrance / hold / exit phases, 3D tilt, masks / reveals, seeded randomness and beat
+  reactivity; it saves versioned, data-only presets to the effects library. Not scheduled yet.
 
 ## Known issues
 - TikTok (target 25 s) ended at 31.6 s like Reels on the user's song (most likely no bar inside a gap
@@ -582,10 +678,25 @@ Cause: a line was treated as sung until the next line started (and the next line
   `pnpm dlx shadcn@latest add <name>` works normally on your PC for future components.
 - FFmpeg (and ffprobe) must be on the PATH for adding clips and for the db tests.
 - The workspace service is used by tests only so far; commands and UI that use it come in later steps.
+- `pnpm songs:migrate --undo` replaces studio.db with the backup: stop Lyric Studio first (it asks).
+  Runs made between --apply and --undo stay on disk but lose their database rows (jobs, marks).
+- A song file replaced in the Assets tab keeps the stored alignment (keyed by lyrics + hints); if the new
+  mix has different timing, use Generate -> advanced -> re-align.
 
 ## Next
-1. Verify Steps 6.2a and 6.2b on the PC.
-2. Step 6.3 (content board with manually entered results).
+1. Verify Steps 6.2a, 6.2b and 6.2c-1 on the PC (run `pnpm songs:migrate`, then `--apply`).
+2. Step 6.2c-2 — the remaining song-page tabs (planned and approved with 6.2c; not built yet):
+   - **Style** tab: the recipe fields with their source (library / artist / song) and per field
+     "Save to song", "Reset" (back to inherited) and a lock toggle — backend ready in recipe.ts
+     (`resolveRecipe` sources, `saveToSong`, `resetField`, `lockField`, `unlockField`, `writeRecipe`).
+   - **Generate** tab: start from the resolved recipe (platforms, variations per platform, section,
+     YouTube layout, fonts, accent), show which values are this run's tweaks, "save to song" for the
+     run's choices; locked fields shown locked (a run cannot change them).
+   - **Videos** tab: in 6.2c-1 the Generate and Videos tabs only hold the existing 6.2b panel and 6.2a
+     grid (so the page has its tab bar); 6.2c-2 finishes them.
+   - **Post** tab: the "ready to post" panel per video (exists in 6.2a, opened from a tile) as its own tab.
+   - Assets polish if needed (e.g. "open the song folder" in Explorer).
+3. Step 6.3 (content board with manually entered results).
 3. Step 5g.4 (loop layout).
 4. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project
    (confirmed by the user) and plug into the same render-time layer as the lyrics offset.

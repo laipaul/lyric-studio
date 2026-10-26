@@ -9,13 +9,16 @@ import { songRuns } from "@lyric/video/exports";
 import { generatePanelData, platformLabels, platformState, songCard } from "@lyric/video/library";
 import { eq } from "drizzle-orm";
 
+import { AssetsTab } from "@/components/assets-tab";
 import { GeneratePanel } from "@/components/generate-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { SongView, type RunView } from "@/components/song-view";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { withWorkspace } from "@/lib/workspace";
 
-// The song page: header and every video made for it (exports grid, marks, compare, ready to post).
-// Generate panel (the worker makes the videos; progress in the Tasks menu).
+// The song page: header, then tabs: Assets (the song folder's files and clips), Generate (the
+// worker makes the videos; progress in the Tasks menu) and Videos (exports grid, marks, compare,
+// ready to post).
 export default function SongPage({ params }: { params: Promise<{ id: string }> }) {
   return (
     <Suspense fallback={<div className="text-muted-foreground p-8 text-sm">Loading…</div>}>
@@ -71,8 +74,22 @@ async function Song({ params }: { params: Promise<{ id: string }> }) {
           </ul>
         </div>
       </div>
-      <GeneratePanel projectId={song.id} data={panel} open={!runs.length} />
-      <SongView projectId={song.id} songTitle={song.title} runs={runs} />
+      <Tabs defaultValue={runs.length ? "videos" : "generate"} className="gap-6">
+        <TabsList>
+          <TabsTrigger value="assets">Assets</TabsTrigger>
+          <TabsTrigger value="generate">Generate</TabsTrigger>
+          <TabsTrigger value="videos">Videos</TabsTrigger>
+        </TabsList>
+        <TabsContent value="assets">
+          <AssetsTab projectId={song.id} />
+        </TabsContent>
+        <TabsContent value="generate">
+          <GeneratePanel projectId={song.id} data={panel} open />
+        </TabsContent>
+        <TabsContent value="videos">
+          <SongView projectId={song.id} songTitle={song.title} runs={runs} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

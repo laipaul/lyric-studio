@@ -2,9 +2,11 @@
 // in the database.
 //
 //   <workspace>/studio.db
-//   <workspace>/projects/<project id>/audio/
-//   <workspace>/projects/<project id>/exports/
-//   <workspace>/clips/<collection name>/
+//   <workspace>/songs/<artist>/<title>/   one folder per song (Step 6.2c; see packages/video song-folder.ts)
+//   <workspace>/collections/<collection name>/   shared clip collections
+//   <workspace>/projects/<project id>/audio/   where createProject puts a new song first (then moved
+//                                              into its song folder); songs not migrated yet
+//   <workspace>/clips/<collection name>/   collections not migrated yet
 //   <workspace>/thumbs/<clip id>.jpg
 //
 // Paths in the database are relative to the workspace folder, so the folder can be moved.
@@ -26,7 +28,7 @@ export type Workspace = {
 
 // Opens the workspace (default: WORKSPACE_DIR from .env), creating folders and applying migrations.
 export function openWorkspace(dir: string = resolveWorkspaceDir()): Workspace {
-  for (const sub of ["projects", "clips", "thumbs"]) mkdirSync(path.join(dir, sub), { recursive: true });
+  for (const sub of ["songs", "collections", "thumbs"]) mkdirSync(path.join(dir, sub), { recursive: true });
   const db = openDb(dir);
   runMigrations(db);
   return { dir, db, close: () => db.$client.close() };
@@ -72,7 +74,7 @@ export function safeName(name: string): string {
 }
 
 // Picks "name.ext", "name-2.ext", ... so an existing file is never overwritten.
-function uniqueFileName(dir: string, fileName: string): string {
+export function uniqueFileName(dir: string, fileName: string): string {
   const { name, ext } = path.parse(safeName(fileName));
   let candidate = `${name}${ext}`;
   for (let n = 2; existsSync(path.join(dir, candidate)); n++) candidate = `${name}-${n}${ext}`;
@@ -133,13 +135,18 @@ export async function createProject(ws: Workspace, input: CreateProjectInput): P
   }
 }
 
-export function collectionDir(c: Pick<Collection, "name">): string {
-  return rel("clips", safeName(c.name));
+// A shared collection's folder: collections/<name> (Step 6.2c); a workspace not migrated yet keeps
+// clips/<name> while that folder exists.
+export function collectionDir(c: Pick<Collection, "name">, workspaceDir?: string): string {
+  const now = rel("collections", safeName(c.name));
+  const legacy = rel("clips", safeName(c.name));
+  if (workspaceDir && !existsSync(path.join(workspaceDir, now)) && existsSync(path.join(workspaceDir, legacy))) return legacy;
+  return now;
 }
 
 export function createCollection(ws: Workspace, name: string): Collection {
   const row = ws.db.insert(collection).values({ name }).returning().get();
-  mkdirSync(absPath(ws, collectionDir(row)), { recursive: true });
+  mkdirSync(absPath(ws, collectionDir(row, ws.dir)), { recursive: true });
   return row;
 }
 
@@ -164,7 +171,7 @@ export async function addClip(ws: Workspace, input: AddClipInput): Promise<Clip>
   if (input.inPlace) {
     clipPath = storedPath(ws, input.file);
   } else {
-    const folder = collectionDir(coll);
+    const folder = collectionDir(coll, ws.dir);
     mkdirSync(absPath(ws, folder), { recursive: true });
     clipPath = rel(folder, uniqueFileName(absPath(ws, folder), path.basename(input.file)));
     copyFileSync(input.file, absPath(ws, clipPath));

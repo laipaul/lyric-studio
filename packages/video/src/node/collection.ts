@@ -70,7 +70,7 @@ export async function syncCollection(
 ): Promise<CollectionSync> {
   const log = options.log ?? (() => {});
   const existingColl = ws.db.select().from(collectionTable).where(eq(collectionTable.name, options.name)).get();
-  const folder = path.resolve(options.folder ?? absPath(ws, collectionDir({ name: options.name })));
+  const folder = path.resolve(options.folder ?? absPath(ws, collectionDir({ name: options.name }, ws.dir)));
   if (!existsSync(folder)) {
     throw new Error(
       `Collection folder not found: ${folder}\n` +
@@ -150,6 +150,42 @@ export async function prepareForFormat(
     else out.filled.push(s.name);
     const prepared = await normaliseClip(ws, s.clip, s.name, options.log, { fit, width: format.width, height: format.height });
     out.clips.push({ ...prepared, file: s.file, hash: s.hash });
+  }
+  return out;
+}
+
+// Several folders used together (the song's own clips\ and shared collections): one list of sources
+// in folder order, each folder in file-name order. A file whose content is already in an earlier
+// folder is used once (and named in `duplicates`).
+export function mergeCollections(syncs: readonly CollectionSync[]): CollectionSync & { folders: string[] } {
+  if (!syncs.length) throw new Error("mergeCollections: no folders");
+  const out: CollectionSync & { folders: string[] } = {
+    collection: { ...syncs[0].collection, name: syncs.map((s) => s.collection.name).join(" + ") },
+    folder: syncs[0].folder,
+    folders: syncs.map((s) => s.folder),
+    sources: [],
+    clips: [],
+    added: [],
+    changed: [],
+    unchanged: [],
+    removed: [],
+    duplicates: [],
+  };
+  const seen = new Map<string, { folder: number; label: string }>(); // hash -> where it was first
+  for (const [index, s] of syncs.entries()) {
+    const label = (name: string) => (syncs.length > 1 ? `${s.collection.name}/${name}` : name);
+    for (const src of s.sources) {
+      const first = seen.get(src.hash);
+      if (first && first.folder !== index) {
+        out.duplicates.push([first.label, label(src.name)]);
+        continue;
+      }
+      if (!first) seen.set(src.hash, { folder: index, label: label(src.name) });
+      out.sources.push(src);
+    }
+    out.clips.push(...s.clips);
+    for (const k of ["added", "changed", "unchanged", "removed"] as const) out[k].push(...s[k].map(label));
+    out.duplicates.push(...s.duplicates.map((d) => d.map(label)));
   }
   return out;
 }

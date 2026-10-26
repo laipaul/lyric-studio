@@ -20,11 +20,12 @@ const label = "flex flex-col gap-1.5 text-sm";
 const select = "bg-input/30 border-input h-9 rounded-md border px-2 text-sm";
 
 // Generate: makes videos for this song through the worker (the same as "pnpm make"); the progress
-// shows in the Tasks menu. Defaults: the song's last collection, the artist's brand effects.
+// shows in the Tasks menu. Defaults: the song's recipe (song.json), else its last collection and the
+// artist's brand effects. Clips: the song's own clips folder plus the shared collections ticked here.
 export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projectId: string; data: GeneratePanelData; open: boolean }) {
   const [open, setOpen] = useState(initiallyOpen);
   const [platforms, setPlatforms] = useState<string[]>(data.platforms.some((p) => p.name === "reels") ? ["reels"] : [data.platforms[0]?.name ?? "standard"]);
-  const [collection, setCollection] = useState(data.collection ?? data.collections[0] ?? "");
+  const [collections, setCollections] = useState<string[]>(data.chosen.length || data.songClips ? data.chosen : data.collections.slice(0, 1));
   const [variations, setVariations] = useState("");
   const [verse, setVerse] = useState(split(data.verseEffect));
   const [hook, setHook] = useState(split(data.hookEffect));
@@ -38,7 +39,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
     const f = new FormData(event.currentTarget);
     const request = {
       platforms,
-      collection: collection || undefined,
+      collection: collections.length ? collections.join(",") : undefined,
       variations: variations ? Number(variations) : undefined,
       lineEffect: join(verse.name, verse.intensity),
       hookEffect: join(hook.name, hook.intensity),
@@ -123,17 +124,27 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
             </div>
           </fieldset>
           <div className="grid gap-4 md:grid-cols-3">
-            <label className={label}>
-              <span className="font-medium">Clips</span>
-              <select name="collection" className={select} value={collection} onChange={(e) => setCollection(e.target.value)}>
+            <fieldset className={label} data-collections>
+              <legend className="mb-1.5 font-medium">Clips</legend>
+              <p className="text-muted-foreground text-xs">
+                {data.songClips ? `This song's own clips (${data.songClips})` : "No clips of its own yet (Assets tab)"}
+                {data.collections.length ? ", plus:" : ""}
+              </p>
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
                 {data.collections.map((c) => (
-                  <option key={c} value={c}>
+                  <label key={c} className="flex items-center gap-1.5 text-sm">
+                    <input
+                      type="checkbox"
+                      data-collection-choice={c}
+                      checked={collections.includes(c)}
+                      onChange={(e) => setCollections((list) => (e.target.checked ? [...list, c] : list.filter((x) => x !== c)))}
+                    />
                     {c}
-                    {c === data.collection ? " (last used)" : ""}
-                  </option>
+                    {data.chosen.includes(c) ? <span className="text-muted-foreground text-xs">(this song&apos;s)</span> : null}
+                  </label>
                 ))}
-              </select>
-            </label>
+              </div>
+            </fieldset>
             <label className={label}>
               <span className="font-medium">Verse effect</span>
               {effectSelect(verse, setVerse, "Verse")}

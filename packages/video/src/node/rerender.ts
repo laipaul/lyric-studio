@@ -33,6 +33,8 @@ export async function rerender(
   if (out === path.resolve(path.dirname(manifestFile), manifest.output.file)) {
     throw new Error(`Refusing to overwrite the original video ${out}; choose another --out.`);
   }
-  await renderLyricVideo({ props: manifest.props, media: verification.media, outFile: out, concurrency: options.concurrency, log, onProgress: options.onProgress });
+  // The platform's bitrate (settings.video "H.264 10M, ..."), as in the first render.
+  const videoBitrate = /^H\.264 (\d+(?:\.\d+)?[kKmM]),/.exec(String((manifest.settings as { video?: string }).video ?? ""))?.[1] ?? null;
+  await renderLyricVideo({ props: manifest.props, media: verification.media, outFile: out, concurrency: options.concurrency, videoBitrate, log, onProgress: options.onProgress });
   return { out, notes: verification.notes, manifest };
 }

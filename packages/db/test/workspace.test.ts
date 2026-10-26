@@ -98,7 +98,7 @@ describe("workspace service", () => {
     const coll = createCollection(ws, "Summer: B-roll");
     const c = await addClip(ws, { collectionId: coll.id, file: video });
 
-    expect(c.path).toBe("clips/Summer_ B-roll/beach.mp4");
+    expect(c.path).toBe("collections/Summer_ B-roll/beach.mp4");
     expect(existsSync(absPath(ws, c.path))).toBe(true);
     expect(c.width).toBe(360);
     expect(c.height).toBe(640);
@@ -114,7 +114,7 @@ describe("workspace service", () => {
 
     // Adding the same file again keeps both copies.
     const again = await addClip(ws, { collectionId: coll.id, file: video });
-    expect(again.path).toBe("clips/Summer_ B-roll/beach-2.mp4");
+    expect(again.path).toBe("collections/Summer_ B-roll/beach-2.mp4");
     expect(ws.db.select().from(clip).all()).toHaveLength(2);
   });
 
@@ -129,7 +129,7 @@ describe("workspace service", () => {
     const song = makeSong(path.join(fixtures.dir, "not-a-video.wav"));
     const coll = createCollection(ws, "Broken");
     await expect(addClip(ws, { collectionId: coll.id, file: song })).rejects.toThrow(/No video/);
-    expect(existsSync(absPath(ws, "clips/Broken/not-a-video.wav"))).toBe(false);
+    expect(existsSync(absPath(ws, "collections/Broken/not-a-video.wav"))).toBe(false);
   });
 });
 

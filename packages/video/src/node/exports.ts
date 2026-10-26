@@ -9,6 +9,7 @@ import { absPath, renderJob, storedPath, variation, videoMark, type VideoMarkSta
 import { and, eq } from "drizzle-orm";
 
 import { markInterruptedJobs, processAlive } from "./jobs";
+import { songPathsById } from "./song-folder";
 import type { Manifest } from "./manifest";
 
 export const RUN_FOLDER = /^(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(-\d+)?$/;
@@ -90,7 +91,7 @@ const readJson = <T>(file: string): T | null => {
 };
 
 export function runFolders(ws: Workspace, projectId: string): string[] {
-  const dir = absPath(ws, `projects/${projectId}/exports`);
+  const dir = songPathsById(ws, projectId).exports;
   if (!existsSync(dir)) return [];
   return readdirSync(dir, { withFileTypes: true })
     .filter((d) => d.isDirectory() && RUN_FOLDER.test(d.name))
@@ -123,7 +124,7 @@ export function songRuns(ws: Workspace, projectId: string, labels: Record<string
     .innerJoin(variation, eq(renderJob.variation_id, variation.id))
     .where(eq(variation.project_id, projectId))
     .all();
-  const exportsDir = absPath(ws, `projects/${projectId}/exports`);
+  const exportsDir = songPathsById(ws, projectId).exports;
   const folders = runFolders(ws, projectId);
 
   return folders.map((folder, k) => {
@@ -208,7 +209,14 @@ export function renderingPlatforms(ws: Workspace, projectId: string): Set<string
 
 // Sets the user's marks on a video (favourite, and generated / approved / discarded).
 export function setVideoMark(ws: Workspace, projectId: string, video: string, change: { favourite?: boolean; status?: VideoMarkStatus }): { favourite: boolean; status: VideoMarkStatus } {
-  if (!/^projects\/[0-9a-f-]{36}\/exports\/.+\/v\d+\.manifest\.json$/.test(video) || !video.startsWith(`projects/${projectId}/`)) throw new Error(`Not a video of this song: ${video}`);
+  const exportsRel = (() => {
+    try {
+      return songPathsById(ws, projectId).exportsRel;
+    } catch {
+      return null;
+    }
+  })();
+  if (!exportsRel || video.includes("..") || !video.startsWith(`${exportsRel}/`) || !/\/v\d+\.manifest\.json$/.test(video)) throw new Error(`Not a video of this song: ${video}`);
   if (!existsSync(absPath(ws, video))) throw new Error(`Video not found: ${video}`);
   const current = ws.db.select().from(videoMark).where(eq(videoMark.video, video)).get();
   const next = { favourite: change.favourite ?? current?.favourite ?? false, status: change.status ?? current?.status ?? "generated" };

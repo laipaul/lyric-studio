@@ -1,14 +1,18 @@
 // "pnpm make" command-line arguments -> MakeOptions. Shared by the command (scripts/make.ts) and by
 // the studio's "Resume" of a run that was started in the terminal (its command is in the manifests).
+import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
 import type { CutRate, Energy } from "../index";
 import type { MakeOptions } from "./make";
+import { songFolderFiles } from "./song-folder";
 
 export type MakeArgs = { options: MakeOptions; noOpen: boolean };
 
-export const MAKE_USAGE = 'Usage: pnpm make <song> <lyrics.txt> --collection <name>   (e.g. pnpm make "workspace\\test\\song.wav" "workspace\\test\\lyrics.txt" --collection wedding)';
+export const MAKE_USAGE =
+  'Usage: pnpm make <song folder>   or   pnpm make <song> <lyrics.txt> --collection <name>\n' +
+  '  (e.g. pnpm make "workspace\\songs\\Life Lyrics\\Hold On"   or   pnpm make "workspace\\test\\song.wav" "workspace\\test\\lyrics.txt" --collection wedding)';
 
 // Relative paths are relative to `cwd` (the folder the command was typed in).
 export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
@@ -29,7 +33,7 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
       stills: { type: "string" },
       "no-grain": { type: "boolean", default: false },
       "no-glow": { type: "boolean", default: false },
-      section: { type: "string", default: "auto" },
+      section: { type: "string" }, // default: the song's recipe, else auto
       hint: { type: "string" },
       "no-hint": { type: "boolean", default: false },
       realign: { type: "boolean", default: false },
@@ -54,7 +58,14 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
   const fail = (message: string): never => {
     throw new Error(message);
   };
-  if (positionals.length !== 2) fail(MAKE_USAGE);
+  if (positionals.length !== 1 && positionals.length !== 2) fail(MAKE_USAGE);
+  // One argument: a song folder (song.wav|mp3, lyrics.txt, hints.lrc, clips\, song.json).
+  let folder: ReturnType<typeof songFolderFiles> | undefined;
+  if (positionals.length === 1) {
+    const dir = path.resolve(cwd, positionals[0]);
+    if (!existsSync(dir) || !statSync(dir).isDirectory()) fail(`${MAKE_USAGE}\n${dir} is not a song folder.`);
+    folder = songFolderFiles(dir);
+  }
   const rate = values.rate as CutRate;
   if (!["0.5x", "1x", "2x", "off"].includes(rate)) fail("--rate must be 0.5x, 1x, 2x or off");
   const energy = values.energy as Energy;
@@ -78,8 +89,9 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
   return {
     noOpen: values["no-open"]!,
     options: {
-      song: resolve(positionals[0])!,
-      lyrics: resolve(positionals[1])!,
+      song: folder ? folder.song : resolve(positionals[0])!,
+      lyrics: folder ? folder.lyrics : resolve(positionals[1])!,
+      ...(folder ? { songFolder: path.dirname(folder.song) } : {}),
       collection: values.collection,
       collectionPath: resolve(values["collection-path"]),
       variations,
@@ -94,7 +106,7 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
       grain: values["no-grain"] ? false : undefined,
       glow: values["no-glow"] ? false : undefined,
       section: values.section,
-      hint: resolve(values.hint),
+      hint: resolve(values.hint) ?? (folder?.hints && !values["no-hint"] && !values.lrc ? folder.hints : undefined),
       noHint: values["no-hint"],
       realign: values.realign,
       lrc: resolve(values.lrc),

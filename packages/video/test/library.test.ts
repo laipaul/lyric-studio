@@ -1,7 +1,7 @@
 // The studio's Library (Step 6.1): song cards from the database and the export folders, "+ New
 // song", artists, per-artist brand folders, and the studio listening on this PC only.
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -10,7 +10,7 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { studioHost } from "../../../apps/studio/scripts/next.mjs";
-import { appIcon, appIconSettings, brandDirFor, checkNewSong, icoSizes, visibleBox, createSong, knownArtists, listSongs, loadBrand, loadFontCatalog, readProjectSettings } from "../src/node";
+import { appIcon, appIconSettings, brandDirFor, checkNewSong, icoSizes, visibleBox, createSong, knownArtists, listSongs, loadBrand, loadFontCatalog, readProjectSettings, readRecipe, songPathsById } from "../src/node";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-library-"));
 const inDir = path.join(root, "in");
@@ -51,11 +51,17 @@ describe("+ New song", () => {
     const r = await createSong(ws, { song: path.join(inDir, "Hold On Tight.wav"), lyrics: path.join(inDir, "lyrics.txt"), cover: path.join(inDir, "cover.jpg"), hints: path.join(inDir, "taps.lrc"), artist: "Pômé", ep: "In The Mood for Life" });
     expect(r.created).toBe(true);
     const p = ws.db.select().from(project).where(eq(project.id, r.id)).get()!;
-    expect([p.title, p.artist, p.cover_path]).toEqual(["Hold On Tight", "Pômé", `projects/${r.id}/audio/cover.jpg`]);
+    // Its own folder songs\Pômé\Hold On Tight\ (renamed from songs\Life Lyrics\... when the artist was set).
+    expect(p.folder).toBe("songs/Pômé/Hold On Tight");
+    expect(existsSync(path.join(ws.dir, "songs", "Life Lyrics"))).toBe(false);
+    expect([p.title, p.artist, p.cover_path, p.audio_path]).toEqual(["Hold On Tight", "Pômé", "songs/Pômé/Hold On Tight/cover.jpg", "songs/Pômé/Hold On Tight/song.wav"]);
     const settings = readProjectSettings(ws, r.id);
-    expect(settings).toMatchObject({ ep: "In The Mood for Life", lyricsTxt: `projects/${r.id}/lyrics/lyrics.txt` });
-    expect(readFileSync(path.join(ws.dir, "projects", r.id, "lyrics", "lyrics.txt"), "utf8")).toBe("Verse one\n* Hold on to me\n");
-    const hint = JSON.parse(readFileSync(path.join(ws.dir, "projects", r.id, "lyrics", "hint.json"), "utf8"));
+    expect(settings).toMatchObject({ lyricsTxt: "songs/Pômé/Hold On Tight/lyrics.txt" });
+    expect(readRecipe(path.join(ws.dir, "songs", "Pômé", "Hold On Tight", "song.json")).ep).toBe("In The Mood for Life"); // the EP is the song's recipe
+    expect(readFileSync(path.join(ws.dir, "songs", "Pômé", "Hold On Tight", "lyrics.txt"), "utf8")).toBe("Verse one\n* Hold on to me\n");
+    expect(readFileSync(path.join(ws.dir, "songs", "Pômé", "Hold On Tight", "hints.lrc"), "utf8")).toContain("[00:01.00]Verse one");
+    for (const d of ["clips", "exports"]) expect(existsSync(path.join(ws.dir, "songs", "Pômé", "Hold On Tight", d))).toBe(true);
+    const hint = JSON.parse(readFileSync(path.join(ws.dir, "songs", "Pômé", "Hold On Tight", ".studio", "lyrics", "hint.json"), "utf8"));
     expect(hint.copy).toMatch(/^hints-[0-9a-f]{12}\.lrc$/); // pnpm make uses it automatically
   });
 
@@ -67,6 +73,10 @@ describe("+ New song", () => {
     expect(r.updated).toEqual(["title", "lyrics"]);
     expect(ws.db.select().from(project).all()).toHaveLength(1);
     expect(ws.db.select().from(project).get()!.title).toBe("Hold On Tight (Acoustic)");
+    expect(ws.db.select().from(project).get()!.folder).toBe("songs/Pômé/Hold On Tight (Acoustic)"); // renamed with the title
+    // The replaced lyrics.txt is kept, never deleted.
+    const replaced = readdirSync(path.join(ws.dir, "songs", "Pômé", "Hold On Tight (Acoustic)", ".studio", "replaced"));
+    expect(replaced.some((f) => f.endsWith("-lyrics.txt"))).toBe(true);
   });
 
   it("artists: Life Lyrics first, then every artist used and every brand folder", async () => {
@@ -92,7 +102,7 @@ describe("song cards", () => {
   it("per platform: videos of its latest run and a status (PASS, WARN, FAILED, Rendering, none)", () => {
     const id = ws.db.select().from(project).get()!.id;
     expect(listSongs(ws)[0].platforms.every((p) => p.status === "none" && p.videos === 0)).toBe(true);
-    const exportsDir = path.join(ws.dir, "projects", id, "exports");
+    const exportsDir = songPathsById(ws, id).exports;
     touch(path.join(exportsDir, "2026-01-02_1030", "reels"), ["v1.mp4", "v1.manifest.json", "v1.qa.txt"]);
     touch(path.join(exportsDir, "2026-01-03_0900", "reels"), ["v1.mp4", "v1.manifest.json", "v1.qa.txt", "v2.mp4", "v2.manifest.json"]);
     touch(path.join(exportsDir, "2026-01-03_0900", "reels"), ["v2.qa.txt"], "WARN");
@@ -111,7 +121,7 @@ describe("song cards", () => {
     expect(by.canvas).toMatchObject({ videos: 0, status: "none" });
     expect(card.lastRun).toBe(new Date(2026, 0, 3, 9, 0).toISOString());
     expect(card).toMatchObject({ artist: "Pômé", ep: "In The Mood for Life", hasLyrics: true });
-    expect(card.cover).toMatch(/audio\/cover\.jpg$/);
+    expect(card.cover).toMatch(/\/cover\.jpg$/);
   });
 });
 

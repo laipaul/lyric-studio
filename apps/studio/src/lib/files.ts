@@ -1,14 +1,19 @@
-// Which workspace files the studio may serve: project covers and what "pnpm make" wrote into a
-// project's export folders. Never the database or anything else.
+// Which workspace files the studio may serve: a song's cover, its own clips and what "pnpm make"
+// wrote into its export folders (song folders songs/<artist>/<title>/, and songs not migrated yet in
+// projects/<id>/), plus clip thumbnails. Never the database, .studio\ or anything else.
 const UUID = "[0-9a-f-]{36}";
 const RUN = "\\d{4}-\\d{2}-\\d{2}_\\d{4}(?:-\\d+)?";
-export const COVER_FILE = new RegExp(`^projects/${UUID}/audio/cover\\.(jpg|jpeg|png|webp)$`, "i");
-export const EXPORT_FILE = new RegExp(`^projects/${UUID}/exports/${RUN}/(?:[a-z0-9-]+/)?(v\\d+\\.(mp4|srt|qa\\.txt|manifest\\.json)|thumbnail\\.jpg|publish\\.txt|[^/]+\\.lrc)$`, "i");
-export const VIDEO_FILE = new RegExp(`^projects/${UUID}/exports/${RUN}/(?:[a-z0-9-]+/)?v\\d+\\.mp4$`, "i");
+const SONG = `(?:projects/${UUID}|songs/[^/]+/[^/]+)`;
+export const COVER_FILE = new RegExp(`^(?:projects/${UUID}/audio|songs/[^/]+/[^/]+)/cover\\.(jpg|jpeg|png|webp)$`, "i");
+export const EXPORT_FILE = new RegExp(`^${SONG}/exports/${RUN}/(?:[a-z0-9-]+/)?(v\\d+\\.(mp4|srt|qa\\.txt|manifest\\.json)|thumbnail\\.jpg|publish\\.txt|[^/]+\\.lrc)$`, "i");
+export const VIDEO_FILE = new RegExp(`^${SONG}/exports/${RUN}/(?:[a-z0-9-]+/)?v\\d+\\.mp4$`, "i");
+export const SONG_CLIP_FILE = /^songs\/[^/]+\/[^/]+\/clips\/[^/]+\.(mp4|m4v|mov|webm|jpe?g|png|webp)$/i;
+export const THUMB_FILE = new RegExp(`^thumbs/${UUID}\\.jpg$`, "i");
 
 // Caption / publish templates in the brand folders (for "open folder").
 export const TEMPLATE_FILE = /^brand\/(?:[^/]+\/)?publish-[a-z-]+\.txt$/;
 
 export function allowedFile(relative: string): boolean {
-  return !relative.includes("..") && (COVER_FILE.test(relative) || EXPORT_FILE.test(relative));
+  if (relative.split("/").some((part) => part === ".." || part === "." || part.startsWith(".studio"))) return false;
+  return COVER_FILE.test(relative) || EXPORT_FILE.test(relative) || SONG_CLIP_FILE.test(relative) || THUMB_FILE.test(relative);
 }

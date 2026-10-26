@@ -27,6 +27,7 @@ import {
   runProgress,
   type MakeOptions,
   type MakeResult,
+  songPathsById,
 } from "../src/node";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-runs-"));
@@ -76,8 +77,8 @@ describe("Generate: request -> run options", () => {
 
   it("uses the project's own song and lyrics; only the choices made are passed", () => {
     const o = generateOptions(ws, projectId, { platforms: ["reels", "canvas"], collection: "wedding", lineEffect: "floating:subtle", title: " Hold On ", section: "auto", layout: "cover" });
-    expect(o.song).toBe(path.join(ws.dir, "projects", projectId, "audio", "Hold On.wav"));
-    expect(o.lyrics).toBe(path.join(ws.dir, "projects", projectId, "lyrics", "lyrics.txt"));
+    expect(o.song).toBe(songPathsById(ws, projectId).audio);
+    expect(o.lyrics).toBe(songPathsById(ws, projectId).lyricsTxt);
     expect(o).toMatchObject({ platforms: "reels,canvas", collection: "wedding", lineEffect: "floating:subtle", title: "Hold On", layout: "cover", command: "Lyric Studio: Generate" });
     expect(o).not.toHaveProperty("section"); // auto = the default
     expect(o).not.toHaveProperty("collection_path");
@@ -113,7 +114,7 @@ describe("the queue", () => {
 describe("the worker makes a run", () => {
   const fakeResult = (over: Partial<MakeResult> = {}): MakeResult => ({
     projectTitle: "Hold On",
-    exportDir: path.join(ws.dir, "projects", projectId, "exports", "2026-10-27_1000"),
+    exportDir: path.join(songPathsById(ws, projectId).exports, "2026-10-27_1000"),
     lrcFile: "x.lrc",
     section: { start_ms: 0, end_ms: 1, reason: "" },
     limit: {} as MakeResult["limit"],
@@ -133,8 +134,8 @@ describe("the worker makes a run", () => {
     let given: MakeOptions | null = null;
     const done = await executeRun(ws, ws.db.select().from(makeRun).where(eq(makeRun.id, run.id)).get()!, async (o) => {
       given = o;
-      o.onReady?.({ platform: { name: "reels", label: "Reels", index: 0, count: 1, folder: "" }, exportDir: path.join(ws.dir, "projects", projectId, "exports", "2026-10-27_1000", "reels") } as never);
-      expect(ws.db.select().from(makeRun).where(eq(makeRun.id, run.id)).get()!.export_dir).toBe(`projects/${projectId}/exports/2026-10-27_1000`);
+      o.onReady?.({ platform: { name: "reels", label: "Reels", index: 0, count: 1, folder: "" }, exportDir: path.join(songPathsById(ws, projectId).exports, "2026-10-27_1000", "reels") } as never);
+      expect(ws.db.select().from(makeRun).where(eq(makeRun.id, run.id)).get()!.export_dir).toBe(`${songPathsById(ws, projectId).exportsRel}/2026-10-27_1000`);
       o.onRenderProgress?.([{ platform: "reels", name: "v1", status: "rendering", progress: 0.5 }, { platform: "reels", name: "v2", status: "queued", progress: 0 }]);
       const r = ws.db.select().from(makeRun).where(eq(makeRun.id, run.id)).get()!;
       seen.push({ progress: r.progress, current: r.current });
@@ -143,7 +144,7 @@ describe("the worker makes a run", () => {
     expect(given!.runId).toBe(run.id);
     expect(seen[0].progress).toBeCloseTo(0.2375, 4);
     expect(seen[0].current).toBe("Reels v1: 50% (1 of 2)");
-    expect(done).toMatchObject({ status: "done", progress: 1, message: "2 videos: 1 PASS, 1 WARN", export_dir: `projects/${projectId}/exports/2026-10-27_1000`, current: null });
+    expect(done).toMatchObject({ status: "done", progress: 1, message: "2 videos: 1 PASS, 1 WARN", export_dir: `${songPathsById(ws, projectId).exportsRel}/2026-10-27_1000`, current: null });
   });
 
   it("Stop: makeVideos is told to stop; the run ends as stopped (Resume makes the rest)", async () => {
@@ -178,26 +179,26 @@ describe("the worker makes a run", () => {
 
 describe("Resume and the Tasks list", () => {
   it("a terminal run resumes with its own command; missing files are replaced by the project's copies", () => {
-    const dir = path.join(ws.dir, "projects", projectId, "exports", "2026-10-26_0900", "reels");
+    const dir = path.join(songPathsById(ws, projectId).exports, "2026-10-26_0900", "reels");
     mkdirSync(dir, { recursive: true });
     writeFileSync(path.join(dir, "v1.manifest.json"), JSON.stringify({ command: 'pnpm make "D:\\gone\\song.wav" "D:\\gone\\lyrics.txt" --collection wedding --platforms reels --variations 3' }));
     const o = resumeOptions(ws, projectId, "2026-10-26_0900");
-    expect(o).toMatchObject({ collection: "wedding", platforms: "reels", variations: 3, resume: true, resumeFolder: path.join(ws.dir, "projects", projectId, "exports", "2026-10-26_0900") });
-    expect(o.song).toBe(path.join(ws.dir, "projects", projectId, "audio", "Hold On.wav"));
-    expect(o.lyrics).toBe(path.join(ws.dir, "projects", projectId, "lyrics", "lyrics.txt"));
+    expect(o).toMatchObject({ collection: "wedding", platforms: "reels", variations: 3, resume: true, resumeFolder: path.join(songPathsById(ws, projectId).exports, "2026-10-26_0900") });
+    expect(o.song).toBe(songPathsById(ws, projectId).audio);
+    expect(o.lyrics).toBe(songPathsById(ws, projectId).lyricsTxt);
     expect(o.command).toMatch(/--variations 3 \(resumed in Lyric Studio\)$/);
     expect(() => resumeOptions(ws, projectId, "2020-01-01_0000")).toThrow(/No run 2020-01-01_0000/);
   });
 
   it("a studio run resumes with the options it was made with", () => {
-    mkdirSync(path.join(ws.dir, "projects", projectId, "exports", "2026-10-27_1000"), { recursive: true });
+    mkdirSync(path.join(songPathsById(ws, projectId).exports, "2026-10-27_1000"), { recursive: true });
     const o = resumeOptions(ws, projectId, "2026-10-27_1000"); // made by the "writes live progress" run above
     expect(o).toMatchObject({ platforms: "reels", resume: true, command: "Lyric Studio: Generate (resumed in Lyric Studio)" });
     expect(enqueueRun(ws, projectId, o).label).toBe("Resume Reels");
   });
 
   it("lists studio runs (with the song) and terminal runs rendering right now", () => {
-    const v = ws.db.insert(variation).values({ project_id: projectId, seed: 1, cut_rate: "1x", text_size: 64, colour: "#fff", cinematic_bars: false, overrides_json: { platform: "tiktok", run: `projects/${projectId}/exports/2026-10-28_0800` } }).returning().get();
+    const v = ws.db.insert(variation).values({ project_id: projectId, seed: 1, cut_rate: "1x", text_size: 64, colour: "#fff", cinematic_bars: false, overrides_json: { platform: "tiktok", run: `${songPathsById(ws, projectId).exportsRel}/2026-10-28_0800` } }).returning().get();
     ws.db.insert(renderJob).values({ variation_id: v.id, status: "rendering", progress: 0.4, pid: process.pid }).run();
     const tasks = listTasks(ws);
     expect(tasks.runs.length).toBeGreaterThan(0);
