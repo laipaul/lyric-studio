@@ -20,6 +20,7 @@ import { eq } from "drizzle-orm";
 
 import { HOOK_MARKER, normalizeLyric, parseLrc, type TimedLine } from "../lrc";
 import { cachedFileHash } from "./collection";
+import { processAlive } from "./jobs";
 import { ADDING_PREFIX, adoptIntoSongFolder, songPaths, songPathsById } from "./song-folder";
 
 export const ALIGN_STORE_VERSION = 2; // 2: key without hook markers, LRC with word end tags
@@ -143,11 +144,12 @@ export async function ensureAlignment(
   const dir = absPath(ws, relDir);
   mkdirSync(dir, { recursive: true });
   const warnings: string[] = [];
+  cleanInterrupted(dir, log);
   const hint = options.lrc ? null : projectHint(dir, options, log, warnings);
 
   // Keep a copy of the lyrics.txt this alignment was made from.
   const txtCopy = path.join(dir, `lyrics-${lyricsHash.slice(0, 12)}.txt`);
-  if (!existsSync(txtCopy)) copyFileSync(options.lyricsTxt, txtCopy);
+  if (!existsSync(txtCopy)) writeFileAtomic(txtCopy, txtContent);
 
   let key: string;
   let name: string;
@@ -157,7 +159,7 @@ export async function ensureAlignment(
     key = lrcHash.slice(0, 12);
     name = `given-${key}.lrc`;
     source = "given";
-    if (!existsSync(path.join(dir, name))) copyFileSync(options.lrc, path.join(dir, name));
+    if (!existsSync(path.join(dir, name))) writeFileAtomic(path.join(dir, name), readFileSync(options.lrc));
   } else {
     key = sha256(`v${ALIGN_STORE_VERSION}|${sha256(wordsOfLyrics(txtContent.toString("utf8")))}|${hint?.hash ?? ""}|${lang}`).slice(0, 12);
     const stored = readdirSync(dir)
@@ -170,8 +172,11 @@ export async function ensureAlignment(
     } else {
       name = `aligned-${key}-${stamp(options.now ?? new Date())}.lrc`;
       for (let n = 2; existsSync(path.join(dir, name)); n++) name = `aligned-${key}-${stamp(options.now ?? new Date())}-${n}.lrc`;
-      const tmpLrc = path.join(dir, `.${name}.part`);
-      const tmpReport = path.join(dir, `.${name}.report.part`);
+      // The aligner writes into temporary files; the alignment is stored only when it has finished and
+      // its output is complete (the .lrc appearing is the commit point). Ctrl+C, Stop or a crash leaves
+      // only temporary files, which the next run removes.
+      const tmpLrc = path.join(dir, `.${name}.${process.pid}.part`);
+      const tmpReport = path.join(dir, `.${name}.report.${process.pid}.part`);
       if (!stored.length) for (const line of whyNotStored(dir, txtContent.toString("utf8"), hint?.hash ?? "", lang)) log(`lyrics: ${line}`);
       log(`lyrics: aligning ${path.basename(options.lyricsTxt)} with pnpm align${hint ? ` (hint ${path.basename(hint.file)})` : ""}`);
       try {
@@ -184,6 +189,7 @@ export async function ensureAlignment(
           fresh: !!options.realign,
           lang,
         });
+        checkAlignerOutput(tmpLrc, tmpReport, txtContent.toString("utf8"));
         renameSync(tmpReport, path.join(dir, name.replace(/\.lrc$/, ".report.json")));
         renameSync(tmpLrc, path.join(dir, name));
       } finally {
@@ -257,6 +263,57 @@ export function whyNotStored(dir: string, lyricsText: string, hintHash: string, 
   return out;
 }
 
+// Writes a file completely or not at all (a temporary file renamed at the end).
+export function writeFileAtomic(file: string, content: string | Buffer): void {
+  const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.part`);
+  try {
+    writeFileSync(tmp, content);
+    renameSync(tmp, file);
+  } finally {
+    rmSync(tmp, { force: true });
+  }
+}
+
+// Leftovers of an alignment that was interrupted (Ctrl+C, Stop, a crash): temporary files of processes
+// that are gone, and a report whose .lrc never appeared. They were never used; removed.
+export function cleanInterrupted(dir: string, log: (m: string) => void = () => {}): string[] {
+  if (!existsSync(dir)) return [];
+  const removed: string[] = [];
+  for (const f of readdirSync(dir)) {
+    const part = /^\..*\.(\d+)\.part$/.exec(f);
+    const oldPart = /^\..*\.part$/.test(f) && !part; // from before the process id was in the name
+    const orphan = /^aligned-.*\.report\.json$/.test(f) && !existsSync(path.join(dir, f.replace(/\.report\.json$/, ".lrc"))) && Date.now() - statSync(path.join(dir, f)).mtimeMs > 60_000;
+    if ((part && !processAlive(Number(part[1]))) || oldPart || orphan) {
+      rmSync(path.join(dir, f), { force: true });
+      removed.push(f);
+    }
+  }
+  if (removed.length) log(`lyrics: removed ${removed.length} file(s) left by an interrupted alignment (never used)`);
+  return removed;
+}
+
+// The aligner's output must be complete before it is stored: every lyric line timed in the .lrc, and
+// a report with one entry per line.
+export function checkAlignerOutput(lrcFile: string, reportFile: string, lyricsText: string): void {
+  const expected = lyricsText
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/)
+    .map((l) => l.trim().replace(HOOK_MARKER, "").trim())
+    .filter(Boolean).length;
+  const problem = (why: string) => new Error(`pnpm align finished without a complete result (${why}); nothing was stored. Run it again.`);
+  if (!existsSync(lrcFile)) throw problem("no .lrc written");
+  const timed = parseLrc(readFileSync(lrcFile, "utf8"), Number.MAX_SAFE_INTEGER).filter((l) => l.text.trim()).length; // also a last line without an end stamp
+  if (timed !== expected) throw problem(`${timed} of ${expected} lines timed`);
+  if (!existsSync(reportFile)) throw problem("no report written");
+  let lines: unknown;
+  try {
+    lines = (JSON.parse(readFileSync(reportFile, "utf8")) as { lines?: unknown }).lines;
+  } catch {
+    throw problem("the report is not valid JSON");
+  }
+  if (!Array.isArray(lines) || lines.length !== expected) throw problem(`the report has ${Array.isArray(lines) ? lines.length : 0} of ${expected} lines`);
+}
+
 // lyrics.txt without its hook markers: what the alignment depends on.
 export function wordsOfLyrics(text: string): string {
   return text
@@ -280,7 +337,7 @@ export function storeProjectHint(ws: Workspace, projectId: string, hintFile: str
   projectHint(dir, { hint: hintFile }, () => {}, []);
   const record = path.join(dir, "hint.json");
   const stored = JSON.parse(readFileSync(record, "utf8")) as StoredHint;
-  if (source) writeFileSync(record, `${JSON.stringify({ ...stored, source }, null, 2)}\n`);
+  if (source) writeFileAtomic(record, `${JSON.stringify({ ...stored, source }, null, 2)}\n`);
   return stored.copy;
 }
 
@@ -296,9 +353,9 @@ function projectHint(
     const content = readFileSync(options.hint);
     const hash = sha256(content);
     const copy = `hints-${hash.slice(0, 12)}.lrc`;
-    if (!existsSync(path.join(dir, copy))) writeFileSync(path.join(dir, copy), content);
+    if (!existsSync(path.join(dir, copy))) writeFileAtomic(path.join(dir, copy), content);
     if (stored?.sha256 !== hash) {
-      writeFileSync(record, `${JSON.stringify({ source: path.resolve(options.hint), copy, sha256: hash, stored_at: new Date().toISOString() }, null, 2)}\n`);
+      writeFileAtomic(record, `${JSON.stringify({ source: path.resolve(options.hint), copy, sha256: hash, stored_at: new Date().toISOString() }, null, 2)}\n`);
       log(`hints: ${path.basename(options.hint)} stored with the project; later alignments use it automatically`);
     }
     return { file: path.join(dir, copy), hash, source: path.resolve(options.hint), stored: false };

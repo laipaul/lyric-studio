@@ -211,3 +211,13 @@ def test_report_has_confidence_and_sung_times_per_line() -> None:
     args = build_parser().parse_args(["s.wav", "l.txt", "--report", "r.json", "--fresh"])
     assert (args.report, args.fresh) == ("r.json", True)
     assert build_parser().parse_args(["s.wav", "l.txt"]).fresh is False
+
+
+def test_write_atomic_replaces_whole_file_and_leaves_no_part(tmp_path):
+    from app.align import write_atomic
+
+    target = tmp_path / "out.lrc"
+    target.write_text("old", encoding="utf-8")
+    write_atomic(target, "[00:01.00]new\n")
+    assert target.read_text(encoding="utf-8") == "[00:01.00]new\n"
+    assert [p.name for p in tmp_path.iterdir()] == ["out.lrc"]  # no .part left behind

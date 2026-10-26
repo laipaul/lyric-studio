@@ -306,6 +306,13 @@ def same_file(a: Path, b: Path) -> bool:
     return os.path.normcase(str(a.resolve())).lower() == os.path.normcase(str(b.resolve())).lower()
 
 
+def write_atomic(path: Path, text: str) -> None:
+    """Writes a file completely or not at all: an interrupted run (Ctrl+C) never leaves half a file."""
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.part")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
 # --------------------------------------------------------------------------- report
 
 def print_lines(lines: list[AlignedLine], comparison: Comparison | None) -> None:
@@ -455,14 +462,18 @@ def main(argv: list[str] | None = None) -> int:
         f"v{ALIGN_CACHE_VERSION}|trim-{args.trim}|{vocals.name}|{model_name}|{json.dumps(texts)}".encode()
     ).hexdigest()[:24]
     cache = workspace_dir() / "cache" / "align" / f"{key}.json"
+    words = None
     if cache.exists() and not args.fresh:
-        log("alignment: cached")
-        words = json.loads(cache.read_text(encoding="utf-8"))
-    else:
+        try:
+            words = json.loads(cache.read_text(encoding="utf-8"))
+            log("alignment: cached")
+        except ValueError:
+            log("alignment: the cached result is damaged (an interrupted run?); aligning again")
+    if words is None:
         words, device = align_words(vocals, " ".join(texts), args.lang, model_name, device, log, trim=args.trim == "on")
         words = [{k: (float(v) if k in ("start", "end", "score") and v is not None else v) for k, v in w.items()} for w in words]
         cache.parent.mkdir(parents=True, exist_ok=True)
-        cache.write_text(json.dumps(words), encoding="utf-8")
+        write_atomic(cache, json.dumps(words))
 
     aligned = words_to_lines(texts, hooks, words)
     original = list(aligned)  # before --hint (what --diagnose explains)
@@ -493,15 +504,12 @@ def main(argv: list[str] | None = None) -> int:
     duration_ms = int(sf.info(str(song)).duration * 1000)
     out = output_path(lyrics, args.out, [reference, hint_file], cwd)
     if out.exists():
-        out.with_suffix(".lrc.bak").write_text(out.read_text(encoding="utf-8"), encoding="utf-8")
-    out.write_text(
-        build_lrc(ordered, duration_ms, header=["[ar:Life Lyrics]", f"[re:Lyric Studio - pnpm align ({model_name})]"]),
-        encoding="utf-8",
-    )
+        write_atomic(out.with_suffix(".lrc.bak"), out.read_text(encoding="utf-8"))
+    write_atomic(out, build_lrc(ordered, duration_ms, header=["[ar:Life Lyrics]", f"[re:Lyric Studio - pnpm align ({model_name})]"]))
 
     if args.report:
         report = resolve(args.report)
-        report.write_text(json.dumps(line_report(aligned, model_name, args.lang), indent=1), encoding="utf-8")
+        write_atomic(report, json.dumps(line_report(aligned, model_name, args.lang), indent=1))
 
     comparison = compare(aligned, parse_lrc(reference.read_text(encoding="utf-8-sig"))) if reference else None
     print_lines(aligned, comparison)

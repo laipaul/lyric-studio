@@ -524,7 +524,7 @@ Cause: a line was treated as sung until the next line started (and the next line
   live Tasks -> Stop after v1 -> Resume -> v2 made in the same folder, badge PASS; a terminal run shown
   in Tasks while rendering.
 
-### Step 6.2c-1 — One folder per song, the recipe, migration, Assets tab ✅ (to verify on the Windows PC)
+### Step 6.2c-1 — One folder per song, the recipe, migration, Assets tab ✅ (verified on the Windows PC: Love Is A Good Thing merged, no "(2)" left, "Nothing to migrate" on a re-run, pnpm make reused the stored alignment for both songs, reels PASS with cuts on the beat, the app shows the song once with all runs)
 Everything for one song now lives in one readable folder, and each song has a recipe (song.json).
 Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other tabs, below in Next).
 - **Song folder** `WORKSPACE_DIR\songs\<artist>\<title>\`:
@@ -628,6 +628,17 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
     appears when songs need tidying.
   - Per-song state before 6.2c was only settings.json (EP, remembered collection, lyrics.txt path); marks
     are in the database and follow every move; locks did not exist before 6.2c.
+- Hardening after 6.2c-1: an interrupted alignment (Ctrl+C, Stop, a crash) is never stored. The aligner
+  writes temporary files named with the process id; the result is checked for completeness (every
+  lyric line timed in the .lrc, one report entry per line) and only then renamed into place, the .lrc
+  last (the commit point). The next run removes leftovers of processes that are gone (and a report whose
+  .lrc never appeared); a run still going is left alone. The lyrics copy, an --lrc copy, the hint copy
+  and hint.json are written the same way. In `pnpm align` (Python) the LRC, the report and the word
+  cache are written atomically, and a damaged cache is aligned again. Tests: a failing aligner, an
+  incomplete result, a process killed hard in the middle (nothing stored, cleaned up, aligned again).
+- UI fix: every native dropdown (Generate's effect / intensity / layout lists, the artist suggestions in
+  + New song) opens dark on Windows: `color-scheme: dark` on the app, options and option groups in the
+  theme colours (the selected one in the accent tint).
 - **Studio**: Library banner "N songs and M collections still use the old folders" with **Preview**
   (dialog with the dry-run text) and **Migrate** (confirm with the backup reminder, then the same as
   --apply). Song page tabs **Assets / Generate / Videos** (Videos is the default when the song has runs).
@@ -734,7 +745,7 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   mix has different timing, use Generate -> advanced -> re-align.
 
 ## Next
-1. Verify Steps 6.2a, 6.2b and 6.2c-1 on the PC (run `pnpm songs:migrate`, then `--apply`).
+1. Verify Steps 6.2a and 6.2b on the PC (6.2c-1 verified).
 2. Step 6.2c-2 — the remaining song-page tabs (planned and approved with 6.2c; not built yet):
    - **Style** tab: the recipe fields with their source (library / artist / song) and per field
      "Save to song", "Reset" (back to inherited) and a lock toggle — backend ready in recipe.ts
