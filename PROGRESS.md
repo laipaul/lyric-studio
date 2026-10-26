@@ -692,6 +692,33 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   - QA "Lyric contrast": WARN naming the shot / line when the contrast between text and background stays
     too low (WCAG-style ratio on sampled frames), also for the waiting next line and the highlighted word;
   - tests: brightness measurement, the on/off decision with hysteresis (no flicker between shots), QA.
+  - D1 (from the review): test on real wedding footage (white dresses, skin tones, soft focus), not only
+    on synthetic frames.
+  - Open questions: shadow vs scrim as the default; how strong the scrim may get before it looks like a
+    box; one decision per shot or per line.
+- **Proposed Step 7.1 — EP film for YouTube (16:9)** (D2): the songs of an EP (song.json `ep`) in a set
+  order become one video. Intro card (EP title, artist, EP cover, written like a short letter from the
+  artist); each song with its own stored alignment, lyrics, effects and layout plus a title card;
+  transitions crossfade or a short silence (recipe choice), never a hard cut; audio levels matched;
+  publish.txt with YouTube chapters (00:00 Intro + one per song, exact times), tracklist, EP thumbnail;
+  one .srt / .lrc for the whole video with the right offsets; songs with low-confidence lines or missing
+  clips flagged before rendering. Later the same as a vertical Reel EP film.
+  Open questions: where the EP's order, intro text and cover live (an `eps\<name>\ep.json`?); loudness
+  target (e.g. -14 LUFS for YouTube); length of the title cards; one render or songs rendered separately
+  and joined (faster re-renders).
+- **Proposed Step 7.2 — Song notes** (D3): notes.txt per song (1–2 sentences by the artist, in the
+  song's language), editable in the Assets tab. In the EP film shown during the instrumental intro (or on
+  the title card when the intro is too short), reading-speed timing (~3 words/s, at least 4 s), soft fade,
+  brand fonts; also under each chapter in publish.txt. Note text is never generated automatically.
+  Open questions: also in single-song YouTube videos?; position on screen (above the lyrics band?).
+- **Proposed Step 7.3 — Line annotations** (D4): annotations.txt (line number + a short artist note),
+  shown only in an "annotated" render, during the next instrumental gap after that line, never over sung
+  lyrics; pnpm make can render a "clean" and an "annotated" version of the same run.
+  Open questions: what happens when a gap is too short (skip with a warning, or the next gap?); line
+  numbers vs the line's text as the key (numbers move when lyrics.txt changes).
+- **Proposed Step 5g.5 — Full song as a Reel** (D5): confirm `--section full` works for Reels (a 4:01
+  song) and passes QA (length vs the preset's target, the seamless-loop ending, file size / bitrate).
+  Open question: should Reels allow a full song at all, or only with a confirmation?
 - **Effects page**: a gallery of all lyric effects (later also ambient effects and loop scenes) with
   animated previews rendered on a line of the selected song (cached), an intensity selector, "set as
   default for <artist>" for verses and hooks (writes brand.json), effect descriptions and which
@@ -746,18 +773,30 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
 
 ## Next
 1. Verify Steps 6.2a and 6.2b on the PC (6.2c-1 verified).
-2. Step 6.2c-2 — the remaining song-page tabs (planned and approved with 6.2c; not built yet):
-   - **Style** tab: the recipe fields with their source (library / artist / song) and per field
-     "Save to song", "Reset" (back to inherited) and a lock toggle — backend ready in recipe.ts
-     (`resolveRecipe` sources, `saveToSong`, `resetField`, `lockField`, `unlockField`, `writeRecipe`).
-   - **Generate** tab: start from the resolved recipe (platforms, variations per platform, section,
-     YouTube layout, fonts, accent), show which values are this run's tweaks, "save to song" for the
-     run's choices; locked fields shown locked (a run cannot change them).
-   - **Videos** tab: in 6.2c-1 the Generate and Videos tabs only hold the existing 6.2b panel and 6.2a
-     grid (so the page has its tab bar); 6.2c-2 finishes them.
-   - **Post** tab: the "ready to post" panel per video (exists in 6.2a, opened from a tile) as its own tab.
-   - Assets polish if needed (e.g. "open the song folder" in Explorer).
-3. Step 6.3 (content board with manually entered results).
-3. Step 5g.4 (loop layout).
-4. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project
+2. **Step 6.2c-2a — Style tab + Generate from the recipe** (in progress; consolidated roadmap from the
+   review):
+   - B1 Style tab: every recipe field with its value and source (library / brand / song), Reset and
+     Lock; saves to song.json. — built (not yet on main)
+   - B2 Per-platform values (brand.json and song.json `perPlatform`) for the effects + intensity, fonts,
+     accent colour and section; shown in the Style tab; applied per platform by Generate and pnpm make.
+     — built (not yet on main)
+   - B3 Per-platform target length for "auto" (e.g. reels 90 s, tiktok 30 s): a musical section of about
+     that length, starting at / just before a hook, ending after a complete line or chorus, never cutting
+     a sung line. — planned, waiting for approval
+   - B4 Generate opens with the resolved recipe; one-run tweaks marked; locked fields cannot be changed;
+     "Save to song" never overwrites a lock. — built (not yet on main)
+   - B5 Fonts: bundled + own fonts only, live preview line with é è ç à ô, warning when a font lacks
+     them. — built (not yet on main)
+   - B6 Effect lists: a short hint per effect ("best for verses" / "best for hooks"). — planned
+   - Tests for all of the above + a browser check.
+   - Also in this round (asked during it): Assets tab shows the real song-folder path, clickable (opens
+     Explorer); the Hints card separates timed lines from end marks and warns about orphan lines.
+3. **Step 6.2c-2b — Videos + Post** (after 2a is tested on the PC):
+   - C1 Videos tab: each run shows the settings it was made with (from its manifest) next to the current
+     recipe; "Use these settings" loads them into Generate.
+   - C2 Post tab: approved videos only (discarded hidden), caption / hashtags per artist and platform,
+     downloads, YouTube title / description / tags, Open folder. Nothing is posted automatically.
+4. Step 6.3 (content board with manually entered results).
+5. Step 5g.4 (loop layout).
+6. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project
    (confirmed by the user) and plug into the same render-time layer as the lyrics offset.
