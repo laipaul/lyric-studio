@@ -669,6 +669,18 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
 
 ## Backlog (not scheduled yet)
+- **Proposed Step 5j.1 — Lyric readability on bright clips** (reported on the wedding collection: the
+  waiting next line and the pink karaoke highlight get lost on white / cream footage). Idea:
+  - measure the brightness behind the lyric area per shot (FFmpeg on the prepared clip frames, cached
+    like the posters) and pass it in the props, so preview and render stay identical;
+  - when it is bright, automatically add a soft text shadow and/or a subtle scrim (a soft dark gradient
+    behind the lyric band), faded in and out with the shot, never a hard box; strength per brand.json
+    (e.g. `readability: { auto: true, shadow, scrim }`), overridable per platform and per run;
+  - the karaoke highlight and the next line get extra contrast (a darker outline or a deeper accent tint)
+    on bright shots;
+  - QA "Lyric contrast": WARN naming the shot / line when the contrast between text and background stays
+    too low (WCAG-style ratio on sampled frames), also for the waiting next line and the highlighted word;
+  - tests: brightness measurement, the on/off decision with hysteresis (no flicker between shots), QA.
 - **Effects page**: a gallery of all lyric effects (later also ambient effects and loop scenes) with
   animated previews rendered on a line of the selected song (cached), an intensity selector, "set as
   default for <artist>" for verses and hooks (writes brand.json), effect descriptions and which
