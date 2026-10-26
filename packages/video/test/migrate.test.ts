@@ -103,7 +103,7 @@ describe("pnpm songs:migrate", () => {
   it("the song really is in the old layout", () => {
     expect(manifestRel).toMatch(new RegExp(`^projects/${projectId}/exports/[^/]+/reels/v1\\.manifest\\.json$`));
     expect(ws.db.select().from(clip).all().map((c) => c.path).sort()).toEqual(["clips/wedding/01_rings.mp4", "clips/wedding/02_dance.mp4"]);
-    expect(migrationStatus(ws)).toEqual({ songs: 1, collections: 1 });
+    expect(migrationStatus(ws)).toMatchObject({ songs: 1, collections: 1 });
   });
 
   it("the dry run shows every move and changes nothing", () => {
@@ -140,7 +140,7 @@ describe("pnpm songs:migrate", () => {
     const mark = ws.db.select().from(videoMark).get()!;
     expect(mark.video).toBe(manifestRel.replace(`projects/${projectId}/exports`, "songs/Pômé/Old Song/exports"));
     expect(existsSync(path.join(wsDir, mark.video))).toBe(true);
-    expect(migrationStatus(ws)).toEqual({ songs: 0, collections: 0 });
+    expect(migrationStatus(ws)).toEqual({ songs: 0, collections: 0, tidy: 0 });
     expect(migrationText(planMigration(ws))[0]).toMatch(/^Nothing to migrate/);
   });
 
@@ -216,7 +216,7 @@ describe("pnpm songs:migrate", () => {
     expect(existsSync(path.join(wsDir, "songs", "Pômé"))).toBe(false);
     expect(ws.db.select().from(clip).all().map((c) => c.path).sort()).toEqual(["clips/wedding/01_rings.mp4", "clips/wedding/02_dance.mp4"]);
     expect(ws.db.select().from(videoMark).get()!.video).toBe(manifestRel);
-    expect(migrationStatus(ws)).toEqual({ songs: 1, collections: 1 });
+    expect(migrationStatus(ws)).toMatchObject({ songs: 1, collections: 1 });
     expect(() => undoMigration(wsDir)).toThrow(/Nothing to undo/);
   });
 });

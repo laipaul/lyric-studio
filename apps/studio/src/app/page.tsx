@@ -20,5 +20,5 @@ export default function LibraryPage() {
 async function Library() {
   await connection(); // always fresh: read the workspace on every visit
   const { songs, artists, old } = withWorkspace((ws) => ({ songs: listSongs(ws), artists: knownArtists(ws), old: migrationStatus(ws) }));
-  return <LibraryView songs={songs} artists={artists} banner={<MigrationBanner songs={old.songs} collections={old.collections} />} />;
+  return <LibraryView songs={songs} artists={artists} banner={<MigrationBanner songs={old.songs} collections={old.collections} tidy={old.tidy} />} />;
 }

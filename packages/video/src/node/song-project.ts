@@ -20,7 +20,7 @@ import { eq } from "drizzle-orm";
 
 import { HOOK_MARKER, normalizeLyric, parseLrc, type TimedLine } from "../lrc";
 import { cachedFileHash } from "./collection";
-import { adoptIntoSongFolder, songPaths, songPathsById } from "./song-folder";
+import { ADDING_PREFIX, adoptIntoSongFolder, songPaths, songPathsById } from "./song-folder";
 
 export const ALIGN_STORE_VERSION = 2; // 2: key without hook markers, LRC with word end tags
 
@@ -33,6 +33,11 @@ export async function findOrCreateSongProject(ws: Workspace, song: string, log: 
   const songHash = await cachedFileHash(ws, song);
   const found = ws.db.select().from(projectTable).where(eq(projectTable.audio_hash, songHash)).get();
   if (found?.audio_path && existsSync(absPath(ws, found.audio_path))) {
+    if (!found.folder && found.audio_path.startsWith(`songs/${ADDING_PREFIX}`)) {
+      adoptIntoSongFolder(ws, found.id); // an interrupted adoption: finish it
+      const done = ws.db.select().from(projectTable).where(eq(projectTable.id, found.id)).get()!;
+      return { project: done, songFile: absPath(ws, done.audio_path!), songHash, created: false };
+    }
     return { project: found, songFile: absPath(ws, found.audio_path), songHash, created: false };
   }
   if (found) {

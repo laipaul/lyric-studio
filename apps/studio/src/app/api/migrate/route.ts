@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   if (!body.confirmed) return Response.json({ error: "Confirm the backup reminder first." }, { status: 400 });
   try {
     const r = await withWorkspaceAsync((ws) => applyMigration(ws));
-    return Response.json({ songs: r.songs, collections: r.collections, backupDir: r.backupDir });
+    return Response.json({ songs: r.songs, collections: r.collections, merges: r.merges, repairs: r.repairs, backupDir: r.backupDir });
   } catch (error) {
     return Response.json({ error: (error as Error).message }, { status: 400 });
   }

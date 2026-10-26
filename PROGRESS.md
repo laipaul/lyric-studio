@@ -604,6 +604,30 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   since (the old one kept in .studio\replaced\; --undo reverses it). When a song with stored
   alignments is aligned again, `pnpm make` now says why: other words (with the first differing line
   and the stored copy's file), other hints, or another language.
+- Third fix from the PC: "Love Is A Good Thing" was split over two folders (song, cover and
+  .studio\lyrics in `Love Is A Good Thing\`; exports and an empty song.json in `... (2)\`). Root cause:
+  the first version moved a song piece by piece and named its folder in the database only at the end; a
+  first --apply stopped half-way (a file in use on Windows), the second saw the song as not migrated,
+  found the plain name taken and put the rest into "(2)" (the stored alignments became invisible, so
+  `pnpm make` aligned again). Now:
+  - each song is built in `songs\.migrating-<id>\` and renamed once at the end (merged into its folder
+    when an older interrupted run left files there); the database names the folder only then, so an
+    interrupted --apply is finished by the next one and a song can never be split. New songs likewise
+    (`songs\.adding-<id>\`, finished the next time the song is used).
+  - a folder with `.studio\` or song.json counts as made by Lyric Studio.
+  - split songs are detected (the song file in another folder, or a Lyric Studio "<title>" folder next
+    to "<title> (2)") for every song, and --apply merges them into the plain name: everything moves over,
+    nothing is overwritten (a name clash keeps both, "name (from <folder>).ext"), the empty half is removed;
+    runs, marks (favourite / approved / discarded) and database paths follow.
+  - repairs for every migrated song: missing lyrics.txt (the lyrics the newest video's manifest names),
+    missing hints.lrc (the stored hints), empty song.json (EP / collection from its settings.json or from
+    a migration backup `workspace\migrations\<date>\projects\<id>\settings.json`).
+  - the dry run shows the whole merge (every move, clashes, runs and marks that follow), the repairs, a
+    list "song.json without settings of its own" with the reason (no settings before the migration, or
+    not migrated yet), song folders no song uses and leftover staging folders. The Library banner also
+    appears when songs need tidying.
+  - Per-song state before 6.2c was only settings.json (EP, remembered collection, lyrics.txt path); marks
+    are in the database and follow every move; locks did not exist before 6.2c.
 - **Studio**: Library banner "N songs and M collections still use the old folders" with **Preview**
   (dialog with the dry-run text) and **Migrate** (confirm with the backup reminder, then the same as
   --apply). Song page tabs **Assets / Generate / Videos** (Videos is the default when the song has runs).

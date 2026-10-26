@@ -241,38 +241,52 @@ export function renameSongFolder(ws: Workspace, projectId: string, opts: { selfP
 
 // A new song goes straight into its own folder: song.<ext> (and cover) are moved there from the
 // place createProject put them. A song file that already sits in a song folder nobody owns yet
-// (songs\<artist>\<title>\ made by hand) adopts that folder: title and artist come from its names.
+// (songs\<artist>\<title>\ made by hand) adopts that folder (title and artist from its names).
+// The folder is built in songs\.adding-<id>\ and renamed once at the end; the database names the
+// folder only then, so an interrupted adoption is simply finished the next time (never split).
+export const ADDING_PREFIX = ".adding-";
 export function adoptIntoSongFolder(ws: Workspace, projectId: string, songFile?: string): string {
   let p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get()!;
   if (p.folder) return p.folder;
   const own = songFile ? unownedSongFolder(ws, songFile) : null;
   if (own) {
-    p = ws.db.update(projectTable).set({ title: own.title, artist: own.artist }).where(eq(projectTable.id, p.id)).returning().get();
-  }
-  const target = own?.rel ?? songFolderFor(ws, p.artist, p.title, p.id);
-  const root = absPath(ws, target);
-  mkdirSync(path.join(root, "clips"), { recursive: true });
-  mkdirSync(path.join(root, "exports"), { recursive: true });
-  let audio = p.audio_path;
-  if (own) {
     // The folder's own song file stays; the copy createProject made is not needed.
-    if (p.audio_path && existsSync(absPath(ws, p.audio_path))) rmSync(absPath(ws, p.audio_path));
-    audio = `${target}/${path.basename(songFile!)}`;
-  } else if (p.audio_path && existsSync(absPath(ws, p.audio_path))) {
-    audio = `${target}/song${path.extname(p.audio_path).toLowerCase()}`;
-    moveEntry(absPath(ws, p.audio_path), absPath(ws, audio));
+    if (p.audio_path && existsSync(absPath(ws, p.audio_path)) && path.resolve(absPath(ws, p.audio_path)) !== path.resolve(songFile!)) rmSync(absPath(ws, p.audio_path));
+    const folderCover = ["cover.jpg", "cover.jpeg", "cover.png"].find((c) => existsSync(path.join(absPath(ws, own.rel), c)));
+    mkdirSync(path.join(absPath(ws, own.rel), "clips"), { recursive: true });
+    mkdirSync(path.join(absPath(ws, own.rel), "exports"), { recursive: true });
+    ws.db
+      .update(projectTable)
+      .set({ title: own.title, artist: own.artist, folder: own.rel, audio_path: `${own.rel}/${path.basename(songFile!)}`, cover_path: folderCover ? `${own.rel}/${folderCover}` : p.cover_path })
+      .where(eq(projectTable.id, p.id))
+      .run();
+    removeOldProjectDirs(ws, p.id);
+    return own.rel;
   }
-  let cover = p.cover_path;
-  const folderCover = ["cover.jpg", "cover.jpeg", "cover.png"].find((c) => existsSync(path.join(root, c)));
-  if (folderCover) cover = `${target}/${folderCover}`;
-  else if (p.cover_path && existsSync(absPath(ws, p.cover_path))) {
-    cover = `${target}/cover${path.extname(p.cover_path).toLowerCase()}`;
-    moveEntry(absPath(ws, p.cover_path), absPath(ws, cover));
-  }
-  ws.db.update(projectTable).set({ folder: target, audio_path: audio, cover_path: cover }).where(eq(projectTable.id, p.id)).run();
-  const old = absPath(ws, `projects/${p.id}`);
-  for (const sub of ["audio", "exports"]) removeEmptyDirs(path.join(old, sub), absPath(ws, "projects"));
+  const stage = `${SONGS_DIR}/${ADDING_PREFIX}${p.id}`;
+  const stageAbs = absPath(ws, stage);
+  mkdirSync(path.join(stageAbs, "clips"), { recursive: true });
+  mkdirSync(path.join(stageAbs, "exports"), { recursive: true });
+  const into = (rel: string | null, name: string) => {
+    if (!rel || rel.startsWith(`${stage}/`) || !existsSync(absPath(ws, rel))) return rel;
+    const to = `${stage}/${name}${path.extname(rel).toLowerCase()}`;
+    moveEntry(absPath(ws, rel), absPath(ws, to));
+    return to;
+  };
+  const audio = into(p.audio_path, "song");
+  const cover = into(p.cover_path, "cover");
+  p = ws.db.update(projectTable).set({ audio_path: audio, cover_path: cover }).where(eq(projectTable.id, p.id)).returning().get();
+  const target = songFolderFor(ws, p.artist, p.title, p.id);
+  moveEntry(stageAbs, absPath(ws, target));
+  const moved = (rel: string | null) => (rel && rel.startsWith(`${stage}/`) ? target + rel.slice(stage.length) : rel);
+  ws.db.update(projectTable).set({ folder: target, audio_path: moved(p.audio_path), cover_path: moved(p.cover_path) }).where(eq(projectTable.id, p.id)).run();
+  removeOldProjectDirs(ws, p.id);
   return target;
+}
+
+function removeOldProjectDirs(ws: Workspace, projectId: string): void {
+  const old = absPath(ws, `projects/${projectId}`);
+  for (const sub of ["audio", "exports"]) removeEmptyDirs(path.join(old, sub), absPath(ws, "projects"));
 }
 
 // songs/<artist>/<title>/ holding `songFile`, when no song owns that folder yet.

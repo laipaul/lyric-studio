@@ -96,12 +96,17 @@ export function readRecipe(file: string | null): SongRecipe {
   return recipe;
 }
 
-export function writeRecipe(file: string, recipe: SongRecipe): void {
-  mkdirSync(path.dirname(file), { recursive: true });
+// song.json's text: the help line, the fields in a fixed order, then locked.
+export function recipeJson(recipe: SongRecipe): string {
   const ordered: Record<string, unknown> = { _help: RECIPE_HELP };
   for (const k of RECIPE_FIELDS) if (recipe[k] !== undefined) ordered[k] = recipe[k];
   if (recipe.locked?.length) ordered.locked = recipe.locked;
-  writeFileSync(file, `${JSON.stringify(ordered, null, 2)}\n`);
+  return `${JSON.stringify(ordered, null, 2)}\n`;
+}
+
+export function writeRecipe(file: string, recipe: SongRecipe): void {
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, recipeJson(recipe));
 }
 
 // Each setting's value and where it comes from.

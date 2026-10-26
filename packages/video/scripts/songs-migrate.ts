@@ -7,7 +7,7 @@ import { parseArgs } from "node:util";
 
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 
-import { applyMigration, BACKUP_REMINDER, migrationText, planMigration, undoMigration } from "../src/node";
+import { applyMigration, BACKUP_REMINDER, hasWork, migrationText, planMigration, undoMigration } from "../src/node";
 
 function fail(message: string): never {
   console.error(`\nError: ${message}`);
@@ -47,14 +47,15 @@ try {
   const lines = migrationText(plan);
   console.log(lines.join("\n"));
   if (!values.apply) {
-    if (plan.songs.length || plan.collections.length || plan.renames.length || plan.lyricsFixes.length) console.log("\nDry run: nothing was changed. Run pnpm songs:migrate --apply to move.");
+    if (hasWork(plan)) console.log("\nDry run: nothing was changed. Run pnpm songs:migrate --apply to move.");
     process.exit(0);
   }
-  if (!plan.songs.length && !plan.collections.length && !plan.renames.length && !plan.lyricsFixes.length) process.exit(0);
+  if (!hasWork(plan)) process.exit(0);
   if (plan.problems.length) fail("fix the problems above first; nothing was changed.");
   if (!values.yes && !(await ask(`\n${BACKUP_REMINDER}`))) fail("Nothing changed.");
   const r = await applyMigration(ws, { log: (m) => console.log(`  ${m}`) });
-  console.log(`\nDone: ${r.songs} song(s) and ${r.collections} collection(s) moved${r.renames ? `, ${r.renames} song folder(s) renamed` : ""}.`);
+  const extra = [r.merges ? `${r.merges} split song(s) merged` : "", r.renames ? `${r.renames} song folder(s) renamed` : "", r.repairs ? `${r.repairs} repair(s)` : ""].filter(Boolean);
+  console.log(`\nDone: ${r.songs} song(s) and ${r.collections} collection(s) moved${extra.length ? `, ${extra.join(", ")}` : ""}.`);
   console.log(`Backup of the database and settings: ${r.backupDir}`);
   console.log("Old manifests still re-render (the moves are recorded). To undo: pnpm songs:migrate --undo");
 } catch (error) {
