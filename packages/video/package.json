@@ -62,6 +62,8 @@
     "./exports": "./src/node/exports.ts",
     "./captions": "./src/node/captions.ts",
     "./posters": "./src/node/posters.ts",
-    "./project-settings": "./src/node/project-settings.ts"
+    "./project-settings": "./src/node/project-settings.ts",
+    "./runs": "./src/node/runs.ts",
+    "./run-worker": "./src/node/run-worker.ts"
   }
 }

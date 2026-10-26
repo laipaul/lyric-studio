@@ -73,8 +73,8 @@ beforeAll(() => {
   video(path.join(ex, "2026-10-26_0900", "reels"), 1, QA_PASS);
   writeFileSync(path.join(ex, "2026-10-26_0900", "reels", "v2.mp4"), "partial");
   writeFileSync(path.join(ex, "2026-10-26_0900", "song.lrc"), "[00:01.00]x\n");
-  for (const [status, pid] of [["done", 4242], ["rendering", 4242]] as const) {
-    const v = ws.db.insert(variation).values({ project_id: projectId, seed: 1, cut_rate: "1x", text_size: 64, colour: "#fff", cinematic_bars: false, overrides_json: { platform: "reels", run: `projects/${projectId}/exports/2026-10-26_0900` } }).returning().get();
+  for (const [status, pid, seed] of [["done", 4242, 1], ["rendering", 4242, 2]] as const) {
+    const v = ws.db.insert(variation).values({ project_id: projectId, seed, cut_rate: "1x", text_size: 64, colour: "#fff", cinematic_bars: false, overrides_json: { platform: "reels", run: `projects/${projectId}/exports/2026-10-26_0900` } }).returning().get();
     ws.db.insert(renderJob).values({ variation_id: v.id, status, pid }).run();
   }
 });
@@ -233,5 +233,18 @@ describe("the studio serves only export files and covers", async () => {
     expect(VIDEO_FILE.test(`projects/${id}/exports/2026-10-25_1751/reels/v1.srt`)).toBe(false);
     expect(TEMPLATE_FILE.test("brand/Pômé/publish-reels.txt")).toBe(true);
     expect(TEMPLATE_FILE.test("brand/brand.json")).toBe(false);
+  });
+});
+
+describe("a resumed run is no longer interrupted", () => {
+  it("interrupted / failed jobs count only until a later job makes the same video (same seed)", async () => {
+    const { unresolvedJobs } = await import("../src/node");
+    const jobs = [
+      { status: "done", seed: 1 },
+      { status: "interrupted", seed: 2 },
+      { status: "failed", seed: 3 },
+    ];
+    expect(unresolvedJobs(jobs).map((j) => j.seed)).toEqual([2, 3]);
+    expect(unresolvedJobs([...jobs, { status: "done", seed: 2 }]).map((j) => j.seed)).toEqual([3]); // Resume made v2
   });
 });

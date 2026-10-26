@@ -463,6 +463,35 @@ describe("failures, retry and --resume (stand-in renderer)", () => {
     expect(again.variations.every((v) => v.kept)).toBe(true);
   });
 
+  it("Stop (the studio): after the current video the rest is not started, their jobs are interrupted; Resume into that folder finishes it", async () => {
+    rendered.length = 0;
+    failures = {};
+    let started = 0;
+    const states: string[] = [];
+    const stopped = await run({
+      renderer: async (o) => {
+        started++;
+        return renderer(o);
+      },
+      shouldStop: () => started >= 2, // stop requested while v2 renders
+      onRenderProgress: (list) => states.splice(0, states.length, ...list.map((x) => `${x.platform}:${x.name}:${x.status}`)),
+      runId: "run-123",
+    });
+    expect(rendered.map((r) => r.name)).toEqual(["v1", "v2"]);
+    expect(states).toEqual(["standard:v1:done", "standard:v2:done", "standard:v3:stopped", "standard:v4:stopped"]);
+    const jobs = ws.db.select({ status: renderJob.status, error: renderJob.error, overrides: variation.overrides_json }).from(renderJob).innerJoin(variation, eq(renderJob.variation_id, variation.id)).all().filter((j) => j.overrides?.make_run === "run-123");
+    expect(jobs.map((j) => j.status).sort()).toEqual(["done", "done", "interrupted", "interrupted"]);
+
+    // A newer run exists; Resume of the stopped one (by its folder) renders only v3 and v4 there.
+    const newer = await run({ variations: 1 });
+    expect(newer.exportDir).not.toBe(stopped.exportDir);
+    rendered.length = 0;
+    const resumed = await run({ resume: true, resumeFolder: stopped.exportDir });
+    expect(resumed.exportDir).toBe(stopped.exportDir);
+    expect(rendered.map((r) => r.name)).toEqual(["v3", "v4"]);
+    await expect(run({ resume: true, resumeFolder: path.join(root, "elsewhere") })).rejects.toThrow(/is not a run folder of/);
+  });
+
   it("--resume refuses when the inputs changed since that run", async () => {
     rmSync(path.join(first.exportDir, "v4.mp4"));
     await expect(run({ resume: true, section: "0:02-0:06" })).rejects.toThrow(/--resume: the section changed .* run without --resume/);

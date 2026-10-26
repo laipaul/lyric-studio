@@ -84,10 +84,26 @@ export const runAlignCommand: AlignRunner = (a) =>
     const args = [path.join(REPO_ROOT, "services/audio/scripts/align.mjs"), a.song, a.lyrics, "--out", a.out, "--report", a.report, "--lang", a.lang];
     if (a.hint) args.push("--hint", a.hint);
     if (a.fresh) args.push("--fresh");
-    const child = spawn(process.execPath, args, { cwd: REPO_ROOT, stdio: "inherit", windowsHide: true });
+    // The output still shows as it comes (terminal), and its last lines go into the error, so the
+    // studio's Tasks menu can say why it failed (e.g. the AI packages are not installed).
+    const child = spawn(process.execPath, args, { cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    const tail: string[] = [];
+    const keep = (chunk: Buffer, to: NodeJS.WriteStream) => {
+      to.write(chunk);
+      for (const line of chunk.toString("utf8").split(/[\r\n]+/)) if (line.trim()) tail.push(line.trim());
+      tail.splice(0, Math.max(0, tail.length - 8));
+    };
+    child.stdout.on("data", (c: Buffer) => keep(c, process.stdout));
+    child.stderr.on("data", (c: Buffer) => keep(c, process.stderr));
     child.on("error", reject);
-    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error("pnpm align failed (see the messages above)."))));
+    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`pnpm align failed:\n${alignFailure(tail)}`))));
   });
+
+// The useful part of the aligner's last messages (not progress bars).
+export function alignFailure(lines: readonly string[]): string {
+  const useful = lines.filter((l) => !/^\d+%|it\/s\]$|^\[?[#=\-> ]+\]?$/.test(l));
+  return (useful.length ? useful : lines).slice(-4).join("\n") || "no message";
+}
 
 const stamp = (d: Date) => {
   const p = (n: number) => String(n).padStart(2, "0");
@@ -208,11 +224,15 @@ type StoredHint = { source: string; copy: string; sha256: string; stored_at: str
 // stored one is reused; --no-hint (or a lost copy) aligns without it, with a clear warning.
 // Stores a hints file (tapped times) with the project, as the first --hint does: later alignments
 // use it automatically. Returns the stored copy's name.
-export function storeProjectHint(ws: Workspace, projectId: string, hintFile: string): string {
+// `source`: how the hints are named in messages (default: the file's path).
+export function storeProjectHint(ws: Workspace, projectId: string, hintFile: string, source?: string): string {
   const dir = absPath(ws, `projects/${projectId}/lyrics`);
   mkdirSync(dir, { recursive: true });
   projectHint(dir, { hint: hintFile }, () => {}, []);
-  return (JSON.parse(readFileSync(path.join(dir, "hint.json"), "utf8")) as StoredHint).copy;
+  const record = path.join(dir, "hint.json");
+  const stored = JSON.parse(readFileSync(record, "utf8")) as StoredHint;
+  if (source) writeFileSync(record, `${JSON.stringify({ ...stored, source }, null, 2)}\n`);
+  return stored.copy;
 }
 
 function projectHint(

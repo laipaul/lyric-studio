@@ -1,9 +1,11 @@
 "use client";
 
+import { RotateCw } from "lucide-react";
 import { Popover } from "radix-ui";
 import { useRef, useState } from "react";
 
 import { CopyButton } from "@/components/copy-button";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export type BadgeStatus = "PASS" | "WARN" | "FAILED" | "interrupted" | "Rendering" | "none";
@@ -33,6 +35,7 @@ export function StatusBadge({
   children,
   details = [],
   resumeCommand,
+  resume,
   heading,
   className,
 }: {
@@ -40,9 +43,19 @@ export function StatusBadge({
   children: React.ReactNode;
   details?: string[];
   resumeCommand?: string | null;
+  resume?: { projectId: string; folder: string } | null; // one-click Resume (the worker makes the missing videos)
   heading?: string;
   className?: string;
 }) {
+  const [resumeState, setResumeState] = useState<string | null>(null);
+  const resumeNow = async () => {
+    if (!resume) return;
+    setResumeState("Queuing…");
+    const r = await fetch("/api/runs/resume", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(resume) });
+    const body = (await r.json()) as { error?: string };
+    setResumeState(r.ok ? "Queued: see Tasks for the progress." : (body.error ?? "Could not resume"));
+    if (r.ok) window.dispatchEvent(new Event("lyric-tasks-changed"));
+  };
   const [hover, setHover] = useState(false);
   const [pinned, setPinned] = useState(false);
   const leave = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -91,11 +104,24 @@ export function StatusBadge({
               <li key={i}>{d}</li>
             ))}
           </ul>
-          {resumeCommand ? (
+          {resume || resumeCommand ? (
             <div className="mt-3 flex flex-col gap-2 border-t pt-3">
-              <p>Resume: run this in the terminal to make only the missing videos (one click in Step 6.2b).</p>
-              <code className="bg-muted block rounded p-2 text-[11px] break-all">{resumeCommand}</code>
-              <CopyButton text={resumeCommand} label="Copy command" className="self-start" />
+              {resume ? (
+                <>
+                  <p>Make only the missing videos, into the same folder.</p>
+                  <Button size="sm" className="self-start" onClick={resumeNow} disabled={!!resumeState && resumeState !== "Could not resume"}>
+                    <RotateCw /> Resume
+                  </Button>
+                  {resumeState ? <p className="text-foreground">{resumeState}</p> : null}
+                </>
+              ) : null}
+              {resumeCommand ? (
+                <details>
+                  <summary className="cursor-pointer">or in the terminal</summary>
+                  <code className="bg-muted mt-2 block rounded p-2 text-[11px] break-all">{resumeCommand}</code>
+                  <CopyButton text={resumeCommand} label="Copy command" className="mt-2" />
+                </details>
+              ) : null}
             </div>
           ) : null}
         </Popover.Content>

@@ -23,6 +23,7 @@ export const CUT_RATES = ["0.5x", "1x", "2x", "off"] as const;
 // interrupted: the process rendering it is gone (stopped or crashed); "pnpm make --resume" continues.
 export const RENDER_STATUSES = ["queued", "rendering", "done", "failed", "interrupted"] as const;
 export const VIDEO_MARKS = ["generated", "approved", "discarded"] as const;
+export const RUN_STATUSES = ["queued", "running", "done", "failed", "stopped", "interrupted"] as const;
 export const TEXT_CASES = ["none", "upper", "lower", "title"] as const;
 export const ENERGY_LEVELS = ["low", "medium", "high"] as const;
 
@@ -30,6 +31,7 @@ export type ClipSource = (typeof CLIP_SOURCES)[number];
 export type CutRate = (typeof CUT_RATES)[number];
 export type RenderStatus = (typeof RENDER_STATUSES)[number];
 export type VideoMarkStatus = (typeof VIDEO_MARKS)[number];
+export type RunStatus = (typeof RUN_STATUSES)[number];
 export type TextCase = (typeof TEXT_CASES)[number];
 export type Energy = (typeof ENERGY_LEVELS)[number];
 
@@ -224,6 +226,38 @@ export const videoMark = sqliteTable(
   (t) => [index("video_mark_project").on(t.project_id), check("video_mark_status", inList("status", VIDEO_MARKS))],
 );
 
+// A "pnpm make" run started from the studio (Generate, Resume): queued, then done by the worker one at
+// a time. options_json: the choices; states_json: the videos with their progress (Tasks menu).
+export const makeRun = sqliteTable(
+  "make_run",
+  {
+    id: id(),
+    project_id: text("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    status: text("status", { enum: RUN_STATUSES }).notNull().default("queued"),
+    label: text("label").notNull(),
+    options_json: text("options_json", { mode: "json" }).notNull().$type<Record<string, unknown>>(),
+    progress: real("progress").notNull().default(0),
+    current: text("current"),
+    states_json: text("states_json", { mode: "json" }).$type<{ platform: string; name: string; status: string; progress: number }[]>(),
+    message: text("message"),
+    export_dir: text("export_dir"),
+    pid: integer("pid"),
+    stop_requested: integer("stop_requested", { mode: "boolean" }).notNull().default(false),
+    created_at: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    started_at: integer("started_at", { mode: "timestamp_ms" }),
+    finished_at: integer("finished_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [
+    index("make_run_status").on(t.status),
+    check("make_run_status_values", inList("status", RUN_STATUSES)),
+    check("make_run_progress", sql.raw("progress >= 0 and progress <= 1")),
+  ],
+);
+
 export const TABLES = {
   project,
   lyric_line: lyricLine,
@@ -235,10 +269,12 @@ export const TABLES = {
   variation,
   render_job: renderJob,
   video_mark: videoMark,
+  make_run: makeRun,
 } as const;
 
 export type Project = typeof project.$inferSelect;
 export type VideoMark = typeof videoMark.$inferSelect;
+export type MakeRun = typeof makeRun.$inferSelect;
 export type LyricLine = typeof lyricLine.$inferSelect;
 export type Beat = typeof beat.$inferSelect;
 export type Section = typeof section.$inferSelect;

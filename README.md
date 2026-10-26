@@ -113,6 +113,27 @@ every artist used so far) and the EP are optional. Everything is stored with the
 `pnpm make` uses it too (the hints, the EP, the cover). Adding the same song again (even under another
 file name) updates that song instead of making a second one.
 
+### Generate videos (song page)
+
+Open a song and use **Generate videos** at the top: choose the platforms (with how many videos each
+makes), the clips collection (the last one used is preselected), the verse and hook effects (your
+brand's defaults preselected), and if you like a new title, artist, EP or cover. **Advanced**: videos
+per platform, section (auto / full / 0:11-1:10), YouTube layout, allow fill, align the lyrics again.
+Press **Generate**: the worker makes the videos in the background (the same as `pnpm make`; one run at
+a time, others wait in line), and they appear on the page when they are done.
+
+**Tasks** (top right, with the number of running tasks): every run with its progress ("Reels v2: 45%
+(2 of 3)"), then the result ("3 videos: 2 PASS, 1 WARN") or why it failed. **Stop after this video**
+finishes the video being made and keeps everything done so far; a waiting run is cancelled.
+Runs started with `pnpm make` in the terminal show here too while they render.
+
+**Resume**: a stopped or interrupted run has an orange "interrupted" badge; click it and press
+**Resume** to make only the missing videos, into the same folder (also for runs started in the
+terminal; the command to do it there is shown as well).
+
+The song needs its `lyrics.txt` in the app: songs added with **+ New song** have it; for a song made
+only from the terminal, add it once with **+ New song** (same song file and lyrics: it updates the song).
+
 ### Song page
 
 Click a song card. You see every run of the song, also the ones made with `pnpm make` in the
@@ -126,9 +147,8 @@ terminal, newest first, grouped by platform:
   one timeline (sound from the first), with what differs highlighted (style, order, effects, bars, QA).
 - **Post** ("ready to post"): the caption and hashtags to copy, the video / .srt / (YouTube) thumbnail
   and publish.txt to download, and **Open folder** (Explorer with the file selected).
-- **Interrupted** (orange "!"): a run that was stopped (window closed, PC restarted). It never shows
-  "rendering" forever; the badge shows which videos are missing and the exact command to finish them
-  (`... --resume`; one click from Step 6.2b).
+- **Interrupted** (orange "!"): a run that was stopped (Stop, window closed, PC restarted). It never
+  shows "rendering" forever; the badge shows which videos are missing and a **Resume** button.
 
 Captions come from text templates per platform, per artist: `workspace\brand\publish-reels.txt`,
 `publish-tiktok.txt`, `publish-shorts.txt` (English defaults, made the first time). For an artist's

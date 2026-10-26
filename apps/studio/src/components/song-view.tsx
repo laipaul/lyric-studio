@@ -54,7 +54,7 @@ export function SongView({ projectId, songTitle, runs }: { projectId: string; so
   const compareVideos = selected.map((id) => allVideos.find((v) => v.id === id)).filter((v): v is VideoInfo => !!v);
 
   if (!runs.length) {
-    return <div className="text-muted-foreground flex h-48 items-center justify-center rounded-xl border border-dashed text-sm">No videos yet. Generate them with pnpm make (from the app in Step 6.2b).</div>;
+    return <div className="text-muted-foreground flex h-48 items-center justify-center rounded-xl border border-dashed text-sm">No videos yet: choose the platforms above and press Generate.</div>;
   }
 
   return (
@@ -100,7 +100,12 @@ export function SongView({ projectId, songTitle, runs }: { projectId: string; so
               <div key={p.name} data-platform-group={p.name} className="flex flex-col gap-3">
                 <div className="flex items-center gap-3">
                   <h3 className="font-display text-brand text-sm tracking-[0.14em] uppercase">{p.label}</h3>
-                  <StatusBadge status={p.state.status} details={p.state.details} resumeCommand={p.state.status === "interrupted" ? run.resumeCommand : null}>
+                  <StatusBadge
+                    status={p.state.status}
+                    details={p.state.details}
+                    resumeCommand={p.state.status === "interrupted" ? run.resumeCommand : null}
+                    resume={p.state.status === "interrupted" ? { projectId, folder: run.folder } : null}
+                  >
                     {p.state.status === "interrupted" ? "interrupted" : p.state.status}
                   </StatusBadge>
                 </div>

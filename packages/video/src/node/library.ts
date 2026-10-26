@@ -8,9 +8,11 @@ import { REPO_ROOT, absPath, project as projectTable, type Workspace } from "@ly
 import { eq } from "drizzle-orm";
 
 import { parsePresets } from "../platform";
-import { brandDir, DEFAULT_ARTIST } from "./brand";
+import { checkEffectChoice, choiceText, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, EFFECT_NAMES, type EffectChoice } from "../effects/names";
+import { brandDir, brandDirFor, DEFAULT_ARTIST } from "./brand";
 import { renderingPlatforms, SHORT_LABELS, songRuns, type PlatformRun } from "./exports";
-import { readProjectSettings, storeCover, storeLyricsTxt, updateProjectSettings } from "./project-settings";
+import { readProjectSettings, rememberedCollection, storeCover, storeLyricsTxt, updateProjectSettings } from "./project-settings";
+import { projectLyricsTxt } from "./runs";
 import { findOrCreateSongProject, storeProjectHint } from "./song-project";
 
 export type PlatformStatus = "PASS" | "WARN" | "FAILED" | "interrupted" | "Rendering" | "none";
@@ -22,6 +24,7 @@ export type PlatformCount = {
   runs: number;
   details: string[]; // why WARN / FAILED / interrupted (per video, from its QA report)
   resumeCommand: string | null; // interrupted: the command that finishes the run
+  resumeFolder: string | null; // interrupted: the run folder to resume (one click in the studio)
 };
 export type SongCard = {
   id: string;
@@ -67,8 +70,8 @@ export function songCard(ws: Workspace, p: typeof projectTable.$inferSelect, lab
   const platforms = labels.map(({ name, label }): PlatformCount => {
     const withIt = runs.map((r) => ({ run: r, pr: r.platforms.find((x) => x.name === name) })).filter((x) => x.pr);
     const latest = withIt[withIt.length - 1];
-    if (rendering.has(name)) return { name, label, videos: latest?.pr?.videos.length ?? 0, status: "Rendering", runs: withIt.length, details: ["rendering now"], resumeCommand: null };
-    if (!latest?.pr) return { name, label, videos: 0, status: "none", runs: 0, details: [], resumeCommand: null };
+    if (rendering.has(name)) return { name, label, videos: latest?.pr?.videos.length ?? 0, status: "Rendering", runs: withIt.length, details: ["rendering now"], resumeCommand: null, resumeFolder: null };
+    if (!latest?.pr) return { name, label, videos: 0, status: "none", runs: 0, details: [], resumeCommand: null, resumeFolder: null };
     const state = platformState(latest.pr);
     return {
       name,
@@ -78,6 +81,7 @@ export function songCard(ws: Workspace, p: typeof projectTable.$inferSelect, lab
       runs: withIt.length,
       details: state.details,
       resumeCommand: state.status === "interrupted" ? latest.run.resumeCommand : null,
+      resumeFolder: state.status === "interrupted" ? latest.run.folder : null,
     };
   });
   const settings = readProjectSettings(ws, p.id);
@@ -124,6 +128,7 @@ export type NewSongInput = {
   lyrics: string;
   cover?: string;
   hints?: string;
+  hintsName?: string; // the hints file's own name (the upload is saved under a temporary path)
   title?: string;
   artist?: string;
   ep?: string;
@@ -171,7 +176,7 @@ export async function createSong(ws: Workspace, input: NewSongInput): Promise<{ 
     updated.push("cover");
   }
   if (input.hints) {
-    storeProjectHint(ws, id, input.hints);
+    storeProjectHint(ws, id, input.hints, input.hintsName ? `${input.hintsName} (from "+ New song")` : undefined);
     updated.push("hints");
   }
   if (input.ep !== undefined && input.ep.trim() !== (readProjectSettings(ws, id).ep ?? "")) {
@@ -179,4 +184,56 @@ export async function createSong(ws: Workspace, input: NewSongInput): Promise<{ 
     updated.push("ep");
   }
   return { id, created: sp.created, updated };
+}
+
+export type GeneratePanelData = {
+  platforms: { name: string; label: string; variations: number; lyrics: boolean }[];
+  collections: string[]; // folders in WORKSPACE_DIR\clips
+  collection: string | null; // the one this song used last
+  effects: string[];
+  verseEffect: string; // the artist's brand defaults
+  hookEffect: string;
+  lyricsReady: boolean;
+  title: string;
+  artist: string;
+  ep: string;
+  artists: string[];
+};
+
+// What the song page's Generate panel offers, with this song's defaults.
+export function generatePanelData(ws: Workspace, p: typeof projectTable.$inferSelect): GeneratePanelData {
+  const file = path.join(REPO_ROOT, "presets", "platforms.json");
+  const presets = Object.values(parsePresets(JSON.parse(readFileSync(file, "utf8")), file)).filter((x) => x.available);
+  const clipsDir = absPath(ws, "clips");
+  const collections = existsSync(clipsDir) ? readdirSync(clipsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort((a, b) => a.localeCompare(b)) : [];
+  const remembered = rememberedCollection(ws, p.id);
+  if (remembered && !collections.includes(remembered.name)) collections.unshift(remembered.name);
+  const motion = brandMotion(ws.dir, p.artist);
+  return {
+    platforms: presets.map((x) => ({ name: x.name, label: SHORT_LABELS[x.name] ?? x.label, variations: x.variations, lyrics: x.lyrics })),
+    collections,
+    collection: remembered?.name ?? null,
+    effects: [...EFFECT_NAMES],
+    verseEffect: choiceText(motion.verseEffect),
+    hookEffect: choiceText(motion.hookEffect),
+    lyricsReady: !!projectLyricsTxt(ws, p.id),
+    title: p.title,
+    artist: p.artist,
+    ep: readProjectSettings(ws, p.id).ep ?? "",
+    artists: knownArtists(ws),
+  };
+}
+
+// The artist's motion defaults from brand.json (read directly; a broken file falls back to the defaults).
+function brandMotion(workspaceDir: string, artist: string): { verseEffect: EffectChoice; hookEffect: EffectChoice } {
+  const fallback = { verseEffect: DEFAULT_VERSE_EFFECT, hookEffect: DEFAULT_HOOK_EFFECT };
+  try {
+    const raw = JSON.parse(readFileSync(path.join(brandDirFor(workspaceDir, artist), "brand.json"), "utf8")) as { motion?: Record<string, unknown> };
+    return {
+      verseEffect: raw.motion?.verseEffect ? checkEffectChoice(raw.motion.verseEffect, "verse") : fallback.verseEffect,
+      hookEffect: raw.motion?.hookEffect ? checkEffectChoice(raw.motion.hookEffect, "hook") : fallback.hookEffect,
+    };
+  } catch {
+    return fallback;
+  }
 }

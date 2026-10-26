@@ -104,14 +104,21 @@ export function resumeCommandFor(command: string | null): string | null {
   return /\s--resume(\s|$)/.test(command) ? command : `${command} --resume`;
 }
 
-type JobRow = { status: string; error: string | null; started: Date | null; pid: number | null; overrides: Record<string, unknown> | null };
+type JobRow = { status: string; error: string | null; started: Date | null; pid: number | null; seed: number; overrides: Record<string, unknown> | null };
+
+// Jobs still in trouble: interrupted / failed ones whose video (same seed = same vN) has not been made
+// by a later job of the run (a Resume).
+export function unresolvedJobs<T extends { status: string; seed: number }>(jobs: readonly T[]): T[] {
+  const madeLater = new Set(jobs.filter((j) => j.status === "done").map((j) => j.seed));
+  return jobs.filter((j) => (j.status === "interrupted" || j.status === "failed") && !madeLater.has(j.seed));
+}
 
 // Every run of a song (oldest first) with its platforms and videos.
 export function songRuns(ws: Workspace, projectId: string, labels: Record<string, string> = SHORT_LABELS): RunInfo[] {
   markInterruptedJobs(ws);
   const marks = new Map(ws.db.select().from(videoMark).where(eq(videoMark.project_id, projectId)).all().map((m) => [m.video, m]));
   const jobs: JobRow[] = ws.db
-    .select({ status: renderJob.status, error: renderJob.error, started: renderJob.started_at, pid: renderJob.pid, overrides: variation.overrides_json })
+    .select({ status: renderJob.status, error: renderJob.error, started: renderJob.started_at, pid: renderJob.pid, seed: variation.seed, overrides: variation.overrides_json })
     .from(renderJob)
     .innerJoin(variation, eq(renderJob.variation_id, variation.id))
     .where(eq(variation.project_id, projectId))
@@ -174,14 +181,14 @@ export function songRuns(ws: Workspace, projectId: string, labels: Record<string
           mark: { favourite: mark?.favourite ?? false, status: mark?.status ?? "generated" },
         });
       }
-      const pj = runJobs(name);
+      const open = unresolvedJobs(runJobs(name));
       platforms.push({
         name,
         label: labels[name] ?? name,
         videos,
         missing,
-        interrupted: pj.some((j) => j.status === "interrupted"),
-        failed: pj.filter((j) => j.status === "failed").map((j) => j.error ?? "failed"),
+        interrupted: open.some((j) => j.status === "interrupted"),
+        failed: open.filter((j) => j.status === "failed").map((j) => j.error ?? "failed"),
       });
     }
     return { folder, time: since?.toISOString() ?? null, command, resumeCommand: resumeCommandFor(command), platforms };

@@ -15,8 +15,9 @@ const log = (m) => console.log(`[lyric-studio] ${m}`);
 function codeVersion() {
   try {
     const head = execSync("git rev-parse HEAD", { cwd: root }).toString().trim();
-    const changes = execSync("git status --porcelain -- apps/studio packages", { cwd: root }).toString();
-    return createHash("sha256").update(head).update(changes).digest("hex").slice(0, 16);
+    const files = execSync("git status --porcelain -- apps/studio packages", { cwd: root }).toString();
+    const changes = execSync("git diff HEAD -- apps/studio packages", { cwd: root, maxBuffer: 64 * 1024 * 1024 }).toString();
+    return createHash("sha256").update(head).update(files).update(changes).digest("hex").slice(0, 16);
   } catch {
     return "unknown";
   }

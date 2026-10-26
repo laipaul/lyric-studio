@@ -37,7 +37,7 @@ export function SongCard({ song }: { song: Song }) {
         <ul className="grid grid-cols-3 gap-1.5" aria-label="Videos per platform">
           {song.platforms.map((p) => (
             <li key={p.name} data-platform={p.name} title={p.status === "none" ? `${p.label}: not made yet` : undefined}>
-              <StatusBadge status={p.status} details={p.details} resumeCommand={p.resumeCommand} heading={`${p.label}: ${p.status === "interrupted" ? "interrupted" : `${p.videos} video(s), ${p.status}`}`}>
+              <StatusBadge status={p.status} details={p.details} resumeCommand={p.resumeCommand} resume={p.resumeFolder ? { projectId: song.id, folder: p.resumeFolder } : null} heading={`${p.label}: ${p.status === "interrupted" ? "interrupted" : `${p.videos} video(s), ${p.status}`}`}>
                 <span className="truncate">{p.label}</span>
                 <span className="font-medium tabular-nums">{p.status === "none" ? "—" : p.status === "Rendering" ? "…" : p.status === "interrupted" ? "!" : p.videos}</span>
               </StatusBadge>

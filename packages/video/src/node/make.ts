@@ -105,6 +105,9 @@ export type MakeOptions = {
   parallel?: number;
   frameCheck?: boolean; // default true
   resume?: boolean; // render only the missing or failed variations of the latest export folder
+  resumeFolder?: string; // with resume: this run folder of the project instead of the latest one
+  shouldStop?: () => boolean; // asked before each video starts: true = stop (the studio's Stop button)
+  runId?: string; // the studio's make_run (stored with the jobs, links them to the Tasks menu)
   workspaceDir?: string;
   command?: string;
   now?: Date;
@@ -140,7 +143,7 @@ export type MakePlan = {
   notes: string[];
 };
 
-export type RenderState = { name: string; status: "queued" | "rendering" | "checking" | "done" | "failed"; progress: number };
+export type RenderState = { platform: string; name: string; status: "queued" | "rendering" | "checking" | "done" | "failed" | "stopped"; progress: number };
 
 export type VariationSpec = { index: number; name: string; order: ClipOrder; seed: number; style: StyleChoice; bars: boolean };
 
@@ -453,9 +456,11 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     // The run's folder; --resume continues the latest one.
     let rootDir: string;
     if (options.resume) {
-      const latest = latestExportFolder(ws, project.id);
-      if (!latest) throw new Error("--resume: this project has no earlier export folder; run without --resume.");
-      rootDir = latest;
+      const exportsBase = absPath(ws, `projects/${project.id}/exports`);
+      const chosenFolder = options.resumeFolder ? path.resolve(options.resumeFolder) : latestExportFolder(ws, project.id);
+      if (!chosenFolder) throw new Error("--resume: this project has no earlier export folder; run without --resume.");
+      if (path.dirname(chosenFolder) !== path.resolve(exportsBase) || !existsSync(chosenFolder)) throw new Error(`--resume: ${chosenFolder} is not a run folder of "${project.title}".`);
+      rootDir = chosenFolder;
     } else {
       rootDir = exportFolder(ws, project.id, now);
     }
@@ -478,6 +483,14 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const results: PlatformResult[] = [];
     for (const [index, name] of chosenPlatforms.names.entries()) {
       const preset = presets[name];
+      if (options.shouldStop?.()) {
+        // Stopped before this platform started: nothing of it is made (Resume makes it later).
+        results.push({
+          name, label: preset.label, exportDir: platformDir(rootDir, name), section: { start_ms: 0, end_ms: 0, reason: "" },
+          limit: renderLimit({ platform: options.platform, requested: options.parallel }), variations: [], warnings: [], error: "stopped before it started",
+        });
+        continue;
+      }
       try {
         results.push(await makePlatform(shared, preset, { index, count: chosenPlatforms.names.length }));
       } catch (error) {
@@ -790,7 +803,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
     warnings: [...warnings],
     notes,
   });
-  const states: RenderState[] = specs.map((s) => ({ name: s.name, status: "queued", progress: 0 }));
+  const states: RenderState[] = specs.map((s) => ({ platform: preset.name, name: s.name, status: "queued", progress: 0 }));
   const report = () => options.onRenderProgress?.(states.map((s) => ({ ...s })));
   const results: VariationResult[] = allSpecs
     .filter((spec) => !specs.includes(spec))
@@ -822,6 +835,7 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
           font: options.font ?? null, font_hook: options.fontHook ?? null, lrc: alignment.lrcStored,
           line_effect: choiceText(fx.verse), hook_effect: choiceText(fx.hook),
           run: storedPath(ws, sh.rootDir), // the run folder (the studio links jobs to their videos)
+          ...(options.runId ? { make_run: options.runId } : {}),
         },
       })
       .returning()
@@ -838,6 +852,13 @@ async function makePlatform(sh: Shared, preset: PlatformPreset, position: { inde
   await runPool(jobs, limit.parallel, async ({ spec, props, jobId }) => {
     const state = states.find((st) => st.name === spec.name)!;
     const file = path.join(exportDir, `${spec.name}.mp4`);
+    if (options.shouldStop?.()) {
+      // Stopped: this video is not started; its job is "interrupted" so Resume makes it later.
+      state.status = "stopped";
+      report();
+      updateJob(jobId, { status: "interrupted", error: "stopped before it started (Resume makes it)", finished_at: new Date() });
+      return;
+    }
     const result: VariationResult = {
       ...spec,
       platform: preset.name,

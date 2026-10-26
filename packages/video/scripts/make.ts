@@ -7,11 +7,9 @@
 //   [--platforms reels,tiktok,shorts,youtube | all] [--allow-fill] [--title "Song title"]
 //   [--cover cover.jpg] [--layout cover|stills|clips] [--stills stills.txt] [--no-grain] [--no-glow] [--ep "EP name"] [--artist "Pômé"]
 // One command from a song to N finished variations with manifests and QA reports, per platform.
-import path from "node:path";
-import { parseArgs } from "node:util";
 
-import { clockText, type CutRate, type Energy } from "../src";
-import { failureSummary, makeVideos, openFolder, type RenderState } from "../src/node";
+import { clockText } from "../src";
+import { failureSummary, makeVideos, openFolder, parseMakeArgs, type RenderState } from "../src/node";
 
 function fail(message: string): never {
   console.error(`\nError: ${message}`);
@@ -20,73 +18,14 @@ function fail(message: string): never {
 
 let parsed;
 try {
-  parsed = parseArgs({
-    allowPositionals: true,
-    options: {
-      collection: { type: "string" },
-      "collection-path": { type: "string" },
-      variations: { type: "string" },
-      platforms: { type: "string" },
-      "allow-fill": { type: "boolean", default: false },
-      title: { type: "string" },
-      ep: { type: "string" },
-      artist: { type: "string" },
-      cover: { type: "string" },
-      layout: { type: "string" },
-      stills: { type: "string" },
-      "no-grain": { type: "boolean", default: false },
-      "no-glow": { type: "boolean", default: false },
-      section: { type: "string", default: "auto" },
-      hint: { type: "string" },
-      "no-hint": { type: "boolean", default: false },
-      realign: { type: "boolean", default: false },
-      lrc: { type: "string" },
-      lang: { type: "string", default: "en" },
-      rate: { type: "string", default: "1x" },
-      energy: { type: "string", default: "medium" },
-      lead: { type: "string", default: "0.25" },
-      "lyrics-offset": { type: "string" },
-      "downbeat-offset": { type: "string" },
-      font: { type: "string" },
-      "font-hook": { type: "string" },
-      "line-effect": { type: "string" },
-      "hook-effect": { type: "string" },
-      pins: { type: "string" },
-      parallel: { type: "string" },
-      "no-open": { type: "boolean", default: false },
-      "no-frame-check": { type: "boolean", default: false },
-      resume: { type: "boolean", default: false },
-    },
-  });
+  // Relative paths are relative to the folder the command was typed in.
+  parsed = parseMakeArgs(process.argv.slice(2), process.env.INIT_CWD ?? process.cwd());
 } catch (error) {
   fail((error as Error).message);
 }
-const { values, positionals } = parsed;
-
-if (positionals.length !== 2) fail('Usage: pnpm make <song> <lyrics.txt> --collection <name>   (e.g. pnpm make "workspace\\test\\song.wav" "workspace\\test\\lyrics.txt" --collection wedding)');
-const rate = values.rate as CutRate;
-if (!["0.5x", "1x", "2x", "off"].includes(rate)) fail("--rate must be 0.5x, 1x, 2x or off");
-const energy = values.energy as Energy;
-if (!["low", "medium", "high"].includes(energy)) fail("--energy must be low, medium or high");
-if (!["en", "fr"].includes(values.lang!)) fail("--lang must be en or fr");
-const variations = values.variations === undefined ? undefined : Number(values.variations);
-if (variations !== undefined && (!Number.isInteger(variations) || variations < 1 || variations > 24)) fail("--variations must be a whole number from 1 to 24");
-const seconds = (name: string, text: string) => {
-  const n = Number(text);
-  if (!Number.isFinite(n) || Math.abs(n) > 10) fail(`--${name} must be a number of seconds, e.g. 0.25 or -0.3`);
-  return Math.round(n * 1000);
-};
-const offset = values["downbeat-offset"] === undefined ? undefined : Number(values["downbeat-offset"]);
-if (offset !== undefined && ![0, 1, 2, 3].includes(offset)) fail("--downbeat-offset must be 0, 1, 2 or 3");
-const parallel = values.parallel === undefined ? undefined : Number(values.parallel);
-if (parallel !== undefined && (!Number.isInteger(parallel) || parallel < 1 || parallel > 6)) fail("--parallel must be a whole number from 1 to 6");
-if (values.realign && values.lrc) fail("--realign and --lrc cannot be used together");
-if (values.hint && values["no-hint"]) fail("--hint and --no-hint cannot be used together");
-if (values.layout && !["cover", "stills", "clips"].includes(values.layout)) fail("--layout must be cover, stills or clips");
-
-// Relative paths are relative to the folder the command was typed in.
-const userCwd = process.env.INIT_CWD ?? process.cwd();
-const resolve = (p?: string) => (p ? path.resolve(userCwd, p) : undefined);
+const { options, noOpen } = parsed;
+const rate = options.rate;
+const energy = options.energy;
 const log = (m: string) => console.log(`  ${m}`);
 
 const pad = (text: string, width: number) => text.padEnd(width);
@@ -108,46 +47,12 @@ console.log("Preparing");
 let result;
 try {
   result = await makeVideos({
-    song: resolve(positionals[0])!,
-    lyrics: resolve(positionals[1])!,
-    collection: values.collection,
-    collectionPath: resolve(values["collection-path"]),
-    variations,
-    platforms: values.platforms,
-    allowFill: values["allow-fill"],
-    title: values.title,
-    ep: values.ep,
-    artist: values.artist,
-    cover: resolve(values.cover),
-    layout: values.layout as "cover" | "stills" | "clips" | undefined,
-    stills: resolve(values.stills),
-    grain: values["no-grain"] ? false : undefined,
-    glow: values["no-glow"] ? false : undefined,
-    section: values.section,
-    hint: resolve(values.hint),
-    noHint: values["no-hint"],
-    realign: values.realign,
-    lrc: resolve(values.lrc),
-    lang: values.lang,
-    rate,
-    energy,
-    leadMs: seconds("lead", values.lead!),
-    lyricsOffsetMs: values["lyrics-offset"] === undefined ? undefined : seconds("lyrics-offset", values["lyrics-offset"]),
-    downbeatOffset: offset,
-    font: values.font,
-    fontHook: values["font-hook"],
-    lineEffect: values["line-effect"],
-    hookEffect: values["hook-effect"],
-    pins: resolve(values.pins),
-    parallel,
-    frameCheck: !values["no-frame-check"],
-    resume: values.resume,
+    ...options,
     onRetry: (name, error, concurrency) => {
       process.stdout.write("\n");
       console.log(`  ${name} failed (${error.split("\n")[0]}); retrying once with ${concurrency} frame${concurrency > 1 ? "s" : ""} in parallel and a smaller clip cache`);
       lastLine = "";
     },
-    command: `pnpm make ${process.argv.slice(2).map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ")}`,
     log,
     onReady: (p) => {
       const c = p.collection;
@@ -232,7 +137,7 @@ console.log("Captions:  a .srt next to every video (v1.srt, ...)");
 for (const v of result.variations.filter((x) => x.thumbnailFile && !x.error)) {
   console.log(`YouTube:   ${v.thumbnailFile} (1280x720) and ${v.publishFile} (title, description, tags)`);
 }
-if (!values["no-open"]) openFolder(result.exportDir);
+if (!noOpen) openFolder(result.exportDir);
 const failures = failureSummary(result);
 if (failures) {
   console.log("");

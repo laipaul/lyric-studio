@@ -21,6 +21,9 @@ export function openDb(workspaceDir: string): Db {
   mkdirSync(workspaceDir, { recursive: true });
   const sqlite = new Database(dbFile(workspaceDir));
   sqlite.pragma("journal_mode = WAL");
+  // The studio, the worker and a "pnpm make" in the terminal share the file: wait for a moment
+  // instead of failing when another one is writing.
+  sqlite.pragma("busy_timeout = 5000");
   sqlite.pragma("foreign_keys = ON");
   return drizzle(sqlite, { schema }) as Db;
 }

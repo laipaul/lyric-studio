@@ -6,15 +6,16 @@ import { Suspense } from "react";
 
 import { project } from "@lyric/db";
 import { songRuns } from "@lyric/video/exports";
-import { platformLabels, platformState, songCard } from "@lyric/video/library";
+import { generatePanelData, platformLabels, platformState, songCard } from "@lyric/video/library";
 import { eq } from "drizzle-orm";
 
+import { GeneratePanel } from "@/components/generate-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { SongView, type RunView } from "@/components/song-view";
 import { withWorkspace } from "@/lib/workspace";
 
 // The song page: header and every video made for it (exports grid, marks, compare, ready to post).
-// The Generate panel and live progress arrive in Step 6.2b.
+// Generate panel (the worker makes the videos; progress in the Tasks menu).
 export default function SongPage({ params }: { params: Promise<{ id: string }> }) {
   return (
     <Suspense fallback={<div className="text-muted-foreground p-8 text-sm">Loading…</div>}>
@@ -34,10 +35,10 @@ async function Song({ params }: { params: Promise<{ id: string }> }) {
       ...r,
       platforms: r.platforms.map((pr) => ({ ...pr, state: platformState(pr) })),
     }));
-    return { song: songCard(ws, p, labels), runs };
+    return { song: songCard(ws, p, labels), runs, panel: generatePanelData(ws, p) };
   });
   if (!data) notFound();
-  const { song, runs } = data;
+  const { song, runs, panel } = data;
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 p-8">
       <Link href="/" className="text-muted-foreground hover:text-foreground flex w-fit items-center gap-1 text-sm">
@@ -61,7 +62,7 @@ async function Song({ params }: { params: Promise<{ id: string }> }) {
               .filter((p) => p.status !== "none")
               .map((p) => (
                 <li key={p.name}>
-                  <StatusBadge status={p.status} details={p.details} resumeCommand={p.resumeCommand} heading={`${p.label}: latest run`}>
+                  <StatusBadge status={p.status} details={p.details} resumeCommand={p.resumeCommand} resume={p.resumeFolder ? { projectId: song.id, folder: p.resumeFolder } : null} heading={`${p.label}: latest run`}>
                     <span>{p.label}</span>
                     <span className="ml-2 font-medium tabular-nums">{p.status === "interrupted" ? "!" : p.status === "Rendering" ? "…" : p.videos}</span>
                   </StatusBadge>
@@ -70,6 +71,7 @@ async function Song({ params }: { params: Promise<{ id: string }> }) {
           </ul>
         </div>
       </div>
+      <GeneratePanel projectId={song.id} data={panel} open={!runs.length} />
       <SongView projectId={song.id} songTitle={song.title} runs={runs} />
     </div>
   );

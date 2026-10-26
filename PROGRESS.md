@@ -494,6 +494,36 @@ Cause: a line was treated as sung until the next line started (and the next line
   Cloud check: browser run on a workspace with 14 runs (badges, reasons on hover and click,
   interrupted resume, marks, discard / restore, compare playing in sync, post window, download).
 
+### Step 6.2b — Generate, worker queue, live Tasks menu, Stop / Resume ✅ (to verify on the Windows PC)
+- Generate panel on the song page: platforms (videos each), clips collection (last used first),
+  verse / hook effect + intensity (the artist's brand defaults), title / artist / EP / new cover;
+  advanced: videos per platform, section, YouTube layout, allow fill, re-align. Checked before it is
+  queued (clear messages); a song without its lyrics.txt in the app says how to add it.
+- Worker: takes the oldest queued run when none is running and makes it with makeVideos (same code as
+  pnpm make; jobs linked to the run), writes progress at most once a second, records the result
+  ("3 videos: 2 PASS, 1 WARN", or why it failed), never leaves jobs "rendering" after a crash. Runs
+  whose worker is gone become "interrupted".
+- Tasks menu (header, with a count): studio runs (waiting, making with "Reels v2: 45% (2 of 3)", done /
+  failed / stopped / interrupted for 24 h) and terminal runs rendering right now; Stop after this video
+  (a waiting run is cancelled); the page refreshes itself when a run finishes.
+- Resume (one click on an interrupted badge, also on the Library cards): queues only the missing
+  videos into the same folder: studio runs with their stored options, terminal runs from the command
+  in their manifests (moved song / lyrics replaced by the project's copies). A resumed run's badge goes
+  back to PASS / WARN (an interrupted job counts only until a later job makes the same video).
+- `pnpm make` options parsing shared (make-args.ts) between the command and Resume; new makeVideos
+  options shouldStop / resumeFolder / runId; database busy timeout (studio, worker and terminal share
+  the file); the aligner's last messages now go into its error (the Tasks menu says e.g. "AI packages
+  not installed: pnpm audio:setup --ai" instead of "see the messages above"); hints added in
+  "+ New song" are named by their file, not the temporary upload path.
+- New table make_run (migration 0004).
+- Tests: argument parsing (also stored commands with quotes), Generate request checks and options,
+  queue (one at a time, oldest first, dead worker -> interrupted), Stop (queued / running), worker
+  execution (progress, result, stop, failure), resume options (terminal and studio runs), Tasks list
+  (studio + terminal), Stop in makeVideos (rest interrupted) and Resume into an older folder,
+  superseded interrupted jobs, aligner messages. Cloud check: Generate in the browser -> worker ->
+  live Tasks -> Stop after v1 -> Resume -> v2 made in the same folder, badge PASS; a terminal run shown
+  in Tasks while rendering.
+
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -507,6 +537,12 @@ Cause: a line was treated as sung until the next line started (and the next line
 - `pnpm lrc:shift`, `pnpm lrc:hook`, `pnpm fonts`.
 - `pnpm audio:setup --ai`, `pnpm align` (GPU path to be verified on the Windows PC).
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
+
+## Backlog (not scheduled yet)
+- **Effects page**: a gallery of all lyric effects (later also ambient effects and loop scenes) with
+  animated previews rendered on a line of the selected song (cached), an intensity selector, "set as
+  default for <artist>" for verses and hooks (writes brand.json), effect descriptions and which
+  platforms use each effect.
 
 ## Known issues
 - TikTok (target 25 s) ended at 31.6 s like Reels on the user's song (most likely no bar inside a gap
@@ -548,9 +584,8 @@ Cause: a line was treated as sung until the next line started (and the next line
 - The workspace service is used by tests only so far; commands and UI that use it come in later steps.
 
 ## Next
-1. Verify Step 6.2a on the PC.
-2. Step 6.2b (worker queue, Generate panel, live Tasks menu, one-click resume), then 6.3 (content
-   board with manually entered results).
+1. Verify Steps 6.2a and 6.2b on the PC.
+2. Step 6.3 (content board with manually entered results).
 3. Step 5g.4 (loop layout).
 4. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project
    (confirmed by the user) and plug into the same render-time layer as the lyrics offset.

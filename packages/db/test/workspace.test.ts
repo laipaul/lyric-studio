@@ -40,7 +40,7 @@ afterAll(() => {
 });
 
 describe("database", () => {
-  it("creates all 10 tables from the migrations", () => {
+  it("creates all 11 tables from the migrations", () => {
     const rows = ws.db.$client
       .prepare("select name from sqlite_master where type = 'table' and name not like '\\_\\_%' escape '\\' and name != 'sqlite_sequence'")
       .all() as { name: string }[];

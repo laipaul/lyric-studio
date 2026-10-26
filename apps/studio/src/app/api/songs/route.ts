@@ -28,7 +28,15 @@ export async function POST(request: Request) {
     };
     const files = { song: await save("song"), lyrics: await save("lyrics"), cover: await save("cover"), hints: await save("hints") };
     const result = await withWorkspaceAsync((ws) =>
-      createSong(ws, { ...files, song: files.song ?? "", lyrics: files.lyrics ?? "", title: text("title"), artist: text("artist"), ep: text("ep") }),
+      createSong(ws, {
+        ...files,
+        song: files.song ?? "",
+        lyrics: files.lyrics ?? "",
+        hintsName: form.get("hints") instanceof File ? (form.get("hints") as File).name : undefined,
+        title: text("title"),
+        artist: text("artist"),
+        ep: text("ep"),
+      }),
     );
     return Response.json(result);
   } catch (error) {
