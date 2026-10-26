@@ -3,7 +3,7 @@
 // changes nothing, --apply keeps the database consistent and old manifests re-render identically,
 // --undo puts everything back.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -85,6 +85,11 @@ beforeAll(async () => {
     align: fakeAlign,
   });
   manifestRel = path.relative(wsDir, made.variations[0].manifestFile).split(path.sep).join("/");
+  // A newer lyrics copy that no video was made with (e.g. a run that failed): the migration must
+  // still take the lyrics of the newest video.
+  const decoy = path.join(wsDir, "projects", projectId, "lyrics", "lyrics-0123456789ab.txt");
+  writeFileSync(decoy, "Some draft words\n");
+  utimesSync(decoy, new Date(Date.now() + 60_000), new Date(Date.now() + 60_000));
   setVideoMark(ws, projectId, manifestRel, { favourite: true });
 }, 600_000);
 afterAll(() => {
@@ -139,6 +144,22 @@ describe("pnpm songs:migrate", () => {
     expect(migrationText(planMigration(ws))[0]).toMatch(/^Nothing to migrate/);
   });
 
+  it("a lyrics.txt an earlier migration took from the wrong copy is put right (unless changed since)", async () => {
+    const song = path.join(wsDir, "songs", "Pômé", "Old Song");
+    const lyrics = path.join(song, "lyrics.txt");
+    writeFileSync(lyrics, "Some draft words\n"); // what the first version of the migration could write
+    const journal = path.join(readdirSync(path.join(wsDir, "migrations")).map((d) => path.join(wsDir, "migrations", d))[0], "journal.json");
+    const finished = Date.parse(JSON.parse(readFileSync(journal, "utf8")).finished_at);
+    utimesSync(lyrics, new Date(finished - 1000), new Date(finished - 1000)); // untouched since the migration
+    const plan = planMigration(ws);
+    expect(plan.lyricsFixes.map((f) => [f.title, f.file])).toEqual([["Old Song", "songs/Pômé/Old Song/lyrics.txt"]]);
+    expect(migrationText(plan).join("\n")).toContain('Lyrics "Old Song": songs\\Pômé\\Old Song\\lyrics.txt gets the lyrics of its newest video');
+    await applyMigration(ws);
+    expect(readFileSync(lyrics, "utf8")).toBe(`${LYRICS.join("\n")}\n`);
+    expect(readdirSync(path.join(song, ".studio", "replaced")).some((f) => f.endsWith("-lyrics.txt"))).toBe(true);
+    expect(planMigration(ws).lyricsFixes).toEqual([]); // changed now: never again
+  });
+
   it("an old manifest (paths unchanged inside) still re-renders, frame for frame", async () => {
     const manifestFile = path.join(wsDir, ...manifestRel.replace(`projects/${projectId}/exports`, "songs/Pômé/Old Song/exports").split("/"));
     expect(readManifest(manifestFile).song.file).toMatch(new RegExp(`^projects/${projectId}/audio/`)); // never edited
@@ -166,9 +187,25 @@ describe("pnpm songs:migrate", () => {
     rmSync(r.exportDir, { recursive: true });
   });
 
+  it("changed lyrics are aligned again, and the log says which line differs from the stored alignment", async () => {
+    const changed = path.join(root, "changed-lyrics.txt");
+    writeFileSync(changed, `${LYRICS.join("\n").replace("Through the night", "Through the long night")}\n`);
+    const logs: string[] = [];
+    const r = await makeVideos({
+      workspaceDir: wsDir, song: path.join(inDir, "song.wav"), lyrics: changed, platforms: "reels", variations: 1, section: "0:02-0:06",
+      align: fakeAlign, frameCheck: false, renderer: async (o) => (writeFileSync(o.outFile, "mp4"), o.outFile), log: (m) => logs.push(m),
+    });
+    expect(logs.some((l) => l.startsWith("lyrics: no stored alignment for these words"))).toBe(true);
+    expect(logs.find((l) => l.includes("First difference"))).toMatch(/line 3: now "Through the long night", stored "Through the night"/);
+    rmSync(r.exportDir, { recursive: true });
+  });
+
   it("--undo puts the files and the database back as before", () => {
     ws.close();
-    const r = undoMigration(wsDir);
+    const fix = undoMigration(wsDir); // the lyrics repair first (the newest --apply) ...
+    expect(fix.steps).toBe(1);
+    expect(readFileSync(path.join(wsDir, "songs", "Pômé", "Old Song", "lyrics.txt"), "utf8")).toBe("Some draft words\n");
+    const r = undoMigration(wsDir); // ... then the migration itself
     expect(r.steps).toBeGreaterThan(3);
     ws = openWorkspace(wsDir);
     const p = ws.db.select().from(project).where(eq(project.id, projectId)).get()!;

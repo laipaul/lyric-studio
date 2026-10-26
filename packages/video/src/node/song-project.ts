@@ -12,7 +12,7 @@
 // (the project's lyrics offset, and per-line overrides in Step 5e) are applied at render time.
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { REPO_ROOT, absPath, createProject, project as projectTable, type Project, type Workspace } from "@lyric/db";
@@ -167,6 +167,7 @@ export async function ensureAlignment(
       for (let n = 2; existsSync(path.join(dir, name)); n++) name = `aligned-${key}-${stamp(options.now ?? new Date())}-${n}.lrc`;
       const tmpLrc = path.join(dir, `.${name}.part`);
       const tmpReport = path.join(dir, `.${name}.report.part`);
+      if (!stored.length) for (const line of whyNotStored(dir, txtContent.toString("utf8"), hint?.hash ?? "", lang)) log(`lyrics: ${line}`);
       log(`lyrics: aligning ${path.basename(options.lyricsTxt)} with pnpm align${hint ? ` (hint ${path.basename(hint.file)})` : ""}`);
       try {
         await (options.align ?? runAlignCommand)({
@@ -209,6 +210,46 @@ export async function ensureAlignment(
     lines,
     warnings,
   };
+}
+
+// Why a song with stored alignments is aligned again: which input differs from the newest one
+// (its lyrics words, the hints or the language). Lines to print; empty when nothing was stored.
+export function whyNotStored(dir: string, lyricsText: string, hintHash: string, lang: string): string[] {
+  const aligned = readdirSync(dir)
+    .filter((f) => /^aligned-[0-9a-f]{12}-.*\.lrc$/.test(f))
+    .sort((a, b) => statSync(path.join(dir, b)).mtimeMs - statSync(path.join(dir, a)).mtimeMs);
+  if (!aligned.length) return [];
+  const keyOf = (words: string, h: string, l: string) => sha256(`v${ALIGN_STORE_VERSION}|${sha256(words)}|${h}|${l}`).slice(0, 12);
+  const keys = new Set(aligned.map((f) => f.slice("aligned-".length, "aligned-".length + 12)));
+  const copies = readdirSync(dir)
+    .filter((f) => /^lyrics-[0-9a-f]{12}\.txt$/.test(f))
+    .sort((a, b) => statSync(path.join(dir, b)).mtimeMs - statSync(path.join(dir, a)).mtimeMs);
+  const words = wordsOfLyrics(lyricsText);
+  const out = [`no stored alignment for these words, hints and language (${aligned.length} stored for this song), so it aligns again (never overwritten).`];
+  const hints = [hintHash, ""];
+  for (const f of readdirSync(dir).filter((x) => /^hints-[0-9a-f]{12}\.lrc$/.test(x))) hints.push(sha256(readFileSync(path.join(dir, f))));
+  if (hints.some((h) => h !== hintHash && keys.has(keyOf(words, h, lang)))) {
+    out.push("the same words were aligned with other hints before: the stored hints changed (or --no-hint / --hint).");
+    return out;
+  }
+  if (["en", "fr"].some((l) => l !== lang && keys.has(keyOf(words, hintHash, l)))) {
+    out.push(`the same words were aligned in another language before (not --lang ${lang}).`);
+    return out;
+  }
+  for (const c of copies) {
+    const other = wordsOfLyrics(readFileSync(path.join(dir, c), "utf8"));
+    if (other === words || !hints.some((h) => keys.has(keyOf(other, h, lang)))) continue;
+    const a = words.split("\n");
+    const b = other.split("\n");
+    const i = a.findIndex((line, n) => line !== b[n]);
+    const at = i < 0 ? b.length : i;
+    out.push(
+      `the stored alignment was made from other words (${path.join(dir, c)}). First difference, line ${at + 1}: ` +
+        `now "${a[at] ?? "(no line)"}", stored "${b[at] ?? "(no line)"}". Use those words again to reuse it.`,
+    );
+    return out;
+  }
+  return out;
 }
 
 // lyrics.txt without its hook markers: what the alignment depends on.

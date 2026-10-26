@@ -47,10 +47,10 @@ try {
   const lines = migrationText(plan);
   console.log(lines.join("\n"));
   if (!values.apply) {
-    if (plan.songs.length || plan.collections.length || plan.renames.length) console.log("\nDry run: nothing was changed. Run pnpm songs:migrate --apply to move.");
+    if (plan.songs.length || plan.collections.length || plan.renames.length || plan.lyricsFixes.length) console.log("\nDry run: nothing was changed. Run pnpm songs:migrate --apply to move.");
     process.exit(0);
   }
-  if (!plan.songs.length && !plan.collections.length && !plan.renames.length) process.exit(0);
+  if (!plan.songs.length && !plan.collections.length && !plan.renames.length && !plan.lyricsFixes.length) process.exit(0);
   if (plan.problems.length) fail("fix the problems above first; nothing was changed.");
   if (!values.yes && !(await ask(`\n${BACKUP_REMINDER}`))) fail("Nothing changed.");
   const r = await applyMigration(ws, { log: (m) => console.log(`  ${m}`) });

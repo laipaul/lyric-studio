@@ -14,7 +14,8 @@ import { eq } from "drizzle-orm";
 
 import { processAlive } from "./jobs";
 import { writeRecipe, type SongRecipe } from "./recipe";
-import { COLLECTIONS_DIR, holdsNoFiles, moveEntry, readMoves, relocatePaths, removeEmptyDirs, songBusy, songFolderFor, STUDIO_DIR, writeMoves } from "./song-folder";
+import { keepReplaced } from "./project-settings";
+import { COLLECTIONS_DIR, holdsNoFiles, movesSince, resolveMoved, moveEntry, readMoves, relocatePaths, removeEmptyDirs, songBusy, songFolderFor, STUDIO_DIR, writeMoves } from "./song-folder";
 
 export const MIGRATIONS_DIR = "migrations"; // WORKSPACE_DIR\migrations\<date>\: backups and journals
 export const BACKUP_REMINDER = "Make sure your regular backup is recent before continuing (y/n)";
@@ -33,6 +34,7 @@ export type MigrationPlan = {
   songs: PlannedSong[];
   collections: PlannedMove[];
   renames: PlannedMove[]; // song folders that got " (2)" because the name was taken, now free again
+  lyricsFixes: { title: string; file: string; from: string }[]; // lyrics.txt written by an earlier migration from the wrong copy
   problems: string[]; // things that stop --apply
   notes: string[]; // left as they are
 };
@@ -44,6 +46,7 @@ export function planMigration(ws: Workspace): MigrationPlan {
     songs: [],
     collections: [],
     renames: [],
+    lyricsFixes: [],
     problems: [],
     notes: [],
   };
@@ -74,6 +77,7 @@ export function planMigration(ws: Workspace): MigrationPlan {
       plan.notes.push(`${win(base)}\\ was not made by Lyric Studio and has files in it, so "${p.title}" is in ${win(p.folder)}\\. Move what you need from it, delete or rename it, then run pnpm songs:migrate --apply again to tidy the name.`);
     }
   }
+  plan.lyricsFixes = lyricsFixes(ws);
   // Songs: projects\<id>\ -> songs\<artist>\<title>\.
   const taken = new Set<string>();
   for (const p of ws.db
@@ -182,12 +186,17 @@ function storedHint(ws: Workspace, from: string): string | null {
 
 // The lyrics.txt an old project uses: settings.json, else the newest copy in its lyrics folder.
 function legacyLyrics(ws: Workspace, from: string): Buffer | null {
+  // The lyrics the newest video was made with (its manifest names them); a lyrics.txt given later in
+  // the studio ("+ New song") wins when it is newer than that video.
+  const newest = newestVideoLyrics(absPath(ws, `${from}/exports`), absPath(ws, `${from}/lyrics`));
   try {
     const s = JSON.parse(readFileSync(absPath(ws, `${from}/settings.json`), "utf8")) as { lyricsTxt?: string };
-    if (s.lyricsTxt && existsSync(absPath(ws, s.lyricsTxt))) return readFileSync(absPath(ws, s.lyricsTxt));
+    const given = s.lyricsTxt ? absPath(ws, s.lyricsTxt) : null;
+    if (given && existsSync(given) && (!newest || statSync(given).mtimeMs > newest.madeAt)) return readFileSync(given);
   } catch {
     // no settings
   }
+  if (newest) return readFileSync(newest.file);
   const dir = absPath(ws, `${from}/lyrics`);
   if (!existsSync(dir)) return null;
   const copies = readdirSync(dir)
@@ -197,13 +206,73 @@ function legacyLyrics(ws: Workspace, from: string): Buffer | null {
   return copies.length ? readFileSync(copies[0]) : null;
 }
 
+// The stored copy of the lyrics.txt the newest video of a song was made with (from its manifest's
+// lyrics.txt_sha256), or null.
+export function newestVideoLyrics(exportsDir: string, storeDir: string, before = Infinity): { file: string; madeAt: number } | null {
+  if (!existsSync(exportsDir)) return null;
+  const runs = readdirSync(exportsDir)
+    .filter((d) => /^\d{4}-\d{2}-\d{2}_\d{4}(-\d+)?$/.test(d))
+    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+  for (const run of runs) {
+    const dir = path.join(exportsDir, run);
+    const manifests = [dir, ...readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path.join(dir, d.name))]
+      .flatMap((d) => readdirSync(d).filter((f) => /^v\d+\.manifest\.json$/.test(f)).map((f) => path.join(d, f)))
+      .map((f) => {
+        try {
+          return JSON.parse(readFileSync(f, "utf8")) as { created_at?: string; lyrics?: { txt_sha256?: string } };
+        } catch {
+          return null;
+        }
+      })
+      .filter((m) => m?.lyrics?.txt_sha256 && (Date.parse(m.created_at ?? "") || 0) < before)
+      .sort((a, b) => String(b!.created_at).localeCompare(String(a!.created_at)));
+    for (const m of manifests) {
+      const file = path.join(storeDir, `lyrics-${m!.lyrics!.txt_sha256!.slice(0, 12)}.txt`);
+      if (existsSync(file)) return { file, madeAt: Date.parse(m!.created_at ?? "") || 0 };
+    }
+  }
+  return null;
+}
+
+// Earlier migrations wrote lyrics.txt from the newest lyrics copy, which is not always the version the
+// newest video used. A lyrics.txt that no one changed since the migration wrote it, and that differs
+// from the lyrics of the song's newest video made before that migration, is put right.
+function lyricsFixes(ws: Workspace): MigrationPlan["lyricsFixes"] {
+  const fixes: MigrationPlan["lyricsFixes"] = [];
+  const base = path.join(ws.dir, MIGRATIONS_DIR);
+  if (!existsSync(base)) return fixes;
+  for (const d of readdirSync(base)) {
+    let journal: Journal;
+    try {
+      journal = JSON.parse(readFileSync(path.join(base, d, "journal.json"), "utf8")) as Journal;
+    } catch {
+      continue;
+    }
+    if (journal.undone_at || !journal.finished_at) continue;
+    const since = movesSince(readMoves(ws.dir), journal.finished_at);
+    for (const step of journal.steps) {
+      if (step.op !== "create" || !step.file.endsWith("/lyrics.txt")) continue;
+      const rel = resolveMoved(since, step.file);
+      const file = absPath(ws, rel);
+      if (!existsSync(file) || statSync(file).mtimeMs > Date.parse(journal.finished_at) + 5000) continue; // changed since: the user's
+      const folder = rel.slice(0, -"/lyrics.txt".length);
+      const p = ws.db.select().from(projectTable).where(eq(projectTable.folder, folder)).get();
+      if (!p) continue;
+      const newest = newestVideoLyrics(absPath(ws, `${folder}/exports`), absPath(ws, `${folder}/${STUDIO_DIR}/lyrics`), Date.parse(journal.started_at));
+      if (newest && !readFileSync(newest.file).equals(readFileSync(file))) fixes.push({ title: p.title, file: rel, from: newest.file });
+    }
+  }
+  return fixes;
+}
+
 const win = (rel: string) => rel.split("/").join("\\");
 
 export function migrationText(plan: MigrationPlan): string[] {
   const out: string[] = [];
-  if (!plan.songs.length && !plan.collections.length && !plan.renames.length) out.push("Nothing to migrate: every song has its own folder in songs\\ and collections are in collections\\.");
+  if (!plan.songs.length && !plan.collections.length && !plan.renames.length && !plan.lyricsFixes.length) out.push("Nothing to migrate: every song has its own folder in songs\\ and collections are in collections\\.");
   for (const c of plan.collections) out.push(`Collection: ${win(c.from)}\\  ->  ${win(c.to)}\\`);
   for (const r of plan.renames) out.push(`Rename ${r.what}: ${win(r.from)}\\  ->  ${win(r.to)}\\`);
+  for (const f of plan.lyricsFixes) out.push(`Lyrics "${f.title}": ${win(f.file)} gets the lyrics of its newest video (${path.basename(f.from)}); the current one is kept in .studio\\replaced\\`);
   for (const s of plan.songs) {
     out.push(`Song "${s.title}" (${s.artist}): ${win(s.from)}\\  ->  ${win(s.to)}\\`);
     for (const m of s.moves) out.push(`    ${win(m.from.slice(s.from.length + 1))}  ->  ${win(m.to.slice(s.to.length + 1))}  (${m.what})`);
@@ -216,7 +285,11 @@ export function migrationText(plan: MigrationPlan): string[] {
 
 // ---- --apply ---------------------------------------------------------------------------------------
 
-type JournalStep = { op: "move"; from: string; to: string } | { op: "create"; file: string } | { op: "mkdir"; dir: string };
+type JournalStep =
+  | { op: "move"; from: string; to: string }
+  | { op: "create"; file: string }
+  | { op: "mkdir"; dir: string }
+  | { op: "replace"; file: string; kept: string }; // file's earlier content is in `kept` (workspace-relative)
 export type Journal = {
   version: 1;
   started_at: string;
@@ -243,7 +316,7 @@ export async function applyMigration(ws: Workspace, options: { log?: (m: string)
   const log = options.log ?? (() => {});
   const plan = planMigration(ws);
   if (plan.problems.length) throw new Error(`Cannot migrate now:\n  - ${plan.problems.join("\n  - ")}`);
-  if (!plan.songs.length && !plan.collections.length && !plan.renames.length)
+  if (!plan.songs.length && !plan.collections.length && !plan.renames.length && !plan.lyricsFixes.length)
     return {
       backupDir: "",
       songs: 0,
@@ -320,6 +393,14 @@ export async function applyMigration(ws: Workspace, options: { log?: (m: string)
     for (const c of plan.collections) {
       move(c.from, c.to);
       log(`moved ${win(c.from)}\\ -> ${win(c.to)}\\`);
+    }
+    for (const f of plan.lyricsFixes) {
+      const file = absPath(ws, f.file); // before the renames below
+      const kept = keepReplaced(path.dirname(file), file, true);
+      copyFileSync(f.from, file);
+      journal.steps.push({ op: "replace", file: f.file, kept: path.relative(ws.dir, kept).split(path.sep).join("/") });
+      save();
+      log(`lyrics.txt of "${f.title}" now holds the lyrics of its newest video`);
     }
     for (const r of plan.renames) {
       move(r.from, r.to);
@@ -424,7 +505,15 @@ export function undoMigration(workspaceDir: string, options: { log?: (m: string)
   const abs = (rel: string) => path.join(workspaceDir, ...rel.split("/"));
   const steps = [...last.journal.steps].reverse();
   for (const s of steps) {
-    if (s.op === "move") {
+    if (s.op === "replace") {
+      if (existsSync(abs(s.kept))) {
+        copyFileSync(abs(s.kept), abs(s.file));
+        const keep = path.join(last.dir, "undone", ...s.kept.split("/"));
+        mkdirSync(path.dirname(keep), { recursive: true });
+        renameSync(abs(s.kept), keep);
+        removeEmptyDirs(path.dirname(abs(s.kept)), path.join(workspaceDir, "songs"));
+      }
+    } else if (s.op === "move") {
       if (!existsSync(abs(s.to))) throw new Error(`Cannot undo: ${abs(s.to)} is missing (moved or renamed since the migration?).`);
       mkdirSync(path.dirname(abs(s.from)), { recursive: true });
       renameSync(abs(s.to), abs(s.from));

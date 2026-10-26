@@ -596,6 +596,14 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   the dry run names it); an empty `collections\<name>\` no longer blocks moving `clips\<name>\`; a
   collection kept outside the workspace (`--collection-path`) is found again by its name after the
   migration (before, song.json's collection lost the remembered path).
+- Second fix from the PC: after the migration `pnpm make` aligned "A Heart For Two" again instead of
+  reusing its stored alignment. Cause: the migration wrote lyrics.txt from the newest lyrics copy by
+  date, which is not always the version the newest video was made with. Now it takes the lyrics named
+  in the newest video's manifest (a lyrics.txt given later in the studio wins if newer);
+  `pnpm songs:migrate --apply` also repairs a lyrics.txt an earlier migration wrote and nobody changed
+  since (the old one kept in .studio\replaced\; --undo reverses it). When a song with stored
+  alignments is aligned again, `pnpm make` now says why: other words (with the first differing line
+  and the stored copy's file), other hints, or another language.
 - **Studio**: Library banner "N songs and M collections still use the old folders" with **Preview**
   (dialog with the dry-run text) and **Migrate** (confirm with the backup reminder, then the same as
   --apply). Song page tabs **Assets / Generate / Videos** (Videos is the default when the song has runs).
