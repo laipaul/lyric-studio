@@ -9,7 +9,9 @@ import { eq } from "drizzle-orm";
 
 import { parsePresets } from "../platform";
 import { EFFECT_NAMES, effectOptionLabel } from "../effects/names";
-import { brandDir, DEFAULT_ARTIST } from "./brand";
+import { brandDir, DEFAULT_ARTIST, loadBrand } from "./brand";
+import { loadFontCatalog } from "./font-catalog";
+import { loadPairings } from "./pairings";
 import { renderingPlatforms, SHORT_LABELS, songRuns, type PlatformRun } from "./exports";
 import { keepReplaced, setSongEp, songCollections, songEp, storeCover, storeLyricsTxt } from "./project-settings";
 import { projectLyricsTxt } from "./runs";
@@ -219,6 +221,7 @@ export type GeneratePanelData = {
     brandDefaults: { verseEffect: string; hookEffect: string };
   };
   lyricsReady: boolean;
+  pairings: { id: string; name: string; note: string }[]; // "Compare pairings": one video per pairing
   title: string;
   artist: string;
   ep: string;
@@ -243,7 +246,10 @@ export function generatePanelData(ws: Workspace, p: typeof projectTable.$inferSe
     lengths[x.name] = x.length.mode === "full" || x.length.mode === "loop" ? null : r.values.length;
     if (r.values.verseEffect !== resolved.values.verseEffect || r.values.hookEffect !== resolved.values.hookEffect) effects[x.name] = { verse: r.values.verseEffect, hook: r.values.hookEffect };
   }
+  const catalog = loadFontCatalog(ws.dir);
+  const pairings = loadPairings(catalog, loadBrand(ws.dir, catalog, p.artist).brand).pairings.map((x) => ({ id: x.id, name: x.name, note: x.note }));
   return {
+    pairings,
     platforms: presets.map((x) => ({ name: x.name, label: SHORT_LABELS[x.name] ?? x.label, variations: x.variations, lyrics: x.lyrics })),
     collections,
     chosen,

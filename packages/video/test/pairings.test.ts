@@ -109,8 +109,9 @@ describe("pairing presets", () => {
     expect(jp).toContain("EB Garamond (verse) lacks 4 characters this song uses (君 の 名 は): they would show in another font");
     // A white frame behind the lyrics: white text has no contrast.
     const bright = pairingWarnings(byId("elegant"), { ...ctx, background: 0.95 });
-    expect(bright[0]).toMatch(/^low contrast over this frame: the verse text is 1\.\d:1 against the brightest part behind it/);
-    expect(bright[1]).toMatch(/^low contrast over this frame: the hook's accent colour is/);
+    expect(bright).toHaveLength(1);
+    expect(bright[0]).toMatch(/^low contrast over this frame: verse 1\.\d:1, hook accent 1\.\d:1; aim for 3:1, thin strokes 4\.5:1$/);
+    expect(pairingWarnings(byId("romantic-script"), { ...ctx, background: 0.3 }).some((w) => /hook accent \d\.\d:1 \(thin script\)/.test(w))).toBe(true); // mid-grey: enough for regular text, not for a thin script
   });
 });
 

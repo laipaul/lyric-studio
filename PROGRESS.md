@@ -757,6 +757,40 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   make.test.ts (real renders: the song file's hash and modification time are unchanged, the song
   folder's copy is byte for byte the same, QA audio check passes, 44.1 kHz kept).
 
+### Font pairings + font weight / italic ✅ (to verify on the Windows PC; run pnpm install after git pull)
+- **Weight and italic** for the verse and hook fonts: recipe fields verseWeight / hookWeight (100-900) and
+  verseItalic / hookItalic, in brand.json (verseFont / hookFont / titleFont: weight, italic), song.json and
+  per platform, with sources, Reset and Lock. The exact weight / italic file is used; when the family lacks
+  it, the nearest weight (upright without an italic) with a warning ("hook font Great Vibes has no italic:
+  upright used (never a synthetic italic)"), printed by pnpm make. Text is drawn with font-synthesis: none.
+  CLI: --weight, --hook-weight, --italic, --hook-italic. The recipe's weight now applies to every variation
+  (before, Bold used the style's 900 = Cormorant 700; now the brand's 600 everywhere).
+- **Bundled fonts**: Great Vibes, EB Garamond, Spline Sans, Space Mono, Bitter, Grand Hotel, Lato, Abril
+  Fatface, Poppins, Arima, Mulish, Noto Sans JP, Noto Serif JP added (Cormorant Garamond, Playfair Display
+  and Special Elite were bundled already, with all the faces asked for). Licences: fonts/LICENSES.md (OFL;
+  Special Elite and Yellowtail Apache 2.0), each package keeps its LICENSE. Noto JP: ~120 pieces per
+  weight, a video loads only those its lyrics use. Your own fonts: D:\videomaker\workspace\fonts
+  (shown in the Style tab).
+- **Pairings** (presets/font-pairings.json): Current brand (the artist's brand.json), Elegant (try this),
+  Dramatic, Romantic script, Literary, Typewriter story (title Special Elite), Vintage romance, Bold
+  statement, Gentle; checked on load (a font or weight that does not exist is named).
+- **Style tab**: a Pairings row above the font fields: each card previews the pair together on this song's
+  own verse and hook line, as the video draws them (PairPreview composition: the same layout, size, weight,
+  italic, shadow and karaoke accent), over a frame of the song's clips (or the cover); warnings per card
+  (French accents, characters the song uses, contrast over the frame, thin script on long hooks, the
+  pair's own note); "This song" (locks kept and named), "Back to the brand", "Save to brand…" (asks
+  first). Weight (only the family's weights, 300-800) and italic controls right under each font, the font
+  preview line follows them; the folder for your own fonts is shown.
+- **Compare by rendering**: Generate's "Compare font pairings" (tick 2-3) / pnpm make --pairings
+  elegant,dramatic: one video per pairing with the same section, clips, order and style; the manifest
+  records settings.fonts (family, weight, italic, pairing); the QA title names the pairing.
+- Tests: pairings.test.ts (exact / nearest with warnings; styles carry weight and italic; song.json and
+  perPlatform checks; every requested family bundled with its faces and the accents; Japanese; the
+  presets file; card warnings; apply / reset / locks / Save to brand; the cards' data), make.test.ts (a
+  real run comparing Elegant and Dramatic: same shots, fonts recorded), pairings.e2e.ts (cards with both
+  lines over a clip frame, the italic 600 file loaded, apply writes song.json not brand.json, weight
+  options, Save to brand asks first, Generate offers up to 3).
+
 ### Story anchors — part (b): the Lyrics tab and the Videos tab ✅ (to verify on the Windows PC)
 - **Lyrics tab, "Lands on" column**: per line the anchored clip (thumbnail, name, cut / dissolve, from
   N s) with Remove, and "Lands on…" / "Change": an inline picker with the thumbnails of the song's own

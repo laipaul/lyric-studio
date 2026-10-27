@@ -64,6 +64,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
   const [saveToSong, setSaveToSong] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pairings, setPairings] = useState<string[]>([]); // compare font pairings: one video per pairing
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -89,6 +90,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
       allowFill: f.get("allowFill") === "on",
       layout: (layout || undefined) as "cover" | "stills" | "clips" | undefined,
       realign: f.get("realign") === "on",
+      ...(pairings.length ? { pairings } : {}),
     };
     const body = new FormData();
     body.set("projectId", projectId);
@@ -237,6 +239,30 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
               ) : null}
             </label>
           </div>
+          {data.pairings.length ? (
+            <fieldset data-compare-pairings className="flex flex-col gap-1.5 text-sm">
+              <legend className="font-medium">Compare font pairings (optional)</legend>
+              <span className="text-muted-foreground text-xs">
+                Tick 2–3: each platform gets one video per pairing, with the same section, clips and order, so only the fonts differ (compare them in Videos and on your phone). Without: the song&apos;s own fonts.
+              </span>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {data.pairings.map((p) => (
+                  <label key={p.id} className="flex items-center gap-1.5" title={p.note}>
+                    <input
+                      type="checkbox"
+                      className="accent-brand"
+                      data-pairing-option={p.id}
+                      checked={pairings.includes(p.id)}
+                      disabled={!pairings.includes(p.id) && pairings.length >= 3}
+                      onChange={(e) => setPairings((list) => (e.target.checked ? [...list, p.id] : list.filter((x) => x !== p.id)))}
+                    />
+                    {p.name}
+                  </label>
+                ))}
+              </div>
+              {pairings.length === 1 ? <span className="text-xs text-amber-300">Tick one more to compare (one pairing makes one video in it).</span> : null}
+            </fieldset>
+          ) : null}
           <div className="grid gap-4 md:grid-cols-4">
             <label className={label}>
               <span className="font-medium">Title</span>

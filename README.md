@@ -306,6 +306,23 @@ Each video's QA report checks it ("Audio matches the song": length, level within
 of the song). The fade lengths are `fadeInSeconds` / `fadeOutSeconds` per platform in
 `presets\platforms.json`.
 
+## Fonts and pairings
+
+The Style tab's **Pairings** row shows each font pairing on your song's own verse and hook line, over a
+frame of its clips, as the video will draw them. "This song" uses the pair for this song; "Save to
+brand…" makes it the artist's default (it asks first). Under each font you can set its weight and
+italic; only the weights the font really has are offered (no fake bold or italic).
+
+To compare pairings in real videos: Generate → "Compare font pairings", tick 2-3, or
+
+```powershell
+cd D:\videomaker
+pnpm make "workspace\songs\Life Lyrics\A Heart For Two" --platforms reels --collection wedding --pairings elegant,dramatic
+```
+
+Your own fonts (.ttf, .otf, .woff, .woff2) go in `D:\videomaker\workspace\fonts`. Bundled font licences:
+`fonts\LICENSES.md`.
+
 ## Story anchors
 
 In the Lyrics tab, "Lands on…" on a line picks the clip that appears with it (thumbnails of the song's

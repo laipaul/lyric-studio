@@ -6,6 +6,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { StyleData, StyleField, StyleFont } from "@lyric/video/style";
 
+import { PairingsRow } from "@/components/pairings-row";
+
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 
@@ -90,12 +92,24 @@ export function StyleTab({ projectId }: { projectId: string }) {
     [data?.fonts],
   );
 
+  async function reload() {
+    const fresh = (await api(`/api/songs/${projectId}/recipe`, { cache: "no-store" }).then((r) => r.json()).catch(() => null)) as (StyleData & { error?: string }) | null;
+    if (fresh && !fresh.error) setData(fresh);
+    router.refresh();
+  }
+
   if (error && !data) return <p className="text-sm text-red-300">{error}</p>;
   if (!data) return <p className="text-muted-foreground text-sm">Loading the song&apos;s recipe…</p>;
   if (!data.folder) {
     return <p className="rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-200">This song still uses the old folders. Migrate it first (Library → Migrate); then its recipe shows here.</p>;
   }
 
+  // A role's value (verse / hook font, weight, italic) for the default or one platform.
+  const valueOf = (field: string, platform?: string): unknown => {
+    const f = data.fields.find((x) => x.field === field);
+    return platform ? (f?.perPlatform?.find((p) => p.platform === platform)?.value ?? f?.value) : f?.value;
+  };
+  const familyOf = (role: "verse" | "hook", platform?: string) => data.fonts.find((x) => x.family.toLowerCase() === String(valueOf(`${role}Font`, platform)).toLowerCase());
   const editor = (f: StyleField, value: unknown, platform?: string) => {
     const set = (v: unknown) => act({ action: "set", field: f.field, platform, value: v });
     const key = `${f.field}-${platform ?? "default"}`;
@@ -123,8 +137,47 @@ export function StyleTab({ projectId }: { projectId: string }) {
       );
     }
     if (f.field === "verseFont" || f.field === "hookFont") {
+      const role = f.field === "verseFont" ? "verse" : "hook";
       const font = data.fonts.find((x) => x.family.toLowerCase() === String(value).toLowerCase());
-      return <FontEditor fonts={data.fonts} value={String(value)} font={font} previewLine={data.previewLine} onChange={set} testId={key} />;
+      const look = { weight: Number(valueOf(`${role}Weight`, platform)), italic: valueOf(`${role}Italic`, platform) === true };
+      return <FontEditor fonts={data.fonts} value={String(value)} font={font} look={look} previewLine={data.previewLine} onChange={set} testId={key} />;
+    }
+    if (f.field === "verseWeight" || f.field === "hookWeight") {
+      const role = f.field === "verseWeight" ? "verse" : "hook";
+      const family = familyOf(role, platform);
+      const italic = valueOf(`${role}Italic`, platform) === true;
+      const style = italic && family?.faces.some((x) => x.style === "italic") ? "italic" : "normal";
+      const weights = [...new Set((family?.faces ?? []).filter((x) => x.style === style).map((x) => x.weight))].filter((w) => w >= 300 && w <= 800).sort((a, b) => a - b);
+      const n = Number(value);
+      const nearest = weights.length ? weights.reduce((a, b) => (Math.abs(b - n) < Math.abs(a - n) ? b : a)) : n;
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          <select aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} className={select} value={String(n)} onChange={(e) => set(Number(e.target.value))}>
+            {!weights.includes(n) ? <option value={n}>{n} (not in {family?.family ?? "this font"}: {nearest} is used)</option> : null}
+            {weights.map((w) => (
+              <option key={w} value={w}>
+                {w} · {WEIGHT_NAMES[w] ?? ""}
+              </option>
+            ))}
+          </select>
+          {!weights.includes(n) ? (
+            <span data-weight-fallback={key} className="text-xs text-amber-300">
+              {family?.family} has no {n}{style === "italic" ? " italic" : ""}: the video uses {nearest} (never a synthetic bold)
+            </span>
+          ) : null}
+        </div>
+      );
+    }
+    if (f.field === "verseItalic" || f.field === "hookItalic") {
+      const role = f.field === "verseItalic" ? "verse" : "hook";
+      const family = familyOf(role, platform);
+      const has = !!family?.faces.some((x) => x.style === "italic");
+      return (
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" data-edit={key} checked={value === true} disabled={!has && value !== true} onChange={(e) => set(e.target.checked)} className="accent-brand" />
+          {has ? "italic" : <span className="text-muted-foreground text-xs">{family?.family ?? "This font"} has no italic{value === true ? ": the video uses upright (never a synthetic italic)" : ""}</span>}
+        </label>
+      );
     }
     if (f.field === "accentColour") {
       return (
@@ -248,8 +301,12 @@ export function StyleTab({ projectId }: { projectId: string }) {
         {saving === "saving" ? "Saving…" : saving === "saved" ? "Saved to song.json" : ""}
       </p>
       {error ? <p className="rounded-md border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-200">{error}</p> : null}
+      <PairingsRow projectId={projectId} onChanged={reload} />
+      <p data-user-fonts className="text-muted-foreground text-xs">
+        Your own fonts: put .ttf, .otf, .woff or .woff2 files in <span className="text-foreground font-mono">{data.userFonts}</span>; they appear in the font lists after reloading this page.
+      </p>
       <ul className="flex flex-col gap-2">
-        {data.fields.map((f) => (
+        {[...data.fields].sort((a, b) => order(a.field) - order(b.field)).map((f) => (
           <li key={f.field} data-field={f.field} className={cn("bg-card rounded-lg border px-4 py-3", f.locked && "border-brand/40")}>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <span className="w-44 text-sm font-medium">{f.label}</span>
@@ -314,8 +371,17 @@ export function StyleTab({ projectId }: { projectId: string }) {
   );
 }
 
-// A font list (bundled and your own) with a live preview line and a warning when accents are missing.
-function FontEditor({ fonts, value, font, previewLine, onChange, testId }: { fonts: StyleFont[]; value: string; font?: StyleFont; previewLine: string; onChange: (v: string) => void; testId: string }) {
+const WEIGHT_NAMES: Record<number, string> = { 300: "light", 400: "regular", 500: "medium", 600: "semibold", 700: "bold", 800: "extra bold" };
+// Each font, then its weight and italic, then the rest in the recipe's order.
+const FONT_ORDER = ["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic"];
+const order = (field: string) => {
+  const i = FONT_ORDER.indexOf(field);
+  return i >= 0 ? 2 + i * 0.01 : field === "verseEffect" ? 0 : field === "hookEffect" ? 1 : 3;
+};
+
+// A font list (bundled and your own) with a live preview line (in the chosen weight and italic: the exact
+// file, never a synthetic one) and a warning when accents are missing.
+function FontEditor({ fonts, value, font, look, previewLine, onChange, testId }: { fonts: StyleFont[]; value: string; font?: StyleFont; look: { weight: number; italic: boolean }; previewLine: string; onChange: (v: string) => void; testId: string }) {
   return (
     <div className="flex flex-col gap-1">
       <select aria-label="font" data-edit={testId} className={cn(select, "w-64")} value={font?.family ?? value} onChange={(e) => onChange(e.target.value)}>
@@ -335,7 +401,7 @@ function FontEditor({ fonts, value, font, previewLine, onChange, testId }: { fon
           ) : null,
         )}
       </select>
-      <p data-preview={testId} className="text-lg leading-snug" style={{ fontFamily: `"${font?.family ?? value} preview", sans-serif` }}>
+      <p data-preview={testId} className="text-lg leading-snug" style={{ fontFamily: `"${font?.family ?? value} preview", sans-serif`, fontWeight: look.weight || 400, fontStyle: look.italic ? "italic" : "normal", fontSynthesis: "none" }}>
         {previewLine}
       </p>
       {font?.missing.length ? (

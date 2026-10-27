@@ -11,7 +11,7 @@ import { eq } from "drizzle-orm";
 import { EFFECT_NAMES, effectOptionLabel } from "../effects/names";
 import { parsePresets, type PlatformPreset } from "../platform";
 import { loadBrand } from "./brand";
-import { loadFontCatalog, missingCharacters, type FontCatalog } from "./font-catalog";
+import { loadFontCatalog, missingCharacters, userFontsDir, type FontCatalog } from "./font-catalog";
 import { isPlatformField, PLATFORM_FIELDS } from "./per-platform";
 import {
   artistRecipe,
@@ -77,6 +77,7 @@ export type StyleData = {
   fonts: StyleFont[];
   collections: string[];
   previewLine: string;
+  userFonts: string; // the folder for the user's own fonts (WORKSPACE_DIR\fonts)
 };
 
 function presetsList(): PlatformPreset[] {
@@ -166,6 +167,7 @@ export function styleData(ws: Workspace, projectId: string): StyleData {
     fonts: styleFonts(catalog),
     collections: sharedCollections(ws),
     previewLine: PREVIEW_LINE,
+    userFonts: userFontsDir(ws.dir),
   };
 }
 

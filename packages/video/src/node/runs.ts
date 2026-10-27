@@ -32,6 +32,7 @@ export type RunRequest = {
   layout?: "cover" | "stills" | "clips";
   realign?: boolean;
   saveToSong?: boolean; // keep this run's choices in the song's recipe (song.json; locked settings stay)
+  pairings?: string[]; // compare font pairings: one video per pairing (ids from presets/font-pairings.json, "brand")
 };
 
 // The options a run is made with (MakeOptions without callbacks), stored in make_run.options_json.
@@ -53,6 +54,7 @@ export function checkRunRequest(req: RunRequest, platformNames: readonly string[
   }
   if (req.section && !/^(auto|full|\d+:\d{1,2}(\.\d+)?\s*-\s*\d+:\d{1,2}(\.\d+)?)$/.test(req.section.trim())) problems.push('Section must be "auto", "full" or like 0:11-1:10.');
   if (req.length !== undefined && !(typeof req.length === "number" && req.length >= 3 && req.length <= 600)) problems.push("Target length must be 3-600 seconds.");
+  if (req.pairings !== undefined && !(Array.isArray(req.pairings) && req.pairings.length <= 3 && req.pairings.every((x) => typeof x === "string" && /^[a-z0-9-]+$/.test(x)))) problems.push("Compare pairings: choose up to 3.");
   if (req.layout && !["cover", "stills", "clips"].includes(req.layout)) problems.push("YouTube layout must be cover, stills or clips.");
   if (req.collection !== undefined && !/^[^\\/:*?"<>|]+$/.test(req.collection)) problems.push("Choose a collection.");
   return problems;
@@ -100,6 +102,7 @@ export function generateOptions(ws: Workspace, projectId: string, req: RunReques
     ...(req.allowFill ? { allowFill: true } : {}),
     ...(req.layout ? { layout: req.layout } : {}),
     ...(req.realign ? { realign: true } : {}),
+    ...(req.pairings?.length ? { pairings: req.pairings.join(",") } : {}),
     command: "Lyric Studio: Generate",
   };
 }

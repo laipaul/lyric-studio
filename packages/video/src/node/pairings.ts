@@ -140,8 +140,12 @@ export function pairingWarnings(p: Pairing, ctx: CardContext): string[] {
     const need = (f: PairFont) => (isThin(f) || f.weight <= 300 ? 4.5 : 3);
     const verse = contrastWith(ctx.colour, ctx.background);
     const accent = contrastWith(ctx.accent, ctx.background);
-    if (verse < need(p.verse)) out.push(`low contrast over this frame: the verse text is ${verse.toFixed(1)}:1 against the brightest part behind it (${p.verse.family}${p.verse.weight <= 300 ? " is thin" : ""}; aim for ${need(p.verse)}:1)`);
-    if (accent < need(p.hook)) out.push(`low contrast over this frame: the hook's accent colour is ${accent.toFixed(1)}:1 (${isThin(p.hook) ? `${p.hook.family} is a thin script; ` : ""}aim for ${need(p.hook)}:1)`);
+    // One short line: the frame is the same on every card, the need depends on the pair (thin strokes 4.5:1).
+    const low = [
+      ...(verse < need(p.verse) ? [`verse ${verse.toFixed(1)}:1${need(p.verse) > 3 ? " (thin)" : ""}`] : []),
+      ...(accent < need(p.hook) ? [`hook accent ${accent.toFixed(1)}:1${need(p.hook) > 3 ? " (thin script)" : ""}`] : []),
+    ];
+    if (low.length) out.push(`low contrast over this frame: ${low.join(", ")}; aim for 3:1, thin strokes 4.5:1`);
   }
   if (isThin(p.hook)) {
     const long = ctx.hookLines.filter((l) => l.length > LONG_HOOK_CHARS);
