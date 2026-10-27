@@ -71,7 +71,7 @@ export function hookKeys(lyricsTxt: string): Set<string> {
 }
 
 // early_ms: set by pnpm make from the vocal-start guard (how long after its start the voice begins).
-export type LineReport = { number: number; text: string; is_hook: boolean; start_ms: number; end_ms: number; confidence: number; early_ms?: number | null };
+export type LineReport = { number: number; text: string; is_hook: boolean; start_ms: number; end_ms: number; confidence: number; early_ms?: number | null; review?: string | null };
 export type AlignReport = { model: string; lang: string; low_confidence: number; lines: LineReport[] };
 
 export type Alignment = {
@@ -91,7 +91,7 @@ export type Alignment = {
 
 // The vocal-start guard's result for one alignment (also written to guard-<lrc hash>.json).
 export type VocalGuard = {
-  moves: { number: number; text: string; from_ms: number; to_ms: number }[];
+  moves: { number: number; text: string; from_ms: number; to_ms: number; shortens_previous?: boolean }[];
   earlyMs: (number | null)[]; // per line, after the moves: how long after its start the voice begins
   voiceMap: string; // workspace-relative
   // What was measured (printed by pnpm make and kept in the manifest): the song's singing level, the
@@ -110,6 +110,7 @@ export type VocalGuard = {
       duration_ms: number | null;
       first_word_ms: number | null;
       loudest_before_db: number | null;
+      stamp_level_db: number | null;
       target_ms: number;
       agree: string[];
       why: string;
@@ -213,11 +214,23 @@ export async function applyVocalGuard(
     const stretched = c.firstWordMs !== null && c.firstWordMs >= 1000 ? ` (first word ${(c.firstWordMs / 1000).toFixed(1)} s)` : "";
     const loud = c.loudestBeforeDb !== null && c.loudestBeforeDb > -90 ? `; loudest sound before it ${c.loudestBeforeDb.toFixed(1)} dB` : "";
     const change = c.result === "moved" ? ` (${seconds(c.targetMs - c.stampMs)})` : "";
-    log(`vocal-start check: line ${c.index + 1} stamp ${at(c.stampMs)} · voice ${at(c.voiceMs)} · ${heard} · word durations ${at(c.durationMs)}${stretched} -> ${at(c.targetMs)}: ${c.result}${change}; ${c.why}${loud}`);
+    // Why the voice was (not) heard at the stamp: the vocal track's loudest level in the 2 s after it.
+    const atStamp = c.stampLevelDb === null ? "" : ` (vocal track at the stamp: up to ${c.stampLevelDb.toFixed(1)} dB${c.stampLevelDb <= check.thresholdDb ? `, under the voice level ${check.thresholdDb.toFixed(1)} dB` : ""})`;
+    const durations = c.firstWordMs !== null && c.firstWordMs >= 2500 ? `word durations ${at(c.durationMs)}${stretched}` : `first word ${c.firstWordMs === null ? "–" : `${(c.firstWordMs / 1000).toFixed(1)} s`}`;
+    const prefix = c.result === "flagged for review" ? "FLAGGED FOR REVIEW: " : "";
+    log(`vocal-start check: ${prefix}line ${c.index + 1} stamp ${at(c.stampMs)} · voice ${at(c.voiceMs)}${atStamp} · ${heard} · ${durations} -> ${at(c.targetMs)}: ${c.result}${change}; ${c.why}${loud}`);
   }
-  for (const m of check.moves) log(`guard: line ${m.index + 1} moved from ${clockText(m.fromMs)} to ${clockText(m.toMs)} (vocals start)`);
+  const flagged = check.lines.filter((c) => c.result === "flagged for review");
+  if (flagged.length) {
+    const list = flagged.map((c) => c.index + 1).join(", ");
+    log(`vocal-start check: ${flagged.length} line(s) flagged for review (kept where the alignment has them; check them by ear, later in the Lyrics tab): line ${list}`);
+    alignment.warnings.push(`Vocal-start check: line ${list} flagged for review (the signals do not agree; kept where the alignment has them).`);
+  }
+  for (const m of check.moves) {
+    log(`guard: line ${m.index + 1} moved from ${clockText(m.fromMs)} to ${clockText(m.toMs)} (vocals start)${m.shortensPrevious ? `; line ${m.index} now ends there (its last note was held too long)` : ""}`);
+  }
   const guard: VocalGuard = {
-    moves: check.moves.map((m) => ({ number: m.index + 1, text: lines[m.index].text, from_ms: m.fromMs, to_ms: m.toMs })),
+    moves: check.moves.map((m) => ({ number: m.index + 1, text: lines[m.index].text, from_ms: m.fromMs, to_ms: m.toMs, ...(m.shortensPrevious ? { shortens_previous: true } : {}) })),
     earlyMs: earlyMs(lines, check.stretches),
     voiceMap: path.relative(ws.dir, mapFile).split(path.sep).join("/"),
     check: {
@@ -234,6 +247,7 @@ export async function applyVocalGuard(
         duration_ms: c.durationMs,
         first_word_ms: c.firstWordMs,
         loudest_before_db: c.loudestBeforeDb,
+        stamp_level_db: c.stampLevelDb,
         target_ms: c.targetMs,
         agree: c.agree,
         why: c.why,

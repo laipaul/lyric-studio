@@ -83,6 +83,12 @@ describe("QA checks", () => {
     expect(check(runQa(input()), "Lines start with the vocals").ok).toBe(true);
   });
 
+  it("warns about line starts the vocal-start check flagged for review", () => {
+    const report = runQa(input({ lyrics: [{ number: 14, text: "And a place", confidence: 0.8, review: "only words 1:16.6 (-2.0 s); no second signal agrees", lines: 1, box: goodBox }] }));
+    expect(report.status).toBe("WARN");
+    expect(check(report, "Line starts to review").details).toEqual(['line 14 "And a place": flagged for review (only words 1:16.6 (-2.0 s); no second signal agrees); kept where the alignment has it']);
+  });
+
   it("flags a clip repeated within 3 shots (but not 4 shots later)", () => {
     const shots = Array.from({ length: 6 }, (_, i) => shot(i * 30, 30));
     const report = runQa(input({ props: { shots, lyrics: [], cinematicBars: false, durationInFrames: 180 }, shotClips: ["a", "b", "c", "a", "d", "b"] }));

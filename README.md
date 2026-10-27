@@ -396,7 +396,10 @@ pnpm align "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test
   every line after a long instrumental (bridge, solo) and every line whose first word is stretched over
   seconds is checked with three signals: where sustained singing starts on the vocal track, the words a
   short speech-recognition pass hears there (needs the AI packages), and the alignment's own word
-  lengths. The line starts where at least two agree; the printout shows every signal and why, e.g.
+  lengths (plus the aligner's own stamp). A line moves only where two signals agree (or: a first word
+  of 4 s or more and the recognised words close to it); a single signal that disagrees keeps the line
+  where it is and marks it `FLAGGED FOR REVIEW` (listed at the end, and a QA warning "Line starts to
+  review"): check those lines by ear. The printout shows every signal and why, e.g.
   `vocal-start check: line 1 stamp 0:01.8 · voice 0:11.8 · words 0:11.9 "A heart for" · word durations
   0:11.8 (first word 10.1 s) -> 0:11.8: moved (+10.0 s); voice, words, word durations agree`, then
   `guard: line 1 moved from 0:01.8 to 0:11.8 (vocals start)`. A line still more than 1 s early gets the

@@ -62,24 +62,20 @@ describe("vocal-start check (pure)", () => {
     expect(c.thresholdDb).toBe(SINGING - 15);
     expect(c.lines.map(row)).toEqual([
       [1, 3_200, 11_800, null, 11_800, 11_800, "moved", "voice + word durations"],
-      [3, 40_000, 45_000, null, 40_000, 45_000, "moved", ""], // no two agree: the stamp is clearly before the voice
-      [4, 47_000, 47_000, null, 47_000, 47_000, "in time", "voice + word durations"],
+      [3, 40_000, 45_000, null, 40_000, 40_000, "flagged for review", ""], // the voice alone never moves a line
+      [4, 47_000, 47_000, null, 47_000, 47_000, "in time", "stamp + voice"],
     ]);
     expect(c.lines[0].loudestBeforeDb).toBe(-17); // the hum: loud, but too short to be voice
-    expect(c.lines[1].why).toBe("no two signals agree; the stamp is clearly before the voice");
+    expect(c.lines[1].why).toBe("only voice 0:45.0 (+5.0 s); no second signal agrees");
     const fixed = applyGuard(lines, c.moves);
     // Line 1: only the stretched first word moves; the words already in the voice keep their times.
     expect(fixed[0].words!.map((w) => w.start_ms)).toEqual([11_800, 11_900, 12_200, 12_500]);
     expect(fixed[0].sung_end_ms).toBe(13_000);
-    // Line 3: sung entirely before the voice: moved as a whole, squeezed to end before line 4.
-    expect(fixed[2].start_ms).toBe(45_000);
-    expect(fixed[2].sung_end_ms).toBeLessThanOrEqual(46_950);
-    expect([fixed[1], fixed[3]]).toEqual([lines[1], lines[3]]);
-    expect(earlyMs(fixed, c.stretches).every((e) => e !== null && e <= 1_000)).toBe(true);
+    expect(fixed.slice(1)).toEqual(lines.slice(1));
     expect(earlyMs(lines, c.stretches)[0]).toBe(8_600); // what QA would report without the check
   });
 
-  it("with the recognised words all three agree, and the line after the solo gets two votes", () => {
+  it("with the recognised words: line 1 on all three, the line after the solo on voice + words", () => {
     const asr = new Map([
       [0, asrAt(11_850, "A heart for two")],
       [2, asrAt(45_080, "after the solo")],
@@ -90,9 +86,72 @@ describe("vocal-start check (pure)", () => {
       [3, 40_000, 45_000, 45_080, 40_000, 45_000, "moved", "voice + words"],
     ]);
     expect(c.lines[0].wordsText).toBe("A heart for");
+    const fixed = applyGuard(lines, c.moves);
+    // Line 3: sung entirely before the voice: moved as a whole, squeezed to end before line 4.
+    expect(fixed[2].start_ms).toBe(45_000);
+    expect(fixed[2].sung_end_ms).toBeLessThanOrEqual(46_950);
+    expect(earlyMs(fixed, c.stretches).every((e) => e !== null && e <= 1_000)).toBe(true);
   });
 
-  it("A Heart For Two as reported (10 s early, loud bleed counts as voice): words and word durations outvote the voice", () => {
+  // The user's check-start results on A Heart For Two (0:12.4 -> 0:21.0; lines 14 and 28 "And a place";
+  // line 40), rebuilt with the same signals.
+  describe("A Heart For Two as checked on the PC", () => {
+    const song = [
+      "[00:12.40]<00:12.40>A <00:22.30>heart <00:22.70>for <00:23.10>two <00:23.80>", // first word 9.9 s
+      "[00:25.00]<00:25.00>Line two <00:25.60>here <00:26.40>",
+      "[00:30.00]<00:30.00>Line three <00:30.60>here <00:32.40>",
+      "[00:40.00]<00:40.00>Line four <00:40.60>here <00:42.40>",
+      "[01:18.60]<01:18.60>And <01:19.00>a <01:19.30>place <01:20.40>", // line 5 here = line 14 there
+      "[01:24.00]<01:24.00>Then <01:24.60>more <01:25.40>",
+      "[02:52.00]<02:52.00>A <02:55.40>heart <02:55.80>for <02:56.30>two <02:57.50>", // the last line, a hook: first word 3.4 s
+      "[03:05.00]",
+    ].join("\n");
+    const ls = parseLrc(song, 200_000).map((l, i) => ({ ...l, isHook: i === 6 }));
+    const v = levels(
+      [
+        [12_000, 12_600, -24], // "the sound at 0:12": short and quiet
+        [20_950, 23_900, SINGING],
+        [25_000, 26_400, SINGING],
+        [30_000, 32_400, SINGING],
+        [40_000, 42_400, SINGING],
+        [78_600, 80_400, -31], // "And a place" sung softly: under the voice level (-29 dB)
+        [84_000, 85_400, -31],
+        [101_600, 104_000, SINGING], // the next loud singing, 23 s after the stamp
+        [172_000, 177_500, -33], // a soft last line
+      ],
+      200_000,
+    );
+    const asr = new Map<number, AsrWord[]>([
+      [0, asrAt(21_000, "A heart for two")],
+      [4, asrAt(76_600, "And a place")], // 2.0 s before the stamp: the recognised words alone
+    ]);
+    const c = checkVocalStart(ls, v, { asr });
+    const of = (n: number) => c.lines.find((x) => x.index === n - 1)!;
+
+    it("line 1: a first word of 9.9 s and the recognised words near its estimate: moved to the words", () => {
+      expect([of(1).targetMs, of(1).result, of(1).agree]).toEqual([21_000, "moved", ["words", "word durations"]]);
+      expect(of(1).why).toBe("the first word lasts 9.9 s and the recognised words are within 0.1 s of the word-duration estimate");
+    });
+
+    it('"And a place": the recognised words alone (2.0 s earlier) never move it; flagged for review', () => {
+      expect([of(5).targetMs, of(5).result]).toEqual([78_600, "flagged for review"]);
+      expect(of(5).why).toBe("only voice 1:41.6 (+23.0 s), only words 1:16.6 (-2.0 s); no second signal agrees");
+      // Why the voice was 23 s late: the singing there is under the voice level (shown in the printout).
+      expect(of(5).stampLevelDb).toBe(-31);
+      expect(c.thresholdDb).toBe(-29);
+    });
+
+    it("line 40: a 3.4 s first word on a hook, no voice, no words: kept and flagged (a held note?)", () => {
+      expect([of(7).targetMs, of(7).result]).toEqual([172_000, "flagged for review"]);
+      expect(of(7).why).toMatch(/^only word durations .*; no second signal agrees; the long first word \(3\.4 s\) may be a held note \(a hook\)$/);
+    });
+
+    it("moves only line 1", () => {
+      expect(c.moves).toEqual([{ index: 0, fromMs: 12_400, toMs: 21_000 }]);
+    });
+  });
+
+  it("A Heart For Two 10 s early with loud bleed: the long first word and the words move it; without words it is only flagged", () => {
     const loud = levels([
       [0, 11_800, -22], // bleed within 15 dB of the singing: "voice" from 0:00
       [11_800, 14_000, SINGING],
@@ -102,13 +161,12 @@ describe("vocal-start check (pure)", () => {
     ]);
     const tenEarly = parseLrc(LRC.replace("[00:03.20]<00:03.20>A", "[00:01.80]<00:01.80>A"), 60_000);
     const withWords = checkVocalStart(tenEarly, loud, { asr: new Map([[0, asrAt(11_900, "a heart for two")]]) });
-    expect(row(withWords.lines[0])).toEqual([1, 1_800, 0, 11_900, 11_800, 11_800, "moved", "words + word durations"]);
-    // Without the AI packages (no recognised words): the stretched first word still decides.
+    expect(row(withWords.lines[0])).toEqual([1, 1_800, 0, 11_900, 11_800, 11_900, "moved", "words + word durations"]);
     const without = checkVocalStart(tenEarly, loud);
-    expect([without.lines[0].targetMs, without.lines[0].why]).toEqual([11_800, "no two signals agree; the first word was stretched, so the word durations decide"]);
+    expect([without.lines[0].targetMs, without.lines[0].result]).toEqual([1_800, "flagged for review"]);
   });
 
-  it("the whole line placed early with normal word lengths: the recognised words decide when nothing else agrees", () => {
+  it("the whole line placed early with normal word lengths: the recognised words alone only flag it", () => {
     const loud = levels([
       [0, 11_800, -22],
       [11_800, 14_000, SINGING],
@@ -116,7 +174,7 @@ describe("vocal-start check (pure)", () => {
     ]);
     const early = parseLrc("[00:02.00]<00:02.00>A <00:02.30>heart <00:02.70>for <00:03.10>two <00:03.60>\n[00:15.00]<00:15.00>Second <00:15.60>line <00:16.40>\n[00:20.00]", 60_000);
     const c = checkVocalStart(early, loud, { asr: new Map([[0, asrAt(11_820, "a heart for two")]]) });
-    expect([c.lines[0].targetMs, c.lines[0].result, c.lines[0].why]).toEqual([11_820, "moved", "no two signals agree; the recognised words decide"]);
+    expect([c.lines[0].targetMs, c.lines[0].result]).toEqual([2_000, "flagged for review"]);
   });
 
   it("Love Is A Good Thing (all in time): every signal agrees, nothing moves", () => {
@@ -127,8 +185,33 @@ describe("vocal-start check (pure)", () => {
       [11_200, 12_500, -12],
     ], 40_000);
     const c = checkVocalStart(fine, v, { asr: new Map([[0, asrAt(8_450, "Love is a good thing")]]) });
-    expect(c.lines.map(row)).toEqual([[1, 8_400, 8_380, 8_450, 8_400, 8_400, "in time", "voice + words + word durations"]]);
+    expect(c.lines.map(row)).toEqual([[1, 8_400, 8_380, 8_450, 8_400, 8_400, "in time", "stamp + voice + words"]]);
     expect(c.moves).toEqual([]);
+  });
+
+  it('Love Is A Good Thing line 39 "The old ones": voice and words agree 1.3 s later, inside line 38 (held too long): line 38 ends there', () => {
+    const song = parseLrc(
+      [
+        "[02:50.00]<02:50.00>Line thirty <02:51.00>eight <03:01.50>", // its last word "held" until 3:01.5
+        "[02:59.70]<02:59.70>The <03:01.40>old <03:01.80>ones <03:02.60>",
+        "[03:04.00]<03:04.00>After <03:05.00>",
+        "[03:10.00]",
+      ].join("\n"),
+      200_000,
+    );
+    const v = levels([[170_000, 175_000, -12], [181_000, 182_600, -12], [184_000, 185_000, -12]], 200_000);
+    // Checked because its recognised words are asked for (here: a 4.6 s gap before it in the voice).
+    const c = checkVocalStart(song, v, { asr: new Map([[1, asrAt(181_050, "The old ones")]]) });
+    const l39 = c.lines.find((x) => x.index === 1)!;
+    expect([l39.targetMs, l39.result, l39.agree]).toEqual([181_000, "moved", ["voice", "words"]]);
+    expect(c.moves).toEqual([{ index: 1, fromMs: 179_700, toMs: 181_000, shortensPrevious: true }]);
+    const fixed = applyGuard(song, c.moves);
+    expect([fixed[0].sung_end_ms, fixed[1].start_ms]).toEqual([180_950, 181_000]);
+    // An EARLIER start inside the previous line stays as it is.
+    const earlier = checkVocalStart(song, levels([[170_000, 175_000, -12], [178_000, 179_000, -12], [184_000, 185_000, -12]], 200_000), {
+      asr: new Map([[1, asrAt(178_050, "The old ones")]]),
+    });
+    expect(earlier.lines.find((x) => x.index === 1)!.result).toBe("flagged for review");
   });
 
   it("matches the line's first words: case and punctuation ignored, a missed short first word allowed", () => {
@@ -140,13 +223,13 @@ describe("vocal-start check (pure)", () => {
 
   it("never moves a line onto or past the next one; hand-placed lines stay", () => {
     const both: TimedLine[] = [
-      { text: "One", start_ms: 3_000, end_ms: 6_000, isHook: false },
+      { text: "One", start_ms: 3_000, end_ms: 6_000, isHook: false, words: [{ text: "One", start_ms: 3_000 }, { text: "more", start_ms: 11_900 }] },
       { text: "Two", start_ms: 6_000, end_ms: 15_000, isHook: false },
       { text: "Three", start_ms: 15_000, end_ms: 20_000, isHook: false },
     ];
     const c = checkVocalStart(both, HEART);
-    expect([c.lines[0].result, c.lines[0].why]).toEqual(["kept", "no two signals agree; the stamp is clearly before the voice, but that is past the next line"]);
-    expect(c.moves.map((m) => m.index)).toEqual([1]);
+    // Voice and word durations agree on 0:11.8, but that is past line 2.
+    expect([c.lines[0].result, c.lines[0].why]).toEqual(["flagged for review", "voice, word durations agree, but that is past the next line"]);
     expect(checkVocalStart(lines, HEART, { skip: new Set([0]) }).lines[0].result).toBe("set by hand");
   });
 
@@ -233,9 +316,9 @@ describe("pnpm make: the guard on the stored alignment", () => {
     // What was measured is always printed, also for lines that stay.
     expect(log.filter((l) => l.startsWith("vocal-start check:"))).toEqual([
       "vocal-start check: singing level -14.0 dB; voice = at least 0.5 s above -29.0 dB; recognised words: ran",
-      'vocal-start check: line 1 stamp 0:03.2 · voice 0:11.8 · words 0:11.8 "A heart for" · word durations 0:11.8 (first word 8.7 s) -> 0:11.8: moved (+8.6 s); voice, words, word durations agree; loudest sound before it -17.0 dB',
-      'vocal-start check: line 3 stamp 0:40.0 · voice 0:45.0 · words 0:45.1 "after the solo" · word durations 0:40.0 -> 0:45.0: moved (+5.0 s); voice, words agree; loudest sound before it -32.0 dB',
-      'vocal-start check: line 4 stamp 0:47.0 · voice 0:47.0 · words 0:47.0 "last line" · word durations 0:47.0 -> 0:47.0: in time; voice, words, word durations agree',
+      'vocal-start check: line 1 stamp 0:03.2 · voice 0:11.8 (vocal track at the stamp: up to -22.0 dB) · words 0:11.8 "A heart for" · word durations 0:11.8 (first word 8.7 s) -> 0:11.8: moved (+8.6 s); the first word lasts 8.7 s and the recognised words are within 0.1 s of the word-duration estimate; loudest sound before it -17.0 dB',
+      'vocal-start check: line 3 stamp 0:40.0 · voice 0:45.0 (vocal track at the stamp: up to -32.0 dB, under the voice level -29.0 dB) · words 0:45.1 "after the solo" · first word 0.6 s -> 0:45.0: moved (+5.0 s); voice, words agree; loudest sound before it -32.0 dB',
+      'vocal-start check: line 4 stamp 0:47.0 · voice 0:47.0 (vocal track at the stamp: up to -14.0 dB) · words 0:47.0 "last line" · first word 0.5 s -> 0:47.0: in time; stamp, voice, words agree',
     ]);
     expect(log.filter((l) => l.startsWith("guard:"))).toEqual(["guard: line 1 moved from 0:03.2 to 0:11.8 (vocals start)", "guard: line 3 moved from 0:40.0 to 0:45.0 (vocals start)"]);
     expect(guarded.guard?.check.lines.map((l) => [l.number, l.stamp_ms, l.voice_ms, l.words_ms, l.duration_ms, l.target_ms, l.result])).toEqual([
@@ -251,6 +334,24 @@ describe("pnpm make: the guard on the stored alignment", () => {
     const record = readdirSync(dir).find((f) => /^guard-[0-9a-f]{12}\.json$/.test(f))!;
     const recorded = JSON.parse(readFileSync(path.join(dir, record), "utf8"));
     expect([recorded.moves.length, recorded.check.lines.length, recorded.check.level_db]).toEqual([2, 3, -14]);
+  });
+
+  it("flagged lines are printed clearly, listed at the end and kept where the alignment has them", async () => {
+    const sp = await findOrCreateSongProject(ws, song);
+    const stored = await ensureAlignment(ws, sp, { lyricsTxt: lyrics, durationMs: 60_000, align: aligner.run });
+    const log: string[] = [];
+    // No recognised words for line 3 this time: the voice alone says 0:45.0.
+    const onlyLineOne: FirstWordsRunner = async (a) =>
+      writeFileSync(a.out, JSON.stringify({ version: 1, windows: a.windows.map(([line, from, to]) => ({ line, from_ms: from, to_ms: to, words: line === 1 ? asrAt(11_850, "A heart for two") : [] })) }));
+    process.env.FIRST_WORDS_MODEL = "other"; // a new cache key for this test
+    const guarded = await applyVocalGuard(ws, sp, stored, { log: (m) => log.push(m), voiceMap, firstWords: onlyLineOne });
+    delete process.env.FIRST_WORDS_MODEL;
+    expect(log.filter((l) => l.includes("FLAGGED FOR REVIEW"))).toEqual([
+      "vocal-start check: FLAGGED FOR REVIEW: line 3 stamp 0:40.0 · voice 0:45.0 (vocal track at the stamp: up to -32.0 dB, under the voice level -29.0 dB) · words – · first word 0.6 s -> 0:40.0: flagged for review; only voice 0:45.0 (+5.0 s); no second signal agrees; loudest sound before it -32.0 dB",
+    ]);
+    expect(log).toContain("vocal-start check: 1 line(s) flagged for review (kept where the alignment has them; check them by ear, later in the Lyrics tab): line 3");
+    expect(guarded.lines[2].start_ms).toBe(40_000);
+    expect(guarded.warnings.at(-1)).toBe("Vocal-start check: line 3 flagged for review (the signals do not agree; kept where the alignment has them).");
   });
 
   it("no vocal track available: the check is skipped with a warning, the alignment used as it is", async () => {

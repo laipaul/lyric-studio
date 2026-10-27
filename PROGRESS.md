@@ -718,6 +718,33 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   effect hints. Browser check: Style (per-platform rows, lock, fonts and warning, length), Generate
   (recipe option, locked hook effect, chips with length), Assets (path, hints).
 
+### Step 5c.1c — Vocal-start check: no move on one signal, flags for review ✅ (to verify on the Windows PC)
+From check-start on the PC. A Heart For Two: line 1 0:12.4 -> 0:21.0 (words + 9.9 s first word, right);
+lines 14 and 28 "And a place" moved -2.0 s on the recognised words alone (wrong to move); line 40 moved
++3.0 s on a 3.4 s first word alone (wrong to move). Love Is A Good Thing: nothing moved, but line 39
+"The old ones" (voice and words agree 1.3 s later) was kept because that point is inside line 38.
+- **Rules now**: the aligner's stamp is a signal; word durations count only for a stretched first word.
+  A move needs two signals within 0.3 s. Exception: a first word of 4 s or more and the recognised
+  words within 1.0 s of the word-duration estimate -> moved to the recognised words (line 1).
+  A single disagreeing signal keeps the stamp and **flags the line for review**: printed as
+  "FLAGGED FOR REVIEW: line …", listed at the end ("2 line(s) flagged for review … line 14, 28"), a QA
+  WARN "Line starts to review" on each video, and kept for the Lyrics tab. A stretched first word on a
+  hook or the last line may be a held note: flagged, never moved on that alone.
+- **Later start inside the previous line** (line 39): when two signals agree, line 38's end is shortened
+  to the new start (its last note was held too long) and line 39 moves; earlier starts are flagged.
+- **Why the voice was 23 s late on line 14**: the voice signal only counts singing louder than 15 dB under
+  the song's typical singing level for 0.5 s. If "And a place" is sung softly (or is quieter on the vocal
+  track), nothing there reaches that level, so the next voice found is the next loud phrase, 23 s
+  later. The printout now shows the vocal track's level at the stamp next to the voice level ("vocal
+  track at the stamp: up to -31.0 dB, under the voice level -29.0 dB"), so the next run confirms it; and
+  since a move needs two signals, a wrong voice value can no longer move a line. Short pauses between
+  sung words (up to 0.25 s, was 0.15 s) no longer split the voice.
+- Tests: the user's results rebuilt as cases (line 1 moved to the words; "And a place" flagged with the
+  voice 23 s late because the passage is under the voice level; line 40 a held note on a hook, flagged;
+  only line 1 moves), Love Is A Good Thing (nothing moves; line 39 moves and line 38 is shortened; an
+  earlier start inside the previous line is flagged), one signal alone never moves, the flagged printout
+  and summary, QA "Line starts to review".
+
 ### Step 5c.1b — Vocal-start check: three signals, always printed ✅ (to verify on the Windows PC)
 Reported: on A Heart For Two the check ran but printed nothing and line 1 stayed ~10 s early.
 - **Why it did not fire**: "voice" was anything within 20 dB of the loudest 5% of the vocal track, for

@@ -19,6 +19,7 @@ export type QaLyric = {
   text: string;
   confidence: number | null; // null: not known (LRC given by hand)
   earlyMs?: number | null; // how long after its stamp the voice begins (vocal track); null: not known
+  review?: string | null; // the vocal-start check flagged its start for review (why)
   lines: number; // text lines on screen
   box: Box; // largest extent on the 1080x1920 frame
 };
@@ -114,6 +115,14 @@ export function runQa(input: QaInput): QaReport {
     name: "Lines start with the vocals",
     ok: early.length === 0,
     details: early.map((l) => `line ${l.number} "${l.text}" starts long before the vocals (${(l.earlyMs! / 1000).toFixed(1)} s early); check its timing`),
+  });
+
+  // 1c. Line starts the vocal-start check could not settle (kept where the alignment has them).
+  const review = input.lyrics.filter((l) => l.review);
+  checks.push({
+    name: "Line starts to review",
+    ok: review.length === 0,
+    details: review.map((l) => `line ${l.number} "${l.text}": flagged for review (${l.review}); kept where the alignment has it`),
   });
 
   // 2. The same clip again within 3 shots.

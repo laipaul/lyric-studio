@@ -512,9 +512,17 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const alignment = await applyVocalGuard(ws, { ...sp, project }, stored, { log, voiceMap: options.voiceMap, firstWords: options.firstWords });
     const lines = alignment.lines;
     if (!lines.length) throw new Error(`No timed lyric lines in ${alignment.lrcFile}`);
-    const guardMoved = new Set(alignment.guard?.moves.map((m) => m.number - 1));
+    // Lines the vocal-start check changed: the moved ones and a previous line it shortened.
+    const guardMoved = new Set(alignment.guard?.moves.flatMap((m) => (m.shortens_previous ? [m.number - 1, m.number - 2] : [m.number - 1])));
     const reports = matchReport(lines, alignment.report).map((r, i) =>
-      r ? { ...r, ...(guardMoved.has(i) ? { start_ms: lines[i].start_ms, end_ms: lines[i].sung_end_ms ?? r.end_ms } : {}), early_ms: alignment.guard?.earlyMs[i] ?? null } : r,
+      r
+        ? {
+            ...r,
+            ...(guardMoved.has(i) ? { start_ms: lines[i].start_ms, end_ms: lines[i].sung_end_ms ?? r.end_ms } : {}),
+            early_ms: alignment.guard?.earlyMs[i] ?? null,
+            review: alignment.guard?.check.lines.find((c) => c.number === i + 1 && c.result === "flagged for review")?.why ?? null,
+          }
+        : r,
     );
     saveLyricLines(ws, project.id, alignment);
     const numbers = lyricLineNumbers(lines.map((l) => l.text), alignment.lrcFile, alignment.lyricsTxt).numbers;
@@ -1173,6 +1181,7 @@ async function checkVariation(
     number: ctx.numbers[i] || i + 1,
     confidence: ctx.reports[i]?.confidence ?? null,
     earlyMs: ctx.reports[i]?.early_ms ?? null,
+    review: ctx.reports[i]?.review ?? null,
   }));
   // Lines reaching into the end-screen time are drawn (and measured) in the end-screen area.
   const end = props.endScreen;
