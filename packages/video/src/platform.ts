@@ -26,6 +26,7 @@ export type PlatformPreset = {
   fadeOutSeconds: number; // where the section cuts the music off (never at the song's own end)
   audioSampleRate: number | "source"; // "source" (default): the master's own rate, no resampling
   loopEnding: boolean; // last shot continues into the first one (Reels loop)
+  loops: boolean; // the platform plays the video in a loop (Reels, TikTok, Shorts): QA "Loop flows" and a loop-aware end
   lyrics: boolean;
   audio: boolean;
   available: boolean; // false: comes in a later step
@@ -194,6 +195,7 @@ export function parsePresets(json: unknown, file = "presets/platforms.json"): Re
       }
     }
     if (p.showNextLine !== undefined && typeof p.showNextLine !== "boolean") bad("showNextLine", "must be true or false");
+    if (p.loops !== undefined && typeof p.loops !== "boolean") bad("loops", "must be true or false");
     if (errors.length) continue;
     out[name] = {
       name,
@@ -214,6 +216,8 @@ export function parsePresets(json: unknown, file = "presets/platforms.json"): Re
       fadeOutSeconds: (p.fadeOutSeconds as number) ?? 0.5,
       audioSampleRate: (p.audioSampleRate as number | "source" | undefined) ?? "source",
       loopEnding: p.loopEnding === true,
+      // Not given: the short-form presets loop (a loop ending, or hook-first); YouTube and Canvas never.
+      loops: p.layout === "vertical" && (p.loops !== undefined ? p.loops === true : p.loopEnding === true || p.anchor === "hook-first"),
       lyrics: p.lyrics !== false,
       audio: p.audio !== false,
       available: p.available !== false,

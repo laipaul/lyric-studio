@@ -1,7 +1,9 @@
 // Clip assignment: which clip plays in each shot, from where, and at what speed.
 //   story   - clips in file-name order (01_, 02_, ...), cycling; a clip shown again continues where
 //             it stopped last time.
-//   shuffle - seeded random order (mulberry32), avoiding the last 3 clips when the pool allows.
+//   shuffle - seeded random order (mulberry32), avoiding the last 3 clips when the pool allows, and
+//             never the first shot's clip on the last shot (the video loops on the platform: the same
+//             clip at both ends makes the loop visible), unless only that clip is left.
 // Pins force a clip onto a shot and override both modes. Never the same clip twice in a row
 // (unless two pins ask for it).
 import type { CutPlan } from "./cuts";
@@ -58,10 +60,20 @@ export function assignClips(plan: CutPlan, clipsIn: readonly ClipInfo[], seed: n
 
   const lastIndex = bounds.length - 2;
   const loop = !!options.loopEnding && lastIndex >= 2 && !pins.has(lastIndex) && clips.length > 1;
+  // The loop shot can continue into shot 1 only if the first clip has the frames for it (else the last
+  // shot gets another clip: the same clip restarting at the loop would be visible).
+  let canLoop: boolean | undefined;
+  const loopPossible = () => {
+    const first = shots[0];
+    const clip = clipById.get(first.clip_id)!;
+    const lastLength = bounds[lastIndex + 1] - bounds[lastIndex];
+    return !!clip.still || (first.playback_rate === 1 && (first.clip_start_frame >= lastLength || framesOf(clip) >= lastLength + first.duration_frames));
+  };
   for (let i = 0; i < bounds.length - 1; i++) {
     const length = bounds[i + 1] - bounds[i];
     const previous = recent[recent.length - 1];
-    const loopClip = loop && i > 0 ? shots[0].clip_id : undefined;
+    if (loop && i === 1) canLoop = loopPossible();
+    const loopClip = loop && i > 0 && canLoop ? shots[0].clip_id : undefined;
     // Keep the loop clip out of the shots just before the loop shot (no repeat within 3 shots).
     const avoidLoop = loopClip && i < lastIndex && lastIndex - i <= window ? loopClip : undefined;
     const nextPinned = pins.get(i + 1) ?? (loopClip && i + 1 === lastIndex ? loopClip : undefined);
@@ -79,8 +91,13 @@ export function assignClips(plan: CutPlan, clipsIn: readonly ClipInfo[], seed: n
       }
       storyIndex += 1;
     } else {
-      const blocked = new Set([...(window > 0 ? recent.slice(-window) : []), ...(nextPinned ? [nextPinned] : []), ...(avoidLoop ? [avoidLoop] : [])]);
+      // The last shot never shows the first shot's clip again (an intended loop shot is pinned above).
+      const firstClip = i === lastIndex && i > 0 ? shots[0].clip_id : undefined;
+      const blocked = new Set([
+        ...(window > 0 ? recent.slice(-window) : []), ...(nextPinned ? [nextPinned] : []), ...(avoidLoop ? [avoidLoop] : []), ...(firstClip ? [firstClip] : []),
+      ]);
       let allowed = clips.filter((c) => !blocked.has(c.id));
+      if (!allowed.length) allowed = clips.filter((c) => c.id !== previous && c.id !== firstClip);
       if (!allowed.length) allowed = clips.filter((c) => c.id !== previous);
       if (!allowed.length) allowed = clips;
       // Prefer clips that cover the shot at normal speed, then ones that do when slowed down.

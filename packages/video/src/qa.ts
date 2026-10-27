@@ -3,6 +3,7 @@
 import { AUDIO_ENVELOPE_TOLERANCE_DB, AUDIO_LENGTH_TOLERANCE_S, AUDIO_LEVEL_TOLERANCE_DB, type AudioMatch } from "./audio";
 import { VIDEO } from "./config";
 import { cinematicBarHeight, DEFAULT_FORMAT, DEFAULT_LYRIC_AREA, DEFAULT_SAFE_ZONE, type Format, type LyricArea, type SafeZone } from "./platform";
+import type { LoopResult } from "./loop";
 import { MAX_LINES } from "./lyrics";
 import type { LyricVideoProps } from "./props";
 import { RECENT_WINDOW } from "./shots";
@@ -39,6 +40,7 @@ export type QaInput = {
   length?: { actualS: number; songS: number | null } | null; // the finished file's length (songS: a full-song video)
   platformLimit?: { seconds: number; limitS: number; platform: string } | null; // a fixed section (0:11-1:10) against the platform's longest
   audioMatch?: AudioMatch | null; // the video's audio against the same section of the song (null: not checked)
+  loop?: LoopResult | null; // Reels, TikTok, Shorts: the wrap-around from the last frame to the first (null: not a loop platform)
   canvas?: { lastToFirst: number; typicalStep: number; hasAudio: boolean; seconds: number; min: number; max: number } | null; // Spotify Canvas
 };
 
@@ -210,6 +212,17 @@ export function runQa(input: QaInput): QaReport {
       details.push(`the video is ${expected.toFixed(1)} s but the song is ${input.length.songS.toFixed(1)} s`);
     }
     checks.push({ name: "Video length", ok: details.length === 0, details });
+  }
+
+  // Reels, TikTok, Shorts loop on the platform: beat, phrase, sound, harmony and picture across the
+  // wrap-around. A failed point names its cause; when all flow, one line says what was measured.
+  if (input.loop) {
+    const failed = input.loop.points.filter((p) => !p.ok);
+    checks.push({
+      name: "Loop flows",
+      ok: failed.length === 0,
+      details: failed.length ? failed.map((p) => p.detail) : [input.loop.points.map((p) => p.detail).join("; ")],
+    });
   }
 
   // Spotify Canvas: a seamless loop (the jump from the last frame back to the first is no bigger

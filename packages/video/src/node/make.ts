@@ -27,7 +27,7 @@ import { eq } from "drizzle-orm";
 
 import { audioPlan, type AudioPlan } from "../audio";
 import { CHECKED_BY_EAR_FILE, checkedByEar, type EarCheck } from "../checked-by-ear";
-import { compareAudio } from "./audio-check";
+import { compareAudio, readLoopAudio } from "./audio-check";
 import type { Beat } from "../beats";
 import { composeProps, DEFAULT_LEAD_MS, lyricFrames, rawLyric, type PlatformLayout, type RenderBase, type StyleChoice } from "../compose";
 import { choiceText, parseEffectChoice, type EffectChoice } from "../effects";
@@ -38,7 +38,8 @@ import { getCutPoints, type CutRate, type Energy } from "../cuts";
 import { matchPinClips, parsePins } from "../pins";
 import type { LyricEffectsProps, LyricVideoProps } from "../props";
 import { formatQa, LOW_CONFIDENCE, qaReasons, runQa, type QaInput, type QaReport } from "../qa";
-import { autoSection, clockText, finishedBeforeStart, sectionCuts, startsAfterEnd, type SectionCut, type SectionLine } from "../section";
+import { autoSection, clockText, finishedBeforeStart, sectionCuts, startsAfterEnd, sungEnd, sungStart, type SectionCut, type SectionLine } from "../section";
+import { loopFit, loopFlows, type LoopAudio, type LoopResult } from "../loop";
 import { RECENT_WINDOW, type ClipOrder } from "../shots";
 import { analyzeSong } from "./analysis";
 import { loadBrand, type Brand } from "./brand";
@@ -351,7 +352,10 @@ type SectionChoiceOut = {
   cuts: SectionCut[]; // sung lines cut at the start or end (QA: WARN)
 };
 
-function chooseSection(mode: string, lines: SectionLine[], beats: Beat[], durationMs: number, leadMs: number, preset?: PlatformPreset): SectionChoiceOut {
+function chooseSection(
+  mode: string, lines: SectionLine[], beats: Beat[], durationMs: number, leadMs: number, preset?: PlatformPreset,
+  fit?: (startMs: number, endMs: number) => { score: number; ok: boolean; text: string }, // loop platforms: the end that flows back best
+): SectionChoiceOut {
   if (mode === "auto" && preset?.length.mode === "full") mode = "full";
   if (mode === "auto") {
     const window = preset ? sectionWindow(preset) : null;
@@ -362,6 +366,7 @@ function chooseSection(mode: string, lines: SectionLine[], beats: Beat[], durati
       ...(window && preset!.length.mode === "target" ? { targetMs: window.targetMs } : {}),
       anchorMode: preset?.anchor ?? "lead-in",
       endOn: preset?.endOn ?? "bar",
+      ...(fit ? { loopFit: fit } : {}),
     });
     return { mode, start_ms: s.start_ms, end_ms: s.end_ms, requested: null, reason: s.reason, warnings: s.warnings, cuts: s.cuts };
   }
@@ -581,9 +586,11 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       const info = await probeMedia(brand.logoFile);
       if (info.width && info.height) logo = { file: brand.logoFile, width: info.width, height: info.height };
     }
+    let songAudio: Promise<LoopAudio | null> | undefined;
     const shared: Shared = {
       ws, options: effective, variationsFor, effectLabels, recipeFor: (platform: string) => resolveRecipe(recipeInput, platform), stylesFor, log, now, leadMs, lyricsOffsetMs, catalog, styles, brand, logo, sp, analysis, alignment, lines, reports, numbers,
       sectionLines, collection, collectionNames, collectionRemembered, ep, tool, rootDir, getProject: () => project,
+      loopAudio: () => (songAudio ??= readLoopAudio(sp.songFile)),
     };
     const results: PlatformResult[] = [];
     for (const [index, name] of chosenPlatforms.names.entries()) {
@@ -654,6 +661,7 @@ type Shared = {
   tool: Manifest["tool"];
   rootDir: string;
   getProject: () => { id: string; title: string; artist: string };
+  loopAudio: () => Promise<LoopAudio | null>; // the song decoded once per run, for the loop checks
 };
 
 // The last shot shows the frames right before the first one (or the same photo, ending where its move starts).
@@ -755,10 +763,14 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     canvas = await planCanvas(ws, prepared.clips, { bpm: analysis.bpm, count: sh.variationsFor(preset), min: l.min, max: l.max });
   }
 
-  // Section (lines appear `leadMs` early and move by the lyrics offset).
+  // Section (lines appear `leadMs` early and move by the lyrics offset). Loop platforms (Reels, TikTok,
+  // Shorts): the auto end that flows best back into the start.
+  const loops = preset.loops && !canvas;
+  const loopSong = loops ? await sh.loopAudio() : null;
   const chosen: SectionChoiceOut = canvas
     ? { mode: "loop", start_ms: 0, end_ms: Math.round(canvas.seconds * 1000), requested: null, reason: canvas.reason, warnings: canvas.warnings, cuts: [] }
-    : chooseSection(options.section ?? "auto", sh.sectionLines, analysis.beats, analysis.duration_ms, leadMs - lyricsOffsetMs, preset);
+    : chooseSection(options.section ?? "auto", sh.sectionLines, analysis.beats, analysis.duration_ms, leadMs - lyricsOffsetMs, preset,
+      loops ? (startMs, endMs) => loopFit(loopSong, analysis.bpm, startMs, endMs) : undefined);
   log(`${preset.name}: ${canvas ? "loop" : "section"} ${clockText(chosen.start_ms)} - ${clockText(chosen.end_ms)}`);
   const sectionRow = ws.db
     .insert(sectionTable)
@@ -1094,7 +1106,10 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       }
       state.status = "checking";
       report();
+      // The wrap-around from the last frame to the first (the section as rendered, to the frame).
+      const loop = loops ? loopResult(props, prepared.clips, { bpm: analysis.bpm, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers }) : null;
       const qa = await checkVariation(spec, props, file, {
+        loop,
         lines, visible, numbers, reports, styles, clips: prepared.clips,
         sources: usesClips ? { ...sources, platform: preset.label } : null,
         frameCheck: options.frameCheck ?? true,
@@ -1113,7 +1128,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         buildManifest({
           ws, tool: sh.tool, spec, props, media, project, songHash: sh.sp.songHash, songFile: sh.sp.songFile, analysis, chosen, alignment, reports, numbers, audioPlan: audioP,
           visible, lines, leadMs, lyricsOffsetMs, options, collection: sh.collection, collectionNames: sh.collectionNames, clips: prepared.clips, file, qa, now: sh.now, warnings, preset,
-          brand: sh.brand.brand,
+          brand: sh.brand.brand, loop: loops ? (loop ? { checked: true, ...loop } : null) : { checked: false, why: canvas ? "a Spotify Canvas has its own loop checks" : `${preset.label} does not loop` },
         }),
       );
       // Captions for every video; YouTube also gets a thumbnail and a publishing pack.
@@ -1205,6 +1220,7 @@ async function checkVariation(
     songS: number | null; // a full-song video: the song's length
     canvas?: { min: number; max: number } | null; // Spotify Canvas: loop, silence and length checks
     audio?: { song: string; fadeInS: number; fadeOutS: number } | null; // compared with the song (QA "Audio matches the song")
+    loop?: LoopResult | null; // Reels, TikTok, Shorts: QA "Loop flows"
   },
 ): Promise<QaReport> {
   const style = ctx.styles[spec.style];
@@ -1250,6 +1266,32 @@ async function checkVariation(
           )
         : null,
     canvas: ctx.frameCheck && ctx.canvas ? { ...(await loopCheck(file)), ...ctx.canvas } : null,
+    loop: ctx.loop ?? null,
+  });
+}
+
+// QA "Loop flows" for one video: its length against whole bars, the lines at both ends, the music's
+// level and harmony at the loop point (the song's own section, to the frame), and the clips at both ends.
+export function loopResult(
+  props: Pick<LyricVideoProps, "shots" | "durationInFrames" | "audio">,
+  clips: readonly { path: string; name: string }[],
+  c: { bpm: number; startMs: number; audio: LoopAudio | null; lines: readonly SectionLine[]; numbers: readonly number[] },
+): LoopResult {
+  const lengthMs = (props.durationInFrames * 1000) / VIDEO.fps;
+  const startMs = props.audio ? (props.audio.startFrame * 1000) / VIDEO.fps : c.startMs;
+  const nameBySrc = new Map(clips.map((k) => [k.path, k.name]));
+  const name = (s: LyricVideoProps["shots"][number] | undefined) => (s ? (nameBySrc.get(s.src) ?? s.src) : null);
+  return loopFlows({
+    lengthMs,
+    bpm: c.bpm,
+    startMs,
+    endMs: startMs + lengthMs,
+    lines: c.lines.map((l, i) => ({ number: c.numbers[i] || i + 1, text: l.text, sungStartMs: sungStart(l), sungEndMs: sungEnd(l) })),
+    audio: c.audio,
+    firstClip: name(props.shots[0]),
+    lastClip: name(props.shots[props.shots.length - 1]),
+    shots: props.shots.length,
+    continues: loopsSeamlessly(props.shots),
   });
 }
 
@@ -1282,6 +1324,7 @@ function buildManifest(c: {
   warnings: string[];
   preset: PlatformPreset;
   brand: Brand;
+  loop?: Manifest["loop"];
 }): Manifest {
   const { props, spec, ws } = c;
   const startFrame = props.audio?.startFrame ?? Math.round((c.chosen.start_ms * VIDEO.fps) / 1000);
@@ -1384,6 +1427,7 @@ function buildManifest(c: {
     }),
     props,
     output: { file: path.basename(c.file), duration_s: props.durationInFrames / VIDEO.fps, qa: c.qa.status },
+    loop: c.loop ?? null,
     warnings: c.warnings,
   };
 }

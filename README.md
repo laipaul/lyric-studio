@@ -306,6 +306,15 @@ Each video's QA report checks it ("Audio matches the song": length, level within
 of the song). The fade lengths are `fadeInSeconds` / `fadeOutSeconds` per platform in
 `presets\platforms.json`.
 
+## Loops (Reels, TikTok, Shorts)
+
+These platforms play a video in a loop. Each of their QA reports has a check "Loop flows": the length is
+a whole number of bars (the beat stays in time), it ends after a complete line and starts at most a bar
+before one, no level jump over 3 dB at the loop point, the last and first bar in a common key, and not
+the same clip at both ends (except the Reels loop ending, which continues the first clip seamlessly).
+An auto section picks, among its clean line ends, the one that flows best back into its start; the
+section line in `pnpm make` says why.
+
 ## Audio analysis
 
 ```powershell

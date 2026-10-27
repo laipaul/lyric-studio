@@ -13,6 +13,9 @@
 //           45-60 s, up to 65 s rather than cutting; presets: nearest the target +-15%, else the nearest
 //           clean line end up to 25% shorter, else up to 30% longer). Cutting a line is the last resort
 //           and always gives a warning naming the line.
+//   Loop:   (Reels, TikTok, Shorts loop on the platform) among the clean line ends inside the length
+//           tolerance (chorus lines still first), the one whose last bar flows best into the first bar
+//           (whole bars, level, harmony: options.loopFit) wins; the reason names the others.
 // Pure: the reason is returned as text so the command can print it.
 import type { Beat } from "./beats";
 import { normalizeLyric, type TimedWord } from "./lrc";
@@ -36,6 +39,8 @@ export type AutoSectionOptions = {
   shortestMs?: number; // presets: a clean end down to this length is preferred over a longer one
   anchorMode?: "lead-in" | "hook-first"; // hook-first: start at most 1 bar before the hook
   endOn?: "bar" | "beat"; // beat: when no bar is clean, any beat may end the section (bars still preferred)
+  // Loop platforms: how well an end flows back into the start (lower score flows better).
+  loopFit?: (startMs: number, endMs: number) => { score: number; ok: boolean; text: string };
 };
 
 export type SectionChoice = {
@@ -224,6 +229,20 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
   let end: number;
   let endKind: SectionChoice["endKind"];
   let endText: string;
+  let loopNote = "";
+
+  // Loop platforms: of the clean ends in the window, the one that flows best back into the start;
+  // a small share of the distance to the target breaks near-ties.
+  const pickLoop = (pool: Candidate[]): Candidate => {
+    const fits = pool.map((c) => ({ c, fit: options.loopFit!(start, c.at) }));
+    const total = (f: (typeof fits)[number]) => f.fit.score + (target ? (Math.abs(length(f.c) - target) / target) * 0.5 : 0);
+    const best = fits.reduce((a, b) => (total(b) < total(a) ? b : a));
+    const others = fits.filter((f) => f !== best).map((f) => `${clockText(f.c.at)} (${f.fit.text})`);
+    loopNote = others.length
+      ? `; loop: ${clockText(best.c.at)} flows best back into the start (${best.fit.text}); also clean: ${others.join(", ")}`
+      : `; loop: the only clean end in the window (${best.fit.text})`;
+    return best.c;
+  };
 
   if (start + shortestMs > duration) {
     end = duration;
@@ -245,7 +264,8 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
     const windowEnd = tier((g) => {
       const pool = after(g.filter(within(minMs, maxMs)));
       const chorusPool = pool.filter((c) => c.chorusLine);
-      return chorusPool.length ? pick(chorusPool) : pool.length ? pick(pool) : undefined;
+      const choose = options.loopFit ? pickLoop : pick;
+      return chorusPool.length ? choose(chorusPool) : pool.length ? choose(pool) : undefined;
     });
     const shorterEnd = target ? tier((g) => after(g.filter(within(shortestMs, minMs - 1))).pop()) : undefined;
     const longerEnd = tier((g) => after(g.filter(within(maxMs + 1, hardMaxMs)))[0]);
@@ -292,7 +312,7 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
 
   const reason =
     `start ${clockText(start)}: ${anchorText}${startNote}; ` +
-    `end ${clockText(end)}: ${endText}; ${seconds(end - start)}`;
+    `end ${clockText(end)}: ${endText}; ${seconds(end - start)}${loopNote}`;
   return { start_ms: start, end_ms: end, anchor, endKind, reason, warnings, cuts };
 }
 

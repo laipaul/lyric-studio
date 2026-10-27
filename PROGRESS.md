@@ -757,6 +757,36 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   make.test.ts (real renders: the song file's hash and modification time are unchanged, the song
   folder's copy is byte for byte the same, QA audio check passes, 44.1 kHz kept).
 
+### Loop check — "Loop flows" for Reels, TikTok, Shorts ✅ (to verify on the Windows PC)
+These platforms play a video in a loop, so the wrap-around from the last frame to the first is checked.
+- **QA "Loop flows"** (src/loop.ts), five points; a failing point names its cause:
+  - beat: the length is a whole number of bars at the song's BPM (within 50 ms), e.g. "length 30.3 s
+    is 0.3 s off a whole bar (15.15 bars at 120 BPM, 0.6 beats over; ...)";
+  - phrase: it ends after a complete line and starts at most one bar before a sung line;
+  - sound: the music's last 100 ms against its first 100 ms (measured on the song's own section, which
+    the video carries unchanged; the fades sit in between): WARN above 3 dB;
+  - harmony: a 12-note chroma of the last and the first bar, each matched against the 24 major/minor
+    keys; WARN when no key fits both (best shared fit below 0.15: a key change). Ordinary chord changes
+    (I-V, i-V, I-ii) fit at 0.3-0.5, a chord a tritone away at -0.07;
+  - picture: WARN when the first and last shot are the same clip, except the Reels loop ending (the
+    last shot plays the frames just before the first shot's, so the motion carries on).
+  When all flow, one line says what was measured.
+- **Loop-aware auto end**: of the clean line ends inside the length tolerance (chorus lines still
+  first, never cutting a sung line), the one whose last bar flows best back into the first (whole bars,
+  level, harmony) wins; a small share of the distance to the target breaks near-ties. The reason says it:
+  "; loop: 0:36.5 flows best back into the start (whole bars, level jump 0.5 dB, harmony 0.87); also
+  clean: 0:40.5 (whole bars, level jump 6.8 dB, harmony 0.86)".
+- **Shot order**: shuffle never puts the first shot's clip on the last shot. A Reels loop ending whose
+  first clip is too short to continue now gets another clip at the end (it used to show the same clip
+  restarting).
+- **Manifest**: `loop` (all five points, length in bars, beat offset, levels, harmony, first/last clip);
+  `{ checked: false, why }` for YouTube (no loop) and the Canvas (its own loop checks).
+- platforms.json: `"loops": true` on reels, tiktok and shorts (also the default for vertical presets
+  with a loop ending or hook-first).
+- Tests: loop.test.ts (a clean loop passes; 0.3 s off a whole bar; a 6 dB level jump at the end; the
+  same clip first and last, and the Reels continuation that passes; a harmony clash C -> F#; phrase cut;
+  the end choice preferring the better loop and saying why; shuffle first != last over 300 seeds).
+
 ### Fix — Start always runs the current code ✅ (to verify on the Windows PC)
 Reported: after `git pull` (1e233c0) the app did not show the Lyrics tab, and Start printed nothing.
 - **Cause**: an older Lyric Studio was still answering on port 3000, so Start only opened the window

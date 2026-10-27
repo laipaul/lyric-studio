@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 import { ffmpegBin } from "@lyric/db";
 
 import { compareSignals, type AudioMatch } from "../audio";
+import type { LoopAudio } from "../loop";
 
 const RATE = 16_000;
 
@@ -24,4 +25,14 @@ export async function compareAudio(video: string, song: string, section: { start
   const match = compareSignals(rendered, source, RATE, fades.fadeInS, fades.fadeOutS);
   // The expected length is the section's, also when the song ends early.
   return { ...match, expectedS: (section.endMs - section.startMs) / 1000 };
+}
+
+// The whole song, mono 16 kHz, for the loop checks (level and harmony at the loop point). null: the
+// song could not be read (the loop check then says so).
+export async function readLoopAudio(song: string): Promise<LoopAudio | null> {
+  try {
+    return { rate: RATE, samples: await decode(song) };
+  } catch {
+    return null;
+  }
 }

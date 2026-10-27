@@ -84,6 +84,9 @@ export type Manifest = {
   fonts: { family: string; weight: number; style: string; src: string; sha256: string }[];
   props: Omit<LyricVideoProps, "mediaBaseUrl">;
   output: { file: string; duration_s: number; qa: string };
+  // Reels, TikTok, Shorts (they loop on the platform): QA "Loop flows" across the wrap-around;
+  // null for YouTube (no loop) and Canvas (its own loop checks). Absent in older manifests.
+  loop?: (import("../loop").LoopResult & { checked: true }) | { checked: false; why: string } | null;
   warnings: string[];
 };
 
