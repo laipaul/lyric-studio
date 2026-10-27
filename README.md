@@ -288,6 +288,21 @@ A brand value for one platform (brand.json `perPlatform`) from the terminal:
 value removes it). Songs of that artist with the same value of their own (and not locked) are tidied
 up, so they follow the brand from now on; songs with a different value keep it (both are listed).
 
+## The music is never altered
+
+Lyric Studio only ever **reads** your song file; nothing writes into it. A video carries the song
+itself, cut to the section, with:
+
+- a short fade only where the music is cut (0.3 s in; 0.5 s out, Reels 0.12 s) — never at the song's
+  own start or end, so a whole-song YouTube video has the song's real intro and ending;
+- AAC 320 kbps at the master's own sample rate (a 44.1 kHz master stays 44.1 kHz; set
+  `"audioSampleRate": 48000` on a platform in `presets\platforms.json` to force 48 kHz);
+- no volume change, loudness normalisation, EQ, compression or limiting.
+
+Each video's QA report checks it ("Audio matches the song": length, level within 0.5 dB, the same part
+of the song). The fade lengths are `fadeInSeconds` / `fadeOutSeconds` per platform in
+`presets\platforms.json`.
+
 ## Audio analysis
 
 ```powershell

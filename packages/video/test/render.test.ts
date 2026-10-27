@@ -25,6 +25,7 @@ import {
   bundledFontDirs,
   fontFileRefs,
   getBundle,
+  compareAudio,
   isFaststart,
   layoutWithFace,
   loadFontCatalog,
@@ -156,7 +157,7 @@ afterAll(async () => {
 });
 
 describe("LyricVideo render", () => {
-  it("renders a 3-second sample as 1080x1920 30 fps H.264 / AAC 192k / yuv420p / faststart", async () => {
+  it("renders a 3-second sample as 1080x1920 30 fps H.264 / AAC 320k / yuv420p / faststart; the audio is the song itself", async () => {
     const out = path.join(dir, "sample.mp4");
     await renderLyricVideo({
       props: {
@@ -180,8 +181,9 @@ describe("LyricVideo render", () => {
     expect(video.r_frame_rate).toBe("30/1");
     expect(video.pix_fmt).toBe("yuv420p");
     expect(audio.codec_name).toBe("aac");
-    expect(Number(audio.bit_rate)).toBeGreaterThan(150_000);
-    expect(Number(audio.bit_rate)).toBeLessThanOrEqual(200_000);
+    expect(Number(audio.bit_rate)).toBeGreaterThan(280_000);
+    expect(Number(audio.bit_rate)).toBeLessThanOrEqual(330_000);
+    expect(Number(audio.sample_rate)).toBe(48_000); // without a sampleRate: Remotion's default (pnpm make passes the master's own)
     expect(Number(probe.format.duration)).toBeCloseTo(3, 1);
     expect(isFaststart(out)).toBe(true);
 
@@ -198,6 +200,10 @@ describe("LyricVideo render", () => {
     expect(middle).toBeGreaterThan(1000);
     expect(rms(0, 0.05)).toBeLessThan(middle * 0.3);
     expect(rms(2.95, 3.0)).toBeLessThan(middle * 0.3);
+    // QA "Audio matches the song": the same section of tone.wav (from frame 15 = 0.5 s), same level.
+    const match = await compareAudio(out, path.join(dir, "tone.wav"), { startMs: 500, endMs: 3_500 }, { fadeInS: 0.3, fadeOutS: 0.5 });
+    expect(Math.abs(match.actualS - match.expectedS)).toBeLessThan(0.1);
+    expect(Math.abs(match.levelDiffDb)).toBeLessThan(0.5);
   }, 300_000);
 
   it("a render that makes no progress is stopped by the watchdog (no partial file left)", async () => {

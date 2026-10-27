@@ -1,4 +1,6 @@
-// Renders LyricVideo to MP4 with Remotion: H.264, AAC 192 kbps, yuv420p, faststart (see CLAUDE.md).
+// Renders LyricVideo to MP4 with Remotion: H.264, AAC 320 kbps at the master's own sample rate, yuv420p,
+// faststart (see CLAUDE.md). The audio is the song with only the fade curve applied (Remotion mixes with
+// amix normalize=0: no level change, no loudness normalisation, EQ, compression or limiting).
 import { execFile } from "node:child_process";
 import { closeSync, openSync, readSync, renameSync, rmSync, statSync } from "node:fs";
 import net from "node:net";
@@ -9,6 +11,7 @@ import { ffmpegBin } from "@lyric/db";
 import { bundle } from "@remotion/bundler";
 import { makeCancelSignal, renderMedia, renderStill, selectComposition } from "@remotion/renderer";
 
+import { AUDIO_BITRATE } from "../audio";
 import { COMPOSITION_ID } from "../config";
 import { THUMBNAIL_ID, type ThumbnailProps } from "../Thumbnail";
 import type { LyricVideoProps } from "../props";
@@ -57,6 +60,7 @@ export type RenderOptions = {
   videoCacheBytes?: number;
   stallTimeoutMs?: number; // cancel the render if it makes no progress for this long (default 5 min)
   videoBitrate?: string | null; // e.g. "10M" (platform presets); default: constant quality
+  sampleRate?: number; // the audio's (Hz): the master's own (pnpm make); default 48000
   compositionId?: string; // default LyricVideo (pnpm effects:preview renders its grid composition)
 };
 
@@ -111,7 +115,8 @@ export async function renderLyricVideo(options: RenderOptions): Promise<string> 
         inputProps,
         codec: "h264",
         audioCodec: "aac",
-        audioBitrate: "192k",
+        audioBitrate: AUDIO_BITRATE,
+        ...(options.sampleRate ? { sampleRate: options.sampleRate } : {}),
         pixelFormat: "yuv420p",
         colorSpace: "bt709", // standard (limited) range: plain yuv420p, not full-range yuvj420p
         logLevel: "error",

@@ -33,3 +33,4 @@ export * from "./assets";
 export * from "./style";
 export * from "./run-settings";
 export * from "./lyrics-view";
+export * from "./audio-check";

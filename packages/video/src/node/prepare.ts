@@ -201,6 +201,7 @@ export function songMedia(
   plan: CutPlan,
   catalog: Pick<FontCatalog, "fontDirs">,
   fadeOutSeconds: number = AUDIO_FADE.outSeconds,
+  fadeInSeconds: number = AUDIO_FADE.inSeconds,
 ): { media: MediaRoots; audio: NonNullable<RenderBase["audio"]> } {
   const insideWorkspace = path.relative(workspaceDir, song);
   const songInWorkspace = !insideWorkspace.startsWith("..") && !path.isAbsolute(insideWorkspace);
@@ -214,7 +215,7 @@ export function songMedia(
     audio: {
       src: audioSrc,
       startFrame: plan.start_frame,
-      fadeInFrames: Math.round(AUDIO_FADE.inSeconds * VIDEO.fps),
+      fadeInFrames: Math.round(fadeInSeconds * VIDEO.fps),
       fadeOutFrames: Math.round(fadeOutSeconds * VIDEO.fps),
     },
   };

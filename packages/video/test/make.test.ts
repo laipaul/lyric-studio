@@ -1,7 +1,7 @@
 // "pnpm make" and "pnpm rerender": collection import by content hash, project by song hash, stored
 // (immutable) alignments, and a full short run with real renders, manifests, QA and a rerender.
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -271,7 +271,11 @@ describe("pnpm make + pnpm rerender (real renders)", () => {
   let lrcHash: string;
   let lrcFile: string;
 
+  let songBefore: { hash: string; mtimeMs: number };
+
   beforeAll(async () => {
+    const input = path.join(inDir, "song.wav");
+    songBefore = { hash: sha256File(input), mtimeMs: statSync(input).mtimeMs };
     result = await makeVideos({
       workspaceDir: wsDir,
       song: path.join(inDir, "song.wav"),
@@ -286,6 +290,19 @@ describe("pnpm make + pnpm rerender (real renders)", () => {
     lrcFile = path.join(wsDir, ...manifest.lyrics.lrc.split("/"));
     lrcHash = sha256File(lrcFile);
   }, 600_000);
+
+  it("never alters the music: the song file is untouched, the video's audio is the song itself", () => {
+    const input = path.join(inDir, "song.wav");
+    expect({ hash: sha256File(input), mtimeMs: statSync(input).mtimeMs }).toEqual(songBefore);
+    const p = ws.db.select().from(project).all().find((x) => x.audio_hash === songBefore.hash)!;
+    expect(sha256File(path.join(wsDir, ...p.audio_path!.split("/")))).toBe(songBefore.hash); // the song folder's copy is byte for byte the same
+    for (const v of result.variations) {
+      expect(v.qa!.checks.find((c) => c.name === "Audio matches the song")).toEqual({ name: "Audio matches the song", ok: true, details: [] });
+      const m = readManifest(v.manifestFile);
+      expect(m.settings.audio).toEqual({ fade_in_s: 0.3, fade_out_s: 0.5, sample_rate: 44_100, resampled: false, bitrate: "320k", processing: "none (no volume, loudness normalisation, EQ, compression or limiting)" });
+      expect(m.settings.video).toBe("H.264, AAC 320 kbps 44.1 kHz, yuv420p, faststart");
+    }
+  });
 
   it("writes v1.mp4/v2.mp4 with a manifest and a QA report each, and records the jobs", () => {
     expect(readdirSync(result.exportDir).sort()).toEqual(["song.lrc", "v1.manifest.json", "v1.mp4", "v1.qa.txt", "v1.srt", "v2.manifest.json", "v2.mp4", "v2.qa.txt", "v2.srt"]);

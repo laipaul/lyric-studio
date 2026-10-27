@@ -1,5 +1,6 @@
 // Quality checks for a finished variation ("pnpm make"), written to v<N>.qa.txt. Pure: the frame
 // analysis (FFmpeg) and text measuring happen in Node and are passed in.
+import { AUDIO_ENVELOPE_TOLERANCE_DB, AUDIO_LENGTH_TOLERANCE_S, AUDIO_LEVEL_TOLERANCE_DB, type AudioMatch } from "./audio";
 import { VIDEO } from "./config";
 import { cinematicBarHeight, DEFAULT_FORMAT, DEFAULT_LYRIC_AREA, DEFAULT_SAFE_ZONE, type Format, type LyricArea, type SafeZone } from "./platform";
 import { MAX_LINES } from "./lyrics";
@@ -36,6 +37,7 @@ export type QaInput = {
   frozenCheckSkipped?: boolean; // still pictures by design (YouTube cover / stills)
   length?: { actualS: number; songS: number | null } | null; // the finished file's length (songS: a full-song video)
   platformLimit?: { seconds: number; limitS: number; platform: string } | null; // a fixed section (0:11-1:10) against the platform's longest
+  audioMatch?: AudioMatch | null; // the video's audio against the same section of the song (null: not checked)
   canvas?: { lastToFirst: number; typicalStep: number; hasAudio: boolean; seconds: number; min: number; max: number } | null; // Spotify Canvas
 };
 
@@ -124,6 +126,16 @@ export function runQa(input: QaInput): QaReport {
     ok: review.length === 0,
     details: review.map((l) => `line ${l.number} "${l.text}": flagged for review (${l.review}); kept where the alignment has it`),
   });
+
+  // 1d. The music is the song itself: same length, same level (outside the fades), same loudness curve.
+  if (input.audioMatch) {
+    const a = input.audioMatch;
+    const details: string[] = [];
+    if (Math.abs(a.actualS - a.expectedS) > AUDIO_LENGTH_TOLERANCE_S) details.push(`the audio lasts ${a.actualS.toFixed(2)} s, the section ${a.expectedS.toFixed(2)} s`);
+    if (Math.abs(a.levelDiffDb) > AUDIO_LEVEL_TOLERANCE_DB) details.push(`the level differs from the song by ${a.levelDiffDb > 0 ? "+" : ""}${a.levelDiffDb.toFixed(2)} dB (allowed ${AUDIO_LEVEL_TOLERANCE_DB} dB)`);
+    if (a.envelopeDiffDb > AUDIO_ENVELOPE_TOLERANCE_DB) details.push(`the loudness curve differs from the song's by ${a.envelopeDiffDb.toFixed(2)} dB on average (a different part of the song, or shifted?)`);
+    checks.push({ name: "Audio matches the song", ok: details.length === 0, details });
+  }
 
   // 2. The same clip again within 3 shots.
   const repeats: string[] = [];

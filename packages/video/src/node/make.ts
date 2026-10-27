@@ -25,6 +25,8 @@ import {
 } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
+import { audioPlan, type AudioPlan } from "../audio";
+import { compareAudio } from "./audio-check";
 import type { Beat } from "../beats";
 import { composeProps, DEFAULT_LEAD_MS, lyricFrames, rawLyric, type PlatformLayout, type RenderBase, type StyleChoice } from "../compose";
 import { choiceText, parseEffectChoice, type EffectChoice } from "../effects";
@@ -817,7 +819,19 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     warnings.push(...parsed.warnings, ...matched.warnings);
   }
 
-  const { media, audio } = songMedia(ws.dir, sh.sp.songFile, plan, sh.catalog, preset.fadeOutSeconds);
+  // The music: the song itself, cut to the section; a fade only where the music is cut (see ../audio.ts).
+  const songAudio = await probeMedia(sh.sp.songFile);
+  const audioP = audioPlan({
+    startMs: Math.round((plan.start_frame * 1000) / VIDEO.fps),
+    endMs: chosen.end_ms,
+    songMs: analysis.duration_ms,
+    fadeInSeconds: preset.fadeInSeconds,
+    fadeOutSeconds: preset.fadeOutSeconds,
+    sourceRate: songAudio.sampleRate ?? null,
+    sampleRate: preset.audioSampleRate,
+  });
+  if (preset.audio) sh.log(`${preset.name}: ${audioP.note}`);
+  const { media, audio } = songMedia(ws.dir, sh.sp.songFile, plan, sh.catalog, audioP.fadeOutS, audioP.fadeInS);
   // With word times and the sung end (from the aligned LRC, else the alignment report) for the effects.
   const allLyrics = lines.map((l, i) => rawLyric({ ...l, sung_end_ms: sh.sectionLines[i].sung_end_ms ?? l.sung_end_ms }));
   const fx = chooseEffects(sh.brand.brand, options, sh.effectLabels);
@@ -1045,6 +1059,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         concurrency: settings.concurrency,
         videoCacheBytes: settings.videoCacheBytes,
         videoBitrate: preset.videoBitrate,
+        sampleRate: audioP.sampleRate,
         onProgress: (p) => {
           state.progress = p;
           report();
@@ -1082,6 +1097,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         sectionCuts: chosen.cuts.map((c) => ({ ...c, line: numbers[c.line - 1] || c.line })),
         platformLimit: platformLimit(chosen, preset),
         canvas: canvas ? { min: preset.length.mode === "loop" ? preset.length.min : 3, max: preset.length.mode === "loop" ? preset.length.max : 8 } : null,
+        audio: props.audio ? { song: sh.sp.songFile, fadeInS: audioP.fadeInS, fadeOutS: audioP.fadeOutS } : null,
       });
       result.qa = qa;
       result.qaSummary = qa.status === "PASS" ? "PASS" : `WARN (${qaReasons(qa)})`;
@@ -1089,7 +1105,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       writeManifest(
         result.manifestFile,
         buildManifest({
-          ws, tool: sh.tool, spec, props, media, project, songHash: sh.sp.songHash, songFile: sh.sp.songFile, analysis, chosen, alignment, reports, numbers,
+          ws, tool: sh.tool, spec, props, media, project, songHash: sh.sp.songHash, songFile: sh.sp.songFile, analysis, chosen, alignment, reports, numbers, audioPlan: audioP,
           visible, lines, leadMs, lyricsOffsetMs, options, collection: sh.collection, collectionNames: sh.collectionNames, clips: prepared.clips, file, qa, now: sh.now, warnings, preset,
           brand: sh.brand.brand,
         }),
@@ -1182,6 +1198,7 @@ async function checkVariation(
     platformLimit: { seconds: number; limitS: number; platform: string } | null;
     songS: number | null; // a full-song video: the song's length
     canvas?: { min: number; max: number } | null; // Spotify Canvas: loop, silence and length checks
+    audio?: { song: string; fadeInS: number; fadeOutS: number } | null; // compared with the song (QA "Audio matches the song")
   },
 ): Promise<QaReport> {
   const style = ctx.styles[spec.style];
@@ -1216,12 +1233,22 @@ async function checkVariation(
     endScreen: end ? { clear: end.clear, lines: lyrics.filter(inEnd).map((l) => l.number) } : null,
     frozenCheckSkipped: ctx.stillPictures,
     length: ctx.frameCheck ? { actualS: (await probeMedia(file)).durationMs / 1000, songS: ctx.songS } : null,
+    audioMatch:
+      ctx.frameCheck && ctx.audio && props.audio
+        ? await compareAudio(
+            file,
+            ctx.audio.song,
+            { startMs: (props.audio.startFrame * 1000) / VIDEO.fps, endMs: ((props.audio.startFrame + props.durationInFrames) * 1000) / VIDEO.fps },
+            ctx.audio,
+          )
+        : null,
     canvas: ctx.frameCheck && ctx.canvas ? { ...(await loopCheck(file)), ...ctx.canvas } : null,
   });
 }
 
 function buildManifest(c: {
   ws: Workspace;
+  audioPlan?: AudioPlan;
   tool: Manifest["tool"];
   spec: VariationSpec;
   props: Omit<LyricVideoProps, "mediaBaseUrl">;
@@ -1304,7 +1331,11 @@ function buildManifest(c: {
       target_length: c.options.length ?? null, // seconds; shapes an auto section only (the Videos tab shows it)
       fps: VIDEO.fps,
       size: `${c.preset.width}x${c.preset.height}`,
-      video: `H.264${c.preset.videoBitrate ? ` ${c.preset.videoBitrate}` : ""}, ${props.audio ? "AAC 192 kbps" : "no audio"}, yuv420p, faststart`,
+      video: `H.264${c.preset.videoBitrate ? ` ${c.preset.videoBitrate}` : ""}, ${props.audio ? `AAC ${(c.audioPlan?.bitrate ?? "320k").replace("k", " kbps")}${c.audioPlan ? ` ${c.audioPlan.sampleRate / 1000} kHz` : ""}` : "no audio"}, yuv420p, faststart`,
+      // The music: the song itself, cut to the section; fades only where it is cut; nothing else applied.
+      audio: props.audio && c.audioPlan
+        ? { fade_in_s: c.audioPlan.fadeInS, fade_out_s: c.audioPlan.fadeOutS, sample_rate: c.audioPlan.sampleRate, resampled: c.audioPlan.resampled, bitrate: c.audioPlan.bitrate, processing: "none (no volume, loudness normalisation, EQ, compression or limiting)" }
+        : null,
       safe_zone: c.preset.safeZone,
       lyric_area: props.lyricArea,
     },

@@ -22,7 +22,9 @@ export type PlatformPreset = {
   lyricsAt: number; // vertical position of the lyrics inside the usable area: 0 = top, 0.5 = middle
   textScale: number;
   videoBitrate: string | null; // e.g. "10M"; null = constant quality (CRF)
-  fadeOutSeconds: number;
+  fadeInSeconds: number; // where the section cuts into the music (never at the song's own start)
+  fadeOutSeconds: number; // where the section cuts the music off (never at the song's own end)
+  audioSampleRate: number | "source"; // "source" (default): the master's own rate, no resampling
   loopEnding: boolean; // last shot continues into the first one (Reels loop)
   lyrics: boolean;
   audio: boolean;
@@ -159,6 +161,8 @@ export function parsePresets(json: unknown, file = "presets/platforms.json"): Re
     if (!isNum(p.textScale ?? 1, 0.5, 2)) bad("textScale", "must be 0.5-2");
     if (p.videoBitrate !== null && p.videoBitrate !== undefined && !(typeof p.videoBitrate === "string" && /^\d+(\.\d+)?[kKmM]$/.test(p.videoBitrate))) bad("videoBitrate", 'must be like "10M", "8000k" or null');
     if (!isNum(p.fadeOutSeconds ?? 0.5, 0, 3)) bad("fadeOutSeconds", "must be 0-3");
+    if (!isNum(p.fadeInSeconds ?? 0.3, 0, 3)) bad("fadeInSeconds", "must be 0-3");
+    if (p.audioSampleRate !== undefined && p.audioSampleRate !== "source" && !(typeof p.audioSampleRate === "number" && [44100, 48000].includes(p.audioSampleRate))) bad("audioSampleRate", 'must be "source" (the master\'s own rate), 44100 or 48000');
     let youtube: YouTubeOptions | undefined;
     if (p.layout === "youtube") {
       const y = (p.youtube ?? {}) as Partial<YouTubeOptions>;
@@ -206,7 +210,9 @@ export function parsePresets(json: unknown, file = "presets/platforms.json"): Re
       lyricsAt: (p.lyricsAt as number) ?? 0.45,
       textScale: (p.textScale as number) ?? 1,
       videoBitrate: (p.videoBitrate as string | null) ?? null,
+      fadeInSeconds: (p.fadeInSeconds as number) ?? 0.3,
       fadeOutSeconds: (p.fadeOutSeconds as number) ?? 0.5,
+      audioSampleRate: (p.audioSampleRate as number | "source" | undefined) ?? "source",
       loopEnding: p.loopEnding === true,
       lyrics: p.lyrics !== false,
       audio: p.audio !== false,

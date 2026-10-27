@@ -29,12 +29,16 @@ export type MediaInfo = {
   durationMs: number;
   hasVideo: boolean;
   hasAudio: boolean;
+  sampleRate?: number | null; // the audio stream's (Hz)
+  channels?: number | null;
   width: number | null; // as displayed (rotation applied)
   height: number | null;
 };
 
 type ProbeStream = {
   codec_type?: string;
+  sample_rate?: string;
+  channels?: number;
   width?: number;
   height?: number;
   duration?: string;
@@ -63,7 +67,7 @@ export async function probeMedia(file: string): Promise<MediaInfo> {
   const rotation = Number(video?.side_data_list?.find((d) => d.rotation !== undefined)?.rotation ?? video?.tags?.rotate ?? 0);
   if (Math.abs(rotation) % 180 === 90) [width, height] = [height, width];
 
-  return { durationMs: Math.round(seconds * 1000), hasVideo: !!video, hasAudio: !!audio, width, height };
+  return { durationMs: Math.round(seconds * 1000), hasVideo: !!video, hasAudio: !!audio, width, height, sampleRate: audio?.sample_rate ? Number(audio.sample_rate) : null, channels: audio?.channels ?? null };
 }
 
 // Thumbnails come from about 1 second in (frame 0 is often black), or the middle of shorter clips.

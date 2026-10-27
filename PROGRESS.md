@@ -718,6 +718,30 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   effect hints. Browser check: Style (per-platform rows, lock, fonts and warning, length), Generate
   (recipe option, locked hook effect, chips with length), Assets (path, hints).
 
+### Rule — Lyric Studio never alters the music ✅ (to verify on the Windows PC)
+- **The song file is only read.** Readers: the song hash (finding the project), ffprobe (length, sample
+  rate), librosa (BPM / beats), Demucs (vocal stem, written to workspace\cache\stems), the aligner,
+  pnpm tap (playback), Remotion's media server (render), the Lyrics tab's ▶, the new QA comparison.
+  Nothing writes into it: it is only copied into the song folder (New song), moved (migration) or moved
+  to .studio\replaced\ when replaced in the Assets tab. (pnpm analyze --click writes a separate
+  <song>_click.wav test file next to it, on request only; never used in videos.)
+- **Stems are analysis only**: the vocal stem and the voice map are never in any output.
+- **What happens to the audio in a render**: the song itself, cut to the section; a fade only where the
+  music is cut (0.3 s in; out 0.5 s, Reels 0.12 s for the loop); **no fades at the song's own start or
+  end any more** (whole-song YouTube videos had a 0.3 s fade-in and a 1.5 s fade-out on the song's own
+  intro and ending: removed). AAC **320 kbps** (was 192) at **the master's own sample rate** (44.1 kHz
+  stays 44.1 kHz: no resampling; platforms.json "audioSampleRate": 48000 forces 48 kHz, then it is
+  resampled, said so). No volume, loudness normalisation, EQ, compression or limiting (Remotion mixes
+  with amix normalize=0 and applies only the fade curve).
+- **QA "Audio matches the song"**: the video's audio against the same section of the song file:
+  length within 0.1 s, level within 0.5 dB outside the fades, loudness curve within 1 dB (a different
+  part of the song or a shift shows up). The manifest records settings.audio.
+- Tests: audio.test.ts (the plan: whole song without fades, a section with them, 48 kHz only on request;
+  real FFmpeg files: the song cut/faded/AAC 320k passes with < 0.1 dB difference, -1 dB fails, a 2 s
+  shift fails), render.test.ts (a real Remotion render: AAC ~320 kbps, audio matches its source),
+  make.test.ts (real renders: the song file's hash and modification time are unchanged, the song
+  folder's copy is byte for byte the same, QA audio check passes, 44.1 kHz kept).
+
 ### Fix — Start always runs the current code ✅ (to verify on the Windows PC)
 Reported: after `git pull` (1e233c0) the app did not show the Lyrics tab, and Start printed nothing.
 - **Cause**: an older Lyric Studio was still answering on port 3000, so Start only opened the window
