@@ -997,6 +997,14 @@ rest was in sync.
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
 
 ## Backlog (not scheduled yet)
+- **Colour grading (plan approved, not built yet)**: a look per brand -> collection (look.json) -> song
+  (white balance, contrast, saturation, black level, warmth, optional vignette; presets warm cinematic,
+  cool night, soft pastel, natural, film fade; optional .cube LUT); shot matching first (brightness and
+  white balance per clip, a capped gentle correction toward the collection average); graded once per
+  clip in the clip cache (clip + look + strength); readability rules applied after grading; Style tab
+  on/off, preset, strength, before/after frames; QA "Shot colour" naming the clip; never the audio.
+  **Default strength 40%** (the user's clips already have a strong look: matching matters more than
+  restyling). Tests: matching on clips with different white balance/exposure, cache reuse, strength, QA.
 - **Proposed Step 5j.1 — Lyric readability on bright clips** (reported on the wedding collection: the
   waiting next line and the pink karaoke highlight get lost on white / cream footage). Idea:
   - measure the brightness behind the lyric area per shot (FFmpeg on the prepared clip frames, cached
