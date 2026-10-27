@@ -128,7 +128,7 @@ describe("the Lyrics tab's checks (before any section is chosen)", () => {
       lines, durations, downbeats,
     );
     expect(problems).toEqual([
-      { line: 2, problem: "line 2 is not a sung line in lyrics.txt" },
+      { line: 2, problem: "line 2 is not a sung line of this song" },
       { line: 5, problem: "short.mp4 has 1.5 s, line 5 lasts 3.8 s: it will be slowed to 0.50x and its last frame held" },
       { line: 7, problem: "line 7 and line 6 land on the same bar: line 7 will cut in on a beat instead" },
       { line: 7, problem: "lines 6 and 7 both land on hands.mp4, 0.9 s apart: the repeat is visible" },
@@ -139,7 +139,7 @@ describe("the Lyrics tab's checks (before any section is chosen)", () => {
   it("song.json anchors are checked, every problem named", () => {
     expect(checkAnchors([{ line: 9, clip: " hands.mp4 ", clipIn: 1.5, transition: "dissolve" }])).toEqual({ anchors: [{ line: 9, clip: "hands.mp4", clipIn: 1.5, transition: "dissolve" }], problems: [] });
     expect(checkAnchors([{ line: 0, clip: "a.mp4" }, { line: 3 }, { line: 4, clip: "b.mp4", transition: "wipe" }]).problems).toEqual([
-      "anchors[0]: line must be a line number of lyrics.txt (1, 2, ...)",
+      "anchors[0]: line must be a line number (1, 2, ...)",
       "anchors[1]: clip must be a clip file name",
       'anchors[2]: transition must be "cut" or "dissolve"',
     ]);

@@ -1,6 +1,6 @@
 // Story anchors (song.json "anchors": [{ line: 9, clip: "hands.mp4", clipIn?: 1.5, transition?: "dissolve" }]):
-// a clip that lands on one lyric line (its lyrics.txt number; a repeated chorus line can land on
-// another clip each time).
+// a clip that lands on one lyric line (its number in the Lyrics tab: sung lines counted, blank lines
+// not, as in check-start and hints.lrc; a repeated chorus line can land on another clip each time).
 //   Cut:   on the downbeat at or just before the line's on-screen time (earlyCutFrames before it, as
 //          every cut), held until at least the line's sung end; the next cut is the first regular cut
 //          after that. Anchors win over the regular cut rate; regular cuts fill the gaps.
@@ -180,7 +180,7 @@ export function anchorProblems(
     seen.set(a.line, a);
     const l = lines.get(a.line);
     if (!l) {
-      out.push({ line: a.line, problem: `line ${a.line} is not a sung line in lyrics.txt` });
+      out.push({ line: a.line, problem: `line ${a.line} is not a sung line of this song` });
       continue;
     }
     const key = a.clip.toLowerCase();
@@ -196,7 +196,7 @@ export function anchorProblems(
     const bar = barOf(l.shownMs);
     if (previous) {
       const p = lines.get(previous.a.line)!;
-      if (bar === previous.bar || l.shownMs - p.shownMs < minShotMs) {
+      if ((downbeats.length && bar === previous.bar) || l.shownMs - p.shownMs < minShotMs) { // (no beats analysed yet: only the spacing)
         out.push({ line: a.line, problem: `line ${a.line} and line ${previous.a.line} land on the same bar: line ${a.line} will cut in on a beat instead${l.shownMs - barOf(p.shownMs) < minShotMs ? " (or not at all: too close)" : ""}` });
       }
       if (previous.a.clip.toLowerCase() === key && l.shownMs - p.shownMs < ANCHOR_REPEAT_MS) {
@@ -227,7 +227,7 @@ export function checkAnchors(raw: unknown): { anchors: AnchorSpec[]; problems: s
     const a = x as Record<string, unknown>;
     const at = `anchors[${i}]`;
     if (!a || typeof a !== "object") return problems.push(`${at} must be like { "line": 9, "clip": "hands.mp4" }`);
-    if (!Number.isInteger(a.line) || (a.line as number) < 1) return problems.push(`${at}: line must be a line number of lyrics.txt (1, 2, ...)`);
+    if (!Number.isInteger(a.line) || (a.line as number) < 1) return problems.push(`${at}: line must be a line number (1, 2, ...)`);
     if (typeof a.clip !== "string" || !a.clip.trim()) return problems.push(`${at}: clip must be a clip file name`);
     if (a.clipIn !== undefined && (typeof a.clipIn !== "number" || !Number.isFinite(a.clipIn) || a.clipIn < 0)) return problems.push(`${at}: clipIn must be seconds into the clip (0 or more)`);
     if (a.transition !== undefined && a.transition !== "cut" && a.transition !== "dissolve") return problems.push(`${at}: transition must be "cut" or "dissolve"`);

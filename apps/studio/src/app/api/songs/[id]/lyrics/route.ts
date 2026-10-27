@@ -2,10 +2,11 @@
 // lyrics.txt with its label lines. POST { action: "times", changes: [{ number, ms | null }] }: hand-set
 // starts into hints.lrc (the stored alignment is kept); { action: "text", text }: a new lyrics.txt (the
 // old one kept in .studio\replaced\); { action: "restore", file }: an earlier lyrics.txt back;
-// { action: "ear", number, checked }: "checked by ear" on a line (clears its timing warnings in QA).
+// { action: "ear", number, checked }: "checked by ear" on a line (clears its timing warnings in QA);
+// { action: "anchors", anchors: [{ line, clip, clipIn?, transition? }], gapOrder? }: story anchors in song.json.
 import { connection } from "next/server";
 
-import { lyricsView, restoreLyrics, saveHandTimes, saveLyricsText, setCheckedByEar } from "@lyric/video/lyrics-view";
+import { lyricsView, restoreLyrics, saveAnchors, saveHandTimes, saveLyricsText, setCheckedByEar } from "@lyric/video/lyrics-view";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
@@ -25,7 +26,8 @@ export async function GET(_request: Request, { params }: Params) {
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
   try {
-    const body = (await request.json()) as { action?: string; changes?: { number: number; ms: number | null }[]; text?: string; file?: string; number?: number; checked?: boolean };
+    const body = (await request.json()) as { action?: string; changes?: { number: number; ms: number | null }[]; text?: string; file?: string; number?: number; checked?: boolean; anchors?: unknown; gapOrder?: "story" | "shuffle" | null };
+    if (body.action === "anchors") return Response.json({ anchors: withWorkspace((ws) => saveAnchors(ws, id, body.anchors ?? [], body.gapOrder)) });
     if (body.action === "ear") {
       await withWorkspaceAsync((ws) => setCheckedByEar(ws, id, Number(body.number), body.checked === true));
       return Response.json({ ok: true });

@@ -306,6 +306,15 @@ Each video's QA report checks it ("Audio matches the song": length, level within
 of the song). The fade lengths are `fadeInSeconds` / `fadeOutSeconds` per platform in
 `presets\platforms.json`.
 
+## Story anchors
+
+In the Lyrics tab, "Lands on…" on a line picks the clip that appears with it (thumbnails of the song's
+clips and its collections), where in the clip it starts, and cut or dissolve. It is saved in song.json
+(`anchors`). The clip cuts in on the downbeat just before the line appears and stays until the line is
+sung; the other clips fill the gaps in file-name order in every video (or shuffled: "Gaps between them").
+Each platform uses the anchors inside its section; an auto section prefers the end that keeps the most.
+QA "Story anchors" names every conflict, and every clip that had to be slowed down to cover its line.
+
 ## Loops (Reels, TikTok, Shorts)
 
 These platforms play a video in a loop. Each of their QA reports has a check "Loop flows": the length is

@@ -6,6 +6,7 @@ import path from "node:path";
 
 import type { Workspace } from "@lyric/db";
 
+import type { AnchorUse } from "../anchors";
 import { clockText } from "../section";
 import { SHORT_LABELS } from "./exports";
 import type { Manifest } from "./manifest";
@@ -27,6 +28,7 @@ export type RunPlatformSettings = {
   section: { mode: string; startMs: number; endMs: number } | null;
   targetLength: number | null;
   youtubeLayout: string | null;
+  anchors: AnchorUse[] | null; // story anchors of its first video (null: none, or an older run)
 };
 
 export type SettingsRow = { key: string; label: string; then: string; now: string; differs: boolean };
@@ -91,8 +93,16 @@ export function runSettings(ws: Workspace, projectId: string, folder: string): R
       section: m.section ? { mode: m.section.mode, startMs: m.section.start_ms, endMs: m.section.end_ms } : null,
       targetLength: typeof s.target_length === "number" ? s.target_length : null,
       youtubeLayout: platform === "youtube" ? (str(m.props?.layout) ?? null) : null,
+      anchors: m.anchors?.used?.length ? m.anchors.used : null,
     };
   });
+}
+
+// "line 9 → hands.mp4 (0:41.0, dissolve), line 12 → … ; not in this section: line 31 (sea.mp4)"
+export function anchorsText(uses: readonly AnchorUse[]): string {
+  const used = uses.filter((u) => u.used).map((u) => `line ${u.line} → ${u.clip} (${clockText(u.at_ms ?? 0)}${u.transition === "dissolve" ? ", dissolve" : ""}${u.playback_rate ? `, slowed ${u.playback_rate.toFixed(2)}x` : ""})`);
+  const out = uses.filter((u) => !u.used).map((u) => `line ${u.line} (${u.clip}${u.why && u.why !== "outside this section" ? `: ${u.why}` : ""})`);
+  return [used.join(", ") || "none used", ...(out.length ? [`not in this video: ${out.join(", ")}`] : [])].join("; ");
 }
 
 // One run next to the recipe as it is now, platform by platform.
@@ -119,6 +129,14 @@ export function compareRunToRecipe(ws: Workspace, projectId: string, folder: str
       rows.push({ key: "section", label: "Section", then, now: nowText, differs: (r.section.mode === "auto") !== (now.section === "auto") });
     }
     if (r.platform === "youtube") add("youtubeLayout", "Layout", r.youtubeLayout, now.youtubeLayout);
+    // Story anchors: which ones this run used (and which were outside its section), against song.json now.
+    const nowAnchors = input.song.anchors ?? [];
+    if (r.anchors || nowAnchors.length) {
+      const then = r.anchors ? anchorsText(r.anchors) : "none";
+      const key = (xs: readonly { line: number; clip: string }[]) => xs.map((a) => `${a.line}=${a.clip.toLowerCase()}`).sort().join(",");
+      const nowText = nowAnchors.length ? nowAnchors.map((a) => `line ${a.line} → ${a.clip}`).join(", ") : "none";
+      rows.push({ key: "anchors", label: "Story anchors", then, now: nowText, differs: key(r.anchors ?? []) !== key(nowAnchors) });
+    }
     return { platform: r.platform, label: r.label, videos: r.videos, rows };
   });
 }

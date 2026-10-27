@@ -785,10 +785,11 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   // Shorts): the auto end that flows best back into the start.
   const loops = preset.loops && !canvas;
   const loopSong = loops ? await sh.loopAudio() : null;
-  // Story anchors by alignment line: on screen from (stamp - lead + offset) until the line is sung.
+  // Story anchors by line (the Lyrics tab's number: sung lines counted, as in check-start and hints.lrc):
+  // on screen from (stamp - lead + offset) until the line is sung.
   const anchorLines = sh.anchors.flatMap((a) => {
-    const i = numbers.indexOf(a.line);
-    return i < 0 ? [] : [{ line: a.line, shownMs: lines[i].start_ms - leadMs + lyricsOffsetMs, sungEndMs: sungEnd(sh.sectionLines[i]) }];
+    const i = a.line - 1;
+    return !lines[i] ? [] : [{ line: a.line, shownMs: lines[i].start_ms - leadMs + lyricsOffsetMs, sungEndMs: sungEnd(sh.sectionLines[i]) }];
   });
   const chosen: SectionChoiceOut = canvas
     ? { mode: "loop", start_ms: 0, end_ms: Math.round(canvas.seconds * 1000), requested: null, reason: canvas.reason, warnings: canvas.warnings, cuts: [] }
@@ -885,16 +886,16 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     ? [...finishedBeforeStart(sh.sectionLines, chosen.start_ms, leadMs, lyricsOffsetMs), ...startsAfterEnd(sh.sectionLines, chosen.end_ms, leadMs, lyricsOffsetMs)]
     : [];
   const shown = preset.lyrics ? lines.map((_, i) => i).filter((i) => !hidden.includes(i)) : [];
-  // Story anchors (song.json): the line by its lyrics.txt number, the clip from this run's clips (the
+  // Story anchors (song.json): the line by the Lyrics tab's number, the clip from this run's clips (the
   // song's own and its collections). Never dropped silently: what is not found is said (QA too).
   const anchors: ResolvedAnchor[] = [];
   const anchorMissing: string[] = [];
   if (usesClips && !canvas && preset.lyrics) {
     const stem = (n: string) => n.toLowerCase().replace(/\.[^.]+$/, "");
     for (const a of sh.anchors) {
-      const i = numbers.indexOf(a.line);
+      const i = lines[a.line - 1] ? a.line - 1 : -1;
       const clip = preparedClips.find((c) => c.name.toLowerCase() === a.clip.toLowerCase()) ?? preparedClips.find((c) => stem(c.name) === stem(a.clip));
-      if (i < 0) anchorMissing.push(`the anchor on line ${a.line} (${a.clip}): line ${a.line} is not a sung line in lyrics.txt`);
+      if (i < 0) anchorMissing.push(`the anchor on line ${a.line} (${a.clip}): the song has ${lines.length} sung lines`);
       else if (!clip) anchorMissing.push(`the anchor on line ${a.line} "${lines[i].text}": ${a.clip} is not among this video's clips (the song's clips and its collections, ${prepared.kind} for ${preset.label})`);
       else anchors.push({ line: a.line, text: lines[i].text, lyric: shown.indexOf(i), clipId: clip.id, clipName: clip.name, clipInMs: Math.round((a.clipIn ?? 0) * 1000), transition: a.transition ?? "cut" });
     }

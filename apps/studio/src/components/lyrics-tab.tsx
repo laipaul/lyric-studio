@@ -1,9 +1,9 @@
 "use client";
 
-import { AlertTriangle, Ear, Pause, Play, RotateCcw, Save, Star, Undo2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, Clapperboard, Ear, Pause, Play, RotateCcw, Save, Star, Undo2, X } from "lucide-react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
-import type { LyricsLine, LyricsView } from "@lyric/video/lyrics-view";
+import type { AnchorClip, LyricsLine, LyricsView } from "@lyric/video/lyrics-view";
 
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -28,7 +28,9 @@ type Pending = Map<number, number | null>; // line number -> new start (null = b
 // The Lyrics tab: every line with its time stamp, where it starts now, what the viewer sees, confidence
 // and the vocal-start check's verdict (flagged lines highlighted). Nudge a line (−0.5 / −0.1 / +0.1 /
 // +0.5 s), listen (▶ 3 s from just before it), Save: hand-set lines go into hints.lrc and the next make
-// uses them, keeping the stored alignment. Below: lyrics.txt itself, with label / title / credit lines flagged.
+// uses them, keeping the stored alignment. "Lands on": a story anchor per line (a clip from the song's
+// own clips and its collections; saved in song.json at once). Below: lyrics.txt itself, with label /
+// title / credit lines flagged.
 export function LyricsTab({ projectId }: { projectId: string }) {
   const [data, setData] = useState<LyricsView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +40,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
   const [onlyReview, setOnlyReview] = useState(false);
   const [busy, setBusy] = useState(false);
   const [playing, setPlaying] = useState<number | null>(null);
+  const [picking, setPicking] = useState<number | null>(null); // the line whose "lands on" picker is open
   const audio = useRef<HTMLAudioElement>(null);
   const stopAt = useRef<number | null>(null);
 
@@ -121,6 +124,20 @@ export function LyricsTab({ projectId }: { projectId: string }) {
     await load();
   }
 
+  type Anchor = LyricsView["anchors"]["list"][number];
+  async function saveAnchor(line: number, anchor: Anchor | null, gapOrder?: "story" | "shuffle" | null) {
+    const list = (data?.anchors.list ?? []).filter((a) => a.line !== line);
+    if (anchor) list.push(anchor);
+    const result = await post({ action: "anchors", anchors: list, ...(gapOrder !== undefined ? { gapOrder } : {}) });
+    if (!result) return;
+    setPicking(null);
+    setNotice({
+      ok: true,
+      text: gapOrder !== undefined ? `Gap order: ${gapOrder ?? "default"} (saved to song.json).` : anchor ? `Line ${line} lands on ${anchor.clip}${anchor.transition === "dissolve" ? " (dissolve)" : ""}: saved to song.json. The next video uses it.` : `Line ${line}: anchor removed (song.json).`,
+    });
+    await load();
+  }
+
   const lines = useMemo(() => data?.lines ?? [], [data]);
   const review = (l: LyricsLine) => ((!!l.flagged || l.lowConfidence) && !l.checkedByEar) || l.checkLapsed || l.source === "hand" || pending.has(l.number);
   const shown = onlyReview ? lines.filter(review) : lines;
@@ -161,6 +178,27 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                 {onlyReview ? "Showing lines to review" : "Show only lines to review"}
               </button>
             </div>
+            <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
+              <span>Story anchors: {data.anchors.list.length} line(s) land on a chosen clip.</span>
+              <label className="flex items-center gap-1">
+                Gaps between them:
+                <select
+                  className="bg-background rounded-md border px-1.5 py-0.5"
+                  value={data.anchors.gapOrder ?? ""}
+                  disabled={busy}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    void saveAnchor(-1, null, v === "story" || v === "shuffle" ? v : null);
+                  }}
+                  data-gap-order
+                >
+                  <option value="">{data.anchors.list.length ? "story order (default with anchors)" : "default (v1 story, the others shuffled)"}</option>
+                  <option value="story">story order in every video (file-name order)</option>
+                  <option value="shuffle">shuffled (v1 story, the others shuffled)</option>
+                </select>
+              </label>
+              {!data.anchors.clips.length ? <span className="text-amber-200">No clips to choose from: add clips in the Assets tab or choose a collection in Generate.</span> : null}
+            </div>
             {!data.checkRan ? <p className="text-muted-foreground text-xs">The vocal-start check runs when a video is made (Generate, or pnpm make); its verdicts show here after the next video.</p> : null}
             <div className="overflow-x-auto rounded-xl border">
               <table className="w-full min-w-[960px] text-left text-sm">
@@ -173,6 +211,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                     <th className="px-3 py-2 font-normal">On screen</th>
                     <th className="px-3 py-2 font-normal">Confidence</th>
                     <th className="px-3 py-2 font-normal">Adjust</th>
+                    <th className="px-3 py-2 font-normal">Lands on</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -180,9 +219,12 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                     const start = startOf(l);
                     const delta = start - l.startMs; // unsaved change: the screen times shift with it
                     const changed = pending.has(l.number);
+                    const anchor = data.anchors.list.find((a) => a.line === l.number) ?? null;
+                    const anchorClip = anchor ? data.anchors.clips.find((c) => c.name.toLowerCase() === anchor.clip.toLowerCase()) : undefined;
+                    const problems = data.anchors.problems.filter((p) => p.line === l.number);
                     return (
+                      <Fragment key={l.number}>
                       <tr
-                        key={l.number}
                         data-line={l.number}
                         data-flagged={l.flagged && !l.checkedByEar ? "true" : undefined}
                         data-checked-by-ear={l.checkedByEar ? "true" : undefined}
@@ -251,7 +293,40 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                             ) : null}
                           </div>
                         </td>
+                        <td className="px-3 py-2" data-anchor-cell>
+                          {anchor ? (
+                            <div className="flex items-center gap-2" data-anchor={anchor.clip}>
+                              <Thumb clip={anchorClip} />
+                              <div className="min-w-0 text-xs">
+                                <div className="truncate">{anchor.clip}</div>
+                                <div className="text-muted-foreground">
+                                  {anchor.transition === "dissolve" ? "dissolve" : "cut"}
+                                  {anchor.clipIn ? ` · from ${anchor.clipIn} s` : ""}
+                                </div>
+                              </div>
+                              <button type="button" disabled={busy} onClick={() => saveAnchor(l.number, null)} className="text-muted-foreground hover:text-foreground rounded-md border p-0.5" aria-label={`Remove the anchor on line ${l.number}`} data-anchor-remove>
+                                <X className="size-3.5" />
+                              </button>
+                            </div>
+                          ) : null}
+                          <button type="button" disabled={busy} onClick={() => setPicking(picking === l.number ? null : l.number)} className="text-muted-foreground hover:text-foreground mt-1 flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px]" data-anchor-pick>
+                            <Clapperboard className="size-3" /> {anchor ? "Change" : "Lands on…"}
+                          </button>
+                          {problems.map((p) => (
+                            <p key={p.problem} className="mt-1 flex items-start gap-1 text-[11px] text-amber-200" data-anchor-problem>
+                              <AlertTriangle className="mt-0.5 size-3 shrink-0" /> {p.problem}
+                            </p>
+                          ))}
+                        </td>
                       </tr>
+                      {picking === l.number ? (
+                        <tr className="bg-muted/30 border-b" data-anchor-picker>
+                          <td colSpan={8} className="px-3 py-3">
+                            <AnchorPicker line={l} clips={data.anchors.clips} current={anchor} busy={busy} onSave={(a) => saveAnchor(l.number, a)} onCancel={() => setPicking(null)} />
+                          </td>
+                        </tr>
+                      ) : null}
+                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -280,6 +355,112 @@ export function LyricsTab({ projectId }: { projectId: string }) {
       </section>
 
       <LyricsText key={data.lyricsText} data={data} onSaved={load} post={post} busy={busy} setNotice={setNotice} />
+    </div>
+  );
+}
+
+function Thumb({ clip }: { clip: AnchorClip | undefined }) {
+  return (
+    <div className="bg-muted flex h-12 w-8 shrink-0 items-center justify-center overflow-hidden rounded">
+      {clip?.thumb ? (
+        // eslint-disable-next-line @next/next/no-img-element -- a local thumbnail served by /api/files
+        <img src={`/api/files/${clip.thumb}`} alt="" className="size-full object-cover" />
+      ) : (
+        <Clapperboard className="text-muted-foreground size-3.5" />
+      )}
+    </div>
+  );
+}
+
+// "Lands on" for one line: the clips (song's own first, then each collection), where in the clip it
+// starts (clipIn, seconds) and cut or dissolve.
+function AnchorPicker({
+  line,
+  clips,
+  current,
+  busy,
+  onSave,
+  onCancel,
+}: {
+  line: LyricsLine;
+  clips: AnchorClip[];
+  current: LyricsView["anchors"]["list"][number] | null;
+  busy: boolean;
+  onSave: (a: LyricsView["anchors"]["list"][number]) => void;
+  onCancel: () => void;
+}) {
+  const [clip, setClip] = useState(current?.clip ?? "");
+  const [clipIn, setClipIn] = useState(current?.clipIn ? String(current.clipIn) : "");
+  const [transition, setTransition] = useState<"cut" | "dissolve">(current?.transition ?? "cut");
+  const groups = [...new Set(clips.map((c) => c.from))];
+  const chosen = clips.find((c) => c.name === clip);
+  const lineMs = (line.sungEndMs ?? line.screen.leaveMs) - line.screen.readableMs;
+  const left = chosen && chosen.kind === "video" ? chosen.durationMs - (Number(clipIn) || 0) * 1000 : null;
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-xs">
+        Line {line.number} &quot;{line.text}&quot; lands on a clip: it cuts in on the downbeat at or just before the line ({(lineMs / 1000).toFixed(1)} s on screen) and stays until the line ends.
+      </p>
+      {groups.map((g) => (
+        <div key={g} className="flex flex-col gap-1">
+          <span className="text-muted-foreground text-[11px]">{g === "song" ? "This song's clips" : `Collection ${g}`}</span>
+          <div className="flex flex-wrap gap-2">
+            {clips
+              .filter((c) => c.from === g)
+              .map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  onClick={() => setClip(c.name)}
+                  className={cn("flex w-20 flex-col items-center gap-1 rounded-md border p-1 text-[10px]", clip === c.name ? "border-brand bg-brand/10" : "hover:border-foreground/30")}
+                  title={`${c.name} · ${c.kind === "photo" ? "photo" : `${(c.durationMs / 1000).toFixed(1)} s`} · ${c.orientation}`}
+                  data-anchor-clip={c.name}
+                >
+                  <div className="bg-muted h-24 w-full overflow-hidden rounded">
+                    {c.thumb ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- a local thumbnail served by /api/files
+                      <img src={`/api/files/${c.thumb}`} alt="" className="size-full object-cover" />
+                    ) : null}
+                  </div>
+                  <span className="w-full truncate">{c.name}</span>
+                  <span className="text-muted-foreground">{c.kind === "photo" ? "photo" : `${(c.durationMs / 1000).toFixed(1)} s`}</span>
+                </button>
+              ))}
+          </div>
+        </div>
+      ))}
+      <div className="flex flex-wrap items-center gap-3 text-xs">
+        <label className="flex items-center gap-1">
+          Start in the clip at
+          <input type="number" min={0} step={0.1} value={clipIn} onChange={(e) => setClipIn(e.target.value)} placeholder="0" className="bg-background w-16 rounded-md border px-1.5 py-0.5" data-anchor-clipin />
+          s
+        </label>
+        <label className="flex items-center gap-1">
+          Transition
+          <select value={transition} onChange={(e) => setTransition(e.target.value === "dissolve" ? "dissolve" : "cut")} className="bg-background rounded-md border px-1.5 py-0.5" data-anchor-transition>
+            <option value="cut">cut (on the downbeat)</option>
+            <option value="dissolve">dissolve (~1 bar)</option>
+          </select>
+        </label>
+        {left !== null && left < lineMs ? (
+          <span className="flex items-center gap-1 text-amber-200" data-anchor-short>
+            <AlertTriangle className="size-3" /> {chosen!.name} has {(Math.max(0, left) / 1000).toFixed(1)} s from there: it will be slowed to cover the line (QA warns)
+          </span>
+        ) : null}
+        <div className="ml-auto flex gap-2">
+          <Button size="sm" variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            disabled={!clip || busy}
+            onClick={() => onSave({ line: line.number, clip, ...(Number(clipIn) > 0 ? { clipIn: Number(clipIn) } : {}), ...(transition === "dissolve" ? { transition } : {}) })}
+            data-anchor-save
+          >
+            <Save /> Save
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

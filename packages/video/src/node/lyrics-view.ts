@@ -7,9 +7,11 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { absPath, project as projectTable, type Workspace } from "@lyric/db";
+import { absPath, beat as beatTable, project as projectTable, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
+import { anchorProblems, checkAnchors, type AnchorSpec, type GapOrder } from "../anchors";
+import { applyDownbeatOffset } from "../beats";
 import { lyricFrames, rawLyric, type RenderBase } from "../compose";
 import { VIDEO } from "../config";
 import { parseHandTimes, withHandTimes } from "../hand-times";
@@ -18,7 +20,10 @@ import { applyGuard, type GuardMove } from "../vocal-guard";
 import { CHECKED_BY_EAR_FILE, checkedByEar, type EarCheck } from "../checked-by-ear";
 import { loadBrand } from "./brand";
 import { loadFontCatalog } from "./font-catalog";
-import { keepReplaced } from "./project-settings";
+import { songAssets } from "./assets";
+import { syncCollection } from "./collection";
+import { keepReplaced, rememberedCollection } from "./project-settings";
+import { readRecipe, writeRecipe } from "./recipe";
 import { songPathsById } from "./song-folder";
 import { applyHandSet, ensureAlignment, matchReport, wordsOfLyrics, type AlignRunner, type Alignment, type VocalGuard } from "./song-project";
 
@@ -54,6 +59,7 @@ export type LyricsView = {
   gap: { hideMs: number; leadInMs: number };
   hintsFile: string | null; // workspace-relative
   replaced: { file: string; at: string; lines: number }[]; // earlier lyrics.txt versions (newest first)
+  anchors: AnchorsView;
 };
 
 const LOW = 0.5;
@@ -106,6 +112,50 @@ async function storedAlignment(ws: Workspace, projectId: string): Promise<{ alig
   return null;
 }
 
+// Story anchors in the Lyrics tab: the song.json list, the clips it can choose from (the song's own and
+// its collections, with thumbnails) and what will clash, per line.
+export type AnchorClip = { name: string; thumb: string | null; kind: "video" | "photo"; durationMs: number; orientation: string; from: string }; // from: "song" or the collection
+export type AnchorsView = { list: AnchorSpec[]; gapOrder: GapOrder | null; clips: AnchorClip[]; problems: { line: number; problem: string }[]; collections: string[] };
+
+async function anchorClips(ws: Workspace, projectId: string): Promise<{ clips: AnchorClip[]; collections: string[] }> {
+  const paths = songPathsById(ws, projectId);
+  const recipe = readRecipe(paths.recipe);
+  const remembered = rememberedCollection(ws, projectId);
+  const collections = recipe.collections ?? (remembered ? [remembered.name] : []);
+  const own = await songAssets(ws, projectId);
+  const clips: AnchorClip[] = own.clips.filter((c) => !c.duplicateOf).map((c) => ({ name: c.name, thumb: c.thumb, kind: c.kind, durationMs: c.durationMs, orientation: c.orientation, from: "song" }));
+  for (const name of collections) {
+    try {
+      const sync = await syncCollection(ws, { name, prepare: false, ...(remembered?.name === name && remembered.folder ? { folder: remembered.folder } : {}) });
+      for (const src of sync.sources) {
+        if (clips.some((c) => c.name.toLowerCase() === src.name.toLowerCase())) continue;
+        const photo = /\.(jpe?g|png|webp)$/i.test(src.name);
+        const w = src.clip.width;
+        const h = src.clip.height;
+        clips.push({ name: src.name, thumb: src.clip.thumb_path, kind: photo ? "photo" : "video", durationMs: photo ? 0 : src.clip.duration_ms, orientation: Math.abs(w - h) <= Math.max(w, h) * 0.02 ? "square" : h > w ? "vertical" : "horizontal", from: name });
+      }
+    } catch {
+      // A collection folder that is gone: its clips are not offered (make says so when it runs).
+    }
+  }
+  return { clips, collections };
+}
+
+// Saves the anchors (and the gap order) in song.json; every other setting stays as it is.
+export function saveAnchors(ws: Workspace, projectId: string, anchors: unknown, gapOrder?: GapOrder | null): AnchorSpec[] {
+  const checked = checkAnchors(anchors);
+  if (checked.problems.length) throw new Error(checked.problems.join("; "));
+  const paths = songPathsById(ws, projectId);
+  if (!paths.recipe) throw new Error("This song has no song folder yet (migrate it first).");
+  const recipe = readRecipe(paths.recipe);
+  const byLine = new Map(checked.anchors.map((a) => [a.line, a])); // one anchor per line (the last one given)
+  const list = [...byLine.values()].sort((a, b) => a.line - b.line);
+  const next = { ...recipe, anchors: list.length ? list : undefined };
+  if (gapOrder !== undefined) next.gapOrder = gapOrder ?? undefined;
+  writeRecipe(paths.recipe, next);
+  return list;
+}
+
 export async function lyricsView(ws: Workspace, projectId: string): Promise<LyricsView> {
   const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
   if (!p) throw new Error("Song not found.");
@@ -133,18 +183,17 @@ export async function lyricsView(ws: Workspace, projectId: string): Promise<Lyri
     hintsFile: paths.hints ? path.relative(ws.dir, paths.hints).split(path.sep).join("/") : null,
     replaced,
   };
+  const recipe = readRecipe(paths.recipe);
+  const choice = await anchorClips(ws, projectId);
+  const anchors: AnchorsView = { list: recipe.anchors ?? [], gapOrder: recipe.gapOrder ?? null, clips: choice.clips, collections: choice.collections, problems: [] };
   const current = await currentLines(ws, projectId);
-  if (!current) return { ...base, lines: null, why: "This song has no stored alignment for its current lyrics.txt yet: make a video first (Generate), then its lines appear here.", checkRan: false };
+  if (!current) return { ...base, anchors, lines: null, why: "This song has no stored alignment for its current lyrics.txt yet: make a video first (Generate), then its lines appear here.", checkRan: false };
   const { alignment, hand, guard, moves, lines, ear } = current;
   const valid = checkedByEar(ear, alignment.lrcHash, lines);
   const reports = matchReport(alignment.lines, alignment.report);
   const frames = lyricFrames({ plan: { start_frame: 0 }, lyrics: lines.map((l) => rawLyric(l)) } as unknown as RenderBase, leadMs, p.lyrics_offset_ms, true, gap);
   const ms = (f: number) => Math.round((f * 1000) / VIDEO.fps);
-  return {
-    ...base,
-    why: null,
-    checkRan: !!guard?.check,
-    lines: lines.map((l, i) => {
+  const out: LyricsLine[] = lines.map((l, i) => {
       const check = guard?.check?.lines.find((c) => c.number === i + 1) ?? null;
       const flagged = !hand.skip.has(i) && check?.result === "flagged for review" ? check.why : null;
       const confidence = reports[i]?.confidence ?? null;
@@ -164,8 +213,19 @@ export async function lyricsView(ws: Workspace, projectId: string): Promise<Lyri
         checkedByEar: valid.has(i) ? (ear.find((c) => c.number === i + 1)?.at ?? null) : null,
         checkLapsed: !valid.has(i) && ear.some((c) => c.number === i + 1),
       };
-    }),
-  };
+    });
+  // What the anchors will clash on (the same rules as pnpm make; per platform more can follow).
+  const beats = applyDownbeatOffset(
+    ws.db.select().from(beatTable).where(eq(beatTable.project_id, projectId)).all().sort((a, b) => a.time_ms - b.time_ms).map((b) => ({ time_ms: b.time_ms, strength: b.strength, is_downbeat: b.is_downbeat })),
+    p.downbeat_offset ?? 0,
+  );
+  anchors.problems = anchorProblems(
+    anchors.list,
+    new Map(out.map((l) => [l.number, { text: l.text, shownMs: l.screen.readableMs, sungEndMs: l.sungEndMs ?? l.screen.leaveMs }])),
+    new Map(anchors.clips.map((c) => [c.name.toLowerCase(), c.kind === "photo" ? null : c.durationMs])),
+    beats.filter((b) => b.is_downbeat).map((b) => b.time_ms),
+  );
+  return { ...base, anchors, why: null, checkRan: !!guard?.check, lines: out };
 }
 
 // The lines as the next video has them: the stored alignment, the hand-set starts (hints.lrc) and the

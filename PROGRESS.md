@@ -757,9 +757,29 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   make.test.ts (real renders: the song file's hash and modification time are unchanged, the song
   folder's copy is byte for byte the same, QA audio check passes, 44.1 kHz kept).
 
+### Story anchors — part (b): the Lyrics tab and the Videos tab ✅ (to verify on the Windows PC)
+- **Lyrics tab, "Lands on" column**: per line the anchored clip (thumbnail, name, cut / dissolve, from
+  N s) with Remove, and "Lands on…" / "Change": an inline picker with the thumbnails of the song's own
+  clips and of its collections (song.json collections, else the remembered one), "Start in the clip at"
+  (clipIn, seconds) and Transition (cut on the downbeat / dissolve ~1 bar); it warns at once when the
+  clip is shorter than the line ("it will be slowed to cover the line (QA warns)"). Saved to song.json
+  at once (every other setting kept; one anchor per line).
+- Each line shows what will clash, named: a clip shorter than its line (slowed to …x), two anchors in
+  one bar, the same clip twice within 8 s, a clip that is not among the song's clips or collections.
+  The same rules as pnpm make (per platform the section can add "not in this section").
+- "Gaps between them": story order in every video (the default with anchors) / shuffled (v1 story, the
+  others shuffled), saved as song.json gapOrder.
+- **Videos tab**: each run's settings have a "Story anchors" row: "line 9 → hands.mp4 (0:41.0,
+  dissolve), …; not in this video: line 31 (sea.mp4)", marked when song.json's anchors differ now.
+- Anchor line numbers are the Lyrics tab's (sung lines counted, blank lines not), as check-start and
+  hints.lrc use.
+- Tests: lyrics-view.test.ts (saved in song.json with the other settings kept, the clips with thumbnails,
+  the conflicts, the Videos text), lyrics-tab.e2e.ts (pick line 3 -> 02_rings.mp4 with a dissolve from the
+  thumbnails, song.json checked; a 1 s clip on line 2 is named as slowed; Remove; the gap order).
+
 ### Story anchors — part (a): rules and pnpm make ✅ (part (b): the Lyrics tab and Videos tab)
 A clip "lands on" a lyric line: song.json `anchors: [{ "line": 9, "clip": "hands.mp4", "clipIn": 1.5, "transition": "dissolve" }]`
-(the line by its lyrics.txt number only: the same chorus can land on different clips as the video goes on).
+(the line by its number in the Lyrics tab, sung lines counted as in check-start: the same chorus can land on different clips as the video goes on).
 - **Cut** (src/anchors.ts): on the downbeat at or just before the line's on-screen time (2 frames early,
   as every cut), held until at least the line's sung end; the next cut is the first regular cut after
   that. Anchors win over the regular cut rate; regular beat cuts fill the gaps. clipIn: where the clip starts.
@@ -787,6 +807,9 @@ A clip "lands on" a lyric line: song.json `anchors: [{ "line": 9, "clip": "hands
   the same clip twice, a short clip slowed; dissolve per anchor or per video; anchor beats pin; the
   Lyrics-tab checks; song.json checks; auto end keeping more anchors; QA; story variations),
   make.test.ts (a real run with anchors in song.json).
+- Known issue (found while building this): QA and the manifest name lines by their row in lyrics.txt
+  (blank lines counted), the Lyrics tab, check-start and anchors by sung line. They differ when
+  lyrics.txt has blank lines; to be unified (proposal: the Lyrics tab's numbers everywhere).
 
 ### Tuning — a long first word is a strong signal ✅ (to verify on the Windows PC)
 From the check-start results on A Heart For Two (lines 13 and 27: stamp ~2.4 s early, voice and words

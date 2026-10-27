@@ -10,7 +10,7 @@ import { absPath, ffmpegBin, openWorkspace, project, type Workspace } from "@lyr
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { createSong, ensureAlignment, labelLines, lyricsView, restoreLyrics, saveHandTimes, saveLyricsText, setCheckedByEar, songPathsById, type AlignRunner } from "../src/node";
+import { anchorsText, createSong, ensureAlignment, labelLines, lyricsView, readRecipe, restoreLyrics, saveAnchors, saveHandTimes, saveLyricsText, setCheckedByEar, songPathsById, type AlignRunner } from "../src/node";
 
 const LRC = [
   "[01:05.00]<01:05.00>The verse <01:06.00>line <01:08.40>",
@@ -118,6 +118,38 @@ describe("the Lyrics tab", () => {
     line = (await lyricsView(ws, id)).lines![3];
     expect([line.checkedByEar, line.checkLapsed]).toEqual([null, false]);
     await expect(setCheckedByEar(ws, id, 9, true)).rejects.toThrow(/no line 9/);
+  });
+
+  it("story anchors: picked per line, saved in song.json (other settings kept), with the clips to choose from and the conflicts", async () => {
+    const paths = songPathsById(ws, id);
+    // Two clips of the song's own: 1 s and 6 s.
+    mkdirSync(paths.clips!, { recursive: true });
+    for (const [name, seconds] of [["01_hands.mp4", 1], ["02_rings.mp4", 6]] as const) {
+      execFileSync(ffmpegBin(), ["-y", "-v", "error", "-f", "lavfi", "-i", `testsrc2=s=216x384:r=30:d=${seconds}`, "-pix_fmt", "yuv420p", path.join(paths.clips!, name)]);
+    }
+    const before = readRecipe(paths.recipe);
+    expect(saveAnchors(ws, id, [{ line: 3, clip: "02_rings.mp4", transition: "dissolve" }, { line: 2, clip: "01_hands.mp4" }], "story")).toEqual([
+      { line: 2, clip: "01_hands.mp4" },
+      { line: 3, clip: "02_rings.mp4", transition: "dissolve" },
+    ]);
+    const recipe = readRecipe(paths.recipe);
+    expect([recipe.anchors?.length, recipe.gapOrder, recipe.collections]).toEqual([2, "story", before.collections]);
+    const v = await lyricsView(ws, id);
+    expect(v.anchors.list.map((a) => a.line)).toEqual([2, 3]);
+    expect(v.anchors.clips.map((c) => [c.name, c.from, c.kind, !!c.thumb])).toEqual([["01_hands.mp4", "song", "video", true], ["02_rings.mp4", "song", "video", true]]);
+    // Line 2 (the hook, 4.5 s on screen) on a 1 s clip: slowed, named; lines 2 and 3 fit their own bars.
+    expect(v.anchors.problems).toEqual([{ line: 2, problem: "01_hands.mp4 has 1.0 s, line 2 lasts 4.2 s: it will be slowed to 0.50x and its last frame held" }]);
+    expect(() => saveAnchors(ws, id, [{ line: 2 }])).toThrow(/clip must be a clip file name/);
+    expect(saveAnchors(ws, id, [], null)).toEqual([]);
+    expect(readRecipe(paths.recipe).anchors).toBeUndefined();
+  });
+
+  it("the Videos tab's text for the anchors a video used", () => {
+    expect(anchorsText([
+      { line: 9, text: "x", clip: "hands.mp4", used: true, shot: 3, at_ms: 41_000, transition: "dissolve", why: null },
+      { line: 12, text: "y", clip: "rings.mp4", used: true, shot: 6, at_ms: 52_400, transition: "cut", why: null, playback_rate: 0.62 },
+      { line: 31, text: "z", clip: "sea.mp4", used: false, shot: null, at_ms: null, transition: "cut", why: "outside this section" },
+    ])).toBe("line 9 → hands.mp4 (0:41.0, dissolve), line 12 → rings.mp4 (0:52.4, slowed 0.62x); not in this video: line 31 (sea.mp4)");
   });
 
   it("editing the text: hook markers only do not re-align, words do; the old lyrics.txt can be restored", async () => {

@@ -4,8 +4,10 @@
 // flagged by the vocal-start check. Nudge it +1.5 s, Save: hints.lrc gets a hand-set line and the
 // stored alignment is kept; Reset takes it back. lyrics.txt: a "[Chorus]" label is flagged and removed
 // (words change: the re-align warning first), an earlier version is restored. The song plays.
+// Story anchors: line 3 lands on 02_rings.mp4 (dissolve) from the picker's thumbnails, saved in
+// song.json; line 2 on a 1 s clip is named as slowed; removed again; the gap order is saved.
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -50,6 +52,10 @@ async function main() {
     JSON.stringify({ moves: [], check: { level_db: -14, threshold_db: -29, words_check: "ran", lines: [{ number: 2, text: "You had a heart for two", stamp_ms: 68_500, voice_ms: null, words_ms: 70_050, words_text: "You had a", duration_ms: 68_500, first_word_ms: 1_900, loudest_before_db: null, stamp_level_db: -40, target_ms: 68_500, agree: [], why: "only words 1:10.1 (+1.6 s); no second signal agrees", result: "flagged for review" }] } }),
   );
   const songFile = absPath(ws, p.audio_path!);
+  mkdirSync(paths.clips!, { recursive: true });
+  for (const [name, seconds] of [["01_hands.mp4", 1], ["02_rings.mp4", 6]] as const) {
+    execFileSync(process.env.FFMPEG_PATH ?? "ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", `testsrc2=s=216x384:r=30:d=${seconds}`, "-pix_fmt", "yuv420p", path.join(paths.clips!, name)]);
+  }
   ws.close();
 
   const server = spawn(process.execPath, [path.join(path.dirname(require.resolve("next/package.json")), "dist", "bin", "next"), "start", "-p", String(port), "-H", "127.0.0.1"], {
@@ -116,6 +122,31 @@ async function main() {
     const audio = await fetch(`${base}${audioSrc}`, { headers: { Range: "bytes=0-99" } });
     check(audio.status === 206 && (audio.headers.get("content-type") ?? "").startsWith("audio/"), `the song is served for ▶ (${audio.status} ${audio.headers.get("content-type")})`);
 
+    // Story anchors: "Lands on…" line 3 -> 02_rings.mp4 with a dissolve, from the thumbnails.
+    await page.waitForSelector("[data-line='3'] [data-anchor-pick]");
+    await page.click("[data-line='3'] [data-anchor-pick]");
+    await page.waitForSelector("[data-anchor-picker] [data-anchor-clip='02_rings.mp4'] img");
+    check(await page.$eval("[data-anchor-picker] [data-anchor-clip='02_rings.mp4'] img", (img: HTMLImageElement) => img.complete && img.naturalWidth > 0), "the picker shows the clips' thumbnails");
+    await page.click("[data-anchor-clip='02_rings.mp4']");
+    await page.selectOption("[data-anchor-transition]", "dissolve");
+    await page.click("[data-anchor-save]");
+    await page.waitForSelector("[data-line='3'] [data-anchor='02_rings.mp4']");
+    const recipe = () => JSON.parse(readFileSync(paths.recipe!, "utf8")) as { anchors?: { line: number; clip: string; transition?: string }[]; gapOrder?: string };
+    check(JSON.stringify(recipe().anchors) === JSON.stringify([{ line: 3, clip: "02_rings.mp4", transition: "dissolve" }]), `saved in song.json (${JSON.stringify(recipe().anchors)})`);
+    // Line 2 (4.2 s on screen) on the 1 s clip: the picker warns, and the line shows it once saved.
+    await page.click("[data-line='2'] [data-anchor-pick]");
+    await page.click("[data-anchor-clip='01_hands.mp4']");
+    check(((await page.textContent("[data-anchor-short]")) ?? "").includes("slowed"), "the picker says the short clip will be slowed");
+    await page.click("[data-anchor-save]");
+    await page.waitForSelector("[data-line='2'] [data-anchor-problem]");
+    check(((await page.textContent("[data-line='2'] [data-anchor-problem]")) ?? "").includes("01_hands.mp4 has 1.0 s, line 2 lasts 4.2 s: it will be slowed"), "the conflict is named on the line");
+    await page.click("[data-line='2'] [data-anchor-remove]");
+    await page.waitForFunction(() => !document.querySelector("[data-line='2'] [data-anchor]"));
+    check(recipe().anchors?.length === 1, "Remove takes it out of song.json");
+    await page.selectOption("[data-gap-order]", "shuffle");
+    await page.waitForFunction(() => document.querySelector("[role=status]")?.textContent?.includes("Gap order: shuffle"));
+    check(recipe().gapOrder === "shuffle" && recipe().anchors?.length === 1, "the gap order is saved (the anchors kept)");
+
     // lyrics.txt: a label line is flagged, removed (words change: the warning first), then undone.
     await page.fill("[data-lyrics-editor]", "[Chorus]\nThe verse line\n* You had a heart for two\nNext verse\n");
     await page.click("[data-save-text]");
@@ -136,6 +167,7 @@ async function main() {
     await page.waitForSelector("[data-label-flags]");
     check(readFileSync(paths.lyricsTxt, "utf8").startsWith("[Chorus]"), "Restore brings the earlier version back");
     check(existsSync(songFile), "the song file is untouched");
+
     await browser.close();
   } finally {
     server.kill();
