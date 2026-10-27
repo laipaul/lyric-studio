@@ -87,7 +87,14 @@ want that.
   `logs\lyric-studio.previous.log`). If the studio, the worker or the audio service stops, only that
   one restarts by itself (up to 5 times), so the app keeps answering. If the app says "Lyric Studio's
   server isn't responding", restart it with Start Lyric Studio.cmd and keep both log files.
-- Double-click **`Stop Lyric Studio.cmd`** to stop everything.
+- Start compares the code with the build that is running: after a `git pull` it says "Lyric Studio is
+  running an older build (commit …); the code is now commit …: restarting it", stops it, builds the
+  new code and starts it again ("Lyric Studio is ready (commit …)"). When nothing changed it just opens
+  the window ("already running the current code").
+- Double-click **`Stop Lyric Studio.cmd`** to stop everything (it stops the whole background process, so
+  nothing restarts itself, and waits until ports 3000 and 8001 are free).
+- A clean rebuild by hand (if the app ever does not show the latest changes): stop Lyric Studio, run
+  `pnpm app:rebuild` (removes `apps\studio\.next` and builds again), then start it.
 - **Desktop shortcut** with the Life Lyrics icon: double-click **`Create Desktop Shortcut.cmd`** once
   (run it again after changing `workspace\brand\logo.png` or the icon style: it updates the icon).
   The icon is made from your logo with its empty border cropped, so the flower fills ~90% of the icon,

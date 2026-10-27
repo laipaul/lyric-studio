@@ -25,6 +25,7 @@
     "test:e2e": "tsx apps/studio/e2e/style-lock.e2e.ts && tsx apps/studio/e2e/videos-post.e2e.ts && tsx apps/studio/e2e/lyrics-tab.e2e.ts",
     "app:icons": "tsx packages/video/scripts/app-icons.ts",
     "app:serve": "node scripts/app-serve.mjs",
+    "app:rebuild": "node scripts/app-rebuild.mjs",
     "fonts": "tsx packages/video/scripts/fonts.ts",
     "db:setup": "pnpm -s --filter @lyric/db run setup",
     "db:migrate": "pnpm -s --filter @lyric/db run migrate",

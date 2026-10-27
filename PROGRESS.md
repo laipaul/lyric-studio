@@ -718,6 +718,21 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   effect hints. Browser check: Style (per-platform rows, lock, fonts and warning, length), Generate
   (recipe option, locked hook effect, chips with length), Assets (path, hints).
 
+### Fix — Start always runs the current code ✅ (to verify on the Windows PC)
+Reported: after `git pull` (1e233c0) the app did not show the Lyrics tab, and Start printed nothing.
+- **Cause**: an older Lyric Studio was still answering on port 3000, so Start only opened the window
+  (it checked "is something running?", not "is it the current code?"). Most likely Stop had not ended
+  the background process that, since 6.2c-2b, restarts a stopped part on its own: the studio was killed
+  and came back 3 s later with the old build.
+- **Start** now compares the code version (git commit + local changes) with the build that is running
+  (/api/health reports it): an older build is stopped and started again, which builds the new code
+  first. It prints each step and ends with "Lyric Studio is ready (commit …)".
+- **Stop** ends the whole background process (its process id is in logs\lyric-studio.pid) with
+  everything under it, so nothing restarts itself, and waits until ports 3000 and 8001 are free.
+- **`pnpm app:rebuild`**: a clean rebuild by hand (removes apps\studio\.next, builds, stamps the commit).
+- pnpm app:serve says why it builds ("the code changed since the last build (built from …, the code is
+  now …)") or that the build is up to date.
+
 ### Step 5c.2 — Lyrics tab ✅ (to verify on the Windows PC)
 First real case: A Heart For Two ~1:10, the hook "You had a heart for two" whose karaoke highlight came
 1-2 s early.
