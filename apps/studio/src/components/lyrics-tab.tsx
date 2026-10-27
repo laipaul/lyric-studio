@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Pause, Play, RotateCcw, Save, Star, Undo2 } from "lucide-react";
+import { AlertTriangle, Ear, Pause, Play, RotateCcw, Save, Star, Undo2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { LyricsLine, LyricsView } from "@lyric/video/lyrics-view";
@@ -104,6 +104,13 @@ export function LyricsTab({ projectId }: { projectId: string }) {
     }
   }
 
+  async function markByEar(l: LyricsLine, checked: boolean) {
+    const result = await post({ action: "ear", number: l.number, checked });
+    if (!result) return;
+    setNotice({ ok: true, text: checked ? `Line ${l.number} checked by ear: QA no longer warns about its timing (until the alignment or its time changes).` : `Line ${l.number}: "checked by ear" taken off.` });
+    await load();
+  }
+
   async function save() {
     const changes = [...pending.entries()].map(([number, ms]) => ({ number, ms }));
     const result = await post({ action: "times", changes });
@@ -115,10 +122,10 @@ export function LyricsTab({ projectId }: { projectId: string }) {
   }
 
   const lines = useMemo(() => data?.lines ?? [], [data]);
-  const review = (l: LyricsLine) => !!l.flagged || l.lowConfidence || l.source === "hand" || pending.has(l.number);
+  const review = (l: LyricsLine) => ((!!l.flagged || l.lowConfidence) && !l.checkedByEar) || l.checkLapsed || l.source === "hand" || pending.has(l.number);
   const shown = onlyReview ? lines.filter(review) : lines;
   const counts = useMemo(
-    () => ({ flagged: lines.filter((l) => l.flagged).length, low: lines.filter((l) => l.lowConfidence).length, hand: lines.filter((l) => l.source === "hand").length, moved: lines.filter((l) => l.source === "vocal-start check").length }),
+    () => ({ flagged: lines.filter((l) => l.flagged && !l.checkedByEar).length, ear: lines.filter((l) => l.checkedByEar).length, low: lines.filter((l) => l.lowConfidence && !l.checkedByEar).length, hand: lines.filter((l) => l.source === "hand").length, moved: lines.filter((l) => l.source === "vocal-start check").length }),
     [lines],
   );
 
@@ -148,7 +155,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
           <>
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <span data-lyrics-summary>
-                {lines.length} lines · <span className={counts.flagged ? "text-amber-300" : ""}>{counts.flagged} flagged for review</span> · {counts.low} low confidence · {counts.moved} moved by the vocal-start check · {counts.hand} set by hand
+                {lines.length} lines · <span className={counts.flagged ? "text-amber-300" : ""}>{counts.flagged} flagged for review</span> · {counts.low} low confidence · {counts.ear} checked by ear · {counts.moved} moved by the vocal-start check · {counts.hand} set by hand
               </span>
               <button type="button" onClick={() => setOnlyReview((o) => !o)} className={cn("rounded-full border px-3 py-1 text-xs", onlyReview ? "border-brand/50 bg-brand/15 text-brand" : "text-muted-foreground hover:text-foreground")} data-only-review>
                 {onlyReview ? "Showing lines to review" : "Show only lines to review"}
@@ -174,7 +181,13 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                     const delta = start - l.startMs; // unsaved change: the screen times shift with it
                     const changed = pending.has(l.number);
                     return (
-                      <tr key={l.number} data-line={l.number} data-flagged={l.flagged ? "true" : undefined} className={cn("border-b align-top last:border-b-0", l.flagged && "bg-amber-400/5", changed && "bg-brand/5")}>
+                      <tr
+                        key={l.number}
+                        data-line={l.number}
+                        data-flagged={l.flagged && !l.checkedByEar ? "true" : undefined}
+                        data-checked-by-ear={l.checkedByEar ? "true" : undefined}
+                        className={cn("border-b align-top last:border-b-0", l.flagged && !l.checkedByEar && "bg-amber-400/5", changed && "bg-brand/5")}
+                      >
                         <td className="text-muted-foreground px-3 py-2 tabular-nums">{l.number}</td>
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-1.5">
@@ -187,6 +200,27 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                             </p>
                           ) : null}
                           {l.source === "vocal-start check" && l.check ? <p className="text-muted-foreground mt-1 text-xs">Moved by the vocal-start check: {l.check.why}</p> : null}
+                          {l.checkedByEar ? (
+                            <p className="mt-1 flex items-center gap-1 text-xs text-emerald-300" data-ear-status>
+                              <Ear className="size-3" /> Checked by ear on {new Date(l.checkedByEar).toLocaleDateString()}: its timing warnings are cleared in QA
+                            </p>
+                          ) : l.checkLapsed ? (
+                            <p className="mt-1 flex items-center gap-1 text-xs text-amber-200" data-ear-lapsed>
+                              <Ear className="size-3" /> Checked by ear before, but its time changed since: check it again
+                            </p>
+                          ) : null}
+                          {(l.flagged || l.lowConfidence || l.checkedByEar || l.checkLapsed) && !changed ? (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => markByEar(l, !l.checkedByEar)}
+                              className={cn("mt-1.5 flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px]", l.checkedByEar ? "border-emerald-400/40 text-emerald-300" : "text-muted-foreground hover:text-foreground")}
+                              title={l.checkedByEar ? "Take the mark off (its QA warnings come back)" : "You listened and this line's timing is right: QA stops warning about it until the alignment or its time changes"}
+                              data-ear={l.checkedByEar ? "on" : "off"}
+                            >
+                              <Ear className="size-3" /> {l.checkedByEar ? "Checked by ear ✓" : "Checked by ear"}
+                            </button>
+                          ) : null}
                         </td>
                         <td className="text-muted-foreground px-3 py-2 tabular-nums">{clock(l.alignedMs)}</td>
                         <td className="px-3 py-2 tabular-nums" data-start>

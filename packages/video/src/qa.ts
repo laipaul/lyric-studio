@@ -21,6 +21,7 @@ export type QaLyric = {
   confidence: number | null; // null: not known (LRC given by hand)
   earlyMs?: number | null; // how long after its stamp the voice begins (vocal track); null: not known
   review?: string | null; // the vocal-start check flagged its start for review (why)
+  checkedByEar?: boolean; // the user listened and its timing is right (Lyrics tab): its timing WARNs are cleared
   lines: number; // text lines on screen
   box: Box; // largest extent on the 1080x1920 frame
 };
@@ -101,30 +102,35 @@ export function runQa(input: QaInput): QaReport {
 
   // 1. Lyric lines the aligner was not sure about.
   const unknown = input.lyrics.filter((l) => l.confidence === null).length;
-  const low = input.lyrics.filter((l) => l.confidence !== null && l.confidence < LOW_CONFIDENCE);
+  const lowAll = input.lyrics.filter((l) => l.confidence !== null && l.confidence < LOW_CONFIDENCE);
+  const low = lowAll.filter((l) => !l.checkedByEar);
+  const byEar = (ls: QaLyric[]) => ls.filter((l) => l.checkedByEar).map((l) => `line ${l.number} "${l.text}": checked by ear`);
   checks.push({
     name: "Lyric timing confidence",
     ok: low.length === 0,
     details: [
       ...low.map((l) => `line ${l.number} "${l.text}": confidence ${l.confidence!.toFixed(2)} (below ${LOW_CONFIDENCE}); check its timing`),
+      ...byEar(lowAll),
       ...(unknown ? [`${unknown} line(s) without a confidence value (lyrics not aligned by pnpm align)`] : []),
     ],
   });
 
   // 1b. Lines that start long before they are sung (aligned into an intro, a bridge or a solo).
-  const early = input.lyrics.filter((l) => (l.earlyMs ?? 0) > EARLY_VOICE_MS);
+  const earlyAll = input.lyrics.filter((l) => (l.earlyMs ?? 0) > EARLY_VOICE_MS);
+  const early = earlyAll.filter((l) => !l.checkedByEar);
   checks.push({
     name: "Lines start with the vocals",
     ok: early.length === 0,
-    details: early.map((l) => `line ${l.number} "${l.text}" starts long before the vocals (${(l.earlyMs! / 1000).toFixed(1)} s early); check its timing`),
+    details: [...early.map((l) => `line ${l.number} "${l.text}" starts long before the vocals (${(l.earlyMs! / 1000).toFixed(1)} s early); check its timing`), ...byEar(earlyAll)],
   });
 
   // 1c. Line starts the vocal-start check could not settle (kept where the alignment has them).
-  const review = input.lyrics.filter((l) => l.review);
+  const reviewAll = input.lyrics.filter((l) => l.review);
+  const review = reviewAll.filter((l) => !l.checkedByEar);
   checks.push({
     name: "Line starts to review",
     ok: review.length === 0,
-    details: review.map((l) => `line ${l.number} "${l.text}": flagged for review (${l.review}); kept where the alignment has it`),
+    details: [...review.map((l) => `line ${l.number} "${l.text}": flagged for review (${l.review}); kept where the alignment has it`), ...byEar(reviewAll)],
   });
 
   // 1d. The music is the song itself: same length, same level (outside the fades), same loudness curve.

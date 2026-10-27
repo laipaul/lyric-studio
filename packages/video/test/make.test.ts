@@ -565,6 +565,25 @@ describe("platform presets (stand-in renderer)", () => {
     ffmpeg("-f", "lavfi", "-i", "color=c=0xE8A3B5:s=300x120", "-frames:v", "1", path.join(wsDir, "brand", "logo.png"));
   });
 
+  it('"checked by ear" (Lyrics tab) reaches pnpm make: logged and kept in the manifest while the line is unchanged', async () => {
+    const first = await run({ platforms: "reels", variations: 1 });
+    const m = readManifest(first.platforms[0].variations[0].manifestFile);
+    const t = m.lyric_timings[0];
+    const dir = path.dirname(path.join(wsDir, ...m.lyrics.lrc.split("/")));
+    const earFile = path.join(dir, "checked-by-ear.json");
+    writeFileSync(earFile, JSON.stringify([{ number: t.number, text: t.text, lrc: m.lyrics.lrc_sha256, start_ms: t.stamp_ms, at: "2026-10-27T10:00:00.000Z" }]));
+    const log: string[] = [];
+    const second = await run({ platforms: "reels", variations: 1, log: (x) => log.push(x) });
+    const timings = readManifest(second.platforms[0].variations[0].manifestFile).lyric_timings;
+    expect(timings.filter((x) => x.checked_by_ear).map((x) => x.number)).toEqual([t.number]);
+    expect(log).toContain(`lyrics: line ${t.number} checked by ear (Lyrics tab): its timing warnings are cleared`);
+    // Another start for that line: the mark no longer holds.
+    writeFileSync(earFile, JSON.stringify([{ number: t.number, text: t.text, lrc: m.lyrics.lrc_sha256, start_ms: t.stamp_ms + 500, at: "2026-10-27T10:00:00.000Z" }]));
+    const third = await run({ platforms: "reels", variations: 1 });
+    expect(readManifest(third.platforms[0].variations[0].manifestFile).lyric_timings.some((x) => x.checked_by_ear)).toBe(false);
+    rmSync(earFile);
+  });
+
   let all: MakeResult;
   let allWhen = ""; // when that run started (the song folder is renamed by later tests)
   it("--platforms reels,tiktok,shorts: one folder each, with the preset's size, length, variations, safe zones and fade", async () => {

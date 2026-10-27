@@ -10,7 +10,7 @@ import { absPath, ffmpegBin, openWorkspace, project, type Workspace } from "@lyr
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { createSong, ensureAlignment, labelLines, lyricsView, restoreLyrics, saveHandTimes, saveLyricsText, songPathsById, type AlignRunner } from "../src/node";
+import { createSong, ensureAlignment, labelLines, lyricsView, restoreLyrics, saveHandTimes, saveLyricsText, setCheckedByEar, songPathsById, type AlignRunner } from "../src/node";
 
 const LRC = [
   "[01:05.00]<01:05.00>The verse <01:06.00>line <01:08.40>",
@@ -101,6 +101,23 @@ describe("the Lyrics tab", () => {
     expect((await lyricsView(ws, id)).lines![1].source).toBe("alignment");
     expect(readdirSync(path.join(paths.root, ".studio", "replaced")).some((f) => f.endsWith("-hints.lrc"))).toBe(true); // the old hints.lrc kept
     await expect(saveHandTimes(ws, id, [{ number: 9, ms: 1_000 }])).rejects.toThrow(/no line 9/);
+  });
+
+  it('"checked by ear" on the low-confidence line holds until its time changes', async () => {
+    await setCheckedByEar(ws, id, 4, true, new Date("2026-10-27T10:00:00Z"));
+    let line = (await lyricsView(ws, id)).lines![3];
+    expect([line.checkedByEar, line.checkLapsed]).toEqual(["2026-10-27T10:00:00.000Z", false]);
+    // Nudged: the time changed, so the mark lapses ("check it again").
+    await saveHandTimes(ws, id, [{ number: 4, ms: 90_500 }]);
+    line = (await lyricsView(ws, id)).lines![3];
+    expect([line.checkedByEar, line.checkLapsed]).toEqual([null, true]);
+    // Back at the time it was checked at: it holds again. Taken off: gone.
+    await saveHandTimes(ws, id, [{ number: 4, ms: null }]);
+    expect((await lyricsView(ws, id)).lines![3].checkedByEar).toBe("2026-10-27T10:00:00.000Z");
+    await setCheckedByEar(ws, id, 4, false);
+    line = (await lyricsView(ws, id)).lines![3];
+    expect([line.checkedByEar, line.checkLapsed]).toEqual([null, false]);
+    await expect(setCheckedByEar(ws, id, 9, true)).rejects.toThrow(/no line 9/);
   });
 
   it("editing the text: hook markers only do not re-align, words do; the old lyrics.txt can be restored", async () => {

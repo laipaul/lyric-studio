@@ -179,6 +179,9 @@ Every lyric line of the song with its timing, to check and fix by ear:
   **Reset line** (back to the alignment), **Save**. Saved lines go into the song's `hints.lrc` as
   "set by hand" lines (`[01:10.00]! #2 You had a heart for two`); the next video uses them and keeps
   the stored alignment (no re-alignment). Make the video again to see the change.
+- **Checked by ear**: on a low-confidence or flagged line, after listening: its timing warnings in
+  the videos' QA become "line N checked by ear" — until the alignment or the line's time changes (then
+  the tab asks you to check it again).
 - **lyrics.txt**: edit the text here. Lines that look like labels ([Chorus], Verse 1:), repeat marks,
   credits or the title at the top are flagged, with a button to remove them. Changing words means the
   song is aligned again on the next video (you are warned first); the old file is always kept in

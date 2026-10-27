@@ -8,6 +8,7 @@ export * from "./lrc";
 export * from "./vocal-guard";
 export * from "./hand-times";
 export * from "./audio";
+export * from "./checked-by-ear";
 export * from "./beats";
 export * from "./prng";
 export * from "./cuts";

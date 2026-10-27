@@ -718,6 +718,21 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   effect hints. Browser check: Style (per-platform rows, lock, fonts and warning, length), Generate
   (recipe option, locked hook effect, chips with length), Assets (path, hints).
 
+### Lyrics tab: "Checked by ear" ✅ (to verify on the Windows PC)
+- On a low-confidence or flagged line: **Checked by ear** (click again to take it off). Stored with the
+  song (.studio\lyrics\checked-by-ear.json) with the alignment, the words and the line's start.
+- While those stay the same, QA turns that line's timing WARNs (low confidence, starts before the
+  vocals, flagged for review) into a note: `line 40 "A heart for two": checked by ear` (the check passes).
+  pnpm make prints "lyrics: line 40 checked by ear (Lyrics tab): its timing warnings are cleared" and the
+  manifest records it (lyric_timings[].checked_by_ear).
+- A new alignment, changed words or a new start (a nudge, a vocal-start move) makes it lapse: the tab
+  shows "Checked by ear before, but its time changed since: check it again" and QA warns again.
+- The summary counts "checked by ear"; checked lines leave "Show only lines to review".
+- Tests: checked-by-ear.test.ts (holds / lapses; QA notes), lyrics-view.test.ts (set, lapses after a
+  nudge, holds again at the same time, taken off), make.test.ts (pnpm make reads it, logs it, the manifest
+  has it; another start: no longer), browser test (the 1:10 hook checked, unflagged, taken off, lapses
+  after a nudge).
+
 ### Rule — Lyric Studio never alters the music ✅ (to verify on the Windows PC)
 - **The song file is only read.** Readers: the song hash (finding the project), ffprobe (length, sample
   rate), librosa (BPM / beats), Demucs (vocal stem, written to workspace\cache\stems), the aligner,

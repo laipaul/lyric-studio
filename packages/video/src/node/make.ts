@@ -26,6 +26,7 @@ import {
 import { eq } from "drizzle-orm";
 
 import { audioPlan, type AudioPlan } from "../audio";
+import { CHECKED_BY_EAR_FILE, checkedByEar, type EarCheck } from "../checked-by-ear";
 import { compareAudio } from "./audio-check";
 import type { Beat } from "../beats";
 import { composeProps, DEFAULT_LEAD_MS, lyricFrames, rawLyric, type PlatformLayout, type RenderBase, type StyleChoice } from "../compose";
@@ -526,9 +527,14 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       ...(alignment.guard?.moves.flatMap((m) => (m.shortens_previous ? [m.number - 1, m.number - 2] : [m.number - 1])) ?? []),
       ...(alignment.handTimes?.flatMap((h) => [h.number - 1, h.number - 2]) ?? []),
     ]);
+    // Lines checked by ear in the Lyrics tab (still the same alignment, words and start): QA leaves them be.
+    const earFile = path.join(path.dirname(alignment.lrcFile), CHECKED_BY_EAR_FILE);
+    const ear = checkedByEar(existsSync(earFile) ? (JSON.parse(readFileSync(earFile, "utf8")) as EarCheck[]) : [], alignment.lrcHash, lines);
+    for (const i of ear) log(`lyrics: line ${i + 1} checked by ear (Lyrics tab): its timing warnings are cleared`);
     const reports = matchReport(lines, alignment.report).map((r, i) =>
       r
         ? {
+            checked_by_ear: ear.has(i),
             ...r,
             ...(guardMoved.has(i) ? { start_ms: lines[i].start_ms, end_ms: lines[i].sung_end_ms ?? r.end_ms } : {}),
             early_ms: alignment.guard?.earlyMs[i] ?? null,
@@ -1209,6 +1215,7 @@ async function checkVariation(
     confidence: ctx.reports[i]?.confidence ?? null,
     earlyMs: ctx.reports[i]?.early_ms ?? null,
     review: ctx.reports[i]?.review ?? null,
+    checkedByEar: ctx.reports[i]?.checked_by_ear ?? false,
   }));
   // Lines reaching into the end-screen time are drawn (and measured) in the end-screen area.
   const end = props.endScreen;
@@ -1368,6 +1375,7 @@ function buildManifest(c: {
       start_frame: props.lyrics[k].startFrame,
       end_frame: props.lyrics[k].endFrame,
       confidence: c.reports[i]?.confidence ?? null,
+      checked_by_ear: c.reports[i]?.checked_by_ear ?? false,
       early_ms: c.reports[i]?.early_ms ?? null, // the voice begins this long after the stamp
     })),
     fonts: props.fonts.map((f) => {

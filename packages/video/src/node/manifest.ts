@@ -79,6 +79,7 @@ export type Manifest = {
     start_frame: number; // in the video
     end_frame: number;
     confidence: number | null;
+    checked_by_ear?: boolean; // the user checked its timing by ear (Lyrics tab)
   }[];
   fonts: { family: string; weight: number; style: string; src: string; sha256: string }[];
   props: Omit<LyricVideoProps, "mediaBaseUrl">;

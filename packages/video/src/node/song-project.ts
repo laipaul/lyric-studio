@@ -72,7 +72,7 @@ export function hookKeys(lyricsTxt: string): Set<string> {
 }
 
 // early_ms: set by pnpm make from the vocal-start guard (how long after its start the voice begins).
-export type LineReport = { number: number; text: string; is_hook: boolean; start_ms: number; end_ms: number; confidence: number; early_ms?: number | null; review?: string | null };
+export type LineReport = { number: number; text: string; is_hook: boolean; start_ms: number; end_ms: number; confidence: number; early_ms?: number | null; review?: string | null; checked_by_ear?: boolean };
 export type AlignReport = { model: string; lang: string; low_confidence: number; lines: LineReport[] };
 
 export type Alignment = {

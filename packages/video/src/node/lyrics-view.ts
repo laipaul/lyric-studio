@@ -15,6 +15,7 @@ import { VIDEO } from "../config";
 import { parseHandTimes, withHandTimes } from "../hand-times";
 import { HOOK_MARKER, normalizeLyric, type TimedLine } from "../lrc";
 import { applyGuard, type GuardMove } from "../vocal-guard";
+import { CHECKED_BY_EAR_FILE, checkedByEar, type EarCheck } from "../checked-by-ear";
 import { loadBrand } from "./brand";
 import { loadFontCatalog } from "./font-catalog";
 import { keepReplaced } from "./project-settings";
@@ -34,6 +35,8 @@ export type LyricsLine = {
   flagged: string | null; // why it is flagged for review
   screen: { fadeInMs: number | null; readableMs: number; leaveMs: number }; // what the viewer sees (song time)
   sungEndMs: number | null;
+  checkedByEar: string | null; // when the user checked it by ear (still the same alignment, words and start)
+  checkLapsed: boolean; // checked by ear before, but the alignment, words or start changed since
 };
 
 export type LabelFlag = { line: number; text: string; why: string }; // a line of lyrics.txt (1-based)
@@ -130,17 +133,10 @@ export async function lyricsView(ws: Workspace, projectId: string): Promise<Lyri
     hintsFile: paths.hints ? path.relative(ws.dir, paths.hints).split(path.sep).join("/") : null,
     replaced,
   };
-  const stored = await storedAlignment(ws, projectId);
-  if (!stored) return { ...base, lines: null, why: "This song has no stored alignment for its current lyrics.txt yet: make a video first (Generate), then its lines appear here.", checkRan: false };
-  const { alignment, hints } = stored;
-  const hand = applyHandSet(alignment, hints ?? undefined);
-  // The vocal-start check of the last pnpm make for this alignment (hand-set lines are left alone).
-  const record = path.join(path.dirname(alignment.lrcFile), `guard-${alignment.lrcHash.slice(0, 12)}.json`);
-  const guard = existsSync(record) ? (JSON.parse(readFileSync(record, "utf8")) as { moves: VocalGuard["moves"]; check?: VocalGuard["check"] }) : null;
-  const moves: GuardMove[] = (guard?.moves ?? [])
-    .filter((m) => !hand.skip.has(m.number - 1))
-    .map((m) => ({ index: m.number - 1, fromMs: m.from_ms, toMs: m.to_ms, ...(m.shortens_previous ? { shortensPrevious: true } : {}) }));
-  const lines: TimedLine[] = applyGuard(hand.alignment.lines, moves);
+  const current = await currentLines(ws, projectId);
+  if (!current) return { ...base, lines: null, why: "This song has no stored alignment for its current lyrics.txt yet: make a video first (Generate), then its lines appear here.", checkRan: false };
+  const { alignment, hand, guard, moves, lines, ear } = current;
+  const valid = checkedByEar(ear, alignment.lrcHash, lines);
   const reports = matchReport(alignment.lines, alignment.report);
   const frames = lyricFrames({ plan: { start_frame: 0 }, lyrics: lines.map((l) => rawLyric(l)) } as unknown as RenderBase, leadMs, p.lyrics_offset_ms, true, gap);
   const ms = (f: number) => Math.round((f * 1000) / VIDEO.fps);
@@ -165,9 +161,41 @@ export async function lyricsView(ws: Workspace, projectId: string): Promise<Lyri
         flagged,
         screen: { fadeInMs: frames[i].enterFrame !== undefined ? ms(frames[i].enterFrame!) : null, readableMs: ms(frames[i].startFrame), leaveMs: ms(frames[i].endFrame) },
         sungEndMs: l.sung_end_ms ?? null,
+        checkedByEar: valid.has(i) ? (ear.find((c) => c.number === i + 1)?.at ?? null) : null,
+        checkLapsed: !valid.has(i) && ear.some((c) => c.number === i + 1),
       };
     }),
   };
+}
+
+// The lines as the next video has them: the stored alignment, the hand-set starts (hints.lrc) and the
+// vocal-start check's moves of the last make (hand-set lines are left alone); the "checked by ear" marks.
+async function currentLines(ws: Workspace, projectId: string) {
+  const stored = await storedAlignment(ws, projectId);
+  if (!stored) return null;
+  const { alignment, hints } = stored;
+  const hand = applyHandSet(alignment, hints ?? undefined);
+  const dir = path.dirname(alignment.lrcFile);
+  const record = path.join(dir, `guard-${alignment.lrcHash.slice(0, 12)}.json`);
+  const guard = existsSync(record) ? (JSON.parse(readFileSync(record, "utf8")) as { moves: VocalGuard["moves"]; check?: VocalGuard["check"] }) : null;
+  const moves: GuardMove[] = (guard?.moves ?? [])
+    .filter((m) => !hand.skip.has(m.number - 1))
+    .map((m) => ({ index: m.number - 1, fromMs: m.from_ms, toMs: m.to_ms, ...(m.shortens_previous ? { shortensPrevious: true } : {}) }));
+  const lines: TimedLine[] = applyGuard(hand.alignment.lines, moves);
+  const earFile = path.join(dir, CHECKED_BY_EAR_FILE);
+  const ear = existsSync(earFile) ? (JSON.parse(readFileSync(earFile, "utf8")) as EarCheck[]) : [];
+  return { alignment, hand, guard, moves, lines, ear, earFile };
+}
+
+// "Checked by ear" on a line (or off again): kept with the song for this alignment, words and start.
+export async function setCheckedByEar(ws: Workspace, projectId: string, number: number, checked: boolean, now = new Date()): Promise<void> {
+  const current = await currentLines(ws, projectId);
+  if (!current) throw new Error("This song has no stored alignment yet: make a video first.");
+  const line = current.lines[number - 1];
+  if (!line) throw new Error(`There is no line ${number}.`);
+  const others = current.ear.filter((c) => c.number !== number);
+  const next = checked ? [...others, { number, text: line.text, lrc: current.alignment.lrcHash, start_ms: line.start_ms, at: now.toISOString() }] : others;
+  writeFileSync(current.earFile, `${JSON.stringify(next.sort((a, b) => a.number - b.number), null, 2)}\n`);
 }
 
 // The Lyrics tab's Save: hand-set starts for these lines (null = back to the alignment / check) in hints.lrc.

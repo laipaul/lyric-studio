@@ -78,6 +78,17 @@ async function main() {
     check(((await page.textContent("[data-line='2'] [data-flag-reason]")) ?? "").includes("only words 1:10.1"), "with the reason");
     check(((await page.textContent("[data-line='2'] [data-screen]")) ?? "").includes("readable 1:08.27"), "what the viewer sees: readable 1:08.27 (0.25 s before the stamp)");
 
+    // "Checked by ear": the flagged line is no longer flagged (stored with the song).
+    await page.click("[data-line='2'] [data-ear='off']");
+    await page.waitForSelector("[data-line='2'][data-checked-by-ear='true']");
+    check(((await page.textContent("[data-lyrics-summary]")) ?? "").includes("0 flagged for review · 0 low confidence · 1 checked by ear"), "checked by ear: 0 flagged, 1 checked by ear");
+    check(existsSync(path.join(path.dirname(stored.lrcFile), "checked-by-ear.json")), "stored with the song (.studio\\lyrics\\checked-by-ear.json)");
+    await page.click("[data-line='2'] [data-ear='on']");
+    await page.waitForSelector("[data-line='2'][data-flagged='true']");
+    check(true, "taken off again: flagged again");
+    await page.click("[data-line='2'] [data-ear='off']");
+    await page.waitForSelector("[data-line='2'][data-checked-by-ear='true']");
+
     // Nudge +0.5 three times (1.5 s later), then Save.
     for (let i = 0; i < 3; i++) await page.click("[data-line='2'] [data-nudge='500']");
     check(((await page.textContent("[data-line='2'] [data-start]")) ?? "").includes("1:10.00"), "after +1.5 s: starts 1:10.00 (not saved)");
@@ -92,6 +103,7 @@ async function main() {
     await page.waitForFunction(() => document.querySelector("[data-line='2'] [data-start]")?.textContent?.includes("set by hand"));
     check((await page.getAttribute("[data-line='2']", "data-flagged")) === null, "a hand-set line is no longer flagged");
     check(readdirSync(path.dirname(stored.lrcFile)).filter((f) => /^aligned-.*\.lrc$/.test(f)).length === 1, "the stored alignment is kept (no new alignment)");
+    check(!!(await page.$("[data-line='2'] [data-ear-lapsed]")), "the time changed: the \"checked by ear\" mark lapsed (check it again)");
 
     // Reset the line: the hand-set time goes again.
     await page.click("[data-line='2'] [data-reset]");
