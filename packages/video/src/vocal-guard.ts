@@ -14,7 +14,9 @@
 //                   independent signal (it is the stamp).
 // A line moves only where two signals agree within AGREE_MS (never on one signal alone), except: a first
 // word of LONG_FIRST_WORD_MS or more with the recognised words within WORDS_NEAR_MS of the word-duration
-// estimate moves to the recognised words. A signal that disagrees with the stamp without a second one
+// estimate moves to the recognised words; and a first word of LONG_WORD_MS or more with voice and words
+// both later than the stamp and within PAIR_NEAR_MS of each other moves to the recognised words (not on
+// the last line: a held note). A signal that disagrees with the stamp without a second one
 // keeps the stamp and flags the line for review (the Lyrics tab); a stretched first word on a hook or the
 // last line may be a held note: flagged, never moved on that alone. Never onto the next line or into the
 // previous one. Pure, so the tests check exactly what pnpm make does.
@@ -29,6 +31,8 @@ export const VOICE_BELOW_SINGING_DB = 15; // voice: at most this far under the s
 export const STRETCHED_WORD_MS = 2500; // a first word lasting this long (to the second word's start) was stretched back
 export const LONG_FIRST_WORD_MS = 4000; // with the recognised words near the estimate: moved on those two
 export const WORDS_NEAR_MS = 1000;
+export const LONG_WORD_MS = 2000; // a first word this long is checked; with voice + words within PAIR_NEAR_MS: moved to the words
+export const PAIR_NEAR_MS = 600;
 const JOIN_GAP_MS = 250; // short pauses between sung words do not split the voice
 const WORD_BEFORE_MS = 400; // no energy found near the second word: the first word starts this much before it
 const NEAR_SECOND_MS = 1500;
@@ -171,8 +175,9 @@ function signalsFor(lines: readonly TimedLine[], v: VoiceLevels, levelDb: number
     const words = l.words ?? [];
     const firstWordMs = words.length >= 2 ? words[1].start_ms - words[0].start_ms : null;
     const stretched = firstWordMs !== null && firstWordMs >= STRETCHED_WORD_MS;
+    const longWord = firstWordMs !== null && firstWordMs >= LONG_WORD_MS;
     // Inside a verse and not a hook: not checked unless `all` (QA still sees early_ms).
-    if (!all && i > 0 && !voiceGap && !alignGap && !stretched && !l.isHook) return;
+    if (!all && i > 0 && !voiceGap && !alignGap && !longWord && !l.isHook) return;
     let duration = l.start_ms;
     if (stretched) {
       const second = words[1].start_ms;
@@ -249,6 +254,14 @@ export function checkVocalStart(
       target = voiceToo ? s.voice! : heard.ms;
       agree = voiceToo ? ["voice", "words", "word durations"] : ["words", "word durations"];
       why = `the first word lasts ${(s.firstWordMs / 1000).toFixed(1)} s and the recognised words are within ${(Math.max(0.1, Math.round(Math.abs(heard.ms - s.duration) / 100) / 10)).toFixed(1)} s of the word-duration estimate`;
+    } else if (
+      s.firstWordMs !== null && s.firstWordMs >= LONG_WORD_MS && s.i < lines.length - 1 && heard && s.voice !== null &&
+      Math.abs(s.voice - heard.ms) <= PAIR_NEAR_MS && Math.min(s.voice, heard.ms) > l.start_ms + MOVE_MS
+    ) {
+      // A long first word (a strong sign it was stretched back) and voice + words agreeing it starts later.
+      target = heard.ms;
+      agree = ["voice", "words"];
+      why = `the first word lasts ${(s.firstWordMs / 1000).toFixed(1)} s and voice and words agree within ${(Math.abs(s.voice - heard.ms) / 1000).toFixed(1)} s that it starts later (moved to the recognised words)`;
     } else if (best.length >= 2) {
       agree = best.map((c) => c.name);
       // The most precise of the agreeing signals: the stamp (when it is one of them), the voice onset, the

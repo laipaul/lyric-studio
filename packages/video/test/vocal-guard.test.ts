@@ -249,6 +249,54 @@ describe("vocal-start check (pure)", () => {
     expect([joined.voiceMs, joined.result]).toEqual([null, "in time"]); // stamp + words agree
   });
 
+  describe("A Heart For Two lines 13, 27, 40: a first word of 2 s or more, voice and words within 0.6 s", () => {
+    // Lines 13 and 27 are stamped ~2.4 s early (the first word stretched back 2.4 s); voice and words
+    // agree within 0.4-0.5 s that they start later (more than the 0.3 s rule). Line 40, the last line
+    // (a hook, a held note?), sung softly: only words and the word-duration estimate, 0.5 s apart: flagged.
+    const song = parseLrc(
+      [
+        "[01:05.00]<01:05.00>The verse <01:06.00>line <01:08.40>",
+        "[01:11.40]<01:11.40>Hold <01:13.80>me <01:14.20>close <01:15.40>", // line 13: first word 2.4 s
+        "[01:20.00]<01:20.00>Another <01:20.60>verse <01:22.00>",
+        "[02:31.50]<02:31.50>Through <02:33.90>the <02:34.20>night <02:35.40>", // line 27: first word 2.4 s
+        "[02:40.00]<02:40.00>Then <02:40.60>more <02:42.00>",
+        "[02:52.00]<02:52.00>A <02:55.40>heart <02:55.80>for <02:56.30>two <02:57.50>", // line 40: the last line, first word 3.4 s
+        "[03:05.00]",
+      ].join("\n"),
+      200_000,
+    ).map((l, i) => ({ ...l, isHook: i === 5 }));
+    const v = levels(
+      [[65_000, 68_400, SINGING], [73_900, 75_400, SINGING], [80_000, 82_000, SINGING], [153_800, 155_400, SINGING], [160_000, 162_000, SINGING], [175_000, 177_500, -33]], // line 40 sung softly (under the voice level), as on the PC
+      200_000,
+    );
+    const asr = new Map<number, AsrWord[]>([
+      [1, asrAt(73_500, "Hold me close")],
+      [3, asrAt(153_300, "Through the night")],
+      [5, asrAt(175_500, "A heart for two")],
+    ]);
+    const c = checkVocalStart(song, v, { asr });
+    const of = (n: number) => c.lines.find((x) => x.index === n)!;
+
+    it("lines 13 and 27 (checked by default: first word >= 2 s) move to the recognised words", () => {
+      expect([of(1).stampMs, of(1).voiceMs, of(1).wordsMs, of(1).targetMs, of(1).result]).toEqual([71_400, 73_900, 73_500, 73_500, "moved"]);
+      expect(of(1).why).toBe("the first word lasts 2.4 s and voice and words agree within 0.4 s that it starts later (moved to the recognised words)");
+      expect([of(3).stampMs, of(3).voiceMs, of(3).wordsMs, of(3).targetMs, of(3).result]).toEqual([151_500, 153_800, 153_300, 153_300, "moved"]);
+    });
+
+    it("line 40 (the last line, a held note?) stays flagged; a line set by hand keeps priority", () => {
+      expect([of(5).targetMs, of(5).result]).toEqual([172_000, "flagged for review"]);
+      const hand = checkVocalStart(song, v, { asr, skip: new Set([1]) });
+      expect(hand.lines.find((x) => x.index === 1)!.result).toBe("set by hand");
+      expect(hand.moves.map((m) => m.index)).toEqual([3]);
+    });
+
+    it("the 0.3 s rule stays for other lines: a short first word with voice and words 0.5 s apart is flagged", () => {
+      const short = song.map((l, i) => (i === 1 ? { ...l, words: l.words!.map((w, k) => (k === 1 ? { ...w, start_ms: 72_000 } : w)) } : l)); // first word 0.6 s
+      const r = checkVocalStart(short, v, { asr, all: true }).lines.find((x) => x.index === 1)!;
+      expect(r.result).toBe("flagged for review");
+    });
+  });
+
   it('Love Is A Good Thing line 39 "The old ones": voice and words agree 1.3 s later, inside line 38 (held too long): line 38 ends there', () => {
     const song = parseLrc(
       [

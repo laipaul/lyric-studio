@@ -757,6 +757,17 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   make.test.ts (real renders: the song file's hash and modification time are unchanged, the song
   folder's copy is byte for byte the same, QA audio check passes, 44.1 kHz kept).
 
+### Tuning — a long first word is a strong signal ✅ (to verify on the Windows PC)
+From the check-start results on A Heart For Two (lines 13 and 27: stamp ~2.4 s early, voice and words
+0.4-0.5 s apart, so the 0.3 s rule left them flagged).
+- A first word of **2 s or more** with **voice and words both later than the stamp and within 0.6 s of
+  each other** moves the line to the recognised-words time ("the first word lasts 2.4 s and voice and
+  words agree within 0.4 s that it starts later (moved to the recognised words)"). All other cases keep
+  the 0.3 s rule. Not on the last line (a held note): line 40 stays flagged. Lines set by hand keep priority.
+- Lines whose first word lasts 2 s or more (was 2.5 s) are checked by default.
+- Tests: vocal-guard.test.ts (lines 13 1:11.4 -> 1:13.5 and 27 2:31.5 -> 2:33.3 moved; line 40 flagged;
+  a hand-set line untouched; a short first word with voice and words 0.5 s apart still flagged).
+
 ### Loop check — "Loop flows" for Reels, TikTok, Shorts ✅ (to verify on the Windows PC)
 These platforms play a video in a loop, so the wrap-around from the last frame to the first is checked.
 - **QA "Loop flows"** (src/loop.ts), five points; a failing point names its cause:
