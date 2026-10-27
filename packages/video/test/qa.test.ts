@@ -68,6 +68,21 @@ describe("QA checks", () => {
     expect(check(report, "Lyric timing confidence").details).toEqual(['line 7 "Low one": confidence 0.42 (below 0.5); check its timing']);
   });
 
+  it("warns when a line starts long before the vocals (aligned into the intro); older reports without the value pass", () => {
+    const report = runQa(
+      input({
+        lyrics: [
+          { number: 1, text: "A heart for two", confidence: 0.8, earlyMs: 5_400, lines: 1, box: goodBox },
+          { number: 2, text: "In time", confidence: 0.8, earlyMs: 900, lines: 1, box: goodBox },
+          { number: 3, text: "Old report", confidence: 0.8, lines: 1, box: goodBox },
+        ],
+      }),
+    );
+    expect(report.status).toBe("WARN");
+    expect(check(report, "Lines start with the vocals").details).toEqual(['line 1 "A heart for two" starts long before the vocals (5.4 s early); check its timing']);
+    expect(check(runQa(input()), "Lines start with the vocals").ok).toBe(true);
+  });
+
   it("flags a clip repeated within 3 shots (but not 4 shots later)", () => {
     const shots = Array.from({ length: 6 }, (_, i) => shot(i * 30, 30));
     const report = runQa(input({ props: { shots, lyrics: [], cinematicBars: false, durationInFrames: 180 }, shotClips: ["a", "b", "c", "a", "d", "b"] }));

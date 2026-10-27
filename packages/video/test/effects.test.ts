@@ -241,6 +241,31 @@ describe("instrumental gaps", () => {
       for (let f = ls[0].endFrame; f < t.enterStart[1]; f++) expect(lyricScene(t, f), `${e.name} frame ${f}`).toEqual([]);
     }
   });
+
+  it("a gap longer than gapHideS shows nothing (no waiting next line); the next line fades in gapLeadInS before its first word", () => {
+    const gap = { hideMs: 3_000, leadInMs: 1_000 };
+    // An intro of 12 s, then a line; an 8 s solo; then a line 2 s after the previous one (a short gap).
+    const raw = [line("first line", 12_000, 20_000, 13_000), line("after solo", 21_000, 23_200, 22_000), line("short gap", 24_000, 30_000, 25_000)];
+    const ls = lyricFrames(base(raw), 250, 0, true, gap);
+    const frame = (ms: number) => Math.round((ms * 30) / 1000);
+    expect(ls[0].enterFrame).toBe(frame(11_000)); // the intro: fades in 1 s before its first word
+    expect(ls[1].enterFrame).toBe(frame(20_000)); // after the 8 s solo
+    expect(ls[2].enterFrame).toBeUndefined(); // 2 s gap: the usual timing
+    expect(ls[0].endFrame).toBe(frame(13_000 + 1_400)); // cleared 1 s after the last word (0.4 s fade)
+    // Older manifests (no gap setting): unchanged.
+    expect(lyricFrames(base(raw), 250, 0, true).map((l) => l.enterFrame)).toEqual([undefined, undefined, undefined]);
+
+    for (const e of EFFECTS) {
+      const t = sceneTimeline(ls, options({ name: e.name, intensity: "balanced" }, undefined, { durationInFrames: 1_000 }));
+      // The intro and the solo: nothing at all on screen, not even the waiting next line.
+      for (let f = 0; f < frame(11_000); f++) expect(lyricScene(t, f), `${e.name} intro frame ${f}`).toEqual([]);
+      for (let f = ls[0].endFrame; f < frame(20_000); f++) expect(lyricScene(t, f), `${e.name} solo frame ${f}`).toEqual([]);
+      // Fading in during the lead-in, settled at its usual time (0.25 s before the stamp).
+      const mid = lyricScene(t, frame(11_400)).find((x) => x.index === 0);
+      expect(mid && mid.look.opacity > 0 && mid.look.opacity < 1, e.name).toBe(true);
+      expect(lyricScene(t, ls[0].startFrame).find((x) => x.index === 0)?.look.opacity, e.name).toBeCloseTo(1, 5);
+    }
+  });
 });
 
 describe("deterministic", () => {

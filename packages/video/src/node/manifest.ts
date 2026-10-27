@@ -51,6 +51,7 @@ export type Manifest = {
     lang: string;
     lead_ms: number;
     lyrics_offset_ms: number;
+    vocal_guard?: { number: number; text: string; from_ms: number; to_ms: number }[] | null; // lines moved to the voice start (pnpm make)
   };
   settings: Record<string, unknown>;
   clips: ManifestClip[];

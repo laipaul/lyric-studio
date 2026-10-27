@@ -370,6 +370,12 @@ pnpm align "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test
 - `--hint <taps.lrc>`: for lines below 0.7 confidence only, uses your tapped time (corrected by the
   typical offset) and moves the line to the nearest start of the voice, re-aligning that line on its
   own. The adjusted lines are listed. The hint file is never overwritten.
+- Vocal-start guard (in `pnpm make`, always on, on the stored alignment, never re-aligning): line 1, and
+  any line after an instrumental gap (bridge, solo), that starts more than 1 s before the voice on the
+  vocal track moves to where the voice starts ("guard: line 1 moved from 0:03.2 to 0:11.8 (vocals
+  start)"). A line still more than 1 s early gets the QA warning "starts long before the vocals".
+- During an instrumental gap longer than 3 s no lyric is shown; the next line fades in 1 s before its
+  first word (brand.json `motion.gapHideS` / `motion.gapLeadInS`).
 - `--trim off` turns off the correction for words stretched over a silent gap.
 - `--report file.json` also writes each line's confidence and sung times; `--fresh` ignores the
   cached alignment (both used by `pnpm make`).

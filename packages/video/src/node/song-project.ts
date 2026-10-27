@@ -19,6 +19,8 @@ import { REPO_ROOT, absPath, createProject, project as projectTable, type Projec
 import { eq } from "drizzle-orm";
 
 import { HOOK_MARKER, normalizeLyric, parseLrc, type TimedLine } from "../lrc";
+import { clockText } from "../section";
+import { applyGuard, earlyMs, planGuard, type VoiceStretch } from "../vocal-guard";
 import { cachedFileHash } from "./collection";
 import { processAlive } from "./jobs";
 import { ADDING_PREFIX, adoptIntoSongFolder, songPaths, songPathsById } from "./song-folder";
@@ -68,7 +70,8 @@ export function hookKeys(lyricsTxt: string): Set<string> {
   );
 }
 
-export type LineReport = { number: number; text: string; is_hook: boolean; start_ms: number; end_ms: number; confidence: number };
+// early_ms: set by pnpm make from the vocal-start guard (how long after its start the voice begins).
+export type LineReport = { number: number; text: string; is_hook: boolean; start_ms: number; end_ms: number; confidence: number; early_ms?: number | null };
 export type AlignReport = { model: string; lang: string; low_confidence: number; lines: LineReport[] };
 
 export type Alignment = {
@@ -82,8 +85,78 @@ export type Alignment = {
   lyricsHash: string;
   hint: { file: string; hash: string; source: string; stored: boolean } | null; // stored: reused from an earlier --hint
   warnings: string[];
-  lines: TimedLine[]; // parsed, with hooks from lyrics.txt
+  lines: TimedLine[]; // parsed, with hooks from lyrics.txt (and the vocal-start guard's moves, see applyVocalGuard)
+  guard?: VocalGuard | null; // null: not checked (a given LRC, or no vocal track)
 };
+
+// The vocal-start guard's result for one alignment (also written to guard-<lrc hash>.json).
+export type VocalGuard = {
+  moves: { number: number; text: string; from_ms: number; to_ms: number }[];
+  earlyMs: (number | null)[]; // per line, after the moves: how long after its start the voice begins
+  voiceMap: string; // workspace-relative
+};
+
+export type VoiceMapRunner = (args: { song: string; out: string }) => Promise<void>;
+
+// Where the voice is heard (services/audio voice_map: the cached vocal stem; Demucs only if not cached).
+export const runVoiceMapCommand: VoiceMapRunner = (a) =>
+  new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [path.join(REPO_ROOT, "services/audio/scripts/voice-map.mjs"), a.song, "--out", a.out], { cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    const tail: string[] = [];
+    const keep = (chunk: Buffer) => {
+      for (const line of chunk.toString("utf8").split(/[\r\n]+/)) if (line.trim()) tail.push(line.trim());
+      tail.splice(0, Math.max(0, tail.length - 6));
+    };
+    child.stdout.on("data", keep);
+    child.stderr.on("data", keep);
+    child.on("error", reject);
+    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(alignFailure(tail)))));
+  });
+
+// The vocal-start guard on an alignment (stored or new), never re-aligning: line 1 and lines after an
+// instrumental gap that start more than 1 s before the voice move to where the voice starts. The voice
+// map is cached per song file (.studio/lyrics/voice-<song hash>.json); each move is logged and recorded
+// in guard-<lrc hash>.json next to the alignment. A given LRC (--lrc) is used as it is.
+export async function applyVocalGuard(
+  ws: Workspace,
+  sp: SongProject,
+  alignment: Alignment,
+  options: { log?: (m: string) => void; voiceMap?: VoiceMapRunner } = {},
+): Promise<Alignment> {
+  const log = options.log ?? (() => {});
+  if (alignment.source === "given") return { ...alignment, guard: null };
+  if (!options.voiceMap && process.env.LYRIC_VOICE_MAP === "off") return { ...alignment, guard: null }; // the tests
+  const dir = path.dirname(alignment.lrcFile);
+  const mapFile = path.join(dir, `voice-${sp.songHash.slice(0, 12)}.json`);
+  if (!existsSync(mapFile)) {
+    log("lyrics: vocal-start check: reading where the voice is heard (the cached vocal track; Demucs only if it is not cached)");
+    const tmp = path.join(dir, `.voice-${sp.songHash.slice(0, 12)}.${process.pid}.part`);
+    try {
+      await (options.voiceMap ?? runVoiceMapCommand)({ song: sp.songFile, out: tmp });
+      renameSync(tmp, mapFile);
+    } catch (error) {
+      rmSync(tmp, { force: true });
+      const why = (error as Error).message.split("\n").pop();
+      alignment.warnings.push(`The vocal-start check was skipped (${why}).`);
+      log(`lyrics: vocal-start check skipped: ${why}`);
+      return { ...alignment, guard: null };
+    }
+  }
+  const map = JSON.parse(readFileSync(mapFile, "utf8")) as { stretches: [number, number][] };
+  const stretches: VoiceStretch[] = map.stretches;
+  const moves = planGuard(alignment.lines, stretches);
+  const lines = applyGuard(alignment.lines, moves);
+  for (const m of moves) log(`guard: line ${m.index + 1} moved from ${clockText(m.fromMs)} to ${clockText(m.toMs)} (vocals start)`);
+  const guard: VocalGuard = {
+    moves: moves.map((m) => ({ number: m.index + 1, text: lines[m.index].text, from_ms: m.fromMs, to_ms: m.toMs })),
+    earlyMs: earlyMs(lines, stretches),
+    voiceMap: path.relative(ws.dir, mapFile).split(path.sep).join("/"),
+  };
+  const record = path.join(dir, `guard-${alignment.lrcHash.slice(0, 12)}.json`);
+  const text = `${JSON.stringify({ alignment: path.basename(alignment.lrcFile), voice_map: path.basename(mapFile), moves: guard.moves }, null, 2)}\n`;
+  if (!existsSync(record) || readFileSync(record, "utf8") !== text) writeFileAtomic(record, text);
+  return { ...alignment, lines, guard };
+}
 
 export type AlignRunner = (args: { song: string; lyrics: string; out: string; report: string; hint?: string; fresh: boolean; lang: string }) => Promise<void>;
 

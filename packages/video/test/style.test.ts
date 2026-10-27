@@ -136,6 +136,17 @@ describe("the Style tab, Generate and pnpm make", () => {
     expect(loadBrand(wsDir, loadFontCatalog(wsDir)).brand.perPlatform).toEqual({ tiktok: { verseEffect: "cinematic-fade" } });
   });
 
+  it("brand.json motion.gapHideS / gapLeadInS: defaults 3 s and 1 s, checked", () => {
+    const brandFile = path.join(wsDir, "brand", "brand.json");
+    expect(loadBrand(wsDir, loadFontCatalog(wsDir)).brand.motion).toMatchObject({ gapHideS: 3, gapLeadInS: 1 }); // creates it if needed
+    const raw = JSON.parse(readFileSync(brandFile, "utf8"));
+    writeFileSync(brandFile, JSON.stringify({ ...raw, motion: { gapHideS: 4.5, gapLeadInS: 0.8 } }));
+    expect(loadBrand(wsDir, loadFontCatalog(wsDir)).brand.motion).toMatchObject({ gapHideS: 4.5, gapLeadInS: 0.8, verseEffect: { name: "glide" } });
+    writeFileSync(brandFile, JSON.stringify({ ...raw, motion: { gapHideS: "soon", gapLeadInS: 9 } }));
+    expect(() => loadBrand(wsDir, loadFontCatalog(wsDir))).toThrow(/motion.gapHideS must be a number of seconds from 1.5 to 30[\s\S]*motion.gapLeadInS must be a number of seconds from 0.25 to 3/);
+    writeFileSync(brandFile, JSON.stringify(raw));
+  });
+
   it("styleData: every setting with value and source, per platform, and fonts with the accent check", () => {
     const d = styleData(ws, id);
     const verse = d.fields.find((f) => f.field === "verseEffect")!;

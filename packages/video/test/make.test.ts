@@ -775,7 +775,7 @@ describe("platform presets (stand-in renderer)", () => {
     const first = await run({ platforms: "reels", variations: 1, onReady: (p) => plans.push(p) });
     const brandBefore = readFileSync(brandFile, "utf8"); // created with the defaults by the first run
     const m = readManifest(first.variations[0].manifestFile);
-    expect(m.props.lyricEffects).toEqual({ verse: { name: "glide", intensity: "balanced" }, hook: { name: "karaoke-highlight", intensity: "balanced" }, accent: "#E8A3B5" });
+    expect(m.props.lyricEffects).toEqual({ verse: { name: "glide", intensity: "balanced" }, hook: { name: "karaoke-highlight", intensity: "balanced" }, accent: "#E8A3B5", gap: { hideMs: 3000, leadInMs: 1000 } });
     expect(m.props.nextLine).toBe(true);
     expect(plans[0].effects).toEqual({ verse: "glide", hook: "karaoke-highlight", from: { verse: "brand.json", hook: "brand.json" }, showNextLine: true });
     expect(m.settings).toMatchObject({ line_effect: "glide", hook_effect: "karaoke-highlight", show_next_line: true });

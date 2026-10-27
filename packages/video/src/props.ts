@@ -35,11 +35,14 @@ export type LyricLineProps = {
   stampFrame?: number;
   sungEndFrame?: number;
   words?: { text: string; startFrame: number; endFrame: number }[];
+  enterFrame?: number; // after a long instrumental gap: it fades in from here (brand motion.gapLeadInS)
 };
 
 // Lyric effects (src/effects): the verse and hook effect, and the accent colour for karaoke.
 // Without this (manifests from before Step 5j) lines use the style's old fade / pop.
-export type LyricEffectsProps = { verse: EffectChoice; hook: EffectChoice; accent: string };
+// gap: during an instrumental gap longer than hideMs no lyric is shown; the next line fades in
+// leadInMs before its first sung word (missing in manifests from before: the old timing).
+export type LyricEffectsProps = { verse: EffectChoice; hook: EffectChoice; accent: string; gap?: { hideMs: number; leadInMs: number } };
 
 export type StillProps = { src: string; startFrame: number; endFrame: number; fadeFrames: number; motion?: KenBurns; section: string };
 

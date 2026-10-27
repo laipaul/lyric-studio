@@ -52,7 +52,7 @@ import { tooLongLines } from "./measure";
 import { loadStyles, lyricLineNumbers, parseSection, snapToDownbeat, songMedia, type StyleFaces } from "./prepare";
 import { detectBadFrames, measureLyrics } from "./qa-check";
 import { getBundle, renderLyricVideo, renderThumbnail, type RenderOptions } from "./render";
-import { ensureAlignment, findOrCreateSongProject, matchReport, type Alignment, type AlignRunner } from "./song-project";
+import { applyVocalGuard, ensureAlignment, findOrCreateSongProject, matchReport, type Alignment, type AlignRunner, type VoiceMapRunner } from "./song-project";
 import { COVER_TEXT_SCALE } from "../youtube-layout";
 import { lyricSections } from "../youtube";
 import { loopCheck, planCanvas, type CanvasPlan } from "./canvas";
@@ -117,6 +117,7 @@ export type MakeOptions = {
   command?: string;
   now?: Date;
   align?: AlignRunner;
+  voiceMap?: VoiceMapRunner; // tests: a stand-in for the voice map of the vocal track
   renderer?: (options: RenderOptions) => Promise<string>; // tests: a stand-in for renderLyricVideo
   thumbnailRenderer?: typeof renderThumbnail; // tests: a stand-in for renderThumbnail
   platform?: NodeJS.Platform;
@@ -495,7 +496,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       .get();
     const lyricsOffsetMs = project.lyrics_offset_ms;
 
-    const alignment = await ensureAlignment(ws, { ...sp, project }, {
+    const stored = await ensureAlignment(ws, { ...sp, project }, {
       lyricsTxt: path.resolve(options.lyrics),
       hint: options.hint ? path.resolve(options.hint) : undefined,
       noHint: options.noHint,
@@ -506,9 +507,14 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       log,
       align: options.align,
     });
+    // The vocal-start guard: on the stored alignment as it is (never re-aligning).
+    const alignment = await applyVocalGuard(ws, { ...sp, project }, stored, { log, voiceMap: options.voiceMap });
     const lines = alignment.lines;
     if (!lines.length) throw new Error(`No timed lyric lines in ${alignment.lrcFile}`);
-    const reports = matchReport(lines, alignment.report);
+    const guardMoved = new Set(alignment.guard?.moves.map((m) => m.number - 1));
+    const reports = matchReport(lines, alignment.report).map((r, i) =>
+      r ? { ...r, ...(guardMoved.has(i) ? { start_ms: lines[i].start_ms, end_ms: lines[i].sung_end_ms ?? r.end_ms } : {}), early_ms: alignment.guard?.earlyMs[i] ?? null } : r,
+    );
     saveLyricLines(ws, project.id, alignment);
     const numbers = lyricLineNumbers(lines.map((l) => l.text), alignment.lrcFile, alignment.lyricsTxt).numbers;
     const sectionLines: SectionLine[] = lines.map((l, i) => ({ ...l, sung_end_ms: reports[i]?.end_ms }));
@@ -795,7 +801,8 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   // With word times and the sung end (from the aligned LRC, else the alignment report) for the effects.
   const allLyrics = lines.map((l, i) => rawLyric({ ...l, sung_end_ms: sh.sectionLines[i].sung_end_ms ?? l.sung_end_ms }));
   const fx = chooseEffects(sh.brand.brand, options, sh.effectLabels);
-  const effects: LyricEffectsProps = { verse: fx.verse, hook: fx.hook, accent: sh.brand.brand.accentColour };
+  const motion = sh.brand.brand.motion;
+  const effects: LyricEffectsProps = { verse: fx.verse, hook: fx.hook, accent: sh.brand.brand.accentColour, gap: { hideMs: Math.round(motion.gapHideS * 1000), leadInMs: Math.round(motion.gapLeadInS * 1000) } };
   // A line whose singing is over but which is still on screen at the start (it lingers until the
   // next stamp) is not shown, so the video never opens on the tail of the previous line.
   // A line whose first word comes after the end would only flash up in the last 0.25 s: not shown either.
@@ -825,7 +832,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   };
 
   // Which lines are on screen (same rule as composeProps).
-  const frames = lyricFrames(base, leadMs, lyricsOffsetMs, true);
+  const frames = lyricFrames(base, leadMs, lyricsOffsetMs, true, effects.gap);
   const visible = frames
     .map((f, k) => ({ i: shown[k], start: Math.max(0, f.startFrame), end: Math.min(base.durationInFrames, f.endFrame) }))
     .filter((v) => v.end > v.start)
@@ -1163,6 +1170,7 @@ async function checkVariation(
     ...props.lyrics[k],
     number: ctx.numbers[i] || i + 1,
     confidence: ctx.reports[i]?.confidence ?? null,
+    earlyMs: ctx.reports[i]?.early_ms ?? null,
   }));
   // Lines reaching into the end-screen time are drawn (and measured) in the end-screen area.
   const end = props.endScreen;
@@ -1241,6 +1249,7 @@ function buildManifest(c: {
       txt_sha256: c.alignment.lyricsHash,
       lrc: c.alignment.lrcStored,
       lrc_sha256: c.alignment.lrcHash,
+      vocal_guard: c.alignment.guard?.moves ?? null, // lines moved to where the voice starts (not in the stored LRC)
       source: c.alignment.source,
       hint: c.alignment.hint
         ? { file: c.alignment.hint.file, sha256: c.alignment.hint.hash, source: c.alignment.hint.source, stored: c.alignment.hint.stored }
@@ -1302,6 +1311,7 @@ function buildManifest(c: {
       start_frame: props.lyrics[k].startFrame,
       end_frame: props.lyrics[k].endFrame,
       confidence: c.reports[i]?.confidence ?? null,
+      early_ms: c.reports[i]?.early_ms ?? null, // the voice begins this long after the stamp
     })),
     fonts: props.fonts.map((f) => {
       const file = resolveMediaPath(f.src, c.media);

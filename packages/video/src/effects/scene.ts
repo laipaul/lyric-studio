@@ -25,6 +25,7 @@ export type SceneLine = {
   stampFrame?: number; // when it is sung (no lead); default startFrame + 8
   sungEndFrame?: number; // its last word ends here
   words?: { text: string; startFrame: number; endFrame: number }[];
+  enterFrame?: number; // after a long instrumental gap: fades in from here (instead of D before startFrame)
 };
 
 export type SceneOptions = {
@@ -57,7 +58,7 @@ export function sceneTimeline(lines: readonly SceneLine[], o: SceneOptions) {
   const connected = (a: number) => a >= 0 && a + 1 < n && lines[a].endFrame >= lines[a + 1].startFrame - motion[a + 1].frames;
   const D = lines.map((l, i) => {
     const full = motion[i].frames;
-    if (!connected(i - 1)) return full;
+    if (!connected(i - 1)) return l.enterFrame !== undefined && l.enterFrame < l.startFrame ? l.startFrame - l.enterFrame : full;
     const spacing = l.startFrame - lines[i - 1].startFrame;
     const lead = stamp(i - 1) - lines[i - 1].startFrame;
     return Math.max(3, Math.min(full, Math.round(spacing * 0.6), spacing - lead - 2));

@@ -24,7 +24,9 @@ export type Brand = {
   logo: { file: string; size: number; youtube: Corner; vertical: Corner | "auto"; platforms: string[]; position?: string };
   useForLyrics: boolean;
   // Lyric effects (Step 5j): "glide", "karaoke-highlight:subtle" or { name, intensity, durationMs, easing }.
-  motion: { verseEffect: EffectChoice; hookEffect: EffectChoice };
+  // gapHideS / gapLeadInS: during an instrumental gap longer than gapHideS no lyric is shown (not
+  // even the waiting next line); the next line fades in gapLeadInS before its first sung word.
+  motion: { verseEffect: EffectChoice; hookEffect: EffectChoice; gapHideS: number; gapLeadInS: number };
   // The app's icon (shortcut, window, taskbar): "logo" = the logo alone, "tile" = on a rounded square
   // in the accent colour.
   appIcon: { style: "logo" | "tile" };
@@ -40,7 +42,7 @@ export const DEFAULT_BRAND: Brand = {
   accentColour: "#E8A3B5",
   logo: { file: "logo.png", size: 0.08, youtube: "bottom-right", vertical: "auto", platforms: ["youtube"] },
   useForLyrics: true,
-  motion: { verseEffect: DEFAULT_VERSE_EFFECT, hookEffect: DEFAULT_HOOK_EFFECT },
+  motion: { verseEffect: DEFAULT_VERSE_EFFECT, hookEffect: DEFAULT_HOOK_EFFECT, gapHideS: 3, gapLeadInS: 1 },
   appIcon: { style: "logo" },
   perPlatform: {},
 };
@@ -54,6 +56,7 @@ const HELP =
   "useForLyrics: false = lyrics keep the Simple/Bold style fonts. " +
   "motion.verseEffect / motion.hookEffect: glide, cinematic-fade, soft-blur, dreamy-glow, word-reveal, karaoke-highlight, floating, typewriter " +
   '(optionally ":subtle" or ":expressive", or { "name": ..., "intensity": ..., "durationMs": ..., "easing": ... }); see pnpm effects:preview. ' +
+  "motion.gapHideS: during an instrumental gap longer than this (seconds, default 3) no lyric is shown; motion.gapLeadInS: the next line then fades in this long before its first sung word (default 1). " +
   'appIcon.style: "logo" (the logo alone, default) or "tile" (the logo on a rounded square in the accent colour); run Create Desktop Shortcut.cmd again after a change. ' +
   'perPlatform: values for one platform only, e.g. { "youtube": { "verseEffect": "cinematic-fade" }, "reels": { "verseEffect": "glide" } } ' +
   "(verseEffect, hookEffect, verseFont, hookFont, accentColour, section); a song's song.json can still override them.";
@@ -115,6 +118,15 @@ export function loadBrand(
     } catch (error) {
       problems.push((error as Error).message);
     }
+  }
+  for (const [key, min, max] of [
+    ["gapHideS", 1.5, 30],
+    ["gapLeadInS", 0.25, 3],
+  ] as const) {
+    const v = rawMotion[key];
+    if (v === undefined) continue;
+    if (typeof v !== "number" || !(v >= min && v <= max)) problems.push(`motion.${key} must be a number of seconds from ${min} to ${max}`);
+    else brand.motion[key] = v;
   }
   for (const key of ["titleFont", "verseFont", "hookFont"] as const) {
     if (!findFamily(catalog, brand[key].family)) problems.push(`${key}: font "${brand[key].family}" not found (see pnpm fonts)`);

@@ -9,6 +9,7 @@ import { logoCornerProblem } from "./youtube";
 
 export const MIN_SHOT_FRAMES = Math.round(0.8 * VIDEO.fps);
 export const LOW_CONFIDENCE = 0.5;
+export const EARLY_VOICE_MS = 1000; // a line starting this long before its voice is early
 
 export type Box = { left: number; top: number; right: number; bottom: number };
 export type TimeRange = { start_s: number; end_s: number };
@@ -17,6 +18,7 @@ export type QaLyric = {
   number: number; // line number in lyrics.txt (1-based)
   text: string;
   confidence: number | null; // null: not known (LRC given by hand)
+  earlyMs?: number | null; // how long after its stamp the voice begins (vocal track); null: not known
   lines: number; // text lines on screen
   box: Box; // largest extent on the 1080x1920 frame
 };
@@ -104,6 +106,14 @@ export function runQa(input: QaInput): QaReport {
       ...low.map((l) => `line ${l.number} "${l.text}": confidence ${l.confidence!.toFixed(2)} (below ${LOW_CONFIDENCE}); check its timing`),
       ...(unknown ? [`${unknown} line(s) without a confidence value (lyrics not aligned by pnpm align)`] : []),
     ],
+  });
+
+  // 1b. Lines that start long before they are sung (aligned into an intro, a bridge or a solo).
+  const early = input.lyrics.filter((l) => (l.earlyMs ?? 0) > EARLY_VOICE_MS);
+  checks.push({
+    name: "Lines start with the vocals",
+    ok: early.length === 0,
+    details: early.map((l) => `line ${l.number} "${l.text}" starts long before the vocals (${(l.earlyMs! / 1000).toFixed(1)} s early); check its timing`),
   });
 
   // 2. The same clip again within 3 shots.

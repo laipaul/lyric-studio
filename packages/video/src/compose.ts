@@ -82,16 +82,35 @@ export const GAP_CLEAR_MS = 1000;
 export const GAP_FADE_MS = 400;
 const NEXT_ENTER_MS = 900; // room for the next line to come in after the screen is clear
 
-// Every lyric line with its on-screen frames relative to the section start (not clipped).
-export function lyricFrames(base: RenderBase, leadMs = DEFAULT_LEAD_MS, offsetMs = 0, withEffects = false): LyricLineProps[] {
+// Every lyric line with its on-screen frames relative to the section start (not clipped). With `gap`
+// (brand motion.gapHideS / gapLeadInS): during an instrumental gap longer than hideMs (from the last
+// sung word, or the section start, to the next first word) nothing is on screen, not even the waiting
+// next line; the line after it fades in leadInMs before its first sung word.
+export function lyricFrames(base: RenderBase, leadMs = DEFAULT_LEAD_MS, offsetMs = 0, withEffects = false, gap?: LyricEffectsProps["gap"]): LyricLineProps[] {
   const toFrame = (ms: number) => Math.round(((ms - leadMs + offsetMs) * VIDEO.fps) / 1000) - base.plan.start_frame;
   if (!withEffects) return base.lyrics.map((l) => ({ text: l.text, startFrame: toFrame(l.start_ms), endFrame: toFrame(l.end_ms), isHook: l.isHook }));
   const sung = (ms: number) => toFrame(ms + leadMs); // when it is heard (no lead)
-  return base.lyrics.map((l) => {
-    const sungEnd = l.sung_end_ms ?? l.words?.at(-1)?.end_ms;
+  const sungEndOf = (l: RawLyric) => l.sung_end_ms ?? l.words?.at(-1)?.end_ms;
+  const firstWord = (l: RawLyric) => l.words?.[0]?.start_ms ?? l.start_ms;
+  const sectionStartMs = (base.plan.start_frame * 1000) / VIDEO.fps - offsetMs;
+  // A long instrumental gap before line k (only with sung end times).
+  const longGapBefore = (k: number) => {
+    if (!gap) return false;
+    const prevEnd = k > 0 ? sungEndOf(base.lyrics[k - 1]) : sectionStartMs;
+    if (prevEnd === undefined) return false;
+    return firstWord(base.lyrics[k]) - Math.max(prevEnd, sectionStartMs) > gap.hideMs;
+  };
+  return base.lyrics.map((l, k) => {
+    const sungEnd = sungEndOf(l);
     // A pause follows: clear the screen 1 s after the last word (if the next line is far enough away).
     const clearMs = sungEnd !== undefined ? sungEnd + GAP_CLEAR_MS + GAP_FADE_MS + leadMs : null;
-    const endMs = clearMs !== null && clearMs + NEXT_ENTER_MS <= l.end_ms ? clearMs : l.end_ms;
+    let endMs = clearMs !== null && clearMs + NEXT_ENTER_MS <= l.end_ms ? clearMs : l.end_ms;
+    const next = base.lyrics[k + 1];
+    if (gap && clearMs !== null && next && longGapBefore(k + 1)) {
+      // A long gap follows: always cleared, and gone before the next line starts to fade in.
+      endMs = Math.min(clearMs, firstWord(next) - gap.leadInMs + leadMs, l.end_ms);
+    }
+    const enter = gap && longGapBefore(k) ? sung(firstWord(l) - gap.leadInMs) : undefined;
     return {
       text: l.text,
       startFrame: toFrame(l.start_ms),
@@ -100,6 +119,7 @@ export function lyricFrames(base: RenderBase, leadMs = DEFAULT_LEAD_MS, offsetMs
       stampFrame: sung(l.start_ms),
       ...(sungEnd !== undefined ? { sungEndFrame: sung(sungEnd) } : {}),
       ...(l.words?.length ? { words: l.words.map((w) => ({ text: w.text, startFrame: sung(w.start_ms), endFrame: sung(w.end_ms) })) } : {}),
+      ...(enter !== undefined && enter < toFrame(l.start_ms) ? { enterFrame: enter } : {}),
     };
   });
 }
@@ -123,7 +143,7 @@ export function composeProps(
   choices: ComposeChoices,
 ): { props: Omit<LyricVideoProps, "mediaBaseUrl">; warnings: string[] } {
   const { plan } = base;
-  const allLines = lyricFrames(base, choices.leadMs ?? DEFAULT_LEAD_MS, choices.lyricsOffsetMs ?? 0, !!choices.effects);
+  const allLines = lyricFrames(base, choices.leadMs ?? DEFAULT_LEAD_MS, choices.lyricsOffsetMs ?? 0, !!choices.effects, choices.effects?.gap);
   const lyrics = allLines
     .map((l) => ({ ...l, startFrame: Math.max(0, l.startFrame), endFrame: Math.min(base.durationInFrames, l.endFrame) }))
     .filter((l) => l.endFrame > l.startFrame);

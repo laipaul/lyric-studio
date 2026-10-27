@@ -5,6 +5,7 @@ export * from "./props";
 export * from "./font-files";
 export * from "./lyrics";
 export * from "./lrc";
+export * from "./vocal-guard";
 export * from "./beats";
 export * from "./prng";
 export * from "./cuts";

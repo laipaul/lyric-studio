@@ -718,6 +718,44 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   effect hints. Browser check: Style (per-platform rows, lock, fonts and warning, length), Generate
   (recipe option, locked hook effect, chips with length), Assets (path, hints).
 
+### Step 5c.1 — Lyric timing: vocal-start guard and the gap display rule ✅ (to verify on the Windows PC)
+Reported on A Heart For Two (YouTube, whole song): line 1 appeared several seconds before it is sung; the
+rest was in sync.
+- **Cause: the aligner, not the display.** The composition never shows line 1 early by itself: the
+  first line has no line before it, so it is never shown as the waiting "next line" during the intro;
+  it comes in ~0.75 s before its stamp. So its stamp in the stored alignment was early: WhisperX
+  stretched it (most likely its first word) back into the instrumental intro.
+- Why the existing hints could not fix it reliably: --hint only moves lines below 0.7 confidence (line 1
+  was not flagged), and a hints file with only line 1 cancels itself (each tap is corrected by the
+  typical offset between taps and alignment, which then equals line 1's own error).
+- **Vocal-start guard** in pnpm make, a post-process on the stored alignment (no re-alignment, no store
+  version change; a full re-alignment stays opt-in with --realign): line 1, and every line after an
+  instrumental gap (>= 4 s of silence on the vocal stem: bridge, solo), that starts more than 1 s before
+  the voice moves to where the voice starts. Words already in the voice keep their times, the early
+  ones are spread up to them; a line wholly before the voice moves as a whole; never onto the next line.
+  - Where the voice is: services/audio voice_map from the cached Demucs vocal stem (Demucs only if it is
+    not cached, never WhisperX), cached per song in .studio/lyrics/voice-<song hash>.json (one Python
+    call per song, then none). No vocal track and no AI packages: skipped with a warning.
+  - pnpm make still prints "lyrics: using the stored alignment …", then one line per change:
+    "guard: line 1 moved from 0:03.2 to 0:11.8 (vocals start)". Recorded in
+    .studio/lyrics/guard-<lrc hash>.json and in each manifest (lyrics.vocal_guard); the stored LRC is
+    never changed. The .srt, the clean .lrc and the lyric lines in the database use the moved times.
+- **QA "Lines start with the vocals"**: WARN "line N "…" starts long before the vocals (5.4 s early)"
+  for any line still more than 1 s before its voice (also lines the guard does not move, e.g. inside a
+  verse). Older videos: no value, no warning.
+- **Display rule (2a)**: during an instrumental gap longer than brand.json motion.gapHideS (default 3 s;
+  from the last sung word, or the section start, to the next first word) no lyric is shown at all, not
+  even the waiting next line; the next line fades in motion.gapLeadInS (default 1 s) before its first
+  sung word and is settled at its usual time (0.25 s before the stamp). Old manifests keep their timing.
+- Tests: vocal-guard.test.ts (line 1 in the intro, a line after a solo, a verse line left alone, never
+  past the next line, hand-placed lines skipped; pnpm make reuses the stored alignment, logs and records
+  each move, runs the voice map once; skipped with a warning when there is no vocal track),
+  test_voice_map.py (stretches from the cached stem, clicks ignored), effects.test.ts (nothing on screen
+  in the intro and the solo for every effect, fade-in during the lead-in, settled on time; short gaps
+  and old manifests unchanged), QA and brand.json checks.
+- Line 40 "A heart for two" at 0.36 confidence: low confidence is a "listen to this" flag, not proof it is
+  wrong; the lyrics view (5c.2) makes checking and nudging it easy.
+
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -826,8 +864,11 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   mix has different timing, use Generate -> advanced -> re-align.
 
 ## Next
-1. Verify Steps 6.2a and 6.2b on the PC (6.2c-1 verified).
-3. **Step 6.2c-2b — Videos + Post** (after 2a is tested on the PC):
+1. Verify Steps 6.2a and 6.2b on the PC (6.2c-1 verified); verify 5c.1 (A Heart For Two, YouTube).
+2. **Step 5c.2 — Lyrics view** (plan to approve): each line with its time and confidence, low-confidence
+   and early lines highlighted, nudges (−0.5 / −0.1 / +0.1 / +0.5 s) with a short audio preview; saving
+   writes hints.lrc and the next make reuses the alignment.
+3. **Step 6.2c-2b — Videos + Post** (mostly built, paused for 5c.1 / 5c.2; kept on a local branch):
    - C1 Videos tab: each run shows the settings it was made with (from its manifest) next to the current
      recipe; "Use these settings" loads them into Generate.
    - C2 Post tab: approved videos only (discarded hidden), caption / hashtags per artist and platform,
