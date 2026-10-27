@@ -217,6 +217,38 @@ describe("vocal-start check (pure)", () => {
     expect(c.moves).toEqual([]);
   });
 
+  it('A Heart For Two ~1:10, hook "You had a heart for two" 1.5 s early: hooks are always checked; voice and words move it', () => {
+    const song = parseLrc(
+      [
+        "[01:05.00]<01:05.00>The verse <01:06.00>line <01:08.40>", // sung until 1:08.4
+        "[01:08.50]<01:08.50>You <01:10.40>had <01:10.70>a <01:10.90>heart <01:11.20>for <01:11.50>two <01:12.50>", // stamped 1.5 s early
+        "[01:13.00]<01:13.00>Next <01:13.60>verse <01:14.40>",
+        "[01:20.00]",
+      ].join("\n"),
+      100_000,
+    ).map((l) => ({ ...l, isHook: l.text.startsWith("You") }));
+    const v = levels([[65_000, 68_400, -12], [70_000, 72_500, -12], [73_000, 74_400, -12]], 100_000);
+    const asr = new Map([[1, asrAt(70_050, "You had a heart")]]);
+    const c = checkVocalStart(song, v, { asr });
+    expect(c.lines.map(row)).toEqual([
+      [1, 65_000, 65_000, null, 65_000, 65_000, "in time", "stamp + voice"],
+      [2, 68_500, 70_000, 70_050, 68_500, 70_000, "moved", "voice + words"],
+    ]);
+    // Not a hook: not checked by default; --all checks every line.
+    const plain = song.map((l) => ({ ...l, isHook: false }));
+    expect(checkVocalStart(plain, v, { asr }).lines.map((l) => l.index)).toEqual([0]);
+    expect(checkVocalStart(plain, v, { asr, all: true }).lines.map((l) => [l.index, l.result])).toEqual([
+      [0, "in time"],
+      [1, "moved"],
+      [2, "in time"],
+    ]);
+    expect(asrWindows(plain, v, true).map((w) => w[0])).toEqual([1, 2, 3]);
+    // Sung on without a pause from the previous line: no voice onset of its own (not the next phrase).
+    const legato = levels([[65_000, 72_500, -12], [73_000, 74_400, -12]], 100_000);
+    const joined = checkVocalStart(song, legato, { asr: new Map([[1, asrAt(68_550, "You had a heart")]]) }).lines[1];
+    expect([joined.voiceMs, joined.result]).toEqual([null, "in time"]); // stamp + words agree
+  });
+
   it('Love Is A Good Thing line 39 "The old ones": voice and words agree 1.3 s later, inside line 38 (held too long): line 38 ends there', () => {
     const song = parseLrc(
       [

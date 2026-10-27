@@ -404,7 +404,8 @@ pnpm align "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test
   0:11.8 (first word 10.1 s) -> 0:11.8: moved (+10.0 s); voice, words, word durations agree`, then
   `guard: line 1 moved from 0:01.8 to 0:11.8 (vocals start)`. A line still more than 1 s early gets the
   QA warning "starts long before the vocals".
-- `pnpm lyrics:check-start "workspace\songs\<artist>\<title>"` prints the same check without making
+- `pnpm lyrics:check-start "workspace\songs\<artist>\<title>"` (add `--all` to check every line, not only
+  line 1, lines after a long instrumental, stretched first words and hook lines) prints the same check without making
   videos (it uses the stored alignment; the first time it reads the vocal track and runs the short
   speech recognition, which downloads the "small" model once, ~0.5 GB, into services\audio\models).
 - During an instrumental gap longer than 3 s no lyric is shown; the next line fades in 1 s before its

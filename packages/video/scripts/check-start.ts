@@ -1,6 +1,6 @@
-// pnpm lyrics:check-start "<song folder>"   e.g. pnpm lyrics:check-start "workspace\songs\Life Lyrics\A Heart For Two"
-// The vocal-start check of pnpm make, without making videos: for line 1 and every line after a long
-// instrumental (or with a stretched first word) it prints the stamp of the stored alignment, the voice
+// pnpm lyrics:check-start "<song folder>" [--all]   e.g. pnpm lyrics:check-start "workspace\songs\Life Lyrics\A Heart For Two"
+// The vocal-start check of pnpm make, without making videos: for line 1, every line after a long
+// instrumental, lines with a stretched first word and every hook line (--all: every line) it prints the stamp of the stored alignment, the voice
 // onset, the recognised words, the word-duration estimate, where they agree and what pnpm make will use.
 // Uses the stored alignment (never aligns): run pnpm make once first.
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
@@ -8,9 +8,10 @@ import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import { applyVocalGuard, ensureAlignment, findOrCreateSongProject, loadBrand, loadFontCatalog, parseMakeArgs, type AlignRunner } from "../src/node";
 
 const cwd = process.env.INIT_CWD ?? process.cwd();
-const args = process.argv.slice(2);
+const all = process.argv.includes("--all");
+const args = process.argv.slice(2).filter((a) => a !== "--all");
 if (args.length !== 1) {
-  console.error('Usage: pnpm lyrics:check-start "<song folder>"   (e.g. "workspace\\songs\\Life Lyrics\\A Heart For Two")');
+  console.error('Usage: pnpm lyrics:check-start "<song folder>" [--all]   (e.g. "workspace\\songs\\Life Lyrics\\A Heart For Two"; --all checks every line)');
   process.exit(1);
 }
 const noAligning: AlignRunner = async () => {
@@ -25,7 +26,7 @@ async function main() {
     const log = (m: string) => (m.startsWith("lyrics: aligning") ? undefined : console.log(m)); // it never aligns
     const stored = await ensureAlignment(ws, sp, { lyricsTxt: options.lyrics, hint: options.hint, lang: options.lang, durationMs: sp.project.duration_ms ?? 600_000, log, align: noAligning });
     const brand = loadBrand(ws.dir, loadFontCatalog(ws.dir), sp.project.artist);
-    const checked = await applyVocalGuard(ws, sp, stored, { log, reviewMs: Math.round(brand.brand.motion.gapLeadInS * 1000) });
+    const checked = await applyVocalGuard(ws, sp, stored, { log, all, reviewMs: Math.round(brand.brand.motion.gapLeadInS * 1000) });
     for (const w of checked.warnings) console.log(`Warning: ${w}`);
     if (checked.guard && !checked.guard.moves.length) console.log("Nothing to move: every checked line starts with its singing.");
   } finally {

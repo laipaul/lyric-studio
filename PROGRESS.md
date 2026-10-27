@@ -718,6 +718,19 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   effect hints. Browser check: Style (per-platform rows, lock, fonts and warning, length), Generate
   (recipe option, locked hook effect, chips with length), Assets (path, hints).
 
+### Step 5c.1d — Hook lines always checked, `--all`, previous line's voice ✅ (to verify on the Windows PC)
+Test result on the PC: "almost perfect". One glitch: A Heart For Two ~1:10, hook "You had a heart for
+two": the pink karaoke highlight starts on "You" 1-2 s before it is sung (an early stamp); that line was
+not among the checked lines.
+- **Every hook line is checked** by pnpm make (with the same three signals and rules), since an early
+  karaoke highlight is very visible. `pnpm lyrics:check-start "<song folder>" --all` checks every line.
+- **Bug found with this case**: when an early stamp sits right after the previous line's singing, the
+  tail of that singing counted as this line's voice, so the voice "agreed" with the early stamp. The
+  previous line's own singing (the stretch its last word is in) now never counts; a line sung on without
+  any pause gets no voice signal (instead of the next phrase).
+- Tests: the 1:10 hook (stamp 1.5 s early, right after the previous line: moved on voice + words), not
+  a hook -> not checked by default but with --all, a line sung on without a pause.
+
 ### Step 5c.1c — Vocal-start check: no move on one signal, flags for review ✅ (to verify on the Windows PC)
 From check-start on the PC. A Heart For Two: line 1 0:12.4 -> 0:21.0 (words + 9.9 s first word, right);
 lines 14 and 28 "And a place" moved -2.0 s on the recognised words alone (wrong to move); line 40 moved

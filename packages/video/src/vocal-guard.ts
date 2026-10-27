@@ -1,7 +1,8 @@
 // Vocal-start check (pnpm make): the first sung word of a song, and the first word after every long
 // instrumental, must be placed right (within ~0.3 s) with no manual fix. The aligner sometimes pulls
 // such a line into the music before it. Applied to the stored alignment, never re-aligning. For line 1,
-// lines after an instrumental gap and lines whose first word is stretched, these signals:
+// lines after an instrumental gap, lines whose first word is stretched and every hook line (an early
+// karaoke highlight is very visible; with `all`: every line), these signals:
 //   stamp           the aligner's own line start (WhisperX);
 //   voice           the onset of sustained voice on the vocal track: at most VOICE_BELOW_SINGING_DB under
 //                   the song's own singing level (measured on the aligned lines), for at least
@@ -148,7 +149,7 @@ type Signals = { i: number; voice: number | null; duration: number; firstWordMs:
 
 // The lines to check (line 1, after an instrumental gap, a stretched first word) with their voice and
 // word-duration signals.
-function signalsFor(lines: readonly TimedLine[], v: VoiceLevels, levelDb: number, stretches: readonly VoiceStretch[]): Signals[] {
+function signalsFor(lines: readonly TimedLine[], v: VoiceLevels, levelDb: number, stretches: readonly VoiceStretch[], all = false): Signals[] {
   const sung = voiceStretches(v, levelDb - WORD_LEVEL_DB, 200); // singing-level energy (for stretched first words)
   const out: Signals[] = [];
   lines.forEach((l, i) => {
@@ -156,15 +157,22 @@ function signalsFor(lines: readonly TimedLine[], v: VoiceLevels, levelDb: number
     const prevEnd = prev ? (prev.sung_end_ms ?? prev.end_ms) : 0;
     // a: the voice at the stamp (the start of the stretch it is in, not before the previous line's
     // singing), else the next voice after it.
-    const inside = stretches.find(([start, end]) => start <= l.start_ms + PRE_ROLL_MS && end > l.start_ms - PRE_ROLL_MS);
-    const voice = inside ? Math.max(inside[0], prevEnd) : voiceFrom(stretches, l.start_ms - PRE_ROLL_MS);
+    // The previous line's own singing (the stretch its last word starts in) never counts for this line,
+    // even when it ends just before this stamp (an early stamp right after the previous line).
+    const prevLast = prev ? (prev.words?.at(-1)?.start_ms ?? prev.start_ms) : null;
+    const mine = stretches.filter(([start, end]) => prevLast === null || !(start <= prevLast && end > prevLast));
+    const inside = mine.find(([start, end]) => start <= l.start_ms + PRE_ROLL_MS && end > l.start_ms - PRE_ROLL_MS);
+    // Sung on without a pause from the previous line: no onset of its own to measure (no voice signal).
+    const continuous = prevLast !== null && stretches.some(([start, end]) => start <= prevLast && end > l.start_ms + PRE_ROLL_MS);
+    const voice = continuous ? null : inside ? inside[0] : voiceFrom(mine, l.start_ms - PRE_ROLL_MS);
     const before = voice === null ? null : Math.max(0, ...stretches.filter(([, end]) => end <= voice).map(([, end]) => end));
     const voiceGap = voice !== null && before !== null && voice - before >= LONG_GAP_MS;
     const alignGap = !!prev && l.start_ms - prevEnd >= LONG_GAP_MS;
     const words = l.words ?? [];
     const firstWordMs = words.length >= 2 ? words[1].start_ms - words[0].start_ms : null;
     const stretched = firstWordMs !== null && firstWordMs >= STRETCHED_WORD_MS;
-    if (i > 0 && !voiceGap && !alignGap && !stretched) return; // inside a verse: not checked (QA still sees early_ms)
+    // Inside a verse and not a hook: not checked unless `all` (QA still sees early_ms).
+    if (!all && i > 0 && !voiceGap && !alignGap && !stretched && !l.isHook) return;
     let duration = l.start_ms;
     if (stretched) {
       const second = words[1].start_ms;
@@ -178,10 +186,10 @@ function signalsFor(lines: readonly TimedLine[], v: VoiceLevels, levelDb: number
 }
 
 // The windows for the recognised-words pass: around each checked line's signals (line number, from, to).
-export function asrWindows(lines: readonly TimedLine[], v: VoiceLevels): [number, number, number][] {
+export function asrWindows(lines: readonly TimedLine[], v: VoiceLevels, all = false): [number, number, number][] {
   const levelDb = singingLevel(lines, v);
   const stretches = voiceStretches(v, levelDb - VOICE_BELOW_SINGING_DB);
-  return signalsFor(lines, v, levelDb, stretches).map((s) => {
+  return signalsFor(lines, v, levelDb, stretches, all).map((s) => {
     const l = lines[s.i];
     const prev = lines[s.i - 1];
     const points = [l.start_ms, s.duration, ...(s.voice !== null ? [s.voice] : [])];
@@ -195,7 +203,8 @@ export function checkVocalStart(
   lines: readonly TimedLine[],
   v: VoiceLevels,
   // reviewMs: a disagreement smaller than this (the brand's lead-in, motion.gapLeadInS) is not visible: not flagged.
-  options: { skip?: ReadonlySet<number>; asr?: ReadonlyMap<number, readonly AsrWord[]>; reviewMs?: number } = {},
+  // all: check every line (pnpm lyrics:check-start --all), not only line 1, gaps, stretched words and hooks.
+  options: { skip?: ReadonlySet<number>; asr?: ReadonlyMap<number, readonly AsrWord[]>; reviewMs?: number; all?: boolean } = {},
 ): VocalCheck {
   const reviewMs = options.reviewMs ?? 1000;
   const skip = options.skip ?? new Set<number>();
@@ -204,7 +213,7 @@ export function checkVocalStart(
   const stretches = voiceStretches(v, thresholdDb);
   const checks: LineCheck[] = [];
   const moves: GuardMove[] = [];
-  for (const s of signalsFor(lines, v, levelDb, stretches)) {
+  for (const s of signalsFor(lines, v, levelDb, stretches, options.all)) {
     const l = lines[s.i];
     const prev = lines[s.i - 1];
     const prevEnd = prev ? (prev.sung_end_ms ?? prev.end_ms) : 0;

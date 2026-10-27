@@ -156,7 +156,7 @@ export async function applyVocalGuard(
   ws: Workspace,
   sp: SongProject,
   alignment: Alignment,
-  options: { log?: (m: string) => void; voiceMap?: VoiceMapRunner; firstWords?: FirstWordsRunner; reviewMs?: number } = {},
+  options: { log?: (m: string) => void; voiceMap?: VoiceMapRunner; firstWords?: FirstWordsRunner; reviewMs?: number; all?: boolean } = {},
 ): Promise<Alignment> {
   const log = options.log ?? (() => {});
   if (alignment.source === "given") return { ...alignment, guard: null };
@@ -180,7 +180,7 @@ export async function applyVocalGuard(
   const map = JSON.parse(readFileSync(mapFile, "utf8")) as { hop_ms: number; db: number[] };
   const levels: VoiceLevels = { hopMs: map.hop_ms, db: map.db };
   // The recognised words around the checked lines (cached per song, windows and language).
-  const windows = asrWindows(alignment.lines, levels);
+  const windows = asrWindows(alignment.lines, levels, options.all);
   const lang = alignment.report?.lang ?? "en";
   let asr: Map<number, AsrWord[]> | undefined;
   let wordsCheck = "ran";
@@ -205,7 +205,7 @@ export async function applyVocalGuard(
       asr = new Map(words.windows.map((w) => [w.line - 1, w.words]));
     }
   }
-  const check = checkVocalStart(alignment.lines, levels, { asr, reviewMs: options.reviewMs });
+  const check = checkVocalStart(alignment.lines, levels, { asr, reviewMs: options.reviewMs, all: options.all });
   const lines = applyGuard(alignment.lines, check.moves);
   log(`vocal-start check: singing level ${check.levelDb.toFixed(1)} dB; voice = at least 0.5 s above ${check.thresholdDb.toFixed(1)} dB; recognised words: ${wordsCheck}`);
   for (const c of check.lines) {
