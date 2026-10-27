@@ -23,6 +23,10 @@ export type ShotProps = {
   // (the frames right before clipStartFrame), fades in on top, so the last frame flows into the first.
   loopBlend?: { frames: number; fromClipFrame: number };
   motionLoop?: boolean; // photo: the Ken Burns move goes out and comes back (first frame = last frame)
+  // Story anchors: a dissolve into this shot, `before` frames over the previous shot (which keeps
+  // playing `after` frames into this one: its `tail`). Without them: a hard cut.
+  dissolve?: { before: number; after: number };
+  tail?: number;
 };
 
 export type LyricLineProps = {

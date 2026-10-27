@@ -11,6 +11,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import { checkAnchors, type AnchorSpec, type GapOrder } from "../anchors";
 import { choiceText, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, parseEffectChoice } from "../effects/names";
 import { DEFAULT_BRAND, type Brand } from "./brand";
 import { checkPerPlatform, isPlatformField, PLATFORM_FIELDS, type PerPlatform, type PlatformField } from "./per-platform";
@@ -35,7 +36,9 @@ export type RecipeValues = {
 
 export { isPlatformField, PLATFORM_FIELDS, type PerPlatform, type PlatformField, type PlatformValues } from "./per-platform";
 
-export type SongRecipe = Partial<RecipeValues> & { perPlatform?: PerPlatform; locked?: RecipeField[] };
+// anchors and gapOrder belong to the song only (story anchors, the Lyrics tab): never from the brand,
+// outside Reset / Lock.
+export type SongRecipe = Partial<RecipeValues> & { perPlatform?: PerPlatform; locked?: RecipeField[]; anchors?: AnchorSpec[]; gapOrder?: GapOrder };
 // library | artist | artist:<platform> | song | song:<platform> | run
 export type RecipeSource = string;
 
@@ -53,7 +56,9 @@ export const RECIPE_HELP =
   '("glide", "soft-blur:subtle", ...), verseFont, hookFont, accentColour ("#E8A3B5"), collections (shared collections used ' +
   'with the clips in clips\\), platforms (["reels", "youtube"]), variations ({ "reels": 3 }), section ("auto", "full", ' +
   '"0:11-1:10"), length (seconds an "auto" section aims for, e.g. 90; empty = the platform preset), ep, youtubeLayout ("cover", "stills", "clips"). perPlatform: values for one platform only, e.g. ' +
-  '{ "youtube": { "verseEffect": "cinematic-fade" } } (verseEffect, hookEffect, verseFont, hookFont, accentColour, section, length), e.g. { "reels": { "length": 90 }, "tiktok": { "length": 30 } }.';
+  '{ "youtube": { "verseEffect": "cinematic-fade" } } (verseEffect, hookEffect, verseFont, hookFont, accentColour, section, length), e.g. { "reels": { "length": 90 }, "tiktok": { "length": 30 } }. ' +
+  'Story anchors (the Lyrics tab sets them): anchors [{ "line": 9, "clip": "hands.mp4", "clipIn": 1.5, "transition": "dissolve" }] = that clip lands on lyrics.txt line 9 ' +
+  '(cut in on the downbeat before the line, held until it ends); gapOrder "story" (default with anchors: the other clips in file-name order in every video) or "shuffle".';
 
 // Checks a song.json; every problem is named.
 export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: string[] } {
@@ -109,6 +114,15 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
     else problems.push(`locked must list settings of this recipe (${RECIPE_FIELDS.join(", ")})`);
   }
   for (const k of recipe.locked ?? []) if (recipe[k] === undefined) problems.push(`${k} is locked but has no value in song.json`);
+  if (r.anchors !== undefined) {
+    const checked = checkAnchors(r.anchors);
+    problems.push(...checked.problems);
+    if (checked.anchors.length) recipe.anchors = checked.anchors;
+  }
+  if (r.gapOrder !== undefined) {
+    if (r.gapOrder === "story" || r.gapOrder === "shuffle") recipe.gapOrder = r.gapOrder;
+    else problems.push('gapOrder must be "story" or "shuffle"');
+  }
   return { recipe, problems };
 }
 
@@ -131,6 +145,8 @@ export function recipeJson(recipe: SongRecipe): string {
   for (const k of RECIPE_FIELDS) if (recipe[k] !== undefined) ordered[k] = recipe[k];
   if (recipe.perPlatform && Object.keys(recipe.perPlatform).length) ordered.perPlatform = recipe.perPlatform;
   if (recipe.locked?.length) ordered.locked = recipe.locked;
+  if (recipe.gapOrder) ordered.gapOrder = recipe.gapOrder;
+  if (recipe.anchors?.length) ordered.anchors = recipe.anchors;
   return `${JSON.stringify(ordered, null, 2)}\n`;
 }
 

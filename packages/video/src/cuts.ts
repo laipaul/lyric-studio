@@ -69,18 +69,7 @@ export function getCutPoints(beatsIn: readonly Beat[], section: CutSection, opti
   const startFrame = toFrame(section.start_ms, fps);
   const endFrame = toFrame(section.end_ms, fps);
 
-  const cutAt = (index: number): CutPoint => {
-    const frame = toFrame(beats[index].time_ms, fps) - early;
-    const { bar, beatInBar } = barPosition(beats, index);
-    return {
-      frame,
-      time_ms: toMs(frame, fps),
-      beat_index: index,
-      beat_time_ms: beats[index].time_ms,
-      bar,
-      beat_in_bar: beatInBar,
-    };
-  };
+  const cutAt = (index: number): CutPoint => cutPointAt(beats, index, fps, early);
   // A cut must leave room for a shot on both sides inside the section.
   const insideSection = (c: CutPoint) => c.frame > startFrame && c.frame < endFrame;
 
@@ -132,6 +121,13 @@ export function getCutPoints(beatsIn: readonly Beat[], section: CutSection, opti
   }
 
   return { start_frame: startFrame, end_frame: endFrame, fps, cuts, requested_grid_beats: requested, grid_beats: used };
+}
+
+// The cut for beat `index`: `early` frames before the beat (beats with the downbeat offset applied).
+export function cutPointAt(beats: readonly Beat[], index: number, fps: number = VIDEO.fps, early: number = DEFAULT_EARLY_CUT_FRAMES): CutPoint {
+  const frame = toFrame(beats[index].time_ms, fps) - early;
+  const { bar, beatInBar } = barPosition(beats, index);
+  return { frame, time_ms: toMs(frame, fps), beat_index: index, beat_time_ms: beats[index].time_ms, bar, beat_in_bar: beatInBar };
 }
 
 function nearestBeat(beats: readonly Beat[], ms: number): number | null {

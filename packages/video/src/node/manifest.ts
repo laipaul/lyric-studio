@@ -87,6 +87,8 @@ export type Manifest = {
   // Reels, TikTok, Shorts (they loop on the platform): QA "Loop flows" across the wrap-around;
   // null for YouTube (no loop) and Canvas (its own loop checks). Absent in older manifests.
   loop?: (import("../loop").LoopResult & { checked: true }) | { checked: false; why: string } | null;
+  // Story anchors (song.json): what each anchor did in this video. Absent in older manifests.
+  anchors?: { used: import("../anchors").AnchorUse[]; conflicts: string[]; notes: string[]; missing: string[] } | null;
   warnings: string[];
 };
 

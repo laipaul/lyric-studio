@@ -40,6 +40,8 @@ import type { LyricEffectsProps, LyricVideoProps } from "../props";
 import { formatQa, LOW_CONFIDENCE, qaReasons, runQa, type QaInput, type QaReport } from "../qa";
 import { autoSection, clockText, finishedBeforeStart, sectionCuts, startsAfterEnd, sungEnd, sungStart, type SectionCut, type SectionLine } from "../section";
 import { loopFit, loopFlows, type LoopAudio, type LoopResult } from "../loop";
+import { anchorsInside, type AnchorSpec, type GapOrder, type ResolvedAnchor } from "../anchors";
+import type { AnchorReport, AnchorTransitions } from "../compose";
 import { RECENT_WINDOW, type ClipOrder } from "../shots";
 import { analyzeSong } from "./analysis";
 import { loadBrand, type Brand } from "./brand";
@@ -156,7 +158,8 @@ export type MakePlan = {
 
 export type RenderState = { platform: string; name: string; status: "queued" | "rendering" | "checking" | "done" | "failed" | "stopped"; progress: number };
 
-export type VariationSpec = { index: number; name: string; order: ClipOrder; seed: number; style: StyleChoice; bars: boolean };
+// rate / transitions: story variations (gaps in story order) differ by cut rate and cut / dissolve.
+export type VariationSpec = { index: number; name: string; order: ClipOrder; seed: number; style: StyleChoice; bars: boolean; rate?: CutRate; transitions?: AnchorTransitions };
 
 export type VariationResult = VariationSpec & {
   platform: string;
@@ -216,19 +219,28 @@ export function failureSummary(result: Pick<MakeResult, "platforms" | "variation
 
 // v1: story order; v2..vN: shuffle with seed 2..N. Styles alternate Simple / Bold; cinematic bars on
 // every other variation (v2, v4, ...).
-export function planVariations(count: number): VariationSpec[] {
+// Without a story: v1 in story order, the others shuffled. A story (gap order "story": the default when
+// the song has anchors): every video in story order; they differ by style, cut rate (the run's, then one
+// coarser, one finer) and cut / dissolve (the anchors' own, all dissolve, all cut).
+export function planVariations(count: number, story?: { rate: CutRate }): VariationSpec[] {
   return Array.from({ length: count }, (_, i) => {
     const index = i + 1;
-    return {
+    const spec: VariationSpec = {
       index,
       name: `v${index}`,
-      order: index === 1 ? "story" : "shuffle",
+      order: story || index === 1 ? "story" : "shuffle",
       seed: index,
       style: index % 2 === 1 ? "simple" : "bold",
       bars: index % 2 === 0,
     };
+    if (!story) return spec;
+    const step = (index - 1) % 4; // 0, 1: the run's rate; 2: coarser; 3: finer
+    return { ...spec, rate: step === 2 ? coarserRate(story.rate) : step === 3 ? finerRate(story.rate) : story.rate, transitions: index % 2 === 1 ? "as-set" : index % 4 === 2 ? "dissolve" : "cut" };
   });
 }
+const RATES: CutRate[] = ["0.5x", "1x", "2x"];
+const coarserRate = (r: CutRate): CutRate => (r === "off" ? r : RATES[Math.max(0, RATES.indexOf(r) - 1)]);
+const finerRate = (r: CutRate): CutRate => (r === "off" ? r : RATES[Math.min(RATES.length - 1, RATES.indexOf(r) + 1)]);
 
 export type RenderLimit = { parallel: number; concurrency: number; videoCacheBytes: number; estimateGB: number; explanation: string };
 
@@ -355,6 +367,7 @@ type SectionChoiceOut = {
 function chooseSection(
   mode: string, lines: SectionLine[], beats: Beat[], durationMs: number, leadMs: number, preset?: PlatformPreset,
   fit?: (startMs: number, endMs: number) => { score: number; ok: boolean; text: string }, // loop platforms: the end that flows back best
+  kept?: (startMs: number, endMs: number) => { kept: number; total: number; missing: number[] }, // story anchors: the end that keeps most
 ): SectionChoiceOut {
   if (mode === "auto" && preset?.length.mode === "full") mode = "full";
   if (mode === "auto") {
@@ -367,6 +380,7 @@ function chooseSection(
       anchorMode: preset?.anchor ?? "lead-in",
       endOn: preset?.endOn ?? "bar",
       ...(fit ? { loopFit: fit } : {}),
+      ...(kept ? { anchorsKept: kept } : {}),
     });
     return { mode, start_ms: s.start_ms, end_ms: s.end_ms, requested: null, reason: s.reason, warnings: s.warnings, cuts: s.cuts };
   }
@@ -591,6 +605,8 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       ws, options: effective, variationsFor, effectLabels, recipeFor: (platform: string) => resolveRecipe(recipeInput, platform), stylesFor, log, now, leadMs, lyricsOffsetMs, catalog, styles, brand, logo, sp, analysis, alignment, lines, reports, numbers,
       sectionLines, collection, collectionNames, collectionRemembered, ep, tool, rootDir, getProject: () => project,
       loopAudio: () => (songAudio ??= readLoopAudio(sp.songFile)),
+      anchors: songRecipe.anchors ?? [],
+      gapOrder: songRecipe.gapOrder ?? null,
     };
     const results: PlatformResult[] = [];
     for (const [index, name] of chosenPlatforms.names.entries()) {
@@ -662,6 +678,8 @@ type Shared = {
   rootDir: string;
   getProject: () => { id: string; title: string; artist: string };
   loopAudio: () => Promise<LoopAudio | null>; // the song decoded once per run, for the loop checks
+  anchors: AnchorSpec[]; // song.json: story anchors
+  gapOrder: GapOrder | null; // song.json (null: story with anchors, else v1 story and the others shuffled)
 };
 
 // The last shot shows the frames right before the first one (or the same photo, ending where its move starts).
@@ -767,10 +785,16 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   // Shorts): the auto end that flows best back into the start.
   const loops = preset.loops && !canvas;
   const loopSong = loops ? await sh.loopAudio() : null;
+  // Story anchors by alignment line: on screen from (stamp - lead + offset) until the line is sung.
+  const anchorLines = sh.anchors.flatMap((a) => {
+    const i = numbers.indexOf(a.line);
+    return i < 0 ? [] : [{ line: a.line, shownMs: lines[i].start_ms - leadMs + lyricsOffsetMs, sungEndMs: sungEnd(sh.sectionLines[i]) }];
+  });
   const chosen: SectionChoiceOut = canvas
     ? { mode: "loop", start_ms: 0, end_ms: Math.round(canvas.seconds * 1000), requested: null, reason: canvas.reason, warnings: canvas.warnings, cuts: [] }
     : chooseSection(options.section ?? "auto", sh.sectionLines, analysis.beats, analysis.duration_ms, leadMs - lyricsOffsetMs, preset,
-      loops ? (startMs, endMs) => loopFit(loopSong, analysis.bpm, startMs, endMs) : undefined);
+      loops ? (startMs, endMs) => loopFit(loopSong, analysis.bpm, startMs, endMs) : undefined,
+      anchorLines.length && preset.lyrics ? (startMs, endMs) => anchorsInside(anchorLines, startMs, endMs) : undefined);
   log(`${preset.name}: ${canvas ? "loop" : "section"} ${clockText(chosen.start_ms)} - ${clockText(chosen.end_ms)}`);
   const sectionRow = ws.db
     .insert(sectionTable)
@@ -815,10 +839,9 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     );
   }
 
-  const plan = getCutPoints(analysis.beats, { start_ms: chosen.start_ms, end_ms: chosen.end_ms, energy: options.energy ?? "medium" }, {
-    cutRate: options.rate ?? "1x",
-    lyricLines: lines,
-  });
+  const planFor = (cutRate: CutRate) =>
+    getCutPoints(analysis.beats, { start_ms: chosen.start_ms, end_ms: chosen.end_ms, energy: options.energy ?? "medium" }, { cutRate, lyricLines: lines });
+  const plan = planFor(options.rate ?? "1x");
   const preparedClips = prepared.clips.map((c) => ({
     id: c.clip.id, name: c.name, duration_ms: c.durationMs, path: c.path, durationFrames: c.durationFrames, kind: c.kind, fit: c.fit,
   }));
@@ -862,6 +885,21 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     ? [...finishedBeforeStart(sh.sectionLines, chosen.start_ms, leadMs, lyricsOffsetMs), ...startsAfterEnd(sh.sectionLines, chosen.end_ms, leadMs, lyricsOffsetMs)]
     : [];
   const shown = preset.lyrics ? lines.map((_, i) => i).filter((i) => !hidden.includes(i)) : [];
+  // Story anchors (song.json): the line by its lyrics.txt number, the clip from this run's clips (the
+  // song's own and its collections). Never dropped silently: what is not found is said (QA too).
+  const anchors: ResolvedAnchor[] = [];
+  const anchorMissing: string[] = [];
+  if (usesClips && !canvas && preset.lyrics) {
+    const stem = (n: string) => n.toLowerCase().replace(/\.[^.]+$/, "");
+    for (const a of sh.anchors) {
+      const i = numbers.indexOf(a.line);
+      const clip = preparedClips.find((c) => c.name.toLowerCase() === a.clip.toLowerCase()) ?? preparedClips.find((c) => stem(c.name) === stem(a.clip));
+      if (i < 0) anchorMissing.push(`the anchor on line ${a.line} (${a.clip}): line ${a.line} is not a sung line in lyrics.txt`);
+      else if (!clip) anchorMissing.push(`the anchor on line ${a.line} "${lines[i].text}": ${a.clip} is not among this video's clips (the song's clips and its collections, ${prepared.kind} for ${preset.label})`);
+      else anchors.push({ line: a.line, text: lines[i].text, lyric: shown.indexOf(i), clipId: clip.id, clipName: clip.name, clipInMs: Math.round((a.clipIn ?? 0) * 1000), transition: a.transition ?? "cut" });
+    }
+  }
+  const story = !canvas && (sh.gapOrder === "story" || (!sh.gapOrder && sh.anchors.length > 0));
   const layout: PlatformLayout = {
     format,
     safeZone: preset.safeZone,
@@ -881,6 +919,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     cinematicBars: false,
     pins,
     platform: layout,
+    ...(anchors.length ? { anchors, beats: analysis.beats } : {}),
   };
 
   // Which lines are on screen (same rule as composeProps).
@@ -902,7 +941,19 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     }
   }
 
-  const allSpecs = planVariations(canvas ? Math.max(1, canvas.loops.length) : sh.variationsFor(preset));
+  if (story && !canvas) log(`${preset.name}: gap order story (${sh.gapOrder ? "song.json gapOrder" : "the song has anchors"}): every video in file-name order; they differ by style, cut rate and cut / dissolve`);
+  for (const m of anchorMissing) warnings.push(`${preset.name}: ${m}`);
+  const allSpecs = planVariations(canvas ? Math.max(1, canvas.loops.length) : sh.variationsFor(preset), story ? { rate: options.rate ?? "1x" } : undefined);
+  const plans = new Map<CutRate, typeof plan>([[options.rate ?? "1x", plan]]);
+  const planOf = (spec: VariationSpec) => {
+    const rate = spec.rate ?? options.rate ?? "1x";
+    if (!plans.has(rate)) plans.set(rate, planFor(rate));
+    return plans.get(rate)!;
+  };
+  const choicesFor = (spec: VariationSpec) => ({
+    seed: spec.seed, style: spec.style, order: spec.order, leadMs, lyricsOffsetMs, cinematicBars: ytLayout ? false : spec.bars, effects,
+    plan: planOf(spec), ...(spec.transitions ? { transitions: spec.transitions } : {}),
+  });
   let specs = allSpecs;
   if (options.resume) {
     const changed = resumeMismatch(exportDir, allSpecs, {
@@ -910,12 +961,12 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       lrcHash: alignment.lrcHash,
       leadMs,
       lyricsOffsetMs,
-      cutFrames: plan.cuts.map((c) => c.frame - plan.start_frame),
+      cutFrames: (spec) => (canvas || ytLayout ? plan.cuts.map((c) => c.frame - plan.start_frame) : composeProps(base, choicesFor(spec)).props.cutFrames),
       clipHashes: new Set(prepared.clips.map((c) => c.hash)),
-      settings: {
-        cut_rate: options.rate ?? "1x", energy: options.energy ?? "medium", font: options.font ?? null, font_hook: options.fontHook ?? null,
+      settings: (spec) => ({
+        cut_rate: spec.rate ?? options.rate ?? "1x", energy: options.energy ?? "medium", font: options.font ?? null, font_hook: options.fontHook ?? null,
         line_effect: choiceText(fx.verse), hook_effect: choiceText(fx.hook),
-      },
+      }),
     });
     if (changed) throw new Error(`--resume: ${changed} since the run in ${exportDir}; run without --resume to make a new set.`);
     specs = allSpecs.filter((s) => !variationDone(exportDir, s.name));
@@ -925,7 +976,14 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   // Compose every variation now, so its warnings are part of the plan printed before rendering.
   const composedBySpec = new Map(
     specs.map((spec) => {
-      const composed = composeProps(base, { seed: spec.seed, style: spec.style, order: spec.order, leadMs, lyricsOffsetMs, cinematicBars: ytLayout ? false : spec.bars, effects });
+      const composed = composeProps(base, choicesFor(spec));
+      if (composed.anchors && spec === specs[0]) {
+        // One line per anchor (what the first video does with it), then the conflicts once.
+        for (const u of composed.anchors.uses) {
+          log(`${preset.name}: anchor line ${u.line} "${u.text}" -> ${u.clip}: ${u.used ? `at ${clockText(u.at_ms!)}${u.transition === "dissolve" ? " (dissolve)" : ""}${u.why ? `, ${u.why}` : ""}${u.playback_rate ? `, slowed to ${u.playback_rate.toFixed(2)}x` : ""}` : `not used (${u.why})`}`);
+        }
+        warnings.push(...composed.anchors.conflicts.map((c) => `${preset.name}: anchors: ${c}`));
+      }
       composed.props = { ...composed.props, nextLine: preset.showNextLine };
       warnings.push(...composed.warnings.map((w) => `${spec.name}: ${w}`));
       if (ytLayout) {
@@ -1015,7 +1073,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         project_id: project.id,
         section_id: sectionRow.id,
         seed: spec.seed,
-        cut_rate: options.rate ?? "1x",
+        cut_rate: spec.rate ?? options.rate ?? "1x",
         style_id: ws.db.select().from(stylePreset).where(eq(stylePreset.name, styles[spec.style].entry.style.name)).get()?.id ?? null,
         text_size: composed.props.textSize,
         colour: composed.props.colour,
@@ -1032,14 +1090,14 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       .get();
     // pid: this process owns the job; if it disappears, the job counts as interrupted (see jobs.ts).
     const job = ws.db.insert(renderJobTable).values({ variation_id: variationRow.id, pid: process.pid }).returning().get();
-    return { spec, props: composed.props, jobId: job.id };
+    return { spec, props: composed.props, jobId: job.id, anchorReport: composed.anchors };
   });
   report();
 
   const updateJob = (id: string, values: Partial<typeof renderJobTable.$inferInsert>) =>
     ws.db.update(renderJobTable).set(values).where(eq(renderJobTable.id, id)).run();
 
-  await runPool(jobs, limit.parallel, async ({ spec, props, jobId }) => {
+  await runPool(jobs, limit.parallel, async ({ spec, props, jobId, anchorReport }) => {
     const state = states.find((st) => st.name === spec.name)!;
     const file = path.join(exportDir, `${spec.name}.mp4`);
     if (options.shouldStop?.()) {
@@ -1108,8 +1166,10 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       report();
       // The wrap-around from the last frame to the first (the section as rendered, to the frame).
       const loop = loops ? loopResult(props, prepared.clips, { bpm: analysis.bpm, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers }) : null;
+      const anchorsOut = anchors.length || anchorMissing.length ? { ...(anchorReport ?? { uses: [], conflicts: [], notes: [] }), missing: anchorMissing } : null;
       const qa = await checkVariation(spec, props, file, {
         loop,
+        anchors: anchorsOut,
         lines, visible, numbers, reports, styles, clips: prepared.clips,
         sources: usesClips ? { ...sources, platform: preset.label } : null,
         frameCheck: options.frameCheck ?? true,
@@ -1128,7 +1188,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         buildManifest({
           ws, tool: sh.tool, spec, props, media, project, songHash: sh.sp.songHash, songFile: sh.sp.songFile, analysis, chosen, alignment, reports, numbers, audioPlan: audioP,
           visible, lines, leadMs, lyricsOffsetMs, options, collection: sh.collection, collectionNames: sh.collectionNames, clips: prepared.clips, file, qa, now: sh.now, warnings, preset,
-          brand: sh.brand.brand, loop: loops ? (loop ? { checked: true, ...loop } : null) : { checked: false, why: canvas ? "a Spotify Canvas has its own loop checks" : `${preset.label} does not loop` },
+          brand: sh.brand.brand, anchors: anchorsOut, gapOrder: story ? "story" : null, loop: loops ? (loop ? { checked: true, ...loop } : null) : { checked: false, why: canvas ? "a Spotify Canvas has its own loop checks" : `${preset.label} does not loop` },
         }),
       );
       // Captions for every video; YouTube also gets a thumbnail and a publishing pack.
@@ -1221,6 +1281,7 @@ async function checkVariation(
     canvas?: { min: number; max: number } | null; // Spotify Canvas: loop, silence and length checks
     audio?: { song: string; fadeInS: number; fadeOutS: number } | null; // compared with the song (QA "Audio matches the song")
     loop?: LoopResult | null; // Reels, TikTok, Shorts: QA "Loop flows"
+    anchors?: (AnchorReport & { missing: string[] }) | null; // story anchors: QA "Story anchors"
   },
 ): Promise<QaReport> {
   const style = ctx.styles[spec.style];
@@ -1267,6 +1328,7 @@ async function checkVariation(
         : null,
     canvas: ctx.frameCheck && ctx.canvas ? { ...(await loopCheck(file)), ...ctx.canvas } : null,
     loop: ctx.loop ?? null,
+    anchors: ctx.anchors ?? null,
   });
 }
 
@@ -1325,6 +1387,8 @@ function buildManifest(c: {
   preset: PlatformPreset;
   brand: Brand;
   loop?: Manifest["loop"];
+  anchors?: (AnchorReport & { missing: string[] }) | null;
+  gapOrder?: GapOrder | null;
 }): Manifest {
   const { props, spec, ws } = c;
   const startFrame = props.audio?.startFrame ?? Math.round((c.chosen.start_ms * VIDEO.fps) / 1000);
@@ -1360,7 +1424,9 @@ function buildManifest(c: {
       lyrics_offset_ms: c.lyricsOffsetMs,
     },
     settings: {
-      cut_rate: c.options.rate ?? "1x",
+      cut_rate: spec.rate ?? c.options.rate ?? "1x",
+      gap_order: c.gapOrder ?? null, // "story": every video in story order (story anchors)
+      transitions: spec.transitions ?? null, // story variations: the anchors' own ("as-set"), all "dissolve" or all "cut"
       energy: c.options.energy ?? "medium",
       early_cut_frames: 2,
       order: spec.order,
@@ -1428,6 +1494,7 @@ function buildManifest(c: {
     props,
     output: { file: path.basename(c.file), duration_s: props.durationInFrames / VIDEO.fps, qa: c.qa.status },
     loop: c.loop ?? null,
+    anchors: c.anchors ? { used: c.anchors.uses, conflicts: c.anchors.conflicts, notes: c.anchors.notes, missing: c.anchors.missing } : null,
     warnings: c.warnings,
   };
 }
@@ -1441,22 +1508,25 @@ export function resumeMismatch(
     lrcHash: string;
     leadMs: number;
     lyricsOffsetMs: number;
-    cutFrames: number[];
+    cutFrames: number[] | ((spec: VariationSpec) => number[]); // per video when videos differ (story anchors, cut rates)
     clipHashes: Set<string>;
-    settings: Record<string, unknown>;
+    settings: Record<string, unknown> | ((spec: VariationSpec) => Record<string, unknown>);
   },
 ): string | null {
-  const existing = specs.map((s) => path.join(dir, `${s.name}.manifest.json`)).find((f) => existsSync(f));
-  if (!existing) return null; // nothing finished yet: nothing to compare with
+  const spec = specs.find((s) => existsSync(path.join(dir, `${s.name}.manifest.json`)));
+  if (!spec) return null; // nothing finished yet: nothing to compare with
+  const existing = path.join(dir, `${spec.name}.manifest.json`);
+  const cutFrames = typeof now.cutFrames === "function" ? now.cutFrames(spec) : now.cutFrames;
+  const settings = typeof now.settings === "function" ? now.settings(spec) : now.settings;
   const m = JSON.parse(readFileSync(existing, "utf8")) as Manifest;
   if (m.section.start_ms !== now.section.start_ms || m.section.end_ms !== now.section.end_ms) {
     return `the section changed (${clockText(m.section.start_ms)}-${clockText(m.section.end_ms)} then, ${clockText(now.section.start_ms)}-${clockText(now.section.end_ms)} now)`;
   }
   if (m.lyrics.lrc_sha256 !== now.lrcHash) return "the lyric timings changed";
   if (m.lyrics.lead_ms !== now.leadMs || m.lyrics.lyrics_offset_ms !== now.lyricsOffsetMs) return "the lyric lead or offset changed";
-  if (JSON.stringify(m.cuts.frames) !== JSON.stringify(now.cutFrames)) return "the cuts changed";
-  for (const key of Object.keys(now.settings)) {
-    if (JSON.stringify(m.settings[key] ?? null) !== JSON.stringify(now.settings[key])) return `the setting ${key} changed`;
+  if (JSON.stringify(m.cuts.frames) !== JSON.stringify(cutFrames)) return "the cuts changed";
+  for (const key of Object.keys(settings)) {
+    if (JSON.stringify(m.settings[key] ?? null) !== JSON.stringify(settings[key])) return `the setting ${key} changed`;
   }
   const gone = m.clips.filter((c) => !now.clipHashes.has(c.sha256)).map((c) => c.name);
   if (gone.length) return `clip(s) changed or removed: ${gone.join(", ")}`;

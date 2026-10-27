@@ -2,6 +2,7 @@ import { measureText } from "@remotion/layout-utils";
 import { useMemo } from "react";
 import {
   AbsoluteFill,
+  Easing,
   Audio,
   Freeze,
   Img,
@@ -46,8 +47,9 @@ function ClipVideo({ src, shot }: { src: string; shot: ShotProps }) {
 
 // A photo: cover-cropped, with its Ken Burns move spread over exactly the shot.
 function PhotoShot({ src, shot }: { src: string; shot: ShotProps }) {
-  const frame = useCurrentFrame();
-  const progress = shot.duration > 1 ? frame / (shot.duration - 1) : 0;
+  // A dissolve starts the shot early and a tail keeps it on after: the move stays fitted to the shot.
+  const frame = useCurrentFrame() - (shot.dissolve?.before ?? 0);
+  const progress = shot.duration > 1 ? Math.min(1, Math.max(0, frame / (shot.duration - 1))) : 0;
   // A looping photo moves out and back, so its last frame matches its first.
   const t = shot.motionLoop ? photoLoopProgress(progress) : progress;
   const m = shot.motion ? kenBurnsAt(shot.motion, t) : { zoom: 1, x: 0, y: 0 };
@@ -88,6 +90,13 @@ function Shot({ shot, mediaBaseUrl }: { shot: ShotProps; mediaBaseUrl: string })
       </Sequence>
     </>
   );
+}
+
+// Story anchors: the shot fades in over the previous one (which is still playing underneath).
+function DissolveIn({ frames, children }: { frames: number; children: React.ReactNode }) {
+  const frame = useCurrentFrame();
+  const opacity = interpolate(frame, [0, Math.max(1, frames)], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.ease) });
+  return <AbsoluteFill style={{ opacity }}>{children}</AbsoluteFill>;
 }
 
 // Seamless loop: the clip plays from clipStartFrame; over the last `blend.frames` frames the frames
@@ -401,8 +410,19 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
       {props.layout === "cover" && props.cover ? <CoverLayout cover={props.cover} mediaBaseUrl={mediaBaseUrl} format={format} mood={mood} /> : null}
       {props.layout === "stills" && props.stills ? <StillsLayout stills={props.stills} mediaBaseUrl={mediaBaseUrl} /> : null}
       {shots.map((shot) => (
-        <Sequence key={shot.start} from={shot.start} durationInFrames={shot.duration} premountFor={30}>
-          <Shot shot={shot} mediaBaseUrl={mediaBaseUrl} />
+        <Sequence
+          key={shot.start}
+          from={shot.start - (shot.dissolve?.before ?? 0)}
+          durationInFrames={shot.duration + (shot.dissolve?.before ?? 0) + (shot.tail ?? 0)}
+          premountFor={30}
+        >
+          {shot.dissolve ? (
+            <DissolveIn frames={shot.dissolve.before + shot.dissolve.after}>
+              <Shot shot={shot} mediaBaseUrl={mediaBaseUrl} />
+            </DissolveIn>
+          ) : (
+            <Shot shot={shot} mediaBaseUrl={mediaBaseUrl} />
+          )}
         </Sequence>
       ))}
 

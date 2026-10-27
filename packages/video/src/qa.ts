@@ -3,6 +3,7 @@
 import { AUDIO_ENVELOPE_TOLERANCE_DB, AUDIO_LENGTH_TOLERANCE_S, AUDIO_LEVEL_TOLERANCE_DB, type AudioMatch } from "./audio";
 import { VIDEO } from "./config";
 import { cinematicBarHeight, DEFAULT_FORMAT, DEFAULT_LYRIC_AREA, DEFAULT_SAFE_ZONE, type Format, type LyricArea, type SafeZone } from "./platform";
+import type { AnchorReport } from "./compose";
 import type { LoopResult } from "./loop";
 import { MAX_LINES } from "./lyrics";
 import type { LyricVideoProps } from "./props";
@@ -40,6 +41,7 @@ export type QaInput = {
   length?: { actualS: number; songS: number | null } | null; // the finished file's length (songS: a full-song video)
   platformLimit?: { seconds: number; limitS: number; platform: string } | null; // a fixed section (0:11-1:10) against the platform's longest
   audioMatch?: AudioMatch | null; // the video's audio against the same section of the song (null: not checked)
+  anchors?: (AnchorReport & { missing: string[] }) | null; // story anchors (song.json)
   loop?: LoopResult | null; // Reels, TikTok, Shorts: the wrap-around from the last frame to the first (null: not a loop platform)
   canvas?: { lastToFirst: number; typicalStep: number; hasAudio: boolean; seconds: number; min: number; max: number } | null; // Spotify Canvas
 };
@@ -212,6 +214,20 @@ export function runQa(input: QaInput): QaReport {
       details.push(`the video is ${expected.toFixed(1)} s but the song is ${input.length.songS.toFixed(1)} s`);
     }
     checks.push({ name: "Video length", ok: details.length === 0, details });
+  }
+
+  // Story anchors: every conflict named by line; a clip slowed to cover its line is always a WARN naming
+  // the clip; anchors outside the section and pins that give way are notes (not a WARN).
+  if (input.anchors) {
+    const a = input.anchors;
+    const slowed = a.uses.filter((u) => u.used && u.playback_rate !== undefined).map((u) => `line ${u.line} "${u.text}": ${u.clip} is slowed to ${u.playback_rate!.toFixed(2)}x to cover its line${u.playback_rate! <= 0.5 ? " (and its last frame may be held)" : ""}; choose a longer clip or an earlier clipIn`);
+    const problems = [...a.missing, ...a.conflicts, ...slowed];
+    const used = a.uses.filter((u) => u.used);
+    checks.push({
+      name: "Story anchors",
+      ok: problems.length === 0,
+      details: [...problems, ...(used.length ? [`used: ${used.map((u) => `line ${u.line} -> ${u.clip}${u.transition === "dissolve" ? " (dissolve)" : ""}`).join(", ")}`] : []), ...a.notes],
+    });
   }
 
   // Reels, TikTok, Shorts loop on the platform: beat, phrase, sound, harmony and picture across the

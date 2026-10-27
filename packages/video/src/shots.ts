@@ -31,6 +31,11 @@ export type AssignOptions = {
   // Reels: the last shot shows the first clip's frames just before the first shot's, so the video
   // loops seamlessly (pins win over this).
   loopEnding?: boolean;
+  // Story anchors: these shots play their pinned clip from this clip frame (song.json clipIn).
+  clipStarts?: ReadonlyMap<number, number>;
+  // Story anchors: shots whose pinned clip is reserved for them. The gaps use the other clips (all clips
+  // when fewer than 4 are left) and never show an anchored clip within 3 shots of its anchor.
+  anchored?: ReadonlySet<number>;
 };
 
 export const MIN_PLAYBACK_RATE = 0.5;
@@ -50,6 +55,12 @@ export function assignClips(plan: CutPlan, clipsIn: readonly ClipInfo[], seed: n
   for (const id of pins.values()) if (!clipById.has(id)) throw new Error(`pinned clip not in the pool: ${id}`);
 
   const random = mulberry32(seed);
+  // Story anchors: the clips that fill the gaps, and the anchored clips near each shot.
+  const anchoredShots = [...(options.anchored ?? [])].filter((i) => pins.has(i));
+  const reserved = new Set(anchoredShots.map((i) => pins.get(i)!));
+  const unreserved = clips.filter((c) => !reserved.has(c.id));
+  const fill = unreserved.length > RECENT_WINDOW ? unreserved : clips;
+  const nearAnchors = (i: number) => new Set(anchoredShots.filter((k) => k !== i && Math.abs(k - i) <= RECENT_WINDOW).map((k) => pins.get(k)!));
   const framesOf = (c: ClipInfo) => (c.still ? Number.MAX_SAFE_INTEGER : Math.floor((c.duration_ms * plan.fps) / 1000));
   const bounds = [plan.start_frame, ...plan.cuts.map((c) => c.frame), plan.end_frame];
   const window = Math.min(RECENT_WINDOW, clips.length - 1);
@@ -83,11 +94,13 @@ export function assignClips(plan: CutPlan, clipsIn: readonly ClipInfo[], seed: n
     if (pinnedId) {
       clip = clipById.get(pinnedId)!;
     } else if (order === "story") {
-      // Next clip in file-name order; skip one that would repeat the previous shot or the next pin.
-      clip = clips[storyIndex % clips.length];
-      for (let tries = 0; tries < clips.length && clips.length > 1 && (clip.id === previous || clip.id === nextPinned || clip.id === avoidLoop); tries++) {
+      // Next clip in file-name order; skip one that would repeat the previous shot or the next pin (or
+      // show an anchored clip near its anchor).
+      const near = nearAnchors(i);
+      clip = fill[storyIndex % fill.length];
+      for (let tries = 0; tries < fill.length && fill.length > 1 && (clip.id === previous || clip.id === nextPinned || clip.id === avoidLoop || near.has(clip.id)); tries++) {
         storyIndex += 1;
-        clip = clips[storyIndex % clips.length];
+        clip = fill[storyIndex % fill.length];
       }
       storyIndex += 1;
     } else {
@@ -95,9 +108,10 @@ export function assignClips(plan: CutPlan, clipsIn: readonly ClipInfo[], seed: n
       const firstClip = i === lastIndex && i > 0 ? shots[0].clip_id : undefined;
       const blocked = new Set([
         ...(window > 0 ? recent.slice(-window) : []), ...(nextPinned ? [nextPinned] : []), ...(avoidLoop ? [avoidLoop] : []), ...(firstClip ? [firstClip] : []),
+        ...nearAnchors(i),
       ]);
-      let allowed = clips.filter((c) => !blocked.has(c.id));
-      if (!allowed.length) allowed = clips.filter((c) => c.id !== previous && c.id !== firstClip);
+      let allowed = fill.filter((c) => !blocked.has(c.id));
+      if (!allowed.length) allowed = fill.filter((c) => c.id !== previous && c.id !== firstClip);
       if (!allowed.length) allowed = clips.filter((c) => c.id !== previous);
       if (!allowed.length) allowed = clips;
       // Prefer clips that cover the shot at normal speed, then ones that do when slowed down.
@@ -127,8 +141,18 @@ export function assignClips(plan: CutPlan, clipsIn: readonly ClipInfo[], seed: n
         loopShot = false; // the first clip is too short to continue: an ordinary last shot
       }
     }
+    const fixedStart = pinnedId ? options.clipStarts?.get(i) : undefined;
     if (loopShot) {
       // clip start already set
+    } else if (fixedStart !== undefined && !clip.still) {
+      // A story anchor from its clipIn: slowed (down to 0.5x, then its last frame held) when the rest of
+      // the clip is shorter than the shot.
+      clipStart = Math.max(0, Math.min(fixedStart, available - 1));
+      const left = available - clipStart;
+      if (left < length) {
+        rate = left >= Math.ceil(length * MIN_PLAYBACK_RATE) ? Math.floor((left / length) * 10_000) / 10_000 : MIN_PLAYBACK_RATE;
+        hold = left < Math.ceil(length * MIN_PLAYBACK_RATE);
+      }
     } else if (clip.still) {
       clipStart = 0; // photos: any length, the motion is fitted to the shot
     } else if (available >= length) {

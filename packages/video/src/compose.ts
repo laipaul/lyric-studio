@@ -1,6 +1,8 @@
 // Turns a prepared render "base" (cuts, clips, lyrics, audio, fonts, pins) plus the choices that
 // change often (seed, order, style, lyric timing) into LyricVideo props. Pure: the /preview page runs
 // it in the browser and "pnpm render:test" runs it in Node, so the same choices give identical props.
+import { dissolveFrames, planAnchors, type AnchorUse, type ResolvedAnchor } from "./anchors";
+import type { Beat } from "./beats";
 import { VIDEO } from "./config";
 import type { CutPlan } from "./cuts";
 import type { FontFileRef } from "./font-files";
@@ -58,7 +60,15 @@ export type RenderBase = {
   cinematicBars: boolean;
   pins: ResolvedPin[];
   platform?: PlatformLayout;
+  // Story anchors (song.json): `lyric` indexes `lyrics`; placed on `beats` (downbeat offset applied).
+  anchors?: ResolvedAnchor[];
+  beats?: Beat[];
 };
+
+// What the anchors did in one video (QA "Story anchors", the manifest, the Videos tab).
+export type AnchorReport = { uses: AnchorUse[]; conflicts: string[]; notes: string[] };
+// Variations of a story: the anchors' own transitions, or all cut / all dissolve.
+export type AnchorTransitions = "as-set" | "cut" | "dissolve";
 
 // Lines appear this much before their stamp (pro lyric-video convention).
 export const DEFAULT_LEAD_MS = 250;
@@ -75,6 +85,8 @@ export type ComposeChoices = {
   // Lyric effects (Step 5j). With them, lines also carry their word times, and a line followed by a
   // pause leaves the screen 1 s after its last word (instead of staying until the next line).
   effects?: LyricEffectsProps;
+  plan?: CutPlan; // this variation's own cut plan (another cut rate); default base.plan
+  transitions?: AnchorTransitions; // default "as-set"
 };
 
 // Before a pause the last line fades out this long after its last word ends (then 0.4 s fade).
@@ -141,15 +153,32 @@ export function rawLyric(l: { text: string; start_ms: number; end_ms: number; is
 export function composeProps(
   base: RenderBase,
   choices: ComposeChoices,
-): { props: Omit<LyricVideoProps, "mediaBaseUrl">; warnings: string[] } {
-  const { plan } = base;
+): { props: Omit<LyricVideoProps, "mediaBaseUrl">; warnings: string[]; anchors: AnchorReport | null } {
+  let plan = choices.plan ?? base.plan;
   const allLines = lyricFrames(base, choices.leadMs ?? DEFAULT_LEAD_MS, choices.lyricsOffsetMs ?? 0, !!choices.effects, choices.effects?.gap);
   const lyrics = allLines
     .map((l) => ({ ...l, startFrame: Math.max(0, l.startFrame), endFrame: Math.min(base.durationInFrames, l.endFrame) }))
     .filter((l) => l.endFrame > l.startFrame);
 
+  // Story anchors: their cuts go into the plan (they win over the regular cut rate).
+  // (With the lines' sung ends: an anchor holds until its line is sung, also without lyric effects.)
+  const anchorPlan =
+    base.anchors?.length && base.beats && base.clips.length
+      ? planAnchors(plan, base.beats, base.anchors, lyricFrames(base, choices.leadMs ?? DEFAULT_LEAD_MS, choices.lyricsOffsetMs ?? 0, true, choices.effects?.gap))
+      : null;
+  if (anchorPlan) plan = anchorPlan.plan;
   const bounds = [0, ...plan.cuts.map((c) => c.frame - plan.start_frame), base.durationInFrames];
   const { byShot, warnings } = pinsToShots(base.pins, allLines, bounds);
+  const notes: string[] = [];
+  const clipStarts = new Map<number, number>();
+  for (const [shot, a] of anchorPlan?.shots ?? []) {
+    // The anchor wins over a pin on the same shot.
+    const pinned = byShot.get(shot);
+    const pin = pinned && pinned !== a.clipId ? base.pins.find((p) => p.clipId === pinned) : undefined;
+    if (pin) notes.push(`pins.txt line ${pin.lineNumber} "${pin.text}" (${pin.clipName}) gives way to the anchor on line ${a.line} (${a.clipName})`);
+    byShot.set(shot, a.clipId);
+    clipStarts.set(shot, Math.round((a.clipInMs * VIDEO.fps) / 1000));
+  }
 
   const platform = base.platform ?? { format: DEFAULT_FORMAT, safeZone: DEFAULT_SAFE_ZONE, lyricsAt: 0.45, textScale: 1 };
   const byId = new Map(base.clips.map((c) => [c.id, c]));
@@ -158,7 +187,7 @@ export function composeProps(
     plan,
     base.clips.map((c) => ({ id: c.id, name: c.name, duration_ms: c.duration_ms, still: c.kind === "photo" })),
     choices.seed,
-    { order: choices.order ?? "story", pins: byShot, loopEnding: platform.loopEnding },
+    { order: choices.order ?? "story", pins: byShot, loopEnding: platform.loopEnding, clipStarts, anchored: new Set(anchorPlan?.shots.keys() ?? []) },
   );
   // Photo moves are seeded per shot, so they do not depend on the other clips.
   const motionFor = (index: number) => kenBurns(mulberry32((choices.seed * 7919 + index * 104_729 + 17) >>> 0));
@@ -181,8 +210,35 @@ export function composeProps(
       holdLastFrame: s.hold_last_frame,
       ...(photo ? { kind: "photo" as const, motion } : {}),
       ...(clip.fit === "fill" ? { fit: "fill" as const } : {}),
-    };
+    } as LyricVideoProps["shots"][number];
   });
+
+  // Dissolves into anchored shots (~1 bar centred on the cut): the shot starts `before` frames early
+  // over the previous one, which keeps playing `after` frames into it.
+  const bar = barFrames(base.beats ?? []);
+  for (const [index, a] of anchorPlan?.shots ?? []) {
+    const transition = choices.transitions === "cut" || choices.transitions === "dissolve" ? choices.transitions : a.transition;
+    if (transition !== "dissolve" || index === 0 || !shots[index] || !shots[index - 1]) continue;
+    const prev = shots[index - 1];
+    const prevLeft = prev.kind === "photo" ? Infinity : Math.floor((prev.clipDurationFrames - 1 - prev.clipStartFrame) / prev.playbackRate) - prev.duration;
+    const d = dissolveFrames(bar, prev.duration, shots[index].duration, prev.holdLastFrame ? 0 : prevLeft);
+    if (!d.before && !d.after) continue;
+    const shot = shots[index];
+    const back = Math.round(d.before * shot.playbackRate);
+    shots[index] = { ...shot, dissolve: d, ...(shot.kind !== "photo" && shot.clipStartFrame >= back ? { clipStartFrame: shot.clipStartFrame - back } : {}) };
+    shots[index - 1] = { ...prev, tail: d.after };
+  }
+  const anchors: AnchorReport | null = anchorPlan
+    ? {
+        uses: anchorPlan.uses.map((u) => {
+          const s = u.shot !== null ? assigned[u.shot] : undefined;
+          const transition = choices.transitions === "cut" || choices.transitions === "dissolve" ? choices.transitions : u.transition;
+          return { ...u, transition, ...(s && s.playback_rate < 1 ? { playback_rate: s.playback_rate } : {}) };
+        }),
+        conflicts: anchorPlan.conflicts,
+        notes: [...anchorPlan.notes, ...notes],
+      }
+    : null;
 
   const entry = base.styles[choices.style];
   const bars = choices.cinematicBars ?? base.cinematicBars;
@@ -205,5 +261,13 @@ export function composeProps(
       ...(choices.effects ? { lyricEffects: choices.effects } : {}),
     },
     warnings,
+    anchors,
   };
+}
+
+// One bar in frames: the median gap between downbeats (2 s at 120 BPM without beats).
+function barFrames(beats: readonly Beat[]): number {
+  const downs = beats.filter((b) => b.is_downbeat).map((b) => b.time_ms);
+  const gaps = downs.slice(1).map((t, i) => t - downs[i]).sort((a, b) => a - b);
+  return Math.round(((gaps.length ? gaps[Math.floor(gaps.length / 2)] : 2000) * VIDEO.fps) / 1000);
 }

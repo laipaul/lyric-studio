@@ -757,6 +757,37 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   make.test.ts (real renders: the song file's hash and modification time are unchanged, the song
   folder's copy is byte for byte the same, QA audio check passes, 44.1 kHz kept).
 
+### Story anchors — part (a): rules and pnpm make ✅ (part (b): the Lyrics tab and Videos tab)
+A clip "lands on" a lyric line: song.json `anchors: [{ "line": 9, "clip": "hands.mp4", "clipIn": 1.5, "transition": "dissolve" }]`
+(the line by its lyrics.txt number only: the same chorus can land on different clips as the video goes on).
+- **Cut** (src/anchors.ts): on the downbeat at or just before the line's on-screen time (2 frames early,
+  as every cut), held until at least the line's sung end; the next cut is the first regular cut after
+  that. Anchors win over the regular cut rate; regular beat cuts fill the gaps. clipIn: where the clip starts.
+- **Gaps in story order** (file-name order) in every video, with the other clips (all clips when fewer
+  than 4 are left); an anchored clip never within 3 shots of its anchor. song.json `gapOrder`: "story"
+  (the default when the song has anchors) or "shuffle" (as before: v1 story, the others shuffled).
+  Story videos differ by style, cut rate (the run's, the run's, one coarser, one finer) and cut / dissolve
+  (the anchors' own, all dissolve, the anchors' own, all cut).
+- **Dissolve**: ~1 bar centred on the downbeat (at most half of either shot; the previous clip keeps
+  playing under it while it has frames), in the composition, so preview and render are the same.
+- **Per platform**: only anchors inside the section are used, the others listed ("not in this section:
+  line 31 (hands.mp4)"). Auto prefers, among the clean line ends inside the tolerance (chorus first; on a
+  loop platform the ends that loop well), the one keeping the most anchors: "; anchors: keeps 3 of 3,
+  more than 0:36.5 keeps 2". Hook-first, the musical ending and never cutting a sung line come first.
+- **Conflicts, never dropped silently** (QA "Story anchors", WARN, naming the lines): two anchors in one
+  bar (the second cuts in on a beat, or is not shown when no beat is left: said so); an anchored clip that
+  cannot stay until its line ends; the same clip anchored twice within 8 s; a line or clip not found;
+  **every clip slowed to cover its line** (naming the clip). pins.txt keeps working; an anchor wins on the
+  same shot and QA says so (a note).
+- pnpm make prints one line per anchor ("reels: anchor line 9 "…" -> hands.mp4: at 0:41.0 (dissolve)");
+  the manifest has `anchors` (used, shot, time, transition, why, playback rate; conflicts; notes) and
+  settings.gap_order / transitions / the video's own cut_rate. --resume compares each video with its own cuts.
+- Tests: anchors.test.ts (anchors on downbeats; gap filling in story order with clipIn; shuffled gaps keep
+  the anchored clip away; a 90 s Reel vs a 25 s TikTok of the same song; anchors in one bar, no beat left,
+  the same clip twice, a short clip slowed; dissolve per anchor or per video; anchor beats pin; the
+  Lyrics-tab checks; song.json checks; auto end keeping more anchors; QA; story variations),
+  make.test.ts (a real run with anchors in song.json).
+
 ### Tuning — a long first word is a strong signal ✅ (to verify on the Windows PC)
 From the check-start results on A Heart For Two (lines 13 and 27: stamp ~2.4 s early, voice and words
 0.4-0.5 s apart, so the 0.3 s rule left them flagged).

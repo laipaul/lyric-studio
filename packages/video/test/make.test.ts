@@ -22,6 +22,7 @@ import {
   readManifest,
   readMoves,
   readRecipe,
+  writeRecipe,
   resolveMoved,
   movesSince,
   songPathsById,
@@ -393,6 +394,41 @@ describe("pnpm make + pnpm rerender (real renders)", () => {
     expect(notes).toEqual([]);
     expect(m.lyric_timings.map((l) => [l.text, l.start_frame])).toEqual([["Through the night", 0], ["Verse two here", m.lyric_timings[1].start_frame]]);
     expect(sha256File(lrcFile)).toBe(lrcHash);
+  }, 300_000);
+
+  it("story anchors from song.json: the clip lands on its line in every video, gaps in story order; recorded and checked", async () => {
+    const id = (await findOrCreateSongProject(ws, path.join(inDir, "song.wav"))).project.id;
+    const recipeFile = songPathsById(ws, id).recipe!;
+    const before = readRecipe(recipeFile);
+    writeRecipe(recipeFile, { ...before, anchors: [{ line: 4, clip: "10_sun.mp4", transition: "dissolve" }, { line: 1, clip: "01_sea.mp4" }] });
+    const logs: string[] = [];
+    try {
+      const made = await makeVideos({
+        workspaceDir: wsDir, song: path.join(inDir, "song.wav"), lyrics: path.join(inDir, "lyrics.txt"), collection: "beach",
+        variations: 2, section: "0:02-0:09", align: fakeAlign, frameCheck: false, log: (m) => logs.push(m),
+      });
+      const [m1, m2] = made.variations.map((v) => readManifest(v.manifestFile));
+      // Line 4 "Verse two here" (stamp 5.5 s, on screen 5.25 s): cut in on the bar at ~4.25 s.
+      for (const m of [m1, m2]) {
+        expect(m.settings.order).toBe("story");
+        expect(m.settings.gap_order).toBe("story");
+        const use = m.anchors!.used.find((u) => u.line === 4)!;
+        expect([use.used, use.clip]).toEqual([true, "10_sun.mp4"]);
+        expect(Math.abs(use.at_ms! - 4_250)).toBeLessThan(120);
+        expect(m.shots[use.shot!].clip).toBe("10_sun.mp4");
+        expect(m.anchors!.used.find((u) => u.line === 1)).toMatchObject({ used: false, why: "outside this section" });
+      }
+      // The variations differ by style and cut / dissolve: v1 the anchor's own (dissolve), v2 all dissolve.
+      expect([m1.settings.transitions, m2.settings.transitions]).toEqual(["as-set", "dissolve"]);
+      expect(m1.props.shots.some((s) => s.dissolve)).toBe(true);
+      expect(logs.some((l) => /anchor line 4 "Verse two here" -> 10_sun\.mp4: at 0:04\.\d \(dissolve\)/.test(l))).toBe(true);
+      expect(logs).toContain("standard: gap order story (the song has anchors): every video in file-name order; they differ by style, cut rate and cut / dissolve");
+      const qa = readFileSync(made.variations[0].qaFile, "utf8");
+      expect(qa).toMatch(/Story anchors/);
+      expect(qa).toContain("not in this section: line 1 (01_sea.mp4)");
+    } finally {
+      writeRecipe(recipeFile, before);
+    }
   }, 300_000);
 
   it("rerender fails clearly when a clip has changed", async () => {
