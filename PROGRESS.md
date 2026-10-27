@@ -730,6 +730,9 @@ lines 14 and 28 "And a place" moved -2.0 s on the recognised words alone (wrong 
   "FLAGGED FOR REVIEW: line …", listed at the end ("2 line(s) flagged for review … line 14, 28"), a QA
   WARN "Line starts to review" on each video, and kept for the Lyrics tab. A stretched first word on a
   hook or the last line may be a held note: flagged, never moved on that alone.
+- **Not flagged when invisible**: a disagreement smaller than the brand's lead-in (motion.gapLeadInS,
+  1 s) cannot be seen (the line is on screen that long before it is sung): plain "in time" with the
+  reason "less than the 1.0 s lead-in, not visible" (Love Is A Good Thing lines 15, 17, 22, 34 at 0.4-0.8 s).
 - **Later start inside the previous line** (line 39): when two signals agree, line 38's end is shortened
   to the new start (its last note was held too long) and line 39 moves; earlier starts are flagged.
 - **Why the voice was 23 s late on line 14**: the voice signal only counts singing louder than 15 dB under

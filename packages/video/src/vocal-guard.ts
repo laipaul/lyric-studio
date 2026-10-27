@@ -194,8 +194,10 @@ export function asrWindows(lines: readonly TimedLine[], v: VoiceLevels): [number
 export function checkVocalStart(
   lines: readonly TimedLine[],
   v: VoiceLevels,
-  options: { skip?: ReadonlySet<number>; asr?: ReadonlyMap<number, readonly AsrWord[]> } = {},
+  // reviewMs: a disagreement smaller than this (the brand's lead-in, motion.gapLeadInS) is not visible: not flagged.
+  options: { skip?: ReadonlySet<number>; asr?: ReadonlyMap<number, readonly AsrWord[]>; reviewMs?: number } = {},
 ): VocalCheck {
+  const reviewMs = options.reviewMs ?? 1000;
   const skip = options.skip ?? new Set<number>();
   const levelDb = singingLevel(lines, v);
   const thresholdDb = levelDb - VOICE_BELOW_SINGING_DB;
@@ -247,8 +249,12 @@ export function checkVocalStart(
     } else {
       // No two signals agree: the stamp stays. A signal that disagrees with it is flagged for review.
       const others = cands.filter((c) => c.name !== "stamp" && Math.abs(c.ms - l.start_ms) > AGREE_MS);
-      flag = others.length > 0 || cands.length === 1;
-      why = others.length
+      // A difference smaller than the lead-in (the line is on screen that long before it is sung) is not visible.
+      const visible = others.filter((c) => Math.abs(c.ms - l.start_ms) >= reviewMs);
+      flag = visible.length > 0 || cands.length === 1;
+      why = others.length && !visible.length
+        ? `only ${others.map((c) => `${c.name} ${at(c.ms)} (${by(c.ms)})`).join(", only ")}; less than the ${(reviewMs / 1000).toFixed(1)} s lead-in, not visible`
+        : others.length
         ? `only ${others.map((c) => `${c.name} ${at(c.ms)} (${by(c.ms)})`).join(", only ")}; no second signal agrees${heldNote && others.some((c) => c.name === "word durations") ? `; the long first word (${(s.firstWordMs! / 1000).toFixed(1)} s) may be a held note (${l.isHook ? "a hook" : "the last line"})` : ""}`
         : cands.length === 1
           ? "no voice and no recognised words to compare with"

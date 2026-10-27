@@ -189,6 +189,34 @@ describe("vocal-start check (pure)", () => {
     expect(c.moves).toEqual([]);
   });
 
+  it("Love Is A Good Thing lines 15, 17, 22, 34: a difference smaller than the 1 s lead-in is not visible: in time, not flagged", () => {
+    const song = parseLrc(
+      [
+        "[00:10.00]<00:10.00>First <00:10.60>line <00:11.40>",
+        "[00:20.00]<00:20.00>After <00:20.60>a gap <00:21.40>", // after 8.6 s without singing: checked
+        "[00:23.00]<00:23.00>Next <00:23.60>one <00:24.40>",
+        "[00:40.00]<00:40.00>After <00:40.60>another <00:41.40>",
+        "[00:45.00]",
+      ].join("\n"),
+      60_000,
+    );
+    const v = levels([[10_000, 11_400, -12], [20_000, 21_400, -12], [23_000, 24_400, -12], [40_000, 41_400, -12]], 60_000);
+    // The recognised words alone say 0.4 s and 0.8 s earlier: under the lead-in, invisible.
+    const asr = new Map([[1, asrAt(19_600, "After a gap")], [3, asrAt(39_200, "After another")]]);
+    const c = checkVocalStart(song, v, { asr, reviewMs: 1_000 });
+    const l2 = c.lines.find((x) => x.index === 1)!;
+    expect([l2.result, l2.targetMs]).toEqual(["in time", 20_000]); // stamp + voice agree anyway
+    const l4 = c.lines.find((x) => x.index === 3)!;
+    expect([l4.result, l4.targetMs]).toEqual(["in time", 40_000]);
+    // Without the voice (e.g. a soft passage), only the words disagree, by 0.8 s: still not flagged.
+    const soft = levels([[10_000, 11_400, -12], [20_000, 21_400, -12], [23_000, 24_400, -12], [40_000, 41_400, -40]], 60_000);
+    const quiet = checkVocalStart(song, soft, { asr, reviewMs: 1_000 }).lines.find((x) => x.index === 3)!;
+    expect([quiet.result, quiet.why]).toEqual(["in time", "only words 0:39.2 (-0.8 s); less than the 1.0 s lead-in, not visible"]);
+    // With a shorter lead-in (brand motion.gapLeadInS 0.5 s) the same 0.8 s is visible: flagged.
+    expect(checkVocalStart(song, soft, { asr, reviewMs: 500 }).lines.find((x) => x.index === 3)!.result).toBe("flagged for review");
+    expect(c.moves).toEqual([]);
+  });
+
   it('Love Is A Good Thing line 39 "The old ones": voice and words agree 1.3 s later, inside line 38 (held too long): line 38 ends there', () => {
     const song = parseLrc(
       [

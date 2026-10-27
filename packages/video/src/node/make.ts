@@ -509,7 +509,12 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       align: options.align,
     });
     // The vocal-start guard: on the stored alignment as it is (never re-aligning).
-    const alignment = await applyVocalGuard(ws, { ...sp, project }, stored, { log, voiceMap: options.voiceMap, firstWords: options.firstWords });
+    const alignment = await applyVocalGuard(ws, { ...sp, project }, stored, {
+      log,
+      voiceMap: options.voiceMap,
+      firstWords: options.firstWords,
+      reviewMs: Math.round(brand.brand.motion.gapLeadInS * 1000), // smaller differences are not visible: not flagged
+    });
     const lines = alignment.lines;
     if (!lines.length) throw new Error(`No timed lyric lines in ${alignment.lrcFile}`);
     // Lines the vocal-start check changed: the moved ones and a previous line it shortened.
