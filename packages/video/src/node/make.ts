@@ -556,7 +556,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     }
     const shared: Shared = {
       ws, options: effective, variationsFor, effectLabels, recipeFor: (platform: string) => resolveRecipe(recipeInput, platform), stylesFor, log, now, leadMs, lyricsOffsetMs, catalog, styles, brand, logo, sp, analysis, alignment, lines, reports, numbers,
-      sectionLines, collection, collectionRemembered, ep, tool, rootDir, getProject: () => project,
+      sectionLines, collection, collectionNames, collectionRemembered, ep, tool, rootDir, getProject: () => project,
     };
     const results: PlatformResult[] = [];
     for (const [index, name] of chosenPlatforms.names.entries()) {
@@ -622,6 +622,7 @@ type Shared = {
   numbers: number[];
   sectionLines: SectionLine[];
   collection: CollectionSync & { folders: string[] };
+  collectionNames: string[]; // the shared collections of the run (the song's own clips come on top)
   collectionRemembered: boolean; // --collection not given: the one this project used last time
   tool: Manifest["tool"];
   rootDir: string;
@@ -1070,7 +1071,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         result.manifestFile,
         buildManifest({
           ws, tool: sh.tool, spec, props, media, project, songHash: sh.sp.songHash, songFile: sh.sp.songFile, analysis, chosen, alignment, reports, numbers,
-          visible, lines, leadMs, lyricsOffsetMs, options, collection: sh.collection, clips: prepared.clips, file, qa, now: sh.now, warnings, preset,
+          visible, lines, leadMs, lyricsOffsetMs, options, collection: sh.collection, collectionNames: sh.collectionNames, clips: prepared.clips, file, qa, now: sh.now, warnings, preset,
           brand: sh.brand.brand,
         }),
       );
@@ -1219,6 +1220,7 @@ function buildManifest(c: {
   lyricsOffsetMs: number;
   options: MakeOptions;
   collection: CollectionSync;
+  collectionNames: string[];
   clips: PreparedForFormat["clips"];
   file: string;
   qa: QaReport;
@@ -1276,6 +1278,8 @@ function buildManifest(c: {
       show_next_line: props.nextLine ?? false,
       pins: c.options.pins ? { file: path.resolve(c.options.pins), sha256: sha256File(c.options.pins) } : null,
       collection: { name: c.collection.collection.name, folder: c.collection.folder, clips: c.collection.sources.length, usable: c.clips.length },
+      collections: c.collectionNames,
+      target_length: c.options.length ?? null, // seconds; shapes an auto section only (the Videos tab shows it)
       fps: VIDEO.fps,
       size: `${c.preset.width}x${c.preset.height}`,
       video: `H.264${c.preset.videoBitrate ? ` ${c.preset.videoBitrate}` : ""}, ${props.audio ? "AAC 192 kbps" : "no audio"}, yuv420p, faststart`,

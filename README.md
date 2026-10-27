@@ -83,7 +83,10 @@ want that.
   the audio service in a minimised window ("LyricStudioServer"), waits until they answer, then opens
   Lyric Studio in its own Edge window. The first start after a `git pull` builds the app first
   (1-2 minutes); later starts take a few seconds. If it is already running, it just opens the window.
-  The log is in `logs\lyric-studio.log`.
+  The log is in `logs\lyric-studio.log` (each line with its time; the previous start's log is kept as
+  `logs\lyric-studio.previous.log`). If the studio, the worker or the audio service stops, only that
+  one restarts by itself (up to 5 times), so the app keeps answering. If the app says "Lyric Studio's
+  server isn't responding", restart it with Start Lyric Studio.cmd and keep both log files.
 - Double-click **`Stop Lyric Studio.cmd`** to stop everything.
 - **Desktop shortcut** with the Life Lyrics icon: double-click **`Create Desktop Shortcut.cmd`** once
   (run it again after changing `workspace\brand\logo.png` or the icon style: it updates the icon).
@@ -226,6 +229,20 @@ terminal, newest first, grouped by platform:
   and publish.txt to download, and **Open folder** (Explorer with the file selected).
 - **Interrupted** (orange "!"): a run that was stopped (Stop, window closed, PC restarted). It never
   shows "rendering" forever; the badge shows which videos are missing and a **Resume** button.
+- **settings** (next to each run's date): what the run was made with, per platform (effects, fonts,
+  accent, collections, section, YouTube layout), with what differs from the song's recipe now marked
+  ("now: glide"). **Use these settings** opens Generate with them: an auto section comes back as the
+  exact times that run used ("0:34–1:06 (from that run)"), with **Switch to auto · 32 s** to go back
+  to an auto section of that run's target length; locked settings still come from the recipe.
+
+**Post tab**: only the videos you approved, per platform, newest first. For each: play it, copy the
+caption and hashtags (YouTube: title, description, tags from its publish.txt), download the files and
+**Open folder**. Nothing is posted automatically: you post it yourself.
+
+**Tasks menu → Clear finished**: removes done, failed and never-started tasks from the list. A stopped
+or interrupted task that can still Resume stays unless you confirm ("1 stopped task can still resume —
+clear it too?"). Running and queued tasks are never cleared, and clearing never touches a video or a
+file. Finished tasks older than 24 hours disappear from the list by themselves.
 
 Captions come from text templates per platform, per artist: `workspace\brand\publish-reels.txt`,
 `publish-tiktok.txt`, `publish-shorts.txt` (English defaults, made the first time). For an artist's
@@ -241,6 +258,11 @@ Each song has its artist (Life Lyrics, Pômé, a client, ...): titles, thumbnail
 `publish.txt` use it. `pnpm make --artist "Pômé"` sets it from the command line. An artist can have
 their own brand: `workspace\brand\<artist>\brand.json` (plus `logo.png` and
 `publish-template.txt` there); without one, the Life Lyrics brand in `workspace\brand\` is used.
+
+A brand value for one platform (brand.json `perPlatform`) from the terminal:
+`pnpm brand:set youtube verseEffect cinematic-fade` (`--artist "Pômé"` for another artist; `-` as the
+value removes it). Songs of that artist with the same value of their own (and not locked) are tidied
+up, so they follow the brand from now on; songs with a different value keep it (both are listed).
 
 ## Audio analysis
 

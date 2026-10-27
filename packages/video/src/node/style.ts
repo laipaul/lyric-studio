@@ -2,7 +2,7 @@
 // from (library, the artist's brand, the song), per platform where it can differ, and
 // the song's own changes: set, reset (back to inherited), lock / unlock. Writes song.json only.
 // No rendering code is imported here, so the studio's server can use it directly.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { project as projectTable, REPO_ROOT, type Workspace } from "@lyric/db";
@@ -205,4 +205,48 @@ export function saveRunToSong(ws: Workspace, projectId: string, options: Paramet
   const kept = fields.filter((k) => (song.locked ?? []).includes(k));
   writeRecipe(file, saveToSong(song, run));
   return { saved: fields.filter((k) => !kept.includes(k)), kept };
+}
+
+// "pnpm brand:set youtube verseEffect cinematic-fade" (artist "Life Lyrics" unless --artist): a
+// per-platform value in the artist's brand.json, for every song of that artist. Songs that set the very
+// same value themselves (and do not lock it) lose their own copy, so they inherit it from the brand;
+// songs with another value of their own keep it (listed).
+export function setBrandPerPlatform(
+  ws: Workspace,
+  o: { artist: string; platform: string; field: string; value: string | number | null },
+): { file: string; tidied: string[]; kept: string[] } {
+  if (!isPlatformField(o.field)) throw new Error(`${o.field} cannot differ per platform (only ${PLATFORM_FIELDS.join(", ")}).`);
+  const platforms = presetsList().map((p) => p.name);
+  if (!platforms.includes(o.platform)) throw new Error(`Unknown platform "${o.platform}". Known: ${platforms.join(", ")}`);
+  const catalog = loadFontCatalog(ws.dir);
+  const brand = loadBrand(ws.dir, catalog, o.artist); // creates the file with the defaults if needed
+  const before = readFileSync(brand.file, "utf8");
+  const raw = JSON.parse(before) as Record<string, unknown> & { perPlatform?: Record<string, Record<string, unknown>> };
+  const perPlatform = { ...(raw.perPlatform ?? {}) };
+  const own = { ...(perPlatform[o.platform] ?? {}) };
+  if (o.value === null) delete own[o.field];
+  else own[o.field] = o.value;
+  if (Object.keys(own).length) perPlatform[o.platform] = own;
+  else delete perPlatform[o.platform];
+  writeFileSync(brand.file, `${JSON.stringify({ ...raw, perPlatform }, null, 2)}\n`);
+  try {
+    loadBrand(ws.dir, catalog, o.artist); // checked like any brand.json; a bad value is put back
+  } catch (error) {
+    writeFileSync(brand.file, before);
+    throw error;
+  }
+  const tidied: string[] = [];
+  const kept: string[] = [];
+  for (const p of ws.db.select().from(projectTable).where(eq(projectTable.artist, o.artist)).all()) {
+    const file = songPathsById(ws, p.id).recipe;
+    if (!file || !existsSync(file)) continue;
+    const song = readRecipe(file);
+    const mine = songValue(song, o.field as RecipeField, o.platform);
+    if (mine === undefined) continue;
+    if (o.value !== null && JSON.stringify(mine) === JSON.stringify(o.value) && !(song.locked ?? []).includes(o.field as RecipeField)) {
+      writeRecipe(file, resetField(song, o.field as RecipeField, o.platform));
+      tidied.push(p.title);
+    } else kept.push(p.title);
+  }
+  return { file: brand.file, tidied, kept };
 }

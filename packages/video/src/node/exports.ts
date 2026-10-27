@@ -224,3 +224,19 @@ export function setVideoMark(ws: Workspace, projectId: string, video: string, ch
   else ws.db.insert(videoMark).values({ project_id: projectId, video, ...next }).run();
   return next;
 }
+
+// The Post tab: the approved videos only (discarded / just generated left out), per platform in the
+// order of the Videos tab, newest run first.
+export function approvedVideos(runs: readonly RunInfo[]): { platform: string; label: string; videos: VideoInfo[] }[] {
+  const groups = new Map<string, { platform: string; label: string; videos: VideoInfo[] }>();
+  for (const run of [...runs].reverse()) {
+    for (const p of run.platforms) {
+      for (const v of p.videos) {
+        if (v.mark.status !== "approved") continue;
+        if (!groups.has(p.name)) groups.set(p.name, { platform: p.name, label: p.label, videos: [] });
+        groups.get(p.name)!.videos.push(v);
+      }
+    }
+  }
+  return [...groups.values()];
+}

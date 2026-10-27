@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { api } from "@/lib/api";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -36,7 +37,7 @@ export function NewSongDialog({ artists, onDone }: { artists: string[]; onDone: 
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch("/api/songs", { method: "POST", body: new FormData(event.currentTarget) });
+      const response = await api("/api/songs", { method: "POST", body: new FormData(event.currentTarget) });
       const result = (await response.json()) as { error?: string; created?: boolean; updated?: string[] };
       if (!response.ok || result.error) throw new Error(result.error ?? `The studio answered ${response.status}`);
       onDone(result.created ? "Song added to your library." : `Already in your library: updated ${result.updated?.join(", ")}.`);

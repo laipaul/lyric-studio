@@ -1,6 +1,6 @@
 "use client";
 
-import { ListChecks, Square, Terminal } from "lucide-react";
+import { Eraser, ListChecks, Square, Terminal } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Tasks } from "@lyric/video/runs";
 
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 
 type Run = Tasks["runs"][number];
 const ACTIVE = new Set(["queued", "running"]);
@@ -31,7 +32,7 @@ export function TasksMenu() {
 
   const load = useCallback(async () => {
     try {
-      const r = await fetch("/api/tasks", { cache: "no-store" });
+      const r = await api("/api/tasks", { cache: "no-store" });
       if (!r.ok) return;
       const next = (await r.json()) as Tasks;
       // A run finished (or a terminal run ended): show its videos.
@@ -61,8 +62,19 @@ export function TasksMenu() {
     };
   }, [load, active, open]);
 
+  // Clear finished: done / failed / never-started entries at once; stopped ones that can still Resume
+  // only after the question. Only the list entries go (the videos and files stay).
+  const [askStopped, setAskStopped] = useState(0);
+  const clear = async (includeStopped: boolean) => {
+    const r = await api("/api/tasks/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ includeStopped }) });
+    const result = (await r.json()) as { cleared: number; resumable: number };
+    setAskStopped(includeStopped ? 0 : result.resumable);
+    void load();
+  };
+  const finishedCount = tasks.runs.filter((r) => !ACTIVE.has(r.status)).length;
+
   const stop = async (run: Run) => {
-    await fetch("/api/runs/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: run.id }) });
+    await api("/api/runs/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: run.id }) });
     void load();
   };
 
@@ -84,6 +96,30 @@ export function TasksMenu() {
             <div>
               <p className="font-medium">No tasks</p>
               <p className="text-muted-foreground mt-1 text-xs">Press Generate on a song page; its progress shows here.</p>
+            </div>
+          ) : null}
+          {finishedCount || askStopped ? (
+            <div className="flex flex-col gap-2">
+              {finishedCount ? (
+                <button type="button" data-clear-finished onClick={() => clear(false)} className="text-muted-foreground hover:text-foreground flex w-fit items-center gap-1 self-end text-xs">
+                  <Eraser className="size-3" /> Clear finished
+                </button>
+              ) : null}
+              {askStopped ? (
+                <div data-clear-ask className="bg-muted/40 flex flex-col gap-2 rounded-md border p-2 text-xs">
+                  <p>
+                    {askStopped} stopped task{askStopped === 1 ? "" : "s"} can still resume — clear {askStopped === 1 ? "it" : "them"} too?
+                  </p>
+                  <div className="flex gap-3">
+                    <button type="button" data-clear-stopped onClick={() => clear(true)} className="text-brand hover:underline">
+                      Clear {askStopped === 1 ? "it" : "them"} too
+                    </button>
+                    <button type="button" onClick={() => setAskStopped(0)} className="text-muted-foreground hover:text-foreground">
+                      Keep
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
           {tasks.terminal.map((t) => {

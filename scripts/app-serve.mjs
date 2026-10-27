@@ -35,11 +35,21 @@ if (!built || version === "unknown") {
   writeFileSync(stamp, `${version}\n`);
 }
 
-log("starting studio, worker and audio service");
+// One part stopping (a crash in the worker or the audio service) must not take the others down: it is
+// restarted on its own (up to 5 times, 3 s apart) and every line carries the time, so
+// logs\lyric-studio.log shows what stopped, when and with which exit code.
+log(`starting studio, worker and audio service (${new Date().toLocaleString()})`);
 const child = spawn(
   "pnpm",
-  ["exec", "concurrently", "-k", "-n", "studio,worker,audio", "-c", "cyan,magenta,yellow", '"pnpm --filter @lyric/studio start"', '"pnpm --filter @lyric/worker start"', '"node services/audio/scripts/run.mjs"'],
+  [
+    "exec", "concurrently", "--restart-tries", "5", "--restart-after", "3000", "-t", '"yyyy-MM-dd HH:mm:ss"', "-p", '"[{time}] {name}"',
+    "-n", "studio,worker,audio", "-c", "cyan,magenta,yellow",
+    '"pnpm --filter @lyric/studio start"', '"pnpm --filter @lyric/worker start"', '"node services/audio/scripts/run.mjs"',
+  ],
   { cwd: root, stdio: "inherit", shell: true },
 );
-child.on("exit", (code) => process.exit(code ?? 0));
+child.on("exit", (code) => {
+  log(`stopped (${new Date().toLocaleString()}, exit code ${code ?? 0})`);
+  process.exit(code ?? 0);
+});
 for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => child.kill(signal));

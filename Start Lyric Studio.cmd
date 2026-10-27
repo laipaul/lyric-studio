@@ -7,6 +7,8 @@ call :ready
 if %errorlevel%==0 goto open
 
 if not exist "logs" mkdir "logs"
+rem Keep the previous log (it says why Lyric Studio stopped last time).
+if exist "logs\lyric-studio.log" move /y "logs\lyric-studio.log" "logs\lyric-studio.previous.log" >nul
 echo Starting Lyric Studio...
 start "LyricStudioServer" /min cmd /c "pnpm app:serve > logs\lyric-studio.log 2>&1"
 echo Waiting for it to be ready (the first start after an update builds the app: 1-2 minutes)...

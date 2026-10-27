@@ -8,6 +8,7 @@ import type { AssetKind, SongAssets } from "@lyric/video/assets";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 
 const clock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
@@ -27,7 +28,7 @@ export function AssetsTab({ projectId }: { projectId: string }) {
 
   async function reload() {
     try {
-      const r = await fetch(`/api/songs/${projectId}/assets`, { cache: "no-store" });
+      const r = await api(`/api/songs/${projectId}/assets`, { cache: "no-store" });
       const d = (await r.json()) as SongAssets & { error?: string };
       if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
       setData(d);
@@ -38,7 +39,7 @@ export function AssetsTab({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     let alive = true;
-    fetch(`/api/songs/${projectId}/assets`, { cache: "no-store" })
+    api(`/api/songs/${projectId}/assets`, { cache: "no-store" })
       .then((r) => r.json() as Promise<SongAssets & { error?: string }>)
       .then((d) => {
         if (!alive) return;
@@ -55,7 +56,7 @@ export function AssetsTab({ projectId }: { projectId: string }) {
     setBusy(true);
     setNotice(null);
     try {
-      const r = await fetch(`/api/songs/${projectId}/assets${query}`, { method, body });
+      const r = await api(`/api/songs/${projectId}/assets${query}`, { method, body });
       const result = (await r.json()) as Record<string, unknown> & { error?: string };
       if (!r.ok || result.error) throw new Error(result.error ?? `The studio answered ${r.status}`);
       await reload();
@@ -94,7 +95,7 @@ export function AssetsTab({ projectId }: { projectId: string }) {
   }
 
   async function openFolder() {
-    const r = await fetch("/api/open-folder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId }) });
+    const r = await api("/api/open-folder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId }) });
     const d = (await r.json()) as { error?: string; folder?: string };
     setNotice(r.ok ? { ok: true, text: `Opened ${d.folder} in Explorer.` } : { ok: false, text: d.error ?? "Could not open the folder." });
   }

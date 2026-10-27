@@ -1,13 +1,16 @@
 "use client";
 
 import { ChevronDown, Sparkles } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import type { GeneratePanelData } from "@lyric/video/library";
+import type { GeneratePreset } from "@lyric/video/run-settings";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 
 const INTENSITIES = ["subtle", "balanced", "expressive"] as const;
 const join = (name: string, intensity: string) => (intensity === "balanced" ? name : `${name}:${intensity}`);
@@ -19,21 +22,45 @@ const select = "bg-input/30 border-input h-9 rounded-md border px-2 text-sm";
 // shows in the Tasks menu. It starts from the song's recipe (Style tab: song.json, the artist's brand,
 // per platform where they differ); only what is changed here is sent, for this run only unless "Save
 // these choices to the song" is ticked. Locked settings cannot be changed here. Clips: the song's own
-// clips folder plus the shared collections ticked here.
-export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projectId: string; data: GeneratePanelData; open: boolean }) {
+// clips folder plus the shared collections ticked here. "Use these settings" (Videos tab) opens it with
+// a run's settings (`preset`): an auto section comes back as the exact times that run used, with a
+// one-click switch back to "auto · <its target length>"; locked settings still come from the recipe.
+export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: { projectId: string; data: GeneratePanelData; open: boolean; preset?: GeneratePreset | null }) {
   const [open, setOpen] = useState(initiallyOpen);
   const r = data.recipe;
   const locked = (field: string) => r.locked.includes(field);
-  const startPlatforms = r.platforms.filter((p) => data.platforms.some((x) => x.name === p));
+  const known = (list: string[]) => list.filter((p) => data.platforms.some((x) => x.name === p));
+  const from = preset ?? null;
+  const startPlatforms = from && known(from.platforms).length ? known(from.platforms) : known(r.platforms);
   // The recipe's platforms; none set: Reels + YouTube (the Style tab says so).
   const fallback = ["reels", "youtube"].filter((p) => data.platforms.some((x) => x.name === p));
   const [platforms, setPlatforms] = useState<string[]>(startPlatforms.length ? startPlatforms : fallback.length ? fallback : [data.platforms[0]?.name ?? "standard"]);
   const videosFor = (name: string, preset: number) => (variations ? Number(variations) : (r.variations[name] ?? r.variations["*"] ?? preset));
-  const [collections, setCollections] = useState<string[]>(data.chosen.length || data.songClips ? data.chosen : data.collections.slice(0, 1));
-  const [variations, setVariations] = useState("");
+  const recipeCollections = data.chosen.length || data.songClips ? data.chosen : data.collections.slice(0, 1);
+  const runCollections = from?.collections && !locked("collections") ? from.collections.filter((c) => data.collections.includes(c)) : null;
+  const [collections, setCollections] = useState<string[]>(runCollections ?? recipeCollections);
+  // A run's video counts: one number when they were the same on every platform and differ from the recipe.
+  const runVideos = (() => {
+    if (!from || locked("variations")) return "";
+    const counts = Object.entries(from.variations).filter(([p]) => p !== "canvas");
+    const n = counts[0]?.[1];
+    return counts.length && counts.every(([, c]) => c === n) && counts.some(([p, c]) => c !== (r.variations[p] ?? r.variations["*"] ?? data.platforms.find((x) => x.name === p)?.variations)) ? String(n) : "";
+  })();
+  const [variations, setVariations] = useState(runVideos);
   // "" = from the recipe (per platform where it differs); a choice here applies to this run only
-  const [verse, setVerse] = useState({ name: "", intensity: "balanced" });
-  const [hook, setHook] = useState({ name: "", intensity: "balanced" });
+  const runEffect = (value: string | null, recipeValue: string, field: string) => {
+    if (!value || locked(field) || value === recipeValue) return { name: "", intensity: "balanced" };
+    const [name, intensity = "balanced"] = value.split(":");
+    return { name, intensity };
+  };
+  const [verse, setVerse] = useState(runEffect(from?.lineEffect ?? null, data.verseEffect, "verseEffect"));
+  const [hook, setHook] = useState(runEffect(from?.hookEffect ?? null, data.hookEffect, "hookEffect"));
+  // Section and target length: the run's exact times ("0:34–1:06 (from that run)") until switched back to auto.
+  const runSection = from?.section && !locked("section") ? from.section : null;
+  const [section, setSection] = useState(runSection ?? r.section);
+  const [length, setLength] = useState("");
+  const [layout, setLayout] = useState(from?.layout && !locked("youtubeLayout") && from.layout !== r.youtubeLayout ? from.layout : "");
+  const fromRun = !!runSection && section === runSection;
   const [saveToSong, setSaveToSong] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
@@ -45,7 +72,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
     const f = new FormData(event.currentTarget);
     // Only what differs from the recipe is sent: the rest comes from song.json / the brand per platform.
     const changed = <T,>(value: T, recipeValue: T) => (JSON.stringify(value) === JSON.stringify(recipeValue) ? undefined : value);
-    const section = String(f.get("section") ?? r.section).trim() || r.section;
+    const chosenSection = section.trim() || r.section;
     const sameCollections = [...collections].sort().join(",") === [...data.chosen].sort().join(",");
     const request = {
       platforms,
@@ -56,11 +83,11 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
       title: String(f.get("title") ?? ""),
       artist: String(f.get("artist") ?? ""),
       ep: changed(String(f.get("ep") ?? ""), data.ep),
-      section: changed(section, r.section),
-      length: f.get("length") ? Number(f.get("length")) : undefined,
+      section: changed(chosenSection, r.section),
+      length: length ? Number(length) : undefined,
       saveToSong,
       allowFill: f.get("allowFill") === "on",
-      layout: (String(f.get("layout") ?? "") || undefined) as "cover" | "stills" | "clips" | undefined,
+      layout: (layout || undefined) as "cover" | "stills" | "clips" | undefined,
       realign: f.get("realign") === "on",
     };
     const body = new FormData();
@@ -69,7 +96,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
     const cover = f.get("cover");
     if (cover instanceof File && cover.size) body.set("cover", cover);
     try {
-      const res = await fetch("/api/runs", { method: "POST", body });
+      const res = await api("/api/runs", { method: "POST", body });
       const result = (await res.json()) as { error?: string; label?: string; saved?: { saved: string[]; kept: string[] } | null };
       if (!res.ok || result.error) throw new Error(result.error ?? `The studio answered ${res.status}`);
       const saved = result.saved
@@ -135,6 +162,16 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
             <p className="rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-200">
               This song has no lyrics.txt in the app yet: use “+ New song” in the Library with the same song file and its lyrics (it updates this song).
             </p>
+          ) : null}
+          {from ? (
+            <div data-from-run={from.folder} className="border-brand/30 bg-brand/10 flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm">
+              <span>
+                Settings of the run {from.folder.replace(/_(\d{2})(\d{2})/, " $1:$2")}: check them, then Generate (locked settings stay as in the recipe).
+              </span>
+              <Link href={`/songs/${projectId}?tab=generate`} className="text-muted-foreground hover:text-foreground text-xs underline">
+                Back to the recipe
+              </Link>
+            </div>
           ) : null}
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-2 text-sm font-medium">Platforms</legend>
@@ -223,7 +260,49 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
               <input name="cover" type="file" accept=".jpg,.jpeg,.png,.webp,image/*" className="text-muted-foreground file:bg-secondary file:text-secondary-foreground block w-full text-xs file:mr-3 file:rounded-md file:border-0 file:px-3 file:py-1.5" />
             </label>
           </div>
-          <details className="text-sm">
+          {runSection ? (
+            <div data-run-section className="flex flex-wrap items-center gap-3 text-sm">
+              <span className="font-medium">Section</span>
+              {fromRun ? (
+                <>
+                  <span data-run-section-label>{from!.sectionLabel}</span>
+                  {from!.sectionWasAuto ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      data-switch-auto
+                      onClick={() => {
+                        setSection("auto");
+                        setLength(from!.targetLength ? String(from!.targetLength) : "");
+                      }}
+                    >
+                      Switch to auto{from!.targetLength ? ` · ${from!.targetLength} s` : ""}
+                    </Button>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <span>
+                    {section}
+                    {length ? ` · ${length} s` : ""}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setSection(runSection);
+                      setLength("");
+                    }}
+                  >
+                    Back to {from!.sectionLabel}
+                  </Button>
+                </>
+              )}
+            </div>
+          ) : null}
+          <details className="text-sm" open={!!runSection || undefined}>
             <summary className="text-muted-foreground cursor-pointer">Advanced</summary>
             <div className="mt-4 grid gap-4 md:grid-cols-4">
               <label className={label}>
@@ -232,15 +311,15 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen }: { projec
               </label>
               <label className={label}>
                 <span className="font-medium">Target length (s)</span>
-                <Input type="number" name="length" min={3} max={600} placeholder="from the recipe" disabled={locked("length")} />
+                <Input type="number" name="length" min={3} max={600} placeholder="from the recipe" value={length} disabled={locked("length")} onChange={(e) => setLength(e.target.value)} />
               </label>
               <label className={label}>
                 <span className="font-medium">Section</span>
-                <Input name="section" defaultValue={r.section} placeholder="auto, full or 0:11-1:10" disabled={locked("section")} />
+                <Input name="section" value={section} placeholder="auto, full or 0:11-1:10" disabled={locked("section")} onChange={(e) => setSection(e.target.value)} />
               </label>
               <label className={label}>
                 <span className="font-medium">YouTube layout</span>
-                <select name="layout" className={select} defaultValue="" disabled={locked("youtubeLayout")}>
+                <select name="layout" className={select} value={layout} disabled={locked("youtubeLayout")} onChange={(e) => setLayout(e.target.value)}>
                   <option value="">from the recipe ({r.youtubeLayout})</option>
                   <option value="cover">cover</option>
                   <option value="stills">stills</option>

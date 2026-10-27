@@ -718,6 +718,40 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   effect hints. Browser check: Style (per-platform rows, lock, fonts and warning, length), Generate
   (recipe option, locked hook effect, chips with length), Assets (path, hints).
 
+### Step 6.2c-2b — Videos settings, Post tab, Tasks "Clear finished" ✅ (to verify on the Windows PC)
+- **Videos**: each run has a "settings" line: per platform what it was made with (verse / hook effect,
+  fonts, accent, collections, section with its times and length, YouTube layout; read from its
+  manifests, "not recorded" for what older runs did not store), with what differs from the recipe now
+  marked ("now: glide"). New manifests also record the collections and the target length.
+- **Use these settings** opens Generate with that run's platforms, videos per platform, effects,
+  collections, YouTube layout and section. An auto section comes back as the exact times that run used,
+  shown as "0:34–1:06 (from that run)", with **Switch to auto · 32 s** (its target length) one click
+  away; a fixed section exactly as it was. Locked settings stay the recipe's; "Back to the recipe".
+- **Post tab**: only approved videos (generated and discarded ones are left out), per platform, newest
+  first; each with the video to play, caption + hashtags per artist and platform (YouTube: title,
+  description, tags), downloads and Open folder. Nothing is posted automatically. Approving in Videos
+  updates the Post tab at once.
+- **Tasks → Clear finished**: done, failed and "cancelled before it started" go at once; a stopped or
+  interrupted task that can still Resume stays unless confirmed ("1 stopped task can still resume —
+  clear it too?"); running and queued are never cleared; only the list entry is hidden (database column
+  make_run.cleared_at, migration 0006), never a video or a file. Auto-tidy stays at 24 hours.
+- **Brand**: `pnpm brand:set youtube verseEffect cinematic-fade` sets a per-platform value in the
+  artist's brand.json (checked; a bad value puts the old file back) and removes the identical, unlocked
+  song-level overrides of that artist's songs (Love Is A Good Thing's own YouTube value); songs with a
+  different value keep it.
+- **"Failed to fetch" in Generate**: now "Lyric Studio's server isn't responding — restart it with
+  Start Lyric Studio.cmd", everywhere in the app (the cause goes to the browser console). Why the
+  server stopped: the launcher ran studio, worker and audio service with "kill the others when one
+  exits", so when the worker or the audio service stopped (e.g. a crash or Ctrl+C in its window), the
+  studio was shut down with it; and the next start overwrote the log, so the reason was lost. Now each
+  process restarts on its own (up to 5 times, 3 s apart), every log line has its time and the process
+  name, and the previous log is kept as logs\lyric-studio.previous.log. If it happens again, send both.
+- Tests: run-settings.test.ts (new and old manifests, comparison, Use these settings with the exact
+  section and target length, fixed section, approved list, Clear finished rules incl. files untouched
+  and the 24-hour window, brand:set tidy / keep / bad value); browser test videos-post.e2e.ts (part of
+  `pnpm test:e2e`): settings and differences, Use these settings, Switch to auto, Post empty then the
+  approved video only with its caption, Clear finished with the question.
+
 ### Step 5c.1 — Lyric timing: vocal-start guard and the gap display rule ✅ (to verify on the Windows PC)
 Reported on A Heart For Two (YouTube, whole song): line 1 appeared several seconds before it is sung; the
 rest was in sync.
@@ -864,16 +898,12 @@ rest was in sync.
   mix has different timing, use Generate -> advanced -> re-align.
 
 ## Next
-1. Verify Steps 6.2a and 6.2b on the PC (6.2c-1 verified); verify 5c.1 (A Heart For Two, YouTube).
-2. **Step 5c.2 — Lyrics view** (plan to approve): each line with its time and confidence, low-confidence
+1. Verify Steps 6.2a and 6.2b on the PC (6.2c-1 verified); verify 5c.1 (A Heart For Two, YouTube) and 6.2c-2b.
+2. **Step 5c.2 — Lyrics tab** (plan approved; next): each line with its time and confidence, low-confidence
    and early lines highlighted, nudges (−0.5 / −0.1 / +0.1 / +0.5 s) with a short audio preview; saving
-   writes hints.lrc and the next make reuses the alignment.
-3. **Step 6.2c-2b — Videos + Post** (mostly built, paused for 5c.1 / 5c.2; kept on a local branch):
-   - C1 Videos tab: each run shows the settings it was made with (from its manifest) next to the current
-     recipe; "Use these settings" loads them into Generate.
-   - C2 Post tab: approved videos only (discarded hidden), caption / hashtags per artist and platform,
-     downloads, YouTube title / description / tags, Open folder. Nothing is posted automatically.
-4. Step 6.3 (content board with manually entered results).
-5. Step 5g.4 (loop layout).
-6. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project
+   writes hints.lrc (exact lines, skipped by the guard) and the next make reuses the alignment. Also
+   shows when each line really appears on screen (after the display rule and the guard).
+3. Step 6.3 (content board with manually entered results).
+4. Step 5g.4 (loop layout).
+5. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project
    (confirmed by the user) and plug into the same render-time layer as the lyrics offset.

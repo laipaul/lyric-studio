@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { StyleData, StyleField, StyleFont } from "@lyric/video/style";
 
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 
 const INTENSITIES = ["subtle", "balanced", "expressive"] as const;
 const select = "bg-input/30 border-input h-8 rounded-md border px-2 text-sm";
@@ -40,7 +41,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     let alive = true;
-    fetch(`/api/songs/${projectId}/recipe`, { cache: "no-store" })
+    api(`/api/songs/${projectId}/recipe`, { cache: "no-store" })
       .then((r) => r.json() as Promise<StyleData & { error?: string }>)
       .then((d) => alive && (d.error ? setError(d.error) : setData(d)))
       .catch((e: Error) => alive && setError(e.message));
@@ -59,14 +60,14 @@ export function StyleTab({ projectId }: { projectId: string }) {
     setError(null);
     queue.current = queue.current.then(async () => {
       try {
-        const r = await fetch(`/api/songs/${projectId}/recipe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const r = await api(`/api/songs/${projectId}/recipe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
         const d = (await r.json()) as StyleData & { error?: string };
         if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
         setData(d);
       } catch (e) {
         setError((e as Error).message);
         // Show what is really saved.
-        const fresh = (await fetch(`/api/songs/${projectId}/recipe`, { cache: "no-store" })
+        const fresh = (await api(`/api/songs/${projectId}/recipe`, { cache: "no-store" })
           .then((r) => r.json())
           .catch(() => null)) as (StyleData & { error?: string }) | null;
         if (fresh && !fresh.error) setData(fresh);

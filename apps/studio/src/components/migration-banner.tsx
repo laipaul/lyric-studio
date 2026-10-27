@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { api } from "@/lib/api";
 
 type Preview = { lines: string[]; problems: string[]; reminder: string };
 
@@ -19,7 +20,7 @@ export function MigrationBanner({ songs, collections, tidy = 0 }: { songs: numbe
   const what = [songs ? `${songs} song${songs === 1 ? "" : "s"}` : "", collections ? `${collections} collection${collections === 1 ? "" : "s"}` : ""].filter(Boolean).join(" and ");
 
   async function load(): Promise<Preview> {
-    const r = await fetch("/api/migrate", { cache: "no-store" });
+    const r = await api("/api/migrate", { cache: "no-store" });
     return (await r.json()) as Preview;
   }
 
@@ -30,7 +31,7 @@ export function MigrationBanner({ songs, collections, tidy = 0 }: { songs: numbe
       const p = await load();
       if (p.problems.length) throw new Error(`Cannot migrate now: ${p.problems.join("; ")}`);
       if (!window.confirm(p.reminder.replace(/ \(y\/n\)$/, "?"))) return;
-      const r = await fetch("/api/migrate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmed: true }) });
+      const r = await api("/api/migrate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmed: true }) });
       const result = (await r.json()) as { error?: string; songs?: number; collections?: number; merges?: number; repairs?: number; backupDir?: string };
       if (!r.ok || result.error) throw new Error(result.error ?? `The studio answered ${r.status}`);
       setMessage({ ok: true, text: `Done: ${result.songs} song(s) and ${result.collections} collection(s) moved${result.merges ? `, ${result.merges} split song(s) merged` : ""}${result.repairs ? `, ${result.repairs} repair(s)` : ""}. Backup: ${result.backupDir}. To undo: pnpm songs:migrate --undo` });

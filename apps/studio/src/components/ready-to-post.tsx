@@ -9,20 +9,39 @@ import type { VideoInfo } from "@lyric/video/exports";
 import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { api } from "@/lib/api";
 
 async function openFolder(file: string) {
-  await fetch("/api/open-folder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file }) });
+  await api("/api/open-folder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file }) });
 }
 
-// Everything to post one video: caption and hashtags (copy), the files (download), the folder.
-// Mounted per video (key = video id), so it starts empty each time.
+// "Ready to post" from a tile in the Videos tab: the post panel in a dialog.
 export function ReadyToPost({ projectId, songTitle, video, onClose }: { projectId: string; songTitle: string; video: VideoInfo; onClose: () => void }) {
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>
+            Ready to post: {video.label} {video.name}
+          </DialogTitle>
+          <DialogDescription>Copy the text, download the files, then post it yourself on {video.label}.</DialogDescription>
+        </DialogHeader>
+        <PostPanel projectId={projectId} songTitle={songTitle} video={video} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Everything to post one video: caption and hashtags per artist and platform (YouTube: title,
+// description, tags from its publish.txt), copy buttons, the files (download), the folder. Nothing is
+// posted from here. Mounted per video (key = video id), so it starts empty each time.
+export function PostPanel({ projectId, songTitle, video }: { projectId: string; songTitle: string; video: VideoInfo }) {
   const [pack, setPack] = useState<PostingPack | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const fetchPack = () =>
-    fetch(`/api/captions?projectId=${projectId}&video=${encodeURIComponent(video.id)}`).then(async (r) => {
+    api(`/api/captions?projectId=${projectId}&video=${encodeURIComponent(video.id)}`).then(async (r) => {
       const body = (await r.json()) as PostingPack & { error?: string };
       return !r.ok || body.error ? { error: body.error ?? "Could not read the caption" } : { pack: body };
     });
@@ -53,7 +72,7 @@ export function ReadyToPost({ projectId, songTitle, video, onClose }: { projectI
   ].filter((f): f is { label: string; file: string; name: string } => !!f);
 
   const makeOwn = async () => {
-    const r = await fetch("/api/captions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, platform: video.platform }) });
+    const r = await api("/api/captions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, platform: video.platform }) });
     const body = (await r.json()) as { file?: string; error?: string };
     if (body.file) {
       setNotice(`Made ${body.file}: edit it (e.g. in French); the captions here use it from now on.`);
@@ -62,14 +81,7 @@ export function ReadyToPost({ projectId, songTitle, video, onClose }: { projectI
   };
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>
-            Ready to post: {video.label} {video.name}
-          </DialogTitle>
-          <DialogDescription>Copy the text, download the files, then post it yourself on {video.label}.</DialogDescription>
-        </DialogHeader>
+    <div className="flex flex-col gap-4" data-post-panel={video.id}>
         {error ? <p className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{error}</p> : null}
         {pack?.kind === "none" ? <p className="text-muted-foreground text-sm">A Spotify Canvas is uploaded in Spotify for Artists without a caption.</p> : null}
         {pack && pack.kind !== "none"
@@ -111,7 +123,6 @@ export function ReadyToPost({ projectId, songTitle, video, onClose }: { projectI
             <FolderOpen /> Open folder
           </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+    </div>
   );
 }

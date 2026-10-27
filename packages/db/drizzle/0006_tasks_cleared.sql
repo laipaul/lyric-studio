@@ -1,0 +1,1 @@
+ALTER TABLE `make_run` ADD `cleared_at` integer;

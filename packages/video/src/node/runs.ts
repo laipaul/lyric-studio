@@ -5,7 +5,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { REPO_ROOT, absPath, makeRun, project as projectTable, renderJob, variation, type MakeRun, type Workspace } from "@lyric/db";
-import { and, desc, eq, gte, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 
 import { parseEffectChoice } from "../effects/names";
 import { processAlive } from "./jobs";
@@ -191,13 +191,38 @@ export type Tasks = { runs: (MakeRun & { title: string })[]; terminal: TerminalR
 
 // The Tasks menu: studio runs (queued, running, and those finished in the last 24 hours) and runs
 // started in the terminal that are rendering right now.
+// A stopped or interrupted run that can still Resume (it has a run folder; "cancelled before it started" has none).
+export const canResume = (run: Pick<MakeRun, "status" | "export_dir">) => (run.status === "stopped" || run.status === "interrupted") && !!run.export_dir;
+
+// "Clear finished" in the Tasks menu: hides done, failed and never-started entries; stopped / interrupted
+// runs that can still Resume only with includeStopped (the menu asks first). Running and queued runs are
+// never cleared, and nothing but the list entry changes (videos and files stay).
+export function clearFinished(ws: Workspace, { includeStopped = false, now = new Date() }: { includeStopped?: boolean; now?: Date } = {}): { cleared: number; resumable: number } {
+  markInterruptedRuns(ws);
+  const finished = ws.db
+    .select()
+    .from(makeRun)
+    .where(and(inArray(makeRun.status, ["done", "failed", "stopped", "interrupted"]), isNull(makeRun.cleared_at)))
+    .all();
+  const clear = finished.filter((r) => includeStopped || !canResume(r));
+  if (clear.length) ws.db.update(makeRun).set({ cleared_at: now }).where(inArray(makeRun.id, clear.map((r) => r.id))).run();
+  // Counted for the question only when the menu still shows them (the last 24 hours).
+  const since = now.getTime() - 24 * 3600_000;
+  return { cleared: clear.length, resumable: finished.filter((r) => canResume(r) && !clear.includes(r) && r.created_at.getTime() >= since).length };
+}
+
+// The Tasks menu: running and queued runs, plus the finished ones of the last 24 hours not cleared.
 export function listTasks(ws: Workspace, now = new Date()): Tasks {
   markInterruptedRuns(ws);
   const titles = new Map(ws.db.select({ id: projectTable.id, title: projectTable.title }).from(projectTable).all().map((p) => [p.id, p.title]));
   const since = new Date(now.getTime() - 24 * 3600_000);
   const runs = [
     ...ws.db.select().from(makeRun).where(inArray(makeRun.status, ["queued", "running"])).all(),
-    ...ws.db.select().from(makeRun).where(and(inArray(makeRun.status, ["done", "failed", "stopped", "interrupted"]), gte(makeRun.created_at, since))).all(),
+    ...ws.db
+      .select()
+      .from(makeRun)
+      .where(and(inArray(makeRun.status, ["done", "failed", "stopped", "interrupted"]), gte(makeRun.created_at, since), isNull(makeRun.cleared_at)))
+      .all(),
   ]
     .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
     .slice(0, 12)

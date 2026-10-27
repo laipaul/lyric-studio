@@ -253,6 +253,7 @@ export const makeRun = sqliteTable(
       .$defaultFn(() => new Date()),
     started_at: integer("started_at", { mode: "timestamp_ms" }),
     finished_at: integer("finished_at", { mode: "timestamp_ms" }),
+    cleared_at: integer("cleared_at", { mode: "timestamp_ms" }), // "Clear finished" in the Tasks menu (hides the entry only)
   },
   (t) => [
     index("make_run_status").on(t.status),

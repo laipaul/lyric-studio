@@ -70,6 +70,7 @@
     "./recipe": "./src/node/recipe.ts",
     "./song-folder": "./src/node/song-folder.ts",
     "./style": "./src/node/style.ts",
+    "./run-settings": "./src/node/run-settings.ts",
     "./font-catalog": "./src/node/font-catalog.ts"
   }
 }

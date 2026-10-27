@@ -1,9 +1,12 @@
 "use client";
 
-import { Columns3, X } from "lucide-react";
+import { Columns3, SlidersHorizontal, X } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import type { PlatformRun, RunInfo, VideoInfo } from "@lyric/video/exports";
+import type { RunComparison } from "@lyric/video/run-settings";
 
 import { CompareDialog } from "@/components/compare-dialog";
 import { CopyButton } from "@/components/copy-button";
@@ -12,6 +15,7 @@ import { StatusBadge, type BadgeStatus } from "@/components/status-badge";
 import { VideoTile } from "@/components/video-tile";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 
 export type PlatformRunView = PlatformRun & { state: { status: BadgeStatus; details: string[] } };
 export type RunView = Omit<RunInfo, "platforms"> & { platforms: PlatformRunView[] };
@@ -19,8 +23,10 @@ export type RunView = Omit<RunInfo, "platforms"> & { platforms: PlatformRunView[
 const when = (iso: string | null, folder: string) =>
   iso ? new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : folder;
 
-// The song's exports: every run (also from the command line), newest first, grouped by platform.
-export function SongView({ projectId, songTitle, runs }: { projectId: string; songTitle: string; runs: RunView[] }) {
+// The song's exports: every run (also from the command line), newest first, grouped by platform; each
+// run with its settings (from its manifests) next to the recipe as it is now, and "Use these settings".
+export function SongView({ projectId, songTitle, runs, settings = {} }: { projectId: string; songTitle: string; runs: RunView[]; settings?: Record<string, RunComparison[]> }) {
+  const router = useRouter();
   const [marks, setMarks] = useState<Record<string, VideoInfo["mark"]>>({});
   const [platform, setPlatform] = useState<string>("all");
   const [favouritesOnly, setFavouritesOnly] = useState(false);
@@ -43,11 +49,11 @@ export function SongView({ projectId, songTitle, runs }: { projectId: string; so
   const mark = async (v: VideoInfo, change: { favourite?: boolean; status?: VideoInfo["mark"]["status"] }) => {
     const before = withMark(v).mark;
     setMarks((m) => ({ ...m, [v.id]: { ...before, ...change } }));
-    const r = await fetch("/api/marks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, video: v.id, ...change }) });
+    const r = await api("/api/marks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, video: v.id, ...change }) });
     if (!r.ok) {
       setMarks((m) => ({ ...m, [v.id]: before }));
       setError(((await r.json()) as { error?: string }).error ?? "Could not save the mark");
-    }
+    } else router.refresh(); // the Post tab lists the approved videos
   };
   const toggleCompare = (v: VideoInfo) =>
     setSelected((s) => (s.includes(v.id) ? s.filter((x) => x !== v.id) : s.length >= 3 ? [...s.slice(1), v.id] : [...s, v.id]));
@@ -95,6 +101,7 @@ export function SongView({ projectId, songTitle, runs }: { projectId: string; so
                   </div>
                 </details>
               ) : null}
+              {settings[run.folder]?.length ? <RunSettings projectId={projectId} folder={run.folder} platforms={settings[run.folder]} /> : null}
             </div>
             {shown.map(({ p, videos }) => (
               <div key={p.name} data-platform-group={p.name} className="flex flex-col gap-3">
@@ -158,5 +165,40 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
     >
       {children}
     </button>
+  );
+}
+
+// What a run was made with, per platform, next to the recipe now (differences highlighted).
+function RunSettings({ projectId, folder, platforms }: { projectId: string; folder: string; platforms: RunComparison[] }) {
+  const differ = platforms.reduce((n, p) => n + p.rows.filter((r) => r.differs).length, 0);
+  return (
+    <details data-run-settings className="text-xs">
+      <summary className="text-muted-foreground hover:text-foreground cursor-pointer">
+        settings{differ ? <span className="text-amber-300"> · {differ} differ from the recipe now</span> : " · as the recipe now"}
+      </summary>
+      <div className="bg-card mt-2 flex flex-col gap-3 rounded-lg border p-3">
+        {platforms.map((p) => (
+          <table key={p.platform} data-settings-platform={p.platform} className="w-full max-w-2xl text-left">
+            <caption className="font-display text-brand mb-1 text-left text-[11px] tracking-[0.14em] uppercase">
+              {p.label} · {p.videos} video{p.videos === 1 ? "" : "s"}
+            </caption>
+            <tbody>
+              {p.rows.map((r) => (
+                <tr key={r.key} data-setting={r.key} data-differs={r.differs || undefined}>
+                  <td className="text-muted-foreground w-32 py-0.5 pr-3">{r.label}</td>
+                  <td className={cn("py-0.5 pr-3", r.differs && "text-amber-200")}>{r.then}</td>
+                  <td className="text-muted-foreground py-0.5">{r.differs ? `now: ${r.now}` : ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ))}
+        <Button size="sm" variant="secondary" className="w-fit" asChild>
+          <Link href={`/songs/${projectId}?tab=generate&from=${encodeURIComponent(folder)}`} data-use-settings>
+            <SlidersHorizontal /> Use these settings
+          </Link>
+        </Button>
+      </div>
+    </details>
   );
 }

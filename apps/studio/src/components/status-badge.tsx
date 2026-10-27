@@ -7,6 +7,7 @@ import { useRef, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 
 export type BadgeStatus = "PASS" | "WARN" | "FAILED" | "interrupted" | "Rendering" | "none";
 
@@ -51,7 +52,7 @@ export function StatusBadge({
   const resumeNow = async () => {
     if (!resume) return;
     setResumeState("Queuing…");
-    const r = await fetch("/api/runs/resume", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(resume) });
+    const r = await api("/api/runs/resume", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(resume) });
     const body = (await r.json()) as { error?: string };
     setResumeState(r.ok ? "Queued: see Tasks for the progress." : (body.error ?? "Could not resume"));
     if (r.ok) window.dispatchEvent(new Event("lyric-tasks-changed"));
