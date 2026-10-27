@@ -20,7 +20,7 @@ import { eq } from "drizzle-orm";
 
 import { HOOK_MARKER, normalizeLyric, parseLrc, type TimedLine } from "../lrc";
 import { clockText } from "../section";
-import { applyGuard, earlyMs, planGuard, type VoiceStretch } from "../vocal-guard";
+import { applyGuard, asrWindows, checkVocalStart, earlyMs, type AsrWord, type LineCheck, type VoiceLevels } from "../vocal-guard";
 import { cachedFileHash } from "./collection";
 import { processAlive } from "./jobs";
 import { ADDING_PREFIX, adoptIntoSongFolder, songPaths, songPathsById } from "./song-folder";
@@ -94,14 +94,39 @@ export type VocalGuard = {
   moves: { number: number; text: string; from_ms: number; to_ms: number }[];
   earlyMs: (number | null)[]; // per line, after the moves: how long after its start the voice begins
   voiceMap: string; // workspace-relative
+  // What was measured (printed by pnpm make and kept in the manifest): the song's singing level, the
+  // voice threshold, and per checked line its stamp, where the voice starts, the difference and result.
+  check: {
+    level_db: number;
+    threshold_db: number;
+    words_check: string; // the recognised-words pass: "ran", or why it did not
+    lines: {
+      number: number;
+      text: string;
+      stamp_ms: number;
+      voice_ms: number | null;
+      words_ms: number | null;
+      words_text: string | null;
+      duration_ms: number | null;
+      first_word_ms: number | null;
+      loudest_before_db: number | null;
+      target_ms: number;
+      agree: string[];
+      why: string;
+      result: LineCheck["result"];
+    }[];
+  };
 };
 
-export type VoiceMapRunner = (args: { song: string; out: string }) => Promise<void>;
+const seconds = (ms: number) => `${ms >= 0 ? "+" : "-"}${(Math.abs(ms) / 1000).toFixed(1)} s`;
 
-// Where the voice is heard (services/audio voice_map: the cached vocal stem; Demucs only if not cached).
-export const runVoiceMapCommand: VoiceMapRunner = (a) =>
-  new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [path.join(REPO_ROOT, "services/audio/scripts/voice-map.mjs"), a.song, "--out", a.out], { cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+export type VoiceMapRunner = (args: { song: string; out: string }) => Promise<void>;
+export type FirstWordsRunner = (args: { song: string; windows: [number, number, number][]; lang: string; out: string }) => Promise<void>;
+
+// A Node script of services/audio, its last messages in the error when it fails.
+function runAudioScript(script: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [path.join(REPO_ROOT, "services/audio/scripts", script), ...args], { cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     const tail: string[] = [];
     const keep = (chunk: Buffer) => {
       for (const line of chunk.toString("utf8").split(/[\r\n]+/)) if (line.trim()) tail.push(line.trim());
@@ -112,22 +137,31 @@ export const runVoiceMapCommand: VoiceMapRunner = (a) =>
     child.on("error", reject);
     child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(alignFailure(tail)))));
   });
+}
+
+// The words sung around the checked lines (services/audio first_words: speech recognition on the vocal track).
+export const runFirstWordsCommand: FirstWordsRunner = (a) => runAudioScript("first-words.mjs", [a.song, "--windows", JSON.stringify(a.windows), "--lang", a.lang, "--out", a.out]);
+
+// Where the voice is heard (services/audio voice_map: the cached vocal stem; Demucs only if not cached).
+export const runVoiceMapCommand: VoiceMapRunner = (a) => runAudioScript("voice-map.mjs", [a.song, "--out", a.out]);
 
 // The vocal-start guard on an alignment (stored or new), never re-aligning: line 1 and lines after an
 // instrumental gap that start more than 1 s before the voice move to where the voice starts. The voice
-// map is cached per song file (.studio/lyrics/voice-<song hash>.json); each move is logged and recorded
-// in guard-<lrc hash>.json next to the alignment. A given LRC (--lrc) is used as it is.
+// map (the vocal track's level) is cached per song file (.studio/lyrics/voice-<song hash>.v2.json).
+// What was measured is always printed, per checked line (stamp, voice start, difference, result), and
+// recorded with the moves in guard-<lrc hash>.json next to the alignment. A given LRC (--lrc) is used
+// as it is.
 export async function applyVocalGuard(
   ws: Workspace,
   sp: SongProject,
   alignment: Alignment,
-  options: { log?: (m: string) => void; voiceMap?: VoiceMapRunner } = {},
+  options: { log?: (m: string) => void; voiceMap?: VoiceMapRunner; firstWords?: FirstWordsRunner } = {},
 ): Promise<Alignment> {
   const log = options.log ?? (() => {});
   if (alignment.source === "given") return { ...alignment, guard: null };
   if (!options.voiceMap && process.env.LYRIC_VOICE_MAP === "off") return { ...alignment, guard: null }; // the tests
   const dir = path.dirname(alignment.lrcFile);
-  const mapFile = path.join(dir, `voice-${sp.songHash.slice(0, 12)}.json`);
+  const mapFile = path.join(dir, `voice-${sp.songHash.slice(0, 12)}.v2.json`);
   if (!existsSync(mapFile)) {
     log("lyrics: vocal-start check: reading where the voice is heard (the cached vocal track; Demucs only if it is not cached)");
     const tmp = path.join(dir, `.voice-${sp.songHash.slice(0, 12)}.${process.pid}.part`);
@@ -142,18 +176,73 @@ export async function applyVocalGuard(
       return { ...alignment, guard: null };
     }
   }
-  const map = JSON.parse(readFileSync(mapFile, "utf8")) as { stretches: [number, number][] };
-  const stretches: VoiceStretch[] = map.stretches;
-  const moves = planGuard(alignment.lines, stretches);
-  const lines = applyGuard(alignment.lines, moves);
-  for (const m of moves) log(`guard: line ${m.index + 1} moved from ${clockText(m.fromMs)} to ${clockText(m.toMs)} (vocals start)`);
+  const map = JSON.parse(readFileSync(mapFile, "utf8")) as { hop_ms: number; db: number[] };
+  const levels: VoiceLevels = { hopMs: map.hop_ms, db: map.db };
+  // The recognised words around the checked lines (cached per song, windows and language).
+  const windows = asrWindows(alignment.lines, levels);
+  const lang = alignment.report?.lang ?? "en";
+  let asr: Map<number, AsrWord[]> | undefined;
+  let wordsCheck = "ran";
+  if (windows.length && !options.firstWords && process.env.LYRIC_VOICE_MAP === "off") wordsCheck = "off (tests)";
+  else if (windows.length) {
+    const key = sha256(`v1|${sp.songHash}|${JSON.stringify(windows)}|${lang}|${process.env.FIRST_WORDS_MODEL ?? "small"}`).slice(0, 12);
+    const wordsFile = path.join(dir, `words-${key}.json`);
+    if (!existsSync(wordsFile)) {
+      log(`lyrics: vocal-start check: recognising the first sung words of ${windows.length} line(s) (a short speech-recognition pass on the vocal track; never re-aligns)`);
+      const tmp = path.join(dir, `.words-${key}.${process.pid}.part`);
+      try {
+        await (options.firstWords ?? runFirstWordsCommand)({ song: sp.songFile, windows, lang, out: tmp });
+        renameSync(tmp, wordsFile);
+      } catch (error) {
+        rmSync(tmp, { force: true });
+        wordsCheck = `skipped: ${(error as Error).message.split("\n").pop()}`;
+        log(`lyrics: vocal-start check: recognised words ${wordsCheck}`);
+      }
+    }
+    if (existsSync(wordsFile)) {
+      const words = JSON.parse(readFileSync(wordsFile, "utf8")) as { windows: { line: number; words: AsrWord[] }[] };
+      asr = new Map(words.windows.map((w) => [w.line - 1, w.words]));
+    }
+  }
+  const check = checkVocalStart(alignment.lines, levels, { asr });
+  const lines = applyGuard(alignment.lines, check.moves);
+  log(`vocal-start check: singing level ${check.levelDb.toFixed(1)} dB; voice = at least 0.5 s above ${check.thresholdDb.toFixed(1)} dB; recognised words: ${wordsCheck}`);
+  for (const c of check.lines) {
+    const at = (ms: number | null) => (ms === null ? "–" : clockText(ms));
+    const heard = c.wordsMs === null ? "words –" : `words ${at(c.wordsMs)} "${c.wordsText}"`;
+    const stretched = c.firstWordMs !== null && c.firstWordMs >= 1000 ? ` (first word ${(c.firstWordMs / 1000).toFixed(1)} s)` : "";
+    const loud = c.loudestBeforeDb !== null && c.loudestBeforeDb > -90 ? `; loudest sound before it ${c.loudestBeforeDb.toFixed(1)} dB` : "";
+    const change = c.result === "moved" ? ` (${seconds(c.targetMs - c.stampMs)})` : "";
+    log(`vocal-start check: line ${c.index + 1} stamp ${at(c.stampMs)} · voice ${at(c.voiceMs)} · ${heard} · word durations ${at(c.durationMs)}${stretched} -> ${at(c.targetMs)}: ${c.result}${change}; ${c.why}${loud}`);
+  }
+  for (const m of check.moves) log(`guard: line ${m.index + 1} moved from ${clockText(m.fromMs)} to ${clockText(m.toMs)} (vocals start)`);
   const guard: VocalGuard = {
-    moves: moves.map((m) => ({ number: m.index + 1, text: lines[m.index].text, from_ms: m.fromMs, to_ms: m.toMs })),
-    earlyMs: earlyMs(lines, stretches),
+    moves: check.moves.map((m) => ({ number: m.index + 1, text: lines[m.index].text, from_ms: m.fromMs, to_ms: m.toMs })),
+    earlyMs: earlyMs(lines, check.stretches),
     voiceMap: path.relative(ws.dir, mapFile).split(path.sep).join("/"),
+    check: {
+      level_db: check.levelDb,
+      threshold_db: check.thresholdDb,
+      words_check: wordsCheck,
+      lines: check.lines.map((c) => ({
+        number: c.index + 1,
+        text: alignment.lines[c.index].text,
+        stamp_ms: c.stampMs,
+        voice_ms: c.voiceMs,
+        words_ms: c.wordsMs,
+        words_text: c.wordsText,
+        duration_ms: c.durationMs,
+        first_word_ms: c.firstWordMs,
+        loudest_before_db: c.loudestBeforeDb,
+        target_ms: c.targetMs,
+        agree: c.agree,
+        why: c.why,
+        result: c.result,
+      })),
+    },
   };
   const record = path.join(dir, `guard-${alignment.lrcHash.slice(0, 12)}.json`);
-  const text = `${JSON.stringify({ alignment: path.basename(alignment.lrcFile), voice_map: path.basename(mapFile), moves: guard.moves }, null, 2)}\n`;
+  const text = `${JSON.stringify({ alignment: path.basename(alignment.lrcFile), voice_map: path.basename(mapFile), moves: guard.moves, check: guard.check }, null, 2)}\n`;
   if (!existsSync(record) || readFileSync(record, "utf8") !== text) writeFileAtomic(record, text);
   return { ...alignment, lines, guard };
 }

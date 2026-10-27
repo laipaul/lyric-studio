@@ -718,6 +718,33 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   effect hints. Browser check: Style (per-platform rows, lock, fonts and warning, length), Generate
   (recipe option, locked hook effect, chips with length), Assets (path, hints).
 
+### Step 5c.1b — Vocal-start check: three signals, always printed ✅ (to verify on the Windows PC)
+Reported: on A Heart For Two the check ran but printed nothing and line 1 stayed ~10 s early.
+- **Why it did not fire**: "voice" was anything within 20 dB of the loudest 5% of the vocal track, for
+  0.12 s. Instrument bleed in the Demucs vocal track (and breaths, a hum) passes that easily, so the voice
+  seemed to be there from 0:00, line 1 looked in time, nothing was moved and nothing printed (and QA saw
+  no early line either).
+- **Acceptance rule** (in CLAUDE.md): the first sung word of every song, and the first word after every
+  long instrumental, placed right by default (within ~0.3 s) with no manual fix.
+- **Three signals** for line 1, lines after a long instrumental and lines with a stretched first word:
+  (a) voice: sustained voice (>= 0.5 s) no more than 15 dB under the song's own singing level (measured
+  on the aligned lines); (b) words: a short speech-recognition pass (faster-whisper "small", part of the
+  AI packages) on the vocal track, only around those lines, matched against the line's first words;
+  (c) word durations: WhisperX's own first word, when it lasts seconds (A Heart For Two: ~10 s to the
+  second word), points to the singing-level energy just before the second word. The line starts where
+  two agree within 0.3 s; when none agree the recognised words decide (then the stretched word, then a
+  clearly early stamp moves to the voice). Moves of more than 0.3 s, never onto the next line.
+- **Always printed** per checked line (and in the manifest, lyrics.vocal_check): stamp, voice, words,
+  word durations, decision, which signals agreed and why; plus "guard: line N moved from … to …".
+- `pnpm lyrics:check-start "<song folder>"`: the same check without making videos.
+- The voice map is now the vocal track's level every 20 ms (voice-<hash>.v2.json, read again once from
+  the cached stem, no Demucs); the recognised words are cached (words-<key>.json).
+- Tests: built from this case (bleed, breaths and a hum in the intro; 10 s early with loud bleed; the
+  whole line early with normal word lengths; the line after a solo), Love Is A Good Thing-like in-time
+  case (nothing moves), word matching (punctuation, apostrophes, a missed "I"), never past the next line,
+  windows for the speech recognition, the printout; Python: level map and the windows of the speech
+  recognition (stand-in model). The real model runs only on the PC.
+
 ### Step 6.2c-2b — Videos settings, Post tab, Tasks "Clear finished" ✅ (to verify on the Windows PC)
 - **Videos**: each run has a "settings" line: per platform what it was made with (verse / hook effect,
   fonts, accent, collections, section with its times and length, YouTube layout; read from its

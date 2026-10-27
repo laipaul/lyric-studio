@@ -165,3 +165,25 @@ def test_hint_rescues_a_line_aligned_too_early(tmp_path: Path, monkeypatch: pyte
     rows = diagnose_line(3, lines[2], lines[1], truths[2] + 180, voice, 16_000, tmp_path / "diagnose")
     print("\n".join(rows))
     assert any(r.startswith("  best guess:") for r in rows)
+
+
+def test_first_words_hears_where_line_one_starts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The recognised-words signal of pnpm make's vocal-start check: speech recognition around line 1
+    finds its first words within 0.3 s of where they are really sung."""
+    import librosa
+
+    from app.first_words import SAMPLE_RATE, whisper_transcriber, words_in_windows
+
+    monkeypatch.setenv("WORKSPACE_DIR", str(tmp_path / "workspace"))
+    song = tmp_path / "song-en.wav"
+    truths = make_song(song, "en")
+    device = Device("cpu", "CPU (test)")
+    vocals, _ = separate_vocals(song, device, print)
+    audio, _ = librosa.load(str(vocals), sr=SAMPLE_RATE, mono=True)
+    out = words_in_windows(audio, [(1, 0, 6_000)], "en", whisper_transcriber("small", device))
+    words = out[0]["words"]
+    print(words)
+    morning = next(w for w in words if w["text"].lower().strip(",.") == "morning")
+    the = next(w for w in words if w["text"].lower() == "the")
+    assert abs(the["start_ms"] - truths[0]) <= 300, f"{the} vs {truths[0]}"
+    assert morning["start_ms"] > the["start_ms"]

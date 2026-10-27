@@ -1,5 +1,5 @@
-"""The voice map for pnpm make's vocal-start guard: stretches of sustained voice on the vocal stem,
-from the cached stem only (no Demucs, no WhisperX when it is cached)."""
+"""The voice map for pnpm make's vocal-start guard: the vocal track's level every 20 ms, from the
+cached stem only (no Demucs, no WhisperX when it is cached)."""
 
 from __future__ import annotations
 
@@ -11,31 +11,27 @@ import pytest
 import soundfile as sf
 
 from app.cache import file_hash
-from app.refine import loudness_envelope, voice_threshold
-from app.voice_map import main, sustained_voice
+from app.voice_map import level_db, main
 
 SR = 16_000
 
 
-def _audio(spans: list[tuple[float, float]], total_s: float = 40.0) -> np.ndarray:
-    rng = np.random.default_rng(1)
-    audio = 0.0005 * rng.standard_normal(int(total_s * SR))
-    for a, b in spans:
+def _audio(spans: list[tuple[float, float, float]], total_s: float = 20.0) -> np.ndarray:
+    audio = np.zeros(int(total_s * SR), dtype=np.float64)
+    for a, b, amp in spans:
         t = np.arange(int(a * SR), int(b * SR)) / SR
-        audio[int(a * SR) : int(b * SR)] += 0.5 * np.sin(2 * np.pi * 220 * t)
+        audio[int(a * SR) : int(b * SR)] += amp * np.sin(2 * np.pi * 220 * t)
     return audio.astype(np.float32)
 
 
-SPANS = [(5.0, 5.05), (12.0, 14.0), (14.1, 17.0), (18.0, 25.0), (30.5, 36.0)]  # a click, then singing
-
-
-def test_sustained_voice_joins_short_pauses_and_drops_clicks() -> None:
-    env = loudness_envelope(_audio(SPANS), SR)
-    got = sustained_voice(env, voice_threshold(env))
-    expected = [(12_000, 17_000), (18_000, 25_000), (30_500, 36_000)]
-    assert len(got) == len(expected)
-    for (a, b), (x, y) in zip(got, expected):
-        assert abs(a - x) <= 40 and abs(b - y) <= 40
+def test_levels_every_20_ms_in_db() -> None:
+    db = level_db(_audio([(2.0, 4.0, 0.5), (6.0, 7.0, 0.005)]), SR)
+    assert len(db) == 999  # 20 s / 20 ms (minus the last window)
+    at = lambda s: db[int(s * 1000 / 20)]  # noqa: E731
+    assert abs(at(3.0) - (20 * np.log10(0.5 / np.sqrt(2)))) < 0.6  # a sine's RMS: -9 dB
+    assert abs(at(6.5) - (20 * np.log10(0.005 / np.sqrt(2)))) < 0.6  # 40 dB quieter
+    assert at(10.0) == -100.0  # silence: the floor
+    assert all(v * 2 == round(v * 2) for v in db)  # 0.5 dB steps
 
 
 def test_uses_the_cached_vocal_stem(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -44,9 +40,8 @@ def test_uses_the_cached_vocal_stem(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     sf.write(str(song), np.zeros(SR, dtype=np.float32), SR)
     stems = tmp_path / "workspace" / "cache" / "stems"
     stems.mkdir(parents=True)
-    sf.write(str(stems / f"{file_hash(song)}-htdemucs-vocals.wav"), _audio(SPANS), SR)
+    sf.write(str(stems / f"{file_hash(song)}-htdemucs-vocals.wav"), _audio([(2.0, 4.0, 0.5)]), SR)
     out = tmp_path / "voice.json"
     assert main([str(song), "--out", str(out)]) == 0
     data = json.loads(out.read_text(encoding="utf-8"))
-    assert data["version"] == 1 and len(data["stretches"]) == 3
-    assert abs(data["stretches"][0][0] - 12_000) <= 40
+    assert data["version"] == 2 and data["hop_ms"] == 20 and len(data["db"]) == 999

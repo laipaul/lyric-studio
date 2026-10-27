@@ -392,10 +392,18 @@ pnpm align "D:\videomaker\workspace\test\song.wav" "D:\videomaker\workspace\test
 - `--hint <taps.lrc>`: for lines below 0.7 confidence only, uses your tapped time (corrected by the
   typical offset) and moves the line to the nearest start of the voice, re-aligning that line on its
   own. The adjusted lines are listed. The hint file is never overwritten.
-- Vocal-start guard (in `pnpm make`, always on, on the stored alignment, never re-aligning): line 1, and
-  any line after an instrumental gap (bridge, solo), that starts more than 1 s before the voice on the
-  vocal track moves to where the voice starts ("guard: line 1 moved from 0:03.2 to 0:11.8 (vocals
-  start)"). A line still more than 1 s early gets the QA warning "starts long before the vocals".
+- Vocal-start check (in `pnpm make`, always on, on the stored alignment, never re-aligning): line 1,
+  every line after a long instrumental (bridge, solo) and every line whose first word is stretched over
+  seconds is checked with three signals: where sustained singing starts on the vocal track, the words a
+  short speech-recognition pass hears there (needs the AI packages), and the alignment's own word
+  lengths. The line starts where at least two agree; the printout shows every signal and why, e.g.
+  `vocal-start check: line 1 stamp 0:01.8 · voice 0:11.8 · words 0:11.9 "A heart for" · word durations
+  0:11.8 (first word 10.1 s) -> 0:11.8: moved (+10.0 s); voice, words, word durations agree`, then
+  `guard: line 1 moved from 0:01.8 to 0:11.8 (vocals start)`. A line still more than 1 s early gets the
+  QA warning "starts long before the vocals".
+- `pnpm lyrics:check-start "workspace\songs\<artist>\<title>"` prints the same check without making
+  videos (it uses the stored alignment; the first time it reads the vocal track and runs the short
+  speech recognition, which downloads the "small" model once, ~0.5 GB, into services\audio\models).
 - During an instrumental gap longer than 3 s no lyric is shown; the next line fades in 1 s before its
   first word (brand.json `motion.gapHideS` / `motion.gapLeadInS`).
 - `--trim off` turns off the correction for words stretched over a silent gap.
