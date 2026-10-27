@@ -1,0 +1,64 @@
+{
+  "_help": "Font pairings for the Style tab: a verse font and a hook font (and optionally a title font), each with its weight (100-900: 400 = regular, 500 = medium, 600 = semibold, 700 = bold) and italic (true / false). The fonts must exist (pnpm fonts lists them; your own go in workspace\\fonts). note: one line about the pair's character. warning: shown on its card. The \"brand\" pairing is not listed here: it is always the artist's own brand.json fonts. Edit freely; the Style tab names any font or weight that does not exist.",
+  "pairings": [
+    {
+      "id": "elegant",
+      "name": "Elegant",
+      "recommended": true,
+      "note": "One family, two voices: calm roman verses, a refined semibold italic for the hook.",
+      "verse": { "family": "Cormorant Garamond", "weight": 400, "italic": false },
+      "hook": { "family": "Cormorant Garamond", "weight": 600, "italic": true }
+    },
+    {
+      "id": "dramatic",
+      "name": "Dramatic",
+      "note": "Classic verses with a high-contrast Playfair italic hook: theatrical, cinematic.",
+      "verse": { "family": "Cormorant Garamond", "weight": 400, "italic": false },
+      "hook": { "family": "Playfair Display", "weight": 400, "italic": true }
+    },
+    {
+      "id": "romantic-script",
+      "name": "Romantic script",
+      "note": "A flowing wedding-invitation script for the hook.",
+      "warning": "Great Vibes is a thin script: short hooks only, and set them large.",
+      "verse": { "family": "Cormorant Garamond", "weight": 400, "italic": false },
+      "hook": { "family": "Great Vibes", "weight": 400, "italic": false, "script": "thin" }
+    },
+    {
+      "id": "literary",
+      "name": "Literary",
+      "note": "Book-page verses with a warm, retro brush hook.",
+      "verse": { "family": "EB Garamond", "weight": 400, "italic": false },
+      "hook": { "family": "Grand Hotel", "weight": 400, "italic": false, "script": "thin" }
+    },
+    {
+      "id": "typewriter-story",
+      "name": "Typewriter story",
+      "note": "A slab serif told like a diary, the hook typed out in mono.",
+      "verse": { "family": "Bitter", "weight": 400, "italic": false },
+      "hook": { "family": "Space Mono", "weight": 400, "italic": false },
+      "title": { "family": "Special Elite", "weight": 400, "italic": false }
+    },
+    {
+      "id": "vintage-romance",
+      "name": "Vintage romance",
+      "note": "Clean, friendly verses with a 1950s script hook.",
+      "verse": { "family": "Lato", "weight": 400, "italic": false },
+      "hook": { "family": "Grand Hotel", "weight": 400, "italic": false, "script": "thin" }
+    },
+    {
+      "id": "bold-statement",
+      "name": "Bold statement",
+      "note": "Modern geometric verses, a heavy fat-face hook that shouts.",
+      "verse": { "family": "Poppins", "weight": 500, "italic": false },
+      "hook": { "family": "Abril Fatface", "weight": 400, "italic": false }
+    },
+    {
+      "id": "gentle",
+      "name": "Gentle",
+      "note": "Soft, rounded verses with a light, airy hook.",
+      "verse": { "family": "Mulish", "weight": 400, "italic": false },
+      "hook": { "family": "Arima", "weight": 500, "italic": false }
+    }
+  ]
+}

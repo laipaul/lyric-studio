@@ -28,3 +28,4 @@ export * from "./anchors";
 export * from "./effects";
 export * from "./effects/scene";
 export * from "./EffectsPreview";
+export * from "./PairPreview";

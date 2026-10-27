@@ -9,10 +9,10 @@ import { safeName } from "@lyric/db";
 
 import type { Corner } from "../youtube";
 import type { FontCatalog } from "./font-catalog";
-import { checkPerPlatform, type PerPlatform } from "./per-platform";
+import { checkPerPlatform, isWeight, type PerPlatform } from "./per-platform";
 import { findFamily } from "./font-catalog";
 
-export type BrandFont = { family: string; weight: number; letterSpacing?: number };
+export type BrandFont = { family: string; weight: number; italic?: boolean; letterSpacing?: number };
 export type Brand = {
   titleFont: BrandFont;
   verseFont: BrandFont;
@@ -48,7 +48,7 @@ export const DEFAULT_BRAND: Brand = {
 };
 
 const HELP =
-  "Brand for Lyric Studio. Fonts: any family from 'pnpm fonts'. letterSpacing in em (0.18 = wide). " +
+  "Brand for Lyric Studio. Fonts: any family from 'pnpm fonts' (your own .ttf/.otf/.woff/.woff2 go in WORKSPACE_DIR\\fonts); weight 100-900 (400 = regular, 600 = semibold, 700 = bold; the nearest the family has, with a warning); italic: true / false (the family's italic file, never a synthetic one). letterSpacing in em (0.18 = wide). " +
   "accentColour: #RRGGBB. logo.file: inside this folder; logo.youtube: top-left | top-right | bottom-left | bottom-right " +
   "(YouTube videos; it fades out before the end screen); logo.vertical: auto (bottom right) or a corner " +
   "(9:16 videos); logo.platforms: the platforms that show the logo, e.g. [\"youtube\"] (default) or [\"youtube\", \"reels\"]; " +
@@ -130,6 +130,8 @@ export function loadBrand(
   }
   for (const key of ["titleFont", "verseFont", "hookFont"] as const) {
     if (!findFamily(catalog, brand[key].family)) problems.push(`${key}: font "${brand[key].family}" not found (see pnpm fonts)`);
+    if (!isWeight(brand[key].weight)) problems.push(`${key}.weight must be a font weight: 100, 200, ... 900 (400 = regular, 600 = semibold, 700 = bold)`);
+    if (brand[key].italic !== undefined && typeof brand[key].italic !== "boolean") problems.push(`${key}.italic must be true or false`);
   }
   if (raw.perPlatform !== undefined) {
     const checked = checkPerPlatform(raw.perPlatform, "perPlatform");

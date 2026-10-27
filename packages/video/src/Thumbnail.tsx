@@ -50,6 +50,7 @@ export const Thumbnail: React.FC<ThumbnailProps> = (p) => {
             transform: "translateY(-50%)",
             fontFamily: `"${p.font.family}", serif`,
             fontWeight: p.font.weight,
+            fontSynthesis: "none",
             letterSpacing: `${p.font.letterSpacing}em`,
             textShadow: "0 4px 24px rgba(0,0,0,0.7)",
           }}

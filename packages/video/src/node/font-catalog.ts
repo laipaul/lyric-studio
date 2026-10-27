@@ -1,13 +1,13 @@
 // All fonts available to the video: the bundled @fontsource families and any .ttf/.otf/.woff/.woff2
 // files in WORKSPACE_DIR\fonts. Used by render:test, the preview data, "pnpm fonts" and measuring.
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
 import { REPO_ROOT } from "@lyric/db";
 import * as fontkit from "fontkit";
 
-import { LATIN_EXT_RANGE, LATIN_RANGE, type FontFileRef } from "../font-files";
+import { LATIN_EXT_RANGE, LATIN_RANGE, rangeCovers, type FontFileRef } from "../font-files";
 
 // [npm package slug, family name]
 export const BUNDLED_FONTS: [string, string][] = [
@@ -28,6 +28,20 @@ export const BUNDLED_FONTS: [string, string][] = [
   ["special-elite", "Special Elite"],
   ["courier-prime", "Courier Prime"],
   ["cinzel", "Cinzel"], // brand title font (OFL)
+  // Font pairings (all SIL Open Font License; each package keeps its LICENSE file, see fonts/LICENSES.md).
+  ["great-vibes", "Great Vibes"],
+  ["eb-garamond", "EB Garamond"],
+  ["spline-sans", "Spline Sans"],
+  ["space-mono", "Space Mono"],
+  ["bitter", "Bitter"],
+  ["grand-hotel", "Grand Hotel"],
+  ["lato", "Lato"],
+  ["abril-fatface", "Abril Fatface"],
+  ["poppins", "Poppins"],
+  ["arima", "Arima"],
+  ["mulish", "Mulish"],
+  ["noto-sans-jp", "Noto Sans JP"], // Japanese in ~120 small pieces: a video loads only the ones its lyrics use
+  ["noto-serif-jp", "Noto Serif JP"],
 ];
 
 export type FontFaceFile = { path: string; src: string; unicodeRange?: string };
@@ -66,12 +80,21 @@ export function loadFontCatalog(workspaceDir: string): FontCatalog {
     const dir = fontDirs[slug];
     const faces: FontFaceInfo[] = [];
     const pattern = new RegExp(`^${slug}-latin-(\\d+)-(normal|italic)\\.woff2$`);
-    for (const file of readdirSync(dir).sort()) {
+    const all = readdirSync(dir).sort();
+    // CJK families come in numbered pieces ("noto-sans-jp-12-400-normal.woff2"), each with its range.
+    const unicodeFile = path.join(dir, "..", "unicode.json");
+    const pieces = existsSync(unicodeFile) ? (JSON.parse(readFileSync(unicodeFile, "utf8")) as Record<string, string>) : {};
+    for (const file of all) {
       const m = pattern.exec(file);
       if (!m) continue;
       const files: FontFaceFile[] = [{ path: path.join(dir, file), src: `_fonts/${file}`, unicodeRange: LATIN_RANGE }];
       const ext = file.replace("-latin-", "-latin-ext-");
       if (existsSync(path.join(dir, ext))) files.push({ path: path.join(dir, ext), src: `_fonts/${ext}`, unicodeRange: LATIN_EXT_RANGE });
+      for (const [key, range] of Object.entries(pieces)) {
+        const n = /^\[(\d+)\]$/.exec(key)?.[1];
+        const piece = n !== undefined ? `${slug}-${n}-${m[1]}-${m[2]}.woff2` : null;
+        if (piece && existsSync(path.join(dir, piece))) files.push({ path: path.join(dir, piece), src: `_fonts/${piece}`, unicodeRange: range });
+      }
       faces.push({ family, weight: Number(m[1]), style: m[2] as "normal" | "italic", files });
     }
     families.push({ family, source: "bundled", faces });
@@ -122,6 +145,38 @@ export function resolveFace(catalog: FontCatalog, family: string, weight: number
   const sameStyle = entry.faces.filter((f) => f.style === style);
   const pool = sameStyle.length ? sameStyle : entry.faces;
   return [...pool].sort((a, b) => Math.abs(a.weight - weight) - Math.abs(b.weight - weight) || b.weight - a.weight)[0];
+}
+
+// The face with only the files a text needs (always the first, latin one): CJK families have ~120
+// pieces, a video loads the ones its lyrics use. Without `text`: unchanged.
+export function forText(face: FontFaceInfo, text?: string): FontFaceInfo {
+  if (text === undefined || face.files.length <= 2) return face;
+  return { ...face, files: face.files.filter((f, i) => i === 0 || !f.unicodeRange || rangeCovers(f.unicodeRange, text)) };
+}
+
+// The user's own fonts: WORKSPACE_DIR\fonts (D:\videomaker\workspace\fonts on the PC).
+export const userFontsDir = (workspaceDir: string) => path.join(workspaceDir, "fonts");
+
+export type ResolvedFont = { face: FontFaceInfo; warnings: string[] };
+// The exact weight and italic of `family`, never a synthetic one: when the family lacks it, the nearest
+// weight (and upright when it has no italic), with a warning naming what was used instead.
+export function resolveFont(catalog: FontCatalog, family: string, weight: number, italic = false, role = "font"): ResolvedFont {
+  const entry = findFamily(catalog, family);
+  if (!entry || !entry.faces.length) throw new Error(`Font "${family}" not found. Run "pnpm fonts" to see the available fonts.`);
+  const warnings: string[] = [];
+  const want = italic ? "italic" : "normal";
+  let pool = entry.faces.filter((f) => f.style === want);
+  if (!pool.length) {
+    warnings.push(`${role} ${entry.family} has no italic: upright used (never a synthetic italic)`);
+    pool = entry.faces.filter((f) => f.style === "normal");
+    if (!pool.length) pool = entry.faces;
+  }
+  const face = [...pool].sort((a, b) => Math.abs(a.weight - weight) - Math.abs(b.weight - weight) || b.weight - a.weight)[0];
+  if (face.weight !== weight) {
+    const has = [...new Set(pool.map((f) => f.weight))].sort((a, b) => a - b).join(", ");
+    warnings.push(`${role} ${entry.family} has no weight ${weight}${face.style === "italic" ? " italic" : ""}: ${face.weight} used (it has ${has}; never a synthetic bold)`);
+  }
+  return { face, warnings };
 }
 
 export function fontFileRefs(face: FontFaceInfo): FontFileRef[] {

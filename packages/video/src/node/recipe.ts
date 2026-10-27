@@ -14,9 +14,9 @@ import path from "node:path";
 import { checkAnchors, type AnchorSpec, type GapOrder } from "../anchors";
 import { choiceText, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, parseEffectChoice } from "../effects/names";
 import { DEFAULT_BRAND, type Brand } from "./brand";
-import { checkPerPlatform, isPlatformField, PLATFORM_FIELDS, type PerPlatform, type PlatformField } from "./per-platform";
+import { checkPerPlatform, isPlatformField, isWeight, PLATFORM_FIELDS, type PerPlatform, type PlatformField } from "./per-platform";
 
-export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "accentColour", "collections", "platforms", "variations", "section", "length", "ep", "youtubeLayout"] as const;
+export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "collections", "platforms", "variations", "section", "length", "ep", "youtubeLayout"] as const;
 export type RecipeField = (typeof RECIPE_FIELDS)[number];
 
 export type RecipeValues = {
@@ -24,6 +24,10 @@ export type RecipeValues = {
   hookEffect: string;
   verseFont: string; // font family
   hookFont: string;
+  verseWeight: number; // 100-900: the exact weight file (the nearest the family has, with a warning)
+  hookWeight: number;
+  verseItalic: boolean; // the family's italic file (never a synthetic italic)
+  hookItalic: boolean;
   accentColour: string; // #RRGGBB
   collections: string[]; // shared collections used with the song's own clips
   platforms: string[]; // the platforms Generate starts with
@@ -34,7 +38,7 @@ export type RecipeValues = {
   youtubeLayout: "cover" | "stills" | "clips";
 };
 
-export { isPlatformField, PLATFORM_FIELDS, type PerPlatform, type PlatformField, type PlatformValues } from "./per-platform";
+export { isPlatformField, isWeight, ITALIC_FIELDS, PLATFORM_FIELDS, WEIGHT_FIELDS, type PerPlatform, type PlatformField, type PlatformValues } from "./per-platform";
 
 // anchors and gapOrder belong to the song only (story anchors, the Lyrics tab): never from the brand,
 // outside Reset / Lock.
@@ -53,7 +57,7 @@ export const RECIPE_HELP =
   "The recipe of this song. A setting that is not here is inherited from the artist's brand (brand.json) " +
   "or the library defaults; a setting here is this song's own. \"locked\": settings that keep this song's value " +
   "(a brand change does not reach them, and Generate cannot change them for one run). Fields: verseEffect, hookEffect " +
-  '("glide", "soft-blur:subtle", ...), verseFont, hookFont, accentColour ("#E8A3B5"), collections (shared collections used ' +
+  '("glide", "soft-blur:subtle", ...), verseFont, hookFont, verseWeight / hookWeight (400 = regular, 600 = semibold, 700 = bold), verseItalic / hookItalic (true / false), accentColour ("#E8A3B5"), collections (shared collections used ' +
   'with the clips in clips\\), platforms (["reels", "youtube"]), variations ({ "reels": 3 }), section ("auto", "full", ' +
   '"0:11-1:10"), length (seconds an "auto" section aims for, e.g. 90; empty = the platform preset), ep, youtubeLayout ("cover", "stills", "clips"). perPlatform: values for one platform only, e.g. ' +
   '{ "youtube": { "verseEffect": "cinematic-fade" } } (verseEffect, hookEffect, verseFont, hookFont, accentColour, section, length), e.g. { "reels": { "length": 90 }, "tiktok": { "length": 30 } }. ' +
@@ -82,6 +86,16 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
     }
   }
   if (r.ep === "") recipe.ep = "";
+  for (const k of ["verseWeight", "hookWeight"] as const) {
+    if (r[k] === undefined) continue;
+    if (isWeight(r[k])) recipe[k] = r[k] as number;
+    else problems.push(`${k} must be a font weight: 100, 200, ... 900 (400 = regular, 600 = semibold, 700 = bold)`);
+  }
+  for (const k of ["verseItalic", "hookItalic"] as const) {
+    if (r[k] === undefined) continue;
+    if (typeof r[k] === "boolean") recipe[k] = r[k] as boolean;
+    else problems.push(`${k} must be true or false`);
+  }
   if (r.length !== undefined && r.length !== null) {
     if (typeof r.length === "number" && Number.isFinite(r.length) && r.length >= 3 && r.length <= 600) recipe.length = Math.round(r.length);
     else problems.push("length must be a number of seconds from 3 to 600 (the target for an auto section)");
@@ -253,6 +267,10 @@ export const LIBRARY_RECIPE: RecipeValues = {
   hookEffect: choiceText(DEFAULT_HOOK_EFFECT),
   verseFont: DEFAULT_BRAND.verseFont.family,
   hookFont: DEFAULT_BRAND.hookFont.family,
+  verseWeight: DEFAULT_BRAND.verseFont.weight,
+  hookWeight: DEFAULT_BRAND.hookFont.weight,
+  verseItalic: false,
+  hookItalic: false,
   accentColour: DEFAULT_BRAND.accentColour,
   collections: [], // none: the song's own clips (or the collection it used last time)
   platforms: [], // none: the "standard" preset
@@ -270,6 +288,10 @@ export function artistRecipe(brand: Pick<Brand, "verseFont" | "hookFont" | "acce
     hookEffect: choiceText(brand.motion.hookEffect),
     verseFont: brand.verseFont.family,
     hookFont: brand.hookFont.family,
+    verseWeight: brand.verseFont.weight,
+    hookWeight: brand.hookFont.weight,
+    verseItalic: brand.verseFont.italic === true,
+    hookItalic: brand.hookFont.italic === true,
     accentColour: brand.accentColour,
   };
 }
@@ -280,6 +302,10 @@ export function runRecipe(o: {
   hookEffect?: string;
   font?: string;
   fontHook?: string;
+  weight?: number;
+  hookWeight?: number;
+  italic?: boolean;
+  hookItalic?: boolean;
   collection?: string;
   platforms?: string;
   variations?: number;
@@ -294,6 +320,10 @@ export function runRecipe(o: {
     hookEffect: o.hookEffect,
     verseFont: o.font,
     hookFont: o.fontHook,
+    verseWeight: o.weight,
+    hookWeight: o.hookWeight,
+    verseItalic: o.italic,
+    hookItalic: o.hookItalic,
     collections: list(o.collection),
     platforms: list(o.platforms?.toLowerCase()),
     variations: o.variations !== undefined ? { "*": o.variations } : undefined,
@@ -315,7 +345,7 @@ export function recipeText(v: unknown): string {
 
 // "verse glide (artist), hook karaoke-highlight (artist), collections wedding (song, locked), ..."
 export function recipeSummary(r: ResolvedRecipe): string {
-  const show: RecipeField[] = ["verseEffect", "hookEffect", "verseFont", "hookFont", "accentColour", "collections", "section"];
+  const show: RecipeField[] = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "collections", "section"];
   for (const k of ["platforms", "variations", "ep", "youtubeLayout"] as const) if (r.sources[k] !== "library") show.push(k);
   return show.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]}${r.locked.includes(k) ? ", locked" : ""})`).join(", ");
 }

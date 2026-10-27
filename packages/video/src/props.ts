@@ -68,6 +68,7 @@ export type StyleProps = {
   name: string;
   font: string; // font family (one of `fonts`)
   weight: number;
+  italic?: boolean; // the family's italic file (rendered with font-synthesis: none, never a fake italic)
   textCase: TextCase;
   effect: string;
   animation: string;
@@ -81,7 +82,7 @@ export type LyricVideoProps = {
   shots: ShotProps[];
   lyrics: LyricLineProps[];
   style: StyleProps;
-  hookFont?: { font: string; weight: number } | null; // font for hook lines (default: the style's)
+  hookFont?: { font: string; weight: number; italic?: boolean } | null; // font for hook lines (default: the style's)
   fonts: FontFileRef[]; // every font file the lyrics need (loaded before rendering)
   textSize: number; // px on the 1080x1920 canvas
   colour: string;

@@ -19,7 +19,7 @@ import type { LyricVideoProps, StyleProps, TextCase } from "../props";
 import type { ClipOrder } from "../shots";
 import { analyzeSong } from "./analysis";
 import { prepareClips } from "./clips";
-import { fontFileRefs, loadFontCatalog, resolveFace, type FontCatalog, type FontFaceInfo } from "./font-catalog";
+import { fontFileRefs, forText, loadFontCatalog, resolveFont, type FontCatalog, type FontFaceInfo } from "./font-catalog";
 import { tooLongLines } from "./measure";
 import type { MediaRoots } from "./media";
 
@@ -127,13 +127,15 @@ const FALLBACK_STYLES: Record<StyleChoice, StylePresetLike> = {
 };
 type StylePresetLike = Pick<StylePreset, "name" | "font" | "weight" | "text_case" | "effect" | "animation" | "default_size">;
 
-export type StyleFaces = Record<StyleChoice, { entry: StyleEntry; main: FontFaceInfo; hook: FontFaceInfo | null }>;
+export type StyleFaces = Record<StyleChoice, { entry: StyleEntry; main: FontFaceInfo; hook: FontFaceInfo | null; warnings: string[] }>;
+// The recipe's weight and italic for the verse and hook fonts (absent: the style's own weight, upright).
+export type FontChoice = { weight?: number; italic?: boolean };
 
 // Simple and Bold from the database (or built-in defaults), with --font / --font-hook applied.
 export function loadStyles(
   ws: Workspace,
   catalog: FontCatalog,
-  options: { font?: string; fontHook?: string; textSize?: number; brandFonts?: { verse: string; hook: string } },
+  options: { font?: string; fontHook?: string; textSize?: number; brandFonts?: { verse: string; hook: string }; verse?: FontChoice; hook?: FontChoice; text?: string },
 ): StyleFaces {
   // Brand fonts (brand.json) replace the styles' own fonts; --font / --font-hook win over both.
   if (options.brandFonts) {
@@ -148,17 +150,24 @@ export function loadStyles(
 }
 
 // Style + fonts for one preset: the lyric font (preset font, or --font) and an optional hook font.
+// The exact weight / italic file (never synthetic); the nearest the family has otherwise, with a warning.
+// `text`: the song's lyrics, so a CJK family loads only the pieces they use.
 function styleEntry(
   catalog: FontCatalog,
   preset: StylePresetLike,
-  options: { font?: string; fontHook?: string; textSize?: number },
-): { entry: StyleEntry; main: FontFaceInfo; hook: FontFaceInfo | null } {
-  const main = resolveFace(catalog, options.font ?? preset.font, preset.weight);
-  const hook = options.fontHook ? resolveFace(catalog, options.fontHook, preset.weight) : null;
+  options: { font?: string; fontHook?: string; textSize?: number; verse?: FontChoice; hook?: FontChoice; text?: string },
+): { entry: StyleEntry; main: FontFaceInfo; hook: FontFaceInfo | null; warnings: string[] } {
+  const verse = resolveFont(catalog, options.font ?? preset.font, options.verse?.weight ?? preset.weight, options.verse?.italic === true, "verse font");
+  const hookResolved = options.fontHook ? resolveFont(catalog, options.fontHook, options.hook?.weight ?? preset.weight, options.hook?.italic === true, "hook font") : null;
+  // A weight from the style itself (no recipe weight) falls back silently, as before.
+  const warnings = [...(options.verse?.weight !== undefined || options.verse?.italic ? verse.warnings : []), ...(hookResolved && (options.hook?.weight !== undefined || options.hook?.italic) ? hookResolved.warnings : [])];
+  const main = forText(verse.face, options.text);
+  const hook = hookResolved ? forText(hookResolved.face, options.text) : null;
   const style: StyleProps = {
     name: preset.name,
     font: main.family,
     weight: main.weight,
+    ...(main.style === "italic" ? { italic: true } : {}),
     textCase: preset.text_case as TextCase,
     effect: preset.effect,
     animation: preset.animation,
@@ -167,11 +176,12 @@ function styleEntry(
     entry: {
       style,
       textSize: options.textSize ?? preset.default_size,
-      hookFont: hook ? { font: hook.family, weight: hook.weight } : null,
+      hookFont: hook ? { font: hook.family, weight: hook.weight, ...(hook.style === "italic" ? { italic: true } : {}) } : null,
       fonts: [...fontFileRefs(main), ...(hook ? fontFileRefs(hook) : [])],
     },
     main,
     hook,
+    warnings,
   };
 }
 

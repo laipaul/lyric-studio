@@ -53,6 +53,7 @@ import { renameSongFolder, songPathsById } from "./song-folder";
 import { mergeCollections, prepareForFormat, SOURCE_FILE, syncCollection, type CollectionSync, type PreparedForFormat } from "./collection";
 import { fontFileRefs, loadFontCatalog, resolveFace, type FontCatalog } from "./font-catalog";
 import { sha256File, toolInfo, writeManifest, type Manifest } from "./manifest";
+import { findPairing, loadPairings } from "./pairings";
 import { resolveMediaPath, type MediaRoots } from "./media";
 import { tooLongLines } from "./measure";
 import { loadStyles, lyricLineNumbers, parseSection, snapToDownbeat, songMedia, type StyleFaces } from "./prepare";
@@ -110,6 +111,11 @@ export type MakeOptions = {
   downbeatOffset?: number;
   font?: string;
   fontHook?: string;
+  weight?: number; // verse font weight (100-900; the exact file, the nearest with a warning)
+  hookWeight?: number;
+  italic?: boolean; // verse font italic (the family's italic file, never synthetic)
+  hookItalic?: boolean;
+  pairings?: string; // "elegant,dramatic": one video per pairing (presets/font-pairings.json), all else the same
   lineEffect?: string; // lyric effect for verse lines, e.g. "glide" or "soft-blur:subtle" (default: platform / brand)
   hookEffect?: string; // lyric effect for hook lines (default: platform / brand)
   pins?: string;
@@ -159,7 +165,8 @@ export type MakePlan = {
 export type RenderState = { platform: string; name: string; status: "queued" | "rendering" | "checking" | "done" | "failed" | "stopped"; progress: number };
 
 // rate / transitions: story variations (gaps in story order) differ by cut rate and cut / dissolve.
-export type VariationSpec = { index: number; name: string; order: ClipOrder; seed: number; style: StyleChoice; bars: boolean; rate?: CutRate; transitions?: AnchorTransitions };
+// pairing: "compare pairings" (--pairings / Generate): this video's fonts; all else the same in every video.
+export type VariationSpec = { index: number; name: string; order: ClipOrder; seed: number; style: StyleChoice; bars: boolean; rate?: CutRate; transitions?: AnchorTransitions; pairing?: { id: string; name: string } };
 
 export type VariationResult = VariationSpec & {
   platform: string;
@@ -465,6 +472,9 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       hookEffect: own("hookEffect") ? recipe.values.hookEffect : undefined,
       font: own("verseFont") ? recipe.values.verseFont : undefined,
       fontHook: own("hookFont") ? recipe.values.hookFont : undefined,
+      // Weights and italic: the recipe's (brand, song or run) whenever the brand fonts are used for the
+      // lyrics; otherwise only the song's or run's own (else the Simple / Bold style's weight).
+      ...fontChoiceOf((k) => (own(k) || brand.brand.useForLyrics ? recipe.values[k] : undefined)),
       section: recipe.values.section,
       layout: own("youtubeLayout") ? recipe.values.youtubeLayout : undefined,
       platforms: recipe.values.platforms.length ? recipe.values.platforms.join(",") : undefined,
@@ -477,9 +487,16 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const effectLabels = { verse: recipe.sources.verseEffect === "song" ? "song.json" : "--line-effect", hook: recipe.sources.hookEffect === "song" ? "song.json" : "--hook-effect" };
     log(`recipe: ${recipeSummary(recipe)}`);
 
-    const stylesFor = (font?: string, fontHook?: string) =>
-      loadStyles(ws, catalog, { font, fontHook, brandFonts: brand.brand.useForLyrics ? { verse: brand.brand.verseFont.family, hook: brand.brand.hookFont.family } : undefined });
+    const lyricsText = readFileSync(options.lyrics, "utf8"); // a CJK font loads only the pieces these lines use
+    const stylesFor = (font?: string, fontHook?: string, choice: Pick<MakeOptions, "weight" | "hookWeight" | "italic" | "hookItalic"> = effective) =>
+      loadStyles(ws, catalog, {
+        font, fontHook, text: lyricsText,
+        brandFonts: brand.brand.useForLyrics ? { verse: brand.brand.verseFont.family, hook: brand.brand.hookFont.family } : undefined,
+        verse: { weight: choice.weight, italic: choice.italic },
+        hook: { weight: choice.hookWeight, italic: choice.hookItalic },
+      });
     const styles = stylesFor(effective.font, effective.fontHook);
+    for (const w of fontWarnings(styles)) log(`fonts: ${w}`);
     // The EP: song.json (--ep is saved there; songs not migrated yet: remembered with the project).
     if (options.ep?.trim() && !recipe.locked.includes("ep")) {
       if (paths.recipe) writeRecipe(paths.recipe, { ...songRecipe, ep: options.ep.trim() });
@@ -654,7 +671,7 @@ type Shared = {
   variationsFor: (preset: PlatformPreset) => number;
   effectLabels: { verse: string; hook: string };
   recipeFor: (platform: string) => ResolvedRecipe; // the recipe for one platform (perPlatform values)
-  stylesFor: (font?: string, fontHook?: string) => StyleFaces;
+  stylesFor: (font?: string, fontHook?: string, choice?: Pick<MakeOptions, "weight" | "hookWeight" | "italic" | "hookItalic">) => StyleFaces;
   log: (m: string) => void;
   now: Date;
   leadMs: number;
@@ -707,6 +724,23 @@ export function loadPresets(file = path.join(REPO_ROOT, "presets", "platforms.js
   return parsePresets(json, file);
 }
 
+// Recipe weight / italic fields -> make options.
+const CHOICE_OPTION = { verseWeight: "weight", hookWeight: "hookWeight", verseItalic: "italic", hookItalic: "hookItalic" } as const;
+type ChoiceField = keyof typeof CHOICE_OPTION;
+function fontChoiceOf(value: (k: ChoiceField) => unknown): Pick<MakeOptions, "weight" | "hookWeight" | "italic" | "hookItalic"> {
+  const out: Pick<MakeOptions, "weight" | "hookWeight" | "italic" | "hookItalic"> = {};
+  for (const k of Object.keys(CHOICE_OPTION) as ChoiceField[]) {
+    const v = value(k);
+    if (v !== undefined) (out as Record<string, unknown>)[CHOICE_OPTION[k]] = v;
+  }
+  return out;
+}
+
+// Each font that could not be had exactly (weight or italic missing in the family), once.
+export function fontWarnings(styles: StyleFaces): string[] {
+  return [...new Set([...styles.simple.warnings, ...styles.bold.warnings])];
+}
+
 // The run's settings for one platform: per-platform recipe values (brand.json / song.json perPlatform)
 // for the lyric effects, fonts, accent colour and section.
 function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: PlatformPreset } {
@@ -721,18 +755,21 @@ function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: Pl
   const font = pick("verseFont");
   const fontHook = pick("hookFont");
   const accent = pick("accentColour");
+  // The platform's weights / italic when its recipe has its own (brand or song perPlatform).
+  const choice = { ...sh.options, ...fontChoiceOf((k) => (r.sources[k].includes(":") ? r.values[k] : sh.options[CHOICE_OPTION[k]])) };
+  const sameFonts = font === sh.options.font && fontHook === sh.options.fontHook && (["weight", "hookWeight", "italic", "hookItalic"] as const).every((k) => choice[k] === sh.options[k]);
   // The target length shapes an "auto" section only (a fixed section stays exactly as given).
   const length = lengthFor(base, r.values.length, sh.analysis.duration_ms);
   if (length.note) sh.log(`${base.name}: ${length.note}`);
   const section = r.values.section === "auto" && length.wholeSong ? "full" : r.values.section;
-  const options: MakeOptions = { ...sh.options, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined };
+  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined };
   const own = PLATFORM_FIELDS.filter((k) => r.sources[k].includes(":"));
   if (own.length) sh.log(`${preset.name}: recipe ${own.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]})`).join(", ")}`);
   const out: Shared = {
     ...sh,
     options,
     effectLabels: { verse: label("verseEffect", "--line-effect"), hook: label("hookEffect", "--hook-effect") },
-    styles: font === sh.options.font && fontHook === sh.options.fontHook ? sh.styles : sh.stylesFor(font, fontHook),
+    styles: sameFonts ? sh.styles : sh.stylesFor(font, fontHook, choice),
     brand: accent ? { ...sh.brand, brand: { ...sh.brand.brand, accentColour: accent } } : sh.brand,
   };
   return { sh: out, preset: r.values.section === "auto" ? length.preset : base };
@@ -944,7 +981,21 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
 
   if (story && !canvas) log(`${preset.name}: gap order story (${sh.gapOrder ? "song.json gapOrder" : "the song has anchors"}): every video in file-name order; they differ by style, cut rate and cut / dissolve`);
   for (const m of anchorMissing) warnings.push(`${preset.name}: ${m}`);
-  const allSpecs = planVariations(canvas ? Math.max(1, canvas.loops.length) : sh.variationsFor(preset), story ? { rate: options.rate ?? "1x" } : undefined);
+  // Compare pairings: one video per pairing with the same section, clips, order, cut rate and style, so
+  // only the fonts differ (presets/font-pairings.json, or "brand" for the artist's own).
+  const pairingIds = options.pairings && !canvas && preset.lyrics ? options.pairings.split(/[\s,]+/).filter(Boolean) : [];
+  const allPairings = pairingIds.length ? loadPairings(sh.catalog, sh.brand.brand) : null;
+  if (allPairings?.problems.length) warnings.push(...allPairings.problems.map((p) => `font-pairings.json: ${p}`));
+  const compared = allPairings ? pairingIds.map((id) => findPairing(allPairings.pairings, id)) : [];
+  if (compared.length > 4) throw new Error("--pairings: at most 4 pairings in one run (2-3 compare best).");
+  const pairStyles = new Map(compared.map((p) => [p.id, sh.stylesFor(p.verse.family, p.hook.family, { weight: p.verse.weight, hookWeight: p.hook.weight, italic: p.verse.italic, hookItalic: p.hook.italic })]));
+  for (const [id, st] of pairStyles) for (const w of fontWarnings(st)) warnings.push(`${preset.name}: pairing ${id}: ${w}`);
+  const stylesOf = (spec: VariationSpec) => (spec.pairing ? pairStyles.get(spec.pairing.id)! : styles);
+  const baseFor = (spec: VariationSpec): RenderBase => (spec.pairing ? { ...base, styles: { simple: stylesOf(spec).simple.entry, bold: stylesOf(spec).bold.entry } } : base);
+  if (compared.length) log(`${preset.name}: comparing font pairings: ${compared.map((p, i) => `v${i + 1} ${p.name} (${p.verse.family} ${p.verse.weight}${p.verse.italic ? " italic" : ""} + ${p.hook.family} ${p.hook.weight}${p.hook.italic ? " italic" : ""})`).join(", ")}; the same section, clips and order in each`);
+  const allSpecs: VariationSpec[] = compared.length
+    ? compared.map((p, i) => ({ index: i + 1, name: `v${i + 1}`, order: "story", seed: 1, style: "simple", bars: false, pairing: { id: p.id, name: p.name }, ...(story ? { rate: options.rate ?? "1x", transitions: "as-set" as const } : {}) }))
+    : planVariations(canvas ? Math.max(1, canvas.loops.length) : sh.variationsFor(preset), story ? { rate: options.rate ?? "1x" } : undefined);
   const plans = new Map<CutRate, typeof plan>([[options.rate ?? "1x", plan]]);
   const planOf = (spec: VariationSpec) => {
     const rate = spec.rate ?? options.rate ?? "1x";
@@ -962,7 +1013,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       lrcHash: alignment.lrcHash,
       leadMs,
       lyricsOffsetMs,
-      cutFrames: (spec) => (canvas || ytLayout ? plan.cuts.map((c) => c.frame - plan.start_frame) : composeProps(base, choicesFor(spec)).props.cutFrames),
+      cutFrames: (spec) => (canvas || ytLayout ? plan.cuts.map((c) => c.frame - plan.start_frame) : composeProps(baseFor(spec), choicesFor(spec)).props.cutFrames),
       clipHashes: new Set(prepared.clips.map((c) => c.hash)),
       settings: (spec) => ({
         cut_rate: spec.rate ?? options.rate ?? "1x", energy: options.energy ?? "medium", font: options.font ?? null, font_hook: options.fontHook ?? null,
@@ -977,7 +1028,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   // Compose every variation now, so its warnings are part of the plan printed before rendering.
   const composedBySpec = new Map(
     specs.map((spec) => {
-      const composed = composeProps(base, choicesFor(spec));
+      const composed = composeProps(baseFor(spec), choicesFor(spec));
       if (composed.anchors && spec === specs[0]) {
         // One line per anchor (what the first video does with it), then the conflicts once.
         for (const u of composed.anchors.uses) {
@@ -1075,7 +1126,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         section_id: sectionRow.id,
         seed: spec.seed,
         cut_rate: spec.rate ?? options.rate ?? "1x",
-        style_id: ws.db.select().from(stylePreset).where(eq(stylePreset.name, styles[spec.style].entry.style.name)).get()?.id ?? null,
+        style_id: ws.db.select().from(stylePreset).where(eq(stylePreset.name, stylesOf(spec)[spec.style].entry.style.name)).get()?.id ?? null,
         text_size: composed.props.textSize,
         colour: composed.props.colour,
         cinematic_bars: spec.bars,
@@ -1171,7 +1222,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       const qa = await checkVariation(spec, props, file, {
         loop,
         anchors: anchorsOut,
-        lines, visible, numbers, reports, styles, clips: prepared.clips,
+        lines, visible, numbers, reports, styles: stylesOf(spec), clips: prepared.clips,
         sources: usesClips ? { ...sources, platform: preset.label } : null,
         frameCheck: options.frameCheck ?? true,
         stillPictures: ytLayout === "cover" || ytLayout === "stills" || (!!canvas && props.shots[0]?.kind === "photo"),
@@ -1246,7 +1297,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
 function qaTitle(spec: VariationSpec, title: string, section: SectionChoiceOut, preset: PlatformPreset): string {
   return (
     `${title} - ${preset.name === STANDARD ? "" : `${preset.label} `}${spec.name}: ${spec.style === "simple" ? "Simple" : "Bold"}, ${spec.order}` +
-    `${spec.order === "shuffle" ? ` (seed ${spec.seed})` : ""}${spec.bars ? ", cinematic bars" : ""}\n` +
+    `${spec.order === "shuffle" ? ` (seed ${spec.seed})` : ""}${spec.bars ? ", cinematic bars" : ""}${spec.pairing ? `, fonts: ${spec.pairing.name}` : ""}\n` +
     `Section ${clockText(section.start_ms)} - ${clockText(section.end_ms)}`
   );
 }
@@ -1436,6 +1487,12 @@ function buildManifest(c: {
       text_size: props.textSize,
       colour: props.colour,
       cinematic_bars: props.cinematicBars,
+      // The fonts as rendered (the exact files): family, weight, italic; the pairing, when compared.
+      fonts: {
+        verse: { family: props.style.font, weight: props.style.weight, italic: props.style.italic === true },
+        hook: props.hookFont ? { family: props.hookFont.font, weight: props.hookFont.weight, italic: props.hookFont.italic === true } : null,
+        pairing: spec.pairing?.id ?? null,
+      },
       font: c.options.font ?? null,
       font_hook: c.options.fontHook ?? null,
       hook_font: props.hookFont ?? null,

@@ -431,6 +431,25 @@ describe("pnpm make + pnpm rerender (real renders)", () => {
     }
   }, 300_000);
 
+  it("compare font pairings: one video per pairing, the same section, clips and order; the fonts recorded", async () => {
+    const logs: string[] = [];
+    const made = await makeVideos({
+      workspaceDir: wsDir, song: path.join(inDir, "song.wav"), lyrics: path.join(inDir, "lyrics.txt"), collection: "beach",
+      pairings: "elegant,dramatic", section: "0:02-0:09", align: fakeAlign, frameCheck: false, log: (m) => logs.push(m),
+    });
+    expect(made.variations.map((v) => v.name)).toEqual(["v1", "v2"]);
+    const [a, b] = made.variations.map((v) => readManifest(v.manifestFile));
+    expect(a.settings.fonts).toEqual({ verse: { family: "Cormorant Garamond", weight: 400, italic: false }, hook: { family: "Cormorant Garamond", weight: 600, italic: true }, pairing: "elegant" });
+    expect(b.settings.fonts).toEqual({ verse: { family: "Cormorant Garamond", weight: 400, italic: false }, hook: { family: "Playfair Display", weight: 400, italic: true }, pairing: "dramatic" });
+    // Only the fonts differ: the same section, cuts, clips and in-points.
+    expect(b.section).toEqual(a.section);
+    expect(b.shots).toEqual(a.shots);
+    expect([a.settings.order, b.settings.order, a.props.style.name, b.props.style.name]).toEqual(["story", "story", "Simple", "Simple"]);
+    expect(b.props.fonts.map((f) => f.src)).toContain("_fonts/playfair-display-latin-400-italic.woff2");
+    expect(logs.some((l) => l.startsWith("standard: comparing font pairings: v1 Elegant (Cormorant Garamond 400 + Cormorant Garamond 600 italic), v2 Dramatic"))).toBe(true);
+    expect(readFileSync(made.variations[1].qaFile, "utf8")).toContain("fonts: Dramatic");
+  }, 300_000);
+
   it("rerender fails clearly when a clip has changed", async () => {
     const m = readManifest(result.variations[0].manifestFile);
     const used = path.join(wsDir, ...m.clips[0].file.split("/"));

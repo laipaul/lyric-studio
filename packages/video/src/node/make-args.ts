@@ -47,6 +47,11 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
       "downbeat-offset": { type: "string" },
       font: { type: "string" },
       "font-hook": { type: "string" },
+      weight: { type: "string" },
+      "hook-weight": { type: "string" },
+      italic: { type: "boolean" },
+      "hook-italic": { type: "boolean" },
+      pairings: { type: "string" },
       "line-effect": { type: "string" },
       "hook-effect": { type: "string" },
       pins: { type: "string" },
@@ -58,6 +63,10 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
   });
   const fail = (message: string): never => {
     throw new Error(message);
+  };
+  const weightOf = (flag: string, v: string): number => {
+    const n = Number(v);
+    return Number.isInteger(n) && n >= 100 && n <= 900 && n % 100 === 0 ? n : fail(`--${flag} must be a font weight: 100, 200, ... 900 (400 = regular, 600 = semibold, 700 = bold)`);
   };
   if (positionals.length !== 1 && positionals.length !== 2) fail(MAKE_USAGE);
   // One argument: a song folder (song.wav|mp3, lyrics.txt, hints.lrc, clips\, song.json).
@@ -122,6 +131,11 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
       downbeatOffset: offset,
       font: values.font,
       fontHook: values["font-hook"],
+      weight: values.weight === undefined ? undefined : weightOf("weight", values.weight),
+      hookWeight: values["hook-weight"] === undefined ? undefined : weightOf("hook-weight", values["hook-weight"]),
+      italic: values.italic,
+      hookItalic: values["hook-italic"],
+      pairings: values.pairings,
       lineEffect: values["line-effect"],
       hookEffect: values["hook-effect"],
       pins: resolve(values.pins),

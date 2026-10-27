@@ -146,7 +146,16 @@ importers:
 
   packages/video:
     dependencies:
+      '@fontsource/abril-fatface':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/arima':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@fontsource/bebas-neue':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/bitter':
         specifier: ^5.3.0
         version: 5.3.0
       '@fontsource/caveat':
@@ -167,7 +176,16 @@ importers:
       '@fontsource/dm-serif-display':
         specifier: ^5.3.0
         version: 5.3.0
+      '@fontsource/eb-garamond':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@fontsource/fraunces':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/grand-hotel':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/great-vibes':
         specifier: ^5.3.0
         version: 5.3.0
       '@fontsource/inter':
@@ -179,19 +197,40 @@ importers:
       '@fontsource/kaushan-script':
         specifier: ^5.3.0
         version: 5.3.0
+      '@fontsource/lato':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@fontsource/manrope':
         specifier: ^5.3.0
         version: 5.3.0
       '@fontsource/montserrat':
         specifier: ^5.3.0
         version: 5.3.0
+      '@fontsource/mulish':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/noto-sans-jp':
+        specifier: ^5.3.1
+        version: 5.3.1
+      '@fontsource/noto-serif-jp':
+        specifier: ^5.3.1
+        version: 5.3.1
       '@fontsource/patrick-hand':
         specifier: ^5.3.0
         version: 5.3.0
       '@fontsource/playfair-display':
         specifier: ^5.3.0
         version: 5.3.0
+      '@fontsource/poppins':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/space-mono':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@fontsource/special-elite':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/spline-sans':
         specifier: ^5.3.0
         version: 5.3.0
       '@fontsource/yellowtail':
@@ -202,7 +241,7 @@ importers:
         version: link:../db
       '@remotion/bundler':
         specifier: 4.0.538
-        version: 4.0.538(@swc/helpers@0.5.23)(lightningcss@1.33.0)(postcss@8.5.31)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        version: 4.0.538(@swc/helpers@0.5.23)(lightningcss@1.32.0)(postcss@8.5.31)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@remotion/layout-utils':
         specifier: 4.0.538
         version: 4.0.538
@@ -224,7 +263,7 @@ importers:
     devDependencies:
       '@remotion/cli':
         specifier: 4.0.538
-        version: 4.0.538(@swc/helpers@0.5.23)(lightningcss@1.33.0)(postcss@8.5.31)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)(typescript@5.9.3)
+        version: 4.0.538(@swc/helpers@0.5.23)(lightningcss@1.32.0)(postcss@8.5.31)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)(typescript@5.9.3)
       '@types/fontkit':
         specifier: ^2.0.9
         version: 2.0.9
@@ -1023,8 +1062,17 @@ packages:
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
 
+  '@fontsource/abril-fatface@5.3.0':
+    resolution: {integrity: sha512-voKCJEhGGZNdlk+OS3uFRSDV/HWbs6TAy7qKe9wXq96Uzwadfksyk5eyXLa1T5FkEazBgpHRMRSFBKfA3rbKbg==}
+
+  '@fontsource/arima@5.3.0':
+    resolution: {integrity: sha512-XxydtRj5wjr7LnY1ef+XJpHoVK+/yKYmDF+1mXIO7kuNNBPlc+uQZwA+t8nfVggrHJwNrAdZ2BfEGN75rRYsKw==}
+
   '@fontsource/bebas-neue@5.3.0':
     resolution: {integrity: sha512-nCxMEb9Bg9sjNWm9TIOsvHKDMLRUfEZPWpLgYu6m9KavZZVSA/WoHzI5wROwqA+eNwEi/PNBAcB5Co7HA3S0Cw==}
+
+  '@fontsource/bitter@5.3.0':
+    resolution: {integrity: sha512-RYfrDnaja7v6FO8AwknA5aw/BuVgLBJvwLIShkS42XUIxMbvi/yp47Ax/Xnn9OTVIGFiTXCbVsH0O9HhTTDtqA==}
 
   '@fontsource/caveat-brush@5.3.0':
     resolution: {integrity: sha512-BHSP/9EKNUtnSj7h4TXuYKOrQWgnkCGm7QMHYiie0xSxtlWKbND6wLkhAgwUtUpbz5k8XL8CWPRrL6tDV+JC8w==}
@@ -1044,8 +1092,17 @@ packages:
   '@fontsource/dm-serif-display@5.3.0':
     resolution: {integrity: sha512-ecRclUcYeto9fB7ghkB36H4MtUoaUYFjjornWYYeLCMHzaWEDPk2kIWgZOq0mKBNRxclRSieKcFeLonlMYDTKg==}
 
+  '@fontsource/eb-garamond@5.3.0':
+    resolution: {integrity: sha512-VplwHpB8FLuzl+4G5LDci1b3Z4SghiuXH8XEgaxjnOb5aue5mEt1njmDKeO6iyLeGa73LffU7PC7hzncLRx0ZA==}
+
   '@fontsource/fraunces@5.3.0':
     resolution: {integrity: sha512-LEHTOBiZufQzAvnAe2rZ8ZknbDS28Q9kzwb0L+gZJEmjLGr8hhZ/5NuHXwDuHBWhVXYoiGGXmrb0H6Ko/RrHTg==}
+
+  '@fontsource/grand-hotel@5.3.0':
+    resolution: {integrity: sha512-tGqyrh9EKrmiI4Hk2mPuADbfPhefKFvhFTJ2emYr2z8gwmXLgiQ+eTAV7Ag6j7LCduzBDZlZV/CK3oKs6SqszQ==}
+
+  '@fontsource/great-vibes@5.3.0':
+    resolution: {integrity: sha512-1w60cXzXnC9V4y943po8044O1mqRQBiTTK75h7OpZE+1VQtx+KlAAzoIyEE5KNzu05gUpxaCQg7cbL7ITSwegQ==}
 
   '@fontsource/inter@5.3.0':
     resolution: {integrity: sha512-RofMylZmjlJEfELXeNHFWBRcSs75rGU/6bV2S2jfnvv/3rPXPGe0LgUJTklcHZ9lM4OZmAVFhcJPnACfb91A3g==}
@@ -1056,11 +1113,23 @@ packages:
   '@fontsource/kaushan-script@5.3.0':
     resolution: {integrity: sha512-Kdcvr76wOGp2jgKkkmAOETmPcw/a34RU/qcGW2+gSKzkKyr03vEaLWSbSABoVKWuyuoqWoulcmC4571vq3BYvg==}
 
+  '@fontsource/lato@5.3.0':
+    resolution: {integrity: sha512-0WhF/4rhrw+ErIyneKvhHn2YAl+xf8GDtllgOgOzDmeaSlLQtjpChXaQOpWhG2BchQW0WJy2zLV12Hdg0ndOMw==}
+
   '@fontsource/manrope@5.3.0':
     resolution: {integrity: sha512-obJ1Dv3+uCA6HlHgW8u4BGYxJR9In2HW7gjJhlflEvkrj1X1iSEwu0fToL+JYGC/FEKFfIz1sBuPduvcL2gIAA==}
 
   '@fontsource/montserrat@5.3.0':
     resolution: {integrity: sha512-iQPDtZOnmM5ih4JBGaMSXisRap0ixb9bAUw2hDtY7EjVfaqiiNlKtVuJl9XclxUwtwMMHNcWXfQR6zI9x05+Tg==}
+
+  '@fontsource/mulish@5.3.0':
+    resolution: {integrity: sha512-Fru/fmJwg4ZlKUU4jELz6/guZhba6Lz1vraAROqooYnUbtj1iMi7BXFkQU7AkB6QP5swpvwRnO5chUp6mNh5mA==}
+
+  '@fontsource/noto-sans-jp@5.3.1':
+    resolution: {integrity: sha512-9NNBB/M9PextLYVXGSfIaLZsPnrt5UDw8g2B6T0M775H2yb/oekApSjuS1XKOP7FPcMMEnTavR5rJGDM66qKtA==}
+
+  '@fontsource/noto-serif-jp@5.3.1':
+    resolution: {integrity: sha512-ewMVFXmG1Ip5u1Po1E1M3qqm8hsFqja0/26vkoaNylPXW9pnmEcBREqXxp+Fs03wpmhICE6qyYBN2bbfNtsR9Q==}
 
   '@fontsource/patrick-hand@5.3.0':
     resolution: {integrity: sha512-V8C38IlIFfdWg0Xtri3F7sLCVpm069rUwn6w4n+oyn38gt7H4arOJmuReg3tAw1Q6jHqZp89wTnAAJagq4Atxw==}
@@ -1068,8 +1137,17 @@ packages:
   '@fontsource/playfair-display@5.3.0':
     resolution: {integrity: sha512-uJSABalvdWc10fEPppQjQocamT21LEyRfzzWfRfqbkPz+sRv+kKpYDKyluBUskvJREkJTos9epj1WjQROGu99Q==}
 
+  '@fontsource/poppins@5.3.0':
+    resolution: {integrity: sha512-cms1nM7U6SN8epIV1WMVOV8VsA645aSm3wHfzIQnkk188U341ThbJGSl2Sv54V29gnDbT2arMPfLzvVIIVCceQ==}
+
+  '@fontsource/space-mono@5.3.0':
+    resolution: {integrity: sha512-FrpBMOVWn3PRdRHlrZWC55X3kZG/2BTH7SM5ZyS/bky3iKya2BturI5lk+t0RoDQL2JyHzURsVq/EisCsxpI5A==}
+
   '@fontsource/special-elite@5.3.0':
     resolution: {integrity: sha512-fOQ9XU8m4KnqzcLibAXCxTsKzbxePNDjPqVss5GSMcPVCY1TuCv+Wq8gm1ebqIR6XS1rhMbQ7ECP9ocKVEEpTA==}
+
+  '@fontsource/spline-sans@5.3.0':
+    resolution: {integrity: sha512-iH7h2S+Xk3ZFvXweFjH1KGYBuwhrYS/M4RxudPLGiyrRoVvDjPzPaL6N8J+qtaLzZKrg82w1zHgwotYHwsWTqQ==}
 
   '@fontsource/yellowtail@5.3.0':
     resolution: {integrity: sha512-atz4CIdbP7otppxRaObJiygnkyJzIuLFpPRjWspXvXhBWLB0sk35cCu5r6gSkDomRtEWakJ8//bWbyBjJbilGg==}
@@ -5641,7 +5719,13 @@ snapshots:
 
   '@floating-ui/utils@0.2.12': {}
 
+  '@fontsource/abril-fatface@5.3.0': {}
+
+  '@fontsource/arima@5.3.0': {}
+
   '@fontsource/bebas-neue@5.3.0': {}
+
+  '@fontsource/bitter@5.3.0': {}
 
   '@fontsource/caveat-brush@5.3.0': {}
 
@@ -5655,7 +5739,13 @@ snapshots:
 
   '@fontsource/dm-serif-display@5.3.0': {}
 
+  '@fontsource/eb-garamond@5.3.0': {}
+
   '@fontsource/fraunces@5.3.0': {}
+
+  '@fontsource/grand-hotel@5.3.0': {}
+
+  '@fontsource/great-vibes@5.3.0': {}
 
   '@fontsource/inter@5.3.0': {}
 
@@ -5663,15 +5753,29 @@ snapshots:
 
   '@fontsource/kaushan-script@5.3.0': {}
 
+  '@fontsource/lato@5.3.0': {}
+
   '@fontsource/manrope@5.3.0': {}
 
   '@fontsource/montserrat@5.3.0': {}
+
+  '@fontsource/mulish@5.3.0': {}
+
+  '@fontsource/noto-sans-jp@5.3.1': {}
+
+  '@fontsource/noto-serif-jp@5.3.1': {}
 
   '@fontsource/patrick-hand@5.3.0': {}
 
   '@fontsource/playfair-display@5.3.0': {}
 
+  '@fontsource/poppins@5.3.0': {}
+
+  '@fontsource/space-mono@5.3.0': {}
+
   '@fontsource/special-elite@5.3.0': {}
+
+  '@fontsource/spline-sans@5.3.0': {}
 
   '@fontsource/yellowtail@5.3.0': {}
 
@@ -6674,21 +6778,21 @@ snapshots:
 
   '@radix-ui/rect@1.1.3': {}
 
-  '@remotion/bundler@4.0.538(@swc/helpers@0.5.23)(lightningcss@1.33.0)(postcss@8.5.31)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+  '@remotion/bundler@4.0.538(@swc/helpers@0.5.23)(lightningcss@1.32.0)(postcss@8.5.31)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
       '@remotion/studio': 4.0.538(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@remotion/studio-shared': 4.0.538(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@remotion/timeline-utils': 4.0.538(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@rspack/core': 1.7.11(@swc/helpers@0.5.23)
       '@rspack/plugin-react-refresh': 1.6.1(react-refresh@0.18.0)
-      css-loader: 7.1.4(@rspack/core@1.7.11(@swc/helpers@0.5.23))(webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.31))
+      css-loader: 7.1.4(@rspack/core@1.7.11(@swc/helpers@0.5.23))(webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.31))
       esbuild: 0.28.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
       react-refresh: 0.18.0
       remotion: 4.0.538(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      style-loader: 4.0.0(webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.31))
-      webpack: 5.105.0(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.31)
+      style-loader: 4.0.0(webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.31))
+      webpack: 5.105.0(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.31)
     transitivePeerDependencies:
       - '@minify-html/node'
       - '@remotion/video-matting'
@@ -6711,16 +6815,16 @@ snapshots:
 
   '@remotion/captions@4.0.538': {}
 
-  '@remotion/cli@4.0.538(@swc/helpers@0.5.23)(lightningcss@1.33.0)(postcss@8.5.31)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)(typescript@5.9.3)':
+  '@remotion/cli@4.0.538(@swc/helpers@0.5.23)(lightningcss@1.32.0)(postcss@8.5.31)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)(typescript@5.9.3)':
     dependencies:
       '@babel/parser': 7.24.1
-      '@remotion/bundler': 4.0.538(@swc/helpers@0.5.23)(lightningcss@1.33.0)(postcss@8.5.31)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@remotion/bundler': 4.0.538(@swc/helpers@0.5.23)(lightningcss@1.32.0)(postcss@8.5.31)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@remotion/codemods': 4.0.538(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@remotion/media-utils': 4.0.538(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@remotion/player': 4.0.538(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@remotion/renderer': 4.0.538(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@remotion/studio': 4.0.538(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@remotion/studio-server': 4.0.538(@swc/helpers@0.5.23)(lightningcss@1.33.0)(postcss@8.5.31)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)(typescript@5.9.3)
+      '@remotion/studio-server': 4.0.538(@swc/helpers@0.5.23)(lightningcss@1.32.0)(postcss@8.5.31)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)(typescript@5.9.3)
       '@remotion/studio-shared': 4.0.538(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       dotenv: 17.3.1
       mediabunny: 1.62.0
@@ -6864,11 +6968,11 @@ snapshots:
     dependencies:
       zod: 4.5.4
 
-  '@remotion/studio-server@4.0.538(@swc/helpers@0.5.23)(lightningcss@1.33.0)(postcss@8.5.31)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)(typescript@5.9.3)':
+  '@remotion/studio-server@4.0.538(@swc/helpers@0.5.23)(lightningcss@1.32.0)(postcss@8.5.31)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)(typescript@5.9.3)':
     dependencies:
       '@babel/parser': 7.24.1
       '@babel/types': 7.24.0
-      '@remotion/bundler': 4.0.538(@swc/helpers@0.5.23)(lightningcss@1.33.0)(postcss@8.5.31)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@remotion/bundler': 4.0.538(@swc/helpers@0.5.23)(lightningcss@1.32.0)(postcss@8.5.31)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@remotion/codemods': 4.0.538(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@remotion/renderer': 4.0.538(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@remotion/studio-protocol': 4.0.538
@@ -7810,7 +7914,7 @@ snapshots:
       shebang-command: 2.0.0
       which: 2.0.2
 
-  css-loader@7.1.4(@rspack/core@1.7.11(@swc/helpers@0.5.23))(webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.31)):
+  css-loader@7.1.4(@rspack/core@1.7.11(@swc/helpers@0.5.23))(webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.31)):
     dependencies:
       icss-utils: 5.1.0(postcss@8.5.31)
       postcss: 8.5.31
@@ -7822,7 +7926,7 @@ snapshots:
       semver: 7.8.5
     optionalDependencies:
       '@rspack/core': 1.7.11(@swc/helpers@0.5.23)
-      webpack: 5.105.0(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.31)
+      webpack: 5.105.0(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.31)
 
   cssesc@3.0.0: {}
 
@@ -9393,14 +9497,14 @@ snapshots:
 
   scheduler@0.28.0: {}
 
-  schema-utils@4.8.1(webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.31)):
+  schema-utils@4.8.1(webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.31)):
     dependencies:
       '@types/json-schema': 7.0.15
       ajv: 8.20.0
       ajv-formats: 3.0.1
       ajv-keywords: 5.1.0(ajv@8.20.0)
     optionalDependencies:
-      webpack: 5.105.0(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.31)
+      webpack: 5.105.0(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.31)
 
   semver@6.3.1: {}
 
@@ -9600,9 +9704,9 @@ snapshots:
 
   strip-json-comments@3.1.1: {}
 
-  style-loader@4.0.0(webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.31)):
+  style-loader@4.0.0(webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.31)):
     dependencies:
-      webpack: 5.105.0(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.31)
+      webpack: 5.105.0(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.31)
 
   styled-jsx@5.1.6(@babel/core@7.29.7(supports-color@10.2.2))(react@19.3.0):
     dependencies:
@@ -9631,16 +9735,16 @@ snapshots:
 
   tapable@2.3.3: {}
 
-  terser-webpack-plugin@5.6.1(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.31)(webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.31)):
+  terser-webpack-plugin@5.6.1(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.31)(webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.31)):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       jest-worker: 27.5.1
-      schema-utils: 4.8.1(webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.31))
+      schema-utils: 4.8.1(webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.31))
       terser: 5.51.2
-      webpack: 5.105.0(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.31)
+      webpack: 5.105.0(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.31)
     optionalDependencies:
       esbuild: 0.28.1
-      lightningcss: 1.33.0
+      lightningcss: 1.32.0
       postcss: 8.5.31
 
   terser@5.51.2:
@@ -9892,7 +9996,7 @@ snapshots:
 
   webpack-sources@3.6.0: {}
 
-  webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.31):
+  webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.31):
     dependencies:
       '@types/eslint-scope': 3.7.7
       '@types/estree': 1.0.9
@@ -9914,9 +10018,9 @@ snapshots:
       loader-runner: 4.3.2
       mime-types: 2.1.35
       neo-async: 2.6.2
-      schema-utils: 4.8.1(webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.31))
+      schema-utils: 4.8.1(webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.31))
       tapable: 2.3.3
-      terser-webpack-plugin: 5.6.1(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.31)(webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.31))
+      terser-webpack-plugin: 5.6.1(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.31)(webpack@5.105.0(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.31))
       watchpack: 2.6.3
       webpack-sources: 3.6.0
     transitivePeerDependencies:

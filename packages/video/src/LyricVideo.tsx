@@ -129,7 +129,7 @@ function LyricText({ line, style, font, textSize, colour, ready, area, glow, nex
   next?: string | null; // the next line, shown small and faded underneath
   nextScale?: number;
   style: StyleProps;
-  font: { family: string; weight: number };
+  font: { family: string; weight: number; italic?: boolean };
   textSize: number;
   colour: string;
   ready: boolean;
@@ -146,11 +146,11 @@ function LyricText({ line, style, font, textSize, colour, ready, area, glow, nex
             text,
             textSize,
             maxWidth,
-            (t, size) => measureText({ text: t, fontFamily: font.family, fontWeight: font.weight, fontSize: size }).width,
+            (t, size) => measureText({ text: t, fontFamily: font.family, fontWeight: font.weight, fontSize: size, ...(font.italic ? { additionalStyles: { fontStyle: "italic" } } : {}) }).width,
             area.minScale,
           )
         : null,
-    [ready, text, textSize, maxWidth, font.family, font.weight, area.minScale],
+    [ready, text, textSize, maxWidth, font.family, font.weight, font.italic, area.minScale],
   );
   if (!layout) return null;
 
@@ -180,6 +180,8 @@ function LyricText({ line, style, font, textSize, colour, ready, area, glow, nex
         color: colour,
         fontFamily: `"${font.family}", sans-serif`,
         fontWeight: font.weight,
+        fontStyle: font.italic ? "italic" : "normal",
+        fontSynthesis: "none", // the exact file: never a fake bold or italic
         fontSize: layout.fontSize,
         lineHeight: area.lineHeight,
         textShadow: [textShadows[style.effect] ?? textShadows.none, ...(glow ? [glow] : [])].join(", "),
@@ -320,6 +322,7 @@ function TitleOverlay({ t, format }: { t: NonNullable<LyricVideoProps["titleOver
         textAlign: "center",
         fontFamily: `"${t.font}", serif`,
         fontWeight: t.weight,
+        fontSynthesis: "none",
         color: t.colour,
         letterSpacing: `${t.letterSpacing}em`,
         textShadow: "0 2px 18px rgba(0,0,0,0.6)",
@@ -402,8 +405,8 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
   const barHeight = cinematicBarHeight(format);
   const font =
     line?.isHook && props.hookFont
-      ? { family: props.hookFont.font, weight: props.hookFont.weight }
-      : { family: style.font, weight: style.weight };
+      ? { family: props.hookFont.font, weight: props.hookFont.weight, italic: props.hookFont.italic === true }
+      : { family: style.font, weight: style.weight, italic: style.italic === true };
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>

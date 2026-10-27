@@ -117,7 +117,7 @@ async function storedAlignment(ws: Workspace, projectId: string): Promise<{ alig
 export type AnchorClip = { name: string; thumb: string | null; kind: "video" | "photo"; durationMs: number; orientation: string; from: string }; // from: "song" or the collection
 export type AnchorsView = { list: AnchorSpec[]; gapOrder: GapOrder | null; clips: AnchorClip[]; problems: { line: number; problem: string }[]; collections: string[] };
 
-async function anchorClips(ws: Workspace, projectId: string): Promise<{ clips: AnchorClip[]; collections: string[] }> {
+export async function anchorClips(ws: Workspace, projectId: string): Promise<{ clips: AnchorClip[]; collections: string[] }> {
   const paths = songPathsById(ws, projectId);
   const recipe = readRecipe(paths.recipe);
   const remembered = rememberedCollection(ws, projectId);

@@ -9,7 +9,7 @@ import { applyTextCase, layoutLyric, type LyricLayout } from "./lyrics";
 import type { LyricArea } from "./platform";
 import type { LyricEffectsProps, LyricLineProps, StyleProps } from "./props";
 
-type Font = { family: string; weight: number };
+type Font = { family: string; weight: number; italic?: boolean };
 
 const BASE_SHADOW = "0 2px 12px rgba(0,0,0,0.55)";
 const SHADOWS: Record<string, string> = { none: BASE_SHADOW, shadow: "0 6px 0 rgba(0,0,0,0.35), 0 0 28px rgba(0,0,0,0.65)" };
@@ -33,7 +33,7 @@ export function LyricScene(props: {
   lyrics: readonly LyricLineProps[];
   effects: LyricEffectsProps;
   style: StyleProps;
-  hookFont: { font: string; weight: number } | null;
+  hookFont: { font: string; weight: number; italic?: boolean } | null;
   textSize: number;
   colour: string;
   ready: boolean;
@@ -45,19 +45,19 @@ export function LyricScene(props: {
   const { lyrics, effects, style, textSize, colour, ready, areaFor } = props;
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
-  const fontOf = (l: LyricLineProps): Font => (l.isHook && props.hookFont ? { family: props.hookFont.font, weight: props.hookFont.weight } : { family: style.font, weight: style.weight });
+  const fontOf = (l: LyricLineProps): Font => (l.isHook && props.hookFont ? { family: props.hookFont.font, weight: props.hookFont.weight, italic: props.hookFont.italic === true } : { family: style.font, weight: style.weight, italic: style.italic === true });
 
   const layouts = useMemo(
     () =>
       ready
         ? lyrics.map((l): LyricLayout => {
             const area = areaFor(l);
-            const font = l.isHook && props.hookFont ? { family: props.hookFont.font, weight: props.hookFont.weight } : { family: style.font, weight: style.weight };
+            const font = l.isHook && props.hookFont ? { family: props.hookFont.font, weight: props.hookFont.weight, italic: props.hookFont.italic === true } : { family: style.font, weight: style.weight, italic: style.italic === true };
             return layoutLyric(
               applyTextCase(l.text, style.textCase),
               textSize,
               area.right - area.left,
-              (t, size) => measureText({ text: t, fontFamily: font.family, fontWeight: font.weight, fontSize: size }).width,
+              (t, size) => measureText({ text: t, fontFamily: font.family, fontWeight: font.weight, fontSize: size, ...(font.italic ? { additionalStyles: { fontStyle: "italic" } } : {}) }).width,
               area.minScale,
             );
           })
@@ -114,6 +114,8 @@ export function LyricScene(props: {
               color: colour,
               fontFamily: `"${font.family}", sans-serif`,
               fontWeight: font.weight,
+              fontStyle: font.italic ? "italic" : "normal",
+              fontSynthesis: "none", // the exact file: never a fake bold or italic
               fontSize: layout.fontSize,
               lineHeight: area.lineHeight,
               textShadow: shadows.join(", "),
