@@ -12,6 +12,7 @@ import { eq } from "drizzle-orm";
 
 import { AssetsTab } from "@/components/assets-tab";
 import { GeneratePanel } from "@/components/generate-panel";
+import { LyricsTab } from "@/components/lyrics-tab";
 import { PostTab } from "@/components/post-tab";
 import { StatusBadge } from "@/components/status-badge";
 import { StyleTab } from "@/components/style-tab";
@@ -19,12 +20,13 @@ import { SongView, type RunView } from "@/components/song-view";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { withWorkspace } from "@/lib/workspace";
 
-// The song page: header, then tabs: Assets (the song folder's files and clips), Style (the song's
+// The song page: header, then tabs: Assets (the song folder's files and clips), Lyrics (every line's
+// timing, what the viewer sees, nudges into hints.lrc, lyrics.txt), Style (the song's
 // recipe: song.json with each setting's source, per platform, save / reset / lock), Generate (the
 // worker makes the videos; progress in the Tasks menu; ?from=<run> starts it with that run's settings),
 // Videos (exports grid, marks, compare, each run's settings next to the recipe) and Post (the approved
 // videos with their captions and files). ?tab= opens a tab.
-const TABS = ["assets", "style", "generate", "videos", "post"];
+const TABS = ["assets", "lyrics", "style", "generate", "videos", "post"];
 type Search = Promise<{ tab?: string; from?: string }>;
 
 export default function SongPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Search }) {
@@ -105,6 +107,7 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
       <Tabs key={`${tab}:${search.from ?? ""}`} defaultValue={tab} className="gap-6">
         <TabsList>
           <TabsTrigger value="assets">Assets</TabsTrigger>
+          <TabsTrigger value="lyrics">Lyrics</TabsTrigger>
           <TabsTrigger value="style">Style</TabsTrigger>
           <TabsTrigger value="generate">Generate</TabsTrigger>
           <TabsTrigger value="videos">Videos</TabsTrigger>
@@ -114,6 +117,9 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
         </TabsList>
         <TabsContent value="assets">
           <AssetsTab projectId={song.id} />
+        </TabsContent>
+        <TabsContent value="lyrics">
+          <LyricsTab projectId={song.id} />
         </TabsContent>
         <TabsContent value="style">
           <StyleTab projectId={song.id} />

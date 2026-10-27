@@ -160,6 +160,23 @@ then the run (Generate or command-line options). Fields: `verseEffect`, `hookEff
 run cannot change (`"locked": ["verseEffect"]`). `pnpm make` prints a `recipe:` line showing where each
 value came from.
 
+### Lyrics (song page)
+
+Every lyric line of the song with its timing, to check and fix by ear:
+
+- **Stamp** (where the aligner put it), **Starts** (where it starts now: moved by the vocal-start check,
+  or set by hand) and **On screen** (when it fades in, is readable and leaves — what the viewer sees).
+- Lines **flagged for review** by the vocal-start check (with the reason) and lines with a low confidence
+  are highlighted; "Show only lines to review" hides the rest.
+- **−0.5 / −0.1 / +0.1 / +0.5** move a line's start; **▶** plays 3 s from just before it; **Undo**,
+  **Reset line** (back to the alignment), **Save**. Saved lines go into the song's `hints.lrc` as
+  "set by hand" lines (`[01:10.00]! #2 You had a heart for two`); the next video uses them and keeps
+  the stored alignment (no re-alignment). Make the video again to see the change.
+- **lyrics.txt**: edit the text here. Lines that look like labels ([Chorus], Verse 1:), repeat marks,
+  credits or the title at the top are flagged, with a button to remove them. Changing words means the
+  song is aligned again on the next video (you are warned first); the old file is always kept in
+  `.studio\replaced\`, and **Earlier versions → Restore** brings one back.
+
 ### Style (song page)
 
 The **Style** tab shows the song's recipe: every setting (verse / hook effect, fonts, accent colour,

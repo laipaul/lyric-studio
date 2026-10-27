@@ -52,6 +52,7 @@ export type Manifest = {
     lead_ms: number;
     lyrics_offset_ms: number;
     vocal_guard?: { number: number; text: string; from_ms: number; to_ms: number }[] | null; // lines moved to the voice start (pnpm make)
+    hand_times?: { number: number; text: string; from_ms: number; to_ms: number }[] | null; // set by hand (Lyrics tab)
     vocal_check?: import("./song-project").VocalGuard["check"] | null; // what the vocal-start check measured and decided
   };
   settings: Record<string, unknown>;

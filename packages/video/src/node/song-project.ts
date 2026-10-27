@@ -20,6 +20,7 @@ import { eq } from "drizzle-orm";
 
 import { HOOK_MARKER, normalizeLyric, parseLrc, type TimedLine } from "../lrc";
 import { clockText } from "../section";
+import { applyHandTimes, parseHandTimes, stripHandTimes } from "../hand-times";
 import { applyGuard, asrWindows, checkVocalStart, earlyMs, type AsrWord, type LineCheck, type VoiceLevels } from "../vocal-guard";
 import { cachedFileHash } from "./collection";
 import { processAlive } from "./jobs";
@@ -87,7 +88,25 @@ export type Alignment = {
   warnings: string[];
   lines: TimedLine[]; // parsed, with hooks from lyrics.txt (and the vocal-start guard's moves, see applyVocalGuard)
   guard?: VocalGuard | null; // null: not checked (a given LRC, or no vocal track)
+  handTimes?: { number: number; text: string; from_ms: number; to_ms: number }[]; // hand-set starts applied (Lyrics tab)
 };
+
+// The hand-set starts of hints.lrc (the Lyrics tab) on the alignment: those lines start exactly there,
+// and the vocal-start check leaves them alone (skip). The stored alignment itself is never changed.
+export function applyHandSet(alignment: Alignment, hintsFile: string | undefined, log: (m: string) => void = () => {}): { alignment: Alignment; skip: Set<number> } {
+  const times = hintsFile && existsSync(hintsFile) ? parseHandTimes(readFileSync(hintsFile, "utf8")) : [];
+  if (!times.length || alignment.source === "given") return { alignment, skip: new Set() };
+  const r = applyHandTimes(alignment.lines, times);
+  for (const p of r.problems) {
+    log(`lyrics: ${p}`);
+    alignment.warnings.push(p.charAt(0).toUpperCase() + p.slice(1));
+  }
+  for (const a of r.applied) log(`lyrics: line ${a.index + 1} set by hand: starts at ${clockText(a.toMs)} (was ${clockText(a.fromMs)}; Lyrics tab, hints.lrc)`);
+  return {
+    alignment: { ...alignment, lines: r.lines, handTimes: r.applied.map((a) => ({ number: a.index + 1, text: r.lines[a.index].text, from_ms: a.fromMs, to_ms: a.toMs })) },
+    skip: new Set(r.applied.map((a) => a.index)),
+  };
+}
 
 // The vocal-start guard's result for one alignment (also written to guard-<lrc hash>.json).
 export type VocalGuard = {
@@ -156,7 +175,7 @@ export async function applyVocalGuard(
   ws: Workspace,
   sp: SongProject,
   alignment: Alignment,
-  options: { log?: (m: string) => void; voiceMap?: VoiceMapRunner; firstWords?: FirstWordsRunner; reviewMs?: number; all?: boolean } = {},
+  options: { log?: (m: string) => void; voiceMap?: VoiceMapRunner; firstWords?: FirstWordsRunner; reviewMs?: number; all?: boolean; skip?: ReadonlySet<number> } = {},
 ): Promise<Alignment> {
   const log = options.log ?? (() => {});
   if (alignment.source === "given") return { ...alignment, guard: null };
@@ -180,7 +199,7 @@ export async function applyVocalGuard(
   const map = JSON.parse(readFileSync(mapFile, "utf8")) as { hop_ms: number; db: number[] };
   const levels: VoiceLevels = { hopMs: map.hop_ms, db: map.db };
   // The recognised words around the checked lines (cached per song, windows and language).
-  const windows = asrWindows(alignment.lines, levels, options.all);
+  const windows = asrWindows(alignment.lines, levels, options.all).filter(([n]) => !options.skip?.has(n - 1));
   const lang = alignment.report?.lang ?? "en";
   let asr: Map<number, AsrWord[]> | undefined;
   let wordsCheck = "ran";
@@ -205,7 +224,7 @@ export async function applyVocalGuard(
       asr = new Map(words.windows.map((w) => [w.line - 1, w.words]));
     }
   }
-  const check = checkVocalStart(alignment.lines, levels, { asr, reviewMs: options.reviewMs, all: options.all });
+  const check = checkVocalStart(alignment.lines, levels, { asr, reviewMs: options.reviewMs, all: options.all, skip: options.skip });
   const lines = applyGuard(alignment.lines, check.moves);
   log(`vocal-start check: singing level ${check.levelDb.toFixed(1)} dB; voice = at least 0.5 s above ${check.thresholdDb.toFixed(1)} dB; recognised words: ${wordsCheck}`);
   for (const c of check.lines) {
@@ -525,8 +544,13 @@ function projectHint(
 ): Alignment["hint"] {
   const record = path.join(dir, "hint.json");
   const stored = existsSync(record) ? (JSON.parse(readFileSync(record, "utf8")) as StoredHint) : null;
-  if (options.hint) {
-    const content = readFileSync(options.hint);
+  // Hand-set lines (Lyrics tab, "[mm:ss.xx]! #n text") are not taps: the aligner gets the file without
+  // them, so adding or changing them keeps the stored alignment. Only hand-set lines: as if no --hint.
+  const given = options.hint ? Buffer.from(stripHandTimes(readFileSync(options.hint, "utf8")), "utf8") : null;
+  const hasTaps = !!given && /\[\d+:\d{1,2}(?:\.\d+)?\][^\r\n]*\S/.test(given.toString("utf8").replace(/^\[[a-z]+:.*$/gim, ""));
+  if (options.hint && hasTaps) {
+    const original = readFileSync(options.hint);
+    const content = given!.toString("utf8") === original.toString("utf8") ? original : given!;
     const hash = sha256(content);
     const copy = `hints-${hash.slice(0, 12)}.lrc`;
     if (!existsSync(path.join(dir, copy))) writeFileAtomic(path.join(dir, copy), content);

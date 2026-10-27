@@ -8,6 +8,7 @@ import path from "node:path";
 import { clip as clipTable, PHOTO_EXTENSION, probeMedia, project as projectTable, uniqueFileName, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
+import { isHandTimeLine } from "../hand-times";
 import { HOOK_MARKER, normalizeLyric } from "../lrc";
 import { cachedFileHash, SOURCE_FILE, syncCollection } from "./collection";
 import { keepReplaced, storeCover, storeLyricsTxt } from "./project-settings";
@@ -97,12 +98,13 @@ export type HintsCheck = {
   marks: number; // empty stamps: where the singing of the line before ends (pnpm tap writes one after the last line) or a pause
   orphans: string[]; // timed lines that match no line of lyrics.txt
   untapped: number; // lyric lines without a tapped time (the aligner times them on its own)
+  handSet: number; // lines set by hand in the Lyrics tab ("[mm:ss.xx]! #n text"; not taps)
 };
 
 // hints.lrc against lyrics.txt (lines compared ignoring case, punctuation and "* " hook markers).
 export function checkHints(hints: string, lyricsTxt: string): HintsCheck {
   const STAMP = /\[\d+:\d{1,2}(?:\.\d+)?\]/g;
-  const out: HintsCheck = { stamps: 0, timed: 0, marks: 0, orphans: [], untapped: 0 };
+  const out: HintsCheck = { stamps: 0, timed: 0, marks: 0, orphans: [], untapped: 0, handSet: 0 };
   const lyrics = lyricsTxt
     .replace(/^\uFEFF/, "")
     .split(/\r?\n/)
@@ -111,6 +113,10 @@ export function checkHints(hints: string, lyricsTxt: string): HintsCheck {
   const known = new Set(lyrics.map(normalizeLyric));
   const tapped = new Set<string>();
   for (const raw of hints.replace(/^\uFEFF/, "").split(/\r?\n/)) {
+    if (isHandTimeLine(raw)) {
+      out.handSet++;
+      continue;
+    }
     const stamps = raw.match(STAMP)?.length ?? 0;
     if (!stamps || /^\[[a-z]+:/i.test(raw.trim())) continue; // [ti:...] and other tags
     out.stamps += stamps;

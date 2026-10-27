@@ -71,6 +71,7 @@
     "./song-folder": "./src/node/song-folder.ts",
     "./style": "./src/node/style.ts",
     "./run-settings": "./src/node/run-settings.ts",
+    "./lyrics-view": "./src/node/lyrics-view.ts",
     "./font-catalog": "./src/node/font-catalog.ts"
   }
 }

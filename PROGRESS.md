@@ -718,6 +718,32 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   effect hints. Browser check: Style (per-platform rows, lock, fonts and warning, length), Generate
   (recipe option, locked hook effect, chips with length), Assets (path, hints).
 
+### Step 5c.2 — Lyrics tab ✅ (to verify on the Windows PC)
+First real case: A Heart For Two ~1:10, the hook "You had a heart for two" whose karaoke highlight came
+1-2 s early.
+- **Lyrics tab** (song page, after Assets): every line with its time stamp (the stored alignment), where
+  it starts now (moved by the vocal-start check, or set by hand), **what the viewer sees** (fades in /
+  readable / leaves, computed by the same code as the render: lead-in, gaps), confidence. Lines flagged
+  for review (with the reason) and low-confidence lines are highlighted; "Show only lines to review".
+- **Nudges** −0.5 / −0.1 / +0.1 / +0.5 s per line, **▶** plays 3 s from 1 s before the line, Undo, Reset
+  line, **Save**: the changed lines go into hints.lrc as hand-set lines ("[01:10.00]! #2 You had a heart
+  for two"). The aligner never sees those lines, so the stored alignment is kept (no re-alignment);
+  pnpm make applies them ("lyrics: line 2 set by hand: starts at 1:10.0 (was 1:08.5; Lyrics tab,
+  hints.lrc)") and the vocal-start check leaves them alone. The old hints.lrc is kept in .studio\replaced\.
+- **lyrics.txt editor**: label lines ([Chorus], "Verse 1:", "Chorus"), repeat marks ((x2)), credits
+  ("Written by", ©) and the song title at the top (when it is not sung again) are flagged, with "Remove
+  these lines". Saving keeps the old lyrics.txt in .studio\replaced\ and warns first when words change
+  (the next video aligns again; hook markers and blank lines alone do not). Earlier versions: Restore.
+- The song file itself is now served to the app (for ▶ only; .studio, the database and other files stay
+  private).
+- Tests: hand-times.test.ts (adding / replacing / removing hand-set lines leaves the taps byte for byte,
+  also without a last newline or with CRLF; whole-line move and squeeze; ignored with a message when the
+  text changed or the order is wrong; the aligner gets only the taps and the stored alignment is reused; a
+  hints.lrc with only hand-set lines = no hints), lyrics-view.test.ts (the 1:10 hook: flagged, nudged
+  +1.5 s, readable 1:09.77, reset; label lines; text edits with re-align flag, restore), browser test
+  lyrics-tab.e2e.ts (part of pnpm test:e2e: the same case in the app, the song plays, the label removed
+  with the warning first, restore).
+
 ### Step 5c.1d — Hook lines always checked, `--all`, previous line's voice ✅ (to verify on the Windows PC)
 Test result on the PC: "almost perfect". One glitch: A Heart For Two ~1:10, hook "You had a heart for
 two": the pink karaoke highlight starts on "You" 1-2 s before it is sung (an early stamp); that line was
@@ -969,10 +995,7 @@ rest was in sync.
 
 ## Next
 1. Verify Steps 6.2a and 6.2b on the PC (6.2c-1 verified); verify 5c.1 (A Heart For Two, YouTube) and 6.2c-2b.
-2. **Step 5c.2 — Lyrics tab** (plan approved; next): each line with its time and confidence, low-confidence
-   and early lines highlighted, nudges (−0.5 / −0.1 / +0.1 / +0.5 s) with a short audio preview; saving
-   writes hints.lrc (exact lines, skipped by the guard) and the next make reuses the alignment. Also
-   shows when each line really appears on screen (after the display rule and the guard).
+2. Verify 5c.2 (the Lyrics tab) on the PC with A Heart For Two ~1:10.
 3. Step 6.3 (content board with manually entered results).
 4. Step 5g.4 (loop layout).
 5. Step 5e (timing editor on /preview); corrections go into an automatically created "test" project

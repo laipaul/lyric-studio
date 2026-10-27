@@ -244,9 +244,9 @@ describe("the Assets tab's hints check", () => {
   it("timed lines, end marks (the empty stamp after the last line) and orphans", () => {
     const lyrics = "Verse one here\n* Hold on to me\nThrough the night\n";
     const tap = "[ti:x]\n[00:01.00]Verse one here\n[00:02.50]Hold on to me\n[00:04.00]Through the night\n[00:05.20]\n";
-    expect(checkHints(tap, lyrics)).toEqual({ stamps: 4, timed: 3, marks: 1, orphans: [], untapped: 0 });
+    expect(checkHints(tap, lyrics)).toEqual({ stamps: 4, timed: 3, marks: 1, orphans: [], untapped: 0, handSet: 0 });
     const old = "[00:01.00]Verse one here\n[00:02.00]A line that was removed\n[00:04.00]Through the night\n";
-    expect(checkHints(old, lyrics)).toEqual({ stamps: 3, timed: 3, marks: 0, orphans: ["A line that was removed"], untapped: 1 });
+    expect(checkHints(old, lyrics)).toEqual({ stamps: 3, timed: 3, marks: 0, orphans: ["A line that was removed"], untapped: 1, handSet: 0 });
   });
 });
 

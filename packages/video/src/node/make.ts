@@ -52,7 +52,7 @@ import { tooLongLines } from "./measure";
 import { loadStyles, lyricLineNumbers, parseSection, snapToDownbeat, songMedia, type StyleFaces } from "./prepare";
 import { detectBadFrames, measureLyrics } from "./qa-check";
 import { getBundle, renderLyricVideo, renderThumbnail, type RenderOptions } from "./render";
-import { applyVocalGuard, ensureAlignment, findOrCreateSongProject, matchReport, type Alignment, type AlignRunner, type VoiceMapRunner, type FirstWordsRunner } from "./song-project";
+import { applyHandSet, applyVocalGuard, ensureAlignment, findOrCreateSongProject, matchReport, type Alignment, type AlignRunner, type VoiceMapRunner, type FirstWordsRunner } from "./song-project";
 import { COVER_TEXT_SCALE } from "../youtube-layout";
 import { lyricSections } from "../youtube";
 import { loopCheck, planCanvas, type CanvasPlan } from "./canvas";
@@ -508,9 +508,11 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       log,
       align: options.align,
     });
-    // The vocal-start guard: on the stored alignment as it is (never re-aligning).
-    const alignment = await applyVocalGuard(ws, { ...sp, project }, stored, {
+    // Hand-set starts (Lyrics tab), then the vocal-start guard: on the stored alignment (never re-aligning).
+    const hand = applyHandSet(stored, paths.hints && existsSync(paths.hints) ? paths.hints : options.hint, log);
+    const alignment = await applyVocalGuard(ws, { ...sp, project }, hand.alignment, {
       log,
+      skip: hand.skip,
       voiceMap: options.voiceMap,
       firstWords: options.firstWords,
       reviewMs: Math.round(brand.brand.motion.gapLeadInS * 1000), // smaller differences are not visible: not flagged
@@ -518,7 +520,10 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const lines = alignment.lines;
     if (!lines.length) throw new Error(`No timed lyric lines in ${alignment.lrcFile}`);
     // Lines the vocal-start check changed: the moved ones and a previous line it shortened.
-    const guardMoved = new Set(alignment.guard?.moves.flatMap((m) => (m.shortens_previous ? [m.number - 1, m.number - 2] : [m.number - 1])));
+    const guardMoved = new Set([
+      ...(alignment.guard?.moves.flatMap((m) => (m.shortens_previous ? [m.number - 1, m.number - 2] : [m.number - 1])) ?? []),
+      ...(alignment.handTimes?.flatMap((h) => [h.number - 1, h.number - 2]) ?? []),
+    ]);
     const reports = matchReport(lines, alignment.report).map((r, i) =>
       r
         ? {
@@ -1267,6 +1272,7 @@ function buildManifest(c: {
       lrc: c.alignment.lrcStored,
       lrc_sha256: c.alignment.lrcHash,
       vocal_guard: c.alignment.guard?.moves ?? null, // lines moved to where the voice starts (not in the stored LRC)
+      hand_times: c.alignment.handTimes ?? null, // lines set by hand in the Lyrics tab (hints.lrc "!" lines)
       vocal_check: c.alignment.guard?.check ?? null, // what the vocal-start check measured (singing level, per checked line)
       source: c.alignment.source,
       hint: c.alignment.hint

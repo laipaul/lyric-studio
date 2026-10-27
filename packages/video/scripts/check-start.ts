@@ -5,7 +5,7 @@
 // Uses the stored alignment (never aligns): run pnpm make once first.
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 
-import { applyVocalGuard, ensureAlignment, findOrCreateSongProject, loadBrand, loadFontCatalog, parseMakeArgs, type AlignRunner } from "../src/node";
+import { applyHandSet, applyVocalGuard, ensureAlignment, findOrCreateSongProject, loadBrand, loadFontCatalog, parseMakeArgs, type AlignRunner } from "../src/node";
 
 const cwd = process.env.INIT_CWD ?? process.cwd();
 const all = process.argv.includes("--all");
@@ -26,7 +26,8 @@ async function main() {
     const log = (m: string) => (m.startsWith("lyrics: aligning") ? undefined : console.log(m)); // it never aligns
     const stored = await ensureAlignment(ws, sp, { lyricsTxt: options.lyrics, hint: options.hint, lang: options.lang, durationMs: sp.project.duration_ms ?? 600_000, log, align: noAligning });
     const brand = loadBrand(ws.dir, loadFontCatalog(ws.dir), sp.project.artist);
-    const checked = await applyVocalGuard(ws, sp, stored, { log, all, reviewMs: Math.round(brand.brand.motion.gapLeadInS * 1000) });
+    const hand = applyHandSet(stored, options.songFolder ? `${options.songFolder}/hints.lrc` : options.hint, log);
+    const checked = await applyVocalGuard(ws, sp, hand.alignment, { log, all, skip: hand.skip, reviewMs: Math.round(brand.brand.motion.gapLeadInS * 1000) });
     for (const w of checked.warnings) console.log(`Warning: ${w}`);
     if (checked.guard && !checked.guard.moves.length) console.log("Nothing to move: every checked line starts with its singing.");
   } finally {
