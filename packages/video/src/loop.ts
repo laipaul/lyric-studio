@@ -322,3 +322,36 @@ export function loopFit(audio: LoopAudio | null, bpm: number, startMs: number, e
   }
   return { score, ok, text: parts.join(", ") };
 }
+
+// ---------------------------------------------------------------- better loops (the storyboard's hint)
+
+export type LoopSuggestion = { lengthS: number; endMs: number; line: { number: number; text: string } | null; fit: LoopFit };
+
+// Ends that loop well from this start: bar starts right after a complete sung line (never inside one),
+// 0.5-1.5x the target, whose wrap-around passes beat, level and harmony; the nearest to the target first.
+export function loopSuggestions(o: {
+  audio: LoopAudio | null;
+  bpm: number;
+  startMs: number;
+  downbeats: readonly number[]; // song time
+  lines: readonly LoopLine[];
+  targetMs: number;
+  durationMs: number;
+  count?: number;
+}): LoopSuggestion[] {
+  const singing = (t: number) => o.lines.some((l) => t > l.sungStartMs && t < l.sungEndMs);
+  const bars = [...o.downbeats].sort((a, b) => a - b);
+  const out: LoopSuggestion[] = [];
+  for (let k = 0; k < bars.length; k++) {
+    const at = bars[k];
+    const length = at - o.startMs;
+    if (length < o.targetMs * 0.5 || length > o.targetMs * 1.5 || at > o.durationMs || singing(at)) continue;
+    // The first bar after a line has ended (a musical ending, not mid-instrumental).
+    const ended = o.lines.filter((l) => l.sungEndMs <= at && l.sungStartMs >= o.startMs);
+    const last = ended.reduce<LoopLine | null>((a, l) => (!a || l.sungEndMs > a.sungEndMs ? l : a), null);
+    if (!last || (k > 0 && bars[k - 1] >= last.sungEndMs)) continue;
+    const fit = loopFit(o.audio, o.bpm, o.startMs, at);
+    if (fit.ok) out.push({ lengthS: Math.round(length / 100) / 10, endMs: at, line: { number: last.number, text: last.text }, fit });
+  }
+  return out.sort((a, b) => Math.abs(a.endMs - o.startMs - o.targetMs) - Math.abs(b.endMs - o.startMs - o.targetMs)).slice(0, o.count ?? 3);
+}

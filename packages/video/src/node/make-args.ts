@@ -41,6 +41,8 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
       lrc: { type: "string" },
       lang: { type: "string", default: "en" },
       rate: { type: "string", default: "1x" },
+      "shot-length": { type: "string" },
+      tempo: { type: "string" },
       energy: { type: "string", default: "medium" },
       lead: { type: "string", default: "0.25" },
       "lyrics-offset": { type: "string" },
@@ -92,6 +94,10 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
   if (offset !== undefined && ![0, 1, 2, 3].includes(offset)) fail("--downbeat-offset must be 0, 1, 2 or 3");
   const length = values.length === undefined ? undefined : Number(values.length);
   if (length !== undefined && (!Number.isFinite(length) || length < 3 || length > 600)) fail("--length must be a number of seconds from 3 to 600 (the target for an auto section)");
+  const shotLength = values["shot-length"];
+  if (shotLength !== undefined && !["1", "2", "4", "8", "story"].includes(shotLength)) fail("--shot-length must be 1, 2, 4 or 8 (bars per shot) or story (2 bars on hooks, 4 on verses, never under 3 s)");
+  const tempo = values.tempo === undefined ? undefined : Number(values.tempo);
+  if (tempo !== undefined && (!Number.isFinite(tempo) || tempo < 30 || tempo > 300)) fail("--tempo must be the song's BPM, from 30 to 300");
   const parallel = values.parallel === undefined ? undefined : Number(values.parallel);
   if (parallel !== undefined && (!Number.isInteger(parallel) || parallel < 1 || parallel > 6)) fail("--parallel must be a whole number from 1 to 6");
   if (values.realign && values.lrc) fail("--realign and --lrc cannot be used together");
@@ -125,6 +131,8 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
       lrc: resolve(values.lrc),
       lang: values.lang,
       rate,
+      ...(shotLength !== undefined ? { shotLength } : {}),
+      ...(tempo !== undefined ? { tempo } : {}),
       energy,
       leadMs: seconds("lead", values.lead!),
       lyricsOffsetMs: values["lyrics-offset"] === undefined ? undefined : seconds("lyrics-offset", values["lyrics-offset"]),

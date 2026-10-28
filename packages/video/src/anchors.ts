@@ -16,7 +16,7 @@ export type AnchorSpec = { line: number; clip: string; clipIn?: number; transiti
 export type GapOrder = "story" | "shuffle";
 
 // An anchor whose clip was found; `lyric` is the line's index in the render's lyric list.
-export type ResolvedAnchor = { line: number; text: string; lyric: number; clipId: string; clipName: string; clipInMs: number; transition: AnchorTransition };
+export type ResolvedAnchor = { line: number; text: string; lyric: number; clipId: string; clipName: string; clipInMs: number | null; transition: AnchorTransition };
 
 export type AnchorUse = {
   line: number;

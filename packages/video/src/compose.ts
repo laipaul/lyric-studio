@@ -11,7 +11,7 @@ import { pinsToShots, type ResolvedPin } from "./pins";
 import { DEFAULT_FORMAT, DEFAULT_SAFE_ZONE, lyricArea, type Format, type SafeZone } from "./platform";
 import { mulberry32 } from "./prng";
 import type { LyricEffectsProps, LyricLineProps, LyricVideoProps, StyleProps } from "./props";
-import { assignClips, type ClipOrder } from "./shots";
+import { assignClips, BEST_WINDOW_MS, type ClipOrder } from "./shots";
 
 export type StyleChoice = "simple" | "bold";
 
@@ -23,6 +23,13 @@ export type PreparedClip = {
   durationFrames: number;
   kind?: "video" | "photo";
   fit?: "cover" | "fill"; // fill: shown whole over a blurred copy (a source that does not suit the format)
+  // The clip editor (clips.json) and the analysis: story rank, usable part, speed, best moment (ms).
+  rank?: number;
+  in_ms?: number;
+  out_ms?: number;
+  speed?: number;
+  best_ms?: number;
+  best_from?: "clip editor" | "auto";
 };
 
 // Size and safe zones of the platform (default: 1080x1920 "standard").
@@ -177,7 +184,16 @@ export function composeProps(
     const pin = pinned && pinned !== a.clipId ? base.pins.find((p) => p.clipId === pinned) : undefined;
     if (pin) notes.push(`pins.txt line ${pin.lineNumber} "${pin.text}" (${pin.clipName}) gives way to the anchor on line ${a.line} (${a.clipName})`);
     byShot.set(shot, a.clipId);
-    clipStarts.set(shot, Math.round((a.clipInMs * VIDEO.fps) / 1000));
+    // Its clipIn, else the window around the clip's best moment (the clip editor's, else the strongest 2 s).
+    const clip = base.clips.find((c) => c.id === a.clipId);
+    const length = bounds[shot + 1] - bounds[shot];
+    let inMs = a.clipInMs ?? clip?.in_ms ?? 0;
+    if (a.clipInMs === null && clip?.best_ms !== undefined) {
+      const needMs = (length * 1000 * (clip.speed ?? 1)) / VIDEO.fps;
+      const from = clip.in_ms ?? 0;
+      inMs = Math.max(from, Math.min(clip.best_ms + BEST_WINDOW_MS / 2 - needMs / 2, (clip.out_ms ?? clip.duration_ms) - needMs));
+    }
+    clipStarts.set(shot, Math.round((inMs * VIDEO.fps) / 1000));
   }
 
   const platform = base.platform ?? { format: DEFAULT_FORMAT, safeZone: DEFAULT_SAFE_ZONE, lyricsAt: 0.45, textScale: 1 };
@@ -185,7 +201,11 @@ export function composeProps(
   // No clips (YouTube cover / stills layouts): no shots; the background comes from other props.
   const assigned = !base.clips.length ? [] : assignClips(
     plan,
-    base.clips.map((c) => ({ id: c.id, name: c.name, duration_ms: c.duration_ms, still: c.kind === "photo" })),
+    base.clips.map((c) => ({
+      id: c.id, name: c.name, duration_ms: c.duration_ms, still: c.kind === "photo",
+      ...(c.rank !== undefined ? { rank: c.rank } : {}), ...(c.in_ms !== undefined ? { in_ms: c.in_ms } : {}), ...(c.out_ms !== undefined ? { out_ms: c.out_ms } : {}),
+      ...(c.speed !== undefined ? { speed: c.speed } : {}), ...(c.best_ms !== undefined ? { best_ms: c.best_ms } : {}),
+    })),
     choices.seed,
     { order: choices.order ?? "story", pins: byShot, loopEnding: platform.loopEnding, clipStarts, anchored: new Set(anchorPlan?.shots.keys() ?? []) },
   );

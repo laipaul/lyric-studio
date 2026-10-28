@@ -106,3 +106,16 @@ def test_downbeat_phase_estimator() -> None:
     phase, confidence = estimate_downbeat_phase([0.5] * 32)
     assert confidence == 0
     assert estimate_downbeat_phase([1.0, 0.1, 0.1])[1] == 0  # too few beats to tell
+
+
+def test_tempo_candidates_include_the_true_tempo_and_name_the_ratio(tmp_path: Path) -> None:
+    """pnpm tempo:check: the likeliest tempi, with their ratio to the detected one (a 3:2 error shows as x2/3)."""
+    from app.analysis import tempo_candidates
+
+    song = tmp_path / "92.wav"
+    click_track(song, 92, bars=24)
+    found = tempo_candidates(song, detected_bpm=138.0)
+    assert found, "some tempo candidates"
+    assert any(abs(c["bpm"] - 92) <= 92 * 0.04 for c in found), found
+    assert next(c for c in found if abs(c["bpm"] - 92) <= 92 * 0.04)["ratio"] == "x2/3"
+    assert all(0 < c["strength"] <= 1 for c in found)

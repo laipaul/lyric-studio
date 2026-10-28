@@ -8,8 +8,17 @@ export type Energy = "low" | "medium" | "high";
 export type CutSection = { start_ms: number; end_ms: number; energy?: Energy };
 export type LyricTiming = { start_ms: number | null; end_ms: number | null };
 
+// Shot length in bars (overrides the cut rate), or "story": 2 bars on hooks, 4 on verses and
+// instrumentals, never shorter than 3 s (a storytelling pace: ~12-20 shots in 90 s).
+export type ShotLength = 1 | 2 | 4 | 8 | "story";
+export const SHOT_LENGTHS: readonly ShotLength[] = [1, 2, 4, 8, "story"];
+export const STORY_BARS = { hook: 2, verse: 4 } as const;
+export const STORY_MIN_SHOT_MS = 3000;
+
 export type CutOptions = {
   cutRate: CutRate;
+  shotLength?: ShotLength; // set: replaces the cut rate
+  hooks?: readonly { start_ms: number; end_ms: number }[]; // "story": the hook (chorus) stretches, song time
   earlyCutFrames?: number; // 0-4, default 2: cut this many frames before the beat
   downbeatOffset?: number; // 0-3, default 0: shift which beat is bar 1
   holdOnLyricLines?: boolean; // never cut inside a lyric line
@@ -41,8 +50,8 @@ export type CutPlan = {
 export const DEFAULT_EARLY_CUT_FRAMES = 2;
 export const MIN_SHOT_MS = 800;
 
-// Regular grids, from every beat to every 4 bars.
-const GRID_LADDER = [1, 2, 4, 8, 16];
+// Regular grids, from every beat to every 8 bars.
+const GRID_LADDER = [1, 2, 4, 8, 16, 32];
 const RATE_GRID_BEATS: Record<Exclude<CutRate, "off">, number> = { "0.5x": 8, "1x": 4, "2x": 2 };
 // Low energy = half as many cuts (twice the beats per cut); high = twice as many.
 const ENERGY_FACTOR: Record<Energy, number> = { low: 2, medium: 1, high: 0.5 };
@@ -77,7 +86,34 @@ export function getCutPoints(beatsIn: readonly Beat[], section: CutSection, opti
   let requested: number | null = null;
   let used: number | null = null;
 
-  if (options.cutRate === "off") {
+  if (options.shotLength === "story") {
+    // Story pace: from each cut, 2 bars on a hook, 4 elsewhere (more when that is under 3 s), on downbeats.
+    const minStory = Math.max(minShotFrames, Math.ceil((STORY_MIN_SHOT_MS * fps) / 1000));
+    const downbeats = beats.map((_, i) => i).filter((i) => beats[i].is_downbeat).map(cutAt).filter(insideSection);
+    const inHook = (frame: number) => (options.hooks ?? []).some((h) => frame >= toFrame(h.start_ms, fps) && frame < toFrame(h.end_ms, fps));
+    cuts = [];
+    let from = startFrame;
+    for (;;) {
+      const ahead = downbeats.filter((c) => c.frame > from);
+      let bars = inHook(from) ? STORY_BARS.hook : STORY_BARS.verse;
+      while (ahead[bars - 1] && ahead[bars - 1].frame - from < minStory) bars += 1;
+      const next = ahead[bars - 1];
+      if (!next || endFrame - next.frame < minStory) break; // the rest stays one shot (never a short last one)
+      cuts.push(next);
+      from = next.frame;
+    }
+    requested = null;
+    used = null;
+  } else if (options.shotLength) {
+    // A fixed shot length in bars (energy: low doubles it, high halves it).
+    const grid = Math.min(GRID_LADDER[GRID_LADDER.length - 1], Math.max(1, options.shotLength * 4 * ENERGY_FACTOR[section.energy ?? "medium"]));
+    // Counted from the bar the section starts on (a section snapped to a downbeat: its first shot is full).
+    const anchor = beats.findIndex((b) => b.is_downbeat && toFrame(b.time_ms, fps) >= startFrame - early);
+    cuts = anchor < 0 ? [] : beats.map((_, i) => i).filter((i) => i > anchor && (i - anchor) % grid === 0).map(cutAt).filter(insideSection);
+    cuts = trimEdges(cuts, startFrame, endFrame, minShotFrames);
+    requested = grid;
+    used = grid;
+  } else if (options.cutRate === "off") {
     // One cut per lyric line start, snapped to the nearest beat.
     cuts = dedupe(
       lines

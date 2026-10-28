@@ -1,15 +1,17 @@
 "use client";
 
-// The song page's Storyboard (stage 1, read-only): a video's cut plan without rendering it (the same
-// planner Generate renders with) or a past run's. Rows: the waveform with bars and hook sections, the
-// lyric lines at their on-screen times (⚓ anchored), the shots as blocks with their badges and warnings.
-// Click anywhere on the timeline: the low-res preview plays from there.
+// The song page's Storyboard: a video's cut plan without rendering it (the same planner Generate renders
+// with) or a past run's. Rows: the waveform with bars and hook sections, the lyric lines at their
+// on-screen times (⚓ anchored), the shots as blocks with their badges and warnings. Click anywhere on
+// the timeline: the low-res preview plays from there. Stage 2 (plans only): drag clips in the story
+// strip into order (clips.json), drag a clip onto a lyric line (an anchor), click a shot or a clip to
+// edit it (in / out, speed, best moment); every change plans again.
 import { Player, type PlayerRef } from "@remotion/player";
-import { AlertTriangle, Anchor, Blend, Gauge, Loader2, Repeat, Star } from "lucide-react";
+import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2, Repeat, Scissors, Star, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { LyricVideo, type StoryShot } from "@lyric/video";
-import type { StoryboardChoices, StoryboardView } from "@lyric/video/node"; // types only (erased): the data comes from /api/songs/[id]/storyboard
+import type { StoryboardChoices, StoryboardClip, StoryboardView } from "@lyric/video/node"; // types only (erased): the data comes from /api/songs/[id]/storyboard
 
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -32,6 +34,9 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
   const [selected, setSelected] = useState<number | null>(null);
   const [frame, setFrame] = useState(0);
   const player = useRef<PlayerRef>(null);
+  const [editing, setEditing] = useState<string | null>(null); // the clip in the clip editor
+  const [saving, setSaving] = useState(false);
+  const [dropLine, setDropLine] = useState<number | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -50,10 +55,13 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
     };
   }, [projectId]);
 
-  async function show(s: Source) {
+  async function show(s: Source, keep = false) {
     setLoading(true);
     setError(null);
-    setSelected(null);
+    if (!keep) {
+      setSelected(null);
+      setEditing(null);
+    }
     try {
       const q = new URLSearchParams({ platform: s.platform, video: s.video, ...(s.kind === "run" ? { run: s.run } : {}) });
       const r = await api(`/api/songs/${projectId}/storyboard?${q}`, { cache: "no-store" });
@@ -68,6 +76,29 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
       setLoading(false);
     }
   }
+
+  // One storyboard edit (story order, clip edit, anchor), then the plan again.
+  async function edit(body: Record<string, unknown>) {
+    if (!source || source.kind !== "plan") return;
+    setSaving(true);
+    setError(null);
+    try {
+      const r = await api(`/api/songs/${projectId}/storyboard`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const d = (await r.json()) as { error?: string };
+      if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
+      await show(source, true);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+  const moveClip = (name: string, to: number) => {
+    if (!view) return;
+    const order = view.clips.map((c) => c.name).filter((n) => n !== name);
+    order.splice(Math.max(0, Math.min(order.length, to)), 0, name);
+    void edit({ action: "order", order });
+  };
 
   // The preview follows the playhead.
   useEffect(() => {
@@ -101,7 +132,7 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
   return (
     <div data-storyboard className="flex flex-col gap-4">
       <p className="text-muted-foreground text-xs">
-        The cut plan as Generate would make it (nothing is rendered), or a past run&apos;s. Read-only for now: shots, lines and anchors as planned; click the timeline to play from there.
+        The cut plan as Generate would make it (nothing is rendered), or a past run&apos;s (read-only). In the plan: drag clips in the story strip into order, drag a clip onto a lyric line to anchor it there, click a shot or a clip to edit it; each change is saved for this song and planned again, and Generate renders exactly this. Click the timeline to play from there.
       </p>
       <div className="flex flex-wrap items-end gap-3 text-sm">
         <label className="flex flex-col gap-1">
@@ -171,8 +202,33 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
                 {view.platform.label} {view.video}
               </span>{" "}
               · {view.source === "plan" ? "planned now" : `run ${view.run}`} · {view.settings} · {secs(view.durationMs)} ({clock(view.section.startMs)}–{clock(view.section.endMs)} in the song) · {Math.round(view.bpm)} BPM · {view.shots.length} shots
+              {saving || (loading && view) ? (
+                <span className="text-brand ml-2" data-replanning>
+                  <Loader2 className="mr-1 inline size-3 animate-spin" />
+                  planning again…
+                </span>
+              ) : null}
             </p>
             <p className="text-muted-foreground mb-3 text-xs">{view.section.reason}</p>
+            {view.loop && !view.loop.ok ? (
+              <div className="mb-3 rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs text-amber-100" data-loop-warn>
+                <p className="flex items-start gap-1 font-medium">
+                  <AlertTriangle className="mt-0.5 size-3 shrink-0" /> WARN Loop flows: the end does not flow back into the start ({view.loop.problems.join("; ")})
+                </p>
+                {view.loopSuggestions.length ? (
+                  <p className="mt-1" data-loop-suggestions>
+                    Target lengths that loop better from this start (Style tab → Target length, or Generate):{" "}
+                    {view.loopSuggestions.map((x) => `${Math.round(x.lengthS)} s (ends ${x.end}${x.line ? ` after ${x.line}` : ""}: ${x.fit})`).join(" · ")}
+                  </p>
+                ) : view.source === "plan" ? (
+                  <p className="mt-1">No other clean line end within 0.5–1.5x the target loops better from this start: try another section.</p>
+                ) : null}
+              </div>
+            ) : view.loop ? (
+              <p className="mb-3 text-xs text-emerald-300" data-loop-ok>
+                ↻ Loop flows: the end flows back into the start.
+              </p>
+            ) : null}
             <div className="overflow-x-auto rounded-lg border" data-storyboard-timeline>
               <div className="relative" style={{ width: width + 16 }} onClick={(e) => playFrom(((e.clientX - e.currentTarget.getBoundingClientRect().left) / zoom) * 1000)}>
                 {/* bars and hook sections */}
@@ -199,7 +255,18 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
                       key={i}
                       data-story-line={l.number ?? ""}
                       data-anchored={l.anchor ?? undefined}
-                      className={cn("absolute top-1 bottom-1 overflow-hidden rounded border px-1 text-[11px] leading-tight", l.isHook ? "border-brand/50 bg-brand/10" : "bg-muted/40")}
+                      onDragOver={(e) => {
+                        if (!view.editable || l.number === null || !e.dataTransfer.types.includes("text/x-lyric-clip")) return;
+                        e.preventDefault();
+                        setDropLine(l.number);
+                      }}
+                      onDragLeave={() => setDropLine(null)}
+                      onDrop={(e) => {
+                        const clip = e.dataTransfer.getData("text/x-lyric-clip");
+                        setDropLine(null);
+                        if (clip && l.number !== null) void edit({ action: "anchor", line: l.number, clip });
+                      }}
+                      className={cn("absolute top-1 bottom-1 overflow-hidden rounded border px-1 text-[11px] leading-tight", l.isHook ? "border-brand/50 bg-brand/10" : "bg-muted/40", dropLine !== null && dropLine === l.number && "ring-brand ring-2")}
                       style={{ left: x(l.startMs), width: Math.max(4, x(l.endMs - l.startMs) - 2) }}
                       title={`${l.number ? `line ${l.number}: ` : ""}${l.text} (${clock(l.startMs)}–${clock(l.endMs)})${l.anchor ? ` · ⚓ ${l.anchor}` : ""}`}
                     >
@@ -217,7 +284,27 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
                 <div className="pointer-events-none absolute top-0 bottom-0 w-px bg-white" style={{ left: x(playhead) }} data-playhead />
               </div>
             </div>
-            {shot ? <ShotDetails shot={shot} /> : <p className="text-muted-foreground mt-2 text-xs">Click a shot for its details.</p>}
+            {shot ? (
+              <ShotDetails
+                shot={shot}
+                editable={view.editable}
+                onEdit={() => setEditing(view.clips.find((c) => c.name === shot.clip)?.name ?? null)}
+                onUnanchor={shot.anchor ? () => void edit({ action: "unanchor", line: shot.anchor!.line }) : undefined}
+              />
+            ) : (
+              <p className="text-muted-foreground mt-2 text-xs">Click a shot for its details{view.editable ? " (and to edit its clip)" : ""}.</p>
+            )}
+            {view.editable && editing ? (
+              <ClipEditor
+                key={editing}
+                clip={view.clips.find((c) => c.name === editing)!}
+                mediaUrl={`/api/songs/${projectId}/storyboard/media`}
+                busy={saving}
+                onSave={(e) => void edit({ action: "clip", clip: editing, edit: e })}
+                onClose={() => setEditing(null)}
+              />
+            ) : null}
+            {view.editable && view.clips.length ? <StoryStrip clips={view.clips} busy={saving || loading} onMove={moveClip} onOpen={setEditing} editing={editing} /> : null}
             {view.anchorsOutside.length ? (
               <p className="text-muted-foreground mt-3 text-xs" data-anchors-outside>
                 <Anchor className="mr-1 inline size-3" />
@@ -297,11 +384,16 @@ function ShotBlock({ shot: s, left, width, selected, onSelect }: { shot: StorySh
   );
 }
 
-function ShotDetails({ shot: s }: { shot: StoryShot }) {
+function ShotDetails({ shot: s, editable, onEdit, onUnanchor }: { shot: StoryShot; editable: boolean; onEdit: () => void; onUnanchor?: () => void }) {
   return (
     <div className="bg-card mt-2 rounded-lg border p-3 text-xs" data-shot-details={s.index + 1}>
-      <p className="mb-1 text-sm font-medium">
+      <p className="mb-1 flex flex-wrap items-center gap-2 text-sm font-medium">
         Shot {s.index + 1}: {s.clip}
+        {editable && s.kind === "video" ? (
+          <button type="button" data-edit-clip onClick={onEdit} className="hover:bg-accent flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-normal">
+            <Scissors className="size-3" /> Edit clip (in / out, speed, best moment)
+          </button>
+        ) : null}
       </p>
       <p>
         {clock(s.startMs)}–{clock(s.endMs)} in the video ({secs(s.endMs - s.startMs)}), cut at {clock(s.songMs)} in the song · in {s.inS.toFixed(2)} s → out {s.outS.toFixed(2)} s of the clip ·{" "}
@@ -311,6 +403,11 @@ function ShotDetails({ shot: s }: { shot: StoryShot }) {
       {s.anchor ? (
         <p className="text-brand mt-1">
           ⚓ anchored on line {s.anchor.line} &quot;{s.anchor.text}&quot;
+          {editable && onUnanchor ? (
+            <button type="button" data-unanchor={s.anchor.line} onClick={onUnanchor} className="text-muted-foreground hover:text-foreground ml-2 underline">
+              remove the anchor
+            </button>
+          ) : null}
         </p>
       ) : null}
       {s.best ? <p className="mt-1 text-yellow-200">★ shows the clip&apos;s best moment</p> : null}
@@ -320,6 +417,157 @@ function ShotDetails({ shot: s }: { shot: StoryShot }) {
           <AlertTriangle className="mt-0.5 size-3 shrink-0" /> {w}
         </p>
       ))}
+    </div>
+  );
+}
+
+// The story order: every clip of the run (the song's own and the collections') in the order story
+// videos use them. Drag a card onto another to put it there (or use the arrows); drag a card onto a
+// lyric line to anchor it on that line; click it to edit it.
+function StoryStrip({ clips, busy, onMove, onOpen, editing }: { clips: StoryboardClip[]; busy: boolean; onMove: (name: string, to: number) => void; onOpen: (name: string) => void; editing: string | null }) {
+  const [over, setOver] = useState<number | null>(null);
+  return (
+    <div className="mt-4" data-story-strip>
+      <p className="text-muted-foreground mb-1 text-xs">
+        Story order{clips.some((c) => c.ranked) ? " (clips.json)" : " (file names: drag to change it)"} · each clip once before any repeats · drag a clip onto a lyric line above to anchor it there
+      </p>
+      <ol className="flex gap-2 overflow-x-auto pb-2">
+        {clips.map((c, i) => (
+          <li
+            key={c.name}
+            data-story-clip={c.name}
+            data-story-index={i + 1}
+            draggable={!busy}
+            onDragStart={(e) => {
+              e.dataTransfer.setData("text/x-lyric-clip", c.name);
+              e.dataTransfer.effectAllowed = "move";
+            }}
+            onDragOver={(e) => {
+              if (!e.dataTransfer.types.includes("text/x-lyric-clip")) return;
+              e.preventDefault();
+              setOver(i);
+            }}
+            onDragLeave={() => setOver(null)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setOver(null);
+              const name = e.dataTransfer.getData("text/x-lyric-clip");
+              if (name && name !== c.name) onMove(name, i);
+            }}
+            className={cn("bg-card relative w-32 shrink-0 cursor-grab overflow-hidden rounded-lg border text-[11px]", over === i && "ring-brand ring-2", editing === c.name && "border-brand")}
+          >
+            <button type="button" onClick={() => onOpen(c.name)} className="block w-full text-left" title={`${c.name}: click to edit`}>
+              <div className="aspect-video bg-black bg-cover bg-center" style={{ backgroundImage: c.thumb ? `url(/api/files/${c.thumb})` : undefined }} />
+              <div className="p-1">
+                <p className="truncate font-medium">
+                  {i + 1}. {c.name}
+                </p>
+                <p className="text-muted-foreground">
+                  {c.shots} shot{c.shots === 1 ? "" : "s"}
+                  {c.inS !== null || c.outS !== null ? " · ✂" : ""}
+                  {c.speed !== null && c.speed < 1 ? ` · ${c.speed}x` : ""}
+                  {c.bestFrom === "clip editor" ? " · ★ yours" : ""}
+                </p>
+              </div>
+            </button>
+            <div className="absolute top-0.5 right-0.5 flex gap-0.5">
+              <button type="button" aria-label={`move ${c.name} earlier`} data-move-earlier={c.name} disabled={busy || i === 0} onClick={() => onMove(c.name, i - 1)} className="rounded bg-black/60 p-0.5 disabled:opacity-30">
+                <ChevronLeft className="size-3" />
+              </button>
+              <button type="button" aria-label={`move ${c.name} later`} data-move-later={c.name} disabled={busy || i === clips.length - 1} onClick={() => onMove(c.name, i + 1)} className="rounded bg-black/60 p-0.5 disabled:opacity-30">
+                <ChevronRight className="size-3" />
+              </button>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+// The clip editor: the part of the clip used (in / out), its speed (slow motion, 0.5-1x) and its best
+// moment (a story video's first shot of this clip is centred on it; yours always wins over the automatic
+// one). Set each from the clip playing, or type the seconds.
+function ClipEditor({ clip, mediaUrl, busy, onSave, onClose }: { clip: StoryboardClip; mediaUrl: string; busy: boolean; onSave: (e: { in?: number; out?: number; speed?: number; best?: number } | null) => void; onClose: () => void }) {
+  const video = useRef<HTMLVideoElement>(null);
+  const total = clip.durationMs / 1000;
+  const [inS, setIn] = useState(clip.inS === null ? "" : String(clip.inS));
+  const [outS, setOut] = useState(clip.outS === null ? "" : String(clip.outS));
+  const [speed, setSpeed] = useState(clip.speed === null ? "1" : String(clip.speed));
+  const [best, setBest] = useState(clip.bestFrom === "clip editor" && clip.bestS !== null ? String(clip.bestS) : "");
+  const here = () => String(Math.round((video.current?.currentTime ?? 0) * 100) / 100);
+  const num = (v: string) => (v.trim() === "" ? undefined : Number(v));
+  const problem = (() => {
+    const a = num(inS);
+    const b = num(outS);
+    if ([a, b, num(best)].some((x) => x !== undefined && (!Number.isFinite(x) || x < 0 || x > total + 0.05))) return `Times must be within the clip (0–${total.toFixed(1)} s).`;
+    if (a !== undefined && b !== undefined && b <= a) return "Out must be after in.";
+    return null;
+  })();
+  const save = () => {
+    const s = Number(speed);
+    onSave({ ...(num(inS) !== undefined ? { in: num(inS) } : {}), ...(num(outS) !== undefined ? { out: num(outS) } : {}), ...(s < 1 ? { speed: s } : {}), ...(num(best) !== undefined ? { best: num(best) } : {}) });
+  };
+  const field = "bg-input/30 border-input h-7 w-20 rounded-md border px-2 text-xs";
+  const setHere = "hover:bg-accent rounded-md border px-2 py-0.5";
+  return (
+    <div className="bg-card mt-3 rounded-lg border p-3 text-xs" data-clip-editor={clip.name}>
+      <div className="mb-2 flex items-center gap-2">
+        <p className="text-sm font-medium">Clip editor: {clip.name}</p>
+        <span className="text-muted-foreground">{total.toFixed(1)} s</span>
+        <button type="button" onClick={onClose} aria-label="close the clip editor" className="text-muted-foreground hover:text-foreground ml-auto rounded p-1">
+          <X className="size-4" />
+        </button>
+      </div>
+      <div className="flex flex-col gap-3 md:flex-row">
+        <video ref={video} src={`${mediaUrl}/${clip.src}`} controls muted preload="metadata" className="aspect-video w-full max-w-sm rounded bg-black object-contain" data-clip-video />
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-2">
+            <span className="w-24">In (s)</span>
+            <input data-clip-in className={field} value={inS} placeholder="0" onChange={(e) => setIn(e.target.value)} />
+            <button type="button" className={setHere} onClick={() => setIn(here())}>
+              set here
+            </button>
+          </label>
+          <label className="flex items-center gap-2">
+            <span className="w-24">Out (s)</span>
+            <input data-clip-out className={field} value={outS} placeholder={total.toFixed(1)} onChange={(e) => setOut(e.target.value)} />
+            <button type="button" className={setHere} onClick={() => setOut(here())}>
+              set here
+            </button>
+          </label>
+          <label className="flex items-center gap-2">
+            <span className="w-24">Speed</span>
+            <select data-clip-speed className={cn(field, "w-24")} value={speed} onChange={(e) => setSpeed(e.target.value)}>
+              {["1", "0.9", "0.8", "0.75", "0.7", "0.6", "0.5"].map((v) => (
+                <option key={v} value={v}>
+                  {v === "1" ? "1x (normal)" : `${v}x`}
+                </option>
+              ))}
+            </select>
+            {Number(speed) < 0.75 ? <span className="text-amber-300">below 0.75x the motion may look choppy</span> : null}
+          </label>
+          <label className="flex items-center gap-2">
+            <span className="w-24">Best moment (s)</span>
+            <input data-clip-best className={field} value={best} placeholder={clip.autoBestS !== null ? `auto ${clip.autoBestS}` : "auto"} onChange={(e) => setBest(e.target.value)} />
+            <button type="button" className={setHere} data-clip-best-here onClick={() => setBest(here())}>
+              set here
+            </button>
+          </label>
+          <p className="text-muted-foreground">
+            ★ {best ? `yours: ${best} s` : clip.autoBestS !== null ? `automatic: ${clip.autoBestS} s (the strongest 2 s by motion, colour and contrast)` : "no clear best moment found"}. A story video&apos;s first shot of this clip is centred on it; yours always wins.
+          </p>
+          {problem ? <p className="text-amber-300">{problem}</p> : null}
+          <div className="flex gap-2">
+            <Button size="sm" data-clip-save disabled={busy || !!problem} onClick={save}>
+              {busy ? <Loader2 className="animate-spin" /> : null} Save and plan again
+            </Button>
+            <Button size="sm" variant="outline" data-clip-reset disabled={busy} onClick={() => onSave(null)}>
+              Whole clip, automatic
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

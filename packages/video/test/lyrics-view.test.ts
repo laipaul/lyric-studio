@@ -10,7 +10,7 @@ import { absPath, ffmpegBin, openWorkspace, project, type Workspace } from "@lyr
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { anchorsText, createSong, ensureAlignment, labelLines, lyricsView, readRecipe, restoreLyrics, saveAnchors, saveHandTimes, saveLyricsText, setCheckedByEar, songPathsById, type AlignRunner } from "../src/node";
+import { anchorsText, createSong, ensureAlignment, keepReplaced, labelLines, lyricsView, readRecipe, restoreLyrics, saveAnchors, saveHandTimes, saveLyricsText, setCheckedByEar, songPathsById, type AlignRunner } from "../src/node";
 
 const LRC = [
   "[01:05.00]<01:05.00>The verse <01:06.00>line <01:08.40>",
@@ -35,6 +35,22 @@ describe("label, title and credit lines in lyrics.txt", () => {
     ]);
     // The title as the first sung line that comes back later (a hook): sung, not flagged.
     expect(labelLines("A heart for two\nSomething\n* A heart for two\n", "A Heart For Two", "Life Lyrics")).toEqual([]);
+  });
+});
+
+describe("replaced files are kept", () => {
+  it("two replacements in the same second keep both (the newest sorts last)", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "lyric-replaced-"));
+    const file = path.join(dir, "lyrics.txt");
+    const kept = ["first", "second", "third"].map((text) => {
+      writeFileSync(file, text);
+      return keepReplaced(dir, file);
+    });
+    expect(new Set(kept).size).toBe(3);
+    expect(kept.map((k) => readFileSync(k, "utf8"))).toEqual(["first", "second", "third"]);
+    const names = readdirSync(path.join(dir, ".studio", "replaced")).sort();
+    expect(names.map((n) => readFileSync(path.join(dir, ".studio", "replaced", n), "utf8"))).toEqual(["first", "second", "third"]);
+    rmSync(dir, { recursive: true, force: true });
   });
 });
 
@@ -165,5 +181,9 @@ describe("the Lyrics tab", () => {
     expect((await lyricsView(ws, id)).lines).not.toBeNull(); // back to words that were aligned
     expect(existsSync(paths.lyricsTxt)).toBe(true);
     expect(() => restoreLyrics(ws, id, "../../studio.db")).toThrow(/Not an earlier lyrics.txt/);
+    // Saves within the same second each keep their own copy, and each can be restored.
+    const all = (await lyricsView(ws, id)).replaced;
+    expect(all.some((r) => /\.\d+-lyrics\.txt$/.test(r.file))).toBe(true);
+    for (const r of all) expect(() => restoreLyrics(ws, id, r.file)).not.toThrow();
   });
 });

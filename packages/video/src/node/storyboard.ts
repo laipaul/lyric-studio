@@ -1,22 +1,25 @@
 // The song page's Storyboard (stage 1, read-only): a video's cut plan without rendering it (a dry run
 // of the planner: makeVideos with dryRun, the same code Generate renders with) or a past run's plan
 // (its manifests). Adds the song's waveform (cached), the beats, the clips' thumbnails and best moments
-// (the strongest 2 s by motion, colour and contrast, as the Spotify Canvas picks them; cached).
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+// (the clip editor's, else the strongest 2 s by motion, colour and contrast, as the Spotify Canvas picks
+// them; cached).
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { absPath, clip as clipTable, REPO_ROOT, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
 import type { AnchorUse } from "../anchors";
-import { CANVAS, strongestWindows } from "../canvas";
 import { VIDEO } from "../config";
+import type { LoopResult, LoopSuggestion } from "../loop";
 import { parsePresets } from "../platform";
 import type { LyricVideoProps } from "../props";
-import { BEST_WINDOW_S, hookSections, peaks, storyLines, storyShots, type StoryClip, type StoryLine, type StoryShot } from "../storyboard";
+import { clockText } from "../section";
+import { hookSections, peaks, storyLines, storyShots, type StoryClip, type StoryLine, type StoryShot } from "../storyboard";
 import { analyzeSong } from "./analysis";
 import { readLoopAudio } from "./audio-check";
-import { clipStats } from "./canvas";
+import { bestMoments } from "./best-moment";
+import { editOf, readClipEdits } from "./clip-edits";
 import { SHORT_LABELS, songRuns } from "./exports";
 import { makeVideos } from "./make";
 import type { Manifest } from "./manifest";
@@ -44,7 +47,31 @@ export type StoryboardView = {
   anchorsOutside: { line: number; text: string; clip: string }[];
   anchorWarnings: string[]; // conflicts and anchors not found that no shot carries
   notes: string[]; // what the planner said (warnings)
+  // Loop platforms: does the wrap-around flow (the failing points, as QA "Loop flows" names them), and
+  // target lengths with an end that loops well from this start (plans only).
+  loop: { ok: boolean; problems: string[]; lengthS: number } | null;
+  loopSuggestions: { lengthS: number; end: string; line: string | null; fit: string }[];
+  // Stage 2 (plans only): the clips in story order (clips.json, else file names) with their edits; a run
+  // is read-only (editable false).
+  editable: boolean;
+  clips: StoryboardClip[];
   props: Omit<LyricVideoProps, "mediaBaseUrl">; // for the preview (served by the storyboard's media route)
+};
+
+export type StoryboardClip = {
+  name: string; // the clip's file name (clips.json and anchors use it)
+  src: string; // the prepared file (the props' shot src: the clip editor plays it)
+  thumb: string | null;
+  durationMs: number;
+  kind: "video" | "photo";
+  ranked: boolean; // placed by the story order in clips.json (else by its file name)
+  inS: number | null;
+  outS: number | null;
+  speed: number | null;
+  bestS: number | null; // the best moment used (the clip editor's, else the automatic one)
+  bestFrom: "clip editor" | "auto" | null;
+  autoBestS: number | null; // the automatic one (the strongest 2 s)
+  shots: number; // shots it gets in this video
 };
 
 export type StoryboardChoices = {
@@ -103,7 +130,8 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
   const v = plan.videos.find((x) => x.spec.name === video) ?? plan.videos[0];
   if (!v) throw new Error(`${p.label} has no video ${video}.`);
   notes.push(...p.warnings);
-  const clips = await storyClips(ws, plan.clips.map((c) => ({ src: c.path, name: c.name, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, file: absPath(ws, c.path) })), v.props.shots.map((s) => s.src));
+  // The best moments the planner used (the clip editor's, else the strongest 2 s).
+  const clips = new Map<string, StoryClip>(plan.clips.map((c) => [c.path, { name: c.name, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, bestAtS: c.bestMs === null ? null : c.bestMs / 1000, bestFrom: c.bestFrom }]));
   const startMs = v.props.audio ? frameMs(v.props.audio.startFrame) : plan.section.start_ms;
   // The props' lyric lines with their numbers (the Lyrics tab's), matched by text and time.
   const numbered = v.props.lyrics.map((l) => {
@@ -112,11 +140,21 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
     const best = same.reduce<(typeof same)[number] | null>((a, x) => (!a || Math.abs(x.start_ms - songStart) < Math.abs(a.start_ms - songStart) ? x : a), null);
     return { number: best?.number ?? null, text: l.text, isHook: !!l.isHook };
   });
+  const auto = await bestMoments(ws.dir, plan.clips.filter((c) => c.kind === "video").map((c) => absPath(ws, c.path)));
+  const storyOrder = [...plan.clips].sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+  const storyboardClips: StoryboardClip[] = storyOrder.map((c) => ({
+    name: c.name, src: c.path, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, ranked: c.rank !== null,
+    inS: c.inMs === null ? null : c.inMs / 1000, outS: c.outMs === null ? null : c.outMs / 1000, speed: c.speed,
+    bestS: c.bestMs === null ? null : c.bestMs / 1000, bestFrom: c.bestFrom, autoBestS: c.kind === "video" ? (auto.get(absPath(ws, c.path)) ?? null) : null,
+    shots: v.props.shots.filter((s) => s.src === c.path).length,
+  }));
   return view(ws, {
+    editable: !paths.legacy, storyboardClips,
     source: "plan", run: null, platform: { name: p.name, label: p.label }, video: v.spec.name, videos: plan.videos.map((x) => x.spec.name),
     settings: settingsText(v.spec),
     section: { mode: plan.section.mode, startMs: plan.section.start_ms, endMs: plan.section.end_ms, reason: plan.section.reason },
     props: v.props, startMs, bpm: plan.analysis.bpm, beats: plan.analysis.beats, clips, numbered, anchors: v.anchors, anchorsOutside: plan.anchorsOutside, notes,
+    loop: v.loop, loopSuggestions: plan.loopSuggestions ?? [],
     songFile: paths.audio,
   });
 }
@@ -131,17 +169,19 @@ export async function storyboardRun(ws: Workspace, projectId: string, folder: st
   const m = JSON.parse(readFileSync(file, "utf8")) as Manifest;
   const moves = readMoves(ws.dir);
   const songFile = absPath(ws, resolveMoved(moves, m.song.file));
-  const analysis = analyzeSong(existsSync(songFile) ? songFile : paths.audio!, { downbeatOffset: m.analysis.downbeat_offset });
+  const tempo = (m.settings.tempo as { set?: number } | null | undefined)?.set;
+  const analysis = analyzeSong(existsSync(songFile) ? songFile : paths.audio!, { downbeatOffset: m.analysis.downbeat_offset, ...(tempo ? { bpm: tempo } : {}) });
   const thumbOf = (f: string) => ws.db.select({ thumb: clipTable.thumb_path }).from(clipTable).where(eq(clipTable.path, f)).get()?.thumb ?? null;
   const clips = await storyClips(
     ws,
+    projectId,
     m.clips.map((c) => ({ src: c.normalised, name: c.name, thumb: thumbOf(c.file), durationMs: 0, kind: /\.(jpe?g|png|webp)$/i.test(c.name) ? ("photo" as const) : ("video" as const), file: absPath(ws, resolveMoved(moves, c.normalised)) })),
-    m.props.shots.map((s) => s.src),
   );
   const startMs = m.props.audio ? frameMs(m.props.audio.startFrame) : m.section.start_ms;
   const videos = ["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8"].filter((n) => existsSync(path.join(dir, `${n}.manifest.json`)));
   const used = m.anchors?.used ?? [];
   return view(ws, {
+    editable: false, storyboardClips: [],
     source: "run", run: folder, platform: { name: platform, label: SHORT_LABELS[platform] ?? m.platform?.preset.label ?? platform }, video, videos,
     settings: `${m.variation.style}, ${m.variation.order}${(m.settings.cut_rate as string) ? `, ${m.settings.cut_rate}` : ""}${m.settings.transitions ? `, ${m.settings.transitions}` : ""}`,
     section: { mode: m.section.mode, startMs: m.section.start_ms, endMs: m.section.end_ms, reason: m.section.reason },
@@ -151,6 +191,8 @@ export async function storyboardRun(ws: Workspace, projectId: string, folder: st
     anchors: m.anchors ? { uses: used, conflicts: m.anchors.conflicts, notes: m.anchors.notes, missing: m.anchors.missing } : null,
     anchorsOutside: used.filter((u) => !u.used && u.why === "outside this section").map((u) => ({ line: u.line, text: u.text, clip: u.clip })),
     notes: m.warnings ?? [],
+    loop: m.loop && m.loop.checked ? m.loop : null,
+    loopSuggestions: [],
     songFile: existsSync(songFile) ? songFile : paths.audio!,
   });
 }
@@ -168,6 +210,7 @@ async function view(
     section: StoryboardView["section"]; props: Omit<LyricVideoProps, "mediaBaseUrl">; startMs: number; bpm: number; beats: { time_ms: number; is_downbeat: boolean }[];
     clips: Map<string, StoryClip>; numbered: { number: number | null; text: string; isHook: boolean }[];
     anchors: { uses: AnchorUse[]; conflicts: string[]; notes: string[]; missing: string[] } | null; anchorsOutside: StoryboardView["anchorsOutside"]; notes: string[]; songFile: string;
+    loop: LoopResult | null; loopSuggestions: LoopSuggestion[]; editable: boolean; storyboardClips: StoryboardClip[];
   },
 ): Promise<StoryboardView> {
   const durationMs = frameMs(c.props.durationInFrames);
@@ -190,6 +233,10 @@ async function view(
     anchorsOutside: c.anchorsOutside,
     anchorWarnings: [...(c.anchors?.missing ?? []), ...(c.anchors?.conflicts ?? []).filter((x) => !attached.has(x))],
     notes: c.notes,
+    loop: c.loop ? { ok: c.loop.ok, problems: c.loop.points.filter((p) => !p.ok).map((p) => `${p.point}: ${p.detail}`), lengthS: c.loop.length_s } : null,
+    loopSuggestions: c.loopSuggestions.map((x) => ({ lengthS: x.lengthS, end: clockText(x.endMs), line: x.line ? `line ${x.line.number} "${x.line.text}"` : null, fit: x.fit.text })),
+    editable: c.editable,
+    clips: c.storyboardClips,
     props: c.props,
   };
 }
@@ -204,44 +251,18 @@ async function songPeaks(_ws: Workspace, songFile: string) {
   return decoded.get(key)!;
 }
 
-// Each clip's best moment (the strongest 2 s), cached in workspace\cache\best-moments.json by file,
-// size and date. A best moment set in the clip editor (stage 2) will win over this one.
+// A past run's clips: their best moments now (the clip editor's in clips.json, else the strongest 2 s).
 async function storyClips(
   ws: Workspace,
+  projectId: string,
   clips: { src: string; name: string; thumb: string | null; durationMs: number; kind: "video" | "photo"; file: string }[],
-  used: readonly string[],
 ): Promise<Map<string, StoryClip>> {
-  const cacheFile = path.join(ws.dir, "cache", "best-moments.json");
-  let cache: Record<string, number | null> = {};
-  try {
-    cache = existsSync(cacheFile) ? (JSON.parse(readFileSync(cacheFile, "utf8")) as Record<string, number | null>) : {};
-  } catch {
-    cache = {};
-  }
-  let changed = false;
-  const out = new Map<string, StoryClip>();
-  for (const c of clips) {
-    let bestAtS: number | null = null;
-    if (c.kind === "video" && used.includes(c.src) && existsSync(c.file)) {
-      const st = statSync(c.file);
-      const key = `${c.file}|${st.size}|${Math.round(st.mtimeMs)}`;
-      if (!(key in cache)) {
-        try {
-          const stats = await clipStats(c.file);
-          const best = strongestWindows([{ name: c.name, stats }], BEST_WINDOW_S * CANVAS.sampleFps)[0];
-          cache[key] = best ? Math.round((best.startSample / CANVAS.sampleFps) * 10) / 10 : null;
-        } catch {
-          cache[key] = null;
-        }
-        changed = true;
-      }
-      bestAtS = cache[key];
-    }
-    out.set(c.src, { name: c.name, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, bestAtS, bestFrom: bestAtS === null ? null : "auto" });
-  }
-  if (changed) {
-    mkdirSync(path.dirname(cacheFile), { recursive: true });
-    writeFileSync(cacheFile, JSON.stringify(cache));
-  }
-  return out;
+  const edits = readClipEdits(songPathsById(ws, projectId).root);
+  const videos = clips.filter((c) => c.kind === "video");
+  const auto = await bestMoments(ws.dir, videos.map((c) => c.file));
+  return new Map(clips.map((c) => {
+    const own = editOf(edits, c.name).best;
+    const bestAtS = c.kind !== "video" ? null : (own ?? auto.get(c.file) ?? null);
+    return [c.src, { name: c.name, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, bestAtS, bestFrom: bestAtS === null ? null : own !== undefined ? "clip editor" : "auto" }];
+  }));
 }

@@ -1,11 +1,13 @@
-// Browser test of the Storyboard tab, stage 1 (needs a studio build, FFmpeg, the audio service's Python
-// and Playwright, as the others):  pnpm test:e2e
+// Browser test of the Storyboard tab, stages 1 and 2 (needs a studio build, FFmpeg, the audio service's
+// Python and Playwright, as the others):  pnpm test:e2e
 // A 14 s click track at 120 BPM, six lines, four clips (one only 1 s long), and two anchors in song.json:
 // line 4 on 02_b.mp4 (dissolve) inside the section, line 6 outside it. The plan (a dry run: nothing is
 // rendered or written) shows bars, the waveform, the lines with ⚓, the shots with badges and warnings,
-// the anchor left outside; clicking the timeline plays the preview from there.
+// the anchor left outside; clicking the timeline plays the preview from there. Stage 2: moving a clip in
+// the story strip re-plans and is kept in clips.json, the clip editor's best moment and speed re-plan,
+// dragging a clip onto a lyric line anchors it (song.json); the Style tab's tempo (x2/3) re-plans.
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -109,6 +111,70 @@ async function main() {
     const left = Number((await page.getAttribute("[data-playhead]", "style"))?.match(/left: ([\d.]+)px/)?.[1] ?? 0);
     check(left > 100, `the preview plays from the clicked point (playhead at ${left} px)`);
     await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "storyboard.png") });
+
+    // Stage 2. The story strip: file-name order; moving 01_a later re-plans and is kept in clips.json.
+    const strip = async () => page.$$eval("[data-story-clip]", (els: Element[]) => els.map((e) => e.getAttribute("data-story-clip")));
+    check(JSON.stringify(await strip()) === JSON.stringify(["01_a.mp4", "02_b.mp4", "03_c.mp4", "04_d.mp4"]), "the story strip in file-name order");
+    const replanned = async () => {
+      await page.waitForSelector("[data-replanning]", { timeout: 10_000 }).catch(() => null);
+      await page.waitForSelector("[data-replanning]", { state: "detached", timeout: 180_000 });
+    };
+    await page.click("[data-move-later='01_a.mp4']");
+    await replanned();
+    const order = await strip();
+    check(JSON.stringify(order) === JSON.stringify(["02_b.mp4", "01_a.mp4", "03_c.mp4", "04_d.mp4"]), `moved later, planned again (${order.join(", ")})`);
+    const clipsJson = () => JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8"));
+    check(JSON.stringify(clipsJson().order) === JSON.stringify(order), "the order is kept in clips.json");
+    await page.reload();
+    await page.waitForSelector("[data-storyboard-show]");
+    await page.click("[data-storyboard-show]");
+    await page.waitForSelector("[data-story-clip]", { timeout: 180_000 });
+    check(JSON.stringify(await strip()) === JSON.stringify(order), "and still there after reloading the page");
+    // Drag a clip onto another: it takes that place.
+    await page.dragAndDrop("[data-story-clip='04_d.mp4']", "[data-story-clip='02_b.mp4']");
+    await replanned();
+    check((await strip())[0] === "04_d.mp4", `dragged to the front (${(await strip()).join(", ")})`);
+    // The clip editor: a best moment and slow motion for 03_c.
+    await page.click("[data-story-clip='03_c.mp4'] button");
+    await page.waitForSelector("[data-clip-editor='03_c.mp4']");
+    await page.fill("[data-clip-best]", "1.5");
+    await page.selectOption("[data-clip-speed]", "0.8");
+    await page.click("[data-clip-save]");
+    await replanned();
+    check(JSON.stringify(clipsJson().clips["03_c.mp4"]) === JSON.stringify({ speed: 0.8, best: 1.5 }), `the clip editor saved its best moment and speed (${JSON.stringify(clipsJson().clips)})`);
+    const shots03 = await page.$$eval("[data-shot]", (els: Element[]) => els.filter((e) => (e.textContent ?? "").includes("03_c.mp4")).map((e) => !!e.querySelector("[data-badge=speed]")));
+    const card03 = (await page.textContent("[data-story-clip='03_c.mp4']")) ?? "";
+    check(card03.includes("0.8x") && card03.includes("★ yours") && shots03.every(Boolean), `and the plan uses it: the card (${card03}), its shots slowed (${shots03.length})`);
+    // Drag a clip onto a lyric line: an anchor.
+    await page.dragAndDrop("[data-story-clip='04_d.mp4']", "[data-story-line='3']");
+    await replanned();
+    const recipe = JSON.parse(readFileSync(paths.recipe!, "utf8"));
+    check(recipe.anchors.some((a: { line: number; clip: string }) => a.line === 3 && a.clip === "04_d.mp4"), `dragging onto line 3 anchors 04_d there (${JSON.stringify(recipe.anchors)})`);
+    check(!!(await page.$("[data-story-line='3'][data-anchored='04_d.mp4']")), "line 3 shows ⚓ 04_d.mp4");
+
+    // The Style tab's tempo: x2/3 of 120 = 80 BPM in song.json; the storyboard plans with it.
+    await page.goto(`${base}/songs/${sp.project.id}?tab=style`);
+    await page.waitForSelector("[data-tempo-check]");
+    if (!(await page.$("[data-tempo-ratio='×2/3']"))) {
+      // No video made yet: the detected tempo comes from the tempo check.
+      await page.click("[data-tempo-check]");
+      await page.waitForSelector("[data-tempo-candidates]", { timeout: 120_000 });
+      const candidates = (await page.textContent("[data-tempo-candidates]")) ?? "";
+      check(/120(\.\d)? BPM \(detected\)/.test(candidates), `the tempo check lists the likely tempi (${candidates})`);
+    }
+    await page.waitForSelector("[data-tempo-ratio='×2/3']");
+    await page.click("[data-tempo-ratio='×2/3']");
+    await page.waitForSelector("[data-saving=saved]");
+    check(JSON.parse(readFileSync(paths.recipe!, "utf8")).tempo === 80, "x2/3 sets the tempo to 80 BPM in song.json");
+    await page.goto(`${base}/songs/${sp.project.id}?tab=storyboard`);
+    await page.waitForSelector("[data-storyboard-show]");
+    await page.click("[data-storyboard-show]");
+    await page.waitForSelector("[data-shot='1']", { timeout: 180_000 });
+    const summary80 = (await page.textContent("[data-storyboard-summary]")) ?? "";
+    const bpm80 = Number(summary80.match(/(\d+) BPM/)?.[1]);
+    // The beats are tracked again around 80 (on this 120 BPM click track they settle near it).
+    check(Math.abs(bpm80 - 80) <= 4, `the storyboard plans with the tempo (${summary80})`);
+    await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "storyboard-stage2.png") });
     check(existsSync(songFile), "the song file is untouched");
     await browser.close();
   } finally {

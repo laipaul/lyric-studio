@@ -49,6 +49,8 @@ export const FIELD_LABELS: Record<RecipeField, string> = {
   verseItalic: "Verse italic",
   hookItalic: "Hook italic",
   accentColour: "Accent colour",
+  shotLength: "Shot length",
+  tempo: "Tempo (BPM)",
   collections: "Shared collections",
   platforms: "Platforms Generate starts with",
   variations: "Videos per platform",
@@ -78,6 +80,7 @@ export type StyleData = {
   collections: string[];
   previewLine: string;
   userFonts: string; // the folder for the user's own fonts (WORKSPACE_DIR\fonts)
+  song: { file: string | null; bpm: number | null }; // workspace-relative song file (the Tap button plays it); the BPM the last video used
 };
 
 function presetsList(): PlatformPreset[] {
@@ -103,6 +106,11 @@ export function recipeInputFor(ws: Workspace, projectId: string, catalog: FontCa
     recipeFile: p.recipe ? path.relative(ws.dir, p.recipe).split(path.sep).join("/") : null,
     brandFile: path.relative(ws.dir, brand.file).split(path.sep).join("/"),
   };
+}
+
+function songRow(ws: Workspace, projectId: string): StyleData["song"] {
+  const row = ws.db.select({ file: projectTable.audio_path, bpm: projectTable.bpm }).from(projectTable).where(eq(projectTable.id, projectId)).get();
+  return { file: row?.file ?? null, bpm: row?.bpm ?? null };
 }
 
 function artistOf(ws: Workspace, projectId: string): string {
@@ -168,6 +176,7 @@ export function styleData(ws: Workspace, projectId: string): StyleData {
     collections: sharedCollections(ws),
     previewLine: PREVIEW_LINE,
     userFonts: userFontsDir(ws.dir),
+    song: songRow(ws, projectId),
   };
 }
 

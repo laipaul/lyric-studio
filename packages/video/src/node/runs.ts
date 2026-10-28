@@ -30,6 +30,7 @@ export type RunRequest = {
   length?: number; // seconds an auto section aims for (all chosen platforms)
   allowFill?: boolean;
   layout?: "cover" | "stills" | "clips";
+  shotLength?: string; // "1" | "2" | "4" | "8" bars per shot or "story" (only sent when changed from the recipe)
   realign?: boolean;
   saveToSong?: boolean; // keep this run's choices in the song's recipe (song.json; locked settings stay)
   pairings?: string[]; // compare font pairings: one video per pairing (ids from presets/font-pairings.json, "brand")
@@ -56,6 +57,7 @@ export function checkRunRequest(req: RunRequest, platformNames: readonly string[
   if (req.length !== undefined && !(typeof req.length === "number" && req.length >= 3 && req.length <= 600)) problems.push("Target length must be 3-600 seconds.");
   if (req.pairings !== undefined && !(Array.isArray(req.pairings) && req.pairings.length <= 3 && req.pairings.every((x) => typeof x === "string" && /^[a-z0-9-]+$/.test(x)))) problems.push("Compare pairings: choose up to 3.");
   if (req.layout && !["cover", "stills", "clips"].includes(req.layout)) problems.push("YouTube layout must be cover, stills or clips.");
+  if (req.shotLength !== undefined && !["1", "2", "4", "8", "story"].includes(req.shotLength)) problems.push("Shot length must be 1, 2, 4 or 8 bars, or story.");
   if (req.collection !== undefined && !/^[^\\/:*?"<>|]+$/.test(req.collection)) problems.push("Choose a collection.");
   return problems;
 }
@@ -101,6 +103,7 @@ export function generateOptions(ws: Workspace, projectId: string, req: RunReques
     ...(req.length ? { length: Math.round(req.length) } : {}),
     ...(req.allowFill ? { allowFill: true } : {}),
     ...(req.layout ? { layout: req.layout } : {}),
+    ...(req.shotLength ? { shotLength: req.shotLength } : {}),
     ...(req.realign ? { realign: true } : {}),
     ...(req.pairings?.length ? { pairings: req.pairings.join(",") } : {}),
     command: "Lyric Studio: Generate",

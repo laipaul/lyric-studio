@@ -757,7 +757,52 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   make.test.ts (real renders: the song file's hash and modification time are unchanged, the song
   folder's copy is byte for byte the same, QA audio check passes, 44.1 kHz kept).
 
-### Storyboard — stage 1 (read-only) ✅ (to verify on the Windows PC; stage 2 = editing, after your test)
+### Storyboard stage 2 + your four findings ✅ (to verify on the Windows PC)
+- **1. Shot length** (recipe "shotLength": 1, 2, 4, 8 bars or "story"; brand.json, song.json, per platform;
+  Style tab with source / Reset / Lock, Generate → Advanced, `--shot-length`). "story" = 2 bars on hooks,
+  4 on verses and instrumentals, more bars when that is under 3 s, never a short last shot: a 90.8 s Reels
+  cut at 92 BPM now has 12-20 shots instead of 51. Bars count from the bar the section starts on. In story
+  order every clip is used once before any repeats (a round), pinned / anchored clips count in the round.
+  The manifest records settings.shot_length.
+- **2. Clip window**: a clip's first shot in a story video is centred on its best moment (the clip
+  editor's, else the strongest 2 s by motion / colour / contrast, cached in
+  workspace\cache\best-moments.json), inside its in / out; later shots of the same clip continue from there. An anchor
+  without its own clipIn is also centred on the best moment (was: 0.0 s). Shuffle keeps its seeded offset.
+- **3. Tempo**: `pnpm tempo:check "<song folder>"` prints the detected tempo, the likeliest other tempi with
+  their ratio (x2/3 = a 3:2 error) and the downbeats. Style tab → Tempo (BPM): type it, ½ / ×2 / ×2/3 /
+  ×3/2, a Tap test over the song (median of the gaps, after 4 taps), or "Check the tempo" (the same list,
+  click one). Saved as song.json "tempo"; the analysis re-tracks the beats around it (half / double from
+  the detected beats, other tempi tracked again, fine-tuned by at most 3%); pnpm make prints "tempo: X BPM
+  (song.json "tempo" Y; detected Z)", the manifest records settings.tempo, and the storyboard plans with it
+  (a past run's storyboard uses the tempo that run had). `--tempo 92` on the command line. I could not
+  check your song here (it is only on your PC): please run tempo:check and send me its lines.
+- **4. Loop warning**: the storyboard header shows WARN "Loop flows" with each failing point (e.g. "sound:
+  level jump 15.4 dB at the loop point …") and target lengths whose end loops well from the same start
+  (clean bar right after a complete line, 0.5-1.5x the target, beat + level + harmony pass; nearest to the
+  target first), or says none exists.
+- **Stage 2 (editing, plans only)**: the story strip (every clip of the run in story order) — drag a clip
+  onto another or use the arrows → song folder `clips.json` "order" (file names stay the fallback); the
+  clip editor (click a clip or a shot → Edit clip): in / out with "set here" from the playing clip, speed
+  0.5-1x, best moment (always wins over the automatic one), "Whole clip, automatic"; drag a clip onto a
+  lyric line → an anchor in song.json (another clip on the same line replaces it; "remove the anchor" on
+  the shot). Every change re-plans at once; Generate renders exactly the plan shown.
+- **Flaky Lyrics tab browser test fixed** (three causes, the last two real bugs): (1) after saving or
+  restoring lyrics.txt the notice appeared before the page had reloaded; the reload then rebuilt the
+  "earlier versions" list and closed it, so a click hit a hidden button: the notice now waits for the
+  reload, the test for the list. (2) Two lyrics.txt saves in the same second gave their backups in
+  .studio\replaced\ the same name, so the second overwrote the first (an earlier version was lost):
+  now each gets its own ("<time>.2-lyrics.txt"). (3) Restore refused those new names: fixed. Before: 2 of
+  6 runs failed; after (1) only, every run failed on (2)/(3) because the saves got faster; after all
+  three: **20 of 20 runs passed**. The failing outputs are kept in the session's scratchpad.
+- Tests: story-pace.test.ts (story pacing 12-20 shots, ≥ 3 s, 2 bars on hooks / 4 on verses, 1/2/4/8 bars,
+  each clip once per round, clips.json rank, best-moment window inside in / out, speed; recipe, CLI and
+  Generate checks), loop.test.ts (suggestions: only clean ends after a line in 0.5-1.5x that pass; a level
+  jump is not suggested), storyboard-edit.test.ts (order persists in clips.json and re-plans, clip editor
+  edits re-plan, drag-to-anchor, and after each: the rendered manifest's shots equal the plan's),
+  test_analysis.py (tempo candidates name the 2/3 ratio), storyboard.e2e.ts (move / drag in the strip,
+  kept after reload, clip editor, drag onto a line, the Style tab's ×2/3 re-plans at ~80 BPM).
+
+### Storyboard — stage 1 (read-only) ✅ (to verify on the Windows PC)
 - **Song page → Storyboard**: choose "The plan now" (per platform of the recipe, v1, v2, …) or a past
   run, then Show. The plan is a dry run of the very planner Generate renders with (makeVideos with
   dryRun): nothing is rendered or written (no run folder, no section / job rows, no song.json or .lrc
@@ -771,7 +816,7 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   listed; the planner's warnings below.
 - **Best moment**: the strongest 2 s of each clip by motion, colour and contrast (as the Spotify Canvas
   picks them), cached in workspace\cache\best-moments.json. A best moment set in the clip editor (stage 2)
-  will always win.
+  always wins.
 - **Preview**: a low-res Player of the same composition next to the timeline; clicking the timeline plays
   from that point (the playhead follows).
 - Built so the studio never bundles the render code: the storyboard is planned in a child process

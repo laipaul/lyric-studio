@@ -86,6 +86,9 @@
     "./run-settings": "./src/node/run-settings.ts",
     "./lyrics-view": "./src/node/lyrics-view.ts",
     "./font-catalog": "./src/node/font-catalog.ts",
-    "./pairings": "./src/node/pairings.ts"
+    "./pairings": "./src/node/pairings.ts",
+    "./analysis": "./src/node/analysis.ts",
+    "./clip-edits": "./src/node/clip-edits.ts",
+    "./storyboard-edit": "./src/node/storyboard-edit.ts"
   }
 }

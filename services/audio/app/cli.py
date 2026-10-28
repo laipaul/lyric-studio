@@ -1,4 +1,5 @@
-"""Command line: pnpm analyze <path-to-audio> [--bpm 140] [--downbeat-offset 1] [--click] [--json]
+"""Command line: pnpm analyze <path-to-audio> [--bpm 140] [--downbeat-offset 1] [--click] [--json] [--candidates]
+(pnpm tempo:check <song> = --candidates: the likeliest tempi, to check a detected one)
 
 Analyses any audio file on this PC (it does not need "pnpm dev" running) and prints the result.
 Results are cached in the workspace, like the /analyze endpoint."""
@@ -10,7 +11,7 @@ import json
 import sys
 from pathlib import Path
 
-from .analysis import MAX_BPM, MIN_BPM
+from .analysis import MAX_BPM, MIN_BPM, tempo_candidates
 from .beatgrid import apply_downbeat_offset, write_click_track
 from .cache import analyze_cached
 from .store import DatabaseOutdated, find_project_by_audio, set_downbeat_offset
@@ -34,6 +35,7 @@ def _confidence_label(value: float) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pnpm analyze", description="Find BPM, beats and downbeats of a song.")
     parser.add_argument("path", help="audio file (WAV, MP3, FLAC, ...)")
+    parser.add_argument("--candidates", action="store_true", help="also list the likeliest tempi (to check the detected one)")
     parser.add_argument("--bpm", type=float, help=f"manual BPM ({MIN_BPM:g}-{MAX_BPM:g}): re-track beats around this tempo")
     parser.add_argument(
         "--downbeat-offset", type=int, choices=[0, 1, 2, 3], help="bar 1 starts this many beats later than detected"
@@ -79,8 +81,9 @@ def main(argv: list[str] | None = None) -> int:
 
     click_file = write_click_track(path, r["beats"]) if args.click else None
 
+    candidates = tempo_candidates(path, r["bpm"]) if args.candidates else None
     if args.json:
-        print(json.dumps({**r, "path": str(path), "click_file": str(click_file) if click_file else None}, indent=2))
+        print(json.dumps({**r, "path": str(path), "click_file": str(click_file) if click_file else None, **({"tempo_candidates": candidates} if candidates is not None else {})}, indent=2))
         return 0
 
     alt = r["bpm_alternatives"]
@@ -95,6 +98,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Half/double: {alt['half']:g} / {alt['double']:g}")
     print(f"             If the beat feels too fast or too slow, try: pnpm analyze {quoted} --bpm {alt['half']:g}")
     print(f"                                                      or: pnpm analyze {quoted} --bpm {alt['double']:g}")
+    if candidates is not None:
+        print("Likely tempi (strongest first; a song can feel like any of these, the detected one is marked):")
+        for c in candidates:
+            mark = "  <- detected" if c["ratio"] == "x1" else f"  ({c['ratio']} the detected)" if c["ratio"] else ""
+            print(f"             {c['bpm']:6.1f} BPM  strength {c['strength']:.2f}{mark}")
+        print(f"             Tap along: Style tab > Tempo > Tap. To use another tempo: pnpm analyze {quoted} --bpm <bpm>, or the Style tab's Tempo.")
     print(f"Downbeats:   confidence {r['downbeat_confidence']:.2f} ({_confidence_label(r['downbeat_confidence'])})")
     print(f"             offset {offset}{f' ({offset_note})' if offset_note else ''}"
           f" - if bar 1 sounds wrong, change it with --downbeat-offset 0, 1, 2 or 3")

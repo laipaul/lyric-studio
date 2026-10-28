@@ -205,3 +205,42 @@ def analyze_file(path: Path, bpm: float | None = None) -> dict[str, Any]:
         "beats": beats,
         "analyzer_version": ANALYZER_VERSION,
     }
+
+
+# How a candidate relates to the detected tempo, for the printout ("x2/3": a 3:2 error, e.g. a triplet feel).
+RATIOS = {"x1/2": 0.5, "x2/3": 2 / 3, "x3/4": 0.75, "x1": 1.0, "x4/3": 4 / 3, "x3/2": 1.5, "x2": 2.0}
+
+
+def tempo_candidates(path: Path, detected_bpm: float | None = None, count: int = 4) -> list[dict[str, Any]]:
+    """The likeliest tempi of a song (for checking a detected tempo, "pnpm tempo:check"): peaks of the
+    song's average autocorrelation tempogram between 50 and 220 BPM, strongest first, each with its
+    strength (0-1, relative to the strongest) and its ratio to the detected tempo when it is a simple one.
+    Not cached, not part of the analysis: only computed when asked for."""
+    y, _ = librosa.load(str(path), sr=SR, mono=True)
+    onset_env = librosa.onset.onset_strength(y=y, sr=SR, hop_length=HOP, n_fft=N_FFT)
+    tempogram = librosa.feature.tempogram(onset_envelope=onset_env, sr=SR, hop_length=HOP)
+    strength = tempogram.mean(axis=1)
+    bpms = librosa.tempo_frequencies(tempogram.shape[0], sr=SR, hop_length=HOP)
+    peaks = [
+        i for i in range(1, len(strength) - 1)
+        if 50 <= bpms[i] <= 220 and strength[i] >= strength[i - 1] and strength[i] >= strength[i + 1]
+    ]
+    if not peaks:
+        return []
+    top = max(strength[i] for i in peaks)
+    out: list[dict[str, Any]] = []
+    for i in sorted(peaks, key=lambda k: strength[k], reverse=True):
+        bpm = float(bpms[i])
+        if strength[i] / top < 0.05 or any(abs(bpm - c["bpm"]) <= c["bpm"] * 0.04 for c in out):
+            continue  # the same tempo once
+        ratio = None
+        if detected_bpm:
+            for name, r in RATIOS.items():
+                if abs(bpm - detected_bpm * r) <= detected_bpm * r * 0.04:
+                    ratio = name
+                    break
+        out.append({"bpm": round(bpm, 1), "strength": round(float(strength[i] / top), 2), "ratio": ratio})
+        if len(out) >= count:
+            break
+    return out
+

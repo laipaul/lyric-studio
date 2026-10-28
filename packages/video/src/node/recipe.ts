@@ -14,9 +14,9 @@ import path from "node:path";
 import { checkAnchors, type AnchorSpec, type GapOrder } from "../anchors";
 import { choiceText, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, parseEffectChoice } from "../effects/names";
 import { DEFAULT_BRAND, type Brand } from "./brand";
-import { checkPerPlatform, isPlatformField, isWeight, PLATFORM_FIELDS, type PerPlatform, type PlatformField } from "./per-platform";
+import { checkPerPlatform, isPlatformField, isWeight, SHOT_LENGTH_VALUES, PLATFORM_FIELDS, type PerPlatform, type PlatformField } from "./per-platform";
 
-export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "collections", "platforms", "variations", "section", "length", "ep", "youtubeLayout"] as const;
+export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "tempo", "collections", "platforms", "variations", "section", "length", "ep", "youtubeLayout"] as const;
 export type RecipeField = (typeof RECIPE_FIELDS)[number];
 
 export type RecipeValues = {
@@ -29,6 +29,8 @@ export type RecipeValues = {
   verseItalic: boolean; // the family's italic file (never a synthetic italic)
   hookItalic: boolean;
   accentColour: string; // #RRGGBB
+  shotLength: string | null; // "1" | "2" | "4" | "8" bars per shot, or "story"; null: the cut rate (one shot per bar)
+  tempo: number | null; // BPM override for this song (the beats are re-tracked around it); null: as detected
   collections: string[]; // shared collections used with the song's own clips
   platforms: string[]; // the platforms Generate starts with
   variations: Record<string, number>; // videos per platform
@@ -57,7 +59,7 @@ export const RECIPE_HELP =
   "The recipe of this song. A setting that is not here is inherited from the artist's brand (brand.json) " +
   "or the library defaults; a setting here is this song's own. \"locked\": settings that keep this song's value " +
   "(a brand change does not reach them, and Generate cannot change them for one run). Fields: verseEffect, hookEffect " +
-  '("glide", "soft-blur:subtle", ...), verseFont, hookFont, verseWeight / hookWeight (400 = regular, 600 = semibold, 700 = bold), verseItalic / hookItalic (true / false), accentColour ("#E8A3B5"), collections (shared collections used ' +
+  '("glide", "soft-blur:subtle", ...), verseFont, hookFont, verseWeight / hookWeight (400 = regular, 600 = semibold, 700 = bold), verseItalic / hookItalic (true / false), accentColour ("#E8A3B5"), shotLength ("1", "2", "4", "8" bars per shot, or "story": 2 bars on hooks, 4 on verses, never under 3 s), tempo (the real BPM of this song when the detected one is wrong, e.g. 92), collections (shared collections used ' +
   'with the clips in clips\\), platforms (["reels", "youtube"]), variations ({ "reels": 3 }), section ("auto", "full", ' +
   '"0:11-1:10"), length (seconds an "auto" section aims for, e.g. 90; empty = the platform preset), ep, youtubeLayout ("cover", "stills", "clips"). perPlatform: values for one platform only, e.g. ' +
   '{ "youtube": { "verseEffect": "cinematic-fade" } } (verseEffect, hookEffect, verseFont, hookFont, accentColour, section, length), e.g. { "reels": { "length": 90 }, "tiktok": { "length": 30 } }. ' +
@@ -86,6 +88,14 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
     }
   }
   if (r.ep === "") recipe.ep = "";
+  if (r.shotLength !== undefined && r.shotLength !== null) {
+    if ((SHOT_LENGTH_VALUES as readonly string[]).includes(String(r.shotLength))) recipe.shotLength = String(r.shotLength);
+    else problems.push(`shotLength must be ${SHOT_LENGTH_VALUES.join(", ")} (bars per shot, or "story": 2 bars on hooks, 4 on verses, never under 3 s)`);
+  }
+  if (r.tempo !== undefined && r.tempo !== null) {
+    if (typeof r.tempo === "number" && r.tempo >= 30 && r.tempo <= 300) recipe.tempo = Math.round(r.tempo * 100) / 100;
+    else problems.push("tempo must be a number of BPM from 30 to 300 (the song's real tempo)");
+  }
   for (const k of ["verseWeight", "hookWeight"] as const) {
     if (r[k] === undefined) continue;
     if (isWeight(r[k])) recipe[k] = r[k] as number;
@@ -272,6 +282,8 @@ export const LIBRARY_RECIPE: RecipeValues = {
   verseItalic: false,
   hookItalic: false,
   accentColour: DEFAULT_BRAND.accentColour,
+  shotLength: null,
+  tempo: null,
   collections: [], // none: the song's own clips (or the collection it used last time)
   platforms: [], // none: the "standard" preset
   variations: {}, // none: each platform preset's number
@@ -282,7 +294,7 @@ export const LIBRARY_RECIPE: RecipeValues = {
 };
 
 // The artist's brand.json (fonts, accent colour, lyric effects).
-export function artistRecipe(brand: Pick<Brand, "verseFont" | "hookFont" | "accentColour" | "motion">): Partial<RecipeValues> {
+export function artistRecipe(brand: Pick<Brand, "verseFont" | "hookFont" | "accentColour" | "motion" | "shotLength">): Partial<RecipeValues> {
   return {
     verseEffect: choiceText(brand.motion.verseEffect),
     hookEffect: choiceText(brand.motion.hookEffect),
@@ -293,6 +305,7 @@ export function artistRecipe(brand: Pick<Brand, "verseFont" | "hookFont" | "acce
     verseItalic: brand.verseFont.italic === true,
     hookItalic: brand.hookFont.italic === true,
     accentColour: brand.accentColour,
+    ...(brand.shotLength ? { shotLength: brand.shotLength } : {}),
   };
 }
 
@@ -306,6 +319,8 @@ export function runRecipe(o: {
   hookWeight?: number;
   italic?: boolean;
   hookItalic?: boolean;
+  shotLength?: string;
+  tempo?: number;
   collection?: string;
   platforms?: string;
   variations?: number;
@@ -324,6 +339,8 @@ export function runRecipe(o: {
     hookWeight: o.hookWeight,
     verseItalic: o.italic,
     hookItalic: o.hookItalic,
+    shotLength: o.shotLength,
+    tempo: o.tempo,
     collections: list(o.collection),
     platforms: list(o.platforms?.toLowerCase()),
     variations: o.variations !== undefined ? { "*": o.variations } : undefined,
@@ -345,8 +362,8 @@ export function recipeText(v: unknown): string {
 
 // "verse glide (artist), hook karaoke-highlight (artist), collections wedding (song, locked), ..."
 export function recipeSummary(r: ResolvedRecipe): string {
-  const show: RecipeField[] = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "collections", "section"];
-  for (const k of ["platforms", "variations", "ep", "youtubeLayout"] as const) if (r.sources[k] !== "library") show.push(k);
+  const show: RecipeField[] = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "collections", "section"];
+  for (const k of ["platforms", "variations", "ep", "youtubeLayout", "tempo"] as const) if (r.sources[k] !== "library") show.push(k);
   return show.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]}${r.locked.includes(k) ? ", locked" : ""})`).join(", ");
 }
 

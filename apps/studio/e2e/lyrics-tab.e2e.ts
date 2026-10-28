@@ -162,7 +162,10 @@ async function main() {
     await page.waitForFunction(() => document.querySelector("[role=status]")?.textContent?.includes("lyrics.txt saved"));
     check(readFileSync(paths.lyricsTxt, "utf8") === "The verse line\n* You had a heart for two\nNext verse\n", "lyrics.txt saved without the label");
     check(existsSync(path.join(paths.root, ".studio", "replaced")) && readdirSync(path.join(paths.root, ".studio", "replaced")).some((f) => f.endsWith("-lyrics.txt")), "the old lyrics.txt is kept in .studio\\replaced\\");
+    // Both earlier versions listed (the page has reloaded), then open the list (and wait until it is open).
+    await page.waitForFunction(() => document.querySelectorAll("[data-restore]").length >= 2);
     await page.click("[data-lyrics-text] summary");
+    await page.waitForSelector("[data-restore] >> nth=0", { state: "visible" });
     await page.click("[data-restore] >> nth=0");
     await page.waitForSelector("[data-label-flags]");
     check(readFileSync(paths.lyricsTxt, "utf8").startsWith("[Chorus]"), "Restore brings the earlier version back");

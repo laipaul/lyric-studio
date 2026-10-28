@@ -300,7 +300,7 @@ export function saveLyricsText(ws: Workspace, projectId: string, text: string): 
 // Undo: an earlier lyrics.txt from .studio\replaced\ back (the current one is kept there too).
 export function restoreLyrics(ws: Workspace, projectId: string, file: string): { realign: boolean } {
   const paths = songPathsById(ws, projectId);
-  if (!/^[\dT-]+-lyrics\.txt$/.test(file)) throw new Error("Not an earlier lyrics.txt.");
+  if (!/^[\dT-]+(\.\d+)?-lyrics\.txt$/.test(file)) throw new Error("Not an earlier lyrics.txt.");
   const source = path.join(paths.root, ".studio", "replaced", file);
   if (!existsSync(source)) throw new Error("That earlier version is not there any more.");
   return saveLyricsText(ws, projectId, readFileSync(source, "utf8"));

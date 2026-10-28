@@ -264,6 +264,24 @@ export function StyleTab({ projectId }: { projectId: string }) {
         </div>
       );
     }
+    if (f.field === "shotLength") {
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          <select aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} className={select} value={value === null || value === undefined ? "" : String(value)} onChange={(e) => (e.target.value ? set(e.target.value) : act({ action: "reset", field: f.field, platform }))}>
+            <option value="">the cut rate (Generate&apos;s 0.5x / 1x / 2x)</option>
+            {SHOT_LENGTHS.map(([v, label]) => (
+              <option key={v} value={v}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <span className="text-muted-foreground text-xs">story = 2 bars on hooks, 4 on verses, never under 3 s; each clip once before any repeats</span>
+        </div>
+      );
+    }
+    if (f.field === "tempo") {
+      return <TempoEditor projectId={projectId} value={typeof value === "number" ? value : null} song={data.song} onSet={(n) => (n === null ? act({ action: "reset", field: f.field }) : set(n))} />;
+    }
     if (f.field === "youtubeLayout") {
       return (
         <select aria-label={f.label} data-edit={key} className={select} value={String(value)} onChange={(e) => set(e.target.value)}>
@@ -367,6 +385,117 @@ export function StyleTab({ projectId }: { projectId: string }) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+const SHOT_LENGTHS: [string, string][] = [["1", "1 bar"], ["2", "2 bars"], ["4", "4 bars"], ["8", "8 bars"], ["story", "story (2-4 bars)"]];
+const RATIOS: [string, number][] = [["½", 1 / 2], ["×2", 2], ["×2/3", 2 / 3], ["×3/2", 3 / 2]];
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
+// The song's tempo: empty = as detected. Quick fixes for the usual errors (half, double, 3:2), a tap
+// test over the song (tap along on the beat) and the tempo check (the likeliest tempi). Saved in
+// song.json "tempo": the beats are re-tracked around it and the storyboard plans with it.
+function TempoEditor({ projectId, value, song, onSet }: { projectId: string; value: number | null; song: StyleData["song"]; onSet: (n: number | null) => void }) {
+  const audio = useRef<HTMLAudioElement>(null);
+  const [taps, setTaps] = useState<number[]>([]);
+  const [tapping, setTapping] = useState(false);
+  const [check, setCheck] = useState<{ state: "idle" | "busy" | "done"; text?: string; candidates?: { bpm: number; strength: number; ratio: string | null }[]; detected?: number }>({ state: "idle" });
+  const base = value ?? song.bpm ?? check.detected ?? null;
+  // BPM from the taps: the median gap (one stray tap does not spoil it).
+  const gaps = taps.slice(1).map((t, i) => t - taps[i]).sort((a, b) => a - b);
+  const tapBpm = gaps.length >= 3 ? round1(60_000 / gaps[Math.floor(gaps.length / 2)]) : null;
+  const tap = () => setTaps((t) => [...t.filter((x) => performance.now() - x < 12_000), performance.now()]);
+  async function runCheck() {
+    setCheck({ state: "busy" });
+    try {
+      const r = await api(`/api/songs/${projectId}/tempo`, { cache: "no-store" });
+      const d = (await r.json()) as { bpm: number; candidates: { bpm: number; strength: number; ratio: string | null }[]; error?: string };
+      if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
+      setCheck({ state: "done", candidates: d.candidates, detected: d.bpm });
+    } catch (e) {
+      setCheck({ state: "done", text: (e as Error).message });
+    }
+  }
+  return (
+    <div data-tempo className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          key={`tempo-${value ?? ""}`}
+          type="number"
+          min={30}
+          max={300}
+          step={0.1}
+          data-edit="tempo-default"
+          className={cn(input, "w-24")}
+          defaultValue={value ?? ""}
+          placeholder="detected"
+          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+          onBlur={(e) => {
+            const n = e.target.value ? Number(e.target.value) : null;
+            if (n !== value) onSet(n);
+          }}
+        />
+        <span className="text-muted-foreground text-xs">BPM{value === null ? (song.bpm ? ` · as detected (${round1(song.bpm)} in the last video)` : " · as detected") : " · set for this song"}</span>
+        {base
+          ? RATIOS.map(([label, r]) => (
+              <button key={label} type="button" data-tempo-ratio={label} title={`${round1(base)} ${label} = ${round1(base * r)} BPM`} onClick={() => onSet(round1(base * r))} className="hover:bg-accent rounded-md border px-2 py-0.5 text-xs">
+                {label}
+              </button>
+            ))
+          : null}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        {song.file ? (
+          <>
+            <audio ref={audio} src={`/api/files/${song.file}`} preload="none" onEnded={() => setTapping(false)} />
+            <button
+              type="button"
+              data-tempo-tap-start
+              onClick={() => {
+                const a = audio.current;
+                if (!a) return;
+                if (tapping) {
+                  a.pause();
+                  setTapping(false);
+                } else {
+                  setTaps([]);
+                  void a.play();
+                  setTapping(true);
+                }
+              }}
+              className="hover:bg-accent rounded-md border px-2 py-0.5"
+            >
+              {tapping ? "Stop the song" : "Tap test: play the song"}
+            </button>
+            <button type="button" data-tempo-tap onClick={tap} onKeyDown={(e) => e.key === " " && e.preventDefault()} className="bg-brand/20 text-brand hover:bg-brand/30 rounded-md border px-3 py-0.5">
+              Tap
+            </button>
+            <span data-tempo-tapped className="text-muted-foreground">
+              {taps.length ? `${taps.length} tap(s)` : "tap on every beat (1 tap per beat)"}
+              {tapBpm ? `: ${tapBpm} BPM` : ""}
+            </span>
+            {tapBpm ? (
+              <button type="button" data-tempo-use-tap onClick={() => onSet(tapBpm)} className="text-brand underline">
+                use {tapBpm}
+              </button>
+            ) : null}
+          </>
+        ) : null}
+        <button type="button" data-tempo-check disabled={check.state === "busy"} onClick={runCheck} className="hover:bg-accent rounded-md border px-2 py-0.5">
+          {check.state === "busy" ? "Checking the tempo…" : "Check the tempo"}
+        </button>
+      </div>
+      {check.state === "done" ? (
+        <div data-tempo-candidates className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
+          {check.text ? <span className="text-red-300">{check.text}</span> : <span>Likely tempi:</span>}
+          {(check.candidates ?? []).map((c) => (
+            <button key={c.bpm} type="button" data-tempo-candidate={c.bpm} onClick={() => onSet(c.bpm)} className="hover:bg-accent rounded-md border px-2 py-0.5">
+              {c.bpm} BPM{c.ratio === "x1" || (!c.ratio && Math.abs(c.bpm - (check.detected ?? 0)) < 1) ? " (detected)" : c.ratio ? ` (${c.ratio} the detected)` : ""} · {Math.round(c.strength * 100)}%
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

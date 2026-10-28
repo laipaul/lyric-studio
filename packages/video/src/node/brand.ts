@@ -9,7 +9,7 @@ import { safeName } from "@lyric/db";
 
 import type { Corner } from "../youtube";
 import type { FontCatalog } from "./font-catalog";
-import { checkPerPlatform, isWeight, type PerPlatform } from "./per-platform";
+import { checkPerPlatform, isWeight, SHOT_LENGTH_VALUES, type PerPlatform } from "./per-platform";
 import { findFamily } from "./font-catalog";
 
 export type BrandFont = { family: string; weight: number; italic?: boolean; letterSpacing?: number };
@@ -33,6 +33,7 @@ export type Brand = {
   // Per platform (Step 6.2c-2a): { "youtube": { "verseEffect": "cinematic-fade" } } for the effects,
   // fonts, accent colour and section; above the defaults here and platforms.json, below the song.
   perPlatform: PerPlatform;
+  shotLength?: string; // the artist's pace: "1" | "2" | "4" | "8" bars per shot, or "story"
 };
 
 export const DEFAULT_BRAND: Brand = {
@@ -141,6 +142,7 @@ export function loadBrand(
       for (const k of ["verseFont", "hookFont"] as const) if (v[k] && !findFamily(catalog, v[k]!)) problems.push(`perPlatform.${platform}.${k}: font "${v[k]}" not found (see pnpm fonts)`);
     }
   }
+  if (brand.shotLength !== undefined && !(SHOT_LENGTH_VALUES as readonly string[]).includes(String(brand.shotLength))) problems.push(`shotLength must be ${SHOT_LENGTH_VALUES.join(", ")} (bars per shot, or "story")`);
   if (!/^#[0-9a-fA-F]{6}$/.test(brand.accentColour)) problems.push(`accentColour must look like #E8A3B5 (found ${JSON.stringify(brand.accentColour)})`);
   const corners = ["top-left", "top-right", "bottom-left", "bottom-right"];
   if (!corners.includes(brand.logo.youtube)) problems.push("logo.youtube must be top-left, top-right, bottom-left or bottom-right");

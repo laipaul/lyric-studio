@@ -493,15 +493,16 @@ function LyricsText({
     const r = await post({ action: "text", text });
     setConfirm(false);
     if (!r) return;
-    setNotice({ ok: true, text: r.realign ? "lyrics.txt saved (the old one is in .studio\\replaced\\). The words changed: the next video aligns the lyrics again." : "lyrics.txt saved (the old one is in .studio\\replaced\\). Only hook markers or blank lines changed: the stored alignment is kept." });
+    // The page shows the saved state first, then says so (a click right after the message finds it settled).
     await onSaved();
+    setNotice({ ok: true, text: r.realign ? "lyrics.txt saved (the old one is in .studio\\replaced\\). The words changed: the next video aligns the lyrics again." : "lyrics.txt saved (the old one is in .studio\\replaced\\). Only hook markers or blank lines changed: the stored alignment is kept." });
   }
 
   async function restore(file: string) {
     const r = await post({ action: "restore", file });
     if (!r) return;
-    setNotice({ ok: true, text: `Earlier lyrics.txt restored (the current one was kept).${r.realign ? " The next video aligns the lyrics for these words (or reuses an alignment made for them before)." : ""}` });
     await onSaved();
+    setNotice({ ok: true, text: `Earlier lyrics.txt restored (the current one was kept).${r.realign ? " The next video aligns the lyrics for these words (or reuses an alignment made for them before)." : ""}` });
   }
 
   const removeLabels = () =>

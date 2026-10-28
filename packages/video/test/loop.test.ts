@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  assignClips, autoSection, getCutPoints, loopFit, loopFlows, runQa, sungEnd, sungStart,
+  assignClips, autoSection, getCutPoints, loopFit, loopFlows, loopSuggestions, runQa, sungEnd, sungStart,
   type ClipInfo, type LoopAudio, type LoopLine, type QaInput, type SectionLine,
 } from "../src";
 import { grid } from "./helpers";
@@ -175,5 +175,25 @@ describe("shot order on a loop platform", () => {
     // Long enough: the last shot continues into the first (same clip, seamless).
     const shots = assignClips(plan, clips, 7, { order: "shuffle", loopEnding: true });
     expect([shots[shots.length - 1].clip_id, shots[shots.length - 1].loop]).toEqual([shots[0].clip_id, true]);
+  });
+});
+
+describe("better loops: target lengths whose end flows back into the start (the storyboard's hint)", () => {
+  // Bars every 2 s from 0:00.5; line 6 ends at 0:38.0, so 0:38.5 is the clean end after it (28 s).
+  const downbeats = Array.from({ length: 30 }, (_, i) => 500 + i * 2000);
+  const base = { bpm: 120, startMs: 10_500, downbeats, lines: LINES, durationMs: 60_000 };
+
+  it("only clean ends right after a sung line, in 0.5-1.5x the target, that pass beat, level and harmony", () => {
+    const s = loopSuggestions({ ...base, audio: clockAudio, targetMs: 30_000 });
+    // 0:14.5 (after line 4: 4 s, below half the target) is out; 0:20.5 (after line 5, 10 s) too; 0:40.5 is
+    // not the first bar after a line (an instrumental bar more).
+    expect(s.map((x) => [x.lengthS, x.line?.number])).toEqual([[28, 6]]);
+    expect(s[0].fit.text).toMatch(/^whole bars, level jump \d\.\d dB, harmony/);
+    expect(loopSuggestions({ ...base, audio: clockAudio, targetMs: 14_000 }).map((x) => x.lengthS)).toEqual([10]); // 0:20.5, after line 5
+  });
+
+  it("an end with a level jump is not suggested", () => {
+    const loudEnd = song([{ fromMs: 36_500, toMs: 38_500, gain: 2 }]);
+    expect(loopSuggestions({ ...base, audio: loudEnd, targetMs: 30_000 })).toEqual([]);
   });
 });

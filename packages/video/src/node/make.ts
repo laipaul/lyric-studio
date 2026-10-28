@@ -34,12 +34,14 @@ import { choiceText, parseEffectChoice, type EffectChoice } from "../effects";
 import { cleanLrc } from "../lrc";
 import { choosePlatforms, lyricArea, parsePresets, sectionWindow, STANDARD, type LyricArea, type PlatformPreset } from "../platform";
 import { VIDEO } from "../config";
-import { getCutPoints, type CutRate, type Energy } from "../cuts";
+import { getCutPoints, type CutRate, type Energy, type ShotLength } from "../cuts";
+import { bestMoments } from "./best-moment";
+import { editOf, rankOf, readClipEdits } from "./clip-edits";
 import { matchPinClips, parsePins } from "../pins";
 import type { LyricEffectsProps, LyricVideoProps } from "../props";
 import { formatQa, LOW_CONFIDENCE, qaReasons, runQa, type QaInput, type QaReport } from "../qa";
 import { autoSection, clockText, finishedBeforeStart, sectionCuts, startsAfterEnd, sungEnd, sungStart, type SectionCut, type SectionLine } from "../section";
-import { loopFit, loopFlows, type LoopAudio, type LoopResult } from "../loop";
+import { loopFit, loopFlows, loopSuggestions, type LoopAudio, type LoopResult, type LoopSuggestion } from "../loop";
 import { anchorsInside, type AnchorSpec, type GapOrder, type ResolvedAnchor } from "../anchors";
 import type { AnchorReport, AnchorTransitions } from "../compose";
 import { RECENT_WINDOW, type ClipOrder } from "../shots";
@@ -116,6 +118,8 @@ export type MakeOptions = {
   italic?: boolean; // verse font italic (the family's italic file, never synthetic)
   hookItalic?: boolean;
   pairings?: string; // "elegant,dramatic": one video per pairing (presets/font-pairings.json), all else the same
+  shotLength?: string; // "1" | "2" | "4" | "8" bars per shot, or "story" (2 bars on hooks, 4 on verses, >= 3 s); replaces --rate
+  tempo?: number; // the song's real BPM (song.json "tempo"): the beats are re-tracked around it
   // The storyboard: plan every video exactly as a make would (the same code), but render nothing and
   // make no output (no run folder, section / job rows, song.json changes or .lrc; never aligns: it needs
   // the stored alignment). Caches are filled as usual (clip import and preparation, analysis).
@@ -193,11 +197,17 @@ export type VideoPlan = {
   spec: VariationSpec;
   props: Omit<LyricVideoProps, "mediaBaseUrl">;
   anchors: (AnchorReport & { missing: string[] }) | null;
+  loop: LoopResult | null; // loop platforms: does the wrap-around flow (as QA "Loop flows" checks it)
 };
 export type PlatformPlan = {
   videos: VideoPlan[];
+  loopSuggestions: LoopSuggestion[] | null; // loop platforms: target lengths with an end that loops well
   media: MediaRoots; // where the props' files are (for a preview)
-  clips: { path: string; name: string; clipId: string; thumb: string | null; durationMs: number; kind: "video" | "photo" }[]; // the prepared clips (props' shot src)
+  // The prepared clips (props' shot src), with the clip editor's edits and the best moment the planner used.
+  clips: {
+    path: string; name: string; clipId: string; thumb: string | null; durationMs: number; kind: "video" | "photo";
+    rank: number | null; inMs: number | null; outMs: number | null; speed: number | null; bestMs: number | null; bestFrom: "clip editor" | "auto" | null;
+  }[];
   section: { mode: string; start_ms: number; end_ms: number; reason: string };
   analysis: { bpm: number; beats: Beat[]; duration_ms: number };
   lines: { number: number; text: string; isHook: boolean; start_ms: number; end_ms: number; sung_end_ms: number | null }[]; // every line, by the Lyrics tab's number
@@ -493,6 +503,8 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       hookEffect: own("hookEffect") ? recipe.values.hookEffect : undefined,
       font: own("verseFont") ? recipe.values.verseFont : undefined,
       fontHook: own("hookFont") ? recipe.values.hookFont : undefined,
+      shotLength: recipe.values.shotLength ?? undefined,
+      tempo: recipe.values.tempo ?? undefined,
       // Weights and italic: the recipe's (brand, song or run) whenever the brand fonts are used for the
       // lyrics; otherwise only the song's or run's own (else the Simple / Bold style's weight).
       ...fontChoiceOf((k) => (own(k) || brand.brand.useForLyrics ? recipe.values[k] : undefined)),
@@ -543,7 +555,10 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const collectionFolder = (name: string, i: number) => (i === 0 && options.collectionPath) || (lastUsed?.name === name ? lastUsed.folder : undefined);
 
     log("analysing the song (cached after the first time)");
-    const analysis = analyzeSong(sp.songFile, { downbeatOffset: options.downbeatOffset });
+    const analysis = analyzeSong(sp.songFile, { downbeatOffset: options.downbeatOffset, ...(effective.tempo ? { bpm: effective.tempo } : {}) });
+    // A tempo override (song.json "tempo"): the beats were re-tracked around it; the detected tempo is said too.
+    const detectedBpm = effective.tempo ? analyzeSong(sp.songFile, { downbeatOffset: options.downbeatOffset }).bpm : analysis.bpm;
+    if (effective.tempo) log(`tempo: ${analysis.bpm} BPM (song.json "tempo" ${effective.tempo}; detected ${detectedBpm})`);
     const analysed = {
       bpm: analysis.bpm,
       duration_ms: analysis.duration_ms,
@@ -783,7 +798,7 @@ function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: Pl
   const length = lengthFor(base, r.values.length, sh.analysis.duration_ms);
   if (length.note) sh.log(`${base.name}: ${length.note}`);
   const section = r.values.section === "auto" && length.wholeSong ? "full" : r.values.section;
-  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined };
+  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined, shotLength: r.values.shotLength ?? undefined };
   const own = PLATFORM_FIELDS.filter((k) => r.sources[k].includes(":"));
   if (own.length) sh.log(`${preset.name}: recipe ${own.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]})`).join(", ")}`);
   const out: Shared = {
@@ -895,12 +910,32 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     );
   }
 
+  // Shot length (recipe "shotLength", per platform): bars per shot, or "story" (shorter on the hooks, as
+  // the viewer sees them). Without it, the cut rate (--rate).
+  const shotLength = options.shotLength ? (options.shotLength === "story" ? "story" : (Number(options.shotLength) as ShotLength)) : undefined;
+  const hooks = sh.sectionLines.flatMap((l) => (l.isHook ? [{ start_ms: l.start_ms - leadMs + lyricsOffsetMs, end_ms: sungEnd(l) }] : []));
   const planFor = (cutRate: CutRate) =>
-    getCutPoints(analysis.beats, { start_ms: chosen.start_ms, end_ms: chosen.end_ms, energy: options.energy ?? "medium" }, { cutRate, lyricLines: lines });
+    getCutPoints(analysis.beats, { start_ms: chosen.start_ms, end_ms: chosen.end_ms, energy: options.energy ?? "medium" }, { cutRate, lyricLines: lines, ...(shotLength ? { shotLength, hooks } : {}) });
   const plan = planFor(options.rate ?? "1x");
-  const preparedClips = prepared.clips.map((c) => ({
-    id: c.clip.id, name: c.name, duration_ms: c.durationMs, path: c.path, durationFrames: c.durationFrames, kind: c.kind, fit: c.fit,
-  }));
+  if (shotLength) log(`${preset.name}: shot length ${shotLength === "story" ? "story (2 bars on hooks, 4 on verses, never under 3 s)" : `${shotLength} bar${shotLength > 1 ? "s" : ""}`}: ${plan.cuts.length + 1} shots`);
+  // The clip editor's story order and edits (clips.json), and each clip's best moment (the editor's, else
+  // the strongest 2 s): a clip's first shot is centred on it.
+  const edits = readClipEdits(songPathsById(ws, project.id).root);
+  const best = await bestMoments(ws.dir, prepared.clips.filter((c) => c.kind !== "photo").map((c) => absPath(ws, c.path)), log);
+  const preparedClips = prepared.clips.map((c) => {
+    const e = editOf(edits, c.name);
+    const auto = best.get(absPath(ws, c.path)) ?? null;
+    const bestS = e.best ?? auto;
+    const rank = rankOf(edits, c.name);
+    return {
+      id: c.clip.id, name: c.name, duration_ms: c.durationMs, path: c.path, durationFrames: c.durationFrames, kind: c.kind, fit: c.fit,
+      ...(rank !== undefined ? { rank } : {}),
+      ...(e.in !== undefined ? { in_ms: Math.round(e.in * 1000) } : {}),
+      ...(e.out !== undefined ? { out_ms: Math.round(e.out * 1000) } : {}),
+      ...(e.speed !== undefined ? { speed: e.speed } : {}),
+      ...(bestS !== null && c.kind !== "photo" ? { best_ms: Math.round(bestS * 1000), best_from: e.best !== undefined ? ("clip editor" as const) : ("auto" as const) } : {}),
+    };
+  });
 
   const warnings = [
     ...(position.index === 0 ? sh.alignment.warnings : []),
@@ -952,7 +987,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       const clip = preparedClips.find((c) => c.name.toLowerCase() === a.clip.toLowerCase()) ?? preparedClips.find((c) => stem(c.name) === stem(a.clip));
       if (i < 0) anchorMissing.push(`the anchor on line ${a.line} (${a.clip}): the song has ${lines.length} sung lines`);
       else if (!clip) anchorMissing.push(`the anchor on line ${a.line} "${lines[i].text}": ${a.clip} is not among this video's clips (the song's clips and its collections, ${prepared.kind} for ${preset.label})`);
-      else anchors.push({ line: a.line, text: lines[i].text, lyric: shown.indexOf(i), clipId: clip.id, clipName: clip.name, clipInMs: Math.round((a.clipIn ?? 0) * 1000), transition: a.transition ?? "cut" });
+      else anchors.push({ line: a.line, text: lines[i].text, lyric: shown.indexOf(i), clipId: clip.id, clipName: clip.name, clipInMs: a.clipIn !== undefined ? Math.round(a.clipIn * 1000) : null, transition: a.transition ?? "cut" });
     }
   }
   const story = !canvas && (sh.gapOrder === "story" || (!sh.gapOrder && sh.anchors.length > 0));
@@ -1092,10 +1127,28 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       plan: {
         videos: specs.map((spec) => {
           const composed = composedBySpec.get(spec.name)!;
-          return { spec, props: composed.props, anchors: anchors.length || anchorMissing.length ? { ...(composed.anchors ?? { uses: [], conflicts: [], notes: [] }), missing: anchorMissing } : null };
+          return {
+            spec, props: composed.props, anchors: anchors.length || anchorMissing.length ? { ...(composed.anchors ?? { uses: [], conflicts: [], notes: [] }), missing: anchorMissing } : null,
+            loop: loops ? loopResult(composed.props, prepared.clips, { bpm: analysis.bpm, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers }) : null,
+          };
         }),
+        // Loop platforms: target lengths whose end loops well from this start (beat, level, harmony).
+        loopSuggestions: loops
+          ? loopSuggestions({
+              audio: loopSong, bpm: analysis.bpm, startMs: chosen.start_ms, durationMs: analysis.duration_ms,
+              downbeats: analysis.beats.filter((b) => b.is_downbeat).map((b) => b.time_ms),
+              lines: sh.sectionLines.map((l, i) => ({ number: numbers[i] || i + 1, text: l.text, sungStartMs: sungStart(l), sungEndMs: sungEnd(l) })),
+              targetMs: preset.length.mode === "target" ? preset.length.seconds * 1000 : preset.length.mode === "range" ? ((preset.length.min + preset.length.max) / 2) * 1000 : chosen.end_ms - chosen.start_ms,
+            })
+          : null,
         media,
-        clips: prepared.clips.map((c) => ({ path: c.path, name: c.name, clipId: c.clip.id, thumb: c.clip.thumb_path, durationMs: c.durationMs, kind: c.kind })),
+        clips: prepared.clips.map((c, i) => {
+          const e = preparedClips[i];
+          return {
+            path: c.path, name: c.name, clipId: c.clip.id, thumb: c.clip.thumb_path, durationMs: c.durationMs, kind: c.kind,
+            rank: e.rank ?? null, inMs: e.in_ms ?? null, outMs: e.out_ms ?? null, speed: e.speed ?? null, bestMs: e.best_ms ?? null, bestFrom: e.best_from ?? null,
+          };
+        }),
         section: { mode: chosen.mode, start_ms: chosen.start_ms, end_ms: chosen.end_ms, reason: chosen.reason },
         analysis: { bpm: analysis.bpm, beats: analysis.beats, duration_ms: analysis.duration_ms },
         lines: lines.map((l, i) => ({ number: i + 1, text: l.text, isHook: l.isHook, start_ms: l.start_ms, end_ms: l.end_ms, sung_end_ms: sh.sectionLines[i].sung_end_ms ?? l.sung_end_ms ?? null })),
@@ -1518,6 +1571,8 @@ function buildManifest(c: {
       transitions: spec.transitions ?? null, // story variations: the anchors' own ("as-set"), all "dissolve" or all "cut"
       energy: c.options.energy ?? "medium",
       early_cut_frames: 2,
+      shot_length: c.options.shotLength ?? null, // bars per shot or "story" (null: the cut rate)
+      tempo: c.options.tempo ? { bpm: c.analysis.bpm, set: c.options.tempo } : null, // song.json "tempo" (null: as detected)
       order: spec.order,
       seed: spec.seed,
       style: props.style,

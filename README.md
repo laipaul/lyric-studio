@@ -311,7 +311,44 @@ of the song). The fade lengths are `fadeInSeconds` / `fadeOutSeconds` per platfo
 Song page → **Storyboard**: see a video's cut plan before rendering it (exactly what Generate would make)
 or a past run's: the bars and waveform, the lyric lines, and every shot with its clip, length, in/out,
 speed, ⚓ anchor, ★ best moment and warnings. Click the timeline to play the preview from there.
-(Editing comes in stage 2.)
+
+Editing (in "The plan now"; every change is saved for this song and planned again, and Generate renders
+exactly what the storyboard shows):
+
+- **Story order**: the strip under the timeline lists every clip of the song (its own and its
+  collections') in the order story videos use them. Drag a clip onto another to put it there, or use the
+  arrows. Saved in the song folder's `clips.json`; clips not listed follow by file name (01_, 02_, …).
+  Story videos use each clip once before any repeats.
+- **Clip editor**: click a clip in the strip (or a shot → "Edit clip"): the part used (in / out, "set
+  here" from the clip playing), speed (0.5–1x slow motion; below 0.75x may look choppy) and the best
+  moment. A clip's first shot in a story video is centred on its best moment: yours, else the automatic
+  one (the strongest 2 s by motion, colour and contrast). "Whole clip, automatic" undoes the edits.
+- **Anchors**: drag a clip from the strip onto a lyric line: it lands on that line (song.json `anchors`,
+  the same as the Lyrics tab's "Lands on…"). Click the anchored shot → "remove the anchor".
+- **Loop warning**: on Reels / TikTok / Shorts the header shows WARN "Loop flows" with the reason
+  (e.g. a 15 dB level jump) and target lengths whose end loops better from the same start.
+
+## Shot length
+
+Style tab (and Generate → Advanced) → **Shot length**: how long each shot is, in bars: 1, 2, 4, 8, or
+**story** (2 bars on hooks, 4 on verses, never shorter than 3 s: about 12–20 shots in 90 s). Empty = the
+cut rate (one shot per bar at 1x). Per platform like the other settings, also in brand.json
+(`"shotLength": "story"`) for all songs of an artist. Command line: `--shot-length story`.
+
+## Tempo
+
+If a song's tempo is detected wrong (e.g. 135 instead of 92: a 3:2 error), check it:
+
+```powershell
+cd D:\videomaker
+pnpm tempo:check "workspace\songs\Life Lyrics\The House My Heart Built"
+```
+
+It prints the detected tempo, the likeliest other tempi with their ratio ("x2/3 the detected") and the
+first downbeats. Then set the real one in the Style tab → **Tempo (BPM)**: type it, or use ½, ×2, ×2/3,
+×3/2, or the **Tap test** (play the song, tap once per beat; the BPM appears after 4 taps), or "Check the
+tempo" (the same list as tempo:check, click one). Saved in song.json (`"tempo": 92`); the beats are tracked
+again around it, and the storyboard and Generate use it. Command line: `--tempo 92`.
 
 ## Fonts and pairings
 

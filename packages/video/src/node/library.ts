@@ -213,6 +213,8 @@ export type GeneratePanelData = {
     variations: Record<string, number>;
     section: string;
     youtubeLayout: string;
+    shotLength: string | null; // bars per shot or "story" (null: the cut rate)
+    shotLengths: Record<string, string | null>; // per platform
     locked: string[];
     sources: Record<string, string>;
     effects: Record<string, { verse: string; hook: string }>; // per platform, when it differs from the default
@@ -240,8 +242,10 @@ export function generatePanelData(ws: Workspace, p: typeof projectTable.$inferSe
   const resolved = resolveRecipe(input);
   const effects: Record<string, { verse: string; hook: string }> = {};
   const lengths: Record<string, number | null> = {};
+  const shotLengths: Record<string, string | null> = {};
   for (const x of presets) {
     const r = resolveRecipe(input, x.name);
+    shotLengths[x.name] = r.values.shotLength;
     // A target length never applies to YouTube (whole song) or Canvas (loop): their chips keep that.
     lengths[x.name] = x.length.mode === "full" || x.length.mode === "loop" ? null : r.values.length;
     if (r.values.verseEffect !== resolved.values.verseEffect || r.values.hookEffect !== resolved.values.hookEffect) effects[x.name] = { verse: r.values.verseEffect, hook: r.values.hookEffect };
@@ -262,6 +266,8 @@ export function generatePanelData(ws: Workspace, p: typeof projectTable.$inferSe
       variations: resolved.values.variations,
       section: resolved.values.section,
       youtubeLayout: resolved.values.youtubeLayout,
+      shotLength: resolved.values.shotLength,
+      shotLengths,
       locked: resolved.locked,
       sources: resolved.sources,
       effects,

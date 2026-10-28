@@ -74,7 +74,11 @@ export function storeLyricsTxt(ws: Workspace, projectId: string, file: string): 
 // .studio\replaced\<date>-<name>: nothing the user made is ever deleted.
 export function keepReplaced(songRoot: string, file: string, copy = false): string {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  const target = path.join(songRoot, STUDIO_DIR, "replaced", `${stamp}-${path.basename(file)}`);
+  // Two replacements in the same second keep both ("<stamp>.2-…" sorts after "<stamp>-…": newest last).
+  const at = (n: number) => path.join(songRoot, STUDIO_DIR, "replaced", `${stamp}${n > 1 ? `.${n}` : ""}-${path.basename(file)}`);
+  let n = 1;
+  while (existsSync(at(n))) n += 1;
+  const target = at(n);
   mkdirSync(path.dirname(target), { recursive: true });
   if (copy) copyFileSync(file, target);
   else renameSync(file, target);

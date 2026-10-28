@@ -1,7 +1,7 @@
 // pnpm make <song> <lyrics.txt> [--collection <name>] [--collection-path <folder>] [--variations 6]
 //   (--collection is needed the first time per project; after that the last one is remembered)
 //   [--section auto|full|0:11-1:10] [--hint <taps.lrc> | --no-hint] [--realign] [--lrc <file.lrc>] [--lang en|fr]
-//   [--rate 1x] [--energy medium] [--lead 0.25] [--lyrics-offset 0] [--downbeat-offset N]
+//   [--rate 1x] [--shot-length 1|2|4|8|story] [--tempo 92] [--energy medium] [--lead 0.25] [--lyrics-offset 0] [--downbeat-offset N]
 //   [--font "Family"] [--font-hook "Family"] [--pins pins.txt] [--parallel N] [--resume] [--no-open]
 //   [--line-effect glide[:subtle|balanced|expressive]] [--hook-effect karaoke-highlight[:...]]
 //   [--platforms reels,tiktok,shorts,youtube | all] [--allow-fill] [--title "Song title"]
