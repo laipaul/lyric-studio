@@ -29,7 +29,17 @@ export type StoryShot = {
   best: boolean; // shows the clip's best moment
   warnings: string[];
 };
-export type StoryLine = { number: number | null; text: string; isHook: boolean; startMs: number; endMs: number; anchor: string | null };
+export type StoryLine = {
+  number: number | null;
+  text: string;
+  isHook: boolean;
+  startMs: number;
+  endMs: number;
+  anchor: string | null;
+  card: string | null; // its textboard card ("line-9")
+  changed: boolean; // the card changes its look (place, size, hold, effect or font)
+  slot: string | null; // an anchor whose clip is not in this clip set: the line needs a clip (the clip it had)
+};
 
 const s1 = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 const frameMs = (f: number) => Math.round((f * 1000) / VIDEO.fps);
@@ -93,12 +103,22 @@ export function storyLines(
   lyrics: LyricVideoProps["lyrics"],
   numbered: readonly { number: number | null; text: string; isHook: boolean }[], // the same lines, in order, with their numbers when known
   anchors: readonly AnchorUse[],
+  slots: readonly { line: number; clip: string }[] = [],
 ): StoryLine[] {
   return lyrics.map((l, k) => {
     const n = numbered[k];
     const anchor = anchors.find((a) => a.used && n?.number != null && a.line === n.number) ?? null;
-    return { number: n?.number ?? null, text: l.text, isHook: !!l.isHook, startMs: frameMs(l.startFrame), endMs: frameMs(l.endFrame), anchor: anchor?.clip ?? null };
+    const slot = slots.find((x) => n?.number != null && x.line === n.number) ?? null;
+    return {
+      number: n?.number ?? null, text: l.text, isHook: !!l.isHook, startMs: frameMs(l.startFrame), endMs: frameMs(l.endFrame), anchor: anchor?.clip ?? null,
+      card: l.card?.id ?? null, changed: !!l.card && Object.keys(l.card).some((key) => key !== "id"), slot: slot?.clip ?? null,
+    };
   });
+}
+
+// The title, byline and tagline cards on the timeline (video time).
+export function storyTitleCards(props: Pick<LyricVideoProps, "textCards" | "durationInFrames">): { id: string; type: string; text: string; startMs: number; endMs: number }[] {
+  return (props.textCards ?? []).map((c) => ({ id: c.id, type: c.type, text: c.text, startMs: frameMs(c.startFrame), endMs: frameMs(Math.min(c.endFrame, props.durationInFrames)) }));
 }
 
 // Hook (chorus) sections: runs of hook lines, from the first one's start to the last one's end.

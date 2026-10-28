@@ -34,6 +34,7 @@ export type RunRequest = {
   realign?: boolean;
   saveToSong?: boolean; // keep this run's choices in the song's recipe (song.json; locked settings stay)
   pairings?: string[]; // compare font pairings: one video per pairing (ids from presets/font-pairings.json, "brand")
+  pictures?: string[]; // picture versions: one video per clip set ("song+wedding", "city"), the same textboard
 };
 
 // The options a run is made with (MakeOptions without callbacks), stored in make_run.options_json.
@@ -57,6 +58,8 @@ export function checkRunRequest(req: RunRequest, platformNames: readonly string[
   if (req.length !== undefined && !(typeof req.length === "number" && req.length >= 3 && req.length <= 600)) problems.push("Target length must be 3-600 seconds.");
   if (req.pairings !== undefined && !(Array.isArray(req.pairings) && req.pairings.length <= 3 && req.pairings.every((x) => typeof x === "string" && /^[a-z0-9-]+$/.test(x)))) problems.push("Compare pairings: choose up to 3.");
   if (req.layout && !["cover", "stills", "clips"].includes(req.layout)) problems.push("YouTube layout must be cover, stills or clips.");
+  if (req.pictures !== undefined && !(Array.isArray(req.pictures) && req.pictures.length >= 2 && req.pictures.length <= 4 && req.pictures.every((x) => typeof x === "string" && /^[^\\/:*?"<>|,]+$/.test(x)))) problems.push("Picture versions: choose 2-4 clip sets.");
+  if (req.pictures?.length && req.pairings?.length) problems.push("Compare font pairings and picture versions cannot be combined in one run.");
   if (req.shotLength !== undefined && !["1", "2", "4", "8", "story"].includes(req.shotLength)) problems.push("Shot length must be 1, 2, 4 or 8 bars, or story.");
   if (req.collection !== undefined && !/^[^\\/:*?"<>|]+$/.test(req.collection)) problems.push("Choose a collection.");
   return problems;
@@ -106,6 +109,7 @@ export function generateOptions(ws: Workspace, projectId: string, req: RunReques
     ...(req.shotLength ? { shotLength: req.shotLength } : {}),
     ...(req.realign ? { realign: true } : {}),
     ...(req.pairings?.length ? { pairings: req.pairings.join(",") } : {}),
+    ...(req.pictures?.length ? { pictures: req.pictures.join(",") } : {}),
     command: "Lyric Studio: Generate",
   };
 }

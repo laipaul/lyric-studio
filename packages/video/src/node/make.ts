@@ -37,6 +37,7 @@ import { VIDEO } from "../config";
 import { getCutPoints, type CutRate, type Energy, type ShotLength } from "../cuts";
 import { bestMoments } from "./best-moment";
 import { editOf, rankOf, readClipEdits } from "./clip-edits";
+import { boardForRun, cardFont, overrideCount, titleCards, type RunBoard } from "./textboard";
 import { matchPinClips, parsePins } from "../pins";
 import type { LyricEffectsProps, LyricVideoProps } from "../props";
 import { formatQa, LOW_CONFIDENCE, qaReasons, runQa, type QaInput, type QaReport } from "../qa";
@@ -45,6 +46,8 @@ import { loopFit, loopFlows, loopSuggestions, type LoopAudio, type LoopResult, t
 import { anchorsInside, type AnchorSpec, type GapOrder, type ResolvedAnchor } from "../anchors";
 import type { AnchorReport, AnchorTransitions } from "../compose";
 import { RECENT_WINDOW, type ClipOrder } from "../shots";
+import { lyricCardStyle } from "../textboard";
+import type { FontFileRef } from "../font-files";
 import { analyzeSong } from "./analysis";
 import { loadBrand, type Brand } from "./brand";
 import { artistBrandFile } from "./captions";
@@ -87,6 +90,11 @@ export type MakeOptions = {
   songFolder?: string; // "pnpm make <song folder>" (song and lyrics come from it)
   collection?: string; // shared collection(s), "wedding" or "wedding,beach"; default: song.json, else the one used last time
   collectionPath?: string;
+  // Picture versions: one video per clip set with the same textboard, "song+wedding,city" (sets by
+  // commas, parts by "+"; "song" = the song's own clips). Not saved to the song.
+  pictures?: string;
+  // One clip set for this run instead of the recipe's (the storyboard's picture swap), never saved.
+  clipSet?: string;
   variations?: number; // default: the platform preset's number (standard: 6)
   platforms?: string; // "reels,tiktok,shorts" or "all"; default: the "standard" preset
   allowFill?: boolean; // use sources of the other orientation, shown whole over a blurred copy
@@ -174,7 +182,23 @@ export type RenderState = { platform: string; name: string; status: "queued" | "
 
 // rate / transitions: story variations (gaps in story order) differ by cut rate and cut / dissolve.
 // pairing: "compare pairings" (--pairings / Generate): this video's fonts; all else the same in every video.
-export type VariationSpec = { index: number; name: string; order: ClipOrder; seed: number; style: StyleChoice; bars: boolean; rate?: CutRate; transitions?: AnchorTransitions; pairing?: { id: string; name: string } };
+export type PictureSet = { label: string; songClips: boolean; collections: string[] };
+
+// "song+wedding,city" -> [{ song clips + wedding }, { city }].
+export function parsePictures(text: string): PictureSet[] {
+  const sets = text.split(",").map((t) => t.trim()).filter(Boolean).map((t): PictureSet => {
+    const parts = t.split("+").map((x) => x.trim()).filter(Boolean);
+    const songClips = parts.some((x) => x.toLowerCase() === "song");
+    const collections = [...new Set(parts.filter((x) => x.toLowerCase() !== "song"))];
+    if (!songClips && !collections.length) throw new Error(`--pictures: "${t}" has no clips (use song, a collection name, or song+name)`);
+    return { label: [songClips ? "the song's clips" : null, ...collections].filter(Boolean).join(" + "), songClips, collections };
+  });
+  if (!sets.length) throw new Error('--pictures: give one or more clip sets, e.g. "song,wedding" or "song+wedding,city"');
+  if (sets.length > 4) throw new Error("--pictures: at most 4 picture versions in one run");
+  return sets;
+}
+
+export type VariationSpec = { index: number; name: string; order: ClipOrder; seed: number; style: StyleChoice; bars: boolean; rate?: CutRate; transitions?: AnchorTransitions; pairing?: { id: string; name: string }; picture?: { index: number; label: string; songClips: boolean; collections: string[] } };
 
 export type VariationResult = VariationSpec & {
   platform: string;
@@ -201,6 +225,7 @@ export type VideoPlan = {
 };
 export type PlatformPlan = {
   videos: VideoPlan[];
+  slots: { line: number; text: string; clip: string }[]; // anchors whose clip is not in this clip set: the line needs a clip
   loopSuggestions: LoopSuggestion[] | null; // loop platforms: target lengths with an end that loops well
   media: MediaRoots; // where the props' files are (for a preview)
   // The prepared clips (props' shot src), with the clip editor's edits and the best moment the planner used.
@@ -617,13 +642,31 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     if (!options.dryRun) saveLyricLines(ws, project.id, alignment);
     const numbers = lyricLineNumbers(lines.map((l) => l.text), alignment.lrcFile, alignment.lyricsTxt).numbers;
     const sectionLines: SectionLine[] = lines.map((l, i) => ({ ...l, sung_end_ms: reports[i]?.end_ms }));
+    // The textboard: textboard.json synced to these lines (a card whose words are gone is said, not used).
+    const textboard = boardForRun(paths.legacy ? null : songPathsById(ws, project.id).root, {
+      title: project.title, artist: project.artist, ep: ep ?? null, lines: lines.map((l, i) => ({ number: i + 1, text: l.text, isHook: l.isHook })),
+    });
+    if (textboard.stored) log(`textboard: ${overrideCount(textboard.board)} change(s)${textboard.board.template ? `, template "${textboard.board.template}"` : ""}`);
+    for (const o of textboard.orphans) log(`textboard: card ${o.id} "${o.text}" no longer matches a lyric line (its changes are not used; the words changed in lyrics.txt)`);
 
-    const syncs: CollectionSync[] = [];
-    if (songClips) syncs.push(await syncCollection(ws, { name: `song:${project.id}`, folder: songClips, log, prepare: false }));
-    for (const [i, name] of collectionNames.entries()) syncs.push(await syncCollection(ws, { name, folder: collectionFolder(name, i), log, prepare: false }));
-    if (songClips) syncs[0] = { ...syncs[0], collection: { ...syncs[0].collection, name: "song clips" } };
-    const collection = mergeCollections(syncs);
-    if (recipe.sources.collections === "run" && !options.dryRun) {
+    // A clip set: the song's own clips (when it has them) and shared collections, merged.
+    const clipsOf = async (set: { songClips: boolean; collections: string[] }) => {
+      const syncs: CollectionSync[] = [];
+      if (set.songClips && songClips) syncs.push(await syncCollection(ws, { name: `song:${project.id}`, folder: songClips, log, prepare: false }));
+      for (const [i, name] of set.collections.entries()) syncs.push(await syncCollection(ws, { name, folder: collectionFolder(name, i), log, prepare: false }));
+      if (!syncs.length) throw new Error("This clip set has no clips: the song has no clips of its own.");
+      if (set.songClips && songClips) syncs[0] = { ...syncs[0], collection: { ...syncs[0].collection, name: "song clips" } };
+      return mergeCollections(syncs);
+    };
+    const swap = options.clipSet ? parsePictures(options.clipSet)[0] : null;
+    if (swap) log(`clips: ${swap.label} (this run only)`);
+    const collection = await clipsOf(swap ?? { songClips: true, collections: collectionNames });
+    const runCollections = swap ? swap.collections : collectionNames;
+    if (options.pictures && (options.resume || options.pairings)) throw new Error("--pictures cannot be combined with --resume or --pairings.");
+    const pictureSets = options.pictures ? parsePictures(options.pictures) : null;
+    const pictures = pictureSets ? await Promise.all(pictureSets.map(async (p, k) => ({ ...p, index: k + 1, collection: await clipsOf(p) }))) : null;
+    if (pictures) log(`picture versions: ${pictures.map((p) => `v${p.index} ${p.label}`).join(", ")}; the same textboard in each`);
+    if (recipe.sources.collections === "run" && !options.dryRun && !swap) {
       const folder = options.collectionPath ?? collectionFolder(collectionNames[0], 0);
       rememberCollection(ws, project.id, { name: collectionNames[0], ...(folder ? { folder } : {}) });
       // Remembered in song.json (a locked song.json collection never gets here: the run's choice was ignored).
@@ -656,10 +699,11 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     let songAudio: Promise<LoopAudio | null> | undefined;
     const shared: Shared = {
       ws, options: effective, variationsFor, effectLabels, recipeFor: (platform: string) => resolveRecipe(recipeInput, platform), stylesFor, log, now, leadMs, lyricsOffsetMs, catalog, styles, brand, logo, sp, analysis, alignment, lines, reports, numbers,
-      sectionLines, collection, collectionNames, collectionRemembered, ep, tool, rootDir, getProject: () => project,
+      sectionLines, collection, collectionNames: runCollections, collectionRemembered, ep, tool, rootDir, getProject: () => project,
       loopAudio: () => (songAudio ??= readLoopAudio(sp.songFile)),
       anchors: songRecipe.anchors ?? [],
       gapOrder: songRecipe.gapOrder ?? null,
+      textboard,
     };
     const results: PlatformResult[] = [];
     for (const [index, name] of chosenPlatforms.names.entries()) {
@@ -673,7 +717,17 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
         continue;
       }
       try {
-        results.push(await makePlatform(shared, preset, { index, count: chosenPlatforms.names.length }));
+        if (pictures && preset.lyrics && preset.layout !== "canvas") {
+          // Picture versions: one video per clip set, the same textboard, section and style.
+          const parts: PlatformResult[] = [];
+          for (const p of pictures) {
+            const { collection: pc, ...set } = p;
+            parts.push(await makePlatform({ ...shared, collection: pc, collectionNames: set.collections, picture: set }, preset, { index, count: chosenPlatforms.names.length }));
+          }
+          results.push({ ...parts[0], variations: parts.flatMap((x) => x.variations), warnings: [...new Set(parts.flatMap((x) => x.warnings))], ...(parts[0].plan ? { plan: { ...parts[0].plan, videos: parts.flatMap((x) => x.plan?.videos ?? []) } } : {}) });
+        } else {
+          results.push(await makePlatform(shared, preset, { index, count: chosenPlatforms.names.length }));
+        }
       } catch (error) {
         if (chosenPlatforms.names.length === 1) throw error;
         // One platform failing (e.g. no suitable clips) never stops the others.
@@ -733,6 +787,8 @@ type Shared = {
   loopAudio: () => Promise<LoopAudio | null>; // the song decoded once per run, for the loop checks
   anchors: AnchorSpec[]; // song.json: story anchors
   gapOrder: GapOrder | null; // song.json (null: story with anchors, else v1 story and the others shuffled)
+  textboard: RunBoard; // the song's text layer (textboard.json, else the brand's defaults)
+  picture?: PictureSet & { index: number }; // picture versions: this video's clip set
 };
 
 // The last shot shows the frames right before the first one (or the same photo, ending where its move starts).
@@ -980,13 +1036,18 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   // song's own and its collections). Never dropped silently: what is not found is said (QA too).
   const anchors: ResolvedAnchor[] = [];
   const anchorMissing: string[] = [];
+  const anchorSlots: { line: number; text: string; clip: string }[] = [];
   if (usesClips && !canvas && preset.lyrics) {
     const stem = (n: string) => n.toLowerCase().replace(/\.[^.]+$/, "");
     for (const a of sh.anchors) {
       const i = lines[a.line - 1] ? a.line - 1 : -1;
       const clip = preparedClips.find((c) => c.name.toLowerCase() === a.clip.toLowerCase()) ?? preparedClips.find((c) => stem(c.name) === stem(a.clip));
       if (i < 0) anchorMissing.push(`the anchor on line ${a.line} (${a.clip}): the song has ${lines.length} sung lines`);
-      else if (!clip) anchorMissing.push(`the anchor on line ${a.line} "${lines[i].text}": ${a.clip} is not among this video's clips (the song's clips and its collections, ${prepared.kind} for ${preset.label})`);
+      else if (!clip) {
+        // A slot: the line needs a clip (another clip set, or the clip was removed); refill it in the storyboard.
+        anchorMissing.push(`slot: line ${a.line} "${lines[i].text}" needs a clip (${a.clip} is not among this video's clips: ${sh.picture?.label ?? "the song's clips and its collections"}, ${prepared.kind} for ${preset.label})`);
+        anchorSlots.push({ line: a.line, text: lines[i].text, clip: a.clip });
+      }
       else anchors.push({ line: a.line, text: lines[i].text, lyric: shown.indexOf(i), clipId: clip.id, clipName: clip.name, clipInMs: a.clipIn !== undefined ? Math.round(a.clipIn * 1000) : null, transition: a.transition ?? "cut" });
     }
   }
@@ -1012,6 +1073,23 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     platform: layout,
     ...(anchors.length ? { anchors, beats: analysis.beats } : {}),
   };
+  // The textboard's lyric cards (their own place, size, hold, effect and font) for the lines shown.
+  const cardFonts: FontFileRef[] = [];
+  if (preset.lyrics && !canvas) {
+    const board = sh.textboard.board;
+    base.cards = shown.map((i) => {
+      const card = board.cards.find((c) => c.type === "lyric" && c.line === i + 1);
+      if (!card) return null;
+      const style = lyricCardStyle(board, card, lines[i].isHook);
+      const main = lines[i].isHook && styles.simple.hook ? styles.simple.hook : styles.simple.main;
+      const own = cardFont(sh.catalog, style, { family: main.family, weight: main.weight, italic: main.style === "italic" }, lines[i].text, `line ${i + 1} font`);
+      if (own) {
+        cardFonts.push(...own.refs);
+        for (const w of own.warnings) if (!warnings.includes(`${preset.name}: textboard: ${w}`)) warnings.push(`${preset.name}: textboard: ${w}`);
+      }
+      return { id: card.id, style, ...(own ? { font: own.font } : {}) };
+    });
+  }
 
   // Which lines are on screen (same rule as composeProps).
   const frames = lyricFrames(base, leadMs, lyricsOffsetMs, true, effects.gap);
@@ -1046,7 +1124,9 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   const stylesOf = (spec: VariationSpec) => (spec.pairing ? pairStyles.get(spec.pairing.id)! : styles);
   const baseFor = (spec: VariationSpec): RenderBase => (spec.pairing ? { ...base, styles: { simple: stylesOf(spec).simple.entry, bold: stylesOf(spec).bold.entry } } : base);
   if (compared.length) log(`${preset.name}: comparing font pairings: ${compared.map((p, i) => `v${i + 1} ${p.name} (${p.verse.family} ${p.verse.weight}${p.verse.italic ? " italic" : ""} + ${p.hook.family} ${p.hook.weight}${p.hook.italic ? " italic" : ""})`).join(", ")}; the same section, clips and order in each`);
-  const allSpecs: VariationSpec[] = compared.length
+  const allSpecs: VariationSpec[] = sh.picture
+    ? [{ index: sh.picture.index, name: `v${sh.picture.index}`, order: "story", seed: 1, style: "simple", bars: false, picture: { index: sh.picture.index, label: sh.picture.label, songClips: sh.picture.songClips, collections: sh.picture.collections }, ...(story ? { rate: options.rate ?? "1x", transitions: "as-set" as const } : {}) }]
+    : compared.length
     ? compared.map((p, i) => ({ index: i + 1, name: `v${i + 1}`, order: "story", seed: 1, style: "simple", bars: false, pairing: { id: p.id, name: p.name }, ...(story ? { rate: options.rate ?? "1x", transitions: "as-set" as const } : {}) }))
     : planVariations(canvas ? Math.max(1, canvas.loops.length) : sh.variationsFor(preset), story ? { rate: options.rate ?? "1x" } : undefined);
   const plans = new Map<CutRate, typeof plan>([[options.rate ?? "1x", plan]]);
@@ -1114,6 +1194,20 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
           logo: { ...placeLogo(ws, sh.logo, format, sh.brand.brand.logo.vertical, sh.brand.brand.logo.size), goneAt: null },
         };
       }
+      if (preset.lyrics && !canvas) {
+        // The textboard: title / byline / tagline cards (YouTube's title as before unless the board
+        // changes it), and the fonts of the cards with their own font.
+        const { titleOverlay, ...rest } = composed.props;
+        const tc = titleCards(sh.textboard.board, {
+          format, area: rest.lyricArea!, fps: VIDEO.fps, durationInFrames: rest.durationInFrames, youtube: titleOverlay ?? null,
+          titleFont: sh.brand.brand.titleFont, accent: sh.brand.brand.accentColour, textScale: preset.textScale,
+          fontFor: (style, b, text, role) => cardFont(sh.catalog, style, b, text, role),
+        });
+        for (const w of tc.warnings) if (!warnings.includes(`${preset.name}: textboard: ${w}`)) warnings.push(`${preset.name}: textboard: ${w}`);
+        const titleFace = tc.cards.some((c) => c.font === sh.brand.brand.titleFont.family) && !ytLayout ? fontFileRefs(resolveFace(sh.catalog, sh.brand.brand.titleFont.family, sh.brand.brand.titleFont.weight)) : [];
+        const fonts = [...rest.fonts, ...cardFonts, ...tc.fonts, ...titleFace].filter((f, k, all) => all.findIndex((x) => x.src === f.src) === k);
+        composed.props = { ...rest, ...(tc.cards.length ? { textCards: tc.cards } : {}), fonts };
+      }
       if (preset.loopEnding && !loopsSeamlessly(composed.props.shots)) {
         warnings.push(`${preset.name} ${spec.name}: no seamless loop ending (the first clip is too short to also fill the last shot)`);
       }
@@ -1152,6 +1246,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         section: { mode: chosen.mode, start_ms: chosen.start_ms, end_ms: chosen.end_ms, reason: chosen.reason },
         analysis: { bpm: analysis.bpm, beats: analysis.beats, duration_ms: analysis.duration_ms },
         lines: lines.map((l, i) => ({ number: i + 1, text: l.text, isHook: l.isHook, start_ms: l.start_ms, end_ms: l.end_ms, sung_end_ms: sh.sectionLines[i].sung_end_ms ?? l.sung_end_ms ?? null })),
+        slots: anchorSlots,
         // As the planner reports them (the same for every video of the platform).
         anchorsOutside: (composedBySpec.get(specs[0]?.name ?? "")?.anchors?.uses ?? []).filter((u) => !u.used && u.why === "outside this section").map((u) => ({ line: u.line, text: u.text, clip: u.clip })),
       },
@@ -1312,7 +1407,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       const qa = await checkVariation(spec, props, file, {
         loop,
         anchors: anchorsOut,
-        lines, visible, numbers, reports, styles: stylesOf(spec), clips: prepared.clips,
+        lines, visible, numbers, reports, styles: stylesOf(spec), clips: prepared.clips, catalog: sh.catalog,
         sources: usesClips ? { ...sources, platform: preset.label } : null,
         frameCheck: options.frameCheck ?? true,
         stillPictures: ytLayout === "cover" || ytLayout === "stills" || (!!canvas && props.shots[0]?.kind === "photo"),
@@ -1330,7 +1425,13 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         buildManifest({
           ws, tool: sh.tool, spec, props, media, project, songHash: sh.sp.songHash, songFile: sh.sp.songFile, analysis, chosen, alignment, reports, numbers, audioPlan: audioP,
           visible, lines, leadMs, lyricsOffsetMs, options, collection: sh.collection, collectionNames: sh.collectionNames, clips: prepared.clips, file, qa, now: sh.now, warnings, preset,
-          brand: sh.brand.brand, anchors: anchorsOut, gapOrder: story ? "story" : null, loop: loops ? (loop ? { checked: true, ...loop } : null) : { checked: false, why: canvas ? "a Spotify Canvas has its own loop checks" : `${preset.label} does not loop` },
+          brand: sh.brand.brand, anchors: anchorsOut, gapOrder: story ? "story" : null,
+          textboard: preset.lyrics && !canvas
+            ? {
+                file: sh.textboard.stored ? "textboard.json" : null, hash: sh.textboard.hash, template: sh.textboard.board.template,
+                changes: overrideCount(sh.textboard.board), cards: sh.textboard.board.cards.length,
+              }
+            : null, loop: loops ? (loop ? { checked: true, ...loop } : null) : { checked: false, why: canvas ? "a Spotify Canvas has its own loop checks" : `${preset.label} does not loop` },
         }),
       );
       // Captions for every video; YouTube also gets a thumbnail and a publishing pack.
@@ -1424,6 +1525,7 @@ async function checkVariation(
     audio?: { song: string; fadeInS: number; fadeOutS: number } | null; // compared with the song (QA "Audio matches the song")
     loop?: LoopResult | null; // Reels, TikTok, Shorts: QA "Loop flows"
     anchors?: (AnchorReport & { missing: string[] }) | null; // story anchors: QA "Story anchors"
+    catalog?: FontCatalog; // textboard cards with their own font are measured in it
   },
 ): Promise<QaReport> {
   const style = ctx.styles[spec.style];
@@ -1443,6 +1545,7 @@ async function checkVariation(
     measureLyrics(ls, {
       main: style.main, hook: style.hook, textCase: style.entry.style.textCase, textSize: props.textSize, animation: style.entry.style.animation, area,
       effects: props.lyricEffects ?? null, nextLine: props.nextLine ?? false, nextScale: props.nextLineScale ?? 0.55,
+      ...(ctx.catalog ? { cardFace: (f: { family: string; weight: number; italic?: boolean }) => resolveFace(ctx.catalog!, f.family, f.weight, f.italic ? "italic" : "normal") } : {}),
     });
   const measured = [...measure(lyrics.filter((l) => !inEnd(l)), props.lyricArea), ...(end ? measure(lyrics.filter(inEnd), end.lyricArea) : [])];
   let frames = ctx.frameCheck ? await detectBadFrames(file, props.durationInFrames / VIDEO.fps) : null;
@@ -1531,6 +1634,7 @@ function buildManifest(c: {
   loop?: Manifest["loop"];
   anchors?: (AnchorReport & { missing: string[] }) | null;
   gapOrder?: GapOrder | null;
+  textboard?: Manifest["textboard"];
 }): Manifest {
   const { props, spec, ws } = c;
   const startFrame = props.audio?.startFrame ?? Math.round((c.chosen.start_ms * VIDEO.fps) / 1000);
@@ -1645,6 +1749,8 @@ function buildManifest(c: {
     output: { file: path.basename(c.file), duration_s: props.durationInFrames / VIDEO.fps, qa: c.qa.status },
     loop: c.loop ?? null,
     anchors: c.anchors ? { used: c.anchors.uses, conflicts: c.anchors.conflicts, notes: c.anchors.notes, missing: c.anchors.missing } : null,
+    textboard: c.textboard ?? null,
+    picture: c.spec.picture ?? null,
     warnings: c.warnings,
   };
 }

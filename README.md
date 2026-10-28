@@ -328,6 +328,25 @@ exactly what the storyboard shows):
 - **Loop warning**: on Reels / TikTok / Shorts the header shows WARN "Loop flows" with the reason
   (e.g. a 15 dB level jump) and target lengths whose end loops better from the same start.
 
+## Textboard (the text layer)
+
+Storyboard → the **Textboard** row shows every text card: the title, byline (artist) and tagline above,
+then one card per lyric line. Click a card to change its place (always inside the platform's safe area),
+size, hold and effect; lyric cards change in the preview at once, "Save and plan again" keeps it in the
+song folder's `textboard.json`, "Reset this card" undoes it. The title / byline / tagline buttons open
+those cards, also when they are hidden (on Reels they are hidden unless you set "Shown: yes").
+
+- **Save as template**: the design without the words, in `workspace\templates\<artist>\<name>.json`.
+  **Apply template** on another song uses that song's own title, artist, tagline and lyrics.
+- **Pictures** (next to Show): plan the same text over other clips. A line whose anchored clip is not in
+  that set is outlined in amber ("needs a clip"); drag a clip from the strip onto it.
+- **Generate → Picture versions**: one video per clip set, the same textboard. Command line:
+
+```powershell
+cd D:\videomaker
+pnpm make "workspace\songs\Life Lyrics\A Heart For Two" --platforms reels --collection wedding --pictures "song+wedding,wedding"
+```
+
 ## Shot length
 
 Style tab (and Generate → Advanced) → **Shot length**: how long each shot is, in bars: 1, 2, 4, 8, or

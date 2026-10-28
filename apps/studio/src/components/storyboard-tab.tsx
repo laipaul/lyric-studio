@@ -5,13 +5,16 @@
 // on-screen times (⚓ anchored), the shots as blocks with their badges and warnings. Click anywhere on
 // the timeline: the low-res preview plays from there. Stage 2 (plans only): drag clips in the story
 // strip into order (clips.json), drag a clip onto a lyric line (an anchor), click a shot or a clip to
-// edit it (in / out, speed, best moment); every change plans again.
+// edit it (in / out, speed, best moment); every change plans again. The Textboard row: the song's text
+// cards (title, byline, tagline, every lyric line); click one to change its place, size, hold and
+// effect with a live preview (saved in textboard.json), save the design as a template or apply one.
+// Pictures: the same textboard over another clip set; an anchor whose clip is missing is a slot.
 import { Player, type PlayerRef } from "@remotion/player";
-import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2, Repeat, Scissors, Star, X } from "lucide-react";
+import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2, Pencil, Repeat, Scissors, Star, Type, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { LyricVideo, type StoryShot } from "@lyric/video";
-import type { StoryboardChoices, StoryboardClip, StoryboardView } from "@lyric/video/node"; // types only (erased): the data comes from /api/songs/[id]/storyboard
+import { EFFECT_NAMES, LyricVideo, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
+import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node"; // types only (erased): the data comes from /api/songs/[id]/storyboard
 
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -37,6 +40,11 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
   const [editing, setEditing] = useState<string | null>(null); // the clip in the clip editor
   const [saving, setSaving] = useState(false);
   const [dropLine, setDropLine] = useState<number | null>(null);
+  const [board, setBoard] = useState<TextboardData | null>(null);
+  const [cardId, setCardId] = useState<string | null>(null); // the card in the card editor
+  const [draft, setDraft] = useState<CardOverrides>({}); // its overrides while editing (live preview)
+  const [notice, setNotice] = useState<string | null>(null);
+  const [pictures, setPictures] = useState<{ songClips: boolean; collections: string[] } | null>(null); // the clip set planned
 
   useEffect(() => {
     let alive = true;
@@ -46,6 +54,7 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
         if (!alive) return;
         if (d.error) return setError(d.error);
         setChoices(d);
+        setPictures(d.pictures.recipe);
         const first = d.platforms[0];
         if (first) setSource({ kind: "plan", platform: first.name, video: first.videos[0] ?? "v1" });
       })
@@ -55,15 +64,34 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
     };
   }, [projectId]);
 
-  async function show(s: Source, keep = false) {
+  useEffect(() => {
+    let alive = true;
+    api(`/api/songs/${projectId}/textboard`, { cache: "no-store" })
+      .then((r) => r.json() as Promise<TextboardData & { error?: string }>)
+      .then((d) => alive && !d.error && setBoard(d))
+      .catch(() => null);
+    return () => {
+      alive = false;
+    };
+  }, [projectId]);
+  // The picture swap: a clip set other than the recipe's ("song+wedding", "city"), else null.
+  const clipSet = (p: typeof pictures) => {
+    if (!p || !choices) return null;
+    const same = p.songClips === choices.pictures.recipe.songClips && [...p.collections].sort().join(",") === [...choices.pictures.recipe.collections].sort().join(",");
+    return same ? null : [...(p.songClips ? ["song"] : []), ...p.collections].join("+") || null;
+  };
+
+  async function show(s: Source, keep = false, set = pictures) {
     setLoading(true);
     setError(null);
     if (!keep) {
       setSelected(null);
       setEditing(null);
+      setCardId(null);
     }
     try {
-      const q = new URLSearchParams({ platform: s.platform, video: s.video, ...(s.kind === "run" ? { run: s.run } : {}) });
+      const swap = s.kind === "plan" ? clipSet(set) : null;
+      const q = new URLSearchParams({ platform: s.platform, video: s.video, ...(s.kind === "run" ? { run: s.run } : {}), ...(swap ? { clips: swap } : {}) });
       const r = await api(`/api/songs/${projectId}/storyboard?${q}`, { cache: "no-store" });
       const d = (await r.json()) as StoryboardView & { error?: string };
       if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
@@ -93,6 +121,28 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
       setSaving(false);
     }
   }
+  // One textboard edit (a card, a template), then the plan again.
+  async function editText(body: Record<string, unknown>) {
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const r = await api(`/api/songs/${projectId}/textboard`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const d = (await r.json()) as { data?: TextboardData; message?: string; error?: string };
+      if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
+      if (d.data) setBoard(d.data);
+      setNotice(d.message ?? null);
+      if (source) await show(source, true);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+  const openCard = (id: string) => {
+    setCardId(id);
+    setDraft(board?.cards.find((c) => c.id === id)?.overrides ?? {});
+  };
   const moveClip = (name: string, to: number) => {
     if (!view) return;
     const order = view.clips.map((c) => c.name).filter((n) => n !== name);
@@ -109,7 +159,21 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
     return () => p.removeEventListener("frameupdate", update);
   }, [view]);
 
-  const props = useMemo(() => (view ? { ...view.props, mediaBaseUrl: `/api/songs/${projectId}/storyboard/media` } : null), [view, projectId]);
+  const card = board?.cards.find((c) => c.id === cardId) ?? null;
+  // The live preview: the edited card's place, size, hold and effect on the planned props (a font
+  // change shows after saving: it needs its font file).
+  const props = useMemo(() => {
+    if (!view) return null;
+    let lyrics = view.props.lyrics;
+    if (card?.type === "lyric" && view.props.lyricArea) {
+      const own: CardOverrides = { ...draft };
+      delete own.text;
+      delete own.show;
+      const style: CardStyle = { ...(board?.roles[card.isHook ? "hook" : "verse"] ?? {}), ...own };
+      lyrics = previewCard(lyrics, card.id, style, { area: view.props.lyricArea, durationInFrames: view.props.durationInFrames });
+    }
+    return { ...view.props, lyrics, mediaBaseUrl: `/api/songs/${projectId}/storyboard/media` };
+  }, [view, projectId, card, draft, board]);
   const playFrom = (ms: number) => {
     const p = player.current;
     if (!p || !view) return;
@@ -178,6 +242,41 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
             ))}
           </select>
         </label>
+        {source?.kind === "plan" && pictures ? (
+          <details className="relative" data-pictures>
+            <summary className={cn(select, "flex cursor-pointer items-center")}>Pictures: {clipSet(pictures) ? clipSet(pictures)!.replace(/\+/g, " + ").replace(/^song/, "the song's clips") : "as the recipe"}</summary>
+            <div className="bg-popover absolute z-10 mt-1 flex w-64 flex-col gap-1 rounded-md border p-2 text-xs shadow-lg">
+              <p className="text-muted-foreground">The same textboard over other clips (this plan only; anchors whose clip is missing become slots).</p>
+              {choices.pictures.songClips ? (
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" data-picture="song" checked={pictures.songClips} onChange={(e) => setPictures({ ...pictures, songClips: e.target.checked })} /> the song&apos;s own clips
+                </label>
+              ) : null}
+              {choices.pictures.collections.map((c) => (
+                <label key={c} className="flex items-center gap-2">
+                  <input type="checkbox" data-picture={c} checked={pictures.collections.includes(c)} onChange={(e) => setPictures({ ...pictures, collections: e.target.checked ? [...pictures.collections, c] : pictures.collections.filter((x) => x !== c) })} /> {c}
+                </label>
+              ))}
+              <div className="flex gap-2 pt-1">
+                <Button
+                  size="sm"
+                  data-pictures-plan
+                  disabled={loading || (!pictures.songClips && !pictures.collections.length)}
+                  onClick={(e) => {
+                    const box = e.currentTarget.closest("details");
+                    if (box) box.open = false;
+                    if (source) void show(source);
+                  }}
+                >
+                  Plan with these
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setPictures(choices.pictures.recipe)}>
+                  Recipe&apos;s
+                </Button>
+              </div>
+            </div>
+          </details>
+        ) : null}
         <Button size="sm" disabled={!source || loading} onClick={() => source && show(source)} data-storyboard-show>
           {loading ? <Loader2 className="animate-spin" /> : null} {loading ? "Planning…" : "Show"}
         </Button>
@@ -202,6 +301,7 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
                 {view.platform.label} {view.video}
               </span>{" "}
               · {view.source === "plan" ? "planned now" : `run ${view.run}`} · {view.settings} · {secs(view.durationMs)} ({clock(view.section.startMs)}–{clock(view.section.endMs)} in the song) · {Math.round(view.bpm)} BPM · {view.shots.length} shots
+              {view.picture ? <span data-storyboard-picture> · pictures: {view.picture.replace(/\+/g, " + ").replace(/^song\b/, "the song's clips")}</span> : null}
               {saving || (loading && view) ? (
                 <span className="text-brand ml-2" data-replanning>
                   <Loader2 className="mr-1 inline size-3 animate-spin" />
@@ -248,8 +348,29 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
                     <rect key={i} x={i} y={50 - p * 48} width={0.8} height={Math.max(1, p * 96)} className="fill-brand/60" />
                   ))}
                 </svg>
-                {/* lyric lines */}
-                <div className="relative h-12 border-b">
+                {/* the textboard: title / byline / tagline cards, then every lyric card */}
+                {view.titleCards.length ? (
+                  <div className="relative h-6 border-b" data-textboard-titles>
+                    {view.titleCards.map((c, k) => (
+                      <button
+                        type="button"
+                        key={c.id}
+                        data-text-card={c.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (view.editable) openCard(c.id);
+                        }}
+                        className={cn("bg-brand/20 absolute overflow-hidden rounded border px-1 text-left text-[10px]", cardId === c.id && "ring-brand ring-2")}
+                        style={{ left: x(c.startMs), width: Math.max(8, x(c.endMs - c.startMs) - 2), top: 2 + (k % 2) * 0, height: 18 }}
+                        title={`${c.type}: ${c.text}`}
+                      >
+                        <Type className="mr-0.5 inline size-2.5" />
+                        {c.type}: {c.text}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="relative h-12 border-b" data-textboard-row>
                   {view.lines.map((l, i) => (
                     <div
                       key={i}
@@ -266,11 +387,29 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
                         setDropLine(null);
                         if (clip && l.number !== null) void edit({ action: "anchor", line: l.number, clip });
                       }}
-                      className={cn("absolute top-1 bottom-1 overflow-hidden rounded border px-1 text-[11px] leading-tight", l.isHook ? "border-brand/50 bg-brand/10" : "bg-muted/40", dropLine !== null && dropLine === l.number && "ring-brand ring-2")}
+                      data-card={l.card ?? undefined}
+                      data-changed={l.changed || undefined}
+                      data-needs-clip={l.slot ?? undefined}
+                      onClick={(e) => {
+                        if (!view.editable || !l.card) return; // a past run: the timeline plays from here
+                        e.stopPropagation();
+                        openCard(l.card);
+                        player.current?.seekTo(Math.round((l.startMs * 30) / 1000));
+                      }}
+                      className={cn(
+                        "absolute top-1 bottom-1 overflow-hidden rounded border px-1 text-[11px] leading-tight",
+                        view.editable && l.card && "cursor-pointer",
+                        l.isHook ? "border-brand/50 bg-brand/10" : "bg-muted/40",
+                        l.changed && "border-sky-400/70",
+                        l.slot && "border-2 border-dashed border-amber-400 bg-amber-400/15",
+                        (dropLine !== null && dropLine === l.number) || (cardId !== null && cardId === l.card) ? "ring-brand ring-2" : "",
+                      )}
                       style={{ left: x(l.startMs), width: Math.max(4, x(l.endMs - l.startMs) - 2) }}
-                      title={`${l.number ? `line ${l.number}: ` : ""}${l.text} (${clock(l.startMs)}–${clock(l.endMs)})${l.anchor ? ` · ⚓ ${l.anchor}` : ""}`}
+                      title={`${l.number ? `line ${l.number}: ` : ""}${l.text} (${clock(l.startMs)}–${clock(l.endMs)})${l.anchor ? ` · ⚓ ${l.anchor}` : ""}${l.slot ? ` · needs a clip (was ${l.slot})` : ""}${l.changed ? " · its own look" : ""}`}
                     >
                       {l.anchor ? <Anchor className="text-brand mr-0.5 inline size-3" aria-label="anchored" /> : null}
+                      {l.slot ? <Anchor className="mr-0.5 inline size-3 text-amber-300" aria-label="slot" /> : null}
+                      {l.changed ? <Pencil className="mr-0.5 inline size-2.5 text-sky-300" aria-label="own look" /> : null}
                       {l.text}
                     </div>
                   ))}
@@ -303,6 +442,34 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
                 onSave={(e) => void edit({ action: "clip", clip: editing, edit: e })}
                 onClose={() => setEditing(null)}
               />
+            ) : null}
+            {view.slots.length ? (
+              <p className="mt-3 rounded-md border border-dashed border-amber-400/60 bg-amber-400/10 p-2 text-xs text-amber-100" data-slots>
+                <Anchor className="mr-1 inline size-3" />
+                Needs a clip (drag one from the strip below onto the line): {view.slots.map((x) => `line ${x.line} "${x.text}" (was ${x.clip})`).join(" · ")}
+              </p>
+            ) : null}
+            {view.editable && card ? (
+              <CardEditor
+                key={card.id}
+                card={card}
+                role={board?.roles[card.type === "lyric" ? (card.isHook ? "hook" : "verse") : (card.type as "title")] ?? {}}
+                draft={draft}
+                setDraft={setDraft}
+                busy={saving}
+                onSave={() => void editText({ action: "card", id: card.id, overrides: draft })}
+                onReset={() => {
+                  setDraft({});
+                  void editText({ action: "card", id: card.id, overrides: null });
+                }}
+                onClose={() => setCardId(null)}
+              />
+            ) : null}
+            {view.editable && board ? <TemplateBar board={board} busy={saving} onEdit={(b) => void editText(b)} onOpen={openCard} /> : null}
+            {notice ? (
+              <p className="mt-2 text-xs text-emerald-300" role="status" data-textboard-notice>
+                {notice}
+              </p>
             ) : null}
             {view.editable && view.clips.length ? <StoryStrip clips={view.clips} busy={saving || loading} onMove={moveClip} onOpen={setEditing} editing={editing} /> : null}
             {view.anchorsOutside.length ? (
@@ -568,6 +735,164 @@ function ClipEditor({ clip, mediaUrl, busy, onSave, onClose }: { clip: Storyboar
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+const POSITION_LABELS: Record<string, string> = { lyrics: "the lyric spot", "with-title": "under the title", top: "top", upper: "upper", centre: "centre", lower: "lower" };
+
+// A card's own look: place, size, hold, effect (and, for title / byline / tagline, its text and whether
+// it is shown). The preview shows lyric cards at once; Save keeps them in textboard.json.
+function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClose }: {
+  card: TextCard;
+  role: CardStyle;
+  draft: CardOverrides;
+  setDraft: (d: CardOverrides) => void;
+  busy: boolean;
+  onSave: () => void;
+  onReset: () => void;
+  onClose: () => void;
+}) {
+  const set = <K extends keyof CardOverrides>(k: K, v: CardOverrides[K] | undefined) => {
+    const next = { ...draft };
+    if (v === undefined || v === "") delete next[k];
+    else next[k] = v;
+    setDraft(next);
+  };
+  const lyric = card.type === "lyric";
+  const positions = lyric ? ["lyrics", "upper", "centre", "lower"] : card.type === "title" ? ["top", "upper", "centre", "lower"] : ["with-title", "top", "upper", "centre", "lower"];
+  const [effectName, intensity = "balanced"] = (draft.effect ?? "").split(":");
+  const field = "bg-input/30 border-input h-7 rounded-md border px-2 text-xs";
+  const changed = JSON.stringify(draft) !== JSON.stringify(card.overrides);
+  return (
+    <div className="bg-card mt-3 rounded-lg border p-3 text-xs" data-card-editor={card.id}>
+      <div className="mb-2 flex items-center gap-2">
+        <p className="text-sm font-medium">
+          {lyric ? `Line ${card.line}` : card.type[0].toUpperCase() + card.type.slice(1)}: <span className="font-normal">&quot;{draft.text ?? card.text}&quot;</span>
+        </p>
+        {Object.keys(role).length ? <span className="text-muted-foreground">({lyric ? (card.isHook ? "hook" : "verse") : card.type} rule: {Object.entries(role).map(([k, v]) => `${k} ${String(v)}`).join(", ")})</span> : null}
+        <button type="button" onClick={onClose} aria-label="close the card editor" className="text-muted-foreground hover:text-foreground ml-auto rounded p-1">
+          <X className="size-4" />
+        </button>
+      </div>
+      <div className="grid gap-2 md:grid-cols-2">
+        {!lyric ? (
+          <>
+            <label className="flex items-center gap-2">
+              <span className="w-20">Text</span>
+              <input data-card-text className={cn(field, "flex-1")} value={draft.text ?? ""} placeholder={card.text || "(empty)"} onChange={(e) => set("text", e.target.value)} />
+            </label>
+            <label className="flex items-center gap-2">
+              <span className="w-20">Shown</span>
+              <select data-card-show className={field} value={draft.show === undefined ? "" : String(draft.show)} onChange={(e) => set("show", e.target.value === "" ? undefined : e.target.value === "true")}>
+                <option value="">as the platform (YouTube: title + artist)</option>
+                <option value="true">yes, on every platform</option>
+                <option value="false">no</option>
+              </select>
+            </label>
+          </>
+        ) : null}
+        <label className="flex items-center gap-2">
+          <span className="w-20">Place</span>
+          <select data-card-position className={field} value={draft.position ?? ""} onChange={(e) => set("position", (e.target.value || undefined) as CardOverrides["position"])}>
+            <option value="">{role.position ? `the rule (${POSITION_LABELS[role.position]})` : lyric ? "the lyric spot" : "as the platform"}</option>
+            {positions.map((p) => (
+              <option key={p} value={p}>
+                {POSITION_LABELS[p]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2">
+          <span className="w-20">Size</span>
+          <input data-card-size type="range" min={0.5} max={2} step={0.05} value={draft.size ?? role.size ?? 1} onChange={(e) => set("size", Number(e.target.value))} className="accent-brand flex-1" />
+          <span className="w-10 tabular-nums">{(draft.size ?? role.size ?? 1).toFixed(2)}x</span>
+        </label>
+        <label className="flex items-center gap-2">
+          <span className="w-20">Hold (s)</span>
+          <input data-card-hold type="number" min={0} max={10} step={0.5} className={cn(field, "w-20")} value={draft.hold ?? ""} placeholder={lyric ? "as sung" : "as the platform"} onChange={(e) => set("hold", e.target.value === "" ? undefined : Number(e.target.value))} />
+          <span className="text-muted-foreground">{lyric ? "at least this long after its last word (never into the next line)" : "on screen from the start"}</span>
+        </label>
+        <label className="flex items-center gap-2">
+          <span className="w-20">Effect</span>
+          <select data-card-effect className={field} value={effectName} onChange={(e) => set("effect", e.target.value ? (intensity === "balanced" ? e.target.value : `${e.target.value}:${intensity}`) : undefined)}>
+            <option value="">{role.effect ? `the rule (${role.effect})` : lyric ? "the recipe's" : "fade (as before)"}</option>
+            {EFFECT_NAMES.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+          {effectName ? (
+            <select className={field} value={intensity} onChange={(e) => set("effect", e.target.value === "balanced" ? effectName : `${effectName}:${e.target.value}`)}>
+              {["subtle", "balanced", "expressive"].map((i) => (
+                <option key={i} value={i}>
+                  {i}
+                </option>
+              ))}
+            </select>
+          ) : null}
+        </label>
+      </div>
+      <p className="text-muted-foreground mt-2">
+        {lyric ? "The preview shows the change at once (its timing comes from the lyric alignment). " : "Title cards change in the preview after saving. "}
+        Places stay inside the platform&apos;s safe area.
+      </p>
+      <div className="mt-2 flex gap-2">
+        <Button size="sm" data-card-save disabled={busy || !changed} onClick={onSave}>
+          {busy ? <Loader2 className="animate-spin" /> : null} Save and plan again
+        </Button>
+        <Button size="sm" variant="outline" data-card-reset disabled={busy || !Object.keys(card.overrides).length} onClick={onReset}>
+          Reset this card
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// Save the textboard's design (without the words) as a template for this artist, or apply one.
+function TemplateBar({ board, busy, onEdit, onOpen }: { board: TextboardData; busy: boolean; onEdit: (body: Record<string, unknown>) => void; onOpen: (id: string) => void }) {
+  const [name, setName] = useState(board.template ?? "");
+  const [picked, setApply] = useState("");
+  const apply = board.templates.includes(picked) ? picked : (board.templates[0] ?? ""); // the first one until another is picked
+  const field = "bg-input/30 border-input h-7 rounded-md border px-2 text-xs";
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs" data-template-bar>
+      <span className="text-muted-foreground">
+        Textboard{board.file ? "" : " (the brand's defaults)"}
+        {board.template ? ` · template "${board.template}"` : ""} · {board.cards.filter((c) => Object.keys(c.overrides).length).length} card(s) changed
+      </span>
+      {(["title", "byline", "tagline"] as const).map((t) => (
+        <button key={t} type="button" data-open-card={t} onClick={() => onOpen(t)} className="hover:bg-accent rounded-md border px-2 py-0.5">
+          <Type className="mr-1 inline size-3" />
+          {t}
+        </button>
+      ))}
+      <input data-template-name className={cn(field, "w-36")} value={name} placeholder="template name" onChange={(e) => setName(e.target.value)} />
+      <Button size="sm" variant="outline" data-template-save disabled={busy || !name.trim()} onClick={() => onEdit({ action: "save-template", name })}>
+        Save as template
+      </Button>
+      {board.templates.length ? (
+        <>
+          <select data-template-apply className={field} value={apply} onChange={(e) => setApply(e.target.value)}>
+            {board.templates.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+          <Button size="sm" variant="outline" data-template-apply-button disabled={busy || !apply} onClick={() => onEdit({ action: "apply-template", name: apply })}>
+            Apply template
+          </Button>
+        </>
+      ) : (
+        <span className="text-muted-foreground">no templates for {board.artist} yet</span>
+      )}
+      {board.orphans.length ? (
+        <span className="text-amber-200" data-textboard-orphans>
+          Not used any more (their words changed): {board.orphans.map((o) => `${o.id} "${o.text}"`).join(", ")}
+        </span>
+      ) : null}
     </div>
   );
 }

@@ -13,6 +13,7 @@ import type { Manifest } from "./manifest";
 import { resolveRecipe, type RecipeValues } from "./recipe";
 import { songPathsById } from "./song-folder";
 import { recipeInputFor } from "./style";
+import { overrideCount, readTextboard, textboardHash } from "./textboard";
 
 export type RunPlatformSettings = {
   platform: string;
@@ -29,6 +30,8 @@ export type RunPlatformSettings = {
   targetLength: number | null;
   youtubeLayout: string | null;
   anchors: AnchorUse[] | null; // story anchors of its first video (null: none, or an older run)
+  textboard: { file: string | null; hash: string | null; template: string | null; changes: number } | null; // null: an older run
+  pictures: string[]; // picture versions: each video's clip set ("v2 city")
 };
 
 export type SettingsRow = { key: string; label: string; then: string; now: string; differs: boolean };
@@ -94,6 +97,8 @@ export function runSettings(ws: Workspace, projectId: string, folder: string): R
       targetLength: typeof s.target_length === "number" ? s.target_length : null,
       youtubeLayout: platform === "youtube" ? (str(m.props?.layout) ?? null) : null,
       anchors: m.anchors?.used?.length ? m.anchors.used : null,
+      textboard: m.textboard ? { file: m.textboard.file, hash: m.textboard.hash, template: m.textboard.template, changes: m.textboard.changes } : null,
+      pictures: ms.filter((x) => x.picture).map((x) => `v${x.picture!.index} ${x.picture!.label}`),
     };
   });
 }
@@ -137,6 +142,21 @@ export function compareRunToRecipe(ws: Workspace, projectId: string, folder: str
       const nowText = nowAnchors.length ? nowAnchors.map((a) => `line ${a.line} → ${a.clip}`).join(", ") : "none";
       rows.push({ key: "anchors", label: "Story anchors", then, now: nowText, differs: key(r.anchors ?? []) !== key(nowAnchors) });
     }
+    // The textboard (and its template) the run used, against the song's textboard.json now.
+    if (!isCanvas) {
+      const board = (() => {
+        try {
+          return readTextboard(songPathsById(ws, projectId).root);
+        } catch {
+          return null;
+        }
+      })();
+      const text = (t: { file: string | null; template: string | null; changes: number; hash?: string | null }) =>
+        t.file ? `textboard.json (${t.changes} change${t.changes === 1 ? "" : "s"}${t.template ? `, template "${t.template}"` : ""})` : "the brand's defaults";
+      const nowBoard = board ? { file: "textboard.json", template: board.template, changes: overrideCount(board), hash: textboardHash(board) } : { file: null, template: null, changes: 0, hash: null };
+      rows.push({ key: "textboard", label: "Textboard", then: r.textboard ? text(r.textboard) : "not recorded", now: text(nowBoard), differs: !!r.textboard && r.textboard.hash !== nowBoard.hash });
+    }
+    if (r.pictures.length) rows.push({ key: "pictures", label: "Picture versions", then: r.pictures.join(", "), now: "—", differs: false });
     return { platform: r.platform, label: r.label, videos: r.videos, rows };
   });
 }

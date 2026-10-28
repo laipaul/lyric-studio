@@ -3,7 +3,7 @@
 // (its manifests). Adds the song's waveform (cached), the beats, the clips' thumbnails and best moments
 // (the clip editor's, else the strongest 2 s by motion, colour and contrast, as the Spotify Canvas picks
 // them; cached).
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { absPath, clip as clipTable, REPO_ROOT, type Workspace } from "@lyric/db";
@@ -15,7 +15,7 @@ import type { LoopResult, LoopSuggestion } from "../loop";
 import { parsePresets } from "../platform";
 import type { LyricVideoProps } from "../props";
 import { clockText } from "../section";
-import { hookSections, peaks, storyLines, storyShots, type StoryClip, type StoryLine, type StoryShot } from "../storyboard";
+import { hookSections, peaks, storyLines, storyShots, storyTitleCards, type StoryClip, type StoryLine, type StoryShot } from "../storyboard";
 import { analyzeSong } from "./analysis";
 import { readLoopAudio } from "./audio-check";
 import { bestMoments } from "./best-moment";
@@ -25,7 +25,9 @@ import { makeVideos } from "./make";
 import type { Manifest } from "./manifest";
 import { resolveMoved } from "./media";
 import { resolveRecipe } from "./recipe";
-import { readMoves, songPathsById } from "./song-folder";
+import { SOURCE_FILE } from "./collection";
+import { songCollections } from "./project-settings";
+import { readMoves, sharedCollections, songPathsById } from "./song-folder";
 import { recipeInputFor } from "./style";
 
 export type StoryboardView = {
@@ -55,6 +57,10 @@ export type StoryboardView = {
   // is read-only (editable false).
   editable: boolean;
   clips: StoryboardClip[];
+  // The textboard: the title / byline / tagline cards on screen; the lyric cards are the lines.
+  titleCards: { id: string; type: string; text: string; startMs: number; endMs: number }[];
+  slots: { line: number; text: string; clip: string }[]; // lines that need a clip (picture swap)
+  picture: string | null; // the clip set planned ("city"; null: the recipe's)
   props: Omit<LyricVideoProps, "mediaBaseUrl">; // for the preview (served by the storyboard's media route)
 };
 
@@ -79,6 +85,9 @@ export type StoryboardChoices = {
   runs: { folder: string; time: string | null; platforms: { name: string; label: string; videos: string[] }[] }[];
   ready: boolean; // the song has lyrics and a song file
   why: string | null;
+  // Picture swap: the clip sets the plan can use (the song's own clips and the shared collections),
+  // and the recipe's own set.
+  pictures: { songClips: boolean; collections: string[]; recipe: { songClips: boolean; collections: string[] } };
 };
 
 const WAVE_BUCKET_MS = 50;
@@ -105,11 +114,16 @@ export function storyboardChoices(ws: Workspace, projectId: string): StoryboardC
     platforms: run.platforms.filter((p) => p.name !== "canvas" && p.videos.length).map((p) => ({ name: p.name, label: p.label, videos: p.videos.map((v) => v.name) })),
   })).filter((run) => run.platforms.length);
   const ready = !!paths.audio && existsSync(paths.audio) && existsSync(paths.lyricsTxt);
-  return { platforms, runs, ready, why: ready ? null : "This song needs its song file and lyrics.txt (Assets tab) first." };
+  const hasOwn = !!paths.clips && existsSync(paths.clips) && readdirSync(paths.clips).some((f) => SOURCE_FILE.test(f));
+  return {
+    platforms, runs, ready, why: ready ? null : "This song needs its song file and lyrics.txt (Assets tab) first.",
+    pictures: { songClips: hasOwn, collections: sharedCollections(ws), recipe: { songClips: hasOwn, collections: songCollections(ws, projectId) } },
+  };
 }
 
 // The plan of one video, without rendering: the same planner Generate uses (makeVideos, dry run).
-export async function storyboardPlan(ws: Workspace, projectId: string, platform: string, video = "v1"): Promise<StoryboardView> {
+// clipSet: the picture swap ("song+wedding", "city"): the same textboard over other clips, this plan only.
+export async function storyboardPlan(ws: Workspace, projectId: string, platform: string, video = "v1", clipSet?: string): Promise<StoryboardView> {
   const paths = songPathsById(ws, projectId);
   if (!paths.audio || !existsSync(paths.audio)) throw new Error("This song has no song file yet (Assets tab).");
   const notes: string[] = [];
@@ -119,6 +133,7 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
     lyrics: paths.lyricsTxt,
     ...(paths.hints && existsSync(paths.hints) ? { hint: paths.hints } : {}),
     platforms: platform,
+    ...(clipSet ? { clipSet } : {}),
     dryRun: true,
     frameCheck: false,
     log: () => {},
@@ -149,7 +164,7 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
     shots: v.props.shots.filter((s) => s.src === c.path).length,
   }));
   return view(ws, {
-    editable: !paths.legacy, storyboardClips,
+    editable: !paths.legacy, storyboardClips, slots: plan.slots, picture: clipSet ?? null,
     source: "plan", run: null, platform: { name: p.name, label: p.label }, video: v.spec.name, videos: plan.videos.map((x) => x.spec.name),
     settings: settingsText(v.spec),
     section: { mode: plan.section.mode, startMs: plan.section.start_ms, endMs: plan.section.end_ms, reason: plan.section.reason },
@@ -181,7 +196,7 @@ export async function storyboardRun(ws: Workspace, projectId: string, folder: st
   const videos = ["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8"].filter((n) => existsSync(path.join(dir, `${n}.manifest.json`)));
   const used = m.anchors?.used ?? [];
   return view(ws, {
-    editable: false, storyboardClips: [],
+    editable: false, storyboardClips: [], slots: [], picture: m.picture?.label ?? null,
     source: "run", run: folder, platform: { name: platform, label: SHORT_LABELS[platform] ?? m.platform?.preset.label ?? platform }, video, videos,
     settings: `${m.variation.style}, ${m.variation.order}${(m.settings.cut_rate as string) ? `, ${m.settings.cut_rate}` : ""}${m.settings.transitions ? `, ${m.settings.transitions}` : ""}`,
     section: { mode: m.section.mode, startMs: m.section.start_ms, endMs: m.section.end_ms, reason: m.section.reason },
@@ -211,13 +226,14 @@ async function view(
     clips: Map<string, StoryClip>; numbered: { number: number | null; text: string; isHook: boolean }[];
     anchors: { uses: AnchorUse[]; conflicts: string[]; notes: string[]; missing: string[] } | null; anchorsOutside: StoryboardView["anchorsOutside"]; notes: string[]; songFile: string;
     loop: LoopResult | null; loopSuggestions: LoopSuggestion[]; editable: boolean; storyboardClips: StoryboardClip[];
+    slots: StoryboardView["slots"]; picture: string | null;
   },
 ): Promise<StoryboardView> {
   const durationMs = frameMs(c.props.durationInFrames);
   const inVideo = (t: number) => t - c.startMs;
   const beats = c.beats.filter((b) => inVideo(b.time_ms) >= 0 && inVideo(b.time_ms) <= durationMs);
   const shots = storyShots(c.props, c.clips, c.startMs, c.anchors);
-  const lines = storyLines(c.props.lyrics, c.numbered, c.anchors?.uses ?? []);
+  const lines = storyLines(c.props.lyrics, c.numbered, c.anchors?.uses ?? [], c.slots);
   const attached = new Set(shots.flatMap((s) => s.warnings));
   const wave = await songPeaks(ws, c.songFile);
   const buckets = Math.max(1, Math.round(durationMs / WAVE_BUCKET_MS));
@@ -237,6 +253,9 @@ async function view(
     loopSuggestions: c.loopSuggestions.map((x) => ({ lengthS: x.lengthS, end: clockText(x.endMs), line: x.line ? `line ${x.line.number} "${x.line.text}"` : null, fit: x.fit.text })),
     editable: c.editable,
     clips: c.storyboardClips,
+    titleCards: storyTitleCards(c.props),
+    slots: c.slots,
+    picture: c.picture,
     props: c.props,
   };
 }

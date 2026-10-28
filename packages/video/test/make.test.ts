@@ -791,12 +791,19 @@ describe("platform presets (stand-in renderer)", () => {
     expect([m.section.start_ms, m.section.end_ms]).toEqual([0, 75_000]); // the whole song from 0:00
     expect(existsSync(path.join(wsDir, ...m.props.cover!.src.split("/")))).toBe(true); // stored with the project
     expect(existsSync(path.join(wsDir, ...m.props.cover!.backgroundSrc!.split("/")))).toBe(true); // blurred once
-    expect(m.props.titleOverlay).toMatchObject({ title: "Long Song", artist: "Life Lyrics", font: "Cinzel", colour: "#E8A3B5" });
+    // The title and artist as the textboard's default cards (drawn as the title overlay was).
+    expect(m.props.titleOverlay).toBeUndefined();
+    expect(m.props.textCards?.map((c) => [c.id, c.text, c.font, c.colour, c.size, c.stackOn ?? null])).toEqual([
+      ["title", "Long Song", "Cinzel", "#E8A3B5", 40, null],
+      ["byline", "Life Lyrics", "Cinzel", "#ffffff", 18, "title"],
+    ]);
+    expect(m.props.textCards![0]).toMatchObject({ top: 76, startFrame: 0, endFrame: m.props.durationInFrames + 1, effect: null, upper: true });
+    expect(m.textboard).toEqual({ file: null, hash: null, template: null, changes: 0, cards: expect.any(Number) });
     expect(m.props.endScreen?.fromFrame).toBe(m.props.durationInFrames - 600);
     expect(m.props.nextLine).toBe(true);
     // 5g.2b: bigger lyrics, title centred over the lyrics column, drift + parallax, mood, logo.
     expect(m.props.textSize).toBe(Math.round(64 * 1.18));
-    expect([m.props.titleOverlay?.left, m.props.titleOverlay?.right]).toEqual([m.props.lyricArea!.left, m.props.lyricArea!.right]);
+    expect([m.props.textCards?.[0].left, m.props.textCards?.[0].right]).toEqual([m.props.lyricArea!.left, m.props.lyricArea!.right]);
     expect(m.props.cover?.parallax).toBe(0.3);
     expect(m.props.cover?.zoomTo).toBe(1.08);
     expect(m.props.cover?.drift).toBeDefined();
@@ -841,6 +848,7 @@ describe("platform presets (stand-in renderer)", () => {
     expect(m.props.audio).toBeNull();
     expect(m.props.lyrics).toEqual([]);
     expect(m.props.titleOverlay).toBeUndefined();
+    expect(m.props.textCards).toBeUndefined();
     expect(m.props.logo).toBeUndefined();
     expect(m.props.cutFrames).toEqual([]);
     expect(m.props.shots).toHaveLength(1);

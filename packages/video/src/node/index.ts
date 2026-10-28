@@ -39,3 +39,4 @@ export * from "./audio-check";
 export * from "./pairings";
 export * from "./storyboard";
 export * from "./storyboard-edit";
+export * from "./textboard";

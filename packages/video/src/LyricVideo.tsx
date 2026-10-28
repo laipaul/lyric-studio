@@ -24,7 +24,8 @@ import { COVER_CENTRE_X, coverSide } from "./youtube-layout";
 
 const LOGO_FADE_FRAMES = 15; // 0.5 s
 import { cinematicBarHeight, DEFAULT_FORMAT, DEFAULT_LYRIC_AREA, DEFAULT_SAFE_ZONE, type Format, type LyricArea, type SafeZone } from "./platform";
-import { mediaUrl, type LyricLineProps, type LyricVideoProps, type ShotProps, type StyleProps } from "./props";
+import { mediaUrl, type LyricLineProps, type LyricVideoProps, type ShotProps, type StyleProps, type TextCardProps } from "./props";
+import { textCardLook } from "./text-cards";
 
 const cover: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };
 const cover_ = cover;
@@ -335,6 +336,81 @@ function TitleOverlay({ t, format }: { t: NonNullable<LyricVideoProps["titleOver
   );
 }
 
+// The textboard's title, byline and tagline cards. A card "with-title" sits under the card it is stacked
+// on (as the artist under the title); the others are blocks of their own. Without an effect a card
+// is on screen from its start and fades out over its last second (the YouTube title as before).
+function TextCards({ cards, format }: { cards: TextCardProps[]; format: Format }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const shown = new Set(cards.map((c) => c.id));
+  const roots = cards.filter((c) => !c.stackOn || !shown.has(c.stackOn));
+  const line = (c: TextCardProps, parent: TextCardProps | null) => {
+    const look = parent ? textCardLook(c, frame, fps) : { opacity: 1 };
+    if (!look || look.opacity <= 0.001) return null;
+    return (
+      <div
+        key={c.id}
+        data-text-card={c.id}
+        style={{
+          fontSize: c.size,
+          ...(c.upper ? { textTransform: "uppercase" as const } : {}),
+          ...(parent
+            ? {
+                marginTop: parent.size * 0.25,
+                ...(c.colour !== parent.colour ? { color: c.colour } : {}),
+                ...(c.font !== parent.font || c.weight !== parent.weight || !!c.italic !== !!parent.italic
+                  ? { fontFamily: `"${c.font}", serif`, fontWeight: c.weight, fontStyle: c.italic ? "italic" : "normal" }
+                  : {}),
+                ...(c.letterSpacing !== parent.letterSpacing ? { letterSpacing: `${c.letterSpacing}em` } : {}),
+                opacity: (c.opacity ?? 1) * look.opacity,
+              }
+            : c.opacity !== undefined && c.opacity !== 1
+              ? { opacity: c.opacity }
+              : {}),
+        }}
+      >
+        {c.text}
+      </div>
+    );
+  };
+  return (
+    <>
+      {roots.map((root) => {
+        const look = textCardLook(root, frame, fps);
+        if (!look || look.opacity <= 0.001) return null;
+        const stacked = cards.filter((c) => c.stackOn === root.id);
+        const moved = look.x || look.y || look.scale !== 1;
+        return (
+          <div
+            key={root.id}
+            data-title={root.type === "title" ? "" : undefined}
+            style={{
+              position: "absolute",
+              left: root.left ?? 0,
+              right: root.right !== undefined ? format.width - root.right : 0,
+              top: root.top ?? root.centerY ?? "50%",
+              transform: [root.top === undefined ? "translateY(-50%)" : "", moved ? `translate(${look.x.toFixed(2)}px, ${look.y.toFixed(2)}px) scale(${look.scale.toFixed(4)})` : ""].filter(Boolean).join(" ") || undefined,
+              textAlign: "center",
+              fontFamily: `"${root.font}", serif`,
+              fontWeight: root.weight,
+              ...(root.italic ? { fontStyle: "italic" as const } : {}),
+              fontSynthesis: "none",
+              color: root.colour,
+              letterSpacing: `${root.letterSpacing}em`,
+              textShadow: "0 2px 18px rgba(0,0,0,0.6)",
+              opacity: look.opacity,
+              filter: look.blur > 0.01 ? `blur(${look.blur.toFixed(2)}px)` : undefined,
+            }}
+          >
+            {line(root, null)}
+            {stacked.map((c) => line(c, root))}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 function Logo({ logo, mediaBaseUrl }: { logo: NonNullable<LyricVideoProps["logo"]>; mediaBaseUrl: string }) {
   const frame = useCurrentFrame();
   const opacity = 0.9 * logoOpacity(frame, logo.goneAt, LOGO_FADE_FRAMES);
@@ -477,7 +553,7 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
       ) : null}
 
       {props.grain ? <Grain /> : null}
-      {props.titleOverlay ? <TitleOverlay t={props.titleOverlay} format={format} /> : null}
+      {props.textCards?.length ? <TextCards cards={props.textCards} format={format} /> : props.titleOverlay ? <TitleOverlay t={props.titleOverlay} format={format} /> : null}
       {props.logo ? <Logo logo={props.logo} mediaBaseUrl={mediaBaseUrl} /> : null}
 
       {props.showSafeGuides ? <SafeGuides format={format} safe={props.safeZone ?? DEFAULT_SAFE_ZONE} area={area} /> : null}

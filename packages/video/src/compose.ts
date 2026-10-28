@@ -12,6 +12,7 @@ import { DEFAULT_FORMAT, DEFAULT_SAFE_ZONE, lyricArea, type Format, type SafeZon
 import { mulberry32 } from "./prng";
 import type { LyricEffectsProps, LyricLineProps, LyricVideoProps, StyleProps } from "./props";
 import { assignClips, BEST_WINDOW_MS, type ClipOrder } from "./shots";
+import { withCard, type CardStyle } from "./textboard";
 
 export type StyleChoice = "simple" | "bold";
 
@@ -70,6 +71,9 @@ export type RenderBase = {
   // Story anchors (song.json): `lyric` indexes `lyrics`; placed on `beats` (downbeat offset applied).
   anchors?: ResolvedAnchor[];
   beats?: Beat[];
+  // The textboard (src/textboard.ts): each lyric line's card (same order as `lyrics`), with the look it
+  // sets (position, size, hold, effect) and its font resolved to a file the props load.
+  cards?: ({ id: string; style: CardStyle; font?: { family: string; weight: number; italic?: boolean } } | null)[];
 };
 
 // What the anchors did in one video (QA "Story anchors", the manifest, the Videos tab).
@@ -162,7 +166,14 @@ export function composeProps(
   choices: ComposeChoices,
 ): { props: Omit<LyricVideoProps, "mediaBaseUrl">; warnings: string[]; anchors: AnchorReport | null } {
   let plan = choices.plan ?? base.plan;
-  const allLines = lyricFrames(base, choices.leadMs ?? DEFAULT_LEAD_MS, choices.lyricsOffsetMs ?? 0, !!choices.effects, choices.effects?.gap);
+  const platform = base.platform ?? { format: DEFAULT_FORMAT, safeZone: DEFAULT_SAFE_ZONE, lyricsAt: 0.45, textScale: 1 };
+  const bars = choices.cinematicBars ?? base.cinematicBars;
+  const area = lyricArea(platform.format, platform.lyricSafeZone ?? platform.safeZone, platform.lyricsAt, bars);
+  const timed = lyricFrames(base, choices.leadMs ?? DEFAULT_LEAD_MS, choices.lyricsOffsetMs ?? 0, !!choices.effects, choices.effects?.gap);
+  // Each line with its textboard card (the card's look; without a textboard: unchanged).
+  const allLines = base.cards
+    ? timed.map((l, k) => (base.cards![k] ? withCard(l, base.cards![k]!, { area, nextStartFrame: timed[k + 1]?.startFrame ?? null, durationInFrames: base.durationInFrames }) : l))
+    : timed;
   const lyrics = allLines
     .map((l) => ({ ...l, startFrame: Math.max(0, l.startFrame), endFrame: Math.min(base.durationInFrames, l.endFrame) }))
     .filter((l) => l.endFrame > l.startFrame);
@@ -196,7 +207,6 @@ export function composeProps(
     clipStarts.set(shot, Math.round((inMs * VIDEO.fps) / 1000));
   }
 
-  const platform = base.platform ?? { format: DEFAULT_FORMAT, safeZone: DEFAULT_SAFE_ZONE, lyricsAt: 0.45, textScale: 1 };
   const byId = new Map(base.clips.map((c) => [c.id, c]));
   // No clips (YouTube cover / stills layouts): no shots; the background comes from other props.
   const assigned = !base.clips.length ? [] : assignClips(
@@ -261,7 +271,6 @@ export function composeProps(
     : null;
 
   const entry = base.styles[choices.style];
-  const bars = choices.cinematicBars ?? base.cinematicBars;
   return {
     props: {
       audio: base.audio,
@@ -277,7 +286,7 @@ export function composeProps(
       cinematicBars: bars,
       format: platform.format,
       safeZone: platform.safeZone,
-      lyricArea: lyricArea(platform.format, platform.lyricSafeZone ?? platform.safeZone, platform.lyricsAt, bars),
+      lyricArea: area,
       ...(choices.effects ? { lyricEffects: choices.effects } : {}),
     },
     warnings,

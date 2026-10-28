@@ -89,6 +89,11 @@ export type Manifest = {
   loop?: (import("../loop").LoopResult & { checked: true }) | { checked: false; why: string } | null;
   // Story anchors (song.json): what each anchor did in this video. Absent in older manifests.
   anchors?: { used: import("../anchors").AnchorUse[]; conflicts: string[]; notes: string[]; missing: string[] } | null;
+  // The textboard (the song's textboard.json; null: the brand's defaults) and its template. Absent in
+  // older manifests.
+  textboard?: { file: string | null; hash: string | null; template: string | null; changes: number; cards: number } | null;
+  // Picture versions (--pictures): which clip set this video used.
+  picture?: { index: number; label: string; songClips: boolean; collections: string[] } | null;
   warnings: string[];
 };
 

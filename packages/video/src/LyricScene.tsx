@@ -45,17 +45,27 @@ export function LyricScene(props: {
   const { lyrics, effects, style, textSize, colour, ready, areaFor } = props;
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
-  const fontOf = (l: LyricLineProps): Font => (l.isHook && props.hookFont ? { family: props.hookFont.font, weight: props.hookFont.weight, italic: props.hookFont.italic === true } : { family: style.font, weight: style.weight, italic: style.italic === true });
+  // A textboard card may set the line's own font, size and place.
+  const fontOf = (l: LyricLineProps): Font =>
+    l.card?.font
+      ? { family: l.card.font.family, weight: l.card.font.weight, italic: l.card.font.italic === true }
+      : l.isHook && props.hookFont
+        ? { family: props.hookFont.font, weight: props.hookFont.weight, italic: props.hookFont.italic === true }
+        : { family: style.font, weight: style.weight, italic: style.italic === true };
+  const placeOf = (l: LyricLineProps): LyricArea => {
+    const a = areaFor(l);
+    return l.card?.centerY !== undefined ? { ...a, centerY: l.card.centerY } : a;
+  };
 
   const layouts = useMemo(
     () =>
       ready
         ? lyrics.map((l): LyricLayout => {
             const area = areaFor(l);
-            const font = l.isHook && props.hookFont ? { family: props.hookFont.font, weight: props.hookFont.weight, italic: props.hookFont.italic === true } : { family: style.font, weight: style.weight, italic: style.italic === true };
+            const font = fontOf(l);
             return layoutLyric(
               applyTextCase(l.text, style.textCase),
-              textSize,
+              Math.round(textSize * (l.card?.scale ?? 1)),
               area.right - area.left,
               (t, size) => measureText({ text: t, fontFamily: font.family, fontWeight: font.weight, fontSize: size, ...(font.italic ? { additionalStyles: { fontStyle: "italic" } } : {}) }).width,
               area.minScale,
@@ -77,7 +87,7 @@ export function LyricScene(props: {
             showNext: props.showNext,
             nextScale: props.nextScale,
             gapPx: textSize * 0.35,
-            height: (i) => layouts[i].lines.length * layouts[i].fontSize * areaFor(lyrics[i]).lineHeight,
+            height: (i) => layouts[i].lines.length * layouts[i].fontSize * placeOf(lyrics[i]).lineHeight,
             wordCount: (i) => layouts[i].lines.join(" ").split(" ").length,
           })
         : null,
@@ -92,7 +102,7 @@ export function LyricScene(props: {
         const line = lyrics[item.index];
         const layout = layouts[item.index];
         // A waiting line sits under the line before it (in that line's area).
-        const area = areaFor(item.role === "next" ? lyrics[item.index - 1] : line);
+        const area = placeOf(item.role === "next" ? lyrics[item.index - 1] : line);
         const font = fontOf(line);
         const { look } = item;
         const shadows = [SHADOWS[style.effect] ?? BASE_SHADOW];

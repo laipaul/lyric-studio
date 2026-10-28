@@ -37,7 +37,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
   // The recipe's platforms; none set: Reels + YouTube (the Style tab says so).
   const fallback = ["reels", "youtube"].filter((p) => data.platforms.some((x) => x.name === p));
   const [platforms, setPlatforms] = useState<string[]>(startPlatforms.length ? startPlatforms : fallback.length ? fallback : [data.platforms[0]?.name ?? "standard"]);
-  const videosFor = (name: string, preset: number) => (variations ? Number(variations) : (r.variations[name] ?? r.variations["*"] ?? preset));
+  const videosFor = (name: string, preset: number) => (pictureSets.length >= 2 && name !== "canvas" ? pictureSets.length : variations ? Number(variations) : (r.variations[name] ?? r.variations["*"] ?? preset));
   const recipeCollections = data.chosen.length || data.songClips ? data.chosen : data.collections.slice(0, 1);
   const runCollections = from?.collections && !locked("collections") ? from.collections.filter((c) => data.collections.includes(c)) : null;
   const [collections, setCollections] = useState<string[]>(runCollections ?? recipeCollections);
@@ -68,6 +68,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [pairings, setPairings] = useState<string[]>([]); // compare font pairings: one video per pairing
+  const [pictureSets, setPictureSets] = useState<{ songClips: boolean; collections: string[] }[]>([]); // picture versions: one video per clip set
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -95,6 +96,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
       shotLength: shotLength || undefined,
       realign: f.get("realign") === "on",
       ...(pairings.length ? { pairings } : {}),
+      ...(pictureSets.length >= 2 ? { pictures: pictureSets.map((x) => [...(x.songClips ? ["song"] : []), ...x.collections].join("+")).filter(Boolean) } : {}),
     };
     const body = new FormData();
     body.set("projectId", projectId);
@@ -267,6 +269,52 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
               {pairings.length === 1 ? <span className="text-xs text-amber-300">Tick one more to compare (one pairing makes one video in it).</span> : null}
             </fieldset>
           ) : null}
+          <fieldset data-picture-versions className="flex flex-col gap-1.5 text-sm">
+            <legend className="font-medium">Picture versions (optional)</legend>
+            <span className="text-muted-foreground text-xs">
+              The same textboard over other clips: one video per clip set (2–4), with the same section, text and order. An anchor whose clip is not in a set is listed as a slot (QA), never dropped.
+            </span>
+            {pictureSets.map((set, k) => (
+              <div key={k} className="flex flex-wrap items-center gap-x-4 gap-y-1" data-picture-set={k + 1}>
+                <span className="text-muted-foreground w-6 text-xs">v{k + 1}</span>
+                {data.songClips ? (
+                  <label className="flex items-center gap-1.5">
+                    <input type="checkbox" className="accent-brand" checked={set.songClips} onChange={(e) => setPictureSets((all) => all.map((x, i) => (i === k ? { ...x, songClips: e.target.checked } : x)))} /> the song&apos;s clips
+                  </label>
+                ) : null}
+                {data.collections.map((c) => (
+                  <label key={c} className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      className="accent-brand"
+                      data-picture-collection={c}
+                      checked={set.collections.includes(c)}
+                      onChange={(e) => setPictureSets((all) => all.map((x, i) => (i === k ? { ...x, collections: e.target.checked ? [...x.collections, c] : x.collections.filter((n) => n !== c) } : x)))}
+                    />
+                    {c}
+                  </label>
+                ))}
+                <button type="button" className="text-muted-foreground text-xs underline" onClick={() => setPictureSets((all) => all.filter((_, i) => i !== k))}>
+                  remove
+                </button>
+              </div>
+            ))}
+            <div className="flex items-center gap-3">
+              {pictureSets.length < 4 ? (
+                <button
+                  type="button"
+                  data-add-picture
+                  className="hover:bg-accent w-fit rounded-md border px-2 py-0.5 text-xs"
+                  disabled={pairings.length > 0}
+                  onClick={() => setPictureSets((all) => [...all, all.length ? { songClips: false, collections: data.collections.filter((c) => !all.some((x) => x.collections.includes(c))).slice(0, 1) } : { songClips: data.songClips > 0, collections: [...collections] }])}
+                >
+                  + Add a picture version
+                </button>
+              ) : null}
+              {pictureSets.length === 1 ? <span className="text-xs text-amber-300">Add one more to compare (one set makes one video).</span> : null}
+              {pairings.length ? <span className="text-muted-foreground text-xs">(not together with Compare font pairings)</span> : null}
+            </div>
+          </fieldset>
           <div className="grid gap-4 md:grid-cols-4">
             <label className={label}>
               <span className="font-medium">Title</span>

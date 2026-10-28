@@ -26,6 +26,7 @@ export type SceneLine = {
   sungEndFrame?: number; // its last word ends here
   words?: { text: string; startFrame: number; endFrame: number }[];
   enterFrame?: number; // after a long instrumental gap: fades in from here (instead of D before startFrame)
+  card?: { effect?: EffectChoice; centerY?: number }; // the textboard card: its own effect and place
 };
 
 export type SceneOptions = {
@@ -50,7 +51,7 @@ export function sceneTimeline(lines: readonly SceneLine[], o: SceneOptions) {
   const n = lines.length;
   const verse = resolveEffect(o.verse, o.fps);
   const hook = resolveEffect(o.hook, o.fps);
-  const own: ResolvedEffect[] = lines.map((l) => (l.isHook ? hook : verse));
+  const own: ResolvedEffect[] = lines.map((l) => (l.card?.effect ? resolveEffect(l.card.effect, o.fps) : l.isHook ? hook : verse));
   const motion = own.map((r) => motionOf(r, verse, o.fps));
   const kind = (i: number) => motion[i].effect.transition;
   const stamp = (i: number) => lines[i].stampFrame ?? lines[i].startFrame + 8;
@@ -65,7 +66,9 @@ export function sceneTimeline(lines: readonly SceneLine[], o: SceneOptions) {
   });
   const enterStart = lines.map((l, i) => l.startFrame - D[i]);
   // Glide pairs: line i rises from under line i-1 (where it waited if showNext).
-  const stacked = (i: number) => connected(i - 1) && kind(i) === "glide" && kind(i - 1) === "glide";
+  // (Only lines in the same place: a card moved elsewhere comes in on its own.)
+  const samePlace = (i: number) => lines[i].card?.centerY === lines[i - 1].card?.centerY;
+  const stacked = (i: number) => connected(i - 1) && kind(i) === "glide" && kind(i - 1) === "glide" && samePlace(i);
   const waits = (i: number) => o.showNext && stacked(i);
   const exitWindow = lines.map((l, i) => {
     if (connected(i)) {

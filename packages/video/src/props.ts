@@ -40,6 +40,39 @@ export type LyricLineProps = {
   sungEndFrame?: number;
   words?: { text: string; startFrame: number; endFrame: number }[];
   enterFrame?: number; // after a long instrumental gap: it fades in from here (brand motion.gapLeadInS)
+  // The line's textboard card (src/textboard.ts): its id, and the look it sets for this line only.
+  card?: {
+    id: string;
+    effect?: EffectChoice; // instead of the verse / hook effect
+    scale?: number; // x the text size
+    centerY?: number; // its own place (px), inside the lyric area
+    position?: string; // the place's name (upper, centre, lower, top)
+    font?: { family: string; weight: number; italic?: boolean };
+    baseEndFrame?: number; // the display rules' end before the card's hold
+  };
+};
+
+// Title, byline and tagline cards (the textboard's opening): drawn over the picture.
+export type TextCardProps = {
+  id: string;
+  type: "title" | "byline" | "tagline";
+  text: string;
+  font: string;
+  weight: number;
+  italic?: boolean;
+  size: number; // px
+  colour: string;
+  opacity?: number; // of the text colour (byline: 0.85)
+  letterSpacing: number; // em
+  upper: boolean;
+  startFrame: number;
+  endFrame: number; // gone by here (fades out over the last second without an effect)
+  effect?: EffectChoice | null; // comes in / goes like that lyric effect (default: the fade)
+  stackOn?: string; // drawn under this card (with-title), marginTop 0.25 x that card's size
+  top?: number; // px: the block's top edge (title at the top)
+  centerY?: number; // px: the block's centre (when no top)
+  left?: number; // horizontal extent (default: the whole width)
+  right?: number;
 };
 
 // Lyric effects (src/effects): the verse and hook effect, and the accent colour for karaoke.
@@ -95,7 +128,8 @@ export type LyricVideoProps = {
   // advance; drift = its slow movement (px), the background moving the opposite way (parallax).
   cover?: { src: string; zoomFrom: number; zoomTo: number; backgroundSrc?: string; drift?: CoverDrift; parallax?: number } | null;
   stills?: StillProps[]; // stills layout: one picture per lyric section, crossfaded on downbeats
-  titleOverlay?: TitleOverlayProps | null; // song title + artist over the opening seconds
+  titleOverlay?: TitleOverlayProps | null; // song title + artist over the opening seconds (manifests before the textboard)
+  textCards?: TextCardProps[]; // the textboard's title / byline / tagline cards
   logo?: { src: string; left: number; top: number; width: number; height: number; goneAt: number | null } | null; // goneAt: faded out by this frame
   mood?: MoodSegment[]; // section mood: warm/bright on hooks, soft on verses (2 s eased changes)
   endScreen?: { fromFrame: number; lyricArea: LyricArea; clear: { left: number; top: number; right: number; bottom: number } } | null;

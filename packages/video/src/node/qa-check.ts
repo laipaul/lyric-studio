@@ -27,31 +27,36 @@ export function measureLyrics(
     effects?: LyricEffectsProps | null;
     nextLine?: boolean;
     nextScale?: number;
+    // A textboard card's own font (its face, for measuring).
+    cardFace?: (font: { family: string; weight: number; italic?: boolean }) => FontFaceInfo;
   },
 ): QaLyric[] {
+  // A textboard card: its own font, size, place and effect.
+  const areaOf = (l: LyricLineProps) => (fonts.area && l.card?.centerY !== undefined ? { ...fonts.area, centerY: l.card.centerY } : fonts.area);
   const measured = lyrics.map((l) => {
-    const face = l.isHook && fonts.hook ? fonts.hook : fonts.main;
-    const layout = layoutWithFace(l.text, face, fonts.textCase, fonts.textSize, fonts.area);
+    const face = l.card?.font && fonts.cardFace ? fonts.cardFace(l.card.font) : l.isHook && fonts.hook ? fonts.hook : fonts.main;
+    const layout = layoutWithFace(l.text, face, fonts.textCase, Math.round(fonts.textSize * (l.card?.scale ?? 1)), areaOf(l));
     const measure = faceMeasure(face);
     const widest = Math.max(...layout.lines.map((line) => measure(line, layout.fontSize)));
     return { l, layout, widest };
   });
   return measured.map(({ l, layout, widest }, k) => {
-    let box = lyricBox(layout.lines.length, layout.fontSize, widest, fonts.animation === "pop" && !fonts.effects ? POP_MAX_SCALE : 1, fonts.area);
+    const area = areaOf(l);
+    let box = lyricBox(layout.lines.length, layout.fontSize, widest, fonts.animation === "pop" && !fonts.effects ? POP_MAX_SCALE : 1, area);
     if (fonts.effects) {
-      const own = l.isHook ? fonts.effects.hook : fonts.effects.verse;
+      const own = l.card?.effect ?? (l.isHook ? fonts.effects.hook : fonts.effects.verse);
       const ext = effectExtents(own, fonts.effects.verse, 30);
-      const grown = lyricBox(layout.lines.length, layout.fontSize, widest, ext.maxScale, fonts.area);
+      const grown = lyricBox(layout.lines.length, layout.fontSize, widest, ext.maxScale, area);
       box = { left: grown.left - ext.side, right: grown.right + ext.side, top: grown.top - ext.up, bottom: grown.bottom + ext.down };
       // The next line waiting small underneath (it shares the screen with this one).
       const next = measured[k + 1];
       const glides = (c: LyricEffectsProps["verse"]) => motionKind(c, fonts.effects!.verse) === "glide";
-      if (fonts.nextLine && next && next.l.startFrame - l.endFrame < 30 && glides(own) && glides(next.l.isHook ? fonts.effects.hook : fonts.effects.verse)) {
+      if (fonts.nextLine && next && next.l.startFrame - l.endFrame < 30 && next.l.card?.centerY === l.card?.centerY && glides(own) && glides(next.l.card?.effect ?? (next.l.isHook ? fonts.effects.hook : fonts.effects.verse))) {
         const s = fonts.nextScale ?? 0.55;
         const height = layout.lines.length * layout.fontSize * (fonts.area?.lineHeight ?? 1.15);
         const nextHeight = next.layout.lines.length * next.layout.fontSize * (fonts.area?.lineHeight ?? 1.15) * s;
         const cx = (box.left + box.right) / 2;
-        const top = (fonts.area?.centerY ?? box.top) + height / 2 + fonts.textSize * 0.35;
+        const top = (area?.centerY ?? box.top) + height / 2 + fonts.textSize * 0.35;
         box = {
           left: Math.min(box.left, cx - (next.widest * s) / 2),
           right: Math.max(box.right, cx + (next.widest * s) / 2),

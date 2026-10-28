@@ -757,6 +757,43 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   make.test.ts (real renders: the song file's hash and modification time are unchanged, the song
   folder's copy is byte for byte the same, QA audio check passes, 44.1 kHz kept).
 
+### Textboard: the text layer as its own object ✅ (to verify on the Windows PC)
+- **textboard.json** in the song folder (written by the Storyboard tab): an ordered list of cards (title,
+  byline, tagline, then every lyric line, numbered as the Lyrics tab) and per card only what differs:
+  place (lyric spot / under the title / top / upper / centre / lower, always inside the platform's safe
+  area), size (0.5-2x), hold (seconds after the last word, never into the next line; title cards: shown
+  this long), effect, font / weight / italic; title cards also their text and "shown". "roles": rules per
+  kind of card (title, byline, tagline, verse, hook), e.g. hook lines 1.2x. Timing always comes from the
+  alignment, hand times and the display rules (never aligned again). **Without textboard.json nothing
+  changes**: the brand's defaults (YouTube title + artist as before, no title on vertical videos).
+- After a lyrics change a card keeps its look when its words stay (also on a new number); a card whose
+  words are gone is listed ("not used any more"), never silently dropped (pnpm make says so too).
+- **Render**: the same planner (dry run = render, tested): a lyric card's place, size, effect and font go
+  into the props of that line; the title / byline / tagline are text cards (the YouTube title is drawn
+  exactly as before). QA measures a moved or resized card at its own place, size, font and effect.
+- **Storyboard**: a Textboard row (title cards above the lyric cards; ✎ = its own look). Click a card:
+  place, size, hold, effect (and text / shown for title cards) with a live preview of lyric cards before
+  saving; Save plans again; "Reset this card". Buttons open the title, byline and tagline cards (also
+  when hidden).
+- **Templates**: "Save as template" keeps the design without the words (roles and the title cards' looks)
+  in workspace\templates\<artist>\<name>.json (per artist: Life Lyrics, Pômé); per-line changes are not
+  part of it (it says how many). "Apply template" on another song fills in its own title, byline, tagline
+  and lyrics, whatever its number of lines.
+- **Picture swap**: Storyboard → Pictures: plan the same textboard over another clip set (the song's own
+  clips and / or collections; this plan only, nothing saved). An anchor whose clip is not in the set
+  becomes a **slot**: the line is outlined in amber and listed "needs a clip (was 02_b.mp4)" until a clip is
+  dragged onto it (also a QA "Story anchors" WARN "slot: line 4 … needs a clip"). **Generate → Picture
+  versions** (2-4 clip sets) or `--pictures "song,wedding"`: one video per clip set with the same textboard,
+  section and order (not together with font pairings or --resume).
+- **Manifest** records textboard (file, hash, template, number of changes) and picture; the Videos tab's
+  settings show "Textboard" (and the template) next to the song's textboard now, and "Picture versions".
+- Tests: textboard.test.ts (cards, round-trip, bad values, sync after a lyrics change, template without the
+  words applied to a song with 7 lines instead of 4, a card's look and its preview, title card timing),
+  textboard-make.test.ts (overrides in the rendered props and fonts, a title card on Reels, the manifest,
+  dry run = render; picture versions keep the text, use other clips and turn the missing anchor into a
+  slot), make.test.ts (YouTube title as text cards), textboard.e2e.ts (card editor with live preview, save,
+  title card, save / apply template, picture swap, slot filled by dragging a clip).
+
 ### Storyboard stage 2 + your four findings ✅ (to verify on the Windows PC)
 - **1. Shot length** (recipe "shotLength": 1, 2, 4, 8 bars or "story"; brand.json, song.json, per platform;
   Style tab with source / Reset / Lock, Generate → Advanced, `--shot-length`). "story" = 2 bars on hooks,

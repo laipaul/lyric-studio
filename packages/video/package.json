@@ -89,6 +89,7 @@
     "./pairings": "./src/node/pairings.ts",
     "./analysis": "./src/node/analysis.ts",
     "./clip-edits": "./src/node/clip-edits.ts",
-    "./storyboard-edit": "./src/node/storyboard-edit.ts"
+    "./storyboard-edit": "./src/node/storyboard-edit.ts",
+    "./textboard": "./src/node/textboard.ts"
   }
 }
