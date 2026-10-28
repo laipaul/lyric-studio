@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { openWorkspace, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -67,10 +68,10 @@ describe("an interrupted alignment is never stored", () => {
 
   it("the process is killed in the middle (like Ctrl+C or a crash): nothing stored; the next run cleans up and aligns", async () => {
     const child = path.join(root, "child.mts");
-    const node = path.resolve("src/node/index.ts").split(path.sep).join("/");
+    const node = pathToFileURL(path.resolve("src/node/index.ts")).href; // a file: URL, so Windows drive letters are not read as a URL scheme
     writeFileSync(
       child,
-      `import { openWorkspace } from ${JSON.stringify(path.resolve("../db/src/index.ts").split(path.sep).join("/"))};
+      `import { openWorkspace } from ${JSON.stringify(pathToFileURL(path.resolve("../db/src/index.ts")).href)};
 import { ensureAlignment, findOrCreateSongProject } from ${JSON.stringify(node)};
 import { writeFileSync } from "node:fs";
 const ws = openWorkspace(${JSON.stringify(wsDir)});
