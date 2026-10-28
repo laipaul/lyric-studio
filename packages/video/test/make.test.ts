@@ -5,7 +5,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFile
 import os from "node:os";
 import path from "node:path";
 
-import { REPO_ROOT, clip, ffmpegBin, lyricLine, project, openWorkspace, renderJob, seedStylePresets, variation, type Workspace } from "@lyric/db";
+import { REPO_ROOT, clip, ffmpegBin, lyricLine, project, openWorkspace, renderJob, section as sectionTable, seedStylePresets, variation, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -23,6 +23,8 @@ import {
   readMoves,
   readRecipe,
   writeRecipe,
+  storyboardChoices,
+  storyboardRun,
   resolveMoved,
   movesSince,
   songPathsById,
@@ -291,6 +293,42 @@ describe("pnpm make + pnpm rerender (real renders)", () => {
     lrcFile = path.join(wsDir, ...manifest.lyrics.lrc.split("/"));
     lrcHash = sha256File(lrcFile);
   }, 600_000);
+
+  it("the storyboard's dry run plans exactly what was rendered, and makes nothing", async () => {
+    const id = readManifest(result.variations[0].manifestFile).project.id;
+    const exportsDir = songPathsById(ws, id).exports;
+    const before = { runs: readdirSync(exportsDir).sort(), sections: ws.db.select().from(sectionTable).all().length, lines: ws.db.select().from(lyricLine).all().length, jobs: ws.db.select().from(renderJob).all().length };
+    const dry = await makeVideos({
+      workspaceDir: wsDir, song: path.join(inDir, "song.wav"), lyrics: path.join(inDir, "lyrics.txt"), collection: "beach",
+      variations: 2, section: "0:02-0:09", dryRun: true, align: async () => { throw new Error("a dry run never aligns"); },
+    });
+    const plan = dry.platforms[0].plan!;
+    expect(plan.videos.map((v) => v.spec.name)).toEqual(["v1", "v2"]);
+    for (const [i, v] of result.variations.entries()) {
+      const m = readManifest(v.manifestFile);
+      expect(plan.videos[i].props).toEqual(m.props); // the same planner: the same shots, cuts, lyrics, fonts, audio
+    }
+    expect(plan.section).toMatchObject({ start_ms: readManifest(result.variations[0].manifestFile).section.start_ms });
+    expect({ runs: readdirSync(exportsDir).sort(), sections: ws.db.select().from(sectionTable).all().length, lines: ws.db.select().from(lyricLine).all().length, jobs: ws.db.select().from(renderJob).all().length }).toEqual(before);
+    expect(dry.variations).toEqual([]);
+  }, 300_000);
+
+  it("the storyboard of a past run and of a plan: shots with thumbnails, lines, bars, waveform", async () => {
+    const m = readManifest(result.variations[0].manifestFile);
+    const folder = path.basename(result.exportDir);
+    const run = await storyboardRun(ws, m.project.id, folder, "standard", "v1");
+    expect(run.shots.length).toBe(m.props.shots.length);
+    expect(run.shots.map((s) => s.clip)).toEqual(m.shots.map((s) => s.clip));
+    expect(run.shots.every((s) => s.thumb !== null)).toBe(true);
+    expect(run.lines.map((l) => l.text)).toEqual(m.props.lyrics.map((l) => l.text));
+    expect(run.bars.length).toBeGreaterThan(1);
+    expect(run.bars.every((b) => b >= 0 && b <= run.durationMs)).toBe(true);
+    expect(run.waveform.peaks.length).toBe(Math.round(run.durationMs / 50));
+    expect(Math.max(...run.waveform.peaks)).toBeGreaterThan(0.1);
+    expect(run.videos).toEqual(["v1", "v2"]);
+    const choices = storyboardChoices(ws, m.project.id);
+    expect(choices.runs[0].folder).toBe(folder);
+  }, 300_000);
 
   it("never alters the music: the song file is untouched, the video's audio is the song itself", () => {
     const input = path.join(inDir, "song.wav");

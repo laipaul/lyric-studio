@@ -25,6 +25,7 @@ export * from "./Thumbnail";
 export * from "./canvas";
 export * from "./loop";
 export * from "./anchors";
+export * from "./storyboard";
 export * from "./effects";
 export * from "./effects/scene";
 export * from "./EffectsPreview";

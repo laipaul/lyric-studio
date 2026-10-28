@@ -757,6 +757,31 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   make.test.ts (real renders: the song file's hash and modification time are unchanged, the song
   folder's copy is byte for byte the same, QA audio check passes, 44.1 kHz kept).
 
+### Storyboard — stage 1 (read-only) ✅ (to verify on the Windows PC; stage 2 = editing, after your test)
+- **Song page → Storyboard**: choose "The plan now" (per platform of the recipe, v1, v2, …) or a past
+  run, then Show. The plan is a dry run of the very planner Generate renders with (makeVideos with
+  dryRun): nothing is rendered or written (no run folder, no section / job rows, no song.json or .lrc
+  change) and it never aligns (a song needs its stored alignment: "make a video first"). Tested: a dry
+  run's props are exactly the rendered manifest's props.
+- **Rows**: the bars (numbered), hook sections shaded, the song's waveform, the lyric lines at their
+  on-screen times (⚓ when a clip is anchored on them), the shots as thumbnail blocks with clip, length and
+  in–out; badges ⚓ line, ★ best moment, ◐ dissolve, speed when slowed, ↻ the Reels loop ending; a warning
+  border and icon for choppy slow motion (< 0.75x), a clip too short (last frame held), anchor
+  conflicts, the same clip within 3 shots. Click a shot for its details; anchors outside the section are
+  listed; the planner's warnings below.
+- **Best moment**: the strongest 2 s of each clip by motion, colour and contrast (as the Spotify Canvas
+  picks them), cached in workspace\cache\best-moments.json. A best moment set in the clip editor (stage 2)
+  will always win.
+- **Preview**: a low-res Player of the same composition next to the timeline; clicking the timeline plays
+  from that point (the playhead follows).
+- Built so the studio never bundles the render code: the storyboard is planned in a child process
+  (packages/video/scripts/storyboard.ts, as /preview already does).
+- Tests: storyboard.test.ts (shot places, in / out, speed, badges, every warning, the loop ending, lines with
+  anchors, hook sections, waveform), make.test.ts (the dry run equals the rendered manifests and makes
+  nothing; a past run's storyboard with thumbnails, lines, bars and waveform), storyboard.e2e.ts (the tab:
+  the plan, bars, waveform, hooks, ⚓ on line 4 and its shot with the dissolve, the outside anchor, the loop
+  shot, shot details, play from a click, no run folder).
+
 ### Font pairings + font weight / italic ✅ (to verify on the Windows PC; run pnpm install after git pull)
 - **Weight and italic** for the verse and hook fonts: recipe fields verseWeight / hookWeight (100-900) and
   verseItalic / hookItalic, in brand.json (verseFont / hookFont / titleFont: weight, italic), song.json and
@@ -841,6 +866,8 @@ A clip "lands on" a lyric line: song.json `anchors: [{ "line": 9, "clip": "hands
   the same clip twice, a short clip slowed; dissolve per anchor or per video; anchor beats pin; the
   Lyrics-tab checks; song.json checks; auto end keeping more anchors; QA; story variations),
   make.test.ts (a real run with anchors in song.json).
+- Known issue (2026-10-28): the Lyrics tab browser test failed one check once in a full run and passed 5
+  reruns (also in the same order); its output was not kept. Probably a timing race; watch for it.
 - Known issue (found while building this): QA and the manifest name lines by their row in lyrics.txt
   (blank lines counted), the Lyrics tab, check-start and anchors by sung line. They differ when
   lyrics.txt has blank lines; to be unified (proposal: the Lyrics tab's numbers everywhere).

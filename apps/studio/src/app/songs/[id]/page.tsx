@@ -15,6 +15,7 @@ import { GeneratePanel } from "@/components/generate-panel";
 import { LyricsTab } from "@/components/lyrics-tab";
 import { PostTab } from "@/components/post-tab";
 import { StatusBadge } from "@/components/status-badge";
+import { StoryboardTab } from "@/components/storyboard-tab";
 import { StyleTab } from "@/components/style-tab";
 import { SongView, type RunView } from "@/components/song-view";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,7 +27,7 @@ import { withWorkspace } from "@/lib/workspace";
 // worker makes the videos; progress in the Tasks menu; ?from=<run> starts it with that run's settings),
 // Videos (exports grid, marks, compare, each run's settings next to the recipe) and Post (the approved
 // videos with their captions and files). ?tab= opens a tab.
-const TABS = ["assets", "lyrics", "style", "generate", "videos", "post"];
+const TABS = ["assets", "lyrics", "style", "storyboard", "generate", "videos", "post"];
 type Search = Promise<{ tab?: string; from?: string }>;
 
 export default function SongPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Search }) {
@@ -109,6 +110,7 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
           <TabsTrigger value="assets">Assets</TabsTrigger>
           <TabsTrigger value="lyrics">Lyrics</TabsTrigger>
           <TabsTrigger value="style">Style</TabsTrigger>
+          <TabsTrigger value="storyboard">Storyboard</TabsTrigger>
           <TabsTrigger value="generate">Generate</TabsTrigger>
           <TabsTrigger value="videos">Videos</TabsTrigger>
           <TabsTrigger value="post">
@@ -123,6 +125,9 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
         </TabsContent>
         <TabsContent value="style">
           <StyleTab projectId={song.id} />
+        </TabsContent>
+        <TabsContent value="storyboard">
+          <StoryboardTab projectId={song.id} />
         </TabsContent>
         <TabsContent value="generate">
           {presetError ? <p className="mb-4 rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{presetError}</p> : null}

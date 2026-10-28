@@ -306,6 +306,13 @@ Each video's QA report checks it ("Audio matches the song": length, level within
 of the song). The fade lengths are `fadeInSeconds` / `fadeOutSeconds` per platform in
 `presets\platforms.json`.
 
+## Storyboard
+
+Song page → **Storyboard**: see a video's cut plan before rendering it (exactly what Generate would make)
+or a past run's: the bars and waveform, the lyric lines, and every shot with its clip, length, in/out,
+speed, ⚓ anchor, ★ best moment and warnings. Click the timeline to play the preview from there.
+(Editing comes in stage 2.)
+
 ## Fonts and pairings
 
 The Style tab's **Pairings** row shows each font pairing on your song's own verse and hook line, over a

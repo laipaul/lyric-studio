@@ -35,3 +35,4 @@ export * from "./run-settings";
 export * from "./lyrics-view";
 export * from "./audio-check";
 export * from "./pairings";
+export * from "./storyboard";

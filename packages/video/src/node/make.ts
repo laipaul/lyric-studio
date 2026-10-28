@@ -116,6 +116,10 @@ export type MakeOptions = {
   italic?: boolean; // verse font italic (the family's italic file, never synthetic)
   hookItalic?: boolean;
   pairings?: string; // "elegant,dramatic": one video per pairing (presets/font-pairings.json), all else the same
+  // The storyboard: plan every video exactly as a make would (the same code), but render nothing and
+  // make no output (no run folder, section / job rows, song.json changes or .lrc; never aligns: it needs
+  // the stored alignment). Caches are filled as usual (clip import and preparation, analysis).
+  dryRun?: boolean;
   lineEffect?: string; // lyric effect for verse lines, e.g. "glide" or "soft-blur:subtle" (default: platform / brand)
   hookEffect?: string; // lyric effect for hook lines (default: platform / brand)
   pins?: string;
@@ -184,7 +188,24 @@ export type VariationResult = VariationSpec & {
   retried: boolean; // the first attempt failed and it was rendered again with less memory
 };
 
+// One planned video (dry run): the composition props a render would get, and what goes with them.
+export type VideoPlan = {
+  spec: VariationSpec;
+  props: Omit<LyricVideoProps, "mediaBaseUrl">;
+  anchors: (AnchorReport & { missing: string[] }) | null;
+};
+export type PlatformPlan = {
+  videos: VideoPlan[];
+  media: MediaRoots; // where the props' files are (for a preview)
+  clips: { path: string; name: string; clipId: string; thumb: string | null; durationMs: number; kind: "video" | "photo" }[]; // the prepared clips (props' shot src)
+  section: { mode: string; start_ms: number; end_ms: number; reason: string };
+  analysis: { bpm: number; beats: Beat[]; duration_ms: number };
+  lines: { number: number; text: string; isHook: boolean; start_ms: number; end_ms: number; sung_end_ms: number | null }[]; // every line, by the Lyrics tab's number
+  anchorsOutside: { line: number; text: string; clip: string }[];
+};
+
 export type PlatformResult = {
+  plan?: PlatformPlan; // dry run only
   name: string;
   label: string;
   exportDir: string;
@@ -434,7 +455,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const renamed: Partial<{ artist: string; title: string }> = {};
     if (options.artist?.trim() && options.artist.trim() !== sp.project.artist) renamed.artist = options.artist.trim();
     if (options.title?.trim() && options.title.trim() !== sp.project.title) renamed.title = options.title.trim();
-    if (Object.keys(renamed).length) {
+    if (Object.keys(renamed).length && !options.dryRun) {
       const oldRoot = songPathsById(ws, sp.project.id).root;
       sp.project = ws.db.update(projectTable).set(renamed).where(eq(projectTable.id, sp.project.id)).returning().get();
       // A new title or artist renames the song folder (songs\<artist>\<title>\).
@@ -498,7 +519,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const styles = stylesFor(effective.font, effective.fontHook);
     for (const w of fontWarnings(styles)) log(`fonts: ${w}`);
     // The EP: song.json (--ep is saved there; songs not migrated yet: remembered with the project).
-    if (options.ep?.trim() && !recipe.locked.includes("ep")) {
+    if (options.ep?.trim() && !recipe.locked.includes("ep") && !options.dryRun) {
       if (paths.recipe) writeRecipe(paths.recipe, { ...songRecipe, ep: options.ep.trim() });
       else updateProjectSettings(ws, sp.project.id, { ep: options.ep.trim() });
     }
@@ -523,17 +544,13 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
 
     log("analysing the song (cached after the first time)");
     const analysis = analyzeSong(sp.songFile, { downbeatOffset: options.downbeatOffset });
-    let project = ws.db
-      .update(projectTable)
-      .set({
-        bpm: analysis.bpm,
-        duration_ms: analysis.duration_ms,
-        downbeat_offset: analysis.downbeat_offset,
-        ...(options.lyricsOffsetMs !== undefined ? { lyrics_offset_ms: options.lyricsOffsetMs } : {}),
-      })
-      .where(eq(projectTable.id, sp.project.id))
-      .returning()
-      .get();
+    const analysed = {
+      bpm: analysis.bpm,
+      duration_ms: analysis.duration_ms,
+      downbeat_offset: analysis.downbeat_offset,
+      ...(options.lyricsOffsetMs !== undefined ? { lyrics_offset_ms: options.lyricsOffsetMs } : {}),
+    };
+    let project = options.dryRun ? { ...sp.project, ...analysed } : ws.db.update(projectTable).set(analysed).where(eq(projectTable.id, sp.project.id)).returning().get();
     const lyricsOffsetMs = project.lyrics_offset_ms;
 
     const stored = await ensureAlignment(ws, { ...sp, project }, {
@@ -541,11 +558,15 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       hint: options.hint ? path.resolve(options.hint) : undefined,
       noHint: options.noHint,
       lrc: options.lrc ? path.resolve(options.lrc) : undefined,
-      realign: options.realign,
+      realign: options.dryRun ? false : options.realign,
       lang: options.lang,
       durationMs: analysis.duration_ms,
       log,
-      align: options.align,
+      align: options.dryRun
+        ? async () => {
+            throw new Error("This song has no stored alignment for its current lyrics.txt yet: make a video first (Generate), then its storyboard shows here.");
+          }
+        : options.align,
     });
     // Hand-set starts (Lyrics tab), then the vocal-start guard: on the stored alignment (never re-aligning).
     const hand = applyHandSet(stored, paths.hints && existsSync(paths.hints) ? paths.hints : options.hint, log);
@@ -578,7 +599,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
           }
         : r,
     );
-    saveLyricLines(ws, project.id, alignment);
+    if (!options.dryRun) saveLyricLines(ws, project.id, alignment);
     const numbers = lyricLineNumbers(lines.map((l) => l.text), alignment.lrcFile, alignment.lyricsTxt).numbers;
     const sectionLines: SectionLine[] = lines.map((l, i) => ({ ...l, sung_end_ms: reports[i]?.end_ms }));
 
@@ -587,7 +608,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     for (const [i, name] of collectionNames.entries()) syncs.push(await syncCollection(ws, { name, folder: collectionFolder(name, i), log, prepare: false }));
     if (songClips) syncs[0] = { ...syncs[0], collection: { ...syncs[0].collection, name: "song clips" } };
     const collection = mergeCollections(syncs);
-    if (recipe.sources.collections === "run") {
+    if (recipe.sources.collections === "run" && !options.dryRun) {
       const folder = options.collectionPath ?? collectionFolder(collectionNames[0], 0);
       rememberCollection(ws, project.id, { name: collectionNames[0], ...(folder ? { folder } : {}) });
       // Remembered in song.json (a locked song.json collection never gets here: the run's choice was ignored).
@@ -603,10 +624,10 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       if (path.dirname(chosenFolder) !== path.resolve(exportsBase) || !existsSync(chosenFolder)) throw new Error(`--resume: ${chosenFolder} is not a run folder of "${project.title}".`);
       rootDir = chosenFolder;
     } else {
-      rootDir = exportFolder(ws, project.id, now);
+      rootDir = options.dryRun ? path.join(songPathsById(ws, project.id).exports, "(dry run)") : exportFolder(ws, project.id, now);
     }
     const lrcFile = path.join(rootDir, `${safeName(project.title)}.lrc`);
-    if (!existsSync(lrcFile)) {
+    if (!existsSync(lrcFile) && !options.dryRun) {
       writeFileSync(lrcFile, cleanLrc(lines, { title: project.title, artist: project.artist, durationMs: analysis.duration_ms, offsetMs: lyricsOffsetMs }));
     }
 
@@ -804,7 +825,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   const project = sh.getProject();
   const format = { width: preset.width, height: preset.height };
   const exportDir = platformDir(sh.rootDir, preset.name);
-  mkdirSync(exportDir, { recursive: true });
+  if (!options.dryRun) mkdirSync(exportDir, { recursive: true });
 
   // Sources that suit this format.
   const prepared = await prepareForFormat(ws, sh.collection.sources, format, { allowFill: options.allowFill, log });
@@ -834,11 +855,8 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       loops ? (startMs, endMs) => loopFit(loopSong, analysis.bpm, startMs, endMs) : undefined,
       anchorLines.length && preset.lyrics ? (startMs, endMs) => anchorsInside(anchorLines, startMs, endMs) : undefined);
   log(`${preset.name}: ${canvas ? "loop" : "section"} ${clockText(chosen.start_ms)} - ${clockText(chosen.end_ms)}`);
-  const sectionRow = ws.db
-    .insert(sectionTable)
-    .values({ project_id: project.id, name: `make ${preset.name} (${chosen.mode})`, start_ms: chosen.start_ms, end_ms: chosen.end_ms, energy: options.energy ?? "medium" })
-    .returning()
-    .get();
+  const sectionValues = { project_id: project.id, name: `make ${preset.name} (${chosen.mode})`, start_ms: chosen.start_ms, end_ms: chosen.end_ms, energy: options.energy ?? "medium" } as const;
+  const sectionRow = options.dryRun ? { id: "" } : ws.db.insert(sectionTable).values(sectionValues).returning().get();
   const ytWarnings: string[] = [];
   let ytLayout: YouTubeLayout | null = null;
   let coverSrc: string | null = null;
@@ -1067,6 +1085,25 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       return [spec.name, composed] as const;
     }),
   );
+  if (options.dryRun) {
+    // The storyboard: the plan, exactly as the render would get it.
+    return {
+      name: preset.name, label: preset.label, exportDir, section: { start_ms: chosen.start_ms, end_ms: chosen.end_ms, reason: chosen.reason }, limit, variations: [], warnings, error: null,
+      plan: {
+        videos: specs.map((spec) => {
+          const composed = composedBySpec.get(spec.name)!;
+          return { spec, props: composed.props, anchors: anchors.length || anchorMissing.length ? { ...(composed.anchors ?? { uses: [], conflicts: [], notes: [] }), missing: anchorMissing } : null };
+        }),
+        media,
+        clips: prepared.clips.map((c) => ({ path: c.path, name: c.name, clipId: c.clip.id, thumb: c.clip.thumb_path, durationMs: c.durationMs, kind: c.kind })),
+        section: { mode: chosen.mode, start_ms: chosen.start_ms, end_ms: chosen.end_ms, reason: chosen.reason },
+        analysis: { bpm: analysis.bpm, beats: analysis.beats, duration_ms: analysis.duration_ms },
+        lines: lines.map((l, i) => ({ number: i + 1, text: l.text, isHook: l.isHook, start_ms: l.start_ms, end_ms: l.end_ms, sung_end_ms: sh.sectionLines[i].sung_end_ms ?? l.sung_end_ms ?? null })),
+        // As the planner reports them (the same for every video of the platform).
+        anchorsOutside: (composedBySpec.get(specs[0]?.name ?? "")?.anchors?.uses ?? []).filter((u) => !u.used && u.why === "outside this section").map((u) => ({ line: u.line, text: u.text, clip: u.clip })),
+      },
+    };
+  }
   options.onReady?.({
     platform: { name: preset.name, label: preset.label, index: position.index, count: position.count, folder: exportDir },
     sources: usesClips ? sources : null,
