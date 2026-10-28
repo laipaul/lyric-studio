@@ -913,6 +913,8 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   // Section (lines appear `leadMs` early and move by the lyrics offset). Loop platforms (Reels, TikTok,
   // Shorts): the auto end that flows best back into the start.
   const loops = preset.loops && !canvas;
+  // The song's detected bar starts (downbeat_offset already applied): the grid the section snaps to and the loop's beat check counts.
+  const downbeatTimes = analysis.beats.filter((b) => b.is_downbeat).map((b) => b.time_ms).sort((a, b) => a - b);
   const loopSong = loops ? await sh.loopAudio() : null;
   // Story anchors by line (the Lyrics tab's number: sung lines counted, as in check-start and hints.lrc):
   // on screen from (stamp - lead + offset) until the line is sung.
@@ -923,7 +925,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   const chosen: SectionChoiceOut = canvas
     ? { mode: "loop", start_ms: 0, end_ms: Math.round(canvas.seconds * 1000), requested: null, reason: canvas.reason, warnings: canvas.warnings, cuts: [] }
     : chooseSection(options.section ?? "auto", sh.sectionLines, analysis.beats, analysis.duration_ms, leadMs - lyricsOffsetMs, preset,
-      loops ? (startMs, endMs) => loopFit(loopSong, analysis.bpm, startMs, endMs) : undefined,
+      loops ? (startMs, endMs) => loopFit(loopSong, analysis.bpm, startMs, endMs, downbeatTimes) : undefined,
       anchorLines.length && preset.lyrics ? (startMs, endMs) => anchorsInside(anchorLines, startMs, endMs) : undefined);
   log(`${preset.name}: ${canvas ? "loop" : "section"} ${clockText(chosen.start_ms)} - ${clockText(chosen.end_ms)}`);
   const sectionValues = { project_id: project.id, name: `make ${preset.name} (${chosen.mode})`, start_ms: chosen.start_ms, end_ms: chosen.end_ms, energy: options.energy ?? "medium" } as const;
@@ -1223,14 +1225,14 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
           const composed = composedBySpec.get(spec.name)!;
           return {
             spec, props: composed.props, anchors: anchors.length || anchorMissing.length ? { ...(composed.anchors ?? { uses: [], conflicts: [], notes: [] }), missing: anchorMissing } : null,
-            loop: loops ? loopResult(composed.props, prepared.clips, { bpm: analysis.bpm, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers }) : null,
+            loop: loops ? loopResult(composed.props, prepared.clips, { bpm: analysis.bpm, downbeats: downbeatTimes, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers }) : null,
           };
         }),
         // Loop platforms: target lengths whose end loops well from this start (beat, level, harmony).
         loopSuggestions: loops
           ? loopSuggestions({
               audio: loopSong, bpm: analysis.bpm, startMs: chosen.start_ms, durationMs: analysis.duration_ms,
-              downbeats: analysis.beats.filter((b) => b.is_downbeat).map((b) => b.time_ms),
+              downbeats: downbeatTimes,
               lines: sh.sectionLines.map((l, i) => ({ number: numbers[i] || i + 1, text: l.text, sungStartMs: sungStart(l), sungEndMs: sungEnd(l) })),
               targetMs: preset.length.mode === "target" ? preset.length.seconds * 1000 : preset.length.mode === "range" ? ((preset.length.min + preset.length.max) / 2) * 1000 : chosen.end_ms - chosen.start_ms,
             })
@@ -1402,7 +1404,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       state.status = "checking";
       report();
       // The wrap-around from the last frame to the first (the section as rendered, to the frame).
-      const loop = loops ? loopResult(props, prepared.clips, { bpm: analysis.bpm, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers }) : null;
+      const loop = loops ? loopResult(props, prepared.clips, { bpm: analysis.bpm, downbeats: downbeatTimes, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers }) : null;
       const anchorsOut = anchors.length || anchorMissing.length ? { ...(anchorReport ?? { uses: [], conflicts: [], notes: [] }), missing: anchorMissing } : null;
       const qa = await checkVariation(spec, props, file, {
         loop,
@@ -1582,7 +1584,7 @@ async function checkVariation(
 export function loopResult(
   props: Pick<LyricVideoProps, "shots" | "durationInFrames" | "audio">,
   clips: readonly { path: string; name: string }[],
-  c: { bpm: number; startMs: number; audio: LoopAudio | null; lines: readonly SectionLine[]; numbers: readonly number[] },
+  c: { bpm: number; downbeats?: readonly number[]; startMs: number; audio: LoopAudio | null; lines: readonly SectionLine[]; numbers: readonly number[] },
 ): LoopResult {
   const lengthMs = (props.durationInFrames * 1000) / VIDEO.fps;
   const startMs = props.audio ? (props.audio.startFrame * 1000) / VIDEO.fps : c.startMs;
@@ -1591,6 +1593,7 @@ export function loopResult(
   return loopFlows({
     lengthMs,
     bpm: c.bpm,
+    downbeats: c.downbeats,
     startMs,
     endMs: startMs + lengthMs,
     lines: c.lines.map((l, i) => ({ number: c.numbers[i] || i + 1, text: l.text, sungStartMs: sungStart(l), sungEndMs: sungEnd(l) })),

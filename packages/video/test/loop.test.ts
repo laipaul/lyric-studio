@@ -197,3 +197,53 @@ describe("better loops: target lengths whose end flows back into the start (the 
     expect(loopSuggestions({ ...base, audio: loudEnd, targetMs: 30_000 })).toEqual([]);
   });
 });
+
+describe("beat: the song's own detected bars (a real song drifts a little)", () => {
+  // Bars alternate 1.775 s / 1.785 s (average 1.78 s = 134.8 BPM) from 0:10; the song's BPM says 135.
+  const drift = (n: number) => {
+    const t = [10_000];
+    for (let i = 0; i < n; i++) t.push(t[i] + (i % 2 === 0 ? 1775 : 1785));
+    return t;
+  };
+  const downbeats = drift(90);
+  const startMs = downbeats[10];
+  const endMs = downbeats[61]; // 51 bars later
+  const lengthMs = endMs - startMs;
+  const base = { lengthMs, bpm: 135, startMs, endMs, lines: [] as LoopLine[], audio: null, firstClip: null, lastClip: null, shots: 10, continues: false };
+
+  it("51 detected bars pass although the average BPM would say 51.1 bars", () => {
+    const old = loopFlows(base); // no downbeats: the old division
+    expect(point(old, "beat").ok).toBe(false);
+    expect(point(old, "beat").detail).toMatch(/51\.0\d bars at 135 BPM/);
+    const r = loopFlows({ ...base, downbeats });
+    expect(point(r, "beat").ok).toBe(true);
+    expect(point(r, "beat").detail).toBe(`${(lengthMs / 1000).toFixed(1)} s = 51 bars (on the song's detected bars, avg 134.8 BPM)`);
+    expect(r.bars).toBe(51);
+    expect(r.bar_s).toBeCloseTo(1.78, 3);
+    expect(r.beat_off_ms).toBe(0);
+  });
+
+  it("an end 0.25 s past a bar line fails and says how far off it is", () => {
+    const r = loopFlows({ ...base, downbeats, lengthMs: lengthMs + 250, endMs: endMs + 250 });
+    const p = point(r, "beat");
+    expect(p.ok).toBe(false);
+    expect(p.detail).toMatch(/the end \(.*\) is 0\.25 s \(0\.6 beats\) after the nearest detected bar line/);
+    expect(r.beat_off_ms).toBe(250);
+    expect(r.ok).toBe(false);
+  });
+
+  it("a video whose length does not match its section fails the beat point", () => {
+    const r = loopFlows({ ...base, downbeats, lengthMs: lengthMs + 200 });
+    expect(point(r, "beat").ok).toBe(false);
+    expect(point(r, "beat").detail).toMatch(/section in the song/);
+  });
+
+  it("loopSuggestions on a drifting grid returns ends on detected bars (the beat passes)", () => {
+    const lines: LoopLine[] = [{ number: 1, text: "A line", sungStartMs: startMs + 500, sungEndMs: downbeats[30] - 600 }];
+    const s = loopSuggestions({ audio: null, bpm: 135, startMs, downbeats, lines, targetMs: downbeats[30] - startMs, durationMs: 200_000 });
+    expect(s.map((x) => x.endMs)).toEqual([downbeats[30]]);
+    expect(s[0].fit.text).toBe("whole bars");
+    expect(loopFit(null, 135, startMs, endMs).ok).toBe(false); // 51 bars: the old division would have refused it
+    expect(loopFit(null, 135, startMs, endMs, downbeats).ok).toBe(true);
+  });
+});

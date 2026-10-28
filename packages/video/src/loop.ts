@@ -1,7 +1,8 @@
 // "Loop flows" (Reels, TikTok, Shorts loop on the platform): the wrap-around from the last frame back
 // to the first, on five points:
-//   beat    - the video is a whole number of bars at the song's BPM (within 50 ms), so the beat stays
-//             in time across the loop;
+//   beat    - the video is a whole number of the song's own detected bars (start and end each within
+//             50 ms of a detected downbeat), so the beat stays in time across the loop; without the
+//             detected downbeats it falls back to whole bars at the song's average BPM;
 //   phrase  - it ends after a complete line and starts at most one bar before a sung line;
 //   sound   - no level jump at the loop point: the music's last 100 ms against its first 100 ms
 //             (WARN above 3 dB; the music is the song's own, so it is measured on the song's section);
@@ -56,19 +57,143 @@ export function beatOff(lengthMs: number, bpm: number): { bars: number; whole: n
   return { bars, whole, offMs: lengthMs - whole * barMs, barMs };
 }
 
-function beatPoint(lengthMs: number, bpm: number): LoopPoint {
-  const b = beatOff(lengthMs, bpm);
-  const ok = Math.abs(b.offMs) <= LOOP_BEAT_TOLERANCE_MS;
-  const bpmText = `${Math.round(bpm)} BPM`;
-  if (ok) return { point: "beat", ok, detail: `${s1(lengthMs)} = ${b.whole} bars at ${bpmText}` };
-  const beats = Math.abs(b.offMs) / (b.barMs / BEATS_PER_BAR);
-  return {
-    point: "beat",
-    ok,
-    detail:
-      `length ${s1(lengthMs)} is ${Number((Math.abs(b.offMs) / 1000).toFixed(2))} s off a whole bar ` +
-      `(${b.bars.toFixed(2)} bars at ${bpmText}, ${beats.toFixed(1)} beat${beats >= 0.95 && beats < 1.05 ? "" : "s"} ${b.offMs > 0 ? "over" : "short"}; ${b.whole} bars would be ${s1(b.whole * b.barMs)}): the beat jumps at the loop`,
+// The nearest detected downbeat to a time (the list is sorted): its index and signed distance (time - downbeat).
+function nearestDownbeat(downbeats: readonly number[], t: number): { index: number; distMs: number } {
+  let lo = 0;
+  let hi = downbeats.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (downbeats[mid] < t) lo = mid + 1;
+    else hi = mid;
+  }
+  const index = lo > 0 && Math.abs(downbeats[lo - 1] - t) <= Math.abs(downbeats[lo] - t) ? lo - 1 : lo;
+  return { index, distMs: t - downbeats[index] };
+}
+
+// A position in bars on the detected grid (fractional between two downbeats; beyond the ends the first /
+// last bar's length carries on).
+function barPosition(downbeats: readonly number[], t: number): number {
+  const n = downbeats.length;
+  if (t <= downbeats[0]) return (t - downbeats[0]) / (downbeats[1] - downbeats[0]);
+  if (t >= downbeats[n - 1]) return n - 1 + (t - downbeats[n - 1]) / (downbeats[n - 1] - downbeats[n - 2]);
+  let lo = 0;
+  let hi = n - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (downbeats[mid] <= t) lo = mid;
+    else hi = mid;
+  }
+  return lo + (t - downbeats[lo]) / (downbeats[hi] - downbeats[lo]);
+}
+
+export type BarCount = {
+  onGrid: boolean; // start and end are both within the tolerance of a detected downbeat
+  bars: number; // whole bars between the two downbeats when on the grid, else the fractional count
+  whole: number;
+  offMs: number; // on the grid: the small residual; else the larger of the two ends' distance to its nearest downbeat (signed, + = after it)
+  startOffMs: number; // the start's signed distance to its nearest downbeat
+  endOffMs: number;
+  barMs: number; // the section's average bar (on the grid: its own downbeats; else the local bar at the worse end)
+  firstBarMs: number; // the first / last bar of the section (the gaps between the neighbouring detected downbeats)
+  lastBarMs: number;
+  endBarMs: number; // the local bar length at the end (for "beats over / short")
+  startBarMs: number;
+};
+
+// Counts the bars between two song times on the DETECTED grid (sorted downbeats, song ms). Needs 2+
+// downbeats, else null (the caller falls back to the song's average BPM).
+export function barsOnGrid(downbeats: readonly number[], startMs: number, endMs: number, toleranceMs = LOOP_BEAT_TOLERANCE_MS): BarCount | null {
+  if (downbeats.length < 2 || endMs <= startMs) return null;
+  const a = nearestDownbeat(downbeats, startMs);
+  const b = nearestDownbeat(downbeats, endMs);
+  // The bar (gap between two neighbouring downbeats) that holds t, the first / last one at the edges.
+  const gapAround = (i: number, t: number) => {
+    const lo = Math.min(Math.max(t >= downbeats[i] ? i : i - 1, 0), downbeats.length - 2);
+    return downbeats[lo + 1] - downbeats[lo];
   };
+  const startBarMs = gapAround(a.index, startMs);
+  const endBarMs = gapAround(b.index, endMs);
+  const onGrid = Math.abs(a.distMs) <= toleranceMs && Math.abs(b.distMs) <= toleranceMs && b.index > a.index;
+  if (onGrid) {
+    const bars = b.index - a.index;
+    return {
+      onGrid, bars, whole: bars, offMs: b.distMs - a.distMs, startOffMs: a.distMs, endOffMs: b.distMs,
+      barMs: (downbeats[b.index] - downbeats[a.index]) / bars,
+      firstBarMs: downbeats[a.index + 1] - downbeats[a.index],
+      lastBarMs: downbeats[b.index] - downbeats[b.index - 1],
+      startBarMs, endBarMs,
+    };
+  }
+  const bars = barPosition(downbeats, endMs) - barPosition(downbeats, startMs);
+  const worse = Math.abs(b.distMs) >= Math.abs(a.distMs) ? { d: b.distMs, bar: endBarMs } : { d: a.distMs, bar: startBarMs };
+  const barMs = (endMs - startMs) / Math.max(bars, 1e-9);
+  return {
+    onGrid, bars, whole: Math.max(1, Math.round(bars)), offMs: worse.d, startOffMs: a.distMs, endOffMs: b.distMs,
+    barMs: Number.isFinite(barMs) && barMs > 0 ? barMs : worse.bar, firstBarMs: startBarMs, lastBarMs: endBarMs, startBarMs, endBarMs,
+  };
+}
+
+// What the beat point and the other checks use: the detected grid when there are downbeats, else the
+// average BPM. `lengthMs` (optional) is the video's own length, which must match endMs - startMs.
+type BeatInfo = {
+  ok: boolean;
+  offMs: number;
+  bars: number;
+  barMs: number;
+  firstBarMs: number;
+  lastBarMs: number;
+  detail: string;
+};
+
+function beatInfo(o: { lengthMs?: number; bpm: number; startMs: number; endMs: number; downbeats?: readonly number[] }): BeatInfo {
+  const lengthMs = o.lengthMs ?? o.endMs - o.startMs;
+  const g = o.downbeats ? barsOnGrid(o.downbeats, o.startMs, o.endMs) : null;
+  if (!g) {
+    const b = beatOff(lengthMs, o.bpm);
+    const ok = Math.abs(b.offMs) <= LOOP_BEAT_TOLERANCE_MS;
+    const bpmText = `${Math.round(o.bpm)} BPM`;
+    const beats = Math.abs(b.offMs) / (b.barMs / BEATS_PER_BAR);
+    return {
+      ok, offMs: b.offMs, bars: b.bars, barMs: b.barMs, firstBarMs: b.barMs, lastBarMs: b.barMs,
+      detail: ok
+        ? `${s1(lengthMs)} = ${b.whole} bars at ${bpmText}`
+        : `length ${s1(lengthMs)} is ${Number((Math.abs(b.offMs) / 1000).toFixed(2))} s off a whole bar ` +
+          `(${b.bars.toFixed(2)} bars at ${bpmText}, ${beats.toFixed(1)} beat${beats >= 0.95 && beats < 1.05 ? "" : "s"} ${b.offMs > 0 ? "over" : "short"}; ${b.whole} bars would be ${s1(b.whole * b.barMs)}): the beat jumps at the loop`,
+    };
+  }
+  const avgBpm = (BEATS_PER_BAR * 60_000) / g.barMs;
+  const bpmText = `avg ${avgBpm.toFixed(1)} BPM`;
+  const mismatch = Math.abs(lengthMs - (o.endMs - o.startMs));
+  if (mismatch > LOOP_BEAT_TOLERANCE_MS) {
+    return {
+      ok: false, offMs: lengthMs - (o.endMs - o.startMs), bars: g.bars, barMs: g.barMs, firstBarMs: g.firstBarMs, lastBarMs: g.lastBarMs,
+      detail: `the video is ${s1(lengthMs)} long but its section in the song is ${s1(o.endMs - o.startMs)} (${(mismatch / 1000).toFixed(2)} s apart): the beat jumps at the loop`,
+    };
+  }
+  if (g.onGrid) {
+    return {
+      ok: true, offMs: g.offMs, bars: g.bars, barMs: g.barMs, firstBarMs: g.firstBarMs, lastBarMs: g.lastBarMs,
+      detail: `${s1(lengthMs)} = ${g.bars} bars (on the song's detected bars, ${bpmText})`,
+    };
+  }
+  const startOff = Math.abs(g.startOffMs) > LOOP_BEAT_TOLERANCE_MS;
+  const endOff = Math.abs(g.endOffMs) > LOOP_BEAT_TOLERANCE_MS;
+  const side = (what: string, t: number, off: number, bar: number) => {
+    const beats = Math.abs(off) / (bar / BEATS_PER_BAR);
+    return `the ${what} (${clock(t)}) is ${Number((Math.abs(off) / 1000).toFixed(2))} s (${beats.toFixed(1)} beat${beats >= 0.95 && beats < 1.05 ? "" : "s"}) ${off > 0 ? "after" : "before"} the nearest detected bar line`;
+  };
+  const parts = [
+    ...(startOff ? [side("start", o.startMs, g.startOffMs, g.startBarMs)] : []),
+    ...(endOff ? [side("end", o.endMs, g.endOffMs, g.endBarMs)] : []),
+  ];
+  return {
+    ok: false, offMs: g.offMs, bars: g.bars, barMs: g.barMs, firstBarMs: g.firstBarMs, lastBarMs: g.lastBarMs,
+    detail: `length ${s1(lengthMs)} is ${g.bars.toFixed(2)} of the song's detected bars (${bpmText}): ${parts.join("; ")}: the beat jumps at the loop`,
+  };
+}
+
+function beatPoint(info: BeatInfo): LoopPoint {
+  return { point: "beat", ok: info.ok, detail: info.detail };
 }
 
 // ---------------------------------------------------------------- phrase
@@ -227,8 +352,9 @@ export function harmonyFit(last: readonly number[] | null, first: readonly numbe
   return { fit: Math.max(...both), lastKey: best(a), firstKey: best(b) };
 }
 
-export function loopHarmony(audio: LoopAudio, startMs: number, endMs: number, barMs: number): Harmony {
-  return harmonyFit(chroma(audio, Math.max(startMs, endMs - barMs), endMs), chroma(audio, startMs, Math.min(endMs, startMs + barMs)));
+// barMs: the last bar's length; firstBarMs (default the same): the first bar's.
+export function loopHarmony(audio: LoopAudio, startMs: number, endMs: number, barMs: number, firstBarMs: number = barMs): Harmony {
+  return harmonyFit(chroma(audio, Math.max(startMs, endMs - barMs), endMs), chroma(audio, startMs, Math.min(endMs, startMs + firstBarMs)));
 }
 
 function harmonyPoint(h: Harmony | undefined): LoopPoint {
@@ -262,6 +388,7 @@ function picturePoint(firstClip: string | null, lastClip: string | null, shots: 
 export function loopFlows(o: {
   lengthMs: number; // the video's length
   bpm: number;
+  downbeats?: readonly number[]; // the song's detected bar starts (song ms, sorted); without them: whole bars at bpm
   startMs: number; // the section in the song
   endMs: number;
   lines: readonly LoopLine[];
@@ -271,11 +398,11 @@ export function loopFlows(o: {
   shots: number;
   continues: boolean;
 }): LoopResult {
-  const b = beatOff(o.lengthMs, o.bpm);
+  const b = beatInfo(o);
   const levels = o.audio ? loopLevels(o.audio, o.startMs, o.endMs) : null;
-  const harmony = o.audio ? loopHarmony(o.audio, o.startMs, o.endMs, b.barMs) : undefined;
+  const harmony = o.audio ? loopHarmony(o.audio, o.startMs, o.endMs, b.lastBarMs, b.firstBarMs) : undefined;
   const points = [
-    beatPoint(o.lengthMs, o.bpm),
+    beatPoint(b),
     phrasePoint(o.lines, o.startMs, o.endMs, b.barMs),
     soundPoint(levels),
     harmonyPoint(harmony),
@@ -305,15 +432,15 @@ export type LoopFit = { score: number; ok: boolean; text: string }; // score: lo
 
 // How well an end flows back into the start: beat (whole bars), level jump, harmony. Each failed point
 // costs 1, plus a small share of how far it is off, so the best of several good ends still wins.
-export function loopFit(audio: LoopAudio | null, bpm: number, startMs: number, endMs: number): LoopFit {
-  const b = beatOff(endMs - startMs, bpm);
-  const beatOk = Math.abs(b.offMs) <= LOOP_BEAT_TOLERANCE_MS;
+export function loopFit(audio: LoopAudio | null, bpm: number, startMs: number, endMs: number, downbeats?: readonly number[]): LoopFit {
+  const b = beatInfo({ bpm, startMs, endMs, downbeats });
+  const beatOk = b.ok;
   const parts = [beatOk ? "whole bars" : `${(Math.abs(b.offMs) / 1000).toFixed(2)} s off a whole bar`];
   let score = (beatOk ? 0 : 1) + Math.abs(b.offMs) / b.barMs;
   let ok = beatOk;
   if (audio) {
     const lv = loopLevels(audio, startMs, endMs);
-    const h = loopHarmony(audio, startMs, endMs, b.barMs);
+    const h = loopHarmony(audio, startMs, endMs, b.lastBarMs, b.firstBarMs);
     const levelOk = lv.jump <= LOOP_LEVEL_JUMP_DB;
     const harmonyOk = !h || h.fit >= HARMONY_MIN_FIT;
     score += (levelOk ? 0 : 1) + lv.jump / 12 + (harmonyOk ? 0 : 1) + (h ? (1 - h.fit) / 2 : 0.25);
@@ -350,7 +477,7 @@ export function loopSuggestions(o: {
     const ended = o.lines.filter((l) => l.sungEndMs <= at && l.sungStartMs >= o.startMs);
     const last = ended.reduce<LoopLine | null>((a, l) => (!a || l.sungEndMs > a.sungEndMs ? l : a), null);
     if (!last || (k > 0 && bars[k - 1] >= last.sungEndMs)) continue;
-    const fit = loopFit(o.audio, o.bpm, o.startMs, at);
+    const fit = loopFit(o.audio, o.bpm, o.startMs, at, bars);
     if (fit.ok) out.push({ lengthS: Math.round(length / 100) / 10, endMs: at, line: { number: last.number, text: last.text }, fit });
   }
   return out.sort((a, b) => Math.abs(a.endMs - o.startMs - o.targetMs) - Math.abs(b.endMs - o.startMs - o.targetMs)).slice(0, o.count ?? 3);

@@ -995,6 +995,12 @@ These platforms play a video in a loop, so the wrap-around from the last frame t
   same clip first and last, and the Reels continuation that passes; a harmony clash C -> F#; phrase cut;
   the end choice preferring the better loop and saying why; shuffle first != last over 300 seeds).
 
+### Fix — Loop beat check counts the song's own bars ✅ (to verify on the Windows PC)
+- "Loop flows" used to divide the video's length by a bar length from the song's average BPM. Real songs drift a little, so a loop of exactly 51 bars could be reported as "51.14 bars, 0.25 s off".
+- Now the check counts the song's detected bars (the same downbeats the section snaps to): when the start and the end are each within 50 ms of a detected bar line, it is whole bars, and the message shows the section's own average BPM ("90.8 s = 51 bars (on the song's detected bars, avg 134.8 BPM)").
+- When an end is not on a bar line, the message says how far from the nearest one it is. A video whose length does not match its section is still a beat failure.
+- The auto end choice and the storyboard's "better loops" hint use the same bar counting, so ends that sit on a detected bar are no longer rejected. Without downbeats the old average-BPM division is used.
+
 ### Fix — Start always runs the current code ✅ (to verify on the Windows PC)
 Reported: after `git pull` (1e233c0) the app did not show the Lyrics tab, and Start printed nothing.
 - **Cause**: an older Lyric Studio was still answering on port 3000, so Start only opened the window
