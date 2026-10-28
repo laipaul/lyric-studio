@@ -102,3 +102,4 @@ Workspace folder layout (Step 6.2c): one folder per song `workspace/songs/<artis
 - Follow the steps strictly in the order I give. Never merge steps and never pull UI work forward.
 - Phase 1 (Steps 2–5) has no UI. It ends when a beat-synced MP4 renders from the command line.
 - After finishing a step, stop and wait for my next message. Do not start the next step on your own.
+- Bug fixes run on Sonnet: the user switches the session with /model for bug-fix sessions; in other sessions hand each bug fix to a Sonnet subagent, then check its result and run the tests before pushing.

@@ -1294,6 +1294,19 @@ rest was in sync.
   mix has different timing, use Generate -> advanced -> re-align.
 
 ## Next
+0. **Feature freeze** until the user has tested on their songs (Textboard, Storyboard stage 2, shot length,
+   tempo, loop warning). Then, first item: the **title opening** (decided, not built yet):
+   1. Lead-in 2 bars before the first hook only when the title opening is on (setting 1-2 bars, default 2,
+      at most ~5 s); without a title: hook-first <= 1 bar and the 2.5 s rule as now.
+   2. Places: title + byline on the frame's upper third, tagline on the frame's lower third (inside the
+      safe area); the Reels defaults when the title opening is on.
+   3. Fade: title cards end as the first lyric line fades in, never overlapping it (no fixed hold).
+   4. Font picker in the card editor; Life Lyrics title font = Special Elite (not Cinzel).
+   5. Automatic Noto Sans JP (or Serif JP) for characters the title font lacks, same in preview and render.
+   6. Tagline = its own song field (empty by default, never from the EP), editable in Assets next to title
+      and artist.
+   7. Reel cover.jpg per Reels / TikTok / Shorts video, with title / byline / tagline inside the 3:4 grid crop.
+   8. QA for title cards: safe zone, 3:4 crop, no overlap with the first lyric, all characters present.
 1. Verify Steps 6.2a and 6.2b on the PC (6.2c-1 verified); verify 5c.1 (A Heart For Two, YouTube) and 6.2c-2b.
 2. Verify 5c.2 (the Lyrics tab) on the PC with A Heart For Two ~1:10.
 3. Step 6.3 (content board with manually entered results).
