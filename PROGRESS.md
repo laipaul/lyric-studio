@@ -995,6 +995,19 @@ These platforms play a video in a loop, so the wrap-around from the last frame t
   same clip first and last, and the Reels continuation that passes; a harmony clash C -> F#; phrase cut;
   the end choice preferring the better loop and saying why; shuffle first != last over 300 seeds).
 
+### Step E — Instrumental songs with a story ✅ (to verify on the Windows PC)
+- **+ New song → Instrumental**: no lyrics needed; an optional **story.txt** instead (one sentence per line,
+  a blank line = a pause). song.json gets "instrumental": true; Assets shows "Story (instrumental)" with
+  Replace; the Lyrics tab edits story.txt and can nudge a sentence.
+- **The app times the story**: each sentence appears on a bar, stays long enough to read, and the
+  sentences are spread through the piece with pure music in between (as in the "Tea with the monk" Reel).
+  Nothing is aligned (no AI packages needed).
+- **Reels / TikTok / Shorts**: the section starts at the strongest stretch of the music (no chorus to start
+  on); calm pacing with dissolves; every story sentence starts with a new clip; the title opening works.
+- No .lrc for lyric services; captions (.srt) carry the story; without a story: music only, no captions.
+- Tests: story.test.ts (parsing, timing, too long, strongest stretch, section, forced cuts),
+  instrumental-make.test.ts (New song + a Reel with and without a story); browser: the New song form.
+
 ### Step D — Title opening ✅ (to verify on the Windows PC)
 - **Title opening** (Style tab → Title opening: on; per platform; Reels, TikTok, Shorts): the video starts up
   to 2 bars before the first hook (1 bar when 2 bars would be over 5 s) and opens with the title + artist on

@@ -53,7 +53,7 @@ export { isPlatformField, isWeight, ITALIC_FIELDS, PLATFORM_FIELDS, WEIGHT_FIELD
 // anchors and gapOrder belong to the song only (story anchors, the Lyrics tab): never from the brand,
 // outside Reset / Lock.
 // canvas: the clip (and moment, seconds) chosen for the Spotify Canvas (the clip editor's "Use for Canvas").
-export type SongRecipe = Partial<RecipeValues> & { perPlatform?: PerPlatform; locked?: RecipeField[]; anchors?: AnchorSpec[]; gapOrder?: GapOrder; canvas?: { clip: string; at?: number } };
+export type SongRecipe = Partial<RecipeValues> & { perPlatform?: PerPlatform; locked?: RecipeField[]; anchors?: AnchorSpec[]; gapOrder?: GapOrder; canvas?: { clip: string; at?: number }; instrumental?: boolean };
 // library | artist | artist:<platform> | song | song:<platform> | run
 export type RecipeSource = string;
 
@@ -181,6 +181,10 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
     if (typeof c.clip === "string" && c.clip.trim() && (c.at === undefined || (typeof c.at === "number" && c.at >= 0))) recipe.canvas = { clip: c.clip.trim(), ...(c.at !== undefined ? { at: Math.round((c.at as number) * 100) / 100 } : {}) };
     else problems.push('canvas must look like { "clip": "05_flowers.mp4", "at": 2.5 } (the clip chosen for the Spotify Canvas; at: seconds)');
   }
+  if (r.instrumental !== undefined) {
+    if (r.instrumental === true) recipe.instrumental = true;
+    else if (r.instrumental !== false) problems.push("instrumental must be true or false (true: no sung lyrics; the text is story.txt)");
+  }
   if (r.gapOrder !== undefined) {
     if (r.gapOrder === "story" || r.gapOrder === "shuffle") recipe.gapOrder = r.gapOrder;
     else problems.push('gapOrder must be "story" or "shuffle"');
@@ -204,6 +208,7 @@ export function readRecipe(file: string | null): SongRecipe {
 // song.json's text: the help line, the fields in a fixed order, then locked.
 export function recipeJson(recipe: SongRecipe): string {
   const ordered: Record<string, unknown> = { _help: RECIPE_HELP };
+  if (recipe.instrumental) ordered.instrumental = true;
   for (const k of RECIPE_FIELDS) if (recipe[k] !== undefined) ordered[k] = recipe[k];
   if (recipe.perPlatform && Object.keys(recipe.perPlatform).length) ordered.perPlatform = recipe.perPlatform;
   if (recipe.locked?.length) ordered.locked = recipe.locked;

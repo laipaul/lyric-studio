@@ -126,6 +126,34 @@ async function main() {
     await page.click("[role=tab]:has-text('Generate')");
     await page.waitForSelector("[aria-label='Hook effect']");
     check(await page.$eval("[aria-label='Hook effect']", (s: HTMLSelectElement) => !(s).disabled), "Generate: Hook effect can be changed again");
+
+    // + New song: Instrumental -> an optional story.txt instead of lyrics.txt; song.json "instrumental".
+    const instrumentalSong = path.join(root, "Tea With The Monk.wav");
+    execFileSync(process.env.FFMPEG_PATH ?? "ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=330:duration=8", instrumentalSong]);
+    const storyFile = path.join(root, "story.txt");
+    writeFileSync(storyFile, "There's a secret place\n\nTea with the monk\n");
+    await page.goto(base);
+    await page.click("button:has-text('New song')");
+    await page.waitForSelector("input[name=lyrics][required]");
+    await page.check("[data-instrumental]");
+    check(!(await page.$("input[name=lyrics][required]")) && !!(await page.$("input[name=lyrics]")), "Instrumental: the lyrics field becomes an optional story");
+    check(!(await page.$("input[name=hints]")), "Instrumental: no tapped hints");
+    await page.setInputFiles("input[name=song]", instrumentalSong);
+    await page.setInputFiles("input[name=lyrics]", storyFile);
+    await page.click("form button[type=submit]");
+    await page.waitForSelector("text=Song added to your library.", { timeout: 60_000 }).catch(() => null);
+    const ws2 = openWorkspace(wsDir);
+    const added = ws2.db.select().from((await import("@lyric/db")).project).all().find((p) => p.title === "Tea With The Monk");
+    const addedPaths = added ? songPathsById(ws2, added.id) : null;
+    ws2.close();
+    check(!!addedPaths?.instrumental, 'the new song is an instrumental (song.json "instrumental": true)');
+    check(!!addedPaths && readFileSync(addedPaths.lyricsTxt, "utf8").includes("Tea with the monk") && addedPaths.lyricsTxt.endsWith("story.txt"), "its story is saved as story.txt");
+    if (added) {
+      await page.goto(`${base}/songs/${added.id}`);
+      await page.click("[role=tab]:has-text('Assets')");
+      await page.waitForSelector("text=Story (instrumental)");
+      check(((await page.textContent("body")) ?? "").includes("story.txt · 2 sentences, timed by the app"), "Assets: the story row says story.txt · 2 sentences");
+    }
     await browser.close();
   } finally {
     server.kill();

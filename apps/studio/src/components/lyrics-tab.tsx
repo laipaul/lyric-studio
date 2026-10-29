@@ -481,7 +481,9 @@ function LyricsText({
 }) {
   const [text, setText] = useState(data.lyricsText);
   const [confirm, setConfirm] = useState(false);
-  const wordsChange = wordsOf(text) !== wordsOf(data.lyricsText);
+  const story = data.instrumental; // story.txt: re-timed by the app on the next video, never aligned
+  const fileName = story ? "story.txt" : "lyrics.txt";
+  const wordsChange = !story && wordsOf(text) !== wordsOf(data.lyricsText);
   const changed = text.replace(/\r\n/g, "\n").trimEnd() !== data.lyricsText.replace(/\r\n/g, "\n").trimEnd();
   const labels = data.labels.filter((f) => text.split(/\r?\n/)[f.line - 1]?.trim().replace(/^\*\s+/, "") === f.text);
 
@@ -495,6 +497,10 @@ function LyricsText({
     if (!r) return;
     // The page shows the saved state first, then says so (a click right after the message finds it settled).
     await onSaved();
+    if (story) {
+      setNotice({ ok: true, text: "story.txt saved (the old one is in .studio\\replaced\\). The next video times the sentences again on the music." });
+      return;
+    }
     setNotice({ ok: true, text: r.realign ? "lyrics.txt saved (the old one is in .studio\\replaced\\). The words changed: the next video aligns the lyrics again." : "lyrics.txt saved (the old one is in .studio\\replaced\\). Only hook markers or blank lines changed: the stored alignment is kept." });
   }
 
@@ -502,7 +508,7 @@ function LyricsText({
     const r = await post({ action: "restore", file });
     if (!r) return;
     await onSaved();
-    setNotice({ ok: true, text: `Earlier lyrics.txt restored (the current one was kept).${r.realign ? " The next video aligns the lyrics for these words (or reuses an alignment made for them before)." : ""}` });
+    setNotice({ ok: true, text: `Earlier ${fileName} restored (the current one was kept).${r.realign ? " The next video aligns the lyrics for these words (or reuses an alignment made for them before)." : ""}` });
   }
 
   const removeLabels = () =>
@@ -515,7 +521,7 @@ function LyricsText({
 
   return (
     <section className="flex flex-col gap-3" data-lyrics-text>
-      <h2 className="font-display text-brand text-sm tracking-[0.14em] uppercase">lyrics.txt</h2>
+      <h2 className="font-display text-brand text-sm tracking-[0.14em] uppercase">{fileName}</h2>
       {labels.length ? (
         <div className="flex flex-col gap-1 rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100" data-label-flags>
           <p className="font-medium">These lines look like labels, not sung words (they would be timed and shown as lyrics):</p>
@@ -532,7 +538,11 @@ function LyricsText({
         </div>
       ) : null}
       <textarea value={text} onChange={(e) => (setText(e.target.value), setConfirm(false))} rows={Math.min(30, Math.max(10, text.split("\n").length + 1))} className="bg-input/30 border-input rounded-md border p-3 font-mono text-sm" spellCheck={false} data-lyrics-editor />
-      <p className="text-muted-foreground text-xs">“* ” at the start of a line marks a hook. Changing hook markers or blank lines keeps the timing; changing words aligns the song again on the next video.</p>
+      <p className="text-muted-foreground text-xs">
+        {story
+          ? "An instrumental's story: one sentence per line, a blank line is a pause. The app times the sentences on the music; nudge one in the list above when you want it elsewhere."
+          : "“* ” at the start of a line marks a hook. Changing hook markers or blank lines keeps the timing; changing words aligns the song again on the next video."}
+      </p>
       {confirm ? (
         <p className="rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100" data-realign-warning>
           The words change: the next video aligns the lyrics again (a few minutes; needs the AI packages), and hand-set times of changed lines are ignored. The old lyrics.txt is kept and can be restored below. Press Save again to go ahead.
@@ -540,7 +550,7 @@ function LyricsText({
       ) : null}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" disabled={!changed || busy} onClick={save} data-save-text>
-          <Save /> {confirm ? "Save anyway" : "Save lyrics.txt"}
+          <Save /> {confirm ? "Save anyway" : `Save ${fileName}`}
         </Button>
         <Button size="sm" variant="ghost" disabled={!changed || busy} onClick={() => (setText(data.lyricsText), setConfirm(false))}>
           Discard changes

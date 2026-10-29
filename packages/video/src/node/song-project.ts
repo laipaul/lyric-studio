@@ -22,6 +22,9 @@ import { HOOK_MARKER, normalizeLyric, parseLrc, type TimedLine } from "../lrc";
 import { clockText } from "../section";
 import { applyHandTimes, parseHandTimes, stripHandTimes } from "../hand-times";
 import { applyGuard, asrWindows, checkVocalStart, earlyMs, type AsrWord, type LineCheck, type VoiceLevels } from "../vocal-guard";
+import { parseStory, planStory } from "../story";
+import type { Beat } from "../beats";
+import { analyzeSong } from "./analysis";
 import { cachedFileHash } from "./collection";
 import { processAlive } from "./jobs";
 import { ADDING_PREFIX, adoptIntoSongFolder, songPaths, songPathsById } from "./song-folder";
@@ -80,7 +83,7 @@ export type Alignment = {
   lrcStored: string; // workspace-relative
   lrcHash: string;
   report: AlignReport | null; // null when the LRC was given with --lrc
-  source: "aligned" | "stored" | "given";
+  source: "aligned" | "stored" | "given" | "story"; // story: an instrumental's story.txt, timed by the app (never aligned)
   key: string;
   lyricsTxt: string; // full path of the lyrics.txt used
   lyricsHash: string;
@@ -178,7 +181,7 @@ export async function applyVocalGuard(
   options: { log?: (m: string) => void; voiceMap?: VoiceMapRunner; firstWords?: FirstWordsRunner; reviewMs?: number; all?: boolean; skip?: ReadonlySet<number> } = {},
 ): Promise<Alignment> {
   const log = options.log ?? (() => {});
-  if (alignment.source === "given") return { ...alignment, guard: null };
+  if (alignment.source === "given" || alignment.source === "story") return { ...alignment, guard: null };
   if (!options.voiceMap && process.env.LYRIC_VOICE_MAP === "off") return { ...alignment, guard: null }; // the tests
   const dir = path.dirname(alignment.lrcFile);
   const mapFile = path.join(dir, `voice-${sp.songHash.slice(0, 12)}.v2.json`);
@@ -328,9 +331,13 @@ export async function ensureAlignment(
     log?: (m: string) => void;
     align?: AlignRunner;
     now?: Date;
+    beats?: readonly Beat[]; // an instrumental's story is timed on these (else the song is analysed, cached)
+    leadMs?: number;
   },
 ): Promise<Alignment> {
   const log = options.log ?? (() => {});
+  const paths = songPaths(ws, sp.project);
+  if (paths.instrumental) return storyAlignment(ws, sp, { ...options, lyricsTxt: options.lyricsTxt || paths.lyricsTxt }, log);
   const lang = options.lang ?? "en";
   for (const f of [options.lyricsTxt, options.hint, options.lrc]) if (f && !existsSync(f)) throw new Error(`File not found: ${f}`);
   const txtContent = readFileSync(options.lyricsTxt);
@@ -417,6 +424,68 @@ export async function ensureAlignment(
     warnings,
   };
 }
+
+// An instrumental (song.json "instrumental": true): no aligner; its story.txt (may be empty or missing)
+// is timed by the app on the song's bars (src/story.ts) and stored as an LRC like an alignment, so the
+// Lyrics tab, the storyboard and the videos read it the same way. Hand-set starts (Lyrics tab) still apply.
+export const STORY_STORE_VERSION = 1;
+async function storyAlignment(
+  ws: Workspace,
+  sp: SongProject,
+  options: { lyricsTxt: string; durationMs: number; beats?: readonly Beat[]; leadMs?: number },
+  log: (m: string) => void,
+): Promise<Alignment> {
+  const text = existsSync(options.lyricsTxt) ? readFileSync(options.lyricsTxt, "utf8") : "";
+  const relDir = songPaths(ws, sp.project).storeRel;
+  const dir = absPath(ws, relDir);
+  mkdirSync(dir, { recursive: true });
+  const sentences = parseStory(text);
+  let beats = options.beats;
+  if (!beats && sentences.length) {
+    const recipeFile = songPaths(ws, sp.project).recipe;
+    let tempo: number | undefined;
+    try {
+      tempo = recipeFile && existsSync(recipeFile) ? (JSON.parse(readFileSync(recipeFile, "utf8")) as { tempo?: number }).tempo : undefined;
+    } catch {
+      tempo = undefined;
+    }
+    beats = analyzeSong(sp.songFile, { downbeatOffset: sp.project.downbeat_offset ?? 0, ...(typeof tempo === "number" ? { bpm: tempo } : {}) }).beats;
+  }
+  const planned = planStory(sentences, beats ?? [], options.durationMs, { leadMs: options.leadMs });
+  for (const w of planned.warnings) log(`story: ${w}`);
+  // Stored as an LRC: a stamp per sentence, an empty stamp where it leaves the screen.
+  const rows: string[] = [];
+  planned.lines.forEach((l, i) => {
+    rows.push(`${formatStamp(l.start_ms)}${l.text}`);
+    if (!planned.lines[i + 1] || l.end_ms < planned.lines[i + 1].start_ms) rows.push(formatStamp(l.end_ms));
+  });
+  const content = `${rows.join("\n")}\n`;
+  const key = sha256(`story|v${STORY_STORE_VERSION}|${content}`).slice(0, 12);
+  const name = `story-${key}.lrc`;
+  const lrcFile = path.join(dir, name);
+  if (!existsSync(lrcFile)) writeFileAtomic(lrcFile, content);
+  if (sentences.length) log(`story: ${planned.lines.length} sentence(s) of ${path.basename(options.lyricsTxt)} timed on the music (an instrumental: nothing is aligned)`);
+  else log("story: an instrumental without story text: no words on screen");
+  // The sentences with their reading time as the "sung" end (they fade out after it before a pause).
+  const lines = parseLrc(content, options.durationMs).map((l, i) => ({ ...l, isHook: false, ...(planned.lines[i] ? { sung_end_ms: planned.lines[i].sung_end_ms } : {}) }));
+  return {
+    lrcFile,
+    lrcStored: `${relDir}/${name}`,
+    lrcHash: sha256(content),
+    report: null,
+    source: "story",
+    key,
+    lyricsTxt: path.resolve(options.lyricsTxt),
+    lyricsHash: sha256(text),
+    hint: null,
+    lines,
+    warnings: planned.warnings,
+  };
+}
+const formatStamp = (ms: number) => {
+  const cs = Math.max(0, Math.round(ms / 10));
+  return `[${String(Math.floor(cs / 6000)).padStart(2, "0")}:${((cs % 6000) / 100).toFixed(2).padStart(5, "0")}]`;
+};
 
 // Why a song with stored alignments is aligned again: which input differs from the newest one
 // (its lyrics words, the hints or the language). Lines to print; empty when nothing was stored.

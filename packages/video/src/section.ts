@@ -43,6 +43,9 @@ export type AutoSectionOptions = {
   // hook-first with the title opening: room for the title before the hook (2 bars, 1 when 2 bars are
   // longer than 5 s); the earliest clean bar in that reach.
   titleLead?: boolean;
+  // Instrumentals: no line to start on; the section starts on this bar (the strongest stretch of the
+  // music, src/story.ts), moved back to the bar before a story sentence it would cut.
+  musicStartMs?: number;
   endOn?: "bar" | "beat"; // beat: when no bar is clean, any beat may end the section (bars still preferred)
   // Loop platforms: how well an end flows back into the start (lower score flows better).
   loopFit?: (startMs: number, endMs: number) => { score: number; ok: boolean; text: string };
@@ -53,7 +56,7 @@ export type AutoSectionOptions = {
 export type SectionChoice = {
   start_ms: number;
   end_ms: number;
-  anchor: { kind: "hook" | "repeat" | "first-line" | "none"; line: number | null }; // line: 1-based
+  anchor: { kind: "hook" | "repeat" | "first-line" | "music" | "none"; line: number | null }; // line: 1-based
   endKind: "chorus-line" | "line" | "shorter" | "instrumental" | "extended" | "song-end" | "cuts-line";
   cuts: SectionCut[]; // sung lines cut at the start or the end (empty when both are clean)
   reason: string;
@@ -138,7 +141,10 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
   const leadBars = hookFirst && options.titleLead ? (2 * bar <= TITLE_LEAD_MAX_MS ? 2 : 1) : 1;
   const before = hookFirst ? (leadBars > 1 ? `at most ${leadBars} bars before (room for the title opening)` : options.titleLead ? "at most one bar before (room for the title opening)" : "at most one bar before") : "one bar before";
   const firstHook = lines.findIndex((l) => l.isHook);
-  if (firstHook >= 0) {
+  if (options.musicStartMs !== undefined) {
+    anchor = { kind: "music", line: null };
+    anchorText = "the strongest stretch of the music (an instrumental)";
+  } else if (firstHook >= 0) {
     lines.forEach((l, i) => l.isHook && chorus.add(i));
     anchor = { kind: "hook", line: firstHook + 1 };
     anchorText = `${before} the first hook line (line ${firstHook + 1}, "${lines[firstHook].text}")`;
@@ -171,7 +177,19 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
   // 2. Start.
   let start: number;
   let startNote = "";
-  if (anchor.line === null) {
+  if (options.musicStartMs !== undefined) {
+    const at = options.musicStartMs;
+    start = downbeats.filter((d) => d <= at + 1).pop() ?? downbeats[0] ?? 0;
+    // Never in the middle of a story sentence: the bar before it appears.
+    const i = lines.findIndex((l) => l.start_ms - leadMs < start && start < sungEnd(l));
+    if (i >= 0) {
+      const earlier = downbeats.filter((d) => d <= lines[i].start_ms - leadMs).pop();
+      if (earlier !== undefined) {
+        startNote = `; moved back to the bar before "${lines[i].text}" so it is not cut`;
+        start = earlier;
+      }
+    }
+  } else if (anchor.line === null) {
     start = downbeats[0] ?? 0;
   } else if (hookFirst) {
     // At most one bar before the hook's first word (a little tolerance for the bar grid), on a bar:

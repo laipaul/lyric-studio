@@ -91,7 +91,7 @@ export function AssetsTab({ projectId }: { projectId: string }) {
     const body = new FormData();
     body.set("kind", kind);
     body.set("file", file);
-    if (await send(body)) setNotice({ ok: true, text: `${file.name} is now the song's ${kind === "song" ? "song file" : kind === "lyrics" ? "lyrics.txt" : kind === "hints" ? "hints.lrc" : "cover"}${kind === "cover" ? "" : " (the previous one is kept in .studio\\replaced\\)"}.` });
+    if (await send(body)) setNotice({ ok: true, text: `${file.name} is now the song's ${kind === "song" ? "song file" : kind === "lyrics" ? (data?.instrumental ? "story.txt" : "lyrics.txt") : kind === "hints" ? "hints.lrc" : "cover"}${kind === "cover" ? "" : " (the previous one is kept in .studio\\replaced\\)"}.` });
   }
 
   async function openFolder() {
@@ -146,7 +146,9 @@ export function AssetsTab({ projectId }: { projectId: string }) {
       <TaglineField projectId={projectId} />
       <ul className="grid gap-3 md:grid-cols-2">
         {fileRow("song", <FileAudio className="size-5" />, "Song", data.song ? `${data.song.name}${data.song.durationMs ? ` · ${clock(data.song.durationMs)}` : ""}${data.song.bpm ? ` · ${Math.round(data.song.bpm)} BPM` : ""}` : "missing")}
-        {fileRow("lyrics", <FileText className="size-5" />, "Lyrics", data.lyrics ? `lyrics.txt · ${data.lyrics.lines} lines` : "no lyrics.txt yet")}
+        {data.instrumental
+          ? fileRow("lyrics", <FileText className="size-5" />, "Story (instrumental)", data.lyrics?.lines ? `story.txt · ${data.lyrics.lines} sentence${data.lyrics.lines === 1 ? "" : "s"}, timed by the app` : "no story: music only (Replace adds a story.txt)")
+          : fileRow("lyrics", <FileText className="size-5" />, "Lyrics", data.lyrics ? `lyrics.txt · ${data.lyrics.lines} lines` : "no lyrics.txt yet")}
         {fileRow(
           "cover",
           data.cover ? (

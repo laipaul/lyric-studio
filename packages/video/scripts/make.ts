@@ -62,7 +62,7 @@ try {
       if (p.platform.index === 0) {
         console.log(`Project:   ${p.project.title}${p.project.created ? " (new)" : ""}`);
         console.log(`BPM:       ${p.bpm}   downbeat confidence ${p.downbeatConfidence.toFixed(2)}   song length ${clockText(p.songMs)}`);
-        const how = { aligned: "aligned now", stored: "stored alignment", given: "given with --lrc" }[p.lyrics.source];
+        const how = { aligned: "aligned now", stored: "stored alignment", given: "given with --lrc", story: "an instrumental: story.txt timed by the app" }[p.lyrics.source];
         console.log(`Lyrics:    ${p.lyrics.lines} lines (${p.lyrics.hooks} hook), ${how}: ${p.lyrics.file}`);
         if (p.lyricsOffsetMs) console.log(`           lyrics offset ${p.lyricsOffsetMs / 1000} s (project setting)`);
         for (const l of p.lyrics.low) console.log(`           low confidence ${l.confidence.toFixed(2)}: line ${l.number} "${l.text}"`);

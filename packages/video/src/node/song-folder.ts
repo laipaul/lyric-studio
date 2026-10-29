@@ -45,13 +45,25 @@ export function songFolderFor(ws: Workspace, artist: string, title: string, proj
   for (let n = 2; ; n++) if (!taken(`${base} (${n})`)) return `${base} (${n})`;
 }
 
+export const STORY_FILE = "story.txt";
+
+// song.json "instrumental": true (read directly: song paths are needed before the recipe is).
+export function isInstrumental(recipeFile: string): boolean {
+  try {
+    return existsSync(recipeFile) && (JSON.parse(readFileSync(recipeFile, "utf8")) as { instrumental?: unknown }).instrumental === true;
+  } catch {
+    return false;
+  }
+}
+
 export type SongPaths = {
   legacy: boolean; // still in projects\<id>\
   rel: string; // the song's folder, workspace-relative
   root: string;
   audio: string | null;
   cover: string | null;
-  lyricsTxt: string; // where the song's lyrics.txt lives
+  lyricsTxt: string; // where the song's lyrics.txt lives (an instrumental: its story.txt)
+  instrumental: boolean; // song.json "instrumental": true (no sung lyrics; the text is story.txt)
   hints: string | null; // hints.lrc (song folders only)
   clips: string | null; // the song's own clips (song folders only)
   exports: string;
@@ -76,6 +88,7 @@ export function songPaths(ws: Workspace, p: ProjectPaths): SongPaths {
       audio,
       cover,
       lyricsTxt: absPath(ws, `${rel}/lyrics/lyrics.txt`),
+      instrumental: false,
       hints: null,
       clips: null,
       exports: absPath(ws, `${rel}/exports`),
@@ -87,13 +100,15 @@ export function songPaths(ws: Workspace, p: ProjectPaths): SongPaths {
     };
   }
   const rel = p.folder;
+  const instrumental = isInstrumental(absPath(ws, `${rel}/song.json`));
   return {
     legacy: false,
     rel,
     root: absPath(ws, rel),
     audio,
     cover,
-    lyricsTxt: absPath(ws, `${rel}/lyrics.txt`),
+    lyricsTxt: absPath(ws, `${rel}/${instrumental ? STORY_FILE : "lyrics.txt"}`),
+    instrumental,
     hints: absPath(ws, `${rel}/hints.lrc`),
     clips: absPath(ws, `${rel}/clips`),
     exports: absPath(ws, `${rel}/exports`),

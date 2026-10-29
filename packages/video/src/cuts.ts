@@ -24,6 +24,9 @@ export type CutOptions = {
   earlyCutFrames?: number; // 0-4, default 2: cut this many frames before the beat
   downbeatOffset?: number; // 0-3, default 0: shift which beat is bar 1
   holdOnLyricLines?: boolean; // never cut inside a lyric line
+  // Story pace / automatic pacing: a new shot starts on the bar at each of these times (an instrumental's
+  // story sentences start with a new clip), when that leaves no shot under the minimum.
+  cutAtMs?: readonly number[];
   lyricLines?: readonly LyricTiming[]; // needed for cutRate "off" and holdOnLyricLines
   minShotMs?: number; // default 800
   fps?: number; // default 30
@@ -95,14 +98,35 @@ export function getCutPoints(beatsIn: readonly Beat[], section: CutSection, opti
     const minStory = Math.max(minShotFrames, Math.ceil((pace.minShotMs * fps) / 1000));
     const downbeats = beats.map((_, i) => i).filter((i) => beats[i].is_downbeat).map(cutAt).filter(insideSection);
     const inHook = (frame: number) => (options.hooks ?? []).some((h) => frame >= toFrame(h.start_ms, fps) && frame < toFrame(h.end_ms, fps));
+    // Forced cuts: the downbeat at (or just before) each time, inside the section.
+    const forced = (options.cutAtMs ?? [])
+      .map((ms) => downbeats.filter((c) => c.beat_time_ms <= ms + 1).pop())
+      .filter((c): c is CutPoint => !!c && c.frame - startFrame >= minShotFrames && endFrame - c.frame >= minShotFrames);
     cuts = [];
     let from = startFrame;
     for (;;) {
       const ahead = downbeats.filter((c) => c.frame > from);
       let bars = inHook(from) ? pace.hookBars : pace.verseBars;
       while (ahead[bars - 1] && ahead[bars - 1].frame - from < minStory) bars += 1;
-      const next = ahead[bars - 1];
-      if (!next || endFrame - next.frame < minStory) break; // the rest stays one shot (never a short last one)
+      let next = ahead[bars - 1];
+      const must = forced.find((c) => c.frame > from && (!next || c.frame <= next.frame));
+      if (must && must.frame - from >= minShotFrames) next = must;
+      else if (must && cuts.length && next && must.frame - from < minShotFrames) {
+        // Just after the last cut: move that cut onto the forced bar instead.
+        cuts[cuts.length - 1] = must;
+        from = must.frame;
+        continue;
+      }
+      if (!next || endFrame - next.frame < minStory) {
+        // The rest stays one shot (never a short last one), unless a forced cut is still to come.
+        const later = forced.find((c) => c.frame > from);
+        if (later && later.frame - from >= minShotFrames) {
+          cuts.push(later);
+          from = later.frame;
+          continue;
+        }
+        break;
+      }
       cuts.push(next);
       from = next.frame;
     }

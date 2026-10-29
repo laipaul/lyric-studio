@@ -43,7 +43,7 @@ describe("+ New song", () => {
       "The cover must be a JPG, PNG or WEBP picture (got cover.gif).",
       "The hints must be an .lrc file of tapped times (got taps.txt).",
     ]);
-    expect(checkNewSong({ song: "", lyrics: "" })).toEqual(["Choose the song (WAV or MP3).", "Choose the lyrics (lyrics.txt)."]);
+    expect(checkNewSong({ song: "", lyrics: "" })).toEqual(["Choose the song (WAV or MP3).", "Choose the lyrics (lyrics.txt), or tick Instrumental."]);
     expect(checkNewSong({ song: path.join(inDir, "Hold On Tight.wav"), lyrics: path.join(inDir, "lyrics.txt"), hints: file("bad.lrc", "no stamps") })).toEqual(["The hints file has no time stamps like [00:12.34]."]);
   });
 

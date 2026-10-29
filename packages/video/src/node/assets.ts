@@ -33,7 +33,8 @@ export type SongAssets = {
   folder: string | null; // workspace-relative song folder (null: not migrated yet)
   folderPath: string | null; // the same on disk (D:\videomaker\workspace\songs\...)
   song: { name: string; file: string; durationMs: number | null; bpm: number | null } | null;
-  lyrics: { file: string; lines: number } | null;
+  lyrics: { file: string; lines: number } | null; // an instrumental: its story.txt (sentences)
+  instrumental: boolean; // song.json "instrumental": true
   cover: string | null;
   hints: (HintsCheck & { file: string }) | null;
   clips: ClipAsset[];
@@ -54,7 +55,7 @@ export async function songAssets(ws: Workspace, projectId: string): Promise<Song
   const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
   if (!p) throw new Error("Song not found.");
   const paths = songPathsById(ws, projectId);
-  const out: SongAssets = { folder: paths.legacy ? null : paths.rel, folderPath: paths.legacy ? null : paths.root, song: null, lyrics: null, cover: null, hints: null, clips: [], removed: [], usable: { vertical: 0, horizontal: 0 } };
+  const out: SongAssets = { folder: paths.legacy ? null : paths.rel, folderPath: paths.legacy ? null : paths.root, song: null, lyrics: null, instrumental: paths.instrumental, cover: null, hints: null, clips: [], removed: [], usable: { vertical: 0, horizontal: 0 } };
   if (paths.audio && existsSync(paths.audio)) out.song = { name: path.basename(paths.audio), file: rel(ws, paths.audio), durationMs: p.duration_ms ?? null, bpm: p.bpm ?? null };
   if (existsSync(paths.lyricsTxt)) out.lyrics = { file: rel(ws, paths.lyricsTxt), lines: readFileSync(paths.lyricsTxt, "utf8").split(/\r?\n/).filter((l) => l.replace(/^\*\s+/, "").trim()).length };
   if (paths.cover && existsSync(paths.cover)) out.cover = rel(ws, paths.cover);

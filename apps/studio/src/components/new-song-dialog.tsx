@@ -24,13 +24,15 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 const fileInput =
   "file:bg-secondary file:text-secondary-foreground file:mr-3 file:rounded-md file:border-0 file:px-3 file:py-1.5 file:text-xs text-muted-foreground block w-full cursor-pointer text-xs";
 
-// "+ New song": song + lyrics (required), cover and hints (optional), title, artist, EP.
+// "+ New song": song + lyrics (required; an instrumental: an optional story.txt instead), cover and hints
+// (optional), title, artist, EP.
 export function NewSongDialog({ artists, onDone }: { artists: string[]; onDone: (message: string) => void }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [titleHint, setTitleHint] = useState("the song's file name");
+  const [instrumental, setInstrumental] = useState(false);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -73,16 +75,28 @@ export function NewSongDialog({ artists, onDone }: { artists: string[]; onDone: 
               onChange={(e) => setTitleHint(e.target.files?.[0]?.name.replace(/\.[^.]+$/, "") ?? "the song's file name")}
             />
           </Field>
-          <Field label="Lyrics" hint="lyrics.txt, hook lines start with *">
-            <input name="lyrics" type="file" accept=".txt,text/plain" required className={fileInput} />
-          </Field>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="instrumental" value="true" checked={instrumental} onChange={(e) => setInstrumental(e.target.checked)} className="accent-brand" data-instrumental />
+            Instrumental (no sung lyrics)
+          </label>
+          {instrumental ? (
+            <Field label="Story" hint="optional story.txt: one sentence per line, a blank line = a pause; the app times them">
+              <input key="story" name="lyrics" type="file" accept=".txt,text/plain" className={fileInput} />
+            </Field>
+          ) : (
+            <Field label="Lyrics" hint="lyrics.txt, hook lines start with *">
+              <input key="lyrics" name="lyrics" type="file" accept=".txt,text/plain" required className={fileInput} />
+            </Field>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <Field label="Cover" hint="optional">
               <input name="cover" type="file" accept=".jpg,.jpeg,.png,.webp,image/*" className={fileInput} />
             </Field>
-            <Field label="Hints" hint="optional, tapped .lrc">
-              <input name="hints" type="file" accept=".lrc" className={fileInput} />
-            </Field>
+            {instrumental ? null : (
+              <Field label="Hints" hint="optional, tapped .lrc">
+                <input name="hints" type="file" accept=".lrc" className={fileInput} />
+              </Field>
+            )}
           </div>
           <Field label="Title">
             <Input name="title" placeholder={titleHint} />

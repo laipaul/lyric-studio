@@ -74,8 +74,9 @@ export function choosePace(o: {
   barMs: number; // the typical bar (median of the detected bars)
   clipMs: readonly number[]; // each video clip's usable length (in / out, speed applied); photos left out
   shift?: number; // the user's pace adjustment (recipe paceShift, the reactions): bars added (+) or taken (-)
+  instrumental?: boolean; // no singing: paced as a calm piece
 }): Pace {
-  const { feel, wordsPerS } = songFeel(o.lines);
+  const { feel, wordsPerS } = o.instrumental ? { feel: "calm" as Feel, wordsPerS: 0 } : songFeel(o.lines);
   const target = TARGET_S[feel];
   const clipMs = median(o.clipMs);
   const limitMs = clipMs === null ? Infinity : clipMs / PACE_MIN_RATE;
@@ -88,12 +89,12 @@ export function choosePace(o: {
   const hookBars = Math.max(1, Math.min(verseBars, autoHook + shift));
   const minShotMs = Math.max(800, Math.round(0.75 * hookBars * o.barMs));
   const s = (bars: number) => `${bars} bar${bars > 1 ? "s" : ""} (${((bars * o.barMs) / 1000).toFixed(1)} s)`;
-  const feelText = feel === "calm" ? "a calm song" : feel === "driving" ? "a driving song" : "a mid-paced song";
+  const feelText = o.instrumental ? "an instrumental, paced as a calm piece" : feel === "calm" ? "a calm song" : feel === "driving" ? "a driving song" : "a mid-paced song";
   const clipText = clipMs === null ? "" : ` and clips of about ${(clipMs / 1000).toFixed(1)} s`;
   const text =
     verseBars === hookBars
-      ? `Pacing: ${feelText} (${wordsPerS.toFixed(1)} words/s)${clipText} → ${s(verseBars)} per shot.`
-      : `Pacing: ${feelText} (${wordsPerS.toFixed(1)} words/s)${clipText} → ${s(verseBars)} on verses, ${s(hookBars)} on hooks.`;
+      ? `Pacing: ${feelText}${o.instrumental ? "" : ` (${wordsPerS.toFixed(1)} words/s)`}${clipText} → ${s(verseBars)} per shot.`
+      : `Pacing: ${feelText}${o.instrumental ? "" : ` (${wordsPerS.toFixed(1)} words/s)`}${clipText} → ${s(verseBars)} on verses, ${s(hookBars)} on hooks.`;
   const adjusted = shift ? ` (your adjustment: ${shift > 0 ? "+" : ""}${shift} bar${Math.abs(shift) > 1 ? "s" : ""})` : "";
   return { feel, wordsPerS, verseBars, hookBars, minShotMs, barMs: o.barMs, clipMs, text: text.replace(/\.$/, `${adjusted}.`) };
 }

@@ -1,7 +1,7 @@
 // The studio's Library (Step 6.1): song cards from the database and the folders "pnpm make" writes,
 // the artists used so far, and "+ New song". No rendering code is imported here, so the studio's
 // server can use it directly.
-import { copyFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { REPO_ROOT, absPath, project as projectTable, type Workspace } from "@lyric/db";
@@ -16,7 +16,7 @@ import { renderingPlatforms, SHORT_LABELS, songRuns, type PlatformRun } from "./
 import { keepReplaced, setSongEp, songCollections, songEp, storeCover, storeLyricsTxt } from "./project-settings";
 import { projectLyricsTxt } from "./runs";
 import { SOURCE_FILE } from "./collection";
-import { resolveRecipe } from "./recipe";
+import { readRecipe, resolveRecipe, writeRecipe } from "./recipe";
 import { renameSongFolder, sharedCollections, songPathsById } from "./song-folder";
 import { presetLengthText, recipeInputFor } from "./style";
 import { findOrCreateSongProject, storeProjectHint } from "./song-project";
@@ -130,7 +130,8 @@ export function knownArtists(ws: Workspace): string[] {
 
 export type NewSongInput = {
   song: string; // files on disk, with their original names (the title defaults to the song's name)
-  lyrics: string;
+  lyrics: string; // lyrics.txt; an instrumental: its story.txt (optional: "" = no words on screen)
+  instrumental?: boolean; // no sung lyrics (song.json "instrumental": true)
   cover?: string;
   hints?: string;
   hintsName?: string; // the hints file's own name (the upload is saved under a temporary path)
@@ -145,7 +146,9 @@ export function checkNewSong(input: NewSongInput): string[] {
   const ext = (f: string) => path.extname(f).toLowerCase();
   if (!input.song) problems.push("Choose the song (WAV or MP3).");
   else if (![".wav", ".mp3"].includes(ext(input.song))) problems.push(`The song must be a WAV or MP3 file (got ${path.basename(input.song)}).`);
-  if (!input.lyrics) problems.push("Choose the lyrics (lyrics.txt).");
+  if (input.instrumental) {
+    if (input.lyrics && ext(input.lyrics) !== ".txt") problems.push(`The story must be a .txt file (got ${path.basename(input.lyrics)}).`);
+  } else if (!input.lyrics) problems.push("Choose the lyrics (lyrics.txt), or tick Instrumental.");
   else if (ext(input.lyrics) !== ".txt") problems.push(`The lyrics must be a .txt file (got ${path.basename(input.lyrics)}).`);
   else if (!readFileSync(input.lyrics, "utf8").split(/\r?\n/).some((l) => l.replace(/^\*\s+/, "").trim())) problems.push("The lyrics file is empty.");
   if (input.cover && ![".jpg", ".jpeg", ".png", ".webp"].includes(ext(input.cover))) problems.push(`The cover must be a JPG, PNG or WEBP picture (got ${path.basename(input.cover)}).`);
@@ -175,8 +178,25 @@ export async function createSong(ws: Workspace, input: NewSongInput): Promise<{ 
     updated.push(...Object.keys(changes));
     renameSongFolder(ws, id); // songs\<artist>\<title>\ follows the new names
   }
-  storeLyricsTxt(ws, id, input.lyrics);
-  updated.push("lyrics");
+  // Instrumental or not: song.json first, so the text goes to story.txt or lyrics.txt.
+  const recipeFile = songPathsById(ws, id).recipe;
+  if (recipeFile) {
+    const recipe = readRecipe(recipeFile);
+    if (!!input.instrumental !== !!recipe.instrumental) {
+      const next = { ...recipe };
+      if (input.instrumental) next.instrumental = true;
+      else delete next.instrumental;
+      writeRecipe(recipeFile, next);
+      updated.push("instrumental");
+    }
+  }
+  const paths = songPathsById(ws, id);
+  if (input.lyrics) {
+    storeLyricsTxt(ws, id, input.lyrics);
+    updated.push(paths.instrumental ? "story" : "lyrics");
+  } else if (paths.instrumental && !existsSync(paths.lyricsTxt)) {
+    writeFileSync(paths.lyricsTxt, ""); // an empty story.txt: music only (add sentences any time)
+  }
   if (input.cover) {
     storeCover(ws, id, input.cover);
     updated.push("cover");

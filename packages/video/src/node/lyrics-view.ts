@@ -59,6 +59,7 @@ export type LyricsView = {
   gap: { hideMs: number; leadInMs: number };
   hintsFile: string | null; // workspace-relative
   replaced: { file: string; at: string; lines: number }[]; // earlier lyrics.txt versions (newest first)
+  instrumental: boolean; // the text is the story.txt of an instrumental (timed by the app, never aligned)
   anchors: AnchorsView;
 };
 
@@ -167,7 +168,7 @@ export async function lyricsView(ws: Workspace, projectId: string): Promise<Lyri
   const replacedDir = path.join(paths.root, ".studio", "replaced");
   const replaced = existsSync(replacedDir)
     ? readdirSync(replacedDir)
-        .filter((f) => /-lyrics\.txt$/.test(f))
+        .filter((f) => (paths.instrumental ? /-story\.txt$/ : /-lyrics\.txt$/).test(f))
         .sort()
         .reverse()
         .map((f) => ({ file: f, at: statSync(path.join(replacedDir, f)).mtime.toISOString(), lines: readFileSync(path.join(replacedDir, f), "utf8").split(/\r?\n/).filter((l) => l.trim()).length }))
@@ -175,7 +176,8 @@ export async function lyricsView(ws: Workspace, projectId: string): Promise<Lyri
   const base = {
     title: p.title,
     lyricsText,
-    labels: labelLines(lyricsText, p.title, p.artist),
+    labels: paths.instrumental ? [] : labelLines(lyricsText, p.title, p.artist),
+    instrumental: paths.instrumental,
     song: p.audio_path ?? null,
     vocals: false,
     leadMs,

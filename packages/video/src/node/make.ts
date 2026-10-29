@@ -41,7 +41,7 @@ import { boardForRun, cardFont, overrideCount, titleCards, type RunBoard } from 
 import { matchPinClips, parsePins } from "../pins";
 import type { LyricEffectsProps, LyricVideoProps } from "../props";
 import { formatQa, LOW_CONFIDENCE, qaReasons, runQa, type QaInput, type QaReport } from "../qa";
-import { autoSection, clockText, finishedBeforeStart, sectionCuts, startsAfterEnd, sungEnd, sungStart, type SectionCut, type SectionLine } from "../section";
+import { autoSection, clockText, finishedBeforeStart, SECTION_TARGET, sectionCuts, startsAfterEnd, sungEnd, sungStart, type SectionCut, type SectionLine } from "../section";
 import { loopFit, loopFlows, loopSuggestions, type LoopAudio, type LoopResult, type LoopSuggestion } from "../loop";
 import { chooseEnding, type Ending, type EndingChoice } from "../ending";
 import { choosePace, songFeel, type Pace } from "../pace";
@@ -57,7 +57,8 @@ import { artistBrandFile } from "./captions";
 import { readProjectSettings, rememberCollection, rememberedCollection, updateProjectSettings } from "./project-settings";
 import { PLATFORM_FIELDS, type PlatformField } from "./per-platform";
 import { artistRecipe, LIBRARY_RECIPE, readRecipe, recipeSummary, recipeText, resolveRecipe, runRecipe, writeRecipe, type RecipeField, type RecipeInput, type ResolvedRecipe } from "./recipe";
-import { renameSongFolder, songPathsById } from "./song-folder";
+import { renameSongFolder, songPathsById, STORY_FILE } from "./song-folder";
+import { barStarts, rmsLevel, strongestStretch } from "../story";
 import { mergeCollections, prepareForFormat, SOURCE_FILE, syncCollection, type CollectionSync, type PreparedForFormat } from "./collection";
 import { fontFileRefs, forText, loadFontCatalog, missingCharacters, resolveFace, type FontCatalog } from "./font-catalog";
 import { sha256File, toolInfo, writeManifest, type Manifest } from "./manifest";
@@ -445,6 +446,7 @@ function chooseSection(
   fit?: (startMs: number, endMs: number) => { score: number; ok: boolean; text: string }, // loop platforms: the end that flows back best
   kept?: (startMs: number, endMs: number) => { kept: number; total: number; missing: number[] }, // story anchors: the end that keeps most
   titleLead = false, // the title opening: up to 2 bars before the hook
+  musicStartMs?: number, // an instrumental: the strongest stretch of the music
 ): SectionChoiceOut {
   if (mode === "auto" && preset?.length.mode === "full") mode = "full";
   if (mode === "auto") {
@@ -456,6 +458,7 @@ function chooseSection(
       ...(window && preset!.length.mode === "target" ? { targetMs: window.targetMs } : {}),
       anchorMode: preset?.anchor ?? "lead-in",
       ...(titleLead ? { titleLead: true } : {}),
+      ...(musicStartMs !== undefined ? { musicStartMs } : {}),
       endOn: preset?.endOn ?? "bar",
       ...(fit ? { loopFit: fit } : {}),
       ...(kept ? { anchorsKept: kept } : {}),
@@ -488,7 +491,8 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
   const now = options.now ?? new Date();
   const ws = openWorkspace(options.workspaceDir ?? resolveWorkspaceDir());
   try {
-    for (const f of [options.song, options.lyrics]) if (!existsSync(f)) throw new Error(`File not found: ${f}`);
+    // (an instrumental's story.txt may be missing: no words on screen)
+    for (const f of [options.song, options.lyrics]) if (!existsSync(f) && !(f === options.lyrics && path.basename(f) === STORY_FILE)) throw new Error(`File not found: ${f}`);
 
     // Presets and fonts first: a mistake there should fail before the slow steps.
     const presets = loadPresets(options.presetsFile);
@@ -565,7 +569,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const effectLabels = { verse: recipe.sources.verseEffect === "song" ? "song.json" : "--line-effect", hook: recipe.sources.hookEffect === "song" ? "song.json" : "--hook-effect" };
     log(`recipe: ${recipeSummary(recipe)}`);
 
-    const lyricsText = readFileSync(options.lyrics, "utf8"); // a CJK font loads only the pieces these lines use
+    const lyricsText = existsSync(options.lyrics) ? readFileSync(options.lyrics, "utf8") : ""; // a CJK font loads only the pieces these lines use
     const stylesFor = (font?: string, fontHook?: string, choice: Pick<MakeOptions, "weight" | "hookWeight" | "italic" | "hookItalic"> = effective) =>
       loadStyles(ws, catalog, {
         font, fontHook, text: lyricsText,
@@ -622,6 +626,8 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       lang: options.lang,
       durationMs: analysis.duration_ms,
       log,
+      beats: analysis.beats,
+      leadMs,
       align: options.dryRun
         ? async () => {
             throw new Error("This song has no stored alignment for its current lyrics.txt yet: make a video first (Generate), then its storyboard shows here.");
@@ -638,7 +644,8 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       reviewMs: Math.round(brand.brand.motion.gapLeadInS * 1000), // smaller differences are not visible: not flagged
     });
     const lines = alignment.lines;
-    if (!lines.length) throw new Error(`No timed lyric lines in ${alignment.lrcFile}`);
+    const instrumental = alignment.source === "story";
+    if (!lines.length && !instrumental) throw new Error(`No timed lyric lines in ${alignment.lrcFile}`);
     // Lines the vocal-start check changed: the moved ones and a previous line it shortened.
     const guardMoved = new Set([
       ...(alignment.guard?.moves.flatMap((m) => (m.shortens_previous ? [m.number - 1, m.number - 2] : [m.number - 1])) ?? []),
@@ -705,7 +712,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       rootDir = options.dryRun ? path.join(songPathsById(ws, project.id).exports, "(dry run)") : exportFolder(ws, project.id, now);
     }
     const lrcFile = path.join(rootDir, `${safeName(project.title)}.lrc`);
-    if (!existsSync(lrcFile) && !options.dryRun) {
+    if (!existsSync(lrcFile) && !options.dryRun && !instrumental) {
       writeFileSync(lrcFile, cleanLrc(lines, { title: project.title, artist: project.artist, durationMs: analysis.duration_ms, offsetMs: lyricsOffsetMs }));
     }
 
@@ -719,7 +726,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     let songAudio: Promise<LoopAudio | null> | undefined;
     const shared: Shared = {
       ws, options: effective, variationsFor, effectLabels, recipeFor: (platform: string) => resolveRecipe(recipeInput, platform), stylesFor, log, now, leadMs, lyricsOffsetMs, catalog, styles, brand, logo, sp, analysis, alignment, lines, reports, numbers,
-      sectionLines, collection, collectionNames: runCollections, collectionRemembered, ep, tool, rootDir, getProject: () => project,
+      sectionLines, instrumental, collection, collectionNames: runCollections, collectionRemembered, ep, tool, rootDir, getProject: () => project,
       loopAudio: () => (songAudio ??= readLoopAudio(sp.songFile)),
       anchors: songRecipe.anchors ?? [],
       canvasChoice: songRecipe.canvas ?? null,
@@ -799,6 +806,7 @@ type Shared = {
   reports: ReturnType<typeof matchReport>;
   numbers: number[];
   sectionLines: SectionLine[];
+  instrumental: boolean; // no sung lyrics: the lines (if any) are the story, timed by the app
   collection: CollectionSync & { folders: string[] };
   collectionNames: string[]; // the shared collections of the run (the song's own clips come on top)
   collectionRemembered: boolean; // --collection not given: the one this project used last time
@@ -907,6 +915,7 @@ export function coverProps(props: Omit<LyricVideoProps, "mediaBaseUrl">, sh: Pic
   return { ...rest, lyrics: [], audio: null, textCards: tc.cards, fonts };
 }
 const CARD_COVER_PAD = 60; // the cover's cards never start fading out
+const TITLE_ALONE_S = 4.5; // the title opening of an instrumental without a story: on screen this long
 
 // Characters a title card's font lacks (e.g. Japanese in a latin title font): Noto Sans JP fills them in,
 // the same files in the preview and the render. Null when the font has them all.
@@ -1008,12 +1017,24 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     const i = a.line - 1;
     return !lines[i] ? [] : [{ line: a.line, shownMs: lines[i].start_ms - leadMs + lyricsOffsetMs, sungEndMs: sungEnd(sh.sectionLines[i]) }];
   });
+  // An instrumental's short-form section: the strongest stretch of the music (no chorus line to start on).
+  let musicStart: number | undefined;
+  if (sh.instrumental && !canvas && (options.section ?? "auto") === "auto" && preset.length.mode !== "full") {
+    const audio = loopSong ?? (await sh.loopAudio());
+    const window = sectionWindow(preset);
+    const lengthMs = window ? (preset.length.mode === "target" ? window.targetMs : window.maxMs) : SECTION_TARGET.maxMs;
+    const bars = barStarts(analysis.beats, analysis.duration_ms);
+    if (audio) {
+      musicStart = strongestStretch(bars, lengthMs, analysis.duration_ms, (a, b) => rmsLevel(audio, a, b));
+      log(`${preset.name}: an instrumental: the section starts at ${clockText(musicStart)}, the strongest ${Math.round(lengthMs / 1000)} s of the music`);
+    } else musicStart = bars[0] ?? 0;
+  }
   const chosen0: SectionChoiceOut = canvas
     ? { mode: "loop", start_ms: 0, end_ms: Math.round(canvas.seconds * 1000), requested: null, reason: canvas.reason, warnings: canvas.warnings, cuts: [] }
     : chooseSection(options.section ?? "auto", sh.sectionLines, analysis.beats, analysis.duration_ms, leadMs - lyricsOffsetMs, preset,
       loops ? (startMs, endMs) => loopFit(loopSong, analysis.bpm, startMs, endMs, downbeatTimes) : undefined,
       anchorLines.length && preset.lyrics ? (startMs, endMs) => anchorsInside(anchorLines, startMs, endMs) : undefined,
-      titleOpeningOn);
+      titleOpeningOn, musicStart);
   // Automatic ending (Reels, TikTok, Shorts; src/ending.ts): a tight loop only when the end flows back into
   // the start, else a soft fade after the last sung word, or the last chord ringing out one more bar.
   const loopLines = sh.sectionLines.map((l, i) => ({ number: numbers[i] || i + 1, text: l.text, sungStartMs: sungStart(l), sungEndMs: sungEnd(l), ...(l.words?.length ? { lastWordStartMs: l.words.at(-1)!.start_ms } : {}) }));
@@ -1089,7 +1110,9 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   const pace: Pace | null =
     shotMode === "auto" && !useRate && !canvas
       ? choosePace({
-          lines: sh.sectionLines.map((l) => ({ text: l.text, sungStartMs: sungStart(l), sungEndMs: sungEnd(l), ...(l.words?.length ? { words: l.words.length } : {}) })),
+          // An instrumental is paced as a calm piece (its story sentences are read, not sung).
+          instrumental: sh.instrumental,
+          lines: sh.instrumental ? [] : sh.sectionLines.map((l) => ({ text: l.text, sungStartMs: sungStart(l), sungEndMs: sungEnd(l), ...(l.words?.length ? { words: l.words.length } : {}) })),
           barMs: medianBarMs(downbeatTimes, analysis.bpm),
           shift: options.paceShift ?? 0,
           clipMs: prepared.clips
@@ -1110,6 +1133,8 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       lyricLines: lines,
       ...(shotLength ? { shotLength, hooks } : {}),
       ...(pace ? { pace: { hookBars: pace.hookBars, verseBars: pace.verseBars, minShotMs: pace.minShotMs }, hooks } : {}),
+      // An instrumental's story: each sentence starts with a new shot (on the bar it appears on).
+      ...(sh.instrumental && preset.lyrics ? { cutAtMs: lines.map((l) => l.start_ms - leadMs + lyricsOffsetMs) } : {}),
     });
   const plan = planFor(options.rate ?? "1x");
   if (pace) log(`${preset.name}: ${pace.text} ${plan.cuts.length + 1} shots`);
@@ -1359,7 +1384,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
           titleFont: sh.brand.brand.titleFont, accent: sh.brand.brand.accentColour, textScale: preset.textScale,
           fontFor: (style, b, text, role) => cardFont(sh.catalog, style, b, text, role),
           // The title opening: gone as the first lyric line fades in.
-          opening: titleOpeningOn ? { untilFrame: rest.lyrics[0] ? (rest.lyrics[0].enterFrame ?? rest.lyrics[0].startFrame) : rest.durationInFrames } : null,
+          opening: titleOpeningOn ? { untilFrame: rest.lyrics[0] ? (rest.lyrics[0].enterFrame ?? rest.lyrics[0].startFrame) : Math.min(rest.durationInFrames, Math.round(TITLE_ALONE_S * VIDEO.fps)) } : null,
           fallbackFor: (face, text) => titleFallback(sh.catalog, face, text),
         });
         for (const w of tc.warnings) if (!warnings.includes(`${preset.name}: textboard: ${w}`)) warnings.push(`${preset.name}: textboard: ${w}`);
@@ -1599,7 +1624,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         }),
       );
       // Captions for every video; YouTube also gets a thumbnail and a publishing pack.
-      if (preset.lyrics) writeSrt(result.srtFile, props); // (a Canvas has no lyrics: no captions)
+      if (preset.lyrics && props.lyrics.length) writeSrt(result.srtFile, props); // (a Canvas, an instrumental without a story: no captions)
       // Reels / TikTok / Shorts: a cover with the title, byline and tagline (the title opening's cards, also
       // when the video itself starts on the hook), on the hook's frame.
       const coverRender = options.coverRenderer ?? (options.renderer ? null : renderCover);

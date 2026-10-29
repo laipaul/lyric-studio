@@ -36,6 +36,7 @@ export async function POST(request: Request) {
         title: text("title"),
         artist: text("artist"),
         ep: text("ep"),
+        instrumental: text("instrumental") === "true",
       }),
     );
     return Response.json(result);
