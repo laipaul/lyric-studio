@@ -32,6 +32,7 @@ const TARGET_S: Record<Feel, { verse: number; hook: number }> = {
 export const PACE_MIN_RATE = 0.8; // a planned shot never needs a clip slower than this
 const ODD_PENALTY = 0.15; // 3, 5, 7 bars break the 2 / 4-bar phrase: chosen only when clearly better
 const MAX_BARS = 8;
+const SHIFT_MIN_RATE = 0.65; // a user's "calmer" adjustment may slow clips down to this
 
 export type PaceLine = { text: string; sungStartMs: number; sungEndMs: number; words?: number };
 
@@ -72,13 +73,19 @@ export function choosePace(o: {
   lines: readonly PaceLine[]; // the song's sung lines (song time)
   barMs: number; // the typical bar (median of the detected bars)
   clipMs: readonly number[]; // each video clip's usable length (in / out, speed applied); photos left out
+  shift?: number; // the user's pace adjustment (recipe paceShift, the reactions): bars added (+) or taken (-)
 }): Pace {
   const { feel, wordsPerS } = songFeel(o.lines);
   const target = TARGET_S[feel];
   const clipMs = median(o.clipMs);
   const limitMs = clipMs === null ? Infinity : clipMs / PACE_MIN_RATE;
-  const verseBars = barsFor(target.verse * 1000, o.barMs, limitMs);
-  const hookBars = Math.min(verseBars, barsFor(target.hook * 1000, o.barMs, limitMs));
+  const auto = barsFor(target.verse * 1000, o.barMs, limitMs);
+  const autoHook = Math.min(auto, barsFor(target.hook * 1000, o.barMs, limitMs));
+  // The adjustment may go past the comfortable clip length, down to 0.65x (the user asked for it).
+  const shift = o.shift ?? 0;
+  const maxBars = clipMs === null ? MAX_BARS : Math.max(1, Math.min(MAX_BARS, Math.floor(clipMs / SHIFT_MIN_RATE / o.barMs)));
+  const verseBars = Math.max(1, Math.min(Math.max(auto, maxBars), auto + shift));
+  const hookBars = Math.max(1, Math.min(verseBars, autoHook + shift));
   const minShotMs = Math.max(800, Math.round(0.75 * hookBars * o.barMs));
   const s = (bars: number) => `${bars} bar${bars > 1 ? "s" : ""} (${((bars * o.barMs) / 1000).toFixed(1)} s)`;
   const feelText = feel === "calm" ? "a calm song" : feel === "driving" ? "a driving song" : "a mid-paced song";
@@ -87,5 +94,6 @@ export function choosePace(o: {
     verseBars === hookBars
       ? `Pacing: ${feelText} (${wordsPerS.toFixed(1)} words/s)${clipText} → ${s(verseBars)} per shot.`
       : `Pacing: ${feelText} (${wordsPerS.toFixed(1)} words/s)${clipText} → ${s(verseBars)} on verses, ${s(hookBars)} on hooks.`;
-  return { feel, wordsPerS, verseBars, hookBars, minShotMs, barMs: o.barMs, clipMs, text };
+  const adjusted = shift ? ` (your adjustment: ${shift > 0 ? "+" : ""}${shift} bar${Math.abs(shift) > 1 ? "s" : ""})` : "";
+  return { feel, wordsPerS, verseBars, hookBars, minShotMs, barMs: o.barMs, clipMs, text: text.replace(/\.$/, `${adjusted}.`) };
 }

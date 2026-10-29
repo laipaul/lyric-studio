@@ -11,6 +11,8 @@ import { and, eq } from "drizzle-orm";
 import { markInterruptedJobs, processAlive } from "./jobs";
 import { songPathsById } from "./song-folder";
 import type { Manifest } from "./manifest";
+import { assessVideo, strongest, type Assessment } from "../assess";
+import { reactionsFor, type Reaction } from "../reactions-list";
 
 export const RUN_FOLDER = /^(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(-\d+)?$/;
 export const SHORT_LABELS: Record<string, string> = { standard: "Standard", reels: "Reels", tiktok: "TikTok", shorts: "Shorts", youtube: "YouTube", canvas: "Canvas" };
@@ -57,6 +59,8 @@ export type VideoInfo = {
   layout: string | null;
   createdAt: string;
   qa: QaResult;
+  reactions: { id: Reaction; label: string }[]; // the reaction keywords this video offers
+  assessment: Assessment; // the pro assessment (src/assess.ts): verdict, points with actions, what the app handled
   mark: { favourite: boolean; status: VideoMarkStatus };
 };
 
@@ -64,6 +68,7 @@ export type PlatformRun = {
   name: string;
   label: string;
   videos: VideoInfo[];
+  strongest: { name: string; why: string } | null; // the clearly strongest video of several
   missing: string[]; // vN started but not finished
   interrupted: boolean;
   failed: string[]; // errors of failed videos
@@ -127,7 +132,8 @@ export function songRuns(ws: Workspace, projectId: string, labels: Record<string
   const exportsDir = songPathsById(ws, projectId).exports;
   const folders = runFolders(ws, projectId);
 
-  return folders.map((folder, k) => {
+  const inputs = new Map<string, Omit<Parameters<typeof assessVideo>[0], "problems">>();
+  const runs = folders.map((folder, k) => {
     const runDir = path.join(exportsDir, folder);
     const runRel = storedPath(ws, runDir);
     const since = runTime(folder);
@@ -179,14 +185,18 @@ export function songRuns(ws: Workspace, projectId: string, labels: Record<string
           layout: m.props?.layout ?? null,
           createdAt: m.created_at,
           qa: parseQaReport(readFileSync(path.join(dir, `${n}.qa.txt`), "utf8")),
+          reactions: reactionsFor(name),
+          assessment: assessVideo({ problems: [] }), // set below, once every video of the song is read (learning)
           mark: { favourite: mark?.favourite ?? false, status: mark?.status ?? "generated" },
         });
+        inputs.set(id, assessInput(m));
       }
       const open = unresolvedJobs(runJobs(name));
       platforms.push({
         name,
         label: labels[name] ?? name,
         videos,
+        strongest: null,
         missing,
         interrupted: open.some((j) => j.status === "interrupted"),
         failed: open.filter((j) => j.status === "failed").map((j) => j.error ?? "failed"),
@@ -194,6 +204,26 @@ export function songRuns(ws: Workspace, projectId: string, labels: Record<string
     }
     return { folder, time: since?.toISOString() ?? null, command, resumeCommand: resumeCommandFor(command), platforms };
   });
+  // The pro assessment, learning from the approved videos: a minor point approved twice no longer counts.
+  const all = runs.flatMap((r) => r.platforms.flatMap((p) => p.videos));
+  const assess = (v: VideoInfo, acceptedCodes?: Record<string, number>) => assessVideo({ problems: v.qa.problems, ...inputs.get(v.id), ...(acceptedCodes ? { acceptedCodes } : {}) });
+  const acceptedCodes: Record<string, number> = {};
+  for (const v of all.filter((x) => x.mark.status === "approved")) for (const p of assess(v).points) if (!p.major) acceptedCodes[p.code] = (acceptedCodes[p.code] ?? 0) + 1;
+  for (const v of all) v.assessment = assess(v, acceptedCodes);
+  for (const r of runs) for (const p of r.platforms) p.strongest = strongest(p.videos.filter((v) => v.mark.status !== "discarded"));
+  return runs;
+}
+
+// What the assessment needs from a manifest: the shots (slow motion), the app's decisions, the Canvas.
+function assessInput(m: Manifest): Omit<Parameters<typeof assessVideo>[0], "problems"> {
+  const settings = (m.settings ?? {}) as Record<string, { text?: string } | unknown>;
+  const text = (k: string) => (settings[k] as { text?: string } | null | undefined)?.text;
+  const canvas = settings.canvas as { seconds?: number; possible_s?: number; need_clip_s?: number | null } | undefined;
+  return {
+    shots: (m.props?.shots ?? []).map((s) => ({ start_s: s.start / 30, speed: s.playbackRate, hold: s.holdLastFrame, photo: s.kind === "photo" })),
+    decisions: [text("pace"), text("transition_plan"), text("ending")].filter((x): x is string => !!x),
+    canvas: canvas?.seconds !== undefined && canvas.possible_s !== undefined ? { seconds: canvas.seconds, possibleS: canvas.possible_s, needClipS: canvas.need_clip_s ?? null } : null,
+  };
 }
 
 // Jobs still rendering (their process is alive), per platform.

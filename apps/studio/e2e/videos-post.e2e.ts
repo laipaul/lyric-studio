@@ -5,7 +5,7 @@
 // "auto · 32 s"). Post: only approved videos, with their caption. Tasks: "Clear finished" removes done
 // tasks at once, asks before a stopped task that can still resume, never touches a running one or a file.
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -97,6 +97,19 @@ async function main() {
     check(JSON.stringify(chips) === JSON.stringify(["reels"]), `the platforms of that run (got ${(chips as string[]).join(", ")})`);
     await page.click("[data-switch-auto]");
     check((await page.inputValue("input[name=section]")) === "auto" && (await page.inputValue("input[name=length]")) === "32", 'one click back to "auto · 32 s"');
+
+    // The pro assessment on each tile, and a reaction: what it changes, then song.json.
+    await page.goto(`${base}/songs/${sp.project.id}?tab=videos`);
+    await page.waitForSelector("[data-video$='v1.manifest.json'] [data-verdict]");
+    check((await page.getAttribute("[data-video$='v1.manifest.json'] [data-verdict]", "data-verdict")) === "ready", "v1 (QA passed) is ✅ Ready to post");
+    await page.click("[data-video$='v1.manifest.json'] [data-reactions-toggle]");
+    await page.click("[data-video$='v1.manifest.json'] [data-reaction=too-fast]");
+    await page.waitForSelector("[data-video$='v1.manifest.json'] [data-reaction-plan]");
+    const planText = (await page.textContent("[data-video$='v1.manifest.json'] [data-reaction-plan]")) ?? "";
+    check(planText.includes("Next run: shots one bar longer"), `"cuts too fast" says what it changes (${planText.slice(0, 80)})`);
+    await page.click("[data-video$='v1.manifest.json'] [data-reaction-apply=song]");
+    await page.waitForSelector("[data-video$='v1.manifest.json'] [data-reaction-done]");
+    check((JSON.parse(readFileSync(path.join(paths.root, "song.json"), "utf8")) as { paceShift?: number }).paceShift === 1, 'song.json holds "paceShift": 1');
 
     // Post: nothing approved yet; approve v1 in Videos, then it is there with its caption.
     await page.goto(`${base}/songs/${sp.project.id}?tab=post`);

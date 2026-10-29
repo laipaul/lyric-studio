@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { EFFECT_NAMES, followScrollLeft, LyricVideo, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
 import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node"; // types only (erased): the data comes from /api/songs/[id]/storyboard
 
+import { AssessmentDetails } from "@/components/assessment";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -366,6 +367,9 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
                 </span>
               ) : null}
             </p>
+            <div className="bg-card/60 mb-2 rounded-lg border p-2" data-storyboard-assessment>
+              <AssessmentDetails a={view.assessment} limit={4} handled={false} />
+            </div>
             <p className="text-muted-foreground mb-3 text-xs">{view.section.reason}</p>
             {view.decisions.map((d) => (
               <p key={d} className="mb-1 text-xs text-sky-200" data-decision>
@@ -496,6 +500,7 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
                 editable={view.editable}
                 onEdit={() => setEditing(view.clips.find((c) => c.name === shot.clip)?.name ?? null)}
                 onUnanchor={shot.anchor ? () => void edit({ action: "unanchor", line: shot.anchor!.line }) : undefined}
+                onMisfit={view.editable ? () => moveClip(shot.clip, view.clips.length) : undefined}
               />
             ) : (
               <p className="text-muted-foreground mt-2 text-xs">Click a shot for its details{view.editable ? " (and to edit its clip)" : ""}.</p>
@@ -508,6 +513,7 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
                 busy={saving}
                 onSave={(e) => void edit({ action: "clip", clip: editing, edit: e })}
                 onClose={() => setEditing(null)}
+                onCanvas={(at) => void edit(at === null ? { action: "canvas", clip: null } : { action: "canvas", clip: editing, at })}
               />
             ) : null}
             {view.slots.length ? (
@@ -619,7 +625,7 @@ function ShotBlock({ shot: s, left, width, selected, onSelect }: { shot: StorySh
   );
 }
 
-function ShotDetails({ shot: s, editable, onEdit, onUnanchor }: { shot: StoryShot; editable: boolean; onEdit: () => void; onUnanchor?: () => void }) {
+function ShotDetails({ shot: s, editable, onEdit, onUnanchor, onMisfit }: { shot: StoryShot; editable: boolean; onEdit: () => void; onUnanchor?: () => void; onMisfit?: () => void }) {
   return (
     <div className="bg-card mt-2 rounded-lg border p-3 text-xs" data-shot-details={s.index + 1}>
       <p className="mb-1 flex flex-wrap items-center gap-2 text-sm font-medium">
@@ -627,6 +633,11 @@ function ShotDetails({ shot: s, editable, onEdit, onUnanchor }: { shot: StorySho
         {editable && s.kind === "video" ? (
           <button type="button" data-edit-clip onClick={onEdit} className="hover:bg-accent flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-normal">
             <Scissors className="size-3" /> Edit clip (in / out, speed, best moment)
+          </button>
+        ) : null}
+        {onMisfit ? (
+          <button type="button" data-misfit onClick={onMisfit} title="Moves this clip to the end of the story order, so it comes in later; drag it in the story strip to place it exactly" className="hover:bg-accent rounded-md border px-2 py-0.5 text-xs font-normal">
+            this clip doesn&apos;t fit here
           </button>
         ) : null}
       </p>
@@ -724,7 +735,7 @@ function StoryStrip({ clips, busy, onMove, onOpen, editing }: { clips: Storyboar
 // The clip editor: the part of the clip used (in / out), its speed (slow motion, 0.5-1x) and its best
 // moment (a story video's first shot of this clip is centred on it; yours always wins over the automatic
 // one). Set each from the clip playing, or type the seconds.
-function ClipEditor({ clip, mediaUrl, busy, onSave, onClose }: { clip: StoryboardClip; mediaUrl: string; busy: boolean; onSave: (e: { in?: number; out?: number; speed?: number; best?: number; transition?: "cut" | "dissolve" } | null) => void; onClose: () => void }) {
+function ClipEditor({ clip, mediaUrl, busy, onSave, onClose, onCanvas }: { clip: StoryboardClip; mediaUrl: string; busy: boolean; onSave: (e: { in?: number; out?: number; speed?: number; best?: number; transition?: "cut" | "dissolve" } | null) => void; onClose: () => void; onCanvas: (at: number | null) => void }) {
   const video = useRef<HTMLVideoElement>(null);
   const total = clip.durationMs / 1000;
   const [inS, setIn] = useState(clip.inS === null ? "" : String(clip.inS));
@@ -802,6 +813,23 @@ function ClipEditor({ clip, mediaUrl, busy, onSave, onClose }: { clip: Storyboar
           <p className="text-muted-foreground">
             ★ {best ? `yours: ${best} s` : clip.autoBestS !== null ? `automatic: ${clip.autoBestS} s (the strongest 2 s by motion, colour and contrast)` : "no clear best moment found"}. A story video&apos;s first shot of this clip is centred on it; yours always wins.
           </p>
+          {clip.kind === "video" ? (
+            <div className="flex flex-wrap items-center gap-2 border-t pt-2" data-canvas-choice>
+              <span className="w-24">Spotify Canvas</span>
+              {clip.canvas ? (
+                <>
+                  <span className="text-emerald-300">chosen{clip.canvas.at !== null ? ` from ${clip.canvas.at} s` : ""}</span>
+                  <button type="button" className={setHere} data-canvas-unset disabled={busy} onClick={() => onCanvas(null)}>
+                    let the app choose
+                  </button>
+                </>
+              ) : (
+                <button type="button" className={setHere} data-canvas-use disabled={busy} onClick={() => onCanvas(Number(here()))} title="The Canvas loops this clip from the moment the player shows (the app picks the loop length and slows it a little if needed)">
+                  Use for Canvas (from here)
+                </button>
+              )}
+            </div>
+          ) : null}
           {problem ? <p className="text-amber-300">{problem}</p> : null}
           <div className="flex gap-2">
             <Button size="sm" data-clip-save disabled={busy || !!problem} onClick={save}>

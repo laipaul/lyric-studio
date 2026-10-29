@@ -81,6 +81,7 @@ export type RenderBase = {
   // Loop platforms: blend the last frames into the first shot's opening (frames) when the last shot does
   // not continue into the first one.
   loopInto?: number;
+  lyricBacking?: boolean; // readability "strong": a soft dark band behind the lyrics
   transitions?: {
     style: TransitionStyle;
     feel: Feel;
@@ -333,6 +334,7 @@ export function composeProps(
       lyricArea: area,
       ...(choices.effects ? { lyricEffects: choices.effects } : {}),
       ...(dips.length ? { dips } : {}),
+      ...(base.lyricBacking ? { lyricBacking: true } : {}),
       ...(base.loopInto && shots.length > 1 && !assigned.at(-1)?.loop ? { loopInto: { frames: Math.max(4, Math.min(base.loopInto, Math.floor(shots.at(-1)!.duration / 2))) } } : {}),
     },
     warnings,

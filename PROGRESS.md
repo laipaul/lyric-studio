@@ -995,6 +995,23 @@ These platforms play a video in a loop, so the wrap-around from the last frame t
   same clip first and last, and the Reels continuation that passes; a harmony clash C -> F#; phrase cut;
   the end choice preferring the better loop and saying why; shuffle first != last over 300 seeds).
 
+### Step C — Pro assessment, reactions, better Canvas ✅ (to verify on the Windows PC)
+- **Pro assessment** (src/assess.ts): each video gets ✅ Ready to post / 🟡 Good — N things to improve /
+  🔴 Not ready — fix N things first, with at most 3 points in plain words and the creative action for each,
+  "Handled by the app" (pacing, transitions, ending) and the technical checks one click away. Videos tab:
+  replaces the PASS/WARN badge; "★ strongest" on the clearly best video of a run. Storyboard header: the
+  same, predicted from the plan. It learns: a point you approved videos with twice stops counting.
+- **Reactions** ("React" under each video): cuts too fast / too slow, too many dissolves, more dreamy,
+  ending too abrupt, lyrics hard to read, too repetitive, love this one; on a Storyboard shot: this clip
+  doesn't fit here. Each says "Next run: …" first, then applies to this song or all your songs; every change
+  is a normal recipe setting (Style tab, Reset undoes it). New settings behind them: Pace adjustment (bars)
+  and Lyric readability (strong = a soft dark band behind the lyrics).
+- **Better Canvas**: the longest loop first, slowed gently (>= 0.75x) rather than dropping to 3 s (6 s
+  clips: 3 bars at 0.92x instead of 2 bars); "Use for Canvas (from here)" in the clip editor chooses the
+  clip and moment; the assessment says "Add a vertical clip of at least N s" when a longer loop was possible.
+- Tests: assess.test.ts, reactions.test.ts (real plans with the stand-in renderer), make test (Canvas);
+  browser tests: verdict on the tile, a reaction applied to song.json, the Storyboard's prediction.
+
 ### Step B — Automatic pacing and transitions ✅ (to verify on the Windows PC)
 - **Pacing** (Shot length "auto", the new default): the app reads the song's feel from how densely it is
   sung (calm / mid-paced / driving; the tempo alone misleads: ballads are often tracked at 130+ BPM) and the
@@ -1365,7 +1382,7 @@ A. ✅ (built 29 Oct, to verify) **Automatic endings**: per section the app choo
 B. ✅ (built 29 Oct, with transitions, to verify) **Automatic pacing**: shot length chosen from the song (tempo, energy, hooks vs verses) and the clips
    given (their usable lengths, slow-motion limit), e.g. "story" for slow emotional songs; asks for longer
    clips only when it cannot work otherwise.
-C. **Pro assessment** per video (Videos tab, Storyboard header): one verdict in plain words + at most a few
+C. ✅ (built 29 Oct, with reactions and the better Canvas, to verify) **Pro assessment** per video (Videos tab, Storyboard header): one verdict in plain words + at most a few
    creative actions; the QA / loop details one click away. Canvas: picks the best clip and the longest loop
    (slowed a little rather than 3 s), or says "a clip of at least N s".
 D. Then the **title opening** below.

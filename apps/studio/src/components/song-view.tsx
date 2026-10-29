@@ -121,6 +121,9 @@ export function SongView({ projectId, songTitle, runs, settings = {} }: { projec
                     {videos.map((v) => (
                       <VideoTile
                         key={v.id}
+                        projectId={projectId}
+                        strongest={p.strongest?.name === v.name ? p.strongest.why : null}
+                        onChanged={() => router.refresh()}
                         video={v}
                         wide={p.name === "youtube"}
                         selected={selected.includes(v.id)}

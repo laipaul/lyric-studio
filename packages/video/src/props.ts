@@ -136,6 +136,9 @@ export type LyricVideoProps = {
   lyricEffects?: LyricEffectsProps | null;
   // Automatic transitions (src/transitions.ts): dips to black, `frames` long and darkest on `frame`.
   dips?: { frame: number; frames: number }[];
+  // Lyric readability "strong" (recipe readability, the reaction "lyrics hard to read"): a soft dark band
+  // behind the lyric area, never a hard box.
+  lyricBacking?: boolean;
   // Loop platforms: over the last `frames` frames the first shot's opening fades in on top, so the last
   // frame leads straight into the first (when the last shot does not already continue into it).
   loopInto?: { frames: number } | null;

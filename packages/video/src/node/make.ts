@@ -130,6 +130,8 @@ export type MakeOptions = {
   hookItalic?: boolean;
   pairings?: string; // "elegant,dramatic": one video per pairing (presets/font-pairings.json), all else the same
   shotLength?: string; // "1" | "2" | "4" | "8" bars per shot, or "story" (2 bars on hooks, 4 on verses, >= 3 s); replaces --rate
+  paceShift?: number; // bars added to the automatic pacing (recipe paceShift)
+  readability?: "normal" | "strong"; // strong: a soft dark band behind the lyrics
   transitions?: TransitionStyle; // between shots: "auto" (default: from the music), "crisp" (cuts), "flowing" (dissolves)
   ending?: EndingChoice; // Reels / TikTok / Shorts: "auto" (default: the app chooses tight loop, soft fade or ring-out) or one of them
   tempo?: number; // the song's real BPM (song.json "tempo"): the beats are re-tracked around it
@@ -538,6 +540,8 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       shotLength: recipe.values.shotLength ?? undefined,
       ending: recipe.values.ending,
       transitions: recipe.values.transitions,
+      paceShift: recipe.values.paceShift,
+      readability: recipe.values.readability,
       tempo: recipe.values.tempo ?? undefined,
       // Weights and italic: the recipe's (brand, song or run) whenever the brand fonts are used for the
       // lyrics; otherwise only the song's or run's own (else the Simple / Bold style's weight).
@@ -711,6 +715,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       sectionLines, collection, collectionNames: runCollections, collectionRemembered, ep, tool, rootDir, getProject: () => project,
       loopAudio: () => (songAudio ??= readLoopAudio(sp.songFile)),
       anchors: songRecipe.anchors ?? [],
+      canvasChoice: songRecipe.canvas ?? null,
       gapOrder: songRecipe.gapOrder ?? null,
       textboard,
     };
@@ -795,6 +800,7 @@ type Shared = {
   getProject: () => { id: string; title: string; artist: string };
   loopAudio: () => Promise<LoopAudio | null>; // the song decoded once per run, for the loop checks
   anchors: AnchorSpec[]; // song.json: story anchors
+  canvasChoice: { clip: string; at?: number } | null; // song.json "canvas": the clip chosen for the Canvas
   gapOrder: GapOrder | null; // song.json (null: story with anchors, else v1 story and the others shuffled)
   textboard: RunBoard; // the song's text layer (textboard.json, else the brand's defaults)
   picture?: PictureSet & { index: number }; // picture versions: this video's clip set
@@ -863,7 +869,7 @@ function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: Pl
   const length = lengthFor(base, r.values.length, sh.analysis.duration_ms);
   if (length.note) sh.log(`${base.name}: ${length.note}`);
   const section = r.values.section === "auto" && length.wholeSong ? "full" : r.values.section;
-  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined, shotLength: r.values.shotLength ?? undefined, ending: r.values.ending, transitions: r.values.transitions };
+  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined, shotLength: r.values.shotLength ?? undefined, ending: r.values.ending, transitions: r.values.transitions, paceShift: r.values.paceShift, readability: r.values.readability };
   const own = PLATFORM_FIELDS.filter((k) => r.sources[k].includes(":"));
   if (own.length) sh.log(`${preset.name}: recipe ${own.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]})`).join(", ")}`);
   const out: Shared = {
@@ -935,7 +941,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   let canvas: CanvasPlan | null = null;
   if (isCanvas) {
     const l = preset.length.mode === "loop" ? preset.length : { min: 3, max: 8 };
-    canvas = await planCanvas(ws, prepared.clips, { bpm: analysis.bpm, count: sh.variationsFor(preset), min: l.min, max: l.max });
+    canvas = await planCanvas(ws, prepared.clips, { bpm: analysis.bpm, count: sh.variationsFor(preset), min: l.min, max: l.max, chosen: sh.canvasChoice });
   }
 
   // Section (lines appear `leadMs` early and move by the lyrics offset). Loop platforms (Reels, TikTok,
@@ -1032,6 +1038,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       ? choosePace({
           lines: sh.sectionLines.map((l) => ({ text: l.text, sungStartMs: sungStart(l), sungEndMs: sungEnd(l), ...(l.words?.length ? { words: l.words.length } : {}) })),
           barMs: medianBarMs(downbeatTimes, analysis.bpm),
+          shift: options.paceShift ?? 0,
           clipMs: prepared.clips
             .filter((c) => c.kind !== "photo")
             .map((c) => {
@@ -1151,6 +1158,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     platform: layout,
     beats: analysis.beats,
     ...(anchors.length ? { anchors } : {}),
+    ...(options.readability === "strong" && preset.lyrics ? { lyricBacking: true } : {}),
     // Loop platforms: the last frames blend into the first shot's opening when the last shot cannot
     // continue into it (about the ending's fade, 0.4-1 s).
     ...(loops && usesClips ? { loopInto: Math.max(12, Math.min(30, Math.round((ending?.fadeOutS ?? 0.5) * VIDEO.fps))) } : {}),
@@ -1523,7 +1531,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       writeManifest(
         result.manifestFile,
         buildManifest({
-          ws, tool: sh.tool, spec, props, media, project, songHash: sh.sp.songHash, songFile: sh.sp.songFile, analysis, chosen, alignment, reports, numbers, audioPlan: audioP, pace, transitionPlan: composedBySpec.get(spec.name)?.transitions ?? null,
+          ws, tool: sh.tool, spec, props, media, project, songHash: sh.sp.songHash, songFile: sh.sp.songFile, analysis, chosen, alignment, reports, numbers, audioPlan: audioP, pace, transitionPlan: composedBySpec.get(spec.name)?.transitions ?? null, canvasPlan: canvas,
           visible, lines, leadMs, lyricsOffsetMs, options, collection: sh.collection, collectionNames: sh.collectionNames, clips: prepared.clips, file, qa, now: sh.now, warnings, preset,
           brand: sh.brand.brand, anchors: anchorsOut, gapOrder: story ? "story" : null,
           textboard: preset.lyrics && !canvas
@@ -1708,6 +1716,7 @@ function buildManifest(c: {
   ws: Workspace;
   audioPlan?: AudioPlan;
   pace?: Pace | null; // automatic pacing (src/pace.ts)
+  canvasPlan?: CanvasPlan | null; // Spotify Canvas: the loop's length, the longest possible, the clip that would make it
   transitionPlan?: { text: string; kinds: string[] } | null; // automatic transitions (src/transitions.ts)
   tool: Manifest["tool"];
   spec: VariationSpec;
@@ -1782,6 +1791,7 @@ function buildManifest(c: {
       shot_length: c.options.shotLength ?? null, // "auto", bars per shot, "story" or "rate"
       pace: c.pace ? { feel: c.pace.feel, words_per_s: c.pace.wordsPerS, verse_bars: c.pace.verseBars, hook_bars: c.pace.hookBars, text: c.pace.text } : null, // automatic pacing
       transition_style: c.options.transitions ?? "auto",
+      canvas: c.canvasPlan ? { seconds: c.canvasPlan.seconds, possible_s: c.canvasPlan.possibleS, need_clip_s: c.canvasPlan.needClipS, fallback: c.canvasPlan.fallback, chosen: c.canvasPlan.chosen } : null,
       transition_plan: c.transitionPlan ?? null, // the transition into each shot (cut / dissolve / dip) and why
       ending: c.loop && c.loop.checked ? (c.loop.ending ?? null) : null, // Reels / TikTok / Shorts: the ending chosen (tight loop, soft fade, ring-out) and why
       tempo: c.options.tempo ? { bpm: c.analysis.bpm, set: c.options.tempo } : null, // song.json "tempo" (null: as detected)

@@ -96,6 +96,8 @@ async function main() {
     check(!!(await page.$(`[data-shot='${last}'] [data-badge=loop]`)), "the last shot is marked as the Reels loop ending (↻), not warned as a repeat");
     const endingText = (await page.textContent("[data-ending]").catch(() => null)) ?? "";
     check(/^Ending: (a tight loop|a soft fade|the last chord rings out|the song's own)/.test(endingText), `the header says how the Reel ends, in plain words (${endingText})`);
+    const predicted = (await page.textContent("[data-storyboard-assessment] [data-assessment-headline]")) ?? "";
+    check(/(Ready to post|Good — \d+ things? to improve|Not ready — fix \d+ things? first) \(prediction before rendering\)/.test(predicted), `the header predicts the pro assessment (${predicted})`);
     const decisions = await page.$$eval("[data-decision]", (els: Element[]) => els.map((e) => e.textContent ?? ""));
     check(decisions.some((d) => d.startsWith("Pacing: ")), `the header says how the shots are paced (${decisions.join(" | ")})`);
     check(decisions.some((d) => d.startsWith("Transitions: ")), "the header says which transitions the app chose");

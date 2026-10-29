@@ -18,7 +18,7 @@ import { choiceText, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, parseEffectChoic
 import { DEFAULT_BRAND, type Brand } from "./brand";
 import { checkPerPlatform, isPlatformField, isWeight, SHOT_LENGTH_VALUES, PLATFORM_FIELDS, type PerPlatform, type PlatformField } from "./per-platform";
 
-export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "tempo", "collections", "platforms", "variations", "section", "length", "ending", "transitions", "ep", "youtubeLayout"] as const;
+export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "tempo", "collections", "platforms", "variations", "section", "length", "ending", "transitions", "paceShift", "readability", "ep", "youtubeLayout"] as const;
 export type RecipeField = (typeof RECIPE_FIELDS)[number];
 
 export type RecipeValues = {
@@ -38,6 +38,8 @@ export type RecipeValues = {
   variations: Record<string, number>; // videos per platform
   section: string; // auto | full | 0:11-1:10
   length: number | null; // target seconds for an "auto" section (null: the platform preset's length)
+  paceShift: number; // bars added to (+) or taken from (-) the automatic pacing (reactions "cuts too fast / slow"), -3..+4
+  readability: "normal" | "strong"; // strong: a soft dark band behind the lyrics (reaction "lyrics hard to read")
   transitions: TransitionStyle; // between shots: "auto" (the app chooses cuts, dissolves and dips from the music), "crisp" (cuts), "flowing" (dissolves)
   ending: EndingChoice; // Reels / TikTok / Shorts: "auto" (the app chooses: tight loop, soft fade or ring-out), or one of them
   ep: string;
@@ -48,7 +50,8 @@ export { isPlatformField, isWeight, ITALIC_FIELDS, PLATFORM_FIELDS, WEIGHT_FIELD
 
 // anchors and gapOrder belong to the song only (story anchors, the Lyrics tab): never from the brand,
 // outside Reset / Lock.
-export type SongRecipe = Partial<RecipeValues> & { perPlatform?: PerPlatform; locked?: RecipeField[]; anchors?: AnchorSpec[]; gapOrder?: GapOrder };
+// canvas: the clip (and moment, seconds) chosen for the Spotify Canvas (the clip editor's "Use for Canvas").
+export type SongRecipe = Partial<RecipeValues> & { perPlatform?: PerPlatform; locked?: RecipeField[]; anchors?: AnchorSpec[]; gapOrder?: GapOrder; canvas?: { clip: string; at?: number } };
 // library | artist | artist:<platform> | song | song:<platform> | run
 export type RecipeSource = string;
 
@@ -65,7 +68,7 @@ export const RECIPE_HELP =
   "(a brand change does not reach them, and Generate cannot change them for one run). Fields: verseEffect, hookEffect " +
   '("glide", "soft-blur:subtle", ...), verseFont, hookFont, verseWeight / hookWeight (400 = regular, 600 = semibold, 700 = bold), verseItalic / hookItalic (true / false), accentColour ("#E8A3B5"), shotLength ("auto" = the app chooses from the song and your clips; or "1", "2", "4", "8" bars per shot, "story": 2 bars on hooks, 4 on verses, never under 3 s, or "rate": the cut rate), tempo (the real BPM of this song when the detected one is wrong, e.g. 92), collections (shared collections used ' +
   'with the clips in clips\\), platforms (["reels", "youtube"]), variations ({ "reels": 3 }), section ("auto", "full", ' +
-  '"0:11-1:10"), length (seconds an "auto" section aims for, e.g. 90; empty = the platform preset), transitions ("auto" = the app chooses cuts, dissolves and dips from the music; "crisp" = cuts; "flowing" = dissolves), ending ("auto" = the app chooses how a Reel / TikTok / Short ends: a tight loop, a soft fade or a ring-out; or "loop", "fade", "ring-out"), ep, youtubeLayout ("cover", "stills", "clips"). perPlatform: values for one platform only, e.g. ' +
+  '"0:11-1:10"), length (seconds an "auto" section aims for, e.g. 90; empty = the platform preset), transitions ("auto" = the app chooses cuts, dissolves and dips from the music; "crisp" = cuts; "flowing" = dissolves), paceShift (bars added to the automatic pacing, e.g. 1 = calmer; set by the reactions), readability ("strong" = a soft dark band behind the lyrics), ending ("auto" = the app chooses how a Reel / TikTok / Short ends: a tight loop, a soft fade or a ring-out; or "loop", "fade", "ring-out"), ep, youtubeLayout ("cover", "stills", "clips"). perPlatform: values for one platform only, e.g. ' +
   '{ "youtube": { "verseEffect": "cinematic-fade" } } (verseEffect, hookEffect, verseFont, hookFont, accentColour, section, length), e.g. { "reels": { "length": 90 }, "tiktok": { "length": 30 } }. ' +
   'Story anchors (the Lyrics tab sets them): anchors [{ "line": 9, "clip": "hands.mp4", "clipIn": 1.5, "transition": "dissolve" }] = that clip lands on lyrics.txt line 9 ' +
   '(cut in on the downbeat before the line, held until it ends); gapOrder "story" (default with anchors: the other clips in file-name order in every video) or "shuffle".';
@@ -95,6 +98,14 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
   if (r.shotLength !== undefined && r.shotLength !== null) {
     if ((SHOT_LENGTH_VALUES as readonly string[]).includes(String(r.shotLength))) recipe.shotLength = String(r.shotLength);
     else problems.push(`shotLength must be ${SHOT_LENGTH_VALUES.join(", ")} (auto = the app chooses; bars per shot; "story": 2 bars on hooks, 4 on verses; "rate": the cut rate)`);
+  }
+  if (r.paceShift !== undefined) {
+    if (Number.isInteger(r.paceShift) && (r.paceShift as number) >= -3 && (r.paceShift as number) <= 4) recipe.paceShift = r.paceShift as number;
+    else problems.push("paceShift must be a whole number of bars from -3 to 4 (added to the automatic pacing)");
+  }
+  if (r.readability !== undefined) {
+    if (r.readability === "normal" || r.readability === "strong") recipe.readability = r.readability;
+    else problems.push("readability must be normal or strong");
   }
   if (r.transitions !== undefined) {
     if ((TRANSITION_STYLES as readonly string[]).includes(String(r.transitions))) recipe.transitions = r.transitions as TransitionStyle;
@@ -155,6 +166,11 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
     problems.push(...checked.problems);
     if (checked.anchors.length) recipe.anchors = checked.anchors;
   }
+  if (r.canvas !== undefined && r.canvas !== null) {
+    const c = r.canvas as { clip?: unknown; at?: unknown };
+    if (typeof c.clip === "string" && c.clip.trim() && (c.at === undefined || (typeof c.at === "number" && c.at >= 0))) recipe.canvas = { clip: c.clip.trim(), ...(c.at !== undefined ? { at: Math.round((c.at as number) * 100) / 100 } : {}) };
+    else problems.push('canvas must look like { "clip": "05_flowers.mp4", "at": 2.5 } (the clip chosen for the Spotify Canvas; at: seconds)');
+  }
   if (r.gapOrder !== undefined) {
     if (r.gapOrder === "story" || r.gapOrder === "shuffle") recipe.gapOrder = r.gapOrder;
     else problems.push('gapOrder must be "story" or "shuffle"');
@@ -183,6 +199,7 @@ export function recipeJson(recipe: SongRecipe): string {
   if (recipe.locked?.length) ordered.locked = recipe.locked;
   if (recipe.gapOrder) ordered.gapOrder = recipe.gapOrder;
   if (recipe.anchors?.length) ordered.anchors = recipe.anchors;
+  if (recipe.canvas) ordered.canvas = recipe.canvas;
   return `${JSON.stringify(ordered, null, 2)}\n`;
 }
 
@@ -303,6 +320,8 @@ export const LIBRARY_RECIPE: RecipeValues = {
   length: null,
   ending: "auto",
   transitions: "auto",
+  paceShift: 0,
+  readability: "normal",
   ep: "",
   youtubeLayout: "cover",
 };
@@ -381,7 +400,7 @@ export function recipeText(v: unknown): string {
 // "verse glide (artist), hook karaoke-highlight (artist), collections wedding (song, locked), ..."
 export function recipeSummary(r: ResolvedRecipe): string {
   const show: RecipeField[] = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "collections", "section"];
-  for (const k of ["platforms", "variations", "ep", "youtubeLayout", "tempo", "ending", "transitions"] as const) if (r.sources[k] !== "library") show.push(k);
+  for (const k of ["platforms", "variations", "ep", "youtubeLayout", "tempo", "ending", "transitions", "paceShift", "readability"] as const) if (r.sources[k] !== "library") show.push(k);
   return show.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]}${r.locked.includes(k) ? ", locked" : ""})`).join(", ");
 }
 

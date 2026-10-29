@@ -7,14 +7,15 @@ import type { Workspace } from "@lyric/db";
 import { checkAnchors, type AnchorSpec, type AnchorTransition } from "../anchors";
 import { readClipEdits, writeClipEdits, type ClipEdit, type ClipEdits } from "./clip-edits";
 import { saveAnchors } from "./lyrics-view";
-import { readRecipe } from "./recipe";
+import { readRecipe, writeRecipe } from "./recipe";
 import { songPathsById } from "./song-folder";
 
 export type StoryboardEdit =
   | { action: "order"; order: string[] } // clip file names, the whole story order
   | { action: "clip"; clip: string; edit: ClipEdit | null } // null: back to the whole clip, normal speed, the automatic best moment
   | { action: "anchor"; line: number; clip: string; transition?: AnchorTransition }
-  | { action: "unanchor"; line: number };
+  | { action: "unanchor"; line: number }
+  | { action: "canvas"; clip: string | null; at?: number }; // the clip (and moment) for the Spotify Canvas; null: the app chooses
 
 export type StoryboardEditResult = { edits: ClipEdits; anchors: AnchorSpec[] };
 
@@ -39,6 +40,10 @@ export function storyboardEdit(ws: Workspace, projectId: string, e: StoryboardEd
     const { problems } = checkAnchors(next);
     if (problems.length) throw new Error(problems.join("; "));
     anchors = saveAnchors(ws, projectId, next);
+  } else if (e.action === "canvas") {
+    const recipe = readRecipe(paths.recipe);
+    const next = { ...recipe, canvas: e.clip ? { clip: e.clip, ...(typeof e.at === "number" && e.at >= 0 ? { at: Math.round(e.at * 100) / 100 } : {}) } : undefined };
+    writeRecipe(paths.recipe, next);
   } else if (e.action === "unanchor") {
     anchors = saveAnchors(ws, projectId, anchors.filter((a) => a.line !== e.line));
   } else {

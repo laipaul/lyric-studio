@@ -28,10 +28,11 @@ export const lengthText = (l: CanvasLength) =>
 
 export const CANVAS_MIN_RATE = 0.6; // clips may be slowed down to 0.6x to fill a loop
 
-// Which loop a set of clips allows, in this order:
+// Which loop a set of clips allows (Step C: the longest loop first, slowed a little rather than short):
 //   "none"       the longest loop, at normal speed;
-//   "fewer-bars" a shorter loop (fewer bars, still >= min seconds), at normal speed;
-//   "slow"       the shortest loop with clips slowed down (down to 0.6x);
+//   "slow"       the longest loop a clip reaches slowed gently (down to 0.75x), or, when nothing else
+//                works, the shortest loop slowed down to 0.6x;
+//   "fewer-bars" a shorter loop (fewer bars, still >= min seconds), at normal speed or slowed gently;
 //   "photo"      no clip can make even that: a vertical photo moving out and back;
 //   "fail"       nothing usable.
 // `needs` = clip frames a loop takes at 1x (the loop plus the blend frames before its start).
@@ -40,19 +41,27 @@ export type CanvasFit = {
   length: CanvasLength;
   rates: (number | null)[]; // per clip: its playback rate, or null if it cannot make the loop
 };
+export const CANVAS_GENTLE_RATE = 0.75; // a clip slowed this much still looks natural
 
 export function chooseCanvasFit(lengths: readonly CanvasLength[], clipFrames: readonly number[], blendFrames: number, photos: number, fps = 30): CanvasFit {
   const needs = (l: CanvasLength) => Math.round(l.seconds * fps) + blendFrames;
+  // Slowed: the clip plays `rate` frames per video frame; rounded down to 0.01 so it always fits.
+  const rateFor = (f: number, l: CanvasLength, min: number) => {
+    if (f >= needs(l)) return 1;
+    const rate = Math.floor((f / needs(l)) * 100) / 100;
+    return rate >= min ? rate : null;
+  };
   for (const [k, l] of lengths.entries()) {
-    const rates = clipFrames.map((f) => (f >= needs(l) ? 1 : null));
-    if (rates.some((r) => r !== null)) return { fallback: k === 0 ? "none" : "fewer-bars", length: l, rates };
+    const rates = clipFrames.map((f) => rateFor(f, l, CANVAS_GENTLE_RATE));
+    if (rates.some((r) => r !== null)) {
+      // At normal speed where a clip can; the slowed ones only when none plays at 1x.
+      const normal = rates.some((r) => r === 1);
+      const used = normal ? rates.map((r) => (r === 1 ? 1 : null)) : rates;
+      return { fallback: k > 0 ? "fewer-bars" : normal ? "none" : "slow", length: l, rates: used };
+    }
   }
   const shortest = lengths[lengths.length - 1];
-  // Slowed: the clip plays `rate` frames per video frame; rounded down to 0.01 so it always fits.
-  const rates = clipFrames.map((f) => {
-    const rate = Math.floor((f / needs(shortest)) * 100) / 100;
-    return rate >= CANVAS_MIN_RATE ? rate : null;
-  });
+  const rates = clipFrames.map((f) => rateFor(f, shortest, CANVAS_MIN_RATE));
   if (rates.some((r) => r !== null)) return { fallback: "slow", length: shortest, rates };
   return { fallback: photos > 0 ? "photo" : "fail", length: lengths[0], rates: clipFrames.map(() => null) };
 }

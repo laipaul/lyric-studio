@@ -126,7 +126,7 @@ describe("Post tab", () => {
   it("lists the approved videos only, per platform, newest run first", () => {
     const video = (run: string, platform: string, name: string, status: VideoInfo["mark"]["status"]) => ({ id: `${run}/${platform}/${name}`, run, platform, label: platform, name, mark: { favourite: false, status } }) as VideoInfo;
     const run = (folder: string, videos: VideoInfo[]): RunInfo =>
-      ({ folder, time: null, command: null, resumeCommand: null, platforms: [...new Set(videos.map((v) => v.platform))].map((p) => ({ name: p, label: p, videos: videos.filter((v) => v.platform === p), missing: [], interrupted: false, failed: [] })) }) as RunInfo;
+      ({ folder, time: null, command: null, resumeCommand: null, platforms: [...new Set(videos.map((v) => v.platform))].map((p) => ({ name: p, label: p, videos: videos.filter((v) => v.platform === p), strongest: null, missing: [], interrupted: false, failed: [] })) }) as RunInfo;
     const runs = [
       run("old", [video("old", "reels", "v1", "approved"), video("old", "reels", "v2", "discarded")]),
       run("new", [video("new", "reels", "v1", "generated"), video("new", "reels", "v2", "approved"), video("new", "youtube", "v1", "approved")]),

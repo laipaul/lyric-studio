@@ -1,11 +1,12 @@
 "use client";
 
-import { Check, Columns3, Send, Star, Trash2, Undo2 } from "lucide-react";
-import { useRef } from "react";
+import { Check, Columns3, MessageSquareHeart, Send, Star, Trash2, Undo2 } from "lucide-react";
+import { useRef, useState } from "react";
 
 import type { VideoInfo } from "@lyric/video/exports";
 
-import { StatusBadge } from "@/components/status-badge";
+import { VerdictBadge } from "@/components/assessment";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export const seconds = (s: number | null) => (s === null ? "" : s >= 60 ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : `${s.toFixed(1)} s`);
@@ -14,6 +15,9 @@ export const orderText = (v: VideoInfo) => (v.order === "story" ? "story" : `shu
 // One finished video: its still frame (it plays muted on hover), QA badge with reasons, settings, and
 // the marks: favourite, approved, discarded (hidden), compare, ready to post.
 export function VideoTile({
+  projectId,
+  strongest,
+  onChanged,
   video,
   wide,
   selected,
@@ -21,6 +25,9 @@ export function VideoTile({
   onCompare,
   onPost,
 }: {
+  projectId: string;
+  strongest: string | null; // why this is the strongest of its platform's videos
+  onChanged: () => void;
   video: VideoInfo;
   wide: boolean;
   selected: boolean;
@@ -52,9 +59,12 @@ export function VideoTile({
         <img src={`/api/poster/${video.mp4}`} alt="" loading="lazy" className="absolute inset-0 size-full object-cover" />
         <video ref={ref} src={`/api/files/${video.mp4}`} muted loop playsInline preload="none" className="absolute inset-0 size-full object-cover opacity-0 transition-opacity group-hover:opacity-100" />
         <div className="absolute top-2 left-2">
-          <StatusBadge status={qa.status === "WARN" ? "WARN" : "PASS"} details={qaDetails} heading={`${video.label} ${video.name}: QA ${qa.status === "WARN" ? "warnings" : "passed"}`}>
-            {qa.status === "WARN" ? "WARN" : "PASS"}
-          </StatusBadge>
+          <VerdictBadge a={video.assessment} technical={qaDetails.length ? qaDetails : ["QA: every check passed"]} heading={`${video.label} ${video.name}`} />
+          {strongest ? (
+            <span className="bg-brand/80 mt-1 block w-fit rounded px-1.5 py-0.5 text-[10px] text-white" title={`Strongest: ${strongest}`} data-strongest>
+              ★ strongest
+            </span>
+          ) : null}
         </div>
         <button
           type="button"
@@ -91,6 +101,7 @@ export function VideoTile({
             <Send />
           </TileButton>
         </div>
+        <Reactions projectId={projectId} video={video} onChanged={onChanged} />
       </div>
     </div>
   );
@@ -109,5 +120,93 @@ function TileButton({ active, onClick, label, children }: { active: boolean; onC
       {children}
       {label}
     </button>
+  );
+}
+
+// Reactions (Step C): a keyword under the video; the app says what it would change for the next run
+// ("Next run: …"), then applies it to this song or to all the artist's songs.
+type Plan = { label: string; text: string; scopes: ("song" | "artist")[]; none?: string };
+function Reactions({ projectId, video, onChanged }: { projectId: string; video: VideoInfo; onChanged: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [chosen, setChosen] = useState<{ id: string; plan: Plan } | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const post = async (body: Record<string, unknown>) => {
+    setBusy(true);
+    setError(null);
+    const r = await api(`/api/songs/${projectId}/reaction`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ video: video.id, ...body }) });
+    const out = (await r.json()) as Record<string, unknown> & { error?: string };
+    setBusy(false);
+    if (!r.ok) {
+      setError(out.error ?? "Could not do that");
+      return null;
+    }
+    return out;
+  };
+  const choose = async (id: string) => {
+    setDone(null);
+    const plan = (await post({ reaction: id })) as Plan | null;
+    if (plan) setChosen({ id, plan });
+  };
+  const apply = async (scope: "song" | "artist") => {
+    if (!chosen) return;
+    const out = (await post({ reaction: chosen.id, scope, apply: true })) as { applied?: string } | null;
+    if (!out) return;
+    setDone(`Done for ${out.applied}. ${chosen.plan.text.replace(/^Next run: /, "Next run: ")} (Style tab → Reset undoes it.)`);
+    setChosen(null);
+    onChanged();
+  };
+  if (!video.reactions.length) return null;
+  return (
+    <div className="text-[11px]" data-reactions>
+      <button type="button" onClick={() => setOpen((o) => !o)} className="text-muted-foreground hover:text-foreground flex items-center gap-1" data-reactions-toggle>
+        <MessageSquareHeart className="size-3.5" /> React
+      </button>
+      {open ? (
+        <div className="mt-1.5 flex flex-col gap-1.5">
+          <div className="flex flex-wrap gap-1">
+            {video.reactions.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                disabled={busy}
+                onClick={() => void choose(r.id)}
+                data-reaction={r.id}
+                className={cn("rounded-full border px-2 py-0.5", chosen?.id === r.id ? "border-brand bg-brand/15 text-brand" : "text-muted-foreground hover:text-foreground")}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+          {chosen ? (
+            <div className="bg-muted/40 rounded-md p-2" data-reaction-plan>
+              {chosen.plan.none ? (
+                <p className="text-muted-foreground">Nothing to change: {chosen.plan.none}.</p>
+              ) : (
+                <>
+                  <p>{chosen.plan.text}</p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    <button type="button" disabled={busy} onClick={() => void apply("song")} className="border-brand/50 bg-brand/15 text-brand rounded-md border px-2 py-0.5" data-reaction-apply="song">
+                      This song
+                    </button>
+                    {chosen.plan.scopes.includes("artist") ? (
+                      <button type="button" disabled={busy} onClick={() => void apply("artist")} className="rounded-md border px-2 py-0.5" data-reaction-apply="artist">
+                        All my songs
+                      </button>
+                    ) : null}
+                    <button type="button" onClick={() => setChosen(null)} className="text-muted-foreground px-1">
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : null}
+          {done ? <p className="text-emerald-300" data-reaction-done>{done}</p> : null}
+          {error ? <p className="text-red-300">{error}</p> : null}
+        </div>
+      ) : null}
+    </div>
   );
 }

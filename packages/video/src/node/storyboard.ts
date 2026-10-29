@@ -10,6 +10,7 @@ import { absPath, clip as clipTable, REPO_ROOT, type Workspace } from "@lyric/db
 import { eq } from "drizzle-orm";
 
 import type { AnchorUse } from "../anchors";
+import { assessVideo, type Assessment } from "../assess";
 import { VIDEO } from "../config";
 import type { LoopResult, LoopSuggestion } from "../loop";
 import { parsePresets } from "../platform";
@@ -24,7 +25,7 @@ import { SHORT_LABELS, songRuns } from "./exports";
 import { makeVideos } from "./make";
 import type { Manifest } from "./manifest";
 import { resolveMoved } from "./media";
-import { resolveRecipe } from "./recipe";
+import { readRecipe, resolveRecipe } from "./recipe";
 import { SOURCE_FILE } from "./collection";
 import { songCollections } from "./project-settings";
 import { readMoves, sharedCollections, songPathsById } from "./song-folder";
@@ -52,7 +53,8 @@ export type StoryboardView = {
   // Loop platforms: does the wrap-around flow (the failing points, as QA "Loop flows" names them), and
   // target lengths with an end that loops well from this start (plans only).
   loop: { ok: boolean; problems: string[]; lengthS: number; ending: string | null } | null;
-  decisions: string[]; // the app's technical choices in plain words (pacing, transitions) // ending: the automatic ending, in plain words
+  decisions: string[]; // the app's technical choices in plain words (pacing, transitions)
+  assessment: Assessment; // the pro assessment, predicted from the plan (before rendering) // ending: the automatic ending, in plain words
   loopSuggestions: { lengthS: number; end: string; line: string | null; fit: string }[];
   // Stage 2 (plans only): the clips in story order (clips.json, else file names) with their edits; a run
   // is read-only (editable false).
@@ -76,6 +78,7 @@ export type StoryboardClip = {
   outS: number | null;
   speed: number | null;
   transition: "cut" | "dissolve" | null; // how it comes in (clips.json), null: the app chooses
+  canvas: { at: number | null } | null; // chosen for the Spotify Canvas (song.json "canvas"), at that moment
   bestS: number | null; // the best moment used (the clip editor's, else the automatic one)
   bestFrom: "clip editor" | "auto" | null;
   autoBestS: number | null; // the automatic one (the strongest 2 s)
@@ -159,7 +162,9 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
   });
   const auto = await bestMoments(ws.dir, plan.clips.filter((c) => c.kind === "video").map((c) => absPath(ws, c.path)));
   const storyOrder = [...plan.clips].sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+  const canvasChoice = paths.recipe && existsSync(paths.recipe) ? (readRecipe(paths.recipe).canvas ?? null) : null;
   const storyboardClips: StoryboardClip[] = storyOrder.map((c) => ({
+    canvas: canvasChoice && canvasChoice.clip.toLowerCase() === c.name.toLowerCase() ? { at: canvasChoice.at ?? null } : null,
     name: c.name, src: c.path, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, ranked: c.rank !== null,
     inS: c.inMs === null ? null : c.inMs / 1000, outS: c.outMs === null ? null : c.outMs / 1000, speed: c.speed, transition: c.transition,
     bestS: c.bestMs === null ? null : c.bestMs / 1000, bestFrom: c.bestFrom, autoBestS: c.kind === "video" ? (auto.get(absPath(ws, c.path)) ?? null) : null,
@@ -252,6 +257,7 @@ async function view(
     anchorsOutside: c.anchorsOutside,
     anchorWarnings: [...(c.anchors?.missing ?? []), ...(c.anchors?.conflicts ?? []).filter((x) => !attached.has(x))],
     notes: c.notes,
+    assessment: predictAssessment(c.loop, c.anchors, shots, lines, c.notes, [...c.decisions, ...(c.loop?.ending?.text ? [c.loop.ending.text] : [])]),
     loop: c.loop ? { ok: c.loop.ok, problems: c.loop.points.filter((p) => !p.ok).map((p) => `${p.point}: ${p.detail}`), lengthS: c.loop.length_s, ending: c.loop.ending?.text ?? null } : null,
     decisions: c.decisions,
     loopSuggestions: c.loopSuggestions.map((x) => ({ lengthS: x.lengthS, end: clockText(x.endMs), line: x.line ? `line ${x.line.number} "${x.line.text}"` : null, fit: x.fit.text })),
@@ -288,4 +294,36 @@ async function storyClips(
     const bestAtS = c.kind !== "video" ? null : (own ?? auto.get(c.file) ?? null);
     return [c.src, { name: c.name, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, bestAtS, bestFrom: bestAtS === null ? null : own !== undefined ? "clip editor" : "auto" }];
   }));
+}
+
+// The pro assessment of a plan, before rendering: what QA would warn about that the plan already shows
+// (the loop, anchors, clips repeated close together, lines flagged for review, slow motion).
+function predictAssessment(
+  loop: LoopResult | null,
+  anchors: { conflicts: string[]; missing: string[] } | null,
+  shots: StoryShot[],
+  lines: StoryLine[],
+  notes: string[],
+  decisions: string[],
+): Assessment {
+  const problems: { check: string; details: string[] }[] = [];
+  if (loop && !loop.ok) problems.push({ check: "Loop flows", details: loop.points.filter((p) => !p.ok).map((p) => p.detail) });
+  if (anchors && (anchors.conflicts.length || anchors.missing.length)) problems.push({ check: "Story anchors", details: [...anchors.missing, ...anchors.conflicts] });
+  const repeats = shots.flatMap((s, i) => {
+    const back = [1, 2, 3].find((k) => i - k >= 0 && shots[i - k].clip === s.clip);
+    return back ? [`shot ${i + 1} (${clockText(s.startMs)}) repeats ${s.clip} from shot ${i - back + 1}`] : [];
+  });
+  if (repeats.length) problems.push({ check: "Clips repeated within 3 shots", details: repeats });
+  const flagged = notes.flatMap((n) => {
+    const m = /^Vocal-start check: line ([\d, ]+) flagged for review/.exec(n);
+    return m ? m[1].split(/,\s*/).map(Number) : [];
+  });
+  const shown = flagged.map((n) => lines.find((l) => l.number === n)).filter((l): l is StoryLine => !!l);
+  if (shown.length) problems.push({ check: "Line starts to review", details: shown.map((l) => `line ${l.number} "${l.text}": flagged for review`) });
+  return assessVideo({
+    problems,
+    shots: shots.map((s) => ({ start_s: s.startMs / 1000, speed: s.speed, hold: s.hold, photo: s.kind === "photo" })),
+    decisions,
+    prediction: true,
+  });
 }

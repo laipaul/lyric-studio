@@ -865,15 +865,18 @@ describe("platform presets (stand-in renderer)", () => {
     expect(r.warnings.join("\n")).toContain("canvas: only 1 clip(s) give a loop, so 1 variation(s) instead of 2");
     expect(r.warnings.join("\n")).not.toContain("canvas: canvas:");
 
-    // Fallback 1: the 6 s clips of "mixed" cannot make 4 or 3 bars, but 2 bars at normal speed.
+    // Fallback 1: the 6 s clips of "mixed" cannot make 4 bars, but 3 bars slowed gently (0.92x) rather
+    // than 2 bars at normal speed (the longest loop first).
     const fewer = await run({ platforms: "canvas", variations: 1 });
     const fm = readManifest(fewer.variations[0].manifestFile);
-    expect(fm.props.durationInFrames).toBe(120);
-    expect(fm.props.shots[0]).toMatchObject({ playbackRate: 1, duration: 120 });
+    expect(fm.props.durationInFrames).toBe(180);
+    expect(fm.props.shots[0]).toMatchObject({ playbackRate: 0.92, duration: 180 });
     expect(fewer.warnings.join("\n")).toContain(
-      "canvas: fallback 1 (fewer bars): 2 bars (4.00 s) instead of 4 bars (8.00 s), because no vertical clip is long enough for 4 bars (8.00 s) (it needs 8.5 s, the longest is 6.0 s)",
+      "canvas: fallback 1 (fewer bars): 3 bars (6.00 s) with the clip slowed to 0.92x instead of 4 bars (8.00 s), because no vertical clip is long enough for 4 bars (8.00 s) (it needs 8.5 s, the longest is 6.0 s)",
     );
     expect(fm.section.reason).toContain("; fallback 1 (fewer bars)");
+    // The assessment's Canvas info: 8 s was possible with a clip of 6.4 s (8.5 s at 0.75x).
+    expect(fm.settings.canvas).toMatchObject({ seconds: 6, possible_s: 8, need_clip_s: 6.4, fallback: "fewer-bars", chosen: null });
 
     // Fallback 2: a 3 s clip slowed to 0.66x fills 2 bars; the blend frames are taken at that speed too.
     const folder = (name: string) => {
