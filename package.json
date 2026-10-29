@@ -23,7 +23,7 @@
     "songs:migrate": "tsx packages/video/scripts/songs-migrate.ts",
     "brand:set": "tsx packages/video/scripts/brand-set.ts",
     "lyrics:check-start": "tsx packages/video/scripts/check-start.ts",
-    "test:e2e": "tsx apps/studio/e2e/style-lock.e2e.ts && tsx apps/studio/e2e/videos-post.e2e.ts && tsx apps/studio/e2e/lyrics-tab.e2e.ts && tsx apps/studio/e2e/pairings.e2e.ts && tsx apps/studio/e2e/storyboard.e2e.ts && tsx apps/studio/e2e/textboard.e2e.ts",
+    "test:e2e": "tsx apps/studio/e2e/style-lock.e2e.ts && tsx apps/studio/e2e/videos-post.e2e.ts && tsx apps/studio/e2e/lyrics-tab.e2e.ts && tsx apps/studio/e2e/pairings.e2e.ts && tsx apps/studio/e2e/storyboard.e2e.ts && tsx apps/studio/e2e/textboard.e2e.ts && tsx apps/studio/e2e/collections.e2e.ts",
     "app:icons": "tsx packages/video/scripts/app-icons.ts",
     "app:serve": "node scripts/app-serve.mjs",
     "app:rebuild": "node scripts/app-rebuild.mjs",

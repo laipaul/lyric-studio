@@ -7,7 +7,10 @@ import { TasksMenu } from "@/components/tasks-menu";
 import { cn } from "@/lib/utils";
 
 // Only menu items that lead somewhere real (the Studio editor and the content board come later).
-const NAV = [{ href: "/", label: "Library" }];
+const NAV = [
+  { href: "/", label: "Library" },
+  { href: "/collections", label: "Collections" },
+];
 
 // The header: the app's name and icon, navigation, and the Tasks menu (live progress of the runs).
 export function AppHeader() {

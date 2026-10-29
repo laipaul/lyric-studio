@@ -62,11 +62,20 @@ export async function songAssets(ws: Workspace, projectId: string): Promise<Song
   if (paths.hints && existsSync(paths.hints)) {
     out.hints = { file: rel(ws, paths.hints), ...checkHints(readFileSync(paths.hints, "utf8"), existsSync(paths.lyricsTxt) ? readFileSync(paths.lyricsTxt, "utf8") : "") };
   }
-  if (!paths.clips || !existsSync(paths.clips)) return out;
-  const removedDir = path.join(paths.clips, REMOVED_DIR);
+  if (!paths.clips) return out;
+  const listed = await folderClips(ws, paths.clips, songClipsCollection(projectId));
+  return { ...out, ...listed };
+}
+
+// The clips of a folder (a song's clips\ or a shared collection): synced with the database on the way
+// (thumbnail, size), duplicates by content, what was removed (_removed\) and the counts each format can use.
+export async function folderClips(ws: Workspace, folder: string, collectionName: string): Promise<Pick<SongAssets, "clips" | "removed" | "usable">> {
+  const out: Pick<SongAssets, "clips" | "removed" | "usable"> = { clips: [], removed: [], usable: { vertical: 0, horizontal: 0 } };
+  if (!existsSync(folder)) return out;
+  const removedDir = path.join(folder, REMOVED_DIR);
   if (existsSync(removedDir)) out.removed = readdirSync(removedDir).filter((f) => SOURCE_FILE.test(f)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  if (!readdirSync(paths.clips).some((f) => SOURCE_FILE.test(f))) return out;
-  const sync = await syncCollection(ws, { name: songClipsCollection(projectId), folder: paths.clips, prepare: false });
+  if (!readdirSync(folder).some((f) => SOURCE_FILE.test(f))) return out;
+  const sync = await syncCollection(ws, { name: collectionName, folder, prepare: false });
   const firstOf = new Map<string, string>();
   for (const s of sync.sources) {
     const duplicateOf = firstOf.get(s.hash) ?? null;
@@ -142,6 +151,12 @@ export type ImportResult = { added: string[]; duplicates: { name: string; sameAs
 export async function importSongClips(ws: Workspace, projectId: string, files: readonly { file: string; name: string }[]): Promise<ImportResult> {
   const paths = songPathsById(ws, projectId);
   if (!paths.clips) throw new Error("This song has no folder yet: run the migration first (pnpm songs:migrate).");
+  return importClipsInto(ws, paths.clips, songClipsCollection(projectId), files);
+}
+
+// Files copied into a clip folder (a free name when one is taken); content already there is not copied.
+export async function importClipsInto(ws: Workspace, folder: string, collectionName: string, files: readonly { file: string; name: string }[]): Promise<ImportResult> {
+  const paths = { clips: folder };
   mkdirSync(paths.clips, { recursive: true });
   const known = new Map<string, string>();
   for (const f of readdirSync(paths.clips)) {
@@ -171,7 +186,7 @@ export async function importSongClips(ws: Workspace, projectId: string, files: r
     known.set(hash, target);
     result.added.push(target);
   }
-  if (result.added.length) await syncCollection(ws, { name: songClipsCollection(projectId), folder: paths.clips, prepare: false });
+  if (result.added.length) await syncCollection(ws, { name: collectionName, folder: paths.clips, prepare: false });
   return result;
 }
 
@@ -179,15 +194,31 @@ export async function importSongClips(ws: Workspace, projectId: string, files: r
 export async function removeSongClip(ws: Workspace, projectId: string, name: string): Promise<string> {
   const paths = songPathsById(ws, projectId);
   if (!paths.clips) throw new Error("This song has no folder yet.");
+  return removeClipFrom(ws, paths.clips, name, "this song");
+}
+
+// A clip of a folder moves to its _removed\ (never deleted).
+export async function removeClipFrom(ws: Workspace, folder: string, name: string, where: string): Promise<string> {
+  const paths = { clips: folder };
   const base = path.basename(name);
   const file = path.join(paths.clips, base);
-  if (base !== name || !SOURCE_FILE.test(base) || !existsSync(file)) throw new Error(`No clip ${name} in this song.`);
+  if (base !== name || !SOURCE_FILE.test(base) || !existsSync(file)) throw new Error(`No clip ${name} in ${where}.`);
   const removedDir = path.join(paths.clips, REMOVED_DIR);
   mkdirSync(removedDir, { recursive: true });
   const target = path.join(removedDir, uniqueFileName(removedDir, base));
   moveEntry(file, target);
   const stored = rel(ws, file);
   ws.db.delete(clipTable).where(eq(clipTable.path, stored)).run();
+  return rel(ws, target);
+}
+
+// "Restore": a removed clip (in _removed\) goes back into the folder (a free name when one is taken).
+export function restoreClipTo(ws: Workspace, folder: string, name: string): string {
+  const base = path.basename(name);
+  const file = path.join(folder, REMOVED_DIR, base);
+  if (base !== name || !SOURCE_FILE.test(base) || !existsSync(file)) throw new Error(`No removed clip ${name}.`);
+  const target = path.join(folder, uniqueFileName(folder, base));
+  moveEntry(file, target);
   return rel(ws, target);
 }
 

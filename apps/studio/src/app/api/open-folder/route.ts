@@ -1,18 +1,30 @@
 // "Open folder": shows the file in Windows Explorer (selected); only export files of a song. With
-// { projectId } it opens that song's folder (songs\<artist>\<title>\).
+// { projectId } it opens that song's folder (songs\<artist>\<title>\); with { collection } that collection's folder.
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { resolveWorkspaceDir } from "@lyric/db";
 
+import { collectionFolder } from "@lyric/video/collections";
 import { songPathsById } from "@lyric/video/song-folder";
 
 import { allowedFile, TEMPLATE_FILE } from "@/lib/files";
 import { withWorkspace } from "@/lib/workspace";
 
 export async function POST(request: Request) {
-  const { file, projectId } = (await request.json()) as { file?: string; projectId?: string };
+  const { file, projectId, collection } = (await request.json()) as { file?: string; projectId?: string; collection?: string };
+  if (collection) {
+    let folder: string | null = null;
+    try {
+      folder = withWorkspace((ws) => collectionFolder(ws, collection));
+    } catch {
+      folder = null;
+    }
+    if (!folder || !existsSync(folder)) return Response.json({ error: "No such collection" }, { status: 404 });
+    open(process.platform === "win32" ? ["explorer.exe", [folder]] : process.platform === "darwin" ? ["open", [folder]] : ["xdg-open", [folder]]);
+    return Response.json({ ok: true, folder });
+  }
   if (projectId) {
     const folder = withWorkspace((ws) => {
       const paths = songPathsById(ws, projectId);

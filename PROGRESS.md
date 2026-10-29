@@ -995,6 +995,13 @@ These platforms play a video in a loop, so the wrap-around from the last frame t
   same clip first and last, and the Reels continuation that passes; a harmony clash C -> F#; phrase cut;
   the end choice preferring the better loop and saying why; shuffle first != last over 300 seeds).
 
+### Step F — Collections page ✅ (to verify on the Windows PC)
+- Header **Collections** next to Library: a card per collection (thumbnails, clip count, video length,
+  what 9:16 and 16:9 can use, which songs use it) and **New collection**.
+- A collection's page: thumbnail grid (hover plays the clip), drag-and-drop or **Add clips** (copied in,
+  the same content never twice), **Remove** -> _removed\ (never deleted) with **Restore**, **Open folder**.
+- Tests: collections.test.ts; browser: collections.e2e.ts (now part of pnpm test:e2e).
+
 ### Step E — Instrumental songs with a story ✅ (to verify on the Windows PC)
 - **+ New song → Instrumental**: no lyrics needed; an optional **story.txt** instead (one sentence per line,
   a blank line = a pause). song.json gets "instrumental": true; Assets shows "Story (instrumental)" with

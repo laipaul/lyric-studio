@@ -79,6 +79,7 @@
     "./runs": "./src/node/runs.ts",
     "./run-worker": "./src/node/run-worker.ts",
     "./assets": "./src/node/assets.ts",
+    "./collections": "./src/node/collections.ts",
     "./migrate": "./src/node/migrate.ts",
     "./recipe": "./src/node/recipe.ts",
     "./song-folder": "./src/node/song-folder.ts",
