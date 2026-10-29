@@ -803,7 +803,10 @@ describe("platform presets (stand-in renderer)", () => {
     ]);
     expect(m.props.textCards![0]).toMatchObject({ top: 76, startFrame: 0, endFrame: m.props.durationInFrames + 1, effect: null, upper: true });
     expect(m.textboard).toEqual({ file: null, hash: null, template: null, changes: 0, cards: expect.any(Number) });
-    expect(m.props.endScreen?.fromFrame).toBe(m.props.durationInFrames - 600);
+    // The app chooses the end-screen window: 5-20 s, from after the last lyric line has left.
+    expect(m.props.endScreen!.seconds).toBeGreaterThanOrEqual(5);
+    expect(m.props.endScreen!.seconds).toBeLessThanOrEqual(20);
+    expect(m.props.endScreen?.fromFrame).toBe(m.props.durationInFrames - m.props.endScreen!.seconds! * 30);
     expect(m.props.nextLine).toBe(true);
     // 5g.2b: bigger lyrics, title centred over the lyrics column, drift + parallax, mood, logo.
     expect(m.props.textSize).toBe(Math.round(64 * 1.18));
@@ -1183,5 +1186,18 @@ describe("publish.txt EP line with an older template", () => {
     expect(withEp.text).toBe('== Title ==\nHold On\n\n== Description ==\nIntro for Hold On.\nFrom the EP "In The Mood for Life"\n\nOne\nTwo\n');
     const without = publishText(dir, { song: "Hold On", artist: "Life Lyrics", lyricsTxt: "One\n", year: 2026 });
     expect(without.text).toBe("== Title ==\nHold On\n\n== Description ==\nIntro for Hold On.\n\nOne\n");
+  });
+
+  it("tells the end-screen length: appended after the tags for an older template, or at {{endScreen}}", () => {
+    const dir = path.join(root, "end-screen-ws");
+    mkdirSync(path.join(dir, "brand"), { recursive: true });
+    writeFileSync(path.join(dir, "brand", "publish-template.txt"), "== Title ==\n{{song}}\n\n== Description ==\nIntro.\n\n== Tags ==\na, b\n");
+    const old = publishText(dir, { song: "Hold On", artist: "Life Lyrics", lyricsTxt: "One\n", year: 2026, endScreen: "the last 14 s (from 3:41)" });
+    expect(old.text).toBe("== Title ==\nHold On\n\n== Description ==\nIntro.\n\n== Tags ==\na, b\n\n== End screen ==\nEnd screen: the last 14 s (from 3:41)\n");
+    writeFileSync(path.join(dir, "brand", "publish-template.txt"), "== Title ==\n{{song}}\n\n{{endScreen}}\n\n== Description ==\nIntro.\n");
+    const own = publishText(dir, { song: "Hold On", artist: "Life Lyrics", lyricsTxt: "One\n", year: 2026, endScreen: "the last 5 s (from 3:00)" });
+    expect(own.text).toBe("== Title ==\nHold On\n\nEnd screen: the last 5 s (from 3:00)\n\n== Description ==\nIntro.\n");
+    const none = publishText(dir, { song: "Hold On", artist: "Life Lyrics", lyricsTxt: "One\n", year: 2026 });
+    expect(none.text).toBe("== Title ==\nHold On\n\n\n== Description ==\nIntro.\n");
   });
 });

@@ -1341,6 +1341,12 @@ rest was in sync.
   reactivity; it saves versioned, data-only presets to the effects library. Not scheduled yet.
 
 ## Known issues
+- Fixed: YouTube cover layout, lines near the end jumped to the top ("These Empty Roads", lines 35-37). The
+  fixed 20 s end-screen window put any line reaching into it in the top band. Now the app chooses the
+  window (from 0.5 s after the last lyric line has left, 5-20 s long, props endScreen.seconds); lines move
+  only when the singing reaches into the last 5 s, and then the lyric area glides to the band instead of
+  jumping. publish.txt gets "End screen: the last N s (from m:ss)" ({{endScreen}}, or an "== End screen =="
+  note after the tags for older templates). Older manifests (no endScreen.seconds) render as before.
 - TikTok (target 25 s) ended at 31.6 s like Reels on the user's song (most likely no bar inside a gap
   between lines). Since 5g.2 TikTok and Shorts may end on any beat, which should fix it.
 - Full-song YouTube videos render slowly in the cloud check (cover layout ~1.5 s per second of video on

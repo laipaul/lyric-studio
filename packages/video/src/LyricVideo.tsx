@@ -20,7 +20,7 @@ import { activeLyricLine, applyTextCase, layoutLyric } from "./lyrics";
 import { kenBurnsAt } from "./photo";
 import { loopBlendOpacity, photoLoopProgress } from "./canvas";
 import { dipOpacity } from "./transitions";
-import { beatPulse, coverMotionAt, logoOpacity, moodAt, stillOpacity, type Rgba } from "./youtube";
+import { beatPulse, coverMotionAt, endScreenAreaAt, logoOpacity, moodAt, stillOpacity, type Rgba } from "./youtube";
 import { COVER_CENTRE_X, coverSide } from "./youtube-layout";
 
 const LOGO_FADE_FRAMES = 15; // 0.5 s
@@ -502,10 +502,11 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
   const ready = useFonts(mediaBaseUrl, props.fonts);
   const line = activeLyricLine(lyrics, frame);
   const format = props.format ?? DEFAULT_FORMAT;
-  // In the last seconds of a YouTube video the lyrics move out of the end-screen area; a line that
-  // reaches into that time is placed there from its start (it never jumps).
+  // Only when the singing reaches into a YouTube video's end-screen window do the lyrics move out of
+  // the end-screen area: the lyric area glides to the band just before the window starts.
   const endScreen = props.endScreen;
-  const area = line && endScreen && line.endFrame > endScreen.fromFrame ? endScreen.lyricArea : (props.lyricArea ?? DEFAULT_LYRIC_AREA);
+  const baseArea = props.lyricArea ?? DEFAULT_LYRIC_AREA;
+  const area = line ? endScreenAreaAt(baseArea, endScreen, frame, line.endFrame) : baseArea;
   const { fps } = useVideoConfig();
   const mood = props.mood?.length ? moodAt(frame, props.mood, fps) : null;
   const next = props.nextLine && line ? lyrics.find((l) => l.startFrame > line.startFrame)?.text ?? null : null;
@@ -583,7 +584,7 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
           textSize={textSize}
           colour={colour}
           ready={ready}
-          areaFor={(l) => (endScreen && l.endFrame > endScreen.fromFrame ? endScreen.lyricArea : (props.lyricArea ?? DEFAULT_LYRIC_AREA))}
+          areaFor={(l) => endScreenAreaAt(baseArea, endScreen, frame, l.endFrame)}
           glow={glow}
           showNext={props.nextLine ?? false}
           nextScale={props.nextLineScale ?? 0.55}

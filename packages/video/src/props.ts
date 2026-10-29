@@ -133,7 +133,7 @@ export type LyricVideoProps = {
   textCards?: TextCardProps[]; // the textboard's title / byline / tagline cards
   logo?: { src: string; left: number; top: number; width: number; height: number; goneAt: number | null } | null; // goneAt: faded out by this frame
   mood?: MoodSegment[]; // section mood: warm/bright on hooks, soft on verses (2 s eased changes)
-  endScreen?: { fromFrame: number; lyricArea: LyricArea; clear: { left: number; top: number; right: number; bottom: number } } | null;
+  endScreen?: { fromFrame: number; seconds?: number /* window length; absent in older manifests */; lyricArea: LyricArea; clear: { left: number; top: number; right: number; bottom: number } } | null;
   lyricEffects?: LyricEffectsProps | null;
   // Automatic transitions (src/transitions.ts): dips to black, `frames` long and darkest on `frame`.
   dips?: { frame: number; frames: number }[];

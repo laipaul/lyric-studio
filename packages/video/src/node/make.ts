@@ -70,7 +70,7 @@ import { detectBadFrames, measureLyrics } from "./qa-check";
 import { getBundle, renderCover, renderLyricVideo, renderThumbnail, type RenderOptions } from "./render";
 import { applyHandSet, applyVocalGuard, ensureAlignment, findOrCreateSongProject, matchReport, type Alignment, type AlignRunner, type VoiceMapRunner, type FirstWordsRunner } from "./song-project";
 import { COVER_TEXT_SCALE } from "../youtube-layout";
-import { lyricSections } from "../youtube";
+import { endScreenText, lyricSections } from "../youtube";
 import { loopCheck, planCanvas, type CanvasPlan } from "./canvas";
 import {
   blurredBackground,
@@ -1639,7 +1639,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
           outFile: result.thumbnailFile,
           log,
         });
-        const pack = publishText(ws.dir, { song: project.title, artist: project.artist, lyricsTxt: readFileSync(alignment.lyricsTxt, "utf8"), year: sh.now.getFullYear(), ep: sh.ep }, path.dirname(artistBrandFile(ws.dir, project.artist, "publish-template.txt").file));
+        const pack = publishText(ws.dir, { song: project.title, artist: project.artist, lyricsTxt: readFileSync(alignment.lyricsTxt, "utf8"), year: sh.now.getFullYear(), ep: sh.ep, ...(props.endScreen?.seconds ? { endScreen: endScreenText({ fromFrame: props.endScreen.fromFrame, seconds: props.endScreen.seconds }, VIDEO.fps) } : {}) }, path.dirname(artistBrandFile(ws.dir, project.artist, "publish-template.txt").file));
         if (pack.created) log(`publishing template created: ${pack.template} (edit it to change publish.txt)`);
         result.publishFile = path.join(exportDir, one ? "publish.txt" : `${spec.name}.publish.txt`);
         writeFileSync(result.publishFile, pack.text);

@@ -21,7 +21,10 @@ import {
   moodSegments,
   mulberry32,
   beatPulse,
+  END_SCREEN_GLIDE_FRAMES,
+  endScreenAreaAt,
   endScreenLayout,
+  endScreenText,
   lyricArea,
   lyricBox,
   lyricSections,
@@ -134,6 +137,54 @@ describe("end screen, glow and captions", () => {
         expect(box.top).toBeGreaterThanOrEqual(1080 * 0.14);
       }
     }
+  });
+
+  describe("the app chooses the end-screen window", () => {
+    const area = lyricArea(yt, youtubeLyricSafeZone("cover", yt.safeZone), yt.lyricsAt);
+    const safe = { ...yt.safeZone, top: 0.14 };
+    const total = 6000; // 200 s at 30 fps
+    const layout = (lastLyricEndFrame: number | null) => endScreenLayout(yt, safe, area, 30, total, { ...yt.youtube!.endScreen, lastLyricEndFrame });
+
+    it("lyrics ending 30 s before the end: the full 20 s window", () => {
+      const end = layout(total - 30 * 30);
+      expect(end.fromFrame).toBe(total - 600);
+      expect(end.seconds).toBe(20);
+    });
+    it("no lyrics: the full 20 s window", () => {
+      expect(layout(null)).toMatchObject({ fromFrame: total - 600, seconds: 20 });
+    });
+    it("lyrics ending 12 s before the end: the window starts 0.5 s after the last line, ~11.5 s long", () => {
+      const end = layout(total - 12 * 30);
+      expect(end.fromFrame).toBeGreaterThanOrEqual(total - 12 * 30 + 15); // not before the last line has left + 0.5 s
+      expect(end.fromFrame).toBeLessThanOrEqual(total - 11 * 30);
+      expect(end.seconds).toBe(11);
+      expect(end.fromFrame).toBe(total - end.seconds * 30); // consistent
+    });
+    it("lyrics ending 2 s before the end: a 5 s window", () => {
+      const end = layout(total - 2 * 30);
+      expect(end).toMatchObject({ fromFrame: total - 150, seconds: 5 });
+    });
+    it("lines before the glide are untouched; a line reaching the window glides to the band, then sits in it", () => {
+      const end = layout(total - 2 * 30);
+      const gone = endScreenAreaAt(area, end, end.fromFrame - 10, end.fromFrame - END_SCREEN_GLIDE_FRAMES); // ended before the glide
+      expect(gone).toBe(area);
+      const lineEnd = total - 60;
+      expect(endScreenAreaAt(area, end, end.fromFrame - END_SCREEN_GLIDE_FRAMES, lineEnd).centerY).toBe(area.centerY);
+      const mid = endScreenAreaAt(area, end, end.fromFrame - END_SCREEN_GLIDE_FRAMES / 2, lineEnd).centerY;
+      const lo = Math.min(area.centerY, end.lyricArea.centerY);
+      expect(mid).toBeGreaterThan(lo);
+      expect(mid).toBeLessThan(Math.max(area.centerY, end.lyricArea.centerY));
+      expect(endScreenAreaAt(area, end, end.fromFrame, lineEnd)).toBe(end.lyricArea);
+      expect(endScreenAreaAt(area, end, total - 1, lineEnd)).toBe(end.lyricArea);
+    });
+    it("old manifests (no seconds): a line reaching into the window sits in the band, others in the normal area", () => {
+      const old = { fromFrame: 5400, lyricArea: layout(null).lyricArea };
+      expect(endScreenAreaAt(area, old, 100, 5500)).toBe(old.lyricArea);
+      expect(endScreenAreaAt(area, old, 100, 5000)).toBe(area);
+    });
+    it("endScreenText: the length and start to set in YouTube Studio", () => {
+      expect(endScreenText({ fromFrame: 221 * 30, seconds: 14 }, 30)).toBe("the last 14 s (from 3:41)");
+    });
   });
 
   it("the cover layout keeps the lyrics right of the cover", () => {

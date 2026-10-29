@@ -1,5 +1,7 @@
 // YouTube (16:9) helpers, pure: lyric sections for the stills layout, stills.txt, crossfades on
 // downbeats, the end-screen area of the last 20 s, the beat-pulsed glow and .srt captions.
+import { Easing, interpolate } from "remotion";
+
 import type { Beat } from "./beats";
 import { normalizeLyric } from "./lrc";
 import { type Format, type LyricArea, lyricArea, type SafeZone } from "./platform";
@@ -129,23 +131,66 @@ export function stillOpacity(s: { startFrame: number; endFrame: number; fadeFram
   return first ? 1 : Math.min(1, (frame - s.startFrame + 1) / s.fadeFrames);
 }
 
-// The last `seconds` of a YouTube video: YouTube's end-screen elements go bottom-right, so that
-// area (`clear`, fractions of the frame) stays free; lyrics move to a band above it.
+export const END_SCREEN_MIN_SECONDS = 5; // YouTube's shortest end screen
+export const END_SCREEN_MARGIN_SECONDS = 0.5; // after the last lyric has left
+export const END_SCREEN_GLIDE_FRAMES = 24; // the lyric area glides to the band over this many frames
+
+// The end of a YouTube video: YouTube's end-screen elements go bottom-right, so that area (`clear`,
+// fractions of the frame) stays free. The app chooses the window itself: it starts when the last
+// lyric line has left the screen (+ 0.5 s), but is at least 5 s (YouTube's minimum) and at most
+// `options.seconds` (20 s) long; without lyrics it is the full `seconds`. `seconds` is the window's
+// length in whole seconds (rounded down, so fromFrame = duration - seconds * fps). Only when the
+// singing reaches into the last 5 s do lyrics move, to a band above the clear area (see
+// endScreenAreaAt: a glide, not a jump).
 export function endScreenLayout(
   format: Format,
   safe: SafeZone,
   area: LyricArea,
   fps: number,
   durationInFrames: number,
-  options: { seconds: number; clear: { left: number; top: number } },
-): { fromFrame: number; lyricArea: LyricArea; clear: { left: number; top: number; right: number; bottom: number } } {
+  options: { seconds: number; clear: { left: number; top: number }; lastLyricEndFrame?: number | null },
+): { fromFrame: number; seconds: number; lyricArea: LyricArea; clear: { left: number; top: number; right: number; bottom: number } } {
   const clear = { left: Math.round(format.width * options.clear.left), top: Math.round(format.height * options.clear.top), right: format.width, bottom: format.height };
   const band = lyricArea(format, { ...safe, bottom: 1 - options.clear.top + 0.03 }, 0.5);
+  const longest = Math.max(0, durationInFrames - Math.round(options.seconds * fps)); // earliest start
+  const shortest = Math.max(longest, durationInFrames - Math.round(END_SCREEN_MIN_SECONDS * fps)); // latest start
+  const last = options.lastLyricEndFrame;
+  const wanted = last === null || last === undefined ? longest : Math.round(last + END_SCREEN_MARGIN_SECONDS * fps);
+  const start = Math.min(shortest, Math.max(longest, wanted));
+  const seconds = Math.floor((durationInFrames - start) / fps);
   return {
-    fromFrame: Math.max(0, durationInFrames - Math.round(options.seconds * fps)),
+    fromFrame: Math.max(0, durationInFrames - seconds * fps),
+    seconds,
     lyricArea: { ...band, left: area.left, right: area.right },
     clear,
   };
+}
+
+// The lyric area for a line at `frame`: the normal area, gliding (eased, END_SCREEN_GLIDE_FRAMES before
+// fromFrame) to the end-screen band for lines still on screen then. Lines that end before the glide
+// starts are untouched. Manifests from before the glide (no `seconds`) keep the old rule: a line
+// reaching into the window sits in the band from its start.
+export function endScreenAreaAt(
+  base: LyricArea,
+  end: { fromFrame: number; seconds?: number; lyricArea: LyricArea } | null | undefined,
+  frame: number,
+  lineEndFrame: number,
+): LyricArea {
+  if (!end) return base;
+  if (end.seconds === undefined) return lineEndFrame > end.fromFrame ? end.lyricArea : base;
+  const glideStart = end.fromFrame - END_SCREEN_GLIDE_FRAMES;
+  if (lineEndFrame <= glideStart) return base;
+  const t = interpolate(frame, [glideStart, end.fromFrame], [0, 1], { easing: Easing.inOut(Easing.cubic), extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  if (t <= 0) return base;
+  if (t >= 1) return end.lyricArea;
+  const mix = (a: number, b: number) => a + (b - a) * t;
+  return { ...base, centerY: mix(base.centerY, end.lyricArea.centerY), top: mix(base.top, end.lyricArea.top), bottom: mix(base.bottom, end.lyricArea.bottom) };
+}
+
+// "the last 14 s (from 3:41)": what to set in YouTube Studio's end-screen editor.
+export function endScreenText(end: { fromFrame: number; seconds: number }, fps: number): string {
+  const s = Math.floor(end.fromFrame / fps);
+  return `the last ${end.seconds} s (from ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")})`;
 }
 
 // 0..1: how strongly the glow pulses at `frame` (jumps on a beat, decays over ~0.2 s).

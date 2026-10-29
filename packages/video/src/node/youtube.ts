@@ -150,7 +150,9 @@ export function youtubeExtras(o: {
   const titleFont = o.brand.titleFont;
   // The end-screen lyric band starts below the title at the top (14% of the height).
   const safe = { ...o.preset.safeZone, top: Math.max(o.preset.safeZone.top, 0.14) };
-  const endScreen = y.endScreen.seconds > 0 ? endScreenLayout(format, safe, area, fps, o.props.durationInFrames, y.endScreen) : null;
+  // The app picks the end-screen window: from just after the last lyric has left (5-20 s long).
+  const lastLyricEndFrame = o.props.lyrics.length ? Math.max(...o.props.lyrics.map((l) => l.endFrame)) : null;
+  const endScreen = y.endScreen.seconds > 0 ? endScreenLayout(format, safe, area, fps, o.props.durationInFrames, { ...y.endScreen, lastLyricEndFrame }) : null;
   const beatFrames = o.beats.map((b) => Math.round(((b.time_ms - o.startMs) * fps) / 1000)).filter((f) => f >= 0 && f < o.props.durationInFrames);
   return {
     layout: o.layout,
@@ -254,12 +256,15 @@ Listen on Spotify: https://open.spotify.com/ (add the link to the song)
 `;
 
 // WORKSPACE_DIR\brand\publish-template.txt (created the first time) filled in for one song.
-// Placeholders: {{song}} {{artist}} {{lyrics}} {{songTag}} {{artistTag}} {{year}} {{ep}} {{epLine}}.
+// Placeholders: {{song}} {{artist}} {{lyrics}} {{songTag}} {{artistTag}} {{year}} {{ep}} {{epLine}} {{endScreen}}.
 // {{epLine}} is 'From the EP "<name>"' with --ep, otherwise its line is left out. A template from
 // before --ep existed gets that line right after the first line of the description.
+// {{endScreen}} is "End screen: the last 14 s (from 3:41)" (what to set in YouTube Studio; `endScreen`
+// given only). A template without it gets "== End screen ==" + that line at the very end, outside the
+// description and tags, so nothing of it is published by accident.
 export function publishText(
   workspaceDir: string,
-  values: { song: string; artist: string; lyricsTxt: string; year: number; ep?: string },
+  values: { song: string; artist: string; lyricsTxt: string; year: number; ep?: string; endScreen?: string },
   folder: string = brandDir(workspaceDir), // the artist's brand folder
 ): { text: string; template: string; created: boolean } {
   const template = path.join(folder, "publish-template.txt");
@@ -286,8 +291,11 @@ export function publishText(
     year: String(values.year),
     ep: values.ep ?? "",
     epLine: values.ep ? `From the EP "${values.ep}"` : "",
+    endScreen: values.endScreen ? `End screen: ${values.endScreen}` : "",
   };
   let content = readFileSync(template, "utf8").replace(/\r\n/g, "\n");
+  if (values.endScreen && !content.includes("{{endScreen}}")) content = `${content.replace(/\n*$/, "\n")}\n== End screen ==\n{{endScreen}}\n`;
+  if (!values.endScreen) content = content.replace(/^[ \t]*\{\{endScreen\}\}[ \t]*\n/gm, "");
   if (!content.includes("{{epLine}}") && values.ep) {
     const m = /== Description ==\n+[^\n]*\n/.exec(content);
     if (m) content = `${content.slice(0, m.index + m[0].length)}{{epLine}}\n${content.slice(m.index + m[0].length)}`;
