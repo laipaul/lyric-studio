@@ -6,6 +6,7 @@ node_modules/
 __pycache__/
 *.pyc
 .pytest_cache/
+.pytest-tmp/
 
 # Workspace data (songs, clips, renders, database) - keep the folder only
 workspace/*
