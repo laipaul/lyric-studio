@@ -1307,8 +1307,29 @@ rest was in sync.
   mix has different timing, use Generate -> advanced -> re-align.
 
 ## Next
+Guiding principle (CLAUDE.md, decided 29 Oct 2026): the user provides, orders and trims the clips; the app
+does every technical decision automatically and gives a plain-language pro assessment of each result.
+Found in the 29 Oct test on The House My Heart Built (135 BPM, 13 own clips of ~5 s), each a technical
+decision the app still hands to the user:
+- Reels ending stops dead on a loud chorus (0.12 s fade, level jump 15.6 dB).
+- A loop suggestion (84 s) that drops the title line ("This is the house that my heart built").
+- Pacing left to the user: 51 shots of 1.8 s on an emotional song until Shot length "story" was set by hand.
+- Slow-motion warnings (0.74x) the user must judge; a 3 s Canvas from short clips; technical WARN texts.
+
+After the user's test pass, in this order (each its own step, plan first):
+A. **Automatic endings**: per section the app chooses tight loop / soft fade / ring-out (last chord one more
+   bar, then fade) from the music at the end (level, harmony, what follows); whole bars kept; loop
+   suggestions never drop a chorus / title line the plan has. Fixes the abrupt Reels ending.
+B. **Automatic pacing**: shot length chosen from the song (tempo, energy, hooks vs verses) and the clips
+   given (their usable lengths, slow-motion limit), e.g. "story" for slow emotional songs; asks for longer
+   clips only when it cannot work otherwise.
+C. **Pro assessment** per video (Videos tab, Storyboard header): one verdict in plain words + at most a few
+   creative actions; the QA / loop details one click away. Canvas: picks the best clip and the longest loop
+   (slowed a little rather than 3 s), or says "a clip of at least N s".
+D. Then the **title opening** below.
+
 0. **Feature freeze** until the user has tested on their songs (Textboard, Storyboard stage 2, shot length,
-   tempo, loop warning). Then, first item: the **title opening** (decided, not built yet):
+   tempo, loop warning). Then A–C above, then the **title opening** (decided, not built yet):
    1. Lead-in 2 bars before the first hook only when the title opening is on (setting 1-2 bars, default 2,
       at most ~5 s); without a title: hook-first <= 1 bar and the 2.5 s rule as now.
    2. Places: title + byline on the frame's upper third, tagline on the frame's lower third (inside the

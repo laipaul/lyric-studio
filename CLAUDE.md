@@ -15,6 +15,20 @@ Screens (Step 6, in the Life Lyrics look: dark, Cinzel headings, accent pink):
 - **Studio**: left panel (project, sections, lyrics, text styles, cinematic bars), centre phone-shaped live preview with "Render video", right panel (media collections, add clips, filter all / in use / unused), bottom bar (play, undo, shuffle, Beat Synced with cut rate 0.5x / 1x / 2x / Off, timeline with clip thumbnails and beat ruler), variations strip under the preview.
 A header "Tasks" menu shows render progress.
 
+## Guiding principle — who does what (decided by the user, 29 Oct 2026)
+- **The user does the creative part**: provides the clips, puts them in order, shortens a clip when needed
+  (and makes artistic choices: fonts, effects, anchors, which take to post).
+- **The app does all the technical work automatically**: beat-synced cuts, pacing / shot lengths, section
+  and ending choice, loops, fades, lyric timing, readability, blending the clips together — with
+  professional defaults, never asking the user to tune a technical setting to get a good result. Settings
+  stay available as overrides, never as requirements.
+- **Every result gets a professional assessment** in plain words (e.g. "Ready to post" / "Good — two things
+  to improve: …"), with the technical details one click away. A WARN the user cannot act on creatively is a
+  job for the app, not for the user.
+- When the app truly cannot make it work with the clips given, it says what creative input would fix it
+  (e.g. "a clip of at least 9 s for the Canvas"), never which technical knob to turn.
+- Every new feature and fix is checked against this: if it hands the user a technical decision, rethink it.
+
 ## Out of scope — never build these
 Payments, credits, user accounts, login, multi-user, cloud hosting, cloud rendering, social posting, analytics.
 
