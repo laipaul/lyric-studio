@@ -396,7 +396,7 @@ function TextCards({ cards, format }: { cards: TextCardProps[]; format: Format }
                 marginTop: parent.size * 0.25,
                 ...(c.colour !== parent.colour ? { color: c.colour } : {}),
                 ...(c.font !== parent.font || c.weight !== parent.weight || !!c.italic !== !!parent.italic
-                  ? { fontFamily: `"${c.font}", serif`, fontWeight: c.weight, fontStyle: c.italic ? "italic" : "normal" }
+                  ? { fontFamily: `"${c.font}"${c.fallbackFont ? `, "${c.fallbackFont}"` : ""}, serif`, fontWeight: c.weight, fontStyle: c.italic ? "italic" : "normal" }
                   : {}),
                 ...(c.letterSpacing !== parent.letterSpacing ? { letterSpacing: `${c.letterSpacing}em` } : {}),
                 opacity: (c.opacity ?? 1) * look.opacity,
@@ -428,7 +428,7 @@ function TextCards({ cards, format }: { cards: TextCardProps[]; format: Format }
               top: root.top ?? root.centerY ?? "50%",
               transform: [root.top === undefined ? "translateY(-50%)" : "", moved ? `translate(${look.x.toFixed(2)}px, ${look.y.toFixed(2)}px) scale(${look.scale.toFixed(4)})` : ""].filter(Boolean).join(" ") || undefined,
               textAlign: "center",
-              fontFamily: `"${root.font}", serif`,
+              fontFamily: `"${root.font}"${root.fallbackFont ? `, "${root.fallbackFont}"` : ""}, serif`,
               fontWeight: root.weight,
               ...(root.italic ? { fontStyle: "italic" as const } : {}),
               fontSynthesis: "none",

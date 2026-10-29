@@ -143,6 +143,7 @@ export function AssetsTab({ projectId }: { projectId: string }) {
           {data.folderPath ?? win(data.folder)}
         </button>
       </p>
+      <TaglineField projectId={projectId} />
       <ul className="grid gap-3 md:grid-cols-2">
         {fileRow("song", <FileAudio className="size-5" />, "Song", data.song ? `${data.song.name}${data.song.durationMs ? ` · ${clock(data.song.durationMs)}` : ""}${data.song.bpm ? ` · ${Math.round(data.song.bpm)} BPM` : ""}` : "missing")}
         {fileRow("lyrics", <FileText className="size-5" />, "Lyrics", data.lyrics ? `lyrics.txt · ${data.lyrics.lines} lines` : "no lyrics.txt yet")}
@@ -241,5 +242,45 @@ export function AssetsTab({ projectId }: { projectId: string }) {
         </p>
       ) : null}
     </div>
+  );
+}
+
+// The song's tagline (song.json "tagline"): a short line under the title in the title opening (Style tab:
+// Title opening on). Empty: none. Never taken from the EP.
+function TaglineField({ projectId }: { projectId: string }) {
+  const [value, setValue] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  useEffect(() => {
+    api(`/api/songs/${projectId}/recipe`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: { fields?: { field: string; value: unknown }[] }) => {
+        const v = String(d.fields?.find((f) => f.field === "tagline")?.value ?? "");
+        setValue(v);
+        setSaved(v);
+      })
+      .catch(() => setValue(""));
+  }, [projectId]);
+  const save = async () => {
+    if (value === null || value === saved) return;
+    const body = value.trim() ? { action: "set", field: "tagline", value: value.trim() } : { action: "reset", field: "tagline" };
+    const r = await api(`/api/songs/${projectId}/recipe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (r.ok) setSaved(value.trim());
+  };
+  if (value === null) return null;
+  return (
+    <label className="bg-card flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 text-sm" data-tagline>
+      <span className="font-medium">Tagline</span>
+      <input
+        data-tagline-input
+        className="bg-input/30 border-input h-8 min-w-60 flex-1 rounded-md border px-2 text-sm"
+        value={value}
+        maxLength={120}
+        placeholder="a short line under the title (empty: none)"
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => void save()}
+        onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+      />
+      <span className="text-muted-foreground text-xs">{saved === value && value ? "saved · " : ""}shown in the title opening (Style tab → Title opening: on)</span>
+    </label>
   );
 }

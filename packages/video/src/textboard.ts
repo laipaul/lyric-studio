@@ -15,7 +15,8 @@ export const ROLES = ["title", "byline", "tagline", "verse", "hook"] as const;
 export type Role = (typeof ROLES)[number];
 // lyrics: the lyric spot (lyricsAt in the safe area); with-title: stacked under the title; top /
 // upper / centre / lower: places inside the safe area (never in a platform's UI).
-export const POSITIONS = ["lyrics", "with-title", "top", "upper", "centre", "lower"] as const;
+// upper-third / lower-third: the frame's thirds (the title opening), kept inside the safe area.
+export const POSITIONS = ["lyrics", "with-title", "top", "upper", "centre", "lower", "upper-third", "lower-third"] as const;
 export type CardPosition = (typeof POSITIONS)[number];
 export const POSITION_AT: Record<"upper" | "centre" | "lower", number> = { upper: 0.3, centre: 0.5, lower: 0.7 };
 export const SIZE_RANGE = [0.5, 2] as const;
@@ -38,7 +39,7 @@ export type Textboard = { template: string | null; roles: Partial<Record<Role, C
 // A template: the design without the words (roles and the title-opening cards' looks).
 export type TextTemplate = { name: string; artist: string; roles: Partial<Record<Role, CardStyle>>; opening: Partial<Record<"title" | "byline" | "tagline", CardStyle>>; createdAt?: string };
 
-export type SongText = { title: string; artist: string; ep?: string | null; lines: { number: number; text: string; isHook: boolean }[] };
+export type SongText = { title: string; artist: string; ep?: string | null; tagline?: string | null; lines: { number: number; text: string; isHook: boolean }[] };
 
 const norm = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 export const taglineFor = (ep?: string | null) => (ep ? `From the EP "${ep}"` : "");
@@ -152,7 +153,7 @@ export function defaultCards(song: SongText): TextCard[] {
   return [
     { id: "title", type: "title", text: song.title, overrides: {} },
     { id: "byline", type: "byline", text: song.artist, overrides: {} },
-    { id: "tagline", type: "tagline", text: taglineFor(song.ep), overrides: {} },
+    { id: "tagline", type: "tagline", text: song.tagline ?? "", overrides: {} }, // the song's own tagline (song.json), never the EP
     ...song.lines.map((l): TextCard => ({ id: `line-${l.number}`, type: "lyric", line: l.number, text: l.text, ...(l.isHook ? { isHook: true } : {}), overrides: {} })),
   ];
 }
@@ -245,9 +246,15 @@ export function lyricCardStyle(board: Textboard, card: TextCard, isHook: boolean
 export type LineCard = NonNullable<LyricLineProps["card"]>;
 
 // Where a card sits (its centre, px) in the lyric area: lyrics = the usual spot.
-export function cardCenterY(position: CardPosition | undefined, area: Pick<LyricArea, "top" | "bottom" | "centerY">): number | undefined {
+export function cardCenterY(position: CardPosition | undefined, area: Pick<LyricArea, "top" | "bottom" | "centerY">, frameHeight?: number): number | undefined {
   if (!position || position === "lyrics" || position === "with-title") return undefined;
   if (position === "top") return Math.round(area.top + (area.bottom - area.top) * 0.15);
+  if (position === "upper-third" || position === "lower-third") {
+    const h = area.bottom - area.top;
+    // On the frame's third lines (rule of thirds), kept 12% inside the safe area.
+    const want = frameHeight ? (frameHeight * (position === "upper-third" ? 1 : 2)) / 3 : area.top + h * (position === "upper-third" ? POSITION_AT.upper : POSITION_AT.lower);
+    return Math.round(Math.min(area.bottom - h * 0.12, Math.max(area.top + h * 0.12, want)));
+  }
   return Math.round(area.top + (area.bottom - area.top) * POSITION_AT[position]);
 }
 

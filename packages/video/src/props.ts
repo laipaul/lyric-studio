@@ -58,6 +58,7 @@ export type TextCardProps = {
   type: "title" | "byline" | "tagline";
   text: string;
   font: string;
+  fallbackFont?: string; // for characters the font lacks (e.g. Japanese: Noto Sans JP), same in preview and render
   weight: number;
   italic?: boolean;
   size: number; // px

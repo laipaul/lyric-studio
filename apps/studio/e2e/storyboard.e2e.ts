@@ -138,7 +138,8 @@ async function main() {
       const box = await (await page.$("[data-waveform]")).boundingBox();
       return [box.x + 40, box.y + box.height / 2] as [number, number];
     })()));
-    await sleep(3000);
+    // Wait (up to 8 s) until the preview has played past a third of the view and the timeline followed.
+    for (let k = 0; k < 16 && (await scrollLeft()) === 0; k++) await sleep(500);
     const followed = await scrollLeft();
     check(followed > 0, `with Follow playback the timeline scrolls with the playhead (scrolled ${followed} px)`);
     check((await page.evaluate(() => window.localStorage.getItem("lyric-studio:storyboard-follow"))) === "1", "Follow playback is remembered in this browser");

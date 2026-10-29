@@ -264,6 +264,17 @@ export function StyleTab({ projectId }: { projectId: string }) {
         </div>
       );
     }
+    if (f.field === "titleOpening") {
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          <select aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} className={select} value={String(value ?? "off")} onChange={(e) => (e.target.value === "off" && !platform ? act({ action: "reset", field: f.field, platform }) : set(e.target.value))}>
+            <option value="off">off (start on the hook)</option>
+            <option value="on">on (title, artist and tagline before the first hook)</option>
+          </select>
+          <span className="text-muted-foreground text-xs">the app places and times them: upper third, lower third, gone as the first line fades in</span>
+        </div>
+      );
+    }
     if (f.field === "transitions") {
       return (
         <div className="flex flex-wrap items-center gap-2">

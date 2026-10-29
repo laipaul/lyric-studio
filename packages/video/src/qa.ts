@@ -44,6 +44,9 @@ export type QaInput = {
   anchors?: (AnchorReport & { missing: string[] }) | null; // story anchors (song.json)
   loop?: LoopResult | null; // Reels, TikTok, Shorts: the wrap-around from the last frame to the first (null: not a loop platform)
   canvas?: { lastToFirst: number; typicalStep: number; hasAudio: boolean; seconds: number; min: number; max: number } | null; // Spotify Canvas
+  // The title opening's cards (Reels, TikTok, Shorts): their blocks on the frame, when the first lyric line
+  // appears, the characters no font has, and whether the profile grid's 3:4 crop applies.
+  titleCards?: { blocks: { ids: string[]; text: string; box: Box; endFrame: number }[]; firstLyricFrame: number | null; missing: string[]; grid: { top: number; bottom: number } | null } | null;
 };
 
 export type QaCheck = { name: string; ok: boolean; details: string[] };
@@ -254,6 +257,23 @@ export function runQa(input: QaInput): QaReport {
     checks.push({ name: "No audio", ok: !c.hasAudio, details: c.hasAudio ? ["the file has an audio track (Spotify Canvas must be silent)"] : [] });
     const okLength = c.seconds >= c.min - 0.05 && c.seconds <= c.max + 0.05;
     checks.push({ name: `Length ${c.min}-${c.max} s`, ok: okLength, details: okLength ? [] : [`the loop is ${c.seconds.toFixed(2)} s`] });
+  }
+
+  // The title opening: inside the safe zone, inside the profile grid's 3:4 crop, gone before the first
+  // lyric line, every character drawn.
+  if (input.titleCards && input.titleCards.blocks.length) {
+    const tc = input.titleCards;
+    const outside = tc.blocks.map((b) => ({ b, problem: safeZoneProblem(b.box, false, props.format, props.safeZone) })).filter((x) => x.problem);
+    checks.push({ name: "Title cards inside the safe zone", ok: !outside.length, details: outside.map(({ b, problem }) => `"${b.text}" ${problem}`) });
+    if (tc.grid) {
+      const cut = tc.blocks.filter((b) => b.box.top < tc.grid!.top || b.box.bottom > tc.grid!.bottom);
+      checks.push({ name: "Title cards inside the profile grid (3:4)", ok: !cut.length, details: cut.map((b) => `"${b.text}" reaches ${b.box.top < tc.grid!.top ? "above" : "below"} the 3:4 area the profile grid shows (${Math.round(tc.grid!.top)}-${Math.round(tc.grid!.bottom)} px)`) });
+    }
+    if (tc.firstLyricFrame !== null) {
+      const late = tc.blocks.filter((b) => b.endFrame > tc.firstLyricFrame! + 1);
+      checks.push({ name: "Title cards clear of the first lyric", ok: !late.length, details: late.map((b) => `"${b.text}" is still on screen ${((b.endFrame - tc.firstLyricFrame!) / VIDEO.fps).toFixed(1)} s after the first lyric line appears`) });
+    }
+    checks.push({ name: "Title characters", ok: !tc.missing.length, details: tc.missing.length ? [`no font draws ${tc.missing.join(" ")} (they would show as boxes)`] : [] });
   }
 
   // The logo never covers a lyric line.

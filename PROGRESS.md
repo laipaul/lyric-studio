@@ -995,6 +995,24 @@ These platforms play a video in a loop, so the wrap-around from the last frame t
   same clip first and last, and the Reels continuation that passes; a harmony clash C -> F#; phrase cut;
   the end choice preferring the better loop and saying why; shuffle first != last over 300 seeds).
 
+### Step D — Title opening ✅ (to verify on the Windows PC)
+- **Title opening** (Style tab → Title opening: on; per platform; Reels, TikTok, Shorts): the video starts up
+  to 2 bars before the first hook (1 bar when 2 bars would be over 5 s) and opens with the title + artist on
+  the frame's upper third line and the tagline on the lower third line (inside the safe area). The app times
+  them: they fade out as the first lyric line fades in, never overlapping it. Off (default) = as before.
+- **Tagline**: its own song field (Assets tab, song.json "tagline"), empty by default, never the EP.
+- **Fonts**: the card editor has a font picker and "Use as the brand's title font" (asks first, writes
+  brand.json titleFont; e.g. Special Elite for Life Lyrics). Characters the title font lacks (Japanese)
+  are drawn in Noto Sans JP / Serif JP automatically, the same in preview and render.
+- **Cover**: every Reels / TikTok / Shorts video gets cover.jpg (vN.cover.jpg with several) with the title,
+  artist and tagline on the hook's frame, inside the 3:4 profile-grid crop; download in Ready to post.
+- **QA + assessment**: title cards inside the safe zone, inside the 3:4 grid, clear of the first lyric, every
+  character drawn; each mapped to a plain point with a creative action (shorter tagline, smaller size,
+  another font).
+- Tests: title-opening.test.ts (lead bars, geometry, QA, recipe, assessment), title-opening-make.test.ts
+  (a Reel with the opening + cover, off by default); browser tests: Style select, Assets tagline, card
+  editor font -> brand.json.
+
 ### Step C — Pro assessment, reactions, better Canvas ✅ (to verify on the Windows PC)
 - **Pro assessment** (src/assess.ts): each video gets ✅ Ready to post / 🟡 Good — N things to improve /
   🔴 Not ready — fix N things first, with at most 3 points in plain words and the creative action for each,
@@ -1385,10 +1403,10 @@ B. ✅ (built 29 Oct, with transitions, to verify) **Automatic pacing**: shot le
 C. ✅ (built 29 Oct, with reactions and the better Canvas, to verify) **Pro assessment** per video (Videos tab, Storyboard header): one verdict in plain words + at most a few
    creative actions; the QA / loop details one click away. Canvas: picks the best clip and the longest loop
    (slowed a little rather than 3 s), or says "a clip of at least N s".
-D. Then the **title opening** below.
+D. ✅ (built 29 Oct, to verify) **Title opening** (items 1-8 below).
 
 0. **Feature freeze** until the user has tested on their songs (Textboard, Storyboard stage 2, shot length,
-   tempo, loop warning). Then A–C above, then the **title opening** (decided, not built yet):
+   tempo, loop warning). Then A–D above; the **title opening** as built in Step D:
    1. Lead-in 2 bars before the first hook only when the title opening is on (setting 1-2 bars, default 2,
       at most ~5 s); without a title: hook-first <= 1 bar and the 2.5 s rule as now.
    2. Places: title + byline on the frame's upper third, tagline on the frame's lower third (inside the

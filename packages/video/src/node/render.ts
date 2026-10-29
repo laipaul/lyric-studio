@@ -211,3 +211,31 @@ export async function renderThumbnail(options: { props: Omit<ThumbnailProps, "me
     await server.close();
   }
 }
+
+// The Reel cover (Step D): one frame of the LyricVideo composition as a 1080x1920 JPEG (the title
+// opening's cards drawn on it, inside the 3:4 area Instagram shows on the profile grid).
+export async function renderCover(options: { props: Omit<LyricVideoProps, "mediaBaseUrl">; media: MediaRoots; outFile: string; frame: number; log?: (m: string) => void }): Promise<string> {
+  const server = await startMediaServer({ ...options.media, fontDirs: options.media.fontDirs ?? bundledFontDirs() });
+  try {
+    const inputProps: LyricVideoProps = { ...options.props, mediaBaseUrl: server.url, showSafeGuides: false };
+    const serveUrl = await getBundle(options.log);
+    const port = await freePort();
+    const composition = await selectComposition({ port, serveUrl, id: COMPOSITION_ID, inputProps, browserExecutable: browserExecutable(), logLevel: "error" });
+    await renderStill({
+      port,
+      serveUrl,
+      composition,
+      inputProps,
+      frame: Math.max(0, Math.min(composition.durationInFrames - 1, options.frame)),
+      output: options.outFile,
+      imageFormat: "jpeg",
+      jpegQuality: 92,
+      overwrite: true,
+      browserExecutable: browserExecutable(),
+      logLevel: "error",
+    });
+    return options.outFile;
+  } finally {
+    await server.close();
+  }
+}

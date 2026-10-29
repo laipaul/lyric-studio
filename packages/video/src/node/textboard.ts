@@ -34,7 +34,8 @@ import {
   type Textboard,
   type TextTemplate,
 } from "../textboard";
-import { fontFileRefs, forText, resolveFont, type FontCatalog } from "./font-catalog";
+import { fontFileRefs, forText, loadFontCatalog, resolveFont, type FontCatalog } from "./font-catalog";
+import { loadBrand } from "./brand";
 import { readRecipe } from "./recipe";
 import { folderName, songPathsById } from "./song-folder";
 
@@ -82,8 +83,8 @@ export function songText(ws: Workspace, projectId: string): SongText {
   const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
   if (!p) throw new Error("Song not found.");
   const paths = songPathsById(ws, projectId);
-  const ep = paths.recipe ? readRecipe(paths.recipe).ep : undefined;
-  return { title: p.title, artist: p.artist, ep: ep ?? null, lines: existsSync(paths.lyricsTxt) ? lyricsLines(readFileSync(paths.lyricsTxt, "utf8")) : [] };
+  const recipe = paths.recipe ? readRecipe(paths.recipe) : {};
+  return { title: p.title, artist: p.artist, ep: recipe.ep ?? null, tagline: recipe.tagline ?? null, lines: existsSync(paths.lyricsTxt) ? lyricsLines(readFileSync(paths.lyricsTxt, "utf8")) : [] };
 }
 
 // ---------------------------------------------------------------- templates
@@ -130,6 +131,8 @@ export type TextboardData = {
   orphans: { id: string; text: string }[]; // cards whose words are gone (their changes are not used)
   templates: string[]; // the artist's templates
   artist: string;
+  fonts: string[]; // the font families the card editor offers (bundled + WORKSPACE_DIR\fonts)
+  titleFont: string; // the artist's brand title font
 };
 
 export function textboardData(ws: Workspace, projectId: string): TextboardData {
@@ -145,6 +148,10 @@ export function textboardData(ws: Workspace, projectId: string): TextboardData {
     orphans: orphans.map((o) => ({ id: o.id, text: o.text })),
     templates: listTemplates(ws.dir, song.artist).map((t) => t.name),
     artist: song.artist,
+    ...(() => {
+      const catalog = loadFontCatalog(ws.dir);
+      return { fonts: catalog.families.map((f) => f.family).sort((a, b) => a.localeCompare(b)), titleFont: loadBrand(ws.dir, catalog, song.artist).brand.titleFont.family };
+    })(),
   };
 }
 
@@ -230,21 +237,28 @@ export function titleCards(
     accent: string;
     textScale: number;
     fontFor: (style: CardStyle, base: Face, text: string, role: string) => CardFont | null;
+    // The title opening (Reels, TikTok, Shorts, recipe titleOpening "on"): title + byline in the frame's
+    // upper third, the tagline (when the song has one) in the lower third, all gone by `untilFrame` (when
+    // the first lyric line fades in: they never overlap it).
+    opening?: { untilFrame: number } | null;
+    // Characters the card's font lacks: a fallback family (e.g. Noto Sans JP) and its files.
+    fallbackFor?: (face: Face, text: string) => { family: string; refs: FontFileRef[] } | null;
   },
 ): { cards: TextCardProps[]; fonts: FontFileRef[]; warnings: string[] } {
   const y = o.youtube;
   const baseSize = y?.size ?? Math.round(TITLE_SIZE_VERTICAL * o.textScale);
+  const open = !y && o.opening ? o.opening : null;
   const defaults = {
-    title: { show: !!y, size: baseSize, position: (y ? "top" : "centre") as CardPosition, colour: o.accent, opacity: 1, upper: true },
-    byline: { show: !!y, size: Math.round(baseSize * 0.45), position: "with-title" as CardPosition, colour: "#ffffff", opacity: 0.85, upper: false },
-    tagline: { show: false, size: Math.round(baseSize * 0.35), position: "with-title" as CardPosition, colour: "#ffffff", opacity: 0.75, upper: false },
+    title: { show: !!y || !!open, size: baseSize, position: (y ? "top" : open ? "upper-third" : "centre") as CardPosition, colour: o.accent, opacity: 1, upper: true },
+    byline: { show: !!y || !!open, size: Math.round(baseSize * 0.45), position: "with-title" as CardPosition, colour: "#ffffff", opacity: 0.85, upper: false },
+    tagline: { show: !!open, size: Math.round(baseSize * (open ? 0.42 : 0.35)), position: (open ? "lower-third" : "with-title") as CardPosition, colour: "#ffffff", opacity: 0.8, upper: false },
   };
-  const holdFrames = y ? y.untilFrame : Math.round(TITLE_HOLD_VERTICAL_S * o.fps);
+  const holdFrames = y ? y.untilFrame : open ? Math.max(1, Math.min(o.durationInFrames, open.untilFrame)) : Math.round(TITLE_HOLD_VERTICAL_S * o.fps);
   const fonts: FontFileRef[] = [];
   const warnings: string[] = [];
   const place = (position: CardPosition): Pick<TextCardProps, "top" | "centerY"> => {
     if (position === "top") return { top: y ? Math.round(o.format.height * 0.07) : Math.max(Math.round(o.format.height * 0.07), o.area.top) };
-    const c = cardCenterY(position, o.area);
+    const c = cardCenterY(position, o.area, o.format.height);
     return c !== undefined ? { centerY: c } : {};
   };
   const out: TextCardProps[] = [];
@@ -261,6 +275,8 @@ export function titleCards(
       warnings.push(...own.warnings);
     }
     const font = own?.font ?? base;
+    const fallback = o.fallbackFor?.(font, text) ?? null;
+    if (fallback) fonts.push(...fallback.refs);
     const position = style.position ?? d.position;
     const stackOn = position === "with-title" && type !== "title" ? "title" : undefined;
     out.push({
@@ -268,6 +284,7 @@ export function titleCards(
       type,
       text,
       font: font.family,
+      ...(fallback ? { fallbackFont: fallback.family } : {}),
       weight: font.weight,
       ...(font.italic ? { italic: true } : {}),
       size: Math.round(d.size * (style.size ?? 1)),
@@ -276,7 +293,8 @@ export function titleCards(
       letterSpacing: o.titleFont.letterSpacing ?? 0.18,
       upper: d.upper,
       startFrame: 0,
-      endFrame: style.hold !== undefined ? Math.min(o.durationInFrames, Math.round(style.hold * o.fps)) : holdFrames,
+      // With the title opening a card never stays into the first lyric line, even with its own hold.
+      endFrame: Math.min(style.hold !== undefined ? Math.min(o.durationInFrames, Math.round(style.hold * o.fps)) : holdFrames, open ? holdFrames : Infinity),
       effect: style.effect ? parseEffectChoice(style.effect) : null,
       ...(stackOn ? { stackOn } : place(position === "with-title" ? (type === "title" ? d.position : "centre") : position)),
       ...(y?.left !== undefined ? { left: y.left } : {}),

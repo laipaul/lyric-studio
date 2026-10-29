@@ -68,6 +68,7 @@ export function PostPanel({ projectId, songTitle, video }: { projectId: string; 
     { label: "Video", file: video.mp4, name: `${base}.mp4` },
     video.srt ? { label: "Captions (.srt)", file: video.srt, name: `${base}.srt` } : null,
     video.thumbnail ? { label: "Thumbnail", file: video.thumbnail, name: `${songTitle} - thumbnail.jpg` } : null,
+    video.cover ? { label: "Cover (title inside the profile grid's 3:4 crop)", file: video.cover, name: `${songTitle} - ${video.label} cover.jpg` } : null,
     video.publish ? { label: "publish.txt", file: video.publish, name: `${songTitle} - publish.txt` } : null,
   ].filter((f): f is { label: string; file: string; name: string } => !!f);
 

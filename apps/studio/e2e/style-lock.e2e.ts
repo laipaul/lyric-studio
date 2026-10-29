@@ -84,6 +84,29 @@ async function main() {
     await page.waitForSelector("[data-saving=saved]");
     await sleep(300);
     check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { ending?: string }).ending === undefined, "back to auto: the song's own ending setting is gone");
+    // Title opening (Step D): off by default; on = title, artist and tagline before the first hook.
+    check((await page.$eval("[data-edit='titleOpening-default']", (e: Element) => (e as HTMLSelectElement).value)) === "off", "Title opening: off by default");
+    await page.selectOption("[data-edit='titleOpening-default']", "on");
+    await page.waitForSelector("[data-saving=saved]");
+    await sleep(300);
+    check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { titleOpening?: string }).titleOpening === "on", 'song.json holds "titleOpening": "on"');
+    await page.selectOption("[data-edit='titleOpening-default']", "off");
+    await page.waitForSelector("[data-saving=saved]");
+    await sleep(300);
+    check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { titleOpening?: string }).titleOpening === undefined, "back to off: the song's own title opening setting is gone");
+    // The tagline lives on the Assets tab (song.json "tagline").
+    await page.click("[role=tab]:has-text('Assets')");
+    await page.waitForSelector("[data-tagline-input]");
+    await page.fill("[data-tagline-input]", "A song for the road");
+    await page.press("[data-tagline-input]", "Enter");
+    await sleep(800);
+    check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { tagline?: string }).tagline === "A song for the road", 'Assets: the tagline is saved in song.json');
+    await page.fill("[data-tagline-input]", "");
+    await page.press("[data-tagline-input]", "Enter");
+    await sleep(800);
+    check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { tagline?: string }).tagline === undefined, "Assets: an empty tagline removes it");
+    await page.click("[role=tab]:has-text('Style')");
+    await page.waitForSelector("[data-edit='ending-default']");
 
     await page.click("[role=tab]:has-text('Generate')");
     await page.waitForSelector("[aria-label='Hook effect']");

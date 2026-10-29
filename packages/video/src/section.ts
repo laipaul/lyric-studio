@@ -40,6 +40,9 @@ export type AutoSectionOptions = {
   targetMs?: number; // platform presets: prefer the clean end nearest this length (else the latest)
   shortestMs?: number; // presets: a clean end down to this length is preferred over a longer one
   anchorMode?: "lead-in" | "hook-first"; // hook-first: start at most 1 bar before the hook
+  // hook-first with the title opening: room for the title before the hook (2 bars, 1 when 2 bars are
+  // longer than 5 s); the earliest clean bar in that reach.
+  titleLead?: boolean;
   endOn?: "bar" | "beat"; // beat: when no bar is clean, any beat may end the section (bars still preferred)
   // Loop platforms: how well an end flows back into the start (lower score flows better).
   loopFit?: (startMs: number, endMs: number) => { score: number; ok: boolean; text: string };
@@ -58,6 +61,7 @@ export type SectionChoice = {
 };
 
 export const SECTION_TARGET = { minMs: 45_000, maxMs: 60_000, hardMaxMs: 65_000 } as const;
+export const TITLE_LEAD_MAX_MS = 5000; // the title opening's lead-in before the hook: 2 bars, at most ~5 s
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 export const clockText = (ms: number) => `${Math.floor(ms / 60_000)}:${((ms % 60_000) / 1000).toFixed(1).padStart(4, "0")}`;
@@ -131,7 +135,8 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
   const chorus = new Set<number>();
   let anchor: SectionChoice["anchor"];
   let anchorText: string;
-  const before = hookFirst ? "at most one bar before" : "one bar before";
+  const leadBars = hookFirst && options.titleLead ? (2 * bar <= TITLE_LEAD_MAX_MS ? 2 : 1) : 1;
+  const before = hookFirst ? (leadBars > 1 ? `at most ${leadBars} bars before (room for the title opening)` : options.titleLead ? "at most one bar before (room for the title opening)" : "at most one bar before") : "one bar before";
   const firstHook = lines.findIndex((l) => l.isHook);
   if (firstHook >= 0) {
     lines.forEach((l, i) => l.isHook && chorus.add(i));
@@ -172,7 +177,7 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
     // At most one bar before the hook's first word (a little tolerance for the bar grid), on a bar:
     // the earliest such bar that cuts no line, else the one nearest the hook.
     const hookAt = starts[anchor.line - 1];
-    const inReach = downbeats.filter((d) => d <= hookAt && d >= hookAt - bar - 150);
+    const inReach = downbeats.filter((d) => d <= hookAt && d >= hookAt - leadBars * bar - 150);
     const clean = inReach.filter((d) => isCut(d) < 0);
     start = clean[0] ?? inReach[inReach.length - 1] ?? downbeats.filter((d) => d <= hookAt).pop() ?? 0;
     startNote = ` (${seconds(hookAt - start)} before the hook)`;

@@ -536,6 +536,9 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
                   void editText({ action: "card", id: card.id, overrides: null });
                 }}
                 onClose={() => setCardId(null)}
+                fonts={board?.fonts ?? []}
+                titleFont={board?.titleFont ?? ""}
+                artist={board?.artist ?? "Life Lyrics"}
               />
             ) : null}
             {view.editable && board ? <TemplateBar board={board} busy={saving} onEdit={(b) => void editText(b)} onOpen={openCard} /> : null}
@@ -845,11 +848,14 @@ function ClipEditor({ clip, mediaUrl, busy, onSave, onClose, onCanvas }: { clip:
   );
 }
 
-const POSITION_LABELS: Record<string, string> = { lyrics: "the lyric spot", "with-title": "under the title", top: "top", upper: "upper", centre: "centre", lower: "lower" };
+const POSITION_LABELS: Record<string, string> = { lyrics: "the lyric spot", "with-title": "under the title", top: "top", upper: "upper", centre: "centre", lower: "lower", "upper-third": "upper third (title opening)", "lower-third": "lower third (title opening)" };
 
 // A card's own look: place, size, hold, effect (and, for title / byline / tagline, its text and whether
 // it is shown). The preview shows lyric cards at once; Save keeps them in textboard.json.
-function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClose }: {
+function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClose, fonts, titleFont, artist }: {
+  fonts: string[];
+  titleFont: string;
+  artist: string;
   card: TextCard;
   role: CardStyle;
   draft: CardOverrides;
@@ -866,7 +872,15 @@ function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClos
     setDraft(next);
   };
   const lyric = card.type === "lyric";
-  const positions = lyric ? ["lyrics", "upper", "centre", "lower"] : card.type === "title" ? ["top", "upper", "centre", "lower"] : ["with-title", "top", "upper", "centre", "lower"];
+  const positions = lyric ? ["lyrics", "upper", "centre", "lower"] : card.type === "title" ? ["top", "upper-third", "upper", "centre", "lower"] : ["with-title", "top", "upper-third", "upper", "centre", "lower", "lower-third"];
+  const [brandNote, setBrandNote] = useState<string | null>(null);
+  const useForBrand = async () => {
+    if (!draft.font) return;
+    if (!window.confirm(`Use ${draft.font} as the title font of every ${artist} song (brand.json: title cards, YouTube titles, thumbnails)?`)) return;
+    const r = await fetch("/api/brand/title-font", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ artist, family: draft.font }) });
+    const out = (await r.json()) as { family?: string; error?: string };
+    setBrandNote(r.ok ? `${out.family} is now the ${artist} title font (brand.json).` : (out.error ?? "Could not save it"));
+  };
   const [effectName, intensity = "balanced"] = (draft.effect ?? "").split(":");
   const field = "bg-input/30 border-input h-7 rounded-md border px-2 text-xs";
   const changed = JSON.stringify(draft) !== JSON.stringify(card.overrides);
@@ -891,7 +905,7 @@ function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClos
             <label className="flex items-center gap-2">
               <span className="w-20">Shown</span>
               <select data-card-show className={field} value={draft.show === undefined ? "" : String(draft.show)} onChange={(e) => set("show", e.target.value === "" ? undefined : e.target.value === "true")}>
-                <option value="">as the platform (YouTube: title + artist)</option>
+                <option value="">as the platform (YouTube: title + artist; Reels, TikTok, Shorts: with the title opening)</option>
                 <option value="true">yes, on every platform</option>
                 <option value="false">no</option>
               </select>
@@ -919,6 +933,23 @@ function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClos
           <input data-card-hold type="number" min={0} max={10} step={0.5} className={cn(field, "w-20")} value={draft.hold ?? ""} placeholder={lyric ? "as sung" : "as the platform"} onChange={(e) => set("hold", e.target.value === "" ? undefined : Number(e.target.value))} />
           <span className="text-muted-foreground">{lyric ? "at least this long after its last word (never into the next line)" : "on screen from the start"}</span>
         </label>
+        <label className="flex items-center gap-2">
+          <span className="w-20">Font</span>
+          <select data-card-font className={field} value={draft.font ?? ""} onChange={(e) => set("font", e.target.value || undefined)}>
+            <option value="">{role.font ? `the rule (${role.font})` : lyric ? "the recipe's" : `the brand's title font (${titleFont})`}</option>
+            {fonts.map((f) => (
+              <option key={f} value={f} style={{ fontFamily: f }}>
+                {f}
+              </option>
+            ))}
+          </select>
+          {card.type === "title" && draft.font && draft.font !== titleFont ? (
+            <button type="button" data-brand-title-font onClick={() => void useForBrand()} className="hover:bg-accent rounded-md border px-2 py-0.5">
+              Use as the brand&apos;s title font
+            </button>
+          ) : null}
+        </label>
+        {brandNote ? <p className="text-emerald-300 md:col-span-2" data-brand-title-font-note>{brandNote}</p> : null}
         <label className="flex items-center gap-2">
           <span className="w-20">Effect</span>
           <select data-card-effect className={field} value={effectName} onChange={(e) => set("effect", e.target.value ? (intensity === "balanced" ? e.target.value : `${e.target.value}:${intensity}`) : undefined)}>

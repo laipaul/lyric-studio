@@ -60,6 +60,8 @@ export const FIELD_LABELS: Record<RecipeField, string> = {
   transitions: "Transitions",
   paceShift: "Pace adjustment (bars)",
   readability: "Lyric readability",
+  titleOpening: "Title opening (Reels, TikTok, Shorts)",
+  tagline: "Tagline",
   ep: "EP",
   youtubeLayout: "YouTube layout",
 };
@@ -268,4 +270,24 @@ export function setBrandPerPlatform(
     } else kept.push(p.title);
   }
   return { file: brand.file, tidied, kept };
+}
+
+// The card editor's "Use as the brand's title font": the artist's brand.json titleFont family (its
+// weight and letter spacing kept; the nearest weight the family has, with the brand's own check). Every
+// title card, YouTube title and thumbnail of the artist then uses it.
+export function setBrandTitleFont(ws: Workspace, o: { artist: string; family: string }): { file: string; family: string } {
+  const catalog = loadFontCatalog(ws.dir);
+  if (!catalog.families.some((f) => f.family.toLowerCase() === o.family.trim().toLowerCase())) throw new Error(`Font "${o.family}" not found.`);
+  const brand = loadBrand(ws.dir, catalog, o.artist);
+  const before = readFileSync(brand.file, "utf8");
+  const raw = JSON.parse(before) as Record<string, unknown> & { titleFont?: Record<string, unknown> };
+  const family = catalog.families.find((f) => f.family.toLowerCase() === o.family.trim().toLowerCase())!.family;
+  writeFileSync(brand.file, `${JSON.stringify({ ...raw, titleFont: { ...(raw.titleFont ?? {}), family } }, null, 2)}\n`);
+  try {
+    loadBrand(ws.dir, catalog, o.artist);
+  } catch (error) {
+    writeFileSync(brand.file, before);
+    throw error;
+  }
+  return { file: brand.file, family };
 }

@@ -113,6 +113,17 @@ async function main() {
     await replanned();
     await page.waitForSelector("[data-textboard-titles] [data-text-card='title']");
     check(((await page.textContent("[data-text-card='title']")) ?? "").includes("Text Board"), "the title card is on the timeline (the song's title)");
+    // The card editor's font: pick one, then make it the brand's title font (asks first).
+    await page.click("[data-open-card='title']");
+    await page.waitForSelector("[data-card-editor='title'] [data-card-font]");
+    await page.selectOption("[data-card-font]", "Playfair Display");
+    page.once("dialog", (d) => void d.accept());
+    await page.click("[data-brand-title-font]");
+    await page.waitForSelector("[data-brand-title-font-note]");
+    const brandFile = path.join(wsDir, "brand", "brand.json");
+    const brandJson = existsSync(brandFile) ? (JSON.parse(readFileSync(brandFile, "utf8")) as { titleFont?: { family?: string } }) : {};
+    check(brandJson.titleFont?.family === "Playfair Display", "brand.json titleFont is now Playfair Display (after the confirmation)");
+    await page.click("[aria-label='close the card editor']");
 
     // Save as template (the design, not the words), then apply it.
     await page.fill("[data-template-name]", "Clean");

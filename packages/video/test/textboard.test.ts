@@ -24,7 +24,7 @@ describe("cards", () => {
     expect(cards.map((c) => [c.id, c.type, c.text, c.isHook ?? false])).toEqual([
       ["title", "title", "A Heart For Two", false],
       ["byline", "byline", "Life Lyrics", false],
-      ["tagline", "tagline", 'From the EP "Home"', false],
+      ["tagline", "tagline", "", false], // the song's own tagline (song.json), never the EP
       ["line-1", "lyric", "Verse one here", false],
       ["line-2", "lyric", "Hold on to me", true],
       ["line-3", "lyric", "Through the night", false],

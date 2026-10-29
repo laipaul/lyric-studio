@@ -59,14 +59,15 @@ import { PLATFORM_FIELDS, type PlatformField } from "./per-platform";
 import { artistRecipe, LIBRARY_RECIPE, readRecipe, recipeSummary, recipeText, resolveRecipe, runRecipe, writeRecipe, type RecipeField, type RecipeInput, type ResolvedRecipe } from "./recipe";
 import { renameSongFolder, songPathsById } from "./song-folder";
 import { mergeCollections, prepareForFormat, SOURCE_FILE, syncCollection, type CollectionSync, type PreparedForFormat } from "./collection";
-import { fontFileRefs, loadFontCatalog, resolveFace, type FontCatalog } from "./font-catalog";
+import { fontFileRefs, forText, loadFontCatalog, missingCharacters, resolveFace, type FontCatalog } from "./font-catalog";
 import { sha256File, toolInfo, writeManifest, type Manifest } from "./manifest";
 import { findPairing, loadPairings } from "./pairings";
 import { resolveMediaPath, type MediaRoots } from "./media";
-import { tooLongLines } from "./measure";
+import { faceMeasure, tooLongLines } from "./measure";
+import { cardBlocks, gridCrop } from "../text-cards";
 import { loadStyles, lyricLineNumbers, parseSection, snapToDownbeat, songMedia, type StyleFaces } from "./prepare";
 import { detectBadFrames, measureLyrics } from "./qa-check";
-import { getBundle, renderLyricVideo, renderThumbnail, type RenderOptions } from "./render";
+import { getBundle, renderCover, renderLyricVideo, renderThumbnail, type RenderOptions } from "./render";
 import { applyHandSet, applyVocalGuard, ensureAlignment, findOrCreateSongProject, matchReport, type Alignment, type AlignRunner, type VoiceMapRunner, type FirstWordsRunner } from "./song-project";
 import { COVER_TEXT_SCALE } from "../youtube-layout";
 import { lyricSections } from "../youtube";
@@ -132,6 +133,7 @@ export type MakeOptions = {
   shotLength?: string; // "1" | "2" | "4" | "8" bars per shot, or "story" (2 bars on hooks, 4 on verses, >= 3 s); replaces --rate
   paceShift?: number; // bars added to the automatic pacing (recipe paceShift)
   readability?: "normal" | "strong"; // strong: a soft dark band behind the lyrics
+  titleOpening?: "off" | "on"; // Reels / TikTok / Shorts: title, byline and tagline before the first hook
   transitions?: TransitionStyle; // between shots: "auto" (default: from the music), "crisp" (cuts), "flowing" (dissolves)
   ending?: EndingChoice; // Reels / TikTok / Shorts: "auto" (default: the app chooses tight loop, soft fade or ring-out) or one of them
   tempo?: number; // the song's real BPM (song.json "tempo"): the beats are re-tracked around it
@@ -156,6 +158,7 @@ export type MakeOptions = {
   firstWords?: FirstWordsRunner; // tests: a stand-in for the recognised-words pass
   renderer?: (options: RenderOptions) => Promise<string>; // tests: a stand-in for renderLyricVideo
   thumbnailRenderer?: typeof renderThumbnail; // tests: a stand-in for renderThumbnail
+  coverRenderer?: typeof renderCover; // tests: a stand-in for renderCover (with a stand-in video renderer and none: no cover)
   platform?: NodeJS.Platform;
   log?: (message: string) => void;
   onRenderProgress?: (state: RenderState[]) => void;
@@ -212,6 +215,7 @@ export type VariationResult = VariationSpec & {
   file: string;
   srtFile: string;
   thumbnailFile?: string; // YouTube
+  coverFile?: string; // Reels / TikTok / Shorts: the cover with the title opening (inside the 3:4 grid crop)
   publishFile?: string; // YouTube
   manifestFile: string;
   qaFile: string;
@@ -440,6 +444,7 @@ function chooseSection(
   mode: string, lines: SectionLine[], beats: Beat[], durationMs: number, leadMs: number, preset?: PlatformPreset,
   fit?: (startMs: number, endMs: number) => { score: number; ok: boolean; text: string }, // loop platforms: the end that flows back best
   kept?: (startMs: number, endMs: number) => { kept: number; total: number; missing: number[] }, // story anchors: the end that keeps most
+  titleLead = false, // the title opening: up to 2 bars before the hook
 ): SectionChoiceOut {
   if (mode === "auto" && preset?.length.mode === "full") mode = "full";
   if (mode === "auto") {
@@ -450,6 +455,7 @@ function chooseSection(
       ...(window ? { minMs: window.minMs, maxMs: window.maxMs, hardMaxMs: window.hardMaxMs, shortestMs: window.shortestMs } : {}),
       ...(window && preset!.length.mode === "target" ? { targetMs: window.targetMs } : {}),
       anchorMode: preset?.anchor ?? "lead-in",
+      ...(titleLead ? { titleLead: true } : {}),
       endOn: preset?.endOn ?? "bar",
       ...(fit ? { loopFit: fit } : {}),
       ...(kept ? { anchorsKept: kept } : {}),
@@ -542,6 +548,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       transitions: recipe.values.transitions,
       paceShift: recipe.values.paceShift,
       readability: recipe.values.readability,
+      titleOpening: recipe.values.titleOpening,
       tempo: recipe.values.tempo ?? undefined,
       // Weights and italic: the recipe's (brand, song or run) whenever the brand fonts are used for the
       // lyrics; otherwise only the song's or run's own (else the Simple / Bold style's weight).
@@ -657,7 +664,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const sectionLines: SectionLine[] = lines.map((l, i) => ({ ...l, sung_end_ms: reports[i]?.end_ms }));
     // The textboard: textboard.json synced to these lines (a card whose words are gone is said, not used).
     const textboard = boardForRun(paths.legacy ? null : songPathsById(ws, project.id).root, {
-      title: project.title, artist: project.artist, ep: ep ?? null, lines: lines.map((l, i) => ({ number: i + 1, text: l.text, isHook: l.isHook })),
+      title: project.title, artist: project.artist, ep: ep ?? null, tagline: songRecipe.tagline ?? null, lines: lines.map((l, i) => ({ number: i + 1, text: l.text, isHook: l.isHook })),
     });
     if (textboard.stored) log(`textboard: ${overrideCount(textboard.board)} change(s)${textboard.board.template ? `, template "${textboard.board.template}"` : ""}`);
     for (const o of textboard.orphans) log(`textboard: card ${o.id} "${o.text}" no longer matches a lyric line (its changes are not used; the words changed in lyrics.txt)`);
@@ -869,7 +876,7 @@ function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: Pl
   const length = lengthFor(base, r.values.length, sh.analysis.duration_ms);
   if (length.note) sh.log(`${base.name}: ${length.note}`);
   const section = r.values.section === "auto" && length.wholeSong ? "full" : r.values.section;
-  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined, shotLength: r.values.shotLength ?? undefined, ending: r.values.ending, transitions: r.values.transitions, paceShift: r.values.paceShift, readability: r.values.readability };
+  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined, shotLength: r.values.shotLength ?? undefined, ending: r.values.ending, transitions: r.values.transitions, paceShift: r.values.paceShift, readability: r.values.readability, titleOpening: r.values.titleOpening };
   const own = PLATFORM_FIELDS.filter((k) => r.sources[k].includes(":"));
   if (own.length) sh.log(`${preset.name}: recipe ${own.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]})`).join(", ")}`);
   const out: Shared = {
@@ -880,6 +887,48 @@ function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: Pl
     brand: accent ? { ...sh.brand, brand: { ...sh.brand.brand, accentColour: accent } } : sh.brand,
   };
   return { sh: out, preset: r.values.section === "auto" ? length.preset : base };
+}
+
+// The Reel cover's props: the video's frame with the title opening's cards (title, byline, tagline) on it
+// for the whole video, no lyrics, no sound. Null when the song has no title to show.
+export function coverProps(props: Omit<LyricVideoProps, "mediaBaseUrl">, sh: Pick<Shared, "textboard" | "brand" | "catalog">, preset: PlatformPreset, format: { width: number; height: number }): Omit<LyricVideoProps, "mediaBaseUrl"> | null {
+  if (!props.lyricArea) return null;
+  const tc = titleCards(sh.textboard.board, {
+    format, area: props.lyricArea, fps: VIDEO.fps, durationInFrames: props.durationInFrames, youtube: null,
+    titleFont: sh.brand.brand.titleFont, accent: sh.brand.brand.accentColour, textScale: preset.textScale,
+    fontFor: (style, b, text, role) => cardFont(sh.catalog, style, b, text, role),
+    opening: { untilFrame: props.durationInFrames + CARD_COVER_PAD },
+    fallbackFor: (face, text) => titleFallback(sh.catalog, face, text),
+  });
+  if (!tc.cards.length) return null;
+  const titleFace = tc.cards.some((c) => c.font === sh.brand.brand.titleFont.family) ? fontFileRefs(resolveFace(sh.catalog, sh.brand.brand.titleFont.family, sh.brand.brand.titleFont.weight)) : [];
+  const fonts = [...props.fonts, ...tc.fonts, ...titleFace].filter((f, k, all) => all.findIndex((x) => x.src === f.src) === k);
+  const { dips: _d, loopInto: _l, ...rest } = props;
+  return { ...rest, lyrics: [], audio: null, textCards: tc.cards, fonts };
+}
+const CARD_COVER_PAD = 60; // the cover's cards never start fading out
+
+// Characters a title card's font lacks (e.g. Japanese in a latin title font): Noto Sans JP fills them in,
+// the same files in the preview and the render. Null when the font has them all.
+export function titleFallback(catalog: FontCatalog, face: { family: string; weight: number; italic?: boolean }, text: string): { family: string; refs: ReturnType<typeof fontFileRefs> } | null {
+  const chars = [...new Set([...text].filter((c) => /\S/.test(c)))];
+  let own;
+  try {
+    own = resolveFace(catalog, face.family, face.weight, face.italic ? "italic" : "normal");
+  } catch {
+    return null;
+  }
+  const missing = missingCharacters(own, chars);
+  if (!missing.length) return null;
+  for (const family of ["Noto Sans JP", "Noto Serif JP"]) {
+    try {
+      const fb = forText(resolveFace(catalog, family, face.weight), missing.join(""));
+      return { family, refs: fontFileRefs(fb) };
+    } catch {
+      // not bundled: try the next
+    }
+  }
+  return null;
 }
 
 // The typical bar of the song (median gap between detected downbeats), else four beats at the BPM.
@@ -947,6 +996,9 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   // Section (lines appear `leadMs` early and move by the lyrics offset). Loop platforms (Reels, TikTok,
   // Shorts): the auto end that flows best back into the start.
   const loops = preset.loops && !canvas;
+  // The title opening (recipe titleOpening "on"; Reels, TikTok, Shorts): title, byline and tagline before
+  // the first hook; the section starts up to 2 bars before the hook to make room.
+  const titleOpeningOn = !!loops && preset.lyrics && options.titleOpening === "on";
   // The song's detected bar starts (downbeat_offset already applied): the grid the section snaps to and the loop's beat check counts.
   const downbeatTimes = analysis.beats.filter((b) => b.is_downbeat).map((b) => b.time_ms).sort((a, b) => a - b);
   const loopSong = loops ? await sh.loopAudio() : null;
@@ -960,7 +1012,8 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     ? { mode: "loop", start_ms: 0, end_ms: Math.round(canvas.seconds * 1000), requested: null, reason: canvas.reason, warnings: canvas.warnings, cuts: [] }
     : chooseSection(options.section ?? "auto", sh.sectionLines, analysis.beats, analysis.duration_ms, leadMs - lyricsOffsetMs, preset,
       loops ? (startMs, endMs) => loopFit(loopSong, analysis.bpm, startMs, endMs, downbeatTimes) : undefined,
-      anchorLines.length && preset.lyrics ? (startMs, endMs) => anchorsInside(anchorLines, startMs, endMs) : undefined);
+      anchorLines.length && preset.lyrics ? (startMs, endMs) => anchorsInside(anchorLines, startMs, endMs) : undefined,
+      titleOpeningOn);
   // Automatic ending (Reels, TikTok, Shorts; src/ending.ts): a tight loop only when the end flows back into
   // the start, else a soft fade after the last sung word, or the last chord ringing out one more bar.
   const loopLines = sh.sectionLines.map((l, i) => ({ number: numbers[i] || i + 1, text: l.text, sungStartMs: sungStart(l), sungEndMs: sungEnd(l), ...(l.words?.length ? { lastWordStartMs: l.words.at(-1)!.start_ms } : {}) }));
@@ -1305,6 +1358,9 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
           format, area: rest.lyricArea!, fps: VIDEO.fps, durationInFrames: rest.durationInFrames, youtube: titleOverlay ?? null,
           titleFont: sh.brand.brand.titleFont, accent: sh.brand.brand.accentColour, textScale: preset.textScale,
           fontFor: (style, b, text, role) => cardFont(sh.catalog, style, b, text, role),
+          // The title opening: gone as the first lyric line fades in.
+          opening: titleOpeningOn ? { untilFrame: rest.lyrics[0] ? (rest.lyrics[0].enterFrame ?? rest.lyrics[0].startFrame) : rest.durationInFrames } : null,
+          fallbackFor: (face, text) => titleFallback(sh.catalog, face, text),
         });
         for (const w of tc.warnings) if (!warnings.includes(`${preset.name}: textboard: ${w}`)) warnings.push(`${preset.name}: textboard: ${w}`);
         const titleFace = tc.cards.some((c) => c.font === sh.brand.brand.titleFont.family) && !ytLayout ? fontFileRefs(resolveFace(sh.catalog, sh.brand.brand.titleFont.family, sh.brand.brand.titleFont.weight)) : [];
@@ -1544,6 +1600,24 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       );
       // Captions for every video; YouTube also gets a thumbnail and a publishing pack.
       if (preset.lyrics) writeSrt(result.srtFile, props); // (a Canvas has no lyrics: no captions)
+      // Reels / TikTok / Shorts: a cover with the title, byline and tagline (the title opening's cards, also
+      // when the video itself starts on the hook), on the hook's frame.
+      const coverRender = options.coverRenderer ?? (options.renderer ? null : renderCover);
+      if (loops && preset.lyrics && props.shots.length && coverRender) {
+        const cover = coverProps(props, sh, preset, format);
+        if (cover) {
+          const one = allSpecs.length === 1;
+          result.coverFile = path.join(exportDir, one ? "cover.jpg" : `${spec.name}.cover.jpg`);
+          const hookIndex = lines.findIndex((l) => l.isHook);
+          const hookFrame = hookIndex >= 0 ? Math.round(((lines[hookIndex].start_ms - chosen.start_ms) * VIDEO.fps) / 1000) : 0;
+          try {
+            await coverRender({ props: cover, media, outFile: result.coverFile, frame: Math.max(15, hookFrame + 15), log });
+          } catch (error) {
+            warnings.push(`${preset.name} ${spec.name}: the cover could not be made (${(error as Error).message.split("\n")[0]})`);
+            result.coverFile = undefined;
+          }
+        }
+      }
       if (ytLayout) {
         const one = allSpecs.length === 1;
         const hookIndex = lines.findIndex((l) => l.isHook);
@@ -1682,7 +1756,51 @@ async function checkVariation(
     canvas: ctx.frameCheck && ctx.canvas ? { ...(await loopCheck(file)), ...ctx.canvas } : null,
     loop: ctx.loop ?? null,
     anchors: ctx.anchors ?? null,
+    titleCards: ctx.catalog && props.textCards?.length && (props.format?.height ?? 1920) > (props.format?.width ?? 1080) ? titleCardsQa(props, ctx.catalog) : null,
   });
+}
+
+// The title opening for QA: the cards' blocks (measured in their own fonts), when the first lyric line
+// appears, characters no font draws, and the profile grid's 3:4 crop (vertical videos).
+export function titleCardsQa(props: Omit<LyricVideoProps, "mediaBaseUrl">, catalog: FontCatalog): NonNullable<QaInput["titleCards"]> {
+  const cards = props.textCards ?? [];
+  const faces = new Map<string, ReturnType<typeof resolveFace> | null>();
+  const faceOf = (c: (typeof cards)[number]) => {
+    const key = `${c.font}|${c.weight}|${c.italic ? 1 : 0}`;
+    if (!faces.has(key)) {
+      try {
+        faces.set(key, resolveFace(catalog, c.font, c.weight, c.italic ? "italic" : "normal"));
+      } catch {
+        faces.set(key, null);
+      }
+    }
+    return faces.get(key)!;
+  };
+  const blocks = cardBlocks(cards, props.format ?? { width: 1080, height: 1920 }, (m) => {
+    const c = cards.find((x) => x.text === m.text && x.size === m.size)!;
+    const face = faceOf(c);
+    const text = m.upper ? m.text.toUpperCase() : m.text;
+    const width = face ? faceMeasure(face)(text, m.size) : text.length * m.size * 0.6;
+    return width + Math.max(0, text.length - 1) * m.letterSpacing * m.size;
+  });
+  const missing = new Set<string>();
+  for (const c of cards) {
+    const face = faceOf(c);
+    if (!face) continue;
+    const chars = [...new Set([...c.text].filter((x) => /\S/.test(x)))];
+    let lacks = missingCharacters(face, chars);
+    if (lacks.length && c.fallbackFont) {
+      try {
+        lacks = missingCharacters(forText(resolveFace(catalog, c.fallbackFont, c.weight), lacks.join("")), lacks);
+      } catch {
+        // the fallback is not bundled
+      }
+    }
+    for (const x of lacks) missing.add(x);
+  }
+  const first = props.lyrics[0];
+  const format = props.format ?? { width: 1080, height: 1920 };
+  return { blocks, firstLyricFrame: first ? (first.enterFrame ?? first.startFrame) : null, missing: [...missing], grid: format.height > format.width ? gridCrop(format) : null };
 }
 
 // QA "Loop flows" for one video: its length against whole bars, the lines at both ends, the music's

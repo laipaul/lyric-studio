@@ -49,6 +49,7 @@ export type VideoInfo = {
   mp4: string; // workspace-relative
   srt: string | null;
   thumbnail: string | null; // YouTube
+  cover: string | null; // Reels / TikTok / Shorts: the cover with the title (workspace-relative)
   publish: string | null; // YouTube publish.txt
   durationS: number | null;
   style: string;
@@ -175,6 +176,7 @@ export function songRuns(ws: Workspace, projectId: string, labels: Record<string
           mp4: rel(`${n}.mp4`)!,
           srt: rel(`${n}.srt`),
           thumbnail: name === "youtube" ? rel("thumbnail.jpg") : null,
+          cover: rel(`${n}.cover.jpg`) ?? (names.length === 1 ? rel("cover.jpg") : null),
           publish: name === "youtube" ? rel("publish.txt") : null,
           durationS: m.output?.duration_s ?? null,
           style: m.variation?.style ?? "",

@@ -18,7 +18,7 @@ import { choiceText, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, parseEffectChoic
 import { DEFAULT_BRAND, type Brand } from "./brand";
 import { checkPerPlatform, isPlatformField, isWeight, SHOT_LENGTH_VALUES, PLATFORM_FIELDS, type PerPlatform, type PlatformField } from "./per-platform";
 
-export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "tempo", "collections", "platforms", "variations", "section", "length", "ending", "transitions", "paceShift", "readability", "ep", "youtubeLayout"] as const;
+export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "tempo", "collections", "platforms", "variations", "section", "length", "ending", "transitions", "paceShift", "readability", "titleOpening", "tagline", "ep", "youtubeLayout"] as const;
 export type RecipeField = (typeof RECIPE_FIELDS)[number];
 
 export type RecipeValues = {
@@ -39,7 +39,9 @@ export type RecipeValues = {
   section: string; // auto | full | 0:11-1:10
   length: number | null; // target seconds for an "auto" section (null: the platform preset's length)
   paceShift: number; // bars added to (+) or taken from (-) the automatic pacing (reactions "cuts too fast / slow"), -3..+4
-  readability: "normal" | "strong"; // strong: a soft dark band behind the lyrics (reaction "lyrics hard to read")
+  readability: "normal" | "strong";
+  titleOpening: "off" | "on"; // Reels / TikTok / Shorts: the title, byline and tagline before the first hook (the app places and times them)
+  tagline: string; // the song's own tagline (a short line under the title); empty: none (never taken from the EP) // strong: a soft dark band behind the lyrics (reaction "lyrics hard to read")
   transitions: TransitionStyle; // between shots: "auto" (the app chooses cuts, dissolves and dips from the music), "crisp" (cuts), "flowing" (dissolves)
   ending: EndingChoice; // Reels / TikTok / Shorts: "auto" (the app chooses: tight loop, soft fade or ring-out), or one of them
   ep: string;
@@ -68,7 +70,7 @@ export const RECIPE_HELP =
   "(a brand change does not reach them, and Generate cannot change them for one run). Fields: verseEffect, hookEffect " +
   '("glide", "soft-blur:subtle", ...), verseFont, hookFont, verseWeight / hookWeight (400 = regular, 600 = semibold, 700 = bold), verseItalic / hookItalic (true / false), accentColour ("#E8A3B5"), shotLength ("auto" = the app chooses from the song and your clips; or "1", "2", "4", "8" bars per shot, "story": 2 bars on hooks, 4 on verses, never under 3 s, or "rate": the cut rate), tempo (the real BPM of this song when the detected one is wrong, e.g. 92), collections (shared collections used ' +
   'with the clips in clips\\), platforms (["reels", "youtube"]), variations ({ "reels": 3 }), section ("auto", "full", ' +
-  '"0:11-1:10"), length (seconds an "auto" section aims for, e.g. 90; empty = the platform preset), transitions ("auto" = the app chooses cuts, dissolves and dips from the music; "crisp" = cuts; "flowing" = dissolves), paceShift (bars added to the automatic pacing, e.g. 1 = calmer; set by the reactions), readability ("strong" = a soft dark band behind the lyrics), ending ("auto" = the app chooses how a Reel / TikTok / Short ends: a tight loop, a soft fade or a ring-out; or "loop", "fade", "ring-out"), ep, youtubeLayout ("cover", "stills", "clips"). perPlatform: values for one platform only, e.g. ' +
+  '"0:11-1:10"), length (seconds an "auto" section aims for, e.g. 90; empty = the platform preset), transitions ("auto" = the app chooses cuts, dissolves and dips from the music; "crisp" = cuts; "flowing" = dissolves), paceShift (bars added to the automatic pacing, e.g. 1 = calmer; set by the reactions), readability ("strong" = a soft dark band behind the lyrics), titleOpening ("on" = the title, byline and tagline before the first hook on Reels, TikTok and Shorts), tagline (a short line under the title; empty = none), ending ("auto" = the app chooses how a Reel / TikTok / Short ends: a tight loop, a soft fade or a ring-out; or "loop", "fade", "ring-out"), ep, youtubeLayout ("cover", "stills", "clips"). perPlatform: values for one platform only, e.g. ' +
   '{ "youtube": { "verseEffect": "cinematic-fade" } } (verseEffect, hookEffect, verseFont, hookFont, accentColour, section, length), e.g. { "reels": { "length": 90 }, "tiktok": { "length": 30 } }. ' +
   'Story anchors (the Lyrics tab sets them): anchors [{ "line": 9, "clip": "hands.mp4", "clipIn": 1.5, "transition": "dissolve" }] = that clip lands on lyrics.txt line 9 ' +
   '(cut in on the downbeat before the line, held until it ends); gapOrder "story" (default with anchors: the other clips in file-name order in every video) or "shuffle".';
@@ -98,6 +100,14 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
   if (r.shotLength !== undefined && r.shotLength !== null) {
     if ((SHOT_LENGTH_VALUES as readonly string[]).includes(String(r.shotLength))) recipe.shotLength = String(r.shotLength);
     else problems.push(`shotLength must be ${SHOT_LENGTH_VALUES.join(", ")} (auto = the app chooses; bars per shot; "story": 2 bars on hooks, 4 on verses; "rate": the cut rate)`);
+  }
+  if (r.titleOpening !== undefined) {
+    if (r.titleOpening === "off" || r.titleOpening === "on") recipe.titleOpening = r.titleOpening;
+    else problems.push("titleOpening must be off or on");
+  }
+  if (r.tagline !== undefined) {
+    if (typeof r.tagline === "string" && r.tagline.length <= 120) recipe.tagline = r.tagline.trim();
+    else problems.push("tagline must be a short text (at most 120 characters)");
   }
   if (r.paceShift !== undefined) {
     if (Number.isInteger(r.paceShift) && (r.paceShift as number) >= -3 && (r.paceShift as number) <= 4) recipe.paceShift = r.paceShift as number;
@@ -322,6 +332,8 @@ export const LIBRARY_RECIPE: RecipeValues = {
   transitions: "auto",
   paceShift: 0,
   readability: "normal",
+  titleOpening: "off",
+  tagline: "",
   ep: "",
   youtubeLayout: "cover",
 };
@@ -400,7 +412,7 @@ export function recipeText(v: unknown): string {
 // "verse glide (artist), hook karaoke-highlight (artist), collections wedding (song, locked), ..."
 export function recipeSummary(r: ResolvedRecipe): string {
   const show: RecipeField[] = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "collections", "section"];
-  for (const k of ["platforms", "variations", "ep", "youtubeLayout", "tempo", "ending", "transitions", "paceShift", "readability"] as const) if (r.sources[k] !== "library") show.push(k);
+  for (const k of ["platforms", "variations", "ep", "youtubeLayout", "tempo", "ending", "transitions", "paceShift", "readability", "titleOpening", "tagline"] as const) if (r.sources[k] !== "library") show.push(k);
   return show.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]}${r.locked.includes(k) ? ", locked" : ""})`).join(", ");
 }
 
