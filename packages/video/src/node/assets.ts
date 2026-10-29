@@ -63,14 +63,15 @@ export async function songAssets(ws: Workspace, projectId: string): Promise<Song
     out.hints = { file: rel(ws, paths.hints), ...checkHints(readFileSync(paths.hints, "utf8"), existsSync(paths.lyricsTxt) ? readFileSync(paths.lyricsTxt, "utf8") : "") };
   }
   if (!paths.clips) return out;
-  const listed = await folderClips(ws, paths.clips, songClipsCollection(projectId));
+  const { hashes: _hashes, ...listed } = await folderClips(ws, paths.clips, songClipsCollection(projectId));
   return { ...out, ...listed };
 }
 
 // The clips of a folder (a song's clips\ or a shared collection): synced with the database on the way
 // (thumbnail, size), duplicates by content, what was removed (_removed\) and the counts each format can use.
-export async function folderClips(ws: Workspace, folder: string, collectionName: string): Promise<Pick<SongAssets, "clips" | "removed" | "usable">> {
-  const out: Pick<SongAssets, "clips" | "removed" | "usable"> = { clips: [], removed: [], usable: { vertical: 0, horizontal: 0 } };
+// `hashes`: the content of each different clip (sorted), so two collections holding the same clips can be told.
+export async function folderClips(ws: Workspace, folder: string, collectionName: string): Promise<Pick<SongAssets, "clips" | "removed" | "usable"> & { hashes: string[] }> {
+  const out: Pick<SongAssets, "clips" | "removed" | "usable"> & { hashes: string[] } = { clips: [], removed: [], usable: { vertical: 0, horizontal: 0 }, hashes: [] };
   if (!existsSync(folder)) return out;
   const removedDir = path.join(folder, REMOVED_DIR);
   if (existsSync(removedDir)) out.removed = readdirSync(removedDir).filter((f) => SOURCE_FILE.test(f)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
@@ -94,11 +95,13 @@ export async function folderClips(ws: Workspace, folder: string, collectionName:
       duplicateOf,
     });
     if (duplicateOf) continue;
+    out.hashes.push(s.hash);
     // The same rule as the render (sourceFit): 9:16 takes vertical and square sources (horizontal
     // ones only when at least twice the output height); 16:9 takes horizontal and square ones.
     if (o !== "horizontal" || s.clip.height >= 3840) out.usable.vertical += 1;
     if (o !== "vertical" || s.clip.width >= 3840) out.usable.horizontal += 1;
   }
+  out.hashes.sort();
   return out;
 }
 

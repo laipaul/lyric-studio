@@ -995,6 +995,24 @@ These platforms play a video in a loop, so the wrap-around from the last frame t
   same clip first and last, and the Reels continuation that passes; a harmony clash C -> F#; phrase cut;
   the end choice preferring the better loop and saying why; shuffle first != last over 300 seeds).
 
+### Step G — Collections: rename, delete, clearer cards ✅ (to verify on the Windows PC)
+- Each collection card has a **⋯ menu**: **Rename**, **Open folder**, **Delete…** (fixes "a collection's
+  name cannot be changed or deleted").
+- **Rename**: the folder gets the new name; every song using it follows (song.json "collections", also a
+  locked one, and the remembered collection of older songs), the database paths follow and the move is
+  recorded in moved-paths.json, so old videos still re-render. A change of case only works too. Not while
+  a song using it is rendering.
+- **Delete**: asks first and names the songs that use it; the folder moves to
+  collections\_removed\<name> (removed <date>) — nothing is deleted — and those songs stop naming it
+  (their own clips and other collections stay). **Removed collections** at the bottom of the page with
+  **Restore** (as "<name> (2)" if the name was taken since; tick it again in a song's Generate tab).
+- **Cards**: an empty collection shows "Add clips" instead of a black box; "9:16 · N" and "16:9 · N" chips
+  (amber when a format cannot use every clip); "Used by N songs" (names on hover); "Same clips as X" when two
+  collections hold exactly the same clips (the copy no song uses is the one flagged).
+- **New collection** is a button with a small dialog instead of an always-visible name box.
+- Tests: collections.test.ts (rename incl. database paths, moves and songs; delete; restore; same clips);
+  browser: collections.e2e.ts (⋯ menu, rename, delete with the song named, restore, empty card).
+
 ### Step F — Collections page ✅ (to verify on the Windows PC)
 - Header **Collections** next to Library: a card per collection (thumbnails, clip count, video length,
   what 9:16 and 16:9 can use, which songs use it) and **New collection**.
@@ -1421,6 +1439,10 @@ rest was in sync.
   mix has different timing, use Generate -> advanced -> re-align.
 
 ## Next
+- **Step H (planned, not started): Library cards** — one status colour system (grey not made / amber to review
+  / green approved / red failed), short platform labels that never truncate, a "4/6 ready · 1 error" line,
+  2-line titles, a Generate / Fix button on the card, filters (All · No videos · Needs review · Errors · Ready)
+  and sorting, a warning when two songs share the same cover.
 Guiding principle (CLAUDE.md, decided 29 Oct 2026): the user provides, orders and trims the clips; the app
 does every technical decision automatically and gives a plain-language pro assessment of each result.
 Found in the 29 Oct test on The House My Heart Built (135 BPM, 13 own clips of ~5 s), each a technical

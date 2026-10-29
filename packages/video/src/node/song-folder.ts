@@ -16,6 +16,7 @@ import { processAlive } from "./jobs";
 
 export const SONGS_DIR = "songs";
 export const COLLECTIONS_DIR = "collections";
+export const REMOVED_COLLECTIONS_DIR = "_removed"; // deleted collections: collections\_removed\<name> (removed <date>)
 export const STUDIO_DIR = ".studio";
 export const NAME_MAX = 60;
 
@@ -334,7 +335,8 @@ export function sharedCollections(ws: Workspace): string[] {
   const names = new Set<string>();
   for (const dir of [COLLECTIONS_DIR, "clips"]) {
     const abs = absPath(ws, dir);
-    if (existsSync(abs)) for (const d of readdirSync(abs, { withFileTypes: true })) if (d.isDirectory()) names.add(d.name);
+    // collections\_removed\ holds deleted collections (Restore brings them back): not a collection itself.
+    if (existsSync(abs)) for (const d of readdirSync(abs, { withFileTypes: true })) if (d.isDirectory() && d.name !== REMOVED_COLLECTIONS_DIR) names.add(d.name);
   }
   return [...names].sort((a, b) => a.localeCompare(b));
 }

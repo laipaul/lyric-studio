@@ -1,9 +1,10 @@
 // Browser test of the Collections page (needs a studio build, FFmpeg and Playwright with Chromium):
 //   npx tsx apps/studio/e2e/collections.e2e.ts
 // The header link, a collection's card (counts, the song that uses it), a new collection, clips added by
-// "Add clips", Remove (to _removed\, nothing deleted), Restore, and the clip files served for hover play.
+// "Add clips", Remove (to _removed\, nothing deleted), Restore, the clip files served for hover play, and
+// the card's ⋯ menu: Rename (the song follows) and Delete (to collections\_removed\) with Restore.
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -60,12 +61,15 @@ async function main() {
     await page.click("header a:has-text('Collections')");
     await page.waitForSelector("[data-collection=wedding]");
     const counts = (await page.textContent("[data-collection=wedding] [data-counts]")) ?? "";
-    check(counts.includes("2 clips") && counts.includes("9:16 can use 1") && counts.includes("16:9 can use 1"), `the wedding card: 2 clips, 1 for 9:16, 1 for 16:9 (${counts})`);
-    check(((await page.textContent("[data-collection=wedding]")) ?? "").includes("Used by Hold On"), "the card says which song uses it");
+    const chips = (await page.textContent("[data-collection=wedding] [data-usable-chips]")) ?? "";
+    check(counts.includes("2 clips") && chips.includes("9:16 · 1") && chips.includes("16:9 · 1"), `the wedding card: 2 clips, 1 for 9:16, 1 for 16:9 (${counts} ${chips})`);
+    check(((await page.textContent("[data-collection=wedding] [data-used-by]")) ?? "").includes("Used by 1 song"), "the card says how many songs use it");
+    check(((await page.getAttribute("[data-collection=wedding] [data-used-by]", "title")) ?? "").includes("Hold On"), "…and which (on hover)");
 
-    // A new collection.
-    await page.fill("[data-new-collection]", "City nights");
-    await page.click("button:has-text('New collection')");
+    // A new collection (a dialog).
+    await page.click("[data-new-collection-button]");
+    await page.fill("[data-collection-name]", "City nights");
+    await page.click("[data-save-name]");
     await page.waitForSelector("[data-collection-view='City nights']");
     check(existsSync(path.join(wsDir, "collections", "City nights")), "New collection: the folder collections\\City nights\\ exists");
 
@@ -84,6 +88,37 @@ async function main() {
     await page.click("[data-restore='02_rings.mp4']");
     await page.waitForSelector("[data-clip='02_rings.mp4']");
     check(existsSync(path.join(wedding, "02_rings.mp4")), "Restore: back in the collection");
+
+    // Rename "wedding" -> "Wedding day" from the card's ⋯ menu: the folder and the song follow.
+    await page.goto(`${base}/collections`);
+    await page.waitForSelector("[data-collection='City nights'] [data-empty-collection]");
+    check(true, "an empty collection shows “Add clips” instead of a black box");
+    await page.click("[data-collection-menu=wedding]");
+    await page.click("[data-rename]");
+    await page.fill("[data-collection-name]", "Wedding day");
+    await page.click("[data-save-name]");
+    await page.waitForSelector("[data-collection='Wedding day']");
+    const renamed = path.join(wsDir, "collections", "Wedding day");
+    check(existsSync(renamed) && !existsSync(wedding), "Rename: the folder is collections\\Wedding day\\");
+    const ws2 = openWorkspace(wsDir);
+    const recipe = () => JSON.parse(readFileSync(songPathsById(ws2, sp.project.id).recipe!, "utf8")) as { collections?: string[] };
+    check(JSON.stringify(recipe().collections) === JSON.stringify(["Wedding day"]), `Rename: the song now names "Wedding day" (${JSON.stringify(recipe().collections)})`);
+
+    // Delete: a confirmation naming the song; the folder moves to collections\_removed\; Restore brings it back.
+    await page.click("[data-collection-menu='Wedding day']");
+    await page.click("[data-delete]");
+    await page.waitForSelector("[data-delete-songs]");
+    check(((await page.textContent("[data-delete-songs]")) ?? "").includes("Hold On"), "Delete asks first and names the song that uses it");
+    await page.click("[data-confirm-delete]");
+    await page.waitForSelector("[data-collection='Wedding day']", { state: "detached" });
+    const removedDir = path.join(wsDir, "collections", "_removed");
+    check(existsSync(removedDir) && readdirSync(removedDir).some((d) => d.startsWith("Wedding day (removed ")), "Delete: moved to collections\\_removed\\ (nothing deleted)");
+    check(!recipe().collections, "Delete: the song no longer names it");
+    await page.click("[data-removed-collections] summary");
+    await page.click("[data-restore-collection='Wedding day']");
+    await page.waitForSelector("[data-collection='Wedding day']");
+    check(existsSync(renamed), "Restore: back in collections\\Wedding day\\");
+    ws2.close();
     await browser.close();
   } finally {
     server.kill();
