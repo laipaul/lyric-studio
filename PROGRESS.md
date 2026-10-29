@@ -1341,6 +1341,17 @@ rest was in sync.
   reactivity; it saves versioned, data-only presets to the effects library. Not scheduled yet.
 
 ## Known issues
+- Fixed: Videos tab polish. The platform heading shows the verdict of its videos ("All 3 ready to post" /
+  "1 of 3 could be better" / "2 of 3 not ready"; nothing for one video) instead of the old WARN / PASS badge
+  (interrupted / failed keep their own badge with Resume; Compare's QA row is now "Verdict"). Platform groups
+  and runs without a finished video are hidden, with "Show N empty runs" (remembered in the browser; nothing
+  deleted, Tasks > Resume unchanged). "1 differs from the recipe now". Old runs show the same verdict badge
+  (assessment is computed from v<N>.qa.txt + manifest; checked with a manifest without settings / props).
+  Fast clicks on Discard / Approve / Restore / favourite: marks are applied at once, sent one after the other
+  in click order, the page is refreshed once after the last one, and a refresh can no longer undo a click;
+  a failed save only drops that video's change and says so. New: click a tile's picture to watch it with
+  sound (player dialog with Approve / Discard / Post); the Post dialog (now titled "Post Reels v1", so it is
+  not mistaken for the "Ready to post" verdict) shows the video with controls at the top.
 - Fixed: YouTube cover layout, lines near the end jumped to the top ("These Empty Roads", lines 35-37). The
   fixed 20 s end-screen window put any line reaching into it in the top band. Now the app chooses the
   window (from 0.5 s after the last lyric line has left, 5-20 s long, props endScreen.seconds); lines move

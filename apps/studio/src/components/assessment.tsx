@@ -102,3 +102,18 @@ export function VerdictBadge({ a, technical, heading, className }: { a: Assessme
     </Popover.Root>
   );
 }
+
+// A platform run's summary next to its heading: the worst verdict of its videos, in plain words.
+// Nothing for a single video (its own badge says it).
+export function PlatformVerdict({ videos }: { videos: { assessment: Assessment }[] }) {
+  if (videos.length < 2) return null;
+  const order: Assessment["verdict"][] = ["ready", "good", "not-ready"];
+  const worst = videos.reduce<Assessment["verdict"]>((w, v) => (order.indexOf(v.assessment.verdict) > order.indexOf(w) ? v.assessment.verdict : w), "ready");
+  const n = videos.filter((v) => v.assessment.verdict === worst).length;
+  const text = worst === "ready" ? `All ${videos.length} ready to post` : worst === "good" ? `${n} of ${videos.length} could be better` : `${n} of ${videos.length} not ready`;
+  return (
+    <span data-platform-verdict={worst} className={cn("flex items-center gap-1 rounded-md border px-2 py-1 text-[11px]", STYLE[worst])}>
+      {ICON[worst]} {text}
+    </span>
+  );
+}

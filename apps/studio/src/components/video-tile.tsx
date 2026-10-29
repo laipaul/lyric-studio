@@ -24,6 +24,7 @@ export function VideoTile({
   onMark,
   onCompare,
   onPost,
+  onPlay,
 }: {
   projectId: string;
   strongest: string | null; // why this is the strongest of its platform's videos
@@ -34,6 +35,7 @@ export function VideoTile({
   onMark: (change: { favourite?: boolean; status?: VideoInfo["mark"]["status"] }) => void;
   onCompare: () => void;
   onPost: () => void;
+  onPlay: () => void;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
   const { mark, qa } = video;
@@ -46,7 +48,9 @@ export function VideoTile({
       className={cn("bg-card group flex flex-col rounded-xl border transition-colors", selected && "border-brand ring-brand/40 ring-2", discarded && "opacity-50", mark.status === "approved" && !selected && "border-emerald-400/40")}
     >
       <div
-        className={cn("relative overflow-hidden rounded-t-xl bg-black", wide ? "aspect-video" : "aspect-[9/16]")}
+        data-tile-picture
+        onClick={onPlay}
+        className={cn("relative cursor-pointer overflow-hidden rounded-t-xl bg-black", wide ? "aspect-video" : "aspect-[9/16]")}
         onMouseEnter={() => ref.current?.play().catch(() => {})}
         onMouseLeave={() => {
           if (ref.current) {
@@ -58,7 +62,7 @@ export function VideoTile({
         {/* eslint-disable-next-line @next/next/no-img-element -- a frame made by FFmpeg on this PC */}
         <img src={`/api/poster/${video.mp4}`} alt="" loading="lazy" className="absolute inset-0 size-full object-cover" />
         <video ref={ref} src={`/api/files/${video.mp4}`} muted loop playsInline preload="none" className="absolute inset-0 size-full object-cover opacity-0 transition-opacity group-hover:opacity-100" />
-        <div className="absolute top-2 left-2">
+        <div className="absolute top-2 left-2" onClick={(e) => e.stopPropagation()}>
           <VerdictBadge a={video.assessment} technical={qaDetails.length ? qaDetails : ["QA: every check passed"]} heading={`${video.label} ${video.name}`} />
           {strongest ? (
             <span className="bg-brand/80 mt-1 block w-fit rounded px-1.5 py-0.5 text-[10px] text-white" title={`Strongest: ${strongest}`} data-strongest>
@@ -69,7 +73,10 @@ export function VideoTile({
         <button
           type="button"
           aria-label={mark.favourite ? "Remove from favourites" : "Add to favourites"}
-          onClick={() => onMark({ favourite: !mark.favourite })}
+          onClick={(e) => {
+            e.stopPropagation();
+            onMark({ favourite: !mark.favourite });
+          }}
           className="absolute top-2 right-2 rounded-full bg-black/50 p-1.5 backdrop-blur-sm"
         >
           <Star className={cn("size-4", mark.favourite ? "fill-brand text-brand" : "text-white/80")} />

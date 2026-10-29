@@ -3,7 +3,7 @@
 import { Columns3, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { PlatformRun, RunInfo, VideoInfo } from "@lyric/video/exports";
 import type { RunComparison } from "@lyric/video/run-settings";
@@ -11,7 +11,9 @@ import type { RunComparison } from "@lyric/video/run-settings";
 import { CompareDialog } from "@/components/compare-dialog";
 import { CopyButton } from "@/components/copy-button";
 import { ReadyToPost } from "@/components/ready-to-post";
+import { PlatformVerdict } from "@/components/assessment";
 import { StatusBadge, type BadgeStatus } from "@/components/status-badge";
+import { VideoPlayerDialog } from "@/components/video-player";
 import { VideoTile } from "@/components/video-tile";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -19,6 +21,8 @@ import { api } from "@/lib/api";
 
 export type PlatformRunView = PlatformRun & { state: { status: BadgeStatus; details: string[] } };
 export type RunView = Omit<RunInfo, "platforms"> & { platforms: PlatformRunView[] };
+
+const SHOW_EMPTY_KEY = "lyric-videos-show-empty-runs";
 
 const when = (iso: string | null, folder: string) =>
   iso ? new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : folder;
@@ -35,6 +39,24 @@ export function SongView({ projectId, songTitle, runs, settings = {} }: { projec
   const [comparing, setComparing] = useState(false);
   const [posting, setPosting] = useState<VideoInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [showEmpty, setShowEmpty] = useState(false);
+  useEffect(() => {
+    try {
+      setShowEmpty(localStorage.getItem(SHOW_EMPTY_KEY) === "1");
+    } catch {
+      // no browser storage: the default (hidden)
+    }
+  }, []);
+  const toggleEmpty = () => {
+    const next = !showEmpty;
+    setShowEmpty(next);
+    try {
+      localStorage.setItem(SHOW_EMPTY_KEY, next ? "1" : "0");
+    } catch {
+      // not remembered
+    }
+  };
 
   const withMark = (v: VideoInfo): VideoInfo => ({ ...v, mark: marks[v.id] ?? v.mark });
   const allVideos = useMemo(() => runs.flatMap((r) => r.platforms.flatMap((p) => p.videos)).map(withMark), [runs, marks]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -46,15 +68,38 @@ export function SongView({ projectId, songTitle, runs, settings = {} }: { projec
   const discardedCount = allVideos.filter((v) => v.mark.status === "discarded").length;
   const visible = (v: VideoInfo) => (platform === "all" || v.platform === platform) && (showDiscarded || v.mark.status !== "discarded") && (!favouritesOnly || v.mark.favourite);
 
-  const mark = async (v: VideoInfo, change: { favourite?: boolean; status?: VideoInfo["mark"]["status"] }) => {
-    const before = withMark(v).mark;
-    setMarks((m) => ({ ...m, [v.id]: { ...before, ...change } }));
-    const r = await api("/api/marks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, video: v.id, ...change }) });
-    if (!r.ok) {
-      setMarks((m) => ({ ...m, [v.id]: before }));
-      setError(((await r.json()) as { error?: string }).error ?? "Could not save the mark");
-    } else router.refresh(); // the Post tab lists the approved videos
+  // Marks: applied at once (marks = what the user clicked, which always wins over the page's data) and sent
+  // to the server one after the other in click order. The page is refreshed once, after the last one has
+  // settled, so no refresh made in between can bring back an older state. A failed save drops that video's
+  // own change (back to what the server holds) and says so.
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const pending = useRef(0);
+  const pendingFor = useRef<Record<string, number>>({});
+  const mark = (v: VideoInfo, change: { favourite?: boolean; status?: VideoInfo["mark"]["status"] }) => {
+    setMarks((m) => ({ ...m, [v.id]: { ...(m[v.id] ?? v.mark), ...change } }));
+    pending.current += 1;
+    pendingFor.current[v.id] = (pendingFor.current[v.id] ?? 0) + 1;
+    queue.current = queue.current.then(async () => {
+      let saved: VideoInfo["mark"] | null = null;
+      try {
+        const r = await api("/api/marks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, video: v.id, ...change }) });
+        const body = (await r.json()) as VideoInfo["mark"] & { error?: string };
+        if (!r.ok) throw new Error(body.error ?? "Could not save the mark");
+        saved = { favourite: body.favourite, status: body.status };
+      } catch (e) {
+        setError((e as Error).message);
+      }
+      pending.current -= 1;
+      pendingFor.current[v.id] -= 1;
+      if (!pendingFor.current[v.id]) {
+        if (saved) setMarks((m) => ({ ...m, [v.id]: saved! }));
+        else setMarks((m) => Object.fromEntries(Object.entries(m).filter(([k]) => k !== v.id)));
+      }
+      if (!pending.current) router.refresh(); // the Post tab lists the approved videos
+    });
   };
+  const emptyRuns = runs.filter((r) => r.platforms.some((p) => !p.videos.length)).length;
+  const playing = playingId ? allVideos.find((v) => v.id === playingId) : null;
   const toggleCompare = (v: VideoInfo) =>
     setSelected((s) => (s.includes(v.id) ? s.filter((x) => x !== v.id) : s.length >= 3 ? [...s.slice(1), v.id] : [...s, v.id]));
   const compareVideos = selected.map((id) => allVideos.find((v) => v.id === id)).filter((v): v is VideoInfo => !!v);
@@ -84,10 +129,17 @@ export function SongView({ projectId, songTitle, runs, settings = {} }: { projec
       </div>
       {error ? <p className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{error}</p> : null}
 
+      {emptyRuns ? (
+        <button type="button" data-show-empty onClick={toggleEmpty} className="text-muted-foreground hover:text-foreground w-fit text-xs underline underline-offset-2">
+          {showEmpty ? "Hide empty runs" : `Show ${emptyRuns} empty run${emptyRuns === 1 ? "" : "s"}`}
+        </button>
+      ) : null}
+
       {[...runs].reverse().map((run) => {
         const groups = run.platforms.filter((p) => platform === "all" || p.name === platform);
-        const shown = groups.map((p) => ({ p, videos: p.videos.map(withMark).filter(visible) })).filter((g) => g.videos.length || (!favouritesOnly && g.p.state.status !== "PASS" && g.p.state.status !== "WARN"));
-        if (!shown.length) return null;
+        // A group with no finished video is hidden (with the whole run when none of its groups has one).
+        const shown = groups.map((p) => ({ p, videos: p.videos.map(withMark).filter(visible) })).filter((g) => (g.p.videos.length ? g.videos.length : showEmpty && !favouritesOnly));
+        if (!shown.length || (!showEmpty && !run.platforms.some((p) => p.videos.length))) return null;
         return (
           <section key={run.folder} data-run={run.folder} className="flex flex-col gap-4">
             <div className="flex flex-wrap items-center gap-3 border-b pb-2">
@@ -107,14 +159,17 @@ export function SongView({ projectId, songTitle, runs, settings = {} }: { projec
               <div key={p.name} data-platform-group={p.name} className="flex flex-col gap-3">
                 <div className="flex items-center gap-3">
                   <h3 className="font-display text-brand text-sm tracking-[0.14em] uppercase">{p.label}</h3>
-                  <StatusBadge
-                    status={p.state.status}
-                    details={p.state.details}
-                    resumeCommand={p.state.status === "interrupted" ? run.resumeCommand : null}
-                    resume={p.state.status === "interrupted" ? { projectId, folder: run.folder } : null}
-                  >
-                    {p.state.status === "interrupted" ? "interrupted" : p.state.status}
-                  </StatusBadge>
+                  <PlatformVerdict videos={p.videos.filter((v) => withMark(v).mark.status !== "discarded")} />
+                  {p.state.status === "interrupted" || p.state.status === "FAILED" ? (
+                    <StatusBadge
+                      status={p.state.status}
+                      details={p.state.details}
+                      resumeCommand={p.state.status === "interrupted" ? run.resumeCommand : null}
+                      resume={p.state.status === "interrupted" ? { projectId, folder: run.folder } : null}
+                    >
+                      {p.state.status === "interrupted" ? "interrupted" : "failed"}
+                    </StatusBadge>
+                  ) : null}
                 </div>
                 {videos.length ? (
                   <div className={cn("grid gap-4", p.name === "youtube" ? "grid-cols-[repeat(auto-fill,minmax(360px,1fr))]" : "grid-cols-[repeat(auto-fill,minmax(190px,1fr))]")}>
@@ -130,6 +185,7 @@ export function SongView({ projectId, songTitle, runs, settings = {} }: { projec
                         onMark={(c) => mark(v, c)}
                         onCompare={() => toggleCompare(v)}
                         onPost={() => setPosting(v)}
+                        onPlay={() => setPlayingId(v.id)}
                       />
                     ))}
                   </div>
@@ -154,6 +210,18 @@ export function SongView({ projectId, songTitle, runs, settings = {} }: { projec
         </div>
       ) : null}
       {comparing ? <CompareDialog videos={compareVideos} open onOpenChange={setComparing} /> : null}
+      {playing ? (
+        <VideoPlayerDialog
+          key={playing.id}
+          video={playing}
+          onClose={() => setPlayingId(null)}
+          onMark={(c) => mark(playing, c)}
+          onPost={() => {
+            setPlayingId(null);
+            setPosting(playing);
+          }}
+        />
+      ) : null}
       {posting ? <ReadyToPost key={posting.id} projectId={projectId} songTitle={songTitle} video={posting} onClose={() => setPosting(null)} /> : null}
     </div>
   );
@@ -177,7 +245,7 @@ function RunSettings({ projectId, folder, platforms }: { projectId: string; fold
   return (
     <details data-run-settings className="text-xs">
       <summary className="text-muted-foreground hover:text-foreground cursor-pointer">
-        settings{differ ? <span className="text-amber-300"> · {differ} differ from the recipe now</span> : " · as the recipe now"}
+        settings{differ ? <span className="text-amber-300"> · {differ} {differ === 1 ? "differs" : "differ"} from the recipe now</span> : " · as the recipe now"}
       </summary>
       <div className="bg-card mt-2 flex flex-col gap-3 rounded-lg border p-3">
         {platforms.map((p) => (

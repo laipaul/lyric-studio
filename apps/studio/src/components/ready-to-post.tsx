@@ -9,6 +9,7 @@ import type { VideoInfo } from "@lyric/video/exports";
 import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { VideoPlayer } from "@/components/video-player";
 import { api } from "@/lib/api";
 
 async function openFolder(file: string) {
@@ -22,10 +23,11 @@ export function ReadyToPost({ projectId, songTitle, video, onClose }: { projectI
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            Ready to post: {video.label} {video.name}
+            Post {video.label} {video.name}
           </DialogTitle>
           <DialogDescription>Copy the text, download the files, then post it yourself on {video.label}.</DialogDescription>
         </DialogHeader>
+        <VideoPlayer video={video} maxVh={40} />
         <PostPanel projectId={projectId} songTitle={songTitle} video={video} />
       </DialogContent>
     </Dialog>

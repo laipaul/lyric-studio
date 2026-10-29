@@ -49,7 +49,7 @@ export function CompareDialog({ videos, open, onOpenChange }: { videos: VideoInf
     { label: "Cinematic bars", value: (v) => (v.bars ? "yes" : "no") },
     { label: "Effects", value: (v) => (v.effects ? `${v.effects.verse} / ${v.effects.hook}` : "old fade") },
     { label: "Length", value: (v) => seconds(v.durationS) },
-    { label: "QA", value: (v) => (v.qa.status === "WARN" ? `WARN: ${v.qa.problems.map((p) => p.check).join(", ")}` : "PASS") },
+    { label: "Verdict", value: (v) => v.assessment.headline },
   ];
 
   return (
