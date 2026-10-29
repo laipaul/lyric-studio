@@ -42,6 +42,7 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
       lang: { type: "string", default: "en" },
       rate: { type: "string", default: "1x" },
       "shot-length": { type: "string" },
+      ending: { type: "string" },
       tempo: { type: "string" },
       energy: { type: "string", default: "medium" },
       lead: { type: "string", default: "0.25" },
@@ -95,6 +96,8 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
   if (offset !== undefined && ![0, 1, 2, 3].includes(offset)) fail("--downbeat-offset must be 0, 1, 2 or 3");
   const length = values.length === undefined ? undefined : Number(values.length);
   if (length !== undefined && (!Number.isFinite(length) || length < 3 || length > 600)) fail("--length must be a number of seconds from 3 to 600 (the target for an auto section)");
+  const ending = values.ending;
+  if (ending !== undefined && !["auto", "loop", "fade", "ring-out"].includes(ending)) fail("--ending must be auto, loop, fade or ring-out (how a Reel / TikTok / Short ends; auto = the app chooses)");
   const shotLength = values["shot-length"];
   if (shotLength !== undefined && !["1", "2", "4", "8", "story"].includes(shotLength)) fail("--shot-length must be 1, 2, 4 or 8 (bars per shot) or story (2 bars on hooks, 4 on verses, never under 3 s)");
   const tempo = values.tempo === undefined ? undefined : Number(values.tempo);
@@ -133,6 +136,7 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
       lang: values.lang,
       rate,
       ...(shotLength !== undefined ? { shotLength } : {}),
+      ...(ending !== undefined ? { ending: ending as "auto" | "loop" | "fade" | "ring-out" } : {}),
       ...(tempo !== undefined ? { tempo } : {}),
       energy,
       leadMs: seconds("lead", values.lead!),

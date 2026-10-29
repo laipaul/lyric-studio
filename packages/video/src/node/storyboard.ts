@@ -51,7 +51,7 @@ export type StoryboardView = {
   notes: string[]; // what the planner said (warnings)
   // Loop platforms: does the wrap-around flow (the failing points, as QA "Loop flows" names them), and
   // target lengths with an end that loops well from this start (plans only).
-  loop: { ok: boolean; problems: string[]; lengthS: number } | null;
+  loop: { ok: boolean; problems: string[]; lengthS: number; ending: string | null } | null; // ending: the automatic ending, in plain words
   loopSuggestions: { lengthS: number; end: string; line: string | null; fit: string }[];
   // Stage 2 (plans only): the clips in story order (clips.json, else file names) with their edits; a run
   // is read-only (editable false).
@@ -249,7 +249,7 @@ async function view(
     anchorsOutside: c.anchorsOutside,
     anchorWarnings: [...(c.anchors?.missing ?? []), ...(c.anchors?.conflicts ?? []).filter((x) => !attached.has(x))],
     notes: c.notes,
-    loop: c.loop ? { ok: c.loop.ok, problems: c.loop.points.filter((p) => !p.ok).map((p) => `${p.point}: ${p.detail}`), lengthS: c.loop.length_s } : null,
+    loop: c.loop ? { ok: c.loop.ok, problems: c.loop.points.filter((p) => !p.ok).map((p) => `${p.point}: ${p.detail}`), lengthS: c.loop.length_s, ending: c.loop.ending?.text ?? null } : null,
     loopSuggestions: c.loopSuggestions.map((x) => ({ lengthS: x.lengthS, end: clockText(x.endMs), line: x.line ? `line ${x.line.number} "${x.line.text}"` : null, fit: x.fit.text })),
     editable: c.editable,
     clips: c.storyboardClips,

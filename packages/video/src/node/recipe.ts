@@ -12,11 +12,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { checkAnchors, type AnchorSpec, type GapOrder } from "../anchors";
+import { ENDING_VALUES, type EndingChoice } from "../ending";
 import { choiceText, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, parseEffectChoice } from "../effects/names";
 import { DEFAULT_BRAND, type Brand } from "./brand";
 import { checkPerPlatform, isPlatformField, isWeight, SHOT_LENGTH_VALUES, PLATFORM_FIELDS, type PerPlatform, type PlatformField } from "./per-platform";
 
-export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "tempo", "collections", "platforms", "variations", "section", "length", "ep", "youtubeLayout"] as const;
+export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "tempo", "collections", "platforms", "variations", "section", "length", "ending", "ep", "youtubeLayout"] as const;
 export type RecipeField = (typeof RECIPE_FIELDS)[number];
 
 export type RecipeValues = {
@@ -36,6 +37,7 @@ export type RecipeValues = {
   variations: Record<string, number>; // videos per platform
   section: string; // auto | full | 0:11-1:10
   length: number | null; // target seconds for an "auto" section (null: the platform preset's length)
+  ending: EndingChoice; // Reels / TikTok / Shorts: "auto" (the app chooses: tight loop, soft fade or ring-out), or one of them
   ep: string;
   youtubeLayout: "cover" | "stills" | "clips";
 };
@@ -61,7 +63,7 @@ export const RECIPE_HELP =
   "(a brand change does not reach them, and Generate cannot change them for one run). Fields: verseEffect, hookEffect " +
   '("glide", "soft-blur:subtle", ...), verseFont, hookFont, verseWeight / hookWeight (400 = regular, 600 = semibold, 700 = bold), verseItalic / hookItalic (true / false), accentColour ("#E8A3B5"), shotLength ("1", "2", "4", "8" bars per shot, or "story": 2 bars on hooks, 4 on verses, never under 3 s), tempo (the real BPM of this song when the detected one is wrong, e.g. 92), collections (shared collections used ' +
   'with the clips in clips\\), platforms (["reels", "youtube"]), variations ({ "reels": 3 }), section ("auto", "full", ' +
-  '"0:11-1:10"), length (seconds an "auto" section aims for, e.g. 90; empty = the platform preset), ep, youtubeLayout ("cover", "stills", "clips"). perPlatform: values for one platform only, e.g. ' +
+  '"0:11-1:10"), length (seconds an "auto" section aims for, e.g. 90; empty = the platform preset), ending ("auto" = the app chooses how a Reel / TikTok / Short ends: a tight loop, a soft fade or a ring-out; or "loop", "fade", "ring-out"), ep, youtubeLayout ("cover", "stills", "clips"). perPlatform: values for one platform only, e.g. ' +
   '{ "youtube": { "verseEffect": "cinematic-fade" } } (verseEffect, hookEffect, verseFont, hookFont, accentColour, section, length), e.g. { "reels": { "length": 90 }, "tiktok": { "length": 30 } }. ' +
   'Story anchors (the Lyrics tab sets them): anchors [{ "line": 9, "clip": "hands.mp4", "clipIn": 1.5, "transition": "dissolve" }] = that clip lands on lyrics.txt line 9 ' +
   '(cut in on the downbeat before the line, held until it ends); gapOrder "story" (default with anchors: the other clips in file-name order in every video) or "shuffle".';
@@ -91,6 +93,10 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
   if (r.shotLength !== undefined && r.shotLength !== null) {
     if ((SHOT_LENGTH_VALUES as readonly string[]).includes(String(r.shotLength))) recipe.shotLength = String(r.shotLength);
     else problems.push(`shotLength must be ${SHOT_LENGTH_VALUES.join(", ")} (bars per shot, or "story": 2 bars on hooks, 4 on verses, never under 3 s)`);
+  }
+  if (r.ending !== undefined) {
+    if ((ENDING_VALUES as readonly string[]).includes(String(r.ending))) recipe.ending = r.ending as EndingChoice;
+    else problems.push(`ending must be ${ENDING_VALUES.join(", ")} (auto = the app chooses how a Reel / TikTok / Short ends)`);
   }
   if (r.tempo !== undefined && r.tempo !== null) {
     if (typeof r.tempo === "number" && r.tempo >= 30 && r.tempo <= 300) recipe.tempo = Math.round(r.tempo * 100) / 100;
@@ -289,6 +295,7 @@ export const LIBRARY_RECIPE: RecipeValues = {
   variations: {}, // none: each platform preset's number
   section: "auto",
   length: null,
+  ending: "auto",
   ep: "",
   youtubeLayout: "cover",
 };
@@ -326,6 +333,7 @@ export function runRecipe(o: {
   variations?: number;
   section?: string;
   length?: number;
+  ending?: EndingChoice;
   ep?: string;
   layout?: RecipeValues["youtubeLayout"];
 }): Partial<RecipeValues> {
@@ -346,6 +354,7 @@ export function runRecipe(o: {
     variations: o.variations !== undefined ? { "*": o.variations } : undefined,
     section: o.section,
     length: o.length,
+    ending: o.ending,
     ep: o.ep?.trim() || undefined,
     youtubeLayout: o.layout,
   };
@@ -363,7 +372,7 @@ export function recipeText(v: unknown): string {
 // "verse glide (artist), hook karaoke-highlight (artist), collections wedding (song, locked), ..."
 export function recipeSummary(r: ResolvedRecipe): string {
   const show: RecipeField[] = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "collections", "section"];
-  for (const k of ["platforms", "variations", "ep", "youtubeLayout", "tempo"] as const) if (r.sources[k] !== "library") show.push(k);
+  for (const k of ["platforms", "variations", "ep", "youtubeLayout", "tempo", "ending"] as const) if (r.sources[k] !== "library") show.push(k);
   return show.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]}${r.locked.includes(k) ? ", locked" : ""})`).join(", ");
 }
 

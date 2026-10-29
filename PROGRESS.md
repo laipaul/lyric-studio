@@ -995,6 +995,26 @@ These platforms play a video in a loop, so the wrap-around from the last frame t
   same clip first and last, and the Reels continuation that passes; a harmony clash C -> F#; phrase cut;
   the end choice preferring the better loop and saying why; shuffle first != last over 300 seeds).
 
+### Step A — Automatic endings (Reels, TikTok, Shorts) ✅ (to verify on the Windows PC)
+- The app now chooses how a loop video's music ends, from the music at the end of the section
+  (src/ending.ts): a **tight loop** (cut on the bar, the platform's short fade) only when the last bar
+  flows back into the first (whole bars, level within 3 dB, keys fit); otherwise a **soft fade** over the
+  room after the last sung word (up to one bar, max 3 s); with little room, a **ring-out**: the last chord
+  sounds one more bar (the next detected bar line, not sung, within the platform's length) and fades.
+  At the song's own end: no fade. Whole bars kept, no sung line cut, the music itself never changed.
+- Fixes the abrupt stop on The House My Heart Built (loud chorus -16.7 dB into the quiet pickup -32.3 dB
+  with a 0.12 s fade): now a soft fade or ring-out.
+- Storyboard header: one plain line, e.g. "Ending: a soft fade over the last 1.8 s — the end is loud and
+  the start quiet, so the loop starts the song again gently". pnpm make prints it; manifest settings.ending.
+- QA "Loop flows": with a fade / ring-out the level jump or key change is a note ("softened by a 1.8 s
+  fade"), not a WARN.
+- Loop suggestions never drop a chorus line or the title line the plan has (no more 84 s ending before
+  "This is the house that my heart built").
+- Override (optional): Style tab "Ending (Reels, TikTok, Shorts)": auto / tight loop / soft fade /
+  ring-out, per platform; `pnpm make --ending fade`.
+- Tests: packages/video/test/ending.test.ts (each ending, whole bars, limits, overrides, the title line, suggestions,
+  QA); make test; Style and Storyboard browser tests.
+
 ### Storyboard: "Follow playback" ✅ (to verify on the Windows PC)
 - A "Follow playback" checkbox next to Zoom (off by default, remembered in this browser): while the
   preview plays, the timeline (bars, waveform, lines, shots) scrolls so the playhead stays a third from
@@ -1317,7 +1337,7 @@ decision the app still hands to the user:
 - Slow-motion warnings (0.74x) the user must judge; a 3 s Canvas from short clips; technical WARN texts.
 
 After the user's test pass, in this order (each its own step, plan first):
-A. **Automatic endings**: per section the app chooses tight loop / soft fade / ring-out (last chord one more
+A. ✅ (built 29 Oct, to verify) **Automatic endings**: per section the app chooses tight loop / soft fade / ring-out (last chord one more
    bar, then fade) from the music at the end (level, harmony, what follows); whole bars kept; loop
    suggestions never drop a chorus / title line the plan has. Fixes the abrupt Reels ending.
 B. **Automatic pacing**: shot length chosen from the song (tempo, energy, hooks vs verses) and the clips

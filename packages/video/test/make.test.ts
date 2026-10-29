@@ -695,10 +695,14 @@ describe("platform presets (stand-in renderer)", () => {
         expect(m.props.format).toEqual({ width: 1080, height: 1920 });
         expect(m.props.safeZone).toEqual(preset.safeZone);
         expect(m.props.lyricArea).toEqual(lyricArea(preset, preset.safeZone, preset.lyricsAt, m.props.cinematicBars));
-        expect(m.props.audio?.fadeOutFrames).toBe(Math.round(preset.fadeOutSeconds * 30));
+        // The automatic ending: a tight loop keeps the preset's fade; a soft fade / ring-out its own.
+        const ending = m.settings.ending as { kind: string; fade_out_s: number; text: string };
+        expect(["loop", "fade", "ring-out", "song-end"]).toContain(ending.kind);
+        expect(ending.text).toMatch(/^Ending: /);
+        expect(m.props.audio?.fadeOutFrames).toBe(Math.round((ending.kind === "loop" ? preset.fadeOutSeconds : ending.fade_out_s) * 30));
         const length = m.section.end_ms - m.section.start_ms;
         expect(length).toBeGreaterThanOrEqual(w.minMs);
-        expect(length).toBeLessThanOrEqual(w.maxMs);
+        expect(length).toBeLessThanOrEqual(ending.kind === "ring-out" ? w.hardMaxMs : w.maxMs);
         expect(readFileSync(v.qaFile, "utf8")).toContain(preset.label);
         // No logo on 9:16 by default (brand.json logo.platforms = ["youtube"]).
         expect(m.props.logo ?? null).toBeNull();

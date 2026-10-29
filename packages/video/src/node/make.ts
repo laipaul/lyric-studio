@@ -43,6 +43,7 @@ import type { LyricEffectsProps, LyricVideoProps } from "../props";
 import { formatQa, LOW_CONFIDENCE, qaReasons, runQa, type QaInput, type QaReport } from "../qa";
 import { autoSection, clockText, finishedBeforeStart, sectionCuts, startsAfterEnd, sungEnd, sungStart, type SectionCut, type SectionLine } from "../section";
 import { loopFit, loopFlows, loopSuggestions, type LoopAudio, type LoopResult, type LoopSuggestion } from "../loop";
+import { chooseEnding, type Ending, type EndingChoice } from "../ending";
 import { anchorsInside, type AnchorSpec, type GapOrder, type ResolvedAnchor } from "../anchors";
 import type { AnchorReport, AnchorTransitions } from "../compose";
 import { RECENT_WINDOW, type ClipOrder } from "../shots";
@@ -127,6 +128,7 @@ export type MakeOptions = {
   hookItalic?: boolean;
   pairings?: string; // "elegant,dramatic": one video per pairing (presets/font-pairings.json), all else the same
   shotLength?: string; // "1" | "2" | "4" | "8" bars per shot, or "story" (2 bars on hooks, 4 on verses, >= 3 s); replaces --rate
+  ending?: EndingChoice; // Reels / TikTok / Shorts: "auto" (default: the app chooses tight loop, soft fade or ring-out) or one of them
   tempo?: number; // the song's real BPM (song.json "tempo"): the beats are re-tracked around it
   // The storyboard: plan every video exactly as a make would (the same code), but render nothing and
   // make no output (no run folder, section / job rows, song.json changes or .lrc; never aligns: it needs
@@ -529,6 +531,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       font: own("verseFont") ? recipe.values.verseFont : undefined,
       fontHook: own("hookFont") ? recipe.values.hookFont : undefined,
       shotLength: recipe.values.shotLength ?? undefined,
+      ending: recipe.values.ending,
       tempo: recipe.values.tempo ?? undefined,
       // Weights and italic: the recipe's (brand, song or run) whenever the brand fonts are used for the
       // lyrics; otherwise only the song's or run's own (else the Simple / Bold style's weight).
@@ -854,7 +857,7 @@ function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: Pl
   const length = lengthFor(base, r.values.length, sh.analysis.duration_ms);
   if (length.note) sh.log(`${base.name}: ${length.note}`);
   const section = r.values.section === "auto" && length.wholeSong ? "full" : r.values.section;
-  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined, shotLength: r.values.shotLength ?? undefined };
+  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined, shotLength: r.values.shotLength ?? undefined, ending: r.values.ending };
   const own = PLATFORM_FIELDS.filter((k) => r.sources[k].includes(":"));
   if (own.length) sh.log(`${preset.name}: recipe ${own.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]})`).join(", ")}`);
   const out: Shared = {
@@ -865,6 +868,19 @@ function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: Pl
     brand: accent ? { ...sh.brand, brand: { ...sh.brand.brand, accentColour: accent } } : sh.brand,
   };
   return { sh: out, preset: r.values.section === "auto" ? length.preset : base };
+}
+
+// A lyric line that carries the song's title ("This is the house that my heart built" in "The House My
+// Heart Built"): the payoff line a loop suggestion must never drop.
+export function isTitleLine(text: string, title: string): boolean {
+  const norm = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  // The title's words in the same order (other words may sit between them: "the house THAT my heart built").
+  const want = norm(title).split(" ").filter(Boolean);
+  const have = norm(text).split(" ").filter(Boolean);
+  if (want.length < 2) return want.length === 1 && have.includes(want[0]);
+  let i = 0;
+  for (const w of have) if (w === want[i]) i++;
+  return i === want.length;
 }
 
 // A fixed section ("0:11-1:10") is used exactly as given; QA says when it is longer than the platform
@@ -922,11 +938,34 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     const i = a.line - 1;
     return !lines[i] ? [] : [{ line: a.line, shownMs: lines[i].start_ms - leadMs + lyricsOffsetMs, sungEndMs: sungEnd(sh.sectionLines[i]) }];
   });
-  const chosen: SectionChoiceOut = canvas
+  const chosen0: SectionChoiceOut = canvas
     ? { mode: "loop", start_ms: 0, end_ms: Math.round(canvas.seconds * 1000), requested: null, reason: canvas.reason, warnings: canvas.warnings, cuts: [] }
     : chooseSection(options.section ?? "auto", sh.sectionLines, analysis.beats, analysis.duration_ms, leadMs - lyricsOffsetMs, preset,
       loops ? (startMs, endMs) => loopFit(loopSong, analysis.bpm, startMs, endMs, downbeatTimes) : undefined,
       anchorLines.length && preset.lyrics ? (startMs, endMs) => anchorsInside(anchorLines, startMs, endMs) : undefined);
+  // Automatic ending (Reels, TikTok, Shorts; src/ending.ts): a tight loop only when the end flows back into
+  // the start, else a soft fade after the last sung word, or the last chord ringing out one more bar.
+  const loopLines = sh.sectionLines.map((l, i) => ({ number: numbers[i] || i + 1, text: l.text, sungStartMs: sungStart(l), sungEndMs: sungEnd(l) }));
+  const lengthWindow = loops ? sectionWindow(preset) : null;
+  const ending: Ending | null = loops
+    ? chooseEnding({
+        requested: options.ending ?? "auto",
+        startMs: chosen0.start_ms,
+        endMs: chosen0.end_ms,
+        songMs: analysis.duration_ms,
+        bpm: analysis.bpm,
+        downbeats: downbeatTimes,
+        lines: loopLines,
+        audio: loopSong,
+        loopFadeS: preset.fadeOutSeconds,
+        // A ring-out may add one bar to an auto section within the platform's length; a fixed section stays exactly as given.
+        maxEndMs: chosen0.mode === "auto" && lengthWindow ? chosen0.start_ms + lengthWindow.hardMaxMs : chosen0.end_ms,
+      })
+    : null;
+  const chosen: SectionChoiceOut = ending
+    ? { ...chosen0, end_ms: ending.endMs, reason: ending.kind === "ring-out" ? `${chosen0.reason}; + one ring-out bar to ${clockText(ending.endMs)}` : chosen0.reason, warnings: [...chosen0.warnings, ...(ending.note ? [ending.note] : [])] }
+    : chosen0;
+  if (ending) log(`${preset.name}: ${ending.text}${ending.note ? ` (${ending.note})` : ""}`);
   log(`${preset.name}: ${canvas ? "loop" : "section"} ${clockText(chosen.start_ms)} - ${clockText(chosen.end_ms)}`);
   const sectionValues = { project_id: project.id, name: `make ${preset.name} (${chosen.mode})`, start_ms: chosen.start_ms, end_ms: chosen.end_ms, energy: options.energy ?? "medium" } as const;
   const sectionRow = options.dryRun ? { id: "" } : ws.db.insert(sectionTable).values(sectionValues).returning().get();
@@ -1016,7 +1055,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     endMs: chosen.end_ms,
     songMs: analysis.duration_ms,
     fadeInSeconds: preset.fadeInSeconds,
-    fadeOutSeconds: preset.fadeOutSeconds,
+    fadeOutSeconds: ending ? ending.fadeOutS : preset.fadeOutSeconds,
     sourceRate: songAudio.sampleRate ?? null,
     sampleRate: preset.audioSampleRate,
   });
@@ -1225,7 +1264,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
           const composed = composedBySpec.get(spec.name)!;
           return {
             spec, props: composed.props, anchors: anchors.length || anchorMissing.length ? { ...(composed.anchors ?? { uses: [], conflicts: [], notes: [] }), missing: anchorMissing } : null,
-            loop: loops ? loopResult(composed.props, prepared.clips, { bpm: analysis.bpm, downbeats: downbeatTimes, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers }) : null,
+            loop: loops ? loopResult(composed.props, prepared.clips, { bpm: analysis.bpm, downbeats: downbeatTimes, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers, ending }) : null,
           };
         }),
         // Loop platforms: target lengths whose end loops well from this start (beat, level, harmony).
@@ -1233,7 +1272,9 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
           ? loopSuggestions({
               audio: loopSong, bpm: analysis.bpm, startMs: chosen.start_ms, durationMs: analysis.duration_ms,
               downbeats: downbeatTimes,
-              lines: sh.sectionLines.map((l, i) => ({ number: numbers[i] || i + 1, text: l.text, sungStartMs: sungStart(l), sungEndMs: sungEnd(l) })),
+              lines: loopLines,
+              // Never suggest dropping a chorus line or the title line the plan has.
+              keep: loopLines.filter((l, i) => (sh.sectionLines[i].isHook || isTitleLine(l.text, project.title)) && l.sungStartMs >= chosen.start_ms && l.sungEndMs <= chosen.end_ms),
               targetMs: preset.length.mode === "target" ? preset.length.seconds * 1000 : preset.length.mode === "range" ? ((preset.length.min + preset.length.max) / 2) * 1000 : chosen.end_ms - chosen.start_ms,
             })
           : null,
@@ -1404,7 +1445,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       state.status = "checking";
       report();
       // The wrap-around from the last frame to the first (the section as rendered, to the frame).
-      const loop = loops ? loopResult(props, prepared.clips, { bpm: analysis.bpm, downbeats: downbeatTimes, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers }) : null;
+      const loop = loops ? loopResult(props, prepared.clips, { bpm: analysis.bpm, downbeats: downbeatTimes, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers, ending }) : null;
       const anchorsOut = anchors.length || anchorMissing.length ? { ...(anchorReport ?? { uses: [], conflicts: [], notes: [] }), missing: anchorMissing } : null;
       const qa = await checkVariation(spec, props, file, {
         loop,
@@ -1584,7 +1625,7 @@ async function checkVariation(
 export function loopResult(
   props: Pick<LyricVideoProps, "shots" | "durationInFrames" | "audio">,
   clips: readonly { path: string; name: string }[],
-  c: { bpm: number; downbeats?: readonly number[]; startMs: number; audio: LoopAudio | null; lines: readonly SectionLine[]; numbers: readonly number[] },
+  c: { bpm: number; downbeats?: readonly number[]; startMs: number; audio: LoopAudio | null; lines: readonly SectionLine[]; numbers: readonly number[]; ending?: Ending | null },
 ): LoopResult {
   const lengthMs = (props.durationInFrames * 1000) / VIDEO.fps;
   const startMs = props.audio ? (props.audio.startFrame * 1000) / VIDEO.fps : c.startMs;
@@ -1594,6 +1635,7 @@ export function loopResult(
     lengthMs,
     bpm: c.bpm,
     downbeats: c.downbeats,
+    ending: c.ending ?? null,
     startMs,
     endMs: startMs + lengthMs,
     lines: c.lines.map((l, i) => ({ number: c.numbers[i] || i + 1, text: l.text, sungStartMs: sungStart(l), sungEndMs: sungEnd(l) })),
@@ -1679,6 +1721,7 @@ function buildManifest(c: {
       energy: c.options.energy ?? "medium",
       early_cut_frames: 2,
       shot_length: c.options.shotLength ?? null, // bars per shot or "story" (null: the cut rate)
+      ending: c.loop && c.loop.checked ? (c.loop.ending ?? null) : null, // Reels / TikTok / Shorts: the ending chosen (tight loop, soft fade, ring-out) and why
       tempo: c.options.tempo ? { bpm: c.analysis.bpm, set: c.options.tempo } : null, // song.json "tempo" (null: as detected)
       order: spec.order,
       seed: spec.seed,

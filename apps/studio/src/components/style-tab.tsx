@@ -264,6 +264,20 @@ export function StyleTab({ projectId }: { projectId: string }) {
         </div>
       );
     }
+    if (f.field === "ending") {
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          <select aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} className={select} value={String(value ?? "auto")} onChange={(e) => (e.target.value === "auto" && !platform ? act({ action: "reset", field: f.field, platform }) : set(e.target.value))}>
+            {ENDINGS.map(([v, label]) => (
+              <option key={v} value={v}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <span className="text-muted-foreground text-xs">auto = the app listens to the end of the section and chooses; the Storyboard header says which and why</span>
+        </div>
+      );
+    }
     if (f.field === "shotLength") {
       return (
         <div className="flex flex-wrap items-center gap-2">
@@ -389,7 +403,13 @@ export function StyleTab({ projectId }: { projectId: string }) {
   );
 }
 
-const SHOT_LENGTHS: [string, string][] = [["1", "1 bar"], ["2", "2 bars"], ["4", "4 bars"], ["8", "8 bars"], ["story", "story (2-4 bars)"]];
+const ENDINGS: [string, string][] = [
+  ["auto", "auto (tight loop, soft fade or ring-out, chosen from the music)"],
+  ["loop", "tight loop (cut on the bar)"],
+  ["fade", "soft fade after the last line"],
+  ["ring-out", "ring-out (one more bar, then fade)"],
+];
+const SHOT_LENGTHS: [string, string][] =[["1", "1 bar"], ["2", "2 bars"], ["4", "4 bars"], ["8", "8 bars"], ["story", "story (2-4 bars)"]];
 const RATIOS: [string, number][] = [["½", 1 / 2], ["×2", 2], ["×2/3", 2 / 3], ["×3/2", 3 / 2]];
 const round1 = (n: number) => Math.round(n * 10) / 10;
 

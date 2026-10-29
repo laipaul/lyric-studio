@@ -42,6 +42,7 @@ export type LoopResult = {
   first_clip: string | null;
   last_clip: string | null;
   continues: boolean; // the last shot continues into the first one (Reels loop ending)
+  ending?: { kind: string; fade_out_s: number; text: string } | null; // the automatic ending (src/ending.ts)
 };
 
 const s1 = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
@@ -397,6 +398,9 @@ export function loopFlows(o: {
   lastClip: string | null;
   shots: number;
   continues: boolean;
+  // The ending chosen for the section (src/ending.ts): a soft fade or a ring-out restarts the song gently,
+  // so a level jump or a key change at the loop point is not heard as a jump.
+  ending?: { kind: "loop" | "fade" | "ring-out" | "song-end"; fadeOutS: number; text: string } | null;
 }): LoopResult {
   const b = beatInfo(o);
   const levels = o.audio ? loopLevels(o.audio, o.startMs, o.endMs) : null;
@@ -408,6 +412,14 @@ export function loopFlows(o: {
     harmonyPoint(harmony),
     picturePoint(o.firstClip, o.lastClip, o.shots, o.continues),
   ];
+  const gentle = o.ending && o.ending.kind !== "loop";
+  if (gentle) {
+    const how = o.ending!.kind === "song-end" ? "the song's own ending" : `a ${o.ending!.fadeOutS.toFixed(1)} s fade${o.ending!.kind === "ring-out" ? " after a ring-out bar" : ""}`;
+    for (const p of points) {
+      if (p.point === "sound" && !p.ok) Object.assign(p, { ok: true, detail: `${p.detail.split(" at the loop point")[0]}, softened by ${how}: the loop starts the song again gently` });
+      if (p.point === "harmony" && !p.ok) Object.assign(p, { ok: true, detail: `the last and first bar are in different keys, softened by ${how}` });
+    }
+  }
   const round = (v: number, d = 1) => Math.round(v * 10 ** d) / 10 ** d;
   return {
     ok: points.every((p) => p.ok),
@@ -423,6 +435,7 @@ export function loopFlows(o: {
     first_clip: o.firstClip,
     last_clip: o.lastClip,
     continues: o.continues,
+    ending: o.ending ? { kind: o.ending.kind, fade_out_s: o.ending.fadeOutS, text: o.ending.text } : null,
   };
 }
 
@@ -455,7 +468,8 @@ export function loopFit(audio: LoopAudio | null, bpm: number, startMs: number, e
 export type LoopSuggestion = { lengthS: number; endMs: number; line: { number: number; text: string } | null; fit: LoopFit };
 
 // Ends that loop well from this start: bar starts right after a complete sung line (never inside one),
-// 0.5-1.5x the target, whose wrap-around passes beat, level and harmony; the nearest to the target first.
+// 0.5-1.5x the target, whose wrap-around passes beat, level and harmony, never dropping a line in `keep`;
+// the nearest to the target first.
 export function loopSuggestions(o: {
   audio: LoopAudio | null;
   bpm: number;
@@ -465,14 +479,18 @@ export function loopSuggestions(o: {
   targetMs: number;
   durationMs: number;
   count?: number;
+  // Lines the plan has that a suggestion must keep (the chorus / title lines inside the current section):
+  // an end before one of them finishes is never suggested (the payoff line would be lost).
+  keep?: readonly LoopLine[];
 }): LoopSuggestion[] {
+  const mustReach = Math.max(0, ...(o.keep ?? []).map((l) => l.sungEndMs));
   const singing = (t: number) => o.lines.some((l) => t > l.sungStartMs && t < l.sungEndMs);
   const bars = [...o.downbeats].sort((a, b) => a - b);
   const out: LoopSuggestion[] = [];
   for (let k = 0; k < bars.length; k++) {
     const at = bars[k];
     const length = at - o.startMs;
-    if (length < o.targetMs * 0.5 || length > o.targetMs * 1.5 || at > o.durationMs || singing(at)) continue;
+    if (length < o.targetMs * 0.5 || length > o.targetMs * 1.5 || at > o.durationMs || singing(at) || at < mustReach) continue;
     // The first bar after a line has ended (a musical ending, not mid-instrumental).
     const ended = o.lines.filter((l) => l.sungEndMs <= at && l.sungStartMs >= o.startMs);
     const last = ended.reduce<LoopLine | null>((a, l) => (!a || l.sungEndMs > a.sungEndMs ? l : a), null);

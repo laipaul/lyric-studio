@@ -74,6 +74,16 @@ async function main() {
     const recipe = JSON.parse(readFileSync(paths.recipe!, "utf8")) as { locked?: string[]; perPlatform?: { reels?: { length?: number } } };
     check(!!recipe.locked?.includes("hookEffect"), 'song.json holds "locked": ["hookEffect"]');
     check(recipe.perPlatform?.reels?.length === 90, "song.json holds the Reels length typed just before (90)");
+    // Ending (Reels, TikTok, Shorts): auto by default, the song may ask for one.
+    check((await page.$eval("[data-edit='ending-default']", (e: Element) => (e as HTMLSelectElement).value)) === "auto", "Ending: auto by default (the app chooses)");
+    await page.selectOption("[data-edit='ending-default']", "fade");
+    await page.waitForSelector("[data-saving=saved]");
+    await sleep(300);
+    check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { ending?: string }).ending === "fade", 'song.json holds "ending": "fade"');
+    await page.selectOption("[data-edit='ending-default']", "auto");
+    await page.waitForSelector("[data-saving=saved]");
+    await sleep(300);
+    check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { ending?: string }).ending === undefined, "back to auto: the song's own ending setting is gone");
 
     await page.click("[role=tab]:has-text('Generate')");
     await page.waitForSelector("[aria-label='Hook effect']");

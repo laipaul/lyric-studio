@@ -367,6 +367,11 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
               ) : null}
             </p>
             <p className="text-muted-foreground mb-3 text-xs">{view.section.reason}</p>
+            {view.loop?.ending ? (
+              <p className="mb-2 text-xs text-sky-200" data-ending>
+                {view.loop.ending}
+              </p>
+            ) : null}
             {view.loop && !view.loop.ok ? (
               <div className="mb-3 rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs text-amber-100" data-loop-warn>
                 <p className="flex items-start gap-1 font-medium">

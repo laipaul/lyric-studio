@@ -91,6 +91,8 @@ async function main() {
     check(((await page.textContent("[data-anchors-outside]")) ?? "").includes('line 6 "Into the light" → 03_c.mp4'), "the anchor outside the section is listed");
     const last = (await page.$$("[data-shot]")).length;
     check(!!(await page.$(`[data-shot='${last}'] [data-badge=loop]`)), "the last shot is marked as the Reels loop ending (↻), not warned as a repeat");
+    const endingText = (await page.textContent("[data-ending]").catch(() => null)) ?? "";
+    check(/^Ending: (a tight loop|a soft fade|the last chord rings out|the song's own)/.test(endingText), `the header says how the Reel ends, in plain words (${endingText})`);
     // The 1 s clip: slowed or held: a warning on its shot.
     const warned = await page.$$("[data-shot][data-warnings]");
     if (warned.length) {
