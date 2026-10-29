@@ -23,6 +23,7 @@ export * from "./youtube";
 export * from "./youtube-layout";
 export * from "./Thumbnail";
 export * from "./canvas";
+export * from "./follow";
 export * from "./loop";
 export * from "./anchors";
 export * from "./storyboard";

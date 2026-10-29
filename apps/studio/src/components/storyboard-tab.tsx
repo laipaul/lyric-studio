@@ -13,7 +13,7 @@ import { Player, type PlayerRef } from "@remotion/player";
 import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2, Pencil, Repeat, Scissors, Star, Type, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { EFFECT_NAMES, LyricVideo, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
+import { EFFECT_NAMES, followScrollLeft, LyricVideo, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
 import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node"; // types only (erased): the data comes from /api/songs/[id]/storyboard
 
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,14 @@ import { cn } from "@/lib/utils";
 const clock = (ms: number) => `${Math.floor(ms / 60_000)}:${((ms % 60_000) / 1000).toFixed(1).padStart(4, "0")}`;
 const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 const ZOOMS = [40, 80, 160]; // pixels per second
+const FOLLOW_KEY = "lyric-studio:storyboard-follow"; // "Follow playback", remembered in this browser only
+const readFollow = () => {
+  try {
+    return window.localStorage.getItem(FOLLOW_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
 const select = "bg-input/30 border-input h-8 rounded-md border px-2 text-sm";
 
 type Source = { kind: "plan"; platform: string; video: string } | { kind: "run"; run: string; platform: string; video: string };
@@ -37,6 +45,13 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
   const [selected, setSelected] = useState<number | null>(null);
   const [frame, setFrame] = useState(0);
   const player = useRef<PlayerRef>(null);
+  // "Follow playback": the timeline scrolls with the playhead while the preview plays (off by default).
+  // Scrolling the timeline by hand pauses it until the next play.
+  const [follow, setFollow] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const timeline = useRef<HTMLDivElement>(null);
+  const autoScroll = useRef(false); // the next scroll event is ours, not the user's
+  const heldByUser = useRef(false);
   const [editing, setEditing] = useState<string | null>(null); // the clip in the clip editor
   const [saving, setSaving] = useState(false);
   const [dropLine, setDropLine] = useState<number | null>(null);
@@ -155,9 +170,47 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
     const p = player.current;
     if (!p) return;
     const update = (e: { detail: { frame: number } }) => setFrame(e.detail.frame);
+    const onPlay = () => {
+      heldByUser.current = false;
+      setPlaying(true);
+    };
+    const onStop = () => setPlaying(false);
     p.addEventListener("frameupdate", update);
-    return () => p.removeEventListener("frameupdate", update);
+    p.addEventListener("play", onPlay);
+    p.addEventListener("pause", onStop);
+    p.addEventListener("ended", onStop);
+    return () => {
+      p.removeEventListener("frameupdate", update);
+      p.removeEventListener("play", onPlay);
+      p.removeEventListener("pause", onStop);
+      p.removeEventListener("ended", onStop);
+    };
   }, [view]);
+
+  useEffect(() => setFollow(readFollow()), []);
+  const toggleFollow = () => {
+    const next = !follow;
+    setFollow(next);
+    heldByUser.current = false;
+    try {
+      window.localStorage.setItem(FOLLOW_KEY, next ? "1" : "0");
+    } catch {
+      // not remembered (private window): the toggle still works for this visit
+    }
+  };
+  // While following and playing: keep the playhead a third from the timeline's left edge.
+  useEffect(() => {
+    const el = timeline.current;
+    if (!follow || !playing || heldByUser.current || !el) return;
+    const target = followScrollLeft({ scrollLeft: el.scrollLeft, viewWidth: el.clientWidth, contentWidth: el.scrollWidth, playheadX: (frame / 30) * zoom });
+    if (target === null) return;
+    autoScroll.current = true;
+    el.scrollLeft = target;
+  }, [follow, playing, frame, zoom]);
+  const onTimelineScroll = () => {
+    if (autoScroll.current) autoScroll.current = false;
+    else if (playing) heldByUser.current = true; // the user scrolled: stop following until the next play
+  };
 
   const card = board?.cards.find((c) => c.id === cardId) ?? null;
   // The live preview: the edited card's place, size, hold and effect on the planned props (a font
@@ -282,6 +335,10 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
         </Button>
         {view ? (
           <div className="ml-auto flex items-center gap-1 text-xs">
+            <label className="mr-3 flex cursor-pointer items-center gap-1.5" title="While the preview plays, the timeline scrolls with the playhead. Scroll by hand to stop it until the next play.">
+              <input type="checkbox" checked={follow} onChange={toggleFollow} className="accent-brand" data-follow-playback />
+              Follow playback
+            </label>
             Zoom
             {ZOOMS.map((z) => (
               <button key={z} type="button" onClick={() => setZoom(z)} className={cn("rounded border px-1.5", zoom === z ? "border-brand text-brand" : "text-muted-foreground")}>
@@ -329,7 +386,7 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
                 ↻ Loop flows: the end flows back into the start.
               </p>
             ) : null}
-            <div className="overflow-x-auto rounded-lg border" data-storyboard-timeline>
+            <div ref={timeline} onScroll={onTimelineScroll} className="overflow-x-auto rounded-lg border" data-storyboard-timeline>
               <div className="relative" style={{ width: width + 16 }} onClick={(e) => playFrom(((e.clientX - e.currentTarget.getBoundingClientRect().left) / zoom) * 1000)}>
                 {/* bars and hook sections */}
                 <div className="relative h-6 border-b text-[10px]">

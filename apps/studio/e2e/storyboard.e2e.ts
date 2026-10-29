@@ -110,6 +110,30 @@ async function main() {
     await sleep(1500);
     const left = Number((await page.getAttribute("[data-playhead]", "style"))?.match(/left: ([\d.]+)px/)?.[1] ?? 0);
     check(left > 100, `the preview plays from the clicked point (playhead at ${left} px)`);
+    // Follow playback: off by default; on, the timeline scrolls with the playhead (zoom 4x so it overflows).
+    const scrollLeft = () => page.$eval("[data-storyboard-timeline]", (el: Element) => (el as HTMLElement).scrollLeft);
+    check(!(await page.isChecked("[data-follow-playback]")), "Follow playback is off by default");
+    await page.click("button:has-text('4x')");
+    await page.$eval("[data-storyboard-timeline]", (el: Element) => ((el as HTMLElement).scrollLeft = 0));
+    await page.mouse.click(...(await (async () => {
+      const box = await (await page.$("[data-waveform]")).boundingBox();
+      return [box.x + 40, box.y + box.height / 2] as [number, number];
+    })()));
+    await sleep(2500);
+    check((await scrollLeft()) === 0, "without Follow playback the timeline stays where it is");
+    await page.check("[data-follow-playback]");
+    await page.$eval("[data-storyboard-timeline]", (el: Element) => ((el as HTMLElement).scrollLeft = 0));
+    await page.mouse.click(...(await (async () => {
+      const box = await (await page.$("[data-waveform]")).boundingBox();
+      return [box.x + 40, box.y + box.height / 2] as [number, number];
+    })()));
+    await sleep(3000);
+    const followed = await scrollLeft();
+    check(followed > 0, `with Follow playback the timeline scrolls with the playhead (scrolled ${followed} px)`);
+    check((await page.evaluate(() => window.localStorage.getItem("lyric-studio:storyboard-follow"))) === "1", "Follow playback is remembered in this browser");
+    await page.uncheck("[data-follow-playback]");
+    await page.click("button:has-text('2x')"); // back to the zoom the rest of this test expects
+    await page.$eval("[data-storyboard-timeline]", (el: Element) => ((el as HTMLElement).scrollLeft = 0));
     await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "storyboard.png") });
 
     // Stage 2. The story strip: file-name order; moving 01_a later re-plans and is kept in clips.json.

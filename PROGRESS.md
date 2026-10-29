@@ -995,6 +995,13 @@ These platforms play a video in a loop, so the wrap-around from the last frame t
   same clip first and last, and the Reels continuation that passes; a harmony clash C -> F#; phrase cut;
   the end choice preferring the better loop and saying why; shuffle first != last over 300 seeds).
 
+### Storyboard: "Follow playback" ✅ (to verify on the Windows PC)
+- A "Follow playback" checkbox next to Zoom (off by default, remembered in this browser): while the
+  preview plays, the timeline (bars, waveform, lines, shots) scrolls so the playhead stays a third from
+  the left. Scrolling the timeline by hand stops it until the next play; clicking still plays from there.
+- Pure helper `followScrollLeft` (packages/video/src/follow.ts) with tests; browser test: off by default,
+  no scrolling when off, scrolls when on, remembered.
+
 ### Fix — Loop beat check counts the song's own bars ✅ (to verify on the Windows PC)
 - "Loop flows" used to divide the video's length by a bar length from the song's average BPM. Real songs drift a little, so a loop of exactly 51 bars could be reported as "51.14 bars, 0.25 s off".
 - Now the check counts the song's detected bars (the same downbeats the section snaps to): when the start and the end are each within 50 ms of a detected bar line, it is whole bars, and the message shows the section's own average BPM ("90.8 s = 51 bars (on the song's detected bars, avg 134.8 BPM)").
