@@ -5,14 +5,14 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-export type ClipEdit = { in?: number; out?: number; speed?: number; best?: number };
+export type ClipEdit = { in?: number; out?: number; speed?: number; best?: number; transition?: "cut" | "dissolve" }; // transition: how this clip comes in (absent: the app chooses)
 export type ClipEdits = { order: string[]; clips: Record<string, ClipEdit> };
 export const CLIP_EDITS_FILE = "clips.json";
 
 const HELP =
   'The story order and clip edits of this song (the Storyboard tab writes it). "order": clip file names in the story order ' +
   "(clips not listed follow in file-name order). \"clips\": per clip \"in\" / \"out\" (the part used, seconds), \"speed\" (0.5-1, slow motion) and " +
-  '"best" (the best moment, seconds; wins over the automatic one).';
+  '"best" (the best moment, seconds; wins over the automatic one) and "transition" ("cut" or "dissolve": how the clip comes in; left out, the app chooses).';
 
 export function checkClipEdits(raw: unknown): { edits: ClipEdits; problems: string[] } {
   const problems: string[] = [];
@@ -28,7 +28,7 @@ export function checkClipEdits(raw: unknown): { edits: ClipEdits; problems: stri
     else {
       for (const [name, v] of Object.entries(r.clips as Record<string, Record<string, unknown>>)) {
         const e: ClipEdit = {};
-        const num = (k: keyof ClipEdit, min: number, max: number) => {
+        const num = (k: "in" | "out" | "speed" | "best", min: number, max: number) => {
           if (v?.[k] === undefined || v?.[k] === null) return;
           if (typeof v[k] === "number" && (v[k] as number) >= min && (v[k] as number) <= max) e[k] = Math.round((v[k] as number) * 100) / 100;
           else problems.push(`clips["${name}"].${k} must be a number from ${min} to ${max}`);
@@ -37,6 +37,10 @@ export function checkClipEdits(raw: unknown): { edits: ClipEdits; problems: stri
         num("out", 0, 36_000);
         num("speed", 0.5, 1);
         num("best", 0, 36_000);
+        if (v?.transition !== undefined && v?.transition !== null) {
+          if (v.transition === "cut" || v.transition === "dissolve") e.transition = v.transition;
+          else problems.push(`clips["${name}"].transition must be "cut" or "dissolve" (leave it out: the app chooses)`);
+        }
         if (e.in !== undefined && e.out !== undefined && e.out <= e.in) problems.push(`clips["${name}"]: out must be after in`);
         else if (Object.keys(e).length) edits.clips[name] = e;
       }

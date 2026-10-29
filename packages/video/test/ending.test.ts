@@ -103,3 +103,21 @@ describe("the title line", () => {
     expect(isTitleLine("Où es-tu, mon cœur ?", "Où es-tu")).toBe(true);
   });
 });
+
+describe("a tight loop needs a clear margin", () => {
+  it("a level jump just under the limit (that the video's frames may push over it) gets a soft ending", () => {
+    const close = song({ fromMs: 39_000, toMs: 41_000, gain: 1.38 }); // ~2.8 dB louder in the last bar
+    const e = chooseEnding({ ...base, lines: lines(38_000), audio: close });
+    expect(e.kind).toBe("fade");
+    expect(e.text).toMatch(/close to the limit|loud and the start quiet/);
+  });
+});
+
+describe("loop suggestions", () => {
+  it("never suggest the plan's own end again", async () => {
+    const { loopSuggestions } = await import("../src");
+    const o = { audio: flat, bpm: 120, startMs: 10_500, downbeats, lines: lines(38_000), targetMs: 30_000, durationMs: 60_000 };
+    expect(loopSuggestions(o).map((x) => x.endMs)).toContain(38_500); // the first bar after the last line
+    expect(loopSuggestions({ ...o, currentEndMs: 38_500 }).map((x) => x.endMs)).not.toContain(38_500);
+  });
+});

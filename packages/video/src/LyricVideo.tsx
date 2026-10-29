@@ -19,6 +19,7 @@ import { LyricScene } from "./LyricScene";
 import { activeLyricLine, applyTextCase, layoutLyric } from "./lyrics";
 import { kenBurnsAt } from "./photo";
 import { loopBlendOpacity, photoLoopProgress } from "./canvas";
+import { dipOpacity } from "./transitions";
 import { beatPulse, coverMotionAt, logoOpacity, moodAt, stillOpacity, type Rgba } from "./youtube";
 import { COVER_CENTRE_X, coverSide } from "./youtube-layout";
 
@@ -97,6 +98,29 @@ function Shot({ shot, mediaBaseUrl }: { shot: ShotProps; mediaBaseUrl: string })
 function DissolveIn({ frames, children }: { frames: number; children: React.ReactNode }) {
   const frame = useCurrentFrame();
   const opacity = interpolate(frame, [0, Math.max(1, frames)], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.ease) });
+  return <AbsoluteFill style={{ opacity }}>{children}</AbsoluteFill>;
+}
+
+// A dip to black between two shots (automatic transitions): under the lyrics, darkest on the cut.
+function DipOverlay({ dips }: { dips: NonNullable<LyricVideoProps["dips"]> }) {
+  const opacity = dipOpacity(useCurrentFrame(), dips);
+  return opacity > 0 ? <AbsoluteFill style={{ backgroundColor: "#000", opacity }} /> : null;
+}
+
+// Loop platforms: the last `frames` frames fade into the first shot's opening (the frames just before it,
+// or its first frame held), so the loop's last frame leads straight into the first.
+function LoopIntoFirst({ first, frames, durationInFrames, mediaBaseUrl }: { first: ShotProps; frames: number; durationInFrames: number; mediaBaseUrl: string }) {
+  const back = Math.round(frames * first.playbackRate);
+  const plays = first.kind !== "photo" && first.clipStartFrame >= back;
+  const shot: ShotProps = { ...first, start: 0, duration: frames, dissolve: undefined, tail: undefined, loopBlend: undefined, ...(plays ? { clipStartFrame: first.clipStartFrame - back } : {}) };
+  return (
+    <Sequence from={durationInFrames - frames} durationInFrames={frames} layout="none">
+      <LoopIntoFade frames={frames}>{plays ? <Shot shot={shot} mediaBaseUrl={mediaBaseUrl} /> : <Freeze frame={0}><Shot shot={first} mediaBaseUrl={mediaBaseUrl} /></Freeze>}</LoopIntoFade>
+    </Sequence>
+  );
+}
+function LoopIntoFade({ frames, children }: { frames: number; children: React.ReactNode }) {
+  const opacity = Math.min(1, (useCurrentFrame() + 1) / frames);
   return <AbsoluteFill style={{ opacity }}>{children}</AbsoluteFill>;
 }
 
@@ -504,6 +528,9 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
           )}
         </Sequence>
       ))}
+
+      {props.loopInto && shots.length > 1 ? <LoopIntoFirst first={shots[0]} frames={props.loopInto.frames} durationInFrames={durationInFrames} mediaBaseUrl={mediaBaseUrl} /> : null}
+      {props.dips?.length ? <DipOverlay dips={props.dips} /> : null}
 
       {audio ? (
         <Audio

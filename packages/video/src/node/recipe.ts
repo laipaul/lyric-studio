@@ -13,11 +13,12 @@ import path from "node:path";
 
 import { checkAnchors, type AnchorSpec, type GapOrder } from "../anchors";
 import { ENDING_VALUES, type EndingChoice } from "../ending";
+import { TRANSITION_STYLES, type TransitionStyle } from "../transitions";
 import { choiceText, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, parseEffectChoice } from "../effects/names";
 import { DEFAULT_BRAND, type Brand } from "./brand";
 import { checkPerPlatform, isPlatformField, isWeight, SHOT_LENGTH_VALUES, PLATFORM_FIELDS, type PerPlatform, type PlatformField } from "./per-platform";
 
-export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "tempo", "collections", "platforms", "variations", "section", "length", "ending", "ep", "youtubeLayout"] as const;
+export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "tempo", "collections", "platforms", "variations", "section", "length", "ending", "transitions", "ep", "youtubeLayout"] as const;
 export type RecipeField = (typeof RECIPE_FIELDS)[number];
 
 export type RecipeValues = {
@@ -30,13 +31,14 @@ export type RecipeValues = {
   verseItalic: boolean; // the family's italic file (never a synthetic italic)
   hookItalic: boolean;
   accentColour: string; // #RRGGBB
-  shotLength: string | null; // "1" | "2" | "4" | "8" bars per shot, or "story"; null: the cut rate (one shot per bar)
+  shotLength: string | null; // "auto" (default: the app chooses), "1" | "2" | "4" | "8" bars per shot, "story", or "rate" (the cut rate)
   tempo: number | null; // BPM override for this song (the beats are re-tracked around it); null: as detected
   collections: string[]; // shared collections used with the song's own clips
   platforms: string[]; // the platforms Generate starts with
   variations: Record<string, number>; // videos per platform
   section: string; // auto | full | 0:11-1:10
   length: number | null; // target seconds for an "auto" section (null: the platform preset's length)
+  transitions: TransitionStyle; // between shots: "auto" (the app chooses cuts, dissolves and dips from the music), "crisp" (cuts), "flowing" (dissolves)
   ending: EndingChoice; // Reels / TikTok / Shorts: "auto" (the app chooses: tight loop, soft fade or ring-out), or one of them
   ep: string;
   youtubeLayout: "cover" | "stills" | "clips";
@@ -61,9 +63,9 @@ export const RECIPE_HELP =
   "The recipe of this song. A setting that is not here is inherited from the artist's brand (brand.json) " +
   "or the library defaults; a setting here is this song's own. \"locked\": settings that keep this song's value " +
   "(a brand change does not reach them, and Generate cannot change them for one run). Fields: verseEffect, hookEffect " +
-  '("glide", "soft-blur:subtle", ...), verseFont, hookFont, verseWeight / hookWeight (400 = regular, 600 = semibold, 700 = bold), verseItalic / hookItalic (true / false), accentColour ("#E8A3B5"), shotLength ("1", "2", "4", "8" bars per shot, or "story": 2 bars on hooks, 4 on verses, never under 3 s), tempo (the real BPM of this song when the detected one is wrong, e.g. 92), collections (shared collections used ' +
+  '("glide", "soft-blur:subtle", ...), verseFont, hookFont, verseWeight / hookWeight (400 = regular, 600 = semibold, 700 = bold), verseItalic / hookItalic (true / false), accentColour ("#E8A3B5"), shotLength ("auto" = the app chooses from the song and your clips; or "1", "2", "4", "8" bars per shot, "story": 2 bars on hooks, 4 on verses, never under 3 s, or "rate": the cut rate), tempo (the real BPM of this song when the detected one is wrong, e.g. 92), collections (shared collections used ' +
   'with the clips in clips\\), platforms (["reels", "youtube"]), variations ({ "reels": 3 }), section ("auto", "full", ' +
-  '"0:11-1:10"), length (seconds an "auto" section aims for, e.g. 90; empty = the platform preset), ending ("auto" = the app chooses how a Reel / TikTok / Short ends: a tight loop, a soft fade or a ring-out; or "loop", "fade", "ring-out"), ep, youtubeLayout ("cover", "stills", "clips"). perPlatform: values for one platform only, e.g. ' +
+  '"0:11-1:10"), length (seconds an "auto" section aims for, e.g. 90; empty = the platform preset), transitions ("auto" = the app chooses cuts, dissolves and dips from the music; "crisp" = cuts; "flowing" = dissolves), ending ("auto" = the app chooses how a Reel / TikTok / Short ends: a tight loop, a soft fade or a ring-out; or "loop", "fade", "ring-out"), ep, youtubeLayout ("cover", "stills", "clips"). perPlatform: values for one platform only, e.g. ' +
   '{ "youtube": { "verseEffect": "cinematic-fade" } } (verseEffect, hookEffect, verseFont, hookFont, accentColour, section, length), e.g. { "reels": { "length": 90 }, "tiktok": { "length": 30 } }. ' +
   'Story anchors (the Lyrics tab sets them): anchors [{ "line": 9, "clip": "hands.mp4", "clipIn": 1.5, "transition": "dissolve" }] = that clip lands on lyrics.txt line 9 ' +
   '(cut in on the downbeat before the line, held until it ends); gapOrder "story" (default with anchors: the other clips in file-name order in every video) or "shuffle".';
@@ -92,7 +94,11 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
   if (r.ep === "") recipe.ep = "";
   if (r.shotLength !== undefined && r.shotLength !== null) {
     if ((SHOT_LENGTH_VALUES as readonly string[]).includes(String(r.shotLength))) recipe.shotLength = String(r.shotLength);
-    else problems.push(`shotLength must be ${SHOT_LENGTH_VALUES.join(", ")} (bars per shot, or "story": 2 bars on hooks, 4 on verses, never under 3 s)`);
+    else problems.push(`shotLength must be ${SHOT_LENGTH_VALUES.join(", ")} (auto = the app chooses; bars per shot; "story": 2 bars on hooks, 4 on verses; "rate": the cut rate)`);
+  }
+  if (r.transitions !== undefined) {
+    if ((TRANSITION_STYLES as readonly string[]).includes(String(r.transitions))) recipe.transitions = r.transitions as TransitionStyle;
+    else problems.push(`transitions must be ${TRANSITION_STYLES.join(", ")} (auto = the app chooses cuts, dissolves and dips from the music)`);
   }
   if (r.ending !== undefined) {
     if ((ENDING_VALUES as readonly string[]).includes(String(r.ending))) recipe.ending = r.ending as EndingChoice;
@@ -288,7 +294,7 @@ export const LIBRARY_RECIPE: RecipeValues = {
   verseItalic: false,
   hookItalic: false,
   accentColour: DEFAULT_BRAND.accentColour,
-  shotLength: null,
+  shotLength: "auto",
   tempo: null,
   collections: [], // none: the song's own clips (or the collection it used last time)
   platforms: [], // none: the "standard" preset
@@ -296,6 +302,7 @@ export const LIBRARY_RECIPE: RecipeValues = {
   section: "auto",
   length: null,
   ending: "auto",
+  transitions: "auto",
   ep: "",
   youtubeLayout: "cover",
 };
@@ -334,6 +341,7 @@ export function runRecipe(o: {
   section?: string;
   length?: number;
   ending?: EndingChoice;
+  transitions?: TransitionStyle;
   ep?: string;
   layout?: RecipeValues["youtubeLayout"];
 }): Partial<RecipeValues> {
@@ -355,6 +363,7 @@ export function runRecipe(o: {
     section: o.section,
     length: o.length,
     ending: o.ending,
+    transitions: o.transitions,
     ep: o.ep?.trim() || undefined,
     youtubeLayout: o.layout,
   };
@@ -372,7 +381,7 @@ export function recipeText(v: unknown): string {
 // "verse glide (artist), hook karaoke-highlight (artist), collections wedding (song, locked), ..."
 export function recipeSummary(r: ResolvedRecipe): string {
   const show: RecipeField[] = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "collections", "section"];
-  for (const k of ["platforms", "variations", "ep", "youtubeLayout", "tempo", "ending"] as const) if (r.sources[k] !== "library") show.push(k);
+  for (const k of ["platforms", "variations", "ep", "youtubeLayout", "tempo", "ending", "transitions"] as const) if (r.sources[k] !== "library") show.push(k);
   return show.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]}${r.locked.includes(k) ? ", locked" : ""})`).join(", ");
 }
 

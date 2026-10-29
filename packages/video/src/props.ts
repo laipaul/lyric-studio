@@ -134,6 +134,11 @@ export type LyricVideoProps = {
   mood?: MoodSegment[]; // section mood: warm/bright on hooks, soft on verses (2 s eased changes)
   endScreen?: { fromFrame: number; lyricArea: LyricArea; clear: { left: number; top: number; right: number; bottom: number } } | null;
   lyricEffects?: LyricEffectsProps | null;
+  // Automatic transitions (src/transitions.ts): dips to black, `frames` long and darkest on `frame`.
+  dips?: { frame: number; frames: number }[];
+  // Loop platforms: over the last `frames` frames the first shot's opening fades in on top, so the last
+  // frame leads straight into the first (when the last shot does not already continue into it).
+  loopInto?: { frames: number } | null;
   nextLine?: boolean; // show the next lyric line, small and faded, under the current one
   nextLineScale?: number; // its size compared with the current line (default 0.55)
   grain?: boolean; // subtle film grain

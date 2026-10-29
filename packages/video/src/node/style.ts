@@ -57,6 +57,7 @@ export const FIELD_LABELS: Record<RecipeField, string> = {
   section: "Section",
   length: "Target length (auto section)",
   ending: "Ending (Reels, TikTok, Shorts)",
+  transitions: "Transitions",
   ep: "EP",
   youtubeLayout: "YouTube layout",
 };

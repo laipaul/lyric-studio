@@ -53,7 +53,8 @@ describe("pnpm make arguments", () => {
     const args = commandArgs('pnpm make "D:\\videomaker\\workspace\\test\\song.wav" "D:\\videomaker\\workspace\\test\\lyrics.txt" --collection wedding --platforms reels,canvas --line-effect soft-blur:subtle');
     expect(args).toEqual(["D:\\videomaker\\workspace\\test\\song.wav", "D:\\videomaker\\workspace\\test\\lyrics.txt", "--collection", "wedding", "--platforms", "reels,canvas", "--line-effect", "soft-blur:subtle"]);
     const { options, noOpen } = parseMakeArgs(["song.wav", "my lyrics.txt", "--collection", "wedding", "--variations", "3", "--no-open"], "/work");
-    expect(options).toMatchObject({ song: path.resolve("/work", "song.wav"), lyrics: path.resolve("/work", "my lyrics.txt"), collection: "wedding", variations: 3, rate: "1x", leadMs: 250 });
+    expect(options).toMatchObject({ song: path.resolve("/work", "song.wav"), lyrics: path.resolve("/work", "my lyrics.txt"), collection: "wedding", variations: 3, leadMs: 250 });
+    expect(options.rate).toBeUndefined(); // no --rate: automatic pacing
     expect(options.command).toBe('pnpm make song.wav "my lyrics.txt" --collection wedding --variations 3 --no-open');
     expect(noOpen).toBe(true);
     expect(makeCommand(["a b.wav", "x"])).toBe('pnpm make "a b.wav" x');

@@ -367,6 +367,11 @@ export function StoryboardTab({ projectId }: { projectId: string }) {
               ) : null}
             </p>
             <p className="text-muted-foreground mb-3 text-xs">{view.section.reason}</p>
+            {view.decisions.map((d) => (
+              <p key={d} className="mb-1 text-xs text-sky-200" data-decision>
+                {d}
+              </p>
+            ))}
             {view.loop?.ending ? (
               <p className="mb-2 text-xs text-sky-200" data-ending>
                 {view.loop.ending}
@@ -595,6 +600,7 @@ function ShotBlock({ shot: s, left, width, selected, onSelect }: { shot: StorySh
         ) : null}
         {s.best ? <Star className="size-3 text-yellow-300" data-badge="best" aria-label="best moment" /> : null}
         {s.dissolve ? <Blend className="size-3 text-sky-300" data-badge="dissolve" aria-label="dissolve" /> : null}
+        {s.dip ? <span className="size-2.5 rounded-full border border-white/70 bg-black" data-badge="dip" aria-label="dip to black" title="dip to black" /> : null}
         {s.loop ? <Repeat className="size-3 text-emerald-300" data-badge="loop" aria-label="loop ending" /> : null}
         {s.speed < 1 ? (
           <span className="flex items-center rounded bg-black/60 px-0.5" data-badge="speed">
@@ -628,6 +634,7 @@ function ShotDetails({ shot: s, editable, onEdit, onUnanchor }: { shot: StorySho
         {clock(s.startMs)}–{clock(s.endMs)} in the video ({secs(s.endMs - s.startMs)}), cut at {clock(s.songMs)} in the song · in {s.inS.toFixed(2)} s → out {s.outS.toFixed(2)} s of the clip ·{" "}
         {s.kind === "photo" ? "photo (slow move)" : `speed ${s.speed.toFixed(2)}x`}
         {s.dissolve ? " · dissolves in" : ""}
+        {s.dip ? " · dips to black into it" : ""}
       </p>
       {s.anchor ? (
         <p className="text-brand mt-1">
@@ -717,13 +724,14 @@ function StoryStrip({ clips, busy, onMove, onOpen, editing }: { clips: Storyboar
 // The clip editor: the part of the clip used (in / out), its speed (slow motion, 0.5-1x) and its best
 // moment (a story video's first shot of this clip is centred on it; yours always wins over the automatic
 // one). Set each from the clip playing, or type the seconds.
-function ClipEditor({ clip, mediaUrl, busy, onSave, onClose }: { clip: StoryboardClip; mediaUrl: string; busy: boolean; onSave: (e: { in?: number; out?: number; speed?: number; best?: number } | null) => void; onClose: () => void }) {
+function ClipEditor({ clip, mediaUrl, busy, onSave, onClose }: { clip: StoryboardClip; mediaUrl: string; busy: boolean; onSave: (e: { in?: number; out?: number; speed?: number; best?: number; transition?: "cut" | "dissolve" } | null) => void; onClose: () => void }) {
   const video = useRef<HTMLVideoElement>(null);
   const total = clip.durationMs / 1000;
   const [inS, setIn] = useState(clip.inS === null ? "" : String(clip.inS));
   const [outS, setOut] = useState(clip.outS === null ? "" : String(clip.outS));
   const [speed, setSpeed] = useState(clip.speed === null ? "1" : String(clip.speed));
   const [best, setBest] = useState(clip.bestFrom === "clip editor" && clip.bestS !== null ? String(clip.bestS) : "");
+  const [transition, setTransition] = useState<string>(clip.transition ?? "");
   const here = () => String(Math.round((video.current?.currentTime ?? 0) * 100) / 100);
   const num = (v: string) => (v.trim() === "" ? undefined : Number(v));
   const problem = (() => {
@@ -735,7 +743,7 @@ function ClipEditor({ clip, mediaUrl, busy, onSave, onClose }: { clip: Storyboar
   })();
   const save = () => {
     const s = Number(speed);
-    onSave({ ...(num(inS) !== undefined ? { in: num(inS) } : {}), ...(num(outS) !== undefined ? { out: num(outS) } : {}), ...(s < 1 ? { speed: s } : {}), ...(num(best) !== undefined ? { best: num(best) } : {}) });
+    onSave({ ...(num(inS) !== undefined ? { in: num(inS) } : {}), ...(num(outS) !== undefined ? { out: num(outS) } : {}), ...(s < 1 ? { speed: s } : {}), ...(num(best) !== undefined ? { best: num(best) } : {}), ...(transition === "cut" || transition === "dissolve" ? { transition } : {}) });
   };
   const field = "bg-input/30 border-input h-7 w-20 rounded-md border px-2 text-xs";
   const setHere = "hover:bg-accent rounded-md border px-2 py-0.5";
@@ -782,6 +790,14 @@ function ClipEditor({ clip, mediaUrl, busy, onSave, onClose }: { clip: Storyboar
             <button type="button" className={setHere} data-clip-best-here onClick={() => setBest(here())}>
               set here
             </button>
+          </label>
+          <label className="flex items-center gap-2">
+            <span className="w-24">Comes in with</span>
+            <select data-clip-transition className={cn(field, "w-40")} value={transition} onChange={(e) => setTransition(e.target.value)}>
+              <option value="">auto (the app chooses)</option>
+              <option value="cut">a cut</option>
+              <option value="dissolve">a dissolve</option>
+            </select>
           </label>
           <p className="text-muted-foreground">
             ★ {best ? `yours: ${best} s` : clip.autoBestS !== null ? `automatic: ${clip.autoBestS} s (the strongest 2 s by motion, colour and contrast)` : "no clear best moment found"}. A story video&apos;s first shot of this clip is centred on it; yours always wins.

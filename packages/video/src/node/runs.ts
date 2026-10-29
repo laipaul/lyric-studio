@@ -60,7 +60,7 @@ export function checkRunRequest(req: RunRequest, platformNames: readonly string[
   if (req.layout && !["cover", "stills", "clips"].includes(req.layout)) problems.push("YouTube layout must be cover, stills or clips.");
   if (req.pictures !== undefined && !(Array.isArray(req.pictures) && req.pictures.length >= 2 && req.pictures.length <= 4 && req.pictures.every((x) => typeof x === "string" && /^[^\\/:*?"<>|,]+$/.test(x)))) problems.push("Picture versions: choose 2-4 clip sets.");
   if (req.pictures?.length && req.pairings?.length) problems.push("Compare font pairings and picture versions cannot be combined in one run.");
-  if (req.shotLength !== undefined && !["1", "2", "4", "8", "story"].includes(req.shotLength)) problems.push("Shot length must be 1, 2, 4 or 8 bars, or story.");
+  if (req.shotLength !== undefined && !["auto", "1", "2", "4", "8", "story", "rate"].includes(req.shotLength)) problems.push("Shot length must be auto, 1, 2, 4 or 8 bars, story or the cut rate.");
   if (req.collection !== undefined && !/^[^\\/:*?"<>|]+$/.test(req.collection)) problems.push("Choose a collection.");
   return problems;
 }

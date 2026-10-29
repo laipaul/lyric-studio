@@ -98,7 +98,7 @@ describe("shot length and tempo in the recipe, on the command line and from Gene
   it("song.json shotLength (per platform too) and tempo are checked", () => {
     expect(checkRecipe({ shotLength: "story", tempo: 92, perPlatform: { youtube: { shotLength: "8" } } }).problems).toEqual([]);
     expect(checkRecipe({ shotLength: "3" as never, tempo: 400 }).problems).toEqual([
-      'shotLength must be 1, 2, 4, 8, story (bars per shot, or "story": 2 bars on hooks, 4 on verses, never under 3 s)',
+      'shotLength must be auto, 1, 2, 4, 8, story, rate (auto = the app chooses; bars per shot; "story": 2 bars on hooks, 4 on verses; "rate": the cut rate)',
       "tempo must be a number of BPM from 30 to 300 (the song's real tempo)",
     ]);
   });
@@ -108,14 +108,14 @@ describe("shot length and tempo in the recipe, on the command line and from Gene
     expect(resolveRecipe(input, "reels").values).toMatchObject({ shotLength: "story", tempo: 92 });
     expect(resolveRecipe(input, "reels").sources.shotLength).toBe("artist");
     expect(resolveRecipe(input, "youtube").values.shotLength).toBe("4");
-    expect(resolveRecipe({ ...input, artist }, "reels").values).toMatchObject({ shotLength: null }); // the cut rate
+    expect(resolveRecipe({ ...input, artist }, "reels").values).toMatchObject({ shotLength: "auto" }); // automatic pacing (the library default)
   });
 
   it("--shot-length and --tempo; Generate's shot length", () => {
     expect(parseMakeArgs(["a.wav", "b.txt", "--shot-length", "story", "--tempo", "92"], "/").options).toMatchObject({ shotLength: "story", tempo: 92 });
-    expect(() => parseMakeArgs(["a.wav", "b.txt", "--shot-length", "3"], "/")).toThrow(/--shot-length must be 1, 2, 4 or 8/);
+    expect(() => parseMakeArgs(["a.wav", "b.txt", "--shot-length", "3"], "/")).toThrow(/--shot-length must be auto \(the app chooses\), 1, 2, 4 or 8/);
     expect(() => parseMakeArgs(["a.wav", "b.txt", "--tempo", "900"], "/")).toThrow(/--tempo must be/);
     expect(checkRunRequest({ platforms: ["reels"], shotLength: "story" }, ["reels"])).toEqual([]);
-    expect(checkRunRequest({ platforms: ["reels"], shotLength: "16" }, ["reels"])).toEqual(["Shot length must be 1, 2, 4 or 8 bars, or story."]);
+    expect(checkRunRequest({ platforms: ["reels"], shotLength: "16" }, ["reels"])).toEqual(["Shot length must be auto, 1, 2, 4 or 8 bars, story or the cut rate."]);
   });
 });

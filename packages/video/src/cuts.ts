@@ -18,6 +18,8 @@ export const STORY_MIN_SHOT_MS = 3000;
 export type CutOptions = {
   cutRate: CutRate;
   shotLength?: ShotLength; // set: replaces the cut rate
+  // Automatic pacing (src/pace.ts): like "story" with the app's own bars and minimum (replaces both).
+  pace?: { hookBars: number; verseBars: number; minShotMs: number };
   hooks?: readonly { start_ms: number; end_ms: number }[]; // "story": the hook (chorus) stretches, song time
   earlyCutFrames?: number; // 0-4, default 2: cut this many frames before the beat
   downbeatOffset?: number; // 0-3, default 0: shift which beat is bar 1
@@ -86,16 +88,18 @@ export function getCutPoints(beatsIn: readonly Beat[], section: CutSection, opti
   let requested: number | null = null;
   let used: number | null = null;
 
-  if (options.shotLength === "story") {
+  if (options.shotLength === "story" || options.pace) {
     // Story pace: from each cut, 2 bars on a hook, 4 elsewhere (more when that is under 3 s), on downbeats.
-    const minStory = Math.max(minShotFrames, Math.ceil((STORY_MIN_SHOT_MS * fps) / 1000));
+    // Automatic pacing: the same with the app's bars and minimum.
+    const pace = options.pace ?? { hookBars: STORY_BARS.hook, verseBars: STORY_BARS.verse, minShotMs: STORY_MIN_SHOT_MS };
+    const minStory = Math.max(minShotFrames, Math.ceil((pace.minShotMs * fps) / 1000));
     const downbeats = beats.map((_, i) => i).filter((i) => beats[i].is_downbeat).map(cutAt).filter(insideSection);
     const inHook = (frame: number) => (options.hooks ?? []).some((h) => frame >= toFrame(h.start_ms, fps) && frame < toFrame(h.end_ms, fps));
     cuts = [];
     let from = startFrame;
     for (;;) {
       const ahead = downbeats.filter((c) => c.frame > from);
-      let bars = inHook(from) ? STORY_BARS.hook : STORY_BARS.verse;
+      let bars = inHook(from) ? pace.hookBars : pace.verseBars;
       while (ahead[bars - 1] && ahead[bars - 1].frame - from < minStory) bars += 1;
       const next = ahead[bars - 1];
       if (!next || endFrame - next.frame < minStory) break; // the rest stays one shot (never a short last one)

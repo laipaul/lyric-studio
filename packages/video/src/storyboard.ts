@@ -25,6 +25,7 @@ export type StoryShot = {
   hold: boolean; // the clip runs out: its last frame is held
   anchor: { line: number; text: string } | null;
   dissolve: boolean;
+  dip: boolean; // a dip to black into this shot (automatic transitions)
   loop: boolean; // the Reels loop ending: the frames just before shot 1, so the video loops seamlessly
   best: boolean; // shows the clip's best moment
   warnings: string[];
@@ -47,7 +48,7 @@ const frameMs = (f: number) => Math.round((f * 1000) / VIDEO.fps);
 // Shots with their badges and warnings: choppy slow motion, a clip too short (last frame held), anchor
 // conflicts (on the anchored shot), the same clip again within 3 shots.
 export function storyShots(
-  props: Pick<LyricVideoProps, "shots" | "audio">,
+  props: Pick<LyricVideoProps, "shots" | "audio" | "dips" | "loopInto">,
   clips: ReadonlyMap<string, StoryClip>, // by the shot's src
   sectionStartMs: number,
   anchors: { uses: AnchorUse[]; conflicts: string[] } | null,
@@ -63,7 +64,7 @@ export function storyShots(
     const outS = s.kind === "photo" ? 0 : (s.clipStartFrame + shown * s.playbackRate) / VIDEO.fps;
     const a = usedAnchors.find((u) => u.shot === i) ?? null;
     // The Reels loop ending: the last shot plays the first clip's frames right before shot 1 (intended).
-    const loop = i > 0 && i === shots.length - 1 && s.src === shots[0].src && Math.round(s.clipStartFrame + s.duration * s.playbackRate) === shots[0].clipStartFrame;
+    const loop = i > 0 && i === shots.length - 1 && ((s.src === shots[0].src && Math.round(s.clipStartFrame + s.duration * s.playbackRate) === shots[0].clipStartFrame) || !!props.loopInto);
     const warnings: string[] = [];
     if (s.kind !== "photo" && s.playbackRate < CHOPPY_RATE) warnings.push(`slowed to ${s.playbackRate.toFixed(2)}x: the motion may look choppy (frames repeat)`);
     if (shown < s.duration) warnings.push(`the clip is too short: its last frame is held for ${s1(frameMs(s.duration - shown))}`);
@@ -91,6 +92,7 @@ export function storyShots(
       hold: s.holdLastFrame,
       anchor: a ? { line: a.line, text: a.text } : null,
       dissolve: !!s.dissolve,
+      dip: (props.dips ?? []).some((d) => d.frame === s.start),
       loop,
       best: overlap >= BEST_WINDOW_S / 2,
       warnings,

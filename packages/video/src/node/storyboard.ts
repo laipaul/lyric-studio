@@ -51,7 +51,8 @@ export type StoryboardView = {
   notes: string[]; // what the planner said (warnings)
   // Loop platforms: does the wrap-around flow (the failing points, as QA "Loop flows" names them), and
   // target lengths with an end that loops well from this start (plans only).
-  loop: { ok: boolean; problems: string[]; lengthS: number; ending: string | null } | null; // ending: the automatic ending, in plain words
+  loop: { ok: boolean; problems: string[]; lengthS: number; ending: string | null } | null;
+  decisions: string[]; // the app's technical choices in plain words (pacing, transitions) // ending: the automatic ending, in plain words
   loopSuggestions: { lengthS: number; end: string; line: string | null; fit: string }[];
   // Stage 2 (plans only): the clips in story order (clips.json, else file names) with their edits; a run
   // is read-only (editable false).
@@ -74,6 +75,7 @@ export type StoryboardClip = {
   inS: number | null;
   outS: number | null;
   speed: number | null;
+  transition: "cut" | "dissolve" | null; // how it comes in (clips.json), null: the app chooses
   bestS: number | null; // the best moment used (the clip editor's, else the automatic one)
   bestFrom: "clip editor" | "auto" | null;
   autoBestS: number | null; // the automatic one (the strongest 2 s)
@@ -159,7 +161,7 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
   const storyOrder = [...plan.clips].sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
   const storyboardClips: StoryboardClip[] = storyOrder.map((c) => ({
     name: c.name, src: c.path, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, ranked: c.rank !== null,
-    inS: c.inMs === null ? null : c.inMs / 1000, outS: c.outMs === null ? null : c.outMs / 1000, speed: c.speed,
+    inS: c.inMs === null ? null : c.inMs / 1000, outS: c.outMs === null ? null : c.outMs / 1000, speed: c.speed, transition: c.transition,
     bestS: c.bestMs === null ? null : c.bestMs / 1000, bestFrom: c.bestFrom, autoBestS: c.kind === "video" ? (auto.get(absPath(ws, c.path)) ?? null) : null,
     shots: v.props.shots.filter((s) => s.src === c.path).length,
   }));
@@ -169,7 +171,7 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
     settings: settingsText(v.spec),
     section: { mode: plan.section.mode, startMs: plan.section.start_ms, endMs: plan.section.end_ms, reason: plan.section.reason },
     props: v.props, startMs, bpm: plan.analysis.bpm, beats: plan.analysis.beats, clips, numbered, anchors: v.anchors, anchorsOutside: plan.anchorsOutside, notes,
-    loop: v.loop, loopSuggestions: plan.loopSuggestions ?? [],
+    loop: v.loop, loopSuggestions: plan.loopSuggestions ?? [], decisions: v.decisions,
     songFile: paths.audio,
   });
 }
@@ -208,6 +210,7 @@ export async function storyboardRun(ws: Workspace, projectId: string, folder: st
     notes: m.warnings ?? [],
     loop: m.loop && m.loop.checked ? m.loop : null,
     loopSuggestions: [],
+    decisions: [(m.settings.pace as { text?: string } | null | undefined)?.text, (m.settings.transition_plan as { text?: string } | null | undefined)?.text].filter((x): x is string => !!x),
     songFile: existsSync(songFile) ? songFile : paths.audio!,
   });
 }
@@ -225,7 +228,7 @@ async function view(
     section: StoryboardView["section"]; props: Omit<LyricVideoProps, "mediaBaseUrl">; startMs: number; bpm: number; beats: { time_ms: number; is_downbeat: boolean }[];
     clips: Map<string, StoryClip>; numbered: { number: number | null; text: string; isHook: boolean }[];
     anchors: { uses: AnchorUse[]; conflicts: string[]; notes: string[]; missing: string[] } | null; anchorsOutside: StoryboardView["anchorsOutside"]; notes: string[]; songFile: string;
-    loop: LoopResult | null; loopSuggestions: LoopSuggestion[]; editable: boolean; storyboardClips: StoryboardClip[];
+    loop: LoopResult | null; loopSuggestions: LoopSuggestion[]; decisions: string[]; editable: boolean; storyboardClips: StoryboardClip[];
     slots: StoryboardView["slots"]; picture: string | null;
   },
 ): Promise<StoryboardView> {
@@ -250,6 +253,7 @@ async function view(
     anchorWarnings: [...(c.anchors?.missing ?? []), ...(c.anchors?.conflicts ?? []).filter((x) => !attached.has(x))],
     notes: c.notes,
     loop: c.loop ? { ok: c.loop.ok, problems: c.loop.points.filter((p) => !p.ok).map((p) => `${p.point}: ${p.detail}`), lengthS: c.loop.length_s, ending: c.loop.ending?.text ?? null } : null,
+    decisions: c.decisions,
     loopSuggestions: c.loopSuggestions.map((x) => ({ lengthS: x.lengthS, end: clockText(x.endMs), line: x.line ? `line ${x.line.number} "${x.line.text}"` : null, fit: x.fit.text })),
     editable: c.editable,
     clips: c.storyboardClips,

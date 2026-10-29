@@ -995,6 +995,28 @@ These platforms play a video in a loop, so the wrap-around from the last frame t
   same clip first and last, and the Reels continuation that passes; a harmony clash C -> F#; phrase cut;
   the end choice preferring the better loop and saying why; shuffle first != last over 300 seeds).
 
+### Step B — Automatic pacing and transitions ✅ (to verify on the Windows PC)
+- **Pacing** (Shot length "auto", the new default): the app reads the song's feel from how densely it is
+  sung (calm / mid-paced / driving; the tempo alone misleads: ballads are often tracked at 130+ BPM) and the
+  clips' usable length, and picks whole-bar shots for verses and hooks that the clips can fill without
+  choppy slow motion (never planned below 0.8x). E.g. a calm song with ~5 s clips: 3 bars (5.3 s) on
+  verses, 2 on hooks. 1/2/4/8 bars, story and the cut rate stay available as overrides; `--rate` on the
+  command line still uses the cut rate.
+- **Transitions** (recipe "Transitions": auto / crisp / flowing): cuts on the hooks; calm songs dissolve
+  (about half a bar) in the verses and quiet passages; mid-paced songs dissolve where nobody sings; a short
+  dip to black where a verse opens into a chorus; driving songs cut. Anchors keep their own; per clip
+  "Comes in with: auto / cut / dissolve" in the Storyboard clip editor (clips.json "transition").
+- **Loop picture**: when the first clip cannot also fill the last shot, the last 0.4-1 s fade into the
+  first shot's opening frames, so the Reel loops invisibly; the "no seamless loop ending" warning is gone.
+- **Endings**: a soft fade may start in the tail of a held last note (never on the words): longer fades
+  where the room after the last word is short. A tight loop now needs a clear level margin (the worst
+  jump within a frame either side, under 2.25 dB) so QA always agrees (Love Is A Good Thing: the ending
+  said "tight loop" at 2.6 dB, QA measured 3.9 dB on the frames). Loop suggestions never repeat the
+  current end.
+- Storyboard header: "Pacing: …" and "Transitions: …" lines in plain words; ● dip / ◐ dissolve badges.
+- Tests: packages/video/test/pace-transitions.test.ts, ending.test.ts (margin, held note, suggestions);
+  Storyboard browser test (pacing and transitions lines, the preview plays the end without errors).
+
 ### Step A — Automatic endings (Reels, TikTok, Shorts) ✅ (to verify on the Windows PC)
 - The app now chooses how a loop video's music ends, from the music at the end of the section
   (src/ending.ts): a **tight loop** (cut on the bar, the platform's short fade) only when the last bar
@@ -1340,7 +1362,7 @@ After the user's test pass, in this order (each its own step, plan first):
 A. ✅ (built 29 Oct, to verify) **Automatic endings**: per section the app chooses tight loop / soft fade / ring-out (last chord one more
    bar, then fade) from the music at the end (level, harmony, what follows); whole bars kept; loop
    suggestions never drop a chorus / title line the plan has. Fixes the abrupt Reels ending.
-B. **Automatic pacing**: shot length chosen from the song (tempo, energy, hooks vs verses) and the clips
+B. ✅ (built 29 Oct, with transitions, to verify) **Automatic pacing**: shot length chosen from the song (tempo, energy, hooks vs verses) and the clips
    given (their usable lengths, slow-motion limit), e.g. "story" for slow emotional songs; asks for longer
    clips only when it cannot work otherwise.
 C. **Pro assessment** per video (Videos tab, Storyboard header): one verdict in plain words + at most a few

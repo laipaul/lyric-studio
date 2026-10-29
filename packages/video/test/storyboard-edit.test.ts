@@ -34,7 +34,9 @@ beforeAll(async () => {
   writeFileSync(paths.lyricsTxt, `${LYRICS.join("\n")}\n`);
   mkdirSync(paths.clips!, { recursive: true });
   for (const [i, name] of CLIPS.entries()) makeClip(path.join(paths.clips!, name), 8, ["blue", "yellow", "red", "green"][i]);
-  writeRecipe(paths.recipe!, { platforms: ["reels"], section: "0:00-0:16", variations: { reels: 1 } });
+  // The cut rate (one shot per bar), so the four clips come in turn in a short section (automatic pacing is
+  // tested in pace-transitions.test.ts).
+  writeRecipe(paths.recipe!, { platforms: ["reels"], section: "0:00-0:16", variations: { reels: 1 }, shotLength: "rate" });
   // Aligned once (a storyboard never aligns).
   await makeVideos({ workspaceDir: wsDir, song: paths.audio!, lyrics: paths.lyricsTxt, platforms: "reels", align: fakeAlign, frameCheck: false, renderer, platform: "win32" });
 }, 300_000);

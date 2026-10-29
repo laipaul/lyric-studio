@@ -18,7 +18,7 @@ const join = (name: string, intensity: string) => (intensity === "balanced" ? na
 const label = "flex flex-col gap-1.5 text-sm";
 const select = "bg-input/30 border-input h-9 rounded-md border px-2 text-sm";
 
-const shotLengthText = (v: string | null) => (v === null ? "the cut rate" : v === "story" ? "story: 2-4 bars, at least 3 s" : `${v} bar${v === "1" ? "" : "s"}`);
+const shotLengthText = (v: string | null) => (v === null || v === "auto" ? "auto: from the song and your clips" : v === "rate" ? "the cut rate" : v === "story" ? "story: 2-4 bars, at least 3 s" : `${v} bar${v === "1" ? "" : "s"}`);
 
 // Generate: makes videos for this song through the worker (the same as "pnpm make"); the progress
 // shows in the Tasks menu. It starts from the song's recipe (Style tab: song.json, the artist's brand,
@@ -399,7 +399,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
                 <span className="font-medium">Shot length</span>
                 <select name="shotLength" data-shot-length className={select} value={shotLength} disabled={locked("shotLength")} onChange={(e) => setShotLength(e.target.value)}>
                   <option value="">from the recipe ({shotLengthText(r.shotLength)}{Object.entries(r.shotLengths).some(([p, v]) => platforms.includes(p) && v !== r.shotLength) ? `; ${Object.entries(r.shotLengths).filter(([p, v]) => platforms.includes(p) && v !== r.shotLength).map(([p, v]) => `${data.platforms.find((x) => x.name === p)?.label ?? p}: ${shotLengthText(v)}`).join(", ")}` : ""})</option>
-                  {["1", "2", "4", "8", "story"].map((v) => (
+                  {["auto", "1", "2", "4", "8", "story", "rate"].map((v) => (
                     <option key={v} value={v}>
                       {shotLengthText(v)}
                     </option>

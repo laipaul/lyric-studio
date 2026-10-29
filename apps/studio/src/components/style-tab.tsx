@@ -264,6 +264,20 @@ export function StyleTab({ projectId }: { projectId: string }) {
         </div>
       );
     }
+    if (f.field === "transitions") {
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          <select aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} className={select} value={String(value ?? "auto")} onChange={(e) => (e.target.value === "auto" && !platform ? act({ action: "reset", field: f.field, platform }) : set(e.target.value))}>
+            {TRANSITIONS.map(([v, label]) => (
+              <option key={v} value={v}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <span className="text-muted-foreground text-xs">a clip&apos;s own choice (Storyboard → clip editor) always wins</span>
+        </div>
+      );
+    }
     if (f.field === "ending") {
       return (
         <div className="flex flex-wrap items-center gap-2">
@@ -281,15 +295,14 @@ export function StyleTab({ projectId }: { projectId: string }) {
     if (f.field === "shotLength") {
       return (
         <div className="flex flex-wrap items-center gap-2">
-          <select aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} className={select} value={value === null || value === undefined ? "" : String(value)} onChange={(e) => (e.target.value ? set(e.target.value) : act({ action: "reset", field: f.field, platform }))}>
-            <option value="">the cut rate (Generate&apos;s 0.5x / 1x / 2x)</option>
+          <select aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} className={select} value={value === null || value === undefined ? "auto" : String(value)} onChange={(e) => (e.target.value === "auto" && !platform ? act({ action: "reset", field: f.field, platform }) : set(e.target.value))}>
             {SHOT_LENGTHS.map(([v, label]) => (
               <option key={v} value={v}>
                 {label}
               </option>
             ))}
           </select>
-          <span className="text-muted-foreground text-xs">story = 2 bars on hooks, 4 on verses, never under 3 s; each clip once before any repeats</span>
+          <span className="text-muted-foreground text-xs">auto = the app picks whole-bar shots from the song&apos;s feel and your clips&apos; length (the Storyboard header says which); story = 2 bars on hooks, 4 on verses</span>
         </div>
       );
     }
@@ -409,7 +422,8 @@ const ENDINGS: [string, string][] = [
   ["fade", "soft fade after the last line"],
   ["ring-out", "ring-out (one more bar, then fade)"],
 ];
-const SHOT_LENGTHS: [string, string][] =[["1", "1 bar"], ["2", "2 bars"], ["4", "4 bars"], ["8", "8 bars"], ["story", "story (2-4 bars)"]];
+const SHOT_LENGTHS: [string, string][] = [["auto", "auto (from the song and your clips)"], ["1", "1 bar"], ["2", "2 bars"], ["4", "4 bars"], ["8", "8 bars"], ["story", "story (2-4 bars)"], ["rate", "the cut rate (Generate's 0.5x / 1x / 2x)"]];
+const TRANSITIONS: [string, string][] = [["auto", "auto (cuts, dissolves and dips chosen from the music)"], ["crisp", "crisp (cuts on the beat)"], ["flowing", "flowing (dissolves outside the hooks)"]];
 const RATIOS: [string, number][] = [["½", 1 / 2], ["×2", 2], ["×2/3", 2 / 3], ["×3/2", 3 / 2]];
 const round1 = (n: number) => Math.round(n * 10) / 10;
 

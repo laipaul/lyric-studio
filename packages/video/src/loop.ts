@@ -23,7 +23,7 @@ const SILENT_DB = -60;
 const BEATS_PER_BAR = 4;
 
 export type LoopAudio = { rate: number; samples: Float32Array }; // the song, mono, from 0:00
-export type LoopLine = { number: number; text: string; sungStartMs: number; sungEndMs: number };
+export type LoopLine = { number: number; text: string; sungStartMs: number; sungEndMs: number; lastWordStartMs?: number }; // lastWordStartMs: where the last (held) word starts
 export type LoopPointName = "beat" | "phrase" | "sound" | "harmony" | "picture";
 export type LoopPoint = { point: LoopPointName; ok: boolean; detail: string };
 export type Harmony = { fit: number; lastKey: string; firstKey: string } | null; // null: no clear harmony
@@ -482,6 +482,7 @@ export function loopSuggestions(o: {
   // Lines the plan has that a suggestion must keep (the chorus / title lines inside the current section):
   // an end before one of them finishes is never suggested (the payoff line would be lost).
   keep?: readonly LoopLine[];
+  currentEndMs?: number; // the plan's own end: never suggested again
 }): LoopSuggestion[] {
   const mustReach = Math.max(0, ...(o.keep ?? []).map((l) => l.sungEndMs));
   const singing = (t: number) => o.lines.some((l) => t > l.sungStartMs && t < l.sungEndMs);
@@ -490,7 +491,7 @@ export function loopSuggestions(o: {
   for (let k = 0; k < bars.length; k++) {
     const at = bars[k];
     const length = at - o.startMs;
-    if (length < o.targetMs * 0.5 || length > o.targetMs * 1.5 || at > o.durationMs || singing(at) || at < mustReach) continue;
+    if (length < o.targetMs * 0.5 || length > o.targetMs * 1.5 || at > o.durationMs || singing(at) || at < mustReach || (o.currentEndMs !== undefined && Math.abs(at - o.currentEndMs) < 100)) continue;
     // The first bar after a line has ended (a musical ending, not mid-instrumental).
     const ended = o.lines.filter((l) => l.sungEndMs <= at && l.sungStartMs >= o.startMs);
     const last = ended.reduce<LoopLine | null>((a, l) => (!a || l.sungEndMs > a.sungEndMs ? l : a), null);

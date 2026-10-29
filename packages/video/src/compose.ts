@@ -13,6 +13,8 @@ import { mulberry32 } from "./prng";
 import type { LyricEffectsProps, LyricLineProps, LyricVideoProps, StyleProps } from "./props";
 import { assignClips, BEST_WINDOW_MS, type ClipOrder } from "./shots";
 import { withCard, type CardStyle } from "./textboard";
+import { planTransitions, type TransitionKind, type TransitionStyle } from "./transitions";
+import type { Feel } from "./pace";
 
 export type StyleChoice = "simple" | "bold";
 
@@ -74,6 +76,18 @@ export type RenderBase = {
   // The textboard (src/textboard.ts): each lyric line's card (same order as `lyrics`), with the look it
   // sets (position, size, hold, effect) and its font resolved to a file the props load.
   cards?: ({ id: string; style: CardStyle; font?: { family: string; weight: number; italic?: boolean } } | null)[];
+  // Automatic transitions (src/transitions.ts): the style, the song's feel, the hooks and sung stretches
+  // (song time) and each clip's own choice (clips.json "transition", by clip id). Without it: hard cuts.
+  // Loop platforms: blend the last frames into the first shot's opening (frames) when the last shot does
+  // not continue into the first one.
+  loopInto?: number;
+  transitions?: {
+    style: TransitionStyle;
+    feel: Feel;
+    hooks: { start_ms: number; end_ms: number }[];
+    sung: { start_ms: number; end_ms: number }[];
+    byClip?: Record<string, "cut" | "dissolve">;
+  };
 };
 
 // What the anchors did in one video (QA "Story anchors", the manifest, the Videos tab).
@@ -164,7 +178,7 @@ export function rawLyric(l: { text: string; start_ms: number; end_ms: number; is
 export function composeProps(
   base: RenderBase,
   choices: ComposeChoices,
-): { props: Omit<LyricVideoProps, "mediaBaseUrl">; warnings: string[]; anchors: AnchorReport | null } {
+): { props: Omit<LyricVideoProps, "mediaBaseUrl">; warnings: string[]; anchors: AnchorReport | null; transitions: { text: string; kinds: TransitionKind[] } | null } {
   let plan = choices.plan ?? base.plan;
   const platform = base.platform ?? { format: DEFAULT_FORMAT, safeZone: DEFAULT_SAFE_ZONE, lyricsAt: 0.45, textScale: 1 };
   const bars = choices.cinematicBars ?? base.cinematicBars;
@@ -258,6 +272,36 @@ export function composeProps(
     shots[index] = { ...shot, dissolve: d, ...(shot.kind !== "photo" && shot.clipStartFrame >= back ? { clipStartFrame: shot.clipStartFrame - back } : {}) };
     shots[index - 1] = { ...prev, tail: d.after };
   }
+
+  // Automatic transitions between the other shots: dissolves of about half a bar, dips to black into a
+  // chorus, cuts (anchored shots keep their own).
+  let transitionPlan: { text: string; kinds: TransitionKind[] } | null = null;
+  const dips: { frame: number; frames: number }[] = [];
+  if (base.transitions && shots.length > 1) {
+    const t = base.transitions;
+    const anchored = new Set(anchorPlan?.shots.keys() ?? []);
+    const cuts = shots.flatMap((sh, index) =>
+      index === 0 || anchored.has(index)
+        ? []
+        : [{ shot: index, songMs: Math.round(((plan.start_frame + sh.start) * 1000) / VIDEO.fps), ...(t.byClip?.[assigned[index].clip_id] ? { fixed: t.byClip[assigned[index].clip_id] } : {}) }],
+    );
+    const planned = planTransitions({ style: t.style, feel: t.feel, cuts, hooks: t.hooks, sung: t.sung, barMs: (bar * 1000) / VIDEO.fps });
+    for (const [index, kind] of planned.kinds) {
+      if (kind === "dip") dips.push({ frame: shots[index].start, frames: Math.min(18, Math.max(8, Math.round(bar / 2))) });
+      if (kind !== "dissolve") continue;
+      const prev = shots[index - 1];
+      const prevLeft = prev.kind === "photo" ? Infinity : Math.floor((prev.clipDurationFrames - 1 - prev.clipStartFrame) / prev.playbackRate) - prev.duration;
+      const d = dissolveFrames(Math.round(bar / 2), prev.duration, shots[index].duration, prev.holdLastFrame ? 0 : prevLeft);
+      if (!d.before && !d.after) continue;
+      const shot = shots[index];
+      const back = Math.round(d.before * shot.playbackRate);
+      // The shot starts `back` clip frames earlier when the clip has them before its in point (clips.json).
+      const inFrame = Math.round(((byId.get(assigned[index].clip_id)?.in_ms ?? 0) * VIDEO.fps) / 1000);
+      shots[index] = { ...shot, dissolve: d, ...(shot.kind !== "photo" && shot.clipStartFrame - back >= inFrame ? { clipStartFrame: shot.clipStartFrame - back } : {}) };
+      shots[index - 1] = { ...prev, tail: d.after };
+    }
+    transitionPlan = { text: planned.text, kinds: shots.map((_, i) => (i === 0 ? "cut" : (planned.kinds.get(i) ?? (shots[i].dissolve ? "dissolve" : "cut")))) };
+  }
   const anchors: AnchorReport | null = anchorPlan
     ? {
         uses: anchorPlan.uses.map((u) => {
@@ -288,9 +332,12 @@ export function composeProps(
       safeZone: platform.safeZone,
       lyricArea: area,
       ...(choices.effects ? { lyricEffects: choices.effects } : {}),
+      ...(dips.length ? { dips } : {}),
+      ...(base.loopInto && shots.length > 1 && !assigned.at(-1)?.loop ? { loopInto: { frames: Math.max(4, Math.min(base.loopInto, Math.floor(shots.at(-1)!.duration / 2))) } } : {}),
     },
     warnings,
     anchors,
+    transitions: transitionPlan,
   };
 }
 

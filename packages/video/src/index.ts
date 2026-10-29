@@ -25,6 +25,8 @@ export * from "./Thumbnail";
 export * from "./canvas";
 export * from "./follow";
 export * from "./ending";
+export * from "./pace";
+export * from "./transitions";
 export * from "./loop";
 export * from "./anchors";
 export * from "./storyboard";

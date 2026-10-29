@@ -40,9 +40,10 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
       realign: { type: "boolean", default: false },
       lrc: { type: "string" },
       lang: { type: "string", default: "en" },
-      rate: { type: "string", default: "1x" },
+      rate: { type: "string" },
       "shot-length": { type: "string" },
       ending: { type: "string" },
+      transitions: { type: "string" },
       tempo: { type: "string" },
       energy: { type: "string", default: "medium" },
       lead: { type: "string", default: "0.25" },
@@ -80,8 +81,8 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
     if (!existsSync(dir) || !statSync(dir).isDirectory()) fail(`${MAKE_USAGE}\n${dir} is not a song folder.`);
     folder = songFolderFiles(dir);
   }
-  const rate = values.rate as CutRate;
-  if (!["0.5x", "1x", "2x", "off"].includes(rate)) fail("--rate must be 0.5x, 1x, 2x or off");
+  const rate = values.rate as CutRate | undefined; // given: the cut rate instead of automatic pacing
+  if (rate !== undefined && !["0.5x", "1x", "2x", "off"].includes(rate)) fail("--rate must be 0.5x, 1x, 2x or off");
   const energy = values.energy as Energy;
   if (!["low", "medium", "high"].includes(energy)) fail("--energy must be low, medium or high");
   if (!["en", "fr"].includes(values.lang!)) fail("--lang must be en or fr");
@@ -96,10 +97,12 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
   if (offset !== undefined && ![0, 1, 2, 3].includes(offset)) fail("--downbeat-offset must be 0, 1, 2 or 3");
   const length = values.length === undefined ? undefined : Number(values.length);
   if (length !== undefined && (!Number.isFinite(length) || length < 3 || length > 600)) fail("--length must be a number of seconds from 3 to 600 (the target for an auto section)");
+  const transitions = values.transitions;
+  if (transitions !== undefined && !["auto", "crisp", "flowing"].includes(transitions)) fail("--transitions must be auto (the app chooses), crisp (cuts) or flowing (dissolves)");
   const ending = values.ending;
   if (ending !== undefined && !["auto", "loop", "fade", "ring-out"].includes(ending)) fail("--ending must be auto, loop, fade or ring-out (how a Reel / TikTok / Short ends; auto = the app chooses)");
   const shotLength = values["shot-length"];
-  if (shotLength !== undefined && !["1", "2", "4", "8", "story"].includes(shotLength)) fail("--shot-length must be 1, 2, 4 or 8 (bars per shot) or story (2 bars on hooks, 4 on verses, never under 3 s)");
+  if (shotLength !== undefined && !["auto", "1", "2", "4", "8", "story", "rate"].includes(shotLength)) fail("--shot-length must be auto (the app chooses), 1, 2, 4 or 8 (bars per shot), story (2 bars on hooks, 4 on verses, never under 3 s) or rate (the cut rate)");
   const tempo = values.tempo === undefined ? undefined : Number(values.tempo);
   if (tempo !== undefined && (!Number.isFinite(tempo) || tempo < 30 || tempo > 300)) fail("--tempo must be the song's BPM, from 30 to 300");
   const parallel = values.parallel === undefined ? undefined : Number(values.parallel);
@@ -134,9 +137,10 @@ export function parseMakeArgs(argv: string[], cwd: string): MakeArgs {
       realign: values.realign,
       lrc: resolve(values.lrc),
       lang: values.lang,
-      rate,
+      ...(rate !== undefined ? { rate } : {}),
       ...(shotLength !== undefined ? { shotLength } : {}),
       ...(ending !== undefined ? { ending: ending as "auto" | "loop" | "fade" | "ring-out" } : {}),
+      ...(transitions !== undefined ? { transitions: transitions as "auto" | "crisp" | "flowing" } : {}),
       ...(tempo !== undefined ? { tempo } : {}),
       energy,
       leadMs: seconds("lead", values.lead!),

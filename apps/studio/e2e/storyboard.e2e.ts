@@ -73,6 +73,8 @@ async function main() {
     }
     const browser = await playwright.chromium.launch();
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    const pageErrors: string[] = [];
+    page.on("pageerror", (e: Error) => pageErrors.push(e.message));
     await page.goto(`${base}/songs/${sp.project.id}?tab=storyboard`);
     await page.waitForSelector("[data-storyboard-show]");
     check((await page.inputValue("[data-storyboard-platform]")) === "reels", "the plan for Reels (the recipe's platform) is offered");
@@ -87,12 +89,17 @@ async function main() {
     check(!!(await page.$("[data-story-line='4'][data-anchored='02_b.mp4']")), "line 4 carries its anchor (⚓ 02_b.mp4)");
     const anchored = await page.$$eval("[data-shot]", (els: Element[]) => els.filter((e) => e.querySelector("[data-badge=anchor]")).map((e) => e.textContent ?? ""));
     check(anchored.length === 1 && anchored[0].includes("02_b.mp4"), `one shot carries the ⚓ badge, on 02_b.mp4 (${anchored.join(" | ")})`);
-    check((await page.$$("[data-badge=dissolve]")).length === 1, "and its dissolve badge");
+    const anchoredDissolve = await page.$$eval("[data-shot]", (els: Element[]) => els.filter((e) => e.querySelector("[data-badge=anchor]") && e.querySelector("[data-badge=dissolve]")).length);
+    check(anchoredDissolve === 1, "and its dissolve badge (the anchor's own; automatic dissolves may add others)");
     check(((await page.textContent("[data-anchors-outside]")) ?? "").includes('line 6 "Into the light" → 03_c.mp4'), "the anchor outside the section is listed");
     const last = (await page.$$("[data-shot]")).length;
     check(!!(await page.$(`[data-shot='${last}'] [data-badge=loop]`)), "the last shot is marked as the Reels loop ending (↻), not warned as a repeat");
     const endingText = (await page.textContent("[data-ending]").catch(() => null)) ?? "";
     check(/^Ending: (a tight loop|a soft fade|the last chord rings out|the song's own)/.test(endingText), `the header says how the Reel ends, in plain words (${endingText})`);
+    const decisions = await page.$$eval("[data-decision]", (els: Element[]) => els.map((e) => e.textContent ?? ""));
+    check(decisions.some((d) => d.startsWith("Pacing: ")), `the header says how the shots are paced (${decisions.join(" | ")})`);
+    check(decisions.some((d) => d.startsWith("Transitions: ")), "the header says which transitions the app chose");
+
     // The 1 s clip: slowed or held: a warning on its shot.
     const warned = await page.$$("[data-shot][data-warnings]");
     if (warned.length) {
@@ -135,6 +142,16 @@ async function main() {
     check((await page.evaluate(() => window.localStorage.getItem("lyric-studio:storyboard-follow"))) === "1", "Follow playback is remembered in this browser");
     await page.uncheck("[data-follow-playback]");
     await page.click("button:has-text('2x')"); // back to the zoom the rest of this test expects
+    await page.$eval("[data-storyboard-timeline]", (el: Element) => ((el as HTMLElement).scrollLeft = 0));
+    // The preview plays the end (the loop blend into the first shot) and the dips without an error.
+    await page.$eval("[data-storyboard-timeline]", (el: Element) => ((el as HTMLElement).scrollLeft = (el as HTMLElement).scrollWidth));
+    await page.mouse.click(...(await (async () => {
+      const box = await (await page.$("[data-storyboard-timeline]")).boundingBox();
+      const wave = await (await page.$("[data-waveform]")).boundingBox();
+      return [box.x + box.width - 30, wave.y + wave.height / 2] as [number, number];
+    })()));
+    await sleep(2000);
+    check(!pageErrors.length, `the preview plays the ending without errors${pageErrors.length ? ` (${pageErrors.join("; ")})` : ""}`);
     await page.$eval("[data-storyboard-timeline]", (el: Element) => ((el as HTMLElement).scrollLeft = 0));
     await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "storyboard.png") });
 

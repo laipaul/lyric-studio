@@ -1,11 +1,13 @@
 // Settings that may differ per platform ("perPlatform" in brand.json and song.json), e.g.
 // { "youtube": { "verseEffect": "cinematic-fade" }, "reels": { "verseEffect": "glide" } }.
 import { ENDING_VALUES } from "../ending";
+import { TRANSITION_STYLES } from "../transitions";
 import { parseEffectChoice } from "../effects/names";
 
-export const PLATFORM_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "section", "length", "shotLength", "ending"] as const;
-// Shot length: bars per shot, or "story" (2 bars on hooks, 4 on verses, never under 3 s).
-export const SHOT_LENGTH_VALUES = ["1", "2", "4", "8", "story"] as const;
+export const PLATFORM_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "section", "length", "shotLength", "ending", "transitions"] as const;
+// Shot length: "auto" (the default: the app chooses from the song and the clips, src/pace.ts), bars per
+// shot, "story" (2 bars on hooks, 4 on verses, never under 3 s), or "rate" (the cut rate: Generate / --rate).
+export const SHOT_LENGTH_VALUES = ["auto", "1", "2", "4", "8", "story", "rate"] as const;
 export type PlatformField = (typeof PLATFORM_FIELDS)[number];
 export const WEIGHT_FIELDS = ["verseWeight", "hookWeight"] as const;
 export const ITALIC_FIELDS = ["verseItalic", "hookItalic"] as const;
@@ -47,6 +49,7 @@ export function checkPerPlatform(raw: unknown, where: string): { values: PerPlat
         else problems.push(`${at} must be true or false`);
       } else if (typeof v !== "string" || !v.trim()) problems.push(`${at} must be text`);
       else if (k === "accentColour" && !/^#[0-9a-fA-F]{6}$/.test(v)) problems.push(`${at} must look like "#E8A3B5"`);
+      else if (k === "transitions" && !(TRANSITION_STYLES as readonly string[]).includes(v.trim())) problems.push(`${at} must be ${TRANSITION_STYLES.join(", ")} (auto = the app chooses cuts, dissolves and dips from the music)`);
       else if (k === "ending" && !(ENDING_VALUES as readonly string[]).includes(v.trim())) problems.push(`${at} must be ${ENDING_VALUES.join(", ")} (how a Reel / TikTok / Short ends; auto = the app chooses)`);
       else if (k === "shotLength" && !(SHOT_LENGTH_VALUES as readonly string[]).includes(v.trim())) problems.push(`${at} must be ${SHOT_LENGTH_VALUES.join(", ")} (bars per shot, or "story")`);
       else if (k === "verseEffect" || k === "hookEffect") {
