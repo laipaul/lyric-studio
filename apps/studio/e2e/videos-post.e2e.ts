@@ -37,7 +37,8 @@ async function main() {
   const runDir = path.join(paths.exports, "2026-10-20_1430", "reels");
   mkdirSync(runDir, { recursive: true });
   for (const n of ["v1", "v2"]) {
-    execFileSync(ffmpeg, ["-y", "-v", "error", "-f", "lavfi", "-i", "color=c=0x402030:s=270x480:d=1:r=30", "-pix_fmt", "yuv420p", path.join(runDir, `${n}.mp4`)]);
+    // A realistic reel: 20 s of H.264 + AAC (the sound runs a little past the picture's last frame), faststart.
+    execFileSync(ffmpeg, ["-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=270x480:r=30:d=20", "-f", "lavfi", "-i", "sine=frequency=330:duration=20", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-movflags", "+faststart", path.join(runDir, `${n}.mp4`)]);
     writeFileSync(path.join(runDir, `${n}.qa.txt`), "Summary: PASS\n");
     writeFileSync(
       path.join(runDir, `${n}.manifest.json`),
@@ -47,7 +48,7 @@ async function main() {
         section: { mode: "auto", start_ms: 34_213, end_ms: 66_000 },
         settings: { line_effect: "floating", hook_effect: "karaoke-highlight", collections: ["wedding"], target_length: 32 },
         props: { style: { font: "Cormorant Garamond" }, hookFont: { font: "Kaushan Script" }, lyricEffects: { accent: "#E8A3B5" } },
-        output: { duration_s: 32 },
+        output: { duration_s: 20 },
       }),
     );
   }
@@ -111,6 +112,47 @@ async function main() {
     await page.waitForSelector("[data-video$='v1.manifest.json'] [data-reaction-done]");
     check((JSON.parse(readFileSync(path.join(paths.root, "song.json"), "utf8")) as { paceShift?: number }).paceShift === 1, 'song.json holds "paceShift": 1');
 
+    // The Compare player: its timeline covers the whole video, also on a second opening (video cached),
+    // and after the end the bar can be dragged back and play starts again from 0.
+    for (const round of ["first opening", "second opening (cached)"]) {
+      await page.goto(`${base}/songs/${sp.project.id}?tab=videos`);
+      await page.click("[data-video$='v1.manifest.json'] button:has-text('Compare')");
+      await page.click("[data-video$='v2.manifest.json'] button:has-text('Compare')");
+      await page.locator("button:has-text('Compare'):not([disabled])").last().click();
+      await page.waitForSelector("input[aria-label=Timeline]");
+      const bar = () => page.$eval("input[aria-label=Timeline]", (i: HTMLInputElement) => ({ max: Number(i.max), value: Number(i.value) }));
+      const vids = () => page.$$eval("[role=dialog] video", (v: HTMLVideoElement[]) => v.map((x) => x.currentTime));
+      await page.waitForFunction(() => Number((document.querySelector("input[aria-label=Timeline]") as HTMLInputElement).max) > 10, null, { timeout: 8000 }).catch(() => {});
+      const max = (await bar()).max;
+      check(Math.abs(max - 20) < 0.6, `Compare (${round}): the timeline covers the whole video (max ${max} s, video 20 s)`);
+      // Play to the end.
+      await page.click("button[aria-label=Play]");
+      await page.$eval("[role=dialog] video", (v: HTMLVideoElement) => (v.currentTime = v.duration - 1.2));
+      await page.waitForFunction(() => (document.querySelector("[role=dialog] video") as HTMLVideoElement).ended, null, { timeout: 8000 });
+      await sleep(300);
+      const end = await bar();
+      check(end.value > 18.5 && end.value <= end.max, `Compare (${round}): at the end the bar is at the end (${end.value} of ${end.max})`);
+      check((await page.$("button[aria-label=Play]")) !== null, `Compare (${round}): after the end the button says Play`);
+      // Drag back.
+      await page.$eval("input[aria-label=Timeline]", (i: HTMLInputElement) => {
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+        set.call(i, "5");
+        i.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      await sleep(400);
+      const back = await vids();
+      check(back.every((t) => Math.abs(t - 5) < 0.6), `Compare (${round}): dragging the bar back to 5 s moves every video (${back.map((t) => t.toFixed(2)).join(", ")})`);
+      // Play after the end restarts from 0.
+      await page.$eval("[role=dialog] video", (v: HTMLVideoElement) => (v.currentTime = v.duration));
+      await page.waitForFunction(() => (document.querySelector("[role=dialog] video") as HTMLVideoElement).ended, null, { timeout: 8000 });
+      await page.click("button[aria-label=Play]");
+      await sleep(600);
+      const again = await vids();
+      check(again[0] < 3, `Compare (${round}): Play after the end starts again from the beginning (${again[0].toFixed(2)} s)`);
+      await page.keyboard.press("Escape");
+      await page.waitForSelector("[role=dialog]", { state: "detached" });
+    }
+
     // Post: nothing approved yet; approve v1 in Videos, then it is there with its caption.
     await page.goto(`${base}/songs/${sp.project.id}?tab=post`);
     await page.waitForSelector("[data-post-empty]");
@@ -123,6 +165,32 @@ async function main() {
     check((await page.$$("[data-post-video]")).length === 1, "Post lists the approved video only (v1, not v2)");
     await page.waitForSelector("[data-post-panel] [data-section]");
     check(((await page.textContent("[data-post-panel]")) ?? "").includes("Caption"), "with its caption to copy");
+    // The Post player: seekable over the whole video, and still after the end.
+    await page.waitForSelector("[data-post-video] video");
+    const pv = () =>
+      page.$eval("[data-post-video] video", (v: HTMLVideoElement) => ({ t: v.currentTime, d: v.duration, seekable: v.seekable.length ? v.seekable.end(v.seekable.length - 1) : 0, ended: v.ended }));
+    await page.$eval("[data-post-video] video", (v: HTMLVideoElement) => v.load());
+    await page.waitForFunction(() => (document.querySelector("[data-post-video] video") as HTMLVideoElement).readyState >= 1);
+    const first = await pv();
+    check(Math.abs(first.d - 20) < 0.6 && first.seekable >= first.d - 0.6, `Post player: duration ${first.d.toFixed(2)} s, seekable to ${first.seekable.toFixed(2)} s`);
+    await page.$eval("[data-post-video] video", (v: HTMLVideoElement) => {
+      v.currentTime = v.duration - 1;
+      return v.play();
+    });
+    await page.waitForFunction(() => (document.querySelector("[data-post-video] video") as HTMLVideoElement).ended, null, { timeout: 8000 });
+    await page.$eval("[data-post-video] video", (v: HTMLVideoElement) => (v.currentTime = 5));
+    await sleep(500);
+    const afterEnd = await pv();
+    check(Math.abs(afterEnd.t - 5) < 0.6, `Post player: after the end, seeking back to 5 s works (${afterEnd.t.toFixed(2)} s)`);
+    // The server answers ranges as a player needs them (also "bytes=0-", a tail and HEAD).
+    const mp4Url = await page.$eval("[data-post-video] video", (v: HTMLVideoElement) => v.currentSrc);
+    const zero = await fetch(mp4Url, { headers: { Range: "bytes=0-" } });
+    const total = Number(/\/(\d+)$/.exec(zero.headers.get("content-range") ?? "")?.[1]);
+    check(zero.status === 206 && Number(zero.headers.get("content-length")) === total && (await zero.arrayBuffer()).byteLength === total, "server: bytes=0- gives 206 with the whole file and a correct Content-Range / Content-Length");
+    const tail = await fetch(mp4Url, { headers: { Range: `bytes=${total - 100}-` } });
+    check(tail.status === 206 && (await tail.arrayBuffer()).byteLength === 100, "server: a range at the end gives exactly those bytes");
+    const head = await fetch(mp4Url, { method: "HEAD" });
+    check(head.status === 200 && Number(head.headers.get("content-length")) === total && head.headers.get("accept-ranges") === "bytes", "server: HEAD gives the length and Accept-Ranges");
 
     // Tasks: Clear finished.
     await page.click("[data-tasks-button]");
