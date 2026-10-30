@@ -4,6 +4,14 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Tidy-up — a short brief, details in docs/ ✅ (30 Oct 2026; no app changes)
+- CLAUDE.md is now ~9 KB (was 55 KB): what we build, the guiding principle, the hard rules, the stack, how to work
+  with the user, and an index of docs/. Every rule moved word for word into docs/<area>.md (screens, data model,
+  launcher, audio and output, pacing and cuts, endings and loops, assessment, lyrics, brand and fonts, YouTube and
+  Canvas, recipe and songs); a check confirmed no line of the old brief or of PROGRESS.md was lost.
+- PROGRESS.md keeps the agreed order, open issues, backlog and these latest steps; the full step history, the
+  verification checklist and the 29 Oct plan are in docs/history.md.
+
 ### Step 1 — Monorepo skeleton ✅
 - pnpm workspaces: `apps/studio`, `apps/worker`, `packages/video`, `packages/db`, `services/audio`.
 - `apps/studio`: Next.js 16 (App Router) + TypeScript + Tailwind 4 + shadcn/ui, dark theme.

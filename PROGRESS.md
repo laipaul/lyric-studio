@@ -4,6 +4,16 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Effects, batch 2 step 1: Clarify, Ascend, Ink ✅ (to verify on the Windows PC)
+- **clarify**: each word pulls into focus (blurred and dim -> sharp) as it is sung, like a camera finding focus.
+- **ascend**: the letters rise into place one after another, a soft wave across the line (titles too).
+- **ink**: the line flows in left to right behind a soft-edged reveal, in time with the singing, row after row;
+  made for script fonts (titles too).
+- All three in Verse / Hook effect, the Textboard and "Try an effect". Tests: effects-canva.test.ts (sharp when
+  sung, letters in place on time, uncovered by the last word, QA box counts the rising letters), effects.test.ts
+  (14 effects, no jumps).
+- Step 2 next: Held-note glow, Chorus lift, Shine (music-reactive add-ons, off by default).
+
 ### Fix — title opening fits itself, loop check accepts its lead-in ✅ (verified by the user on the Windows PC, 30 Oct 2026: These Empty Roads Reel now "Ready to post")
 - Found on These Empty Roads (Reels, title opening on): "Not ready — the title opening reaches under the
   platform's buttons" (asking you to shorten the title or pick a smaller size) and "the jump back to the start may
@@ -93,14 +103,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   Date added.
 - Tests: library-status.test.ts (chip colours, counts, summary, action, filters, sorting), library.test.ts
   (approved per platform over every run, same cover); browser: library.e2e.ts (now part of pnpm test:e2e).
-
-### Tidy-up — a short brief, details in docs/ ✅ (30 Oct 2026; no app changes)
-- CLAUDE.md is now ~9 KB (was 55 KB): what we build, the guiding principle, the hard rules, the stack, how to work
-  with the user, and an index of docs/. Every rule moved word for word into docs/<area>.md (screens, data model,
-  launcher, audio and output, pacing and cuts, endings and loops, assessment, lyrics, brand and fonts, YouTube and
-  Canvas, recipe and songs); a check confirmed no line of the old brief or of PROGRESS.md was lost.
-- PROGRESS.md keeps the agreed order, open issues, backlog and these latest steps; the full step history, the
-  verification checklist and the 29 Oct plan are in docs/history.md.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

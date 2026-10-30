@@ -71,9 +71,9 @@ function track(ls: SceneLine[], o: SceneOptions): Map<number, Sample>[] {
 const ALL = EFFECTS.flatMap((e) => INTENSITIES.map((intensity) => ({ name: e.name, intensity })));
 
 describe("lyric effects registry", () => {
-  it("has the 11 effects, glide first (the default)", () => {
-    expect(EFFECTS.map((e) => e.name)).toEqual(["glide", "cinematic-fade", "soft-blur", "dreamy-glow", "word-reveal", "karaoke-highlight", "floating", "typewriter", "spread", "typewriter-erase", "typewriter-words"]);
-    expect(EFFECTS.filter((e) => e.unit === "word").map((e) => e.name)).toEqual(["word-reveal", "karaoke-highlight", "typewriter", "typewriter-erase", "typewriter-words"]);
+  it("has the 14 effects, glide first (the default)", () => {
+    expect(EFFECTS.map((e) => e.name)).toEqual(["glide", "cinematic-fade", "soft-blur", "dreamy-glow", "word-reveal", "karaoke-highlight", "floating", "typewriter", "spread", "typewriter-erase", "typewriter-words", "clarify", "ascend", "ink"]);
+    expect(EFFECTS.filter((e) => e.unit === "word").map((e) => e.name)).toEqual(["word-reveal", "karaoke-highlight", "typewriter", "typewriter-erase", "typewriter-words", "clarify"]);
     expect(EFFECTS.map((e) => e.name)).toEqual([...EFFECT_NAMES]); // the settings checks know every module
   });
 

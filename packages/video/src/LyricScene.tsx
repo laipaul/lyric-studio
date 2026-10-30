@@ -5,6 +5,9 @@ import { useMemo } from "react";
 import { useCurrentFrame, useVideoConfig } from "remotion";
 
 import { lyricScene, sceneTimeline } from "./effects/scene";
+import { ascendLetter } from "./effects/ascend";
+import { inkMask } from "./effects/ink";
+import { AMOUNT } from "./effects/types";
 import { applyTextCase, layoutLyric, type LyricLayout } from "./lyrics";
 import type { LyricArea } from "./platform";
 import type { LyricEffectsProps, LyricLineProps, StyleProps } from "./props";
@@ -137,7 +140,7 @@ export function LyricScene(props: {
             }}
           >
             {layout.lines.map((text, r) => (
-              <div key={r} style={{ whiteSpace: "nowrap" }}>
+              <div key={r} style={{ whiteSpace: "nowrap", ...(look.reveal !== undefined ? rowMask(layout.lines, r, look.reveal) : {}) }}>
                 {item.words
                   ? text.split(" ").map((word, k) => {
                       const wl = item.words![w++] ?? item.words![item.words!.length - 1];
@@ -163,7 +166,9 @@ export function LyricScene(props: {
                         </span>
                       );
                     })
-                  : text}
+                  : look.wave !== undefined
+                    ? waveLetters(layout.lines, r, look.wave, AMOUNT[(line.card?.effect ?? (line.isHook ? effects.hook : effects.verse)).intensity] ?? 1)
+                    : text}
               </div>
             ))}
           </div>
@@ -184,4 +189,28 @@ function Cursor({ opacity, colour }: { opacity: number; colour: string }) {
       <span style={{ position: "absolute", left: "0.04em", top: 0, bottom: 0, width: "0.07em", background: colour, opacity, borderRadius: "0.03em" }} />
     </span>
   );
+}
+
+// Ascend: each letter of row r drawn on its own, rising into place in a wave across the whole line.
+function waveLetters(rows: readonly string[], r: number, wave: number, amount: number) {
+  const n = rows.reduce((a, row) => a + [...row].length, 0);
+  const before = rows.slice(0, r).reduce((a, row) => a + [...row].length, 0);
+  return [...rows[r]].map((ch, k) => {
+    const { y, opacity } = ascendLetter(before + k, n, wave, amount);
+    return (
+      <span key={k} style={{ display: "inline-block", whiteSpace: "pre", transform: y > 0.01 ? `translateY(${y.toFixed(2)}px)` : undefined, opacity }}>
+        {ch}
+      </span>
+    );
+  });
+}
+
+// Ink: row r uncovered left to right, its share of the line's revealed letters (row after row).
+function rowMask(rows: readonly string[], r: number, reveal: number): React.CSSProperties {
+  const sizes = rows.map((row) => [...row].length);
+  const total = sizes.reduce((a, b) => a + b, 0) || 1;
+  const before = sizes.slice(0, r).reduce((a, b) => a + b, 0);
+  const share = Math.min(1, Math.max(0, (reveal * total - before) / (sizes[r] || 1)));
+  const mask = inkMask(share);
+  return mask ? { maskImage: mask, WebkitMaskImage: mask } : {};
 }

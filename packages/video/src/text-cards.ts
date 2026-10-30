@@ -28,7 +28,11 @@ export function textCardLook(card: Pick<TextCardProps, "startFrame" | "endFrame"
   const letters = card.text ? [...card.text].filter((c) => c.trim()).length : 0;
   const chars = typing ? typedShare(card.startFrame, letters, frame, fps, Math.max(card.startFrame + 1, card.endFrame - fps), own.amount) * (typing.exit === "erase" ? 1 - q : 1) : undefined;
   const spacing = (enter.spacing ?? 0) + (exit.spacing ?? 0);
+  // Ink: uncovered left to right at the calm pace (a little quicker), done a second before it ends.
+  const reveal = own.effect.reveal ? typedShare(card.startFrame, letters, frame, fps, Math.max(card.startFrame + 1, card.endFrame - fps), own.amount * 1.3) : undefined;
   return {
+    ...(reveal !== undefined && reveal < 1 ? { reveal } : {}),
+    ...(enter.wave !== undefined && enter.wave < 1 && q <= 0 ? { wave: enter.wave } : {}),
     ...(chars !== undefined ? { chars } : {}),
     ...(spacing ? { spacing } : {}),
     opacity: (enter.opacity ?? 1) * (exit.opacity ?? 1),

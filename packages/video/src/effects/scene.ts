@@ -155,6 +155,11 @@ export function lyricScene(t: SceneTimeline, frame: number): SceneItem[] {
       glow: clamp01(base.look.glow + (hold.glow ?? 0)),
     };
     if (base.look.spacing) look.spacing = base.look.spacing;
+    if (base.look.wave !== undefined && base.look.wave < 1) look.wave = base.look.wave;
+    if (t.own[i].effect.reveal) {
+      const share = inkShare(t, i, frame);
+      if (share < 1) look.reveal = share;
+    }
     if (t.o.breathe && base.role !== "next") look.scale *= breatheScale(t.o.breathe, frame, t.o.fps, !!t.lines[i].isHook);
     const own = t.own[i];
     const words = own.effect.typing
@@ -181,6 +186,16 @@ function typingLook(t: SceneTimeline, i: number, frame: number): WordLook[] {
   const w = t.exitWindow[i];
   const erase = own.effect.typing?.exit === "erase" && w && w.by === "own" && frame >= w.start ? clamp01((frame - w.start) / Math.max(1, w.end - w.start)) : 0;
   return typingWords(plan, frame, t.o.fps, erase).map((x) => ({ ...WORD_REST, chars: x.chars, cursor: x.cursor }));
+}
+
+// Ink: the share of the line's letters uncovered (left to right), at the typewriter's pace (in time with
+// the singing, a little quicker: it reads as one flowing stroke).
+export const INK_PACE = 1.3;
+function inkShare(t: SceneTimeline, i: number, frame: number): number {
+  const timings = wordTimings(t, i);
+  const letters = (t.o.wordLetters?.(i) ?? timings.map(() => 4)).slice(0, timings.length);
+  const plan = typingPlan(typingStartFrame(t, i), timings, letters, t.o.fps, t.own[i].amount * INK_PACE);
+  return plan.total ? Math.min(1, Math.max(0, (frame - plan.startFrame) * plan.perFrame) / plan.total) : 1;
 }
 
 // How far an effect can move a line from its place (px) and its largest scale: for the QA
@@ -218,6 +233,9 @@ export function effectExtents(choice: EffectChoice, verse: EffectChoice, fps: nu
     }
   }
   const maxScale = Math.max(1, ...looks.map((l) => l.scale ?? 1)) * wordScale * (breathe ? BREATHE_MAX_SCALE : 1);
+  const reach = own.effect.reach?.(own.amount) ?? m.effect.reach?.(m.amount) ?? {};
+  up += reach.up ?? 0;
+  down += reach.down ?? 0;
   return { up: up + wordUp, down: down + wordDown, side: x1, maxScale };
 }
 

@@ -20,7 +20,9 @@ export const EASINGS: Record<EasingName, (t: number) => number> = {
 // The look of a whole line. y / x in px (added to its resting place), blur in px, glow 0-1, spacing =
 // letter spacing in em added to the font's own (spread), chars = share of its letters shown (title cards
 // typed in; lyric lines type per word, see WordLook).
-export type LineLook = { opacity: number; x: number; y: number; scale: number; blur: number; glow: number; spacing?: number; chars?: number };
+// wave = ascend's letter wave (0 -> 1: letters rise into place one after another), reveal = ink's reveal
+// (share of the line's letters uncovered, left to right, with a soft edge).
+export type LineLook = { opacity: number; x: number; y: number; scale: number; blur: number; glow: number; spacing?: number; chars?: number; wave?: number; reveal?: number };
 export const REST: LineLook = { opacity: 1, x: 0, y: 0, scale: 1, blur: 0, glow: 0 };
 
 // The look of one word: chars = share of its letters shown (typewriter), accent = 0-1 mix towards
@@ -52,6 +54,10 @@ export type LyricEffect = {
   // A typewriter that types the whole line letter by letter (src/effects/typing.ts) instead of word():
   // exit "fade" (the line fades out) or "erase" (letters removed right to left).
   typing?: { exit: "fade" | "erase" };
+  // Ink (src/effects/ink.ts): the line is uncovered left to right in time with the singing (like the typewriter's pace).
+  reveal?: true;
+  // How far the effect moves parts of a line beyond its enter / exit / hold looks (px, x the amount), for QA.
+  reach?: (amount: number) => { up?: number; down?: number };
 };
 
 export const clamp01 = (v: number) => Math.min(1, Math.max(0, v));

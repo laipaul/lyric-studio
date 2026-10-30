@@ -1,9 +1,10 @@
 // The effects from the user's Canva finishing touches: the letter-by-letter typewriter (steady, never behind
 // the singer, a cursor, a pace from the intensity, erase on the way out, typed title cards), Spread
-// (letters open up, never wider than the laid-out line) and Breathe (a slow swell, on the downbeats).
+// (letters open up, never wider than the laid-out line) and Breathe (a slow swell, on the downbeats);
+// then Clarify (words pull into focus as sung), Ascend (a letter wave) and Ink (uncovered in time).
 import { describe, expect, it } from "vitest";
 
-import { BREATHE_MAX_SCALE, breatheScale, effectExtents, lyricScene, sceneTimeline, textCardLook, typedShare, typingPlan, typingWords, type EffectChoice, type SceneLine, type SceneOptions } from "../src";
+import { ascendLetter, ASCEND_LIFT_PX, BREATHE_MAX_SCALE, breatheScale, effectExtents, inkMask, lyricScene, sceneTimeline, textCardLook, typedShare, typingPlan, typingWords, type EffectChoice, type SceneLine, type SceneOptions } from "../src";
 
 const FPS = 30;
 const LETTERS = [3, 3, 5]; // "one two three"
@@ -139,5 +140,60 @@ describe("breathe", () => {
     const without = effectExtents({ name: "glide", intensity: "balanced" }, { name: "glide", intensity: "balanced" }, FPS);
     const withIt = effectExtents({ name: "glide", intensity: "balanced" }, { name: "glide", intensity: "balanced" }, FPS, { mode: "gentle" });
     expect(withIt.maxScale).toBeCloseTo(without.maxScale * BREATHE_MAX_SCALE, 5);
+  });
+});
+
+describe("clarify", () => {
+  it("each word waits blurred and dim, and is sharp when it is sung", () => {
+    const ls = lines();
+    const t = sceneTimeline(ls, options({ name: "clarify", intensity: "balanced" }));
+    for (const [i, l] of ls.entries())
+      for (const [k, w] of l.words!.entries()) {
+        const at = lyricScene(t, w.startFrame).find((x) => x.index === i)!.words![k];
+        expect([at.blur, at.opacity], `line ${i} word ${k}`).toEqual([0, 1]);
+        const before = lyricScene(t, w.startFrame - 9).find((x) => x.index === i)?.words?.[k];
+        if (before) expect(before.blur).toBeGreaterThan(3);
+      }
+  });
+});
+
+describe("ascend", () => {
+  it("letters rise into place one after another; all in place at the line's usual time", () => {
+    const ls = lines();
+    const t = sceneTimeline(ls, options({ name: "ascend", intensity: "balanced" }));
+    const l = ls[0];
+    const mid = lyricScene(t, l.startFrame - 12).find((x) => x.index === 0)!.look;
+    expect(mid.wave).toBeGreaterThan(0);
+    expect(mid.wave).toBeLessThan(1);
+    expect(lyricScene(t, l.startFrame).find((x) => x.index === 0)!.look.wave).toBeUndefined(); // settled
+    const first = ascendLetter(0, 12, 0.4, 1);
+    const last = ascendLetter(11, 12, 0.4, 1);
+    expect(first.y).toBeLessThan(last.y); // the first letters are already higher up
+    expect(ascendLetter(11, 12, 1, 1)).toEqual({ y: 0, opacity: 1 });
+    expect(ascendLetter(0, 12, 0, 1).y).toBeCloseTo(ASCEND_LIFT_PX, 5);
+    const ext = effectExtents({ name: "ascend", intensity: "balanced" }, { name: "glide", intensity: "balanced" }, FPS);
+    expect(ext.down).toBeGreaterThanOrEqual(ASCEND_LIFT_PX); // QA's safe-zone box counts the letters below
+  });
+});
+
+describe("ink", () => {
+  it("uncovered left to right in time with the singing; complete by the last word", () => {
+    const ls = lines();
+    const t = sceneTimeline(ls, options({ name: "ink", intensity: "balanced" }));
+    for (const [i, l] of ls.entries()) {
+      let last = 0;
+      for (let f = l.startFrame - 20; f < l.words![2].startFrame; f++) {
+        const r = lyricScene(t, f).find((x) => x.index === i)?.look.reveal;
+        if (r === undefined) continue;
+        expect(r, `line ${i} frame ${f}`).toBeGreaterThanOrEqual(last);
+        last = r;
+      }
+      expect(lyricScene(t, l.words![2].startFrame).find((x) => x.index === i)!.look.reveal, `line ${i}`).toBeUndefined(); // fully uncovered
+    }
+    expect(inkMask(1)).toBeUndefined();
+    expect(inkMask(0.5)).toMatch(/linear-gradient\(90deg, #000 .*%, transparent .*%\)/);
+    const card = textCardLook({ startFrame: 0, endFrame: 120, effect: { name: "ink", intensity: "balanced" }, text: "Tea with the Monk" }, 10, FPS)!;
+    expect(card.reveal).toBeGreaterThan(0);
+    expect(card.reveal).toBeLessThan(1);
   });
 });

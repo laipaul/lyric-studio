@@ -28,6 +28,8 @@ import { cinematicBarHeight, DEFAULT_FORMAT, DEFAULT_LYRIC_AREA, DEFAULT_SAFE_ZO
 import { mediaUrl, type LyricLineProps, type LyricVideoProps, type ShotProps, type StyleProps, type TextCardProps } from "./props";
 import { textCardLook } from "./text-cards";
 import { REST, type LineLook } from "./effects/types";
+import { ascendLetter } from "./effects/ascend";
+import { inkMask } from "./effects/ink";
 
 const cover: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };
 const cover_ = cover;
@@ -394,6 +396,24 @@ function TypedText({ text, share }: { text: string; share: number }) {
   );
 }
 
+// An ascend card: its letters rising into place one after another (spaces and line breaks kept).
+function WaveText({ text, wave }: { text: string; wave: number }) {
+  const chars = [...text];
+  return (
+    <>
+      {chars.map((ch, k) => {
+        if (ch === "\n") return <br key={k} />;
+        const { y, opacity } = ascendLetter(k, chars.length, wave, 1);
+        return (
+          <span key={k} style={{ display: "inline-block", whiteSpace: "pre", transform: y > 0.01 ? `translateY(${y.toFixed(2)}px)` : undefined, opacity }}>
+            {ch}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
 // The textboard's title, byline and tagline cards. A card "with-title" sits under the card it is stacked
 // on (as the artist under the title); the others are blocks of their own. Without an effect a card
 // is on screen from its start and fades out over its last second (the YouTube title as before).
@@ -429,7 +449,7 @@ function TextCards({ cards, format }: { cards: TextCardProps[]; format: Format }
               : {}),
         }}
       >
-        {look.chars !== undefined ? <TypedText text={body} share={look.chars} /> : body}
+        {look.chars !== undefined ? <TypedText text={body} share={look.chars} /> : look.wave !== undefined ? <WaveText text={body} wave={look.wave} /> : body}
       </div>
     );
   };
@@ -439,7 +459,7 @@ function TextCards({ cards, format }: { cards: TextCardProps[]; format: Format }
         const look = textCardLook(root, frame, fps);
         if (!look || look.opacity <= 0.001) return null;
         const stacked = cards.filter((c) => c.stackOn === root.id);
-        const { chars: rootChars } = look;
+        const { chars: rootChars, wave: rootWave } = look;
         const moved = look.x || look.y || look.scale !== 1;
         return (
           <div
@@ -458,12 +478,13 @@ function TextCards({ cards, format }: { cards: TextCardProps[]; format: Format }
               fontSynthesis: "none",
               color: root.colour,
               letterSpacing: `${(root.letterSpacing + (look.spacing ?? 0)).toFixed(4)}em`,
+              ...(look.reveal !== undefined ? { maskImage: inkMask(look.reveal), WebkitMaskImage: inkMask(look.reveal) } : {}),
               textShadow: "0 2px 18px rgba(0,0,0,0.6)",
               opacity: look.opacity,
               filter: look.blur > 0.01 ? `blur(${look.blur.toFixed(2)}px)` : undefined,
             }}
           >
-            {line(root, null, { ...REST, ...(rootChars !== undefined ? { chars: rootChars } : {}) })}
+            {line(root, null, { ...REST, ...(rootChars !== undefined ? { chars: rootChars } : {}), ...(rootWave !== undefined ? { wave: rootWave } : {}) })}
             {stacked.map((c) => line(c, root))}
           </div>
         );
