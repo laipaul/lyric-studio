@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import os from "node:os";
 import path from "node:path";
 
-import { ffmpegBin, openWorkspace, project, renderJob, variation, type Workspace } from "@lyric/db";
+import { ffmpegBin, openWorkspace, project, renderJob, variation, videoMark, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -122,6 +122,24 @@ describe("song cards", () => {
     expect(card.lastRun).toBe(new Date(2026, 0, 3, 9, 0).toISOString());
     expect(card).toMatchObject({ artist: "Pômé", ep: "In The Mood for Life", hasLyrics: true });
     expect(card.cover).toMatch(/\/cover\.jpg$/);
+    expect(by.reels.approved).toBe(0);
+    expect(card.sameCover).toEqual([]);
+  });
+
+  it("approved videos are counted per platform over every run; songs sharing a cover name each other (Step H)", async () => {
+    const id = ws.db.select().from(project).get()!.id;
+    const exportsDir = songPathsById(ws, id).exports;
+    // An approved Reels video in the older run still counts (it can be posted).
+    ws.db.insert(videoMark).values({ project_id: id, video: path.relative(ws.dir, path.join(exportsDir, "2026-01-02_1030", "reels", "v1.manifest.json")).split(path.sep).join("/"), status: "approved" }).run();
+    expect(Object.fromEntries(listSongs(ws)[0].platforms.map((p) => [p.name, p])).reels.approved).toBe(1);
+    // A second song with the very same cover picture.
+    execFileSync(ffmpegBin(), ["-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=3", path.join(inDir, "Second Song.wav")]);
+    await createSong(ws, { song: path.join(inDir, "Second Song.wav"), lyrics: path.join(inDir, "lyrics.txt"), cover: path.join(inDir, "cover.jpg") });
+    const cards = listSongs(ws);
+    const second = cards.find((c) => c.title === "Second Song")!;
+    const first = cards.find((c) => c.id === id)!;
+    expect(second.sameCover).toEqual([first.title]);
+    expect(first.sameCover).toEqual(["Second Song"]);
   });
 });
 

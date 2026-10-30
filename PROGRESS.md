@@ -4,6 +4,21 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Step H — Library cards ✅ (to verify on the Windows PC)
+- **One colour per platform chip:** grey = not made, amber = made but not approved yet ("to review"), green =
+  at least one approved video (the number = approved videos), red = failed or stopped (hover: the reasons, and
+  Resume for a stopped run). No more green "0": a platform whose videos were all discarded is grey.
+- **Readable chips:** full names (Reels, TikTok, Shorts, YouTube, Canvas) that wrap instead of being cut off;
+  "Standard" only shows when the song has Standard videos. **Titles on 2 lines.**
+- **Summary line** per card: "2/5 ready · 1 to review · 1 error" (or "No videos yet").
+- **One button per card:** Generate (no videos yet), Fix (a failed run -> Videos tab), Resume (a stopped run,
+  one click), Review (videos waiting for approval -> Videos tab); none when everything made is approved.
+- **"Same cover as …"** when two songs use the very same cover picture.
+- **Filters** All · No videos · Needs review · Errors · Ready (with counts) and **Sort** Last made · Title ·
+  Date added.
+- Tests: library-status.test.ts (chip colours, counts, summary, action, filters, sorting), library.test.ts
+  (approved per platform over every run, same cover); browser: library.e2e.ts (now part of pnpm test:e2e).
+
 ### Tidy-up — a short brief, details in docs/ ✅ (30 Oct 2026; no app changes)
 - CLAUDE.md is now ~9 KB (was 55 KB): what we build, the guiding principle, the hard rules, the stack, how to work
   with the user, and an index of docs/. Every rule moved word for word into docs/<area>.md (screens, data model,
@@ -232,7 +247,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
    docs/lyric-timing.md, docs/collections.md), opened only when working on that feature; PROGRESS.md keeps the
    last 5 steps + open issues, older history to docs/history.md. Nothing may be lost: every rule moves, none is
    dropped.
-3. **Step H: Library cards** — one status colour system (grey not made / amber to review / green approved /
+3. ✅ **Step H: Library cards (built 30 Oct, to verify)** — one status colour system (grey not made / amber to review / green approved /
    red failed), short platform labels that never truncate, a "4/6 ready · 1 error" line, 2-line titles, a
    Generate / Fix button on the card, filters (All · No videos · Needs review · Errors · Ready) and sorting,
    a warning when two songs share the same cover. The card becomes the entry to the song's stages (item 4).
