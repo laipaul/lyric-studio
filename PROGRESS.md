@@ -1341,7 +1341,7 @@ rest was in sync.
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
 
 ## Backlog (not scheduled yet)
-- **Delete a song (cleanup; asked 30 Oct, after the freeze)**: the song card's ⋯ menu -> Delete (asks first),
+- **Delete a song (cleanup; asked 30 Oct, after the freeze)**: the song card's ⋯ menu -> Delete (asks first), exactly like Collections (the user, 30 Oct):
   like Collections: the folder moves to songs\_removed\<title> (removed <date>), never deleted; its database
   rows hidden; "Removed songs" with Restore; not while it renders.
 - **Colour grading (plan approved, not built yet)**: a look per brand -> collection (look.json) -> song
