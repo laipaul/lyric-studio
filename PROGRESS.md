@@ -281,6 +281,26 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
    with ✅ / 🟡 / 🔴 / not made; "Make all" queues every missing video of the release (overnight); per-artist
    **looks** (named complete styles, e.g. "Life Lyrics Cinematic", "Pômé Polaroid") apply to a whole release;
    Scheduled / Published with manually entered results as planned for 6.3.
+
+**UX order agreed 30 Oct 2026 (after the Style tab simplification and an outside UX review).** Do these
+before Releases step 2 and the Lyric Sheet, one step each, plan first:
+- **U1. Simpler font cards (Shape):** each card = picture, name, ✓ when chosen; descriptions and font
+  details on hover/click; warnings only on the chosen look, as one plain line; readability over the clips is
+  the app's job (it adds the backing by itself when needed), not a setting for the user.
+- **U2. One big live preview that stays on screen (Shape):** fonts + effect + accent together on the song's
+  own clip, updating at once with every choice; replaces the small per-card and per-effect previews.
+- **U3. Review & Post around the videos:** per platform, the approved (else the best) video first, then the
+  alternatives; run-by-run history as a secondary view.
+- **U4. Clearer wording:** one meaning each for made / ready / approved everywhere (Library, Releases, stages);
+  verdict badge "Good · 1 to improve" with the point on hover; a one-line summary before Make starts (videos,
+  platforms, length, clips); after generating, go straight to Review; Make's per-run choices clearly marked
+  "this run only" vs saved to the song.
+- **U5.** Then Releases step 2 (item 5 above) and the Lyric Sheet (item 6).
+Later (not scheduled): Library "Continue working" section, auto-director (after complete looks), collection merge.
+Product note: the app is for the user's own use; once fully tested on his own songs he may sell it to other
+artists as a one-off purchase installed on their own PC (like Borumi). Not now — but avoid choices that would
+block that (hard-coded personal paths, single-artist assumptions).
+
 6. **Lyric Sheet + section retakes** (ideas from Borumi): the song as a page (sections as headed blocks, each
    line with the clip it plays over as a thumbnail; drag a clip onto a line, move it down a line); "Try another
    take" per section with a quick low-res preview, both takes kept. Later: a **clip shopping list** before
