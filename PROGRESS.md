@@ -302,6 +302,15 @@ before Releases step 2 and the Lyric Sheet, one step each, plan first:
 - ✅ (built 30 Oct, to verify) **U2. One big live preview that stays on screen (Shape):** fonts + effect + accent together on the song's
   own clip, updating at once with every choice; replaces the Set effect's small player (as built: the font
   cards keep their small pictures as the visual picker; pointing at a card tries it in the big preview).
+- **U2b. Storyboard simplified (Shape; added 30 Oct after an outside review):** header = a short summary of
+  what the app decided (Pacing, Transitions, Ending, Section + the predicted verdict, e.g. "Ready to
+  generate"); the detailed analysis lines folded under "View technical analysis" (no invented "mood": only
+  what the app really decides); three clearly labelled tracks Music (taller waveform) / Lyrics / Video (shots
+  with thumbnail + short name), same precise timing and dragging; click a lyric line = the preview jumps
+  there, a selected shot is highlighted (check what already works, add only what is missing); a shorter
+  selected-shot panel ("Shot 5: 01_dress · 5.6 s · speed 0.92× · best moment chosen automatically") with
+  "Adjust shot" for in/out, speed and the rest; a fixed "Next: Make →" at the bottom of Shape (Style and
+  Storyboard) with a status line ("Storyboard ready · 5 shots") — moved here from U4.
 - **U3. Review & Post around the videos:** per platform, the approved (else the best) video first, then the
   alternatives; run-by-run history as a secondary view.
 - **U4. Clearer wording:** one meaning each for made / ready / approved everywhere (Library, Releases, stages);
