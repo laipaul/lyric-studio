@@ -319,6 +319,17 @@ before Releases step 2 and the Lyric Sheet, one step each, plan first:
   platforms, length, clips); after generating, go straight to Review; Make's per-run choices clearly marked
   "this run only" vs saved to the song.
 - **U5.** Then Releases step 2 (item 5 above) and the Lyric Sheet (item 6).
+**Open decisions (paused 30 Oct 2026, 23:40 — the user is rethinking the strategy; build nothing of this until he decides):**
+- Style tab rebuild proposed: each setting shown once (the display-only effect / add-on rows removed), every
+  change saved at once (no Save to recipe buttons; a Verses / Choruses switch for the effect), compact lines for
+  Words on screen and What to make, Automatic folded, big preview + "Next: Make →", "Use for all my songs" and
+  locks in a ⋯ menu. Font pairings: dropdown (built) or Canva-style text tiles — undecided.
+- Canva: no Canva-style editor (too much, and against the guiding principle). Idea: design looks in Canva and
+  import them (.pptx keeps text boxes with font, size, colour, position; SVG outlines text; Canva animations
+  and Canva-only fonts don't transfer).
+- The user's worry: being frozen in one style. Proposed answer: looks as a growing collection per artist, a look
+  is only a starting point per song, "Try 3 looks" in Make, vary looks across a release, a nudge when the last
+  posts all used the same look.
 Later (not scheduled): Library "Continue working" section, auto-director (after complete looks), collection merge.
 Product note: the app is for the user's own use; once fully tested on his own songs he may sell it to other
 artists as a one-off purchase installed on their own PC (like Borumi). Not now — but avoid choices that would
