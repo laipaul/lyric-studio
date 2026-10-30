@@ -178,6 +178,11 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   reactivity; it saves versioned, data-only presets to the effects library. Not scheduled yet.
 
 ## Known issues
+- **Next bug-fix round (noted 30 Oct):** (1) the song page header chips still use the old colours (green "Standard 0",
+  orange "Reels !"): show the Library card's chips (grey —, amber to review, green approved, red failed / stopped,
+  Standard only when made); (2) old Tasks entries say "2 PASS" (messages written before the wording fix) and two
+  old stopped runs have no Resume button; (3) lint: 3 errors in song-view.tsx / storyboard-tab.tsx (setState in an
+  effect, a hook in a callback), already there before 30 Oct.
 - Fixed: Videos tab polish. The platform heading shows the verdict of its videos ("All 3 ready to post" /
   "1 of 3 could be better" / "2 of 3 not ready"; nothing for one video) instead of the old WARN / PASS badge
   (interrupted / failed keep their own badge with Resume; Compare's QA row is now "Verdict"). Platform groups
