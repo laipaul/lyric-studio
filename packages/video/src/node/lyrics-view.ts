@@ -16,7 +16,7 @@ import { lyricFrames, rawLyric, type RenderBase } from "../compose";
 import { VIDEO } from "../config";
 import { parseHandTimes, withHandTimes } from "../hand-times";
 import { HOOK_MARKER, normalizeLyric, type TimedLine } from "../lrc";
-import { applyGuard, type GuardMove } from "../vocal-guard";
+import { STRETCHED_WORD_MS, applyGuard, flagReason, likelyStart, type GuardMove } from "../vocal-guard";
 import { CHECKED_BY_EAR_FILE, checkedByEar, type EarCheck } from "../checked-by-ear";
 import { loadBrand } from "./brand";
 import { loadFontCatalog } from "./font-catalog";
@@ -37,7 +37,9 @@ export type LyricsLine = {
   confidence: number | null;
   lowConfidence: boolean;
   check: VocalGuard["check"]["lines"][number] | null; // the vocal-start check of the last pnpm make (if it checked this line)
-  flagged: string | null; // why it is flagged for review
+  flagged: string | null; // why it is flagged for review (technical, for a tooltip)
+  flagReason: string | null; // the same in plain words
+  likelyStartMs: number | null; // a flagged line's likely start (two signals within ~1 s agree; the earlier one): the one-click "Use ..."
   screen: { fadeInMs: number | null; readableMs: number; leaveMs: number }; // what the viewer sees (song time)
   sungEndMs: number | null;
   checkedByEar: string | null; // when the user checked it by ear (still the same alignment, words and start)
@@ -198,6 +200,9 @@ export async function lyricsView(ws: Workspace, projectId: string): Promise<Lyri
   const out: LyricsLine[] = lines.map((l, i) => {
       const check = guard?.check?.lines.find((c) => c.number === i + 1) ?? null;
       const flagged = !hand.skip.has(i) && check?.result === "flagged for review" ? check.why : null;
+      const flaggedCheck = flagged !== null && check ? { stampMs: check.stamp_ms, voiceMs: check.voice_ms, wordsMs: check.words_ms, durationMs: check.duration_ms } : null;
+      const heldNote = !!check && check.first_word_ms !== null && check.first_word_ms >= STRETCHED_WORD_MS && (l.isHook || i === lines.length - 1);
+      const likely = flaggedCheck ? likelyStart(flaggedCheck) : null;
       const confidence = reports[i]?.confidence ?? null;
       return {
         number: i + 1,
@@ -210,6 +215,8 @@ export async function lyricsView(ws: Workspace, projectId: string): Promise<Lyri
         lowConfidence: confidence !== null && confidence < LOW,
         check,
         flagged,
+        flagReason: flaggedCheck ? flagReason(flaggedCheck, heldNote) : null,
+        likelyStartMs: likely !== null && (i + 1 >= lines.length || likely < lines[i + 1].start_ms) ? likely : null, // never past the next line
         screen: { fadeInMs: frames[i].enterFrame !== undefined ? ms(frames[i].enterFrame!) : null, readableMs: ms(frames[i].startFrame), leaveMs: ms(frames[i].endFrame) },
         sungEndMs: l.sung_end_ms ?? null,
         checkedByEar: valid.has(i) ? (ear.find((c) => c.number === i + 1)?.at ?? null) : null,

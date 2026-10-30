@@ -4,8 +4,8 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
-import { REPO_ROOT, absPath, makeRun, project as projectTable, renderJob, variation, type MakeRun, type Workspace } from "@lyric/db";
-import { and, desc, eq, gte, inArray, isNull } from "drizzle-orm";
+import { REPO_ROOT, absPath, storedPath, makeRun, project as projectTable, renderJob, variation, type MakeRun, type Workspace } from "@lyric/db";
+import { and, desc, eq, gt, gte, inArray, isNull } from "drizzle-orm";
 
 import { parseEffectChoice } from "../effects/names";
 import { processAlive } from "./jobs";
@@ -161,7 +161,7 @@ export const platformListLabel = (platforms: string | undefined) => (platforms ?
 export function enqueueRun(ws: Workspace, projectId: string, options: RunOptions, label?: string): MakeRun {
   return ws.db
     .insert(makeRun)
-    .values({ project_id: projectId, options_json: options as Record<string, unknown>, label: label ?? (options.resume ? `Resume ${platformListLabel(options.platforms)}` : platformListLabel(options.platforms)) })
+    .values({ project_id: projectId, options_json: options as Record<string, unknown>, ...(options.resume && options.resumeFolder ? { export_dir: storedPath(ws, options.resumeFolder) } : {}), label: label ?? (options.resume ? `Resume ${platformListLabel(options.platforms)}` : platformListLabel(options.platforms)) })
     .returning()
     .get();
 }
@@ -197,7 +197,7 @@ export function stopRequested(ws: Workspace, id: string): boolean {
 }
 
 export type TerminalRun = { projectId: string; title: string; run: string | null; platforms: string[]; videos: { platform: string; status: string; progress: number }[] };
-export type Tasks = { runs: (MakeRun & { title: string })[]; terminal: TerminalRun[] };
+export type Tasks = { runs: (MakeRun & { title: string; resumable: boolean })[]; terminal: TerminalRun[] }; // resumable: canResume and no later run of that folder is queued, running or done
 
 // The Tasks menu: studio runs (queued, running, and those finished in the last 24 hours) and runs
 // started in the terminal that are rendering right now.
@@ -235,8 +235,11 @@ export function listTasks(ws: Workspace, now = new Date()): Tasks {
       .all(),
   ]
     .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
-    .slice(0, 12)
-    .map((r) => ({ ...r, title: titles.get(r.project_id) ?? "?" }));
+    .slice(0, 12);
+  // A later run into the same folder (a Resume) that is waiting, going or done takes over: the old entry no longer offers Resume.
+  const takenOver = (r: MakeRun) =>
+    ws.db.select({ id: makeRun.id }).from(makeRun).where(and(eq(makeRun.project_id, r.project_id), eq(makeRun.export_dir, r.export_dir!), gt(makeRun.created_at, r.created_at), inArray(makeRun.status, ["queued", "running", "done"]))).get() !== undefined;
+  const listed = runs.map((r) => ({ ...r, title: titles.get(r.project_id) ?? "?", resumable: canResume(r) && !takenOver(r) }));
   const open = ws.db
     .select({ status: renderJob.status, progress: renderJob.progress, pid: renderJob.pid, projectId: variation.project_id, overrides: variation.overrides_json })
     .from(renderJob)
@@ -253,5 +256,5 @@ export function listTasks(ws: Workspace, now = new Date()): Tasks {
     g.videos.push({ platform, status: j.status, progress: j.progress });
     groups.set(key, g);
   }
-  return { runs, terminal: [...groups.values()] };
+  return { runs: listed, terminal: [...groups.values()] };
 }

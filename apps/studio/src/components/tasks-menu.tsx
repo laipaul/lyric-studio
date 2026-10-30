@@ -1,12 +1,13 @@
 "use client";
 
-import { Eraser, ListChecks, Square, Terminal } from "lucide-react";
+import { Eraser, ListChecks, RotateCw, Square, Terminal } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Tasks } from "@lyric/video/runs";
 
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 
@@ -78,8 +79,51 @@ export function TasksMenu() {
     void load();
   };
 
+  // Resume: queues the missing videos (also platforms that never started) into the run's own folder.
+  const [resuming, setResuming] = useState<Set<string>>(new Set());
+  const [resumeError, setResumeError] = useState<Record<string, string>>({});
+  const resume = async (run: Run) => {
+    const folder = run.export_dir?.split(/[\\/]/).filter(Boolean).pop();
+    if (!folder) return;
+    setResuming((s) => new Set(s).add(run.id));
+    setResumeError((e) => ({ ...e, [run.id]: "" }));
+    try {
+      const r = await api("/api/runs/resume", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId: run.project_id, folder }) });
+      const body = (await r.json()) as { error?: string };
+      if (!r.ok) throw new Error(body.error ?? "Could not resume");
+      window.dispatchEvent(new Event("lyric-tasks-changed"));
+    } catch (e) {
+      setResumeError((m) => ({ ...m, [run.id]: (e as Error).message }));
+    } finally {
+      setResuming((s) => {
+        const n = new Set(s);
+        n.delete(run.id);
+        return n;
+      });
+      void load();
+    }
+  };
+
+  // Closes on a click outside (the panel and the Tasks button stay open) and on Escape.
+  const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+
   return (
-    <div className="relative ml-auto">
+    <div ref={wrap} className="relative ml-auto">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -154,11 +198,17 @@ export function TasksMenu() {
               {ACTIVE.has(run.status) || run.progress < 1 ? <Bar value={run.status === "queued" ? 0 : run.progress} /> : null}
               {run.current ? <p className="text-xs">{run.current}</p> : null}
               {run.message && !ACTIVE.has(run.status) ? <p className="text-muted-foreground text-xs whitespace-pre-line">{run.message}</p> : null}
-              {ACTIVE.has(run.status) && !run.stop_requested ? (
-                <button type="button" onClick={() => stop(run)} className="text-muted-foreground hover:text-foreground flex w-fit items-center gap-1 text-xs">
-                  <Square className="size-3" /> {run.status === "queued" ? "Cancel" : "Stop after this video"}
-                </button>
+              {ACTIVE.has(run.status) ? (
+                <Button type="button" size="sm" variant="outline" disabled={run.stop_requested} onClick={() => stop(run)} className="w-fit" data-stop={run.stop_requested ? "requested" : "ready"}>
+                  <Square /> {run.stop_requested ? "Stopping after this video…" : run.status === "queued" ? "Cancel" : "Stop after this video"}
+                </Button>
               ) : null}
+              {run.resumable ? (
+                <Button type="button" size="sm" variant="outline" disabled={resuming.has(run.id)} onClick={() => resume(run)} className="w-fit" data-resume>
+                  <RotateCw /> {resuming.has(run.id) ? "Queuing…" : "Resume"}
+                </Button>
+              ) : null}
+              {resumeError[run.id] ? <p className="text-xs text-red-300" data-resume-error>{resumeError[run.id]}</p> : null}
             </div>
           ))}
         </div>

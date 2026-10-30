@@ -98,6 +98,8 @@ describe("the Lyrics tab", () => {
     ]);
     const hook = v.lines![1];
     expect(hook.flagged).toBe("only words 1:10.1 (+1.6 s); no second signal agrees");
+    expect(hook.flagReason).toBe("The singing may start about 1.5 s later than shown. Listen with ▶.");
+    expect(hook.likelyStartMs).toBeNull(); // only one signal disagrees
     expect(hook.screen).toEqual({ fadeInMs: null, readableMs: 68_267, leaveMs: 72_767 }); // readable 0.25 s before its stamp (to the frame)
     // After the solo (a long gap): nothing on screen, then a 1 s fade-in before the first word.
     expect(v.lines![3].screen.fadeInMs).toBe(89_000);

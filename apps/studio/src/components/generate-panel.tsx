@@ -31,12 +31,13 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
   const [open, setOpen] = useState(initiallyOpen);
   const r = data.recipe;
   const locked = (field: string) => r.locked.includes(field);
-  const known = (list: string[]) => list.filter((p) => data.platforms.some((x) => x.name === p));
+  const choices = data.platforms.filter((p) => p.name !== "standard"); // the "Standard" preset is never offered (pnpm make still uses it without --platforms)
+  const known = (list: string[]) => list.filter((p) => choices.some((x) => x.name === p));
   const from = preset ?? null;
   const startPlatforms = from && known(from.platforms).length ? known(from.platforms) : known(r.platforms);
   // The recipe's platforms; none set: Reels + YouTube (the Style tab says so).
-  const fallback = ["reels", "youtube"].filter((p) => data.platforms.some((x) => x.name === p));
-  const [platforms, setPlatforms] = useState<string[]>(startPlatforms.length ? startPlatforms : fallback.length ? fallback : [data.platforms[0]?.name ?? "standard"]);
+  const fallback = ["reels", "youtube"].filter((p) => choices.some((x) => x.name === p));
+  const [platforms, setPlatforms] = useState<string[]>(startPlatforms.length ? startPlatforms : fallback.length ? fallback : choices[0] ? [choices[0].name] : []);
   const videosFor = (name: string, preset: number) => (pictureSets.length >= 2 && name !== "canvas" ? pictureSets.length : variations ? Number(variations) : (r.variations[name] ?? r.variations["*"] ?? preset));
   const recipeCollections = data.chosen.length || data.songClips ? data.chosen : data.collections.slice(0, 1);
   const runCollections = from?.collections && !locked("collections") ? from.collections.filter((c) => data.collections.includes(c)) : null;
@@ -184,7 +185,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-2 text-sm font-medium">Platforms</legend>
             <div className="flex flex-wrap gap-2">
-              {data.platforms.map((p) => {
+              {choices.map((p) => {
                 const on = platforms.includes(p.name);
                 return (
                   <button
@@ -436,7 +437,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
           ) : null}
           <div className="flex items-center justify-end gap-3">
             <span className="text-muted-foreground text-xs">
-              {platforms.length ? `${data.platforms.filter((p) => platforms.includes(p.name)).reduce((a, p) => a + videosFor(p.name, p.variations), 0)} video(s)` : "choose a platform"}
+              {platforms.length ? `${choices.filter((p) => platforms.includes(p.name)).reduce((a, p) => a + videosFor(p.name, p.variations), 0)} video(s)` : "choose a platform"}
             </span>
             <Button type="submit" disabled={busy || !platforms.length || !data.lyricsReady}>
               <Sparkles /> {busy ? "Queuing…" : "Generate"}

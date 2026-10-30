@@ -494,7 +494,7 @@ Cause: a line was treated as sung until the next line started (and the next line
   Cloud check: browser run on a workspace with 14 runs (badges, reasons on hover and click,
   interrupted resume, marks, discard / restore, compare playing in sync, post window, download).
 
-### Step 6.2b — Generate, worker queue, live Tasks menu, Stop / Resume ✅ (to verify on the Windows PC)
+### Step 6.2b — Generate, worker queue, live Tasks menu, Stop / Resume ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - Generate panel on the song page: platforms (videos each), clips collection (last used first),
   verse / hook effect + intensity (the artist's brand defaults), title / artist / EP / new cover;
   advanced: videos per platform, section, YouTube layout, allow fill, re-align. Checked before it is
@@ -717,6 +717,25 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   longer than the song -> whole song), a fixed section over the limit (QA WARN, not trimmed), --length,
   effect hints. Browser check: Style (per-platform rows, lock, fonts and warning, length), Generate
   (recipe option, locked hook effect, chips with length), Assets (path, hints).
+
+### Fix — verification pass 30 Oct (A Heart For Two) ✅ (to verify on the Windows PC)
+- **Tasks:** a stopped or interrupted run that can still resume has a **Resume** button in its entry (POST
+  /api/runs/resume into its own folder, with every platform of the run, also those that never started); once a
+  Resume of that folder is waiting, going or done, the old entry no longer offers it (Tasks runs[].resumable).
+  The result line uses the verdicts ("3 videos: 2 ready to post · 1 to improve", from the same assessment as
+  the Videos tab) instead of PASS / WARN. "Stop after this video" is a real button ("Stopping after this
+  video…" once asked). The panel closes on a click outside it and on Escape.
+- **Stop between videos (checked):** a stop asked while video N renders never starts video N+1 or a later
+  platform (shouldStop before every video and platform); test with 2 platforms × 3 videos, then Resume makes
+  the rest.
+- **Lyrics tab:** flag reasons in plain words ("The singing may start about 2 s later than shown. Listen with
+  ▶."; the technical reason on hover; vocal-guard.ts flagReason). A flagged line with a likely start (two
+  signals within 1 s; the earlier one) gets **Use 1:04.0** next to ▶: saved at once as a hand-set start
+  (likelyStart). Sticky column headers (the lines scroll in their own box); "Lands on…" never truncates.
+- **Generate:** the "Standard" preset is no longer offered (pnpm make without --platforms unchanged).
+- Tests: runs (resume with a platform that never started, resumable), make (stop during v1 of 3), vocal-guard
+  (likelyStart, flagReason), lyrics-view, runSummary verdicts; e2e lyrics-tab (plain reason, tooltip, sticky
+  header, label not cut) and videos-post pass. Not browser-tested: the Tasks menu (Resume, outside click).
 
 ### Lyrics tab: "Checked by ear" ✅ (to verify on the Windows PC)
 - On a low-confidence or flagged line: **Checked by ear** (click again to take it off). Stored with the
@@ -995,7 +1014,7 @@ These platforms play a video in a loop, so the wrap-around from the last frame t
   same clip first and last, and the Reels continuation that passes; a harmony clash C -> F#; phrase cut;
   the end choice preferring the better loop and saying why; shuffle first != last over 300 seeds).
 
-### Step G — Collections: rename, delete, clearer cards ✅ (to verify on the Windows PC)
+### Step G — Collections: rename, delete, clearer cards ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - Each collection card has a **⋯ menu**: **Rename**, **Open folder**, **Delete…** (fixes "a collection's
   name cannot be changed or deleted").
 - **Rename**: the folder gets the new name; every song using it follows (song.json "collections", also a
@@ -1013,7 +1032,7 @@ These platforms play a video in a loop, so the wrap-around from the last frame t
 - Tests: collections.test.ts (rename incl. database paths, moves and songs; delete; restore; same clips);
   browser: collections.e2e.ts (⋯ menu, rename, delete with the song named, restore, empty card).
 
-### Step F — Collections page ✅ (to verify on the Windows PC)
+### Step F — Collections page ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - Header **Collections** next to Library: a card per collection (thumbnails, clip count, video length,
   what 9:16 and 16:9 can use, which songs use it) and **New collection**.
 - A collection's page: thumbnail grid (hover plays the clip), drag-and-drop or **Add clips** (copied in,
@@ -1051,7 +1070,7 @@ These platforms play a video in a loop, so the wrap-around from the last frame t
   (a Reel with the opening + cover, off by default); browser tests: Style select, Assets tagline, card
   editor font -> brand.json.
 
-### Step C — Pro assessment, reactions, better Canvas ✅ (to verify on the Windows PC)
+### Step C — Pro assessment, reactions, better Canvas ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **Pro assessment** (src/assess.ts): each video gets ✅ Ready to post / 🟡 Good — N things to improve /
   🔴 Not ready — fix N things first, with at most 3 points in plain words and the creative action for each,
   "Handled by the app" (pacing, transitions, ending) and the technical checks one click away. Videos tab:
@@ -1068,7 +1087,7 @@ These platforms play a video in a loop, so the wrap-around from the last frame t
 - Tests: assess.test.ts, reactions.test.ts (real plans with the stand-in renderer), make test (Canvas);
   browser tests: verdict on the tile, a reaction applied to song.json, the Storyboard's prediction.
 
-### Step B — Automatic pacing and transitions ✅ (to verify on the Windows PC)
+### Step B — Automatic pacing and transitions ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **Pacing** (Shot length "auto", the new default): the app reads the song's feel from how densely it is
   sung (calm / mid-paced / driving; the tempo alone misleads: ballads are often tracked at 130+ BPM) and the
   clips' usable length, and picks whole-bar shots for verses and hooks that the clips can fill without
@@ -1138,7 +1157,7 @@ Reported: after `git pull` (1e233c0) the app did not show the Lyrics tab, and St
 - pnpm app:serve says why it builds ("the code changed since the last build (built from …, the code is
   now …)") or that the build is up to date.
 
-### Step 5c.2 — Lyrics tab ✅ (to verify on the Windows PC)
+### Step 5c.2 — Lyrics tab ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 First real case: A Heart For Two ~1:10, the hook "You had a heart for two" whose karaoke highlight came
 1-2 s early.
 - **Lyrics tab** (song page, after Assets): every line with its time stamp (the stored alignment), where
@@ -1164,7 +1183,7 @@ First real case: A Heart For Two ~1:10, the hook "You had a heart for two" whose
   lyrics-tab.e2e.ts (part of pnpm test:e2e: the same case in the app, the song plays, the label removed
   with the warning first, restore).
 
-### Step 5c.1d — Hook lines always checked, `--all`, previous line's voice ✅ (to verify on the Windows PC)
+### Step 5c.1d — Hook lines always checked, `--all`, previous line's voice ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 Test result on the PC: "almost perfect". One glitch: A Heart For Two ~1:10, hook "You had a heart for
 two": the pink karaoke highlight starts on "You" 1-2 s before it is sung (an early stamp); that line was
 not among the checked lines.
@@ -1177,7 +1196,7 @@ not among the checked lines.
 - Tests: the 1:10 hook (stamp 1.5 s early, right after the previous line: moved on voice + words), not
   a hook -> not checked by default but with --all, a line sung on without a pause.
 
-### Step 5c.1c — Vocal-start check: no move on one signal, flags for review ✅ (to verify on the Windows PC)
+### Step 5c.1c — Vocal-start check: no move on one signal, flags for review ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 From check-start on the PC. A Heart For Two: line 1 0:12.4 -> 0:21.0 (words + 9.9 s first word, right);
 lines 14 and 28 "And a place" moved -2.0 s on the recognised words alone (wrong to move); line 40 moved
 +3.0 s on a 3.4 s first word alone (wrong to move). Love Is A Good Thing: nothing moved, but line 39
@@ -1207,7 +1226,7 @@ lines 14 and 28 "And a place" moved -2.0 s on the recognised words alone (wrong 
   earlier start inside the previous line is flagged), one signal alone never moves, the flagged printout
   and summary, QA "Line starts to review".
 
-### Step 5c.1b — Vocal-start check: three signals, always printed ✅ (to verify on the Windows PC)
+### Step 5c.1b — Vocal-start check: three signals, always printed ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 Reported: on A Heart For Two the check ran but printed nothing and line 1 stayed ~10 s early.
 - **Why it did not fire**: "voice" was anything within 20 dB of the loudest 5% of the vocal track, for
   0.12 s. Instrument bleed in the Demucs vocal track (and breaths, a hum) passes that easily, so the voice
@@ -1268,7 +1287,7 @@ Reported: on A Heart For Two the check ran but printed nothing and line 1 stayed
   `pnpm test:e2e`): settings and differences, Use these settings, Switch to auto, Post empty then the
   approved video only with its caption, Clear finished with the question.
 
-### Step 5c.1 — Lyric timing: vocal-start guard and the gap display rule ✅ (to verify on the Windows PC)
+### Step 5c.1 — Lyric timing: vocal-start guard and the gap display rule ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 Reported on A Heart For Two (YouTube, whole song): line 1 appeared several seconds before it is sung; the
 rest was in sync.
 - **Cause: the aligner, not the display.** The composition never shows line 1 early by itself: the

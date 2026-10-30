@@ -10,6 +10,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const clock = (ms: number) => `${Math.floor(ms / 60_000)}:${((ms % 60_000) / 1000).toFixed(2).padStart(5, "0")}`;
+const clockD = (ms: number) => `${Math.floor(ms / 60_000)}:${((ms % 60_000) / 1000).toFixed(1).padStart(4, "0")}`; // m:ss.d
 const signed = (ms: number) => `${ms >= 0 ? "+" : "−"}${(Math.abs(ms) / 1000).toFixed(1)} s`;
 const NUDGES = [-500, -100, 100, 500];
 const PREVIEW_MS = 3_000;
@@ -74,6 +75,14 @@ export function LyricsTab({ projectId }: { projectId: string }) {
   };
   const startOf = (l: LyricsLine) => (pending.has(l.number) ? (pending.get(l.number) ?? l.alignedMs) : l.startMs);
   const nudge = (l: LyricsLine, delta: number) => change((p) => p.set(l.number, Math.max(0, Math.round(startOf(l) + delta))));
+  // "Use 1:04.0": the likely start as a nudge, saved at once (with any other unsaved changes).
+  const takeLikely = (l: LyricsLine) => {
+    if (l.likelyStartMs === null) return;
+    const next = new Map(pending).set(l.number, l.likelyStartMs);
+    setHistory((h) => [...h, pending]);
+    setPending(next);
+    void save(next);
+  };
   const reset = (l: LyricsLine) => change((p) => (l.source === "hand" ? p.set(l.number, null) : p.delete(l.number)));
 
   function play(l: LyricsLine) {
@@ -114,8 +123,8 @@ export function LyricsTab({ projectId }: { projectId: string }) {
     await load();
   }
 
-  async function save() {
-    const changes = [...pending.entries()].map(([number, ms]) => ({ number, ms }));
+  async function save(from: Pending = pending) {
+    const changes = [...from.entries()].map(([number, ms]) => ({ number, ms }));
     const result = await post({ action: "times", changes });
     if (!result) return;
     setPending(new Map());
@@ -200,18 +209,18 @@ export function LyricsTab({ projectId }: { projectId: string }) {
               {!data.anchors.clips.length ? <span className="text-amber-200">No clips to choose from: add clips in the Assets tab or choose a collection in Generate.</span> : null}
             </div>
             {!data.checkRan ? <p className="text-muted-foreground text-xs">The vocal-start check runs when a video is made (Generate, or pnpm make); its verdicts show here after the next video.</p> : null}
-            <div className="overflow-x-auto rounded-xl border">
+            <div className="max-h-[calc(100vh-12rem)] overflow-auto rounded-xl border" data-lines-scroll>
               <table className="w-full min-w-[960px] text-left text-sm">
-                <thead className="text-muted-foreground border-b text-xs">
+                <thead className="text-muted-foreground text-xs">
                   <tr>
-                    <th className="px-3 py-2 font-normal">#</th>
-                    <th className="px-3 py-2 font-normal">Line</th>
-                    <th className="px-3 py-2 font-normal">Stamp</th>
-                    <th className="px-3 py-2 font-normal">Starts</th>
-                    <th className="px-3 py-2 font-normal">On screen</th>
-                    <th className="px-3 py-2 font-normal">Confidence</th>
-                    <th className="px-3 py-2 font-normal">Adjust</th>
-                    <th className="px-3 py-2 font-normal">Lands on</th>
+                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">#</th>
+                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Line</th>
+                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Stamp</th>
+                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Starts</th>
+                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">On screen</th>
+                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Confidence</th>
+                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Adjust</th>
+                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap min-w-36">Lands on</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -238,7 +247,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                           </div>
                           {l.flagged ? (
                             <p className="mt-1 flex items-start gap-1 text-xs text-amber-200" data-flag-reason>
-                              <AlertTriangle className="mt-0.5 size-3 shrink-0" /> Flagged for review: {l.flagged}
+                              <AlertTriangle className="mt-0.5 size-3 shrink-0" /> <span title={l.flagged} data-flag-why>{l.flagReason ?? "Flagged for review. Listen with ▶."}</span>
                             </p>
                           ) : null}
                           {l.source === "vocal-start check" && l.check ? <p className="text-muted-foreground mt-1 text-xs">Moved by the vocal-start check: {l.check.why}</p> : null}
@@ -286,6 +295,11 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                             <button type="button" onClick={() => play(l)} className="text-muted-foreground hover:text-foreground ml-1 rounded-md border px-1.5 py-0.5" aria-label={`Play line ${l.number}`} data-play>
                               {playing === l.number ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
                             </button>
+                            {l.flagged && !l.checkedByEar && l.likelyStartMs !== null && !changed ? (
+                              <button type="button" disabled={busy} onClick={() => takeLikely(l)} className="border-brand/50 bg-brand/10 text-brand hover:bg-brand/20 rounded-md border px-2 py-0.5 text-[11px] tabular-nums whitespace-nowrap" title="Two signals agree on this start; the earlier one is used (a line a little early is better than late). Saves at once." data-use-likely>
+                                Use {clockD(l.likelyStartMs)}
+                              </button>
+                            ) : null}
                             {changed || l.source === "hand" ? (
                               <button type="button" onClick={() => reset(l)} className="text-muted-foreground hover:text-foreground rounded-md border px-1.5 py-0.5" aria-label={`Reset line ${l.number}`} title={l.source === "hand" ? "Back to the alignment (removes the hand-set time)" : "Undo the change on this line"} data-reset>
                                 <RotateCcw className="size-3.5" />
@@ -293,7 +307,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                             ) : null}
                           </div>
                         </td>
-                        <td className="px-3 py-2" data-anchor-cell>
+                        <td className="min-w-36 px-3 py-2" data-anchor-cell>
                           {anchor ? (
                             <div className="flex items-center gap-2" data-anchor={anchor.clip}>
                               <Thumb clip={anchorClip} />
@@ -309,7 +323,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                               </button>
                             </div>
                           ) : null}
-                          <button type="button" disabled={busy} onClick={() => setPicking(picking === l.number ? null : l.number)} className="text-muted-foreground hover:text-foreground mt-1 flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px]" data-anchor-pick>
+                          <button type="button" disabled={busy} onClick={() => setPicking(picking === l.number ? null : l.number)} className="text-muted-foreground hover:text-foreground mt-1 flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] whitespace-nowrap" data-anchor-pick>
                             <Clapperboard className="size-3" /> {anchor ? "Change" : "Lands on…"}
                           </button>
                           {problems.map((p) => (
@@ -337,7 +351,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
               <Button size="sm" variant="ghost" disabled={!history.length || busy} onClick={() => (setPending(history[history.length - 1]), setHistory((h) => h.slice(0, -1)))} data-undo>
                 <Undo2 /> Undo
               </Button>
-              <Button size="sm" disabled={!pending.size || busy} onClick={save} data-save-times>
+              <Button size="sm" disabled={!pending.size || busy} onClick={() => save()} data-save-times>
                 <Save /> {busy ? "Saving…" : `Save ${pending.size || ""} change${pending.size === 1 ? "" : "s"}`}
               </Button>
             </div>

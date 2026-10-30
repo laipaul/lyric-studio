@@ -216,8 +216,18 @@ export function songRuns(ws: Workspace, projectId: string, labels: Record<string
   return runs;
 }
 
+// The verdict of one video just made (its qa.txt + manifest, as the Videos tab reads them); null when they cannot be read.
+export function assessMade(qaFile: string, manifestFile: string): Assessment | null {
+  try {
+    const m = JSON.parse(readFileSync(manifestFile, "utf8")) as Manifest;
+    return assessVideo({ problems: parseQaReport(readFileSync(qaFile, "utf8")).problems, ...assessInput(m) });
+  } catch {
+    return null;
+  }
+}
+
 // What the assessment needs from a manifest: the shots (slow motion), the app's decisions, the Canvas.
-function assessInput(m: Manifest): Omit<Parameters<typeof assessVideo>[0], "problems"> {
+export function assessInput(m: Manifest): Omit<Parameters<typeof assessVideo>[0], "problems"> {
   const settings = (m.settings ?? {}) as Record<string, { text?: string } | unknown>;
   const text = (k: string) => (settings[k] as { text?: string } | null | undefined)?.text;
   const canvas = settings.canvas as { seconds?: number; possible_s?: number; need_clip_s?: number | null } | undefined;

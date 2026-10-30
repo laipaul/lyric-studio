@@ -6,6 +6,7 @@ import path from "node:path";
 import { makeRun, storedPath, type MakeRun, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
+import { assessMade } from "./exports";
 import { markInterruptedJobs } from "./jobs";
 import { failureSummary, makeVideos, type MakeOptions, type MakeResult, type RenderState } from "./make";
 import { claimNextRun, stopRequested, type RunOptions } from "./runs";
@@ -37,11 +38,14 @@ export function runCurrent(states: readonly State[]): string | null {
     .join(" · ");
 }
 
-// A short result line: "5 videos: 4 PASS, 1 WARN" (+ what failed or was stopped).
+// A short result line by the verdicts: "3 videos: 2 ready to post · 1 to improve" (+ what failed or was stopped).
+// The verdict is the Videos tab's (assessment of the qa + manifest); the QA summary only when that cannot be read.
 export function runSummary(result: MakeResult, stopped: boolean): string {
   const ok = result.variations.filter((v) => !v.error);
-  const warn = ok.filter((v) => v.qaSummary.startsWith("WARN")).length;
-  const parts = [`${ok.length} video${ok.length === 1 ? "" : "s"}${ok.length ? `: ${ok.length - warn} PASS${warn ? `, ${warn} WARN` : ""}` : ""}`];
+  const verdicts = ok.map((v) => assessMade(v.qaFile, v.manifestFile)?.verdict ?? (v.qaSummary.startsWith("WARN") ? "good" : "ready"));
+  const count = (verdict: string) => verdicts.filter((x) => x === verdict).length;
+  const split = [[count("ready"), "ready to post"], [count("good"), "to improve"], [count("not-ready"), "not ready"]].filter(([n]) => n).map(([n, t]) => `${n} ${t}`);
+  const parts = [`${ok.length} video${ok.length === 1 ? "" : "s"}${split.length ? `: ${split.join(" · ")}` : ""}`];
   if (stopped) parts.push("stopped: Resume makes the rest");
   const failures = failureSummary({ ...result, platforms: result.platforms.filter((p) => p.error !== "stopped before it started") });
   if (failures) parts.push(...failures.filter((l) => !l.startsWith("The other") && !l.startsWith("Render only") && !l.startsWith("No video")));

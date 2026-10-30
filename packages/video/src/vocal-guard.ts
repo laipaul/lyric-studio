@@ -61,6 +61,49 @@ export type LineCheck = {
   why: string;
   result: "moved" | "in time" | "kept" | "flagged for review" | "set by hand";
 };
+// The signals of a check that point at a start of their own: voice, words, and the word durations
+// (only when the first word is stretched, i.e. they differ from the stamp).
+const startSignals = (c: Pick<LineCheck, "stampMs" | "voiceMs" | "wordsMs" | "durationMs">) =>
+  [
+    { name: "voice", ms: c.voiceMs },
+    { name: "words", ms: c.wordsMs },
+    { name: "word durations", ms: c.durationMs !== null && Math.abs(c.durationMs - c.stampMs) > AGREE_MS ? c.durationMs : null },
+  ].filter((x): x is { name: string; ms: number } => x.ms !== null);
+
+export const LIKELY_START_MS = 1000; // two signals this close make a likely start (looser than AGREE_MS, which moves a line by itself)
+
+// A flagged line's likely start: two signals within LIKELY_START_MS of each other; the EARLIER of the pair
+// (a line a little early is better than late). The closest pair wins. null: no pair, or it is the stamp already.
+export function likelyStart(c: Pick<LineCheck, "stampMs" | "voiceMs" | "wordsMs" | "durationMs">): number | null {
+  const sig = startSignals(c);
+  let best: { gap: number; ms: number } | null = null;
+  for (let i = 0; i < sig.length; i++) {
+    for (let j = i + 1; j < sig.length; j++) {
+      const gap = Math.abs(sig[i].ms - sig[j].ms);
+      if (gap <= LIKELY_START_MS && (!best || gap < best.gap)) best = { gap, ms: Math.min(sig[i].ms, sig[j].ms) };
+    }
+  }
+  return best && Math.abs(best.ms - c.stampMs) > AGREE_MS ? Math.round(best.ms) : null;
+}
+
+// "about 2 s" / "about 1.5 s": whole seconds above 2 s, halves below (at least half a second).
+const aboutSeconds = (ms: number) => {
+  const s = Math.abs(ms) / 1000;
+  const r = s > 2 ? Math.round(s) : Math.max(0.5, Math.round(s * 2) / 2);
+  return `about ${r} s`;
+};
+
+// A flagged line in plain words (the technical `why` stays in a tooltip). heldNote: the first word is long
+// and this is a hook or the last line, so it may simply be a held note.
+export function flagReason(c: Pick<LineCheck, "stampMs" | "voiceMs" | "wordsMs" | "durationMs">, heldNote = false): string {
+  const sig = startSignals(c);
+  const far = sig.filter((x) => Math.abs(x.ms - c.stampMs) > AGREE_MS);
+  if (heldNote && far.length && far.every((x) => x.name === "word durations")) return "The first word may be a long held note. Listen with ▶.";
+  const ms = likelyStart(c) ?? far[0]?.ms ?? null;
+  if (ms === null) return "The app could not hear where this line starts. Listen with ▶.";
+  return `The singing may start ${aboutSeconds(ms - c.stampMs)} ${ms >= c.stampMs ? "later" : "earlier"} than shown. Listen with ▶.`;
+}
+
 export type VocalCheck = { levelDb: number; thresholdDb: number; lines: LineCheck[]; moves: GuardMove[]; stretches: VoiceStretch[] };
 
 const quantile = (values: number[], q: number) => {

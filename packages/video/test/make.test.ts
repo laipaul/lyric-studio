@@ -613,6 +613,35 @@ describe("failures, retry and --resume (stand-in renderer)", () => {
     await expect(run({ resume: true, section: "0:02-0:06" })).rejects.toThrow(/--resume: the section changed .* run without --resume/);
     await expect(run({ resume: true, lyricsOffsetMs: 100 })).rejects.toThrow(/the lyric lead or offset changed/);
   });
+
+  it("Stop requested while video 1 of 3 renders: videos 2 and 3 and the next platform never start; Resume makes them all", async () => {
+    rendered.length = 0;
+    failures = {};
+    let stop = false;
+    const states: string[] = [];
+    const stopped = await run({
+      platforms: "reels,tiktok",
+      variations: 3,
+      renderer: async (o) => {
+        stop = true; // the Stop button is pressed while the first video renders
+        return renderer(o);
+      },
+      shouldStop: () => stop,
+      onRenderProgress: (list) => states.splice(0, states.length, ...list.map((x) => `${x.platform}:${x.name}:${x.status}`)),
+    });
+    expect(rendered.map((r) => r.name)).toEqual(["v1"]); // nothing else started, in any platform
+    expect(states).toEqual(["reels:v1:done", "reels:v2:stopped", "reels:v3:stopped"]);
+    expect(stopped.platforms.map((p) => [p.name, p.error, p.variations.length])).toEqual([["reels", null, 1], ["tiktok", "stopped before it started", 0]]);
+    expect(existsSync(path.join(stopped.exportDir, "tiktok", "v1.mp4"))).toBe(false);
+
+    // Resume with the run's full options: reels v2 and v3, and the whole of tiktok (it has no folder yet).
+    rendered.length = 0;
+    stop = false;
+    const resumed = await run({ platforms: "reels,tiktok", variations: 3, resume: true, resumeFolder: stopped.exportDir });
+    expect(resumed.exportDir).toBe(stopped.exportDir);
+    expect(rendered.map((r) => r.name).sort()).toEqual(["v1", "v2", "v2", "v3", "v3"]);
+    expect(resumed.platforms.map((p) => [p.name, p.error, p.variations.filter((v) => !v.kept).length])).toEqual([["reels", null, 2], ["tiktok", null, 3]]);
+  });
 });
 
 describe("platform presets (stand-in renderer)", () => {

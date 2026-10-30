@@ -25,6 +25,7 @@ import {
   resumeOptions,
   runCurrent,
   runProgress,
+  runSummary,
   type MakeOptions,
   type MakeResult,
   songPathsById,
@@ -145,7 +146,24 @@ describe("the worker makes a run", () => {
     expect(given!.runId).toBe(run.id);
     expect(seen[0].progress).toBeCloseTo(0.2375, 4);
     expect(seen[0].current).toBe("Reels v1: 50% (1 of 2)");
-    expect(done).toMatchObject({ status: "done", progress: 1, message: "2 videos: 1 PASS, 1 WARN", export_dir: `${songPathsById(ws, projectId).exportsRel}/2026-10-27_1000`, current: null });
+    expect(done).toMatchObject({ status: "done", progress: 1, message: "2 videos: 1 ready to post · 1 to improve", export_dir: `${songPathsById(ws, projectId).exportsRel}/2026-10-27_1000`, current: null });
+  });
+
+  it("the summary uses the Videos tab's verdicts (from each video's qa + manifest), not PASS/WARN", () => {
+    const dir = path.join(root, "summary");
+    mkdirSync(dir, { recursive: true });
+    const video = (name: string, qa: string) => {
+      writeFileSync(path.join(dir, `${name}.qa.txt`), qa);
+      writeFileSync(path.join(dir, `${name}.manifest.json`), JSON.stringify({ props: { shots: [] }, settings: {} }));
+      return { name, platform: "reels", error: null, qaSummary: qa.includes("[WARN]") ? "WARN (x)" : "PASS", qaFile: path.join(dir, `${name}.qa.txt`), manifestFile: path.join(dir, `${name}.manifest.json`) };
+    };
+    const ok = "[ok  ] Something\nSummary: PASS\n";
+    const minor = '[WARN] Lines start with the vocals\n  line 3 "Hold on" starts 1.0 s early (1.0 s early)\nSummary: WARN - x\n';
+    const major = "[WARN] Audio matches the song\n  differs\nSummary: WARN - x\n";
+    const result = fakeResult({ variations: [video("v1", ok), video("v2", ok), video("v3", minor), video("v4", major)] as unknown as MakeResult["variations"] });
+    expect(runSummary(result, false)).toBe("4 videos: 2 ready to post · 1 to improve · 1 not ready");
+    expect(runSummary(fakeResult({ variations: [video("v1", ok)] as unknown as MakeResult["variations"] }), false)).toBe("1 video: 1 ready to post");
+    expect(runSummary(fakeResult({ variations: [] }), true)).toBe("0 videos. stopped: Resume makes the rest");
   });
 
   it("Stop: makeVideos is told to stop; the run ends as stopped (Resume makes the rest)", async () => {
@@ -158,7 +176,7 @@ describe("the worker makes a run", () => {
       o.onRenderProgress?.([{ platform: "reels", name: "v1", status: "done", progress: 1 }, { platform: "reels", name: "v2", status: "stopped", progress: 0 }]);
       return fakeResult({ variations: [{ name: "v1", platform: "reels", error: null, qaSummary: "PASS" }] as MakeResult["variations"] });
     });
-    expect(done).toMatchObject({ status: "stopped", message: "1 video: 1 PASS. stopped: Resume makes the rest" });
+    expect(done).toMatchObject({ status: "stopped", message: "1 video: 1 ready to post. stopped: Resume makes the rest" });
   });
 
   it("an error ends the run as failed with the reason", async () => {
@@ -196,6 +214,37 @@ describe("Resume and the Tasks list", () => {
     const o = resumeOptions(ws, projectId, "2026-10-27_1000"); // made by the "writes live progress" run above
     expect(o).toMatchObject({ platforms: "reels", resume: true, command: "Lyric Studio: Generate (resumed in Lyric Studio)" });
     expect(enqueueRun(ws, projectId, o).label).toBe("Resume Reels");
+  });
+
+  it("a run stopped before its 2nd platform started resumes with both platforms; only a run nobody took over offers Resume", async () => {
+    const exportsDir = songPathsById(ws, projectId).exports;
+    const folder = "2026-10-30_0900";
+    mkdirSync(path.join(exportsDir, folder, "reels"), { recursive: true });
+    const queued = enqueueRun(ws, projectId, generateOptions(ws, projectId, { platforms: ["reels", "tiktok"] }));
+    const running = ws.db.update(makeRun).set({ status: "running", pid: process.pid }).where(eq(makeRun.id, queued.id)).returning().get();
+    const stoppedRun = await executeRun(ws, running, async (o) => {
+      o.onReady?.({ platform: { name: "reels", label: "Reels", index: 0, count: 2, folder: "" }, exportDir: path.join(exportsDir, folder, "reels") } as never);
+      requestStop(ws, queued.id);
+      expect(o.shouldStop!()).toBe(true); // asked before the 2nd platform starts
+      o.onRenderProgress?.([{ platform: "reels", name: "v1", status: "done", progress: 1 }]);
+      return {
+        projectTitle: "Hold On", exportDir: path.join(exportsDir, folder), lrcFile: "x.lrc", section: { start_ms: 0, end_ms: 1, reason: "" }, limit: {} as MakeResult["limit"], warnings: [],
+        platforms: [{ name: "reels", error: null }, { name: "tiktok", error: "stopped before it started" }] as MakeResult["platforms"],
+        variations: [{ name: "v1", platform: "reels", error: null, qaSummary: "PASS" }] as MakeResult["variations"],
+      };
+    });
+    expect(stoppedRun.status).toBe("stopped");
+    const options = resumeOptions(ws, projectId, folder);
+    expect(options).toMatchObject({ platforms: "reels,tiktok", resume: true }); // the run's full options: tiktok never started and is made now
+    const entry = () => listTasks(ws).runs.find((r) => r.id === queued.id)!;
+    expect(entry().resumable).toBe(true);
+    const again = enqueueRun(ws, projectId, options);
+    expect(again.label).toBe("Resume Reels, TikTok");
+    expect(entry().resumable).toBe(false); // the resumed run is waiting for its turn
+    ws.db.update(makeRun).set({ status: "failed" }).where(eq(makeRun.id, again.id)).run();
+    expect(entry().resumable).toBe(true); // it failed: the old entry offers Resume again
+    ws.db.update(makeRun).set({ status: "done" }).where(eq(makeRun.id, again.id)).run();
+    expect(entry().resumable).toBe(false);
   });
 
   it("lists studio runs (with the song) and terminal runs rendering right now", () => {

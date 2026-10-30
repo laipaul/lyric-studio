@@ -81,7 +81,11 @@ async function main() {
     await page.waitForSelector("[data-line='2']");
     check(((await page.textContent("[data-lyrics-summary]")) ?? "").includes("1 flagged for review"), "summary: 1 flagged for review");
     check((await page.getAttribute("[data-line='2']", "data-flagged")) === "true", "the 1:10 hook is highlighted as flagged");
-    check(((await page.textContent("[data-line='2'] [data-flag-reason]")) ?? "").includes("only words 1:10.1"), "with the reason");
+    check(((await page.textContent("[data-line='2'] [data-flag-reason]")) ?? "").includes("The singing may start about 1.5 s later than shown"), "with the reason in plain words");
+    check(((await page.getAttribute("[data-line='2'] [data-flag-why]", "title")) ?? "").includes("only words 1:10.1"), "the technical reason in the tooltip");
+    check((await page.locator("[data-line='2'] [data-use-likely]").count()) === 0, "one signal only: no one-click \"Use\" time");
+    check((await page.evaluate("getComputedStyle(document.querySelector('[data-lines-scroll] th')).position")) === "sticky", "column headers are sticky");
+    check((await page.evaluate("(() => { const b = document.querySelector('[data-anchor-pick]'); return b.scrollWidth <= b.clientWidth; })()")) === true, "\"Lands on…\" is not cut off");
     check(((await page.textContent("[data-line='2'] [data-screen]")) ?? "").includes("readable 1:08.27"), "what the viewer sees: readable 1:08.27 (0.25 s before the stamp)");
 
     // "Checked by ear": the flagged line is no longer flagged (stored with the song).

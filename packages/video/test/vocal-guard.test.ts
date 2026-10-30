@@ -9,7 +9,7 @@ import path from "node:path";
 import { openWorkspace, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { applyGuard, asrWindows, checkVocalStart, earlyMs, matchFirstWords, moveLineStart, parseLrc, singingLevel, voiceStretches, type AsrWord, type TimedLine, type VoiceLevels } from "../src";
+import { applyGuard, asrWindows, flagReason, likelyStart, checkVocalStart, earlyMs, matchFirstWords, moveLineStart, parseLrc, singingLevel, voiceStretches, type AsrWord, type TimedLine, type VoiceLevels } from "../src";
 import { applyVocalGuard, ensureAlignment, findOrCreateSongProject, type AlignRunner, type FirstWordsRunner, type VoiceMapRunner } from "../src/node";
 import { makeSong } from "./media-helpers";
 
@@ -475,5 +475,30 @@ describe("pnpm make: the guard on the stored alignment", () => {
     expect(guarded.warnings.at(-1)).toMatch(/vocal-start check was skipped \(The vocal track of this song is not cached/);
     expect(readdirSync(path.dirname(stored.lrcFile)).some((f) => f.endsWith(".part"))).toBe(false);
     expect(existsSync(stored.lrcFile)).toBe(true);
+  });
+});
+
+describe("a flagged line: its likely start and the reason in plain words", () => {
+  const c = (o: { stampMs?: number; voiceMs?: number | null; wordsMs?: number | null; durationMs?: number | null }) => ({ stampMs: 60_000, voiceMs: null, wordsMs: null, durationMs: null, ...o });
+  it("two signals within 1 s: the earlier one is proposed", () => {
+    expect(likelyStart(c({ voiceMs: 64_800, wordsMs: 64_000 }))).toBe(64_000); // voice 1:04.8 + words 1:04.0
+    expect(likelyStart(c({ voiceMs: 64_000, wordsMs: 64_900 }))).toBe(64_000);
+    expect(likelyStart(c({ voiceMs: 64_000, wordsMs: 65_300 }))).toBeNull(); // 1.3 s apart
+    expect(likelyStart(c({ voiceMs: 64_000 }))).toBeNull(); // one signal
+  });
+  it("word durations count only when they differ from the stamp (a stretched first word)", () => {
+    expect(likelyStart(c({ wordsMs: 63_500, durationMs: 60_000 }))).toBeNull(); // durations = the stamp: no signal
+    expect(likelyStart(c({ wordsMs: 63_500, durationMs: 63_000 }))).toBe(63_000);
+    expect(likelyStart(c({ voiceMs: 60_100, wordsMs: 60_600 }))).toBeNull(); // already at the stamp
+  });
+  it("reasons: size and direction, whole seconds above 2 s, halves below", () => {
+    expect(flagReason(c({ wordsMs: 62_100 }))).toBe("The singing may start about 2 s later than shown. Listen with ▶.");
+    expect(flagReason(c({ wordsMs: 61_500 }))).toBe("The singing may start about 1.5 s later than shown. Listen with ▶.");
+    expect(flagReason(c({ voiceMs: 58_400 }))).toBe("The singing may start about 1.5 s earlier than shown. Listen with ▶.");
+    expect(flagReason(c({ voiceMs: 66_600 }))).toBe("The singing may start about 7 s later than shown. Listen with ▶."); // 6.6 -> 7
+    expect(flagReason(c({ voiceMs: 64_800, wordsMs: 64_000 }))).toBe("The singing may start about 4 s later than shown. Listen with ▶."); // the likely start
+    expect(flagReason(c({}))).toBe("The app could not hear where this line starts. Listen with ▶.");
+    expect(flagReason(c({ durationMs: 63_000 }), true)).toBe("The first word may be a long held note. Listen with ▶.");
+    expect(flagReason(c({ durationMs: 63_000 }), false)).toBe("The singing may start about 3 s later than shown. Listen with ▶.");
   });
 });
