@@ -718,7 +718,7 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   effect hints. Browser check: Style (per-platform rows, lock, fonts and warning, length), Generate
   (recipe option, locked hook effect, chips with length), Assets (path, hints).
 
-### Fix — verification pass 30 Oct (A Heart For Two) ✅ (to verify on the Windows PC)
+### Fix — verification pass 30 Oct (A Heart For Two) ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **Tasks:** a stopped or interrupted run that can still resume has a **Resume** button in its entry (POST
   /api/runs/resume into its own folder, with every platform of the run, also those that never started); once a
   Resume of that folder is waiting, going or done, the old entry no longer offers it (Tasks runs[].resumable).
@@ -737,7 +737,7 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   (likelyStart, flagReason), lyrics-view, runSummary verdicts; e2e lyrics-tab (plain reason, tooltip, sticky
   header, label not cut) and videos-post pass. Not browser-tested: the Tasks menu (Resume, outside click).
 
-### Lyrics tab: "Checked by ear" ✅ (to verify on the Windows PC)
+### Lyrics tab: "Checked by ear" ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - On a low-confidence or flagged line: **Checked by ear** (click again to take it off). Stored with the
   song (.studio\lyrics\checked-by-ear.json) with the alignment, the words and the line's start.
 - While those stay the same, QA turns that line's timing WARNs (low confidence, starts before the
@@ -1109,7 +1109,7 @@ These platforms play a video in a loop, so the wrap-around from the last frame t
 - Tests: packages/video/test/pace-transitions.test.ts, ending.test.ts (margin, held note, suggestions);
   Storyboard browser test (pacing and transitions lines, the preview plays the end without errors).
 
-### Step A — Automatic endings (Reels, TikTok, Shorts) ✅ (to verify on the Windows PC)
+### Step A — Automatic endings (Reels, TikTok, Shorts) ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - The app now chooses how a loop video's music ends, from the music at the end of the section
   (src/ending.ts): a **tight loop** (cut on the bar, the platform's short fade) only when the last bar
   flows back into the first (whole bars, level within 3 dB, keys fit); otherwise a **soft fade** over the
@@ -1142,7 +1142,7 @@ These platforms play a video in a loop, so the wrap-around from the last frame t
 - When an end is not on a bar line, the message says how far from the nearest one it is. A video whose length does not match its section is still a beat failure.
 - The auto end choice and the storyboard's "better loops" hint use the same bar counting, so ends that sit on a detected bar are no longer rejected. Without downbeats the old average-BPM division is used.
 
-### Fix — Start always runs the current code ✅ (to verify on the Windows PC)
+### Fix — Start always runs the current code ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 Reported: after `git pull` (1e233c0) the app did not show the Lyrics tab, and Start printed nothing.
 - **Cause**: an older Lyric Studio was still answering on port 3000, so Start only opened the window
   (it checked "is something running?", not "is it the current code?"). Most likely Stop had not ended
