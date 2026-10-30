@@ -2,7 +2,7 @@
 
 import { ChevronDown, Lock, LockOpen, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { StyleData, StyleField, StyleFont } from "@lyric/video/style";
 
@@ -31,13 +31,17 @@ const show = (v: unknown) => (v === null ? "preset" : Array.isArray(v) ? (v.leng
 
 // The song's recipe (song.json): every setting with its value and where it comes from; per platform
 // for the effects, fonts, accent colour and section. Changes are saved to song.json at once.
+// Four blocks: This song, Look (creative choices), What to make, Automatic (folded: the app handles
+// these). A row shows only what matters: the "This song" badge (other sources are the label's tooltip),
+// the padlock when locked (else on hover / focus), "per platform" when a platform differs (else on hover).
 export function StyleTab({ projectId }: { projectId: string }) {
   const router = useRouter();
   const [data, setData] = useState<StyleData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<"idle" | "saving" | "saved">("idle");
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const [showAll, setShowAll] = useState(false);
+  const [fineTune, setFineTune] = useState(false); // Look: the six font rows under the font summary
+  const [autoOpen, setAutoOpen] = useState(false); // the Automatic block, folded by default
   const [previewNote, setPreviewNote] = useState("");
   const [justSaved, setJustSaved] = useState<string[]>([]); // rows the preview just saved: highlighted for a few seconds
   const justSavedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -222,8 +226,8 @@ export function StyleTab({ projectId }: { projectId: string }) {
             ))}
           </div>
           {f.field === "platforms" && !list.length ? (
-            <p data-platforms-empty className="text-muted-foreground text-xs">
-              Nothing ticked: Make release pack makes all five (Reels, TikTok, Shorts, YouTube, Canvas); More options starts with Reels + YouTube; pnpm make without --platforms makes the Standard video. Tick platforms to choose your own.
+            <p data-platforms-empty className="text-muted-foreground truncate text-xs" title={PLATFORMS_EMPTY}>
+              {PLATFORMS_EMPTY}
             </p>
           ) : null}
         </div>
@@ -281,7 +285,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
               else set(n);
             }}
           />
-          <span className="text-muted-foreground text-xs">s · empty = {preset}; shapes an &quot;auto&quot; section only</span>
+          <Hint text={`s · empty = ${preset}; shapes an "auto" section only`} />
         </div>
       );
     }
@@ -292,7 +296,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
             <option value="off">off (start on the hook)</option>
             <option value="on">on (title, artist and tagline before the first hook)</option>
           </select>
-          <span className="text-muted-foreground text-xs">the app places and times them: upper third, lower third, gone as the first line fades in</span>
+          <Hint text="the app places and times them: upper third, lower third, gone as the first line fades in" />
         </div>
       );
     }
@@ -309,7 +313,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
             <span data-effect-value className="text-sm">
               {String(value ?? "off")}
             </span>
-            <span className="text-muted-foreground text-xs">{what}</span>
+            <Hint text={what} />
             <span className="text-muted-foreground text-xs">· set it in Set effect above</span>
             <BrandAll field={f.field} value={String(value ?? "off")} onApply={(v) => act({ action: "brand", field: f.field, value: v })} />
           </div>
@@ -321,7 +325,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
             <option value="off">off</option>
             <option value="on">on</option>
           </select>
-          <span className="text-muted-foreground text-xs">{what}</span>
+          <Hint text={what} />
           {!platform ? <BrandAll field={f.field} value={String(value ?? "off")} onApply={(v) => act({ action: "brand", field: f.field, value: v })} /> : null}
         </div>
       );
@@ -333,7 +337,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
             <span data-effect-value className="text-sm">
               {{ off: "off", gentle: "gentle", beat: "with the beat" }[String(value ?? "off")] ?? String(value)}
             </span>
-            <span className="text-muted-foreground text-xs">works with every lyric effect; a little deeper on choruses</span>
+            <Hint text="works with every lyric effect; a little deeper on choruses" />
             <span className="text-muted-foreground text-xs">· set it in Set effect above</span>
             <BrandAll field={f.field} value={String(value ?? "off")} onApply={(v) => act({ action: "brand", field: f.field, value: v })} />
           </div>
@@ -346,7 +350,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
             <option value="gentle">gentle (a slow swell every few seconds)</option>
             <option value="beat">with the beat (one swell per bar, on the downbeats)</option>
           </select>
-          <span className="text-muted-foreground text-xs">works with every lyric effect; a little deeper on choruses</span>
+          <Hint text="works with every lyric effect; a little deeper on choruses" />
           {!platform ? <BrandAll field={f.field} value={String(value ?? "off")} onApply={(v) => act({ action: "brand", field: f.field, value: v })} /> : null}
         </div>
       );
@@ -361,7 +365,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
               </option>
             ))}
           </select>
-          <span className="text-muted-foreground text-xs">a clip&apos;s own choice (Storyboard → clip editor) always wins</span>
+          <Hint text="a clip's own choice (Storyboard → clip editor) always wins" />
         </div>
       );
     }
@@ -375,7 +379,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
               </option>
             ))}
           </select>
-          <span className="text-muted-foreground text-xs">auto = the app listens to the end of the section and chooses; the Storyboard header says which and why</span>
+          <Hint text="auto = the app listens to the end of the section and chooses; the Storyboard header says which and why" />
         </div>
       );
     }
@@ -389,7 +393,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
               </option>
             ))}
           </select>
-          <span className="text-muted-foreground text-xs">auto = the app picks whole-bar shots from the song&apos;s feel and your clips&apos; length (the Storyboard header says which); story = 2 bars on hooks, 4 on verses</span>
+          <Hint text="auto = the app picks whole-bar shots from the song's feel and your clips' length (the Storyboard header says which); story = 2 bars on hooks, 4 on verses" />
         </div>
       );
     }
@@ -422,17 +426,118 @@ export function StyleTab({ projectId }: { projectId: string }) {
     );
   };
 
-  // Only what this song changes (its own value, a per-platform value, or a lock), plus its platforms (the
-  // release pack makes those) and the verse / hook effect (the preview saves them); "Show all settings" lists every setting with its source.
-  const differs = (f: StyleField) => f.own || f.locked || (f.perPlatform ?? []).some((p) => p.own);
-  const sorted = [...data.fields].sort((a, b) => order(a.field) - order(b.field));
-  const differing = sorted.filter(differs);
-  const shownFields = showAll ? sorted : sorted.filter((f) => differs(f) || f.field === "platforms" || f.field === "verseEffect" || f.field === "hookEffect");
+  const byField = new Map(data.fields.map((f) => [f.field, f] as const));
+  const pick = (names: readonly string[]) => names.map((n) => byField.get(n as StyleField["field"])).filter((f): f is StyleField => !!f);
+  // Any setting not named in a block (a future one) lands in "This song".
+  const placed = new Set<string>([...SONG_FIELDS, ...LOOK_FIELDS, ...FONT_ORDER, ...MAKE_FIELDS, ...AUTO_FIELDS]);
+  const songFields = [...pick(SONG_FIELDS), ...data.fields.filter((f) => !placed.has(f.field))];
+  const fontFields = pick(FONT_ORDER);
+  const autoFields = pick(AUTO_FIELDS);
+  // "Set by you": the song's own value (default or one platform) or a lock.
+  const setByYou = autoFields.filter((f) => f.own || f.locked || (f.perPlatform ?? []).some((p) => p.own));
+  const fontsOwn = fontFields.some((f) => f.own || (f.perPlatform ?? []).some((p) => p.own));
+  const face = (role: "verse" | "hook") => `${String(valueOf(`${role}Font`))} ${String(valueOf(`${role}Weight`))}${valueOf(`${role}Italic`) === true ? " italic" : ""}`;
+
+  const row = (f: StyleField) => {
+    const differsPerPlatform = !!f.perPlatform?.some((p) => JSON.stringify(p.value) !== JSON.stringify(f.value));
+    return (
+      <li
+        key={f.field}
+        data-field={f.field}
+        data-just-saved={justSaved.includes(f.field) ? "" : undefined}
+        className={cn("group bg-card rounded-lg border px-4 py-3 transition-shadow", f.locked && "border-brand/40", justSaved.includes(f.field) && "border-brand ring-brand/60 ring-2")}
+      >
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <span className="w-44 text-sm font-medium" title={f.own ? undefined : `From: ${sourceLabel(f.source, data.platforms)}`} data-source-hint={f.own ? undefined : sourceLabel(f.source, data.platforms)}>
+            {f.label}
+            {justSaved.includes(f.field) ? (
+              <span data-saved-tag className="text-brand ml-2 text-xs font-normal">
+                ✓ Saved
+              </span>
+            ) : null}
+          </span>
+          <div className="min-w-0 flex-1">{editor(f, f.value)}</div>
+          {f.own ? (
+            <span data-source className="border-brand/40 text-brand rounded-full border px-2 py-0.5 text-xs">
+              {sourceLabel(f.source, data.platforms)}
+            </span>
+          ) : null}
+          <div className="flex items-center gap-1">
+            {f.perPlatform && !differsPerPlatform ? (
+              <button
+                type="button"
+                data-per-platform={f.field}
+                aria-expanded={!!open[f.field]}
+                onClick={() => setOpen((o) => ({ ...o, [f.field]: !o[f.field] }))}
+                className={cn("text-muted-foreground hover:text-foreground px-1 text-xs underline underline-offset-2 transition-opacity focus:opacity-100", open[f.field] ? "opacity-100" : "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100")}
+              >
+                per platform
+              </button>
+            ) : null}
+            {f.own && !f.locked ? (
+              <button type="button" data-reset={f.field} title="Back to the inherited value" onClick={() => act({ action: "reset", field: f.field })} className="text-muted-foreground hover:text-foreground rounded p-1">
+                <RotateCcw className="size-4" />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              data-lock={f.field}
+              aria-pressed={f.locked}
+              title={f.locked ? "Locked: click to unlock" : "Lock: keep this song's value"}
+              onClick={() => act({ action: f.locked ? "unlock" : "lock", field: f.field })}
+              className={cn("rounded p-1 transition-opacity", f.locked ? "text-brand" : "text-muted-foreground hover:text-foreground opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus:opacity-100")}
+            >
+              {f.locked ? <Lock className="size-4" /> : <LockOpen className="size-4" />}
+            </button>
+          </div>
+        </div>
+        {f.perPlatform && (differsPerPlatform || open[f.field]) ? (
+          <div className="mt-2">
+            {differsPerPlatform ? (
+              <button type="button" data-per-platform={f.field} aria-expanded={!!open[f.field]} onClick={() => setOpen((o) => ({ ...o, [f.field]: !o[f.field] }))} className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs">
+                <ChevronDown className={cn("size-3 transition-transform", open[f.field] && "rotate-180")} />
+                Per platform
+                <span className="text-brand"> · {f.perPlatform.filter((p) => JSON.stringify(p.value) !== JSON.stringify(f.value)).map((p) => `${p.label}: ${show(p.value)}`).join(" · ")}</span>
+              </button>
+            ) : null}
+            {open[f.field] ? (
+              <ul className="mt-2 flex flex-col gap-2 border-l pl-4">
+                {f.perPlatform.map((p) => (
+                  <li key={p.platform} data-platform-value={`${f.field}-${p.platform}`} className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span className="w-24 text-xs" title={p.own ? undefined : `From: ${sourceLabel(p.source, data.platforms)}`}>
+                      {p.label}
+                    </span>
+                    <div className="min-w-0 flex-1">{editor(f, p.value, p.platform)}</div>
+                    {p.own ? (
+                      <span data-source className="border-brand/40 text-brand rounded-full border px-2 py-0.5 text-xs">
+                        {sourceLabel(p.source, data.platforms)}
+                      </span>
+                    ) : null}
+                    {p.own ? (
+                      <button type="button" data-reset={`${f.field}-${p.platform}`} title="Back to the song's default" onClick={() => act({ action: "reset", field: f.field, platform: p.platform })} className="text-muted-foreground hover:text-foreground rounded p-1">
+                        <RotateCcw className="size-4" />
+                      </button>
+                    ) : (
+                      <span className="w-6" />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+      </li>
+    );
+  };
+  const rows = (fields: StyleField[]) => <ul className="flex flex-col gap-2">{fields.map(row)}</ul>;
 
   return (
     <div data-style className="flex flex-col gap-4">
       <style>{fontCss}</style>
-      <p className="text-muted-foreground text-xs">
+      <p
+        className="text-muted-foreground truncate text-xs"
+        title={`This song's recipe (${data.recipeFile?.split("/").pop()}). A setting comes from the library defaults, the artist's brand (${data.brandFile.split("/").join("\\")}) or this song; a change here is saved for this song at once. A locked setting keeps this song's value: a brand change does not reach it and Generate cannot change it for one run.`}
+      >
         This song&apos;s recipe ({data.recipeFile?.split("/").pop()}). A setting comes from the library defaults, the artist&apos;s brand ({data.brandFile.split("/").join("\\")}) or this song; a change here is saved for this song at once. A
         locked setting keeps this song&apos;s value: a brand change does not reach it and Generate cannot change it for one run.
       </p>
@@ -440,125 +545,109 @@ export function StyleTab({ projectId }: { projectId: string }) {
         {saving === "saving" ? "Saving…" : saving === "saved" ? "Saved to song.json" : ""}
       </p>
       {error ? <p className="rounded-md border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-200">{error}</p> : null}
-      <PairingsRow projectId={projectId} onChanged={reload} />
-      <EffectPreview
-        key={["verseEffect", "breathe", "heldGlow", "chorusLift", "shine"].map((k) => String(valueOf(k) ?? "")).join(":")}
-        projectId={projectId}
-        effects={data.effects}
-        lines={data.sampleLines}
-        initial={String(valueOf("verseEffect") ?? "glide")}
-        hookInitial={String(valueOf("hookEffect") ?? "")}
-        breathe={(valueOf("breathe") as "off" | "gentle" | "beat") ?? "off"}
-        addOns={{ heldGlow: valueOf("heldGlow") === "on", chorusLift: valueOf("chorusLift") === "on", shine: valueOf("shine") === "on" }}
-        font={String(valueOf("verseFont") ?? "Cormorant Garamond")}
-        weight={Number(valueOf("verseWeight") ?? 400)}
-        italic={valueOf("verseItalic") === true}
-        accent={String(valueOf("accentColour") ?? "#E8A3B5")}
-        locked={data.fields.filter((f) => f.locked).map((f) => f.field)}
-        note={previewNote}
-        labels={Object.fromEntries(data.fields.map((f) => [f.field, f.label]))}
-        onSave={async (changes, keptLocked) => {
-          const done = await Promise.all(changes.map((c) => act({ action: "set", field: c.field, value: c.value })));
-          const saved = changes.filter((_, i) => done[i]);
-          const nameOf = (field: string) => data.fields.find((f) => f.field === field)?.label ?? field;
-          setPreviewNote(
-            `${saved.length ? `Saved to the recipe: ${saved.map((c) => `${nameOf(c.field)} = ${c.shown}`).join(", ")}.` : "Nothing was saved."}${keptLocked.length ? ` Locked, kept: ${keptLocked.map(nameOf).join(", ")}.` : ""}`,
-          );
-          setJustSaved(saved.map((c) => c.field));
-          clearTimeout(justSavedTimer.current);
-          justSavedTimer.current = setTimeout(() => setJustSaved([]), 4000);
-        }}
-      />
-      <p data-user-fonts className="text-muted-foreground text-xs">
-        Your own fonts: put .ttf, .otf, .woff or .woff2 files in <span className="text-foreground font-mono">{data.userFonts}</span>; they appear in the font lists after reloading this page.
-      </p>
-      <div className="flex flex-wrap items-center justify-between gap-3" data-style-scope>
-        <p className="text-sm">
-          {differing.length
-            ? `This song changes ${differing.length} setting${differing.length === 1 ? "" : "s"} from the brand look${showAll ? "" : "; the rest follow the brand"}.`
-            : "This song follows the brand look for everything; only its platforms and effects are shown."}
-        </p>
-        <button type="button" data-show-all onClick={() => setShowAll((v) => !v)} className="text-muted-foreground hover:text-foreground text-xs underline underline-offset-2">
-          {showAll ? "Only what this song changes" : `Show all settings (${data.fields.length - shownFields.length} more)`}
+
+      <Block id="song" title="This song" subtitle="Words and layout that belong to this song only.">
+        {rows(songFields)}
+      </Block>
+
+      <Block id="look" title="Look" subtitle="Your creative choices: fonts, lyric effects and colour.">
+        <PairingsRow projectId={projectId} onChanged={reload} />
+        <div data-font-summary className="group bg-card flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-4 py-3">
+          <span className="min-w-0 flex-1 text-sm" data-font-summary-text>
+            Fonts: verses {face("verse")} · choruses {face("hook")}
+          </span>
+          {fontsOwn ? <span data-source className="border-brand/40 text-brand rounded-full border px-2 py-0.5 text-xs">This song</span> : null}
+          <button type="button" data-fine-tune aria-expanded={fineTune} onClick={() => setFineTune((v) => !v)} className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs underline underline-offset-2">
+            <ChevronDown className={cn("size-3 transition-transform", fineTune && "rotate-180")} />
+            Fine-tune
+          </button>
+        </div>
+        {fineTune ? (
+          <div data-fine-tune-rows className="flex flex-col gap-2 border-l pl-4">
+            {rows(fontFields)}
+            <p data-user-fonts className="text-muted-foreground truncate text-xs" title={`Your own fonts: put .ttf, .otf, .woff or .woff2 files in ${data.userFonts}; they appear in the font lists after reloading this page.`}>
+              Your own fonts: put .ttf, .otf, .woff or .woff2 files in <span className="text-foreground font-mono">{data.userFonts}</span>; they appear in the font lists after reloading this page.
+            </p>
+          </div>
+        ) : null}
+        <EffectPreview
+          key={["verseEffect", "breathe", "heldGlow", "chorusLift", "shine"].map((k) => String(valueOf(k) ?? "")).join(":")}
+          projectId={projectId}
+          effects={data.effects}
+          lines={data.sampleLines}
+          initial={String(valueOf("verseEffect") ?? "glide")}
+          hookInitial={String(valueOf("hookEffect") ?? "")}
+          breathe={(valueOf("breathe") as "off" | "gentle" | "beat") ?? "off"}
+          addOns={{ heldGlow: valueOf("heldGlow") === "on", chorusLift: valueOf("chorusLift") === "on", shine: valueOf("shine") === "on" }}
+          font={String(valueOf("verseFont") ?? "Cormorant Garamond")}
+          weight={Number(valueOf("verseWeight") ?? 400)}
+          italic={valueOf("verseItalic") === true}
+          accent={String(valueOf("accentColour") ?? "#E8A3B5")}
+          locked={data.fields.filter((f) => f.locked).map((f) => f.field)}
+          note={previewNote}
+          labels={Object.fromEntries(data.fields.map((f) => [f.field, f.label]))}
+          onSave={async (changes, keptLocked) => {
+            const done = await Promise.all(changes.map((c) => act({ action: "set", field: c.field, value: c.value })));
+            const saved = changes.filter((_, i) => done[i]);
+            const nameOf = (field: string) => data.fields.find((f) => f.field === field)?.label ?? field;
+            setPreviewNote(
+              `${saved.length ? `Saved to the recipe: ${saved.map((c) => `${nameOf(c.field)} = ${c.shown}`).join(", ")}.` : "Nothing was saved."}${keptLocked.length ? ` Locked, kept: ${keptLocked.map(nameOf).join(", ")}.` : ""}`,
+            );
+            setJustSaved(saved.map((c) => c.field));
+            clearTimeout(justSavedTimer.current);
+            justSavedTimer.current = setTimeout(() => setJustSaved([]), 4000);
+          }}
+        />
+        {rows(pick(LOOK_FIELDS))}
+      </Block>
+
+      <Block id="make" title="What to make" subtitle="Which videos Generate makes, and the clips it may use.">
+        {rows(pick(MAKE_FIELDS))}
+      </Block>
+
+      <Block id="auto" title="Automatic — the app handles these" subtitle="Professional defaults chosen from the music and your clips; set one only to override the app.">
+        <button type="button" data-auto-toggle aria-expanded={autoOpen} onClick={() => setAutoOpen((v) => !v)} className="text-muted-foreground hover:text-foreground flex items-center gap-1 self-start text-sm">
+          <ChevronDown className={cn("size-4 transition-transform", autoOpen && "rotate-180")} />
+          <span data-auto-summary>{setByYou.length ? `${setByYou.length} set by you: ${setByYou.map((f) => shortLabel(f.label)).join(", ")}` : "All automatic"}</span>
         </button>
-      </div>
-      <ul className="flex flex-col gap-2">
-        {shownFields.map((f) => (
-          <li
-            key={f.field}
-            data-field={f.field}
-            data-just-saved={justSaved.includes(f.field) ? "" : undefined}
-            className={cn("bg-card rounded-lg border px-4 py-3 transition-shadow", f.locked && "border-brand/40", justSaved.includes(f.field) && "border-brand ring-brand/60 ring-2")}
-          >
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <span className="w-44 text-sm font-medium">
-                {f.label}
-                {justSaved.includes(f.field) ? (
-                  <span data-saved-tag className="text-brand ml-2 text-xs font-normal">
-                    ✓ Saved
-                  </span>
-                ) : null}
-              </span>
-              <div className="min-w-0 flex-1">{editor(f, f.value)}</div>
-              <span data-source className={cn("rounded-full border px-2 py-0.5 text-xs", f.own ? "border-brand/40 text-brand" : "text-muted-foreground")}>
-                {sourceLabel(f.source, data.platforms)}
-              </span>
-              <div className="flex items-center gap-1">
-                {f.own && !f.locked ? (
-                  <button type="button" data-reset={f.field} title="Back to the inherited value" onClick={() => act({ action: "reset", field: f.field })} className="text-muted-foreground hover:text-foreground rounded p-1">
-                    <RotateCcw className="size-4" />
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  data-lock={f.field}
-                  aria-pressed={f.locked}
-                  title={f.locked ? "Locked: click to unlock" : "Lock: keep this song's value"}
-                 
-                  onClick={() => act({ action: f.locked ? "unlock" : "lock", field: f.field })}
-                  className={cn("rounded p-1", f.locked ? "text-brand" : "text-muted-foreground hover:text-foreground")}
-                >
-                  {f.locked ? <Lock className="size-4" /> : <LockOpen className="size-4" />}
-                </button>
-              </div>
-            </div>
-            {f.perPlatform ? (
-              <div className="mt-2">
-                <button type="button" data-per-platform={f.field} onClick={() => setOpen((o) => ({ ...o, [f.field]: !o[f.field] }))} className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs">
-                  <ChevronDown className={cn("size-3 transition-transform", open[f.field] && "rotate-180")} />
-                  Per platform
-                  {f.perPlatform.some((p) => JSON.stringify(p.value) !== JSON.stringify(f.value)) ? (
-                    <span className="text-brand"> · {f.perPlatform.filter((p) => JSON.stringify(p.value) !== JSON.stringify(f.value)).map((p) => `${p.label}: ${show(p.value)}`).join(" · ")}</span>
-                  ) : (
-                    <span> · the same on every platform</span>
-                  )}
-                </button>
-                {open[f.field] ? (
-                  <ul className="mt-2 flex flex-col gap-2 border-l pl-4">
-                    {f.perPlatform.map((p) => (
-                      <li key={p.platform} data-platform-value={`${f.field}-${p.platform}`} className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                        <span className="w-24 text-xs">{p.label}</span>
-                        <div className="min-w-0 flex-1">{editor(f, p.value, p.platform)}</div>
-                        <span className={cn("rounded-full border px-2 py-0.5 text-xs", p.own ? "border-brand/40 text-brand" : "text-muted-foreground")}>{sourceLabel(p.source, data.platforms)}</span>
-                        {p.own ? (
-                          <button type="button" data-reset={`${f.field}-${p.platform}`} title="Back to the song's default" onClick={() => act({ action: "reset", field: f.field, platform: p.platform })} className="text-muted-foreground hover:text-foreground rounded p-1">
-                            <RotateCcw className="size-4" />
-                          </button>
-                        ) : (
-                          <span className="w-6" />
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            ) : null}
-          </li>
-        ))}
-      </ul>
+        {autoOpen ? rows(autoFields) : null}
+      </Block>
     </div>
   );
 }
+
+// One titled block of the Style tab.
+function Block({ id, title, subtitle, children }: { id: string; title: string; subtitle: string; children: ReactNode }) {
+  return (
+    <section data-style-block={id} className="flex flex-col gap-2">
+      <div>
+        <h3 className="text-base font-semibold">{title}</h3>
+        <p className="text-muted-foreground text-xs">{subtitle}</p>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+// "Tempo (BPM)" -> "Tempo", "Ending (Reels, TikTok, Shorts)" -> "Ending".
+const shortLabel = (label: string) => label.replace(/\s*\(.*\)\s*$/, "");
+
+// The Style tab's blocks, each in its order (the six font rows sit under Look's "Fine-tune").
+const SONG_FIELDS = ["tagline", "ep", "youtubeLayout", "titleOpening"] as const;
+const LOOK_FIELDS = ["accentColour", "verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine"] as const;
+const MAKE_FIELDS = ["platforms", "variations", "collections"] as const;
+const AUTO_FIELDS = ["shotLength", "tempo", "section", "length", "ending", "transitions", "paceShift", "readability"] as const;
+
+// A control's explanation: one line (cut with …), the whole text on hover.
+function Hint({ text }: { text: string }) {
+  return (
+    <span title={text} className="text-muted-foreground min-w-0 max-w-full truncate text-xs">
+      {text}
+    </span>
+  );
+}
+
+const PLATFORMS_EMPTY = "Nothing ticked: Make release pack makes all five (Reels, TikTok, Shorts, YouTube, Canvas); More options starts with Reels + YouTube; pnpm make without --platforms makes the Standard video. Tick platforms to choose your own.";
 
 // "Use for all my songs": this value in the artist's brand.json (every platform with lyrics); asks first.
 function BrandAll({ field, value, onApply }: { field: string; value: string; onApply: (value: string) => void }) {
@@ -701,12 +790,8 @@ function TempoEditor({ projectId, value, song, onSet }: { projectId: string; val
 }
 
 const WEIGHT_NAMES: Record<number, string> = { 300: "light", 400: "regular", 500: "medium", 600: "semibold", 700: "bold", 800: "extra bold" };
-// Each font, then its weight and italic, then the rest in the recipe's order.
-const FONT_ORDER = ["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic"];
-const order = (field: string) => {
-  const i = FONT_ORDER.indexOf(field);
-  return i >= 0 ? 2 + i * 0.01 : field === "verseEffect" ? 0 : field === "hookEffect" ? 1 : 3;
-};
+// Look → Fine-tune: each font, then its weight and italic.
+const FONT_ORDER = ["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic"] as const;
 
 // A font list (bundled and your own) with a live preview line (in the chosen weight and italic: the exact
 // file, never a synthetic one) and a warning when accents are missing.

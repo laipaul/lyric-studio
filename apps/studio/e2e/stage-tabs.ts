@@ -11,9 +11,15 @@ export async function openTab(page: any, tab: string): Promise<void> {
     return;
   }
   await page.click(`[role=tab]:has-text('${tab}')`);
-  // The Style tab opens with only what the song changes from the brand: these tests use every setting.
-  if (tab === "Style") {
-    const all = await page.waitForSelector("[data-show-all]");
-    if (((await all.textContent()) ?? "").startsWith("Show all")) await all.click();
+  // The Style tab folds its Automatic block and the six font rows (Look → Fine-tune): these tests use every setting.
+  if (tab === "Style") await unfoldStyle(page);
+}
+
+// Opens the Style tab's Automatic block and the font Fine-tune rows when folded.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function unfoldStyle(page: any): Promise<void> {
+  for (const sel of ["[data-auto-toggle]", "[data-fine-tune]"]) {
+    const toggle = await page.waitForSelector(sel);
+    if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
   }
 }

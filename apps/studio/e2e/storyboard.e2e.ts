@@ -14,6 +14,7 @@ import path from "node:path";
 import { absPath, openWorkspace, project } from "@lyric/db";
 import { ensureAlignment, findOrCreateSongProject, songPathsById, type AlignRunner } from "@lyric/video/node";
 import { eq } from "drizzle-orm";
+import { unfoldStyle } from "./stage-tabs";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-storyboard-"));
 const wsDir = path.join(root, "workspace");
@@ -200,7 +201,7 @@ async function main() {
 
     // The Style tab's tempo: x2/3 of 120 = 80 BPM in song.json; the storyboard plans with it.
     await page.goto(`${base}/songs/${sp.project.id}?tab=style`);
-    await page.click("[data-show-all]"); // the tempo follows the analysis: under "Show all settings"
+    await unfoldStyle(page); // the tempo follows the analysis: in the folded Automatic block
     await page.waitForSelector("[data-tempo-check]");
     if (!(await page.$("[data-tempo-ratio='×2/3']"))) {
       // No video made yet: the detected tempo comes from the tempo check.

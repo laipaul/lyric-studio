@@ -72,6 +72,8 @@ async function main() {
     check(!!(await page.$("[data-pairing=elegant] img[src*='/api/files/thumbs/']")), "over a frame of the song's clips");
     check(((await page.textContent("[data-pairing=romantic-script]")) ?? "").includes("short hooks only"), "Romantic script warns: short hooks only");
     check(!!(await page.$("[data-pairing=brand][data-current]")), "the brand pair is this song's now");
+    check((await page.$("[data-font-summary] [data-source]")) === null, "the font summary has no 'This song' badge yet (the brand's fonts)");
+    await page.click("[data-fine-tune]"); // the six font rows and the own-fonts folder sit under Look → Fine-tune
     check(((await page.textContent("[data-user-fonts]")) ?? "").includes(path.join(wsDir, "fonts")), "the Style tab shows the folder for my own fonts");
 
     // "This song": song.json gets the pair; brand.json is untouched.
@@ -80,6 +82,9 @@ async function main() {
     const recipe = JSON.parse(readFileSync(paths.recipe!, "utf8")) as Record<string, unknown>;
     check(recipe.verseFont === "Cormorant Garamond" && recipe.hookWeight === 600 && recipe.hookItalic === true && recipe.verseWeight === 400, `song.json holds the pair (${JSON.stringify(recipe)})`);
     check(readFileSync(brandFile, "utf8") === brandBefore, "brand.json is untouched");
+    await page.waitForFunction(() => document.querySelector("[data-font-summary-text]")?.textContent?.includes("Cormorant Garamond 600 italic"));
+    check((await page.textContent("[data-font-summary-text]")) === "Fonts: verses Cormorant Garamond 400 · choruses Cormorant Garamond 600 italic", `the font summary line follows (${await page.textContent("[data-font-summary-text]")})`);
+    check((await page.textContent("[data-font-summary] [data-source]")) === "This song", "…with the 'This song' badge");
     // The weight / italic controls follow, with only the family's weights.
     await page.waitForFunction(() => (document.querySelector("[data-edit='hookWeight-default']") as HTMLSelectElement | null)?.value === "600");
     const weights = await page.$$eval("[data-edit='hookWeight-default'] option", (os: HTMLOptionElement[]) => os.map((o) => o.value));

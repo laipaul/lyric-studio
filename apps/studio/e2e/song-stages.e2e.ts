@@ -121,13 +121,54 @@ async function main() {
     const takeRun = ws2.db.select().from(makeRun).all().at(-1);
     const takeOptions = (takeRun?.options_json ?? {}) as { platforms?: string; take?: number };
     check(takeOptions.platforms === "reels" && takeOptions.take === 3 && (takeRun?.label ?? "").includes("take 3"), `Try another take: Reels take 3 (${JSON.stringify(takeOptions)}, ${takeRun?.label})`);
+    // The Style tab in four blocks; the song sets its tempo (locked) and an ending: the folded Automatic block says so.
+    writeRecipe(recipe, { ...readRecipe(recipe), tempo: 96, ending: "fade", locked: ["tempo"] });
     await page.click("[data-stage=shape]");
     await page.click("[role=tab]:has-text('Style')");
-    await page.waitForSelector("[data-show-all]");
-    const fields = await page.$$eval("[data-field]", (e: Element[]) => e.map((x) => x.getAttribute("data-field")));
-    check(JSON.stringify(fields.sort()) === JSON.stringify(["collections", "hookEffect", "platforms", "verseEffect"]), `Style shows only what the song changes (+ platforms, verse / hook effect) (${fields.join(", ")})`);
-    await page.click("[data-show-all]");
-    check((await page.$$("[data-field]")).length > 10, "Show all settings lists every setting");
+    await page.waitForSelector("[data-style-block]");
+    const blocks = await page.$$eval("[data-style-block] h3", (e: Element[]) => e.map((x) => x.textContent));
+    check(JSON.stringify(blocks) === JSON.stringify(["This song", "Look", "What to make", "Automatic — the app handles these"]), `Style: four blocks in order (${blocks.join(" | ")})`);
+    check((await page.$("[data-show-all]")) === null && !((await page.textContent("[data-style]")) ?? "").includes("This song changes"), "no Show all toggle, no 'This song changes N settings' sentence");
+    const inBlock = async (b: string) => page.$$eval(`[data-style-block=${b}] [data-field]`, (e: Element[]) => e.map((x) => x.getAttribute("data-field")));
+    check(JSON.stringify(await inBlock("song")) === JSON.stringify(["tagline", "ep", "youtubeLayout", "titleOpening"]), `This song: tagline, EP, YouTube layout, title opening (${(await inBlock("song")).join(", ")})`);
+    check(JSON.stringify(await inBlock("look")) === JSON.stringify(["accentColour", "verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine"]), `Look: accent colour and the effect rows; the font rows folded (${(await inBlock("look")).join(", ")})`);
+    check(JSON.stringify(await inBlock("make")) === JSON.stringify(["platforms", "variations", "collections"]), `What to make: platforms, videos per platform, collections (${(await inBlock("make")).join(", ")})`);
+    check((await page.getAttribute("[data-auto-toggle]", "aria-expanded")) === "false" && (await inBlock("auto")).length === 0, "Automatic is folded");
+    check((await page.textContent("[data-auto-summary]")) === "2 set by you: Tempo, Ending", `…with its summary line (${await page.textContent("[data-auto-summary]")})`);
+    if (process.env.STYLE_SHOT) {
+      await page.waitForSelector("[data-pairing]");
+      await page.setViewportSize({ width: 1280, height: 3200 });
+      await sleep(1500);
+      await page.screenshot({ path: process.env.STYLE_SHOT, fullPage: true });
+      await page.setViewportSize({ width: 1280, height: 1000 });
+    }
+    await page.click("[data-auto-toggle]");
+    check(JSON.stringify(await inBlock("auto")) === JSON.stringify(["shotLength", "tempo", "section", "length", "ending", "transitions", "paceShift", "readability"]), `Automatic opens with its eight rows (${(await inBlock("auto")).join(", ")})`);
+    check(!!(await page.$("[data-field=tempo] [data-tempo-check]")), "the tempo tools are there");
+    // Declutter: only the "This song" badge; other sources in the label's tooltip; padlock and "per platform" on hover.
+    const badges = await page.$$eval("[data-field] [data-source]", (e: Element[]) => [...new Set(e.map((x) => x.textContent))]);
+    check(JSON.stringify(badges) === JSON.stringify(["This song"]), `only "This song" badges (${badges.join(", ")})`);
+    check(((await page.getAttribute("[data-field=transitions] [data-source-hint]", "title")) ?? "").startsWith("From: "), "other sources: a tooltip on the label");
+    const opacity = (sel: string) => page.$eval(sel, (e: Element) => getComputedStyle(e).opacity);
+    check((await opacity("[data-lock=tempo]")) === "1", "a locked padlock is always shown");
+    await page.mouse.move(0, 0);
+    await sleep(300);
+    check((await opacity("[data-lock=shotLength]")) === "0" && (await opacity("[data-per-platform=shotLength]")) === "0", "unlocked padlock and 'per platform' hidden until hover");
+    await page.hover("[data-field=shotLength]");
+    await sleep(300);
+    check((await opacity("[data-lock=shotLength]")) === "1" && (await opacity("[data-per-platform=shotLength]")) === "1", "…shown on hover");
+    check(!((await page.textContent("[data-style]")) ?? "").includes("the same on every platform"), "no 'the same on every platform' lines");
+    await page.click("[data-per-platform=shotLength]");
+    check(!!(await page.$("[data-platform-value=shotLength-reels]")), "'per platform' opens the per-platform editors");
+    // Fonts: one summary line; Fine-tune shows the six rows.
+    const fontLine = (await page.textContent("[data-font-summary-text]")) ?? "";
+    check(/^Fonts: verses .+ \d00(?: italic)? · choruses .+ \d00(?: italic)?$/.test(fontLine), `the font summary line (${fontLine})`);
+    check((await page.$("[data-field=verseFont]")) === null, "the six font rows are folded");
+    await page.click("[data-fine-tune]");
+    const fontRows = await page.$$eval("[data-fine-tune-rows] [data-field]", (e: Element[]) => e.map((x) => x.getAttribute("data-field")));
+    check(JSON.stringify(fontRows) === JSON.stringify(["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic"]), `Fine-tune shows the six font rows (${fontRows.join(", ")})`);
+    const verseFont = await page.$eval("[data-edit='verseFont-default']", (e: Element) => (e as HTMLSelectElement).value);
+    check(fontLine.startsWith(`Fonts: verses ${verseFont} `), "the summary names the verse font of the rows");
     check(!!(await page.$("[data-field=breathe]")), "Breathe is a setting (off / gentle / with the beat)");
     // The effects preview: the song's own lines, drawn as in the video; trying an effect saves nothing.
     await page.waitForSelector("[data-effect-preview]");

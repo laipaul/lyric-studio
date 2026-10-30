@@ -4,6 +4,19 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Four-stage song page, part 2 ✅ (to verify on the Windows PC)
+- **Post: "Ready to post — approve?"**: videos the app judged ✅ with nothing to improve, not yet approved or
+  discarded, with one-click **Approve**. Nothing is approved without your click.
+- **"Try another take"** in Videos: one button per platform makes one more video of it (take 3, 4, …: a
+  different cut and look, same recipe and clips). The Canvas has no takes (it is one chosen loop).
+- **Style shows what differs**: only the settings this song changes from the brand (plus its platforms);
+  "Show all settings" for the rest.
+- From the part 1 check: **Make counts every kept video** of the song (all runs), and Generate's **More
+  options default to one video per platform** (unless the song's recipe sets a number).
+- Tests: take.test.ts (a take is exactly vN, each take differs), song-stages.e2e.ts (Post offer + Approve,
+  another take queued as take 3, Style's short list, Make's count); the Style and Storyboard browser tests open
+  "Show all settings".
+
 ### Step H — Library cards ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **One colour per platform chip:** grey = not made, amber = made but not approved yet ("to review"), green =
   at least one approved video (the number = approved videos), red = failed or stopped (hover: the reasons, and

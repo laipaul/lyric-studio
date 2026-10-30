@@ -4,6 +4,23 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Style tab simplified ✅ (to verify on the Windows PC)
+- Shape → Style is now four blocks, each with a heading and one muted line:
+  **This song** (Tagline, EP, YouTube layout, Title opening) · **Look** (the font pairing cards, one line
+  "Fonts: verses … · choruses …" with **Fine-tune** to show the six font rows, Set effect, Accent colour, then the
+  effect rows) · **What to make** (Platforms, Videos per platform, Shared collections) · **Automatic — the app
+  handles these** (Shot length, Tempo, Section, Target length, Ending, Transitions, Pace adjustment, Lyric
+  readability), folded, with one line: "All automatic" or "2 set by you: Tempo, Ending".
+- "Show all settings" and "This song changes N settings…" are gone: everything shows, except the folded
+  Automatic block and the font rows under Fine-tune.
+- Calmer rows: only the "This song" badge shows (where else a setting comes from is in the tooltip on its name);
+  the padlock shows when locked, otherwise when you point at the row; "per platform" too, unless a platform has
+  its own value (then the line shows as before); long explanations stay on one line (hover for the whole text).
+- Nothing removed: Use for all my songs, reset, lock, the ✓ Saved highlight, the tempo tools and the per-platform
+  editors all work as before.
+- Tests: song-stages.e2e.ts (blocks in order, Automatic folded with its summary, badges, hover padlock and
+  "per platform", font summary and Fine-tune), pairings.e2e.ts (font summary follows a pairing, with "This song").
+
 ### Fix — "Set effect" keeps what you tried ✅ (to verify on the Windows PC)
 - Reported 30 Oct: after setting an effect, going to Make and back to Shape, the tried effect, intensity,
   Breathe and add-ons were gone (the stage tabs unmount the panel). Now what you tried is kept per song (browser
@@ -93,19 +110,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   clicks (the page behind stays alive after navigating): every dialog now closes before moving on.
 - Tests: releases.test.ts (file, grid, what is missing, blocked songs, the estimate learning from past renders,
   rename / delete / restore); browser: releases.e2e.ts (in pnpm test:e2e).
-
-### Four-stage song page, part 2 ✅ (to verify on the Windows PC)
-- **Post: "Ready to post — approve?"**: videos the app judged ✅ with nothing to improve, not yet approved or
-  discarded, with one-click **Approve**. Nothing is approved without your click.
-- **"Try another take"** in Videos: one button per platform makes one more video of it (take 3, 4, …: a
-  different cut and look, same recipe and clips). The Canvas has no takes (it is one chosen loop).
-- **Style shows what differs**: only the settings this song changes from the brand (plus its platforms);
-  "Show all settings" for the rest.
-- From the part 1 check: **Make counts every kept video** of the song (all runs), and Generate's **More
-  options default to one video per platform** (unless the song's recipe sets a number).
-- Tests: take.test.ts (a take is exactly vN, each take differs), song-stages.e2e.ts (Post offer + Approve,
-  another take queued as take 3, Style's short list, Make's count); the Style and Storyboard browser tests open
-  "Show all settings".
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
