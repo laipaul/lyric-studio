@@ -4,6 +4,15 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Fix — "Try an effect" can save what you tried ✅ (to verify on the Windows PC)
+- Reported 30 Oct: the preview said "pick it in Verse / Hook effect below", but those settings were hidden in
+  Style's short list (only what the song changes). Now: **Use for verses / Use for choruses** buttons (the effect
+  with its pace) and **Use these add-ons** (Breathe, Held-note glow, Chorus lift, Shine) save to the song in one
+  click (locked settings: button disabled); Verse effect and Hook effect always show in the short list; the
+  Platforms note says what an empty choice does (Make release pack: all five; More options: Reels + YouTube).
+- Built by a Sonnet helper (bug-fix rule), checked here (clean build, Style / Storyboard / Pairings / Song-stages
+  browser tests pass).
+
 ### Effects, batch 2 step 2: Held-note glow, Chorus lift, Shine ✅ (to verify on the Windows PC)
 - Three settings in Shape → Style, next to Breathe (off by default, per platform), each with **"Use for all my
   songs"** (asks first; writes your brand, and the song follows it):

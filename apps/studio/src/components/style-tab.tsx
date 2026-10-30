@@ -38,6 +38,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
   const [saving, setSaving] = useState<"idle" | "saving" | "saved">("idle");
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [showAll, setShowAll] = useState(false);
+  const [previewNote, setPreviewNote] = useState("");
   // Changes are saved one after the other, in the order they were made: leaving a field (which saves
   // it) and clicking a padlock right after must both count; nothing is disabled while saving.
   const queue = useRef<Promise<void>>(Promise.resolve());
@@ -204,7 +205,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
           </div>
           {f.field === "platforms" && !list.length ? (
             <p data-platforms-empty className="text-muted-foreground text-xs">
-              Nothing ticked: Generate starts with Reels + YouTube, and pnpm make without --platforms makes the Standard video. Tick platforms to choose your own start.
+              Nothing ticked: Make release pack makes all five (Reels, TikTok, Shorts, YouTube, Canvas); More options starts with Reels + YouTube; pnpm make without --platforms makes the Standard video. Tick platforms to choose your own.
             </p>
           ) : null}
         </div>
@@ -379,11 +380,11 @@ export function StyleTab({ projectId }: { projectId: string }) {
   };
 
   // Only what this song changes (its own value, a per-platform value, or a lock), plus its platforms (the
-  // release pack makes those); "Show all settings" lists every setting with its source.
+  // release pack makes those) and the verse / hook effect (the preview saves them); "Show all settings" lists every setting with its source.
   const differs = (f: StyleField) => f.own || f.locked || (f.perPlatform ?? []).some((p) => p.own);
   const sorted = [...data.fields].sort((a, b) => order(a.field) - order(b.field));
   const differing = sorted.filter(differs);
-  const shownFields = showAll ? sorted : sorted.filter((f) => differs(f) || f.field === "platforms");
+  const shownFields = showAll ? sorted : sorted.filter((f) => differs(f) || f.field === "platforms" || f.field === "verseEffect" || f.field === "hookEffect");
 
   return (
     <div data-style className="flex flex-col gap-4">
@@ -408,6 +409,12 @@ export function StyleTab({ projectId }: { projectId: string }) {
         weight={Number(valueOf("verseWeight") ?? 400)}
         italic={valueOf("verseItalic") === true}
         accent={String(valueOf("accentColour") ?? "#E8A3B5")}
+        locked={data.fields.filter((f) => f.locked).map((f) => f.field)}
+        note={previewNote}
+        onSave={(changes, note) => {
+          setPreviewNote(note);
+          for (const c of changes) act({ action: "set", field: c.field, value: c.value });
+        }}
       />
       <p data-user-fonts className="text-muted-foreground text-xs">
         Your own fonts: put .ttf, .otf, .woff or .woff2 files in <span className="text-foreground font-mono">{data.userFonts}</span>; they appear in the font lists after reloading this page.
@@ -416,7 +423,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
         <p className="text-sm">
           {differing.length
             ? `This song changes ${differing.length} setting${differing.length === 1 ? "" : "s"} from the brand look${showAll ? "" : "; the rest follow the brand"}.`
-            : "This song follows the brand look for everything; only its platforms are shown."}
+            : "This song follows the brand look for everything; only its platforms and effects are shown."}
         </p>
         <button type="button" data-show-all onClick={() => setShowAll((v) => !v)} className="text-muted-foreground hover:text-foreground text-xs underline underline-offset-2">
           {showAll ? "Only what this song changes" : `Show all settings (${data.fields.length - shownFields.length} more)`}

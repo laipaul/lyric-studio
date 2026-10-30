@@ -64,7 +64,8 @@ function PreviewScene(p: { lyrics: LyricLineProps[]; effect: EffectChoice; breat
 
 // The effects preview (Style tab): the song's own first lines with an effect and intensity (the typing
 // pace for the typewriters) and Breathe, played in a loop, exactly as the video draws them. Trying an
-// effect here changes nothing; choose it in the Verse / Hook effect setting below.
+// effect changes nothing until "Use for verses" / "Use for choruses" / "Use these add-ons" is pressed;
+// the buttons hand the value to onSave (the Style tab saves it to song.json and reloads).
 export function EffectPreview({
   effects,
   lines,
@@ -75,6 +76,9 @@ export function EffectPreview({
   weight,
   italic,
   accent,
+  locked = [],
+  note = "",
+  onSave,
 }: {
   effects: { name: string; label: string }[];
   lines: string[];
@@ -85,6 +89,9 @@ export function EffectPreview({
   weight: number;
   italic: boolean;
   accent: string;
+  locked?: string[]; // recipe fields locked for this song
+  note?: string; // confirmation shown after a save
+  onSave: (changes: { field: string; value: string }[], note: string) => void;
 }) {
   const [name, setName] = useState(initial.split(":")[0]);
   const [intensity, setIntensity] = useState<Intensity>((initial.split(":")[1] as Intensity) || "balanced");
@@ -93,6 +100,12 @@ export function EffectPreview({
   const lyrics = useMemo(() => sampleLyrics(lines), [lines]);
   const duration = lyrics.length * LINE_FRAMES + 45;
   const select = "bg-background rounded-md border px-2 py-1 text-xs";
+  const choice = `${name}${intensity !== "balanced" ? `:${intensity}` : ""}`; // as saved: "glide" or "glide:subtle"
+  const changes: { field: string; value: string }[] = [];
+  if (breathe !== initialBreathe) changes.push({ field: "breathe", value: breathe });
+  for (const k of ["heldGlow", "chorusLift", "shine"] as const) if (addOns[k] !== initialAddOns[k]) changes.push({ field: k, value: addOns[k] ? "on" : "off" });
+  const addOnsLocked = changes.some((c) => locked.includes(c.field));
+  const lockedTitle = "Locked for this song (unlock it below)";
   const pace = name.startsWith("typewriter") && name !== "typewriter-words";
   return (
     <div className="bg-card flex flex-wrap items-start gap-5 rounded-lg border p-4" data-effect-preview>
@@ -113,7 +126,7 @@ export function EffectPreview({
       <div className="flex min-w-60 flex-1 flex-col gap-3 text-sm">
         <div>
           <p className="font-medium">Try an effect</p>
-          <p className="text-muted-foreground text-xs">Your song&apos;s first lines, drawn exactly as in the video (the middle one as a chorus). Trying changes nothing: pick the one you like in Verse / Hook effect below.</p>
+          <p className="text-muted-foreground text-xs">Your song&apos;s first lines, drawn exactly as in the video (the middle one as a chorus). Trying changes nothing until you press Use for verses / Use for choruses.</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {effects.map((e) => (
@@ -121,6 +134,41 @@ export function EffectPreview({
               {e.name}
             </button>
           ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs" data-use-row>
+          {(
+            [
+              ["verse", "verseEffect", "Use for verses", "verses"],
+              ["hook", "hookEffect", "Use for choruses", "choruses"],
+            ] as const
+          ).map(([key, field, label, what]) => (
+            <button
+              key={key}
+              type="button"
+              data-use-effect={key}
+              disabled={locked.includes(field)}
+              title={locked.includes(field) ? lockedTitle : undefined}
+              onClick={() => onSave([{ field, value: choice }], `Saved: ${what} = ${choice}`)}
+              className="bg-brand/15 border-brand rounded-md border px-2.5 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            type="button"
+            data-use-addons
+            disabled={!changes.length || addOnsLocked}
+            title={addOnsLocked ? lockedTitle : undefined}
+            onClick={() => onSave(changes, `Saved: ${changes.map((c) => `${c.field} = ${c.value}`).join(", ")}`)}
+            className="rounded-md border px-2.5 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Use these add-ons
+          </button>
+          {note ? (
+            <span data-use-note className="text-muted-foreground">
+              {note}
+            </span>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <label className="flex items-center gap-2">

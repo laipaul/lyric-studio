@@ -125,7 +125,7 @@ async function main() {
     await page.click("[role=tab]:has-text('Style')");
     await page.waitForSelector("[data-show-all]");
     const fields = await page.$$eval("[data-field]", (e: Element[]) => e.map((x) => x.getAttribute("data-field")));
-    check(JSON.stringify(fields.sort()) === JSON.stringify(["collections", "platforms"]), `Style shows only what the song changes (+ platforms) (${fields.join(", ")})`);
+    check(JSON.stringify(fields.sort()) === JSON.stringify(["collections", "hookEffect", "platforms", "verseEffect"]), `Style shows only what the song changes (+ platforms, verse / hook effect) (${fields.join(", ")})`);
     await page.click("[data-show-all]");
     check((await page.$$("[data-field]")).length > 10, "Show all settings lists every setting");
     check(!!(await page.$("[data-field=breathe]")), "Breathe is a setting (off / gentle / with the beat)");
@@ -149,6 +149,18 @@ async function main() {
     check(brand.perPlatform?.reels?.heldGlow === "on" && brand.perPlatform?.youtube?.heldGlow === "on" && !brand.perPlatform?.canvas, `Use for all my songs: brand.json on every platform with lyrics (${JSON.stringify(brand.perPlatform)})`);
     check(JSON.parse(readFileSync(recipe, "utf8")).heldGlow === undefined, "…and the song follows the brand (its own value removed)");
     check(!!(await page.$("[data-try-addon=shine]")), "the preview offers the add-ons");
+    // The preview saves what was tried: verses (name:intensity), choruses and the add-ons.
+    await page.click("[data-try-effect=typewriter]");
+    await page.selectOption("[data-try-intensity]", "subtle");
+    await page.click("[data-use-effect=verse]");
+    await page.waitForSelector("[data-saving=saved]");
+    check(JSON.parse(readFileSync(recipe, "utf8")).verseEffect === "typewriter:subtle", "Use for verses saves typewriter:subtle to song.json");
+    await page.waitForSelector("[data-use-note]");
+    await page.check("[data-try-addon=chorusLift]");
+    await page.click("[data-use-addons]");
+    await page.waitForFunction(() => document.querySelector("[data-try-addon=chorusLift]")?.checked === true && document.querySelector("[data-use-addons]")?.disabled === true);
+    check(JSON.parse(readFileSync(recipe, "utf8")).chorusLift === "on", "Use these add-ons saves chorusLift on");
+    check(!!(await page.$("[data-field=verseEffect]")) && !!(await page.$("[data-field=hookEffect]")), "verse and hook effect are in the short list");
     ws2.close();
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
     await browser.close();
