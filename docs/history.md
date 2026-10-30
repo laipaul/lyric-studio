@@ -4,6 +4,21 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Releases + Make all (step 1) ✅ (to verify on the Windows PC)
+- **Releases** in the header (Library · Releases · Collections): a release groups the songs you put out
+  together (an EP, a batch). **New release**: a name and the songs; "Pick an EP" ticks the songs that share it.
+  Each release is a small file in workspace\releases\ (songs are only referenced, never changed).
+- **The grid**: songs x platforms in the Library's colours (✓ approved, to review, failed, — not made, "·" not a
+  platform of that song); "9 of 15 ready to post"; click a cell to open the song.
+- **Make all**: first a preview of what will be made (song by song), what cannot be made yet and why (e.g. no
+  clips) and an estimate from your past renders; then one click queues it all, one video per missing
+  platform, never redoing videos waiting for review or approved. Stop / Resume as usual.
+- **Songs / Rename / Delete** (moved to releases\_removed\, Restore on the Releases page).
+- Fixed on the way: after creating a release the "New release" window stayed open in the background and blocked
+  clicks (the page behind stays alive after navigating): every dialog now closes before moving on.
+- Tests: releases.test.ts (file, grid, what is missing, blocked songs, the estimate learning from past renders,
+  rename / delete / restore); browser: releases.e2e.ts (in pnpm test:e2e).
+
 ### Four-stage song page, part 2 ✅ (to verify on the Windows PC)
 - **Post: "Ready to post — approve?"**: videos the app judged ✅ with nothing to improve, not yet approved or
   discarded, with one-click **Approve**. Nothing is approved without your click.

@@ -3,11 +3,10 @@
 // previews each pair on the song's own lines over a frame of its clips, warns per card, applies a pair
 // to the song ("This song", locks respected) and only on request to the brand ("Save to brand").
 // Remotion-free, so the studio's server can use it.
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { absPath, ffmpegBin, project as projectTable, REPO_ROOT, type Workspace } from "@lyric/db";
+import { absPath, project as projectTable, REPO_ROOT, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
 import type { FontFileRef } from "../font-files";
@@ -19,6 +18,8 @@ import { isWeight } from "./per-platform";
 import { readRecipe, resetField, resolveRecipe, setField, writeRecipe, type RecipeField, type SongRecipe } from "./recipe";
 import { songPathsById } from "./song-folder";
 import { recipeInputFor } from "./style";
+import { bandLuminance } from "./lyric-band";
+import { isThinFace, lyricContrast, type Readability } from "../readability";
 
 export type PairFont = { family: string; weight: number; italic: boolean; script?: "thin" };
 export type Pairing = { id: string; name: string; note: string; warning?: string; recommended?: boolean; brand?: boolean; verse: PairFont; hook: PairFont; title?: PairFont };
@@ -27,8 +28,6 @@ export const PAIRINGS_FILE = path.join(REPO_ROOT, "presets", "font-pairings.json
 export const PAIRING_FIELDS = ["verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic"] as const satisfies readonly RecipeField[];
 export const ACCENTS = ["é", "è", "ç", "à", "ô"];
 export const LONG_HOOK_CHARS = 24; // a thin script on a hook longer than this is hard to read on a phone
-// Thin scripts (also those marked "script": "thin" in the file).
-const THIN_SCRIPTS = ["great vibes", "grand hotel", "yellowtail"];
 
 // presets/font-pairings.json, checked: every problem named (a font or weight that does not exist).
 export function parsePairings(json: unknown, catalog?: FontCatalog): { pairings: Pairing[]; problems: string[] } {
@@ -91,16 +90,8 @@ export function findPairing(pairings: readonly Pairing[], id: string): Pairing {
 
 // ---------------------------------------------------------------- warnings
 
-// WCAG contrast of a colour against a relative luminance (0-1).
-export function contrastWith(hex: string, backgroundLuminance: number): number {
-  const lum = relativeLuminance(hex);
-  const [a, b] = lum > backgroundLuminance ? [lum, backgroundLuminance] : [backgroundLuminance, lum];
-  return (a + 0.05) / (b + 0.05);
-}
-export function relativeLuminance(hex: string): number {
-  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
-  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-}
+// WCAG contrast helpers live in ../readability (pure; the render's automatic backing uses them too).
+export { contrastWith, relativeLuminance } from "../readability";
 
 export type CardContext = {
   catalog: FontCatalog;
@@ -109,15 +100,23 @@ export type CardContext = {
   background: number | null; // relative luminance of the brightest part behind the lyrics (null: no frame)
   colour: string; // the lyric colour
   accent: string; // the hook effect's accent colour
+  readability?: Readability; // the song's Lyric readability (auto: the app adds the backing by itself)
 };
 
-const isThin = (f: PairFont) => f.script === "thin" || THIN_SCRIPTS.includes(f.family.toLowerCase());
+// One thing to know about a pair: in plain words (shown under the cards for the chosen pair) and the
+// technical detail (one click away). kind "fonts" needs a creative choice (another pair); "contrast" is
+// the app's job (the automatic backing); "script" is advice on the pair.
+export type PairingNote = { kind: "fonts" | "contrast" | "script" | "pairing"; plain: string; detail: string };
 
-// The card's warnings: French accents, the song's own characters (e.g. Japanese), contrast over the
+const isThin = (f: PairFont) => isThinFace(f.family, 400, f.script);
+const list = (chars: string[]) => `${chars.slice(0, 8).join(" ")}${chars.length > 8 ? " …" : ""}`;
+
+// The card's notes: French accents, the song's own characters (e.g. Japanese), contrast over the
 // sample frame, a thin script on long hook lines; plus the pairing's own warning.
-export function pairingWarnings(p: Pairing, ctx: CardContext): string[] {
-  const out: string[] = [];
+export function pairingNotes(p: Pairing, ctx: CardContext): PairingNote[] {
+  const out: PairingNote[] = [];
   const own = [...new Set([...ctx.lyricsText.replace(/\s/g, "")])].filter((c) => c.codePointAt(0)! > 0x7f && !ACCENTS.includes(c.toLowerCase()));
+  const sung = new Set([...ctx.lyricsText.toLowerCase()]);
   const seen = new Set<string>();
   for (const [role, f] of [["verse", p.verse], ["hook", p.hook]] as const) {
     const key = `${f.family}|${f.weight}|${f.italic}`;
@@ -127,32 +126,80 @@ export function pairingWarnings(p: Pairing, ctx: CardContext): string[] {
     try {
       face = resolveFont(ctx.catalog, f.family, f.weight, f.italic).face;
     } catch (error) {
-      out.push((error as Error).message);
+      const m = (error as Error).message;
+      out.push({ kind: "fonts", plain: `${f.family} is not installed: choose another pair.`, detail: m });
       continue;
     }
     const accents = missingCharacters(forText(face, ACCENTS.join("")), ACCENTS);
-    if (accents.length) out.push(`${f.family} (${role}) has no ${accents.join(" ")}: French lyrics would show those in another font`);
+    if (accents.length) {
+      const used = accents.filter((a) => sung.has(a));
+      out.push({
+        kind: "fonts",
+        plain: used.length
+          ? `${f.family} cannot draw ${used.join(" ")} in this song's lyrics: those letters would show in another font. Choose another pair.`
+          : `${f.family} has no French accents (${accents.join(" ")}): fine for this song, but choose another pair for French lyrics.`,
+        detail: `${f.family} (${role}) has no ${accents.join(" ")}: French lyrics would show those in another font`,
+      });
+    }
     const missing = own.length ? missingCharacters(forText(face, own.join("")), own) : [];
-    if (missing.length) out.push(`${f.family} (${role}) lacks ${missing.length} character${missing.length === 1 ? "" : "s"} this song uses (${missing.slice(0, 8).join(" ")}${missing.length > 8 ? " …" : ""}): they would show in another font`);
+    if (missing.length) {
+      out.push({
+        kind: "fonts",
+        plain: `${f.family} cannot draw ${missing.length === 1 ? "a character" : `${missing.length} characters`} this song uses (${list(missing)}): they would show in another font. Choose another pair.`,
+        detail: `${f.family} (${role}) lacks ${missing.length} character${missing.length === 1 ? "" : "s"} this song uses (${list(missing)}): they would show in another font`,
+      });
+    }
   }
   if (ctx.background !== null) {
     // Thin strokes need more contrast than regular text.
-    const need = (f: PairFont) => (isThin(f) || f.weight <= 300 ? 4.5 : 3);
-    const verse = contrastWith(ctx.colour, ctx.background);
-    const accent = contrastWith(ctx.accent, ctx.background);
+    const c = lyricContrast(ctx.background, { colour: ctx.colour, accent: ctx.accent, verseThin: isThinFace(p.verse.family, p.verse.weight, p.verse.script), hookThin: isThinFace(p.hook.family, p.hook.weight, p.hook.script) });
     // One short line: the frame is the same on every card, the need depends on the pair (thin strokes 4.5:1).
     const low = [
-      ...(verse < need(p.verse) ? [`verse ${verse.toFixed(1)}:1${need(p.verse) > 3 ? " (thin)" : ""}`] : []),
-      ...(accent < need(p.hook) ? [`hook accent ${accent.toFixed(1)}:1${need(p.hook) > 3 ? " (thin script)" : ""}`] : []),
+      ...(c.verse < c.verseNeed ? [`verse ${c.verse.toFixed(1)}:1${c.verseNeed > 3 ? " (thin)" : ""}`] : []),
+      ...(c.accent < c.accentNeed ? [`hook accent ${c.accent.toFixed(1)}:1${c.accentNeed > 3 ? " (thin script)" : ""}`] : []),
     ];
-    if (low.length) out.push(`low contrast over this frame: ${low.join(", ")}; aim for 3:1, thin strokes 4.5:1`);
+    if (low.length) {
+      const mode = ctx.readability ?? "auto";
+      out.push({
+        kind: "contrast",
+        plain:
+          mode === "strong"
+            ? "Lyrics may be hard to read over this clip: the soft backing behind them is on."
+            : mode === "normal"
+              ? "Lyrics may be hard to read over this clip, and Lyric readability is set to normal (no backing): reset it under Automatic to let the app add a soft backing when needed."
+              : "Lyrics may be hard to read over bright clips like this one: the app adds a soft backing behind them when your clips need it.",
+        detail: `low contrast over this frame: ${low.join(", ")}; aim for 3:1, thin strokes 4.5:1`,
+      });
+    }
   }
   if (isThin(p.hook)) {
     const long = ctx.hookLines.filter((l) => l.length > LONG_HOOK_CHARS);
-    if (long.length) out.push(`${p.hook.family} is a thin script on ${long.length === 1 ? "a long hook line" : `${long.length} long hook lines`} ("${long[0]}", ${long[0].length} characters): hard to read on a phone; best on short hooks, set large`);
+    if (long.length) {
+      out.push({
+        kind: "script",
+        plain: `${p.hook.family} is a thin script: best on short hooks, and this song's hook is long.`,
+        detail: `${p.hook.family} is a thin script on ${long.length === 1 ? "a long hook line" : `${long.length} long hook lines`} ("${long[0]}", ${long[0].length} characters): hard to read on a phone; best on short hooks, set large`,
+      });
+    }
   }
-  if (p.warning) out.push(p.warning);
+  if (p.warning) out.push({ kind: "pairing", plain: p.warning, detail: p.warning });
   return out;
+}
+
+// The notes' technical text (the card's tooltip, and the tests).
+export function pairingWarnings(p: Pairing, ctx: CardContext): string[] {
+  return pairingNotes(p, ctx).map((n) => n.detail);
+}
+
+// The plain line(s) under the cards for the chosen pair: font problems first (they need another pair),
+// then the script advice (the pair's own warning only when it says nothing new), then readability.
+export function plainNotes(notes: readonly PairingNote[]): string[] {
+  const order = { fonts: 0, script: 1, pairing: 2, contrast: 3 } as const;
+  const hasScript = notes.some((n) => n.kind === "script");
+  return [...notes]
+    .filter((n) => !(n.kind === "pairing" && hasScript))
+    .sort((a, b) => order[a.kind] - order[b.kind])
+    .map((n) => n.plain);
 }
 
 // ---------------------------------------------------------------- applying
@@ -221,7 +268,8 @@ function context(ws: Workspace, projectId: string) {
 // ---------------------------------------------------------------- the Style tab's cards
 
 export type PairingCard = Pairing & {
-  warnings: string[];
+  warnings: string[]; // the technical text (tooltip, details)
+  plain: string[]; // the same in plain words (shown under the cards when this pair is the song's)
   fonts: FontFileRef[]; // the exact files (for the preview), relative to /api/fonts
   current: boolean; // this song's fonts are this pair now
 };
@@ -240,6 +288,7 @@ export type PairingsView = {
   locked: RecipeField[]; // of the pairing fields
   userFonts: string; // the folder for the user's own fonts (shown in the Style tab)
   platform: string; // the preview's layout
+  readability: Readability; // the song's Lyric readability (auto: the app adds the backing when the clips need it)
 };
 
 // The song's verse and hook lines for the preview: the first sung verse line of 3+ words and the first hook.
@@ -252,24 +301,8 @@ export function sampleLines(lyricsText: string): { verse: string; hook: string; 
   return { verse, hook: hooks[0] ?? lines.find((l) => l !== verse) ?? "You had a heart for two", hooks };
 }
 
-// The brightest part behind the lyric band of an image (relative luminance, 0-1): the 90th percentile of
-// a small grey copy (FFmpeg), so a bright patch behind the words counts.
-export function bandLuminance(image: string, area: Pick<LyricArea, "top" | "bottom">, height = 1920): number | null {
-  try {
-    const w = 36;
-    const h = 64;
-    const raw = execFileSync(ffmpegBin(), ["-v", "error", "-i", image, "-vf", `scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},format=gray`, "-frames:v", "1", "-f", "rawvideo", "-"], { maxBuffer: 1 << 20 });
-    const from = Math.max(0, Math.floor((area.top / height) * h));
-    const to = Math.min(h, Math.ceil((area.bottom / height) * h));
-    const values = [...raw.subarray(from * w, to * w)].map((v) => {
-      const c = v / 255;
-      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-    }).sort((a, b) => a - b);
-    return values.length ? values[Math.floor(values.length * 0.9)] : null;
-  } catch {
-    return null;
-  }
-}
+// The brightest part behind the lyric band (bandLuminance) lives in ./lyric-band (the render uses it too).
+export { bandLuminance } from "./lyric-band";
 
 export async function pairingsView(ws: Workspace, projectId: string, platformName = "reels"): Promise<PairingsView> {
   const { song, pairings, catalog, brand } = context(ws, projectId);
@@ -292,7 +325,7 @@ export async function pairingsView(ws: Workspace, projectId: string, platformNam
   const backgroundFrom = frame ? `a frame of ${frame.name}` : cover ? "the cover" : null;
   const luminance = background ? bandLuminance(absPath(ws, background), area, format.height) : null;
   const accent = recipe.values.accentColour;
-  const ctx: CardContext = { catalog, lyricsText, hookLines: sample.hooks.length ? sample.hooks : [sample.hook], background: luminance, colour: "#ffffff", accent };
+  const ctx: CardContext = { catalog, lyricsText, hookLines: sample.hooks.length ? sample.hooks : [sample.hook], background: luminance, colour: "#ffffff", accent, readability: recipe.values.readability };
   const v = recipe.values;
   const cards = pairings.map((p) => {
     const files = (f: PairFont) => {
@@ -302,9 +335,11 @@ export async function pairingsView(ws: Workspace, projectId: string, platformNam
         return [];
       }
     };
+    const notes = pairingNotes(p, ctx);
     return {
       ...p,
-      warnings: pairingWarnings(p, ctx),
+      warnings: notes.map((n) => n.detail),
+      plain: plainNotes(notes),
       fonts: [...files(p.verse), ...files(p.hook)],
       current:
         v.verseFont.toLowerCase() === p.verse.family.toLowerCase() && v.hookFont.toLowerCase() === p.hook.family.toLowerCase() &&
@@ -326,5 +361,6 @@ export async function pairingsView(ws: Workspace, projectId: string, platformNam
     locked: PAIRING_FIELDS.filter((k) => (song.locked ?? []).includes(k)),
     userFonts: userFontsDir(ws.dir),
     platform: preset.label,
+    readability: recipe.values.readability,
   };
 }

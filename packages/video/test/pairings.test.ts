@@ -11,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   ACCENTS, applyPairing, BUNDLED_FONTS, checkRecipe, createSong, DEFAULT_BRAND, forText, loadBrand, loadFontCatalog, loadPairings, loadStyles, lockField,
-  missingCharacters, pairingWarnings, pairingsView, parsePairings, readRecipe, resetPairing, resolveFont, savePairingToBrand, songPathsById, writeRecipe,
+  missingCharacters, pairingNotes, pairingWarnings, pairingsView, plainNotes, parsePairings, readRecipe, resetPairing, resolveFont, savePairingToBrand, songPathsById, writeRecipe,
 } from "../src/node";
 
 const catalog = loadFontCatalog(path.join(os.tmpdir(), "no-workspace"));
@@ -112,6 +112,27 @@ describe("pairing presets", () => {
     expect(bright).toHaveLength(1);
     expect(bright[0]).toMatch(/^low contrast over this frame: verse 1\.\d:1, hook accent 1\.\d:1; aim for 3:1, thin strokes 4\.5:1$/);
     expect(pairingWarnings(byId("romantic-script"), { ...ctx, background: 0.3 }).some((w) => /hook accent \d\.\d:1 \(thin script\)/.test(w))).toBe(true); // mid-grey: enough for regular text, not for a thin script
+ 
+  });
+
+  it("the chosen pair's notes in plain words (technical text one click away); readability is the app's job", () => {
+    const { pairings } = loadPairings(catalog, DEFAULT_BRAND);
+    const byId = (id: string) => pairings.find((p) => p.id === id)!;
+    const ctx = { catalog, lyricsText: "Where the river meets the light\n* You had a heart for two, my love\n", hookLines: ["You had a heart for two, my love"], background: 0.95, colour: "#ffffff", accent: "#E8A3B5" };
+    const elegant = pairingNotes(byId("elegant"), ctx);
+    expect(elegant.map((n) => n.kind)).toEqual(["contrast"]);
+    expect(elegant[0].plain).toBe("Lyrics may be hard to read over bright clips like this one: the app adds a soft backing behind them when your clips need it.");
+    expect(elegant[0].detail).toMatch(/^low contrast over this frame: verse 1\.\d:1/);
+    expect(pairingNotes(byId("elegant"), { ...ctx, readability: "strong" })[0].plain).toBe("Lyrics may be hard to read over this clip: the soft backing behind them is on.");
+    expect(pairingNotes(byId("elegant"), { ...ctx, readability: "normal" })[0].plain).toMatch(/set to normal \(no backing\)/);
+    // Thin script on a long hook: one plain line (the pair's own warning says the same), before readability.
+    expect(plainNotes(pairingNotes(byId("romantic-script"), ctx))).toEqual([
+      "Great Vibes is a thin script: best on short hooks, and this song's hook is long.",
+      "Lyrics may be hard to read over bright clips like this one: the app adds a soft backing behind them when your clips need it.",
+    ]);
+    // A Japanese tagline: a creative choice (another pair), in plain words.
+    const jp = plainNotes(pairingNotes(byId("literary"), { ...ctx, background: 0.02, lyricsText: "* 君の名は\nWhere the river meets the light\n", hookLines: ["君の名は"] }));
+    expect(jp[0]).toBe("EB Garamond cannot draw 4 characters this song uses (君 の 名 は): they would show in another font. Choose another pair.");
   });
 });
 
@@ -176,6 +197,8 @@ describe("pairings on a song", () => {
     const elegant = v.cards.find((c) => c.id === "elegant")!;
     expect(elegant.fonts.map((f) => f.src)).toEqual(expect.arrayContaining(["_fonts/cormorant-garamond-latin-400-normal.woff2", "_fonts/cormorant-garamond-latin-600-italic.woff2"]));
     expect(elegant.warnings.some((w) => w.startsWith("low contrast over this frame"))).toBe(true);
+    expect(elegant.plain).toEqual(["Lyrics may be hard to read over bright clips like this one: the app adds a soft backing behind them when your clips need it."]);
+    expect(v.readability).toBe("auto");
     expect(v.cards.find((c) => c.brand)!.current).toBe(true); // the song uses its brand's fonts
     expect(v.highlightWords).toBe(3); // karaoke hooks: half the words sung
   });

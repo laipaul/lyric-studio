@@ -56,7 +56,7 @@ export function checkPerPlatform(raw: unknown, where: string): { values: PerPlat
       else if (k === "titleOpening" && !["off", "on"].includes(v.trim())) problems.push(`${at} must be off or on (the title, byline and tagline before the first hook)`);
       else if ((k === "heldGlow" || k === "chorusLift" || k === "shine") && !["off", "on"].includes(v.trim())) problems.push(`${at} must be off or on`);
       else if (k === "breathe" && !["off", "gentle", "beat"].includes(v.trim())) problems.push(`${at} must be off, gentle or beat (the lyrics swell softly; beat: on the downbeats)`);
-      else if (k === "readability" && !["normal", "strong"].includes(v.trim())) problems.push(`${at} must be normal or strong (strong: a soft dark band behind the lyrics)`);
+      else if (k === "readability" && !["auto", "normal", "strong"].includes(v.trim())) problems.push(`${at} must be auto, normal or strong (auto: the app adds a soft dark band behind the lyrics when the clips need it)`);
       else if (k === "transitions" && !(TRANSITION_STYLES as readonly string[]).includes(v.trim())) problems.push(`${at} must be ${TRANSITION_STYLES.join(", ")} (auto = the app chooses cuts, dissolves and dips from the music)`);
       else if (k === "ending" && !(ENDING_VALUES as readonly string[]).includes(v.trim())) problems.push(`${at} must be ${ENDING_VALUES.join(", ")} (how a Reel / TikTok / Short ends; auto = the app chooses)`);
       else if (k === "shotLength" && !(SHOT_LENGTH_VALUES as readonly string[]).includes(v.trim())) problems.push(`${at} must be ${SHOT_LENGTH_VALUES.join(", ")} (bars per shot, or "story")`);

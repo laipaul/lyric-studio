@@ -4,6 +4,28 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### U1. Simpler font cards ✅ (to verify on the Windows PC)
+- Shape → Style → Look: the font pairings are now a **grid of small cards** (3-5 per row depending on the width,
+  no sideways scrolling), each a smaller picture of the pair (drawn exactly as before) and its name. **Click a card
+  to use it for this song**: it gets a ✓ and the pink border (pink only marks the chosen one). The big
+  "This song" buttons are gone. The description and the exact fonts show when you point at a card;
+  "Save to brand…" is a small link there (and always on the chosen card) and still asks first. "Back to the
+  brand" and the "try this" tag stay.
+- Warnings: none on the other cards (just a tiny grey "!" with the details as tooltip). Under the grid, the
+  chosen pair's points in plain words, e.g. "Lyrics may be hard to read over bright clips like this one: the
+  app adds a soft backing behind them when your clips need it" or "Great Vibes is a thin script: short hooks
+  only…"; the technical text (contrast ratios) under "Details". Missing accents / characters stay (they need
+  another pair), in plain words.
+- **Readability is now the app's job**: Lyric readability has a new default **auto**: each video measures its
+  clips behind the lyrics and, when at least a quarter of them are too bright for the lyric colour or the accent,
+  adds the soft dark band behind the lyrics by itself. The run's log and manifest say which and why. "strong"
+  (always) and "normal" (never) stay as overrides (Automatic → Lyric readability, now a list). The music is never
+  touched.
+- Tests: readability.test.ts (contrast, the auto rule, overrides, recipe), readability-make.test.ts (dry run: dark
+  clips no backing, bright clips backing, "normal" wins), pairings.test.ts (plain notes); browser:
+  pairings.e2e.ts (grid without horizontal scroll, click chooses (✓, song.json), hover details, warnings only for
+  the chosen pair, Details).
+
 ### Style tab simplified ✅ (to verify on the Windows PC)
 - Shape → Style is now four blocks, each with a heading and one muted line:
   **This song** (Tagline, EP, YouTube layout, Title opening) · **Look** (the font pairing cards, one line
@@ -95,21 +117,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   song-stages.e2e.ts (Breathe setting, the preview).
 - Next (proposed, from the Canva toolbar): a per-card styling row in the Textboard (colour, case, letter
   spacing, line height, transparency) and a Text effect (soft / strong shadow, outline, glow, background band).
-
-### Releases + Make all (step 1) ✅ (to verify on the Windows PC)
-- **Releases** in the header (Library · Releases · Collections): a release groups the songs you put out
-  together (an EP, a batch). **New release**: a name and the songs; "Pick an EP" ticks the songs that share it.
-  Each release is a small file in workspace\releases\ (songs are only referenced, never changed).
-- **The grid**: songs x platforms in the Library's colours (✓ approved, to review, failed, — not made, "·" not a
-  platform of that song); "9 of 15 ready to post"; click a cell to open the song.
-- **Make all**: first a preview of what will be made (song by song), what cannot be made yet and why (e.g. no
-  clips) and an estimate from your past renders; then one click queues it all, one video per missing
-  platform, never redoing videos waiting for review or approved. Stop / Resume as usual.
-- **Songs / Rename / Delete** (moved to releases\_removed\, Restore on the Releases page).
-- Fixed on the way: after creating a release the "New release" window stayed open in the background and blocked
-  clicks (the page behind stays alive after navigating): every dialog now closes before moving on.
-- Tests: releases.test.ts (file, grid, what is missing, blocked songs, the estimate learning from past renders,
-  rename / delete / restore); browser: releases.e2e.ts (in pnpm test:e2e).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -284,7 +291,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 
 **UX order agreed 30 Oct 2026 (after the Style tab simplification and an outside UX review).** Do these
 before Releases step 2 and the Lyric Sheet, one step each, plan first:
-- **U1. Simpler font cards (Shape):** each card = picture, name, ✓ when chosen; descriptions and font
+- ✅ (built 30 Oct, to verify) **U1. Simpler font cards (Shape):** each card = picture, name, ✓ when chosen; descriptions and font
   details on hover/click; warnings only on the chosen look, as one plain line; readability over the clips is
   the app's job (it adds the backing by itself when needed), not a setting for the user.
 - **U2. One big live preview that stays on screen (Shape):** fonts + effect + accent together on the song's

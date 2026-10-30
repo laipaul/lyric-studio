@@ -37,6 +37,7 @@ export * from "./run-settings";
 export * from "./lyrics-view";
 export * from "./audio-check";
 export * from "./pairings";
+export * from "./lyric-band";
 export * from "./storyboard";
 export * from "./storyboard-edit";
 export * from "./textboard";

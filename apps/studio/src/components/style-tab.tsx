@@ -369,6 +369,20 @@ export function StyleTab({ projectId }: { projectId: string }) {
         </div>
       );
     }
+    if (f.field === "readability") {
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          <select aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} className={select} value={String(value ?? "auto")} onChange={(e) => (e.target.value === "auto" && !platform ? act({ action: "reset", field: f.field, platform }) : set(e.target.value))}>
+            {READABILITY.map(([v, label]) => (
+              <option key={v} value={v}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <Hint text="auto = the app measures your clips behind the lyrics and adds a soft dark band when they are bright there; the run's log and manifest say which and why" />
+        </div>
+      );
+    }
     if (f.field === "ending") {
       return (
         <div className="flex flex-wrap items-center gap-2">
@@ -679,7 +693,8 @@ const ENDINGS: [string, string][] = [
 ];
 const SHOT_LENGTHS: [string, string][] = [["auto", "auto (from the song and your clips)"], ["1", "1 bar"], ["2", "2 bars"], ["4", "4 bars"], ["8", "8 bars"], ["story", "story (2-4 bars)"], ["rate", "the cut rate (Generate's 0.5x / 1x / 2x)"]];
 const TRANSITIONS: [string, string][] = [["auto", "auto (cuts, dissolves and dips chosen from the music)"], ["crisp", "crisp (cuts on the beat)"], ["flowing", "flowing (dissolves outside the hooks)"]];
-const RATIOS: [string, number][] = [["½", 1 / 2], ["×2", 2], ["×2/3", 2 / 3], ["×3/2", 3 / 2]];
+const READABILITY: [string, string][] = [["auto", "auto (a soft backing when your clips are bright behind the lyrics)"], ["strong", "strong (always a soft dark band behind the lyrics)"], ["normal", "normal (never a backing)"]];
+const RATIOS:[string, number][] = [["½", 1 / 2], ["×2", 2], ["×2/3", 2 / 3], ["×3/2", 3 / 2]];
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 // The song's tempo: empty = as detected. Quick fixes for the usual errors (half, double, 3:2), a tap

@@ -36,6 +36,8 @@ import { choosePlatforms, lyricArea, parsePresets, sectionWindow, STANDARD, type
 import { VIDEO } from "../config";
 import { getCutPoints, type CutRate, type Energy, type ShotLength } from "../cuts";
 import { bestMoments } from "./best-moment";
+import { clipBandLuminances } from "./lyric-band";
+import { isThinFace, lyricBackingFor, type BackingDecision, type Readability } from "../readability";
 import { editOf, rankOf, readClipEdits } from "./clip-edits";
 import { boardForRun, cardFont, cardMeasure, overrideCount, titleCards, type RunBoard } from "./textboard";
 import { matchPinClips, parsePins } from "../pins";
@@ -134,7 +136,7 @@ export type MakeOptions = {
   pairings?: string; // "elegant,dramatic": one video per pairing (presets/font-pairings.json), all else the same
   shotLength?: string; // "1" | "2" | "4" | "8" bars per shot, or "story" (2 bars on hooks, 4 on verses, >= 3 s); replaces --rate
   paceShift?: number; // bars added to the automatic pacing (recipe paceShift)
-  readability?: "normal" | "strong"; // strong: a soft dark band behind the lyrics
+  readability?: Readability; // auto (default): a soft dark band behind the lyrics when the clips are bright there; strong: always; normal: never
   breathe?: "off" | "gentle" | "beat"; // the lyrics swell softly while on screen (beat: once a bar, on the downbeats)
   heldGlow?: "off" | "on"; // a held note's word brightens while it is held
   chorusLift?: "off" | "on"; // the first line of each chorus arrives a touch bigger and brighter
@@ -1243,6 +1245,29 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       else anchors.push({ line: a.line, text: lines[i].text, lyric: shown.indexOf(i), clipId: clip.id, clipName: clip.name, clipInMs: a.clipIn !== undefined ? Math.round(a.clipIn * 1000) : null, transition: a.transition ?? "cut" });
     }
   }
+  // Lyric readability (src/readability.ts): "auto" (default) adds the soft dark band behind the lyrics
+  // when at least a quarter of this video's clips are too bright behind them for the lyric colour or the
+  // hook accent (thin strokes need more); "strong" / "normal" are the user's overrides. The clips are
+  // measured at the moment their first shot is centred on (cached).
+  const readabilityArea = ytLayout ? lyricAreaFor(ytLayout, preset) : lyricArea(format, preset.safeZone, preset.lyricsAt);
+  const backing = lyricBackingFor(
+    options.readability,
+    preset.lyrics && usesClips && !canvas && options.readability !== "strong" && options.readability !== "normal"
+      ? clipBandLuminances(
+          ws.dir,
+          preparedClips.map((c) => ({ file: absPath(ws, c.path), atS: c.kind === "photo" ? 0 : Math.max(0, Math.min((c.best_ms ?? c.in_ms ?? 1000) / 1000, c.duration_ms / 1000 - 0.1)) })),
+          readabilityArea,
+          format.height,
+        )
+      : [],
+    {
+      colour: "#ffffff",
+      accent: sh.brand.brand.accentColour,
+      verseThin: isThinFace(styles.simple.main.family, styles.simple.main.weight),
+      hookThin: isThinFace((styles.simple.hook ?? styles.simple.main).family, (styles.simple.hook ?? styles.simple.main).weight),
+    },
+  );
+  if (preset.lyrics && !canvas) log(`${preset.name}: ${backing.text}`);
   const story = !canvas && (sh.gapOrder === "story" || (!sh.gapOrder && sh.anchors.length > 0));
   const layout: PlatformLayout = {
     format,
@@ -1265,7 +1290,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     platform: layout,
     beats: analysis.beats,
     ...(anchors.length ? { anchors } : {}),
-    ...(options.readability === "strong" && preset.lyrics ? { lyricBacking: true } : {}),
+    ...(backing.backing && preset.lyrics ? { lyricBacking: true } : {}),
     // Loop platforms: the last frames blend into the first shot's opening when the last shot cannot
     // continue into it (about the ending's fade, 0.4-1 s).
     ...(loops && usesClips ? { loopInto: Math.max(12, Math.min(30, Math.round((ending?.fadeOutS ?? 0.5) * VIDEO.fps))) } : {}),
@@ -1644,7 +1669,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       writeManifest(
         result.manifestFile,
         buildManifest({
-          ws, tool: sh.tool, spec, props, media, project, songHash: sh.sp.songHash, songFile: sh.sp.songFile, analysis, chosen, alignment, reports, numbers, audioPlan: audioP, pace, transitionPlan: composedBySpec.get(spec.name)?.transitions ?? null, canvasPlan: canvas,
+          ws, tool: sh.tool, spec, props, media, project, songHash: sh.sp.songHash, songFile: sh.sp.songFile, analysis, chosen, alignment, reports, numbers, audioPlan: audioP, pace, transitionPlan: composedBySpec.get(spec.name)?.transitions ?? null, canvasPlan: canvas, readability: preset.lyrics && !canvas ? backing : null,
           visible, lines, leadMs, lyricsOffsetMs, options, collection: sh.collection, collectionNames: sh.collectionNames, clips: prepared.clips, file, qa, now: sh.now, warnings, preset,
           brand: sh.brand.brand, anchors: anchorsOut, gapOrder: story ? "story" : null,
           textboard: preset.lyrics && !canvas
@@ -1888,6 +1913,7 @@ function buildManifest(c: {
   pace?: Pace | null; // automatic pacing (src/pace.ts)
   canvasPlan?: CanvasPlan | null; // Spotify Canvas: the loop's length, the longest possible, the clip that would make it
   transitionPlan?: { text: string; kinds: string[] } | null; // automatic transitions (src/transitions.ts)
+  readability?: BackingDecision | null; // lyric readability: the soft backing and why (src/readability.ts)
   tool: Manifest["tool"];
   spec: VariationSpec;
   props: Omit<LyricVideoProps, "mediaBaseUrl">;
@@ -1963,6 +1989,7 @@ function buildManifest(c: {
       transition_style: c.options.transitions ?? "auto",
       canvas: c.canvasPlan ? { seconds: c.canvasPlan.seconds, possible_s: c.canvasPlan.possibleS, need_clip_s: c.canvasPlan.needClipS, fallback: c.canvasPlan.fallback, chosen: c.canvasPlan.chosen } : null,
       transition_plan: c.transitionPlan ?? null, // the transition into each shot (cut / dissolve / dip) and why
+      readability: c.readability ? { mode: c.readability.mode, backing: c.readability.backing, clips_measured: c.readability.measured, clips_bright: c.readability.bright, text: c.readability.text } : null, // the soft backing behind the lyrics and why
       ending: c.loop && c.loop.checked ? (c.loop.ending ?? null) : null, // Reels / TikTok / Shorts: the ending chosen (tight loop, soft fade, ring-out) and why
       tempo: c.options.tempo ? { bpm: c.analysis.bpm, set: c.options.tempo } : null, // song.json "tempo" (null: as detected)
       order: spec.order,
