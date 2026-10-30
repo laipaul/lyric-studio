@@ -302,6 +302,7 @@ before Releases step 2 and the Lyric Sheet, one step each, plan first:
 - ✅ (built 30 Oct, to verify) **U2. One big live preview that stays on screen (Shape):** fonts + effect + accent together on the song's
   own clip, updating at once with every choice; replaces the Set effect's small player (as built: the font
   cards keep their small pictures as the visual picker; pointing at a card tries it in the big preview).
+  Fix 30 Oct: save buttons under the controls; preview fits narrower windows; long clip names shortened; font pairings as a dropdown with live preview (hover / arrow keys), card thumbnails removed (replaces the U1 card grid).
 - **U2b. Storyboard simplified (Shape; added 30 Oct after an outside review):** header = a short summary of
   what the app decided (Pacing, Transitions, Ending, Section + the predicted verdict, e.g. "Ready to
   generate"); the detailed analysis lines folded under "View technical analysis" (no invented "mood": only

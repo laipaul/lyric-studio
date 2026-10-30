@@ -7,6 +7,7 @@
 // reflects at once: the song's fonts (or the pair under the pointer / keyboard focus, without saving),
 // what is tried in Set effect (kept per song in sessionStorage), the accent colour and the soft backing
 // behind the lyrics when the render would add it (readability, the render's own rule).
+import { shortFrom } from "@/lib/short-from";
 import { Player } from "@remotion/player";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
@@ -81,7 +82,7 @@ export function LookWorkbench({
 
   const controls: LookControls = { tried, setTried, onPairingView: setView, onPairingHover: setHovered };
   return (
-    <div data-look className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+    <div data-look className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_min(340px,26vw)]">
       <div className="flex min-w-0 flex-col gap-2">{children(controls)}</div>
       <aside
         data-look-preview
@@ -95,7 +96,7 @@ export function LookWorkbench({
         data-accent={accent}
         data-backing={backing ? "1" : "0"}
         data-previewing-pair={hovered?.id}
-        className="order-first mx-auto flex w-[300px] flex-col gap-1.5 self-start lg:sticky lg:top-4 lg:order-none lg:w-[320px] xl:w-[340px]"
+        className="order-first mx-auto flex w-[300px] max-w-full flex-col gap-1.5 self-start lg:sticky lg:top-4 lg:order-none lg:w-[min(340px,26vw)]"
       >
         <div className="overflow-hidden rounded-lg border shadow-lg">
           <Player
@@ -126,13 +127,13 @@ export function LookWorkbench({
             controls={false}
           />
         </div>
-        <p data-look-preview-caption className="text-muted-foreground text-[11px] leading-snug">
+        <p data-look-preview-caption className="text-muted-foreground text-[11px] leading-snug break-words" title={view?.backgroundFrom ?? undefined}>
           {hovered ? (
             <>
               Trying <span className="text-foreground">{hovered.name}</span> — click the card to use it.
             </>
           ) : (
-            <>Your song&apos;s first lines as the video draws them{view?.backgroundFrom ? `, over ${view.backgroundFrom}` : ""}{backing ? ", with the soft backing the video adds behind the lyrics" : ""}. Nothing is saved until you choose.</>
+            <>Your song&apos;s first lines as the video draws them{view?.backgroundFrom ? `, over ${shortFrom(view.backgroundFrom)}` : ""}{backing ? ", with the soft backing the video adds behind the lyrics" : ""}. Nothing is saved until you choose.</>
           )}
         </p>
       </aside>

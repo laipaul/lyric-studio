@@ -87,6 +87,39 @@ export function EffectPreview({
             </button>
           ))}
         </div>
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <label className="flex items-center gap-2">
+            {pace ? "Typing pace" : "Intensity"}
+            <select className={select} value={intensity} onChange={(e) => setIntensity(e.target.value as Intensity)} data-try-intensity>
+              {INTENSITIES.map((i) => (
+                <option key={i} value={i}>
+                  {pace ? (i === "subtle" ? "calm" : i === "balanced" ? "normal" : "quick") : i}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2">
+            Breathe
+            <select className={select} value={breathe} onChange={(e) => setBreathe(e.target.value as typeof breathe)} data-try-breathe>
+              <option value="off">off</option>
+              <option value="gentle">gentle</option>
+              <option value="beat">with the beat</option>
+            </select>
+          </label>
+          {(
+            [
+              ["heldGlow", "Held-note glow"],
+              ["chorusLift", "Chorus lift"],
+              ["shine", "Shine"],
+            ] as const
+          ).map(([k, label]) => (
+            <label key={k} className="flex items-center gap-1.5">
+              <input type="checkbox" data-try-addon={k} checked={addOns[k]} onChange={(e) => setAddOns((a) => ({ ...a, [k]: e.target.checked }))} />
+              {label}
+            </label>
+          ))}
+        </div>
+        <div className="flex flex-col gap-1.5">
         <div className="flex flex-wrap items-center gap-2 text-xs" data-use-row>
           {(
             [
@@ -121,37 +154,6 @@ export function EffectPreview({
             Not saved to the recipe yet: {unsaved.join(", ")} — press Save to recipe to keep {unsaved.length === 1 ? "it" : "them"}.
           </p>
         ) : null}
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          <label className="flex items-center gap-2">
-            {pace ? "Typing pace" : "Intensity"}
-            <select className={select} value={intensity} onChange={(e) => setIntensity(e.target.value as Intensity)} data-try-intensity>
-              {INTENSITIES.map((i) => (
-                <option key={i} value={i}>
-                  {pace ? (i === "subtle" ? "calm" : i === "balanced" ? "normal" : "quick") : i}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-2">
-            Breathe
-            <select className={select} value={breathe} onChange={(e) => setBreathe(e.target.value as typeof breathe)} data-try-breathe>
-              <option value="off">off</option>
-              <option value="gentle">gentle</option>
-              <option value="beat">with the beat</option>
-            </select>
-          </label>
-          {(
-            [
-              ["heldGlow", "Held-note glow"],
-              ["chorusLift", "Chorus lift"],
-              ["shine", "Shine"],
-            ] as const
-          ).map(([k, label]) => (
-            <label key={k} className="flex items-center gap-1.5">
-              <input type="checkbox" data-try-addon={k} checked={addOns[k]} onChange={(e) => setAddOns((a) => ({ ...a, [k]: e.target.checked }))} />
-              {label}
-            </label>
-          ))}
         </div>
       </div>
     </div>

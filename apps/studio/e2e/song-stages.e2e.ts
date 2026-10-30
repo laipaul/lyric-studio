@@ -136,7 +136,7 @@ async function main() {
     check((await page.getAttribute("[data-auto-toggle]", "aria-expanded")) === "false" && (await inBlock("auto")).length === 0, "Automatic is folded");
     check((await page.textContent("[data-auto-summary]")) === "2 set by you: Tempo, Ending", `…with its summary line (${await page.textContent("[data-auto-summary]")})`);
     if (process.env.STYLE_SHOT) {
-      await page.waitForSelector("[data-pairing]");
+      await page.waitForSelector("[data-pairing-select]");
       await page.setViewportSize({ width: 1280, height: 3200 });
       await sleep(1500);
       await page.screenshot({ path: process.env.STYLE_SHOT, fullPage: true });
@@ -199,6 +199,20 @@ async function main() {
     check(brand.perPlatform?.reels?.heldGlow === "on" && brand.perPlatform?.youtube?.heldGlow === "on" && !brand.perPlatform?.canvas, `Use for all my songs: brand.json on every platform with lyrics (${JSON.stringify(brand.perPlatform)})`);
     check(JSON.parse(readFileSync(recipe, "utf8")).heldGlow === undefined, "…and the song follows the brand (its own value removed)");
     check(!!(await page.$("[data-try-addon=shine]")), "the preview offers the add-ons");
+    check(await page.evaluate(() => { const c = document.querySelector("[data-try-intensity]")!.closest("div")!; const u = document.querySelector("[data-use-row]")!; return !!(c.compareDocumentPosition(u) & 4); }), "the Save to recipe row comes after the Intensity / Breathe / add-ons row");
+    for (const w of [1280, 1366]) {
+      await page.setViewportSize({ width: w, height: 1000 });
+      await sleep(300);
+      const right = await page.$eval("[data-look-preview]", (e: Element) => e.getBoundingClientRect().right);
+      check(right <= w, `at ${w} px the Look preview's right edge is inside the window (${Math.round(right)} px)`);
+    }
+    if (process.env.U2FIX_SHOT) {
+      await page.setViewportSize({ width: 1366, height: 1100 });
+      await page.$eval("[data-style-block=look]", (e: Element) => e.scrollIntoView());
+      await sleep(800);
+      await (await page.$("[data-style-block=look]"))!.screenshot({ path: process.env.U2FIX_SHOT });
+    }
+    await page.setViewportSize({ width: 1280, height: 1000 });
     // The preview saves what was tried: verses (name:intensity), choruses and the add-ons.
     await page.click("[data-try-effect=typewriter]");
     await page.selectOption("[data-try-intensity]", "subtle");
