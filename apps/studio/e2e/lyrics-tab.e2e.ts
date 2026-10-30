@@ -85,7 +85,7 @@ async function main() {
     check(((await page.getAttribute("[data-line='2'] [data-flag-why]", "title")) ?? "").includes("only words 1:10.1"), "the technical reason in the tooltip");
     check((await page.locator("[data-line='2'] [data-use-likely]").count()) === 0, "one signal only: no one-click \"Use\" time");
     check((await page.evaluate("getComputedStyle(document.querySelector('[data-lines-scroll] th')).position")) === "sticky", "column headers are sticky");
-    check((await page.evaluate("(() => { const b = document.querySelector('[data-anchor-pick]'); return b.scrollWidth <= b.clientWidth; })()")) === true, "\"Lands on…\" is not cut off");
+    check((await page.evaluate("(() => { const b = document.querySelector('[data-anchor-pick]'); return b.scrollWidth <= b.clientWidth; })()")) === true, "\"Choose a clip\" is not cut off");
     check(((await page.textContent("[data-line='2'] [data-screen]")) ?? "").includes("readable 1:08.27"), "what the viewer sees: readable 1:08.27 (0.25 s before the stamp)");
 
     // "Checked by ear": the flagged line is no longer flagged (stored with the song).

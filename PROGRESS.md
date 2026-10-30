@@ -731,7 +731,7 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
 - **Lyrics tab:** flag reasons in plain words ("The singing may start about 2 s later than shown. Listen with
   ▶."; the technical reason on hover; vocal-guard.ts flagReason). A flagged line with a likely start (two
   signals within 1 s; the earlier one) gets **Use 1:04.0** next to ▶: saved at once as a hand-set start
-  (likelyStart). Sticky column headers (the lines scroll in their own box); "Lands on…" never truncates.
+  (likelyStart). Sticky column headers (the lines scroll in their own box); the "Lands on" button reads "Choose a clip" (the old "Lands on…" looked cut off).
 - **Generate:** the "Standard" preset is no longer offered (pnpm make without --platforms unchanged).
 - Tests: runs (resume with a platform that never started, resumable), make (stop during v1 of 3), vocal-guard
   (likelyStart, flagReason), lyrics-view, runSummary verdicts; e2e lyrics-tab (plain reason, tooltip, sticky

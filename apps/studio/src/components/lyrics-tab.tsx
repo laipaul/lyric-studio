@@ -324,7 +324,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                             </div>
                           ) : null}
                           <button type="button" disabled={busy} onClick={() => setPicking(picking === l.number ? null : l.number)} className="text-muted-foreground hover:text-foreground mt-1 flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] whitespace-nowrap" data-anchor-pick>
-                            <Clapperboard className="size-3" /> {anchor ? "Change" : "Lands on…"}
+                            <Clapperboard className="size-3" /> {anchor ? "Change" : "Choose a clip"}
                           </button>
                           {problems.map((p) => (
                             <p key={p.problem} className="mt-1 flex items-start gap-1 text-[11px] text-amber-200" data-anchor-problem>
