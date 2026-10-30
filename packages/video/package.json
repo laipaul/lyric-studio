@@ -72,6 +72,7 @@
     "./library": "./src/node/library.ts",
     "./library-status": "./src/library-status.ts",
     "./song-stages": "./src/node/song-stages.ts",
+    "./releases": "./src/node/releases.ts",
     "./app-icons": "./src/node/app-icons.ts",
     "./jobs": "./src/node/jobs.ts",
     "./exports": "./src/node/exports.ts",
