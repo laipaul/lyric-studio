@@ -22,12 +22,12 @@ export const EASINGS: Record<EasingName, (t: number) => number> = {
 // typed in; lyric lines type per word, see WordLook).
 // wave = ascend's letter wave (0 -> 1: letters rise into place one after another), reveal = ink's reveal
 // (share of the line's letters uncovered, left to right, with a soft edge).
-export type LineLook = { opacity: number; x: number; y: number; scale: number; blur: number; glow: number; spacing?: number; chars?: number; wave?: number; reveal?: number };
+export type LineLook = { opacity: number; x: number; y: number; scale: number; blur: number; glow: number; spacing?: number; chars?: number; wave?: number; reveal?: number; shine?: number };
 export const REST: LineLook = { opacity: 1, x: 0, y: 0, scale: 1, blur: 0, glow: 0 };
 
 // The look of one word: chars = share of its letters shown (typewriter), accent = 0-1 mix towards
 // the brand accent colour (karaoke), cursor = the typing cursor after this word's shown letters (0-1).
-export type WordLook = { opacity: number; y: number; blur: number; accent: number; scale: number; chars: number; cursor?: number };
+export type WordLook = { opacity: number; y: number; blur: number; accent: number; scale: number; chars: number; cursor?: number; glow?: number };
 export const WORD_REST: WordLook = { opacity: 1, y: 0, blur: 0, accent: 0, scale: 1, chars: 1 };
 
 // A word's sung time in composition frames (from the aligned LRC, or spread over the line).

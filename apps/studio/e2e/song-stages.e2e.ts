@@ -137,6 +137,18 @@ async function main() {
     check((await page.$$eval("[data-effect-preview] [data-lyric]", (e: Element[]) => e.length)) > 0, "the preview draws the song's lines");
     if (process.env.SHOT_FX) await page.screenshot({ path: process.env.SHOT_FX, clip: await page.$eval("[data-effect-preview]", (e: Element) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y + window.scrollY, width: r.width, height: r.height }; }) });
     check(!JSON.parse(readFileSync(recipe, "utf8")).breathe, "trying in the preview saves nothing to song.json");
+    // Held-note glow: on for this song, then "Use for all my songs" (brand.json, every platform with lyrics).
+    await page.selectOption("[data-field=heldGlow] select[data-edit]", "on");
+    await page.waitForSelector("[data-saving=saved]");
+    check(JSON.parse(readFileSync(recipe, "utf8")).heldGlow === "on", "Held-note glow on: saved to song.json");
+    await page.click("[data-brand-all=heldGlow]");
+    await page.click("[data-brand-all-yes=heldGlow]");
+    await page.waitForFunction(() => !document.querySelector("[data-brand-all-ask=heldGlow]"));
+    await sleep(800);
+    const brand = JSON.parse(readFileSync(path.join(wsDir, "brand", "brand.json"), "utf8")) as { perPlatform?: Record<string, { heldGlow?: string }> };
+    check(brand.perPlatform?.reels?.heldGlow === "on" && brand.perPlatform?.youtube?.heldGlow === "on" && !brand.perPlatform?.canvas, `Use for all my songs: brand.json on every platform with lyrics (${JSON.stringify(brand.perPlatform)})`);
+    check(JSON.parse(readFileSync(recipe, "utf8")).heldGlow === undefined, "…and the song follows the brand (its own value removed)");
+    check(!!(await page.$("[data-try-addon=shine]")), "the preview offers the add-ons");
     ws2.close();
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
     await browser.close();

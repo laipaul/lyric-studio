@@ -94,6 +94,7 @@ export function LyricScene(props: {
             wordCount: (i) => layouts[i].lines.join(" ").split(" ").length,
             wordLetters: (i) => layouts[i].lines.join(" ").split(" ").map((w) => [...w].length),
             breathe: effects.breathe ?? null,
+            accents: effects.heldGlow || effects.chorusLift || effects.shine ? { heldGlow: effects.heldGlow, chorusLift: effects.chorusLift, shine: effects.shine, downbeats: effects.downbeats } : null,
           })
         : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -156,7 +157,8 @@ export function LyricScene(props: {
                               opacity: wl.opacity,
                               transform: wl.y || wl.scale !== 1 ? `translateY(${wl.y.toFixed(2)}px) scale(${wl.scale.toFixed(4)})` : undefined,
                               filter: wl.blur > 0.01 ? `blur(${wl.blur.toFixed(2)}px)` : undefined,
-                              color: wl.accent > 0.001 ? mixColour(colour, effects.accent, wl.accent) : undefined,
+                              color: wl.accent > 0.001 ? mixColour(colour, effects.accent, wl.accent) : (wl.glow ?? 0) > 0.001 ? mixColour(colour, effects.accent, 0.35 * wl.glow!) : undefined,
+                              textShadow: (wl.glow ?? 0) > 0.001 ? `${shadows.join(", ")}, 0 0 ${Math.round(14 + 30 * wl.glow!)}px ${rgba(effects.accent, 0.9 * wl.glow!)}, 0 0 ${Math.round(4 + 8 * wl.glow!)}px ${rgba("#ffffff", 0.7 * wl.glow!)}` : undefined,
                             }}
                           >
                             {letters.slice(0, shown).join("")}
@@ -171,6 +173,28 @@ export function LyricScene(props: {
                     : text}
               </div>
             ))}
+            {look.shine !== undefined && (!item.words || item.words.every((wd) => wd.chars >= 1)) ? (
+              <div
+                aria-hidden
+                data-shine
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  color: "transparent",
+                  textShadow: "none",
+                  pointerEvents: "none",
+                  backgroundImage: `linear-gradient(105deg, transparent ${(look.shine * 130 - 30).toFixed(1)}%, rgba(255,255,255,0.95) ${(look.shine * 130 - 15).toFixed(1)}%, transparent ${(look.shine * 130).toFixed(1)}%)`,
+                  WebkitBackgroundClip: "text",
+                  backgroundClip: "text",
+                }}
+              >
+                {layout.lines.map((text, r) => (
+                  <div key={r} style={{ whiteSpace: "nowrap" }}>
+                    {text}
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         );
       })}

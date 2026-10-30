@@ -18,7 +18,7 @@ import { choiceText, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, parseEffectChoic
 import { DEFAULT_BRAND, type Brand } from "./brand";
 import { checkPerPlatform, isPlatformField, isWeight, SHOT_LENGTH_VALUES, PLATFORM_FIELDS, type PerPlatform, type PlatformField } from "./per-platform";
 
-export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "tempo", "collections", "platforms", "variations", "section", "length", "ending", "transitions", "paceShift", "readability", "breathe", "titleOpening", "tagline", "ep", "youtubeLayout"] as const;
+export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "tempo", "collections", "platforms", "variations", "section", "length", "ending", "transitions", "paceShift", "readability", "breathe", "heldGlow", "chorusLift", "shine", "titleOpening", "tagline", "ep", "youtubeLayout"] as const;
 export type RecipeField = (typeof RECIPE_FIELDS)[number];
 
 export type RecipeValues = {
@@ -41,6 +41,9 @@ export type RecipeValues = {
   paceShift: number; // bars added to (+) or taken from (-) the automatic pacing (reactions "cuts too fast / slow"), -3..+4
   readability: "normal" | "strong";
   breathe: "off" | "gentle" | "beat"; // the lyrics swell softly while on screen: every 4 s, or once a bar on the downbeats
+  heldGlow: "off" | "on"; // a held note's word brightens in the accent colour while it is held
+  chorusLift: "off" | "on"; // the first line of each chorus arrives a touch bigger and brighter
+  shine: "off" | "on"; // one soft light sweep across each chorus line, on a downbeat
   titleOpening: "off" | "on"; // Reels / TikTok / Shorts: the title, byline and tagline before the first hook (the app places and times them)
   tagline: string; // the song's own tagline (a short line under the title); empty: none (never taken from the EP) // strong: a soft dark band behind the lyrics (reaction "lyrics hard to read")
   transitions: TransitionStyle; // between shots: "auto" (the app chooses cuts, dissolves and dips from the music), "crisp" (cuts), "flowing" (dissolves)
@@ -121,6 +124,11 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
   if (r.breathe !== undefined) {
     if (r.breathe === "off" || r.breathe === "gentle" || r.breathe === "beat") recipe.breathe = r.breathe;
     else problems.push('breathe must be off, gentle or beat (the lyrics swell softly while on screen; beat: once a bar, on the downbeats)');
+  }
+  for (const k of ["heldGlow", "chorusLift", "shine"] as const) {
+    if (r[k] === undefined) continue;
+    if (r[k] === "off" || r[k] === "on") recipe[k] = r[k];
+    else problems.push(`${k} must be off or on`);
   }
   if (r.transitions !== undefined) {
     if ((TRANSITION_STYLES as readonly string[]).includes(String(r.transitions))) recipe.transitions = r.transitions as TransitionStyle;
@@ -343,6 +351,9 @@ export const LIBRARY_RECIPE: RecipeValues = {
   paceShift: 0,
   readability: "normal",
   breathe: "off",
+  heldGlow: "off",
+  chorusLift: "off",
+  shine: "off",
   titleOpening: "off",
   tagline: "",
   ep: "",
@@ -423,7 +434,7 @@ export function recipeText(v: unknown): string {
 // "verse glide (artist), hook karaoke-highlight (artist), collections wedding (song, locked), ..."
 export function recipeSummary(r: ResolvedRecipe): string {
   const show: RecipeField[] = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "collections", "section"];
-  for (const k of ["platforms", "variations", "ep", "youtubeLayout", "tempo", "ending", "transitions", "paceShift", "readability", "breathe", "titleOpening", "tagline"] as const) if (r.sources[k] !== "library") show.push(k);
+  for (const k of ["platforms", "variations", "ep", "youtubeLayout", "tempo", "ending", "transitions", "paceShift", "readability", "breathe", "heldGlow", "chorusLift", "shine", "titleOpening", "tagline"] as const) if (r.sources[k] !== "library") show.push(k);
   return show.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]}${r.locked.includes(k) ? ", locked" : ""})`).join(", ");
 }
 

@@ -86,7 +86,7 @@ describe("per-platform values: library -> artist -> artist (platform) -> song ->
   it("song.json and brand.json perPlatform are checked", () => {
     expect(checkRecipe({ perPlatform: { youtube: { verseEffect: "spin", collections: ["x"], accentColour: "pink" } } }).problems).toEqual([
       expect.stringMatching(/perPlatform.youtube.verseEffect: unknown effect "spin"/),
-      "perPlatform.youtube.collections: only verseEffect, hookEffect, verseFont, hookFont, verseWeight, hookWeight, verseItalic, hookItalic, accentColour, section, length, shotLength, ending, transitions, paceShift, readability, breathe, titleOpening can differ per platform",
+      "perPlatform.youtube.collections: only verseEffect, hookEffect, verseFont, hookFont, verseWeight, hookWeight, verseItalic, hookItalic, accentColour, section, length, shotLength, ending, transitions, paceShift, readability, breathe, heldGlow, chorusLift, shine, titleOpening can differ per platform",
       'perPlatform.youtube.accentColour must look like "#E8A3B5"',
     ]);
     expect(checkRecipe({ verseEffect: "wobble" }).problems[0]).toMatch(/verseEffect: unknown effect "wobble"/);

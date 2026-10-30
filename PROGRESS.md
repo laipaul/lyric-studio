@@ -4,6 +4,18 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Effects, batch 2 step 2: Held-note glow, Chorus lift, Shine ✅ (to verify on the Windows PC)
+- Three settings in Shape → Style, next to Breathe (off by default, per platform), each with **"Use for all my
+  songs"** (asks first; writes your brand, and the song follows it):
+  - **Held-note glow**: a word sung for about a second or longer glows softly in your accent colour while it is
+    held, then settles (needs the song's word timings, which every aligned song has).
+  - **Chorus lift**: the first line of each chorus arrives about 5% bigger with a soft glow, then eases back.
+  - **Shine**: one soft light sweep across each chorus line, on a downbeat.
+- All three work with every effect, are in "Try an effect" (checkboxes) and count in the safe-zone check.
+- Tests: accents.test.ts (glow only on held words, lift only on the first chorus line, one shine on a downbeat,
+  smooth, settings checked); song-stages.e2e.ts (setting saved, Use for all my songs -> brand.json).
+- Next: Focus Word + Slide, then Emotion presets (Creative Director).
+
 ### Effects, batch 2 step 1: Clarify, Ascend, Ink ✅ (to verify on the Windows PC)
 - **clarify**: each word pulls into focus (blurred and dim -> sharp) as it is sung, like a camera finding focus.
 - **ascend**: the letters rise into place one after another, a soft wave across the line (titles too).
@@ -74,20 +86,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: take.test.ts (a take is exactly vN, each take differs), song-stages.e2e.ts (Post offer + Approve,
   another take queued as take 3, Style's short list, Make's count); the Style and Storyboard browser tests open
   "Show all settings".
-
-### Four-stage song page, part 1 ✅ (verified by the user on the Windows PC, 30 Oct 2026)
-- **Stage bar** on every song: 1 Prepare (Assets, Lyrics) → 2 Shape (Style, Storyboard) → 3 Make (Generate) →
-  4 Review & Post (Videos, Post), each with a status line ("2 to check", "6 videos made", "3 to review · 1
-  approved"); a stage shows only its own tabs (all tabs and features unchanged).
-- **Prepare to-do list**: only what needs you — lyrics or clips missing (these block making videos), no cover,
-  label lines like "Chorus:" in the lyrics, lines to check by ear; each with a button to the right tab.
-- **Make release pack**: one button, one video per platform for the song's own platforms (Style → platforms;
-  else Reels, TikTok, Shorts, YouTube, Canvas), with its recipe and collections. The full Generate panel is
-  folded underneath ("More options").
-- **Opens on the right stage**: Review when the song has videos, else Prepare when something needs doing,
-  else Make. The Library card counts only the song's own platforms when it has them ("1/2 ready").
-- Tests: song-stages.test.ts (to-do list, the song's platforms); browser: song-stages.e2e.ts (new) and the
-  Style, Pairings and Videos browser tests now reach their tab through its stage (e2e/stage-tabs.ts).
 
 ### Step H — Library cards ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **One colour per platform chip:** grey = not made, amber = made but not approved yet ("to review"), green =

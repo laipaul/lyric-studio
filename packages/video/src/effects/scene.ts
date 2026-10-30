@@ -15,6 +15,7 @@ import { GLIDE_LIFT_PX } from "./glide";
 import { motionOf, resolveEffect, type ResolvedEffect } from "./index";
 import { BREATHE_MAX_SCALE, breatheScale, type BreatheProps } from "./breathe";
 import { typingPlan, typingWords } from "./typing";
+import { heldGlow, liftAt, LIFT_GLOW, LIFT_MAX_SCALE, LIFT_SCALE, shineAt, type Accents } from "./accents";
 
 export const NEXT_OPACITY = 0.45; // the waiting next line
 export const GAP_FADE_FRAMES = 12; // 0.4 s fade before a pause
@@ -43,6 +44,7 @@ export type SceneOptions = {
   wordCount: (index: number) => number; // words as laid out (for word effects)
   wordLetters?: (index: number) => number[]; // each word's letters as laid out (the letter-by-letter typewriter)
   breathe?: BreatheProps | null; // the "breathe" add-on (recipe breathe gentle / beat)
+  accents?: Accents | null; // held-note glow, chorus lift, shine (recipe heldGlow / chorusLift / shine)
 };
 
 export type SceneItem = { index: number; role: "active" | "leaving" | "next"; look: LineLook; words: WordLook[] | null };
@@ -161,12 +163,28 @@ export function lyricScene(t: SceneTimeline, frame: number): SceneItem[] {
       if (share < 1) look.reveal = share;
     }
     if (t.o.breathe && base.role !== "next") look.scale *= breatheScale(t.o.breathe, frame, t.o.fps, !!t.lines[i].isHook);
+    const acc = t.o.accents;
+    const line = t.lines[i];
+    if (acc?.chorusLift && base.role !== "next" && line.isHook && !(i > 0 && t.lines[i - 1].isHook)) {
+      const b = liftAt(frame, t.enterStart[i], line.startFrame);
+      look.scale *= 1 + LIFT_SCALE * b;
+      look.glow = clamp01(look.glow + LIFT_GLOW * b);
+    }
+    if (acc?.shine && base.role !== "next" && line.isHook) {
+      const s = shineAt(frame, line.startFrame, t.exitWindow[i]?.start ?? line.endFrame, acc.downbeats);
+      if (s !== undefined) look.shine = s;
+    }
     const own = t.own[i];
-    const words = own.effect.typing
+    let words = own.effect.typing
       ? typingLook(t, i, frame)
       : own.effect.word
         ? wordTimings(t, i).map((w) => ({ ...WORD_REST, ...own.effect.word!(frame, w, own.amount, t.o.fps) }))
         : null;
+    // Held-note glow: only with the singer's own word times (aligned), on the words held long.
+    if (acc?.heldGlow && base.role !== "next" && line.words?.length === Math.max(1, t.o.wordCount(i))) {
+      const glows = line.words.map((w) => heldGlow(frame, w));
+      if (glows.some((g) => g > 0.001)) words = (words ?? line.words.map(() => ({ ...WORD_REST }))).map((w, k) => ({ ...w, glow: glows[k] ?? 0 }));
+    }
     out.push({ index: i, role: base.role, look, words });
   }
   return out;
@@ -200,7 +218,7 @@ function inkShare(t: SceneTimeline, i: number, frame: number): number {
 
 // How far an effect can move a line from its place (px) and its largest scale: for the QA
 // safe-zone check. Sampled from the effect's own functions, so new effects are covered too.
-export function effectExtents(choice: EffectChoice, verse: EffectChoice, fps: number, breathe?: BreatheProps | null): { up: number; down: number; side: number; maxScale: number } {
+export function effectExtents(choice: EffectChoice, verse: EffectChoice, fps: number, breathe?: BreatheProps | null, lift = false): { up: number; down: number; side: number; maxScale: number } {
   const m = motionOf(resolveEffect(choice, fps), resolveEffect(verse, fps), fps);
   const own = resolveEffect(choice, fps);
   const looks: Partial<LineLook>[] = [];
@@ -232,7 +250,7 @@ export function effectExtents(choice: EffectChoice, verse: EffectChoice, fps: nu
       wordScale = Math.max(wordScale, w.scale ?? 1);
     }
   }
-  const maxScale = Math.max(1, ...looks.map((l) => l.scale ?? 1)) * wordScale * (breathe ? BREATHE_MAX_SCALE : 1);
+  const maxScale = Math.max(1, ...looks.map((l) => l.scale ?? 1)) * wordScale * (breathe ? BREATHE_MAX_SCALE : 1) * (lift ? LIFT_MAX_SCALE : 1);
   const reach = own.effect.reach?.(own.amount) ?? m.effect.reach?.(m.amount) ?? {};
   up += reach.up ?? 0;
   down += reach.down ?? 0;

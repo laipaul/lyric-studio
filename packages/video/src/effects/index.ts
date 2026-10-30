@@ -23,6 +23,7 @@ export * from "./typing";
 export * from "./breathe";
 export { ascendLetter, ASCEND_LIFT_PX } from "./ascend";
 export { inkMask } from "./ink";
+export * from "./accents";
 
 export const EFFECTS: readonly LyricEffect[] = [glide, cinematicFade, softBlur, dreamyGlow, wordReveal, karaokeHighlight, floating, typewriter, spread, typewriterErase, typewriterWords, clarify, ascend, ink];
 const BY_NAME = new Map(EFFECTS.map((e) => [e.name, e]));

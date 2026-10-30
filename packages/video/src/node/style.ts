@@ -61,6 +61,9 @@ export const FIELD_LABELS: Record<RecipeField, string> = {
   paceShift: "Pace adjustment (bars)",
   readability: "Lyric readability",
   breathe: "Breathe (lyrics swell softly)",
+  heldGlow: "Held-note glow",
+  chorusLift: "Chorus lift",
+  shine: "Shine (choruses)",
   titleOpening: "Title opening (Reels, TikTok, Shorts)",
   tagline: "Tagline",
   ep: "EP",
@@ -204,11 +207,37 @@ function sampleLines(ws: Workspace, projectId: string): string[] {
   return ["Hold on to the light", "We had a heart for two", "And it carried us home"];
 }
 
-export type StyleAction = { action: "set" | "reset" | "lock" | "unlock"; field: RecipeField; platform?: string; value?: unknown };
+export type StyleAction = { action: "set" | "reset" | "lock" | "unlock" | "brand"; field: RecipeField; platform?: string; value?: unknown };
+
+// "Use for all my songs" (the music-reactive add-ons and Breathe): the value in the artist's brand.json for
+// every platform with lyrics, and this song's own value removed so it follows the brand too.
+export const BRAND_ALL_FIELDS = ["breathe", "heldGlow", "chorusLift", "shine"] as const;
+export function setBrandAllPlatforms(ws: Workspace, projectId: string, field: RecipeField, value: string): { file: string; platforms: string[] } {
+  if (!(BRAND_ALL_FIELDS as readonly string[]).includes(field)) throw new Error(`${FIELD_LABELS[field]} cannot be set for all songs here.`);
+  const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
+  if (!p) throw new Error("Song not found.");
+  const platforms = presetsList().filter((x) => x.lyrics).map((x) => x.name);
+  let file = "";
+  for (const platform of platforms) file = setBrandPerPlatform(ws, { artist: p.artist, platform, field, value }).file;
+  const recipeFile = songPathsById(ws, projectId).recipe;
+  if (recipeFile && existsSync(recipeFile)) {
+    let song = readRecipe(recipeFile);
+    if (!(song.locked ?? []).includes(field)) {
+      song = resetField(song, field);
+      for (const platform of platforms) song = resetField(song, field, platform);
+      writeRecipe(recipeFile, song);
+    }
+  }
+  return { file, platforms };
+}
 
 // One change from the Style tab, checked like song.json is checked when it is read.
 export function applyStyleAction(ws: Workspace, projectId: string, a: StyleAction): SongRecipe {
   if (!(RECIPE_FIELDS as readonly string[]).includes(a.field)) throw new Error(`Unknown setting ${a.field}.`);
+  if (a.action === "brand") {
+    setBrandAllPlatforms(ws, projectId, a.field, String(a.value));
+    return readRecipe(songPathsById(ws, projectId).recipe);
+  }
   if (a.platform && !isPlatformField(a.field)) throw new Error(`${FIELD_LABELS[a.field]} cannot differ per platform (only ${PLATFORM_FIELDS.join(", ")}).`);
   const catalog = loadFontCatalog(ws.dir);
   const { input, song } = recipeInputFor(ws, projectId, catalog);

@@ -83,7 +83,19 @@ export type TextCardProps = {
 // gap: during an instrumental gap longer than hideMs no lyric is shown; the next line fades in
 // leadInMs before its first sung word (missing in manifests from before: the old timing).
 // breathe: the "breathe" add-on (recipe breathe gentle / beat; downbeats = frames of the video).
-export type LyricEffectsProps = { verse: EffectChoice; hook: EffectChoice; accent: string; gap?: { hideMs: number; leadInMs: number }; breathe?: BreatheProps };
+// The music-reactive add-ons (recipe heldGlow / chorusLift / shine "on"); downbeats: frames of the video
+// (the song's detected bars), for Shine.
+export type LyricEffectsProps = {
+  verse: EffectChoice;
+  hook: EffectChoice;
+  accent: string;
+  gap?: { hideMs: number; leadInMs: number };
+  breathe?: BreatheProps;
+  heldGlow?: boolean;
+  chorusLift?: boolean;
+  shine?: boolean;
+  downbeats?: number[];
+};
 
 export type StillProps = { src: string; startFrame: number; endFrame: number; fadeFrames: number; motion?: KenBurns; section: string };
 

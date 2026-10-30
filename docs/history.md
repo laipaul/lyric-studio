@@ -4,6 +4,20 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Four-stage song page, part 1 ✅ (verified by the user on the Windows PC, 30 Oct 2026)
+- **Stage bar** on every song: 1 Prepare (Assets, Lyrics) → 2 Shape (Style, Storyboard) → 3 Make (Generate) →
+  4 Review & Post (Videos, Post), each with a status line ("2 to check", "6 videos made", "3 to review · 1
+  approved"); a stage shows only its own tabs (all tabs and features unchanged).
+- **Prepare to-do list**: only what needs you — lyrics or clips missing (these block making videos), no cover,
+  label lines like "Chorus:" in the lyrics, lines to check by ear; each with a button to the right tab.
+- **Make release pack**: one button, one video per platform for the song's own platforms (Style → platforms;
+  else Reels, TikTok, Shorts, YouTube, Canvas), with its recipe and collections. The full Generate panel is
+  folded underneath ("More options").
+- **Opens on the right stage**: Review when the song has videos, else Prepare when something needs doing,
+  else Make. The Library card counts only the song's own platforms when it has them ("1/2 ready").
+- Tests: song-stages.test.ts (to-do list, the song's platforms); browser: song-stages.e2e.ts (new) and the
+  Style, Pairings and Videos browser tests now reach their tab through its stage (e2e/stage-tabs.ts).
+
 ### Tidy-up — a short brief, details in docs/ ✅ (30 Oct 2026; no app changes)
 - CLAUDE.md is now ~9 KB (was 55 KB): what we build, the guiding principle, the hard rules, the stack, how to work
   with the user, and an index of docs/. Every rule moved word for word into docs/<area>.md (screens, data model,

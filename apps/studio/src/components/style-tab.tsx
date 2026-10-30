@@ -54,7 +54,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
     };
   }, [projectId]);
 
-  function act(body: { action: "set" | "reset" | "lock" | "unlock"; field: string; platform?: string; value?: unknown }) {
+  function act(body: { action: "set" | "reset" | "lock" | "unlock" | "brand"; field: string; platform?: string; value?: unknown }) {
     // The padlock shows its new state at once (the save follows).
     if (body.action === "lock" || body.action === "unlock") {
       setData((d) => (d ? { ...d, fields: d.fields.map((f) => (f.field === body.field ? { ...f, locked: body.action === "lock" } : f)) } : d));
@@ -277,6 +277,23 @@ export function StyleTab({ projectId }: { projectId: string }) {
         </div>
       );
     }
+    if (f.field === "heldGlow" || f.field === "chorusLift" || f.field === "shine") {
+      const what = {
+        heldGlow: "a word sung for about a second or longer brightens in your accent colour while it is held",
+        chorusLift: "the first line of each chorus arrives a touch bigger and brighter, then eases back",
+        shine: "one soft light sweep across each chorus line, on a downbeat",
+      }[f.field];
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          <select aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} className={select} value={String(value ?? "off")} onChange={(e) => (e.target.value === "off" && !platform ? act({ action: "reset", field: f.field, platform }) : set(e.target.value))}>
+            <option value="off">off</option>
+            <option value="on">on</option>
+          </select>
+          <span className="text-muted-foreground text-xs">{what}</span>
+          {!platform ? <BrandAll field={f.field} value={String(value ?? "off")} onApply={(v) => act({ action: "brand", field: f.field, value: v })} /> : null}
+        </div>
+      );
+    }
     if (f.field === "breathe") {
       return (
         <div className="flex flex-wrap items-center gap-2">
@@ -286,6 +303,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
             <option value="beat">with the beat (one swell per bar, on the downbeats)</option>
           </select>
           <span className="text-muted-foreground text-xs">works with every lyric effect; a little deeper on choruses</span>
+          {!platform ? <BrandAll field={f.field} value={String(value ?? "off")} onApply={(v) => act({ action: "brand", field: f.field, value: v })} /> : null}
         </div>
       );
     }
@@ -380,11 +398,12 @@ export function StyleTab({ projectId }: { projectId: string }) {
       {error ? <p className="rounded-md border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-200">{error}</p> : null}
       <PairingsRow projectId={projectId} onChanged={reload} />
       <EffectPreview
-        key={`${String(valueOf("verseEffect") ?? "")}:${String(valueOf("breathe") ?? "")}`}
+        key={["verseEffect", "breathe", "heldGlow", "chorusLift", "shine"].map((k) => String(valueOf(k) ?? "")).join(":")}
         effects={data.effects}
         lines={data.sampleLines}
         initial={String(valueOf("verseEffect") ?? "glide")}
         breathe={(valueOf("breathe") as "off" | "gentle" | "beat") ?? "off"}
+        addOns={{ heldGlow: valueOf("heldGlow") === "on", chorusLift: valueOf("chorusLift") === "on", shine: valueOf("shine") === "on" }}
         font={String(valueOf("verseFont") ?? "Cormorant Garamond")}
         weight={Number(valueOf("verseWeight") ?? 400)}
         italic={valueOf("verseItalic") === true}
@@ -466,6 +485,28 @@ export function StyleTab({ projectId }: { projectId: string }) {
         ))}
       </ul>
     </div>
+  );
+}
+
+// "Use for all my songs": this value in the artist's brand.json (every platform with lyrics); asks first.
+function BrandAll({ field, value, onApply }: { field: string; value: string; onApply: (value: string) => void }) {
+  const [asking, setAsking] = useState(false);
+  if (!asking)
+    return (
+      <button type="button" data-brand-all={field} onClick={() => setAsking(true)} className="text-muted-foreground hover:text-foreground text-xs underline underline-offset-2">
+        Use for all my songs
+      </button>
+    );
+  return (
+    <span className="flex items-center gap-2 text-xs" data-brand-all-ask={field}>
+      Set “{value}” for every song of this artist?
+      <button type="button" data-brand-all-yes={field} className="text-brand underline underline-offset-2" onClick={() => (setAsking(false), onApply(value))}>
+        Yes
+      </button>
+      <button type="button" className="text-muted-foreground underline underline-offset-2" onClick={() => setAsking(false)}>
+        Cancel
+      </button>
+    </span>
   );
 }
 

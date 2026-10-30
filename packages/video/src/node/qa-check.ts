@@ -45,7 +45,7 @@ export function measureLyrics(
     let box = lyricBox(layout.lines.length, layout.fontSize, widest, fonts.animation === "pop" && !fonts.effects ? POP_MAX_SCALE : 1, area);
     if (fonts.effects) {
       const own = l.card?.effect ?? (l.isHook ? fonts.effects.hook : fonts.effects.verse);
-      const ext = effectExtents(own, fonts.effects.verse, 30, fonts.effects.breathe);
+      const ext = effectExtents(own, fonts.effects.verse, 30, fonts.effects.breathe, !!fonts.effects.chorusLift && !!l.isHook);
       const grown = lyricBox(layout.lines.length, layout.fontSize, widest, ext.maxScale, area);
       box = { left: grown.left - ext.side, right: grown.right + ext.side, top: grown.top - ext.up, bottom: grown.bottom + ext.down };
       // The next line waiting small underneath (it shares the screen with this one).

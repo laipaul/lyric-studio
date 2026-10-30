@@ -18,26 +18,37 @@ function sampleLyrics(texts: string[]): LyricLineProps[] {
     const startFrame = 15 + k * LINE_FRAMES;
     const stamp = startFrame + 8;
     const words = text.split(/\s+/).filter(Boolean);
-    const step = Math.min(10, Math.floor(50 / Math.max(1, words.length)));
+    const step = Math.min(10, Math.floor(36 / Math.max(1, words.length)));
+    const held = 32; // the last word is held (~1 s), as singers do at the end of a line
     return {
       text,
       startFrame,
       endFrame: k < texts.length - 1 ? startFrame + LINE_FRAMES : startFrame + LINE_FRAMES + 30,
       isHook: k === 1,
       stampFrame: stamp,
-      sungEndFrame: stamp + step * words.length,
-      words: words.map((w, i) => ({ text: w, startFrame: stamp + step * i, endFrame: stamp + step * (i + 1) })),
+      sungEndFrame: stamp + step * (words.length - 1) + held,
+      words: words.map((w, i) => ({ text: w, startFrame: stamp + step * i, endFrame: i === words.length - 1 ? stamp + step * i + held : stamp + step * (i + 1) })),
     };
   });
 }
 
-function PreviewScene(p: { lyrics: LyricLineProps[]; effect: EffectChoice; breathe: "off" | "gentle" | "beat"; font: string; weight: number; italic: boolean; accent: string }) {
+type AddOns = { heldGlow: boolean; chorusLift: boolean; shine: boolean };
+function PreviewScene(p: { lyrics: LyricLineProps[]; effect: EffectChoice; breathe: "off" | "gentle" | "beat"; addOns: AddOns; font: string; weight: number; italic: boolean; accent: string }) {
   const downbeats = useMemo(() => Array.from({ length: 12 }, (_, k) => k * BAR_FRAMES), []);
   return (
     <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 40%, #3a2630 0%, #141417 60%, #0b0b0d 100%)" }}>
       <LyricScene
         lyrics={p.lyrics}
-        effects={{ verse: p.effect, hook: p.effect, accent: p.accent, ...(p.breathe !== "off" ? { breathe: p.breathe === "beat" ? { mode: "beat", downbeats } : { mode: "gentle" } } : {}) }}
+        effects={{
+          verse: p.effect,
+          hook: p.effect,
+          accent: p.accent,
+          ...(p.breathe !== "off" ? { breathe: p.breathe === "beat" ? { mode: "beat", downbeats } : { mode: "gentle" } } : {}),
+          heldGlow: p.addOns.heldGlow,
+          chorusLift: p.addOns.chorusLift,
+          shine: p.addOns.shine,
+          downbeats,
+        }}
         style={{ name: "Simple", font: p.font, weight: p.weight, italic: p.italic, textCase: "none", effect: "none", animation: "none" }}
         hookFont={null}
         textSize={112}
@@ -59,6 +70,7 @@ export function EffectPreview({
   lines,
   initial,
   breathe: initialBreathe,
+  addOns: initialAddOns,
   font,
   weight,
   italic,
@@ -68,6 +80,7 @@ export function EffectPreview({
   lines: string[];
   initial: string; // "glide" or "spread:subtle"
   breathe: "off" | "gentle" | "beat";
+  addOns: AddOns;
   font: string;
   weight: number;
   italic: boolean;
@@ -76,6 +89,7 @@ export function EffectPreview({
   const [name, setName] = useState(initial.split(":")[0]);
   const [intensity, setIntensity] = useState<Intensity>((initial.split(":")[1] as Intensity) || "balanced");
   const [breathe, setBreathe] = useState(initialBreathe);
+  const [addOns, setAddOns] = useState<AddOns>(initialAddOns);
   const lyrics = useMemo(() => sampleLyrics(lines), [lines]);
   const duration = lyrics.length * LINE_FRAMES + 45;
   const select = "bg-background rounded-md border px-2 py-1 text-xs";
@@ -85,7 +99,7 @@ export function EffectPreview({
       <div className="w-[180px] shrink-0 overflow-hidden rounded-md border">
         <Player
           component={PreviewScene}
-          inputProps={{ lyrics, effect: { name, intensity }, breathe, font, weight, italic, accent }}
+          inputProps={{ lyrics, effect: { name, intensity }, breathe, addOns, font, weight, italic, accent }}
           durationInFrames={duration}
           fps={FPS}
           compositionWidth={1080}
@@ -127,6 +141,18 @@ export function EffectPreview({
               <option value="beat">with the beat</option>
             </select>
           </label>
+          {(
+            [
+              ["heldGlow", "Held-note glow"],
+              ["chorusLift", "Chorus lift"],
+              ["shine", "Shine"],
+            ] as const
+          ).map(([k, label]) => (
+            <label key={k} className="flex items-center gap-1.5">
+              <input type="checkbox" data-try-addon={k} checked={addOns[k]} onChange={(e) => setAddOns((a) => ({ ...a, [k]: e.target.checked }))} />
+              {label}
+            </label>
+          ))}
         </div>
       </div>
     </div>
