@@ -1439,10 +1439,63 @@ rest was in sync.
   mix has different timing, use Generate -> advanced -> re-align.
 
 ## Next
-- **Step H (planned, not started): Library cards** — one status colour system (grey not made / amber to review
-  / green approved / red failed), short platform labels that never truncate, a "4/6 ready · 1 error" line,
-  2-line titles, a Generate / Fix button on the card, filters (All · No videos · Needs review · Errors · Ready)
-  and sorting, a warning when two songs share the same cover.
+**Agreed order (30 Oct 2026, workflow review).** Follow it strictly; each item is its own step, plan first.
+
+1. **Verification pass (the user, no building).** Feature freeze until done: run 2 songs end-to-end on the PC
+   (checklist below), collect every issue in one list, then ONE bug-fix session (Sonnet) for the whole list.
+2. **Tidy-up step (no app changes):** CLAUDE.md down to ~3 pages (guiding principle, hard rules, stack, how to
+   work with the user); each feature spec into its own file under docs/ (e.g. docs/endings.md,
+   docs/lyric-timing.md, docs/collections.md), opened only when working on that feature; PROGRESS.md keeps the
+   last 5 steps + open issues, older history to docs/history.md. Nothing may be lost: every rule moves, none is
+   dropped.
+3. **Step H: Library cards** — one status colour system (grey not made / amber to review / green approved /
+   red failed), short platform labels that never truncate, a "4/6 ready · 1 error" line, 2-line titles, a
+   Generate / Fix button on the card, filters (All · No videos · Needs review · Errors · Ready) and sorting,
+   a warning when two songs share the same cover. The card becomes the entry to the song's stages (item 4).
+4. **Four-stage song page:** a stage bar Prepare → Shape → Make → Review & Post over the existing tabs (they
+   stay, as detail screens). Prepare shows a **to-do list** of only what needs the user's ears or eyes ("2 lines
+   to check by ear", "Canvas needs a clip of 9 s+"). Make = one button **"Make release pack"** (all the
+   recipe's platforms; advanced options folded away). Default one video per platform (the app's best plan);
+   "Try another take" for more. A video judged ✅ Ready to post with no points goes straight to the Post list.
+   Style tab shows only what differs from the artist's look ("differs" badge), the rest collapsed.
+5. **Releases + Make all** (replaces Step 6.3): a release (EP / batch) groups songs; a grid songs × platforms
+   with ✅ / 🟡 / 🔴 / not made; "Make all" queues every missing video of the release (overnight); per-artist
+   **looks** (named complete styles, e.g. "Life Lyrics Cinematic", "Pômé Polaroid") apply to a whole release;
+   Scheduled / Published with manually entered results as planned for 6.3.
+6. **Lyric Sheet + section retakes** (ideas from Borumi): the song as a page (sections as headed blocks, each
+   line with the clip it plays over as a thumbnail; drag a clip onto a line, move it down a line); "Try another
+   take" per section with a quick low-res preview, both takes kept. Later: a **clip shopping list** before
+   gathering footage (what each section and the Canvas need).
+
+**Targets, checked on every test pass:** the user's time per song (new song → posted Reel) under 15 min;
+decisions asked of the user per song under 5, all creative; share of first renders "Ready to post" above 70%.
+When a target misses, it decides what to improve next.
+
+### Verification checklist (item 1)
+Use two songs: one with vocals (e.g. A Heart For Two) and the instrumental (Tea with the Monk). Note per
+point: OK, or what happened (screenshot welcome). Unverified steps covered: 5c.1–5c.1d, 5c.2, 5g.2b, 5g.3,
+5g.3b, 6.2a, 6.2b, 6.2c-2b, B, C, D, E, F, G.
+1. **Start:** Start Lyric Studio.cmd rebuilds and opens the app; the header shows Library, Collections, Tasks.
+2. **Collections (F, G):** add clips, remove and restore one; rename a collection and back; delete and restore
+   one; the "Same clips as" flag on Test.
+3. **Lyrics (5c.1–5c.2):** first line and the line after the solo start with the voice; flagged lines are
+   highlighted with a reason; ▶ plays, a nudge + Save works; "Checked by ear" clears the point.
+4. **Generate (6.2b):** Reels + TikTok + Shorts + YouTube + Canvas in one run; Tasks shows progress; Stop
+   after the current video, then Resume finishes the run.
+5. **Pacing, transitions, endings (B, A):** the Storyboard header's Pacing / Transitions / Ending lines make
+   sense; the Reels ending no longer stops dead; dissolves feel right on a calm song.
+6. **Assessment and reactions (C):** each video has a verdict with at most 3 plain points; a reaction
+   ("cuts too fast") shows "Next run: …" and the next run changes accordingly.
+7. **Title opening (D):** on for Reels: title + tagline on the thirds, gone when the first lyric fades in;
+   cover.jpg downloadable.
+8. **Instrumental (E):** Tea with the Monk with a story.txt: sentences on bars, readable, the Reel starts at a
+   strong stretch of music.
+9. **YouTube and Canvas (5g.2b, 5g.3, 5g.3b):** YouTube cover layout, end-screen area clear in the last
+   seconds, publish.txt; Canvas 3–8 s, loops seamlessly, no text or sound.
+10. **Videos and Post (6.2a, 6.2c-2b):** compare 2 videos, approve one, "Use these settings" opens Generate
+    with that run's settings; Post shows captions + downloads for approved videos only; "Clear finished" in Tasks.
+
+### Earlier plan (29 Oct; A–D built, the rest superseded by the agreed order above — kept for reference)
 Guiding principle (CLAUDE.md, decided 29 Oct 2026): the user provides, orders and trims the clips; the app
 does every technical decision automatically and gives a plain-language pro assessment of each result.
 Found in the 29 Oct test on The House My Heart Built (135 BPM, 13 own clips of ~5 s), each a technical
