@@ -4,6 +4,21 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Releases + Make all (step 1) ✅ (to verify on the Windows PC)
+- **Releases** in the header (Library · Releases · Collections): a release groups the songs you put out
+  together (an EP, a batch). **New release**: a name and the songs; "Pick an EP" ticks the songs that share it.
+  Each release is a small file in workspace\releases\ (songs are only referenced, never changed).
+- **The grid**: songs x platforms in the Library's colours (✓ approved, to review, failed, — not made, "·" not a
+  platform of that song); "9 of 15 ready to post"; click a cell to open the song.
+- **Make all**: first a preview of what will be made (song by song), what cannot be made yet and why (e.g. no
+  clips) and an estimate from your past renders; then one click queues it all, one video per missing
+  platform, never redoing videos waiting for review or approved. Stop / Resume as usual.
+- **Songs / Rename / Delete** (moved to releases\_removed\, Restore on the Releases page).
+- Fixed on the way: after creating a release the "New release" window stayed open in the background and blocked
+  clicks (the page behind stays alive after navigating): every dialog now closes before moving on.
+- Tests: releases.test.ts (file, grid, what is missing, blocked songs, the estimate learning from past renders,
+  rename / delete / restore); browser: releases.e2e.ts (in pnpm test:e2e).
+
 ### Four-stage song page, part 2 ✅ (to verify on the Windows PC)
 - **Post: "Ready to post — approve?"**: videos the app judged ✅ with nothing to improve, not yet approved or
   discarded, with one-click **Approve**. Nothing is approved without your click.
@@ -90,13 +105,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **New collection** is a button with a small dialog instead of an always-visible name box.
 - Tests: collections.test.ts (rename incl. database paths, moves and songs; delete; restore; same clips);
   browser: collections.e2e.ts (⋯ menu, rename, delete with the song named, restore, empty card).
-
-### Step F — Collections page ✅ (verified by the user on the Windows PC, 30 Oct 2026)
-- Header **Collections** next to Library: a card per collection (thumbnails, clip count, video length,
-  what 9:16 and 16:9 can use, which songs use it) and **New collection**.
-- A collection's page: thumbnail grid (hover plays the clip), drag-and-drop or **Add clips** (copied in,
-  the same content never twice), **Remove** -> _removed\ (never deleted) with **Restore**, **Open folder**.
-- Tests: collections.test.ts; browser: collections.e2e.ts (now part of pnpm test:e2e).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -259,7 +267,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
    Style tab shows only what differs from the artist's look ("differs" badge), the rest collapsed.
    Noted from the Step H check (30 Oct): the card's "0/5 ready" counts every platform; once a song has a
    recipe of platforms, count only those (e.g. "1/3 ready" when TikTok is not wanted for that song).
-5. **Releases + Make all** (replaces Step 6.3): a release (EP / batch) groups songs; a grid songs × platforms
+5. ✅ **Releases + Make all (step 1 built 30 Oct, to verify; step 2 next: per-artist looks applied to a release, the release status Draft → Ready → Scheduled → Published with a planned date and results noted by hand)** (replaces Step 6.3): a release (EP / batch) groups songs; a grid songs × platforms
    with ✅ / 🟡 / 🔴 / not made; "Make all" queues every missing video of the release (overnight); per-artist
    **looks** (named complete styles, e.g. "Life Lyrics Cinematic", "Pômé Polaroid") apply to a whole release;
    Scheduled / Published with manually entered results as planned for 6.3.
