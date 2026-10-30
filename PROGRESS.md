@@ -4,7 +4,7 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### Four-stage song page, part 1 ✅ (to verify on the Windows PC)
+### Four-stage song page, part 1 ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **Stage bar** on every song: 1 Prepare (Assets, Lyrics) → 2 Shape (Style, Storyboard) → 3 Make (Generate) →
   4 Review & Post (Videos, Post), each with a status line ("2 to check", "6 videos made", "3 to review · 1
   approved"); a stage shows only its own tabs (all tabs and features unchanged).
@@ -247,7 +247,11 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
    red failed), short platform labels that never truncate, a "4/6 ready · 1 error" line, 2-line titles, a
    Generate / Fix button on the card, filters (All · No videos · Needs review · Errors · Ready) and sorting,
    a warning when two songs share the same cover. The card becomes the entry to the song's stages (item 4).
-4. ✅ **Four-stage song page (part 1 built 30 Oct, to verify; part 2 next: "Ready to post" straight to Post, Style shows only what differs, "Try another take"):** a stage bar Prepare → Shape → Make → Review & Post over the existing tabs (they
+4. ✅ **Four-stage song page (part 1 verified 30 Oct). Part 2 next:** "Ready to post" videos offered straight in
+   Post; Style shows only what differs from the brand; "Try another take"; plus from the part 1 check: Make's
+   status counts every kept video of the song, not only the latest run ("4 videos made", not "1"); the Generate
+   panel's "More options" default to one video per platform, like the release pack (Reels showed "3 videos").
+   Original description: a stage bar Prepare → Shape → Make → Review & Post over the existing tabs (they
    stay, as detail screens). Prepare shows a **to-do list** of only what needs the user's ears or eyes ("2 lines
    to check by ear", "Canvas needs a clip of 9 s+"). Make = one button **"Make release pack"** (all the
    recipe's platforms; advanced options folded away). Default one video per platform (the app's best plan);
