@@ -189,7 +189,7 @@
   to whole-audio processing). Latest run: all 8 line starts within 15-65 ms of the truth, no word
   reaching into the next line.
 
-### Step 5d — One-click Auto Generate (`pnpm make`, `pnpm rerender`) ✅ (to verify on the Windows PC)
+### Step 5d — One-click Auto Generate (`pnpm make`, `pnpm rerender`) ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - `pnpm make <song> <lyrics.txt> --collection <name> [--collection-path] [--variations 6]
   [--section auto|full|a-b] [--hint] [--realign] [--lrc] [--lang] [--rate] [--energy] [--lead]
   [--lyrics-offset] [--font] [--font-hook] [--pins] [--parallel N] [--no-open]`.
@@ -752,7 +752,7 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   has it; another start: no longer), browser test (the 1:10 hook checked, unflagged, taken off, lapses
   after a nudge).
 
-### Rule — Lyric Studio never alters the music ✅ (to verify on the Windows PC)
+### Rule — Lyric Studio never alters the music ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **The song file is only read.** Readers: the song hash (finding the project), ffprobe (length, sample
   rate), librosa (BPM / beats), Demucs (vocal stem, written to workspace\cache\stems), the aligner,
   pnpm tap (playback), Remotion's media server (render), the Lyrics tab's ▶, the new QA comparison.
@@ -776,7 +776,7 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   make.test.ts (real renders: the song file's hash and modification time are unchanged, the song
   folder's copy is byte for byte the same, QA audio check passes, 44.1 kHz kept).
 
-### Textboard: the text layer as its own object ✅ (to verify on the Windows PC)
+### Textboard: the text layer as its own object ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **textboard.json** in the song folder (written by the Storyboard tab): an ordered list of cards (title,
   byline, tagline, then every lyric line, numbered as the Lyrics tab) and per card only what differs:
   place (lyric spot / under the title / top / upper / centre / lower, always inside the platform's safe
@@ -813,7 +813,7 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   slot), make.test.ts (YouTube title as text cards), textboard.e2e.ts (card editor with live preview, save,
   title card, save / apply template, picture swap, slot filled by dragging a clip).
 
-### Storyboard stage 2 + your four findings ✅ (to verify on the Windows PC)
+### Storyboard stage 2 + your four findings ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **1. Shot length** (recipe "shotLength": 1, 2, 4, 8 bars or "story"; brand.json, song.json, per platform;
   Style tab with source / Reset / Lock, Generate → Advanced, `--shot-length`). "story" = 2 bars on hooks,
   4 on verses and instrumentals, more bars when that is under 3 s, never a short last shot: a 90.8 s Reels
@@ -858,7 +858,7 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   test_analysis.py (tempo candidates name the 2/3 ratio), storyboard.e2e.ts (move / drag in the strip,
   kept after reload, clip editor, drag onto a line, the Style tab's ×2/3 re-plans at ~80 BPM).
 
-### Storyboard — stage 1 (read-only) ✅ (to verify on the Windows PC)
+### Storyboard — stage 1 (read-only) ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **Song page → Storyboard**: choose "The plan now" (per platform of the recipe, v1, v2, …) or a past
   run, then Show. The plan is a dry run of the very planner Generate renders with (makeVideos with
   dryRun): nothing is rendered or written (no run folder, no section / job rows, no song.json or .lrc
@@ -883,7 +883,7 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   the plan, bars, waveform, hooks, ⚓ on line 4 and its shot with the dissolve, the outside anchor, the loop
   shot, shot details, play from a click, no run folder).
 
-### Font pairings + font weight / italic ✅ (to verify on the Windows PC; run pnpm install after git pull)
+### Font pairings + font weight / italic ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **Weight and italic** for the verse and hook fonts: recipe fields verseWeight / hookWeight (100-900) and
   verseItalic / hookItalic, in brand.json (verseFont / hookFont / titleFont: weight, italic), song.json and
   per platform, with sources, Reset and Lock. The exact weight / italic file is used; when the family lacks
@@ -917,7 +917,7 @@ Built in two parts at the user's request: 6.2c-1 (this) and 6.2c-2 (the other ta
   lines over a clip frame, the italic 600 file loaded, apply writes song.json not brand.json, weight
   options, Save to brand asks first, Generate offers up to 3).
 
-### Story anchors — part (b): the Lyrics tab and the Videos tab ✅ (to verify on the Windows PC)
+### Story anchors — part (b): the Lyrics tab and the Videos tab ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **Lyrics tab, "Lands on" column**: per line the anchored clip (thumbnail, name, cut / dissolve, from
   N s) with Remove, and "Lands on…" / "Change": an inline picker with the thumbnails of the song's own
   clips and of its collections (song.json collections, else the remembered one), "Start in the clip at"
@@ -973,7 +973,7 @@ A clip "lands on" a lyric line: song.json `anchors: [{ "line": 9, "clip": "hands
   (blank lines counted), the Lyrics tab, check-start and anchors by sung line. They differ when
   lyrics.txt has blank lines; to be unified (proposal: the Lyrics tab's numbers everywhere).
 
-### Tuning — a long first word is a strong signal ✅ (to verify on the Windows PC)
+### Tuning — a long first word is a strong signal ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 From the check-start results on A Heart For Two (lines 13 and 27: stamp ~2.4 s early, voice and words
 0.4-0.5 s apart, so the 0.3 s rule left them flagged).
 - A first word of **2 s or more** with **voice and words both later than the stamp and within 0.6 s of
@@ -984,7 +984,7 @@ From the check-start results on A Heart For Two (lines 13 and 27: stamp ~2.4 s e
 - Tests: vocal-guard.test.ts (lines 13 1:11.4 -> 1:13.5 and 27 2:31.5 -> 2:33.3 moved; line 40 flagged;
   a hand-set line untouched; a short first word with voice and words 0.5 s apart still flagged).
 
-### Loop check — "Loop flows" for Reels, TikTok, Shorts ✅ (to verify on the Windows PC)
+### Loop check — "Loop flows" for Reels, TikTok, Shorts ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 These platforms play a video in a loop, so the wrap-around from the last frame to the first is checked.
 - **QA "Loop flows"** (src/loop.ts), five points; a failing point names its cause:
   - beat: the length is a whole number of bars at the song's BPM (within 50 ms), e.g. "length 30.3 s
@@ -1129,14 +1129,14 @@ These platforms play a video in a loop, so the wrap-around from the last frame t
 - Tests: packages/video/test/ending.test.ts (each ending, whole bars, limits, overrides, the title line, suggestions,
   QA); make test; Style and Storyboard browser tests.
 
-### Storyboard: "Follow playback" ✅ (to verify on the Windows PC)
+### Storyboard: "Follow playback" ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - A "Follow playback" checkbox next to Zoom (off by default, remembered in this browser): while the
   preview plays, the timeline (bars, waveform, lines, shots) scrolls so the playhead stays a third from
   the left. Scrolling the timeline by hand stops it until the next play; clicking still plays from there.
 - Pure helper `followScrollLeft` (packages/video/src/follow.ts) with tests; browser test: off by default,
   no scrolling when off, scrolls when on, remembered.
 
-### Fix — Loop beat check counts the song's own bars ✅ (to verify on the Windows PC)
+### Fix — Loop beat check counts the song's own bars ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - "Loop flows" used to divide the video's length by a bar length from the song's average BPM. Real songs drift a little, so a loop of exactly 51 bars could be reported as "51.14 bars, 0.25 s off".
 - Now the check counts the song's detected bars (the same downbeats the section snaps to): when the start and the end are each within 50 ms of a detected bar line, it is whole bars, and the message shows the section's own average BPM ("90.8 s = 51 bars (on the song's detected bars, avg 134.8 BPM)").
 - When an end is not on a bar line, the message says how far from the nearest one it is. A video whose length does not match its section is still a beat failure.
