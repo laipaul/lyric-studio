@@ -91,6 +91,43 @@ async function main() {
     const run = ws2.db.select().from(makeRun).all().at(-1);
     const options = (run?.options_json ?? {}) as { platforms?: string; variations?: number };
     check(run?.status === "queued" && options.platforms === "reels,youtube" && options.variations === 1, `queued: Reels + YouTube, one video each (${JSON.stringify(options)})`);
+
+    // Part 2. Two runs of Reels (v1 ready, v2 with a point) and one discarded video: Make counts every kept
+    // video; Post offers the ready one; "Try another take" queues take 3; Style shows only what differs.
+    const exportsDir = songPathsById(ws2, id).exports;
+    const video = (dir: string, name: string, qa: string) => {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path.join(dir, `${name}.mp4`), "x");
+      writeFileSync(path.join(dir, `${name}.manifest.json`), JSON.stringify({ manifest_version: 1, created_at: "2026-10-29T09:00:00Z", command: "pnpm make song.wav lyrics.txt", variation: { order: "story", seed: 1, style: "Simple", cinematic_bars: false }, props: {} }));
+      writeFileSync(path.join(dir, `${name}.qa.txt`), qa);
+    };
+    video(path.join(exportsDir, "2026-10-28_1000", "reels"), "v1", "x\nSummary: PASS\n");
+    video(path.join(exportsDir, "2026-10-29_1000", "reels"), "v2", "x\n[WARN] Clips repeated within 3 shots\nSummary: WARN - Clips repeated within 3 shots\n");
+    await page.goto(`${base}/songs/${id}`);
+    await page.waitForSelector("[data-stages]");
+    check(((await page.textContent("[data-stage=make] [data-stage-status]")) ?? "").includes("2 videos made"), "Make counts every kept video of the song, all runs (2)");
+    check((await page.getAttribute("[data-stage=review]", "aria-current")) === "step", "with videos: opens on Review & Post");
+    await page.click("[role=tab]:has-text('Post')");
+    await page.waitForSelector("[data-ready-to-approve]");
+    const offered = await page.$$eval("[data-offered]", (e: Element[]) => e.map((x) => x.getAttribute("data-offered")));
+    check(offered.length === 1 && (offered[0] ?? "").includes("2026-10-28_1000/reels/v1"), `Post offers only the ready video, not the one with a point (${offered.join(", ")})`);
+    await page.click("[data-approve]");
+    await page.waitForSelector("[data-post-video]");
+    check((await page.$("[data-ready-to-approve]")) === null, "Approve: it moves into the posting list");
+    await page.click("[role=tab]:has-text('Videos')");
+    await page.waitForSelector("[data-another-take]");
+    await page.click("[data-take=reels]");
+    await page.waitForSelector("[data-another-take] >> text=Queued");
+    const takeRun = ws2.db.select().from(makeRun).all().at(-1);
+    const takeOptions = (takeRun?.options_json ?? {}) as { platforms?: string; take?: number };
+    check(takeOptions.platforms === "reels" && takeOptions.take === 3 && (takeRun?.label ?? "").includes("take 3"), `Try another take: Reels take 3 (${JSON.stringify(takeOptions)}, ${takeRun?.label})`);
+    await page.click("[data-stage=shape]");
+    await page.click("[role=tab]:has-text('Style')");
+    await page.waitForSelector("[data-show-all]");
+    const fields = await page.$$eval("[data-field]", (e: Element[]) => e.map((x) => x.getAttribute("data-field")));
+    check(JSON.stringify(fields.sort()) === JSON.stringify(["collections", "platforms"]), `Style shows only what the song changes (+ platforms) (${fields.join(", ")})`);
+    await page.click("[data-show-all]");
+    check((await page.$$("[data-field]")).length > 10, "Show all settings lists every setting");
     ws2.close();
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
     await browser.close();

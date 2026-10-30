@@ -38,7 +38,10 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
   // The recipe's platforms; none set: Reels + YouTube (the Style tab says so).
   const fallback = ["reels", "youtube"].filter((p) => choices.some((x) => x.name === p));
   const [platforms, setPlatforms] = useState<string[]>(startPlatforms.length ? startPlatforms : fallback.length ? fallback : choices[0] ? [choices[0].name] : []);
-  const videosFor = (name: string, preset: number) => (pictureSets.length >= 2 && name !== "canvas" ? pictureSets.length : variations ? Number(variations) : (r.variations[name] ?? r.variations["*"] ?? preset));
+  // One video per platform unless the song's recipe or this run asks for more ("Try another take" in
+  // Videos makes one more when wanted); the platform presets' larger numbers are for the command line.
+  const recipeCounts = Object.keys(r.variations).length > 0;
+  const videosFor = (name: string) => (pictureSets.length >= 2 && name !== "canvas" ? pictureSets.length : variations ? Number(variations) : (r.variations[name] ?? r.variations["*"] ?? 1));
   const recipeCollections = data.chosen.length || data.songClips ? data.chosen : data.collections.slice(0, 1);
   const runCollections = from?.collections && !locked("collections") ? from.collections.filter((c) => data.collections.includes(c)) : null;
   const [collections, setCollections] = useState<string[]>(runCollections ?? recipeCollections);
@@ -83,7 +86,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
     const request = {
       platforms,
       collection: sameCollections || !collections.length ? undefined : collections.join(","),
-      variations: variations ? Number(variations) : undefined,
+      variations: variations ? Number(variations) : recipeCounts ? undefined : 1,
       lineEffect: verse.name ? join(verse.name, verse.intensity) : undefined,
       hookEffect: hook.name ? join(hook.name, hook.intensity) : undefined,
       title: String(f.get("title") ?? ""),
@@ -197,7 +200,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
                   >
                     {p.label}{" "}
                     <span className="opacity-60">
-                      · {videosFor(p.name, p.variations)} video{videosFor(p.name, p.variations) === 1 ? "" : "s"} · {r.lengths[p.name] ? `${r.lengths[p.name]} s` : r.presetLengths[p.name]}
+                      · {videosFor(p.name)} video{videosFor(p.name) === 1 ? "" : "s"} · {r.lengths[p.name] ? `${r.lengths[p.name]} s` : r.presetLengths[p.name]}
                     </span>
                   </button>
                 );
@@ -437,7 +440,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
           ) : null}
           <div className="flex items-center justify-end gap-3">
             <span className="text-muted-foreground text-xs">
-              {platforms.length ? `${choices.filter((p) => platforms.includes(p.name)).reduce((a, p) => a + videosFor(p.name, p.variations), 0)} video(s)` : "choose a platform"}
+              {platforms.length ? `${choices.filter((p) => platforms.includes(p.name)).reduce((a, p) => a + videosFor(p.name), 0)} video(s)` : "choose a platform"}
             </span>
             <Button type="submit" disabled={busy || !platforms.length || !data.lyricsReady}>
               <Sparkles /> {busy ? "Queuing…" : "Generate"}

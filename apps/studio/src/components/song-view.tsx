@@ -1,6 +1,6 @@
 "use client";
 
-import { Columns3, SlidersHorizontal, X } from "lucide-react";
+import { Columns3, Shuffle, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -128,6 +128,7 @@ export function SongView({ projectId, songTitle, runs, settings = {} }: { projec
         </Chip>
       </div>
       {error ? <p className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{error}</p> : null}
+      <AnotherTake projectId={projectId} runs={runs} />
 
       {emptyRuns ? (
         <button type="button" data-show-empty onClick={toggleEmpty} className="text-muted-foreground hover:text-foreground w-fit text-xs underline underline-offset-2">
@@ -223,6 +224,57 @@ export function SongView({ projectId, songTitle, runs, settings = {} }: { projec
         />
       ) : null}
       {posting ? <ReadyToPost key={posting.id} projectId={projectId} songTitle={songTitle} video={posting} onClose={() => setPosting(null)} /> : null}
+    </div>
+  );
+}
+
+// The next take of each platform: one more than the highest vN made for it in any run.
+export function nextTakes(runs: readonly RunView[]): { name: string; label: string; take: number }[] {
+  const out = new Map<string, { name: string; label: string; take: number }>();
+  for (const r of runs)
+    for (const p of r.platforms) {
+      if (p.name === "canvas") continue; // the Canvas is one chosen loop, not takes
+      const highest = Math.max(0, ...[...p.videos.map((v) => v.name), ...p.missing].map((n) => Number(/^v(\d+)$/.exec(n)?.[1] ?? 0)));
+      const prev = out.get(p.name);
+      out.set(p.name, { name: p.name, label: p.label, take: Math.max(prev?.take ?? 1, highest + 1) });
+    }
+  return [...out.values()];
+}
+
+// "Try another take": one more video of a platform (the next variation: its own seed and style), with the
+// song's recipe and clips. Only when the user asks: by default each platform gets one video.
+function AnotherTake({ projectId, runs }: { projectId: string; runs: RunView[] }) {
+  const takes = nextTakes(runs);
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  if (!takes.length) return null;
+  async function take(t: { name: string; label: string; take: number }) {
+    setBusy(t.name);
+    setNote(null);
+    const body = new FormData();
+    body.set("projectId", projectId);
+    body.set("request", JSON.stringify({ platforms: [t.name], take: t.take }));
+    try {
+      const res = await api("/api/runs", { method: "POST", body });
+      const result = (await res.json()) as { error?: string; label?: string };
+      if (!res.ok || result.error) throw new Error(result.error ?? `The studio answered ${res.status}`);
+      setNote(`Queued: ${result.label}. It appears here when it is made (see Tasks).`);
+      window.dispatchEvent(new Event("lyric-tasks-changed"));
+    } catch (e) {
+      setNote((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs" data-another-take>
+      <span className="text-muted-foreground">Try another take:</span>
+      {takes.map((t) => (
+        <Button key={t.name} size="sm" variant="outline" disabled={!!busy} onClick={() => take(t)} data-take={t.name} title={`One more ${t.label} video (take ${t.take}: a different cut and look, same recipe and clips)`}>
+          <Shuffle /> {t.label}
+        </Button>
+      ))}
+      {note ? <span className="text-muted-foreground">{note}</span> : null}
     </div>
   );
 }

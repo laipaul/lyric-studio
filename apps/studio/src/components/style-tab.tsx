@@ -36,6 +36,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<"idle" | "saving" | "saved">("idle");
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [showAll, setShowAll] = useState(false);
   // Changes are saved one after the other, in the order they were made: leaving a field (which saves
   // it) and clicking a padlock right after must both count; nothing is disabled while saving.
   const queue = useRef<Promise<void>>(Promise.resolve());
@@ -346,6 +347,13 @@ export function StyleTab({ projectId }: { projectId: string }) {
     );
   };
 
+  // Only what this song changes (its own value, a per-platform value, or a lock), plus its platforms (the
+  // release pack makes those); "Show all settings" lists every setting with its source.
+  const differs = (f: StyleField) => f.own || f.locked || (f.perPlatform ?? []).some((p) => p.own);
+  const sorted = [...data.fields].sort((a, b) => order(a.field) - order(b.field));
+  const differing = sorted.filter(differs);
+  const shownFields = showAll ? sorted : sorted.filter((f) => differs(f) || f.field === "platforms");
+
   return (
     <div data-style className="flex flex-col gap-4">
       <style>{fontCss}</style>
@@ -361,8 +369,18 @@ export function StyleTab({ projectId }: { projectId: string }) {
       <p data-user-fonts className="text-muted-foreground text-xs">
         Your own fonts: put .ttf, .otf, .woff or .woff2 files in <span className="text-foreground font-mono">{data.userFonts}</span>; they appear in the font lists after reloading this page.
       </p>
+      <div className="flex flex-wrap items-center justify-between gap-3" data-style-scope>
+        <p className="text-sm">
+          {differing.length
+            ? `This song changes ${differing.length} setting${differing.length === 1 ? "" : "s"} from the brand look${showAll ? "" : "; the rest follow the brand"}.`
+            : "This song follows the brand look for everything; only its platforms are shown."}
+        </p>
+        <button type="button" data-show-all onClick={() => setShowAll((v) => !v)} className="text-muted-foreground hover:text-foreground text-xs underline underline-offset-2">
+          {showAll ? "Only what this song changes" : `Show all settings (${data.fields.length - shownFields.length} more)`}
+        </button>
+      </div>
       <ul className="flex flex-col gap-2">
-        {[...data.fields].sort((a, b) => order(a.field) - order(b.field)).map((f) => (
+        {shownFields.map((f) => (
           <li key={f.field} data-field={f.field} className={cn("bg-card rounded-lg border px-4 py-3", f.locked && "border-brand/40")}>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <span className="w-44 text-sm font-medium">{f.label}</span>

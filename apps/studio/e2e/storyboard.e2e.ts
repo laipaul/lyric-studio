@@ -200,6 +200,7 @@ async function main() {
 
     // The Style tab's tempo: x2/3 of 120 = 80 BPM in song.json; the storyboard plans with it.
     await page.goto(`${base}/songs/${sp.project.id}?tab=style`);
+    await page.click("[data-show-all]"); // the tempo follows the analysis: under "Show all settings"
     await page.waitForSelector("[data-tempo-check]");
     if (!(await page.$("[data-tempo-ratio='×2/3']"))) {
       // No video made yet: the detected tempo comes from the tempo check.

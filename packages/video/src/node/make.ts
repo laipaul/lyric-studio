@@ -101,6 +101,7 @@ export type MakeOptions = {
   // One clip set for this run instead of the recipe's (the storyboard's picture swap), never saved.
   clipSet?: string;
   variations?: number; // default: the platform preset's number (standard: 6)
+  take?: number; // "Try another take": only variation N of each platform (vN: its own seed and style), not v1..vN
   platforms?: string; // "reels,tiktok,shorts" or "all"; default: the "standard" preset
   allowFill?: boolean; // use sources of the other orientation, shown whole over a blurred copy
   title?: string; // song title (saved to the project; default: the song's file name)
@@ -314,6 +315,10 @@ export function planVariations(count: number, story?: { rate: CutRate }): Variat
     const step = (index - 1) % 4; // 0, 1: the run's rate; 2: coarser; 3: finer
     return { ...spec, rate: step === 2 ? coarserRate(story.rate) : step === 3 ? finerRate(story.rate) : story.rate, transitions: index % 2 === 1 ? "as-set" : index % 4 === 2 ? "dissolve" : "cut" };
   });
+}
+// "Try another take": only take N (the same variation vN a run of N videos would make), so every take differs.
+export function planTake(take: number, story?: { rate: CutRate }): VariationSpec[] {
+  return planVariations(take, story).slice(take - 1);
 }
 const RATES: CutRate[] = ["0.5x", "1x", "2x"];
 const coarserRate = (r: CutRate): CutRate => (r === "off" ? r : RATES[Math.max(0, RATES.indexOf(r) - 1)]);
@@ -1309,6 +1314,8 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     ? [{ index: sh.picture.index, name: `v${sh.picture.index}`, order: "story", seed: 1, style: "simple", bars: false, picture: { index: sh.picture.index, label: sh.picture.label, songClips: sh.picture.songClips, collections: sh.picture.collections }, ...(story ? { rate: options.rate ?? "1x", transitions: "as-set" as const } : {}) }]
     : compared.length
     ? compared.map((p, i) => ({ index: i + 1, name: `v${i + 1}`, order: "story", seed: 1, style: "simple", bars: false, pairing: { id: p.id, name: p.name }, ...(story ? { rate: options.rate ?? "1x", transitions: "as-set" as const } : {}) }))
+    : options.take && !canvas
+    ? planTake(options.take, story ? { rate: options.rate ?? "1x" } : undefined)
     : planVariations(canvas ? Math.max(1, canvas.loops.length) : sh.variationsFor(preset), story ? { rate: options.rate ?? "1x" } : undefined);
   const plans = new Map<CutRate, typeof plan>([[options.rate ?? "1x", plan]]);
   const planOf = (spec: VariationSpec) => {

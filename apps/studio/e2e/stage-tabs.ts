@@ -11,4 +11,9 @@ export async function openTab(page: any, tab: string): Promise<void> {
     return;
   }
   await page.click(`[role=tab]:has-text('${tab}')`);
+  // The Style tab opens with only what the song changes from the brand: these tests use every setting.
+  if (tab === "Style") {
+    const all = await page.waitForSelector("[data-show-all]");
+    if (((await all.textContent()) ?? "").startsWith("Show all")) await all.click();
+  }
 }

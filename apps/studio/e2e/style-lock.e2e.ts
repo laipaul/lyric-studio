@@ -126,6 +126,8 @@ async function main() {
     check((await page.getAttribute("[data-lock=hookEffect]", "aria-pressed")) === "false", "unlocked: the padlock opens");
     await openTab(page, "Generate");
     await page.waitForSelector("[aria-label='Hook effect']");
+    // The page refreshes after the unlock: give it a moment before checking.
+    await page.waitForFunction(() => !(document.querySelector("[aria-label='Hook effect']") as HTMLSelectElement | null)?.disabled, null, { timeout: 10_000 }).catch(() => {});
     check(await page.$eval("[aria-label='Hook effect']", (s: HTMLSelectElement) => !(s).disabled), "Generate: Hook effect can be changed again");
 
     // + New song: Instrumental -> an optional story.txt instead of lyrics.txt; song.json "instrumental".

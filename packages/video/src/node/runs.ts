@@ -21,6 +21,7 @@ export type RunRequest = {
   platforms: string[];
   collection?: string;
   variations?: number;
+  take?: number; // "Try another take": only video vN of the platform (one platform per take)
   lineEffect?: string;
   hookEffect?: string;
   title?: string;
@@ -45,6 +46,7 @@ export function checkRunRequest(req: RunRequest, platformNames: readonly string[
   if (!Array.isArray(req.platforms) || !req.platforms.length) problems.push("Choose at least one platform.");
   else for (const p of req.platforms) if (!platformNames.includes(p)) problems.push(`Unknown platform "${p}".`);
   if (req.variations !== undefined && !(Number.isInteger(req.variations) && req.variations >= 1 && req.variations <= 24)) problems.push("Videos per platform must be 1-24.");
+  if (req.take !== undefined && !(Number.isInteger(req.take) && req.take >= 1 && req.take <= 99)) problems.push("A take is a number 1-99.");
   for (const [field, value] of [["Verse effect", req.lineEffect], ["Hook effect", req.hookEffect]] as const) {
     if (value) {
       try {
@@ -97,6 +99,7 @@ export function generateOptions(ws: Workspace, projectId: string, req: RunReques
     platforms: req.platforms.join(","),
     ...(req.collection ? { collection: req.collection } : {}),
     ...(req.variations ? { variations: req.variations } : {}),
+    ...(req.take ? { take: req.take } : {}),
     ...(req.lineEffect ? { lineEffect: req.lineEffect } : {}),
     ...(req.hookEffect ? { hookEffect: req.hookEffect } : {}),
     ...(req.title?.trim() ? { title: req.title.trim() } : {}),
@@ -161,7 +164,7 @@ export const platformListLabel = (platforms: string | undefined) => (platforms ?
 export function enqueueRun(ws: Workspace, projectId: string, options: RunOptions, label?: string): MakeRun {
   return ws.db
     .insert(makeRun)
-    .values({ project_id: projectId, options_json: options as Record<string, unknown>, ...(options.resume && options.resumeFolder ? { export_dir: storedPath(ws, options.resumeFolder) } : {}), label: label ?? (options.resume ? `Resume ${platformListLabel(options.platforms)}` : platformListLabel(options.platforms)) })
+    .values({ project_id: projectId, options_json: options as Record<string, unknown>, ...(options.resume && options.resumeFolder ? { export_dir: storedPath(ws, options.resumeFolder) } : {}), label: label ?? (options.resume ? `Resume ${platformListLabel(options.platforms)}` : `${platformListLabel(options.platforms)}${options.take ? ` · take ${options.take}` : ""}`) })
     .returning()
     .get();
 }

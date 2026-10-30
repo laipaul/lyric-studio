@@ -269,6 +269,15 @@ export function setVideoMark(ws: Workspace, projectId: string, video: string, ch
 
 // The Post tab: the approved videos only (discarded / just generated left out), per platform in the
 // order of the Videos tab, newest run first.
+// "Ready to post — approve?": videos the app judged ✅ Ready to post with no point left, not yet approved or
+// discarded by the user (newest first). They are only offered: approving stays the user's click.
+export function readyToApprove(runs: readonly RunInfo[]): VideoInfo[] {
+  const out: VideoInfo[] = [];
+  for (const run of [...runs].reverse())
+    for (const p of run.platforms) for (const v of p.videos) if (v.mark.status === "generated" && v.assessment.verdict === "ready" && !v.assessment.points.length) out.push(v);
+  return out;
+}
+
 export function approvedVideos(runs: readonly RunInfo[]): { platform: string; label: string; videos: VideoInfo[] }[] {
   const groups = new Map<string, { platform: string; label: string; videos: VideoInfo[] }>();
   for (const run of [...runs].reverse()) {

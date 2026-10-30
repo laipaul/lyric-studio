@@ -5,7 +5,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 
 import { project } from "@lyric/db";
-import { approvedVideos, songRuns } from "@lyric/video/exports";
+import { approvedVideos, readyToApprove, songRuns } from "@lyric/video/exports";
 import { generatePanelData, platformLabels, platformState, songCard } from "@lyric/video/library";
 import { chipState } from "@lyric/video/library-status";
 import { RELEASE_PLATFORMS, songTodo } from "@lyric/video/song-stages";
@@ -72,10 +72,10 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
         presetError = (error as Error).message;
       }
     }
-    return { song: songCard(ws, p, labels), runs, settings, approved: approvedVideos(runs), panel: generatePanelData(ws, p), preset, presetError };
+    return { song: songCard(ws, p, labels), runs, settings, approved: approvedVideos(runs), offered: readyToApprove(runs), panel: generatePanelData(ws, p), preset, presetError };
   });
   if (!data) notFound();
-  const { song, runs, settings, approved, panel, preset, presetError } = data;
+  const { song, runs, settings, approved, offered, panel, preset, presetError } = data;
   const todo = await withWorkspaceAsync((ws) => songTodo(ws, id)).catch(() => []);
   const blocking = todo.find((t) => t.blocking) ?? null;
   // Where the page opens: ?tab=; a song with videos: Review; before the first video: what still needs doing
@@ -84,7 +84,7 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
 
   // Each stage's status line.
   const chips = song.platforms.map((p) => ({ ...p, state: chipState(p) }));
-  const made = chips.reduce((n, p) => n + (p.state === "none" ? 0 : p.videos), 0);
+  const made = runs.reduce((n, r) => n + r.platforms.reduce((m, p) => m + p.videos.filter((v) => v.mark.status !== "discarded").length, 0), 0); // every kept video, all runs
   const toReview = chips.reduce((n, p) => n + (p.state === "review" ? p.videos : 0), 0);
   const approvedCount = chips.reduce((n, p) => n + p.approved, 0);
   const rendering = chips.some((p) => p.state === "rendering");
@@ -133,7 +133,7 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
           </ul>
         </div>
       </div>
-      <SongStages key={`${tab}:${search.from ?? ""}`} initialTab={tab} statuses={statuses} todo={todo} counts={{ post: approved.reduce((n, g) => n + g.videos.length, 0) }}>
+      <SongStages key={`${tab}:${search.from ?? ""}`} initialTab={tab} statuses={statuses} todo={todo} counts={{ post: approved.reduce((n, g) => n + g.videos.length, 0) + offered.length }}>
         <TabsContent value="assets">
           <AssetsTab projectId={song.id} />
         </TabsContent>
@@ -166,7 +166,7 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
           <SongView projectId={song.id} songTitle={song.title} runs={runs} settings={settings} />
         </TabsContent>
         <TabsContent value="post">
-          <PostTab projectId={song.id} songTitle={song.title} groups={approved} />
+          <PostTab projectId={song.id} songTitle={song.title} groups={approved} offered={offered} />
         </TabsContent>
       </SongStages>
     </div>

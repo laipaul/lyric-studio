@@ -4,6 +4,19 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Four-stage song page, part 2 ✅ (to verify on the Windows PC)
+- **Post: "Ready to post — approve?"**: videos the app judged ✅ with nothing to improve, not yet approved or
+  discarded, with one-click **Approve**. Nothing is approved without your click.
+- **"Try another take"** in Videos: one button per platform makes one more video of it (take 3, 4, …: a
+  different cut and look, same recipe and clips). The Canvas has no takes (it is one chosen loop).
+- **Style shows what differs**: only the settings this song changes from the brand (plus its platforms);
+  "Show all settings" for the rest.
+- From the part 1 check: **Make counts every kept video** of the song (all runs), and Generate's **More
+  options default to one video per platform** (unless the song's recipe sets a number).
+- Tests: take.test.ts (a take is exactly vN, each take differs), song-stages.e2e.ts (Post offer + Approve,
+  another take queued as take 3, Style's short list, Make's count); the Style and Storyboard browser tests open
+  "Show all settings".
+
 ### Four-stage song page, part 1 ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **Stage bar** on every song: 1 Prepare (Assets, Lyrics) → 2 Shape (Style, Storyboard) → 3 Make (Generate) →
   4 Review & Post (Videos, Post), each with a status line ("2 to check", "6 videos made", "3 to review · 1
@@ -84,19 +97,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - A collection's page: thumbnail grid (hover plays the clip), drag-and-drop or **Add clips** (copied in,
   the same content never twice), **Remove** -> _removed\ (never deleted) with **Restore**, **Open folder**.
 - Tests: collections.test.ts; browser: collections.e2e.ts (now part of pnpm test:e2e).
-
-### Step E — Instrumental songs with a story ✅ (verified by the user on the Windows PC, 30 Oct 2026)
-- **+ New song → Instrumental**: no lyrics needed; an optional **story.txt** instead (one sentence per line,
-  a blank line = a pause). song.json gets "instrumental": true; Assets shows "Story (instrumental)" with
-  Replace; the Lyrics tab edits story.txt and can nudge a sentence.
-- **The app times the story**: each sentence appears on a bar, stays long enough to read, and the
-  sentences are spread through the piece with pure music in between (as in the "Tea with the monk" Reel).
-  Nothing is aligned (no AI packages needed).
-- **Reels / TikTok / Shorts**: the section starts at the strongest stretch of the music (no chorus to start
-  on); calm pacing with dissolves; every story sentence starts with a new clip; the title opening works.
-- No .lrc for lyric services; captions (.srt) carry the story; without a story: music only, no captions.
-- Tests: story.test.ts (parsing, timing, too long, strongest stretch, section, forced cuts),
-  instrumental-make.test.ts (New song + a Reel with and without a story); browser: the New song form.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -247,7 +247,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
    red failed), short platform labels that never truncate, a "4/6 ready · 1 error" line, 2-line titles, a
    Generate / Fix button on the card, filters (All · No videos · Needs review · Errors · Ready) and sorting,
    a warning when two songs share the same cover. The card becomes the entry to the song's stages (item 4).
-4. ✅ **Four-stage song page (part 1 verified 30 Oct). Part 2 next:** "Ready to post" videos offered straight in
+4. ✅ **Four-stage song page (part 1 verified 30 Oct; part 2 built 30 Oct, to verify).** Part 2 was: "Ready to post" videos offered straight in
    Post; Style shows only what differs from the brand; "Try another take"; plus from the part 1 check: Make's
    status counts every kept video of the song, not only the latest run ("4 videos made", not "1"); the Generate
    panel's "More options" default to one video per platform, like the release pack (Reels showed "3 videos").
