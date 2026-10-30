@@ -1,7 +1,11 @@
+import { mkdtempSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { assessVideo, autoSection, cardBlocks, gridCrop, runQa, type SectionLine } from "../src";
-import { checkRecipe } from "../src/node";
+import { assessVideo, autoSection, cardBlocks, fitCardBlocks, gridCrop, runQa, type SectionLine, type TextCardProps } from "../src";
+import { cardMeasure, checkRecipe, loadFontCatalog, titleCards } from "../src/node";
+import type { Textboard } from "../src/textboard";
 import { grid } from "./helpers";
 
 // 120 BPM: a bar every 2 s. A hook ("Hold on to me") sung at 40.5 s, the line before it ends at 37.0 s.
@@ -54,8 +58,13 @@ describe("title opening: geometry and QA", () => {
     expect(blocks[0].ids).toEqual(["title", "byline"]);
     // Title wraps (20 chars x 48 px = 960 px fits: one line) + byline one line + gap.
     expect(blocks[0].box.bottom - blocks[0].box.top).toBeCloseTo(80 * 1.2 + 36 * 1.2 + 20, 5);
+    // Text wraps at its spaces: two words that do not fit on one line make two lines.
+    const wrapped = cardBlocks([card({ text: `${"x".repeat(15)} ${"y".repeat(15)}` })], format, measure);
+    expect(wrapped[0].box.bottom - wrapped[0].box.top).toBeCloseTo(2 * 80 * 1.2, 5);
+    // A single word wider than the frame cannot wrap: its block is wider than the frame (QA names it).
     const wide = cardBlocks([card({ text: "x".repeat(30) })], format, measure);
-    expect(wide[0].box.bottom - wide[0].box.top).toBeCloseTo(2 * 80 * 1.2, 5);
+    expect(wide[0].box.bottom - wide[0].box.top).toBeCloseTo(80 * 1.2, 5);
+    expect(wide[0].box.right - wide[0].box.left).toBeGreaterThan(format.width);
   });
 
   it("the profile grid shows the centred 3:4 area", () => {
@@ -89,6 +98,94 @@ describe("title opening: recipe and assessment", () => {
     expect(a.points[0]).toMatchObject({ code: "title-glyphs", major: true });
     expect(a.points[0].text).toContain("語");
     expect(a.points[1]).toMatchObject({ code: "title-grid", major: false });
-    expect(a.points[1].action).toContain("card editor");
+    expect(a.points[1].action).toContain("shorter title or tagline");
+  });
+});
+
+// ---------------------------------------------------------------- the layout fits the safe area by itself
+
+describe("title opening: the cards fit the safe area by themselves", () => {
+  const catalog = loadFontCatalog(mkdtempSync(path.join(os.tmpdir(), "lyric-title-fit-")));
+  const format = { width: 1080, height: 1920 };
+  // Instagram Reels (presets/platforms.json): 14% top, 35% bottom, 12% right.
+  const safeZone = { top: 0.14, bottom: 0.35, left: 0, right: 0.12 };
+  const area = { top: 269, bottom: 1248, centerY: 758 };
+  const board = (title: string, tagline = "", titleOverrides: Record<string, unknown> = {}): Textboard => ({
+    version: 1,
+    roles: {},
+    cards: [
+      { id: "title", type: "title", text: title, overrides: titleOverrides },
+      { id: "byline", type: "byline", text: "Life Lyrics", overrides: {} },
+      ...(tagline ? [{ id: "tagline", type: "tagline", text: tagline, overrides: {} }] : []),
+    ],
+  } as unknown as Textboard);
+  const lay = (b: Textboard) =>
+    titleCards(b, {
+      format, area, fps: 30, durationInFrames: 900, youtube: null,
+      titleFont: { family: "Cinzel", weight: 600, letterSpacing: 0.18 }, accent: "#E8A3B5", textScale: 1,
+      fontFor: () => null, opening: { untilFrame: 300 }, fit: { safeZone, catalog },
+    });
+  // QA's own check on those cards: the same blocks and the same safe-zone test.
+  const qaOf = (cards: TextCardProps[]) => {
+    const blocks = cardBlocks(cards, format, cardMeasure(catalog, cards));
+    const base = { props: { shots: [], lyrics: [], cinematicBars: false, durationInFrames: 900, format, safeZone }, shotClips: [], poolSize: 0, lyrics: [], frames: { black: [], frozen: [] } };
+    const qa = runQa({ ...base, titleCards: { blocks, firstLyricFrame: 300, missing: [], grid: gridCrop(format) } } as never);
+    return { blocks, qa, safe: qa.checks.find((c) => c.name === "Title cards inside the safe zone")! };
+  };
+
+  it("THESE EMPTY ROADS + Life Lyrics + a tagline: inside the safe zone, wrapped and/or shrunk by at most 25%", () => {
+    const out = lay(board("These Empty Roads", "A song for the long way home"));
+    const title = out.cards.find((c) => c.id === "title")!;
+    expect(title.size).toBeGreaterThanOrEqual(Math.round(84 * 0.75));
+    expect(title.size < 84 || title.lines?.length === 2).toBe(true);
+    if (title.lines) expect(title.lines.join(" ")).toBe("These Empty Roads");
+    // The block is limited to the safe area's width, so the composition draws what QA measured.
+    expect(title.right).toBeLessThanOrEqual(format.width * (1 - safeZone.right));
+    const { safe, blocks } = qaOf(out.cards);
+    expect(safe.details).toEqual([]);
+    expect(safe.ok).toBe(true);
+    expect(blocks).toHaveLength(2); // title + byline, and the tagline
+  });
+
+  it("a short title keeps its size and its place (nothing is touched)", () => {
+    const plain = lay({ ...board("Home"), cards: board("Home").cards });
+    const title = plain.cards.find((c) => c.id === "title")!;
+    expect(title.size).toBe(84);
+    expect(title.lines).toBeUndefined();
+    expect(title.left).toBeUndefined();
+    expect(plain.cards.find((c) => c.id === "byline")!.size).toBe(Math.round(84 * 0.45));
+    expect(qaOf(plain.cards).safe.ok).toBe(true);
+  });
+
+  it("the user's own card size is the starting size and is fitted (shrunk) rather than left outside", () => {
+    const out = lay(board("These Empty Roads", "", { size: 1.5 }));
+    const title = out.cards.find((c) => c.id === "title")!;
+    expect(title.size).toBeLessThan(Math.round(84 * 1.5));
+    expect(title.size).toBeGreaterThanOrEqual(Math.round(84 * 1.5 * 0.75));
+    expect(qaOf(out.cards).safe.ok).toBe(true);
+  });
+
+  it("a block that would reach under the platform's buttons is moved up inside the safe area", () => {
+    const low = titleCards(board("Home"), {
+      format, area, fps: 30, durationInFrames: 900, youtube: null,
+      titleFont: { family: "Cinzel", weight: 600, letterSpacing: 0.18 }, accent: "#fff", textScale: 1,
+      fontFor: (style) => (style ? null : null), opening: { untilFrame: 300 }, fit: { safeZone, catalog },
+    });
+    const moved = fitCardBlocks(low.cards.map((c) => ({ ...c, centerY: undefined, top: 1200 })), { format, safeZone, measure: cardMeasure(catalog, low.cards) });
+    const blocks = cardBlocks(moved, format, cardMeasure(catalog, moved));
+    expect(blocks[0].box.bottom).toBeLessThanOrEqual(format.height * (1 - safeZone.bottom));
+  });
+
+  it("an impossibly long title still fails QA, and the assessment asks for a creative fix", () => {
+    const out = lay(board(`The${"Endless".repeat(8)}Road`));
+    const { safe, qa } = qaOf(out.cards);
+    expect(safe.ok).toBe(false);
+    const a = assessVideo({ problems: [{ check: safe.name, details: safe.details }] });
+    expect(a.verdict).toBe("not-ready");
+    const point = a.points[0];
+    expect(point.code).toBe("title-safe");
+    expect(point.action).toContain("shorter title or tagline");
+    expect(point.action.toLowerCase()).not.toContain("smaller size");
+    expect(qa.checks.length).toBeGreaterThan(0);
   });
 });

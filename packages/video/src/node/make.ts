@@ -37,11 +37,11 @@ import { VIDEO } from "../config";
 import { getCutPoints, type CutRate, type Energy, type ShotLength } from "../cuts";
 import { bestMoments } from "./best-moment";
 import { editOf, rankOf, readClipEdits } from "./clip-edits";
-import { boardForRun, cardFont, overrideCount, titleCards, type RunBoard } from "./textboard";
+import { boardForRun, cardFont, cardMeasure, overrideCount, titleCards, type RunBoard } from "./textboard";
 import { matchPinClips, parsePins } from "../pins";
 import type { LyricEffectsProps, LyricVideoProps } from "../props";
 import { formatQa, LOW_CONFIDENCE, qaReasons, runQa, type QaInput, type QaReport } from "../qa";
-import { autoSection, clockText, finishedBeforeStart, SECTION_TARGET, sectionCuts, startsAfterEnd, sungEnd, sungStart, type SectionCut, type SectionLine } from "../section";
+import { autoSection, clockText, titleLeadMs, finishedBeforeStart, SECTION_TARGET, sectionCuts, startsAfterEnd, sungEnd, sungStart, type SectionCut, type SectionLine } from "../section";
 import { loopFit, loopFlows, loopSuggestions, type LoopAudio, type LoopResult, type LoopSuggestion } from "../loop";
 import { chooseEnding, type Ending, type EndingChoice } from "../ending";
 import { choosePace, songFeel, type Pace } from "../pace";
@@ -64,7 +64,7 @@ import { fontFileRefs, forText, loadFontCatalog, missingCharacters, resolveFace,
 import { sha256File, toolInfo, writeManifest, type Manifest } from "./manifest";
 import { findPairing, loadPairings } from "./pairings";
 import { resolveMediaPath, type MediaRoots } from "./media";
-import { faceMeasure, tooLongLines } from "./measure";
+import { tooLongLines } from "./measure";
 import { cardBlocks, gridCrop } from "../text-cards";
 import { loadStyles, lyricLineNumbers, parseSection, snapToDownbeat, songMedia, type StyleFaces } from "./prepare";
 import { detectBadFrames, measureLyrics } from "./qa-check";
@@ -914,6 +914,7 @@ export function coverProps(props: Omit<LyricVideoProps, "mediaBaseUrl">, sh: Pic
     fontFor: (style, b, text, role) => cardFont(sh.catalog, style, b, text, role),
     opening: { untilFrame: props.durationInFrames + CARD_COVER_PAD },
     fallbackFor: (face, text) => titleFallback(sh.catalog, face, text),
+    fit: { safeZone: preset.safeZone, catalog: sh.catalog },
   });
   if (!tc.cards.length) return null;
   const titleFace = tc.cards.some((c) => c.font === sh.brand.brand.titleFont.family) ? fontFileRefs(resolveFace(sh.catalog, sh.brand.brand.titleFont.family, sh.brand.brand.titleFont.weight)) : [];
@@ -1018,6 +1019,8 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   // The song's detected bar starts (downbeat_offset already applied): the grid the section snaps to and the loop's beat check counts.
   const downbeatTimes = analysis.beats.filter((b) => b.is_downbeat).map((b) => b.time_ms).sort((a, b) => a - b);
   const loopSong = loops ? await sh.loopAudio() : null;
+  // With the title opening the loop's phrase check accepts the section's lead-in (up to 2 bars before the hook).
+  const titleLead = titleOpeningOn ? titleLeadMs(downbeatTimes) : 0;
   // Story anchors by line (the Lyrics tab's number: sung lines counted, as in check-start and hints.lrc):
   // on screen from (stamp - lead + offset) until the line is sung.
   const anchorLines = sh.anchors.flatMap((a) => {
@@ -1402,6 +1405,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
           // The title opening: gone as the first lyric line fades in.
           opening: titleOpeningOn ? { untilFrame: rest.lyrics[0] ? (rest.lyrics[0].enterFrame ?? rest.lyrics[0].startFrame) : Math.min(rest.durationInFrames, Math.round(TITLE_ALONE_S * VIDEO.fps)) } : null,
           fallbackFor: (face, text) => titleFallback(sh.catalog, face, text),
+          fit: { safeZone: preset.safeZone, catalog: sh.catalog },
         });
         for (const w of tc.warnings) if (!warnings.includes(`${preset.name}: textboard: ${w}`)) warnings.push(`${preset.name}: textboard: ${w}`);
         const titleFace = tc.cards.some((c) => c.font === sh.brand.brand.titleFont.family) && !ytLayout ? fontFileRefs(resolveFace(sh.catalog, sh.brand.brand.titleFont.family, sh.brand.brand.titleFont.weight)) : [];
@@ -1423,7 +1427,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
           const composed = composedBySpec.get(spec.name)!;
           return {
             spec, props: composed.props, anchors: anchors.length || anchorMissing.length ? { ...(composed.anchors ?? { uses: [], conflicts: [], notes: [] }), missing: anchorMissing } : null,
-            loop: loops ? loopResult(composed.props, prepared.clips, { bpm: analysis.bpm, downbeats: downbeatTimes, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers, ending }) : null,
+            loop: loops ? loopResult(composed.props, prepared.clips, { bpm: analysis.bpm, downbeats: downbeatTimes, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers, ending, titleLeadMs: titleLead }) : null,
             decisions: [pace?.text, composed.transitions?.text].filter((x): x is string => !!x),
           };
         }),
@@ -1607,7 +1611,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       state.status = "checking";
       report();
       // The wrap-around from the last frame to the first (the section as rendered, to the frame).
-      const loop = loops ? loopResult(props, prepared.clips, { bpm: analysis.bpm, downbeats: downbeatTimes, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers, ending }) : null;
+      const loop = loops ? loopResult(props, prepared.clips, { bpm: analysis.bpm, downbeats: downbeatTimes, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers, ending, titleLeadMs: titleLead }) : null;
       const anchorsOut = anchors.length || anchorMissing.length ? { ...(anchorReport ?? { uses: [], conflicts: [], notes: [] }), missing: anchorMissing } : null;
       const qa = await checkVariation(spec, props, file, {
         loop,
@@ -1817,13 +1821,7 @@ export function titleCardsQa(props: Omit<LyricVideoProps, "mediaBaseUrl">, catal
     }
     return faces.get(key)!;
   };
-  const blocks = cardBlocks(cards, props.format ?? { width: 1080, height: 1920 }, (m) => {
-    const c = cards.find((x) => x.text === m.text && x.size === m.size)!;
-    const face = faceOf(c);
-    const text = m.upper ? m.text.toUpperCase() : m.text;
-    const width = face ? faceMeasure(face)(text, m.size) : text.length * m.size * 0.6;
-    return width + Math.max(0, text.length - 1) * m.letterSpacing * m.size;
-  });
+  const blocks = cardBlocks(cards, props.format ?? { width: 1080, height: 1920 }, cardMeasure(catalog, cards));
   const missing = new Set<string>();
   for (const c of cards) {
     const face = faceOf(c);
@@ -1849,7 +1847,7 @@ export function titleCardsQa(props: Omit<LyricVideoProps, "mediaBaseUrl">, catal
 export function loopResult(
   props: Pick<LyricVideoProps, "shots" | "durationInFrames" | "audio" | "loopInto">,
   clips: readonly { path: string; name: string }[],
-  c: { bpm: number; downbeats?: readonly number[]; startMs: number; audio: LoopAudio | null; lines: readonly SectionLine[]; numbers: readonly number[]; ending?: Ending | null },
+  c: { bpm: number; downbeats?: readonly number[]; startMs: number; audio: LoopAudio | null; lines: readonly SectionLine[]; numbers: readonly number[]; ending?: Ending | null; titleLeadMs?: number },
 ): LoopResult {
   const lengthMs = (props.durationInFrames * 1000) / VIDEO.fps;
   const startMs = props.audio ? (props.audio.startFrame * 1000) / VIDEO.fps : c.startMs;
@@ -1860,6 +1858,7 @@ export function loopResult(
     bpm: c.bpm,
     downbeats: c.downbeats,
     ending: c.ending ?? null,
+    ...(c.titleLeadMs ? { titleLeadMs: c.titleLeadMs } : {}),
     startMs,
     endMs: startMs + lengthMs,
     lines: c.lines.map((l, i) => ({ number: c.numbers[i] || i + 1, text: l.text, sungStartMs: sungStart(l), sungEndMs: sungEnd(l) })),

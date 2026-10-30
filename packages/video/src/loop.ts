@@ -199,7 +199,9 @@ function beatPoint(info: BeatInfo): LoopPoint {
 
 // ---------------------------------------------------------------- phrase
 
-function phrasePoint(lines: readonly LoopLine[], startMs: number, endMs: number, barMs: number): LoopPoint {
+// `titleLeadMs`: the title opening's own lead-in (src/section.ts): the section may start that long before the
+// first sung line (room for the title, byline and tagline), so it is not "more than one bar" then.
+function phrasePoint(lines: readonly LoopLine[], startMs: number, endMs: number, barMs: number, titleLeadMs = 0): LoopPoint {
   const problems: string[] = [];
   const name = (l: LoopLine) => `line ${l.number} "${l.text}"`;
   const atEnd = lines.find((l) => l.sungStartMs < endMs && endMs < l.sungEndMs);
@@ -207,8 +209,9 @@ function phrasePoint(lines: readonly LoopLine[], startMs: number, endMs: number,
   const atStart = lines.find((l) => l.sungStartMs < startMs && startMs < l.sungEndMs);
   const first = lines.filter((l) => l.sungStartMs >= startMs && l.sungStartMs < endMs).sort((a, b) => a.sungStartMs - b.sungStartMs)[0];
   if (atStart) problems.push(`it starts inside ${name(atStart)}`);
-  else if (first && first.sungStartMs - startMs > barMs + BAR_REACH_MS) {
-    problems.push(`the first sung line (${name(first)}) begins ${s1(first.sungStartMs - startMs)} after the start, more than one bar (${s1(barMs)})`);
+  else if (first && first.sungStartMs - startMs > Math.max(barMs, titleLeadMs) + BAR_REACH_MS) {
+    const allowed = titleLeadMs > barMs ? `${s1(titleLeadMs)}, the title opening's lead-in` : `one bar (${s1(barMs)})`;
+    problems.push(`the first sung line (${name(first)}) begins ${s1(first.sungStartMs - startMs)} after the start, more than ${allowed}`);
   }
   if (problems.length) return { point: "phrase", ok: false, detail: `phrase: ${problems.join("; ")}` };
   const last = lines.filter((l) => l.sungEndMs <= endMs && l.sungStartMs >= startMs).pop();
@@ -393,6 +396,7 @@ export function loopFlows(o: {
   startMs: number; // the section in the song
   endMs: number;
   lines: readonly LoopLine[];
+  titleLeadMs?: number; // the title opening is on: the start may be this long before the first sung line
   audio: LoopAudio | null; // null: the song could not be read
   firstClip: string | null;
   lastClip: string | null;
@@ -407,7 +411,7 @@ export function loopFlows(o: {
   const harmony = o.audio ? loopHarmony(o.audio, o.startMs, o.endMs, b.lastBarMs, b.firstBarMs) : undefined;
   const points = [
     beatPoint(b),
-    phrasePoint(o.lines, o.startMs, o.endMs, b.barMs),
+    phrasePoint(o.lines, o.startMs, o.endMs, b.barMs, o.titleLeadMs ?? 0),
     soundPoint(levels),
     harmonyPoint(harmony),
     picturePoint(o.firstClip, o.lastClip, o.shots, o.continues),

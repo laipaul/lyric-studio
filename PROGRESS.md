@@ -4,6 +4,21 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Fix — title opening fits itself, loop check accepts its lead-in ✅ (to verify on the Windows PC)
+- Found on These Empty Roads (Reels, title opening on): "Not ready — the title opening reaches under the
+  platform's buttons" (asking you to shorten the title or pick a smaller size) and "the jump back to the start may
+  be noticeable (phrase)". Both were the app's job.
+- **Title opening fits itself** (src/card-layout.ts fitCardBlocks): a long title wraps onto at most 2 balanced
+  lines inside the safe area, then the title block shrinks step by step (at most 25% smaller), and it is moved
+  inside the safe area (and the 3:4 profile grid when it fits). The composition draws exactly what QA measures.
+  Only when it truly cannot fit does QA fail, and the advice is creative ("a shorter title or tagline").
+- **Loop check**: with the title opening on, the "phrase" point accepts the app's own lead-in (up to 2 bars
+  before the first sung line) instead of warning about it.
+- Built by a Sonnet helper (bug-fix rule), checked here: the change made the Textboard's server code load the
+  video renderer and broke the production build; fixed by moving the layout into its own Remotion-free file
+  (src/card-layout.ts). All browser tests and the title / textboard / loop / QA tests pass; a real render
+  could not be checked in the cloud (renders need a download this sandbox cannot make).
+
 ### Effects: letter-by-letter typewriter, Spread, Breathe ✅ (to verify on the Windows PC)
 - **Typewriter** now types **letter by letter** like Canva, at a steady pace, with a thin **cursor** in your
   accent colour that blinks softly once the line is typed. Never behind the singer: every word is fully typed
@@ -86,25 +101,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   Canvas, recipe and songs); a check confirmed no line of the old brief or of PROGRESS.md was lost.
 - PROGRESS.md keeps the agreed order, open issues, backlog and these latest steps; the full step history, the
   verification checklist and the 29 Oct plan are in docs/history.md.
-
-### Fix — verification pass 30 Oct (A Heart For Two) ✅ (verified by the user on the Windows PC, 30 Oct 2026)
-- **Tasks:** a stopped or interrupted run that can still resume has a **Resume** button in its entry (POST
-  /api/runs/resume into its own folder, with every platform of the run, also those that never started); once a
-  Resume of that folder is waiting, going or done, the old entry no longer offers it (Tasks runs[].resumable).
-  The result line uses the verdicts ("3 videos: 2 ready to post · 1 to improve", from the same assessment as
-  the Videos tab) instead of PASS / WARN. "Stop after this video" is a real button ("Stopping after this
-  video…" once asked). The panel closes on a click outside it and on Escape.
-- **Stop between videos (checked):** a stop asked while video N renders never starts video N+1 or a later
-  platform (shouldStop before every video and platform); test with 2 platforms × 3 videos, then Resume makes
-  the rest.
-- **Lyrics tab:** flag reasons in plain words ("The singing may start about 2 s later than shown. Listen with
-  ▶."; the technical reason on hover; vocal-guard.ts flagReason). A flagged line with a likely start (two
-  signals within 1 s; the earlier one) gets **Use 1:04.0** next to ▶: saved at once as a hand-set start
-  (likelyStart). Sticky column headers (the lines scroll in their own box); the "Lands on" button reads "Choose a clip" (the old "Lands on…" looked cut off).
-- **Generate:** the "Standard" preset is no longer offered (pnpm make without --platforms unchanged).
-- Tests: runs (resume with a platform that never started, resumable), make (stop during v1 of 3), vocal-guard
-  (likelyStart, flagReason), lyrics-view, runSummary verdicts; e2e lyrics-tab (plain reason, tooltip, sticky
-  header, label not cut) and videos-post pass. Not browser-tested: the Tasks menu (Resume, outside click).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

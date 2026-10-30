@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  assignClips, autoSection, getCutPoints, loopFit, loopFlows, loopSuggestions, runQa, sungEnd, sungStart,
+  assignClips, autoSection, getCutPoints, loopFit, loopFlows, loopSuggestions, runQa, sungEnd, sungStart, titleLeadMs,
   type ClipInfo, type LoopAudio, type LoopLine, type QaInput, type SectionLine,
 } from "../src";
 import { grid } from "./helpers";
@@ -99,6 +99,28 @@ describe('QA "Loop flows"', () => {
     expect(point(cut, "phrase").detail).toBe('phrase: it ends inside line 6 "Now we are one" (sung until 0:41.0)');
     const late = loopFlows({ ...clean, lines: LINES.map((l) => ({ ...l, sungStartMs: l.sungStartMs + 3_000, sungEndMs: l.sungEndMs + 1_000 })), audio: clockAudio });
     expect(point(late, "phrase").detail).toBe('phrase: the first sung line (line 4 "You had a heart for two") begins 3.5 s after the start, more than one bar (2.0 s)');
+  });
+
+  it("phrase with the title opening: a start up to the title lead before the first sung line passes, further back fails", () => {
+    // The title opening starts the section up to 2 bars (4.0 s here) before the first sung line.
+    const early = { ...clean, lines: LINES.map((l) => ({ ...l, sungStartMs: l.sungStartMs + 3_000, sungEndMs: l.sungEndMs + 1_000 })), audio: clockAudio }; // first line 3.5 s after the start
+    expect(point(loopFlows(early), "phrase").ok).toBe(false); // without the allowance nothing changes
+    const withLead = loopFlows({ ...early, titleLeadMs: 4_000 });
+    expect(point(withLead, "phrase").ok).toBe(true);
+    expect(withLead.ok).toBe(true);
+    // One bar and the 2-bar lead exactly: still fine; 4.5 s before the line is more than the lead.
+    const tooFar = loopFlows({ ...early, titleLeadMs: 4_000, lines: LINES.map((l) => ({ ...l, sungStartMs: l.sungStartMs + 4_000, sungEndMs: l.sungEndMs + 1_000 })) });
+    expect(point(tooFar, "phrase").ok).toBe(false);
+    expect(point(tooFar, "phrase").detail).toBe('phrase: the first sung line (line 4 "You had a heart for two") begins 4.5 s after the start, more than 4.0 s, the title opening\'s lead-in');
+    // The lead never replaces the other phrase rules: an end inside a sung line still fails.
+    const cut = loopFlows({ ...early, titleLeadMs: 4_000, lines: [...early.lines.slice(0, 2), { ...early.lines[2], sungEndMs: 41_000 }] });
+    expect(point(cut, "phrase").ok).toBe(false);
+  });
+
+  it("the title lead is what the auto section allows: 2 bars, or 1 when 2 bars are longer than 5 s", () => {
+    expect(titleLeadMs([0, 2000, 4000, 6000])).toBe(4000);
+    expect(titleLeadMs([0, 3000, 6000, 9000])).toBe(3000);
+    expect(titleLeadMs([])).toBe(4000); // no bars detected: 2 s bars
   });
 
   it("the song not readable: sound and harmony say so, the rest is still checked", () => {

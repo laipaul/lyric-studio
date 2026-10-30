@@ -66,6 +66,24 @@ export type SectionChoice = {
 export const SECTION_TARGET = { minMs: 45_000, maxMs: 60_000, hardMaxMs: 65_000 } as const;
 export const TITLE_LEAD_MAX_MS = 5000; // the title opening's lead-in before the hook: 2 bars, at most ~5 s
 
+// How many bars the title opening may start before the first hook: 2, or 1 when 2 bars are longer than ~5 s.
+export function titleLeadBars(barMs: number): number {
+  return 2 * barMs <= TITLE_LEAD_MAX_MS ? 2 : 1;
+}
+
+// The typical bar length of a song: the median gap between its bar starts (2 s without any).
+export function medianBarMs(downbeats: readonly number[]): number {
+  const d = [...downbeats].sort((a, b) => a - b);
+  const gaps = d.slice(1).map((t, i) => t - d[i]).sort((a, b) => a - b);
+  return gaps.length ? gaps[Math.floor(gaps.length / 2)] : 2000;
+}
+
+// The lead-in (ms) the title opening may take before the first sung line: what autoSection allows.
+export function titleLeadMs(downbeats: readonly number[]): number {
+  const bar = medianBarMs(downbeats);
+  return titleLeadBars(bar) * bar;
+}
+
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 export const clockText = (ms: number) => `${Math.floor(ms / 60_000)}:${((ms % 60_000) / 1000).toFixed(1).padStart(4, "0")}`;
 
@@ -138,7 +156,7 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
   const chorus = new Set<number>();
   let anchor: SectionChoice["anchor"];
   let anchorText: string;
-  const leadBars = hookFirst && options.titleLead ? (2 * bar <= TITLE_LEAD_MAX_MS ? 2 : 1) : 1;
+  const leadBars = hookFirst && options.titleLead ? titleLeadBars(bar) : 1;
   const before = hookFirst ? (leadBars > 1 ? `at most ${leadBars} bars before (room for the title opening)` : options.titleLead ? "at most one bar before (room for the title opening)" : "at most one bar before") : "one bar before";
   const firstHook = lines.findIndex((l) => l.isHook);
   if (options.musicStartMs !== undefined) {

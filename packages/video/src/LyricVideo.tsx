@@ -405,6 +405,7 @@ function TextCards({ cards, format }: { cards: TextCardProps[]; format: Format }
   const line = (c: TextCardProps, parent: TextCardProps | null, rootLook?: LineLook) => {
     const look = parent ? textCardLook(c, frame, fps) : (rootLook ?? { ...REST });
     if (!look || look.opacity <= 0.001) return null;
+    const body = c.lines?.length ? c.lines.join("\n") : c.text;
     return (
       <div
         key={c.id}
@@ -412,6 +413,7 @@ function TextCards({ cards, format }: { cards: TextCardProps[]; format: Format }
         style={{
           fontSize: c.size,
           ...(c.upper ? { textTransform: "uppercase" as const } : {}),
+          ...(c.lines?.length ? { whiteSpace: "pre-line" as const } : {}),
           ...(parent
             ? {
                 marginTop: parent.size * 0.25,
@@ -427,7 +429,7 @@ function TextCards({ cards, format }: { cards: TextCardProps[]; format: Format }
               : {}),
         }}
       >
-        {look.chars !== undefined ? <TypedText text={c.text} share={look.chars} /> : c.text}
+        {look.chars !== undefined ? <TypedText text={body} share={look.chars} /> : body}
       </div>
     );
   };

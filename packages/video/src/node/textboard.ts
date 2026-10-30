@@ -11,7 +11,7 @@ import { eq } from "drizzle-orm";
 import { parseEffectChoice } from "../effects/names";
 import type { FontFileRef } from "../font-files";
 import { HOOK_MARKER } from "../lrc";
-import type { LyricArea } from "../platform";
+import type { LyricArea, SafeZone } from "../platform";
 import type { TextCardProps, TitleOverlayProps } from "../props";
 import {
   applyTemplate,
@@ -34,7 +34,9 @@ import {
   type Textboard,
   type TextTemplate,
 } from "../textboard";
-import { fontFileRefs, forText, loadFontCatalog, resolveFont, type FontCatalog } from "./font-catalog";
+import { fitCardBlocks, type CardMeasure } from "../card-layout";
+import { fontFileRefs, forText, loadFontCatalog, resolveFace, resolveFont, type FontCatalog } from "./font-catalog";
+import { faceMeasure } from "./measure";
 import { loadBrand } from "./brand";
 import { readRecipe } from "./recipe";
 import { folderName, songPathsById } from "./song-folder";
@@ -219,6 +221,30 @@ export function cardFont(catalog: FontCatalog, style: CardStyle, base: Face, tex
   return { font: { family: face.family, weight: face.weight, ...(face.style === "italic" ? { italic: true } : {}) }, refs: fontFileRefs(face), warnings: r.warnings };
 }
 
+// A card's text width in px as QA measures it: the card's own font file, upper-case when the card is, and its
+// letter spacing (em) between the letters. One function for the layout and for QA, so they always agree.
+export function cardMeasure(catalog: FontCatalog, cards: readonly Pick<TextCardProps, "id" | "font" | "weight" | "italic">[]): CardMeasure {
+  const measures = new Map<string, ((text: string, size: number) => number) | null>();
+  const measureOf = (c: Pick<TextCardProps, "font" | "weight" | "italic">) => {
+    const key = `${c.font}|${c.weight}|${c.italic ? 1 : 0}`;
+    if (!measures.has(key)) {
+      try {
+        measures.set(key, faceMeasure(resolveFace(catalog, c.font, c.weight, c.italic ? "italic" : "normal")));
+      } catch {
+        measures.set(key, null);
+      }
+    }
+    return measures.get(key)!;
+  };
+  return (m) => {
+    const card = cards.find((c) => c.id === m.id);
+    const text = m.upper ? m.text.toUpperCase() : m.text;
+    const measure = card ? measureOf(card) : null;
+    const width = measure ? measure(text, m.size) : text.length * m.size * 0.6;
+    return width + Math.max(0, text.length - 1) * m.letterSpacing * m.size;
+  };
+}
+
 export const TITLE_SIZE_VERTICAL = 84; // px at 1080x1920 (x the platform's text scale)
 export const TITLE_HOLD_VERTICAL_S = 4;
 
@@ -241,6 +267,9 @@ export function titleCards(
     // upper third, the tagline (when the song has one) in the lower third, all gone by `untilFrame` (when
     // the first lyric line fades in: they never overlap it).
     opening?: { untilFrame: number } | null;
+    // The platform's safe area (and the font catalog to measure in): the cards are laid out to fit inside it
+    // by themselves (src/text-cards.ts fitCardBlocks: wrap on 2 lines, then shrink by up to 25%, then move).
+    fit?: { safeZone: SafeZone; catalog: FontCatalog } | null;
     // Characters the card's font lacks: a fallback family (e.g. Noto Sans JP) and its files.
     fallbackFor?: (face: Face, text: string) => { family: string; refs: FontFileRef[] } | null;
   },
@@ -305,5 +334,8 @@ export function titleCards(
   const title = out.find((c) => c.id === "title");
   const titlePlace = place(((board.roles.title?.position ?? board.cards.find((c) => c.type === "title")?.overrides.position) as CardPosition | undefined) ?? defaults.title.position);
   for (const c of out) if (c.stackOn && !title) Object.assign(c, { stackOn: undefined }, titlePlace);
-  return { cards: out.map((c) => (c.stackOn === undefined ? (({ stackOn: _s, ...rest }) => rest)(c) : c)), fonts, warnings };
+  const cards = out.map((c) => (c.stackOn === undefined ? (({ stackOn: _s, ...rest }) => rest)(c) : c));
+  // The vertical platforms' cards (not YouTube's title): fitted into the safe area, as QA measures them.
+  const fitted = o.fit && !y ? fitCardBlocks(cards, { format: o.format, safeZone: o.fit.safeZone, measure: cardMeasure(o.fit.catalog, cards) }) : cards;
+  return { cards: fitted, fonts, warnings };
 }

@@ -75,6 +75,7 @@ export type TextCardProps = {
   centerY?: number; // px: the block's centre (when no top)
   left?: number; // horizontal extent (default: the whole width)
   right?: number;
+  lines?: string[]; // the text on these lines (the layout's balanced wrap inside the safe area), drawn and measured as is
 };
 
 // Lyric effects (src/effects): the verse and hook effect, and the accent colour for karaoke.

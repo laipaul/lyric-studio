@@ -105,9 +105,9 @@ function pointsFor(p: Problem): AssessPoint[] {
     case "No audio":
       return [major("canvas-audio", "The Canvas has sound (Spotify needs it silent).", AGAIN)];
     case "Title cards inside the safe zone":
-      return [major("title-safe", `The title opening reaches under the platform's buttons (${(p.details[0] ?? "").split('" ')[0].replace(/^"/, "")}).`, "Shorten the title or the tagline (Assets tab), or choose a smaller size in the card editor.")];
+      return [major("title-safe", `The title opening reaches under the platform's buttons (${(p.details[0] ?? "").split('" ')[0].replace(/^"/, "")}).`, "A shorter title or tagline for the video (Assets tab): the app already wraps and shrinks them to fit, and these still do not.")];
     case "Title cards inside the profile grid (3:4)":
-      return [minor("title-grid", "Part of the title opening would be cut off on your profile grid (the cover shows 3:4).", "A shorter tagline, or a smaller size in the card editor (Storyboard → title / tagline).")];
+      return [minor("title-grid", "Part of the title opening would be cut off on your profile grid (the cover shows 3:4).", "A shorter title or tagline for the video (Assets tab).")];
     case "Title cards clear of the first lyric":
       return [minor("title-overlap", "The title is still on screen when the first lyric line appears.", "Shorten the title's hold in the card editor (Storyboard → title), or reset that card.")];
     case "Title characters":
