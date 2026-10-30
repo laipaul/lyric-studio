@@ -1,7 +1,7 @@
 "use client";
 
 import { Player } from "@remotion/player";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AbsoluteFill } from "remotion";
 
 import { DEFAULT_LYRIC_AREA, INTENSITIES, LyricScene, type EffectChoice, type Intensity, type LyricLineProps } from "@lyric/video";
@@ -33,7 +33,41 @@ function sampleLyrics(texts: string[]): LyricLineProps[] {
 }
 
 type AddOns = { heldGlow: boolean; chorusLift: boolean; shine: boolean };
-function PreviewScene(p: { lyrics: LyricLineProps[]; effect: EffectChoice; breathe: "off" | "gentle" | "beat"; addOns: AddOns; font: string; weight: number; italic: boolean; accent: string }) {
+type Breathe = "off" | "gentle" | "beat";
+type Tried = { name: string; intensity: Intensity; breathe: Breathe; addOns: AddOns };
+
+// What was tried is kept per song in sessionStorage, so it survives switching stage (the tabs unmount) and a reload.
+const triedKey = (projectId: string) => `lyric-effect-try:${projectId}`;
+function readTried(projectId: string, effectNames: string[]): Tried | null {
+  try {
+    const raw = window.sessionStorage.getItem(triedKey(projectId));
+    if (!raw) return null;
+    const t = JSON.parse(raw) as Partial<Tried>;
+    const a = (t.addOns ?? {}) as Partial<AddOns>;
+    if (typeof t.name !== "string" || !effectNames.includes(t.name)) return null;
+    if (!INTENSITIES.includes(t.intensity as Intensity) || !["off", "gentle", "beat"].includes(t.breathe as string)) return null;
+    return { name: t.name, intensity: t.intensity as Intensity, breathe: t.breathe as Breathe, addOns: { heldGlow: a.heldGlow === true, chorusLift: a.chorusLift === true, shine: a.shine === true } };
+  } catch {
+    return null;
+  }
+}
+function writeTried(projectId: string, tried: Tried) {
+  try {
+    window.sessionStorage.setItem(triedKey(projectId), JSON.stringify(tried));
+  } catch {
+    // storage unavailable (private mode, quota): the panel just forgets, as before
+  }
+}
+type Change = { field: string; value: string; shown: string }; // shown: the value in words ("typewriter (quick)")
+const BREATHE_WORDS = { off: "off", gentle: "gentle", beat: "with the beat" } as const;
+const effectWords = (choice: string) => {
+  const [n, i = "balanced"] = choice.split(":");
+  if (i === "balanced") return n;
+  const typer = n.startsWith("typewriter") && n !== "typewriter-words";
+  return `${n} (${typer ? (i === "subtle" ? "calm" : "quick") : i})`;
+};
+const asSaved = (effect: string) => effect.replace(/:balanced$/, ""); // "glide:balanced" is saved as "glide"
+function PreviewScene(p: { lyrics: LyricLineProps[]; effect: EffectChoice; breathe: Breathe; addOns: AddOns; font: string; weight: number; italic: boolean; accent: string }) {
   const downbeats = useMemo(() => Array.from({ length: 12 }, (_, k) => k * BAR_FRAMES), []);
   return (
     <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 40%, #3a2630 0%, #141417 60%, #0b0b0d 100%)" }}>
@@ -63,13 +97,18 @@ function PreviewScene(p: { lyrics: LyricLineProps[]; effect: EffectChoice; breat
 }
 
 // The effects preview (Style tab): the song's own first lines with an effect and intensity (the typing
-// pace for the typewriters) and Breathe, played in a loop, exactly as the video draws them. Trying an
-// effect changes nothing until "Use for verses" / "Use for choruses" / "Use these add-ons" is pressed;
-// the buttons hand the value to onSave (the Style tab saves it to song.json and reloads).
+// pace for the typewriters), Breathe and the add-ons, played in a loop, exactly as the video draws them.
+// Trying changes nothing until "Save to recipe — verses" / "— choruses" is pressed: one click saves everything
+// that differs (the effect to the verse or chorus effect; Breathe and the add-ons are song-wide), skipping
+// locked settings, and hands it to onSave (the Style tab saves it to song.json, reloads and highlights the
+// rows). What was tried stays per song in sessionStorage (it survives Shape -> Make -> Shape and a reload),
+// and a line says what is not in the recipe yet.
 export function EffectPreview({
+  projectId,
   effects,
   lines,
   initial,
+  hookInitial = "",
   breathe: initialBreathe,
   addOns: initialAddOns,
   font,
@@ -78,12 +117,15 @@ export function EffectPreview({
   accent,
   locked = [],
   note = "",
+  labels = {},
   onSave,
 }: {
+  projectId: string;
   effects: { name: string; label: string }[];
   lines: string[];
-  initial: string; // "glide" or "spread:subtle"
-  breathe: "off" | "gentle" | "beat";
+  initial: string; // the saved verse effect: "glide" or "spread:subtle"
+  hookInitial?: string; // the saved chorus effect ("" = follows the verse effect)
+  breathe: Breathe;
   addOns: AddOns;
   font: string;
   weight: number;
@@ -91,20 +133,35 @@ export function EffectPreview({
   accent: string;
   locked?: string[]; // recipe fields locked for this song
   note?: string; // confirmation shown after a save
-  onSave: (changes: { field: string; value: string }[], note: string) => void;
+  labels?: Record<string, string>; // the settings' names as the rows below show them (field -> label)
+  onSave: (changes: Change[], keptLocked: string[]) => void;
 }) {
-  const [name, setName] = useState(initial.split(":")[0]);
-  const [intensity, setIntensity] = useState<Intensity>((initial.split(":")[1] as Intensity) || "balanced");
-  const [breathe, setBreathe] = useState(initialBreathe);
-  const [addOns, setAddOns] = useState<AddOns>(initialAddOns);
+  // The panel is only drawn after the Style tab has loaded its data in the browser, so reading storage in the initialiser cannot mismatch server HTML.
+  const [restored] = useState(() => (typeof window === "undefined" ? null : readTried(projectId, effects.map((e) => e.name))));
+  const [name, setName] = useState(restored?.name ?? initial.split(":")[0]);
+  const [intensity, setIntensity] = useState<Intensity>(restored?.intensity ?? ((initial.split(":")[1] as Intensity) || "balanced"));
+  const [breathe, setBreathe] = useState<Breathe>(restored?.breathe ?? initialBreathe);
+  const [addOns, setAddOns] = useState<AddOns>(restored?.addOns ?? initialAddOns);
+  useEffect(() => writeTried(projectId, { name, intensity, breathe, addOns }), [projectId, name, intensity, breathe, addOns]);
   const lyrics = useMemo(() => sampleLyrics(lines), [lines]);
   const duration = lyrics.length * LINE_FRAMES + 45;
   const select = "bg-background rounded-md border px-2 py-1 text-xs";
   const choice = `${name}${intensity !== "balanced" ? `:${intensity}` : ""}`; // as saved: "glide" or "glide:subtle"
-  const changes: { field: string; value: string }[] = [];
-  if (breathe !== initialBreathe) changes.push({ field: "breathe", value: breathe });
-  for (const k of ["heldGlow", "chorusLift", "shine"] as const) if (addOns[k] !== initialAddOns[k]) changes.push({ field: k, value: addOns[k] ? "on" : "off" });
-  const addOnsLocked = changes.some((c) => locked.includes(c.field));
+  const label = (field: string) => labels[field] ?? field;
+  // The song-wide settings that differ from the recipe (Breathe and the add-ons), saved with either button.
+  const others: Change[] = [];
+  if (breathe !== initialBreathe) others.push({ field: "breathe", value: breathe, shown: BREATHE_WORDS[breathe] });
+  for (const k of ["heldGlow", "chorusLift", "shine"] as const) if (addOns[k] !== initialAddOns[k]) others.push({ field: k, value: addOns[k] ? "on" : "off", shown: addOns[k] ? "on" : "off" });
+  // What is not in the recipe yet (the effect counts as saved when it equals the verse or the chorus effect).
+  const effectSaved = [asSaved(initial), asSaved(hookInitial)].filter(Boolean).includes(choice);
+  const unsaved: string[] = [];
+  if (!effectSaved) unsaved.push(`${label("verseEffect")} / ${label("hookEffect")} = ${effectWords(choice)}`);
+  for (const c of others) unsaved.push(`${label(c.field)} = ${c.shown}`);
+  // One click saves everything that differs; locked settings are skipped (and named afterwards).
+  const plan = (field: "verseEffect" | "hookEffect") => {
+    const all: Change[] = [{ field, value: choice, shown: effectWords(choice) }, ...others];
+    return { save: all.filter((c) => !locked.includes(c.field)), kept: all.filter((c) => locked.includes(c.field)).map((c) => c.field) };
+  };
   const lockedTitle = "Locked for this song (unlock it below)";
   const pace = name.startsWith("typewriter") && name !== "typewriter-words";
   return (
@@ -125,8 +182,8 @@ export function EffectPreview({
       </div>
       <div className="flex min-w-60 flex-1 flex-col gap-3 text-sm">
         <div>
-          <p className="font-medium">Try an effect</p>
-          <p className="text-muted-foreground text-xs">Your song&apos;s first lines, drawn exactly as in the video (the middle one as a chorus). Trying changes nothing until you press Use for verses / Use for choruses.</p>
+          <p className="font-medium">Set effect</p>
+          <p className="text-muted-foreground text-xs">Your song&apos;s first lines, drawn exactly as in the video (the middle one as a chorus). Nothing changes until you press Save to recipe.</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {effects.map((e) => (
@@ -138,38 +195,37 @@ export function EffectPreview({
         <div className="flex flex-wrap items-center gap-2 text-xs" data-use-row>
           {(
             [
-              ["verse", "verseEffect", "Use for verses", "verses"],
-              ["hook", "hookEffect", "Use for choruses", "choruses"],
+              ["verse", "verseEffect", "Save to recipe — verses"],
+              ["hook", "hookEffect", "Save to recipe — choruses"],
             ] as const
-          ).map(([key, field, label, what]) => (
-            <button
-              key={key}
-              type="button"
-              data-use-effect={key}
-              disabled={locked.includes(field)}
-              title={locked.includes(field) ? lockedTitle : undefined}
-              onClick={() => onSave([{ field, value: choice }], `Saved: ${what} = ${choice}`)}
-              className="bg-brand/15 border-brand rounded-md border px-2.5 py-1 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {label}
-            </button>
-          ))}
-          <button
-            type="button"
-            data-use-addons
-            disabled={!changes.length || addOnsLocked}
-            title={addOnsLocked ? lockedTitle : undefined}
-            onClick={() => onSave(changes, `Saved: ${changes.map((c) => `${c.field} = ${c.value}`).join(", ")}`)}
-            className="rounded-md border px-2.5 py-1 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Use these add-ons
-          </button>
+          ).map(([key, field, text]) => {
+            const { save, kept } = plan(field);
+            const blocked = save.length === 0; // the effect is locked and nothing else differs
+            return (
+              <button
+                key={key}
+                type="button"
+                data-use-effect={key}
+                disabled={blocked}
+                title={blocked ? lockedTitle : kept.length ? `Locked, kept as they are: ${kept.map(label).join(", ")}` : undefined}
+                onClick={() => onSave(save, kept)}
+                className="bg-brand/15 border-brand rounded-md border px-2.5 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {text}
+              </button>
+            );
+          })}
           {note ? (
             <span data-use-note className="text-muted-foreground">
               {note}
             </span>
           ) : null}
         </div>
+        {unsaved.length ? (
+          <p data-unsaved className="text-muted-foreground text-xs">
+            Not saved to the recipe yet: {unsaved.join(", ")} — press Save to recipe to keep {unsaved.length === 1 ? "it" : "them"}.
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <label className="flex items-center gap-2">
             {pace ? "Typing pace" : "Intensity"}

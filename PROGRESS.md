@@ -4,6 +4,17 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Fix — "Set effect" keeps what you tried ✅ (to verify on the Windows PC)
+- Reported 30 Oct: after setting an effect, going to Make and back to Shape, the tried effect, intensity,
+  Breathe and add-ons were gone (the stage tabs unmount the panel). Now what you tried is kept per song (browser
+  tab storage: survives Shape -> Make -> Shape and a reload) and a muted line says "Not saved to the recipe yet: …".
+- The two buttons are now **Save to recipe — verses / — choruses** and save everything that differs in one click
+  (the effect to the verse or chorus effect, plus Breathe and the three add-ons); locked settings are skipped and
+  named ("Locked, kept: Shine"). "Use these add-ons" is gone. The panel is now called **Set effect**, and the Verse effect /
+  Hook effect rows below it are display only (the effect is set there; only Per platform keeps dropdowns); Breathe, Held-note glow, Chorus lift and Shine rows are display only too ("Use for all my songs" stays). After a save the note lists what was saved, in the
+  rows' own names, those rows get a "✓ Saved" highlight for 4 s, and the "not saved yet" line disappears.
+- Tests: song-stages.e2e.ts (tried values kept across Make and back, unsaved line, one-click save, highlight).
+
 ### Fix — "Try an effect" can save what you tried ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - Reported 30 Oct: the preview said "pick it in Verse / Hook effect below", but those settings were hidden in
   Style's short list (only what the song changes). Now: **Use for verses / Use for choruses** buttons (the effect
@@ -59,7 +70,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **Breathe** (Style → Breathe: off / gentle / with the beat): the lyrics swell softly while on screen, with
   the beat = once a bar, at its fullest on each downbeat; works with every effect; a little deeper on choruses.
 - **Title cards**: Typewriter types the title letter by letter (done a second before it leaves); Spread works too.
-- **Style → "Try an effect"**: your song's first lines played in a loop with any effect, pace and Breathe,
+- **Style → "Try an effect"** (now "Set effect"): your song's first lines played in a loop with any effect, pace and Breathe,
   exactly as the video draws them; trying saves nothing.
 - Fixed a flaky Releases browser test (it clicked the hidden page left behind after a rename).
 - Tests: effects-canva.test.ts (typed by the time it is sung, steady, cursor, pace, erase, title cards,
@@ -95,21 +106,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: take.test.ts (a take is exactly vN, each take differs), song-stages.e2e.ts (Post offer + Approve,
   another take queued as take 3, Style's short list, Make's count); the Style and Storyboard browser tests open
   "Show all settings".
-
-### Step H — Library cards ✅ (verified by the user on the Windows PC, 30 Oct 2026)
-- **One colour per platform chip:** grey = not made, amber = made but not approved yet ("to review"), green =
-  at least one approved video (the number = approved videos), red = failed or stopped (hover: the reasons, and
-  Resume for a stopped run). No more green "0": a platform whose videos were all discarded is grey.
-- **Readable chips:** full names (Reels, TikTok, Shorts, YouTube, Canvas) that wrap instead of being cut off;
-  "Standard" only shows when the song has Standard videos. **Titles on 2 lines.**
-- **Summary line** per card: "2/5 ready · 1 to review · 1 error" (or "No videos yet").
-- **One button per card:** Generate (no videos yet), Fix (a failed run -> Videos tab), Resume (a stopped run,
-  one click), Review (videos waiting for approval -> Videos tab); none when everything made is approved.
-- **"Same cover as …"** when two songs use the very same cover picture.
-- **Filters** All · No videos · Needs review · Errors · Ready (with counts) and **Sort** Last made · Title ·
-  Date added.
-- Tests: library-status.test.ts (chip colours, counts, summary, action, filters, sorting), library.test.ts
-  (approved per platform over every run, same cover); browser: library.e2e.ts (now part of pnpm test:e2e).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

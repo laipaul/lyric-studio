@@ -4,6 +4,21 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Step H — Library cards ✅ (verified by the user on the Windows PC, 30 Oct 2026)
+- **One colour per platform chip:** grey = not made, amber = made but not approved yet ("to review"), green =
+  at least one approved video (the number = approved videos), red = failed or stopped (hover: the reasons, and
+  Resume for a stopped run). No more green "0": a platform whose videos were all discarded is grey.
+- **Readable chips:** full names (Reels, TikTok, Shorts, YouTube, Canvas) that wrap instead of being cut off;
+  "Standard" only shows when the song has Standard videos. **Titles on 2 lines.**
+- **Summary line** per card: "2/5 ready · 1 to review · 1 error" (or "No videos yet").
+- **One button per card:** Generate (no videos yet), Fix (a failed run -> Videos tab), Resume (a stopped run,
+  one click), Review (videos waiting for approval -> Videos tab); none when everything made is approved.
+- **"Same cover as …"** when two songs use the very same cover picture.
+- **Filters** All · No videos · Needs review · Errors · Ready (with counts) and **Sort** Last made · Title ·
+  Date added.
+- Tests: library-status.test.ts (chip colours, counts, summary, action, filters, sorting), library.test.ts
+  (approved per platform over every run, same cover); browser: library.e2e.ts (now part of pnpm test:e2e).
+
 ### Four-stage song page, part 1 ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **Stage bar** on every song: 1 Prepare (Assets, Lyrics) → 2 Shape (Style, Storyboard) → 3 Make (Generate) →
   4 Review & Post (Videos, Post), each with a status line ("2 to check", "6 videos made", "3 to review · 1

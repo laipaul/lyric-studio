@@ -39,6 +39,9 @@ export function StyleTab({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [showAll, setShowAll] = useState(false);
   const [previewNote, setPreviewNote] = useState("");
+  const [justSaved, setJustSaved] = useState<string[]>([]); // rows the preview just saved: highlighted for a few seconds
+  const justSavedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(justSavedTimer.current), []);
   // Changes are saved one after the other, in the order they were made: leaving a field (which saves
   // it) and clicking a padlock right after must both count; nothing is disabled while saving.
   const queue = useRef<Promise<void>>(Promise.resolve());
@@ -63,12 +66,14 @@ export function StyleTab({ projectId }: { projectId: string }) {
     pending.current += 1;
     setSaving("saving");
     setError(null);
+    let ok = false;
     queue.current = queue.current.then(async () => {
       try {
         const r = await api(`/api/songs/${projectId}/recipe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
         const d = (await r.json()) as StyleData & { error?: string };
         if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
         setData(d);
+        ok = true;
       } catch (e) {
         setError((e as Error).message);
         // Show what is really saved.
@@ -84,6 +89,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
         }
       }
     });
+    return queue.current.then(() => ok);
   }
 
   // @font-face rules for the preview line (each font loads only when it is shown).
@@ -119,6 +125,18 @@ export function StyleTab({ projectId }: { projectId: string }) {
     if (f.field === "verseEffect" || f.field === "hookEffect") {
       const [name, intensity = "balanced"] = String(value).split(":");
       const join = (n: string, i: string) => (i === "balanced" ? n : `${n}:${i}`);
+      if (!platform) {
+        // The song's own effect is set in "Set effect" above (it shows exactly what the video draws); only the per-platform overrides keep dropdowns.
+        const typer = name.startsWith("typewriter") && name !== "typewriter-words";
+        return (
+          <p className="text-sm">
+            <span data-effect-value>
+              {name} · {typer ? (intensity === "subtle" ? "calm" : intensity === "balanced" ? "normal" : "quick") : intensity}
+            </span>
+            <span className="text-muted-foreground ml-3 text-xs">set it in Set effect above</span>
+          </p>
+        );
+      }
       return (
         <div className="flex gap-2">
           <select aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} className={select} value={name} onChange={(e) => set(join(e.target.value, intensity))}>
@@ -284,6 +302,19 @@ export function StyleTab({ projectId }: { projectId: string }) {
         chorusLift: "the first line of each chorus arrives a touch bigger and brighter, then eases back",
         shine: "one soft light sweep across each chorus line, on a downbeat",
       }[f.field];
+      if (!platform) {
+        // Set in "Set effect" above; only "Use for all my songs" (the brand) and the per-platform overrides are edited here.
+        return (
+          <div className="flex flex-wrap items-center gap-2">
+            <span data-effect-value className="text-sm">
+              {String(value ?? "off")}
+            </span>
+            <span className="text-muted-foreground text-xs">{what}</span>
+            <span className="text-muted-foreground text-xs">· set it in Set effect above</span>
+            <BrandAll field={f.field} value={String(value ?? "off")} onApply={(v) => act({ action: "brand", field: f.field, value: v })} />
+          </div>
+        );
+      }
       return (
         <div className="flex flex-wrap items-center gap-2">
           <select aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} className={select} value={String(value ?? "off")} onChange={(e) => (e.target.value === "off" && !platform ? act({ action: "reset", field: f.field, platform }) : set(e.target.value))}>
@@ -296,6 +327,18 @@ export function StyleTab({ projectId }: { projectId: string }) {
       );
     }
     if (f.field === "breathe") {
+      if (!platform) {
+        return (
+          <div className="flex flex-wrap items-center gap-2">
+            <span data-effect-value className="text-sm">
+              {{ off: "off", gentle: "gentle", beat: "with the beat" }[String(value ?? "off")] ?? String(value)}
+            </span>
+            <span className="text-muted-foreground text-xs">works with every lyric effect; a little deeper on choruses</span>
+            <span className="text-muted-foreground text-xs">· set it in Set effect above</span>
+            <BrandAll field={f.field} value={String(value ?? "off")} onApply={(v) => act({ action: "brand", field: f.field, value: v })} />
+          </div>
+        );
+      }
       return (
         <div className="flex flex-wrap items-center gap-2">
           <select aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} className={select} value={String(value ?? "off")} onChange={(e) => (e.target.value === "off" && !platform ? act({ action: "reset", field: f.field, platform }) : set(e.target.value))}>
@@ -400,9 +443,11 @@ export function StyleTab({ projectId }: { projectId: string }) {
       <PairingsRow projectId={projectId} onChanged={reload} />
       <EffectPreview
         key={["verseEffect", "breathe", "heldGlow", "chorusLift", "shine"].map((k) => String(valueOf(k) ?? "")).join(":")}
+        projectId={projectId}
         effects={data.effects}
         lines={data.sampleLines}
         initial={String(valueOf("verseEffect") ?? "glide")}
+        hookInitial={String(valueOf("hookEffect") ?? "")}
         breathe={(valueOf("breathe") as "off" | "gentle" | "beat") ?? "off"}
         addOns={{ heldGlow: valueOf("heldGlow") === "on", chorusLift: valueOf("chorusLift") === "on", shine: valueOf("shine") === "on" }}
         font={String(valueOf("verseFont") ?? "Cormorant Garamond")}
@@ -411,9 +456,17 @@ export function StyleTab({ projectId }: { projectId: string }) {
         accent={String(valueOf("accentColour") ?? "#E8A3B5")}
         locked={data.fields.filter((f) => f.locked).map((f) => f.field)}
         note={previewNote}
-        onSave={(changes, note) => {
-          setPreviewNote(note);
-          for (const c of changes) act({ action: "set", field: c.field, value: c.value });
+        labels={Object.fromEntries(data.fields.map((f) => [f.field, f.label]))}
+        onSave={async (changes, keptLocked) => {
+          const done = await Promise.all(changes.map((c) => act({ action: "set", field: c.field, value: c.value })));
+          const saved = changes.filter((_, i) => done[i]);
+          const nameOf = (field: string) => data.fields.find((f) => f.field === field)?.label ?? field;
+          setPreviewNote(
+            `${saved.length ? `Saved to the recipe: ${saved.map((c) => `${nameOf(c.field)} = ${c.shown}`).join(", ")}.` : "Nothing was saved."}${keptLocked.length ? ` Locked, kept: ${keptLocked.map(nameOf).join(", ")}.` : ""}`,
+          );
+          setJustSaved(saved.map((c) => c.field));
+          clearTimeout(justSavedTimer.current);
+          justSavedTimer.current = setTimeout(() => setJustSaved([]), 4000);
         }}
       />
       <p data-user-fonts className="text-muted-foreground text-xs">
@@ -431,9 +484,21 @@ export function StyleTab({ projectId }: { projectId: string }) {
       </div>
       <ul className="flex flex-col gap-2">
         {shownFields.map((f) => (
-          <li key={f.field} data-field={f.field} className={cn("bg-card rounded-lg border px-4 py-3", f.locked && "border-brand/40")}>
+          <li
+            key={f.field}
+            data-field={f.field}
+            data-just-saved={justSaved.includes(f.field) ? "" : undefined}
+            className={cn("bg-card rounded-lg border px-4 py-3 transition-shadow", f.locked && "border-brand/40", justSaved.includes(f.field) && "border-brand ring-brand/60 ring-2")}
+          >
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <span className="w-44 text-sm font-medium">{f.label}</span>
+              <span className="w-44 text-sm font-medium">
+                {f.label}
+                {justSaved.includes(f.field) ? (
+                  <span data-saved-tag className="text-brand ml-2 text-xs font-normal">
+                    ✓ Saved
+                  </span>
+                ) : null}
+              </span>
               <div className="min-w-0 flex-1">{editor(f, f.value)}</div>
               <span data-source className={cn("rounded-full border px-2 py-0.5 text-xs", f.own ? "border-brand/40 text-brand" : "text-muted-foreground")}>
                 {sourceLabel(f.source, data.platforms)}

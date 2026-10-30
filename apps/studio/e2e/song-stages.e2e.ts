@@ -138,9 +138,11 @@ async function main() {
     if (process.env.SHOT_FX) await page.screenshot({ path: process.env.SHOT_FX, clip: await page.$eval("[data-effect-preview]", (e: Element) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y + window.scrollY, width: r.width, height: r.height }; }) });
     check(!JSON.parse(readFileSync(recipe, "utf8")).breathe, "trying in the preview saves nothing to song.json");
     // Held-note glow: on for this song, then "Use for all my songs" (brand.json, every platform with lyrics).
-    await page.selectOption("[data-field=heldGlow] select[data-edit]", "on");
-    await page.waitForSelector("[data-saving=saved]");
-    check(JSON.parse(readFileSync(recipe, "utf8")).heldGlow === "on", "Held-note glow on: saved to song.json");
+    await page.check("[data-try-addon=heldGlow]");
+    await page.click("[data-use-effect=verse]");
+    await page.waitForSelector("[data-field=heldGlow][data-just-saved]");
+    check(JSON.parse(readFileSync(recipe, "utf8")).heldGlow === "on", "Held-note glow on (saved from Set effect): song.json");
+    check((await page.$("[data-field=heldGlow] select")) === null && (await page.textContent("[data-field=heldGlow] [data-effect-value]")) === "on", "Held-note glow row is display only, showing 'on'");
     await page.click("[data-brand-all=heldGlow]");
     await page.click("[data-brand-all-yes=heldGlow]");
     await page.waitForFunction(() => !document.querySelector("[data-brand-all-ask=heldGlow]"));
@@ -154,13 +156,44 @@ async function main() {
     await page.selectOption("[data-try-intensity]", "subtle");
     await page.click("[data-use-effect=verse]");
     await page.waitForSelector("[data-saving=saved]");
-    check(JSON.parse(readFileSync(recipe, "utf8")).verseEffect === "typewriter:subtle", "Use for verses saves typewriter:subtle to song.json");
+    check(JSON.parse(readFileSync(recipe, "utf8")).verseEffect === "typewriter:subtle", "Save to recipe - verses saves typewriter:subtle to song.json");
+    check(JSON.parse(readFileSync(recipe, "utf8")).breathe === "beat", "…and the Breathe that was tried with it (one click saves everything that differs)");
     await page.waitForSelector("[data-use-note]");
+    const savedNote = (await page.textContent("[data-use-note]")) ?? "";
+    check(savedNote.includes("Saved to the recipe:") && savedNote.includes("Verse effect = typewriter (calm)") && !savedNote.includes("Breathe") /* already saved with the glow */, `the note lists what was saved, named as the rows (${savedNote})`);
+    await page.waitForSelector("[data-field=verseEffect][data-just-saved]");
+    check((await page.textContent("[data-field=verseEffect] [data-source]")) === "This song", "Verse effect row: the new value with the 'This song' badge…");
+    check((await page.$("[data-field=verseEffect] select")) === null, "Verse effect row is display only (no dropdown)");
+    check((await page.$("[data-field=verseEffect] [data-saved-tag]")) !== null && (await page.textContent("[data-field=verseEffect] [data-effect-value]")) === "typewriter · calm", "…highlighted as just saved (✓ Saved)");
+    check((await page.$("[data-unsaved]")) === null, "after the save the 'not saved yet' line is gone");
     await page.check("[data-try-addon=chorusLift]");
-    await page.click("[data-use-addons]");
-    await page.waitForFunction(() => document.querySelector("[data-try-addon=chorusLift]")?.checked === true && document.querySelector("[data-use-addons]")?.disabled === true);
-    check(JSON.parse(readFileSync(recipe, "utf8")).chorusLift === "on", "Use these add-ons saves chorusLift on");
+    await page.click("[data-use-effect=verse]");
+    await page.waitForFunction(() => !document.querySelector("[data-unsaved]") && document.querySelector("[data-try-addon=chorusLift]")?.checked === true);
+    check(JSON.parse(readFileSync(recipe, "utf8")).chorusLift === "on", "Save to recipe saves chorusLift on");
     check(!!(await page.$("[data-field=verseEffect]")) && !!(await page.$("[data-field=hookEffect]")), "verse and hook effect are in the short list");
+    // What was tried (not saved) survives going to Make and back: effect, breathe and an add-on stay, with a "not saved yet" line.
+    await page.click("[data-try-effect=spread]");
+    await page.selectOption("[data-try-breathe]", "gentle");
+    await page.check("[data-try-addon=shine]");
+    await page.click("[data-stage=make]");
+    await page.waitForFunction(() => !document.querySelector("[data-effect-preview]"));
+    await page.click("[data-stage=shape]");
+    await page.click("[role=tab]:has-text('Style')");
+    await page.waitForSelector("[data-effect-preview]");
+    const kept = await page.evaluate(() => ({
+      effect: document.querySelector("[data-try-effect].border-brand")?.getAttribute("data-try-effect"),
+      breathe: (document.querySelector("[data-try-breathe]") as HTMLSelectElement).value,
+      shine: (document.querySelector("[data-try-addon=shine]") as HTMLInputElement).checked,
+      unsaved: document.querySelector("[data-unsaved]")?.textContent ?? "",
+    }));
+    check(kept.effect === "spread" && kept.breathe === "gentle" && kept.shine, `Shape -> Make -> Shape keeps what was tried (${JSON.stringify(kept)})`);
+    check(kept.unsaved.includes("= spread") && kept.unsaved.includes("= gentle") && kept.unsaved.includes("Shine") && kept.unsaved.includes("= on"), "…and says what is not saved to the song yet");
+    check(JSON.parse(readFileSync(recipe, "utf8")).breathe === "beat" && JSON.parse(readFileSync(recipe, "utf8")).shine === undefined, "…while song.json still has the saved values (breathe beat, no shine)");
+    await page.click("[data-use-effect=hook]");
+    await page.waitForFunction(() => document.querySelector("[data-field=hookEffect][data-just-saved]"));
+    check(JSON.parse(readFileSync(recipe, "utf8")).hookEffect?.startsWith("spread") && JSON.parse(readFileSync(recipe, "utf8")).shine === "on" && JSON.parse(readFileSync(recipe, "utf8")).breathe === "gentle", "Save to recipe - choruses: hookEffect plus the tried Breathe and Shine");
+    await sleep(800);
+    check((await page.getAttribute("[data-try-effect=spread]", "class"))?.includes("border-brand") === true, "Use for choruses: the tried effect stays selected after the save");
     ws2.close();
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
     await browser.close();
