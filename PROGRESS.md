@@ -4,7 +4,7 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### Fix — "Try an effect" can save what you tried ✅ (to verify on the Windows PC)
+### Fix — "Try an effect" can save what you tried ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - Reported 30 Oct: the preview said "pick it in Verse / Hook effect below", but those settings were hidden in
   Style's short list (only what the song changes). Now: **Use for verses / Use for choruses** buttons (the effect
   with its pace) and **Use these add-ons** (Breathe, Held-note glow, Chorus lift, Shine) save to the song in one
