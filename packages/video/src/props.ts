@@ -1,3 +1,4 @@
+import type { BreatheProps } from "./effects/breathe";
 import type { FontFileRef } from "./font-files";
 import type { KenBurns } from "./photo";
 import type { EffectChoice } from "./effects/types";
@@ -80,7 +81,8 @@ export type TextCardProps = {
 // Without this (manifests from before Step 5j) lines use the style's old fade / pop.
 // gap: during an instrumental gap longer than hideMs no lyric is shown; the next line fades in
 // leadInMs before its first sung word (missing in manifests from before: the old timing).
-export type LyricEffectsProps = { verse: EffectChoice; hook: EffectChoice; accent: string; gap?: { hideMs: number; leadInMs: number } };
+// breathe: the "breathe" add-on (recipe breathe gentle / beat; downbeats = frames of the video).
+export type LyricEffectsProps = { verse: EffectChoice; hook: EffectChoice; accent: string; gap?: { hideMs: number; leadInMs: number }; breathe?: BreatheProps };
 
 export type StillProps = { src: string; startFrame: number; endFrame: number; fadeFrames: number; motion?: KenBurns; section: string };
 

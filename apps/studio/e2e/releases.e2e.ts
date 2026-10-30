@@ -113,7 +113,7 @@ async function main() {
     await page.click("[data-save-rename]");
     await page.waitForSelector("[data-release-view='In The Mood EP']");
     check(existsSync(path.join(wsDir, "releases", "In The Mood EP.json")) && !existsSync(path.join(wsDir, "releases", "In The Mood.json")), "Rename: the file follows");
-    await page.click("[data-delete-release]");
+    await page.click("[data-release-view='In The Mood EP'] [data-delete-release]"); // the page before the rename stays hidden in the background
     await page.click("[data-confirm-delete-release]");
     await page.waitForSelector("[data-new-release]");
     check((await page.$("[data-release]")) === null, "Delete: gone from the list (moved to releases\\_removed\\)");

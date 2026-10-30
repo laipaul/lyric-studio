@@ -1,5 +1,6 @@
 // Browser-safe exports (composition + pure logic). Node-only helpers live in "@lyric/video/node".
 export { LyricVideo } from "./LyricVideo";
+export { LyricScene } from "./LyricScene";
 export * from "./config";
 export * from "./props";
 export * from "./font-files";

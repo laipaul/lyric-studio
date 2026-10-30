@@ -13,6 +13,8 @@
 import { clamp01, REST, WORD_REST, type EffectChoice, type LineLook, type WordLook, type WordTiming } from "./types";
 import { GLIDE_LIFT_PX } from "./glide";
 import { motionOf, resolveEffect, type ResolvedEffect } from "./index";
+import { BREATHE_MAX_SCALE, breatheScale, type BreatheProps } from "./breathe";
+import { typingPlan, typingWords } from "./typing";
 
 export const NEXT_OPACITY = 0.45; // the waiting next line
 export const GAP_FADE_FRAMES = 12; // 0.4 s fade before a pause
@@ -39,6 +41,8 @@ export type SceneOptions = {
   gapPx: number; // space between the active line and the waiting next line
   height: (index: number) => number; // a line's text block height at full size, px
   wordCount: (index: number) => number; // words as laid out (for word effects)
+  wordLetters?: (index: number) => number[]; // each word's letters as laid out (the letter-by-letter typewriter)
+  breathe?: BreatheProps | null; // the "breathe" add-on (recipe breathe gentle / beat)
 };
 
 export type SceneItem = { index: number; role: "active" | "leaving" | "next"; look: LineLook; words: WordLook[] | null };
@@ -150,16 +154,38 @@ export function lyricScene(t: SceneTimeline, frame: number): SceneItem[] {
       blur: base.look.blur + (hold.blur ?? 0),
       glow: clamp01(base.look.glow + (hold.glow ?? 0)),
     };
+    if (base.look.spacing) look.spacing = base.look.spacing;
+    if (t.o.breathe && base.role !== "next") look.scale *= breatheScale(t.o.breathe, frame, t.o.fps, !!t.lines[i].isHook);
     const own = t.own[i];
-    const words = own.effect.word ? wordTimings(t, i).map((w) => ({ ...WORD_REST, ...own.effect.word!(frame, w, own.amount, t.o.fps) })) : null;
+    const words = own.effect.typing
+      ? typingLook(t, i, frame)
+      : own.effect.word
+        ? wordTimings(t, i).map((w) => ({ ...WORD_REST, ...own.effect.word!(frame, w, own.amount, t.o.fps) }))
+        : null;
     out.push({ index: i, role: base.role, look, words });
   }
   return out;
 }
 
+// The letter-by-letter typewriter: typed from the moment the line appears (after the previous line has
+// gone), never behind the singer; "erase" removes the letters over its exit.
+export function typingStartFrame(t: SceneTimeline, i: number): number {
+  const half = t.connected(i - 1) ? Math.max(1, Math.round(t.D[i] / 2)) : 0;
+  return t.enterStart[i] + half;
+}
+function typingLook(t: SceneTimeline, i: number, frame: number): WordLook[] {
+  const own = t.own[i];
+  const timings = wordTimings(t, i);
+  const letters = t.o.wordLetters?.(i) ?? timings.map(() => 4);
+  const plan = typingPlan(typingStartFrame(t, i), timings, letters.slice(0, timings.length), t.o.fps, own.amount);
+  const w = t.exitWindow[i];
+  const erase = own.effect.typing?.exit === "erase" && w && w.by === "own" && frame >= w.start ? clamp01((frame - w.start) / Math.max(1, w.end - w.start)) : 0;
+  return typingWords(plan, frame, t.o.fps, erase).map((x) => ({ ...WORD_REST, chars: x.chars, cursor: x.cursor }));
+}
+
 // How far an effect can move a line from its place (px) and its largest scale: for the QA
 // safe-zone check. Sampled from the effect's own functions, so new effects are covered too.
-export function effectExtents(choice: EffectChoice, verse: EffectChoice, fps: number): { up: number; down: number; side: number; maxScale: number } {
+export function effectExtents(choice: EffectChoice, verse: EffectChoice, fps: number, breathe?: BreatheProps | null): { up: number; down: number; side: number; maxScale: number } {
   const m = motionOf(resolveEffect(choice, fps), resolveEffect(verse, fps), fps);
   const own = resolveEffect(choice, fps);
   const looks: Partial<LineLook>[] = [];
@@ -191,7 +217,7 @@ export function effectExtents(choice: EffectChoice, verse: EffectChoice, fps: nu
       wordScale = Math.max(wordScale, w.scale ?? 1);
     }
   }
-  const maxScale = Math.max(1, ...looks.map((l) => l.scale ?? 1)) * wordScale;
+  const maxScale = Math.max(1, ...looks.map((l) => l.scale ?? 1)) * wordScale * (breathe ? BREATHE_MAX_SCALE : 1);
   return { up: up + wordUp, down: down + wordDown, side: x1, maxScale };
 }
 

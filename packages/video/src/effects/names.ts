@@ -9,7 +9,7 @@ export const EASING_NAMES: readonly EasingName[] = ["ease-in-out", "ease-out", "
 // What the user picks (brand.json motion, platforms.json motion, --line-effect / --hook-effect).
 export type EffectChoice = { name: string; intensity: Intensity; durationMs?: number; easing?: EasingName };
 
-export const EFFECT_NAMES = ["glide", "cinematic-fade", "soft-blur", "dreamy-glow", "word-reveal", "karaoke-highlight", "floating", "typewriter"] as const;
+export const EFFECT_NAMES = ["glide", "cinematic-fade", "soft-blur", "dreamy-glow", "word-reveal", "karaoke-highlight", "floating", "typewriter", "spread", "typewriter-erase", "typewriter-words"] as const;
 
 // What each effect is best for, shown next to its name in every list ("glide · verses").
 export const EFFECT_HINTS: Record<(typeof EFFECT_NAMES)[number], string> = {
@@ -20,7 +20,10 @@ export const EFFECT_HINTS: Record<(typeof EFFECT_NAMES)[number], string> = {
   "word-reveal": "hooks, fast lyrics",
   "karaoke-highlight": "hooks",
   floating: "intros, calm verses",
-  typewriter: "spoken or rapid lines",
+  typewriter: "letter by letter, story lines",
+  spread: "verses, titles",
+  "typewriter-erase": "story lines, intros",
+  "typewriter-words": "spoken or rapid lines",
 };
 
 // "glide · verses", with " · brand default" when it is the artist's default for that kind of line.

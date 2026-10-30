@@ -60,6 +60,7 @@ export const FIELD_LABELS: Record<RecipeField, string> = {
   transitions: "Transitions",
   paceShift: "Pace adjustment (bars)",
   readability: "Lyric readability",
+  breathe: "Breathe (lyrics swell softly)",
   titleOpening: "Title opening (Reels, TikTok, Shorts)",
   tagline: "Tagline",
   ep: "EP",
@@ -85,6 +86,7 @@ export type StyleData = {
   fonts: StyleFont[];
   collections: string[];
   previewLine: string;
+  sampleLines: string[]; // the song's first sung lines (the effects preview)
   userFonts: string; // the folder for the user's own fonts (WORKSPACE_DIR\fonts)
   song: { file: string | null; bpm: number | null }; // workspace-relative song file (the Tap button plays it); the BPM the last video used
 };
@@ -181,9 +183,25 @@ export function styleData(ws: Workspace, projectId: string): StyleData {
     fonts: styleFonts(catalog),
     collections: sharedCollections(ws),
     previewLine: PREVIEW_LINE,
+    sampleLines: sampleLines(ws, projectId),
     userFonts: userFontsDir(ws.dir),
     song: songRow(ws, projectId),
   };
+}
+
+// The song's first three sung lines (hook marks removed), for the effects preview.
+function sampleLines(ws: Workspace, projectId: string): string[] {
+  try {
+    const file = songPathsById(ws, projectId).lyricsTxt;
+    const lines = readFileSync(file, "utf8")
+      .split(/\r?\n/)
+      .map((l) => l.replace(/^\s*\*\s+/, "").trim())
+      .filter((l) => l && !/^\[.*\]$/.test(l) && !/:$/.test(l));
+    if (lines.length) return lines.slice(0, 3);
+  } catch {
+    // no lyrics yet
+  }
+  return ["Hold on to the light", "We had a heart for two", "And it carried us home"];
 }
 
 export type StyleAction = { action: "set" | "reset" | "lock" | "unlock"; field: RecipeField; platform?: string; value?: unknown };

@@ -4,7 +4,7 @@ import { ENDING_VALUES } from "../ending";
 import { TRANSITION_STYLES } from "../transitions";
 import { parseEffectChoice } from "../effects/names";
 
-export const PLATFORM_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "section", "length", "shotLength", "ending", "transitions", "paceShift", "readability", "titleOpening"] as const;
+export const PLATFORM_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "section", "length", "shotLength", "ending", "transitions", "paceShift", "readability", "breathe", "titleOpening"] as const;
 // Shot length: "auto" (the default: the app chooses from the song and the clips, src/pace.ts), bars per
 // shot, "story" (2 bars on hooks, 4 on verses, never under 3 s), or "rate" (the cut rate: Generate / --rate).
 export const SHOT_LENGTH_VALUES = ["auto", "1", "2", "4", "8", "story", "rate"] as const;
@@ -54,6 +54,7 @@ export function checkPerPlatform(raw: unknown, where: string): { values: PerPlat
       } else if (typeof v !== "string" || !v.trim()) problems.push(`${at} must be text`);
       else if (k === "accentColour" && !/^#[0-9a-fA-F]{6}$/.test(v)) problems.push(`${at} must look like "#E8A3B5"`);
       else if (k === "titleOpening" && !["off", "on"].includes(v.trim())) problems.push(`${at} must be off or on (the title, byline and tagline before the first hook)`);
+      else if (k === "breathe" && !["off", "gentle", "beat"].includes(v.trim())) problems.push(`${at} must be off, gentle or beat (the lyrics swell softly; beat: on the downbeats)`);
       else if (k === "readability" && !["normal", "strong"].includes(v.trim())) problems.push(`${at} must be normal or strong (strong: a soft dark band behind the lyrics)`);
       else if (k === "transitions" && !(TRANSITION_STYLES as readonly string[]).includes(v.trim())) problems.push(`${at} must be ${TRANSITION_STYLES.join(", ")} (auto = the app chooses cuts, dissolves and dips from the music)`);
       else if (k === "ending" && !(ENDING_VALUES as readonly string[]).includes(v.trim())) problems.push(`${at} must be ${ENDING_VALUES.join(", ")} (how a Reel / TikTok / Short ends; auto = the app chooses)`);

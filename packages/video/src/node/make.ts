@@ -135,6 +135,7 @@ export type MakeOptions = {
   shotLength?: string; // "1" | "2" | "4" | "8" bars per shot, or "story" (2 bars on hooks, 4 on verses, >= 3 s); replaces --rate
   paceShift?: number; // bars added to the automatic pacing (recipe paceShift)
   readability?: "normal" | "strong"; // strong: a soft dark band behind the lyrics
+  breathe?: "off" | "gentle" | "beat"; // the lyrics swell softly while on screen (beat: once a bar, on the downbeats)
   titleOpening?: "off" | "on"; // Reels / TikTok / Shorts: title, byline and tagline before the first hook
   transitions?: TransitionStyle; // between shots: "auto" (default: from the music), "crisp" (cuts), "flowing" (dissolves)
   ending?: EndingChoice; // Reels / TikTok / Shorts: "auto" (default: the app chooses tight loop, soft fade or ring-out) or one of them
@@ -557,6 +558,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       transitions: recipe.values.transitions,
       paceShift: recipe.values.paceShift,
       readability: recipe.values.readability,
+      breathe: recipe.values.breathe,
       titleOpening: recipe.values.titleOpening,
       tempo: recipe.values.tempo ?? undefined,
       // Weights and italic: the recipe's (brand, song or run) whenever the brand fonts are used for the
@@ -889,7 +891,7 @@ function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: Pl
   const length = lengthFor(base, r.values.length, sh.analysis.duration_ms);
   if (length.note) sh.log(`${base.name}: ${length.note}`);
   const section = r.values.section === "auto" && length.wholeSong ? "full" : r.values.section;
-  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined, shotLength: r.values.shotLength ?? undefined, ending: r.values.ending, transitions: r.values.transitions, paceShift: r.values.paceShift, readability: r.values.readability, titleOpening: r.values.titleOpening };
+  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined, shotLength: r.values.shotLength ?? undefined, ending: r.values.ending, transitions: r.values.transitions, paceShift: r.values.paceShift, readability: r.values.readability, breathe: r.values.breathe, titleOpening: r.values.titleOpening };
   const own = PLATFORM_FIELDS.filter((k) => r.sources[k].includes(":"));
   if (own.length) sh.log(`${preset.name}: recipe ${own.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]})`).join(", ")}`);
   const out: Shared = {
@@ -1192,7 +1194,14 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   const allLyrics = lines.map((l, i) => rawLyric({ ...l, sung_end_ms: sh.sectionLines[i].sung_end_ms ?? l.sung_end_ms }));
   const fx = chooseEffects(sh.brand.brand, options, sh.effectLabels);
   const motion = sh.brand.brand.motion;
-  const effects: LyricEffectsProps = { verse: fx.verse, hook: fx.hook, accent: sh.brand.brand.accentColour, gap: { hideMs: Math.round(motion.gapHideS * 1000), leadInMs: Math.round(motion.gapLeadInS * 1000) } };
+  // Breathe (recipe): "beat" swells once a bar on the song's detected downbeats inside this video.
+  const breathe: LyricEffectsProps["breathe"] =
+    options.breathe === "gentle"
+      ? { mode: "gentle" }
+      : options.breathe === "beat"
+        ? { mode: "beat", downbeats: downbeatTimes.filter((t) => t >= chosen.start_ms - 4000 && t <= chosen.end_ms + 4000).map((t) => Math.round(((t - chosen.start_ms) * VIDEO.fps) / 1000)) }
+        : undefined;
+  const effects: LyricEffectsProps = { verse: fx.verse, hook: fx.hook, accent: sh.brand.brand.accentColour, gap: { hideMs: Math.round(motion.gapHideS * 1000), leadInMs: Math.round(motion.gapLeadInS * 1000) }, ...(breathe ? { breathe } : {}) };
   // A line whose singing is over but which is still on screen at the start (it lingers until the
   // next stamp) is not shown, so the video never opens on the tail of the previous line.
   // A line whose first word comes after the end would only flash up in the last 0.25 s: not shown either.

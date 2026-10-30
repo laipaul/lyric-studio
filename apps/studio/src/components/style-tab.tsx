@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { StyleData, StyleField, StyleFont } from "@lyric/video/style";
 
+import { EffectPreview } from "@/components/effect-preview";
 import { PairingsRow } from "@/components/pairings-row";
 
 import { cn } from "@/lib/utils";
@@ -276,6 +277,18 @@ export function StyleTab({ projectId }: { projectId: string }) {
         </div>
       );
     }
+    if (f.field === "breathe") {
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          <select aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} className={select} value={String(value ?? "off")} onChange={(e) => (e.target.value === "off" && !platform ? act({ action: "reset", field: f.field, platform }) : set(e.target.value))}>
+            <option value="off">off</option>
+            <option value="gentle">gentle (a slow swell every few seconds)</option>
+            <option value="beat">with the beat (one swell per bar, on the downbeats)</option>
+          </select>
+          <span className="text-muted-foreground text-xs">works with every lyric effect; a little deeper on choruses</span>
+        </div>
+      );
+    }
     if (f.field === "transitions") {
       return (
         <div className="flex flex-wrap items-center gap-2">
@@ -366,6 +379,17 @@ export function StyleTab({ projectId }: { projectId: string }) {
       </p>
       {error ? <p className="rounded-md border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-200">{error}</p> : null}
       <PairingsRow projectId={projectId} onChanged={reload} />
+      <EffectPreview
+        key={`${String(valueOf("verseEffect") ?? "")}:${String(valueOf("breathe") ?? "")}`}
+        effects={data.effects}
+        lines={data.sampleLines}
+        initial={String(valueOf("verseEffect") ?? "glide")}
+        breathe={(valueOf("breathe") as "off" | "gentle" | "beat") ?? "off"}
+        font={String(valueOf("verseFont") ?? "Cormorant Garamond")}
+        weight={Number(valueOf("verseWeight") ?? 400)}
+        italic={valueOf("verseItalic") === true}
+        accent={String(valueOf("accentColour") ?? "#E8A3B5")}
+      />
       <p data-user-fonts className="text-muted-foreground text-xs">
         Your own fonts: put .ttf, .otf, .woff or .woff2 files in <span className="text-foreground font-mono">{data.userFonts}</span>; they appear in the font lists after reloading this page.
       </p>

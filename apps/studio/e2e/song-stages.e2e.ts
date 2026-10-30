@@ -4,7 +4,7 @@
 // to-do list (buttons open the right tab), "Make release pack" (one video per platform of the song's own
 // platforms, queued for the worker) and the page opening on the stage that needs attention.
 import { execFileSync, spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -128,6 +128,15 @@ async function main() {
     check(JSON.stringify(fields.sort()) === JSON.stringify(["collections", "platforms"]), `Style shows only what the song changes (+ platforms) (${fields.join(", ")})`);
     await page.click("[data-show-all]");
     check((await page.$$("[data-field]")).length > 10, "Show all settings lists every setting");
+    check(!!(await page.$("[data-field=breathe]")), "Breathe is a setting (off / gentle / with the beat)");
+    // The effects preview: the song's own lines, drawn as in the video; trying an effect saves nothing.
+    await page.waitForSelector("[data-effect-preview]");
+    await page.click("[data-try-effect=typewriter]");
+    await page.selectOption("[data-try-breathe]", "beat");
+    await sleep(1500);
+    check((await page.$$eval("[data-effect-preview] [data-lyric]", (e: Element[]) => e.length)) > 0, "the preview draws the song's lines");
+    if (process.env.SHOT_FX) await page.screenshot({ path: process.env.SHOT_FX, clip: await page.$eval("[data-effect-preview]", (e: Element) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y + window.scrollY, width: r.width, height: r.height }; }) });
+    check(!JSON.parse(readFileSync(recipe, "utf8")).breathe, "trying in the preview saves nothing to song.json");
     ws2.close();
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
     await browser.close();

@@ -71,9 +71,9 @@ function track(ls: SceneLine[], o: SceneOptions): Map<number, Sample>[] {
 const ALL = EFFECTS.flatMap((e) => INTENSITIES.map((intensity) => ({ name: e.name, intensity })));
 
 describe("lyric effects registry", () => {
-  it("has the 8 effects, glide first (the default)", () => {
-    expect(EFFECTS.map((e) => e.name)).toEqual(["glide", "cinematic-fade", "soft-blur", "dreamy-glow", "word-reveal", "karaoke-highlight", "floating", "typewriter"]);
-    expect(EFFECTS.filter((e) => e.unit === "word").map((e) => e.name)).toEqual(["word-reveal", "karaoke-highlight", "typewriter"]);
+  it("has the 11 effects, glide first (the default)", () => {
+    expect(EFFECTS.map((e) => e.name)).toEqual(["glide", "cinematic-fade", "soft-blur", "dreamy-glow", "word-reveal", "karaoke-highlight", "floating", "typewriter", "spread", "typewriter-erase", "typewriter-words"]);
+    expect(EFFECTS.filter((e) => e.unit === "word").map((e) => e.name)).toEqual(["word-reveal", "karaoke-highlight", "typewriter", "typewriter-erase", "typewriter-words"]);
     expect(EFFECTS.map((e) => e.name)).toEqual([...EFFECT_NAMES]); // the settings checks know every module
   });
 
@@ -194,15 +194,15 @@ describe("word effects follow the word timings", () => {
     }
   });
 
-  it("word-reveal and typewriter: each word complete on its own word time, not before its reveal", () => {
-    for (const name of ["word-reveal", "typewriter"]) {
+  it("word-reveal and typewriter-words: each word complete on its own word time, not before its reveal", () => {
+    for (const name of ["word-reveal", "typewriter-words"]) {
       const t = sceneTimeline(ls, options({ name, intensity: "expressive" }));
       for (const [i, l] of ls.entries()) {
         for (const [k, w] of l.words!.entries()) {
           const at = lyricScene(t, w.startFrame).find((s) => s.index === i)!.words![k];
-          expect(name === "typewriter" ? at.chars : at.opacity, `${name} line ${i} word ${k}`).toBe(1);
+          expect(name === "typewriter-words" ? at.chars : at.opacity, `${name} line ${i} word ${k}`).toBe(1);
           const before = lyricScene(t, w.startFrame - 7).find((s) => s.index === i)?.words?.[k];
-          if (before) expect(name === "typewriter" ? before.chars : before.opacity, `${name} line ${i} word ${k} early`).toBeLessThan(1e-9);
+          if (before) expect(name === "typewriter-words" ? before.chars : before.opacity, `${name} line ${i} word ${k} early`).toBeLessThan(1e-9);
         }
       }
     }

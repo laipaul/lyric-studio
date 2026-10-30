@@ -89,6 +89,8 @@ export function LyricScene(props: {
             gapPx: textSize * 0.35,
             height: (i) => layouts[i].lines.length * layouts[i].fontSize * placeOf(lyrics[i]).lineHeight,
             wordCount: (i) => layouts[i].lines.join(" ").split(" ").length,
+            wordLetters: (i) => layouts[i].lines.join(" ").split(" ").map((w) => [...w].length),
+            breathe: effects.breathe ?? null,
           })
         : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -131,6 +133,7 @@ export function LyricScene(props: {
               textShadow: shadows.join(", "),
               opacity: look.opacity,
               filter: look.blur > 0.01 ? `blur(${look.blur.toFixed(2)}px)` : undefined,
+              letterSpacing: look.spacing ? `${look.spacing.toFixed(4)}em` : undefined,
             }}
           >
             {layout.lines.map((text, r) => (
@@ -138,7 +141,8 @@ export function LyricScene(props: {
                 {item.words
                   ? text.split(" ").map((word, k) => {
                       const wl = item.words![w++] ?? item.words![item.words!.length - 1];
-                      const shown = Math.round(word.length * wl.chars);
+                      const letters = [...word];
+                      const shown = Math.round(letters.length * wl.chars);
                       return (
                         <span key={k}>
                           {k > 0 ? " " : null}
@@ -152,8 +156,9 @@ export function LyricScene(props: {
                               color: wl.accent > 0.001 ? mixColour(colour, effects.accent, wl.accent) : undefined,
                             }}
                           >
-                            {word.slice(0, shown)}
-                            {shown < word.length ? <span style={{ opacity: 0 }}>{word.slice(shown)}</span> : null}
+                            {letters.slice(0, shown).join("")}
+                            {(wl.cursor ?? 0) > 0.001 ? <Cursor opacity={wl.cursor!} colour={effects.accent} /> : null}
+                            {shown < letters.length ? <span style={{ opacity: 0 }}>{letters.slice(shown).join("")}</span> : null}
                           </span>
                         </span>
                       );
@@ -165,5 +170,18 @@ export function LyricScene(props: {
         );
       })}
     </>
+  );
+}
+
+// The typewriter's cursor: a thin bar in the accent colour after the last typed letter, taking no room
+// (the line's layout never shifts while it is typed).
+function Cursor({ opacity, colour }: { opacity: number; colour: string }) {
+  return (
+    <span
+      data-cursor
+      style={{ display: "inline-block", width: 0, height: "0.95em", verticalAlign: "-0.12em", overflow: "visible", position: "relative" }}
+    >
+      <span style={{ position: "absolute", left: "0.04em", top: 0, bottom: 0, width: "0.07em", background: colour, opacity, borderRadius: "0.03em" }} />
+    </span>
   );
 }

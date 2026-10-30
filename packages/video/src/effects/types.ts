@@ -17,13 +17,15 @@ export const EASINGS: Record<EasingName, (t: number) => number> = {
 };
 
 
-// The look of a whole line. y / x in px (added to its resting place), blur in px, glow 0-1.
-export type LineLook = { opacity: number; x: number; y: number; scale: number; blur: number; glow: number };
+// The look of a whole line. y / x in px (added to its resting place), blur in px, glow 0-1, spacing =
+// letter spacing in em added to the font's own (spread), chars = share of its letters shown (title cards
+// typed in; lyric lines type per word, see WordLook).
+export type LineLook = { opacity: number; x: number; y: number; scale: number; blur: number; glow: number; spacing?: number; chars?: number };
 export const REST: LineLook = { opacity: 1, x: 0, y: 0, scale: 1, blur: 0, glow: 0 };
 
 // The look of one word: chars = share of its letters shown (typewriter), accent = 0-1 mix towards
-// the brand accent colour (karaoke).
-export type WordLook = { opacity: number; y: number; blur: number; accent: number; scale: number; chars: number };
+// the brand accent colour (karaoke), cursor = the typing cursor after this word's shown letters (0-1).
+export type WordLook = { opacity: number; y: number; blur: number; accent: number; scale: number; chars: number; cursor?: number };
 export const WORD_REST: WordLook = { opacity: 1, y: 0, blur: 0, accent: 0, scale: 1, chars: 1 };
 
 // A word's sung time in composition frames (from the aligned LRC, or spread over the line).
@@ -47,6 +49,9 @@ export type LyricEffect = {
   // Added on every visible frame (a continuous function of the frame, so it never jumps).
   hold?: (frame: number, amount: number, seed: number, fps: number) => Partial<LineLook>;
   word?: (frame: number, word: WordTiming, amount: number, fps: number) => Partial<WordLook>;
+  // A typewriter that types the whole line letter by letter (src/effects/typing.ts) instead of word():
+  // exit "fade" (the line fades out) or "erase" (letters removed right to left).
+  typing?: { exit: "fade" | "erase" };
 };
 
 export const clamp01 = (v: number) => Math.min(1, Math.max(0, v));

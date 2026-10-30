@@ -4,6 +4,24 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Effects: letter-by-letter typewriter, Spread, Breathe ✅ (to verify on the Windows PC)
+- **Typewriter** now types **letter by letter** like Canva, at a steady pace, with a thin **cursor** in your
+  accent colour that blinks softly once the line is typed. Never behind the singer: every word is fully typed
+  when it is sung. **Typing pace** = the effect's intensity: calm / normal / quick.
+  **typewriter-erase**: un-types the line when it leaves. **typewriter-words**: the old word-by-word version.
+- **Spread**: the letters open up to their spacing as the line fades in (never wider than the line).
+- **Breathe** (Style → Breathe: off / gentle / with the beat): the lyrics swell softly while on screen, with
+  the beat = once a bar, at its fullest on each downbeat; works with every effect; a little deeper on choruses.
+- **Title cards**: Typewriter types the title letter by letter (done a second before it leaves); Spread works too.
+- **Style → "Try an effect"**: your song's first lines played in a loop with any effect, pace and Breathe,
+  exactly as the video draws them; trying saves nothing.
+- Fixed a flaky Releases browser test (it clicked the hidden page left behind after a rename).
+- Tests: effects-canva.test.ts (typed by the time it is sung, steady, cursor, pace, erase, title cards,
+  spread never wider, breathe on the downbeats and in the safe-zone box); effects.test.ts updated (11 effects);
+  song-stages.e2e.ts (Breathe setting, the preview).
+- Next (proposed, from the Canva toolbar): a per-card styling row in the Textboard (colour, case, letter
+  spacing, line height, transparency) and a Text effect (soft / strong shadow, outline, glow, background band).
+
 ### Releases + Make all (step 1) ✅ (to verify on the Windows PC)
 - **Releases** in the header (Library · Releases · Collections): a release groups the songs you put out
   together (an EP, a batch). **New release**: a name and the songs; "Pick an EP" ticks the songs that share it.
@@ -87,24 +105,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: runs (resume with a platform that never started, resumable), make (stop during v1 of 3), vocal-guard
   (likelyStart, flagReason), lyrics-view, runSummary verdicts; e2e lyrics-tab (plain reason, tooltip, sticky
   header, label not cut) and videos-post pass. Not browser-tested: the Tasks menu (Resume, outside click).
-
-### Step G — Collections: rename, delete, clearer cards ✅ (verified by the user on the Windows PC, 30 Oct 2026)
-- Each collection card has a **⋯ menu**: **Rename**, **Open folder**, **Delete…** (fixes "a collection's
-  name cannot be changed or deleted").
-- **Rename**: the folder gets the new name; every song using it follows (song.json "collections", also a
-  locked one, and the remembered collection of older songs), the database paths follow and the move is
-  recorded in moved-paths.json, so old videos still re-render. A change of case only works too. Not while
-  a song using it is rendering.
-- **Delete**: asks first and names the songs that use it; the folder moves to
-  collections\_removed\<name> (removed <date>) — nothing is deleted — and those songs stop naming it
-  (their own clips and other collections stay). **Removed collections** at the bottom of the page with
-  **Restore** (as "<name> (2)" if the name was taken since; tick it again in a song's Generate tab).
-- **Cards**: an empty collection shows "Add clips" instead of a black box; "9:16 · N" and "16:9 · N" chips
-  (amber when a format cannot use every clip); "Used by N songs" (names on hover); "Same clips as X" when two
-  collections hold exactly the same clips (the copy no song uses is the one flagged).
-- **New collection** is a button with a small dialog instead of an always-visible name box.
-- Tests: collections.test.ts (rename incl. database paths, moves and songs; delete; restore; same clips);
-  browser: collections.e2e.ts (⋯ menu, rename, delete with the song named, restore, empty card).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

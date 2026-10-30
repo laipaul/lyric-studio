@@ -27,6 +27,7 @@ const LOGO_FADE_FRAMES = 15; // 0.5 s
 import { cinematicBarHeight, DEFAULT_FORMAT, DEFAULT_LYRIC_AREA, DEFAULT_SAFE_ZONE, type Format, type LyricArea, type SafeZone } from "./platform";
 import { mediaUrl, type LyricLineProps, type LyricVideoProps, type ShotProps, type StyleProps, type TextCardProps } from "./props";
 import { textCardLook } from "./text-cards";
+import { REST, type LineLook } from "./effects/types";
 
 const cover: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };
 const cover_ = cover;
@@ -373,6 +374,26 @@ function TitleOverlay({ t, format }: { t: NonNullable<LyricVideoProps["titleOver
   );
 }
 
+// A typewriter card: the letters typed so far (spaces come with them), the rest kept invisible so the
+// block never shifts, and a thin cursor while it types.
+function TypedText({ text, share }: { text: string; share: number }) {
+  const chars = [...text];
+  const letters = chars.filter((c) => c.trim()).length;
+  let n = Math.round(letters * share);
+  let cut = 0;
+  while (cut < chars.length && (n > 0 || !chars[cut].trim())) {
+    if (chars[cut].trim()) n -= 1;
+    cut += 1;
+  }
+  return (
+    <>
+      {chars.slice(0, cut).join("")}
+      {share > 0 && share < 1 ? <span data-cursor style={{ display: "inline-block", width: 0, height: "0.9em", verticalAlign: "-0.1em", position: "relative" }}><span style={{ position: "absolute", left: "0.04em", top: 0, bottom: 0, width: "0.06em", background: "currentColor" }} /></span> : null}
+      {cut < chars.length ? <span style={{ opacity: 0 }}>{chars.slice(cut).join("")}</span> : null}
+    </>
+  );
+}
+
 // The textboard's title, byline and tagline cards. A card "with-title" sits under the card it is stacked
 // on (as the artist under the title); the others are blocks of their own. Without an effect a card
 // is on screen from its start and fades out over its last second (the YouTube title as before).
@@ -381,8 +402,8 @@ function TextCards({ cards, format }: { cards: TextCardProps[]; format: Format }
   const { fps } = useVideoConfig();
   const shown = new Set(cards.map((c) => c.id));
   const roots = cards.filter((c) => !c.stackOn || !shown.has(c.stackOn));
-  const line = (c: TextCardProps, parent: TextCardProps | null) => {
-    const look = parent ? textCardLook(c, frame, fps) : { opacity: 1 };
+  const line = (c: TextCardProps, parent: TextCardProps | null, rootLook?: LineLook) => {
+    const look = parent ? textCardLook(c, frame, fps) : (rootLook ?? { ...REST });
     if (!look || look.opacity <= 0.001) return null;
     return (
       <div
@@ -398,7 +419,7 @@ function TextCards({ cards, format }: { cards: TextCardProps[]; format: Format }
                 ...(c.font !== parent.font || c.weight !== parent.weight || !!c.italic !== !!parent.italic
                   ? { fontFamily: `"${c.font}"${c.fallbackFont ? `, "${c.fallbackFont}"` : ""}, serif`, fontWeight: c.weight, fontStyle: c.italic ? "italic" : "normal" }
                   : {}),
-                ...(c.letterSpacing !== parent.letterSpacing ? { letterSpacing: `${c.letterSpacing}em` } : {}),
+                ...(c.letterSpacing !== parent.letterSpacing || look.spacing ? { letterSpacing: `${(c.letterSpacing + (look.spacing ?? 0)).toFixed(4)}em` } : {}),
                 opacity: (c.opacity ?? 1) * look.opacity,
               }
             : c.opacity !== undefined && c.opacity !== 1
@@ -406,7 +427,7 @@ function TextCards({ cards, format }: { cards: TextCardProps[]; format: Format }
               : {}),
         }}
       >
-        {c.text}
+        {look.chars !== undefined ? <TypedText text={c.text} share={look.chars} /> : c.text}
       </div>
     );
   };
@@ -416,6 +437,7 @@ function TextCards({ cards, format }: { cards: TextCardProps[]; format: Format }
         const look = textCardLook(root, frame, fps);
         if (!look || look.opacity <= 0.001) return null;
         const stacked = cards.filter((c) => c.stackOn === root.id);
+        const { chars: rootChars } = look;
         const moved = look.x || look.y || look.scale !== 1;
         return (
           <div
@@ -433,13 +455,13 @@ function TextCards({ cards, format }: { cards: TextCardProps[]; format: Format }
               ...(root.italic ? { fontStyle: "italic" as const } : {}),
               fontSynthesis: "none",
               color: root.colour,
-              letterSpacing: `${root.letterSpacing}em`,
+              letterSpacing: `${(root.letterSpacing + (look.spacing ?? 0)).toFixed(4)}em`,
               textShadow: "0 2px 18px rgba(0,0,0,0.6)",
               opacity: look.opacity,
               filter: look.blur > 0.01 ? `blur(${look.blur.toFixed(2)}px)` : undefined,
             }}
           >
-            {line(root, null)}
+            {line(root, null, { ...REST, ...(rootChars !== undefined ? { chars: rootChars } : {}) })}
             {stacked.map((c) => line(c, root))}
           </div>
         );
