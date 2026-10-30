@@ -4,7 +4,7 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### Step H — Library cards ✅ (to verify on the Windows PC)
+### Step H — Library cards ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **One colour per platform chip:** grey = not made, amber = made but not approved yet ("to review"), green =
   at least one approved video (the number = approved videos), red = failed or stopped (hover: the reasons, and
   Resume for a stopped run). No more green "0": a platform whose videos were all discarded is grey.
@@ -247,7 +247,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
    docs/lyric-timing.md, docs/collections.md), opened only when working on that feature; PROGRESS.md keeps the
    last 5 steps + open issues, older history to docs/history.md. Nothing may be lost: every rule moves, none is
    dropped.
-3. ✅ **Step H: Library cards (built 30 Oct, to verify)** — one status colour system (grey not made / amber to review / green approved /
+3. ✅ **Step H: Library cards (verified 30 Oct)** — one status colour system (grey not made / amber to review / green approved /
    red failed), short platform labels that never truncate, a "4/6 ready · 1 error" line, 2-line titles, a
    Generate / Fix button on the card, filters (All · No videos · Needs review · Errors · Ready) and sorting,
    a warning when two songs share the same cover. The card becomes the entry to the song's stages (item 4).
@@ -257,6 +257,8 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
    recipe's platforms; advanced options folded away). Default one video per platform (the app's best plan);
    "Try another take" for more. A video judged ✅ Ready to post with no points goes straight to the Post list.
    Style tab shows only what differs from the artist's look ("differs" badge), the rest collapsed.
+   Noted from the Step H check (30 Oct): the card's "0/5 ready" counts every platform; once a song has a
+   recipe of platforms, count only those (e.g. "1/3 ready" when TikTok is not wanted for that song).
 5. **Releases + Make all** (replaces Step 6.3): a release (EP / batch) groups songs; a grid songs × platforms
    with ✅ / 🟡 / 🔴 / not made; "Make all" queues every missing video of the release (overnight); per-artist
    **looks** (named complete styles, e.g. "Life Lyrics Cinematic", "Pômé Polaroid") apply to a whole release;
