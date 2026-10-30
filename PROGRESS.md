@@ -4,7 +4,7 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### Fix — title opening fits itself, loop check accepts its lead-in ✅ (to verify on the Windows PC)
+### Fix — title opening fits itself, loop check accepts its lead-in ✅ (verified by the user on the Windows PC, 30 Oct 2026: These Empty Roads Reel now "Ready to post")
 - Found on These Empty Roads (Reels, title opening on): "Not ready — the title opening reaches under the
   platform's buttons" (asking you to shorten the title or pick a smaller size) and "the jump back to the start may
   be noticeable (phrase)". Both were the app's job.
