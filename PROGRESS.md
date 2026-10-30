@@ -352,7 +352,7 @@ Cause: a line was treated as sung until the next line started (and the next line
 - Cloud check: 100 s cover-layout video rendered and checked frame by frame (cover, lyrics right,
   next line, hook font, end-screen band, logo, thumbnail).
 
-### Step 5g.2b — YouTube polish ✅ (to verify on the Windows PC)
+### Step 5g.2b — YouTube polish ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 1. Length (3:30 vs 4:01 reported): could not be reproduced. The full-song section ends at the song's
    measured length (librosa, from the audio samples) and the cut plan keeps that end; a 100 s test
    song gives exactly 100.0 s. Added: the song length in the plan ("song length m:ss") and a QA
@@ -377,7 +377,7 @@ Cause: a line was treated as sung until the next line started (and the next line
   parallax, hook veil brighter and warmer than verse, logo gone at its frame).
 - Cloud check: full 100 s cover video, QA PASS (length, logo, end screen), rendered in 146 s.
 
-### Step 5g.3 — Spotify Canvas ✅ (to verify on the Windows PC)
+### Step 5g.3 — Spotify Canvas ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - `pnpm make ... --platforms canvas` (also in `--platforms all`): one silent 1080x1920 loop in
   `exports\<date>\canvas\` with manifest and QA, no .srt, no lyrics, no title, no logo.
 - Length: the longest whole number of bars in 3-8 s at the song's BPM (120 BPM = 4 bars, 8.00 s;
@@ -421,7 +421,7 @@ Cause: a line was treated as sung until the next line started (and the next line
   line, effects:preview, and a real render (smooth movement and brightness, accent colour on the sung
   word, pixel-identical frames).
 
-### Step 5g.3b — Canvas fallbacks, failure summary, logo rule ✅ (to verify on the Windows PC)
+### Step 5g.3b — Canvas fallbacks, failure summary, logo rule ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - Canvas no longer gives up when clips are short (your case: 3 bars needed 7.3 s, longest clip 5.2 s):
   1) fewer bars (3 -> 2 while the loop is >= 3 s; 2 bars = 4.5 s fits a 5.2 s clip), 2) the clip
   slowed down (down to 0.6x) for the shortest loop, with the seamless blend taken at the same speed,
@@ -464,7 +464,7 @@ Cause: a line was treated as sung until the next line started (and the next line
   pnpm make. Cloud check: built app, browser run (library, dialog, upload, duplicate, wrong file,
   song page), localhost-only, app:serve start in 12 s and 4 s without a rebuild.
 
-### Step 6.2a — Song page: exports, marks, compare, ready to post; 6.1 fixes ✅ (to verify on the Windows PC)
+### Step 6.2a — Song page: exports, marks, compare, ready to post; 6.1 fixes ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - 6.1 fixes: jobs record their process (pid) and run folder; queued/rendering jobs whose process is
   gone become "interrupted" (worker at start and every minute; the studio whenever it reads them), so
   a stopped run never shows "…" forever. Old jobs without a pid (your stuck Standard) count as
@@ -1039,7 +1039,7 @@ These platforms play a video in a loop, so the wrap-around from the last frame t
   the same content never twice), **Remove** -> _removed\ (never deleted) with **Restore**, **Open folder**.
 - Tests: collections.test.ts; browser: collections.e2e.ts (now part of pnpm test:e2e).
 
-### Step E — Instrumental songs with a story ✅ (to verify on the Windows PC)
+### Step E — Instrumental songs with a story ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **+ New song → Instrumental**: no lyrics needed; an optional **story.txt** instead (one sentence per line,
   a blank line = a pause). song.json gets "instrumental": true; Assets shows "Story (instrumental)" with
   Replace; the Lyrics tab edits story.txt and can nudge a sentence.
@@ -1052,7 +1052,7 @@ These platforms play a video in a loop, so the wrap-around from the last frame t
 - Tests: story.test.ts (parsing, timing, too long, strongest stretch, section, forced cuts),
   instrumental-make.test.ts (New song + a Reel with and without a story); browser: the New song form.
 
-### Step D — Title opening ✅ (to verify on the Windows PC)
+### Step D — Title opening ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **Title opening** (Style tab → Title opening: on; per platform; Reels, TikTok, Shorts): the video starts up
   to 2 bars before the first hook (1 bar when 2 bars would be over 5 s) and opens with the title + artist on
   the frame's upper third line and the tagline on the lower third line (inside the safe area). The app times
@@ -1253,7 +1253,7 @@ Reported: on A Heart For Two the check ran but printed nothing and line 1 stayed
   windows for the speech recognition, the printout; Python: level map and the windows of the speech
   recognition (stand-in model). The real model runs only on the PC.
 
-### Step 6.2c-2b — Videos settings, Post tab, Tasks "Clear finished" ✅ (to verify on the Windows PC)
+### Step 6.2c-2b — Videos settings, Post tab, Tasks "Clear finished" ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **Videos**: each run has a "settings" line: per platform what it was made with (verse / hook effect,
   fonts, accent, collections, section with its times and length, YouTube layout; read from its
   manifests, "not recorded" for what older runs did not store), with what differs from the recipe now
@@ -1463,7 +1463,7 @@ rest was in sync.
 ## Next
 **Agreed order (30 Oct 2026, workflow review).** Follow it strictly; each item is its own step, plan first.
 
-1. **Verification pass (the user, no building).** Feature freeze until done: run 2 songs end-to-end on the PC
+1. ✅ **Verification pass (done 30 Oct 2026: quick pass, bug-fix session, second pass; every step verified).** Feature freeze until done: run 2 songs end-to-end on the PC
    (checklist below), collect every issue in one list, then ONE bug-fix session (Sonnet) for the whole list.
 2. **Tidy-up step (no app changes):** CLAUDE.md down to ~3 pages (guiding principle, hard rules, stack, how to
    work with the user); each feature spec into its own file under docs/ (e.g. docs/endings.md,
