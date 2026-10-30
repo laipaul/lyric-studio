@@ -4,6 +4,20 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Four-stage song page, part 1 ✅ (to verify on the Windows PC)
+- **Stage bar** on every song: 1 Prepare (Assets, Lyrics) → 2 Shape (Style, Storyboard) → 3 Make (Generate) →
+  4 Review & Post (Videos, Post), each with a status line ("2 to check", "6 videos made", "3 to review · 1
+  approved"); a stage shows only its own tabs (all tabs and features unchanged).
+- **Prepare to-do list**: only what needs you — lyrics or clips missing (these block making videos), no cover,
+  label lines like "Chorus:" in the lyrics, lines to check by ear; each with a button to the right tab.
+- **Make release pack**: one button, one video per platform for the song's own platforms (Style → platforms;
+  else Reels, TikTok, Shorts, YouTube, Canvas), with its recipe and collections. The full Generate panel is
+  folded underneath ("More options").
+- **Opens on the right stage**: Review when the song has videos, else Prepare when something needs doing,
+  else Make. The Library card counts only the song's own platforms when it has them ("1/2 ready").
+- Tests: song-stages.test.ts (to-do list, the song's platforms); browser: song-stages.e2e.ts (new) and the
+  Style, Pairings and Videos browser tests now reach their tab through its stage (e2e/stage-tabs.ts).
+
 ### Step H — Library cards ✅ (verified by the user on the Windows PC, 30 Oct 2026)
 - **One colour per platform chip:** grey = not made, amber = made but not approved yet ("to review"), green =
   at least one approved video (the number = approved videos), red = failed or stopped (hover: the reasons, and
@@ -83,24 +97,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - No .lrc for lyric services; captions (.srt) carry the story; without a story: music only, no captions.
 - Tests: story.test.ts (parsing, timing, too long, strongest stretch, section, forced cuts),
   instrumental-make.test.ts (New song + a Reel with and without a story); browser: the New song form.
-
-### Step D — Title opening ✅ (verified by the user on the Windows PC, 30 Oct 2026)
-- **Title opening** (Style tab → Title opening: on; per platform; Reels, TikTok, Shorts): the video starts up
-  to 2 bars before the first hook (1 bar when 2 bars would be over 5 s) and opens with the title + artist on
-  the frame's upper third line and the tagline on the lower third line (inside the safe area). The app times
-  them: they fade out as the first lyric line fades in, never overlapping it. Off (default) = as before.
-- **Tagline**: its own song field (Assets tab, song.json "tagline"), empty by default, never the EP.
-- **Fonts**: the card editor has a font picker and "Use as the brand's title font" (asks first, writes
-  brand.json titleFont; e.g. Special Elite for Life Lyrics). Characters the title font lacks (Japanese)
-  are drawn in Noto Sans JP / Serif JP automatically, the same in preview and render.
-- **Cover**: every Reels / TikTok / Shorts video gets cover.jpg (vN.cover.jpg with several) with the title,
-  artist and tagline on the hook's frame, inside the 3:4 profile-grid crop; download in Ready to post.
-- **QA + assessment**: title cards inside the safe zone, inside the 3:4 grid, clear of the first lyric, every
-  character drawn; each mapped to a plain point with a creative action (shorter tagline, smaller size,
-  another font).
-- Tests: title-opening.test.ts (lead bars, geometry, QA, recipe, assessment), title-opening-make.test.ts
-  (a Reel with the opening + cover, off by default); browser tests: Style select, Assets tagline, card
-  editor font -> brand.json.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -251,7 +247,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
    red failed), short platform labels that never truncate, a "4/6 ready · 1 error" line, 2-line titles, a
    Generate / Fix button on the card, filters (All · No videos · Needs review · Errors · Ready) and sorting,
    a warning when two songs share the same cover. The card becomes the entry to the song's stages (item 4).
-4. **Four-stage song page:** a stage bar Prepare → Shape → Make → Review & Post over the existing tabs (they
+4. ✅ **Four-stage song page (part 1 built 30 Oct, to verify; part 2 next: "Ready to post" straight to Post, Style shows only what differs, "Try another take"):** a stage bar Prepare → Shape → Make → Review & Post over the existing tabs (they
    stay, as detail screens). Prepare shows a **to-do list** of only what needs the user's ears or eyes ("2 lines
    to check by ear", "Canvas needs a clip of 9 s+"). Make = one button **"Make release pack"** (all the
    recipe's platforms; advanced options folded away). Default one video per platform (the app's best plan);

@@ -7,6 +7,8 @@ import { Suspense } from "react";
 import { project } from "@lyric/db";
 import { approvedVideos, songRuns } from "@lyric/video/exports";
 import { generatePanelData, platformLabels, platformState, songCard } from "@lyric/video/library";
+import { chipState } from "@lyric/video/library-status";
+import { RELEASE_PLATFORMS, songTodo } from "@lyric/video/song-stages";
 import { compareRunToRecipe, generatePresetFromRun, type GeneratePreset, type RunComparison } from "@lyric/video/run-settings";
 import { eq } from "drizzle-orm";
 
@@ -18,15 +20,17 @@ import { StatusBadge } from "@/components/status-badge";
 import { StoryboardTab } from "@/components/storyboard-tab";
 import { StyleTab } from "@/components/style-tab";
 import { SongView, type RunView } from "@/components/song-view";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { withWorkspace } from "@/lib/workspace";
+import { ReleasePack, SongStages, type StageId, type StageStatus } from "@/components/song-stages";
+import { TabsContent } from "@/components/ui/tabs";
+import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
 // The song page: header, then tabs: Assets (the song folder's files and clips), Lyrics (every line's
 // timing, what the viewer sees, nudges into hints.lrc, lyrics.txt), Style (the song's
 // recipe: song.json with each setting's source, per platform, save / reset / lock), Generate (the
 // worker makes the videos; progress in the Tasks menu; ?from=<run> starts it with that run's settings),
 // Videos (exports grid, marks, compare, each run's settings next to the recipe) and Post (the approved
-// videos with their captions and files). ?tab= opens a tab.
+// videos with their captions and files). ?tab= opens a tab. The tabs are grouped in four stages
+// (Prepare -> Shape -> Make -> Review & Post) with the Prepare to-do list and "Make release pack".
 const TABS = ["assets", "lyrics", "style", "storyboard", "generate", "videos", "post"];
 type Search = Promise<{ tab?: string; from?: string }>;
 
@@ -72,7 +76,31 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
   });
   if (!data) notFound();
   const { song, runs, settings, approved, panel, preset, presetError } = data;
-  const tab = search.tab && TABS.includes(search.tab) ? search.tab : runs.length ? "videos" : "generate";
+  const todo = await withWorkspaceAsync((ws) => songTodo(ws, id)).catch(() => []);
+  const blocking = todo.find((t) => t.blocking) ?? null;
+  // Where the page opens: ?tab=; a song with videos: Review; before the first video: what still needs doing
+  // (Prepare), else Make. (Prepare's status stays visible in the stage bar either way.)
+  const tab = search.tab && TABS.includes(search.tab) ? search.tab : runs.length ? "videos" : todo.length ? (blocking ?? todo[0]).tab : "generate";
+
+  // Each stage's status line.
+  const chips = song.platforms.map((p) => ({ ...p, state: chipState(p) }));
+  const made = chips.reduce((n, p) => n + (p.state === "none" ? 0 : p.videos), 0);
+  const toReview = chips.reduce((n, p) => n + (p.state === "review" ? p.videos : 0), 0);
+  const approvedCount = chips.reduce((n, p) => n + p.approved, 0);
+  const rendering = chips.some((p) => p.state === "rendering");
+  const statuses: Record<StageId, StageStatus> = {
+    prepare: blocking ? { text: `${todo.length} to do`, tone: "blocked" } : todo.length ? { text: `${todo.length} to check`, tone: "todo" } : { text: "Ready", tone: "done" },
+    shape: { text: "Optional: clip order, anchors, look", tone: "muted" },
+    make: rendering ? { text: "Rendering…", tone: "busy" } : made ? { text: `${made} video${made === 1 ? "" : "s"} made`, tone: "done" } : { text: "No videos yet", tone: "muted" },
+    review: !made ? { text: "Nothing to review yet", tone: "muted" } : toReview ? { text: `${toReview} to review · ${approvedCount} approved`, tone: "todo" } : { text: `${approvedCount} approved`, tone: approvedCount ? "done" : "muted" },
+  };
+  // The release pack: the song's own platforms, else every platform you post to.
+  const labels = Object.fromEntries(panel.platforms.map((p) => [p.name, p.label]));
+  const releaseNames = (song.wanted ?? RELEASE_PLATFORMS).filter((n) => labels[n]);
+  const clipsNote =
+    [panel.songClips ? `the song's ${panel.songClips} clip${panel.songClips === 1 ? "" : "s"}` : null, panel.chosen.length ? `the ${panel.chosen.join(" + ")} collection${panel.chosen.length === 1 ? "" : "s"}` : null]
+      .filter(Boolean)
+      .join(" and ") || "no clips yet";
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 p-8">
       <Link href="/" className="text-muted-foreground hover:text-foreground flex w-fit items-center gap-1 text-sm">
@@ -105,18 +133,7 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
           </ul>
         </div>
       </div>
-      <Tabs key={`${tab}:${search.from ?? ""}`} defaultValue={tab} className="gap-6">
-        <TabsList>
-          <TabsTrigger value="assets">Assets</TabsTrigger>
-          <TabsTrigger value="lyrics">Lyrics</TabsTrigger>
-          <TabsTrigger value="style">Style</TabsTrigger>
-          <TabsTrigger value="storyboard">Storyboard</TabsTrigger>
-          <TabsTrigger value="generate">Generate</TabsTrigger>
-          <TabsTrigger value="videos">Videos</TabsTrigger>
-          <TabsTrigger value="post">
-            Post{approved.length ? <span className="text-muted-foreground ml-1.5 tabular-nums">{approved.reduce((n, g) => n + g.videos.length, 0)}</span> : null}
-          </TabsTrigger>
-        </TabsList>
+      <SongStages key={`${tab}:${search.from ?? ""}`} initialTab={tab} statuses={statuses} todo={todo} counts={{ post: approved.reduce((n, g) => n + g.videos.length, 0) }}>
         <TabsContent value="assets">
           <AssetsTab projectId={song.id} />
         </TabsContent>
@@ -130,8 +147,20 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
           <StoryboardTab projectId={song.id} />
         </TabsContent>
         <TabsContent value="generate">
-          {presetError ? <p className="mb-4 rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{presetError}</p> : null}
-          <GeneratePanel key={preset?.folder ?? "recipe"} projectId={song.id} data={panel} open preset={preset} />
+          <div className="flex flex-col gap-4">
+            {!preset ? (
+              <ReleasePack
+                projectId={song.id}
+                platforms={releaseNames.map((n) => ({ name: n, label: labels[n] }))}
+                fromRecipe={!!song.wanted}
+                clipsNote={clipsNote}
+                blocked={blocking ? `First: ${blocking.text}` : null}
+              />
+            ) : null}
+            {presetError ? <p className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{presetError}</p> : null}
+            {!preset ? <p className="text-muted-foreground text-xs">More options (platforms, videos per platform, effects, section, compare fonts or pictures):</p> : null}
+            <GeneratePanel key={preset?.folder ?? "recipe"} projectId={song.id} data={panel} open={!!preset} preset={preset} />
+          </div>
         </TabsContent>
         <TabsContent value="videos">
           <SongView projectId={song.id} songTitle={song.title} runs={runs} settings={settings} />
@@ -139,7 +168,7 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
         <TabsContent value="post">
           <PostTab projectId={song.id} songTitle={song.title} groups={approved} />
         </TabsContent>
-      </Tabs>
+      </SongStages>
     </div>
   );
 }

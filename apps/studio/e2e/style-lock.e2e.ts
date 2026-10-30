@@ -12,6 +12,7 @@ import path from "node:path";
 
 import { openWorkspace } from "@lyric/db";
 import { findOrCreateSongProject, songPathsById } from "@lyric/video/node";
+import { openTab } from "./stage-tabs";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-"));
 const wsDir = path.join(root, "workspace");
@@ -57,7 +58,7 @@ async function main() {
     const browser = await playwright.chromium.launch();
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     await page.goto(`${base}/songs/${sp.project.id}`);
-    await page.click("[role=tab]:has-text('Style')");
+    await openTab(page, "Style");
     await page.waitForSelector("[data-field=hookEffect]");
 
     // Polish: wide "videos per platform" inputs with the preset's number; the empty-platforms note.
@@ -95,7 +96,7 @@ async function main() {
     await sleep(300);
     check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { titleOpening?: string }).titleOpening === undefined, "back to off: the song's own title opening setting is gone");
     // The tagline lives on the Assets tab (song.json "tagline").
-    await page.click("[role=tab]:has-text('Assets')");
+    await openTab(page, "Assets");
     await page.waitForSelector("[data-tagline-input]");
     await page.fill("[data-tagline-input]", "A song for the road");
     await page.press("[data-tagline-input]", "Enter");
@@ -105,10 +106,10 @@ async function main() {
     await page.press("[data-tagline-input]", "Enter");
     await sleep(800);
     check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { tagline?: string }).tagline === undefined, "Assets: an empty tagline removes it");
-    await page.click("[role=tab]:has-text('Style')");
+    await openTab(page, "Style");
     await page.waitForSelector("[data-edit='ending-default']");
 
-    await page.click("[role=tab]:has-text('Generate')");
+    await openTab(page, "Generate");
     await page.waitForSelector("[aria-label='Hook effect']");
     check(await page.$eval("[aria-label='Hook effect']", (s: HTMLSelectElement) => (s).disabled), "Generate: Hook effect is locked (greyed out)");
     check(await page.$eval("[aria-label='Verse effect']", (s: HTMLSelectElement) => !(s).disabled), "Generate: Verse effect can be changed");
@@ -118,12 +119,12 @@ async function main() {
     check((await page.textContent("[data-per-platform-effects=verse]")) === "YouTube: cinematic-fade", 'per-platform effects on a line under the list ("YouTube: cinematic-fade")');
 
     // Unlock again.
-    await page.click("[role=tab]:has-text('Style')");
+    await openTab(page, "Style");
     await page.waitForSelector("[data-lock=hookEffect][aria-pressed=true]");
     await page.click("[data-lock=hookEffect]");
     await page.waitForSelector("[data-saving=saved]");
     check((await page.getAttribute("[data-lock=hookEffect]", "aria-pressed")) === "false", "unlocked: the padlock opens");
-    await page.click("[role=tab]:has-text('Generate')");
+    await openTab(page, "Generate");
     await page.waitForSelector("[aria-label='Hook effect']");
     check(await page.$eval("[aria-label='Hook effect']", (s: HTMLSelectElement) => !(s).disabled), "Generate: Hook effect can be changed again");
 
@@ -150,7 +151,7 @@ async function main() {
     check(!!addedPaths && readFileSync(addedPaths.lyricsTxt, "utf8").includes("Tea with the monk") && addedPaths.lyricsTxt.endsWith("story.txt"), "its story is saved as story.txt");
     if (added) {
       await page.goto(`${base}/songs/${added.id}`);
-      await page.click("[role=tab]:has-text('Assets')");
+      await openTab(page, "Assets");
       await page.waitForSelector("text=Story (instrumental)");
       check(((await page.textContent("body")) ?? "").includes("story.txt · 2 sentences, timed by the app"), "Assets: the story row says story.txt · 2 sentences");
     }

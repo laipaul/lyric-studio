@@ -25,9 +25,13 @@ const CHIP_STYLE: Record<ChipState, string> = {
   stopped: "border-red-400/30 bg-red-400/10 text-red-300",
 };
 
-// The platforms a card shows: every platform, except "Standard" while the song has none of it.
+// The platforms a card shows: the song's own platforms (song.json "platforms") plus any it already has
+// videos for; without its own list every platform, except "Standard" while the song has none of it.
 export function cardPlatforms(song: Song) {
-  return song.platforms.map((p) => ({ ...p, state: chipState(p) })).filter((p) => p.name !== "standard" || p.state !== "none");
+  const wanted = song.wanted;
+  return song.platforms
+    .map((p) => ({ ...p, state: chipState(p) }))
+    .filter((p) => (wanted ? wanted.includes(p.name) || p.state !== "none" : p.name !== "standard" || p.state !== "none"));
 }
 
 export function SongCard({ song }: { song: Song }) {

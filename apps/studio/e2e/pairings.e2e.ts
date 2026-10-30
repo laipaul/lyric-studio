@@ -11,6 +11,7 @@ import path from "node:path";
 
 import { openWorkspace } from "@lyric/db";
 import { findOrCreateSongProject, loadBrand, loadFontCatalog, songPathsById } from "@lyric/video/node";
+import { openTab } from "./stage-tabs";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-pairings-"));
 const wsDir = path.join(root, "workspace");
@@ -97,7 +98,7 @@ async function main() {
     await (await page.$("[data-pairing=elegant]")).screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "pairing-card.png") });
 
     // Generate: compare pairings.
-    await page.click("[role=tab]:has-text('Generate')");
+    await openTab(page, "Generate");
     await page.waitForSelector("[data-compare-pairings]");
     await page.check("[data-pairing-option=elegant]");
     await page.check("[data-pairing-option=dramatic]");

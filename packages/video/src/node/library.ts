@@ -46,6 +46,7 @@ export type SongCard = {
   hasLyrics: boolean;
   platforms: PlatformCount[];
   sameCover: string[]; // other songs whose cover is the very same picture (by content)
+  wanted: string[] | null; // the song's own platforms (song.json "platforms"); null: all of them
 };
 
 // Platform names and labels in the presets file's order.
@@ -108,7 +109,18 @@ export function songCard(ws: Workspace, p: typeof projectTable.$inferSelect, lab
     hasLyrics: !!projectLyricsTxt(ws, p.id),
     platforms,
     sameCover: [],
+    wanted: songPlatforms(ws, p.id),
   };
+}
+
+// The song's own platforms: song.json "platforms" (set in the Style tab), else null (= all of them).
+export function songPlatforms(ws: Workspace, projectId: string): string[] | null {
+  try {
+    const list = readRecipe(songPathsById(ws, projectId).recipe).platforms;
+    return list?.length ? list : null;
+  } catch {
+    return null;
+  }
 }
 
 // A cover's content (covers are small pictures; read once per listing).
