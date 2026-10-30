@@ -4,6 +4,29 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### U2. One big live preview ✅ (to verify on the Windows PC)
+- Shape → Style → Look is now **two columns** on a wide screen: your choices on the left (font cards, the Fonts
+  line + Fine-tune, Set effect, Accent colour, the effect rows) and **one big preview** on the right (9:16, about
+  340 px wide) that **stays on screen** while you scroll the left side. On a narrow window it sits on top instead.
+- The preview is the video's own lyric drawing (same effects, fonts, size and lyric area as a Reel) on your song's
+  first lines (the middle one as a chorus), over the **same frame of your clip** the font cards use. It follows at
+  once: the song's verse and chorus fonts, the effect / intensity / Breathe / add-ons you try in Set effect, the
+  accent colour (as soon as you pick it), and the **soft backing** behind the lyrics when the render would add it
+  over that frame (Lyric readability auto / strong / normal, the render's own rule).
+- **Point at (or tab to) a font card**: the big preview shows that pair; move away and it goes back to the song's
+  fonts. Nothing is saved until you click the card.
+- Set effect lost its own small player (the big preview plays what you try); everything else stays: what you
+  tried is kept per song (survives Shape → Make → Shape and a reload), the "Not saved to the recipe yet" line and
+  the two Save to recipe buttons. **The font cards keep their small pictures** as the visual picker (now up to 5 per
+  row beside the preview).
+- Background is the still frame (a looping clip would decode video all the time on the PC for little gain).
+- Tests: look-preview.test.ts (sample-line timing, the exact font faces loaded, the tried state read back, the
+  backing by the render's rule); browser: pairings.e2e.ts (one preview, sticky and ~340 px on a wide screen, the
+  clip's frame, backing over the bright cream frame, hovering a card shows its pair without saving and leaving
+  restores, still fully visible at the middle of the Look block; narrow window: on top, not sticky),
+  song-stages.e2e.ts (the preview plays the tried effect and Breathe, follows a new effect at once, Set effect has
+  no player of its own, the accent colour reaches the preview at once and after the save).
+
 ### U1. Simpler font cards ✅ (to verify on the Windows PC)
 - Shape → Style → Look: the font pairings are now a **grid of small cards** (3-5 per row depending on the width,
   no sideways scrolling), each a smaller picture of the pair (drawn exactly as before) and its name. **Click a card
@@ -99,24 +122,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   video renderer and broke the production build; fixed by moving the layout into its own Remotion-free file
   (src/card-layout.ts). All browser tests and the title / textboard / loop / QA tests pass; a real render
   could not be checked in the cloud (renders need a download this sandbox cannot make).
-
-### Effects: letter-by-letter typewriter, Spread, Breathe ✅ (to verify on the Windows PC)
-- **Typewriter** now types **letter by letter** like Canva, at a steady pace, with a thin **cursor** in your
-  accent colour that blinks softly once the line is typed. Never behind the singer: every word is fully typed
-  when it is sung. **Typing pace** = the effect's intensity: calm / normal / quick.
-  **typewriter-erase**: un-types the line when it leaves. **typewriter-words**: the old word-by-word version.
-- **Spread**: the letters open up to their spacing as the line fades in (never wider than the line).
-- **Breathe** (Style → Breathe: off / gentle / with the beat): the lyrics swell softly while on screen, with
-  the beat = once a bar, at its fullest on each downbeat; works with every effect; a little deeper on choruses.
-- **Title cards**: Typewriter types the title letter by letter (done a second before it leaves); Spread works too.
-- **Style → "Try an effect"** (now "Set effect"): your song's first lines played in a loop with any effect, pace and Breathe,
-  exactly as the video draws them; trying saves nothing.
-- Fixed a flaky Releases browser test (it clicked the hidden page left behind after a rename).
-- Tests: effects-canva.test.ts (typed by the time it is sung, steady, cursor, pace, erase, title cards,
-  spread never wider, breathe on the downbeats and in the safe-zone box); effects.test.ts updated (11 effects);
-  song-stages.e2e.ts (Breathe setting, the preview).
-- Next (proposed, from the Canva toolbar): a per-card styling row in the Textboard (colour, case, letter
-  spacing, line height, transparency) and a Text effect (soft / strong shadow, outline, glow, background band).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -294,8 +299,9 @@ before Releases step 2 and the Lyric Sheet, one step each, plan first:
 - ✅ (built 30 Oct, to verify) **U1. Simpler font cards (Shape):** each card = picture, name, ✓ when chosen; descriptions and font
   details on hover/click; warnings only on the chosen look, as one plain line; readability over the clips is
   the app's job (it adds the backing by itself when needed), not a setting for the user.
-- **U2. One big live preview that stays on screen (Shape):** fonts + effect + accent together on the song's
-  own clip, updating at once with every choice; replaces the small per-card and per-effect previews.
+- ✅ (built 30 Oct, to verify) **U2. One big live preview that stays on screen (Shape):** fonts + effect + accent together on the song's
+  own clip, updating at once with every choice; replaces the Set effect's small player (as built: the font
+  cards keep their small pictures as the visual picker; pointing at a card tries it in the big preview).
 - **U3. Review & Post around the videos:** per platform, the approved (else the best) video first, then the
   alternatives; run-by-run history as a secondary view.
 - **U4. Clearer wording:** one meaning each for made / ready / approved everywhere (Library, Releases, stages);

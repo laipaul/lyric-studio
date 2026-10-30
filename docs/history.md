@@ -4,6 +4,24 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Effects: letter-by-letter typewriter, Spread, Breathe ✅ (to verify on the Windows PC)
+- **Typewriter** now types **letter by letter** like Canva, at a steady pace, with a thin **cursor** in your
+  accent colour that blinks softly once the line is typed. Never behind the singer: every word is fully typed
+  when it is sung. **Typing pace** = the effect's intensity: calm / normal / quick.
+  **typewriter-erase**: un-types the line when it leaves. **typewriter-words**: the old word-by-word version.
+- **Spread**: the letters open up to their spacing as the line fades in (never wider than the line).
+- **Breathe** (Style → Breathe: off / gentle / with the beat): the lyrics swell softly while on screen, with
+  the beat = once a bar, at its fullest on each downbeat; works with every effect; a little deeper on choruses.
+- **Title cards**: Typewriter types the title letter by letter (done a second before it leaves); Spread works too.
+- **Style → "Try an effect"** (now "Set effect"): your song's first lines played in a loop with any effect, pace and Breathe,
+  exactly as the video draws them; trying saves nothing.
+- Fixed a flaky Releases browser test (it clicked the hidden page left behind after a rename).
+- Tests: effects-canva.test.ts (typed by the time it is sung, steady, cursor, pace, erase, title cards,
+  spread never wider, breathe on the downbeats and in the safe-zone box); effects.test.ts updated (11 effects);
+  song-stages.e2e.ts (Breathe setting, the preview).
+- Next (proposed, from the Canva toolbar): a per-card styling row in the Textboard (colour, case, letter
+  spacing, line height, transparency) and a Text effect (soft / strong shadow, outline, glow, background band).
+
 ### Releases + Make all (step 1) ✅ (to verify on the Windows PC)
 - **Releases** in the header (Library · Releases · Collections): a release groups the songs you put out
   together (an EP, a batch). **New release**: a name and the songs; "Pick an EP" ticks the songs that share it.

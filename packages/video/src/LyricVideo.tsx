@@ -15,6 +15,7 @@ import {
 } from "remotion";
 
 import { useFonts } from "./fonts";
+import { LyricBacking } from "./LyricBacking";
 import { LyricScene } from "./LyricScene";
 import { activeLyricLine, applyTextCase, layoutLyric } from "./lyrics";
 import { kenBurnsAt } from "./photo";
@@ -102,19 +103,6 @@ function DissolveIn({ frames, children }: { frames: number; children: React.Reac
   const frame = useCurrentFrame();
   const opacity = interpolate(frame, [0, Math.max(1, frames)], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.ease) });
   return <AbsoluteFill style={{ opacity }}>{children}</AbsoluteFill>;
-}
-
-// Lyric readability "strong": a soft dark band behind the lyric area (fading out above and below).
-function LyricBacking({ area, height }: { area: LyricArea; height: number }) {
-  const half = Math.max(area.bottom - area.top, height * 0.12) * 0.75;
-  const top = Math.max(0, area.centerY - half);
-  const bottom = Math.min(height, area.centerY + half);
-  return (
-    <div
-      data-lyric-backing
-      style={{ position: "absolute", left: 0, right: 0, top, height: bottom - top, background: "linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.42) 35%, rgba(0,0,0,0.42) 65%, rgba(0,0,0,0) 100%)" }}
-    />
-  );
 }
 
 // A dip to black between two shots (automatic transitions): under the lyrics, darkest on the cut.

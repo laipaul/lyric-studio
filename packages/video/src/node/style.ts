@@ -77,7 +77,7 @@ export type StyleField = StyleValue & {
   locked: boolean;
   perPlatform: (StyleValue & { platform: string; label: string })[] | null; // fields that can differ per platform
 };
-export type StyleFont = { family: string; source: "bundled" | "user"; weights: number[]; missing: string[]; faces: { weight: number; style: string; srcs: string[] }[] };
+export type StyleFont = { family: string; source: "bundled" | "user"; weights: number[]; missing: string[]; faces: { weight: number; style: string; srcs: string[]; ranges: (string | null)[] }[] }; // ranges: each src's unicode-range (null: all)
 export type StyleData = {
   folder: string | null;
   recipeFile: string | null; // workspace-relative song.json
@@ -146,7 +146,7 @@ export function styleFonts(catalog: FontCatalog): StyleFont[] {
       source: f.source,
       weights: [...new Set(f.faces.map((x) => x.weight))].sort((a, b) => a - b),
       missing,
-      faces: f.faces.map((x) => ({ weight: x.weight, style: x.style, srcs: x.files.map((file) => file.src) })),
+      faces: f.faces.map((x) => ({ weight: x.weight, style: x.style, srcs: x.files.map((file) => file.src), ranges: x.files.map((file) => file.unicodeRange ?? null) })),
     };
   });
 }

@@ -8,6 +8,8 @@
 // brand…" is a small link on hover / focus and on the chosen card, and asks first. Warnings are not
 // shown per card: under the grid, the chosen pair's in plain words, the technical text one click away.
 // Readability over the clips is the app's job (readability "auto": the render adds a soft backing).
+// The cards stay the visual picker; hovering or focusing one tries the pair in the Look block's big
+// preview (look-preview.tsx), which also uses this view's frame, lines and layout.
 import { Thumbnail } from "@remotion/player";
 import { Check, RotateCcw, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -22,7 +24,17 @@ import { cn } from "@/lib/utils";
 const face = (f: PairingCard["verse"]) => `${f.family} ${f.weight}${f.italic ? " italic" : ""}`;
 const faces = (card: PairingCard) => `verse ${face(card.verse)} · hook ${face(card.hook)}${card.title ? ` · title ${face(card.title)}` : ""}`;
 
-export function PairingsRow({ projectId, onChanged }: { projectId: string; onChanged: () => void }) {
+export function PairingsRow({
+  projectId,
+  onChanged,
+  onView,
+  onHover,
+}: {
+  projectId: string;
+  onChanged: () => void;
+  onView?: (view: PairingsView) => void; // the Look preview uses the same frame, lines and layout
+  onHover?: (card: PairingCard | null) => void; // a card under the pointer / focus: the Look preview tries it (nothing saved)
+}) {
   const [view, setView] = useState<PairingsView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -50,6 +62,10 @@ export function PairingsRow({ projectId, onChanged }: { projectId: string; onCha
       alive = false;
     };
   }, [projectId]);
+
+  useEffect(() => {
+    if (view) onView?.(view);
+  }, [view, onView]);
 
   async function post(body: Record<string, unknown>) {
     setBusy(true);
@@ -114,12 +130,16 @@ export function PairingsRow({ projectId, onChanged }: { projectId: string; onCha
       {view.problems.length ? <p className="text-xs text-amber-300">presets/font-pairings.json: {view.problems.join("; ")}</p> : null}
       {view.locked.length ? <p className="text-muted-foreground text-xs">Locked on this song (a pairing keeps them): {view.locked.join(", ")}</p> : null}
       <div className="@container max-w-4xl">
-        <div data-pairing-grid className="grid grid-cols-2 gap-3 @md:grid-cols-3 @3xl:grid-cols-4 @4xl:grid-cols-5">
+        <div data-pairing-grid className="grid grid-cols-2 gap-3 @md:grid-cols-3 @xl:grid-cols-4 @3xl:grid-cols-5">
           {view.cards.map((card) => (
             <article
               key={card.id}
               data-pairing={card.id}
               data-current={card.current || undefined}
+              onMouseEnter={() => onHover?.(card)}
+              onMouseLeave={() => onHover?.(null)}
+              onFocus={() => onHover?.(card)}
+              onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && onHover?.(null)}
               className={cn(
                 "group relative flex min-w-0 flex-col gap-1.5 rounded-lg border p-1.5 transition-colors",
                 card.current ? "border-brand ring-brand/60 ring-1" : "hover:border-foreground/30",

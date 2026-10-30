@@ -281,6 +281,7 @@ export type PairingsView = {
   highlightWords: number; // karaoke hook effect: the words sung so far in the preview (0: another hook effect)
   background: string | null; // workspace-relative image (a clip frame or the cover)
   backgroundFrom: string | null;
+  bandLuminance: number | null; // how bright that frame is behind the lyrics (relative luminance, 0-1; null: no frame): the Look preview's backing
   textSize: number;
   area: LyricArea;
   colour: string;
@@ -354,6 +355,7 @@ export async function pairingsView(ws: Workspace, projectId: string, platformNam
     highlightWords: /karaoke/.test(v.hookEffect) ? Math.ceil(sample.hook.split(/\s+/).length / 2) : 0,
     background,
     backgroundFrom,
+    bandLuminance: luminance,
     textSize: Math.round(64 * preset.textScale), // the Simple style's size, as in the video
     area,
     colour: "#ffffff",

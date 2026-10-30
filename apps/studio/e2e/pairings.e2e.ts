@@ -121,6 +121,46 @@ async function main() {
     check(await page.$eval("[data-edit='hookItalic-default']", (c: HTMLInputElement) => c.checked), "hook italic is ticked");
     check((await page.getAttribute("[data-preview='hookFont-default']", "style"))?.includes("italic") ?? false, "the per-font preview shows the italic");
     await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "pairings.png"), fullPage: false });
+
+    // One big Look preview: sticky beside the choices on a wide screen, the song's fonts, over the clip's
+    // (bright, cream) frame with the soft backing the render adds there; a hovered card is tried in it.
+    check((await page.$$("[data-look-preview]")).length === 1, "one big Look preview");
+    check((await page.$eval("[data-look-preview]", (e: Element) => getComputedStyle(e).position)) === "sticky", "…sticky on a wide screen");
+    const lookBox = await page.$eval("[data-look-preview]", (e: Element) => e.getBoundingClientRect().width);
+    check(lookBox >= 300 && lookBox <= 360, `…about 300-360 px wide (${Math.round(lookBox)} px)`);
+    check(!!(await page.$("[data-look-preview] img[src*='/api/files/thumbs/']")), "…over the same frame of the song's clip as the cards");
+    check((await page.getAttribute("[data-look-preview]", "data-backing")) === "1" && !!(await page.$("[data-look-preview] [data-lyric-backing]")), "…with the soft backing over the bright frame (readability auto, as the render)");
+    check((await page.getAttribute("[data-look-preview]", "data-hook-face")) === "Cormorant Garamond 600 italic", `…in the song's hook face (${await page.getAttribute("[data-look-preview]", "data-hook-face")})`);
+    await page.hover("[data-pairing=dramatic] [data-pairing-choose]");
+    await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-hook-family") === "Playfair Display");
+    check((await page.getAttribute("[data-look-preview]", "data-previewing-pair")) === "dramatic", "hovering a card tries its pair in the big preview (Playfair Display hook)");
+    check(JSON.parse(readFileSync(paths.recipe!, "utf8")).hookFont === "Cormorant Garamond", "…without saving it");
+    await page.mouse.move(5, 5);
+    await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-hook-family") === "Cormorant Garamond");
+    check(!(await page.getAttribute("[data-look-preview]", "data-previewing-pair")), "leaving the card restores the song's fonts");
+    // The screenshot: the Look block scrolled to its middle, the preview still on screen (sticky).
+    await page.$eval("[data-style-block=look]", (e: Element) => {
+      const main = document.querySelector("main")!;
+      const r = e.getBoundingClientRect();
+      main.scrollTop += r.top + r.height / 2 - main.clientHeight / 2;
+    });
+    await sleep(1500);
+    const inView = await page.$eval("[data-look-preview]", (e: Element) => {
+      const r = e.getBoundingClientRect();
+      return r.top >= 0 && r.bottom <= window.innerHeight;
+    });
+    check(inView, "scrolled to the middle of the Look block, the preview is still fully on screen");
+    if (process.env.U2_SHOT) await page.screenshot({ path: process.env.U2_SHOT });
+    await page.$eval("main", (m: Element) => (m.scrollTop = 0));
+    // A narrow screen: the preview on top of the choices, not sticky.
+    await page.setViewportSize({ width: 800, height: 1100 });
+    await sleep(300);
+    const narrow = await page.evaluate(() => ({
+      position: getComputedStyle(document.querySelector("[data-look-preview]")!).position,
+      above: document.querySelector("[data-look-preview]")!.getBoundingClientRect().bottom <= document.querySelector("[data-pairings]")!.getBoundingClientRect().top,
+    }));
+    check(narrow.position !== "sticky" && narrow.above, `narrow screen: the preview on top, not sticky (${JSON.stringify(narrow)})`);
+    await page.setViewportSize({ width: 1440, height: 1100 });
     if (process.env.LOOK_SHOT) {
       await page.setViewportSize({ width: 1440, height: 2400 });
       await page.mouse.move(0, 0);

@@ -175,8 +175,15 @@ async function main() {
     await page.click("[data-try-effect=typewriter]");
     await page.selectOption("[data-try-breathe]", "beat");
     await sleep(1500);
-    check((await page.$$eval("[data-effect-preview] [data-lyric]", (e: Element[]) => e.length)) > 0, "the preview draws the song's lines");
-    if (process.env.SHOT_FX) await page.screenshot({ path: process.env.SHOT_FX, clip: await page.$eval("[data-effect-preview]", (e: Element) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y + window.scrollY, width: r.width, height: r.height }; }) });
+    check((await page.$$eval("[data-look-preview] [data-lyric]", (e: Element[]) => e.length)) > 0, "the big Look preview draws the song's lines");
+    check((await page.$$("[data-look-preview]")).length === 1 && (await page.$eval("[data-look-preview]", (e: Element) => getComputedStyle(e).position)) === "sticky", "one big Look preview, sticky on a wide screen");
+    check((await page.getAttribute("[data-look-preview]", "data-effect")) === "typewriter" && (await page.getAttribute("[data-look-preview]", "data-breathe")) === "beat", "…it plays what is tried in Set effect (typewriter, Breathe with the beat)");
+    check((await page.$$("[data-effect-preview] .__remotion-player, [data-effect-preview] canvas, [data-effect-preview] [data-lyric]")).length === 0, "the Set effect panel has no player of its own");
+    await page.click("[data-try-effect=spread]");
+    await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-effect") === "spread");
+    check(true, "…and follows at once when another effect is tried");
+    await page.click("[data-try-effect=typewriter]");
+    if (process.env.SHOT_FX) await page.screenshot({ path: process.env.SHOT_FX, clip: await page.$eval("[data-look-preview]", (e: Element) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; }) });
     check(!JSON.parse(readFileSync(recipe, "utf8")).breathe, "trying in the preview saves nothing to song.json");
     // Held-note glow: on for this song, then "Use for all my songs" (brand.json, every platform with lyrics).
     await page.check("[data-try-addon=heldGlow]");
@@ -235,6 +242,18 @@ async function main() {
     check(JSON.parse(readFileSync(recipe, "utf8")).hookEffect?.startsWith("spread") && JSON.parse(readFileSync(recipe, "utf8")).shine === "on" && JSON.parse(readFileSync(recipe, "utf8")).breathe === "gentle", "Save to recipe - choruses: hookEffect plus the tried Breathe and Shine");
     await sleep(800);
     check((await page.getAttribute("[data-try-effect=spread]", "class"))?.includes("border-brand") === true, "Use for choruses: the tried effect stays selected after the save");
+    // The accent colour reaches the preview at once.
+    await page.$eval("[data-edit='accentColour-default']", (el: Element) => {
+      const input = el as HTMLInputElement;
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      set.call(input, "#33aaff");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-accent") === "#33AAFF");
+    check(true, "the accent colour reaches the preview as soon as it changes");
+    await page.waitForFunction(() => document.querySelector("[data-saving]")?.getAttribute("data-saving") === "saved");
+    await sleep(500);
+    check(JSON.parse(readFileSync(recipe, "utf8")).accentColour === "#33AAFF" && (await page.getAttribute("[data-look-preview]", "data-accent")) === "#33AAFF", "…and stays after the save");
     ws2.close();
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
     await browser.close();

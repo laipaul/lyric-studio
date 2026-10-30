@@ -4,9 +4,11 @@ import { ChevronDown, Lock, LockOpen, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import type { Readability, TriedEffect } from "@lyric/video";
 import type { StyleData, StyleField, StyleFont } from "@lyric/video/style";
 
 import { EffectPreview } from "@/components/effect-preview";
+import { LookWorkbench } from "@/components/look-preview";
 import { PairingsRow } from "@/components/pairings-row";
 
 import { cn } from "@/lib/utils";
@@ -43,6 +45,7 @@ export function StyleTab({ projectId }: { projectId: string }) {
   const [fineTune, setFineTune] = useState(false); // Look: the six font rows under the font summary
   const [autoOpen, setAutoOpen] = useState(false); // the Automatic block, folded by default
   const [previewNote, setPreviewNote] = useState("");
+  const [accentDraft, setAccentDraft] = useState<{ value: string; base: string } | null>(null); // the accent being chosen (shown at once, before the save lands)
   const [justSaved, setJustSaved] = useState<string[]>([]); // rows the preview just saved: highlighted for a few seconds
   const justSavedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(justSavedTimer.current), []);
@@ -207,7 +210,16 @@ export function StyleTab({ projectId }: { projectId: string }) {
     if (f.field === "accentColour") {
       return (
         <div className="flex items-center gap-2">
-          <input type="color" aria-label={`${f.label} ${platform ?? ""}`} data-edit={key} value={String(value)} onChange={(e) => set(e.target.value.toUpperCase())} className="h-8 w-12 rounded border bg-transparent" />
+          <input
+            type="color"
+            aria-label={`${f.label} ${platform ?? ""}`}
+            data-edit={key}
+            value={String(value)}
+            onChange={(e) => {
+              const v = e.target.value.toUpperCase();
+              if (!platform) setAccentDraft({ value: v, base: String(value) });
+              void set(v).then((ok) => !ok && !platform && setAccentDraft(null));
+            }} className="h-8 w-12 rounded border bg-transparent" />
           <span className="text-muted-foreground text-xs tabular-nums">{String(value)}</span>
         </div>
       );
@@ -450,6 +462,16 @@ export function StyleTab({ projectId }: { projectId: string }) {
   // "Set by you": the song's own value (default or one platform) or a lock.
   const setByYou = autoFields.filter((f) => f.own || f.locked || (f.perPlatform ?? []).some((p) => p.own));
   const fontsOwn = fontFields.some((f) => f.own || (f.perPlatform ?? []).some((p) => p.own));
+  // What Set effect starts from (the recipe), and the accent as it is being chosen.
+  const [savedName, savedIntensity = "balanced"] = String(valueOf("verseEffect") ?? "glide").split(":");
+  const savedTry: TriedEffect = {
+    name: savedName,
+    intensity: (INTENSITIES as readonly string[]).includes(savedIntensity) ? (savedIntensity as TriedEffect["intensity"]) : "balanced",
+    breathe: (valueOf("breathe") as TriedEffect["breathe"]) ?? "off",
+    addOns: { heldGlow: valueOf("heldGlow") === "on", chorusLift: valueOf("chorusLift") === "on", shine: valueOf("shine") === "on" },
+  };
+  const savedAccent = String(valueOf("accentColour") ?? "#E8A3B5");
+  const accent = accentDraft && accentDraft.base === savedAccent ? accentDraft.value : savedAccent;
   const face = (role: "verse" | "hook") => `${String(valueOf(`${role}Font`))} ${String(valueOf(`${role}Weight`))}${valueOf(`${role}Italic`) === true ? " italic" : ""}`;
 
   const row = (f: StyleField) => {
@@ -564,55 +586,66 @@ export function StyleTab({ projectId }: { projectId: string }) {
         {rows(songFields)}
       </Block>
 
-      <Block id="look" title="Look" subtitle="Your creative choices: fonts, lyric effects and colour.">
-        <PairingsRow projectId={projectId} onChanged={reload} />
-        <div data-font-summary className="group bg-card flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-4 py-3">
-          <span className="min-w-0 flex-1 text-sm" data-font-summary-text>
-            Fonts: verses {face("verse")} · choruses {face("hook")}
-          </span>
-          {fontsOwn ? <span data-source className="border-brand/40 text-brand rounded-full border px-2 py-0.5 text-xs">This song</span> : null}
-          <button type="button" data-fine-tune aria-expanded={fineTune} onClick={() => setFineTune((v) => !v)} className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs underline underline-offset-2">
-            <ChevronDown className={cn("size-3 transition-transform", fineTune && "rotate-180")} />
-            Fine-tune
-          </button>
-        </div>
-        {fineTune ? (
-          <div data-fine-tune-rows className="flex flex-col gap-2 border-l pl-4">
-            {rows(fontFields)}
-            <p data-user-fonts className="text-muted-foreground truncate text-xs" title={`Your own fonts: put .ttf, .otf, .woff or .woff2 files in ${data.userFonts}; they appear in the font lists after reloading this page.`}>
-              Your own fonts: put .ttf, .otf, .woff or .woff2 files in <span className="text-foreground font-mono">{data.userFonts}</span>; they appear in the font lists after reloading this page.
-            </p>
-          </div>
-        ) : null}
-        <EffectPreview
-          key={["verseEffect", "breathe", "heldGlow", "chorusLift", "shine"].map((k) => String(valueOf(k) ?? "")).join(":")}
+      <Block id="look" title="Look" subtitle="Your creative choices: fonts, lyric effects and colour. The preview shows them together on your song's own clip.">
+        <LookWorkbench
           projectId={projectId}
-          effects={data.effects}
+          effectNames={data.effects.map((e) => e.name)}
+          saved={savedTry}
+          fonts={data.fonts}
           lines={data.sampleLines}
-          initial={String(valueOf("verseEffect") ?? "glide")}
-          hookInitial={String(valueOf("hookEffect") ?? "")}
-          breathe={(valueOf("breathe") as "off" | "gentle" | "beat") ?? "off"}
-          addOns={{ heldGlow: valueOf("heldGlow") === "on", chorusLift: valueOf("chorusLift") === "on", shine: valueOf("shine") === "on" }}
-          font={String(valueOf("verseFont") ?? "Cormorant Garamond")}
-          weight={Number(valueOf("verseWeight") ?? 400)}
-          italic={valueOf("verseItalic") === true}
-          accent={String(valueOf("accentColour") ?? "#E8A3B5")}
-          locked={data.fields.filter((f) => f.locked).map((f) => f.field)}
-          note={previewNote}
-          labels={Object.fromEntries(data.fields.map((f) => [f.field, f.label]))}
-          onSave={async (changes, keptLocked) => {
-            const done = await Promise.all(changes.map((c) => act({ action: "set", field: c.field, value: c.value })));
-            const saved = changes.filter((_, i) => done[i]);
-            const nameOf = (field: string) => data.fields.find((f) => f.field === field)?.label ?? field;
-            setPreviewNote(
-              `${saved.length ? `Saved to the recipe: ${saved.map((c) => `${nameOf(c.field)} = ${c.shown}`).join(", ")}.` : "Nothing was saved."}${keptLocked.length ? ` Locked, kept: ${keptLocked.map(nameOf).join(", ")}.` : ""}`,
-            );
-            setJustSaved(saved.map((c) => c.field));
-            clearTimeout(justSavedTimer.current);
-            justSavedTimer.current = setTimeout(() => setJustSaved([]), 4000);
-          }}
-        />
-        {rows(pick(LOOK_FIELDS))}
+          verse={{ family: String(valueOf("verseFont") ?? "Cormorant Garamond"), weight: Number(valueOf("verseWeight") ?? 400), italic: valueOf("verseItalic") === true }}
+          hook={{ family: String(valueOf("hookFont") ?? valueOf("verseFont") ?? "Cormorant Garamond"), weight: Number(valueOf("hookWeight") ?? 400), italic: valueOf("hookItalic") === true }}
+          accent={accent}
+          readability={(valueOf("readability") as Readability | undefined) ?? "auto"}
+        >
+          {({ tried, setTried, onPairingView, onPairingHover }) => (
+            <>
+              <PairingsRow projectId={projectId} onChanged={reload} onView={onPairingView} onHover={onPairingHover} />
+              <div data-font-summary className="group bg-card flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-4 py-3">
+                <span className="min-w-0 flex-1 text-sm" data-font-summary-text>
+                  Fonts: verses {face("verse")} · choruses {face("hook")}
+                </span>
+                {fontsOwn ? <span data-source className="border-brand/40 text-brand rounded-full border px-2 py-0.5 text-xs">This song</span> : null}
+                <button type="button" data-fine-tune aria-expanded={fineTune} onClick={() => setFineTune((v) => !v)} className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs underline underline-offset-2">
+                  <ChevronDown className={cn("size-3 transition-transform", fineTune && "rotate-180")} />
+                  Fine-tune
+                </button>
+              </div>
+              {fineTune ? (
+                <div data-fine-tune-rows className="flex flex-col gap-2 border-l pl-4">
+                  {rows(fontFields)}
+                  <p data-user-fonts className="text-muted-foreground truncate text-xs" title={`Your own fonts: put .ttf, .otf, .woff or .woff2 files in ${data.userFonts}; they appear in the font lists after reloading this page.`}>
+                    Your own fonts: put .ttf, .otf, .woff or .woff2 files in <span className="text-foreground font-mono">{data.userFonts}</span>; they appear in the font lists after reloading this page.
+                  </p>
+                </div>
+              ) : null}
+              <EffectPreview
+                tried={tried}
+                onTry={setTried}
+                effects={data.effects}
+                initial={String(valueOf("verseEffect") ?? "glide")}
+                hookInitial={String(valueOf("hookEffect") ?? "")}
+                breathe={savedTry.breathe}
+                addOns={savedTry.addOns}
+                locked={data.fields.filter((f) => f.locked).map((f) => f.field)}
+                note={previewNote}
+                labels={Object.fromEntries(data.fields.map((f) => [f.field, f.label]))}
+                onSave={async (changes, keptLocked) => {
+                  const done = await Promise.all(changes.map((c) => act({ action: "set", field: c.field, value: c.value })));
+                  const saved = changes.filter((_, i) => done[i]);
+                  const nameOf = (field: string) => data.fields.find((f) => f.field === field)?.label ?? field;
+                  setPreviewNote(
+                    `${saved.length ? `Saved to the recipe: ${saved.map((c) => `${nameOf(c.field)} = ${c.shown}`).join(", ")}.` : "Nothing was saved."}${keptLocked.length ? ` Locked, kept: ${keptLocked.map(nameOf).join(", ")}.` : ""}`,
+                  );
+                  setJustSaved(saved.map((c) => c.field));
+                  clearTimeout(justSavedTimer.current);
+                  justSavedTimer.current = setTimeout(() => setJustSaved([]), 4000);
+                }}
+              />
+              {rows(pick(LOOK_FIELDS))}
+            </>
+          )}
+        </LookWorkbench>
       </Block>
 
       <Block id="make" title="What to make" subtitle="Which videos Generate makes, and the clips it may use.">

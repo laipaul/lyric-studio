@@ -40,3 +40,6 @@ export * from "./effects/scene";
 export * from "./EffectsPreview";
 export * from "./PairPreview";
 export * from "./readability";
+export * from "./look-preview";
+export * from "./LookPreview";
+export * from "./LyricBacking";
