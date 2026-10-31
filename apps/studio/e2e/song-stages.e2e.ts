@@ -242,7 +242,7 @@ async function main() {
     await openPanel(page, "effects");
     await page.waitForSelector("[data-effect-preview]");
     const sections = await page.$$eval("[data-editor-section]", (e: Element[]) => e.map((x) => x.getAttribute("data-editor-section")));
-    check(JSON.stringify(sections) === JSON.stringify(["text", "motion", "colours", "picture", "cards"]), `the theme editor: Text, Motion, Colours, Picture, Cards (${sections.join(", ")})`);
+    check(JSON.stringify(sections) === JSON.stringify(["cards", "text", "motion", "colours", "picture"]), `the theme editor: Cards first, then Text, Motion, Colours, Picture (${sections.join(", ")})`);
     check((await page.getAttribute("[data-effect-part]", "data-effect-part")) === "verse", "Set effect starts on Verses");
     const before = look("verseEffect");
     await page.click("[data-effect-picker]"); // the effect picker opens the gallery
@@ -339,7 +339,7 @@ async function main() {
     await page.screenshot({ path: path.join(os.tmpdir(), "box-viewer.png") });
     check(boxed, "Behind the words: Box draws a dark box behind the lines in the viewer");
     const barAt = await page.evaluate(() =>
-      Object.fromEntries((["editing", "[data-theme-editing]", "bar", "[data-theme-save-as]", "text", "[data-editor-section='text']"] as string[]).flatMap((v, i, a) => (i % 2 ? [] : [[v, document.querySelector(a[i + 1])?.getBoundingClientRect().top ?? NaN]]))),
+      Object.fromEntries((["editing", "[data-theme-editing]", "bar", "[data-theme-save-as]", "text", "[data-editor-section='cards']"] as string[]).flatMap((v, i, a) => (i % 2 ? [] : [[v, document.querySelector(a[i + 1])?.getBoundingClientRect().top ?? NaN]]))),
     );
     check(barAt.editing < barAt.bar && barAt.bar < barAt.text, "Save and Save as new theme sit right below Editing:, above the sections");
     await page.fill("[data-edit-code^='textColour']", "255, 45, 149");

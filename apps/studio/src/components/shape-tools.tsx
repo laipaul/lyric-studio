@@ -731,6 +731,11 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                 {editingTheme.users.length > 1 && savingAs === null ? <p className="text-muted-foreground text-[11px]">Used by {editingTheme.users.join(", ")}. “Save as new theme” keeps it as it is for them.</p> : null}
               </div>
 
+              <EditorSection id="cards" title="Cards">
+                <TitleStyleControls value={(k) => valueOf(k)} onSet={(field, value) => void act({ action: "set", field, value })} sample={data.title || "Your title"} font={String(valueOf("verseFont") ?? "")} />
+                <ExtraCardControls value={(k) => valueOf(k)} onSet={(field, value) => void act({ action: "set", field, value })} font={String(valueOf("hookFont") ?? valueOf("verseFont") ?? "")} hookSample={String(valueOf("hookText") || data.sampleLines.find((_, i) => i === 1) || "Your chorus")} endSample={String(valueOf("endText") || "Stream {title} on Spotify").replace(/\{title\}/gi, data.title || "Your song").replace(/\{artist\}/gi, "")} />
+              </EditorSection>
+
               <EditorSection id="text" title="Text">
                 <PairingsRow
                   projectId={projectId}
@@ -799,11 +804,6 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
               <EditorSection id="picture" title="Picture">
                 <PictureControls value={(k) => valueOf(k)} onSet={(field, value) => void act({ action: "set", field, value })} />
                 {valueOf("fallback") === "colour" ? rows(pick(["fallbackColour"])) : null}
-              </EditorSection>
-
-              <EditorSection id="cards" title="Cards">
-                <TitleStyleControls value={(k) => valueOf(k)} onSet={(field, value) => void act({ action: "set", field, value })} sample={data.title || "Your title"} font={String(valueOf("verseFont") ?? "")} />
-                <ExtraCardControls value={(k) => valueOf(k)} onSet={(field, value) => void act({ action: "set", field, value })} font={String(valueOf("hookFont") ?? valueOf("verseFont") ?? "")} hookSample={String(valueOf("hookText") || data.sampleLines.find((_, i) => i === 1) || "Your chorus")} endSample={String(valueOf("endText") || "Stream {title} on Spotify").replace(/\{title\}/gi, data.title || "Your song").replace(/\{artist\}/gi, "")} />
               </EditorSection>
 
             </div>
@@ -1305,7 +1305,7 @@ function withDraft(data: StyleData, d: Draft): StyleData {
   };
 }
 
-// One titled section of the theme editor (Text, Motion, Colours, Cards).
+// One titled section of the theme editor (Cards, Text, Motion, Colours, Picture: in the order a design is made).
 function EditorSection({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
     <section data-editor-section={id} className="flex flex-col gap-2">
