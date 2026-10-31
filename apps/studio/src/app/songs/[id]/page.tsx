@@ -103,36 +103,35 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
       .filter(Boolean)
       .join(" and ") || "no clips yet";
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 p-8">
-      <Link href="/" className="text-muted-foreground hover:text-foreground flex w-fit items-center gap-1 text-sm">
-        <ArrowLeft className="size-4" /> Library
-      </Link>
-      <div className="flex flex-wrap items-center gap-6">
-        <div className="size-32 shrink-0 overflow-hidden rounded-xl border bg-gradient-to-br from-[#2a1820] to-[#0b0b0d]">
+    <div className="flex min-h-0 w-full flex-1 flex-col">
+      {/* A slim header: cover, title, artist and the platform counts on one line (the work area gets the rest). */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-2" data-song-header>
+        <Link href="/" className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm" title="Library">
+          <ArrowLeft className="size-4" />
+        </Link>
+        <div className="size-11 shrink-0 overflow-hidden rounded-md border bg-gradient-to-br from-[#2a1820] to-[#0b0b0d]">
           {/* eslint-disable-next-line @next/next/no-img-element -- a local file served by /api/files */}
           {song.cover ? <img src={`/api/files/${song.cover}`} alt="" className="size-full object-cover" /> : null}
         </div>
-        <div className="flex flex-col gap-3">
-          <div>
-            <h1 className="text-3xl">{song.title}</h1>
-            <p className="text-muted-foreground">
-              {song.artist}
-              {song.ep ? ` · ${song.ep}` : ""}
-            </p>
-          </div>
-          <ul className="flex flex-wrap gap-1.5">
-            {song.platforms
-              .filter((p) => p.status !== "none")
-              .map((p) => (
-                <li key={p.name}>
-                  <StatusBadge status={p.status} details={p.details} resumeCommand={p.resumeCommand} resume={p.resumeFolder ? { projectId: song.id, folder: p.resumeFolder } : null} heading={`${p.label}: latest run`}>
-                    <span>{p.label}</span>
-                    <span className="ml-2 font-medium tabular-nums">{p.status === "interrupted" ? "!" : p.status === "Rendering" ? "…" : p.videos}</span>
-                  </StatusBadge>
-                </li>
-              ))}
-          </ul>
+        <div className="min-w-0">
+          <h1 className="truncate text-xl leading-tight">{song.title}</h1>
+          <p className="text-muted-foreground truncate text-xs">
+            {song.artist}
+            {song.ep ? ` · ${song.ep}` : ""}
+          </p>
         </div>
+        <ul className="flex flex-wrap gap-1.5">
+          {song.platforms
+            .filter((p) => p.status !== "none")
+            .map((p) => (
+              <li key={p.name}>
+                <StatusBadge status={p.status} details={p.details} resumeCommand={p.resumeCommand} resume={p.resumeFolder ? { projectId: song.id, folder: p.resumeFolder } : null} heading={`${p.label}: latest run`}>
+                  <span>{p.label}</span>
+                  <span className="ml-2 font-medium tabular-nums">{p.status === "interrupted" ? "!" : p.status === "Rendering" ? "…" : p.videos}</span>
+                </StatusBadge>
+              </li>
+            ))}
+        </ul>
       </div>
       <SongStages key={`${tab}:${search.from ?? ""}`} initialTab={tab} statuses={statuses} todo={todo} counts={{ post: approved.reduce((n, g) => n + g.videos.length, 0) + offered.length }}>
         <TabsContent value="assets">

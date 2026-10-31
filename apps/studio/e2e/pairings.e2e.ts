@@ -1,6 +1,6 @@
 // Browser test of font pairings (needs a studio build, FFmpeg and Playwright, as the others):
 //   pnpm test:e2e
-// The Style tab's font pairings (Look block): a grid of compact cards (no horizontal scrolling), each pair
+// The Shape page's font pairings (the Fonts panel): a grid of compact cards (no horizontal scrolling), each pair
 // previewed together on this song's lines over a frame of its clips, with the exact font files loaded
 // (Cormorant Garamond 600 italic for Elegant's hook); clicking a card chooses it (✓, song.json; brand.json
 // untouched); description and faces on hover; warnings only for the chosen pair, in plain words under the
@@ -70,6 +70,8 @@ async function main() {
       await page.click(`[data-pairing=${id}]`);
       await page.waitForSelector("[data-pairing-list]", { state: "detached" });
     };
+    await page.waitForSelector("[data-rail-item=fonts]");
+    await page.click("[data-rail-item=fonts]"); // the Fonts panel, from the rail
     await page.waitForSelector("[data-pairing-select]");
     await page.waitForFunction(() => document.querySelector("[data-pairing-current]")?.textContent?.length);
     check((await page.$$("[data-pairing-grid], [data-pairings] img, [data-pairings] canvas")).length === 0, "no card grid and no card thumbnails: just the dropdown");
@@ -103,7 +105,7 @@ async function main() {
     await page.click("[data-pairing-note-details] summary");
     check(/low contrast over this frame: verse \d\.\d:1/.test((await page.textContent("[data-pairing-note-details]")) ?? ""), "…Details shows the contrast ratios");
     check((await page.$("[data-font-summary] [data-source]")) === null, "the font summary has no 'This song' badge yet (the brand's fonts)");
-    await page.click("[data-fine-tune]"); // the six font rows and the own-fonts folder sit under Look → Fine-tune
+    await page.click("[data-fine-tune]"); // the six font rows and the own-fonts folder sit under Fonts → Fine-tune
     check(((await page.textContent("[data-user-fonts]")) ?? "").includes(path.join(wsDir, "fonts")), "Shape shows the folder for my own fonts");
 
     // Choosing an option: the dropdown shows it, song.json gets the pair; brand.json is untouched.
@@ -170,20 +172,22 @@ async function main() {
     await page.setViewportSize({ width: 1440, height: 1100 });
     if (process.env.U2_SHOT) await page.screenshot({ path: process.env.U2_SHOT });
     await page.$eval("main", (m: Element) => (m.scrollTop = 0));
-    // A narrow screen: the viewer on top of the tools.
-    await page.setViewportSize({ width: 800, height: 1100 });
+    // A small screen: the rail, the Fonts panel and the viewer side by side, all inside the window.
+    await page.setViewportSize({ width: 1024, height: 768 });
     await sleep(300);
     const narrow = await page.evaluate(() => ({
-      above: document.querySelector("[data-look-preview]")!.getBoundingClientRect().bottom <= document.querySelector("[data-pairings]")!.getBoundingClientRect().top,
+      panel: document.querySelector("[data-shape-tools]")!.getBoundingClientRect().right,
+      viewer: document.querySelector("[data-look-preview] > div")!.getBoundingClientRect().right,
+      left: document.querySelector("[data-look-preview] > div")!.getBoundingClientRect().left,
     }));
-    check(narrow.above, `narrow screen: the viewer on top of the tools (${JSON.stringify(narrow)})`);
+    check(narrow.panel <= narrow.left && narrow.viewer <= 1024, `1024 px: the panel left of the viewer, both inside the window (${JSON.stringify(narrow)})`);
     await page.setViewportSize({ width: 1440, height: 1100 });
     if (process.env.LOOK_SHOT) {
       await page.setViewportSize({ width: 1440, height: 2400 });
       await page.mouse.move(0, 0);
-      await page.$eval("[data-style-block=look]", (e: Element) => e.scrollIntoView());
+      await page.$eval("[data-style-block=fonts]", (e: Element) => e.scrollIntoView());
       await sleep(800);
-      await (await page.$("[data-style-block=look]")).screenshot({ path: process.env.LOOK_SHOT });
+      await (await page.$("[data-style-block=fonts]")).screenshot({ path: process.env.LOOK_SHOT });
       await page.setViewportSize({ width: 1440, height: 1100 });
     }
 

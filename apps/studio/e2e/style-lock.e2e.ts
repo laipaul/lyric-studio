@@ -12,7 +12,7 @@ import path from "node:path";
 
 import { openWorkspace } from "@lyric/db";
 import { findOrCreateSongProject, songPathsById } from "@lyric/video/node";
-import { menuItem, openTab } from "./stage-tabs";
+import { menuItem, openPanel, openTab } from "./stage-tabs";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-"));
 const wsDir = path.join(root, "workspace");
@@ -59,17 +59,23 @@ async function main() {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     await page.goto(`${base}/songs/${sp.project.id}`);
     await openTab(page, "Style");
-    // The effect settings are set in Set effect; their own rows (lock, per platform) under its ⋯ → Per platform.
-    await menuItem(page, "effects", "data-effects-per-platform");
-    await page.waitForSelector("[data-field=hookEffect]");
-
     // Polish: wide "videos per platform" inputs with the preset's number; the empty-platforms note.
+    await openPanel(page, "make");
     check((await page.getAttribute("[data-field=variations] input", "placeholder")) === "3 (preset)", 'videos per platform placeholder "3 (preset)" (Reels)');
     check(!!(await page.$("[data-platforms-empty]")), "empty platforms: the note says Generate starts with Reels + YouTube");
 
-    // The bug: type a length, then click the padlock straight away.
+    // The bug: type a length, then lock a setting straight away (here the length itself, before it is saved).
+    await openPanel(page, "auto");
     await menuItem(page, "length", 'data-per-platform="length"');
     await page.fill("[data-edit='length-reels']", "90");
+    await menuItem(page, "length", 'data-lock="length"');
+    check(!!(await page.$("[data-locked=length]")), "the length's padlock shows at once");
+    await page.waitForSelector("[data-saving=saved]");
+    await menuItem(page, "length", 'data-lock="length"'); // unlock again
+    // The effect settings are set in Effects; their own rows (lock, per platform) under its ⋯ → Per platform.
+    await openPanel(page, "effects");
+    await menuItem(page, "effects", "data-effects-per-platform");
+    await page.waitForSelector("[data-field=hookEffect]");
     await menuItem(page, "hookEffect", 'data-lock="hookEffect"');
     check(!!(await page.$("[data-locked=hookEffect]")), "the padlock shows locked at once");
     await page.waitForSelector("[data-saving=saved]");
@@ -82,6 +88,7 @@ async function main() {
     check(!!recipe.locked?.includes("hookEffect"), 'song.json holds "locked": ["hookEffect"]');
     check(recipe.perPlatform?.reels?.length === 90, "song.json holds the Reels length typed just before (90)");
     // Ending (Reels, TikTok, Shorts): auto by default, the song may ask for one.
+    await openPanel(page, "auto");
     check((await page.$eval("[data-edit='ending-default']", (e: Element) => (e as HTMLSelectElement).value)) === "auto", "Ending: auto by default (the app chooses)");
     await page.selectOption("[data-edit='ending-default']", "fade");
     await page.waitForSelector("[data-saving=saved]");
@@ -92,6 +99,7 @@ async function main() {
     await sleep(300);
     check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { ending?: string }).ending === undefined, "back to auto: the song's own ending setting is gone");
     // Title opening (Step D): off by default; on = title, artist and tagline before the first hook.
+    await openPanel(page, "song");
     check((await page.$eval("[data-edit='titleOpening-default']", (e: Element) => (e as HTMLSelectElement).value)) === "off", "Title opening: off by default");
     await page.selectOption("[data-edit='titleOpening-default']", "on");
     await page.waitForSelector("[data-saving=saved]");
@@ -113,6 +121,7 @@ async function main() {
     await sleep(800);
     check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { tagline?: string }).tagline === undefined, "Assets: an empty tagline removes it");
     await openTab(page, "Style");
+    await openPanel(page, "auto");
     await page.waitForSelector("[data-edit='ending-default']");
 
     await openTab(page, "Generate");
@@ -126,6 +135,7 @@ async function main() {
 
     // Unlock again.
     await openTab(page, "Style");
+    await openPanel(page, "effects");
     if (!(await page.$("[data-field=hookEffect]"))) await menuItem(page, "effects", "data-effects-per-platform");
     await page.waitForSelector("[data-locked=hookEffect]");
     check((await page.getAttribute(`[data-row-menu="hookEffect"]`, "aria-label")) === "More for Hook effect", "the ⋯ menu names its setting");

@@ -4,6 +4,51 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### U2. One big live preview ✅ (to verify on the Windows PC)
+- Shape → Style → Look is now **two columns** on a wide screen: your choices on the left (font cards, the Fonts
+  line + Fine-tune, Set effect, Accent colour, the effect rows) and **one big preview** on the right (9:16, about
+  340 px wide) that **stays on screen** while you scroll the left side. On a narrow window it sits on top instead.
+- The preview is the video's own lyric drawing (same effects, fonts, size and lyric area as a Reel) on your song's
+  first lines (the middle one as a chorus), over the **same frame of your clip** the font cards use. It follows at
+  once: the song's verse and chorus fonts, the effect / intensity / Breathe / add-ons you try in Set effect, the
+  accent colour (as soon as you pick it), and the **soft backing** behind the lyrics when the render would add it
+  over that frame (Lyric readability auto / strong / normal, the render's own rule).
+- **Point at (or tab to) a font card**: the big preview shows that pair; move away and it goes back to the song's
+  fonts. Nothing is saved until you click the card.
+- Set effect lost its own small player (the big preview plays what you try); everything else stays: what you
+  tried is kept per song (survives Shape → Make → Shape and a reload), the "Not saved to the recipe yet" line and
+  the two Save to recipe buttons. **The font cards keep their small pictures** as the visual picker (now up to 5 per
+  row beside the preview).
+- Background is the still frame (a looping clip would decode video all the time on the PC for little gain).
+- Tests: look-preview.test.ts (sample-line timing, the exact font faces loaded, the tried state read back, the
+  backing by the render's rule); browser: pairings.e2e.ts (one preview, sticky and ~340 px on a wide screen, the
+  clip's frame, backing over the bright cream frame, hovering a card shows its pair without saving and leaving
+  restores, still fully visible at the middle of the Look block; narrow window: on top, not sticky),
+  song-stages.e2e.ts (the preview plays the tried effect and Breathe, follows a new effect at once, Set effect has
+  no player of its own, the accent colour reaches the preview at once and after the save).
+
+### U1. Simpler font cards ✅ (to verify on the Windows PC)
+- Shape → Style → Look: the font pairings are now a **grid of small cards** (3-5 per row depending on the width,
+  no sideways scrolling), each a smaller picture of the pair (drawn exactly as before) and its name. **Click a card
+  to use it for this song**: it gets a ✓ and the pink border (pink only marks the chosen one). The big
+  "This song" buttons are gone. The description and the exact fonts show when you point at a card;
+  "Save to brand…" is a small link there (and always on the chosen card) and still asks first. "Back to the
+  brand" and the "try this" tag stay.
+- Warnings: none on the other cards (just a tiny grey "!" with the details as tooltip). Under the grid, the
+  chosen pair's points in plain words, e.g. "Lyrics may be hard to read over bright clips like this one: the
+  app adds a soft backing behind them when your clips need it" or "Great Vibes is a thin script: short hooks
+  only…"; the technical text (contrast ratios) under "Details". Missing accents / characters stay (they need
+  another pair), in plain words.
+- **Readability is now the app's job**: Lyric readability has a new default **auto**: each video measures its
+  clips behind the lyrics and, when at least a quarter of them are too bright for the lyric colour or the accent,
+  adds the soft dark band behind the lyrics by itself. The run's log and manifest say which and why. "strong"
+  (always) and "normal" (never) stay as overrides (Automatic → Lyric readability, now a list). The music is never
+  touched.
+- Tests: readability.test.ts (contrast, the auto rule, overrides, recipe), readability-make.test.ts (dry run: dark
+  clips no backing, bright clips backing, "normal" wins), pairings.test.ts (plain notes); browser:
+  pairings.e2e.ts (grid without horizontal scroll, click chooses (✓, song.json), hover details, warnings only for
+  the chosen pair, Details).
+
 ### Style tab simplified ✅ (to verify on the Windows PC)
 - Shape → Style is now four blocks, each with a heading and one muted line:
   **This song** (Tagline, EP, YouTube layout, Title opening) · **Look** (the font pairing cards, one line

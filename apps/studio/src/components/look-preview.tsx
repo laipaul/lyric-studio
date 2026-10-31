@@ -9,10 +9,13 @@ import { Player } from "@remotion/player";
 
 import { LOOK_FPS, LookPreview, lookPreviewDuration, type LookPreviewProps } from "@lyric/video";
 
+// The viewer as tall as the screen allows, leaving room for the header above and most of the timeline below.
+export const VIEWER_HEIGHT = "max(300px, min(calc(100vh - 31rem), 860px))";
+
 export function LookViewer({ input, caption, previewing }: { input: LookPreviewProps; caption: string; previewing?: string | null }) {
   return (
     <div data-look-preview data-effect={input.effect.name} data-breathe={input.breathe} data-verse-family={input.verse.family} data-hook-family={input.hook.family} data-hook-face={`${input.hook.family} ${input.hook.weight}${input.hook.italic ? " italic" : ""}`} data-previewing-pair={previewing ?? undefined} data-accent={input.accent} data-backing={input.backing ? "1" : "0"} className="flex flex-col gap-1.5">
-      <div className="mx-auto overflow-hidden rounded-xl border bg-black shadow-lg" style={{ height: "min(62vh, 640px)", aspectRatio: "9 / 16" }}>
+      <div className="mx-auto overflow-hidden rounded-xl border bg-black shadow-lg" style={{ height: VIEWER_HEIGHT, aspectRatio: "9 / 16" }}>
         <Player
           component={LookPreview}
           inputProps={input}

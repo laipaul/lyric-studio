@@ -19,9 +19,9 @@ import { EFFECT_NAMES, followScrollLeft, LyricVideo, patchLook, previewCard, typ
 import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node"; // types only (erased): the data comes from /api/songs/[id]/storyboard
 
 import { AssessmentDetails, VerdictBadge } from "@/components/assessment";
-import { LookViewer } from "@/components/look-preview";
+import { LookViewer, VIEWER_HEIGHT } from "@/components/look-preview";
 import type { ShapeLook } from "@/components/shape-tools";
-import { useGoToTab } from "@/components/song-stages";
+import { SHAPE_PANELS, useGoToTab, useShapePanel } from "@/components/song-stages";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 const clock = (ms: number) => `${Math.floor(ms / 60_000)}:${((ms % 60_000) / 1000).toFixed(1).padStart(4, "0")}`;
 const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 const ZOOMS = [40, 80, 160]; // pixels per second
+
 const FOLLOW_KEY = "lyric-studio:storyboard-follow"; // "Follow playback", remembered in this browser only
 const readFollow = () => {
   try {
@@ -43,6 +44,7 @@ type Source = { kind: "plan"; platform: string; video: string } | { kind: "run";
 
 export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { projectId: string; tools: ReactNode; look: ShapeLook | null; replan: number; onPlanned: (replan: number) => void }) {
   const goTo = useGoToTab();
+  const { panel, setPanel } = useShapePanel();
   const [choices, setChoices] = useState<StoryboardChoices | null>(null);
   const [source, setSource] = useState<Source | null>(null);
   const [view, setView] = useState<StoryboardView | null>(null);
@@ -194,6 +196,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   }
   const openCard = (id: string) => {
     setCardId(id);
+    setPanel("text");
     setDraft(board?.cards.find((c) => c.id === id)?.overrides ?? {});
   };
   const moveClip = (name: string, to: number) => {
@@ -294,32 +297,55 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
     }
   };
 
-  // The left column: what is selected on the timeline (shot, clip, text card), then the recipe tools.
-  const selection =
-    view && (shot || (view.editable && (editing || card))) ? (
+  // The panel beside the rail: a clicked shot (its details, the clip editor), the clips (the story order to
+  // drag from), the text cards, or one of the recipe tools (ShapeTools, always mounted).
+  const clipEditor =
+    view?.editable && editing && view.clips.some((c) => c.name === editing) ? (
+      <ClipEditor
+        key={editing}
+        clip={view.clips.find((c) => c.name === editing)!}
+        mediaUrl={`/api/songs/${projectId}/storyboard/media`}
+        busy={saving}
+        onSave={(e) => void edit({ action: "clip", clip: editing, edit: e })}
+        onClose={() => setEditing(null)}
+        onCanvas={(at) => void edit(at === null ? { action: "canvas", clip: null } : { action: "canvas", clip: editing, at })}
+      />
+    ) : null;
+  const panelTitle = panel === "shot" ? "Shot" : (SHAPE_PANELS.find((m) => m.id === panel)?.label ?? "");
+  const closePanel = () => {
+    if (panel === "shot") setSelected(null);
+    setPanel(null);
+  };
+  const panelBody =
+    panel === "shot" ? (
       <div data-selection className="flex flex-col gap-2">
-        {shot ? (
+        {view && shot ? (
           <ShotDetails
             shot={shot}
             editable={view.editable}
             onEdit={() => setEditing(view.clips.find((c) => c.name === shot.clip)?.name ?? null)}
             onUnanchor={shot.anchor ? () => void edit({ action: "unanchor", line: shot.anchor!.line }) : undefined}
             onMisfit={view.editable ? () => moveClip(shot.clip, view.clips.length) : undefined}
-            onClose={() => setSelected(null)}
+            onClose={closePanel}
           />
-        ) : null}
-        {view.editable && editing ? (
-          <ClipEditor
-            key={editing}
-            clip={view.clips.find((c) => c.name === editing)!}
-            mediaUrl={`/api/songs/${projectId}/storyboard/media`}
-            busy={saving}
-            onSave={(e) => void edit({ action: "clip", clip: editing, edit: e })}
-            onClose={() => setEditing(null)}
-            onCanvas={(at) => void edit(at === null ? { action: "canvas", clip: null } : { action: "canvas", clip: editing, at })}
-          />
-        ) : null}
-        {view.editable && card ? (
+        ) : (
+          <p className="text-muted-foreground text-xs">Click a shot on the timeline.</p>
+        )}
+        {clipEditor}
+      </div>
+    ) : panel === "clips" ? (
+      <div className="flex flex-col gap-3" data-clips-panel>
+        {clipEditor}
+        {view?.editable && view.clips.length ? (
+          <StoryStrip clips={view.clips} busy={saving || loading} onMove={moveClip} onOpen={setEditing} editing={editing} />
+        ) : (
+          <p className="text-muted-foreground text-xs">{view && !view.editable ? "A past run: its clips cannot be changed." : "The clips show once the video is planned."}</p>
+        )}
+      </div>
+    ) : panel === "text" ? (
+      <div className="flex flex-col gap-3" data-text-panel>
+        <p className="text-muted-foreground text-xs">Click a lyric line or a title card on the timeline to change its place, size, hold or effect.</p>
+        {view?.editable && card ? (
           <CardEditor
             key={card.id}
             card={card}
@@ -338,12 +364,18 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
             artist={board?.artist ?? "Life Lyrics"}
           />
         ) : null}
+        {view?.editable && board ? <TemplateBar board={board} busy={saving} onEdit={(b) => void editText(b)} onOpen={openCard} /> : null}
+        {notice ? (
+          <p className="text-xs text-emerald-300" role="status" data-textboard-notice>
+            {notice}
+          </p>
+        ) : null}
       </div>
     ) : null;
 
   const viewer =
     view && props ? (
-      <div className={cn("mx-auto overflow-hidden rounded-xl border bg-black shadow-lg", wide ? "aspect-video w-full max-w-[860px]" : "aspect-[9/16]")} style={wide ? undefined : { height: "min(62vh, 640px)" }}
+      <div className="mx-auto max-w-full overflow-hidden rounded-xl border bg-black shadow-lg" style={{ height: VIEWER_HEIGHT, aspectRatio: wide ? "16 / 9" : "9 / 16" }}
         data-viewer
         data-patched={look?.patch && view.source === "plan" ? "1" : "0"}
         data-previewing-pair={look?.previewing ?? undefined}
@@ -370,17 +402,27 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
     ) : null;
 
   return (
-    <div data-storyboard data-shape className="grid gap-6 lg:grid-cols-[minmax(320px,380px)_minmax(0,1fr)]">
-      <aside data-shape-tools className="order-last flex min-w-0 flex-col gap-4 lg:order-none lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto lg:pr-2">
-        {selection}
+    <div data-storyboard data-shape className="flex min-w-0 items-start gap-4">
+      <aside
+        data-shape-panel={panel ?? ""}
+        data-shape-tools
+        className={cn("bg-card/40 sticky top-0 flex max-h-[calc(100vh-8rem)] w-[340px] shrink-0 flex-col gap-3 overflow-x-hidden overflow-y-auto rounded-lg border p-3 [&_input]:max-w-full [&_select]:max-w-full", !panel && "hidden")}
+      >
+        <div className="flex items-center gap-2">
+          <h2 className="flex-1 text-base font-semibold">{panelTitle}</h2>
+          <button type="button" data-panel-close onClick={closePanel} aria-label="close the panel" className="text-muted-foreground hover:text-foreground rounded p-1">
+            <X className="size-4" />
+          </button>
+        </div>
+        {panelBody}
         {tools}
       </aside>
 
-      <div className="flex min-w-0 flex-col gap-4">
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
         {/* which video: the plan now (per platform and video) or a past run */}
         {choices?.ready ? (
-          <div className="flex flex-wrap items-end gap-3 text-sm">
-            <label className="flex flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <label className="flex items-center gap-1.5">
               <span className="text-muted-foreground text-xs">Show</span>
               <select
                 className={select}
@@ -403,7 +445,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                 ))}
               </select>
             </label>
-            <label className="flex flex-col gap-1">
+            <label className="flex items-center gap-1.5">
               <span className="text-muted-foreground text-xs">Platform</span>
               <select className={select} data-storyboard-platform value={source?.platform ?? ""} onChange={(e) => source && setSource({ ...source, platform: e.target.value, video: platforms.find((p) => p.name === e.target.value)?.videos[0] ?? "v1" })}>
                 {platforms.map((p) => (
@@ -413,7 +455,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                 ))}
               </select>
             </label>
-            <label className="flex flex-col gap-1">
+            <label className="flex items-center gap-1.5">
               <span className="text-muted-foreground text-xs">Video</span>
               <select className={select} data-storyboard-video value={source?.video ?? "v1"} onChange={(e) => source && setSource({ ...source, video: e.target.value })}>
                 {videos.map((v) => (
@@ -484,6 +526,9 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                 </span>
               ) : null}
               <VerdictBadge a={view.assessment} heading="Predicted before rendering" />
+              <Button size="sm" data-next-make onClick={() => goTo("generate")}>
+                Next: Make <ChevronRight />
+              </Button>
             </div>
           ) : !choices ? (
             <p className="text-muted-foreground text-sm">Loading the plan…</p>
@@ -496,9 +541,11 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
               <Loader2 className="mr-1 inline size-3 animate-spin" /> Planning the video…
             </p>
           ) : null}
-          <Button data-next-make onClick={() => goTo("generate")} className="mt-1">
-            Next: Make <ChevronRight />
-          </Button>
+          {!view ? (
+            <Button size="sm" data-next-make onClick={() => goTo("generate")}>
+              Next: Make <ChevronRight />
+            </Button>
+          ) : null}
         </div>
 
         {view && props ? (
@@ -606,7 +653,10 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                       left={x(s.startMs)}
                       width={x(s.endMs - s.startMs)}
                       selected={selected === s.index}
-                      onSelect={() => setSelected(s.index)}
+                      onSelect={() => {
+                        setSelected(s.index);
+                        setPanel("shot");
+                      }}
                       dropTarget={dropShot === s.index}
                       onDragOver={
                         view.editable
@@ -630,18 +680,23 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                 <div className="pointer-events-none absolute top-0 bottom-0 w-px bg-white" style={{ left: x(playhead) }} data-playhead />
               </div>
             </div>
-            {!shot ? <p className="text-muted-foreground -mt-2 text-xs">Click a shot for its details on the left{view.editable ? " (and to edit its clip)" : ""}. Drag a clip from the row below onto a shot or a lyric line to put it there.</p> : null}
+            <p className="text-muted-foreground -mt-1 text-xs">
+              Click a shot for its details{view.editable ? " (and to edit its clip)" : ""}. Open{" "}
+              <button type="button" className="underline underline-offset-2" onClick={() => setPanel("clips")} data-open-clips>
+                Clips
+              </button>{" "}
+              and drag a clip onto a shot or a lyric line to put it there.
+            </p>
             {view.slots.length ? (
               <p className="rounded-md border border-dashed border-amber-400/60 bg-amber-400/10 p-2 text-xs text-amber-100" data-slots>
                 <Anchor className="mr-1 inline size-3" />
-                Needs a clip (drag one from the clips below onto the line): {view.slots.map((x) => `line ${x.line} "${x.text}" (was ${x.clip})`).join(" · ")}
+                Needs a clip (drag one from Clips onto the line): {view.slots.map((x) => `line ${x.line} "${x.text}" (was ${x.clip})`).join(" · ")}
               </p>
             ) : null}
-            {/* 4. the clips used, in the story order */}
-            {view.editable && view.clips.length ? <StoryStrip clips={view.clips} busy={saving || loading} onMove={moveClip} onOpen={setEditing} editing={editing} /> : null}
-
-            {/* the plan's details (to be slimmed in U2b) */}
-            <div className="flex flex-col gap-2 border-t pt-3" data-plan-details>
+            {/* the plan's details, folded (to be slimmed in U2b) */}
+            <details className="group border-t pt-2" data-plan-details>
+              <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-xs">Plan details: the assessment, how the app paced, cut and ended this video</summary>
+              <div className="mt-2 flex flex-col gap-2">
               <div className="bg-card/60 rounded-lg border p-2" data-storyboard-assessment>
                 <AssessmentDetails a={view.assessment} limit={4} handled={false} />
               </div>
@@ -675,12 +730,6 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                   ↻ Loop flows: the end flows back into the start.
                 </p>
               ) : null}
-              {view.editable && board ? <TemplateBar board={board} busy={saving} onEdit={(b) => void editText(b)} onOpen={openCard} /> : null}
-              {notice ? (
-                <p className="text-xs text-emerald-300" role="status" data-textboard-notice>
-                  {notice}
-                </p>
-              ) : null}
               {view.anchorsOutside.length ? (
                 <p className="text-muted-foreground text-xs" data-anchors-outside>
                   <Anchor className="mr-1 inline size-3" />
@@ -696,7 +745,8 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                   ))}
                 </ul>
               ) : null}
-            </div>
+              </div>
+            </details>
           </>
         ) : null}
       </div>
@@ -829,11 +879,10 @@ function StoryStrip({ clips, busy, onMove, onOpen, editing }: { clips: Storyboar
   const [over, setOver] = useState<number | null>(null);
   return (
     <div data-story-strip>
-      <p className="mb-1 text-sm font-medium">Clips used</p>
-      <p className="text-muted-foreground mb-1 text-xs">
-        In story order{clips.some((c) => c.ranked) ? " (clips.json)" : " (file names: drag to change it)"} · each clip once before any repeats · drag a clip onto a shot or a lyric line above to put it there
+      <p className="text-muted-foreground mb-2 text-xs">
+        The clips used, in story order{clips.some((c) => c.ranked) ? " (clips.json)" : " (file names)"}: drag one onto another to reorder, onto a shot or a lyric line to put it there; click one to edit it. Each clip plays once before any repeats.
       </p>
-      <ol className="flex gap-2 overflow-x-auto pb-2">
+      <ol className="grid grid-cols-2 gap-2">
         {clips.map((c, i) => (
           <li
             key={c.name}
@@ -856,7 +905,7 @@ function StoryStrip({ clips, busy, onMove, onOpen, editing }: { clips: Storyboar
               const name = e.dataTransfer.getData("text/x-lyric-clip");
               if (name && name !== c.name) onMove(name, i);
             }}
-            className={cn("bg-card relative w-32 shrink-0 cursor-grab overflow-hidden rounded-lg border text-[11px]", over === i && "ring-brand ring-2", editing === c.name && "border-brand")}
+            className={cn("bg-card relative cursor-grab overflow-hidden rounded-lg border text-[11px]", over === i && "ring-brand ring-2", editing === c.name && "border-brand")}
           >
             <button type="button" onClick={() => onOpen(c.name)} className="block w-full text-left" title={`${c.name}: click to edit`}>
               <div className="aspect-video bg-black bg-cover bg-center" style={{ backgroundImage: c.thumb ? `url(/api/files/${c.thumb})` : undefined }} />

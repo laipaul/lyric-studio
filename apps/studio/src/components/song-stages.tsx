@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronRight, Package } from "lucide-react";
+import { Captions, Check, CheckCheck, ChevronRight, Clapperboard, ClipboardCheck, FileMusic, Film, ListChecks, Package, Palette, Shapes, Sparkles, Type, Wand2 } from "lucide-react";
 import { createContext, useContext, useState } from "react";
 
 import type { TodoItem } from "@lyric/video/song-stages";
@@ -35,6 +35,30 @@ const TONE: Record<StageStatus["tone"], string> = {
 const GoToTab = createContext<(tab: string) => void>(() => {});
 export const useGoToTab = () => useContext(GoToTab);
 
+// The Shape page's menus in the left rail (Canva style): each opens one panel beside the rail; a second
+// click closes it. "shot" is opened by clicking a shot on the timeline (no rail icon).
+export const SHAPE_PANELS = [
+  { id: "fonts", label: "Fonts", icon: Type },
+  { id: "effects", label: "Effects", icon: Sparkles },
+  { id: "colour", label: "Colour", icon: Palette },
+  { id: "clips", label: "Clips", icon: Film },
+  { id: "text", label: "Text", icon: Captions },
+  { id: "song", label: "This song", icon: FileMusic },
+  { id: "make", label: "To make", icon: ListChecks },
+  { id: "auto", label: "Automatic", icon: Wand2 },
+] as const;
+export type ShapePanelId = (typeof SHAPE_PANELS)[number]["id"] | "shot";
+type PanelState = { panel: ShapePanelId | null; setPanel: (p: ShapePanelId | null) => void };
+const ShapePanel = createContext<PanelState>({ panel: null, setPanel: () => {} });
+export const useShapePanel = () => useContext(ShapePanel);
+
+const STAGE_ICON = { prepare: ClipboardCheck, shape: Shapes, make: Clapperboard, review: CheckCheck } as const;
+const DOT: Record<StageStatus["tone"], string> = { done: "bg-emerald-400", todo: "bg-amber-300", blocked: "bg-red-400", muted: "bg-transparent", busy: "bg-brand animate-pulse" };
+
+// The song page as a Canva-style workspace: a narrow icon rail on the left with the four stages (a dot
+// for each stage's status; the status in words as its tooltip and at the top of the work area) and, under
+// Shape when it is open, the Shape menus; the work area fills the rest. A stage with several tabs shows
+// them at the top of its work area; Prepare lists what still needs the user's ears or eyes.
 export function SongStages({
   initialTab,
   statuses,
@@ -49,73 +73,96 @@ export function SongStages({
   children: React.ReactNode; // the TabsContent of every tab
 }) {
   const [tab, setTab] = useState(initialTab);
+  const [panel, setPanel] = useState<ShapePanelId | null>(null);
   const stage = stageOf(tab);
   const current = STAGES.find((s) => s.id === stage)!;
   return (
     <GoToTab.Provider value={setTab}>
-    <Tabs value={tab} onValueChange={setTab} className="gap-6">
-      <ol className="grid grid-cols-2 gap-2 md:grid-cols-4" aria-label="Stages" data-stages>
-        {STAGES.map((s, i) => (
-          <li key={s.id}>
-            <button
-              type="button"
-              data-stage={s.id}
-              aria-current={stage === s.id ? "step" : undefined}
-              onClick={() => setTab(s.tabs[0])}
-              className={cn(
-                "flex w-full flex-col gap-0.5 rounded-xl border px-4 py-3 text-left transition-colors",
-                stage === s.id ? "border-brand bg-brand/10" : "hover:border-brand/40 bg-card",
-              )}
-            >
-              <span className="flex items-center gap-2 text-sm">
-                <span className={cn("flex size-5 items-center justify-center rounded-full border text-[11px] tabular-nums", statuses[s.id].tone === "done" ? "border-emerald-400/50 text-emerald-300" : "")}>
-                  {statuses[s.id].tone === "done" ? <Check className="size-3" /> : i + 1}
-                </span>
-                {s.name}
-              </span>
-              <span className={cn("pl-7 text-xs", TONE[statuses[s.id].tone])} data-stage-status>
-                {statuses[s.id].text}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ol>
+      <ShapePanel.Provider value={{ panel, setPanel }}>
+        <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-row gap-0">
+          <nav aria-label="Stages" data-stages data-rail className="bg-card/40 sticky top-0 flex max-h-[calc(100vh-3.5rem)] w-[76px] shrink-0 flex-col items-stretch gap-1 overflow-y-auto border-r px-1.5 py-2">
+            {STAGES.map((s, i) => {
+              const Icon = STAGE_ICON[s.id];
+              return (
+                <div key={s.id} className="flex flex-col gap-1">
+                  <button
+                    type="button"
+                    data-stage={s.id}
+                    aria-current={stage === s.id ? "step" : undefined}
+                    title={`${i + 1}. ${s.name}: ${statuses[s.id].text}`}
+                    onClick={() => setTab(s.tabs[0])}
+                    className={cn("relative flex flex-col items-center gap-1 rounded-lg px-1 py-2 text-[11px] leading-tight", stage === s.id ? "bg-brand/15 text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground")}
+                  >
+                    <Icon className="size-5" />
+                    {s.id === "review" ? "Review" : s.name}
+                    <span className={cn("absolute top-1.5 right-2 size-2 rounded-full", DOT[statuses[s.id].tone])} aria-hidden />
+                    <span data-stage-status className="sr-only">
+                      {statuses[s.id].text}
+                    </span>
+                  </button>
+                  {s.id === "shape" && stage === "shape" ? (
+                    <div className="mb-1 flex flex-col gap-0.5 border-y py-1" data-shape-menus>
+                      {SHAPE_PANELS.map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          data-rail-item={m.id}
+                          aria-pressed={panel === m.id}
+                          onClick={() => setPanel(panel === m.id ? null : m.id)}
+                          className={cn("flex flex-col items-center gap-0.5 rounded-md px-1 py-1.5 text-[10px] leading-tight", panel === m.id ? "bg-brand/25 text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground")}
+                        >
+                          <m.icon className="size-4" />
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </nav>
 
-      {stage === "prepare" ? (
-        todo.length ? (
-          <ul className="flex flex-col gap-2 rounded-xl border border-amber-400/25 bg-amber-400/5 p-3" data-todo>
-            {todo.map((t) => (
-              <li key={t.id} data-todo-item={t.id} className="flex flex-wrap items-center justify-between gap-3 text-sm">
-                <span className={cn(t.blocking ? "text-red-200" : "")}>{t.text}</span>
-                <Button size="sm" variant="outline" onClick={() => setTab(t.tab)}>
-                  {t.action} <ChevronRight />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="flex items-center gap-2 rounded-xl border border-emerald-400/25 bg-emerald-400/5 px-4 py-3 text-sm" data-todo-done>
-            <Check className="size-4 text-emerald-300" /> Nothing to prepare: shape the video (optional) or go straight to
-            <button type="button" className="underline underline-offset-2" onClick={() => setTab("generate")}>
-              Make
-            </button>
-            .
-          </p>
-        )
-      ) : null}
+          <div className={cn("flex min-w-0 flex-1 flex-col gap-4 px-4 py-3", stage !== "shape" && "max-w-7xl")} data-work-area>
+            <p className="text-muted-foreground text-xs" data-work-status>
+              <span className="text-foreground font-medium">{current.name}</span> · <span className={TONE[statuses[stage].tone]}>{statuses[stage].text}</span>
+            </p>
+            {stage === "prepare" ? (
+              todo.length ? (
+                <ul className="flex flex-col gap-2 rounded-xl border border-amber-400/25 bg-amber-400/5 p-3" data-todo>
+                  {todo.map((t) => (
+                    <li key={t.id} data-todo-item={t.id} className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                      <span className={cn(t.blocking ? "text-red-200" : "")}>{t.text}</span>
+                      <Button size="sm" variant="outline" onClick={() => setTab(t.tab)}>
+                        {t.action} <ChevronRight />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="flex items-center gap-2 rounded-xl border border-emerald-400/25 bg-emerald-400/5 px-4 py-3 text-sm" data-todo-done>
+                  <Check className="size-4 text-emerald-300" /> Nothing to prepare: shape the video (optional) or go straight to
+                  <button type="button" className="underline underline-offset-2" onClick={() => setTab("generate")}>
+                    Make
+                  </button>
+                  .
+                </p>
+              )
+            ) : null}
 
-      {current.tabs.length > 1 ? (
-        <TabsList>
-          {current.tabs.map((t) => (
-            <TabsTrigger key={t} value={t}>
-              {TAB_LABEL[t]}
-              {counts[t] ? <span className="text-muted-foreground ml-1.5 tabular-nums">{counts[t]}</span> : null}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      ) : null}
-      {children}
-    </Tabs>
+            {current.tabs.length > 1 ? (
+              <TabsList>
+                {current.tabs.map((t) => (
+                  <TabsTrigger key={t} value={t}>
+                    {TAB_LABEL[t]}
+                    {counts[t] ? <span className="text-muted-foreground ml-1.5 tabular-nums">{counts[t]}</span> : null}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            ) : null}
+            {children}
+          </div>
+        </Tabs>
+      </ShapePanel.Provider>
     </GoToTab.Provider>
   );
 }

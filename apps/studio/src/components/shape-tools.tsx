@@ -11,6 +11,7 @@ import type { StyleData, StyleField, StyleFont } from "@lyric/video/style";
 import { PairingsRow } from "@/components/pairings-row";
 import { RowMenu, type RowMenuItem } from "@/components/row-menu";
 import { SetEffect, type EffectPart, type EffectValues } from "@/components/set-effect";
+import { useShapePanel } from "@/components/song-stages";
 
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
@@ -37,22 +38,23 @@ const show = (v: unknown) => (v === null ? "preset" : Array.isArray(v) ? (v.leng
 export type ShapeLook = { patch: LookPatch | null; fallback: LookPreviewProps; caption: string; previewing: string | null }; // previewing: the pairing pointed at
 const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "accentColour"]);
 
-// The Shape page's tools column (the song's recipe, song.json): Look (font pairing, the fonts line with
-// Fine-tune, Set effect with its Verses / Choruses switch, accent colour), This song and What to make as
-// one compact line each (click to edit), Automatic (folded: the app handles these). Every change is saved
+// The Shape page's tool panels (the song's recipe, song.json), one at a time as chosen in the rail: Fonts
+// (font pairing, the fonts line with Fine-tune), Effects (Set effect with its Verses / Choruses switch),
+// Colour (accent), This song and What to make (each with its one-line summary), Automatic. Every change is saved
 // at once; the rarely used actions (per platform, back to the inherited value, lock, use for all my songs)
 // sit in each setting's ⋯ menu. onSaved: the recipe changed (the page plans the video again); planned:
 // counts the plans that arrived (the look patch is dropped once the plan has it).
 export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId: string; onLook: (look: ShapeLook) => void; onSaved: () => void; planned: number }) {
+  // The panel open in the rail (Fonts, Effects, Colour, This song, What to make, Automatic): only that
+  // block shows; the tools stay mounted (hidden) for the other panels, so the viewer keeps its look.
+  const { panel } = useShapePanel();
+  const section = panel && (TOOL_SECTIONS as readonly string[]).includes(panel) ? panel : null;
   const router = useRouter();
   const [data, setData] = useState<StyleData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<"idle" | "saving" | "saved">("idle");
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [fineTune, setFineTune] = useState(false); // Look: the six font rows under the font summary
-  const [autoOpen, setAutoOpen] = useState(false); // the Automatic block, folded by default
-  const [songOpen, setSongOpen] = useState(false); // This song: one line until clicked
-  const [makeOpen, setMakeOpen] = useState(false); // What to make: one line until clicked
   const [part, setPart] = useState<EffectPart>("verse"); // Set effect: verses or choruses
   const [effectPlatforms, setEffectPlatforms] = useState(false); // Set effect ⋯ → Per platform
   const [effectSaved, setEffectSaved] = useState(false);
@@ -592,11 +594,11 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
   };
 
   return (
-    <div data-style className="flex flex-col gap-5">
+    <div data-style data-section={section ?? ""} className={cn("flex flex-col gap-4", !section && "hidden")}>
       <style>{fontCss}</style>
       <p
         data-saving={saving}
-        className="text-muted-foreground -mb-3 h-4 truncate text-xs"
+        className="text-muted-foreground -mb-2 h-4 truncate text-xs"
         aria-live="polite"
         title={`This song's recipe (${data.recipeFile?.split("/").pop()}). A setting comes from the library defaults, the artist's brand (${data.brandFile.split("/").join("\\")}) or this song; a change here is saved for this song at once. A locked setting keeps this song's value: a brand change does not reach it and Make cannot change it for one run.`}
       >
@@ -604,69 +606,90 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
       </p>
       {error ? <p className="rounded-md border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-200">{error}</p> : null}
 
-      <Block id="look" title="Look">
-        <PairingsRow projectId={projectId} onChanged={reload} onView={setPairView} onHover={setHovered} />
-        <div data-font-summary className="bg-card flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2.5">
-          <span className="min-w-0 flex-1 text-sm" data-font-summary-text>
-            Fonts: verses {face("verse")} · choruses {face("hook")}
-          </span>
-          {fontsOwn ? <span data-source className="border-brand/40 text-brand rounded-full border px-2 py-0.5 text-xs">This song</span> : null}
-          <button type="button" data-fine-tune aria-expanded={fineTune} onClick={() => setFineTune((v) => !v)} className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs underline underline-offset-2">
-            <ChevronDown className={cn("size-3 transition-transform", fineTune && "rotate-180")} />
-            Fine-tune
-          </button>
-        </div>
-        {fineTune ? (
-          <div data-fine-tune-rows className="flex flex-col gap-2 border-l pl-3">
-            {rows(fontFields)}
-            <p data-user-fonts className="text-muted-foreground text-xs" title={`Your own fonts: put .ttf, .otf, .woff or .woff2 files in ${data.userFonts}; they appear in the font lists after reloading this page.`}>
-              Your own fonts: put .ttf, .otf, .woff or .woff2 files in <span className="text-foreground font-mono break-all">{data.userFonts}</span>, then reload this page.
-            </p>
+      {section === "fonts" ? (
+        <Block id="fonts" title="Fonts">
+          <PairingsRow projectId={projectId} onChanged={reload} onView={setPairView} onHover={setHovered} />
+          <div data-font-summary className="bg-card flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2.5">
+            <span className="min-w-0 flex-1 text-sm" data-font-summary-text>
+              Fonts: verses {face("verse")} · choruses {face("hook")}
+            </span>
+            {fontsOwn ? <span data-source className="border-brand/40 text-brand rounded-full border px-2 py-0.5 text-xs">This song</span> : null}
+            <button type="button" data-fine-tune aria-expanded={fineTune} onClick={() => setFineTune((v) => !v)} className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs underline underline-offset-2">
+              <ChevronDown className={cn("size-3 transition-transform", fineTune && "rotate-180")} />
+              Fine-tune
+            </button>
           </div>
-        ) : null}
-        <SetEffect
-          effects={data.effects}
-          values={effectValues}
-          part={part}
-          setPart={setPart}
-          locked={locked}
-          saved={effectSaved}
-          onSet={(field, value) => {
-            flashSaved();
-            void act({ action: "set", field, value });
-          }}
-          onBrandAll={() => {
-            flashSaved();
-            for (const field of BRAND_ALL) void act({ action: "brand", field, value: field === "breathe" ? effectValues.breathe : effectValues[field] ? "on" : "off" });
-          }}
-          perPlatformOpen={effectPlatforms}
-          onPerPlatform={() => {
-            const next = !effectPlatforms;
-            setEffectPlatforms(next);
-            setOpen((o) => ({ ...o, ...Object.fromEntries(EFFECT_FIELDS.map((k) => [k, next])) }));
-          }}
-        />
-        {effectPlatforms ? <div data-effect-platform-rows className="border-l pl-3">{rows(pick(EFFECT_FIELDS))}</div> : null}
-        {rows(pick(LOOK_FIELDS))}
-      </Block>
+          {fineTune ? (
+            <div data-fine-tune-rows className="flex flex-col gap-2 border-l pl-3">
+              {rows(fontFields)}
+              <p data-user-fonts className="text-muted-foreground text-xs" title={`Your own fonts: put .ttf, .otf, .woff or .woff2 files in ${data.userFonts}; they appear in the font lists after reloading this page.`}>
+                Your own fonts: put .ttf, .otf, .woff or .woff2 files in <span className="text-foreground font-mono break-all">{data.userFonts}</span>, then reload this page.
+              </p>
+            </div>
+          ) : null}
+        </Block>
+      ) : null}
 
-      <Block id="song" title="This song">
-        <CompactLine id="song" open={songOpen} onToggle={() => setSongOpen((v) => !v)} summary={songLine} own={songFields.some((f) => f.own)} />
-        {songOpen ? rows(songFields) : null}
-      </Block>
+      {section === "effects" ? (
+        <Block id="effects" title="Effects">
+          <SetEffect
+            effects={data.effects}
+            values={effectValues}
+            part={part}
+            setPart={setPart}
+            locked={locked}
+            saved={effectSaved}
+            onSet={(field, value) => {
+              flashSaved();
+              void act({ action: "set", field, value });
+            }}
+            onBrandAll={() => {
+              flashSaved();
+              for (const field of BRAND_ALL) void act({ action: "brand", field, value: field === "breathe" ? effectValues.breathe : effectValues[field] ? "on" : "off" });
+            }}
+            perPlatformOpen={effectPlatforms}
+            onPerPlatform={() => {
+              const next = !effectPlatforms;
+              setEffectPlatforms(next);
+              setOpen((o) => ({ ...o, ...Object.fromEntries(EFFECT_FIELDS.map((k) => [k, next])) }));
+            }}
+          />
+          {effectPlatforms ? <div data-effect-platform-rows className="border-l pl-3">{rows(pick(EFFECT_FIELDS))}</div> : null}
+        </Block>
+      ) : null}
 
-      <Block id="make" title="What to make">
-        <CompactLine id="make" open={makeOpen} onToggle={() => setMakeOpen((v) => !v)} summary={makeLine} own={pick(MAKE_FIELDS).some((f) => f.own)} />
-        {makeOpen ? rows(pick(MAKE_FIELDS)) : null}
-      </Block>
+      {section === "colour" ? (
+        <Block id="colour" title="Colour">
+          {rows(pick(LOOK_FIELDS))}
+        </Block>
+      ) : null}
 
-      <Block id="auto" title="Automatic">
-        <button type="button" data-auto-toggle aria-expanded={autoOpen} onClick={() => setAutoOpen((v) => !v)} className="text-muted-foreground hover:text-foreground flex items-center gap-1 self-start text-left text-sm" title="Professional defaults chosen from the music and your clips; set one only to override the app.">
-          <ChevronDown className={cn("size-4 shrink-0 transition-transform", autoOpen && "rotate-180")} />
-          <span data-auto-summary>{setByYou.length ? `${setByYou.length} set by you: ${setByYou.map((f) => shortLabel(f.label)).join(", ")}` : "All automatic: the app handles these"}</span>
-        </button>
-        {autoOpen ? rows(autoFields) : null}
-      </Block>
+      {section === "song" ? (
+        <Block id="song" title="This song">
+          <p data-compact-summary="song" className="text-muted-foreground text-xs">
+            {songLine}
+          </p>
+          {rows(songFields)}
+        </Block>
+      ) : null}
+
+      {section === "make" ? (
+        <Block id="make" title="What to make">
+          <p data-compact-summary="make" className="text-muted-foreground text-xs">
+            {makeLine}
+          </p>
+          {rows(pick(MAKE_FIELDS))}
+        </Block>
+      ) : null}
+
+      {section === "auto" ? (
+        <Block id="auto" title="Automatic">
+          <p data-auto-summary className="text-muted-foreground text-xs" title="Professional defaults chosen from the music and your clips; set one only to override the app.">
+            {setByYou.length ? `${setByYou.length} set by you: ${setByYou.map((f) => shortLabel(f.label)).join(", ")}` : "All automatic: the app handles these"}
+          </p>
+          {rows(autoFields)}
+        </Block>
+      ) : null}
     </div>
   );
 }
@@ -738,25 +761,9 @@ function effectValuesOf(data: StyleData): EffectValues {
 function Block({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
     <section data-style-block={id} className="flex flex-col gap-2">
-      <h3 className="text-base font-semibold">{title}</h3>
+      <h3 className="sr-only">{title}</h3>
       {children}
     </section>
-  );
-}
-
-// A block shown as one line (its values); click to edit them.
-function CompactLine({ id, open, onToggle, summary, own }: { id: string; open: boolean; onToggle: () => void; summary: string; own: boolean }) {
-  return (
-    <button type="button" data-compact={id} aria-expanded={open} onClick={onToggle} className="bg-card hover:border-brand/40 flex items-start gap-2 rounded-lg border px-3 py-2.5 text-left text-sm">
-      <span data-compact-summary={id} className="min-w-0 flex-1">
-        {summary}
-      </span>
-      {own ? <span className="border-brand/40 text-brand shrink-0 rounded-full border px-2 py-0.5 text-xs">This song</span> : null}
-      <span className="text-muted-foreground flex shrink-0 items-center gap-1 text-xs underline underline-offset-2">
-        <ChevronDown className={cn("size-3 transition-transform", open && "rotate-180")} />
-        {open ? "Done" : "Edit"}
-      </span>
-    </button>
   );
 }
 
@@ -772,6 +779,7 @@ const BRAND_ALL = ["breathe", "heldGlow", "chorusLift", "shine"] as const;
 const MAKE_FIELDS = ["platforms", "variations", "collections"] as const;
 const AUTO_FIELDS = ["shotLength", "tempo", "section", "length", "ending", "transitions", "paceShift", "readability"] as const;
 const RELEASE = ["reels", "tiktok", "shorts", "youtube", "canvas"];
+const TOOL_SECTIONS = ["fonts", "effects", "colour", "song", "make", "auto"] as const;
 
 // A control's explanation: one line (cut with …), the whole text on hover.
 function Hint({ text }: { text: string }) {

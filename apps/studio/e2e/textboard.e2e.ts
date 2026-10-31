@@ -14,6 +14,8 @@ import { absPath, openWorkspace, project } from "@lyric/db";
 import { ensureAlignment, findOrCreateSongProject, songPathsById, type AlignRunner } from "@lyric/video/node";
 import { eq } from "drizzle-orm";
 
+import { openPanel } from "./stage-tabs";
+
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-textboard-"));
 const wsDir = path.join(root, "workspace");
 const port = 3196;
@@ -123,7 +125,8 @@ async function main() {
     check(brandJson.titleFont?.family === "Playfair Display", "brand.json titleFont is now Playfair Display (after the confirmation)");
     await page.click("[aria-label='close the card editor']");
 
-    // Save as template (the design, not the words), then apply it.
+    // Save as template (the design, not the words), then apply it: in the Text panel.
+    await openPanel(page, "text");
     await page.fill("[data-template-name]", "Clean");
     await page.click("[data-template-save]");
     await page.waitForSelector("[data-textboard-notice]");
@@ -148,6 +151,7 @@ async function main() {
     check(((await page.textContent("[data-slots]")) ?? "").includes('line 4 "Verse two here" (was 02_b.mp4)'), "line 4 is a slot (its clip is not in city), highlighted and listed");
     const shotClips = await page.$$eval("[data-shot]", (els: Element[]) => els.map((e) => e.textContent ?? ""));
     check(shotClips.every((t) => /street|lights|bridge|park/.test(t)), "the shots use the city clips");
+    await openPanel(page, "clips");
     await page.dragAndDrop("[data-story-clip='03_bridge.mp4']", "[data-story-line='4']");
     await replanned();
     await page.waitForSelector("[data-story-line='4'][data-anchored='03_bridge.mp4']", { timeout: 60_000 }).catch(() => null);

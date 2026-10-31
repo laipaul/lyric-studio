@@ -14,7 +14,7 @@ import path from "node:path";
 import { absPath, openWorkspace, project } from "@lyric/db";
 import { ensureAlignment, findOrCreateSongProject, songPathsById, type AlignRunner } from "@lyric/video/node";
 import { eq } from "drizzle-orm";
-import { unfoldStyle } from "./stage-tabs";
+import { openPanel, unfoldStyle } from "./stage-tabs";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-storyboard-"));
 const wsDir = path.join(root, "workspace");
@@ -81,8 +81,13 @@ async function main() {
     check((await page.inputValue("[data-storyboard-platform]")) === "reels", "the plan for Reels (the recipe's platform) is offered");
     await page.waitForSelector("[data-shot='1']", { timeout: 180_000 }); // planned on opening, no Show button to press
     check(!!(await page.$("[data-viewer] .__remotion-player, [data-viewer] video, [data-viewer] div")), "the viewer plays the planned video");
-    const [vb, tl, strip0] = await Promise.all(["[data-viewer]", "[data-storyboard-timeline]", "[data-story-strip]"].map(async (sel) => (await page.$(sel))!.boundingBox()));
-    check(!!vb && !!tl && !!strip0 && vb.y + vb.height <= tl.y && tl.y + tl.height <= strip0.y, "top to bottom: the viewer, the soundtrack and shots, the clips used");
+    const [vb, tl] = await Promise.all(["[data-viewer]", "[data-storyboard-timeline]"].map(async (sel) => (await page.$(sel))!.boundingBox()));
+    check(!!vb && !!tl && vb.y + vb.height <= tl.y && tl.width > 900, `top to bottom: the viewer, then the soundtrack and shots across the editor (${JSON.stringify(tl)})`);
+    check(!(await page.$("[data-story-strip]")), "the clips are not on the page until the Clips menu opens them");
+    await openPanel(page, "clips");
+    const strip0 = await (await page.waitForSelector("[data-clips-panel] [data-story-strip]")).boundingBox();
+    check(!!strip0 && strip0.x + strip0.width <= vb!.x, "the Clips menu opens the clips used in the panel, left of the viewer");
+    check(!(await page.$eval("[data-plan-details]", (d: Element) => (d as HTMLDetailsElement).open)), "the plan's details are folded behind the verdict");
     const waveY = (await (await page.$("[data-waveform]"))!.boundingBox())!.y;
     const linesY = (await (await page.$("[data-textboard-row]"))!.boundingBox())!.y;
     const shotsY = (await (await page.$("[data-shots-row]"))!.boundingBox())!.y;
@@ -165,7 +170,8 @@ async function main() {
     await page.$eval("[data-storyboard-timeline]", (el: Element) => ((el as HTMLElement).scrollLeft = 0));
     await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "storyboard.png") });
 
-    // Stage 2. The story strip: file-name order; moving 01_a later re-plans and is kept in clips.json.
+    // Stage 2. The story strip (Clips panel): file-name order; moving 01_a later re-plans and is kept in clips.json.
+    await openPanel(page, "clips");
     const strip = async () => page.$$eval("[data-story-clip]", (els: Element[]) => els.map((e) => e.getAttribute("data-story-clip")));
     check(JSON.stringify(await strip()) === JSON.stringify(["01_a.mp4", "02_b.mp4", "03_c.mp4", "04_d.mp4"]), "the story strip in file-name order");
     const replanned = async () => {
@@ -179,6 +185,8 @@ async function main() {
     const clipsJson = () => JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8"));
     check(JSON.stringify(clipsJson().order) === JSON.stringify(order), "the order is kept in clips.json");
     await page.reload();
+    await page.waitForSelector("[data-shot='1']", { timeout: 180_000 });
+    await openPanel(page, "clips");
     await page.waitForSelector("[data-story-clip]", { timeout: 180_000 });
     check(JSON.stringify(await strip()) === JSON.stringify(order), "and still there after reloading the page");
     // Drag a clip onto another: it takes that place.
@@ -222,6 +230,7 @@ async function main() {
     }
 
     // A look change on the same page: the viewer shows it at once, song.json has it, the video is planned again.
+    await openPanel(page, "effects");
     await page.click("[data-try-effect=spread]");
     await page.waitForFunction(() => document.querySelector("[data-viewer]")?.getAttribute("data-effect") === "spread", null, { timeout: 5000 }).catch(() => {});
     check((await page.getAttribute("[data-viewer]", "data-effect")) === "spread", "Set effect: the viewer plays the new verse effect at once");

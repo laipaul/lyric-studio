@@ -10,6 +10,7 @@ import path from "node:path";
 
 import { makeRun, openWorkspace } from "@lyric/db";
 import { createSong, readRecipe, songPathsById, writeRecipe } from "@lyric/video/node";
+import { openPanel } from "./stage-tabs";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-stages-"));
 const wsDir = path.join(root, "workspace");
@@ -154,41 +155,50 @@ async function main() {
     const takeRun = ws2.db.select().from(makeRun).all().at(-1);
     const takeOptions = (takeRun?.options_json ?? {}) as { platforms?: string; take?: number };
     check(takeOptions.platforms === "reels" && takeOptions.take === 3 && (takeRun?.label ?? "").includes("take 3"), `Try another take: Reels take 3 (${JSON.stringify(takeOptions)}, ${takeRun?.label})`);
-    // The Shape page (Style and Storyboard as one page): the tools column on the left of the viewer; the
-    // song sets its tempo (locked) and an ending: the folded Automatic block says so.
+    // The Shape page, Canva style: a slim header (cover, title, stats); a rail on the left with the stages
+    // and, on Shape, its menus; each menu opens one panel beside the rail; the editor fills the rest.
     writeRecipe(recipe, { ...readRecipe(recipe), tempo: 96, ending: "fade", locked: ["tempo"] });
     await page.click("[data-stage=shape]");
-    await page.waitForSelector("[data-style-block]");
+    await page.waitForSelector("[data-shape-menus]");
     check((await page.$$("[role=tab]")).length === 0, "Shape is one page: no Style / Storyboard tabs");
-    const blocks = await page.$$eval("[data-style-block] h3", (e: Element[]) => e.map((x) => x.textContent));
-    check(JSON.stringify(blocks) === JSON.stringify(["Look", "This song", "What to make", "Automatic"]), `the tools: four blocks in order (${blocks.join(" | ")})`);
-    const toolsBox = await (await page.$("[data-shape-tools]"))!.boundingBox();
-    const viewerBox = await (await page.$("[data-viewer-block]"))!.boundingBox();
-    check(!!toolsBox && !!viewerBox && toolsBox.x + toolsBox.width <= viewerBox.x + 1 && viewerBox.y < 400, `the tools on the left, the viewer at the top in the middle (${JSON.stringify(toolsBox)} / ${JSON.stringify(viewerBox)})`);
-    check(!!(await page.$("[data-viewer-block] [data-next-make]")), '"Next: Make" under the viewer');
+    check(((await page.textContent("[data-song-header] h1")) ?? "").length > 0, "the slim header keeps the song title");
+    const railBox = await (await page.$("[data-rail]"))!.boundingBox();
+    const stageIds = await page.$$eval("[data-rail] [data-stage]", (e: Element[]) => e.map((x) => x.getAttribute("data-stage")));
+    check(JSON.stringify(stageIds) === JSON.stringify(["prepare", "shape", "make", "review"]) && !!railBox && railBox.x < 5 && railBox.width < 100, `the stages sit in the rail on the left (${stageIds.join(", ")})`);
+    const menus = await page.$$eval("[data-rail-item]", (e: Element[]) => e.map((x) => x.getAttribute("data-rail-item")));
+    check(JSON.stringify(menus) === JSON.stringify(["fonts", "effects", "colour", "clips", "text", "song", "make", "auto"]), `Shape's menus in the rail (${menus.join(", ")})`);
+    check(!(await page.isVisible("[data-shape-tools]")), "no panel open: the editor takes the whole width");
+    const viewerBox = await (await page.waitForSelector("[data-viewer], [data-look-preview]")).boundingBox();
+    check(!!viewerBox && viewerBox.y < 300, `the viewer at the top of the editor (${JSON.stringify(viewerBox)})`);
+    check(!!(await page.$("[data-next-make]")), '"Next: Make" under the viewer');
     const inBlock = async (b: string) => page.$$eval(`[data-style-block=${b}] [data-field]`, (e: Element[]) => e.map((x) => x.getAttribute("data-field")));
-    check(JSON.stringify(await inBlock("look")) === JSON.stringify(["accentColour"]), `Look: only the accent colour row, the effects set once in Set effect; the font rows folded (${(await inBlock("look")).join(", ")})`);
-    // This song and What to make: one line each, click to edit.
-    check((await inBlock("song")).length === 0 && (await inBlock("make")).length === 0, "This song and What to make are one line each");
+    await openPanel(page, "colour");
+    const toolsBox = await (await page.$("[data-shape-tools]"))!.boundingBox();
+    const viewerAfter = await (await page.$("[data-viewer], [data-look-preview]"))!.boundingBox();
+    check(!!toolsBox && !!viewerAfter && toolsBox.x + toolsBox.width <= viewerAfter.x + 1, `the panel opens beside the rail, left of the viewer (${JSON.stringify(toolsBox)} / ${JSON.stringify(viewerAfter)})`);
+    check(JSON.stringify(await inBlock("colour")) === JSON.stringify(["accentColour"]), `Colour: the accent colour row (${(await inBlock("colour")).join(", ")})`);
+    await page.click("[data-rail-item=colour]");
+    check(!(await page.isVisible("[data-shape-tools]")), "a second click on the menu closes its panel");
+    await openPanel(page, "song");
     const songLine = (await page.textContent("[data-compact-summary=song]")) ?? "";
     check(songLine === "Tagline: none · EP: none · YouTube: cover · Title opening: off", `This song's line (${songLine})`);
+    check(JSON.stringify(await inBlock("song")) === JSON.stringify(["tagline", "ep", "youtubeLayout", "titleOpening"]), `This song: tagline, EP, YouTube layout, title opening (${(await inBlock("song")).join(", ")})`);
+    await openPanel(page, "make");
     const makeLine = (await page.textContent("[data-compact-summary=make]")) ?? "";
     check(makeLine.startsWith("Reels 3 · YouTube 1") && makeLine.includes("clips: the song's own"), `What to make's line (${makeLine})`);
-    await page.click("[data-compact=song]");
-    check(JSON.stringify(await inBlock("song")) === JSON.stringify(["tagline", "ep", "youtubeLayout", "titleOpening"]), `This song opens: tagline, EP, YouTube layout, title opening (${(await inBlock("song")).join(", ")})`);
-    await page.click("[data-compact=make]");
-    check(JSON.stringify(await inBlock("make")) === JSON.stringify(["platforms", "variations", "collections"]), `What to make opens: platforms, videos per platform, collections (${(await inBlock("make")).join(", ")})`);
-    check((await page.getAttribute("[data-auto-toggle]", "aria-expanded")) === "false" && (await inBlock("auto")).length === 0, "Automatic is folded");
-    check((await page.textContent("[data-auto-summary]")) === "2 set by you: Tempo, Ending", `…with its summary line (${await page.textContent("[data-auto-summary]")})`);
+    check(JSON.stringify(await inBlock("make")) === JSON.stringify(["platforms", "variations", "collections"]), `What to make: platforms, videos per platform, collections (${(await inBlock("make")).join(", ")})`);
+    check((await page.$$("[data-style-block]")).length === 1, "one panel at a time");
+    await page.click("[data-panel-close]");
+    check(!(await page.isVisible("[data-shape-tools]")), "the panel's × closes it");
     if (process.env.STYLE_SHOT) {
+      await openPanel(page, "fonts");
       await page.waitForSelector("[data-pairing-select]");
-      await page.setViewportSize({ width: 1280, height: 3200 });
       await sleep(1500);
-      await page.screenshot({ path: process.env.STYLE_SHOT, fullPage: true });
-      await page.setViewportSize({ width: 1280, height: 1000 });
+      await page.screenshot({ path: process.env.STYLE_SHOT });
     }
-    await page.click("[data-auto-toggle]");
-    check(JSON.stringify(await inBlock("auto")) === JSON.stringify(["shotLength", "tempo", "section", "length", "ending", "transitions", "paceShift", "readability"]), `Automatic opens with its eight rows (${(await inBlock("auto")).join(", ")})`);
+    await openPanel(page, "auto");
+    check((await page.textContent("[data-auto-summary]")) === "2 set by you: Tempo, Ending", `Automatic's summary line (${await page.textContent("[data-auto-summary]")})`);
+    check(JSON.stringify(await inBlock("auto")) === JSON.stringify(["shotLength", "tempo", "section", "length", "ending", "transitions", "paceShift", "readability"]), `Automatic with its eight rows (${(await inBlock("auto")).join(", ")})`);
     check(!!(await page.$("[data-field=tempo] [data-tempo-check]")), "the tempo tools are there");
     // Calm rows: only the "This song" badge; other sources in the label's tooltip; lock, reset, per platform in the ⋯ menu.
     const badges = await page.$$eval("[data-field] [data-source]", (e: Element[]) => [...new Set(e.map((x) => x.textContent))]);
@@ -203,6 +213,8 @@ async function main() {
     check(!!(await page.$("[data-platform-value=shotLength-reels]")), "'Per platform…' opens the per-platform editors");
     check(!((await page.textContent("[data-style]")) ?? "").includes("the same on every platform"), "no 'the same on every platform' lines");
     // Fonts: one summary line; Fine-tune shows the six rows.
+    await page.click("[data-rail-item=fonts]");
+    await page.waitForSelector("[data-shape-panel=fonts]");
     const fontLine = (await page.textContent("[data-font-summary-text]")) ?? "";
     check(/^Fonts: verses .+ \d00(?: italic)? · choruses .+ \d00(?: italic)?$/.test(fontLine), `the font summary line (${fontLine})`);
     check((await page.$("[data-field=verseFont]")) === null, "the six font rows are folded");
@@ -219,6 +231,7 @@ async function main() {
       }
       return false;
     };
+    await openPanel(page, "effects");
     await page.waitForSelector("[data-effect-preview]");
     check((await page.$$("[data-use-effect]")).length === 0 && (await page.$$("[data-unsaved]")).length === 0, "no Save to recipe buttons, no 'not saved yet' line");
     check((await page.getAttribute("[data-effect-part]", "data-effect-part")) === "verse", "Set effect starts on Verses");
@@ -269,6 +282,7 @@ async function main() {
     }
     await page.setViewportSize({ width: 1280, height: 1000 });
     // The accent colour reaches the viewer at once.
+    await openPanel(page, "colour");
     await page.$eval("[data-edit='accentColour-default']", (el: Element) => {
       const input = el as HTMLInputElement;
       const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;

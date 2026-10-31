@@ -236,7 +236,7 @@ export function PairingsRow({
               aria-haspopup="listbox"
               aria-expanded={open}
               disabled={busy}
-              className="bg-background flex w-full max-w-md min-w-0 items-center gap-2 rounded-md border px-3 py-2 text-left text-sm sm:w-auto sm:min-w-80"
+              className="bg-background flex w-full min-w-0 items-center gap-2 rounded-md border px-3 py-2 text-left text-sm"
             >
               <span className="flex min-w-0 flex-1 flex-col">
                 <span data-pairing-current className="font-medium">
