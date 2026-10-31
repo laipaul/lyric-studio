@@ -15,7 +15,7 @@ import { Player, type PlayerRef } from "@remotion/player";
 import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2, Pencil, RefreshCw, Repeat, Scissors, Star, Type, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { EFFECT_NAMES, followScrollLeft, LyricVideo, patchLook, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
+import { EFFECT_NAMES, effectTitle, followScrollLeft, LyricVideo, patchLook, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
 import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node"; // types only (erased): the data comes from /api/songs/[id]/storyboard
 
 import { AssessmentDetails, VerdictBadge } from "@/components/assessment";
@@ -182,6 +182,25 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
       const d = (await r.json()) as { error?: string };
       if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
       await show(source, true);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+  // A lyric line's words fixed on its card: lyrics.txt gets them, the timing is kept; then the plan again.
+  async function fixLine(number: number, text: string) {
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const r = await api(`/api/songs/${projectId}/lyrics`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "fix-line", number, text }) });
+      const d = (await r.json()) as { changed?: boolean; timingKept?: boolean; error?: string };
+      if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
+      const b = (await (await api(`/api/songs/${projectId}/textboard`, { cache: "no-store" })).json()) as TextboardData & { error?: string };
+      if (!b.error) setBoard(b);
+      setNotice(!d.changed ? "Nothing changed." : d.timingKept ? `Line ${number} fixed in the lyrics (every platform and the captions); its timing is kept. The old lyrics are in the Lyrics tab's earlier versions.` : `Line ${number} fixed in the lyrics; the song's timing is made again on the next video.`);
+      if (source) await show(source, true);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -357,7 +376,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
       </div>
     ) : panel === "text" ? (
       <div className="flex flex-col gap-3" data-text-panel>
-        <p className="text-muted-foreground text-xs">Click a lyric line or a title card on the timeline to change its place, size, hold or effect.</p>
+        <p className="text-muted-foreground text-xs">Click a lyric line or a title card on the timeline to fix its words or change its place, size, hold or effect.</p>
         {view?.editable && card ? (
           <CardEditor
             key={card.id}
@@ -372,6 +391,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
               void editText({ action: "card", id: card.id, overrides: null });
             }}
             onClose={() => setCardId(null)}
+            onFixLine={(n, t) => void fixLine(n, t)}
             fonts={board?.fonts ?? []}
             titleFont={board?.titleFont ?? ""}
             artist={board?.artist ?? "Life Lyrics"}
@@ -1099,7 +1119,8 @@ const POSITION_LABELS: Record<string, string> = { lyrics: "the lyric spot", "wit
 
 // A card's own look: place, size, hold, effect (and, for title / byline / tagline, its text and whether
 // it is shown). The preview shows lyric cards at once; Save keeps them in textboard.json.
-function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClose, fonts, titleFont, artist }: {
+function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClose, onFixLine, fonts, titleFont, artist }: {
+  onFixLine: (number: number, text: string) => void;
   fonts: string[];
   titleFont: string;
   artist: string;
@@ -1131,6 +1152,9 @@ function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClos
   const [effectName, intensity = "balanced"] = (draft.effect ?? "").split(":");
   const field = "bg-input/30 border-input h-7 rounded-md border px-2 text-xs";
   const changed = JSON.stringify(draft) !== JSON.stringify(card.overrides);
+  const [words, setWords] = useState(card.text); // a lyric line's words (fixed in lyrics.txt, timing kept)
+  useEffect(() => setWords(card.text), [card.text]);
+  const wordsChanged = words.replace(/\s+/g, " ").trim() !== card.text && !!words.trim();
   return (
     <div className="bg-card rounded-lg border p-3 text-xs" data-card-editor={card.id}>
       <div className="mb-2 flex items-center gap-2">
@@ -1143,6 +1167,26 @@ function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClos
         </button>
       </div>
       <div className="grid gap-2">
+        {lyric && card.line !== undefined ? (
+          <div className="flex flex-col gap-1">
+            <label className="flex items-center gap-2">
+              <span className="w-20">Text</span>
+              <input
+                data-line-text
+                className={cn(field, "flex-1")}
+                value={words}
+                onChange={(e) => setWords(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && wordsChanged && !busy) onFixLine(card.line!, words);
+                }}
+              />
+              <Button size="sm" variant="outline" data-line-fix disabled={busy || !wordsChanged} onClick={() => onFixLine(card.line!, words)}>
+                Fix
+              </Button>
+            </label>
+            <span className="text-muted-foreground pl-[5.5rem]">Fixes the words in the song&apos;s lyrics (every platform, the captions); the timing stays.</span>
+          </div>
+        ) : null}
         {!lyric ? (
           <>
             <label className="flex items-center gap-2">
@@ -1183,7 +1227,7 @@ function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClos
         <label className="flex items-center gap-2">
           <span className="w-20">Font</span>
           <select data-card-font className={field} value={draft.font ?? ""} onChange={(e) => set("font", e.target.value || undefined)}>
-            <option value="">{role.font ? `the rule (${role.font})` : lyric ? "the recipe's" : `the brand's title font (${titleFont})`}</option>
+            <option value="">{role.font ? `the rule (${role.font})` : lyric ? "the theme's" : `the brand's title font (${titleFont})`}</option>
             {fonts.map((f) => (
               <option key={f} value={f} style={{ fontFamily: f }}>
                 {f}
@@ -1200,10 +1244,10 @@ function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClos
         <label className="flex items-center gap-2">
           <span className="w-20">Effect</span>
           <select data-card-effect className={field} value={effectName} onChange={(e) => set("effect", e.target.value ? (intensity === "balanced" ? e.target.value : `${e.target.value}:${intensity}`) : undefined)}>
-            <option value="">{role.effect ? `the rule (${role.effect})` : lyric ? "the recipe's" : "fade (as before)"}</option>
+            <option value="">{role.effect ? `the rule (${role.effect})` : lyric ? "the theme's" : "fade (as before)"}</option>
             {EFFECT_NAMES.map((n) => (
               <option key={n} value={n}>
-                {n}
+                {effectTitle(n)}
               </option>
             ))}
           </select>
@@ -1243,8 +1287,8 @@ function TemplateBar({ board, busy, onEdit, onOpen }: { board: TextboardData; bu
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2 text-xs" data-template-bar>
       <span className="text-muted-foreground">
-        Textboard{board.file ? "" : " (the brand's defaults)"}
-        {board.template ? ` · template "${board.template}"` : ""} · {board.cards.filter((c) => Object.keys(c.overrides).length).length} card(s) changed
+        Text layout{board.file ? "" : " (as the theme sets it)"}
+        {board.template ? ` · "${board.template}"` : ""} · {board.cards.filter((c) => Object.keys(c.overrides).length).length} card(s) changed
       </span>
       {(["title", "byline", "tagline"] as const).map((t) => (
         <button key={t} type="button" data-open-card={t} onClick={() => onOpen(t)} className="hover:bg-accent rounded-md border px-2 py-0.5">
@@ -1252,9 +1296,9 @@ function TemplateBar({ board, busy, onEdit, onOpen }: { board: TextboardData; bu
           {t}
         </button>
       ))}
-      <input data-template-name className={cn(field, "w-36")} value={name} placeholder="template name" onChange={(e) => setName(e.target.value)} />
+      <input data-template-name className={cn(field, "w-36")} value={name} placeholder="layout name" onChange={(e) => setName(e.target.value)} />
       <Button size="sm" variant="outline" data-template-save disabled={busy || !name.trim()} onClick={() => onEdit({ action: "save-template", name })}>
-        Save as template
+        Save this layout
       </Button>
       {board.templates.length ? (
         <>
@@ -1266,11 +1310,11 @@ function TemplateBar({ board, busy, onEdit, onOpen }: { board: TextboardData; bu
             ))}
           </select>
           <Button size="sm" variant="outline" data-template-apply-button disabled={busy || !apply} onClick={() => onEdit({ action: "apply-template", name: apply })}>
-            Apply template
+            Use this layout
           </Button>
         </>
       ) : (
-        <span className="text-muted-foreground">no templates for {board.artist} yet</span>
+        <span className="text-muted-foreground">no saved text layouts for {board.artist} yet</span>
       )}
       {board.orphans.length ? (
         <span className="text-amber-200" data-textboard-orphans>

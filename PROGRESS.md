@@ -4,6 +4,22 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Fix a lyric line's words on its card; effect names in the viewer ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026 ("how do i correct the text here directly?", and "pick an effect and
+  display immediately the effect name on the viewer").
+- **Line card → Text → Fix** (Shape, click a lyric line): the words are fixed in lyrics.txt (the old one
+  kept in .studio\replaced\, Restore in the Lyrics tab), for every platform and the captions. **The timing
+  is kept**: the stored alignment is carried over to the new words (lyrics-view.ts fixLyricLine, lrc.ts
+  retextLrcLine: respelled words keep their own times, more or fewer words share the line's sung span), so
+  nothing is aligned again; the line's hand-set start and its card's look follow the new words.
+- Line card wording: "the theme's" font / effect, plain effect names; "Text layout" with "Save this
+  layout" / "Use this layout" instead of templates.
+- **Motion**: gallery tiles show the effect's name big; pointing at or picking an effect shows its name
+  moving in that effect over the paused frame in the big viewer; pressing play plays the song with the
+  effect on the real lyrics.
+- Tests: retext-lrc.test.ts, lyrics-view.test.ts (fix keeps timing and hand-set start); browser: textboard
+  (Text → Fix), storyboard (effect name over the frame, gone on play), song-stages.
+
 ### Themes, step 6: lyric effects gallery, nine new effects, Emphasis word, title styles ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026 ("make all of them", with Canva MotionText / TypeCraft references).
 - **Motion** is compact: one effect picker; it opens a gallery of tiles (each plays the effect on your own
@@ -61,19 +77,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   of the Library has **Restore** (the song comes back with its videos, marks and settings).
 - Tests: song-delete.test.ts (rename and its folder, delete hides it from the Library and Themes, restore);
   browser: song-title.e2e.ts (title in place, folder follows, delete asks, Library without it, restore).
-
-### Themes, step 3: the Themes page and the theme on Library cards ✅ (to verify on the Windows PC)
-- Asked by the user on 31 Oct 2026 ("redesign the app around themes"). **Themes** is in the top menu
-  (Library · Themes · Collections · Releases): a Canva-style gallery of tall tiles, each theme on your newest
-  song's lyric lines in its fonts and colours; point at a tile and it plays. Filters: All · In use · Not used yet.
-  **+ New theme** (name first, start from any theme). Deleted themes come back with Restore.
-- Click a tile for its **detail view**: the theme playing large, its name, **Designer** (the credit, for themes
-  you buy or sell later) and **About**, the songs that use it, **Use this theme for the song** (pick a song),
-  **Edit** (opens the theme editor on a song with that theme shown; Save changes that theme only), Duplicate,
-  Delete (not while songs use it), and **More like this**.
-- **Library cards** now show each song's theme under the artist.
-- Tests: themes.e2e.ts (new browser test: menu, cards, gallery, hover plays, new theme, designer, use for a
-  song, filters, duplicate, delete, restore, edit on a song and save); themes.test.ts unchanged (pass).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

@@ -1,6 +1,6 @@
 // The song page's Lyrics tab. GET: every line (stamp, start now, what the viewer sees, flags) and
 // lyrics.txt with its label lines. POST { action: "times", changes: [{ number, ms | null }] }: hand-set
-// starts into hints.lrc (the stored alignment is kept); { action: "text", text }: a new lyrics.txt (the
+// starts into hints.lrc (the stored alignment is kept); { action: "fix-line", number, text }: one line's words fixed, its timing kept (Shape's line card); { action: "text", text }: a new lyrics.txt (the
 // old one kept in .studio\replaced\); { action: "restore", file }: an earlier lyrics.txt back;
 // { action: "ear", number, checked }: "checked by ear" on a line (clears its timing warnings in QA);
 // { action: "reset-all" | "undo-reset" | "dismiss-reset" }: every hand-set start back to the (stem's)
@@ -8,7 +8,7 @@
 // { action: "anchors", anchors: [{ line, clip, clipIn?, transition? }], gapOrder? }: story anchors in song.json.
 import { connection } from "next/server";
 
-import { lyricsView, resetHandTimes, restoreLyrics, saveAnchors, saveHandTimes, saveLyricsText, setCheckedByEar } from "@lyric/video/lyrics-view";
+import { lyricsView, resetHandTimes, restoreLyrics, saveAnchors, saveHandTimes, saveLyricsText, fixLyricLine, setCheckedByEar } from "@lyric/video/lyrics-view";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
@@ -40,6 +40,7 @@ export async function POST(request: Request, { params }: Params) {
       return Response.json({ count: await withWorkspaceAsync((ws) => resetHandTimes(ws, id, action)) });
     }
     if (body.action === "text") return Response.json(withWorkspace((ws) => saveLyricsText(ws, id, String(body.text ?? ""))));
+    if (body.action === "fix-line") return Response.json(await withWorkspaceAsync((ws) => fixLyricLine(ws, id, Number(body.number), String(body.text ?? ""))));
     if (body.action === "restore") return Response.json(withWorkspace((ws) => restoreLyrics(ws, id, String(body.file ?? ""))));
     return Response.json({ error: "Unknown action." }, { status: 400 });
   } catch (error) {

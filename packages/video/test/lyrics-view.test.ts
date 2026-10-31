@@ -10,7 +10,7 @@ import { absPath, ffmpegBin, openWorkspace, project, type Workspace } from "@lyr
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { anchorsText, createSong, ensureAlignment, keepReplaced, labelLines, lyricsView, readRecipe, restoreLyrics, saveAnchors, saveHandTimes, saveLyricsText, setCheckedByEar, songPathsById, type AlignRunner } from "../src/node";
+import { anchorsText, createSong, ensureAlignment, keepReplaced, labelLines, lyricsView, readRecipe, restoreLyrics, saveAnchors, saveHandTimes, saveLyricsText, fixLyricLine, setCheckedByEar, songPathsById, type AlignRunner } from "../src/node";
 
 const LRC = [
   "[01:05.00]<01:05.00>The verse <01:06.00>line <01:08.40>",
@@ -187,5 +187,25 @@ describe("the Lyrics tab", () => {
     const all = (await lyricsView(ws, id)).replaced;
     expect(all.some((r) => /\.\d+-lyrics\.txt$/.test(r.file))).toBe(true);
     for (const r of all) expect(() => restoreLyrics(ws, id, r.file)).not.toThrow();
+  });
+  it("fixing one line's words where it is shown keeps its timing (no new alignment) and its hand-set start", async () => {
+    const paths = songPathsById(ws, id);
+    saveLyricsText(ws, id, LYRICS);
+    expect((await lyricsView(ws, id)).lines).not.toBeNull();
+    await saveHandTimes(ws, id, [{ number: 3, ms: 73_500 }]);
+    const before = aligned;
+    expect(await fixLyricLine(ws, id, 3, "Next  verses ")).toEqual({ changed: true, timingKept: true });
+    expect(await fixLyricLine(ws, id, 2, "You had a heart for us two")).toEqual({ changed: true, timingKept: true });
+    expect(await fixLyricLine(ws, id, 2, "You had a heart for us two")).toEqual({ changed: false, timingKept: true });
+    expect(readFileSync(paths.lyricsTxt, "utf8")).toBe("The verse line\n* You had a heart for us two\nNext verses\nAfter the solo\n");
+    const v = await lyricsView(ws, id);
+    expect(aligned).toBe(before); // nothing aligned again
+    expect(v.lines!.map((l) => l.text)).toEqual(["The verse line", "You had a heart for us two", "Next verses", "After the solo"]);
+    expect(v.lines![1].alignedMs).toBe(68_500);
+    expect(v.lines![1].isHook).toBe(true);
+    expect(v.lines![2]).toMatchObject({ alignedMs: 73_000, startMs: 73_500, source: "hand" }); // the hand-set start followed its words
+    await expect(fixLyricLine(ws, id, 9, "x")).rejects.toThrow(/no line 9/);
+    await expect(fixLyricLine(ws, id, 1, "  ")).rejects.toThrow(/can't be empty/);
+    await saveHandTimes(ws, id, [{ number: 3, ms: null }]);
   });
 });

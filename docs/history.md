@@ -4,6 +4,19 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Themes, step 3: the Themes page and the theme on Library cards ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026 ("redesign the app around themes"). **Themes** is in the top menu
+  (Library · Themes · Collections · Releases): a Canva-style gallery of tall tiles, each theme on your newest
+  song's lyric lines in its fonts and colours; point at a tile and it plays. Filters: All · In use · Not used yet.
+  **+ New theme** (name first, start from any theme). Deleted themes come back with Restore.
+- Click a tile for its **detail view**: the theme playing large, its name, **Designer** (the credit, for themes
+  you buy or sell later) and **About**, the songs that use it, **Use this theme for the song** (pick a song),
+  **Edit** (opens the theme editor on a song with that theme shown; Save changes that theme only), Duplicate,
+  Delete (not while songs use it), and **More like this**.
+- **Library cards** now show each song's theme under the artist.
+- Tests: themes.e2e.ts (new browser test: menu, cards, gallery, hover plays, new theme, designer, use for a
+  song, filters, duplicate, delete, restore, edit on a song and save); themes.test.ts unchanged (pass).
+
 ### Themes, step 2: building a theme ("+ New theme" and the theme editor) ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026 ("it's not clear how we build the themes", then "redesign the app around
   themes"). In Shape → Theme:

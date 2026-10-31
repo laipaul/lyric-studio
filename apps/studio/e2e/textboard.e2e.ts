@@ -103,6 +103,17 @@ async function main() {
     const line3 = board().cards.find((c: { id: string }) => c.id === "line-3");
     check(JSON.stringify(line3?.overrides) === JSON.stringify({ position: "upper", size: 1.5 }), `saved in textboard.json (${JSON.stringify(line3?.overrides)})`);
     check(!!(await page.$("[data-card='line-3'][data-changed]")), "planned again: the card is marked as changed");
+    // Fixing the line's words on its card: lyrics.txt gets them, the timing and the card's look stay.
+    await page.fill("[data-line-text]", "Through the long night");
+    await page.click("[data-line-fix]");
+    await page.waitForSelector("[data-textboard-notice]", { timeout: 60_000 });
+    await replanned();
+    check(readFileSync(paths.lyricsTxt, "utf8").split("\n")[2] === "Through the long night", "Text → Fix: the line's words are fixed in lyrics.txt");
+    check(((await page.textContent("[data-textboard-notice]")) ?? "").includes("its timing is kept"), "…its timing is kept (no new alignment)");
+    const fixed = board().cards.find((c: { id: string }) => c.id === "line-3");
+    check(fixed?.text === "Through the long night" && JSON.stringify(fixed?.overrides) === JSON.stringify({ position: "upper", size: 1.5 }), `…the card keeps its look (${JSON.stringify(fixed)})`);
+    await page.waitForSelector("[data-lyric='Through the long night']", { timeout: 30_000 }).catch(() => {});
+    check(!!(await page.$("[data-lyric='Through the long night']")), "…and the video shows the new words");
 
     // The title card, shown on Reels too.
     await page.click("[data-open-card='title']");
@@ -133,7 +144,7 @@ async function main() {
     await page.waitForSelector("[data-textboard-notice]");
     const tplFile = path.join(wsDir, "templates", "Life Lyrics", "Clean.json");
     const tpl = existsSync(tplFile) ? readFileSync(tplFile, "utf8") : "";
-    check(tpl.includes('"show": true') && !tpl.includes("Through the night") && !tpl.includes("Text Board"), "the template keeps the design without the words");
+    check(tpl.includes('"show": true') && !tpl.includes("Through the long night") && !tpl.includes("Text Board"), "the template keeps the design without the words");
     check(((await page.textContent("[data-textboard-notice]")) ?? "").includes("1 change(s) on single lyric lines"), "and says the line's own change is not part of it");
     await page.click("[data-template-apply-button]");
     await replanned();

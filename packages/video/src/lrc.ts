@@ -114,3 +114,44 @@ export function cleanLrc(lines: readonly TimedLine[], meta: { title: string; art
   });
   return `${out.join("\n")}\n`;
 }
+
+// A lyric line's words fixed by hand (a typo, a word heard wrong), its timing kept: the `number`-th sung
+// line of an LRC (1-based, in time order) gets `text`. With word tags, words that stay as many keep their
+// own times; a different number of words shares the line's sung span evenly (from its first word to where
+// it stops singing). Stamps, the hook marker and the line's end stay as they were.
+const pad2 = (n: number) => String(n).padStart(2, "0");
+export function lrcTag(ms: number): string {
+  const cs = Math.max(0, Math.round(ms / 10));
+  return `${pad2(Math.floor(cs / 6000))}:${((cs % 6000) / 100).toFixed(2).padStart(5, "0")}`;
+}
+export function retextLrcLine(content: string, number: number, text: string): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) throw new Error("The line's new text is empty.");
+  const rows = content.split(/(?<=\n)/);
+  const sung = rows
+    .map((raw, index) => {
+      const times = [...raw.matchAll(STAMP)];
+      const body = raw.replace(STAMP, "").trim();
+      return { index, ms: times.length ? tagMs(times[0][1], times[0][2]) : -1, times: times.length, body };
+    })
+    .filter((r) => r.times === 1 && r.body.replace(HOOK_MARKER, "").replace(WORD_TAG, "").trim())
+    .sort((a, b) => a.ms - b.ms || a.index - b.index);
+  const row = sung[number - 1];
+  if (!row) throw new Error(`There is no line ${number} in the timing.`);
+  const raw = rows[row.index];
+  const eol = raw.match(/\r?\n$/)?.[0] ?? "";
+  const prefix = raw.match(/^\s*(?:\[\d+:\d{1,2}(?:\.\d{1,3})?\])+/)?.[0] ?? "";
+  const hook = HOOK_MARKER.test(row.body) ? "* " : "";
+  const old = splitWords(row.body.replace(HOOK_MARKER, "").trim());
+  let body: string;
+  if (!old.words?.length) body = words.join(" ");
+  else {
+    const from = old.words[0].start_ms;
+    const last = old.words[old.words.length - 1].start_ms;
+    const to = old.sung_end_ms ?? last + Math.max(200, old.words.length > 1 ? (last - from) / (old.words.length - 1) : 400);
+    const starts = words.length === old.words.length ? old.words.map((w) => w.start_ms) : words.map((_, k) => Math.round(from + ((to - from) * k) / words.length));
+    body = `${words.map((w, k) => `<${lrcTag(starts[k])}>${w}`).join(" ")}${old.sung_end_ms !== undefined ? ` <${lrcTag(old.sung_end_ms)}>` : ""}`;
+  }
+  rows[row.index] = `${prefix}${hook}${body}${eol}`;
+  return rows.join("");
+}

@@ -4,6 +4,7 @@
 // verdict, and lines of lyrics.txt that look like labels, titles or credits. Saving nudges writes
 // hand-set lines into hints.lrc (the stored alignment is kept); editing the text keeps the old
 // lyrics.txt in .studio\replaced\ (words changed = aligned again on the next make).
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -15,7 +16,7 @@ import { applyDownbeatOffset } from "../beats";
 import { lyricFrames, rawLyric, type RenderBase } from "../compose";
 import { VIDEO } from "../config";
 import { parseHandTimes, withHandTimes } from "../hand-times";
-import { HOOK_MARKER, normalizeLyric, type TimedLine } from "../lrc";
+import { HOOK_MARKER, normalizeLyric, retextLrcLine, type TimedLine } from "../lrc";
 import { STRETCHED_WORD_MS, applyGuard, flagReason, likelyStart, type GuardMove } from "../vocal-guard";
 import { CHECKED_BY_EAR_FILE, checkedByEar, type EarCheck } from "../checked-by-ear";
 import { loadBrand } from "./brand";
@@ -26,8 +27,9 @@ import { keepReplaced, rememberedCollection } from "./project-settings";
 import { readRecipe, writeRecipe } from "./recipe";
 import { songPathsById } from "./song-folder";
 import { dismissHandReset, noteHandTimesSaved, readHandRecord, resetAllHandTimes, resetHandTimesMadeBeforeStem, undoHandReset, type HandReset } from "./hand-reset";
-import { DEMUCS, resolveVoiceSource } from "./voice-source";
-import { applyHandSet, ensureAlignment, matchReport, wordsOfLyrics, type AlignRunner, type Alignment, type VocalGuard } from "./song-project";
+import { DEMUCS, resolveVoiceSource, voiceKey } from "./voice-source";
+import { readTextboard, writeTextboard } from "./textboard";
+import { alignKey, applyHandSet, ensureAlignment, matchReport, wordsOfLyrics, type AlignRunner, type Alignment, type VocalGuard } from "./song-project";
 
 export type LyricsLine = {
   number: number;
@@ -101,7 +103,7 @@ const refuse: AlignRunner = async () => {
 };
 
 // The song's stored alignment for its current lyrics.txt and hints (en, else fr); never aligns.
-async function storedAlignment(ws: Workspace, projectId: string): Promise<{ alignment: Alignment; hints: string | null } | null> {
+async function storedAlignment(ws: Workspace, projectId: string): Promise<{ alignment: Alignment; hints: string | null; lang: string } | null> {
   const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
   if (!p?.audio_path || !p.audio_hash) return null;
   const paths = songPathsById(ws, projectId);
@@ -115,7 +117,7 @@ async function storedAlignment(ws: Workspace, projectId: string): Promise<{ alig
     for (const lang of ["en", "fr"]) {
       try {
         const alignment = await ensureAlignment(ws, sp, { lyricsTxt: paths.lyricsTxt, hint: hints ?? undefined, lang, durationMs: p.duration_ms ?? 600_000, align: refuse, voice: v });
-        return { alignment, hints };
+        return { alignment, hints, lang };
       } catch {
         // not aligned in this language
       }
@@ -333,6 +335,66 @@ export function saveLyricsText(ws: Workspace, projectId: string, text: string): 
   if (old) keepReplaced(paths.root, paths.lyricsTxt, true);
   writeFileSync(paths.lyricsTxt, normalised);
   return { changed: true, realign: wordsOfLyrics(old) !== wordsOfLyrics(normalised) };
+}
+
+// One lyric line's words fixed where it is shown (Shape → a line's card): lyrics.txt gets the new words
+// (the old file kept in .studio\replaced\, Restore in the Lyrics tab), and the stored timing is carried
+// over to the new words, so nothing is aligned again and the line keeps its start and end (respelled words
+// keep their own times; more or fewer words share the line's sung span). Its hand-set start and its
+// Textboard card follow the new words. Every platform and the captions use the new words.
+export async function fixLyricLine(ws: Workspace, projectId: string, number: number, text: string): Promise<{ changed: boolean; timingKept: boolean }> {
+  const paths = songPathsById(ws, projectId);
+  if (paths.legacy) throw new Error("This song has no folder yet: run the migration first (pnpm songs:migrate).");
+  const words = text.replace(/\s+/g, " ").trim();
+  if (!words) throw new Error("The line can't be empty: remove it in the Lyrics tab instead.");
+  if (!existsSync(paths.lyricsTxt)) throw new Error("This song has no lyrics yet.");
+  const old = readFileSync(paths.lyricsTxt, "utf8");
+  const rows = old.replace(/\r\n/g, "\n").split("\n");
+  const sung = rows.flatMap((r, i) => (r.trim() ? [i] : []));
+  const at = sung[number - 1];
+  if (at === undefined) throw new Error(`There is no line ${number}.`);
+  const hook = HOOK_MARKER.test(rows[at].trim());
+  if (rows[at].trim().replace(HOOK_MARKER, "") === words) return { changed: false, timingKept: true };
+  const stored = await storedAlignment(ws, projectId); // before lyrics.txt changes: the timing of the old words
+  rows[at] = `${hook ? "* " : ""}${words}`;
+  saveLyricsText(ws, projectId, rows.join("\n"));
+  const textNow = readFileSync(paths.lyricsTxt, "utf8");
+  let timingKept = false;
+  if (stored && stored.alignment.source !== "given" && stored.alignment.source !== "story" && stored.alignment.lines[number - 1]) {
+    const a = stored.alignment;
+    const dir = path.dirname(a.lrcFile);
+    const key = alignKey(wordsOfLyrics(textNow), a.hint?.hash ?? "", stored.lang, voiceKey(a.voice));
+    const name = path.basename(a.lrcFile).replace(`aligned-${a.key}-`, `aligned-${key}-`);
+    if (key !== a.key && name !== path.basename(a.lrcFile)) {
+      const lrc = retextLrcLine(readFileSync(a.lrcFile, "utf8"), number, words);
+      if (a.report) {
+        const entry = matchReport(a.lines, a.report)[number - 1];
+        const report = { ...a.report, lines: a.report.lines.map((r) => (r === entry ? { ...r, text: words } : r)) };
+        writeFileSync(path.join(dir, name.replace(/\.lrc$/, ".report.json")), `${JSON.stringify(report, null, 2)}\n`);
+      }
+      writeFileSync(path.join(dir, name), lrc);
+      // The vocal-start check's moves are per line number: they still hold.
+      const guard = path.join(dir, `guard-${a.lrcHash.slice(0, 12)}.json`);
+      if (existsSync(guard)) writeFileSync(path.join(dir, `guard-${createHash("sha256").update(lrc).digest("hex").slice(0, 12)}.json`), readFileSync(guard));
+      timingKept = true;
+    }
+  }
+  // The line's hand-set start follows its words.
+  if (paths.hints && existsSync(paths.hints)) {
+    const current = readFileSync(paths.hints, "utf8");
+    const times = parseHandTimes(current);
+    if (times.some((t) => t.number === number)) {
+      const next = withHandTimes(current, times.map((t) => (t.number === number ? { ...t, text: words } : t)));
+      if (next !== current) {
+        keepReplaced(paths.root, paths.hints, true);
+        writeFileSync(paths.hints, next);
+      }
+    }
+  }
+  // Its Textboard card (place, size, effect…) stays with it.
+  const board = readTextboard(paths.root);
+  if (board?.cards.some((c) => c.id === `line-${number}`)) writeTextboard(paths.root, { ...board, cards: board.cards.map((c) => (c.id === `line-${number}` ? { ...c, text: words } : c)) });
+  return { changed: true, timingKept };
 }
 
 // An earlier version of the lyrics in .studio\replaced\: "<time>-<its own name>.txt".
