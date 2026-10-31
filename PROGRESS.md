@@ -11,6 +11,8 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   forward, end, time, Speed, Loop, volume, full screen), Follow and Zoom, the verdict and Next: Make. The
   summary line and the hint follow under it. It all fits on one screen, for 9:16 and for 16:9 (YouTube: pick
   it under Platform; the wide viewer gets the same height).
+- A YouTube video in the cover layout has no clip shots (your cover art plays the whole song): the empty
+  shots lane now says so, with a link to This song → YouTube layout to build it from clips instead.
 - Tests: storyboard.e2e.ts (viewer, timeline and command bar on one 1440×1000 screen for Reels and for
   YouTube; the bar holds the source, the transport, Follow / Zoom and Next: Make; nothing between the viewer
   and the timeline).

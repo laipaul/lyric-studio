@@ -624,6 +624,21 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                   ))}
                 </div>
                 <div className="relative h-24" data-shots-row>
+                  {!view.shots.length ? (
+                    <div className="text-muted-foreground sticky left-2 inline-flex h-full max-w-xl items-center px-3 text-xs" data-no-shots>
+                      {view.platform.name === "youtube" ? (
+                        <span>
+                          No clip shots: this YouTube video shows your cover art for the whole song (the cover layout). To build it from your clips instead, open{" "}
+                          <button type="button" className="text-foreground underline underline-offset-2" onClick={(e) => { e.stopPropagation(); setPanel("song"); }} data-open-song>
+                            This song
+                          </button>{" "}
+                          and set the YouTube layout to clips.
+                        </span>
+                      ) : (
+                        <span>No clip shots in this video.</span>
+                      )}
+                    </div>
+                  ) : null}
                   {view.shots.map((s) => (
                     <ShotBlock
                       key={s.index}

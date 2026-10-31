@@ -356,6 +356,9 @@ async function main() {
     const vw = await (await page.waitForSelector("[data-viewer]", { timeout: 60_000 })).boundingBox();
     const wideFit = await fits();
     check(!!vw && vw.width > vw.height * 1.7 && wideFit.ok, `16:9: the wide viewer (${Math.round(vw?.width ?? 0)}×${Math.round(vw?.height ?? 0)}), timeline and command bar on one screen`);
+    check(((await page.textContent("[data-no-shots]").catch(() => null)) ?? "").includes("cover art"), "YouTube cover layout: the empty shots lane says why (your cover art, not clips)");
+    await page.click("[data-open-song]");
+    check(!!(await page.waitForSelector("[data-shape-panel=song] [data-field=youtubeLayout]", { timeout: 5000 }).catch(() => null)), "…and its This song link opens the YouTube layout setting");
     await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "storyboard-youtube.png") });
     check(existsSync(songFile), "the song file is untouched");
     await browser.close();
