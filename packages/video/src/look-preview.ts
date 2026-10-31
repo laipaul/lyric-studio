@@ -55,7 +55,7 @@ export function previewFace(fonts: readonly CatalogFont[], family: string, weigh
 }
 
 // What "Set effect" tries (not saved until Save to recipe), kept per song in sessionStorage.
-export type TriedAddOns = { heldGlow: boolean; chorusLift: boolean; shine: boolean };
+export type TriedAddOns = { heldGlow: boolean; chorusLift: boolean; shine: boolean; emphasis?: boolean };
 export type TriedBreathe = "off" | "gentle" | "beat";
 export type TriedEffect = { name: string; intensity: Intensity; breathe: TriedBreathe; addOns: TriedAddOns };
 export const triedKey = (projectId: string) => `lyric-effect-try:${projectId}`;
@@ -68,7 +68,7 @@ export function parseTried(raw: string | null, effectNames: readonly string[]): 
     const a = (t.addOns ?? {}) as Partial<TriedAddOns>;
     if (typeof t.name !== "string" || !effectNames.includes(t.name)) return null;
     if (!INTENSITIES.includes(t.intensity as Intensity) || !["off", "gentle", "beat"].includes(t.breathe as string)) return null;
-    return { name: t.name, intensity: t.intensity as Intensity, breathe: t.breathe as TriedBreathe, addOns: { heldGlow: a.heldGlow === true, chorusLift: a.chorusLift === true, shine: a.shine === true } };
+    return { name: t.name, intensity: t.intensity as Intensity, breathe: t.breathe as TriedBreathe, addOns: { heldGlow: a.heldGlow === true, chorusLift: a.chorusLift === true, shine: a.shine === true, emphasis: a.emphasis === true } };
   } catch {
     return null;
   }

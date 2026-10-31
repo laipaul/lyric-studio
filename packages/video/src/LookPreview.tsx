@@ -61,6 +61,7 @@ export function LookPreview(p: LookPreviewProps) {
           heldGlow: p.addOns.heldGlow,
           chorusLift: p.addOns.chorusLift,
           shine: p.addOns.shine,
+          emphasis: p.addOns.emphasis,
           downbeats,
         }}
         style={style}

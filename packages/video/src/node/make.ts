@@ -144,6 +144,7 @@ export type MakeOptions = {
   heldGlow?: "off" | "on"; // a held note's word brightens while it is held
   chorusLift?: "off" | "on"; // the first line of each chorus arrives a touch bigger and brighter
   shine?: "off" | "on"; // one soft light sweep across each chorus line, on a downbeat
+  emphasis?: "off" | "on"; // the key word of each line in the hook font, bigger, in the accent
   titleOpening?: "off" | "on"; // Reels / TikTok / Shorts: title, byline and tagline before the first hook
   // The theme's picture (src/picture.ts; recipe textColour, grade, vignette, textBacking, fallback,
   // fallbackColour, gradeCanvas). Absent (pnpm make without a song.json): the videos as before.
@@ -584,6 +585,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       heldGlow: recipe.values.heldGlow,
       chorusLift: recipe.values.chorusLift,
       shine: recipe.values.shine,
+      emphasis: recipe.values.emphasis,
       titleOpening: recipe.values.titleOpening,
       picture: pictureFields(recipe.values),
       tempo: recipe.values.tempo ?? undefined,
@@ -918,7 +920,7 @@ function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: Pl
   const length = lengthFor(base, r.values.length, sh.analysis.duration_ms);
   if (length.note) sh.log(`${base.name}: ${length.note}`);
   const section = r.values.section === "auto" && length.wholeSong ? "full" : r.values.section;
-  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined, shotLength: r.values.shotLength ?? undefined, ending: r.values.ending, transitions: r.values.transitions, paceShift: r.values.paceShift, readability: r.values.readability, breathe: r.values.breathe, heldGlow: r.values.heldGlow, chorusLift: r.values.chorusLift, shine: r.values.shine, titleOpening: r.values.titleOpening, ...(sh.options.picture ? { picture: pictureFields(r.values) } : {}) };
+  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined, shotLength: r.values.shotLength ?? undefined, ending: r.values.ending, transitions: r.values.transitions, paceShift: r.values.paceShift, readability: r.values.readability, breathe: r.values.breathe, heldGlow: r.values.heldGlow, chorusLift: r.values.chorusLift, shine: r.values.shine, emphasis: r.values.emphasis, titleOpening: r.values.titleOpening, ...(sh.options.picture ? { picture: pictureFields(r.values) } : {}) };
   const own = PLATFORM_FIELDS.filter((k) => r.sources[k].includes(":"));
   if (own.length) sh.log(`${preset.name}: recipe ${own.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]})`).join(", ")}`);
   const out: Shared = {
@@ -1242,6 +1244,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     ...(options.heldGlow === "on" ? { heldGlow: true } : {}),
     ...(options.chorusLift === "on" ? { chorusLift: true } : {}),
     ...(options.shine === "on" ? { shine: true, downbeats: barFrames } : {}),
+    ...(options.emphasis === "on" ? { emphasis: true } : {}),
   };
   // A line whose singing is over but which is still on screen at the start (it lingers until the
   // next stamp) is not shown, so the video never opens on the tail of the previous line.

@@ -95,6 +95,7 @@ export type LyricEffectsProps = {
   heldGlow?: boolean;
   chorusLift?: boolean;
   shine?: boolean;
+  emphasis?: boolean; // the key word of each line in the hook font, bigger, in the accent (src/effects/accents.ts emphasisWord)
   downbeats?: number[];
 };
 

@@ -6,6 +6,7 @@ import { useCurrentFrame, useVideoConfig } from "remotion";
 
 import { lyricScene, sceneTimeline, wordTimings } from "./effects/scene";
 import { kineticAt, kineticGroups } from "./effects/trending";
+import { EMPHASIS_SCALE, emphasisWord } from "./effects/accents";
 import { ascendLetter } from "./effects/ascend";
 import { inkMask } from "./effects/ink";
 import { AMOUNT } from "./effects/types";
@@ -151,6 +152,12 @@ export function LyricScene(props: {
         const rise = look.rise ? Math.min(1, look.rise) : 0;
         const kinetic = t0(item) && item.role !== "next" ? kineticBlock(line, layout, item, frame, font, area) : null;
         let w = 0;
+        let pw = 0; // the plain text's word counter (Emphasis word)
+        // Emphasis word: the line's key word in the hook font, a touch bigger, in the accent colour.
+        const allWords = layout.lines.join(" ").split(" ");
+        const emph = effects.emphasis && item.role !== "next" ? emphasisWord(allWords, line.words?.length === allWords.length ? line.words : null) : -1;
+        const hookFace = props.hookFont ? { fontFamily: `"${props.hookFont.font}", sans-serif`, fontWeight: props.hookFont.weight, fontStyle: props.hookFont.italic ? "italic" : "normal" } : {};
+        const emphStyle: CSSProperties = { ...hookFace, color: effects.accent };
         return (
           <div
             key={`${line.startFrame}-${item.index}`}
@@ -183,6 +190,7 @@ export function LyricScene(props: {
               <div key={r} style={{ whiteSpace: "nowrap", ...(props.backing === "box" && item.role !== "next" ? BOX_ROW : {}), ...(look.reveal !== undefined ? rowMask(layout.lines, r, look.reveal) : {}) }}>
                 {item.words
                   ? text.split(" ").map((word, k) => {
+                      const isEm = w === emph;
                       const wl = item.words![w++] ?? item.words![item.words!.length - 1];
                       const letters = [...word];
                       const shown = Math.round(letters.length * wl.chars);
@@ -191,10 +199,12 @@ export function LyricScene(props: {
                           {k > 0 ? " " : null}
                           <span
                             data-word={word}
+                            data-emphasis={isEm || undefined}
                             style={{
                               display: "inline-block",
                               opacity: wl.opacity,
-                              transform: wl.y || wl.scale !== 1 ? `translateY(${wl.y.toFixed(2)}px) scale(${wl.scale.toFixed(4)})` : undefined,
+                              ...(isEm ? emphStyle : {}),
+                              transform: wl.y || wl.scale !== 1 || isEm ? `translateY(${wl.y.toFixed(2)}px) scale(${(wl.scale * (isEm ? EMPHASIS_SCALE : 1)).toFixed(4)})` : undefined,
                               filter: wl.blur > 0.01 ? `blur(${wl.blur.toFixed(2)}px)` : undefined,
                               color: wl.accent > 0.001 ? mixColour(colour, effects.accent, wl.accent) : (wl.glow ?? 0) > 0.001 ? mixColour(colour, effects.accent, 0.35 * wl.glow!) : undefined,
                               textShadow: (wl.glow ?? 0) > 0.001 ? `${shadows.join(", ")}, 0 0 ${Math.round(14 + 30 * wl.glow!)}px ${rgba(effects.accent, 0.9 * wl.glow!)}, 0 0 ${Math.round(4 + 8 * wl.glow!)}px ${rgba("#ffffff", 0.7 * wl.glow!)}` : undefined,
@@ -211,7 +221,23 @@ export function LyricScene(props: {
                     ? waveLetters(layout.lines, r, look.wave, AMOUNT[(line.card?.effect ?? (line.isHook ? effects.hook : effects.verse)).intensity] ?? 1)
                     : look.ripple !== undefined
                       ? rippleLetters(layout.lines, r, look.ripple, look.rippleAmp ?? 6)
-                      : text}
+                      : emph >= 0
+                        ? text.split(" ").map((word, k) => {
+                            const isEm = pw++ === emph;
+                            return (
+                              <span key={k}>
+                                {k > 0 ? " " : null}
+                                {isEm ? (
+                                  <span data-emphasis style={{ display: "inline-block", ...emphStyle, transform: `scale(${EMPHASIS_SCALE})` }}>
+                                    {word}
+                                  </span>
+                                ) : (
+                                  word
+                                )}
+                              </span>
+                            );
+                          })
+                        : text}
               </div>
             ))}
             </div>

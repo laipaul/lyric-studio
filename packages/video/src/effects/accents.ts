@@ -40,3 +40,18 @@ export function shineAt(frame: number, startFrame: number, endFrame: number, dow
   if (at === undefined || frame < at || frame > at + SHINE_FRAMES) return undefined;
   return EASINGS["ease-in-out"]((frame - at) / SHINE_FRAMES);
 }
+
+// Emphasis word (recipe emphasis "on"): the key word of a line, drawn in the hook font, a touch bigger and
+// in the accent colour. The word the singer holds longest (with the aligned word times), else the longest
+// word; never a small word ("the", "and", "you"...). -1 when the line has no word worth it.
+const SMALL = new Set(["the", "and", "you", "your", "for", "but", "are", "was", "with", "that", "this", "from", "into", "onto", "its", "it's", "i'm", "i'll", "she", "her", "him", "his", "they", "them", "our", "not", "all", "can", "will", "just", "when", "what", "who", "how", "then", "than", "there", "here", "have", "has", "had", "been", "were", "a", "an", "to", "of", "in", "on", "at", "is", "be", "me", "my", "we", "us", "so", "oh", "or", "if", "do", "no", "by", "up"]);
+const bare = (w: string) => w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
+export function emphasisWord(words: readonly string[], timings?: readonly { startFrame: number; endFrame: number }[] | null): number {
+  const ok = words.map((w) => bare(w).length >= 3 && !SMALL.has(bare(w)));
+  if (!ok.some(Boolean)) return -1;
+  const score = (k: number) => (timings && timings.length === words.length ? timings[k].endFrame - timings[k].startFrame : 0) * 100 + bare(words[k]).length;
+  let best = -1;
+  for (let k = 0; k < words.length; k++) if (ok[k] && (best < 0 || score(k) > score(best))) best = k;
+  return best;
+}
+export const EMPHASIS_SCALE = 1.12;

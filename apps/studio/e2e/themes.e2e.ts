@@ -117,6 +117,7 @@ async function main() {
     await page.click("[data-theme-detail-edit]");
     await page.waitForSelector("[data-theme-editing='Night Drive copy']");
     check(((await page.textContent("[data-theme-editing]")) ?? "").includes("(shown on this song)"), "Edit opens the theme editor on a song, the theme shown on it");
+    await page.click("[data-effect-picker]");
     await page.click("[data-try-effect=ink]");
     await page.click("[data-theme-save]");
     await page.waitForSelector("[data-theme-editors]", { state: "detached" });

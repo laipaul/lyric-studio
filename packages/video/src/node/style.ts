@@ -66,6 +66,7 @@ export const FIELD_LABELS: Record<RecipeField, string> = {
   heldGlow: "Held-note glow",
   chorusLift: "Chorus lift",
   shine: "Shine (choruses)",
+  emphasis: "Emphasis word",
   titleOpening: "Title opening (Reels, TikTok, Shorts)",
   tagline: "Tagline",
   ep: "EP",
@@ -256,7 +257,7 @@ export type StyleAction = { action: "set" | "reset" | "lock" | "unlock" | "brand
 
 // "Use for all my songs" (the music-reactive add-ons and Breathe): the value in the artist's brand.json for
 // every platform with lyrics, and this song's own value removed so it follows the brand too.
-export const BRAND_ALL_FIELDS = ["breathe", "heldGlow", "chorusLift", "shine"] as const;
+export const BRAND_ALL_FIELDS = ["breathe", "heldGlow", "chorusLift", "shine", "emphasis"] as const;
 export function setBrandAllPlatforms(ws: Workspace, projectId: string, field: RecipeField, value: string): { file: string; platforms: string[] } {
   if (!(BRAND_ALL_FIELDS as readonly string[]).includes(field)) throw new Error(`${FIELD_LABELS[field]} cannot be set for all songs here.`);
   const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();

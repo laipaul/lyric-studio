@@ -313,6 +313,7 @@ async function main() {
 
     // A look change on the same page: the viewer shows it at once, the song's theme has it, the video is planned again.
     await openPanel(page, "effects");
+    await page.click("[data-effect-picker]");
     await page.click("[data-try-effect=spread]");
     await page.waitForFunction(() => document.querySelector("[data-viewer]")?.getAttribute("data-effect") === "spread", null, { timeout: 5000 }).catch(() => {});
     check((await page.getAttribute("[data-viewer]", "data-effect")) === "spread", "Set effect: the viewer plays the new verse effect at once");

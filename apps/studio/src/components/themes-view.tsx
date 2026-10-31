@@ -5,14 +5,14 @@
 // its detail view: the theme playing large, its name and designer credit, the songs that use it, "Use for a
 // song", "Edit" (opens the theme editor on a song: Shape → Theme), Duplicate, Delete (to themes\_removed\,
 // with Restore) and "More like this".
-import { Player } from "@remotion/player";
 import { ChevronDown, Pencil, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import { backingShadow, BOX_STYLE, fallbackBackground, gradeLook, LOOK_FPS, LookPreview, lookPreviewDuration, pictureOf, vignetteBackground, type LookPreviewProps } from "@lyric/video";
+import { backingShadow, BOX_STYLE, fallbackBackground, gradeLook, pictureOf, vignetteBackground } from "@lyric/video";
 import type { ThemeCard, ThemesPageData } from "@lyric/video/style";
 
+import { PreviewPlayer } from "@/components/preview-player";
 import { themePreview } from "@/components/shape-tools";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -197,23 +197,6 @@ function ThemeTile({ theme, data, onOpen }: { theme: ThemeCard; data: ThemesPage
         {theme.brandDefault !== null ? " · new songs start on it" : ""}
       </span>
     </button>
-  );
-}
-
-function PreviewPlayer({ input }: { input: LookPreviewProps }) {
-  return (
-    <Player
-      component={LookPreview}
-      inputProps={input}
-      durationInFrames={lookPreviewDuration(input.lyrics.length)}
-      fps={LOOK_FPS}
-      compositionWidth={1080}
-      compositionHeight={1920}
-      style={{ width: "100%", height: "100%" }}
-      autoPlay
-      loop
-      controls={false}
-    />
   );
 }
 

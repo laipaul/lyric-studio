@@ -245,13 +245,15 @@ async function main() {
     check(JSON.stringify(sections) === JSON.stringify(["text", "motion", "colours", "picture", "cards"]), `the theme editor: Text, Motion, Colours, Picture, Cards (${sections.join(", ")})`);
     check((await page.getAttribute("[data-effect-part]", "data-effect-part")) === "verse", "Set effect starts on Verses");
     const before = look("verseEffect");
+    await page.click("[data-effect-picker]"); // the effect picker opens the gallery
+    check(!!(await page.$("[data-effect-gallery] [data-effect-kind=Glitch]")), "the gallery has its filter chips");
     await page.click("[data-try-effect=typewriter]");
     await page.selectOption("[data-try-breathe]", "beat");
     await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-effect") === "typewriter" && document.querySelector("[data-look-preview]")?.getAttribute("data-breathe") === "beat");
     check((await page.$$eval("[data-look-preview] [data-lyric]", (e: Element[]) => e.length)) > 0, "the viewer shows the effect and Breathe at once");
     check(look("verseEffect") === before && !!(await page.$("[data-theme-unsaved]")), "…but nothing is saved yet ('not saved yet')");
     check((await page.$$("[data-look-preview]")).length === 1, "one viewer");
-    check((await page.$$("[data-effect-preview] .__remotion-player, [data-effect-preview] canvas, [data-effect-preview] [data-lyric]")).length === 0, "the Set effect panel has no player of its own");
+    check((await page.$$eval("[data-effect-preview] .__remotion-player, [data-effect-preview] canvas, [data-effect-preview] [data-lyric]", (e: Element[]) => e.filter((x) => !x.closest("[data-effect-gallery]")).length)) === 0, "the Set effect panel has no player of its own (only the gallery's tiles play)");
     await page.selectOption("[data-try-intensity]", "subtle");
     check(((await page.textContent("[data-set-effect]")) ?? "").includes("Verses: Typewriter (calm)"), "the panel names what verses use");
     // Choruses: the switch, then the effect goes to the hook effect; the verses keep theirs.
@@ -288,12 +290,12 @@ async function main() {
     check(await saved("accentColour", "#33AAFF"), "…and Save keeps it");
     // Picture: the grade, vignette, behind the words and the background without a clip; the viewer shows each click.
     await openPanel(page, "colour");
-    await page.click("[data-picture-option='grade-warm']");
+    await page.selectOption("[data-picture-select='grade']", "warm");
     await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-grade") === "warm");
     check(true, "Picture: the colour grade reaches the viewer at once");
-    await page.click("[data-picture-option='vignette-soft']");
-    await page.click("[data-picture-option='textBacking-box']");
-    await page.click("[data-picture-option='fallback-colour']");
+    await page.selectOption("[data-picture-select='vignette']", "soft");
+    await page.selectOption("[data-picture-select='textBacking']", "box");
+    await page.selectOption("[data-picture-select='fallback']", "colour");
     await page.waitForSelector("[data-field='fallbackColour']");
     check(true, "Background without a clip: Plain colour shows its colour row");
     await page.click("[data-picture-option='gradeCanvas']");
@@ -343,7 +345,7 @@ async function main() {
     await page.click("[data-stage=shape]");
     await openPanel(page, "effects");
     await page.waitForSelector("[data-effect-preview]");
-    check((await page.getAttribute("[data-try-effect=typewriter]", "aria-pressed")) === "true" && (await page.$eval("[data-try-breathe]", (s: Element) => (s as HTMLSelectElement).value)) === "beat", "Shape -> Make -> Shape: the saved effect and Breathe are there");
+    check((await page.getAttribute("[data-effect-picker]", "data-current")) === "typewriter" && (await page.$eval("[data-try-breathe]", (s: Element) => (s as HTMLSelectElement).value)) === "beat", "Shape -> Make -> Shape: the saved effect and Breathe are there");
     for (const w of [1280, 1366]) {
       await page.setViewportSize({ width: w, height: 1000 });
       await sleep(300);

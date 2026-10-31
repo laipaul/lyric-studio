@@ -6,21 +6,23 @@
 // it straight away and the video is planned again); locked settings are greyed out with a padlock. The ⋯
 // menu: "Use Breathe and add-ons for all my songs" (the artist's brand, asks first) and the per-platform
 // values.
-import { effectTitle, INTENSITIES, type Intensity } from "@lyric/video";
-import { Lock } from "lucide-react";
+import { EFFECT_CATEGORIES, EFFECT_KINDS, effectTitle, INTENSITIES, type Intensity, type LookPreviewProps } from "@lyric/video";
+import { ChevronDown, Lock } from "lucide-react";
 import { useState } from "react";
 
+import { PreviewPlayer } from "@/components/preview-player";
 import { RowMenu } from "@/components/row-menu";
 import { cn } from "@/lib/utils";
 
 export type EffectPart = "verse" | "hook";
-export type EffectValues = { verseEffect: string; hookEffect: string; breathe: "off" | "gentle" | "beat"; heldGlow: boolean; chorusLift: boolean; shine: boolean };
-type Field = "verseEffect" | "hookEffect" | "breathe" | "heldGlow" | "chorusLift" | "shine";
+export type EffectValues = { verseEffect: string; hookEffect: string; breathe: "off" | "gentle" | "beat"; heldGlow: boolean; chorusLift: boolean; shine: boolean; emphasis: boolean };
+type Field = "verseEffect" | "hookEffect" | "breathe" | "heldGlow" | "chorusLift" | "shine" | "emphasis";
 
 const ADD_ONS = [
   ["heldGlow", "Held-note glow", "a word sung for about a second or longer brightens in your accent colour while it is held"],
   ["chorusLift", "Chorus lift", "the first line of each chorus arrives a touch bigger and brighter, then eases back"],
   ["shine", "Shine", "one soft light sweep across each chorus line, on a downbeat"],
+  ["emphasis", "Emphasis word", "the key word of each line (the longest held) in the hook font, bigger and in the accent colour"],
 ] as const;
 const join = (name: string, i: string) => (i === "balanced" ? name : `${name}:${i}`);
 const paceWord = (i: string) => (i === "subtle" ? "calm" : i === "balanced" ? "normal" : "quick");
@@ -42,6 +44,7 @@ export function SetEffect({
   onBrandAll,
   perPlatformOpen,
   onPerPlatform,
+  preview,
 }: {
   effects: { name: string; label: string }[];
   values: EffectValues;
@@ -53,8 +56,12 @@ export function SetEffect({
   onBrandAll?: () => void; // themes: absent (a theme is shared by choosing it for other songs)
   perPlatformOpen: boolean;
   onPerPlatform: () => void;
+  preview?: (effect: string) => LookPreviewProps; // the gallery tile's live preview of one effect
 }) {
   const [asking, setAsking] = useState(false);
+  const [gallery, setGallery] = useState(false); // the effect gallery under the picker
+  const [kind, setKind] = useState<"All" | (typeof EFFECT_KINDS)[number]>("All");
+  const [hovered, setHovered] = useState<string | null>(null); // the tile playing
   const field = part === "verse" ? "verseEffect" : "hookEffect";
   const [name, intensity = "balanced"] = (values[field] || values.verseEffect).split(":");
   const effectLocked = locked.includes(field);
@@ -106,22 +113,60 @@ export function SetEffect({
         {part === "verse" ? "Verses" : "Choruses"}: {effectWords(values[field] || values.verseEffect)}. The viewer shows each click; Save keeps it.
         {effectLocked ? <span className="text-brand"> Locked for this song (unlock it in its ⋯ under Per platform).</span> : null}
       </p>
-      <div className="flex flex-wrap gap-1.5" title={effectLocked ? "Locked for this song" : undefined}>
-        {effects.map((e) => (
-          <button
-            key={e.name}
-            type="button"
-            data-try-effect={e.name}
-            title={e.label}
-            aria-pressed={name === e.name}
-            disabled={effectLocked}
-            onClick={() => onSet(field, join(e.name, intensity))}
-            className={cn("rounded-full border px-2.5 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50", name === e.name ? "border-brand bg-brand/15" : "text-muted-foreground hover:text-foreground")}
-          >
-            {effectTitle(e.name)}
-          </button>
-        ))}
-      </div>
+      {/* The effect: one picker; it opens the gallery (a live tile per effect, filter chips by kind). */}
+      <button
+        type="button"
+        data-effect-picker
+        data-current={name}
+        aria-expanded={gallery}
+        disabled={effectLocked}
+        onClick={() => setGallery((g) => !g)}
+        className="bg-background flex items-center gap-2 rounded-md border px-3 py-1.5 text-left disabled:opacity-50"
+      >
+        <span className="flex-1 font-medium">{effectTitle(name)}</span>
+        <span className="text-muted-foreground truncate text-xs">{effects.find((e) => e.name === name)?.label.split(" · ")[1] ?? ""}</span>
+        <ChevronDown className={cn("size-4 shrink-0 transition-transform", gallery && "rotate-180")} />
+      </button>
+      {gallery ? (
+        <div data-effect-gallery className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            {(["All", ...EFFECT_KINDS] as const).map((k) => (
+              <button key={k} type="button" data-effect-kind={k} aria-pressed={kind === k} onClick={() => setKind(k)} className={cn("rounded-full border px-2.5 py-0.5 text-xs", kind === k ? "border-brand bg-brand/15 text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                {k}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {effects
+              .filter((e) => kind === "All" || (EFFECT_CATEGORIES[e.name as keyof typeof EFFECT_CATEGORIES] ?? []).includes(kind))
+              .map((e) => (
+                <button
+                  key={e.name}
+                  type="button"
+                  data-try-effect={e.name}
+                  title={e.label}
+                  aria-pressed={name === e.name}
+                  onClick={() => onSet(field, join(e.name, intensity))}
+                  onMouseEnter={() => setHovered(e.name)}
+                  onMouseLeave={() => setHovered((h) => (h === e.name ? null : h))}
+                  className={cn("flex flex-col gap-1 rounded-md border p-1 text-left text-[11px]", name === e.name ? "border-brand bg-brand/10" : "hover:border-foreground/40")}
+                >
+                  <span className="relative block w-full overflow-hidden rounded bg-black" style={{ aspectRatio: "9 / 12" }}>
+                    {hovered === e.name && preview ? (
+                      <PreviewPlayer input={preview(join(e.name, intensity))} />
+                    ) : (
+                      <span className="absolute inset-0 flex items-center justify-center px-1 text-center text-sm text-white/90" style={{ background: "radial-gradient(circle at 50% 40%, #3a2630, #0b0b0d 75%)" }}>
+                        {effectTitle(e.name)}
+                      </span>
+                    )}
+                  </span>
+                  <span className="truncate font-medium">{effectTitle(e.name)}</span>
+                </button>
+              ))}
+          </div>
+          <p className="text-muted-foreground text-[11px]">Point at a tile to see it move; click it to use it. The big viewer shows it on your song.</p>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center gap-3 text-xs">
         <label className="flex items-center gap-2">
           {pace ? "Typing pace" : "Intensity"}

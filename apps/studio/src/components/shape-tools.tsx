@@ -37,7 +37,7 @@ const show = (v: unknown) => (v === null ? "preset" : Array.isArray(v) ? (v.leng
 // What the Shape page's viewer needs from the tools: the look to patch into the planned video until it is
 // planned again (or while a pairing is pointed at), and the stand-in preview when there is no plan.
 export type ShapeLook = { patch: LookPatch | null; fallback: LookPreviewProps; caption: string; previewing: string | null }; // previewing: the pairing pointed at
-const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "accentColour", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas"]);
+const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "emphasis", "accentColour", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas"]);
 
 // The Shape page's tool panels (the song's recipe, song.json), one at a time as chosen in the rail: Fonts
 // (font pairing, the fonts line with Fine-tune), Effects (Set effect with its Verses / Choruses switch),
@@ -390,11 +390,12 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
         </div>
       );
     }
-    if (f.field === "heldGlow" || f.field === "chorusLift" || f.field === "shine") {
+    if (f.field === "heldGlow" || f.field === "chorusLift" || f.field === "shine" || f.field === "emphasis") {
       const what = {
         heldGlow: "a word sung for about a second or longer brightens in your accent colour while it is held",
         chorusLift: "the first line of each chorus arrives a touch bigger and brighter, then eases back",
         shine: "one soft light sweep across each chorus line, on a downbeat",
+        emphasis: "the key word of each line in the hook font, bigger and in the accent colour",
       }[f.field];
       if (!platform) {
         // Set in "Set effect" above; only "Use for all my songs" (the brand) and the per-platform overrides are edited here.
@@ -694,6 +695,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                   locked={[]}
                   saved={false}
                   onSet={(field, value) => void act({ action: "set", field, value })}
+                  preview={(effect) => ({ ...lookOf(data, { dirty: false, hovered: null, pairView, part }).fallback, effect: patchChoice(effect, undefined) })}
                   perPlatformOpen={effectPlatforms}
                   onPerPlatform={() => {
                     const next = !effectPlatforms;
@@ -955,7 +957,7 @@ function lookOf(data: StyleData, s: { dirty: boolean; hovered: PairingCard | nul
   const verseEffect = fx.verseEffect;
   const hookEffect = fx.hookEffect || verseEffect;
   const breathe = fx.breathe;
-  const addOns = { heldGlow: fx.heldGlow, chorusLift: fx.chorusLift, shine: fx.shine };
+  const addOns = { heldGlow: fx.heldGlow, chorusLift: fx.chorusLift, shine: fx.shine, emphasis: fx.emphasis };
   const accent = String(value("accentColour") ?? "#E8A3B5");
   const colour = String(value("textColour") ?? s.pairView?.colour ?? "#FFFFFF");
   const picture = pictureOf({ grade: str(value("grade")), vignette: str(value("vignette")), textBacking: str(value("textBacking")), fallback: str(value("fallback")), fallbackColour: str(value("fallbackColour")), accentColour: accent });
@@ -1001,6 +1003,7 @@ function effectValuesOf(data: StyleData): EffectValues {
     heldGlow: shown("heldGlow") === "on",
     chorusLift: shown("chorusLift") === "on",
     shine: shown("shine") === "on",
+    emphasis: shown("emphasis") === "on",
   };
 }
 
@@ -1024,7 +1027,7 @@ const shortLabel = (label: string) => label.replace(/\s*\(.*\)\s*$/, "");
 const SONG_FIELDS = ["tagline", "ep", "youtubeLayout", "titleOpening"] as const;
 const LOOK_FIELDS = ["textColour", "accentColour"] as const;
 const PICTURE_FIELDS = ["grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas"] as const;
-const EFFECT_FIELDS = ["verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine"] as const;
+const EFFECT_FIELDS = ["verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "emphasis"] as const;
 const MAKE_FIELDS = ["platforms", "variations", "collections"] as const;
 const AUTO_FIELDS = ["shotLength", "tempo", "section", "length", "ending", "transitions", "paceShift", "readability"] as const;
 const RELEASE = ["reels", "tiktok", "shorts", "youtube", "canvas"];
@@ -1271,26 +1274,18 @@ function PictureControls({ value, onSet }: { value: (field: string) => unknown; 
     { field: "fallback", label: "Background without a clip", hint: "For a song without clips, or a slot waiting for one.", options: FALLBACK_LABELS },
   ];
   return (
-    <div data-picture className="flex flex-col gap-3">
+    <div data-picture className="flex flex-col gap-2">
       {groups.map((g) => (
-        <div key={g.field} data-picture-group={g.field} className="bg-card flex flex-col gap-1.5 rounded-lg border px-3 py-2.5">
-          <span className="text-sm font-medium">{g.label}</span>
-          <div className="flex flex-wrap gap-1.5">
+        <label key={g.field} data-picture-group={g.field} title={g.hint} className="bg-card flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+          <span className="flex-1 font-medium">{g.label}</span>
+          <select data-picture-select={g.field} className="bg-background rounded-md border px-2 py-1 text-xs" value={String(value(g.field) ?? "")} onChange={(e) => onSet(g.field, e.target.value)}>
             {Object.entries(g.options).map(([v, label]) => (
-              <button
-                key={v}
-                type="button"
-                data-picture-option={`${g.field}-${v}`}
-                aria-pressed={value(g.field) === v}
-                onClick={() => onSet(g.field, v)}
-                className={cn("rounded-full border px-2.5 py-0.5 text-xs", value(g.field) === v ? "border-brand bg-brand/15 text-foreground" : "text-muted-foreground hover:text-foreground")}
-              >
+              <option key={v} value={v}>
                 {label}
-              </button>
+              </option>
             ))}
-          </div>
-          <Hint text={g.hint} />
-        </div>
+          </select>
+        </label>
       ))}
       <label data-picture-group="gradeCanvas" className="bg-card flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg border px-3 py-2.5 text-sm">
         <input type="checkbox" data-picture-option="gradeCanvas" checked={value("gradeCanvas") !== "off"} onChange={(e) => onSet("gradeCanvas", e.target.checked ? "on" : "off")} />

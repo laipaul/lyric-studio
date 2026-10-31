@@ -18,6 +18,7 @@ export type LookPatch = {
   heldGlow?: boolean;
   chorusLift?: boolean;
   shine?: boolean;
+  emphasis?: boolean;
   accent?: string;
   colour?: string; // the theme's text colour
   picture?: Omit<PictureProps, "coverSrc">; // the theme's grade, vignette, behind the words, background without a clip
@@ -64,7 +65,7 @@ export function patchLook(props: LyricVideoProps, patch: LookPatch | null, barFr
       if (patch.breathe === "off") delete e.breathe;
       else e.breathe = patch.breathe === "beat" ? { mode: "beat", downbeats: bars } : { mode: "gentle" };
     }
-    for (const k of ["heldGlow", "chorusLift", "shine"] as const) {
+    for (const k of ["heldGlow", "chorusLift", "shine", "emphasis"] as const) {
       if (patch[k] === undefined) continue;
       if (patch[k]) e[k] = true;
       else delete e[k];
