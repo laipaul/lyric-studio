@@ -59,7 +59,7 @@ export function planReaction(ws: Workspace, projectId: string, o: { video: strin
       const ladder = ["1", "2", "4", "8"];
       const i = ladder.indexOf(String(mode));
       const next = i < 0 ? null : ladder[i + d];
-      if (!next) return { ...base, text: "", none: i < 0 ? `the shot length is "${mode}"; set it to auto in the Style tab first` : d > 0 ? "the shots are already 8 bars long" : "the shots are already one bar long" };
+      if (!next) return { ...base, text: "", none: i < 0 ? `the shot length is "${mode}"; set it to auto on the Shape page first` : d > 0 ? "the shots are already 8 bars long" : "the shots are already one bar long" };
       return { ...base, text: `Next run: ${bars(Number(next))} per shot instead of ${bars(Number(mode))}${why}.`, changes: [{ field: "shotLength", value: next }] };
     }
     const shift = Math.max(SHIFT_MIN, Math.min(SHIFT_MAX, (now.paceShift ?? 0) + d));
@@ -94,7 +94,7 @@ export function planReaction(ws: Workspace, projectId: string, o: { video: strin
       return { ...base, text: "Next run: the last chord rings out one more bar and fades (a soft fade where a ring-out does not fit).", changes: [{ field: "ending", value: "ring-out" }], scopes: ["song", "artist"] };
     case "hard-to-read":
       return now.readability === "strong"
-        ? { ...base, text: "", none: "the lyrics already have the soft dark band; a lighter clip or a bolder font (Style tab) helps more" }
+        ? { ...base, text: "", none: "the lyrics already have the soft dark band; a lighter clip or a bolder font (Shape page) helps more" }
         : { ...base, text: "Next run: a soft dark band behind the lyrics on every shot, so they stay readable on bright clips.", changes: [{ field: "readability", value: "strong" }] };
     case "love": {
       const changes: ReactionPlan["changes"] = [];
@@ -110,7 +110,7 @@ export function planReaction(ws: Workspace, projectId: string, o: { video: strin
       return { ...base, scopes: ["song"], mark: true, changes, text: `Marked favourite and approved${kept ? `; next runs keep this video's choices (${kept})` : "; the song's recipe already makes videos like this one"}.` };
     }
     case "clip-misfit": {
-      if (!o.clip) throw new Error("Which clip? (choose a shot in the Storyboard)");
+      if (!o.clip) throw new Error("Which clip? (choose a shot on the Shape page)");
       const paths = songPathsById(ws, projectId);
       const edits = readClipEdits(paths.root);
       const names = m.clips.map((c) => c.name);

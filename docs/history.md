@@ -4,6 +4,43 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Style tab simplified ✅ (to verify on the Windows PC)
+- Shape → Style is now four blocks, each with a heading and one muted line:
+  **This song** (Tagline, EP, YouTube layout, Title opening) · **Look** (the font pairing cards, one line
+  "Fonts: verses … · choruses …" with **Fine-tune** to show the six font rows, Set effect, Accent colour, then the
+  effect rows) · **What to make** (Platforms, Videos per platform, Shared collections) · **Automatic — the app
+  handles these** (Shot length, Tempo, Section, Target length, Ending, Transitions, Pace adjustment, Lyric
+  readability), folded, with one line: "All automatic" or "2 set by you: Tempo, Ending".
+- "Show all settings" and "This song changes N settings…" are gone: everything shows, except the folded
+  Automatic block and the font rows under Fine-tune.
+- Calmer rows: only the "This song" badge shows (where else a setting comes from is in the tooltip on its name);
+  the padlock shows when locked, otherwise when you point at the row; "per platform" too, unless a platform has
+  its own value (then the line shows as before); long explanations stay on one line (hover for the whole text).
+- Nothing removed: Use for all my songs, reset, lock, the ✓ Saved highlight, the tempo tools and the per-platform
+  editors all work as before.
+- Tests: song-stages.e2e.ts (blocks in order, Automatic folded with its summary, badges, hover padlock and
+  "per platform", font summary and Fine-tune), pairings.e2e.ts (font summary follows a pairing, with "This song").
+
+### Fix — "Set effect" keeps what you tried ✅ (to verify on the Windows PC)
+- Reported 30 Oct: after setting an effect, going to Make and back to Shape, the tried effect, intensity,
+  Breathe and add-ons were gone (the stage tabs unmount the panel). Now what you tried is kept per song (browser
+  tab storage: survives Shape -> Make -> Shape and a reload) and a muted line says "Not saved to the recipe yet: …".
+- The two buttons are now **Save to recipe — verses / — choruses** and save everything that differs in one click
+  (the effect to the verse or chorus effect, plus Breathe and the three add-ons); locked settings are skipped and
+  named ("Locked, kept: Shine"). "Use these add-ons" is gone. The panel is now called **Set effect**, and the Verse effect /
+  Hook effect rows below it are display only (the effect is set there; only Per platform keeps dropdowns); Breathe, Held-note glow, Chorus lift and Shine rows are display only too ("Use for all my songs" stays). After a save the note lists what was saved, in the
+  rows' own names, those rows get a "✓ Saved" highlight for 4 s, and the "not saved yet" line disappears.
+- Tests: song-stages.e2e.ts (tried values kept across Make and back, unsaved line, one-click save, highlight).
+
+### Fix — "Try an effect" can save what you tried ✅ (verified by the user on the Windows PC, 30 Oct 2026)
+- Reported 30 Oct: the preview said "pick it in Verse / Hook effect below", but those settings were hidden in
+  Style's short list (only what the song changes). Now: **Use for verses / Use for choruses** buttons (the effect
+  with its pace) and **Use these add-ons** (Breathe, Held-note glow, Chorus lift, Shine) save to the song in one
+  click (locked settings: button disabled); Verse effect and Hook effect always show in the short list; the
+  Platforms note says what an empty choice does (Make release pack: all five; More options: Reels + YouTube).
+- Built by a Sonnet helper (bug-fix rule), checked here (clean build, Style / Storyboard / Pairings / Song-stages
+  browser tests pass).
+
 ### Effects, batch 2 step 2: Held-note glow, Chorus lift, Shine ✅ (to verify on the Windows PC)
 - Three settings in Shape → Style, next to Breathe (off by default, per platform), each with **"Use for all my
   songs"** (asks first; writes your brand, and the song follows it):

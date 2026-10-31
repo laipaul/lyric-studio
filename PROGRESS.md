@@ -4,6 +4,37 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Shape as one page (Style + Storyboard merged) ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026 (replaces the "Style tab rebuild" open decision). Shape has no tabs any
+  more: **the video viewer at the top in the middle**, under it the **soundtrack** (bar lines, waveform, lyric
+  lines), the **shots**, and the **clips used** (drag to reorder). **All the tools in one column on the left**:
+  Look (font pairing dropdown, the fonts line with Fine-tune, Set effect, accent colour), This song, What to
+  make, Automatic (folded); a clicked shot's details (and the clip / card editors) appear at the top of it.
+  **"Next: Make →"** under the viewer. Old links (?tab=style, ?tab=storyboard) open the Shape page.
+- **Every setting once, saved at once**: the display-only rows (Verse effect, Hook effect, Breathe, Held-note
+  glow, Chorus lift, Shine) are gone; Set effect is the only place, with a **Verses / Choruses** switch; every
+  click is saved to song.json straight away ("✓ Saved"); no Save to recipe buttons, no "not saved yet" line.
+  Their per-platform values: Set effect's ⋯ → Per platform….
+- **This song** and **What to make** are one line each ("Tagline: none · EP: none · YouTube: cover · Title
+  opening: off", "Reels 3 · YouTube 1 · clips: the song's own + wedding"); click to edit.
+- **⋯ menu** on each setting: Per platform…, Back to the inherited value, Lock / Unlock, Use for all my songs…
+  (Breathe and add-ons: in Set effect's ⋯). A locked setting shows a padlock.
+- **One live viewer**: the planned video (as Make renders it). The plan shows on opening the page (no Show
+  button); after any change the app plans again by itself (one plan at a time); meanwhile the new fonts,
+  effects, Breathe, add-ons and accent are shown in the viewer at once, and pointing at a font pairing tries it
+  there. Without a plan yet (no clips, lyrics not timed) a stand-in preview of your first lines shows instead.
+- **Drag a clip onto a shot**: it is pinned (⚓) on the lyric line that starts in that shot; a shot with no
+  line starting in it (intro, break) gets the clip by moving it to that place in the clip order. Dropping on a
+  lyric line works as before.
+- Font pairing kept as a dropdown (its list now always fits the window). Slimming the plan's details (analysis
+  text, textboard templates) stays U2b.
+- Tests: look-patch.test.ts (the viewer's patch: fonts and files, effects, Breathe, add-ons, nothing patched
+  without a change); browser: song-stages.e2e.ts (one page, tools left of the viewer, blocks, compact lines,
+  ⋯ menu, instant save with the Verses / Choruses switch, brand for all songs, accent, Next: Make),
+  storyboard.e2e.ts (planned on opening, viewer → soundtrack → shots → clips, drop on a shot anchors, a look
+  change patches the viewer then re-plans, the tempo re-plans on the same page), style-lock.e2e.ts (locks via
+  the ⋯ menu, locked chips greyed out), pairings.e2e.ts, textboard.e2e.ts.
+
 ### Fix — vocal stem check corrects a small speed difference ✅ (verified by the user on the Windows PC, 31 Oct 2026: all 4 songs pass with the vocal stem)
 - A song exported from the DAW can play a little faster or slower than Suno's stem (Love Is A Good Thing:
   about 0.2 %, so the gap grew from 0.66 s to 0.77 s along the song and the stem was refused). The check now
@@ -122,43 +153,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   clips no backing, bright clips backing, "normal" wins), pairings.test.ts (plain notes); browser:
   pairings.e2e.ts (grid without horizontal scroll, click chooses (✓, song.json), hover details, warnings only for
   the chosen pair, Details).
-
-### Style tab simplified ✅ (to verify on the Windows PC)
-- Shape → Style is now four blocks, each with a heading and one muted line:
-  **This song** (Tagline, EP, YouTube layout, Title opening) · **Look** (the font pairing cards, one line
-  "Fonts: verses … · choruses …" with **Fine-tune** to show the six font rows, Set effect, Accent colour, then the
-  effect rows) · **What to make** (Platforms, Videos per platform, Shared collections) · **Automatic — the app
-  handles these** (Shot length, Tempo, Section, Target length, Ending, Transitions, Pace adjustment, Lyric
-  readability), folded, with one line: "All automatic" or "2 set by you: Tempo, Ending".
-- "Show all settings" and "This song changes N settings…" are gone: everything shows, except the folded
-  Automatic block and the font rows under Fine-tune.
-- Calmer rows: only the "This song" badge shows (where else a setting comes from is in the tooltip on its name);
-  the padlock shows when locked, otherwise when you point at the row; "per platform" too, unless a platform has
-  its own value (then the line shows as before); long explanations stay on one line (hover for the whole text).
-- Nothing removed: Use for all my songs, reset, lock, the ✓ Saved highlight, the tempo tools and the per-platform
-  editors all work as before.
-- Tests: song-stages.e2e.ts (blocks in order, Automatic folded with its summary, badges, hover padlock and
-  "per platform", font summary and Fine-tune), pairings.e2e.ts (font summary follows a pairing, with "This song").
-
-### Fix — "Set effect" keeps what you tried ✅ (to verify on the Windows PC)
-- Reported 30 Oct: after setting an effect, going to Make and back to Shape, the tried effect, intensity,
-  Breathe and add-ons were gone (the stage tabs unmount the panel). Now what you tried is kept per song (browser
-  tab storage: survives Shape -> Make -> Shape and a reload) and a muted line says "Not saved to the recipe yet: …".
-- The two buttons are now **Save to recipe — verses / — choruses** and save everything that differs in one click
-  (the effect to the verse or chorus effect, plus Breathe and the three add-ons); locked settings are skipped and
-  named ("Locked, kept: Shine"). "Use these add-ons" is gone. The panel is now called **Set effect**, and the Verse effect /
-  Hook effect rows below it are display only (the effect is set there; only Per platform keeps dropdowns); Breathe, Held-note glow, Chorus lift and Shine rows are display only too ("Use for all my songs" stays). After a save the note lists what was saved, in the
-  rows' own names, those rows get a "✓ Saved" highlight for 4 s, and the "not saved yet" line disappears.
-- Tests: song-stages.e2e.ts (tried values kept across Make and back, unsaved line, one-click save, highlight).
-
-### Fix — "Try an effect" can save what you tried ✅ (verified by the user on the Windows PC, 30 Oct 2026)
-- Reported 30 Oct: the preview said "pick it in Verse / Hook effect below", but those settings were hidden in
-  Style's short list (only what the song changes). Now: **Use for verses / Use for choruses** buttons (the effect
-  with its pace) and **Use these add-ons** (Breathe, Held-note glow, Chorus lift, Shine) save to the song in one
-  click (locked settings: button disabled); Verse effect and Hook effect always show in the short list; the
-  Platforms note says what an empty choice does (Make release pack: all five; More options: Reels + YouTube).
-- Built by a Sonnet helper (bug-fix rule), checked here (clean build, Style / Storyboard / Pairings / Song-stages
-  browser tests pass).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -363,8 +357,9 @@ before Releases step 2 and the Lyric Sheet, one step each, plan first:
   with thumbnail + short name), same precise timing and dragging; click a lyric line = the preview jumps
   there, a selected shot is highlighted (check what already works, add only what is missing); a shorter
   selected-shot panel ("Shot 5: 01_dress · 5.6 s · speed 0.92× · best moment chosen automatically") with
-  "Adjust shot" for in/out, speed and the rest; a fixed "Next: Make →" at the bottom of Shape (Style and
-  Storyboard) with a status line ("Storyboard ready · 5 shots") — moved here from U4.
+  "Adjust shot" for in/out, speed and the rest. (31 Oct: Shape is now one page; "Next: Make →", the
+  verdict under the viewer, the taller waveform and shots as drop targets are built; what is left is the
+  folded analysis, labelled tracks and the shorter shot panel, on the left column.)
 - **U3. Review & Post around the videos:** per platform, the approved (else the best) video first, then the
   alternatives; run-by-run history as a secondary view.
 - **U4. Clearer wording:** one meaning each for made / ready / approved everywhere (Library, Releases, stages);
@@ -373,10 +368,8 @@ before Releases step 2 and the Lyric Sheet, one step each, plan first:
   "this run only" vs saved to the song.
 - **U5.** Then Releases step 2 (item 5 above) and the Lyric Sheet (item 6).
 **Open decisions (paused 30 Oct 2026, 23:40 — the user is rethinking the strategy; build nothing of this until he decides):**
-- Style tab rebuild proposed: each setting shown once (the display-only effect / add-on rows removed), every
-  change saved at once (no Save to recipe buttons; a Verses / Choruses switch for the effect), compact lines for
-  Words on screen and What to make, Automatic folded, big preview + "Next: Make →", "Use for all my songs" and
-  locks in a ⋯ menu. Font pairings: dropdown (built) or Canva-style text tiles — undecided.
+- ✅ Style tab rebuild: decided and built 31 Oct 2026 as "Shape as one page" (see Latest steps); font
+  pairings stay a dropdown.
 - Canva: no Canva-style editor (too much, and against the guiding principle). Idea: design looks in Canva and
   import them (.pptx keeps text boxes with font, size, colour, position; SVG outlines text; Canva animations
   and Canva-only fonts don't transfer).

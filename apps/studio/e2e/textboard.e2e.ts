@@ -79,9 +79,7 @@ async function main() {
       await page.waitForSelector("[data-replanning]", { state: "detached", timeout: 180_000 });
     };
     await page.goto(`${base}/songs/${sp.project.id}?tab=storyboard`);
-    await page.waitForSelector("[data-storyboard-show]");
-    await page.click("[data-storyboard-show]");
-    await page.waitForSelector("[data-shot='1']", { timeout: 180_000 });
+    await page.waitForSelector("[data-shot='1']", { timeout: 180_000 }); // planned on opening the Shape page
     const cards = await page.$$eval("[data-textboard-row] [data-card]", (els: Element[]) => els.map((e) => e.getAttribute("data-card")));
     check(cards.includes("line-3") && cards.includes("line-4"), `the Textboard row: one card per lyric line (${cards.join(", ")})`);
     check(!(await page.$("[data-textboard-titles]")), "no title card on Reels by default (as before)");

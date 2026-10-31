@@ -89,7 +89,7 @@ async function main() {
 
     // Shape and Review show their own tabs; Make has the release pack.
     await page.click("[data-stage=shape]");
-    check(JSON.stringify(await tabs()) === JSON.stringify(["Style", "Storyboard"]), "Shape shows Style and Storyboard");
+    check(JSON.stringify(await tabs()) === JSON.stringify([]), "Shape is one page (no tabs)");
     await page.click("[data-stage=review]");
     check(JSON.stringify(await tabs()) === JSON.stringify(["Videos", "Post"]), "Review & Post shows Videos and Post");
     await page.click("[data-stage=make]");
@@ -154,18 +154,30 @@ async function main() {
     const takeRun = ws2.db.select().from(makeRun).all().at(-1);
     const takeOptions = (takeRun?.options_json ?? {}) as { platforms?: string; take?: number };
     check(takeOptions.platforms === "reels" && takeOptions.take === 3 && (takeRun?.label ?? "").includes("take 3"), `Try another take: Reels take 3 (${JSON.stringify(takeOptions)}, ${takeRun?.label})`);
-    // The Style tab in four blocks; the song sets its tempo (locked) and an ending: the folded Automatic block says so.
+    // The Shape page (Style and Storyboard as one page): the tools column on the left of the viewer; the
+    // song sets its tempo (locked) and an ending: the folded Automatic block says so.
     writeRecipe(recipe, { ...readRecipe(recipe), tempo: 96, ending: "fade", locked: ["tempo"] });
     await page.click("[data-stage=shape]");
-    await page.click("[role=tab]:has-text('Style')");
     await page.waitForSelector("[data-style-block]");
+    check((await page.$$("[role=tab]")).length === 0, "Shape is one page: no Style / Storyboard tabs");
     const blocks = await page.$$eval("[data-style-block] h3", (e: Element[]) => e.map((x) => x.textContent));
-    check(JSON.stringify(blocks) === JSON.stringify(["This song", "Look", "What to make", "Automatic — the app handles these"]), `Style: four blocks in order (${blocks.join(" | ")})`);
-    check((await page.$("[data-show-all]")) === null && !((await page.textContent("[data-style]")) ?? "").includes("This song changes"), "no Show all toggle, no 'This song changes N settings' sentence");
+    check(JSON.stringify(blocks) === JSON.stringify(["Look", "This song", "What to make", "Automatic"]), `the tools: four blocks in order (${blocks.join(" | ")})`);
+    const toolsBox = await (await page.$("[data-shape-tools]"))!.boundingBox();
+    const viewerBox = await (await page.$("[data-viewer-block]"))!.boundingBox();
+    check(!!toolsBox && !!viewerBox && toolsBox.x + toolsBox.width <= viewerBox.x + 1 && viewerBox.y < 400, `the tools on the left, the viewer at the top in the middle (${JSON.stringify(toolsBox)} / ${JSON.stringify(viewerBox)})`);
+    check(!!(await page.$("[data-viewer-block] [data-next-make]")), '"Next: Make" under the viewer');
     const inBlock = async (b: string) => page.$$eval(`[data-style-block=${b}] [data-field]`, (e: Element[]) => e.map((x) => x.getAttribute("data-field")));
-    check(JSON.stringify(await inBlock("song")) === JSON.stringify(["tagline", "ep", "youtubeLayout", "titleOpening"]), `This song: tagline, EP, YouTube layout, title opening (${(await inBlock("song")).join(", ")})`);
-    check(JSON.stringify(await inBlock("look")) === JSON.stringify(["accentColour", "verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine"]), `Look: accent colour and the effect rows; the font rows folded (${(await inBlock("look")).join(", ")})`);
-    check(JSON.stringify(await inBlock("make")) === JSON.stringify(["platforms", "variations", "collections"]), `What to make: platforms, videos per platform, collections (${(await inBlock("make")).join(", ")})`);
+    check(JSON.stringify(await inBlock("look")) === JSON.stringify(["accentColour"]), `Look: only the accent colour row, the effects set once in Set effect; the font rows folded (${(await inBlock("look")).join(", ")})`);
+    // This song and What to make: one line each, click to edit.
+    check((await inBlock("song")).length === 0 && (await inBlock("make")).length === 0, "This song and What to make are one line each");
+    const songLine = (await page.textContent("[data-compact-summary=song]")) ?? "";
+    check(songLine === "Tagline: none · EP: none · YouTube: cover · Title opening: off", `This song's line (${songLine})`);
+    const makeLine = (await page.textContent("[data-compact-summary=make]")) ?? "";
+    check(makeLine.startsWith("Reels 3 · YouTube 1") && makeLine.includes("clips: the song's own"), `What to make's line (${makeLine})`);
+    await page.click("[data-compact=song]");
+    check(JSON.stringify(await inBlock("song")) === JSON.stringify(["tagline", "ep", "youtubeLayout", "titleOpening"]), `This song opens: tagline, EP, YouTube layout, title opening (${(await inBlock("song")).join(", ")})`);
+    await page.click("[data-compact=make]");
+    check(JSON.stringify(await inBlock("make")) === JSON.stringify(["platforms", "variations", "collections"]), `What to make opens: platforms, videos per platform, collections (${(await inBlock("make")).join(", ")})`);
     check((await page.getAttribute("[data-auto-toggle]", "aria-expanded")) === "false" && (await inBlock("auto")).length === 0, "Automatic is folded");
     check((await page.textContent("[data-auto-summary]")) === "2 set by you: Tempo, Ending", `…with its summary line (${await page.textContent("[data-auto-summary]")})`);
     if (process.env.STYLE_SHOT) {
@@ -178,21 +190,18 @@ async function main() {
     await page.click("[data-auto-toggle]");
     check(JSON.stringify(await inBlock("auto")) === JSON.stringify(["shotLength", "tempo", "section", "length", "ending", "transitions", "paceShift", "readability"]), `Automatic opens with its eight rows (${(await inBlock("auto")).join(", ")})`);
     check(!!(await page.$("[data-field=tempo] [data-tempo-check]")), "the tempo tools are there");
-    // Declutter: only the "This song" badge; other sources in the label's tooltip; padlock and "per platform" on hover.
+    // Calm rows: only the "This song" badge; other sources in the label's tooltip; lock, reset, per platform in the ⋯ menu.
     const badges = await page.$$eval("[data-field] [data-source]", (e: Element[]) => [...new Set(e.map((x) => x.textContent))]);
     check(JSON.stringify(badges) === JSON.stringify(["This song"]), `only "This song" badges (${badges.join(", ")})`);
     check(((await page.getAttribute("[data-field=transitions] [data-source-hint]", "title")) ?? "").startsWith("From: "), "other sources: a tooltip on the label");
-    const opacity = (sel: string) => page.$eval(sel, (e: Element) => getComputedStyle(e).opacity);
-    check((await opacity("[data-lock=tempo]")) === "1", "a locked padlock is always shown");
-    await page.mouse.move(0, 0);
-    await sleep(300);
-    check((await opacity("[data-lock=shotLength]")) === "0" && (await opacity("[data-per-platform=shotLength]")) === "0", "unlocked padlock and 'per platform' hidden until hover");
-    await page.hover("[data-field=shotLength]");
-    await sleep(300);
-    check((await opacity("[data-lock=shotLength]")) === "1" && (await opacity("[data-per-platform=shotLength]")) === "1", "…shown on hover");
+    check(!!(await page.$("[data-locked=tempo]")) && !(await page.$("[data-locked=shotLength]")), "a locked setting shows its padlock, the others none");
+    check(!(await page.$("[data-field=shotLength] [data-lock]")) && !(await page.$("[data-field=shotLength] [data-per-platform]")), "no lock or 'per platform' buttons in the row");
+    await page.click("[data-row-menu=shotLength]");
+    const menuItems = await page.$$eval("[role=menuitem]", (e: Element[]) => e.map((x) => x.textContent));
+    check(JSON.stringify(menuItems) === JSON.stringify(["Per platform…", "Lock: keep this song's value"]), `the ⋯ menu: per platform and lock (${menuItems.join(" | ")})`);
+    await page.click("[role=menuitem][data-per-platform=shotLength]");
+    check(!!(await page.$("[data-platform-value=shotLength-reels]")), "'Per platform…' opens the per-platform editors");
     check(!((await page.textContent("[data-style]")) ?? "").includes("the same on every platform"), "no 'the same on every platform' lines");
-    await page.click("[data-per-platform=shotLength]");
-    check(!!(await page.$("[data-platform-value=shotLength-reels]")), "'per platform' opens the per-platform editors");
     // Fonts: one summary line; Fine-tune shows the six rows.
     const fontLine = (await page.textContent("[data-font-summary-text]")) ?? "";
     check(/^Fonts: verses .+ \d00(?: italic)? · choruses .+ \d00(?: italic)?$/.test(fontLine), `the font summary line (${fontLine})`);
@@ -202,94 +211,64 @@ async function main() {
     check(JSON.stringify(fontRows) === JSON.stringify(["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic"]), `Fine-tune shows the six font rows (${fontRows.join(", ")})`);
     const verseFont = await page.$eval("[data-edit='verseFont-default']", (e: Element) => (e as HTMLSelectElement).value);
     check(fontLine.startsWith(`Fonts: verses ${verseFont} `), "the summary names the verse font of the rows");
-    check(!!(await page.$("[data-field=breathe]")), "Breathe is a setting (off / gentle / with the beat)");
-    // The effects preview: the song's own lines, drawn as in the video; trying an effect saves nothing.
+    // Set effect: every click is saved at once; the viewer (here the stand-in: the song has no timed lyrics) shows it.
+    const saved = async (key: string, value: unknown) => {
+      for (let i = 0; i < 40; i++) {
+        if (JSON.stringify(JSON.parse(readFileSync(recipe, "utf8"))[key]) === JSON.stringify(value)) return true;
+        await sleep(150);
+      }
+      return false;
+    };
     await page.waitForSelector("[data-effect-preview]");
+    check((await page.$$("[data-use-effect]")).length === 0 && (await page.$$("[data-unsaved]")).length === 0, "no Save to recipe buttons, no 'not saved yet' line");
+    check((await page.getAttribute("[data-effect-part]", "data-effect-part")) === "verse", "Set effect starts on Verses");
     await page.click("[data-try-effect=typewriter]");
+    check(await saved("verseEffect", "typewriter"), "a click on typewriter saves it as the verse effect (song.json)");
     await page.selectOption("[data-try-breathe]", "beat");
-    await sleep(1500);
-    check((await page.$$eval("[data-look-preview] [data-lyric]", (e: Element[]) => e.length)) > 0, "the big Look preview draws the song's lines");
-    check((await page.$$("[data-look-preview]")).length === 1 && (await page.$eval("[data-look-preview]", (e: Element) => getComputedStyle(e).position)) === "sticky", "one big Look preview, sticky on a wide screen");
-    check((await page.getAttribute("[data-look-preview]", "data-effect")) === "typewriter" && (await page.getAttribute("[data-look-preview]", "data-breathe")) === "beat", "…it plays what is tried in Set effect (typewriter, Breathe with the beat)");
+    check(await saved("breathe", "beat"), "Breathe with the beat: saved at once");
+    await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-effect") === "typewriter" && document.querySelector("[data-look-preview]")?.getAttribute("data-breathe") === "beat");
+    check((await page.$$eval("[data-look-preview] [data-lyric]", (e: Element[]) => e.length)) > 0, "the viewer draws the song's lines with the effect and Breathe");
+    check((await page.$$("[data-look-preview]")).length === 1, "one viewer");
     check((await page.$$("[data-effect-preview] .__remotion-player, [data-effect-preview] canvas, [data-effect-preview] [data-lyric]")).length === 0, "the Set effect panel has no player of its own");
+    check(!!(await page.$("[data-effect-saved]")), "Set effect says ✓ Saved");
+    await page.selectOption("[data-try-intensity]", "subtle");
+    check(await saved("verseEffect", "typewriter:subtle"), "the typing pace (calm) is saved with it: typewriter:subtle");
+    check(((await page.textContent("[data-set-effect]")) ?? "").includes("Verses: typewriter (calm)"), "the panel names what verses use");
+    // Choruses: the switch, then the effect is saved as the hook effect; the verses keep theirs.
+    await page.click("[data-part=hook]");
     await page.click("[data-try-effect=spread]");
-    await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-effect") === "spread");
-    check(true, "…and follows at once when another effect is tried");
-    await page.click("[data-try-effect=typewriter]");
-    if (process.env.SHOT_FX) await page.screenshot({ path: process.env.SHOT_FX, clip: await page.$eval("[data-look-preview]", (e: Element) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; }) });
-    check(!JSON.parse(readFileSync(recipe, "utf8")).breathe, "trying in the preview saves nothing to song.json");
-    // Held-note glow: on for this song, then "Use for all my songs" (brand.json, every platform with lyrics).
+    check(await saved("hookEffect", "spread"), "Choruses: spread saved as the hook effect (the choruses' own intensity)");
+    check(JSON.parse(readFileSync(recipe, "utf8")).verseEffect === "typewriter:subtle", "…the verse effect unchanged");
+    check((await page.getAttribute("[data-try-effect=spread]", "aria-pressed")) === "true", `the chorus effect shows as chosen (${await page.$$eval("[data-try-effect][aria-pressed=true]", (e: Element[]) => e.map((x) => x.textContent).join())} ${await page.textContent("[data-set-effect] p.text-muted-foreground")})`);
+    await page.click("[data-part=verse]");
+    check((await page.getAttribute("[data-try-effect=typewriter]", "aria-pressed")) === "true", "back on Verses: typewriter is chosen");
+    // Held-note glow: on for this song, then "Use Breathe and add-ons for all my songs" (brand.json, every platform with lyrics).
     await page.check("[data-try-addon=heldGlow]");
-    await page.click("[data-use-effect=verse]");
-    await page.waitForSelector("[data-field=heldGlow][data-just-saved]");
-    check(JSON.parse(readFileSync(recipe, "utf8")).heldGlow === "on", "Held-note glow on (saved from Set effect): song.json");
-    check((await page.$("[data-field=heldGlow] select")) === null && (await page.textContent("[data-field=heldGlow] [data-effect-value]")) === "on", "Held-note glow row is display only, showing 'on'");
-    await page.click("[data-brand-all=heldGlow]");
-    await page.click("[data-brand-all-yes=heldGlow]");
-    await page.waitForFunction(() => !document.querySelector("[data-brand-all-ask=heldGlow]"));
+    check(await saved("heldGlow", "on"), "Held-note glow on: saved at once");
+    await page.click("[data-row-menu=effects]");
+    await page.click("[role=menuitem][data-brand-all=effects]");
+    await page.click("[data-brand-all-yes=effects]");
+    await page.waitForFunction(() => !document.querySelector("[data-brand-all-ask=effects]"));
+    await page.waitForSelector("[data-saving=saved]");
     await sleep(800);
-    const brand = JSON.parse(readFileSync(path.join(wsDir, "brand", "brand.json"), "utf8")) as { perPlatform?: Record<string, { heldGlow?: string }> };
-    check(brand.perPlatform?.reels?.heldGlow === "on" && brand.perPlatform?.youtube?.heldGlow === "on" && !brand.perPlatform?.canvas, `Use for all my songs: brand.json on every platform with lyrics (${JSON.stringify(brand.perPlatform)})`);
+    const brand = JSON.parse(readFileSync(path.join(wsDir, "brand", "brand.json"), "utf8")) as { perPlatform?: Record<string, { heldGlow?: string; breathe?: string }> };
+    check(brand.perPlatform?.reels?.heldGlow === "on" && brand.perPlatform?.youtube?.heldGlow === "on" && brand.perPlatform?.reels?.breathe === "beat" && !brand.perPlatform?.canvas, `Use for all my songs: brand.json on every platform with lyrics (${JSON.stringify(brand.perPlatform)})`);
     check(JSON.parse(readFileSync(recipe, "utf8")).heldGlow === undefined, "…and the song follows the brand (its own value removed)");
-    check(!!(await page.$("[data-try-addon=shine]")), "the preview offers the add-ons");
-    check(await page.evaluate(() => { const c = document.querySelector("[data-try-intensity]")!.closest("div")!; const u = document.querySelector("[data-use-row]")!; return !!(c.compareDocumentPosition(u) & 4); }), "the Save to recipe row comes after the Intensity / Breathe / add-ons row");
+    check((await page.isChecked("[data-try-addon=heldGlow]")) === true, "…still on, now from the brand");
+    // Shape -> Make -> Shape: it is all saved, so it is all still there.
+    await page.click("[data-stage=make]");
+    await page.waitForFunction(() => !document.querySelector("[data-effect-preview]"));
+    await page.click("[data-stage=shape]");
+    await page.waitForSelector("[data-effect-preview]");
+    check((await page.getAttribute("[data-try-effect=typewriter]", "aria-pressed")) === "true" && (await page.$eval("[data-try-breathe]", (s: Element) => (s as HTMLSelectElement).value)) === "beat", "Shape -> Make -> Shape: the saved effect and Breathe are there");
     for (const w of [1280, 1366]) {
       await page.setViewportSize({ width: w, height: 1000 });
       await sleep(300);
       const right = await page.$eval("[data-look-preview]", (e: Element) => e.getBoundingClientRect().right);
-      check(right <= w, `at ${w} px the Look preview's right edge is inside the window (${Math.round(right)} px)`);
-    }
-    if (process.env.U2FIX_SHOT) {
-      await page.setViewportSize({ width: 1366, height: 1100 });
-      await page.$eval("[data-style-block=look]", (e: Element) => e.scrollIntoView());
-      await sleep(800);
-      await (await page.$("[data-style-block=look]"))!.screenshot({ path: process.env.U2FIX_SHOT });
+      check(right <= w, `at ${w} px the viewer's right edge is inside the window (${Math.round(right)} px)`);
     }
     await page.setViewportSize({ width: 1280, height: 1000 });
-    // The preview saves what was tried: verses (name:intensity), choruses and the add-ons.
-    await page.click("[data-try-effect=typewriter]");
-    await page.selectOption("[data-try-intensity]", "subtle");
-    await page.click("[data-use-effect=verse]");
-    await page.waitForSelector("[data-saving=saved]");
-    check(JSON.parse(readFileSync(recipe, "utf8")).verseEffect === "typewriter:subtle", "Save to recipe - verses saves typewriter:subtle to song.json");
-    check(JSON.parse(readFileSync(recipe, "utf8")).breathe === "beat", "…and the Breathe that was tried with it (one click saves everything that differs)");
-    await page.waitForSelector("[data-use-note]");
-    const savedNote = (await page.textContent("[data-use-note]")) ?? "";
-    check(savedNote.includes("Saved to the recipe:") && savedNote.includes("Verse effect = typewriter (calm)") && !savedNote.includes("Breathe") /* already saved with the glow */, `the note lists what was saved, named as the rows (${savedNote})`);
-    await page.waitForSelector("[data-field=verseEffect][data-just-saved]");
-    check((await page.textContent("[data-field=verseEffect] [data-source]")) === "This song", "Verse effect row: the new value with the 'This song' badge…");
-    check((await page.$("[data-field=verseEffect] select")) === null, "Verse effect row is display only (no dropdown)");
-    check((await page.$("[data-field=verseEffect] [data-saved-tag]")) !== null && (await page.textContent("[data-field=verseEffect] [data-effect-value]")) === "typewriter · calm", "…highlighted as just saved (✓ Saved)");
-    check((await page.$("[data-unsaved]")) === null, "after the save the 'not saved yet' line is gone");
-    await page.check("[data-try-addon=chorusLift]");
-    await page.click("[data-use-effect=verse]");
-    await page.waitForFunction(() => !document.querySelector("[data-unsaved]") && document.querySelector("[data-try-addon=chorusLift]")?.checked === true);
-    check(JSON.parse(readFileSync(recipe, "utf8")).chorusLift === "on", "Save to recipe saves chorusLift on");
-    check(!!(await page.$("[data-field=verseEffect]")) && !!(await page.$("[data-field=hookEffect]")), "verse and hook effect are in the short list");
-    // What was tried (not saved) survives going to Make and back: effect, breathe and an add-on stay, with a "not saved yet" line.
-    await page.click("[data-try-effect=spread]");
-    await page.selectOption("[data-try-breathe]", "gentle");
-    await page.check("[data-try-addon=shine]");
-    await page.click("[data-stage=make]");
-    await page.waitForFunction(() => !document.querySelector("[data-effect-preview]"));
-    await page.click("[data-stage=shape]");
-    await page.click("[role=tab]:has-text('Style')");
-    await page.waitForSelector("[data-effect-preview]");
-    const kept = await page.evaluate(() => ({
-      effect: document.querySelector("[data-try-effect].border-brand")?.getAttribute("data-try-effect"),
-      breathe: (document.querySelector("[data-try-breathe]") as HTMLSelectElement).value,
-      shine: (document.querySelector("[data-try-addon=shine]") as HTMLInputElement).checked,
-      unsaved: document.querySelector("[data-unsaved]")?.textContent ?? "",
-    }));
-    check(kept.effect === "spread" && kept.breathe === "gentle" && kept.shine, `Shape -> Make -> Shape keeps what was tried (${JSON.stringify(kept)})`);
-    check(kept.unsaved.includes("= spread") && kept.unsaved.includes("= gentle") && kept.unsaved.includes("Shine") && kept.unsaved.includes("= on"), "…and says what is not saved to the song yet");
-    check(JSON.parse(readFileSync(recipe, "utf8")).breathe === "beat" && JSON.parse(readFileSync(recipe, "utf8")).shine === undefined, "…while song.json still has the saved values (breathe beat, no shine)");
-    await page.click("[data-use-effect=hook]");
-    await page.waitForFunction(() => document.querySelector("[data-field=hookEffect][data-just-saved]"));
-    check(JSON.parse(readFileSync(recipe, "utf8")).hookEffect?.startsWith("spread") && JSON.parse(readFileSync(recipe, "utf8")).shine === "on" && JSON.parse(readFileSync(recipe, "utf8")).breathe === "gentle", "Save to recipe - choruses: hookEffect plus the tried Breathe and Shine");
-    await sleep(800);
-    check((await page.getAttribute("[data-try-effect=spread]", "class"))?.includes("border-brand") === true, "Use for choruses: the tried effect stays selected after the save");
-    // The accent colour reaches the preview at once.
+    // The accent colour reaches the viewer at once.
     await page.$eval("[data-edit='accentColour-default']", (el: Element) => {
       const input = el as HTMLInputElement;
       const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
@@ -297,10 +276,14 @@ async function main() {
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-accent") === "#33AAFF");
-    check(true, "the accent colour reaches the preview as soon as it changes");
+    check(true, "the accent colour reaches the viewer as soon as it changes");
     await page.waitForFunction(() => document.querySelector("[data-saving]")?.getAttribute("data-saving") === "saved");
     await sleep(500);
     check(JSON.parse(readFileSync(recipe, "utf8")).accentColour === "#33AAFF" && (await page.getAttribute("[data-look-preview]", "data-accent")) === "#33AAFF", "…and stays after the save");
+    // Next: Make.
+    await page.click("[data-next-make]");
+    await page.waitForSelector("[data-release-pack]");
+    check((await page.getAttribute("[data-stage=make]", "aria-current")) === "step", '"Next: Make" opens Make');
     ws2.close();
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
     await browser.close();

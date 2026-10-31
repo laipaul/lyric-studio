@@ -514,7 +514,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const presets = loadPresets(options.presetsFile);
     // platforms.json is format only: its old "motion" (lyric effects) is not used any more.
     for (const p of Object.values(presets)) {
-      if (p.motion) log(`platforms.json ${p.name}: "motion" is not used any more (platforms.json is format only); put it in brand.json "perPlatform": { "${p.name}": { "verseEffect": "..." } } or in the song's Style tab`);
+      if (p.motion) log(`platforms.json ${p.name}: "motion" is not used any more (platforms.json is format only); put it in brand.json "perPlatform": { "${p.name}": { "verseEffect": "..." } } or on the song's Shape page`);
     }
     if (options.platforms) choosePlatforms(options.platforms, presets);
     const catalog = loadFontCatalog(ws.dir);

@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, ChevronRight, Package } from "lucide-react";
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 
 import type { TodoItem } from "@lyric/video/song-stages";
 
@@ -14,14 +14,14 @@ import { cn } from "@/lib/utils";
 // shows only its own tabs; the Prepare stage lists what still needs the user's ears or eyes.
 export const STAGES = [
   { id: "prepare", name: "Prepare", tabs: ["assets", "lyrics"] },
-  { id: "shape", name: "Shape", tabs: ["style", "storyboard"] },
+  { id: "shape", name: "Shape", tabs: ["shape"] },
   { id: "make", name: "Make", tabs: ["generate"] },
   { id: "review", name: "Review & Post", tabs: ["videos", "post"] },
 ] as const;
 export type StageId = (typeof STAGES)[number]["id"];
 export type StageStatus = { text: string; tone: "done" | "todo" | "blocked" | "muted" | "busy" };
 
-const TAB_LABEL: Record<string, string> = { assets: "Assets", lyrics: "Lyrics", style: "Style", storyboard: "Storyboard", generate: "Generate", videos: "Videos", post: "Post" };
+const TAB_LABEL: Record<string, string> = { assets: "Assets", lyrics: "Lyrics", shape: "Shape", generate: "Generate", videos: "Videos", post: "Post" };
 const stageOf = (tab: string): StageId => STAGES.find((s) => (s.tabs as readonly string[]).includes(tab))?.id ?? "prepare";
 const TONE: Record<StageStatus["tone"], string> = {
   done: "text-emerald-300",
@@ -30,6 +30,10 @@ const TONE: Record<StageStatus["tone"], string> = {
   muted: "text-muted-foreground",
   busy: "text-brand animate-pulse",
 };
+
+// Lets a tab move to another one ("Next: Make →" on the Shape page).
+const GoToTab = createContext<(tab: string) => void>(() => {});
+export const useGoToTab = () => useContext(GoToTab);
 
 export function SongStages({
   initialTab,
@@ -48,6 +52,7 @@ export function SongStages({
   const stage = stageOf(tab);
   const current = STAGES.find((s) => s.id === stage)!;
   return (
+    <GoToTab.Provider value={setTab}>
     <Tabs value={tab} onValueChange={setTab} className="gap-6">
       <ol className="grid grid-cols-2 gap-2 md:grid-cols-4" aria-label="Stages" data-stages>
         {STAGES.map((s, i) => (
@@ -111,6 +116,7 @@ export function SongStages({
       ) : null}
       {children}
     </Tabs>
+    </GoToTab.Provider>
   );
 }
 
@@ -157,7 +163,7 @@ export function ReleasePack({
           </h2>
           <p className="text-muted-foreground text-sm" data-release-platforms>
             One video for each of {platforms.map((p) => p.label).join(" · ")}
-            {fromRecipe ? " (this song's platforms)" : " (set the song's own platforms in Shape → Style)"}, with {clipsNote}. The app makes every technical choice;
+            {fromRecipe ? " (this song's platforms)" : " (set the song's own platforms in Shape → What to make)"}, with {clipsNote}. The app makes every technical choice;
             you review the result.
           </p>
         </div>

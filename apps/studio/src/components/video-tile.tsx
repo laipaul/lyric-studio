@@ -160,7 +160,7 @@ function Reactions({ projectId, video, onChanged }: { projectId: string; video: 
     if (!chosen) return;
     const out = (await post({ reaction: chosen.id, scope, apply: true })) as { applied?: string } | null;
     if (!out) return;
-    setDone(`Done for ${out.applied}. ${chosen.plan.text.replace(/^Next run: /, "Next run: ")} (Style tab → Reset undoes it.)`);
+    setDone(`Done for ${out.applied}. ${chosen.plan.text.replace(/^Next run: /, "Next run: ")} (Shape → the setting's ⋯ → Back to the inherited value undoes it.)`);
     setChosen(null);
     onChanged();
   };

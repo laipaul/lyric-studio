@@ -282,7 +282,8 @@ export function PairingsRow({
                   listRef.current?.querySelector<HTMLElement>("[data-pairing]")
                 )?.focus();
               }}
-              className="bg-popover text-popover-foreground z-50 max-h-[70vh] w-[min(34rem,92vw)] overflow-y-auto rounded-md border p-1 shadow-lg"
+              collisionPadding={8}
+              className="bg-popover text-popover-foreground z-50 max-h-[min(70vh,var(--radix-popover-content-available-height))] w-[min(34rem,92vw)] overflow-y-auto rounded-md border p-1 shadow-lg"
             >
               <div ref={listRef} className="flex flex-col">
                 {view.cards.map((c) => (

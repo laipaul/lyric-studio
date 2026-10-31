@@ -346,7 +346,7 @@ function TaglineField({ projectId }: { projectId: string }) {
         onBlur={() => void save()}
         onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
       />
-      <span className="text-muted-foreground text-xs">{saved === value && value ? "saved · " : ""}shown in the title opening (Style tab → Title opening: on)</span>
+      <span className="text-muted-foreground text-xs">{saved === value && value ? "saved · " : ""}shown in the title opening (Shape → This song → Title opening: on)</span>
     </label>
   );
 }

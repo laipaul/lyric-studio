@@ -41,5 +41,6 @@ export * from "./EffectsPreview";
 export * from "./PairPreview";
 export * from "./readability";
 export * from "./look-preview";
+export * from "./look-patch";
 export * from "./LookPreview";
 export * from "./LyricBacking";

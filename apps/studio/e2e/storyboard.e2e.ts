@@ -76,11 +76,17 @@ async function main() {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     const pageErrors: string[] = [];
     page.on("pageerror", (e: Error) => pageErrors.push(e.message));
-    await page.goto(`${base}/songs/${sp.project.id}?tab=storyboard`);
+    await page.goto(`${base}/songs/${sp.project.id}?tab=storyboard`); // an old link: opens the Shape page
     await page.waitForSelector("[data-storyboard-show]");
     check((await page.inputValue("[data-storyboard-platform]")) === "reels", "the plan for Reels (the recipe's platform) is offered");
-    await page.click("[data-storyboard-show]");
-    await page.waitForSelector("[data-shot='1']", { timeout: 180_000 });
+    await page.waitForSelector("[data-shot='1']", { timeout: 180_000 }); // planned on opening, no Show button to press
+    check(!!(await page.$("[data-viewer] .__remotion-player, [data-viewer] video, [data-viewer] div")), "the viewer plays the planned video");
+    const [vb, tl, strip0] = await Promise.all(["[data-viewer]", "[data-storyboard-timeline]", "[data-story-strip]"].map(async (sel) => (await page.$(sel))!.boundingBox()));
+    check(!!vb && !!tl && !!strip0 && vb.y + vb.height <= tl.y && tl.y + tl.height <= strip0.y, "top to bottom: the viewer, the soundtrack and shots, the clips used");
+    const waveY = (await (await page.$("[data-waveform]"))!.boundingBox())!.y;
+    const linesY = (await (await page.$("[data-textboard-row]"))!.boundingBox())!.y;
+    const shotsY = (await (await page.$("[data-shots-row]"))!.boundingBox())!.y;
+    check(waveY < linesY && linesY < shotsY, "the waveform, then the lyrics, then the shots");
     const summary = (await page.textContent("[data-storyboard-summary]")) ?? "";
     check(summary.includes("Reels v1") && summary.includes("planned now") && summary.includes("120 BPM"), `the summary (${summary})`);
     check(!existsSync(paths.exports) || readdirSync(paths.exports).length === 0, "nothing was rendered or written (no run folder)");
@@ -173,8 +179,6 @@ async function main() {
     const clipsJson = () => JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8"));
     check(JSON.stringify(clipsJson().order) === JSON.stringify(order), "the order is kept in clips.json");
     await page.reload();
-    await page.waitForSelector("[data-storyboard-show]");
-    await page.click("[data-storyboard-show]");
     await page.waitForSelector("[data-story-clip]", { timeout: 180_000 });
     check(JSON.stringify(await strip()) === JSON.stringify(order), "and still there after reloading the page");
     // Drag a clip onto another: it takes that place.
@@ -199,7 +203,37 @@ async function main() {
     check(recipe.anchors.some((a: { line: number; clip: string }) => a.line === 3 && a.clip === "04_d.mp4"), `dragging onto line 3 anchors 04_d there (${JSON.stringify(recipe.anchors)})`);
     check(!!(await page.$("[data-story-line='3'][data-anchored='04_d.mp4']")), "line 3 shows ⚓ 04_d.mp4");
 
-    // The Style tab's tempo: x2/3 of 120 = 80 BPM in song.json; the storyboard plans with it.
+    // Drag a clip onto a shot: anchored on the lyric line that starts in it.
+    const shotWithLine = await page.evaluate(() => {
+      const lines = [...document.querySelectorAll("[data-story-line]")].filter((l) => l.getAttribute("data-story-line")).map((l) => ({ n: Number(l.getAttribute("data-story-line")), x: l.getBoundingClientRect().left }));
+      for (const s of document.querySelectorAll("[data-shot]")) {
+        const r = s.getBoundingClientRect();
+        const line = lines.find((l) => l.x >= r.left - 1 && l.x < r.right - 2 && l.n !== 3);
+        if (line && !s.textContent?.includes("01_a.mp4")) return { shot: s.getAttribute("data-shot"), line: line.n };
+      }
+      return null;
+    });
+    check(!!shotWithLine, `a shot with a lyric line starting in it (${JSON.stringify(shotWithLine)})`);
+    if (shotWithLine) {
+      await page.dragAndDrop("[data-story-clip='01_a.mp4']", `[data-shot='${shotWithLine.shot}']`);
+      await replanned();
+      const anchors = JSON.parse(readFileSync(paths.recipe!, "utf8")).anchors as { line: number; clip: string }[];
+      check(anchors.some((a) => a.line === shotWithLine.line && a.clip === "01_a.mp4"), `dropping 01_a on shot ${shotWithLine.shot} anchors it on line ${shotWithLine.line} (${JSON.stringify(anchors)})`);
+    }
+
+    // A look change on the same page: the viewer shows it at once, song.json has it, the video is planned again.
+    await page.click("[data-try-effect=spread]");
+    await page.waitForFunction(() => document.querySelector("[data-viewer]")?.getAttribute("data-effect") === "spread", null, { timeout: 5000 }).catch(() => {});
+    check((await page.getAttribute("[data-viewer]", "data-effect")) === "spread", "Set effect: the viewer plays the new verse effect at once");
+    await replanned();
+    check(JSON.parse(readFileSync(paths.recipe!, "utf8")).verseEffect === "spread", "…saved in song.json");
+    await page.waitForFunction(() => document.querySelector("[data-viewer]")?.getAttribute("data-patched") === "0", null, { timeout: 60_000 }).catch(() => {});
+    check((await page.getAttribute("[data-viewer]", "data-patched")) === "0" && (await page.getAttribute("[data-viewer]", "data-effect")) === "spread", "…and the new plan has it (nothing patched any more)");
+    await page.click("[data-next-make]");
+    await page.waitForSelector("[data-release-pack]");
+    check(true, '"Next: Make" under the viewer opens Make');
+
+    // The tempo (Automatic, on the left): x2/3 of 120 = 80 BPM in song.json; the video is planned with it.
     await page.goto(`${base}/songs/${sp.project.id}?tab=style`);
     await unfoldStyle(page); // the tempo follows the analysis: in the folded Automatic block
     await page.waitForSelector("[data-tempo-check]");
@@ -214,14 +248,11 @@ async function main() {
     await page.click("[data-tempo-ratio='×2/3']");
     await page.waitForSelector("[data-saving=saved]");
     check(JSON.parse(readFileSync(paths.recipe!, "utf8")).tempo === 80, "x2/3 sets the tempo to 80 BPM in song.json");
-    await page.goto(`${base}/songs/${sp.project.id}?tab=storyboard`);
-    await page.waitForSelector("[data-storyboard-show]");
-    await page.click("[data-storyboard-show]");
-    await page.waitForSelector("[data-shot='1']", { timeout: 180_000 });
+    await page.waitForFunction(() => / 8\d BPM| 7[6-9] BPM/.test(document.querySelector("[data-storyboard-summary]")?.textContent ?? ""), null, { timeout: 180_000 }).catch(() => {});
     const summary80 = (await page.textContent("[data-storyboard-summary]")) ?? "";
     const bpm80 = Number(summary80.match(/(\d+) BPM/)?.[1]);
     // The beats are tracked again around 80 (on this 120 BPM click track they settle near it).
-    check(Math.abs(bpm80 - 80) <= 4, `the storyboard plans with the tempo (${summary80})`);
+    check(Math.abs(bpm80 - 80) <= 4, `planned again on the same page with the tempo (${summary80})`);
     await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "storyboard-stage2.png") });
     check(existsSync(songFile), "the song file is untouched");
     await browser.close();

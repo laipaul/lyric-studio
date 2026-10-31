@@ -104,7 +104,7 @@ async function main() {
     check(/low contrast over this frame: verse \d\.\d:1/.test((await page.textContent("[data-pairing-note-details]")) ?? ""), "…Details shows the contrast ratios");
     check((await page.$("[data-font-summary] [data-source]")) === null, "the font summary has no 'This song' badge yet (the brand's fonts)");
     await page.click("[data-fine-tune]"); // the six font rows and the own-fonts folder sit under Look → Fine-tune
-    check(((await page.textContent("[data-user-fonts]")) ?? "").includes(path.join(wsDir, "fonts")), "the Style tab shows the folder for my own fonts");
+    check(((await page.textContent("[data-user-fonts]")) ?? "").includes(path.join(wsDir, "fonts")), "Shape shows the folder for my own fonts");
 
     // Choosing an option: the dropdown shows it, song.json gets the pair; brand.json is untouched.
     await pickOption("romantic-script");
@@ -132,12 +132,12 @@ async function main() {
     check((await page.getAttribute("[data-preview='hookFont-default']", "style"))?.includes("italic") ?? false, "the per-font preview shows the italic");
     await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "pairings.png"), fullPage: false });
 
-    // One big Look preview: sticky beside the choices on a wide screen, the song's fonts, over the clip's
-    // (bright, cream) frame with the soft backing the render adds there; a hovered card is tried in it.
-    check((await page.$$("[data-look-preview]")).length === 1, "one big Look preview");
-    check((await page.$eval("[data-look-preview]", (e: Element) => getComputedStyle(e).position)) === "sticky", "…sticky on a wide screen");
+    // One viewer (here the stand-in: no planned video without timed lyrics): beside the tools on a wide
+    // screen, the song's fonts, over the clip's (bright, cream) frame with the soft backing the render adds
+    // there; a hovered option is tried in it.
+    check((await page.$$("[data-look-preview]")).length === 1, "one viewer");
     const lookBox = await page.$eval("[data-look-preview]", (e: Element) => e.getBoundingClientRect().width);
-    check(lookBox >= 300 && lookBox <= 360, `…about 300-360 px wide (${Math.round(lookBox)} px)`);
+    check(lookBox >= 300 && lookBox <= 380, `…about 300-380 px wide (${Math.round(lookBox)} px)`);
     check(!!(await page.$("[data-look-preview] img[src*='/api/files/thumbs/']")), "…over a frame of the song's clip");
     check((await page.getAttribute("[data-look-preview]", "data-backing")) === "1" && !!(await page.$("[data-look-preview] [data-lyric-backing]")), "…with the soft backing over the bright frame (readability auto, as the render)");
     check((await page.getAttribute("[data-look-preview]", "data-hook-face")) === "Cormorant Garamond 600 italic", `…in the song's hook face (${await page.getAttribute("[data-look-preview]", "data-hook-face")})`);
@@ -152,21 +152,10 @@ async function main() {
     await openList();
     await page.focus("[data-pairing=literary]");
     await page.keyboard.press("ArrowDown");
+    await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-previewing-pair") === "typewriter-story", null, { timeout: 3000 }).catch(() => {});
     check((await page.getAttribute("[data-look-preview]", "data-previewing-pair")) === "typewriter-story", "keyboard: moving the highlight tries that pair in the preview");
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => !document.querySelector("[data-look-preview]")?.getAttribute("data-previewing-pair"));
-    // The screenshot: the Look block scrolled to its middle, the preview still on screen (sticky).
-    await page.$eval("[data-style-block=look]", (e: Element) => {
-      const main = document.querySelector("main")!;
-      const r = e.getBoundingClientRect();
-      main.scrollTop += r.top + r.height / 2 - main.clientHeight / 2;
-    });
-    await sleep(1500);
-    const inView = await page.$eval("[data-look-preview]", (e: Element) => {
-      const r = e.getBoundingClientRect();
-      return r.top >= 0 && r.bottom <= window.innerHeight;
-    });
-    check(inView, "scrolled to the middle of the Look block, the preview is still fully on screen");
     // At 1366 px the dropdown and its list fit the window and the current name is whole.
     await page.setViewportSize({ width: 1366, height: 1100 });
     await sleep(400);
@@ -181,14 +170,13 @@ async function main() {
     await page.setViewportSize({ width: 1440, height: 1100 });
     if (process.env.U2_SHOT) await page.screenshot({ path: process.env.U2_SHOT });
     await page.$eval("main", (m: Element) => (m.scrollTop = 0));
-    // A narrow screen: the preview on top of the choices, not sticky.
+    // A narrow screen: the viewer on top of the tools.
     await page.setViewportSize({ width: 800, height: 1100 });
     await sleep(300);
     const narrow = await page.evaluate(() => ({
-      position: getComputedStyle(document.querySelector("[data-look-preview]")!).position,
       above: document.querySelector("[data-look-preview]")!.getBoundingClientRect().bottom <= document.querySelector("[data-pairings]")!.getBoundingClientRect().top,
     }));
-    check(narrow.position !== "sticky" && narrow.above, `narrow screen: the preview on top, not sticky (${JSON.stringify(narrow)})`);
+    check(narrow.above, `narrow screen: the viewer on top of the tools (${JSON.stringify(narrow)})`);
     await page.setViewportSize({ width: 1440, height: 1100 });
     if (process.env.LOOK_SHOT) {
       await page.setViewportSize({ width: 1440, height: 2400 });

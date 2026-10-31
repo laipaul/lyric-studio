@@ -66,7 +66,7 @@ function pointsFor(p: Problem): AssessPoint[] {
             const parts = [reps.length > 1 ? `${reps.length} times` : "", where ? `${reps.length > 1 ? "e.g. " : ""}${where}` : ""].filter(Boolean);
             return parts.length ? ` (${parts.join(", ")})` : "";
           })()}.`,
-          "Add a clip or two to the song, or change the story order in the Storyboard.",
+          "Add a clip or two to the song, or change the clip order on the Shape page.",
         ),
       ];
     }
@@ -93,12 +93,12 @@ function pointsFor(p: Problem): AssessPoint[] {
     case "Video length":
       return [major("length", "The file does not have the length it should.", AGAIN)];
     case "Story anchors":
-      return [minor("anchors", `Not every anchor could be placed as asked: ${p.details[0] ?? "see the details"}.`, "Check the anchored lines in the Storyboard (⚓).")];
+      return [minor("anchors", `Not every anchor could be placed as asked: ${p.details[0] ?? "see the details"}.`, "Check the anchored lines on the Shape page (⚓).")];
     case "Loop flows":
       return p.details.map((d) =>
         /both show (\S+)/.test(d)
           ? minor("loop-picture", `The loop is visible: ${/both show (\S+)/.exec(d)![1]} opens and closes the video.`, "Move that clip in the story order (Storyboard).")
-          : minor(`loop:${d.split(/[ :(]/)[0]}`, `The jump back to the start may be noticeable (${d.split(":")[0]}).`, "Try one of the target lengths the Storyboard suggests."),
+          : minor(`loop:${d.split(/[ :(]/)[0]}`, `The jump back to the start may be noticeable (${d.split(":")[0]}).`, "Try one of the target lengths the Shape page suggests."),
       );
     case "Seamless loop":
       return [major("canvas-loop", "The Canvas loop shows a visible jump.", "Choose another clip for the Canvas (clip editor → Use for Canvas).")];
@@ -109,9 +109,9 @@ function pointsFor(p: Problem): AssessPoint[] {
     case "Title cards inside the profile grid (3:4)":
       return [minor("title-grid", "Part of the title opening would be cut off on your profile grid (the cover shows 3:4).", "A shorter title or tagline for the video (Assets tab).")];
     case "Title cards clear of the first lyric":
-      return [minor("title-overlap", "The title is still on screen when the first lyric line appears.", "Shorten the title's hold in the card editor (Storyboard → title), or reset that card.")];
+      return [minor("title-overlap", "The title is still on screen when the first lyric line appears.", "Shorten the title's hold in the card editor (Shape → the title card), or reset that card.")];
     case "Title characters":
-      return [major("title-glyphs", `Some characters of the title have no font (${(p.details[0] ?? "").replace(/^no font draws /, "").split(" (")[0]}).`, "Choose another title font in the card editor (Storyboard → title).")];
+      return [major("title-glyphs", `Some characters of the title have no font (${(p.details[0] ?? "").replace(/^no font draws /, "").split(" (")[0]}).`, "Choose another title font in the card editor (Shape → the title card).")];
     case "Logo clear of the lyrics":
       return [minor("logo-lyrics", "The logo touches a lyric line.", "Choose another logo corner in brand.json (logo.youtube).")];
     case "Logo in a frame corner":
@@ -121,7 +121,7 @@ function pointsFor(p: Problem): AssessPoint[] {
     case "Section start/end":
       return p.details.map((d) => {
         const m = /^the video (starts|ends) at (\S+) .* line (\d+) "([^"]*)"/.exec(d);
-        return major(`cut:${m?.[3] ?? d}`, m ? `The video ${m[1]} while line ${m[3]} ${quote(m[4])} is being sung.` : "A sung line is cut at the start or end.", "Choose another target length in the Style tab, or Section: auto.");
+        return major(`cut:${m?.[3] ?? d}`, m ? `The video ${m[1]} while line ${m[3]} ${quote(m[4])} is being sung.` : "A sung line is cut at the start or end.", "Choose another target length (Shape → Automatic), or Section: auto.");
       });
     default:
       if (p.check.startsWith("Length ")) return [major("canvas-length", `The Canvas loop has the wrong length (${p.details[0] ?? ""}).`, AGAIN)];

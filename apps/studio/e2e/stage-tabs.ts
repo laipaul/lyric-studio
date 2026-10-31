@@ -1,6 +1,7 @@
 // The song page groups its tabs in four stages (Prepare, Shape, Make, Review & Post): a tab is reached by
-// its stage first. Generate's full panel is folded under "Make release pack": opened here when asked.
-const STAGE_OF: Record<string, string> = { Assets: "prepare", Lyrics: "prepare", Style: "shape", Storyboard: "shape", Generate: "make", Videos: "review", Post: "review" };
+// its stage first. Shape is one page (the former Style and Storyboard tabs). Generate's full panel is
+// folded under "Make release pack": opened here when asked.
+const STAGE_OF: Record<string, string> = { Assets: "prepare", Lyrics: "prepare", Style: "shape", Storyboard: "shape", Shape: "shape", Generate: "make", Videos: "review", Post: "review" };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function openTab(page: any, tab: string): Promise<void> {
@@ -10,16 +11,28 @@ export async function openTab(page: any, tab: string): Promise<void> {
     if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
     return;
   }
+  if (STAGE_OF[tab] === "shape") {
+    await page.waitForSelector("[data-shape]");
+    // The tools column folds Automatic, the six font rows (Look → Fine-tune) and the compact This song /
+    // What to make lines: these tests use every setting.
+    if (tab === "Style") await unfoldStyle(page);
+    return;
+  }
   await page.click(`[role=tab]:has-text('${tab}')`);
-  // The Style tab folds its Automatic block and the six font rows (Look → Fine-tune): these tests use every setting.
-  if (tab === "Style") await unfoldStyle(page);
 }
 
-// Opens the Style tab's Automatic block and the font Fine-tune rows when folded.
+// Opens the tools column's folded parts: Automatic, the font Fine-tune rows, This song and What to make.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function unfoldStyle(page: any): Promise<void> {
-  for (const sel of ["[data-auto-toggle]", "[data-fine-tune]"]) {
+  for (const sel of ["[data-auto-toggle]", "[data-fine-tune]", "[data-compact=song]", "[data-compact=make]"]) {
     const toggle = await page.waitForSelector(sel);
     if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
   }
+}
+
+// A setting's ⋯ menu item (lock, reset, per platform, use for all my songs): opens the menu, then clicks it.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function menuItem(page: any, field: string, item: string): Promise<void> {
+  await page.click(`[data-row-menu="${field}"]`);
+  await page.click(`[role=menuitem][${item}]`);
 }

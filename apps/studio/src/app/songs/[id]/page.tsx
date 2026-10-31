@@ -17,21 +17,21 @@ import { GeneratePanel } from "@/components/generate-panel";
 import { LyricsTab } from "@/components/lyrics-tab";
 import { PostTab } from "@/components/post-tab";
 import { StatusBadge } from "@/components/status-badge";
-import { StoryboardTab } from "@/components/storyboard-tab";
-import { StyleTab } from "@/components/style-tab";
+import { ShapePage } from "@/components/shape-page";
 import { SongView, type RunView } from "@/components/song-view";
 import { ReleasePack, SongStages, type StageId, type StageStatus } from "@/components/song-stages";
 import { TabsContent } from "@/components/ui/tabs";
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
 // The song page: header, then tabs: Assets (the song folder's files and clips), Lyrics (every line's
-// timing, what the viewer sees, nudges into hints.lrc, lyrics.txt), Style (the song's
-// recipe: song.json with each setting's source, per platform, save / reset / lock), Generate (the
+// timing, what the viewer sees, nudges into hints.lrc, lyrics.txt), Shape (one page: the planned video's
+// viewer, the timeline and the clips, the song's recipe tools on the left), Generate (the
 // worker makes the videos; progress in the Tasks menu; ?from=<run> starts it with that run's settings),
 // Videos (exports grid, marks, compare, each run's settings next to the recipe) and Post (the approved
 // videos with their captions and files). ?tab= opens a tab. The tabs are grouped in four stages
 // (Prepare -> Shape -> Make -> Review & Post) with the Prepare to-do list and "Make release pack".
-const TABS = ["assets", "lyrics", "style", "storyboard", "generate", "videos", "post"];
+const TABS = ["assets", "lyrics", "shape", "generate", "videos", "post"];
+const OLD_TABS: Record<string, string> = { style: "shape", storyboard: "shape" }; // links from before Style and Storyboard became one Shape page
 type Search = Promise<{ tab?: string; from?: string }>;
 
 export default function SongPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Search }) {
@@ -80,7 +80,8 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
   const blocking = todo.find((t) => t.blocking) ?? null;
   // Where the page opens: ?tab=; a song with videos: Review; before the first video: what still needs doing
   // (Prepare), else Make. (Prepare's status stays visible in the stage bar either way.)
-  const tab = search.tab && TABS.includes(search.tab) ? search.tab : runs.length ? "videos" : todo.length ? (blocking ?? todo[0]).tab : "generate";
+  const asked = search.tab ? (OLD_TABS[search.tab] ?? search.tab) : undefined;
+  const tab = asked && TABS.includes(asked) ? asked : runs.length ? "videos" : todo.length ? (blocking ?? todo[0]).tab : "generate";
 
   // Each stage's status line.
   const chips = song.platforms.map((p) => ({ ...p, state: chipState(p) }));
@@ -140,11 +141,8 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
         <TabsContent value="lyrics">
           <LyricsTab projectId={song.id} />
         </TabsContent>
-        <TabsContent value="style">
-          <StyleTab projectId={song.id} />
-        </TabsContent>
-        <TabsContent value="storyboard">
-          <StoryboardTab projectId={song.id} />
+        <TabsContent value="shape">
+          <ShapePage projectId={song.id} />
         </TabsContent>
         {/* Kept mounted (hidden when inactive) so what was chosen here (platforms, collections, effects...) survives a trip to another stage. */}
         <TabsContent value="generate" forceMount className="data-[state=inactive]:hidden">
