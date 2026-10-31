@@ -5,17 +5,17 @@
 import { connection } from "next/server";
 
 import { loadFontCatalog } from "@lyric/video/font-catalog";
-import { themesPageData } from "@lyric/video/style";
+import { themesPageWithFrames } from "@lyric/video/style";
 import { chooseTheme, duplicateTheme, newTheme, removeTheme, renameTheme, restoreTheme, setThemeDetails } from "@lyric/video/themes";
 
-import { withWorkspace } from "@/lib/workspace";
+import { withWorkspaceAsync } from "@/lib/workspace";
 
 type Body = { action?: string; projectId?: string; name?: string; newName?: string; from?: string; folder?: string; description?: string; author?: string };
 
 export async function GET() {
   await connection();
   try {
-    return Response.json(withWorkspace((ws) => themesPageData(ws)), { headers: { "Cache-Control": "no-store" } });
+    return Response.json(await withWorkspaceAsync((ws) => themesPageWithFrames(ws)), { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return Response.json({ error: (error as Error).message }, { status: 400 });
   }
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   const name = String(body.name ?? "").trim();
   try {
     return Response.json(
-      withWorkspace((ws) => {
+      await withWorkspaceAsync(async (ws) => {
         const catalog = loadFontCatalog(ws.dir);
         if (body.action === "use") chooseTheme(ws, String(body.projectId ?? ""), name, catalog);
         else if (body.action === "create") newTheme(ws.dir, name, String(body.from ?? ""));
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
         else if (body.action === "remove") removeTheme(ws, name, catalog);
         else if (body.action === "restore") restoreTheme(ws.dir, String(body.folder ?? ""));
         else throw new Error("Unknown action.");
-        return themesPageData(ws);
+        return themesPageWithFrames(ws);
       }),
     );
   } catch (error) {

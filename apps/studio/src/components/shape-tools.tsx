@@ -4,7 +4,7 @@ import { Check, ChevronDown, Lock, Plus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { patchChoice, previewBacking, previewFace, previewLyrics, type LookPatch, type LookPreviewProps, type PatchFace, type Readability } from "@lyric/video";
+import { BACKING_LABELS, FALLBACK_LABELS, GRADE_LABELS, patchChoice, pictureOf, VIGNETTE_LABELS, previewBacking, previewFace, previewLyrics, type LookPatch, type LookPreviewProps, type PatchFace, type Readability } from "@lyric/video";
 import type { PairingCard, PairingsView } from "@lyric/video/pairings";
 import type { StyleData, StyleField, StyleFont, StyleTheme } from "@lyric/video/style";
 
@@ -37,7 +37,7 @@ const show = (v: unknown) => (v === null ? "preset" : Array.isArray(v) ? (v.leng
 // What the Shape page's viewer needs from the tools: the look to patch into the planned video until it is
 // planned again (or while a pairing is pointed at), and the stand-in preview when there is no plan.
 export type ShapeLook = { patch: LookPatch | null; fallback: LookPreviewProps; caption: string; previewing: string | null }; // previewing: the pairing pointed at
-const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "accentColour"]);
+const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "accentColour", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas"]);
 
 // The Shape page's tool panels (the song's recipe, song.json), one at a time as chosen in the rail: Fonts
 // (font pairing, the fonts line with Fine-tune), Effects (Set effect with its Verses / Choruses switch),
@@ -287,7 +287,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
         </label>
       );
     }
-    if (f.field === "accentColour") {
+    if (f.field === "accentColour" || f.field === "textColour" || f.field === "fallbackColour") {
       return (
         <div className="flex items-center gap-2">
           <input
@@ -529,7 +529,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
   const byField = new Map(data.fields.map((f) => [f.field, f] as const));
   const pick = (names: readonly string[]) => names.map((n) => byField.get(n as StyleField["field"])).filter((f): f is StyleField => !!f);
   // Any setting not named in a block (a future one) lands in "This song".
-  const placed = new Set<string>([...SONG_FIELDS, ...LOOK_FIELDS, ...EFFECT_FIELDS, ...FONT_ORDER, ...MAKE_FIELDS, ...AUTO_FIELDS]);
+  const placed = new Set<string>([...SONG_FIELDS, ...LOOK_FIELDS, ...PICTURE_FIELDS, ...EFFECT_FIELDS, ...FONT_ORDER, ...MAKE_FIELDS, ...AUTO_FIELDS]);
   const songFields = [...pick(SONG_FIELDS), ...data.fields.filter((f) => !placed.has(f.field))];
   const fontFields = pick(FONT_ORDER);
   const autoFields = pick(AUTO_FIELDS);
@@ -707,6 +707,11 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
               <EditorSection id="colours" title="Colours">
                 {rows(pick(LOOK_FIELDS))}
                 <CoverColours cover={data.cover} current={String(valueOf("accentColour") ?? "")} onPick={(c) => void act({ action: "set", field: "accentColour", value: c })} />
+              </EditorSection>
+
+              <EditorSection id="picture" title="Picture">
+                <PictureControls value={(k) => valueOf(k)} onSet={(field, value) => void act({ action: "set", field, value })} />
+                {valueOf("fallback") === "colour" ? rows(pick(["fallbackColour"])) : null}
               </EditorSection>
 
               <EditorSection id="cards" title="Cards">
@@ -921,9 +926,11 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
 }
 
 // The stand-in preview of a theme on a few lyric lines (the Themes page's tiles and detail view).
-export function themePreview(look: Record<string, unknown>, fonts: StyleFont[], sampleLines: string[]): LookPreviewProps {
+export function themePreview(look: Record<string, unknown>, fonts: StyleFont[], sampleLines: string[], background: string | null = null): LookPreviewProps {
   const fields = Object.entries(look).map(([field, value]) => ({ field, value })) as unknown as StyleField[];
-  return lookOf({ fields, fonts, sampleLines } as unknown as StyleData, { dirty: false, hovered: null, pairView: null, part: "verse" }).fallback;
+  const p = lookOf({ fields, fonts, sampleLines } as unknown as StyleData, { dirty: false, hovered: null, pairView: null, part: "verse" }).fallback;
+  // background: a frame of a real clip (workspace-relative), so the theme is seen as in a video.
+  return background ? { ...p, background: `/api/files/${background}` } : p;
 }
 
 // The look the viewer shows: the recipe's (or the pairing pointed at), patched into the planned video
@@ -950,8 +957,9 @@ function lookOf(data: StyleData, s: { dirty: boolean; hovered: PairingCard | nul
   const breathe = fx.breathe;
   const addOns = { heldGlow: fx.heldGlow, chorusLift: fx.chorusLift, shine: fx.shine };
   const accent = String(value("accentColour") ?? "#E8A3B5");
-  const patch: LookPatch | null = s.dirty ? { verse, hook, verseEffect, hookEffect, breathe, ...addOns, accent } : s.hovered ? { verse, hook } : null;
-  const colour = s.pairView?.colour ?? "#ffffff";
+  const colour = String(value("textColour") ?? s.pairView?.colour ?? "#FFFFFF");
+  const picture = pictureOf({ grade: str(value("grade")), vignette: str(value("vignette")), textBacking: str(value("textBacking")), fallback: str(value("fallback")), fallbackColour: str(value("fallbackColour")), accentColour: accent });
+  const patch: LookPatch | null = s.dirty ? { verse, hook, verseEffect, hookEffect, breathe, ...addOns, accent, colour, picture } : s.hovered ? { verse, hook } : null;
   const all = [...verse.files, ...hook.files];
   const fallback: LookPreviewProps = {
     mediaBaseUrl: "/api/fonts",
@@ -967,6 +975,7 @@ function lookOf(data: StyleData, s: { dirty: boolean; hovered: PairingCard | nul
     colour,
     textSize: s.pairView?.textSize ?? 64,
     area: s.pairView?.area ?? null,
+    picture,
     backing: previewBacking((value("readability") as Readability | undefined) ?? "auto", s.pairView?.bandLuminance ?? null, { colour, accent, verse, hook }),
   };
   const caption = s.trying ? `Trying the theme ${s.trying}: click it to use it for this song.` : s.hovered ? `Trying ${s.hovered.name}: click it in the list to use it.` : "Your song's first lines with your theme (no planned video yet).";
@@ -1005,13 +1014,16 @@ function Block({ id, title, children }: { id: string; title: string; children: R
   );
 }
 
+const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+
 // "Tempo (BPM)" -> "Tempo", "Ending (Reels, TikTok, Shorts)" -> "Ending".
 const shortLabel = (label: string) => label.replace(/\s*\(.*\)\s*$/, "");
 
 // The tools column's blocks, each in its order (the six font rows sit under Look's "Fine-tune"; the
 // effect, Breathe and add-on settings are set in Set effect, their per-platform values under its ⋯).
 const SONG_FIELDS = ["tagline", "ep", "youtubeLayout", "titleOpening"] as const;
-const LOOK_FIELDS = ["accentColour"] as const;
+const LOOK_FIELDS = ["textColour", "accentColour"] as const;
+const PICTURE_FIELDS = ["grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas"] as const;
 const EFFECT_FIELDS = ["verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine"] as const;
 const MAKE_FIELDS = ["platforms", "variations", "collections"] as const;
 const AUTO_FIELDS = ["shotLength", "tempo", "section", "length", "ending", "transitions", "paceShift", "readability"] as const;
@@ -1250,6 +1262,45 @@ function EditorSection({ id, title, children }: { id: string; title: string; chi
 }
 
 // Five colours from the song's cover, as accent suggestions (read in the browser from a small copy).
+// The theme's picture (src/picture.ts): chips per setting; the viewer shows each click, Save keeps it.
+function PictureControls({ value, onSet }: { value: (field: string) => unknown; onSet: (field: string, value: string) => void }) {
+  const groups: { field: string; label: string; hint: string; options: Record<string, string> }[] = [
+    { field: "grade", label: "Colour grade", hint: "One look on every clip, so mixed footage feels like one film. Your clips themselves are never changed.", options: GRADE_LABELS },
+    { field: "vignette", label: "Vignette", hint: "Darker edges draw the eye to the middle.", options: VIGNETTE_LABELS },
+    { field: "textBacking", label: "Behind the words", hint: "The app still adds a soft band by itself when a clip is too bright to read the lyrics.", options: BACKING_LABELS },
+    { field: "fallback", label: "Background without a clip", hint: "For a song without clips, or a slot waiting for one.", options: FALLBACK_LABELS },
+  ];
+  return (
+    <div data-picture className="flex flex-col gap-3">
+      {groups.map((g) => (
+        <div key={g.field} data-picture-group={g.field} className="bg-card flex flex-col gap-1.5 rounded-lg border px-3 py-2.5">
+          <span className="text-sm font-medium">{g.label}</span>
+          <div className="flex flex-wrap gap-1.5">
+            {Object.entries(g.options).map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                data-picture-option={`${g.field}-${v}`}
+                aria-pressed={value(g.field) === v}
+                onClick={() => onSet(g.field, v)}
+                className={cn("rounded-full border px-2.5 py-0.5 text-xs", value(g.field) === v ? "border-brand bg-brand/15 text-foreground" : "text-muted-foreground hover:text-foreground")}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <Hint text={g.hint} />
+        </div>
+      ))}
+      <label data-picture-group="gradeCanvas" className="bg-card flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg border px-3 py-2.5 text-sm">
+        <input type="checkbox" data-picture-option="gradeCanvas" checked={value("gradeCanvas") !== "off"} onChange={(e) => onSet("gradeCanvas", e.target.checked ? "on" : "off")} />
+        Grade the Spotify Canvas too
+        <span className="text-muted-foreground basis-full pl-5 text-xs">Off: the Canvas keeps the clips&apos; own colours.</span>
+      </label>
+    </div>
+  );
+}
+
 function CoverColours({ cover, current, onPick }: { cover: string | null; current: string; onPick: (colour: string) => void }) {
   const [colours, setColours] = useState<string[]>([]);
   useEffect(() => {

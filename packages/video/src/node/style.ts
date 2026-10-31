@@ -33,6 +33,7 @@ import {
   type SongRecipe,
 } from "./recipe";
 import { isRemovedSong, sharedCollections, songPathsById } from "./song-folder";
+import { anchorClips } from "./lyrics-view";
 import { brandThemes, ensureAllThemes, ensureSongTheme, isThemeField, listThemes, loadTheme, removedThemes, setThemeLook, themeLayer, type RemovedTheme, type ThemeLook } from "./themes";
 import { SHORT_LABELS } from "./exports";
 
@@ -69,6 +70,13 @@ export const FIELD_LABELS: Record<RecipeField, string> = {
   tagline: "Tagline",
   ep: "EP",
   youtubeLayout: "YouTube layout",
+  textColour: "Text colour",
+  grade: "Colour grade",
+  vignette: "Vignette",
+  textBacking: "Behind the words",
+  fallback: "Background without a clip",
+  fallbackColour: "Background colour",
+  gradeCanvas: "Grade on the Canvas",
 };
 
 export type StyleValue = { value: unknown; source: string; own: boolean };
@@ -392,7 +400,7 @@ export function setBrandTitleFont(ws: Workspace, o: { artist: string; family: st
 
 // The Themes page (31 Oct 2026): every theme with its songs, the fonts to draw them, a few lyric lines to
 // preview them on (the newest song with lyrics), the songs to use a theme for, and the deleted themes.
-export type ThemeCard = StyleTheme & { author: string; licence: string; createdAt: string; songs: { id: string; title: string }[]; brandDefault: string | null };
+export type ThemeCard = StyleTheme & { author: string; licence: string; createdAt: string; songs: { id: string; title: string }[]; brandDefault: string | null; background?: string | null };
 export type ThemesPageData = { themes: ThemeCard[]; fonts: StyleFont[]; sampleLines: string[]; sampleSong: string | null; songs: { id: string; title: string; theme: string | null }[]; removed: RemovedTheme[] };
 
 export function themesPageData(ws: Workspace): ThemesPageData {
@@ -441,4 +449,41 @@ export function themesPageData(ws: Workspace): ThemesPageData {
     }
   }
   return { themes, fonts: styleFonts(catalog), sampleLines: sample, sampleSong, songs: songs.sort((a, b) => a.title.localeCompare(b.title)), removed: removedThemes(ws.dir) };
+}
+
+// The Themes page with a real picture behind each theme: a frame of a clip of the first song that uses it
+// (else of the newest song with clips), else that song's cover; null when no song has either.
+export async function themesPageWithFrames(ws: Workspace): Promise<ThemesPageData> {
+  const data = themesPageData(ws);
+  const frames = new Map<string, string | null>();
+  const frameOf = async (id: string): Promise<string | null> => {
+    if (frames.has(id)) return frames.get(id)!;
+    let frame: string | null = null;
+    try {
+      frame = (await anchorClips(ws, id)).clips.find((c) => c.thumb)?.thumb ?? null;
+    } catch {
+      // no clips yet
+    }
+    if (!frame) {
+      const cover = songPathsById(ws, id).cover;
+      frame = cover && existsSync(cover) ? path.relative(ws.dir, cover).split(path.sep).join("/") : null;
+    }
+    frames.set(id, frame);
+    return frame;
+  };
+  const newest = [...data.songs].reverse();
+  let any: string | null | undefined;
+  for (const t of data.themes) {
+    let bg: string | null = null;
+    for (const s of t.songs) if ((bg = await frameOf(s.id))) break;
+    if (!bg) {
+      if (any === undefined) {
+        any = null;
+        for (const s of newest) if ((any = await frameOf(s.id))) break;
+      }
+      bg = any;
+    }
+    t.background = bg;
+  }
+  return data;
 }

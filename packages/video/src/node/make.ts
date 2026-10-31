@@ -38,6 +38,7 @@ import { getCutPoints, type CutRate, type Energy, type ShotLength } from "../cut
 import { bestMoments } from "./best-moment";
 import { clipBandLuminances } from "./lyric-band";
 import { isThinFace, lyricBackingFor, type BackingDecision, type Readability } from "../readability";
+import { pictureOf } from "../picture";
 import { editOf, rankOf, readClipEdits } from "./clip-edits";
 import { boardForRun, cardFont, cardMeasure, overrideCount, titleCards, type RunBoard } from "./textboard";
 import { matchPinClips, parsePins } from "../pins";
@@ -58,7 +59,7 @@ import { loadBrand, type Brand } from "./brand";
 import { artistBrandFile } from "./captions";
 import { readProjectSettings, rememberCollection, rememberedCollection, updateProjectSettings } from "./project-settings";
 import { PLATFORM_FIELDS, type PlatformField } from "./per-platform";
-import { artistRecipe, LIBRARY_RECIPE, readRecipe, recipeSummary, recipeText, resolveRecipe, runRecipe, writeRecipe, type RecipeField, type RecipeInput, type ResolvedRecipe } from "./recipe";
+import { artistRecipe, LIBRARY_RECIPE, readRecipe, recipeSummary, recipeText, resolveRecipe, runRecipe, writeRecipe, type RecipeField, type RecipeInput, type RecipeValues, type ResolvedRecipe } from "./recipe";
 import { renameSongFolder, songPathsById, STORY_FILE } from "./song-folder";
 import { ensureSongTheme, loadTheme, themeLayer } from "./themes";
 import { barStarts, rmsLevel, strongestStretch } from "../story";
@@ -144,6 +145,9 @@ export type MakeOptions = {
   chorusLift?: "off" | "on"; // the first line of each chorus arrives a touch bigger and brighter
   shine?: "off" | "on"; // one soft light sweep across each chorus line, on a downbeat
   titleOpening?: "off" | "on"; // Reels / TikTok / Shorts: title, byline and tagline before the first hook
+  // The theme's picture (src/picture.ts; recipe textColour, grade, vignette, textBacking, fallback,
+  // fallbackColour, gradeCanvas). Absent (pnpm make without a song.json): the videos as before.
+  picture?: Pick<RecipeValues, "textColour" | "grade" | "vignette" | "textBacking" | "fallback" | "fallbackColour" | "gradeCanvas">;
   transitions?: TransitionStyle; // between shots: "auto" (default: from the music), "crisp" (cuts), "flowing" (dissolves)
   ending?: EndingChoice; // Reels / TikTok / Shorts: "auto" (default: the app chooses tight loop, soft fade or ring-out) or one of them
   tempo?: number; // the song's real BPM (song.json "tempo"): the beats are re-tracked around it
@@ -581,6 +585,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       chorusLift: recipe.values.chorusLift,
       shine: recipe.values.shine,
       titleOpening: recipe.values.titleOpening,
+      picture: pictureFields(recipe.values),
       tempo: recipe.values.tempo ?? undefined,
       // Weights and italic: the recipe's (brand, song or run) whenever the brand fonts are used for the
       // lyrics; otherwise only the song's or run's own (else the Simple / Bold style's weight).
@@ -913,7 +918,7 @@ function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: Pl
   const length = lengthFor(base, r.values.length, sh.analysis.duration_ms);
   if (length.note) sh.log(`${base.name}: ${length.note}`);
   const section = r.values.section === "auto" && length.wholeSong ? "full" : r.values.section;
-  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined, shotLength: r.values.shotLength ?? undefined, ending: r.values.ending, transitions: r.values.transitions, paceShift: r.values.paceShift, readability: r.values.readability, breathe: r.values.breathe, heldGlow: r.values.heldGlow, chorusLift: r.values.chorusLift, shine: r.values.shine, titleOpening: r.values.titleOpening };
+  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined, shotLength: r.values.shotLength ?? undefined, ending: r.values.ending, transitions: r.values.transitions, paceShift: r.values.paceShift, readability: r.values.readability, breathe: r.values.breathe, heldGlow: r.values.heldGlow, chorusLift: r.values.chorusLift, shine: r.values.shine, titleOpening: r.values.titleOpening, ...(sh.options.picture ? { picture: pictureFields(r.values) } : {}) };
   const own = PLATFORM_FIELDS.filter((k) => r.sources[k].includes(":"));
   if (own.length) sh.log(`${preset.name}: recipe ${own.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]})`).join(", ")}`);
   const out: Shared = {
@@ -924,6 +929,11 @@ function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: Pl
     brand: accent ? { ...sh.brand, brand: { ...sh.brand.brand, accentColour: accent } } : sh.brand,
   };
   return { sh: out, preset: r.values.section === "auto" ? length.preset : base };
+}
+
+// The theme's picture fields of a recipe (MakeOptions.picture).
+function pictureFields(v: RecipeValues): NonNullable<MakeOptions["picture"]> {
+  return { textColour: v.textColour, grade: v.grade, vignette: v.vignette, textBacking: v.textBacking, fallback: v.fallback, fallbackColour: v.fallbackColour, gradeCanvas: v.gradeCanvas };
 }
 
 // The Reel cover's props: the video's frame with the title opening's cards (title, byline, tagline) on it
@@ -1264,6 +1274,17 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   // hook accent (thin strokes need more); "strong" / "normal" are the user's overrides. The clips are
   // measured at the moment their first shot is centred on (cached).
   const readabilityArea = ytLayout ? lyricAreaFor(ytLayout, preset) : lyricArea(format, preset.safeZone, preset.lyricsAt);
+  // The theme's picture (src/picture.ts): the grade and vignette over the clips, what is behind the words,
+  // the background where there is no clip (the cover blurred in advance for "cover"). The Canvas keeps the
+  // clips' own colours when the theme says gradeCanvas "off".
+  const textColour = options.picture?.textColour ?? "#ffffff";
+  let pictureCover: string | null = null;
+  if (options.picture?.fallback === "cover" && !options.dryRun) {
+    const row = ws.db.select().from(projectTable).where(eq(projectTable.id, project.id)).get()!;
+    const cover = resolveCover(ws, row, { cover: options.cover, songFile: path.resolve(options.song) });
+    if (cover) pictureCover = await blurredBackground(ws, cover.stored, format).catch(() => null);
+  }
+  const picture = options.picture ? pictureOf({ ...options.picture, accentColour: sh.brand.brand.accentColour }, { canvas: !!canvas, coverSrc: pictureCover }) : null;
   const backing = lyricBackingFor(
     options.readability,
     preset.lyrics && usesClips && !canvas && options.readability !== "strong" && options.readability !== "normal"
@@ -1275,7 +1296,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         )
       : [],
     {
-      colour: "#ffffff",
+      colour: textColour,
       accent: sh.brand.brand.accentColour,
       verseThin: isThinFace(styles.simple.main.family, styles.simple.main.weight),
       hookThin: isThinFace((styles.simple.hook ?? styles.simple.main).family, (styles.simple.hook ?? styles.simple.main).weight),
@@ -1298,9 +1319,10 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     durationInFrames: plan.end_frame - plan.start_frame,
     lyrics: shown.map((i) => allLyrics[i]),
     styles: { simple: styles.simple.entry, bold: styles.bold.entry },
-    colour: "#ffffff",
+    colour: textColour,
     cinematicBars: false,
     pins,
+    ...(picture ? { picture } : {}),
     platform: layout,
     beats: analysis.beats,
     ...(anchors.length ? { anchors } : {}),
@@ -1997,6 +2019,7 @@ function buildManifest(c: {
     settings: {
       cut_rate: spec.rate ?? c.options.rate ?? "1x",
       theme: c.options.theme ?? null, // the song's theme (or --theme / Compare themes for this run)
+      picture: c.props.picture ? { grade: c.props.picture.grade, vignette: c.props.picture.vignette, text_backing: c.props.picture.backing, fallback: c.props.picture.fallback, text_colour: c.props.colour } : null, // the theme's picture (src/picture.ts)
       gap_order: c.gapOrder ?? null, // "story": every video in story order (story anchors)
       transitions: spec.transitions ?? null, // story variations: the anchors' own ("as-set"), all "dissolve" or all "cut"
       energy: c.options.energy ?? "medium",

@@ -242,7 +242,7 @@ async function main() {
     await openPanel(page, "effects");
     await page.waitForSelector("[data-effect-preview]");
     const sections = await page.$$eval("[data-editor-section]", (e: Element[]) => e.map((x) => x.getAttribute("data-editor-section")));
-    check(JSON.stringify(sections) === JSON.stringify(["text", "motion", "colours", "cards"]), `the theme editor: Text, Motion, Colours, Cards (${sections.join(", ")})`);
+    check(JSON.stringify(sections) === JSON.stringify(["text", "motion", "colours", "picture", "cards"]), `the theme editor: Text, Motion, Colours, Picture, Cards (${sections.join(", ")})`);
     check((await page.getAttribute("[data-effect-part]", "data-effect-part")) === "verse", "Set effect starts on Verses");
     const before = look("verseEffect");
     await page.click("[data-try-effect=typewriter]");
@@ -286,6 +286,19 @@ async function main() {
     await setAccent("#33aaff");
     await saveTheme(page);
     check(await saved("accentColour", "#33AAFF"), "…and Save keeps it");
+    // Picture: the grade, vignette, behind the words and the background without a clip; the viewer shows each click.
+    await openPanel(page, "colour");
+    await page.click("[data-picture-option='grade-warm']");
+    await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-grade") === "warm");
+    check(true, "Picture: the colour grade reaches the viewer at once");
+    await page.click("[data-picture-option='vignette-soft']");
+    await page.click("[data-picture-option='textBacking-box']");
+    await page.click("[data-picture-option='fallback-colour']");
+    await page.waitForSelector("[data-field='fallbackColour']");
+    check(true, "Background without a clip: Plain colour shows its colour row");
+    await page.click("[data-picture-option='gradeCanvas']");
+    await saveTheme(page);
+    check((await saved("grade", "warm")) && look("vignette") === "soft" && look("textBacking") === "box" && look("fallback") === "colour" && look("gradeCanvas") === "off", "Save: the picture goes into the theme");
     // A second song on the same theme: Save says so; "Save as new theme" keeps it as it is for the other song.
     const shared = readRecipe(recipe).theme!;
     const other = path.join(root, "Let Go.wav");

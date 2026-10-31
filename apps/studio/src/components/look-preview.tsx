@@ -14,7 +14,7 @@ export const VIEWER_HEIGHT = "max(260px, min(calc(100vh - 36rem), 760px))";
 
 export function LookViewer({ input, caption, previewing }: { input: LookPreviewProps; caption: string; previewing?: string | null }) {
   return (
-    <div data-look-preview data-effect={input.effect.name} data-breathe={input.breathe} data-verse-family={input.verse.family} data-hook-family={input.hook.family} data-hook-face={`${input.hook.family} ${input.hook.weight}${input.hook.italic ? " italic" : ""}`} data-previewing-pair={previewing ?? undefined} data-accent={input.accent} data-backing={input.backing ? "1" : "0"} className="flex flex-col gap-1.5">
+    <div data-look-preview data-effect={input.effect.name} data-breathe={input.breathe} data-verse-family={input.verse.family} data-hook-family={input.hook.family} data-hook-face={`${input.hook.family} ${input.hook.weight}${input.hook.italic ? " italic" : ""}`} data-previewing-pair={previewing ?? undefined} data-accent={input.accent} data-grade={input.picture?.grade ?? "natural"} data-text-colour={input.colour} data-backing={input.backing ? "1" : "0"} className="flex flex-col gap-1.5">
       <div className="mx-auto overflow-hidden rounded-xl border bg-black shadow-lg" style={{ height: VIEWER_HEIGHT, aspectRatio: "9 / 16" }}>
         <Player
           component={LookPreview}

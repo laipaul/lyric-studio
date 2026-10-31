@@ -25,7 +25,7 @@ import { isRemovedSong, songPathsById } from "./song-folder";
 
 export const THEME_VERSION = 1;
 // What a theme decides: the fonts, the lyric effects, the accent colour and the add-ons.
-export const THEME_FIELDS = ["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "accentColour", "breathe", "heldGlow", "chorusLift", "shine"] as const satisfies readonly RecipeField[];
+export const THEME_FIELDS = ["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "accentColour", "breathe", "heldGlow", "chorusLift", "shine", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas"] as const satisfies readonly RecipeField[];
 export type ThemeField = (typeof THEME_FIELDS)[number];
 export type ThemeLook = Pick<RecipeValues, ThemeField>;
 // A theme folder is self-contained, so it can later be shared or sold as one file (a zip of the folder):
@@ -49,7 +49,7 @@ export const isThemeField = (k: string): k is ThemeField => (THEME_FIELDS as rea
 const HELP =
   "A Lyric Studio theme: the whole look of a song (fonts, lyric effects, accent colour, add-ons). Songs point to it with " +
   'song.json "theme". look: verseFont / hookFont (a family from pnpm fonts), verseWeight / hookWeight (100-900), verseItalic / hookItalic (true / false), ' +
-  'verseEffect / hookEffect ("glide", "soft-blur:subtle", ...), accentColour ("#E8A3B5"), breathe (off | gentle | beat), heldGlow / chorusLift / shine (off | on). ' +
+  'verseEffect / hookEffect ("glide", "soft-blur:subtle", ...), accentColour ("#E8A3B5"), breathe (off | gentle | beat), heldGlow / chorusLift / shine (off | on), textColour ("#FFFFFF"), grade (natural | warm | cool | faded | mono | moody), vignette (off | soft | strong), textBacking (none | shadow | glow | band | box), fallback (gradient | colour | cover: where there is no clip), fallbackColour ("#101014"), gradeCanvas (on | off: the Spotify Canvas graded too). ' +
   'perPlatform: values for one platform, e.g. { "youtube": { "verseEffect": "cinematic-fade" } }. author / licence: who made the theme and its terms; ' +
   'fonts: the font files in this folder\'s fonts\\ with their licence. The folder is self-contained (fonts\\, overlays\\, preview.png). Edit it in the studio (Shape → Theme), not here.';
 
@@ -232,7 +232,7 @@ export function ensureSongTheme(ws: Workspace, projectId: string, catalog: FontC
   const row = ws.db.select({ artist: projectTable.artist, title: projectTable.title }).from(projectTable).where(eq(projectTable.id, projectId)).get();
   if (!row) return song;
   const ownDefault = THEME_FIELDS.filter((k) => song[k] !== undefined);
-  const ownPlatforms = Object.entries(song.perPlatform ?? {}).filter(([, v]) => THEME_FIELDS.some((k) => (v as PlatformValues)[k] !== undefined));
+  const ownPlatforms = Object.entries(song.perPlatform ?? {}).filter(([, v]) => THEME_FIELDS.some((k) => (v as Record<string, unknown>)[k] !== undefined));
   let name: string;
   if (!ownDefault.length && !ownPlatforms.length) name = artistDefaultTheme(ws, row.artist, catalog);
   else {

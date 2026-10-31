@@ -41,6 +41,7 @@ export * from "./effects/scene";
 export * from "./EffectsPreview";
 export * from "./PairPreview";
 export * from "./readability";
+export * from "./picture";
 export * from "./look-preview";
 export * from "./look-patch";
 export * from "./LookPreview";

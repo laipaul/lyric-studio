@@ -4,6 +4,7 @@ import type { KenBurns } from "./photo";
 import type { EffectChoice } from "./effects/types";
 import type { CoverDrift, MoodSegment } from "./youtube";
 import type { Format, LyricArea, SafeZone } from "./platform";
+import type { PictureProps } from "./picture";
 
 // Everything LyricVideo needs. Preview (@remotion/player) and export (renderMedia) receive the same
 // object; media paths are relative to `mediaBaseUrl`, which is the only thing that differs.
@@ -164,6 +165,9 @@ export type LyricVideoProps = {
   glow?: { colour: string; beatFrames: number[] } | null; // soft glow on the lyrics, pulsing on the beats
   safeZone?: SafeZone; // covered by the platform's buttons and captions (preview guides, QA)
   lyricArea?: LyricArea; // where lyrics go, computed from the safe zones (see lyricArea())
+  // The theme's picture (src/picture.ts): the grade and vignette over the clips, what is behind the words,
+  // and the background where there is no clip. Absent (older manifests): as before.
+  picture?: PictureProps | null;
 };
 
 export const SIMPLE_STYLE: StyleProps = {

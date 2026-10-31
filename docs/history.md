@@ -4,6 +4,33 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Themes, step 1: every song's look comes from a theme ✅ (to verify on the Windows PC)
+- Decided by the user on 31 Oct 2026: like a website theme, a song **uses a theme** and the user no longer
+  thinks about fonts, effects or colours one by one. A theme is one folder `workspace\themes\<name>\`
+  (theme.json with the fonts, effects, accent colour and per-platform values, plus fonts\ and overlays\ for
+  later), self-contained so themes can be shared or sold as files later.
+- **Nothing looks different after the update**: the first time a song opens (or pnpm make runs), a song that
+  never changed its look moves to the artist's default theme ("Life Lyrics", made from brand.json); a song with
+  its own look gets its own theme named after the song. song.json keeps only the song's other settings.
+- **Shape rail: Theme · Clips · This song · To make · Automatic.** Fonts, Effects and Colour are gone as menus;
+  they live in the Theme panel: the song's theme with "Used by N songs", a tile per theme (point at it to try it
+  in the viewer, click to use it), Rename, Duplicate, and **Edit theme** (font pairing, Fine-tune, Set effect,
+  accent colour). When several songs share the theme, Edit theme asks first: **All N songs** or **Only this song
+  (saves a copy)**. Theme settings have no locks, no "Back to the brand", no "Use for all my songs".
+- The Text panel (text cards, textboard templates) opens by clicking a text card on the timeline (no rail menu).
+- Fix after the first look on the PC (31 Oct): the Theme panel now always lists the brand's default theme and
+  every song's theme (before, only the themes of songs already opened showed, so a song with its own look had
+  nothing to switch to); the tiles are one per row so the names and lines are not cut; the fonts line is now
+  a live sample of the two fonts.
+- pnpm make uses the song's theme (the log says which); `--theme "<name>"` tries another theme for one run.
+- Tests: themes.test.ts (recipe order, theme.json check, the move to themes, all songs vs a copy, Style
+  actions, use / duplicate / rename, a missing theme named); style, pairings and make tests updated; browser:
+  song-stages.e2e.ts (rail, Theme panel, tiles, Edit theme, saves into the theme, the "Only this song" copy),
+  pairings, storyboard, style-lock and textboard e2e updated.
+- Not yet (next steps, as agreed): the editable song title and Delete song; then the Themes page (Canva-style
+  gallery and a detail view: big preview on your song, Use this theme, Duplicate / Edit, designer credit, more
+  like this), themes on Library cards, Make "Compare themes", reactions that fix the theme.
+
 ### Controls in one bar under the timeline ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026: the transport bar sat too low on the screen. The viewer is smaller, the
   timeline sits right under it, and **one command bar under the timeline** holds everything: which video (Plan

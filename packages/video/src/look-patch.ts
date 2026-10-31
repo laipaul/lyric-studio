@@ -6,6 +6,7 @@
 import type { Intensity, EffectChoice } from "./effects/names";
 import type { FontFileRef } from "./font-files";
 import type { LyricVideoProps } from "./props";
+import type { PictureProps } from "./picture";
 
 export type PatchFace = { family: string; weight: number; italic: boolean; files: FontFileRef[] };
 export type LookPatch = {
@@ -18,6 +19,8 @@ export type LookPatch = {
   chorusLift?: boolean;
   shine?: boolean;
   accent?: string;
+  colour?: string; // the theme's text colour
+  picture?: Omit<PictureProps, "coverSrc">; // the theme's grade, vignette, behind the words, background without a clip
 };
 
 const INTENSITY: readonly Intensity[] = ["subtle", "balanced", "expressive"];
@@ -48,6 +51,8 @@ export function patchLook(props: LyricVideoProps, patch: LookPatch | null, barFr
     const all = [...props.fonts, ...extra];
     next.fonts = all.filter((f, i) => all.findIndex((g) => g.src === f.src && g.family === f.family && g.weight === f.weight && g.style === f.style) === i);
   }
+  if (patch.colour) next.colour = patch.colour;
+  if (patch.picture) next.picture = { ...patch.picture, ...(props.picture?.coverSrc ? { coverSrc: props.picture.coverSrc } : {}) };
   const fx = props.lyricEffects;
   if (fx) {
     const e = { ...fx };

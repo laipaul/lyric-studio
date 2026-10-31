@@ -1,7 +1,7 @@
 // Draws the lyric scene (src/effects/scene.ts) for the current frame: up to three lines (leaving,
 // active, waiting next), each with its effect's look, words as separate spans for word effects.
 import { measureText } from "@remotion/layout-utils";
-import { useMemo } from "react";
+import { useMemo, type CSSProperties } from "react";
 import { useCurrentFrame, useVideoConfig } from "remotion";
 
 import { lyricScene, sceneTimeline } from "./effects/scene";
@@ -10,11 +10,14 @@ import { inkMask } from "./effects/ink";
 import { AMOUNT } from "./effects/types";
 import { applyTextCase, layoutLyric, type LyricLayout } from "./lyrics";
 import type { LyricArea } from "./platform";
+import { backingShadow, BOX_STYLE, type TextBacking } from "./picture";
 import type { LyricEffectsProps, LyricLineProps, StyleProps } from "./props";
 
 type Font = { family: string; weight: number; italic?: boolean };
 
 const BASE_SHADOW = "0 2px 12px rgba(0,0,0,0.55)";
+// "box": each printed row on its own dark rounded box (centred, as wide as its words).
+const BOX_ROW: CSSProperties = { ...BOX_STYLE, width: "fit-content", marginLeft: "auto", marginRight: "auto" };
 const SHADOWS: Record<string, string> = { none: BASE_SHADOW, shadow: "0 6px 0 rgba(0,0,0,0.35), 0 0 28px rgba(0,0,0,0.65)" };
 
 // "#ffffff" + "#E8A3B5" at t -> "rgb(...)"
@@ -44,6 +47,7 @@ export function LyricScene(props: {
   glow?: string; // beat-pulsed glow (stills layout)
   showNext: boolean;
   nextScale: number;
+  backing?: TextBacking; // the theme's "behind the words" (src/picture.ts): shadow, glow, box
 }) {
   const { lyrics, effects, style, textSize, colour, ready, areaFor } = props;
   const frame = useCurrentFrame();
@@ -111,7 +115,7 @@ export function LyricScene(props: {
         const area = placeOf(item.role === "next" ? lyrics[item.index - 1] : line);
         const font = fontOf(line);
         const { look } = item;
-        const shadows = [SHADOWS[style.effect] ?? BASE_SHADOW];
+        const shadows = [style.effect !== "none" && SHADOWS[style.effect] ? SHADOWS[style.effect] : backingShadow(props.backing, effects.accent)];
         if (look.glow > 0.001) shadows.push(`0 0 ${Math.round(16 + 34 * look.glow)}px ${rgba(effects.accent, 0.85 * look.glow)}`, `0 0 ${Math.round(6 + 10 * look.glow)}px ${rgba("#ffffff", 0.6 * look.glow)}`);
         if (props.glow) shadows.push(props.glow);
         let w = 0;
@@ -141,7 +145,7 @@ export function LyricScene(props: {
             }}
           >
             {layout.lines.map((text, r) => (
-              <div key={r} style={{ whiteSpace: "nowrap", ...(look.reveal !== undefined ? rowMask(layout.lines, r, look.reveal) : {}) }}>
+              <div key={r} style={{ whiteSpace: "nowrap", ...(props.backing === "box" && item.role !== "next" ? BOX_ROW : {}), ...(look.reveal !== undefined ? rowMask(layout.lines, r, look.reveal) : {}) }}>
                 {item.words
                   ? text.split(" ").map((word, k) => {
                       const wl = item.words![w++] ?? item.words![item.words!.length - 1];

@@ -28,6 +28,7 @@ const LOGO_FADE_FRAMES = 15; // 0.5 s
 import { cinematicBarHeight, DEFAULT_FORMAT, DEFAULT_LYRIC_AREA, DEFAULT_SAFE_ZONE, type Format, type LyricArea, type SafeZone } from "./platform";
 import { mediaUrl, type LyricLineProps, type LyricVideoProps, type ShotProps, type StyleProps, type TextCardProps } from "./props";
 import { textCardLook } from "./text-cards";
+import { fallbackBackground, gradeLook, vignetteBackground } from "./picture";
 import { REST, type LineLook } from "./effects/types";
 import { ascendLetter } from "./effects/ascend";
 import { inkMask } from "./effects/ink";
@@ -550,14 +551,19 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
       })()
     : undefined;
   const barHeight = cinematicBarHeight(format);
+  const picture = props.picture ?? null;
+  const grade = gradeLook(picture?.grade);
+  const vignette = vignetteBackground(picture?.vignette);
   const font =
     line?.isHook && props.hookFont
       ? { family: props.hookFont.font, weight: props.hookFont.weight, italic: props.hookFont.italic === true }
       : { family: style.font, weight: style.weight, italic: style.italic === true };
 
   return (
-    <AbsoluteFill style={{ backgroundColor: "#000" }}>
+    <AbsoluteFill style={{ background: picture ? fallbackBackground(picture) : "#000" }}>
+      {picture?.fallback === "cover" && picture.coverSrc ? <Img src={mediaUrl(mediaBaseUrl, picture.coverSrc)} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
       {props.layout === "cover" && props.cover ? <CoverLayout cover={props.cover} mediaBaseUrl={mediaBaseUrl} format={format} mood={mood} /> : null}
+      <AbsoluteFill style={{ filter: grade.filter }}>
       {props.layout === "stills" && props.stills ? <StillsLayout stills={props.stills} mediaBaseUrl={mediaBaseUrl} /> : null}
       {shots.map((shot) => (
         <Sequence
@@ -577,6 +583,9 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
       ))}
 
       {props.loopInto && shots.length > 1 ? <LoopIntoFirst first={shots[0]} frames={props.loopInto.frames} durationInFrames={durationInFrames} mediaBaseUrl={mediaBaseUrl} /> : null}
+      </AbsoluteFill>
+      {grade.veil && (shots.length || props.layout === "stills") ? <AbsoluteFill data-grade={picture?.grade} style={{ pointerEvents: "none", backgroundColor: grade.veil.colour, mixBlendMode: grade.veil.blend }} /> : null}
+      {vignette ? <AbsoluteFill data-vignette={picture?.vignette} style={{ pointerEvents: "none", background: vignette }} /> : null}
       {props.dips?.length ? <DipOverlay dips={props.dips} /> : null}
 
       {audio ? (
@@ -599,7 +608,7 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
 
       {mood && props.layout !== "cover" ? <MoodOverlay colour={mood} /> : null}
 
-      {props.lyricBacking && props.lyrics.length ? <LyricBacking area={props.lyricArea ?? DEFAULT_LYRIC_AREA} height={format.height} /> : null}
+      {(props.lyricBacking || picture?.backing === "band") && props.lyrics.length ? <LyricBacking area={props.lyricArea ?? DEFAULT_LYRIC_AREA} height={format.height} /> : null}
 
       {cinematicBars ? (
         <>
@@ -621,6 +630,7 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
           glow={glow}
           showNext={props.nextLine ?? false}
           nextScale={props.nextLineScale ?? 0.55}
+          backing={picture?.backing}
         />
       ) : line ? (
         <Sequence key={line.startFrame} from={line.startFrame} durationInFrames={line.endFrame - line.startFrame} layout="none">

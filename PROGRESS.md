@@ -4,6 +4,23 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Themes, step 5: background and colours (the theme's Picture) ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026 ("how about the background, colors?"). The theme editor has a new
+  **Picture** section, and Colours has a **Text colour** next to the accent:
+  - **Colour grade**: Natural, Warm, Cool, Faded film, Black & white, Moody: one look on every clip, so
+    mixed footage feels like one film. Drawn over the clips by the video (preview = render); the clip
+    files are never changed.
+  - **Vignette**: Off, Soft, Strong. **Behind the words**: None, Soft shadow, Glow (in the accent),
+    Dark band, Box. The app still adds the soft band by itself when a clip is too bright (readability auto).
+  - **Background without a clip** (a song with no clips, a slot): Gradient in the accent, Plain colour,
+    Blurred cover. **Grade the Spotify Canvas too**: on by default; off keeps the Canvas natural.
+- Themes page tiles and the detail view now show the theme over a real frame of a clip (the first song
+  that uses it, else another song), with its grade, vignette and text colour.
+- Videos record it: manifest settings.picture (grade, vignette, text_backing, fallback, text_colour).
+- Tests: picture.test.ts (grades, vignette, backing, fallback, the Canvas rule, recipe and theme checks,
+  older theme.json files get the defaults, the viewer patch); song-stages.e2e.ts (Picture section, the viewer
+  shows the grade at once, Save keeps all of it).
+
 ### Themes, step 4: Make compares themes; the font and effect dropdowns are gone ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026 ("redesign the app around themes"). Make → More options no longer has the
   Verse effect / Hook effect dropdowns or "Compare font pairings": the look comes from the song's theme.
@@ -54,33 +71,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: themes.test.ts (new, save, save as, delete and restore with their refusals); browser:
   song-stages.e2e.ts (editor sections, nothing saved before Save, Cancel, Save, "Save (changes 2 songs)",
   Save as new theme, + New theme, Use for this song, Delete and Restore), pairings, storyboard updated.
-
-### Themes, step 1: every song's look comes from a theme ✅ (to verify on the Windows PC)
-- Decided by the user on 31 Oct 2026: like a website theme, a song **uses a theme** and the user no longer
-  thinks about fonts, effects or colours one by one. A theme is one folder `workspace\themes\<name>\`
-  (theme.json with the fonts, effects, accent colour and per-platform values, plus fonts\ and overlays\ for
-  later), self-contained so themes can be shared or sold as files later.
-- **Nothing looks different after the update**: the first time a song opens (or pnpm make runs), a song that
-  never changed its look moves to the artist's default theme ("Life Lyrics", made from brand.json); a song with
-  its own look gets its own theme named after the song. song.json keeps only the song's other settings.
-- **Shape rail: Theme · Clips · This song · To make · Automatic.** Fonts, Effects and Colour are gone as menus;
-  they live in the Theme panel: the song's theme with "Used by N songs", a tile per theme (point at it to try it
-  in the viewer, click to use it), Rename, Duplicate, and **Edit theme** (font pairing, Fine-tune, Set effect,
-  accent colour). When several songs share the theme, Edit theme asks first: **All N songs** or **Only this song
-  (saves a copy)**. Theme settings have no locks, no "Back to the brand", no "Use for all my songs".
-- The Text panel (text cards, textboard templates) opens by clicking a text card on the timeline (no rail menu).
-- Fix after the first look on the PC (31 Oct): the Theme panel now always lists the brand's default theme and
-  every song's theme (before, only the themes of songs already opened showed, so a song with its own look had
-  nothing to switch to); the tiles are one per row so the names and lines are not cut; the fonts line is now
-  a live sample of the two fonts.
-- pnpm make uses the song's theme (the log says which); `--theme "<name>"` tries another theme for one run.
-- Tests: themes.test.ts (recipe order, theme.json check, the move to themes, all songs vs a copy, Style
-  actions, use / duplicate / rename, a missing theme named); style, pairings and make tests updated; browser:
-  song-stages.e2e.ts (rail, Theme panel, tiles, Edit theme, saves into the theme, the "Only this song" copy),
-  pairings, storyboard, style-lock and textboard e2e updated.
-- Not yet (next steps, as agreed): the editable song title and Delete song; then the Themes page (Canva-style
-  gallery and a detail view: big preview on your song, Use this theme, Duplicate / Edit, designer credit, more
-  like this), themes on Library cards, Make "Compare themes", reactions that fix the theme.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

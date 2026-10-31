@@ -11,6 +11,7 @@ import { pinsToShots, type ResolvedPin } from "./pins";
 import { DEFAULT_FORMAT, DEFAULT_SAFE_ZONE, lyricArea, type Format, type SafeZone } from "./platform";
 import { mulberry32 } from "./prng";
 import type { LyricEffectsProps, LyricLineProps, LyricVideoProps, StyleProps } from "./props";
+import type { PictureProps } from "./picture";
 import { assignClips, BEST_WINDOW_MS, type ClipOrder } from "./shots";
 import { withCard, type CardStyle } from "./textboard";
 import { planTransitions, type TransitionKind, type TransitionStyle } from "./transitions";
@@ -82,6 +83,7 @@ export type RenderBase = {
   // not continue into the first one.
   loopInto?: number;
   lyricBacking?: boolean; // readability "strong": a soft dark band behind the lyrics
+  picture?: PictureProps; // the theme's grade, vignette, behind the words, background without a clip
   transitions?: {
     style: TransitionStyle;
     feel: Feel;
@@ -335,6 +337,7 @@ export function composeProps(
       ...(choices.effects ? { lyricEffects: choices.effects } : {}),
       ...(dips.length ? { dips } : {}),
       ...(base.lyricBacking ? { lyricBacking: true } : {}),
+      ...(base.picture ? { picture: base.picture } : {}),
       ...(base.loopInto && shots.length > 1 && !assigned.at(-1)?.loop ? { loopInto: { frames: Math.max(4, Math.min(base.loopInto, Math.floor(shots.at(-1)!.duration / 2))) } } : {}),
     },
     warnings,

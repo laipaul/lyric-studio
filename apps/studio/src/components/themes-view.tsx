@@ -10,7 +10,7 @@ import { ChevronDown, Pencil, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import { LOOK_FPS, LookPreview, lookPreviewDuration, type LookPreviewProps } from "@lyric/video";
+import { backingShadow, BOX_STYLE, fallbackBackground, gradeLook, LOOK_FPS, LookPreview, lookPreviewDuration, pictureOf, vignetteBackground, type LookPreviewProps } from "@lyric/video";
 import type { ThemeCard, ThemesPageData } from "@lyric/video/style";
 
 import { themePreview } from "@/components/shape-tools";
@@ -159,18 +159,30 @@ function ThemeTile({ theme, data, onOpen }: { theme: ThemeCard; data: ThemesPage
   const [playing, setPlaying] = useState(false);
   const v = theme.look as Record<string, unknown>;
   const accent = String(v.accentColour ?? "#E8A3B5");
+  const pic = pictureOf({ ...(v as Record<string, string>), accentColour: accent });
+  const grade = gradeLook(pic.grade);
+  const textLook: React.CSSProperties = { color: String(v.textColour ?? "#FFFFFF"), textShadow: backingShadow(pic.backing, accent).replace(/(\d+)px/g, (_m, n) => `${Math.max(1, Math.round(Number(n) / 3))}px`), ...(pic.backing === "box" ? { ...BOX_STYLE } : {}) };
   const fam = (role: "verse" | "hook") => ({ fontFamily: `"${String(v[`${role}Font`])} preview", serif`, fontWeight: Number(v[`${role}Weight`] ?? 400), fontStyle: v[`${role}Italic`] === true ? "italic" : "normal" });
   return (
     <button type="button" data-themes-tile={theme.name} onClick={onOpen} onMouseEnter={() => setPlaying(true)} onMouseLeave={() => setPlaying(false)} onFocus={() => setPlaying(true)} onBlur={() => setPlaying(false)} className="group flex min-w-0 flex-col gap-1.5 text-left">
-      <div className="relative w-full overflow-hidden rounded-lg border bg-black group-hover:border-foreground/40" style={{ aspectRatio: "9 / 16", background: `radial-gradient(circle at 50% 40%, ${accent}33, #0b0b0d 70%)` }}>
+      <div className="relative w-full overflow-hidden rounded-lg border bg-black group-hover:border-foreground/40" style={{ aspectRatio: "9 / 16" }}>
         {playing ? (
-          <PreviewPlayer input={themePreview(v, data.fonts, data.sampleLines)} />
+          <PreviewPlayer input={themePreview(v, data.fonts, data.sampleLines, theme.background ?? null)} />
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center">
-            <span className="line-clamp-2 text-lg leading-tight text-white" style={fam("verse")}>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center" style={{ background: theme.background ? "#000" : fallbackBackground(pic) }}>
+            {theme.background ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element -- a workspace frame served by /api/files */}
+                <img data-tile-frame alt="" src={`/api/files/${theme.background}`} className="absolute inset-0 size-full object-cover" style={{ filter: grade.filter }} />
+                {grade.veil ? <span aria-hidden className="absolute inset-0" style={{ backgroundColor: grade.veil.colour, mixBlendMode: grade.veil.blend }} /> : null}
+              </>
+            ) : null}
+            {vignetteBackground(pic.vignette) ? <span aria-hidden className="absolute inset-0" style={{ background: vignetteBackground(pic.vignette)! }} /> : null}
+            {pic.backing === "band" ? <span aria-hidden className="absolute inset-x-0 top-1/3 h-1/3" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.42) 35%, rgba(0,0,0,0.42) 65%, rgba(0,0,0,0) 100%)" }} /> : null}
+            <span className="relative line-clamp-2 text-lg leading-tight" style={{ ...fam("verse"), ...textLook }}>
               {data.sampleLines[0] || "Your words here"}
             </span>
-            <span className="line-clamp-2 text-lg leading-tight" style={{ ...fam("hook"), color: accent }}>
+            <span className="relative line-clamp-2 text-lg leading-tight" style={{ ...fam("hook"), ...textLook, color: accent }}>
               {data.sampleLines[1] || "The chorus"}
             </span>
           </div>
@@ -230,7 +242,7 @@ function ThemeDetail({ theme, data, act, onOpen, onClose }: { theme: ThemeCard; 
       <div className="bg-background flex w-full max-w-4xl flex-col gap-5 rounded-xl border p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex gap-5">
           <div className="w-[300px] shrink-0 overflow-hidden rounded-lg border bg-black" style={{ aspectRatio: "9 / 16" }}>
-            <PreviewPlayer key={theme.name} input={themePreview(v, data.fonts, data.sampleLines)} />
+            <PreviewPlayer key={theme.name} input={themePreview(v, data.fonts, data.sampleLines, theme.background ?? null)} />
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             <div className="flex items-start gap-2">

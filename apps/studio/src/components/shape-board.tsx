@@ -389,6 +389,8 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
         data-effect={props.lyricEffects?.verse.name}
         data-hook-effect={props.lyricEffects?.hook.name}
         data-accent={props.lyricEffects?.accent}
+        data-grade={props.picture?.grade ?? "natural"}
+        data-text-colour={props.colour}
       >
         <Player
           ref={player}
