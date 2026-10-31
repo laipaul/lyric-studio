@@ -4,7 +4,7 @@ import { Check, ChevronDown, Lock, Plus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { BACKING_LABELS, FALLBACK_LABELS, GRADE_LABELS, patchChoice, pictureOf, VIGNETTE_LABELS, previewBacking, previewFace, previewLyrics, type LookPatch, type LookPreviewProps, type PatchFace, type Readability } from "@lyric/video";
+import { BACKING_LABELS, FALLBACK_LABELS, GRADE_LABELS, patchChoice, pictureOf, TITLE_STYLE_LABELS, TITLE_WARP_LABELS, titleStyleCss, VIGNETTE_LABELS, warpLetter, type TitleStyle, type TitleWarp, previewBacking, previewFace, previewLyrics, type LookPatch, type LookPreviewProps, type PatchFace, type Readability } from "@lyric/video";
 import type { PairingCard, PairingsView } from "@lyric/video/pairings";
 import type { StyleData, StyleField, StyleFont, StyleTheme } from "@lyric/video/style";
 
@@ -37,7 +37,7 @@ const show = (v: unknown) => (v === null ? "preset" : Array.isArray(v) ? (v.leng
 // What the Shape page's viewer needs from the tools: the look to patch into the planned video until it is
 // planned again (or while a pairing is pointed at), and the stand-in preview when there is no plan.
 export type ShapeLook = { patch: LookPatch | null; fallback: LookPreviewProps; caption: string; previewing: string | null }; // previewing: the pairing pointed at
-const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "emphasis", "accentColour", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas"]);
+const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "emphasis", "accentColour", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp"]);
 
 // The Shape page's tool panels (the song's recipe, song.json), one at a time as chosen in the rail: Fonts
 // (font pairing, the fonts line with Fine-tune), Effects (Set effect with its Verses / Choruses switch),
@@ -717,6 +717,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
               </EditorSection>
 
               <EditorSection id="cards" title="Cards">
+                <TitleStyleControls value={(k) => valueOf(k)} onSet={(field, value) => void act({ action: "set", field, value })} sample={data.title || "Your title"} font={String(valueOf("verseFont") ?? "")} />
                 <p className="text-muted-foreground text-xs">A Hook card and an End card (for example “Stream on Spotify”), styled by this theme: coming in a next step.</p>
               </EditorSection>
 
@@ -960,7 +961,7 @@ function lookOf(data: StyleData, s: { dirty: boolean; hovered: PairingCard | nul
   const addOns = { heldGlow: fx.heldGlow, chorusLift: fx.chorusLift, shine: fx.shine, emphasis: fx.emphasis };
   const accent = String(value("accentColour") ?? "#E8A3B5");
   const colour = String(value("textColour") ?? s.pairView?.colour ?? "#FFFFFF");
-  const picture = pictureOf({ grade: str(value("grade")), vignette: str(value("vignette")), textBacking: str(value("textBacking")), fallback: str(value("fallback")), fallbackColour: str(value("fallbackColour")), accentColour: accent });
+  const picture = pictureOf({ grade: str(value("grade")), vignette: str(value("vignette")), textBacking: str(value("textBacking")), fallback: str(value("fallback")), fallbackColour: str(value("fallbackColour")), titleStyle: str(value("titleStyle")), titleWarp: str(value("titleWarp")), accentColour: accent });
   const patch: LookPatch | null = s.dirty ? { verse, hook, verseEffect, hookEffect, breathe, ...addOns, accent, colour, picture } : s.hovered ? { verse, hook } : null;
   const all = [...verse.files, ...hook.files];
   const fallback: LookPreviewProps = {
@@ -1026,7 +1027,7 @@ const shortLabel = (label: string) => label.replace(/\s*\(.*\)\s*$/, "");
 // effect, Breathe and add-on settings are set in Set effect, their per-platform values under its ⋯).
 const SONG_FIELDS = ["tagline", "ep", "youtubeLayout", "titleOpening"] as const;
 const LOOK_FIELDS = ["textColour", "accentColour"] as const;
-const PICTURE_FIELDS = ["grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas"] as const;
+const PICTURE_FIELDS = ["grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp"] as const;
 const EFFECT_FIELDS = ["verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "emphasis"] as const;
 const MAKE_FIELDS = ["platforms", "variations", "collections"] as const;
 const AUTO_FIELDS = ["shotLength", "tempo", "section", "length", "ending", "transitions", "paceShift", "readability"] as const;
@@ -1265,6 +1266,52 @@ function EditorSection({ id, title, children }: { id: string; title: string; chi
 }
 
 // Five colours from the song's cover, as accent suggestions (read in the browser from a small copy).
+// The title card's style and shape (src/picture.ts), with a sample of the title drawn that way.
+function TitleStyleControls({ value, onSet, sample, font }: { value: (field: string) => unknown; onSet: (field: string, value: string) => void; sample: string; font: string }) {
+  const style = (String(value("titleStyle") ?? "plain") as TitleStyle) || "plain";
+  const warp = (String(value("titleWarp") ?? "none") as TitleWarp) || "none";
+  const accent = String(value("accentColour") ?? "#E8A3B5");
+  const colour = String(value("textColour") ?? "#FFFFFF");
+  const letters = [...sample];
+  return (
+    <div data-title-style-controls className="bg-card flex flex-col gap-2 rounded-lg border px-3 py-2.5 text-sm">
+      <span className="font-medium">Title</span>
+      <div data-title-sample className="flex min-h-16 items-center justify-center overflow-hidden rounded bg-[#1a1418] px-2 py-3 text-center text-2xl" style={{ fontFamily: `"${font} preview", serif`, color: colour }}>
+        <span style={titleStyleCss(style, 24, colour, accent)}>
+          {warp === "none"
+            ? sample
+            : letters.map((ch, k) => {
+                const w = warpLetter(warp, k, letters.length, 24);
+                return (
+                  <span key={k} style={{ display: "inline-block", whiteSpace: "pre", transform: `translateY(${w.y.toFixed(1)}px) rotate(${w.rotate.toFixed(1)}deg)` }}>
+                    {ch}
+                  </span>
+                );
+              })}
+        </span>
+      </div>
+      {(
+        [
+          ["titleStyle", "Style", TITLE_STYLE_LABELS],
+          ["titleWarp", "Shape", TITLE_WARP_LABELS],
+        ] as const
+      ).map(([field, label, options]) => (
+        <label key={field} className="flex items-center gap-2 text-xs">
+          <span className="flex-1">{label}</span>
+          <select data-picture-select={field} className="bg-background rounded-md border px-2 py-1 text-xs" value={String(value(field) ?? "")} onChange={(e) => onSet(field, e.target.value)}>
+            {Object.entries(options).map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </label>
+      ))}
+      <p className="text-muted-foreground text-xs">For the song title: the YouTube video and, with the title opening on, Reels, TikTok and Shorts.</p>
+    </div>
+  );
+}
+
 // The theme's picture (src/picture.ts): chips per setting; the viewer shows each click, Save keeps it.
 function PictureControls({ value, onSet }: { value: (field: string) => unknown; onSet: (field: string, value: string) => void }) {
   const groups: { field: string; label: string; hint: string; options: Record<string, string> }[] = [

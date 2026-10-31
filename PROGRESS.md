@@ -4,6 +4,27 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Themes, step 6: lyric effects gallery, nine new effects, Emphasis word, title styles ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026 ("make all of them", with Canva MotionText / TypeCraft references).
+- **Motion** is compact: one effect picker; it opens a gallery of tiles (each plays the effect on your own
+  lines when pointed at) with filter chips All · Word · Calm · Slide · Bounce · Wave · 3D · Glitch · Type.
+  Effects have plain names (Karaoke, Blur in, Handwriting…); the stored names stay the same.
+- New effects (src/effects/trending.ts): Word pop, Highlight sweep, Mask reveal, 3D tilt, Glitch, Wave,
+  Echo stack, Slice, Kinetic stack (one or two big words at a time). Already there under plain names:
+  Typewriter, Blur in / Focus pull, Handwriting (ink), Beat pulse = Breathe "with the beat".
+- **Emphasis word** add-on (recipe/theme emphasis on): the key word of each line (the one held longest,
+  never a small word) in the hook font, a touch bigger, in the accent colour.
+- **Cards → Title**: Style (Plain, Outline, Layered outline, 3D extrude, Label bar that wipes in) and Shape
+  (Straight, Arc, Wave), with a live sample of the song's title; drawn on the title card (YouTube, and the
+  title opening on Reels / TikTok / Shorts) and on the Reel cover.
+- Picture settings and Intensity are dropdowns now. The brand pairing is called "Artist's fonts".
+- Not yet: marking the emphasis word by hand in lyrics.txt; glitch on hard cuts (it glitches as a line lands
+  and briefly every few seconds).
+- Tests: effects.test.ts (all 23 effects: smooth, readable at the stamp; glitch may jump sideways),
+  trending-effects.test.ts (emphasis pick, kinetic groups, names and gallery kinds), picture.test.ts (title
+  styles and shapes); browser: song-stages (picker, gallery chips, dropdowns, title style saved), storyboard,
+  themes, pairings, style-lock, videos-post, textboard.
+
 ### Themes, step 5: background and colours (the theme's Picture) ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026 ("how about the background, colors?"). The theme editor has a new
   **Picture** section, and Colours has a **Text colour** next to the accent:
@@ -53,24 +74,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **Library cards** now show each song's theme under the artist.
 - Tests: themes.e2e.ts (new browser test: menu, cards, gallery, hover plays, new theme, designer, use for a
   song, filters, duplicate, delete, restore, edit on a song and save); themes.test.ts unchanged (pass).
-
-### Themes, step 2: building a theme ("+ New theme" and the theme editor) ✅ (to verify on the Windows PC)
-- Asked by the user on 31 Oct 2026 ("it's not clear how we build the themes", then "redesign the app around
-  themes"). In Shape → Theme:
-- **+ New theme**: name it first, pick what to start from (this song's look, Life Lyrics or any theme), then
-  "Create and edit": the song uses it and the editor opens.
-- **The theme editor** in four sections: **Text** (font pairing, the lyric line and the hook as live samples,
-  "Choose each font"), **Motion** (Set effect, Breathe, add-ons), **Colours** (accent colour plus five colours
-  from your cover), **Cards** (Hook card and End card: a next step).
-- **Nothing is saved until you press Save**: the viewer shows every change straight away; the footer has
-  **Save** ("Save (changes 3 songs)" when the theme is shared), **Save as new theme** (the other songs keep the
-  old one) and **Cancel**. This replaces "All N songs / Only this song".
-- **Each tile**: "Use for this song", and a ⋯ menu with Rename, Duplicate and Delete. Delete moves the theme to
-  themes\_removed\ ("Deleted themes" with Restore); a theme a song uses, or the brand's default theme, cannot
-  be deleted (it says why).
-- Tests: themes.test.ts (new, save, save as, delete and restore with their refusals); browser:
-  song-stages.e2e.ts (editor sections, nothing saved before Save, Cancel, Save, "Save (changes 2 songs)",
-  Save as new theme, + New theme, Use for this song, Delete and Restore), pairings, storyboard updated.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

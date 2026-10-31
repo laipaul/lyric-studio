@@ -78,6 +78,8 @@ export const FIELD_LABELS: Record<RecipeField, string> = {
   fallback: "Background without a clip",
   fallbackColour: "Background colour",
   gradeCanvas: "Grade on the Canvas",
+  titleStyle: "Title style",
+  titleWarp: "Title shape",
 };
 
 export type StyleValue = { value: unknown; source: string; own: boolean };
@@ -107,6 +109,7 @@ export type StyleData = {
   themes: StyleTheme[]; // every theme, for the Theme panel's tiles
   removedThemes: RemovedTheme[]; // deleted themes (themes\_removed\), each with a Restore
   cover: string | null; // the song's cover (workspace-relative), for the editor's cover colours
+  title: string; // the song's title (the editor's title style sample)
   song: { file: string | null; bpm: number | null }; // workspace-relative song file (the Tap button plays it); the BPM the last video used
 };
 
@@ -215,6 +218,7 @@ export function styleData(ws: Workspace, projectId: string): StyleData {
     ...themesOf(ws, song.theme ?? null, catalog),
     removedThemes: removedThemes(ws.dir),
     cover: coverOf(ws, projectId),
+    title: ws.db.select({ title: projectTable.title }).from(projectTable).where(eq(projectTable.id, projectId)).get()?.title ?? "",
   };
 }
 

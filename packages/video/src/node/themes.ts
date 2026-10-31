@@ -25,7 +25,7 @@ import { isRemovedSong, songPathsById } from "./song-folder";
 
 export const THEME_VERSION = 1;
 // What a theme decides: the fonts, the lyric effects, the accent colour and the add-ons.
-export const THEME_FIELDS = ["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "accentColour", "breathe", "heldGlow", "chorusLift", "shine", "emphasis", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas"] as const satisfies readonly RecipeField[];
+export const THEME_FIELDS = ["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "accentColour", "breathe", "heldGlow", "chorusLift", "shine", "emphasis", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp"] as const satisfies readonly RecipeField[];
 export type ThemeField = (typeof THEME_FIELDS)[number];
 export type ThemeLook = Pick<RecipeValues, ThemeField>;
 // A theme folder is self-contained, so it can later be shared or sold as one file (a zip of the folder):
@@ -49,7 +49,7 @@ export const isThemeField = (k: string): k is ThemeField => (THEME_FIELDS as rea
 const HELP =
   "A Lyric Studio theme: the whole look of a song (fonts, lyric effects, accent colour, add-ons). Songs point to it with " +
   'song.json "theme". look: verseFont / hookFont (a family from pnpm fonts), verseWeight / hookWeight (100-900), verseItalic / hookItalic (true / false), ' +
-  'verseEffect / hookEffect ("glide", "soft-blur:subtle", ...), accentColour ("#E8A3B5"), breathe (off | gentle | beat), heldGlow / chorusLift / shine / emphasis (off | on), textColour ("#FFFFFF"), grade (natural | warm | cool | faded | mono | moody), vignette (off | soft | strong), textBacking (none | shadow | glow | band | box), fallback (gradient | colour | cover: where there is no clip), fallbackColour ("#101014"), gradeCanvas (on | off: the Spotify Canvas graded too). ' +
+  'verseEffect / hookEffect ("glide", "soft-blur:subtle", ...), accentColour ("#E8A3B5"), breathe (off | gentle | beat), heldGlow / chorusLift / shine / emphasis (off | on), textColour ("#FFFFFF"), grade (natural | warm | cool | faded | mono | moody), vignette (off | soft | strong), textBacking (none | shadow | glow | band | box), fallback (gradient | colour | cover: where there is no clip), fallbackColour ("#101014"), gradeCanvas (on | off: the Spotify Canvas graded too), titleStyle (plain | outline | layered | extrude | label), titleWarp (none | arc | wave). ' +
   'perPlatform: values for one platform, e.g. { "youtube": { "verseEffect": "cinematic-fade" } }. author / licence: who made the theme and its terms; ' +
   'fonts: the font files in this folder\'s fonts\\ with their licence. The folder is self-contained (fonts\\, overlays\\, preview.png). Edit it in the studio (Shape → Theme), not here.';
 

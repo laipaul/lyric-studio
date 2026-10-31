@@ -19,6 +19,13 @@ export type Vignette = (typeof VIGNETTES)[number];
 export const TEXT_BACKINGS = ["none", "shadow", "glow", "band", "box"] as const;
 export type TextBacking = (typeof TEXT_BACKINGS)[number];
 export const FALLBACKS = ["gradient", "colour", "cover"] as const;
+// The title card's text style and shape (TypeCraft / TypeStudio style; the title, not the lyric lines).
+export const TITLE_STYLES = ["plain", "outline", "layered", "extrude", "label"] as const;
+export type TitleStyle = (typeof TITLE_STYLES)[number];
+export const TITLE_WARPS = ["none", "arc", "wave"] as const;
+export type TitleWarp = (typeof TITLE_WARPS)[number];
+export const TITLE_STYLE_LABELS: Record<TitleStyle, string> = { plain: "Plain", outline: "Outline", layered: "Layered outline", extrude: "3D extrude", label: "Label bar" };
+export const TITLE_WARP_LABELS: Record<TitleWarp, string> = { none: "Straight", arc: "Arc", wave: "Wave" };
 export type Fallback = (typeof FALLBACKS)[number];
 
 export const GRADE_LABELS: Record<Grade, string> = { natural: "Natural", warm: "Warm", cool: "Cool", faded: "Faded film", mono: "Black & white", moody: "Moody" };
@@ -36,6 +43,8 @@ export type PictureProps = {
   fallbackColour: string; // #RRGGBB
   accent: string; // the theme's accent: the gradient and the glow
   coverSrc?: string | null; // fallback "cover": the cover blurred in advance, relative to mediaBaseUrl
+  titleStyle?: TitleStyle; // the title card: plain (default), outline, layered outline, 3D extrude, label bar
+  titleWarp?: TitleWarp; // the title card's shape: straight (default), arc, wave
 };
 
 export const DEFAULT_PICTURE: Omit<PictureProps, "accent"> = { grade: "natural", vignette: "off", backing: "none", fallback: "gradient", fallbackColour: "#101014" };
@@ -93,7 +102,7 @@ export const BOX_STYLE: React.CSSProperties = { background: "rgba(0,0,0,0.55)", 
 
 // The theme's picture fields as props (recipe values; the Canvas without the grade when gradeCanvas is off).
 export function pictureOf(
-  v: { grade?: string; vignette?: string; textBacking?: string; fallback?: string; fallbackColour?: string; gradeCanvas?: string; accentColour?: string },
+  v: { grade?: string; vignette?: string; textBacking?: string; fallback?: string; fallbackColour?: string; gradeCanvas?: string; accentColour?: string; titleStyle?: string; titleWarp?: string },
   opts: { canvas?: boolean; coverSrc?: string | null } = {},
 ): PictureProps {
   const pick = <T extends string>(list: readonly T[], x: string | undefined, d: T): T => ((list as readonly string[]).includes(x ?? "") ? (x as T) : d);
@@ -106,5 +115,39 @@ export function pictureOf(
     fallbackColour: /^#[0-9a-fA-F]{6}$/.test(v.fallbackColour ?? "") ? v.fallbackColour! : DEFAULT_PICTURE.fallbackColour,
     accent: /^#[0-9a-fA-F]{6}$/.test(v.accentColour ?? "") ? v.accentColour! : "#E8A3B5",
     ...(opts.coverSrc ? { coverSrc: opts.coverSrc } : {}),
+    ...(v.titleStyle && v.titleStyle !== "plain" ? { titleStyle: pick(TITLE_STYLES, v.titleStyle, "plain") } : {}),
+    ...(v.titleWarp && v.titleWarp !== "none" ? { titleWarp: pick(TITLE_WARPS, v.titleWarp, "none") } : {}),
   };
+}
+
+// The title's text style (a card's CSS): outline = hollow letters; layered = hollow letters over an accent
+// copy; extrude = a 3D block of accent shadows; label = the text on an accent bar that wipes in.
+export function titleStyleCss(style: TitleStyle | undefined, size: number, colour: string, accent: string, show = 1): React.CSSProperties {
+  const stroke = Math.max(1.5, size * 0.028);
+  if (style === "outline") return { color: "transparent", WebkitTextStroke: `${stroke.toFixed(1)}px ${colour}`, textShadow: "none" };
+  if (style === "layered") return { color: "transparent", WebkitTextStroke: `${stroke.toFixed(1)}px ${colour}`, textShadow: `${(size * 0.05).toFixed(1)}px ${(size * 0.05).toFixed(1)}px 0 ${accent}` };
+  if (style === "extrude") {
+    const step = Math.max(1, size * 0.012);
+    return { textShadow: Array.from({ length: 7 }, (_, k) => `${((k + 1) * step).toFixed(1)}px ${((k + 1) * step).toFixed(1)}px 0 ${shade(accent, 0.75 - k * 0.06)}`).join(", ") };
+  }
+  if (style === "label") {
+    const s = Math.min(1, Math.max(0, show));
+    return { display: "inline-block", background: accent, color: "#141414", padding: "0.06em 0.4em", borderRadius: "0.08em", textShadow: "none", clipPath: s < 1 ? `inset(0 ${((1 - s) * 100).toFixed(1)}% 0 0)` : undefined };
+  }
+  return {};
+}
+// "#E8A3B5" darkened to `k` of its brightness.
+function shade(hex: string, k: number): string {
+  const n = Number.parseInt(hex.replace("#", ""), 16);
+  const c = (v: number) => Math.round(v * k);
+  return `rgb(${c((n >> 16) & 255)},${c((n >> 8) & 255)},${c(n & 255)})`;
+}
+// The title's shape: each letter's lift (px) and turn (deg); k = its place, n = letters on the row.
+export function warpLetter(warp: TitleWarp | undefined, k: number, n: number, size: number): { y: number; rotate: number } {
+  if (warp === "arc" && n > 1) {
+    const t = (2 * k) / (n - 1) - 1; // -1 .. 1
+    return { y: -size * 0.28 * (1 - t * t), rotate: t * 16 };
+  }
+  if (warp === "wave") return { y: size * 0.1 * Math.sin(k * 0.75), rotate: 7 * Math.cos(k * 0.75) };
+  return { y: 0, rotate: 0 };
 }

@@ -28,7 +28,7 @@ const LOGO_FADE_FRAMES = 15; // 0.5 s
 import { cinematicBarHeight, DEFAULT_FORMAT, DEFAULT_LYRIC_AREA, DEFAULT_SAFE_ZONE, type Format, type LyricArea, type SafeZone } from "./platform";
 import { mediaUrl, type LyricLineProps, type LyricVideoProps, type ShotProps, type StyleProps, type TextCardProps } from "./props";
 import { textCardLook } from "./text-cards";
-import { fallbackBackground, gradeLook, vignetteBackground } from "./picture";
+import { fallbackBackground, gradeLook, titleStyleCss, vignetteBackground, warpLetter } from "./picture";
 import { REST, type LineLook } from "./effects/types";
 import { ascendLetter } from "./effects/ascend";
 import { inkMask } from "./effects/ink";
@@ -403,10 +403,33 @@ function WaveText({ text, wave }: { text: string; wave: number }) {
   );
 }
 
+// The title's shape (arc, wave): each letter lifted and turned on its row.
+function WarpedText({ text, warp, size }: { text: string; warp: NonNullable<NonNullable<LyricVideoProps["picture"]>["titleWarp"]>; size: number }) {
+  return (
+    <>
+      {text.split("\n").map((row, r) => {
+        const letters = [...row];
+        return (
+          <div key={r} data-warp={warp} style={{ whiteSpace: "pre" }}>
+            {letters.map((ch, k) => {
+              const w = warpLetter(warp, k, letters.length, size);
+              return (
+                <span key={k} style={{ display: "inline-block", whiteSpace: "pre", transform: `translateY(${w.y.toFixed(1)}px) rotate(${w.rotate.toFixed(1)}deg)` }}>
+                  {ch}
+                </span>
+              );
+            })}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 // The textboard's title, byline and tagline cards. A card "with-title" sits under the card it is stacked
 // on (as the artist under the title); the others are blocks of their own. Without an effect a card
 // is on screen from its start and fades out over its last second (the YouTube title as before).
-function TextCards({ cards, format }: { cards: TextCardProps[]; format: Format }) {
+function TextCards({ cards, format, picture }: { cards: TextCardProps[]; format: Format; picture?: LyricVideoProps["picture"] }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const shown = new Set(cards.map((c) => c.id));
@@ -415,12 +438,18 @@ function TextCards({ cards, format }: { cards: TextCardProps[]; format: Format }
     const look = parent ? textCardLook(c, frame, fps) : (rootLook ?? { ...REST });
     if (!look || look.opacity <= 0.001) return null;
     const body = c.lines?.length ? c.lines.join("\n") : c.text;
+    // The theme's title style and shape (src/picture.ts): only on the title card.
+    const titled = c.type === "title" && picture ? picture : null;
+    const styled = titled?.titleStyle ? titleStyleCss(titled.titleStyle, c.size, c.colour, titled.accent, look.opacity * 1.4) : {};
+    const warped = titled?.titleWarp && look.chars === undefined && look.wave === undefined ? titled.titleWarp : undefined;
     return (
       <div
         key={c.id}
         data-text-card={c.id}
+        data-title-style={titled?.titleStyle}
         style={{
           fontSize: c.size,
+          ...styled,
           ...(c.upper ? { textTransform: "uppercase" as const } : {}),
           ...(c.lines?.length ? { whiteSpace: "pre-line" as const } : {}),
           ...(parent
@@ -438,7 +467,7 @@ function TextCards({ cards, format }: { cards: TextCardProps[]; format: Format }
               : {}),
         }}
       >
-        {look.chars !== undefined ? <TypedText text={body} share={look.chars} /> : look.wave !== undefined ? <WaveText text={body} wave={look.wave} /> : body}
+        {look.chars !== undefined ? <TypedText text={body} share={look.chars} /> : look.wave !== undefined ? <WaveText text={body} wave={look.wave} /> : warped ? <WarpedText text={body} warp={warped} size={c.size} /> : body}
       </div>
     );
   };
@@ -639,7 +668,7 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
       ) : null}
 
       {props.grain ? <Grain /> : null}
-      {props.textCards?.length ? <TextCards cards={props.textCards} format={format} /> : props.titleOverlay ? <TitleOverlay t={props.titleOverlay} format={format} /> : null}
+      {props.textCards?.length ? <TextCards cards={props.textCards} format={format} picture={props.picture} /> : props.titleOverlay ? <TitleOverlay t={props.titleOverlay} format={format} /> : null}
       {props.logo ? <Logo logo={props.logo} mediaBaseUrl={mediaBaseUrl} /> : null}
 
       {props.showSafeGuides ? <SafeGuides format={format} safe={props.safeZone ?? DEFAULT_SAFE_ZONE} area={area} /> : null}

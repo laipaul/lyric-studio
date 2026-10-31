@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { backingShadow, BASE_TEXT_SHADOW, fallbackBackground, gradeLook, pictureOf, vignetteBackground } from "../src/picture";
+import { backingShadow, BASE_TEXT_SHADOW, fallbackBackground, gradeLook, pictureOf, titleStyleCss, vignetteBackground, warpLetter } from "../src/picture";
 import { patchLook } from "../src/look-patch";
 import { defaultLyricVideoProps } from "../src/props";
 import { checkRecipe, LIBRARY_RECIPE } from "../src/node/recipe";
@@ -51,5 +51,20 @@ describe("the theme's picture", () => {
     const next = patchLook(defaultLyricVideoProps, { picture, colour: "#FFEEDD" });
     expect(next.picture?.grade).toBe("cool");
     expect(next.colour).toBe("#FFEEDD");
+  });
+  it("the title's style and shape (title cards only)", () => {
+    expect(titleStyleCss("plain", 80, "#FFFFFF", "#E8A3B5")).toEqual({});
+    expect(titleStyleCss("outline", 80, "#FFFFFF", "#E8A3B5").color).toBe("transparent");
+    expect(String(titleStyleCss("extrude", 80, "#FFFFFF", "#FF0000").textShadow).split("),").length).toBe(7);
+    expect(titleStyleCss("label", 80, "#FFFFFF", "#E8A3B5", 0.5).clipPath).toBe("inset(0 50.0% 0 0)"); // wiping in
+    expect(titleStyleCss("label", 80, "#FFFFFF", "#E8A3B5", 1).clipPath).toBeUndefined();
+    // Arc: the middle letter lifted most, the ends level and turned outwards.
+    expect(warpLetter("arc", 2, 5, 100).y).toBeCloseTo(-28);
+    expect(warpLetter("arc", 0, 5, 100).y).toBeCloseTo(0);
+    expect(warpLetter("arc", 0, 5, 100).rotate).toBe(-16);
+    expect(warpLetter("none", 3, 5, 100)).toEqual({ y: 0, rotate: 0 });
+    expect(pictureOf({ titleStyle: "extrude", titleWarp: "arc" })).toMatchObject({ titleStyle: "extrude", titleWarp: "arc" });
+    expect(pictureOf({ titleStyle: "plain" }).titleStyle).toBeUndefined();
+    expect(checkRecipe({ titleStyle: "label", titleWarp: "wave" }).problems).toEqual([]);
   });
 });

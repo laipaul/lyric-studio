@@ -4,6 +4,24 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Themes, step 2: building a theme ("+ New theme" and the theme editor) ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026 ("it's not clear how we build the themes", then "redesign the app around
+  themes"). In Shape → Theme:
+- **+ New theme**: name it first, pick what to start from (this song's look, Life Lyrics or any theme), then
+  "Create and edit": the song uses it and the editor opens.
+- **The theme editor** in four sections: **Text** (font pairing, the lyric line and the hook as live samples,
+  "Choose each font"), **Motion** (Set effect, Breathe, add-ons), **Colours** (accent colour plus five colours
+  from your cover), **Cards** (Hook card and End card: a next step).
+- **Nothing is saved until you press Save**: the viewer shows every change straight away; the footer has
+  **Save** ("Save (changes 3 songs)" when the theme is shared), **Save as new theme** (the other songs keep the
+  old one) and **Cancel**. This replaces "All N songs / Only this song".
+- **Each tile**: "Use for this song", and a ⋯ menu with Rename, Duplicate and Delete. Delete moves the theme to
+  themes\_removed\ ("Deleted themes" with Restore); a theme a song uses, or the brand's default theme, cannot
+  be deleted (it says why).
+- Tests: themes.test.ts (new, save, save as, delete and restore with their refusals); browser:
+  song-stages.e2e.ts (editor sections, nothing saved before Save, Cancel, Save, "Save (changes 2 songs)",
+  Save as new theme, + New theme, Use for this song, Delete and Restore), pairings, storyboard updated.
+
 ### Themes, step 1: every song's look comes from a theme ✅ (to verify on the Windows PC)
 - Decided by the user on 31 Oct 2026: like a website theme, a song **uses a theme** and the user no longer
   thinks about fonts, effects or colours one by one. A theme is one folder `workspace\themes\<name>\`

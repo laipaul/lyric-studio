@@ -299,8 +299,11 @@ async function main() {
     await page.waitForSelector("[data-field='fallbackColour']");
     check(true, "Background without a clip: Plain colour shows its colour row");
     await page.click("[data-picture-option='gradeCanvas']");
+    await page.selectOption("[data-picture-select='titleStyle']", "extrude");
+    await page.selectOption("[data-picture-select='titleWarp']", "arc");
+    check(!!(await page.$("[data-title-sample] span span")), "Cards: the title sample is drawn in the chosen style and shape");
     await saveTheme(page);
-    check((await saved("grade", "warm")) && look("vignette") === "soft" && look("textBacking") === "box" && look("fallback") === "colour" && look("gradeCanvas") === "off", "Save: the picture goes into the theme");
+    check((await saved("grade", "warm")) && look("vignette") === "soft" && look("textBacking") === "box" && look("fallback") === "colour" && look("gradeCanvas") === "off" && look("titleStyle") === "extrude" && look("titleWarp") === "arc", "Save: the picture and the title style go into the theme");
     // A second song on the same theme: Save says so; "Save as new theme" keeps it as it is for the other song.
     const shared = readRecipe(recipe).theme!;
     const other = path.join(root, "Let Go.wav");

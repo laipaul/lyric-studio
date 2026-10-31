@@ -148,7 +148,7 @@ export type MakeOptions = {
   titleOpening?: "off" | "on"; // Reels / TikTok / Shorts: title, byline and tagline before the first hook
   // The theme's picture (src/picture.ts; recipe textColour, grade, vignette, textBacking, fallback,
   // fallbackColour, gradeCanvas). Absent (pnpm make without a song.json): the videos as before.
-  picture?: Pick<RecipeValues, "textColour" | "grade" | "vignette" | "textBacking" | "fallback" | "fallbackColour" | "gradeCanvas">;
+  picture?: Pick<RecipeValues, "textColour" | "grade" | "vignette" | "textBacking" | "fallback" | "fallbackColour" | "gradeCanvas" | "titleStyle" | "titleWarp">;
   transitions?: TransitionStyle; // between shots: "auto" (default: from the music), "crisp" (cuts), "flowing" (dissolves)
   ending?: EndingChoice; // Reels / TikTok / Shorts: "auto" (default: the app chooses tight loop, soft fade or ring-out) or one of them
   tempo?: number; // the song's real BPM (song.json "tempo"): the beats are re-tracked around it
@@ -935,7 +935,7 @@ function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: Pl
 
 // The theme's picture fields of a recipe (MakeOptions.picture).
 function pictureFields(v: RecipeValues): NonNullable<MakeOptions["picture"]> {
-  return { textColour: v.textColour, grade: v.grade, vignette: v.vignette, textBacking: v.textBacking, fallback: v.fallback, fallbackColour: v.fallbackColour, gradeCanvas: v.gradeCanvas };
+  return { textColour: v.textColour, grade: v.grade, vignette: v.vignette, textBacking: v.textBacking, fallback: v.fallback, fallbackColour: v.fallbackColour, gradeCanvas: v.gradeCanvas, titleStyle: v.titleStyle, titleWarp: v.titleWarp };
 }
 
 // The Reel cover's props: the video's frame with the title opening's cards (title, byline, tagline) on it

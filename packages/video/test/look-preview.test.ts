@@ -40,9 +40,9 @@ describe("Look preview", () => {
 
   it("reads back what Set effect tried; anything broken or unknown is ignored", () => {
     const names = ["glide", "typewriter"];
-    const t = { name: "typewriter", intensity: "subtle", breathe: "beat", addOns: { heldGlow: true, chorusLift: false, shine: true } };
+    const t = { name: "typewriter", intensity: "subtle", breathe: "beat", addOns: { heldGlow: true, chorusLift: false, shine: true, emphasis: false } };
     expect(parseTried(JSON.stringify(t), names)).toEqual(t);
-    expect(parseTried(JSON.stringify({ ...t, addOns: undefined }), names)?.addOns).toEqual({ heldGlow: false, chorusLift: false, shine: false });
+    expect(parseTried(JSON.stringify({ ...t, addOns: undefined }), names)?.addOns).toEqual({ heldGlow: false, chorusLift: false, shine: false, emphasis: false });
     expect(parseTried(JSON.stringify({ ...t, name: "gone" }), names)).toBeNull();
     expect(parseTried(JSON.stringify({ ...t, breathe: "loud" }), names)).toBeNull();
     expect(parseTried("{not json", names)).toBeNull();
