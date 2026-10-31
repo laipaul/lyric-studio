@@ -20,6 +20,9 @@ import { shortFrom } from "@/lib/short-from";
 import { cn } from "@/lib/utils";
 
 const loadedFaces = new Set<string>();
+export type DraftFonts = { verseFont: string; verseWeight: number; verseItalic: boolean; hookFont: string; hookWeight: number; hookItalic: boolean };
+const sameFonts = (c: PairingCard, f: DraftFonts) =>
+  c.verse.family.toLowerCase() === f.verseFont.toLowerCase() && c.hook.family.toLowerCase() === f.hookFont.toLowerCase() && c.verse.weight === f.verseWeight && c.hook.weight === f.hookWeight && c.verse.italic === f.verseItalic && c.hook.italic === f.hookItalic;
 const face = (f: PairingCard["verse"]) =>
   `${f.family} ${f.weight}${f.italic ? " italic" : ""}`;
 // One small line under the card name: verse font · hook font (same family: "Family 400 / 600 italic").
@@ -39,9 +42,13 @@ export function PairingsRow({
   onView,
   onHover,
   scope,
+  fonts,
+  onPick,
 }: {
   projectId: string;
-  scope?: "all" | "song"; // in the Theme panel: the pair goes into the song's theme (every song of it, or a copy for this song); no brand buttons
+  scope?: "all" | "song";
+  fonts?: DraftFonts; // the theme editor's (unsaved) fonts: the ✓ follows them
+  onPick?: (card: PairingCard) => void; // the theme editor: a chosen pair goes into its draft (nothing saved here) // in the Theme panel: the pair goes into the song's theme (every song of it, or a copy for this song); no brand buttons
   onChanged: () => void;
   onView?: (view: PairingsView) => void; // the Look preview uses the same frame, lines and layout
   onHover?: (card: PairingCard | null) => void; // a card under the pointer / focus: the Look preview tries it (nothing saved)
@@ -110,6 +117,10 @@ export function PairingsRow({
   }
 
   async function choose(card: PairingCard) {
+    if (onPick) {
+      onPick(card);
+      return;
+    }
     if (busy || card.current) return;
     const d = await post({ action: "apply", id: card.id, ...(scope ? { scope } : {}) });
     if (!d) return;
@@ -184,8 +195,9 @@ export function PairingsRow({
         Loading the font pairings…
       </p>
     );
-  const chosen = view.cards.find((c) => c.current) ?? null;
-  const card = chosen ?? view.cards[0];
+  const cards = fonts ? view.cards.map((c) => ({ ...c, current: sameFonts(c, fonts) })) : view.cards;
+  const chosen = cards.find((c) => c.current) ?? null;
+  const card = chosen ?? cards[0];
   const sampleStyle = (f: PairingCard["verse"]) =>
     ({
       fontFamily: `"${f.family}", sans-serif`,
@@ -206,8 +218,7 @@ export function PairingsRow({
           className="text-muted-foreground min-w-0 text-xs break-words"
           title={`Each pair on this song's own lines, as a ${view.platform} video draws them${view.backgroundFrom ? `, over ${view.backgroundFrom}` : ""}. Point at a pair to see it in the preview; click it to choose it for this song.`}
         >
-          Point at a pair to see it in the preview, click to use it for this
-          song
+          {onPick ? "Point at a pair to see it in the preview, click to use it in this theme" : "Point at a pair to see it in the preview, click to use it for this song"}
           {view.backgroundFrom
             ? ` · shown over ${shortFrom(view.backgroundFrom)}`
             : ""}
@@ -288,7 +299,7 @@ export function PairingsRow({
               className="bg-popover text-popover-foreground z-50 max-h-[min(70vh,var(--radix-popover-content-available-height))] w-[min(34rem,92vw)] overflow-y-auto rounded-md border p-1 shadow-lg"
             >
               <div ref={listRef} className="flex flex-col">
-                {view.cards.map((c) => (
+                {cards.map((c) => (
                   <div
                     key={c.id}
                     role="option"

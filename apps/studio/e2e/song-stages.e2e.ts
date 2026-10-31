@@ -4,13 +4,13 @@
 // to-do list (buttons open the right tab), "Make release pack" (one video per platform of the song's own
 // platforms, queued for the worker) and the page opening on the stage that needs attention.
 import { execFileSync, spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { makeRun, openWorkspace } from "@lyric/db";
 import { createSong, loadTheme, readRecipe, songPathsById, writeRecipe } from "@lyric/video/node";
-import { openPanel } from "./stage-tabs";
+import { openPanel, saveTheme } from "./stage-tabs";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-stages-"));
 const wsDir = path.join(root, "workspace");
@@ -198,7 +198,7 @@ async function main() {
     check(!(await page.isVisible("[data-shape-tools]")), "the panel's × closes it");
     if (process.env.STYLE_SHOT) {
       await openPanel(page, "theme");
-      if (await page.$("[data-theme-done]")) await page.click("[data-theme-done]");
+      if (await page.$("[data-theme-cancel]")) await page.click("[data-theme-cancel]");
       await page.waitForSelector("[data-theme-tiles]");
       await sleep(1500);
       await page.screenshot({ path: process.env.STYLE_SHOT });
@@ -241,29 +241,52 @@ async function main() {
     };
     await openPanel(page, "effects");
     await page.waitForSelector("[data-effect-preview]");
-    check((await page.$$("[data-use-effect]")).length === 0 && (await page.$$("[data-unsaved]")).length === 0, "no Save to recipe buttons, no 'not saved yet' line");
+    const sections = await page.$$eval("[data-editor-section]", (e: Element[]) => e.map((x) => x.getAttribute("data-editor-section")));
+    check(JSON.stringify(sections) === JSON.stringify(["text", "motion", "colours", "cards"]), `the theme editor: Text, Motion, Colours, Cards (${sections.join(", ")})`);
     check((await page.getAttribute("[data-effect-part]", "data-effect-part")) === "verse", "Set effect starts on Verses");
+    const before = look("verseEffect");
     await page.click("[data-try-effect=typewriter]");
-    check(await saved("verseEffect", "typewriter"), "a click on typewriter saves it as the verse effect (in the theme)");
     await page.selectOption("[data-try-breathe]", "beat");
-    check(await saved("breathe", "beat"), "Breathe with the beat: saved at once");
     await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-effect") === "typewriter" && document.querySelector("[data-look-preview]")?.getAttribute("data-breathe") === "beat");
-    check((await page.$$eval("[data-look-preview] [data-lyric]", (e: Element[]) => e.length)) > 0, "the viewer draws the song's lines with the effect and Breathe");
+    check((await page.$$eval("[data-look-preview] [data-lyric]", (e: Element[]) => e.length)) > 0, "the viewer shows the effect and Breathe at once");
+    check(look("verseEffect") === before && !!(await page.$("[data-theme-unsaved]")), "…but nothing is saved yet ('not saved yet')");
     check((await page.$$("[data-look-preview]")).length === 1, "one viewer");
     check((await page.$$("[data-effect-preview] .__remotion-player, [data-effect-preview] canvas, [data-effect-preview] [data-lyric]")).length === 0, "the Set effect panel has no player of its own");
-    check(!!(await page.$("[data-effect-saved]")), "Set effect says ✓ Saved");
     await page.selectOption("[data-try-intensity]", "subtle");
-    check(await saved("verseEffect", "typewriter:subtle"), "the typing pace (calm) is saved with it: typewriter:subtle");
     check(((await page.textContent("[data-set-effect]")) ?? "").includes("Verses: typewriter (calm)"), "the panel names what verses use");
-    // Choruses: the switch, then the effect is saved as the hook effect; the verses keep theirs.
+    // Choruses: the switch, then the effect goes to the hook effect; the verses keep theirs.
     await page.click("[data-part=hook]");
     await page.click("[data-try-effect=spread]");
-    check(await saved("hookEffect", "spread"), "Choruses: spread saved as the hook effect (the choruses' own intensity)");
-    check(look("verseEffect") === "typewriter:subtle", "…the verse effect unchanged");
-    check((await page.getAttribute("[data-try-effect=spread]", "aria-pressed")) === "true", `the chorus effect shows as chosen (${await page.$$eval("[data-try-effect][aria-pressed=true]", (e: Element[]) => e.map((x) => x.textContent).join())} ${await page.textContent("[data-set-effect] p.text-muted-foreground")})`);
+    check((await page.getAttribute("[data-try-effect=spread]", "aria-pressed")) === "true", "the chorus effect shows as chosen");
     await page.click("[data-part=verse]");
     check((await page.getAttribute("[data-try-effect=typewriter]", "aria-pressed")) === "true", "back on Verses: typewriter is chosen");
-    // A second song on the same theme: Edit theme asks first; "Only this song" saves a copy for this song.
+    check(((await page.textContent("[data-theme-save]")) ?? "") === "Save", "a theme only this song uses: plain Save");
+    await saveTheme(page);
+    check(await saved("verseEffect", "typewriter:subtle") && look("hookEffect") === "spread" && look("breathe") === "beat", "Save: the effects go into the song's theme (theme.json, not song.json)");
+    // Cancel throws the draft away.
+    await openPanel(page, "colour");
+    const setAccent = async (hex: string) =>
+      page.$eval(
+        "[data-edit='accentColour-default']",
+        (el: Element, v: string) => {
+          const input = el as HTMLInputElement;
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, v);
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        },
+        hex,
+      );
+    const accentBefore = look("accentColour");
+    await setAccent("#33aaff");
+    await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-accent") === "#33AAFF");
+    check(true, "the accent colour reaches the viewer as soon as it changes");
+    await page.click("[data-theme-cancel]");
+    await page.waitForFunction((a: string) => document.querySelector("[data-look-preview]")?.getAttribute("data-accent") === a, accentBefore);
+    check(look("accentColour") === accentBefore && !(await page.$("[data-theme-editors]")), "Cancel: the theme as it was, in the viewer too");
+    await openPanel(page, "colour");
+    await setAccent("#33aaff");
+    await saveTheme(page);
+    check(await saved("accentColour", "#33AAFF"), "…and Save keeps it");
+    // A second song on the same theme: Save says so; "Save as new theme" keeps it as it is for the other song.
     const shared = readRecipe(recipe).theme!;
     const other = path.join(root, "Let Go.wav");
     ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=4", other);
@@ -274,18 +297,33 @@ async function main() {
     await page.waitForSelector("[data-shape-menus]");
     await openPanel(page, "theme");
     check(((await page.textContent("[data-theme-users]")) ?? "").startsWith("Used by 2 songs"), `a shared theme says so (${await page.textContent("[data-theme-users]")})`);
-    await page.click("[data-theme-edit]");
-    await page.waitForSelector("[data-theme-scope-ask]");
-    check(((await page.textContent("[data-theme-scope=all]")) ?? "") === "All 2 songs", "Edit theme asks: all 2 songs or only this one");
-    await page.click("[data-theme-scope=song]");
-    await page.waitForSelector("[data-try-addon=heldGlow]");
+    await openPanel(page, "effects");
+    check(((await page.textContent("[data-theme-save]")) ?? "") === "Save (changes 2 songs)", "Save names the songs it changes");
     await page.check("[data-try-addon=heldGlow]");
-    for (let i = 0; i < 40 && readRecipe(recipe).theme === shared; i++) await sleep(150);
-    const copy = readRecipe(recipe).theme!;
-    check(copy !== shared && loadTheme(wsDir, copy).look.heldGlow === "on", `only this song: a copy of the theme (${copy}) with Held-note glow on`);
+    await page.click("[data-theme-save-as]");
+    await page.fill("[data-theme-save-as-name]", "Hold On Glow");
+    await page.click("[data-theme-save-as-confirm]");
+    await page.waitForSelector("[data-theme-current='Hold On Glow']");
+    check(readRecipe(recipe).theme === "Hold On Glow" && loadTheme(wsDir, "Hold On Glow").look.heldGlow === "on", "Save as new theme: this song uses the new theme, with Held-note glow");
     check(loadTheme(wsDir, shared).look.heldGlow !== "on" && readRecipe(songPathsById(ws2, otherId).recipe!).theme === shared, "…the other song keeps its theme as it was");
-    await page.waitForSelector(`[data-theme-current="${copy}"]`);
-    check(((await page.textContent("[data-theme-users]")) ?? "") === "Used by this song only", "the copy is used by this song only");
+    // + New theme: named first, started from another theme, opens in the editor.
+    await page.click("[data-theme-new]");
+    await page.fill("[data-new-theme-name]", "Night Drive");
+    await page.selectOption("[data-new-theme-from]", shared);
+    await page.click("[data-new-theme-create]");
+    await page.waitForSelector("[data-theme-editing='Night Drive']");
+    check(readRecipe(recipe).theme === "Night Drive" && loadTheme(wsDir, "Night Drive").look.verseEffect === "typewriter:subtle", "+ New theme: named first, from the chosen theme, the song uses it, the editor opens");
+    await page.click("[data-theme-cancel]");
+    // A tile: Use for this song; its ⋯: Delete (an unused theme) and Restore.
+    check(!!(await page.$(`[data-theme-use="${shared}"]`)) && !(await page.$("[data-theme-use='Night Drive']")), "the other tiles offer 'Use for this song'");
+    await page.click("[data-row-menu='theme-Hold On Glow']");
+    await page.click("[role=menuitem][data-theme-delete='Hold On Glow']");
+    await page.waitForSelector("[data-removed-themes]");
+    check(!(await page.$("[data-theme-tile='Hold On Glow']")) && existsSync(path.join(wsDir, "themes", "_removed")), "Delete: the theme moves to themes\\_removed\\");
+    await page.click("[data-removed-themes] button[aria-expanded]");
+    await page.click("[data-theme-restore='Hold On Glow']");
+    await page.waitForSelector("[data-theme-tile='Hold On Glow']");
+    check(true, "Restore: it is back");
     // Shape -> Make -> Shape: it is all saved, so it is all still there.
     await page.click("[data-stage=make]");
     await page.waitForFunction(() => !document.querySelector("[data-effect-preview]"));
@@ -300,19 +338,8 @@ async function main() {
       check(right <= w, `at ${w} px the viewer's right edge is inside the window (${Math.round(right)} px)`);
     }
     await page.setViewportSize({ width: 1280, height: 1000 });
-    // The accent colour reaches the viewer at once.
-    await openPanel(page, "colour");
-    await page.$eval("[data-edit='accentColour-default']", (el: Element) => {
-      const input = el as HTMLInputElement;
-      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-      set.call(input, "#33aaff");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-accent") === "#33AAFF");
-    check(true, "the accent colour reaches the viewer as soon as it changes");
-    await page.waitForFunction(() => document.querySelector("[data-saving]")?.getAttribute("data-saving") === "saved");
-    await sleep(500);
-    check(look("accentColour") === "#33AAFF" && (await page.getAttribute("[data-look-preview]", "data-accent")) === "#33AAFF", "…and stays after the save");
+    if (process.env.EDITOR_SHOT) await page.screenshot({ path: process.env.EDITOR_SHOT });
+    await page.click("[data-theme-cancel]");
     // Next: Make.
     await page.click("[data-next-make]");
     await page.waitForSelector("[data-release-pack]");

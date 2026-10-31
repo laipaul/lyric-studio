@@ -13,7 +13,7 @@ import path from "node:path";
 
 import { openWorkspace } from "@lyric/db";
 import { findOrCreateSongProject, loadBrand, loadFontCatalog, loadTheme, readRecipe, songPathsById } from "@lyric/video/node";
-import { openPanel, openTab } from "./stage-tabs";
+import { openPanel, openTab, saveTheme } from "./stage-tabs";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-pairings-"));
 const wsDir = path.join(root, "workspace");
@@ -126,6 +126,9 @@ async function main() {
     await page.keyboard.press("Escape");
     await pickOption("elegant");
     await page.waitForFunction(() => /elegant/i.test(document.querySelector("[data-pairing-current]")?.textContent ?? ""));
+    check(themeLook().verseFont !== "Cormorant Garamond" || themeLook().hookItalic !== true, "the chosen pair waits for Save");
+    await saveTheme(page);
+    await openPanel(page, "fonts");
     for (let i = 0; i < 20 && themeLook().verseFont !== "Cormorant Garamond"; i++) await sleep(150);
     const recipe = themeLook();
     check(recipe.verseFont === "Cormorant Garamond" && recipe.hookWeight === 600 && recipe.hookItalic === true && recipe.verseWeight === 400, `the song's theme holds the pair (${JSON.stringify(recipe)})`);
@@ -201,10 +204,11 @@ async function main() {
     // Another pair goes into the theme as well; the brand stays as it was.
     await pickOption("dramatic");
     await page.waitForFunction(() => /dramatic/i.test(document.querySelector("[data-pairing-current]")?.textContent ?? ""));
+    await (await page.$("[data-pairings]"))!.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "pairing-card.png") });
+    await saveTheme(page);
     for (let i = 0; i < 20 && themeLook().hookFont !== "Playfair Display"; i++) await sleep(150);
     check(themeLook().hookFont === "Playfair Display" && themeLook().hookItalic === true, "the theme now has the Dramatic pair");
     check(brandText() === brandBefore, "…brand.json still untouched");
-    await (await page.$("[data-pairings]"))!.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "pairing-card.png") });
 
     // Generate: compare pairings.
     await openTab(page, "Generate");

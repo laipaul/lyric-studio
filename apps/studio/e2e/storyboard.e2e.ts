@@ -14,7 +14,7 @@ import path from "node:path";
 import { absPath, openWorkspace, project } from "@lyric/db";
 import { ensureAlignment, findOrCreateSongProject, loadTheme, readRecipe, songPathsById, type AlignRunner } from "@lyric/video/node";
 import { eq } from "drizzle-orm";
-import { openPanel, unfoldStyle } from "./stage-tabs";
+import { openPanel, saveTheme, unfoldStyle } from "./stage-tabs";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-storyboard-"));
 const wsDir = path.join(root, "workspace");
@@ -316,6 +316,7 @@ async function main() {
     await page.click("[data-try-effect=spread]");
     await page.waitForFunction(() => document.querySelector("[data-viewer]")?.getAttribute("data-effect") === "spread", null, { timeout: 5000 }).catch(() => {});
     check((await page.getAttribute("[data-viewer]", "data-effect")) === "spread", "Set effect: the viewer plays the new verse effect at once");
+    await saveTheme(page);
     await replanned();
     check(loadTheme(wsDir, readRecipe(paths.recipe!).theme!).look.verseEffect === "spread", "…saved in the song's theme");
     await page.waitForFunction(() => document.querySelector("[data-viewer]")?.getAttribute("data-patched") === "0", null, { timeout: 60_000 }).catch(() => {});

@@ -4,6 +4,24 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Themes, step 2: building a theme ("+ New theme" and the theme editor) ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026 ("it's not clear how we build the themes", then "redesign the app around
+  themes"). In Shape → Theme:
+- **+ New theme**: name it first, pick what to start from (this song's look, Life Lyrics or any theme), then
+  "Create and edit": the song uses it and the editor opens.
+- **The theme editor** in four sections: **Text** (font pairing, the lyric line and the hook as live samples,
+  "Choose each font"), **Motion** (Set effect, Breathe, add-ons), **Colours** (accent colour plus five colours
+  from your cover), **Cards** (Hook card and End card: a next step).
+- **Nothing is saved until you press Save**: the viewer shows every change straight away; the footer has
+  **Save** ("Save (changes 3 songs)" when the theme is shared), **Save as new theme** (the other songs keep the
+  old one) and **Cancel**. This replaces "All N songs / Only this song".
+- **Each tile**: "Use for this song", and a ⋯ menu with Rename, Duplicate and Delete. Delete moves the theme to
+  themes\_removed\ ("Deleted themes" with Restore); a theme a song uses, or the brand's default theme, cannot
+  be deleted (it says why).
+- Tests: themes.test.ts (new, save, save as, delete and restore with their refusals); browser:
+  song-stages.e2e.ts (editor sections, nothing saved before Save, Cancel, Save, "Save (changes 2 songs)",
+  Save as new theme, + New theme, Use for this song, Delete and Restore), pairings, storyboard updated.
+
 ### Themes, step 1: every song's look comes from a theme ✅ (to verify on the Windows PC)
 - Decided by the user on 31 Oct 2026: like a website theme, a song **uses a theme** and the user no longer
   thinks about fonts, effects or colours one by one. A theme is one folder `workspace\themes\<name>\`
@@ -71,37 +89,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   close, the panel left of the viewer, each panel's rows and summary lines), storyboard.e2e.ts (viewer above a
   full-width timeline, Clips panel, details folded, drags from the panel), pairings.e2e.ts (Fonts panel, fits
   at 1024 px), textboard.e2e.ts (Text panel), style-lock.e2e.ts (settings reached through the menus).
-
-### Shape as one page (Style + Storyboard merged) ✅ (to verify on the Windows PC)
-- Asked by the user on 31 Oct 2026 (replaces the "Style tab rebuild" open decision). Shape has no tabs any
-  more: **the video viewer at the top in the middle**, under it the **soundtrack** (bar lines, waveform, lyric
-  lines), the **shots**, and the **clips used** (drag to reorder). **All the tools in one column on the left**:
-  Look (font pairing dropdown, the fonts line with Fine-tune, Set effect, accent colour), This song, What to
-  make, Automatic (folded); a clicked shot's details (and the clip / card editors) appear at the top of it.
-  **"Next: Make →"** under the viewer. Old links (?tab=style, ?tab=storyboard) open the Shape page.
-- **Every setting once, saved at once**: the display-only rows (Verse effect, Hook effect, Breathe, Held-note
-  glow, Chorus lift, Shine) are gone; Set effect is the only place, with a **Verses / Choruses** switch; every
-  click is saved to song.json straight away ("✓ Saved"); no Save to recipe buttons, no "not saved yet" line.
-  Their per-platform values: Set effect's ⋯ → Per platform….
-- **This song** and **What to make** are one line each ("Tagline: none · EP: none · YouTube: cover · Title
-  opening: off", "Reels 3 · YouTube 1 · clips: the song's own + wedding"); click to edit.
-- **⋯ menu** on each setting: Per platform…, Back to the inherited value, Lock / Unlock, Use for all my songs…
-  (Breathe and add-ons: in Set effect's ⋯). A locked setting shows a padlock.
-- **One live viewer**: the planned video (as Make renders it). The plan shows on opening the page (no Show
-  button); after any change the app plans again by itself (one plan at a time); meanwhile the new fonts,
-  effects, Breathe, add-ons and accent are shown in the viewer at once, and pointing at a font pairing tries it
-  there. Without a plan yet (no clips, lyrics not timed) a stand-in preview of your first lines shows instead.
-- **Drag a clip onto a shot**: it is pinned (⚓) on the lyric line that starts in that shot; a shot with no
-  line starting in it (intro, break) gets the clip by moving it to that place in the clip order. Dropping on a
-  lyric line works as before.
-- Font pairing kept as a dropdown (its list now always fits the window). Slimming the plan's details (analysis
-  text, textboard templates) stays U2b.
-- Tests: look-patch.test.ts (the viewer's patch: fonts and files, effects, Breathe, add-ons, nothing patched
-  without a change); browser: song-stages.e2e.ts (one page, tools left of the viewer, blocks, compact lines,
-  ⋯ menu, instant save with the Verses / Choruses switch, brand for all songs, accent, Next: Make),
-  storyboard.e2e.ts (planned on opening, viewer → soundtrack → shots → clips, drop on a shot anchors, a look
-  change patches the viewer then re-plans, the tempo re-plans on the same page), style-lock.e2e.ts (locks via
-  the ⋯ menu, locked chips greyed out), pairings.e2e.ts, textboard.e2e.ts.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -318,6 +305,7 @@ before Releases step 2 and the Lyric Sheet, one step each, plan first:
 - **U5.** Then Releases step 2 (item 5 above) and the Lyric Sheet (item 6).
 **Themes (approved by the user 31 Oct 2026, one step each, plan first):**
 - ✅ (built 31 Oct, to verify) **T1. Theme foundation + Shape Theme panel** (see Latest steps).
+- ✅ (built 31 Oct, to verify) **T1b. Building a theme:** + New theme and the theme editor with Save / Save as new / Cancel (see Latest steps).
 - **T2. Editable song title + Delete song** (moves to songs\_removed\ with Restore, like Collections).
 - **T3. Themes page** in the top nav (Library · Themes · Collections · Releases): Canva-style gallery (tall
   preview tiles that play on hover, filter chips) and a theme detail view (big preview on your own song, Use this

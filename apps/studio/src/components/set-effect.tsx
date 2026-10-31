@@ -2,7 +2,7 @@
 
 // Set effect (Shape, Look): the only place the song's lyric effects are set. A Verses / Choruses switch
 // says which part the effect chips and the intensity (the typing pace for the typewriters) apply to;
-// Breathe and the three add-ons are song-wide. Every click is saved to song.json at once (the viewer shows
+// Breathe and the three add-ons are song-wide. Every click goes into the theme editor's draft (the viewer shows
 // it straight away and the video is planned again); locked settings are greyed out with a padlock. The ⋯
 // menu: "Use Breathe and add-ons for all my songs" (the artist's brand, asks first) and the per-platform
 // values.
@@ -102,7 +102,7 @@ export function SetEffect({
         </p>
       ) : null}
       <p className="text-muted-foreground -mt-1 text-xs">
-        {part === "verse" ? "Verses" : "Choruses"}: {effectWords(values[field] || values.verseEffect)}. Each click is saved and the viewer shows it.
+        {part === "verse" ? "Verses" : "Choruses"}: {effectWords(values[field] || values.verseEffect)}. The viewer shows each click; Save keeps it.
         {effectLocked ? <span className="text-brand"> Locked for this song (unlock it in its ⋯ under Per platform).</span> : null}
       </p>
       <div className="flex flex-wrap gap-1.5" title={effectLocked ? "Locked for this song" : undefined}>

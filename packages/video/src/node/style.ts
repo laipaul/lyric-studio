@@ -5,7 +5,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { project as projectTable, REPO_ROOT, type Workspace } from "@lyric/db";
+import { absPath, project as projectTable, REPO_ROOT, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
 import { EFFECT_NAMES, effectOptionLabel } from "../effects/names";
@@ -33,7 +33,7 @@ import {
   type SongRecipe,
 } from "./recipe";
 import { sharedCollections, songPathsById } from "./song-folder";
-import { ensureAllThemes, ensureSongTheme, isThemeField, listThemes, loadTheme, setThemeLook, themeLayer, type ThemeLook } from "./themes";
+import { ensureAllThemes, ensureSongTheme, isThemeField, listThemes, loadTheme, removedThemes, setThemeLook, themeLayer, type RemovedTheme, type ThemeLook } from "./themes";
 import { SHORT_LABELS } from "./exports";
 
 // The characters the font preview checks (French accents).
@@ -96,6 +96,8 @@ export type StyleData = {
   userFonts: string; // the folder for the user's own fonts (WORKSPACE_DIR\fonts)
   theme: StyleTheme | null; // the song's theme
   themes: StyleTheme[]; // every theme, for the Theme panel's tiles
+  removedThemes: RemovedTheme[]; // deleted themes (themes\_removed\), each with a Restore
+  cover: string | null; // the song's cover (workspace-relative), for the editor's cover colours
   song: { file: string | null; bpm: number | null }; // workspace-relative song file (the Tap button plays it); the BPM the last video used
 };
 
@@ -123,6 +125,11 @@ export function recipeInputFor(ws: Workspace, projectId: string, catalog: FontCa
     recipeFile: p.recipe ? path.relative(ws.dir, p.recipe).split(path.sep).join("/") : null,
     brandFile: path.relative(ws.dir, brand.file).split(path.sep).join("/"),
   };
+}
+
+function coverOf(ws: Workspace, projectId: string): string | null {
+  const cover = ws.db.select({ cover: projectTable.cover_path }).from(projectTable).where(eq(projectTable.id, projectId)).get()?.cover;
+  return cover && existsSync(absPath(ws, cover)) ? cover : null;
 }
 
 function songRow(ws: Workspace, projectId: string): StyleData["song"] {
@@ -197,6 +204,8 @@ export function styleData(ws: Workspace, projectId: string): StyleData {
     userFonts: userFontsDir(ws.dir),
     song: songRow(ws, projectId),
     ...themesOf(ws, song.theme ?? null, catalog),
+    removedThemes: removedThemes(ws.dir),
+    cover: coverOf(ws, projectId),
   };
 }
 

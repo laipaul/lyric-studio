@@ -4,6 +4,37 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Shape as one page (Style + Storyboard merged) ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026 (replaces the "Style tab rebuild" open decision). Shape has no tabs any
+  more: **the video viewer at the top in the middle**, under it the **soundtrack** (bar lines, waveform, lyric
+  lines), the **shots**, and the **clips used** (drag to reorder). **All the tools in one column on the left**:
+  Look (font pairing dropdown, the fonts line with Fine-tune, Set effect, accent colour), This song, What to
+  make, Automatic (folded); a clicked shot's details (and the clip / card editors) appear at the top of it.
+  **"Next: Make →"** under the viewer. Old links (?tab=style, ?tab=storyboard) open the Shape page.
+- **Every setting once, saved at once**: the display-only rows (Verse effect, Hook effect, Breathe, Held-note
+  glow, Chorus lift, Shine) are gone; Set effect is the only place, with a **Verses / Choruses** switch; every
+  click is saved to song.json straight away ("✓ Saved"); no Save to recipe buttons, no "not saved yet" line.
+  Their per-platform values: Set effect's ⋯ → Per platform….
+- **This song** and **What to make** are one line each ("Tagline: none · EP: none · YouTube: cover · Title
+  opening: off", "Reels 3 · YouTube 1 · clips: the song's own + wedding"); click to edit.
+- **⋯ menu** on each setting: Per platform…, Back to the inherited value, Lock / Unlock, Use for all my songs…
+  (Breathe and add-ons: in Set effect's ⋯). A locked setting shows a padlock.
+- **One live viewer**: the planned video (as Make renders it). The plan shows on opening the page (no Show
+  button); after any change the app plans again by itself (one plan at a time); meanwhile the new fonts,
+  effects, Breathe, add-ons and accent are shown in the viewer at once, and pointing at a font pairing tries it
+  there. Without a plan yet (no clips, lyrics not timed) a stand-in preview of your first lines shows instead.
+- **Drag a clip onto a shot**: it is pinned (⚓) on the lyric line that starts in that shot; a shot with no
+  line starting in it (intro, break) gets the clip by moving it to that place in the clip order. Dropping on a
+  lyric line works as before.
+- Font pairing kept as a dropdown (its list now always fits the window). Slimming the plan's details (analysis
+  text, textboard templates) stays U2b.
+- Tests: look-patch.test.ts (the viewer's patch: fonts and files, effects, Breathe, add-ons, nothing patched
+  without a change); browser: song-stages.e2e.ts (one page, tools left of the viewer, blocks, compact lines,
+  ⋯ menu, instant save with the Verses / Choruses switch, brand for all songs, accent, Next: Make),
+  storyboard.e2e.ts (planned on opening, viewer → soundtrack → shots → clips, drop on a shot anchors, a look
+  change patches the viewer then re-plans, the tempo re-plans on the same page), style-lock.e2e.ts (locks via
+  the ⋯ menu, locked chips greyed out), pairings.e2e.ts, textboard.e2e.ts.
+
 ### Fix — vocal stem check corrects a small speed difference ✅ (verified by the user on the Windows PC, 31 Oct 2026: all 4 songs pass with the vocal stem)
 - A song exported from the DAW can play a little faster or slower than Suno's stem (Love Is A Good Thing:
   about 0.2 %, so the gap grew from 0.66 s to 0.77 s along the song and the stem was refused). The check now

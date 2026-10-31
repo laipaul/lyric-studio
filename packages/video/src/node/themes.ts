@@ -370,3 +370,110 @@ export function renameTheme(ws: Workspace, from: string, to: string): string {
   }
   return name;
 }
+
+// ---- The theme editor (31 Oct 2026): New theme, Save, Save as new theme, Delete / Restore ----
+
+// The look a theme editor sends, checked like theme.json (plain-word problems).
+function lookFrom(ws: Workspace, name: string, base: Theme, look: unknown, perPlatform: unknown, catalog: FontCatalog): Theme {
+  const raw = { ...JSON.parse(themeJson(base)), name, look: look ?? base.look, perPlatform: perPlatform ?? base.perPlatform };
+  const { theme, problems } = checkTheme(raw, catalog);
+  if (problems.length) throw new Error(problems.join("\n"));
+  return theme;
+}
+
+function mustBeFree(workspaceDir: string, name: string): string {
+  const clean = name.trim();
+  if (!clean) throw new Error("Give the theme a name.");
+  if (clean.startsWith("_")) throw new Error("A theme name cannot start with _.");
+  if (existsSync(themeFolder(workspaceDir, clean))) throw new Error(`A theme called "${clean}" already exists: pick another name.`);
+  return clean;
+}
+
+// "+ New theme": a new theme named first, started from another theme (its look, fonts and overlays as they
+// are); the song uses it straight away.
+export function createTheme(ws: Workspace, o: { projectId: string; name: string; from: string; catalog: FontCatalog }): string {
+  const name = mustBeFree(ws.dir, o.name);
+  const from = loadTheme(ws.dir, o.from, o.catalog);
+  writeTheme(ws.dir, { ...from, name, description: `Started from ${from.name}`, createdAt: new Date().toISOString() });
+  chooseTheme(ws, o.projectId, name, o.catalog);
+  return name;
+}
+
+// "Save": the editor's whole look into the song's theme (every song that uses it).
+export function saveTheme(ws: Workspace, o: { projectId: string; look: unknown; perPlatform: unknown; catalog: FontCatalog }): string {
+  const song = ensureSongTheme(ws, o.projectId, o.catalog);
+  if (!song.theme) throw new Error("This song has no theme yet.");
+  const base = loadTheme(ws.dir, song.theme, o.catalog);
+  writeTheme(ws.dir, lookFrom(ws, base.name, base, o.look, o.perPlatform, o.catalog));
+  return base.name;
+}
+
+// "Save as new theme": the editor's look as a new theme (named first) that this song uses; the theme it
+// came from stays as it was for the other songs.
+export function saveThemeAs(ws: Workspace, o: { projectId: string; name: string; look: unknown; perPlatform: unknown; catalog: FontCatalog }): string {
+  const name = mustBeFree(ws.dir, o.name);
+  const song = ensureSongTheme(ws, o.projectId, o.catalog);
+  const base = loadTheme(ws.dir, song.theme!, o.catalog);
+  writeTheme(ws.dir, { ...lookFrom(ws, name, base, o.look, o.perPlatform, o.catalog), description: `Made from ${base.name}`, createdAt: new Date().toISOString() });
+  chooseTheme(ws, o.projectId, name, o.catalog);
+  return name;
+}
+
+// The themes the artists' brands start new songs on (brand.json "theme").
+function brandThemes(ws: Workspace, catalog: FontCatalog): Map<string, string> {
+  const out = new Map<string, string>(); // theme -> artist
+  const artists = new Set(ws.db.select({ artist: projectTable.artist }).from(projectTable).all().map((r) => r.artist));
+  for (const artist of artists) {
+    try {
+      const raw = JSON.parse(readFileSync(loadBrand(ws.dir, catalog, artist).file, "utf8")) as { theme?: unknown };
+      if (typeof raw.theme === "string") out.set(raw.theme, artist);
+    } catch {
+      // no brand.json yet
+    }
+  }
+  return out;
+}
+
+export type RemovedTheme = { folder: string; name: string; removedAt: string };
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const REMOVED_THEME = /^(.*) \(removed (\d{4})-(\d{2})-(\d{2}) (\d{2})(\d{2})(\d{2})\)$/;
+
+// "Delete": the folder moves to themes\_removed\<name> (removed <date>); nothing is deleted. A theme that a
+// song uses, or that an artist's new songs start on, is refused with what to do instead.
+export function removeTheme(ws: Workspace, name: string, catalog: FontCatalog): string {
+  const theme = loadTheme(ws.dir, name, catalog);
+  const users = themeUsers(ws, theme.name);
+  if (users.length) throw new Error(`${users.length} song${users.length === 1 ? "" : "s"} use${users.length === 1 ? "s" : ""} "${theme.name}" (${users.map((u) => u.title).join(", ")}): give ${users.length === 1 ? "it" : "them"} another theme first.`);
+  const artist = brandThemes(ws, catalog).get(theme.name);
+  if (artist !== undefined) throw new Error(`"${theme.name}" is the theme new songs of ${artist || "this artist"} start on: it cannot be deleted.`);
+  const at = new Date();
+  const label = `${safeName(theme.name)} (removed ${at.getFullYear()}-${pad2(at.getMonth() + 1)}-${pad2(at.getDate())} ${pad2(at.getHours())}${pad2(at.getMinutes())}${pad2(at.getSeconds())})`;
+  const removed = path.join(themesDir(ws.dir), "_removed");
+  mkdirSync(removed, { recursive: true });
+  renameSync(themeFolder(ws.dir, theme.name), path.join(removed, label));
+  return label;
+}
+
+export function removedThemes(workspaceDir: string): RemovedTheme[] {
+  const dir = path.join(themesDir(workspaceDir), "_removed");
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => {
+      const m = REMOVED_THEME.exec(d.name);
+      return m ? { folder: d.name, name: m[1], removedAt: new Date(+m[2], +m[3] - 1, +m[4], +m[5], +m[6], +m[7]).toISOString() } : { folder: d.name, name: d.name, removedAt: "" };
+    })
+    .sort((a, b) => b.removedAt.localeCompare(a.removedAt));
+}
+
+// "Restore": back to themes\<name> ("<name> 2" when that name was taken since).
+export function restoreTheme(workspaceDir: string, folder: string): string {
+  const entry = removedThemes(workspaceDir).find((r) => r.folder === folder);
+  if (!entry) throw new Error(`No removed theme "${folder}".`);
+  const from = path.join(themesDir(workspaceDir), "_removed", folder);
+  const theme = JSON.parse(readFileSync(path.join(from, "theme.json"), "utf8")) as { name?: string };
+  const name = freeThemeName(workspaceDir, typeof theme.name === "string" ? theme.name : entry.name);
+  renameSync(from, themeFolder(workspaceDir, name));
+  if (name !== theme.name) writeFileSync(path.join(themeFolder(workspaceDir, name), "theme.json"), `${JSON.stringify({ ...theme, name }, null, 2)}\n`);
+  return name;
+}

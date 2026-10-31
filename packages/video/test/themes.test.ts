@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   applyStyleAction,
   checkTheme,
+  createTheme,
   duplicateTheme,
   ensureSongTheme,
   findOrCreateSongProject,
@@ -18,8 +19,13 @@ import {
   loadFontCatalog,
   loadTheme,
   readRecipe,
+  removeTheme,
+  removedThemes,
   renameTheme,
   resolveRecipe,
+  restoreTheme,
+  saveTheme,
+  saveThemeAs,
   setThemeLook,
   songPathsById,
   styleData,
@@ -141,6 +147,30 @@ describe("songs and themes", () => {
     expect(readRecipe(songPathsById(ws, ids.Third).recipe!).hookEffect).toBeUndefined();
   });
 
+  it("the editor: New theme (named first), Save for every song, Save as new theme, Delete and Restore", () => {
+    const catalog = loadFontCatalog(wsDir);
+    expect(() => createTheme(ws, { projectId: ids.Third, name: "Life Lyrics", from: "Life Lyrics", catalog })).toThrow(/already exists/);
+    expect(createTheme(ws, { projectId: ids.Third, name: "Neon", from: "Life Lyrics", catalog })).toBe("Neon");
+    expect(readRecipe(songPathsById(ws, ids.Third).recipe!).theme).toBe("Neon");
+    const look = { ...loadTheme(wsDir, "Neon").look, accentColour: "#00FFAA", verseEffect: "ink" };
+    saveTheme(ws, { projectId: ids.Third, look, perPlatform: { youtube: { hookEffect: "spread" } }, catalog });
+    expect(loadTheme(wsDir, "Neon").look.accentColour).toBe("#00FFAA");
+    expect(loadTheme(wsDir, "Neon").perPlatform).toEqual({ youtube: { hookEffect: "spread" } });
+    expect(() => saveTheme(ws, { projectId: ids.Third, look: { ...look, accentColour: "pink" }, perPlatform: {}, catalog })).toThrow(/accentColour/);
+    expect(saveThemeAs(ws, { projectId: ids.Third, name: "Neon Night", look: { ...look, verseEffect: "glide" }, perPlatform: {}, catalog })).toBe("Neon Night");
+    expect(loadTheme(wsDir, "Neon").look.verseEffect).toBe("ink"); // the theme it came from stays
+    expect(readRecipe(songPathsById(ws, ids.Third).recipe!).theme).toBe("Neon Night");
+    expect(() => removeTheme(ws, "Neon Night", catalog)).toThrow(/1 song uses "Neon Night" \(Third\)/);
+    expect(() => removeTheme(ws, "Life Lyrics", catalog)).toThrow(/new songs of Life Lyrics start on/);
+    removeTheme(ws, "Neon", catalog);
+    expect(listThemes(wsDir).map((t) => t.name)).not.toContain("Neon");
+    const removed = removedThemes(wsDir);
+    expect(removed.map((r) => r.name)).toEqual(["Neon"]);
+    expect(restoreTheme(wsDir, removed[0].folder)).toBe("Neon");
+    expect(loadTheme(wsDir, "Neon").look.verseEffect).toBe("ink");
+    chooseTheme(ws, ids.Third, "Life Lyrics", catalog);
+  });
+
   it("use, duplicate and rename; a missing theme is named", () => {
     const catalog = loadFontCatalog(wsDir);
     chooseTheme(ws, ids.Third, "Own Look", catalog);
@@ -149,7 +179,7 @@ describe("songs and themes", () => {
     expect(copy).toBe("Own Look copy");
     expect(renameTheme(ws, "Own Look", "Night Drive")).toBe("Night Drive");
     expect(themeUsers(ws, "Night Drive").map((u) => u.title).sort()).toEqual(["Own Look", "Third"]);
-    expect(listThemes(wsDir).map((t) => t.name)).toEqual(["Life Lyrics", "Night Drive", "Own Look copy", "Plain"]);
+    expect(listThemes(wsDir).map((t) => t.name)).toEqual(["Life Lyrics", "Neon", "Neon Night", "Night Drive", "Own Look copy", "Plain"]);
     const file = songPathsById(ws, ids.Third).recipe!;
     writeFileSync(file, JSON.stringify({ theme: "Gone" }));
     expect(() => styleData(ws, ids.Third)).toThrow(/Theme "Gone" not found/);
