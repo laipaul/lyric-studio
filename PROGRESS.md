@@ -333,19 +333,14 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
    **looks** (named complete styles, e.g. "Life Lyrics Cinematic", "Pômé Polaroid") apply to a whole release;
    Scheduled / Published with manually entered results as planned for 6.3.
 
-**Lyric timing first (agreed 31 Oct 2026): L1a and L1b come before the Style rebuild and the UX steps below;
-the open decisions stay paused.**
+**Lyric timing first (agreed 31 Oct 2026; done 31 Oct: L1a verified on 4 songs, L1b dropped). Next: the UX
+steps below (U2b first); the open decisions stay paused.**
 - ✅ (verified 31 Oct: These Empty Roads "perfect"; then all 4 of the user's songs pass with the vocal stem) **L1a. Vocal stem (vocals.wav) as the main guide for lyric timing**; Demucs only
   the fallback (see Latest steps). Verify with `pnpm lyrics:compare-voice` on These Empty Roads.
 - ✅ (verified 31 Oct) **Original file names + the vocal stem's timing as the base** (see Latest steps).
-- **L1b. The Lyric Map** (do not build before the user's OK; plan first): a stable ID per word from the song's
-  structure (V1.L2.W3); the song as a map of sections; the app picks the few points most worth checking by ear
-  (section starts, the first word after a gap, chorus entries, the least-certain lines); the user hears 2 s around
-  a point and confirms ✓ or taps the right moment; confirmed points become fixed anchors and the song re-aligns
-  between them at once (alignment section by section, so a repeated chorus can never jump to another one); a fix
-  in one chorus is offered for its repeats. Ideas noted 31 Oct: Suno's bar grid (BPM, 4/4, bar 1) placed on the
-  trimmed song with the L1a offset, so section starts and chorus entries fall on bars; a DAW marker list (Verse 1,
-  Chorus...) as section starts if the user exports one.
+- ~~L1b. The Lyric Map~~ **dropped by the user on 31 Oct 2026** ("not needed anymore"): the vocal stem's timing
+  plus the hand-set starts and "checked by ear" do the job (the idea, for reference: song sections as a map,
+  the few points most worth checking by ear, confirmed points as fixed anchors, re-alignment between them).
 - **L2 (later).** The user's confirmed songs become a test set to measure accuracy and to compare aligner models on
   his own songs. Candidates noted 31 Oct (from outside reviews): a phoneme-based or singing-trained aligner (DALI),
   a trained voice detector (Silero VAD) and pitch (pYIN) as a sign of quiet / breathy singing, snapping word starts
