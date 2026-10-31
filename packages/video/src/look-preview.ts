@@ -22,7 +22,9 @@ export function previewLyrics(texts: readonly string[]): LyricLineProps[] {
     return {
       text,
       startFrame,
-      endFrame: k < texts.length - 1 ? startFrame + LOOK_LINE_FRAMES : startFrame + LOOK_LINE_FRAMES + 30,
+      // The last line leaves before the loop ends, so effects that work on the way out (Dissolve,
+      // Spread) are seen leaving too.
+      endFrame: startFrame + LOOK_LINE_FRAMES,
       isHook: k === 1,
       stampFrame: stamp,
       sungEndFrame: stamp + step * (words.length - 1) + held,
@@ -30,7 +32,7 @@ export function previewLyrics(texts: readonly string[]): LyricLineProps[] {
     };
   });
 }
-export const lookPreviewDuration = (lines: number) => Math.max(1, lines) * LOOK_LINE_FRAMES + 45;
+export const lookPreviewDuration = (lines: number) => Math.max(1, lines) * LOOK_LINE_FRAMES + 45; // ~1 s empty at the end: the last line has left
 
 // A font family as the Style tab lists it (StyleData.fonts).
 export type CatalogFont = { family: string; faces: { weight: number; style: string; srcs: string[]; ranges?: (string | null)[] }[] };

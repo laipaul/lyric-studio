@@ -63,6 +63,7 @@ export function SetEffect({
   const [asking, setAsking] = useState(false);
   const [gallery, setGallery] = useState(false); // the effect gallery under the picker
   const [kind, setKind] = useState<"All" | (typeof EFFECT_KINDS)[number]>("All");
+  const [search, setSearch] = useState(""); // the gallery's search box: part of an effect's name
   const [hovered, setHovered] = useState<string | null>(null); // the tile playing
   const field = part === "verse" ? "verseEffect" : "hookEffect";
   const [name, intensity = "balanced"] = (values[field] || values.verseEffect).split(":");
@@ -131,6 +132,14 @@ export function SetEffect({
       </button>
       {gallery ? (
         <div data-effect-gallery className="flex flex-col gap-2">
+          <input
+            data-effect-search
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search effects (e.g. neon, slide)"
+            className="bg-background rounded-md border px-2.5 py-1 text-xs"
+          />
           <div className="flex flex-wrap gap-1.5">
             {(["All", ...EFFECT_KINDS] as const).map((k) => (
               <button key={k} type="button" data-effect-kind={k} aria-pressed={kind === k} onClick={() => setKind(k)} className={cn("rounded-full border px-2.5 py-0.5 text-xs", kind === k ? "border-brand bg-brand/15 text-foreground" : "text-muted-foreground hover:text-foreground")}>
@@ -139,8 +148,11 @@ export function SetEffect({
             ))}
           </div>
           <div className="grid grid-cols-3 gap-2">
-            {effects
+            {/* A to Z by the shown name (easy to find one you remember), the current effect first. */}
+            {[...effects]
               .filter((e) => kind === "All" || (EFFECT_CATEGORIES[e.name as keyof typeof EFFECT_CATEGORIES] ?? []).includes(kind))
+              .filter((e) => !search.trim() || `${effectTitle(e.name)} ${e.name}`.toLowerCase().includes(search.trim().toLowerCase()))
+              .sort((a, b) => (a.name === name ? -1 : b.name === name ? 1 : effectTitle(a.name).localeCompare(effectTitle(b.name))))
               .map((e) => (
                 <button
                   key={e.name}

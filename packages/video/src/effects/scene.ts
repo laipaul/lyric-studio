@@ -82,7 +82,8 @@ export function sceneTimeline(lines: readonly SceneLine[], o: SceneOptions) {
       return kind(i + 1) === "glide" ? { start: s, end: lines[i + 1].startFrame, by: "glide" as const } : { start: s, end: s + Math.max(1, Math.round(D[i + 1] / 2)), by: "own" as const };
     }
     if (l.endFrame >= o.durationInFrames) return null; // stays to the very end
-    return { start: Math.max(l.startFrame, l.endFrame - GAP_FADE_FRAMES), end: l.endFrame, by: "own" as const };
+    const fade = motion[i].effect.exitLed ? Math.max(GAP_FADE_FRAMES, motion[i].frames) : GAP_FADE_FRAMES;
+    return { start: Math.max(stamp(i) + 2, l.endFrame - fade, l.startFrame), end: l.endFrame, by: "own" as const };
   });
   return { lines, o, own, motion, kind, stamp, connected, D, enterStart, stacked, waits, exitWindow };
 }

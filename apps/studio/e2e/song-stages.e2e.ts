@@ -247,6 +247,14 @@ async function main() {
     const before = look("verseEffect");
     await page.click("[data-effect-picker]"); // the effect picker opens the gallery
     check(!!(await page.$("[data-effect-gallery] [data-effect-kind=Glitch]")), "the gallery has its filter chips");
+    // A to Z by name (the current one first), and a search box.
+    const titles = await page.$$eval("[data-effect-gallery] [data-try-effect]", (els: Element[]) => els.map((e) => (e.getAttribute("title") ?? "").split(" · ")[0]));
+    const rest = titles.slice(1);
+    check(JSON.stringify(rest) === JSON.stringify([...rest].sort((a, b) => a.localeCompare(b))), `the gallery is A to Z after the current effect (${titles.slice(0, 4).join(", ")}…)`);
+    await page.fill("[data-effect-search]", "slide");
+    const found = await page.$$eval("[data-effect-gallery] [data-try-effect]", (els: Element[]) => els.map((e) => e.getAttribute("data-try-effect")));
+    check(found.length >= 3 && found.every((n) => /slide/.test(n ?? "")), `search "slide" finds the slides (${found.join(", ")})`);
+    await page.fill("[data-effect-search]", "");
     // Every new effect plays in its tile without an error (the name drawn letter by letter for Dissolve).
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));

@@ -68,6 +68,9 @@ export type LyricEffect = {
   jumpy?: true;
   // Slides in from the side (./slides.ts): moves sideways fast on purpose while it comes in and goes.
   slides?: true;
+  // Its main move is on the way out (dissolve, spread): before a pause the line leaves over the effect's
+  // whole duration (ending at the same time), not the short 0.4 s fade.
+  exitLed?: true;
   // How far the effect moves parts of a line beyond its enter / exit / hold looks (px, x the amount), for QA.
   reach?: (amount: number) => { up?: number; down?: number };
 };

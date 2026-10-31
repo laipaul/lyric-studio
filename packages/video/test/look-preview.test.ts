@@ -22,7 +22,8 @@ describe("Look preview", () => {
     expect(l.map((x) => x.isHook)).toEqual([false, true, false]);
     expect(l.map((x) => x.startFrame)).toEqual([15, 15 + LOOK_LINE_FRAMES, 15 + 2 * LOOK_LINE_FRAMES]);
     expect(l[0].words?.map((w) => w.text)).toEqual(["Where", "the", "river", "meets", "the", "light"]);
-    expect(l[2].endFrame).toBe(l[2].startFrame + LOOK_LINE_FRAMES + 30); // the last line is held longer
+    expect(l[2].endFrame).toBe(l[2].startFrame + LOOK_LINE_FRAMES); // the last line leaves ~1 s before the loop ends (its exit is seen)
+    expect(lookPreviewDuration(3) - l[2].endFrame).toBe(30);
     expect(lookPreviewDuration(3)).toBe(3 * LOOK_LINE_FRAMES + 45);
   });
 

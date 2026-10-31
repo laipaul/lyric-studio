@@ -1,7 +1,7 @@
 // Directional effects and Dissolve (31 Oct 2026): word rise, slide in from left / right, slide down, dissolve.
 import { describe, expect, it } from "vitest";
 
-import { lyricEffect } from "../src";
+import { lyricEffect, lyricScene, previewLyrics, lookPreviewDuration, sceneTimeline } from "../src";
 import { dustLetter, SLIDE_PX } from "../src/effects/slides";
 
 describe("slides", () => {
@@ -38,5 +38,18 @@ describe("dissolve", () => {
     expect(gone.blur).toBeGreaterThan(5);
     expect(dustLetter(4, 10, 0.7)).toEqual(dustLetter(4, 10, 0.7)); // deterministic
     expect(lyricEffect("dissolve")!.exit!(1, 1)).toMatchObject({ opacity: 0, dust: 1 });
+  });
+});
+
+describe("effects that work on the way out (Dissolve, Spread)", () => {
+  it("leave over their whole duration before a pause, and the one-line preview shows them leaving", () => {
+    for (const name of ["dissolve", "spread"]) {
+      const lyrics = previewLyrics(["You had a heart for two"]);
+      const t = sceneTimeline(lyrics.map((l) => ({ ...l })), { fps: 30, durationInFrames: lookPreviewDuration(1), verse: { name, intensity: "balanced" }, hook: { name, intensity: "balanced" }, showNext: false, nextScale: 0.55, gapPx: 22, height: () => 70, wordCount: () => 6 });
+      const leaving = Array.from({ length: lookPreviewDuration(1) }, (_, f) => lyricScene(t, f).find((x) => x.role === "leaving")).filter(Boolean);
+      expect(leaving.length, name).toBeGreaterThanOrEqual(30); // >= 1 s of leaving (not the 0.4 s gap fade)
+      if (name === "dissolve") expect(Math.max(...leaving.map((x) => x!.look.dust ?? 0))).toBeGreaterThan(0.9);
+      else expect(Math.max(...leaving.map((x) => x!.look.spacing ?? 0))).toBeGreaterThan(0.2);
+    }
   });
 });
