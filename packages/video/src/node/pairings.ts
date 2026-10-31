@@ -1,4 +1,4 @@
-// Font pairings (presets/font-pairings.json, plus the artist's own brand fonts as "Current brand"): a
+// Font pairings (presets/font-pairings.json, plus the artist's own brand fonts as "Artist's fonts"): a
 // verse font and a hook font (and optionally a title font), each with weight and italic. The Style tab
 // previews each pair on the song's own lines over a frame of its clips, warns per card, applies a pair
 // to the song ("This song", locks respected) and only on request to the brand ("Save to brand").
@@ -75,11 +75,11 @@ export function parsePairings(json: unknown, catalog?: FontCatalog): { pairings:
   return { pairings, problems };
 }
 
-// "Current brand" (the artist's brand.json fonts) first, then the file's pairings.
+// "Artist's fonts" (the artist's brand.json fonts) first, then the file's pairings.
 export function loadPairings(catalog: FontCatalog, brand: Brand, file = PAIRINGS_FILE): { pairings: Pairing[]; problems: string[] } {
   const parsed = existsSync(file) ? parsePairings(JSON.parse(readFileSync(file, "utf8")), catalog) : { pairings: [], problems: [`${file} not found`] };
   const f = (b: Brand["verseFont"]): PairFont => ({ family: b.family, weight: b.weight, italic: b.italic === true });
-  const own: Pairing = { id: "brand", name: "Current brand", brand: true, note: "The artist's own fonts (brand.json).", verse: f(brand.verseFont), hook: f(brand.hookFont), title: f(brand.titleFont) };
+  const own: Pairing = { id: "brand", name: "Artist's fonts", brand: true, note: "Your artist's own fonts (brand.json).", verse: f(brand.verseFont), hook: f(brand.hookFont), title: f(brand.titleFont) };
   return { pairings: [own, ...parsed.pairings], problems: parsed.problems };
 }
 

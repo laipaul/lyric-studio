@@ -81,7 +81,7 @@ describe("pairing presets", () => {
     const { pairings, problems } = loadPairings(catalog, DEFAULT_BRAND);
     expect(problems).toEqual([]);
     expect(pairings.map((p) => p.id)).toEqual(["brand", "elegant", "dramatic", "romantic-script", "literary", "typewriter-story", "vintage-romance", "bold-statement", "gentle"]);
-    expect(pairings[0]).toMatchObject({ name: "Current brand", brand: true, verse: { family: "Cormorant Garamond" }, hook: { family: "Kaushan Script" } });
+    expect(pairings[0]).toMatchObject({ name: "Artist's fonts", brand: true, verse: { family: "Cormorant Garamond" }, hook: { family: "Kaushan Script" } });
     expect(pairings.find((p) => p.id === "elegant")).toMatchObject({ recommended: true, hook: { family: "Cormorant Garamond", weight: 600, italic: true } });
     expect(pairings.find((p) => p.id === "typewriter-story")!.title).toEqual({ family: "Special Elite", weight: 400, italic: false });
   });

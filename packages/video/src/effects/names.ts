@@ -29,6 +29,25 @@ export const EFFECT_HINTS: Record<(typeof EFFECT_NAMES)[number], string> = {
   ink: "script fonts, titles",
 };
 
+// The name shown in the studio (the stored name stays the code name above).
+export const EFFECT_TITLES: Record<(typeof EFFECT_NAMES)[number], string> = {
+  glide: "Glide",
+  "cinematic-fade": "Cinematic fade",
+  "soft-blur": "Blur in",
+  "dreamy-glow": "Dreamy glow",
+  "word-reveal": "Word by word",
+  "karaoke-highlight": "Karaoke",
+  floating: "Float",
+  typewriter: "Typewriter",
+  spread: "Spread",
+  "typewriter-erase": "Type and erase",
+  "typewriter-words": "Type by word",
+  clarify: "Focus pull",
+  ascend: "Rise",
+  ink: "Handwriting",
+};
+export const effectTitle = (name: string): string => EFFECT_TITLES[name as keyof typeof EFFECT_TITLES] ?? name;
+
 // "glide · verses", with " · brand default" when it is the artist's default for that kind of line.
 export function effectOptionLabel(name: string, brandDefault?: string): string {
   const hint = EFFECT_HINTS[name as keyof typeof EFFECT_HINTS];

@@ -253,7 +253,7 @@ async function main() {
     check((await page.$$("[data-look-preview]")).length === 1, "one viewer");
     check((await page.$$("[data-effect-preview] .__remotion-player, [data-effect-preview] canvas, [data-effect-preview] [data-lyric]")).length === 0, "the Set effect panel has no player of its own");
     await page.selectOption("[data-try-intensity]", "subtle");
-    check(((await page.textContent("[data-set-effect]")) ?? "").includes("Verses: typewriter (calm)"), "the panel names what verses use");
+    check(((await page.textContent("[data-set-effect]")) ?? "").includes("Verses: Typewriter (calm)"), "the panel names what verses use");
     // Choruses: the switch, then the effect goes to the hook effect; the verses keep theirs.
     await page.click("[data-part=hook]");
     await page.click("[data-try-effect=spread]");

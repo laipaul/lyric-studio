@@ -6,7 +6,7 @@
 // it straight away and the video is planned again); locked settings are greyed out with a padlock. The ⋯
 // menu: "Use Breathe and add-ons for all my songs" (the artist's brand, asks first) and the per-platform
 // values.
-import { INTENSITIES, type Intensity } from "@lyric/video";
+import { effectTitle, INTENSITIES, type Intensity } from "@lyric/video";
 import { Lock } from "lucide-react";
 import { useState } from "react";
 
@@ -24,10 +24,11 @@ const ADD_ONS = [
 ] as const;
 const join = (name: string, i: string) => (i === "balanced" ? name : `${name}:${i}`);
 const paceWord = (i: string) => (i === "subtle" ? "calm" : i === "balanced" ? "normal" : "quick");
+const intensityWord = (i: string) => (i === "subtle" ? "soft" : i === "expressive" ? "strong" : "balanced");
 const isTyper = (n: string) => n.startsWith("typewriter") && n !== "typewriter-words";
 export const effectWords = (saved: string) => {
   const [n, i = "balanced"] = saved.split(":");
-  return i === "balanced" ? n : `${n} (${isTyper(n) ? paceWord(i) : i})`;
+  return i === "balanced" ? effectTitle(n) : `${effectTitle(n)} (${isTyper(n) ? paceWord(i) : intensityWord(i)})`;
 };
 
 export function SetEffect({
@@ -111,12 +112,13 @@ export function SetEffect({
             key={e.name}
             type="button"
             data-try-effect={e.name}
+            title={e.label}
             aria-pressed={name === e.name}
             disabled={effectLocked}
             onClick={() => onSet(field, join(e.name, intensity))}
             className={cn("rounded-full border px-2.5 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50", name === e.name ? "border-brand bg-brand/15" : "text-muted-foreground hover:text-foreground")}
           >
-            {e.name}
+            {effectTitle(e.name)}
           </button>
         ))}
       </div>
@@ -126,7 +128,7 @@ export function SetEffect({
           <select className={select} value={intensity} disabled={effectLocked} onChange={(e) => onSet(field, join(name, e.target.value as Intensity))} data-try-intensity>
             {INTENSITIES.map((i) => (
               <option key={i} value={i}>
-                {pace ? paceWord(i) : i}
+                {pace ? paceWord(i) : intensityWord(i)}
               </option>
             ))}
           </select>
