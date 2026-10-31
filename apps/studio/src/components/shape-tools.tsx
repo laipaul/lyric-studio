@@ -58,6 +58,43 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
   const [draft, setDraft] = useState<Draft | null>(null);
   const data = useMemo(() => (saved && draft ? withDraft(saved, draft) : saved), [saved, draft]); // what the tools and the viewer show
   const editingTheme = draft && saved ? (saved.themes.find((t) => t.name === draft.name) ?? null) : null;
+  // Unsaved changes are kept in this browser (per song) until Save or Cancel: leaving the editor without
+  // saving loses nothing; the next "Edit theme" brings them back with a note.
+  const draftKey = `lyric-studio:theme-draft:${projectId}`;
+  const [restored, setRestored] = useState(false);
+  const openEditor = (t: StyleTheme) => {
+    let kept: Draft | null = null;
+    try {
+      const raw = window.localStorage.getItem(draftKey);
+      kept = raw ? (JSON.parse(raw) as Draft) : null;
+    } catch {
+      kept = null;
+    }
+    if (kept && kept.name === t.name && kept.changed) {
+      setDraft(kept);
+      setRestored(true);
+    } else {
+      setDraft(draftOf(t));
+      setRestored(false);
+    }
+  };
+  const closeEditor = () => {
+    setDraft(null);
+    setRestored(false);
+    try {
+      window.localStorage.removeItem(draftKey);
+    } catch {
+      // private mode: nothing kept
+    }
+  };
+  useEffect(() => {
+    if (!draft?.changed) return;
+    try {
+      window.localStorage.setItem(draftKey, JSON.stringify(draft));
+    } catch {
+      // private mode: nothing kept
+    }
+  }, [draft, draftKey]);
   // ?edit=<theme> (the Themes page's "Edit"): the editor opens on that theme, shown on this song.
   const editParam = useSearchParams().get("edit");
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +127,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
         if (d.error) return setError(d.error);
         setData(d);
         const t = editParam ? d.themes.find((x) => x.name === editParam) : undefined;
-        if (t) setDraft(draftOf(t));
+        if (t) openEditor(t);
       })
       .catch((e: Error) => alive && setError(e.message));
     return () => {
@@ -178,7 +215,8 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
       if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
       setData(d);
       if (["use", "create", "save", "saveAs"].includes(body.action)) {
-        setDraft(body.action === "create" && d.theme ? draftOf(d.theme) : null); // a new theme opens in the editor
+        closeEditor(); // saved (or another theme): nothing unsaved is kept any more
+        if (body.action === "create" && d.theme) setDraft(draftOf(d.theme)); // a new theme opens in the editor
         setDirty(true);
         onSaved(); // the video is planned again with the theme
         router.refresh();
@@ -662,6 +700,11 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                 </span>
                 {draft.changed ? <span data-theme-unsaved className="text-xs text-amber-300">not saved yet</span> : null}
               </div>
+              {restored && draft.changed ? (
+                <p data-theme-restored className="rounded-md border border-amber-300/40 bg-amber-300/10 px-2.5 py-1.5 text-xs text-amber-100">
+                  Your unsaved changes from last time are back. Save keeps them; Cancel drops them.
+                </p>
+              ) : null}
 
               <EditorSection id="text" title="Text">
                 <PairingsRow
@@ -711,11 +754,6 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                   onSet={(field, value) => {
                     if (field === "verseEffect" || field === "hookEffect") setPickedEffect({ field, value, at: Date.now() });
                     void act({ action: "set", field, value });
-                  }}
-                  preview={(effect, title) => {
-                    // The tile: the effect's own name, big, on a plain dark tile (the song's look is in the big viewer).
-                    const p = lookOf(data, { dirty: false, hovered: null, pairView: null, part }).fallback;
-                    return { ...p, background: null, backing: false, picture: null, lyrics: previewLyrics([title]), textSize: 260, area: null, effect: patchChoice(effect, undefined) };
                   }}
                   onTry={(field, value) => setHoverEffect(value ? { field, value } : null)}
                   perPlatformOpen={effectPlatforms}
@@ -772,7 +810,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                     <button type="button" data-theme-save-as onClick={() => setSavingAs(`${editingTheme.name} 2`)} className="bg-muted rounded-md px-3 py-1 text-xs">
                       Save as new theme
                     </button>
-                    <button type="button" data-theme-cancel onClick={() => (setDraft(null), setDirty(false))} className="text-muted-foreground ml-auto text-xs underline underline-offset-2">
+                    <button type="button" data-theme-cancel onClick={() => (closeEditor(), setDirty(false))} className="text-muted-foreground ml-auto text-xs underline underline-offset-2">
                       Cancel
                     </button>
                   </div>
@@ -790,7 +828,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                   </p>
                   {data.theme.problems.length ? <p className="text-xs text-amber-300">{data.theme.problems.join(" ")}</p> : null}
                   <div className="flex flex-wrap gap-2">
-                    <button type="button" data-theme-edit onClick={() => saved?.theme && setDraft(draftOf(saved.theme))} className="bg-brand text-brand-foreground rounded-md px-3 py-1 text-xs font-medium">
+                    <button type="button" data-theme-edit onClick={() => saved?.theme && openEditor(saved.theme)} className="bg-brand text-brand-foreground rounded-md px-3 py-1 text-xs font-medium">
                       Edit theme
                     </button>
                     <button type="button" data-theme-new onClick={() => setCreating({ name: "", from: data.theme?.name ?? "" })} className="bg-muted flex items-center gap-1 rounded-md px-3 py-1 text-xs">

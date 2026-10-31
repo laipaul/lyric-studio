@@ -103,7 +103,7 @@ describe("no frame-to-frame jumps beyond the easing", () => {
           expect(Math.abs((b?.opacity ?? 0) - (a?.opacity ?? 0)), where).toBeLessThanOrEqual(0.25);
           if (!a || !b) continue;
           expect(Math.abs(b.y - a.y), `${where} y`).toBeLessThanOrEqual(30);
-          if (!lyricEffect(name)?.jumpy) expect(Math.abs(b.x - a.x), `${where} x`).toBeLessThanOrEqual(lyricEffect(name)?.slides ? 40 : 2); // glitch jumps on purpose; slides travel sideways
+          if (!lyricEffect(name)?.jumpy) expect(Math.abs(b.x - a.x), `${where} x`).toBeLessThanOrEqual(lyricEffect(name)?.slides ? 60 : 2); // glitch jumps on purpose; slides travel sideways
           expect(Math.abs(b.scale - a.scale), `${where} scale`).toBeLessThanOrEqual(0.06);
           expect(Math.abs(b.blur - a.blur), `${where} blur`).toBeLessThanOrEqual(2); // px at 1080 wide: Blur in pulls focus from 12 px
           for (const [k, w] of (b.words ?? []).entries()) {
@@ -141,7 +141,7 @@ describe("the active line is fully readable at its timestamp", () => {
           expect(s!.opacity, where).toBe(1);
           expect(s!.blur, where).toBe(0);
           expect(Math.abs(s!.scale - 1), where).toBeLessThan(0.001);
-          expect(Math.abs(s!.y), where).toBeLessThanOrEqual(11); // floating sways a few px
+          expect(Math.abs(s!.y), where).toBeLessThanOrEqual(16); // floating sways a few px
           if (name !== "floating" && name !== "spread") expect(s!.y, where).toBe(0); // spread floats a few px too
           // Its first word is readable when the line is sung.
           if (f === l.stampFrame && s!.words) expect(s!.words[0].opacity, where).toBe(1);
@@ -283,7 +283,7 @@ describe("deterministic", () => {
     const g = effectExtents({ name: "glide", intensity: "balanced" }, { name: "glide", intensity: "balanced" }, FPS);
     expect(g.up).toBeGreaterThanOrEqual(GLIDE_LIFT_PX);
     const c = effectExtents({ name: "cinematic-fade", intensity: "expressive" }, { name: "glide", intensity: "balanced" }, FPS);
-    expect(c.maxScale).toBeCloseTo(1.18, 5); // settles from 12% larger (x1.5 expressive)
+    expect(c.maxScale).toBeCloseTo(1.234, 5); // settles from 12% larger (x1.95 expressive)
     const k = effectExtents({ name: "karaoke-highlight", intensity: "balanced" }, { name: "floating", intensity: "balanced" }, FPS);
     expect(k.side).toBeGreaterThan(0); // the hook floats like the verses
   });

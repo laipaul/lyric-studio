@@ -66,7 +66,7 @@ export function checkStyle(raw: unknown, where: string, problems: string[], with
   if (r.effect !== undefined) {
     try {
       const c = parseEffectChoice(String(r.effect), `${where}.effect`);
-      out.effect = `${c.name}${c.intensity !== "balanced" ? `:${c.intensity}` : ""}`;
+      out.effect = `${c.name}${c.strength !== undefined ? `:${c.strength}` : c.intensity !== "balanced" ? `:${c.intensity}` : ""}`;
     } catch (e) {
       problems.push((e as Error).message);
     }

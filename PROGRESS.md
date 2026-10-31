@@ -21,6 +21,13 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   tube letters in the accent that flicker on and hum (new gallery chip "Glow"). Also new: **Word rise** (each
   word rises into place as it is sung), **Slide in from left**, **Slide in from right**, **Slide down**, and
   **Dissolve** (the letters drift up and fade into thin air when the line ends; src/effects/slides.ts). 29 effects.
+- **Strength slider** (0-100 %) right under the effect picker, its own for Verses and Choruses (the typing
+  speed for typewriters), saved as "glide:70"; 50 % is clearly seen on a phone (the old "balanced" made 30%
+  stronger), 100 % is twice that. Replaces the Soft / Balanced / Strong dropdown (old values still work).
+- Gallery: compact name tiles, A to Z (the effect in use first, pinned when the gallery opens), a search
+  box; pointing at an effect plays it in the big viewer. Dissolve and Spread are seen leaving.
+- **Unsaved theme changes are kept** (in the browser, per song) when leaving the editor without Save;
+  the next Edit theme brings them back with a note; Save or Cancel clears them.
 - **Motion**: gallery tiles show the effect's name big; pointing at or picking an effect shows its name
   moving in that effect over the paused frame in the big viewer; pressing play plays the song with the
   effect on the real lyrics.

@@ -10,7 +10,7 @@ import { dustLetter } from "./effects/slides";
 import { EMPHASIS_SCALE, emphasisWord } from "./effects/accents";
 import { ascendLetter } from "./effects/ascend";
 import { inkMask } from "./effects/ink";
-import { AMOUNT } from "./effects/types";
+import { choiceAmount } from "./effects/types";
 import { applyTextCase, layoutLyric, type LyricLayout } from "./lyrics";
 import type { LyricArea } from "./platform";
 import { backingShadow, BOX_STYLE, type TextBacking } from "./picture";
@@ -219,7 +219,7 @@ export function LyricScene(props: {
                       );
                     })
                   : look.wave !== undefined
-                    ? waveLetters(layout.lines, r, look.wave, AMOUNT[(line.card?.effect ?? (line.isHook ? effects.hook : effects.verse)).intensity] ?? 1)
+                    ? waveLetters(layout.lines, r, look.wave, choiceAmount(line.card?.effect ?? (line.isHook ? effects.hook : effects.verse)))
                     : look.ripple !== undefined
                       ? rippleLetters(layout.lines, r, look.ripple, look.rippleAmp ?? 6)
                       : (look.dust ?? 0) > 0.001

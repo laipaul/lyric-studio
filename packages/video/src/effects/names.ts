@@ -7,7 +7,8 @@ export type EasingName = "ease-in-out" | "ease-out" | "ease-in" | "linear";
 export const EASING_NAMES: readonly EasingName[] = ["ease-in-out", "ease-out", "ease-in", "linear"];
 
 // What the user picks (brand.json motion, platforms.json motion, --line-effect / --hook-effect).
-export type EffectChoice = { name: string; intensity: Intensity; durationMs?: number; easing?: EasingName };
+// strength: the Strength slider, 0-100 % (saved as "glide:70"); instead of the named intensity when set.
+export type EffectChoice = { name: string; intensity: Intensity; strength?: number; durationMs?: number; easing?: EasingName };
 
 export const EFFECT_NAMES = ["glide", "cinematic-fade", "soft-blur", "dreamy-glow", "word-reveal", "karaoke-highlight", "floating", "typewriter", "spread", "typewriter-erase", "typewriter-words", "clarify", "ascend", "ink", "word-pop", "highlight-sweep", "mask-reveal", "tilt-3d", "glitch", "wave", "echo-stack", "slice", "kinetic-stack", "neon", "word-rise", "slide-left", "slide-right", "slide-down", "dissolve"] as const;
 
@@ -125,9 +126,10 @@ export const DEFAULT_HOOK_EFFECT: EffectChoice = { name: "karaoke-highlight", in
 export function parseEffectChoice(text: string, where = "effect"): EffectChoice {
   const [name, intensity = "balanced", extra] = text.trim().toLowerCase().split(":");
   if (extra !== undefined || !(EFFECT_NAMES as readonly string[]).includes(name)) {
-    throw new Error(`${where}: unknown effect "${text}". Known: ${EFFECT_NAMES.join(", ")} (optionally with :subtle, :balanced or :expressive)`);
+    throw new Error(`${where}: unknown effect "${text}". Known: ${EFFECT_NAMES.join(", ")} (optionally with :subtle, :balanced, :expressive or a strength :0-100)`);
   }
-  if (!INTENSITIES.includes(intensity as Intensity)) throw new Error(`${where}: intensity must be subtle, balanced or expressive (found "${intensity}")`);
+  if (/^\d{1,3}$/.test(intensity) && Number(intensity) <= 100) return { name, intensity: "balanced", strength: Number(intensity) };
+  if (!INTENSITIES.includes(intensity as Intensity)) throw new Error(`${where}: intensity must be subtle, balanced or expressive, or a strength 0-100 (found "${intensity}")`);
   return { name, intensity: intensity as Intensity };
 }
 
@@ -136,12 +138,12 @@ export function checkEffectChoice(value: unknown, where: string): EffectChoice {
   if (typeof value === "string") return parseEffectChoice(value, where);
   if (!value || typeof value !== "object") throw new Error(`${where}: must be an effect name like "glide" or { "name": "glide", "intensity": "subtle" }`);
   const v = value as Record<string, unknown>;
-  const base = parseEffectChoice(`${String(v.name)}:${String(v.intensity ?? "balanced")}`, where);
+  const base = parseEffectChoice(`${String(v.name)}:${v.strength !== undefined ? String(v.strength) : String(v.intensity ?? "balanced")}`, where);
   if (v.durationMs !== undefined && !(typeof v.durationMs === "number" && v.durationMs >= 100 && v.durationMs <= 2000)) throw new Error(`${where}: durationMs must be 100-2000`);
   if (v.easing !== undefined && !(typeof v.easing === "string" && (EASING_NAMES as readonly string[]).includes(v.easing))) throw new Error(`${where}: easing must be ${EASING_NAMES.join(", ")}`);
   return { ...base, ...(v.durationMs !== undefined ? { durationMs: v.durationMs as number } : {}), ...(v.easing !== undefined ? { easing: v.easing as EasingName } : {}) };
 }
 
 export function choiceText(c: EffectChoice): string {
-  return `${c.name}${c.intensity !== "balanced" ? `:${c.intensity}` : ""}`;
+  return `${c.name}${c.strength !== undefined ? `:${c.strength}` : c.intensity !== "balanced" ? `:${c.intensity}` : ""}`;
 }

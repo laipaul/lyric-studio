@@ -53,3 +53,17 @@ describe("effects that work on the way out (Dissolve, Spread)", () => {
     }
   });
 });
+
+describe("the Strength slider", () => {
+  it('"glide:70" is a strength; 50 % is balanced, 100 % twice that; old names still work', async () => {
+    const { parseEffectChoice, choiceText, strengthAmount, intensityStrength, AMOUNT, resolveEffect } = await import("../src");
+    expect(parseEffectChoice("glide:70")).toEqual({ name: "glide", intensity: "balanced", strength: 70 });
+    expect(choiceText(parseEffectChoice("glide:70"))).toBe("glide:70");
+    expect(() => parseEffectChoice("glide:150")).toThrow();
+    expect(strengthAmount(50)).toBe(AMOUNT.balanced);
+    expect(strengthAmount(100)).toBe(2 * AMOUNT.balanced);
+    expect(intensityStrength("balanced")).toBe(50);
+    expect(resolveEffect(parseEffectChoice("glide:100"), 30).amount).toBeCloseTo(2.6, 5);
+    expect(resolveEffect(parseEffectChoice("glide:expressive"), 30).amount).toBe(AMOUNT.expressive);
+  });
+});

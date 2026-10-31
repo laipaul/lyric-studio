@@ -29,9 +29,13 @@ const INTENSITY: readonly Intensity[] = ["subtle", "balanced", "expressive"];
 // "typewriter:subtle" -> { name, intensity }, keeping the planned timing when the effect is the same.
 export function patchChoice(saved: string, before: EffectChoice | undefined): EffectChoice {
   const [name, raw = "balanced"] = saved.split(":");
+  const strength = /^\d{1,3}$/.test(raw) ? Math.min(100, Number(raw)) : undefined; // the Strength slider
   const intensity = (INTENSITY as readonly string[]).includes(raw) ? (raw as Intensity) : "balanced";
-  if (before && before.name === name) return { ...before, intensity };
-  return { name, intensity };
+  if (before && before.name === name) {
+    const { strength: _s, ...rest } = before;
+    return { ...rest, intensity, ...(strength !== undefined ? { strength } : {}) };
+  }
+  return { name, intensity, ...(strength !== undefined ? { strength } : {}) };
 }
 
 // The planned props with the look patched in. `barFrames`: the video's bars as frames (for Breathe "beat"

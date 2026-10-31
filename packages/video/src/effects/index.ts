@@ -12,7 +12,7 @@ import { clarify } from "./clarify";
 import { ascend } from "./ascend";
 import { ink } from "./ink";
 import { DEFAULT_VERSE_EFFECT } from "./names";
-import { AMOUNT, EASINGS, type EffectChoice, type LyricEffect } from "./types";
+import { AMOUNT, choiceAmount, EASINGS, type EffectChoice, type LyricEffect } from "./types";
 import { wordReveal } from "./word-reveal";
 import { TRENDING } from "./trending";
 import { SLIDES } from "./slides";
@@ -54,7 +54,7 @@ export function resolveEffect(choice: EffectChoice, fps: number): ResolvedEffect
   const effect = BY_NAME.get(choice.name) ?? BY_NAME.get(DEFAULT_VERSE_EFFECT.name)!;
   return {
     effect,
-    amount: AMOUNT[choice.intensity] ?? 1,
+    amount: choiceAmount(choice),
     frames: Math.max(4, Math.round(((choice.durationMs ?? effect.defaults.durationMs) * fps) / 1000)),
     ease: EASINGS[choice.easing ?? effect.defaults.easing],
   };

@@ -7,7 +7,16 @@ import type { EasingName, EffectChoice, Intensity } from "./names";
 
 export type { EasingName, EffectChoice, Intensity };
 // How strongly an effect moves, blurs or glows: subtle = 0.6x, balanced = 1x, expressive = 1.5x.
-export const AMOUNT: Record<Intensity, number> = { subtle: 0.6, balanced: 1, expressive: 1.5 };
+// 31 Oct 2026 (the user: "your presets are sometimes barely noticeable"): balanced is the Strength slider's
+// 50% and clearly seen on a phone; the slider goes from 0% (still) to 100% (2.6x).
+export const AMOUNT: Record<Intensity, number> = { subtle: 0.75, balanced: 1.3, expressive: 1.95 };
+export const STRENGTH_DEFAULT = 50;
+// The Strength slider (0-100 %) as the effect's amount: 50 % = balanced, 100 % = twice that.
+export const strengthAmount = (pct: number) => (Math.min(100, Math.max(0, pct)) / 50) * AMOUNT.balanced;
+// A choice's amount: its strength when set, else its named intensity.
+export const choiceAmount = (c: { intensity: Intensity; strength?: number }) => (c.strength !== undefined ? strengthAmount(c.strength) : (AMOUNT[c.intensity] ?? AMOUNT.balanced));
+// The named intensities on the slider (subtle ~29 %, balanced 50 %, expressive 75 %).
+export const intensityStrength = (i: Intensity) => Math.round((AMOUNT[i] / AMOUNT.balanced) * 50);
 
 export const EASINGS: Record<EasingName, (t: number) => number> = {
   "ease-in-out": Easing.bezier(0.42, 0, 0.58, 1), // CSS ease-in-out

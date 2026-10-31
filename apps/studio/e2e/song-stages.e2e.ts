@@ -255,17 +255,18 @@ async function main() {
     const found = await page.$$eval("[data-effect-gallery] [data-try-effect]", (els: Element[]) => els.map((e) => e.getAttribute("data-try-effect")));
     check(found.length >= 3 && found.every((n) => /slide/.test(n ?? "")), `search "slide" finds the slides (${found.join(", ")})`);
     await page.fill("[data-effect-search]", "");
-    // Every new effect plays in its tile without an error (the name drawn letter by letter for Dissolve).
+    // Pointing at an effect plays its name in the big viewer, without an error (Dissolve drawn letter by letter).
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     for (const name of ["neon", "word-rise", "slide-left", "slide-right", "slide-down", "dissolve", "spread", "soft-blur"]) {
       await page.hover(`[data-try-effect=${name}]`);
-      await page.waitForSelector(`[data-try-effect=${name}] [data-lyric]`, { timeout: 5000 }).catch(() => {});
-      check(!!(await page.$(`[data-try-effect=${name}] [data-lyric]`)), `the ${name} tile plays its name`);
+      await page.waitForFunction((n: string) => document.querySelector("[data-look-preview]")?.getAttribute("data-effect") === n, name, { timeout: 5000 }).catch(() => {});
+      check((await page.getAttribute("[data-look-preview]", "data-effect")) === name && !!(await page.$("[data-look-preview] [data-lyric]")), `pointing at ${name} plays it in the big viewer`);
     }
     await page.hover(`[data-try-effect=dissolve]`);
     await sleep(3000); // into the line's exit: letters drift away
-    check(errors.length === 0, `no page errors while the tiles play (${errors.join("; ")})`);
+    check(errors.length === 0, `no page errors while the effects play (${errors.join("; ")})`);
+    check((await page.$$("[data-effect-gallery] .__remotion-player")).length === 0, "the gallery's tiles are compact names (no players of their own)");
     await page.mouse.move(5, 5);
     await page.click("[data-try-effect=typewriter]");
     await page.selectOption("[data-try-breathe]", "beat");
@@ -273,9 +274,15 @@ async function main() {
     check((await page.$$eval("[data-look-preview] [data-lyric]", (e: Element[]) => e.length)) > 0, "the viewer shows the effect and Breathe at once");
     check(look("verseEffect") === before && !!(await page.$("[data-theme-unsaved]")), "…but nothing is saved yet ('not saved yet')");
     check((await page.$$("[data-look-preview]")).length === 1, "one viewer");
-    check((await page.$$eval("[data-effect-preview] .__remotion-player, [data-effect-preview] canvas, [data-effect-preview] [data-lyric]", (e: Element[]) => e.filter((x) => !x.closest("[data-effect-gallery]")).length)) === 0, "the Set effect panel has no player of its own (only the gallery's tiles play)");
-    await page.selectOption("[data-try-intensity]", "subtle");
-    check(((await page.textContent("[data-set-effect]")) ?? "").includes("Verses: Typewriter (calm)"), "the panel names what verses use");
+    check((await page.$$eval("[data-effect-preview] .__remotion-player, [data-effect-preview] canvas, [data-effect-preview] [data-lyric]", (e: Element[]) => e.length)) === 0, "the Set effect panel has no player of its own (the big viewer shows the effect)");
+    // The Strength slider (the typing speed for a typewriter), right under the effect picker.
+    await page.$eval("[data-effect-strength]", (el: Element) => {
+      const input = el as HTMLInputElement;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "30");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    check(((await page.textContent("[data-effect-strength-value]")) ?? "") === "30%", "the Strength slider shows 30%");
+    check(((await page.textContent("[data-set-effect]")) ?? "").includes("Verses: Typewriter (30%)"), "the panel names what verses use");
     // Choruses: the switch, then the effect goes to the hook effect; the verses keep theirs.
     await page.click("[data-part=hook]");
     await page.click("[data-try-effect=spread]");
@@ -284,7 +291,7 @@ async function main() {
     check((await page.getAttribute("[data-try-effect=typewriter]", "aria-pressed")) === "true", "back on Verses: typewriter is chosen");
     check(((await page.textContent("[data-theme-save]")) ?? "") === "Save", "a theme only this song uses: plain Save");
     await saveTheme(page);
-    check(await saved("verseEffect", "typewriter:subtle") && look("hookEffect") === "spread" && look("breathe") === "beat", "Save: the effects go into the song's theme (theme.json, not song.json)");
+    check(await saved("verseEffect", "typewriter:30") && look("hookEffect") === "spread" && look("breathe") === "beat", "Save: the effects go into the song's theme (theme.json, not song.json)");
     // Cancel throws the draft away.
     await openPanel(page, "colour");
     const setAccent = async (hex: string) =>
@@ -301,9 +308,19 @@ async function main() {
     await setAccent("#33aaff");
     await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-accent") === "#33AAFF");
     check(true, "the accent colour reaches the viewer as soon as it changes");
+    // Leaving without Save keeps the change: the page reloaded, Edit theme brings it back with a note.
+    await page.goto(`${base}/songs/${id}?tab=shape`);
+    await page.waitForSelector("[data-shape]");
+    await openPanel(page, "colour");
+    await page.waitForSelector("[data-theme-restored]", { timeout: 10_000 }).catch(() => {});
+    check(!!(await page.$("[data-theme-restored]")) && !!(await page.$("[data-theme-unsaved]")), "unsaved changes come back after leaving the editor (with a note)");
+    check(look("accentColour") === accentBefore, "…still not saved in the theme");
     await page.click("[data-theme-cancel]");
     await page.waitForFunction((a: string) => document.querySelector("[data-look-preview]")?.getAttribute("data-accent") === a, accentBefore);
     check(look("accentColour") === accentBefore && !(await page.$("[data-theme-editors]")), "Cancel: the theme as it was, in the viewer too");
+    await openPanel(page, "colour");
+    check(!(await page.$("[data-theme-restored]")), "…and after Cancel nothing comes back");
+    await page.click("[data-theme-cancel]");
     await openPanel(page, "colour");
     await setAccent("#33aaff");
     await saveTheme(page);
@@ -350,7 +367,7 @@ async function main() {
     await page.selectOption("[data-new-theme-from]", shared);
     await page.click("[data-new-theme-create]");
     await page.waitForSelector("[data-theme-editing='Night Drive']");
-    check(readRecipe(recipe).theme === "Night Drive" && loadTheme(wsDir, "Night Drive").look.verseEffect === "typewriter:subtle", "+ New theme: named first, from the chosen theme, the song uses it, the editor opens");
+    check(readRecipe(recipe).theme === "Night Drive" && loadTheme(wsDir, "Night Drive").look.verseEffect === "typewriter:30", "+ New theme: named first, from the chosen theme, the song uses it, the editor opens");
     await page.click("[data-theme-cancel]");
     // A tile: Use for this song; its ⋯: Delete (an unused theme) and Restore.
     check(!!(await page.$(`[data-theme-use="${shared}"]`)) && !(await page.$("[data-theme-use='Night Drive']")), "the other tiles offer 'Use for this song'");
