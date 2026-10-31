@@ -12,6 +12,7 @@ import { eq } from "drizzle-orm";
 import { loadBrand } from "./brand";
 import { loadFontCatalog } from "./font-catalog";
 import { songPathsById } from "./song-folder";
+import { recognizeSongFiles } from "./song-files";
 import { applyHandSet, applyVocalGuard, ensureAlignment, matchReport, type Alignment, type AlignRunner, type FirstWordsRunner, type SongProject, type VoiceMapRunner } from "./song-project";
 import { resolveVoiceSource, type StemCheckRunner, type VoiceSource } from "./voice-source";
 
@@ -62,10 +63,12 @@ export function songProjectById(ws: Workspace, projectId: string): SongProject {
 
 export async function timeLyrics(ws: Workspace, projectId: string, options: LyricTimingOptions = {}): Promise<LyricTiming> {
   const log = options.log ?? (() => {});
+  // Files put into the song folder by hand (any names) are found first.
+  if (!options.voice) await recognizeSongFiles(ws, projectId, { check: options.stemCheck, queue: false, log });
   const sp = songProjectById(ws, projectId);
   const paths = songPathsById(ws, projectId);
   if (paths.instrumental) throw new Error(`"${sp.project.title}" is an instrumental: nothing is sung, so there is no lyric timing.`);
-  if (!existsSync(paths.lyricsTxt)) throw new Error(`"${sp.project.title}" has no lyrics.txt yet.`);
+  if (!existsSync(paths.lyricsTxt)) throw new Error(`"${sp.project.title}" has no lyrics yet.`);
   const hints = paths.hints && existsSync(paths.hints) ? paths.hints : undefined;
   const voice = options.voice ?? (await resolveVoiceSource(ws, sp, { log, check: options.stemCheck }));
   const stored = await ensureAlignment(ws, sp, {

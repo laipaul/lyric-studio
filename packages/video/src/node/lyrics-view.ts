@@ -25,6 +25,7 @@ import { syncCollection } from "./collection";
 import { keepReplaced, rememberedCollection } from "./project-settings";
 import { readRecipe, writeRecipe } from "./recipe";
 import { songPathsById } from "./song-folder";
+import { dismissHandReset, noteHandTimesSaved, readHandRecord, resetAllHandTimes, resetHandTimesMadeBeforeStem, undoHandReset, type HandReset } from "./hand-reset";
 import { DEMUCS, resolveVoiceSource } from "./voice-source";
 import { applyHandSet, ensureAlignment, matchReport, wordsOfLyrics, type AlignRunner, type Alignment, type VocalGuard } from "./song-project";
 
@@ -64,6 +65,8 @@ export type LyricsView = {
   replaced: { file: string; at: string; lines: number }[]; // earlier lyrics.txt versions (newest first)
   instrumental: boolean; // the text is the story.txt of an instrumental (timed by the app, never aligned)
   anchors: AnchorsView;
+  voice: "stem" | "demucs" | null; // what the timing listens to (null: no stored alignment)
+  handReset: HandReset | null; // hand-set starts just reset (notice with Undo)
 };
 
 const LOW = 0.5;
@@ -176,7 +179,7 @@ export async function lyricsView(ws: Workspace, projectId: string): Promise<Lyri
   const replacedDir = path.join(paths.root, ".studio", "replaced");
   const replaced = existsSync(replacedDir)
     ? readdirSync(replacedDir)
-        .filter((f) => (paths.instrumental ? /-story\.txt$/ : /-lyrics\.txt$/).test(f))
+        .filter((f) => (paths.instrumental ? /-story\.txt$/.test(f) : EARLIER_LYRICS.test(f) && !/-story\.txt$/.test(f))) // the lyrics under any name
         .sort()
         .reverse()
         .map((f) => ({ file: f, at: statSync(path.join(replacedDir, f)).mtime.toISOString(), lines: readFileSync(path.join(replacedDir, f), "utf8").split(/\r?\n/).filter((l) => l.trim()).length }))
@@ -192,6 +195,8 @@ export async function lyricsView(ws: Workspace, projectId: string): Promise<Lyri
     gap,
     hintsFile: paths.hints ? path.relative(ws.dir, paths.hints).split(path.sep).join("/") : null,
     replaced,
+    voice: null as LyricsView["voice"],
+    handReset: null as HandReset | null,
   };
   const recipe = readRecipe(paths.recipe);
   const choice = await anchorClips(ws, projectId);
@@ -199,6 +204,8 @@ export async function lyricsView(ws: Workspace, projectId: string): Promise<Lyri
   const current = await currentLines(ws, projectId);
   if (!current) return { ...base, anchors, lines: null, why: "This song has no stored alignment for its current lyrics.txt yet: make a video first (Generate), then its lines appear here.", checkRan: false };
   const { alignment, hand, guard, moves, lines, ear } = current;
+  base.voice = alignment.voice?.kind ?? "demucs";
+  base.handReset = paths.hints ? (readHandRecord(paths.hints)?.reset ?? null) : null;
   const valid = checkedByEar(ear, alignment.lrcHash, lines);
   const reports = matchReport(alignment.lines, alignment.report);
   const frames = lyricFrames({ plan: { start_frame: 0 }, lyrics: lines.map((l) => rawLyric(l)) } as unknown as RenderBase, leadMs, p.lyrics_offset_ms, true, gap);
@@ -280,6 +287,7 @@ export async function saveHandTimes(ws: Workspace, projectId: string, changes: r
   if (paths.legacy || !paths.hints) throw new Error("This song has no folder yet: run the migration first (pnpm songs:migrate).");
   const stored = await storedAlignment(ws, projectId);
   if (!stored) throw new Error("This song has no stored alignment yet: make a video first.");
+  resetHandTimesMadeBeforeStem(paths.hints, stored.alignment.voice);
   const current = existsSync(paths.hints) ? readFileSync(paths.hints, "utf8") : "";
   const times = new Map(parseHandTimes(current).map((t) => [t.number, t]));
   for (const c of changes) {
@@ -295,7 +303,22 @@ export async function saveHandTimes(ws: Workspace, projectId: string, changes: r
   if (next === current) return times.size;
   if (existsSync(paths.hints)) keepReplaced(paths.root, paths.hints, true);
   writeFileSync(paths.hints, next);
+  noteHandTimesSaved(paths.hints, stored.alignment.voice); // made on this voice (the stem's starts stay)
   return times.size;
+}
+
+// "Reset all lines to the vocal stem's timing" (or the app's timing without a stem): every hand-set start
+// goes; the old hints.lrc is kept in .studio\replaced\ and Undo brings them back.
+export async function resetHandTimes(ws: Workspace, projectId: string, action: "all" | "undo" | "dismiss"): Promise<number> {
+  const paths = songPathsById(ws, projectId);
+  if (paths.legacy || !paths.hints) throw new Error("This song has no folder yet: run the migration first (pnpm songs:migrate).");
+  if (action === "dismiss") {
+    dismissHandReset(paths.hints);
+    return 0;
+  }
+  const stored = await storedAlignment(ws, projectId);
+  if (!stored) throw new Error("This song has no stored alignment yet: make a video first.");
+  return action === "all" ? resetAllHandTimes(paths.hints, stored.alignment.voice) : undoHandReset(paths.hints, stored.alignment.voice);
 }
 
 // The Lyrics tab's text editor: a new lyrics.txt (the old one kept in .studio\replaced\). realign: the
@@ -312,10 +335,13 @@ export function saveLyricsText(ws: Workspace, projectId: string, text: string): 
   return { changed: true, realign: wordsOfLyrics(old) !== wordsOfLyrics(normalised) };
 }
 
+// An earlier version of the lyrics in .studio\replaced\: "<time>-<its own name>.txt".
+const EARLIER_LYRICS = /^[\dT-]+(\.\d+)?-.+\.txt$/;
+
 // Undo: an earlier lyrics.txt from .studio\replaced\ back (the current one is kept there too).
 export function restoreLyrics(ws: Workspace, projectId: string, file: string): { realign: boolean } {
   const paths = songPathsById(ws, projectId);
-  if (!/^[\dT-]+(\.\d+)?-lyrics\.txt$/.test(file)) throw new Error("Not an earlier lyrics.txt.");
+  if (!EARLIER_LYRICS.test(file) || path.basename(file) !== file) throw new Error("Not an earlier version of the lyrics.");
   const source = path.join(paths.root, ".studio", "replaced", file);
   if (!existsSync(source)) throw new Error("That earlier version is not there any more.");
   return saveLyricsText(ws, projectId, readFileSync(source, "utf8"));

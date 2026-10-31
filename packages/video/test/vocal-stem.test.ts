@@ -126,7 +126,7 @@ describe("the voice source", () => {
     expect(a.voice.kind).toBe("stem");
     expect(aligned.at(-1)!.stem).toBe(path.join(folder, "vocals.wav"));
     expect(aligned.at(-1)!.hint).toBe(aligned[0].hint); // the same stored hints
-    expect(log).toContain("lyrics: the vocal stem (vocals.wav) is new: the song is aligned again on it (stored hints and hand-set starts are kept).");
+    expect(log).toContain("lyrics: the vocal stem is new: the song is aligned again on it (stored hints and hand-set starts are kept).");
     expect(log.some((l) => l.startsWith("lyrics: voice: vocal stem, offset 1.8 s (vocals.wav)."))).toBe(true);
     const stored = readdirSync(path.dirname(a.lrcFile)).filter((f) => /^aligned-.*\.lrc$/.test(f));
     expect(stored.length).toBe(2);
@@ -164,12 +164,13 @@ describe("the Assets tab and the Prepare to-do", () => {
     const songFile = sp.songFile;
     const before = sha(songFile);
     const r = await storeVocalStem(ws, sp.project.id, writeStem("stem-take-2"), "These Empty Roads (Lead Vocal).wav", { check: stemCheck });
-    expect(r).toMatchObject({ stored: expect.stringMatching(/\/vocals\.wav$/), status: "lined-up", offsetMs: 1800, retimed: true, message: "Vocal stem lined up: 1.8 s offset, from trimming the song's start." });
-    expect(sha(path.join(folder, "vocals.wav"))).toBe(sha(writeStem("stem-take-2")));
+    expect(r).toMatchObject({ stored: expect.stringMatching(/\/These Empty Roads \(Lead Vocal\)\.wav$/), status: "lined-up", offsetMs: 1800, retimed: true, message: "Vocal stem lined up: 1.8 s offset, from trimming the song's start." });
+    expect(sha(path.join(folder, "These Empty Roads (Lead Vocal).wav"))).toBe(sha(writeStem("stem-take-2"))); // its own name
     const replaced = readdirSync(path.join(folder, ".studio", "replaced")).filter((f) => f.endsWith("-vocals.wav"));
     expect(replaced.length).toBe(1);
     expect(sha(path.join(folder, ".studio", "replaced", replaced[0]))).toBe(sha(writeStem("other-version")));
     await storeVocalStem(ws, sp.project.id, writeStem("stem-take-3"), "vocals.wav", { check: stemCheck });
+    expect(readdirSync(path.join(folder, ".studio", "replaced")).some((f) => f.endsWith("-These Empty Roads (Lead Vocal).wav"))).toBe(true); // kept under its own name
     const queued = ws.db.select().from(makeRun).where(eq(makeRun.project_id, sp.project.id)).all().filter((x) => x.status === "queued");
     expect(queued.length).toBe(1); // one lyric-timing run waiting, not two
     expect(queued[0].label).toBe("Lyric timing · vocal stem");
@@ -185,7 +186,7 @@ describe("the Assets tab and the Prepare to-do", () => {
     const kept = readFileSync(stem);
     rmSync(stem);
     const todo = (await songTodo(ws, sp.project.id)).find((t) => t.id === "vocals")!;
-    expect(todo).toMatchObject({ text: "Add the vocal stem for better lyric timing (vocals.wav).", tab: "assets", blocking: false });
+    expect(todo).toMatchObject({ text: "Add the vocal stem for better lyric timing.", tab: "assets", blocking: false });
     writeFileSync(stem, kept);
   });
 

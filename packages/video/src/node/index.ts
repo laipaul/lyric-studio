@@ -11,6 +11,8 @@ export * from "./render";
 export * from "./collection";
 export * from "./song-project";
 export * from "./voice-source";
+export * from "./file-links";
+export * from "./song-files";
 export * from "./lyric-timing";
 export * from "./manifest";
 export * from "./qa-check";

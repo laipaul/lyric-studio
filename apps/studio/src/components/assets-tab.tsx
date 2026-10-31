@@ -13,10 +13,14 @@ import { api } from "@/lib/api";
 const clock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 const win = (rel: string) => rel.split("/").join("\\");
-const ACCEPT: Record<AssetKind, string> = { song: ".wav,.mp3", lyrics: ".txt", cover: ".jpg,.jpeg,.png,.webp", hints: ".lrc", vocals: ".wav" };
+const ACCEPT: Record<AssetKind, string> = { song: ".wav,.mp3", lyrics: ".txt", cover: ".jpg,.jpeg,.png,.webp", hints: ".lrc", vocals: ".wav", backingVocals: ".wav" };
+const ROLE_NAME: Record<string, string> = { lyrics: "the lyrics", vocals: "the vocal stem", backingVocals: "the backing vocals", notUsed: "not used" };
+const base = (rel: string) => rel.split("/").pop() ?? rel;
 
-// The song's files: song, lyrics.txt, cover, hints.lrc and its own clips (drop videos and photos;
-// Remove moves a clip to clips\_removed\, nothing is deleted).
+// The song's files: song, vocal stem, backing vocals, lyrics, cover, hints.lrc (each under the user's own
+// file name; the roles are linked in .studio\files.json) and its own clips (drop videos and photos;
+// Remove moves a clip to clips\_removed\, nothing is deleted). Files put into the folder by hand that
+// the app cannot place are asked about once: "What is this file?".
 export function AssetsTab({ projectId }: { projectId: string }) {
   const [data, setData] = useState<SongAssets | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -97,7 +101,16 @@ export function AssetsTab({ projectId }: { projectId: string }) {
       if (r) setNotice({ ok: r.status === "lined-up", text: `${r.message}${r.retimed ? (r.status === "lined-up" ? " The lyric timing runs again on it now (see Tasks); your hints and hand-set starts are kept." : "") : ""}` });
       return;
     }
-    if (await send(body)) setNotice({ ok: true, text: `${file.name} is now the song's ${kind === "song" ? "song file" : kind === "lyrics" ? (data?.instrumental ? "story.txt" : "lyrics.txt") : kind === "hints" ? "hints.lrc" : "cover"}${kind === "cover" ? "" : " (the previous one is kept in .studio\\replaced\\)"}.` });
+    if (await send(body)) setNotice({ ok: true, text: `${file.name} is now the song's ${kind === "song" ? "song file" : kind === "lyrics" ? (data?.instrumental ? "story.txt" : "lyrics") : kind === "hints" ? "hints.lrc" : kind === "backingVocals" ? "backing vocals (kept for reference, not used for timing)" : "cover"}${kind === "cover" ? "" : " (the previous one is kept in .studio\\replaced\\)"}.` });
+  }
+
+  // "What is this file?": a file put into the song folder by hand gets its role (or "Not used").
+  async function assign(name: string, role: string) {
+    const body = new FormData();
+    body.set("kind", "assign");
+    body.set("name", name);
+    body.set("role", role);
+    if (await send(body)) setNotice({ ok: true, text: role === "notUsed" ? `${name} stays in the folder and is not used.` : `${name} is now ${ROLE_NAME[role]}${role === "vocals" ? ": checked against the song; the lyric timing runs again on it (see Tasks)" : ""}.` });
   }
 
   async function openFolder() {
@@ -159,14 +172,17 @@ export function AssetsTab({ projectId }: { projectId: string }) {
               <AudioLines className="size-5" />,
               "Vocal stem",
               data.vocals
-                ? `${data.vocals.name} · ${data.vocals.status === "lined-up" ? `used for lyric timing${data.vocals.offsetMs !== null && Math.abs(data.vocals.offsetMs) >= 50 ? ` (lined up: ${(Math.abs(data.vocals.offsetMs) / 1000).toFixed(1)} s offset, from trimming)` : " (lined up)"}` : data.vocals.status === "rejected" ? "not used: the app separates the vocals itself" : "not checked yet"}${data.backingVocals ? " · backing-vocals.wav: not used for timing" : ""}`
-                : "none: the app separates the vocals itself. Add the vocal stem (vocals.wav) for better lyric timing.",
+                ? `${data.vocals.name} · ${data.vocals.status === "lined-up" ? `used for lyric timing${data.vocals.offsetMs !== null && Math.abs(data.vocals.offsetMs) >= 50 ? ` (lined up: ${(Math.abs(data.vocals.offsetMs) / 1000).toFixed(1)} s offset, from trimming)` : " (lined up)"}` : data.vocals.status === "rejected" ? "not used: the app separates the vocals itself" : "not checked yet"}`
+                : "none: the app separates the vocals itself. Add the vocal stem (a WAV, any name) for better lyric timing.",
               data.vocals?.status === "rejected" ? data.vocals.message : undefined,
               data.vocals ? "Replace…" : "Add…",
             )}
         {data.instrumental
+          ? null
+          : fileRow("backingVocals", <AudioLines className="size-5" />, "Backing vocals", data.backingVocals ? `${base(data.backingVocals)} · kept with the song, not used for timing` : "none (optional)", undefined, data.backingVocals ? "Replace…" : "Add…")}
+        {data.instrumental
           ? fileRow("lyrics", <FileText className="size-5" />, "Story (instrumental)", data.lyrics?.lines ? `story.txt · ${data.lyrics.lines} sentence${data.lyrics.lines === 1 ? "" : "s"}, timed by the app` : "no story: music only (Replace adds a story.txt)")
-          : fileRow("lyrics", <FileText className="size-5" />, "Lyrics", data.lyrics ? `lyrics.txt · ${data.lyrics.lines} lines` : "no lyrics.txt yet")}
+          : fileRow("lyrics", <FileText className="size-5" />, "Lyrics", data.lyrics ? `${base(data.lyrics.file)} · ${data.lyrics.lines} lines` : "no lyrics yet (a .txt, any name)")}
         {fileRow(
           "cover",
           data.cover ? (
@@ -190,6 +206,36 @@ export function AssetsTab({ projectId }: { projectId: string }) {
             : undefined,
         )}
       </ul>
+
+      {data.unassigned.length ? (
+        <section data-unassigned className="flex flex-col gap-2 rounded-lg border border-amber-400/40 bg-amber-400/5 p-4">
+          <h2 className="text-sm font-medium">What is this file?</h2>
+          <p className="text-muted-foreground text-xs">Found in the song folder. Tell the app once; the file keeps its name and place.</p>
+          <ul className="flex flex-col gap-2">
+            {data.unassigned.map((f) => {
+              const roles = f.kind === "text" ? ["lyrics", "notUsed"] : ["vocals", "backingVocals", "notUsed"];
+              const label: Record<string, string> = { lyrics: data.lyrics ? "Lyrics (replaces the current ones)" : "Lyrics", vocals: data.vocals ? "Vocal stem (replaces the current one)" : "Vocal stem", backingVocals: data.backingVocals ? "Backing vocals (replaces the current ones)" : "Backing vocals", notUsed: "Not used" };
+              return (
+                <li key={f.name} data-unassigned-file={f.name} className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="min-w-0 flex-1 truncate">{f.name}</span>
+                  {roles.map((role) => (
+                    <button
+                      key={role}
+                      type="button"
+                      disabled={busy}
+                      data-assign={role}
+                      onClick={() => void assign(f.name, role)}
+                      className={cn("rounded-md border px-2 py-1 text-xs", role === f.guess ? "border-brand/50 bg-brand/15 text-brand" : "hover:bg-accent")}
+                    >
+                      {label[role]}
+                    </button>
+                  ))}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-end justify-between gap-2">

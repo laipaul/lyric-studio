@@ -33,6 +33,7 @@ export async function POST(request: Request) {
         song: files.song ?? "",
         lyrics: files.lyrics ?? "",
         hintsName: form.get("hints") instanceof File ? (form.get("hints") as File).name : undefined,
+        lyricsName: form.get("lyrics") instanceof File ? (form.get("lyrics") as File).name : undefined,
         title: text("title"),
         artist: text("artist"),
         ep: text("ep"),

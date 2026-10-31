@@ -133,6 +133,16 @@ export function LyricsTab({ projectId }: { projectId: string }) {
     await load();
   }
 
+  // Every hand-set start back to the timing (the vocal stem's when it is used), Undo of a reset, or closing its notice.
+  async function resetAll(action: "reset-all" | "undo-reset" | "dismiss-reset") {
+    const result = await post({ action });
+    if (!result) return;
+    setPending(new Map());
+    setHistory([]);
+    if (action === "undo-reset") setNotice({ ok: true, text: `${result.count} hand-set start(s) are back. They now count as your corrections on top of the ${data?.voice === "stem" ? "vocal stem's " : ""}timing.` });
+    await load();
+  }
+
   type Anchor = LyricsView["anchors"]["list"][number];
   async function saveAnchor(line: number, anchor: Anchor | null, gapOrder?: "story" | "shuffle" | null) {
     const list = (data?.anchors.list ?? []).filter((a) => a.line !== line);
@@ -183,10 +193,38 @@ export function LyricsTab({ projectId }: { projectId: string }) {
               <span data-lyrics-summary>
                 {lines.length} lines · <span className={counts.flagged ? "text-amber-300" : ""}>{counts.flagged} flagged for review</span> · {counts.low} low confidence · {counts.ear} checked by ear · {counts.moved} moved by the vocal-start check · {counts.hand} set by hand
               </span>
+              {counts.hand && !pending.size ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void resetAll("reset-all")}
+                  className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-full border px-3 py-1 text-xs"
+                  title="Every line set by hand goes back to the timing; the old hints.lrc is kept in .studio\replaced\ and Undo brings them back"
+                  data-reset-all
+                >
+                  <RotateCcw className="size-3" /> Reset all to the {data.voice === "stem" ? "vocal stem's" : "app's"} timing
+                </button>
+              ) : null}
               <button type="button" onClick={() => setOnlyReview((o) => !o)} className={cn("rounded-full border px-3 py-1 text-xs", onlyReview ? "border-brand/50 bg-brand/15 text-brand" : "text-muted-foreground hover:text-foreground")} data-only-review>
                 {onlyReview ? "Showing lines to review" : "Show only lines to review"}
               </button>
             </div>
+            {data.handReset ? (
+              <div data-hand-reset className="border-brand/40 bg-brand/10 flex flex-wrap items-center gap-3 rounded-md border px-3 py-2 text-sm">
+                <span className="flex-1">
+                  {data.handReset.why === "before-stem"
+                    ? `${data.handReset.count} start(s) you set by hand before the vocal stem was added were reset: every line now follows the stem's timing. Set a line again by hand where your ear disagrees.`
+                    : `${data.handReset.count} hand-set start(s) were reset: every line follows the ${data.voice === "stem" ? "vocal stem's " : ""}timing.`}{" "}
+                  The old ones are kept in .studio\replaced\{data.handReset.backup}.
+                </span>
+                <button type="button" disabled={busy} onClick={() => void resetAll("undo-reset")} className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs" data-undo-reset>
+                  <Undo2 className="size-3" /> Undo
+                </button>
+                <button type="button" disabled={busy} onClick={() => void resetAll("dismiss-reset")} className="text-muted-foreground hover:text-foreground rounded-md px-1 py-1" aria-label="Close" data-dismiss-reset>
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            ) : null}
             <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
               <span>Story anchors: {data.anchors.list.length} line(s) land on a chosen clip.</span>
               <label className="flex items-center gap-1">
@@ -301,7 +339,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                               </button>
                             ) : null}
                             {changed || l.source === "hand" ? (
-                              <button type="button" onClick={() => reset(l)} className="text-muted-foreground hover:text-foreground rounded-md border px-1.5 py-0.5" aria-label={`Reset line ${l.number}`} title={l.source === "hand" ? "Back to the alignment (removes the hand-set time)" : "Undo the change on this line"} data-reset>
+                              <button type="button" onClick={() => reset(l)} className="text-muted-foreground hover:text-foreground rounded-md border px-1.5 py-0.5" aria-label={`Reset line ${l.number}`} title={l.source === "hand" ? (data.voice === "stem" ? "Back to the vocal stem's timing (removes the hand-set time)" : "Back to the alignment (removes the hand-set time)") : "Undo the change on this line"} data-reset>
                                 <RotateCcw className="size-3.5" />
                               </button>
                             ) : null}

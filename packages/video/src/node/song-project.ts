@@ -28,6 +28,8 @@ import { analyzeSong } from "./analysis";
 import { cachedFileHash } from "./collection";
 import { processAlive } from "./jobs";
 import { ADDING_PREFIX, adoptIntoSongFolder, songPaths, songPathsById } from "./song-folder";
+import { recognizeSongFiles } from "./song-files";
+import { resetHandTimesMadeBeforeStem } from "./hand-reset";
 import { alignFailure, runAudioScript } from "./audio-script";
 import { DEMUCS, resolveVoiceSource, stemArgument, voiceKey, voiceLine, type StemCheckRunner, type VoiceSource } from "./voice-source";
 
@@ -99,7 +101,9 @@ export type Alignment = {
 
 // The hand-set starts of hints.lrc (the Lyrics tab) on the alignment: those lines start exactly there,
 // and the vocal-start check leaves them alone (skip). The stored alignment itself is never changed.
+// Hand-set starts made before the song had a vocal stem are reset once the timing is on the stem (hand-reset.ts).
 export function applyHandSet(alignment: Alignment, hintsFile: string | undefined, log: (m: string) => void = () => {}): { alignment: Alignment; skip: Set<number> } {
+  if (hintsFile && alignment.source !== "given") resetHandTimesMadeBeforeStem(hintsFile, alignment.voice, log);
   const times = hintsFile && existsSync(hintsFile) ? parseHandTimes(readFileSync(hintsFile, "utf8")) : [];
   if (!times.length || alignment.source === "given") return { alignment, skip: new Set() };
   const r = applyHandTimes(alignment.lines, times);
@@ -357,6 +361,8 @@ export async function ensureAlignment(
     source = "given";
     if (!existsSync(path.join(dir, name))) writeFileAtomic(path.join(dir, name), readFileSync(options.lrc));
   } else {
+    // A vocal stem put into the song folder by hand (any name) is found first (pnpm make "<song folder>").
+    if (!options.voice) await recognizeSongFiles(ws, sp.project.id, { check: options.stemCheck, queue: false, log });
     voice = options.voice ?? (await resolveVoiceSource(ws, sp, { log, check: options.stemCheck }));
     log(voiceLine(voice));
     key = alignKey(wordsOfLyrics(txtContent.toString("utf8")), hint?.hash ?? "", lang, voiceKey(voice));
@@ -515,15 +521,15 @@ export function whyNotStored(dir: string, lyricsText: string, hintHash: string, 
     }
   });
   if (vocalKey && keys.has(alignKey(words, hintHash, lang, ""))) {
-    out.push("the vocal stem (vocals.wav) is new: the song is aligned again on it (stored hints and hand-set starts are kept).");
+    out.push("the vocal stem is new: the song is aligned again on it (stored hints and hand-set starts are kept).");
     return out;
   }
   if (vocalKey && stemAligned) {
-    out.push("the vocal stem (vocals.wav) was replaced: the song is aligned again on the new one (stored hints and hand-set starts are kept).");
+    out.push("the vocal stem was replaced: the song is aligned again on the new one (stored hints and hand-set starts are kept).");
     return out;
   }
   if (!vocalKey && stemAligned) {
-    out.push("the vocal stem (vocals.wav) is gone or doesn't follow the song: aligned again on the vocals the app separates (Demucs).");
+    out.push("the vocal stem is gone or doesn't follow the song: aligned again on the vocals the app separates (Demucs).");
     return out;
   }
   const hints = [hintHash, ""];

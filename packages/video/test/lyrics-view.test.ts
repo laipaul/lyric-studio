@@ -104,7 +104,7 @@ describe("the Lyrics tab", () => {
     // After the solo (a long gap): nothing on screen, then a 1 s fade-in before the first word.
     expect(v.lines![3].screen.fadeInMs).toBe(89_000);
     expect(v.checkRan).toBe(true);
-    expect(v.song).toMatch(/^songs\/Life Lyrics\/A Heart For Two\/song\.wav$/);
+    expect(v.song).toMatch(/^songs\/Life Lyrics\/A Heart For Two\/A Heart For Two\.wav$/); // its own name
   });
 
   it("a nudge is saved as a hand-set line in hints.lrc; the stored alignment is kept; reset takes it back", async () => {
@@ -182,7 +182,7 @@ describe("the Lyrics tab", () => {
     expect(restoreLyrics(ws, id, earlier.file)).toEqual({ changed: true, realign: true });
     expect((await lyricsView(ws, id)).lines).not.toBeNull(); // back to words that were aligned
     expect(existsSync(paths.lyricsTxt)).toBe(true);
-    expect(() => restoreLyrics(ws, id, "../../studio.db")).toThrow(/Not an earlier lyrics.txt/);
+    expect(() => restoreLyrics(ws, id, "../../studio.db")).toThrow(/Not an earlier version of the lyrics/);
     // Saves within the same second each keep their own copy, and each can be restored.
     const all = (await lyricsView(ws, id)).replaced;
     expect(all.some((r) => /\.\d+-lyrics\.txt$/.test(r.file))).toBe(true);

@@ -233,6 +233,10 @@ describe("the studio serves only export files and covers", async () => {
       expect(allowedFile(ok), ok).toBe(true);
     for (const bad of ["studio.db", "songs/Life Lyrics/A Heart For Two/.studio/lyrics/song.wav", "songs/Life Lyrics/A Heart For Two/hints.lrc", "songs/Life Lyrics/A Heart For Two/other.wav", `projects/${id}/exports/2026-10-25_1751/../../../studio.db`, `projects/${id}/settings.json`, "brand/brand.json", `projects/${id}/exports/effects-2026/x.mp4`])
       expect(allowedFile(bad), bad).toBe(false);
+    // A song under its own name: only when the database names it as the song.
+    expect(allowedFile("songs/Life Lyrics/A Heart For Two/A Heart For Two (Master).wav", (f) => f.endsWith("(Master).wav"))).toBe(true);
+    expect(allowedFile("songs/Life Lyrics/A Heart For Two/other.wav", (f) => f.endsWith("(Master).wav"))).toBe(false);
+    expect(allowedFile("songs/Life Lyrics/A Heart For Two/clips/a.wav", () => true)).toBe(false);
     expect(VIDEO_FILE.test(`projects/${id}/exports/2026-10-25_1751/reels/v1.srt`)).toBe(false);
     expect(TEMPLATE_FILE.test("brand/Pômé/publish-reels.txt")).toBe(true);
     expect(TEMPLATE_FILE.test("brand/brand.json")).toBe(false);

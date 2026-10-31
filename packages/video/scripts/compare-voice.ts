@@ -1,6 +1,6 @@
 // pnpm lyrics:compare-voice "<song folder>"   e.g. pnpm lyrics:compare-voice "workspace\songs\Life Lyrics\These Empty Roads"
-// Lyric timing on the vocals the app separates (Demucs) next to the timing on Suno's vocal stem
-// (vocals.wav, lined up on the song): per line the start, the aligner's confidence and the vocal-start
+// Lyric timing on the vocals the app separates (Demucs) next to the timing on the vocal stem
+// (any name in the song folder, lined up on the song): per line the start, the aligner's confidence and the vocal-start
 // check's result, and the totals (lines flagged for review, low-confidence lines, lines moved by the
 // check). Aligns with each source once if it has not been aligned on it yet (stored like every
 // alignment; the next make reuses the stem's). Changes nothing else: no video, the song and the stems
@@ -10,7 +10,7 @@ import path from "node:path";
 
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 
-import { DEMUCS, findOrCreateSongProject, parseMakeArgs, resolveVoiceSource, songPathsById, timeLyrics, type LyricTiming } from "../src/node";
+import { DEMUCS, findOrCreateSongProject, parseMakeArgs, recognizeSongFiles, resolveVoiceSource, songPathsById, timeLyrics, type LyricTiming } from "../src/node";
 import { clockText } from "../src/section";
 
 const cwd = process.env.INIT_CWD ?? process.cwd();
@@ -38,10 +38,11 @@ async function main() {
   try {
     const sp = await findOrCreateSongProject(ws, options.song);
     const id = sp.project.id;
-    const quiet = (m: string) => (/^(lyrics: (aligning|voice|the vocal stem|checking)|vocal stem)/.test(m) ? console.log(`  ${m}`) : undefined);
+    const quiet = (m: string) => (/^(lyrics: (aligning|voice|the vocal stem|checking)|vocal stem|files:)/.test(m) ? console.log(`  ${m}`) : undefined);
+    await recognizeSongFiles(ws, id, { queue: false, log: quiet }); // a stem put into the folder by hand (any name)
     const voice = await resolveVoiceSource(ws, sp, { log: quiet });
     if (voice.kind !== "stem") {
-      console.error(voice.message ?? `No vocal stem: put the vocal stem as vocals.wav in ${songPathsById(ws, id).root} first.`);
+      console.error(voice.message ?? `No vocal stem: add it in the song's Assets tab, or put it (any name, e.g. "${sp.project.title} (Lead Vocal).wav") in ${songPathsById(ws, id).root} first.`);
       process.exit(1);
     }
     console.log(`"${sp.project.title}": lyric timing on the vocals separated by the app (Demucs) vs ${voice.label}`);

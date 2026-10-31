@@ -11,13 +11,16 @@ export const SONG_CLIP_FILE = /^songs\/[^/]+\/[^/]+\/clips\/[^/]+\.(mp4|m4v|mov|
 // A shared collection's clips (the Collections page plays them on hover).
 export const COLLECTION_CLIP_FILE = /^(?:collections|clips)\/[^/]+\/[^/]+\.(mp4|m4v|mov|webm|jpe?g|png|webp)$/i;
 export const THUMB_FILE = new RegExp(`^thumbs/${UUID}\\.jpg$`, "i");
-// The song itself (the Lyrics tab's audio preview).
+// The song itself (the Lyrics tab's audio preview). Songs keep their own file names: any WAV/MP3 at the top
+// of a song folder may be the song, so those are served only when the database names them as a song
+// (isSongAudio); song.wav|mp3 and the old projects\<id>\audio\ files as before.
 export const SONG_AUDIO_FILE = new RegExp(`^(?:projects/${UUID}/audio/[^/]+|songs/[^/]+/[^/]+/song)\\.(wav|mp3)$`, "i");
+export const SONG_FOLDER_AUDIO = /^songs\/[^/]+\/[^/]+\/[^/]+\.(wav|mp3)$/i;
 
 // Caption / publish templates in the brand folders (for "open folder").
 export const TEMPLATE_FILE = /^brand\/(?:[^/]+\/)?publish-[a-z-]+\.txt$/;
 
-export function allowedFile(relative: string): boolean {
+export function allowedFile(relative: string, isSongAudio?: (relative: string) => boolean): boolean {
   if (relative.split("/").some((part) => part === ".." || part === "." || part.startsWith(".studio"))) return false;
-  return COVER_FILE.test(relative) || EXPORT_FILE.test(relative) || SONG_CLIP_FILE.test(relative) || COLLECTION_CLIP_FILE.test(relative) || THUMB_FILE.test(relative) || SONG_AUDIO_FILE.test(relative);
+  return COVER_FILE.test(relative) || EXPORT_FILE.test(relative) || SONG_CLIP_FILE.test(relative) || COLLECTION_CLIP_FILE.test(relative) || THUMB_FILE.test(relative) || SONG_AUDIO_FILE.test(relative) || (!!isSongAudio && SONG_FOLDER_AUDIO.test(relative) && isSongAudio(relative));
 }

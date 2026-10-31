@@ -3,10 +3,12 @@
 // starts into hints.lrc (the stored alignment is kept); { action: "text", text }: a new lyrics.txt (the
 // old one kept in .studio\replaced\); { action: "restore", file }: an earlier lyrics.txt back;
 // { action: "ear", number, checked }: "checked by ear" on a line (clears its timing warnings in QA);
+// { action: "reset-all" | "undo-reset" | "dismiss-reset" }: every hand-set start back to the (stem's)
+// timing, Undo of a reset, or closing its notice;
 // { action: "anchors", anchors: [{ line, clip, clipIn?, transition? }], gapOrder? }: story anchors in song.json.
 import { connection } from "next/server";
 
-import { lyricsView, restoreLyrics, saveAnchors, saveHandTimes, saveLyricsText, setCheckedByEar } from "@lyric/video/lyrics-view";
+import { lyricsView, resetHandTimes, restoreLyrics, saveAnchors, saveHandTimes, saveLyricsText, setCheckedByEar } from "@lyric/video/lyrics-view";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
@@ -33,6 +35,10 @@ export async function POST(request: Request, { params }: Params) {
       return Response.json({ ok: true });
     }
     if (body.action === "times") return Response.json({ handSet: await withWorkspaceAsync((ws) => saveHandTimes(ws, id, body.changes ?? [])) });
+    if (body.action === "reset-all" || body.action === "undo-reset" || body.action === "dismiss-reset") {
+      const action = body.action === "reset-all" ? "all" : body.action === "undo-reset" ? "undo" : "dismiss";
+      return Response.json({ count: await withWorkspaceAsync((ws) => resetHandTimes(ws, id, action)) });
+    }
     if (body.action === "text") return Response.json(withWorkspace((ws) => saveLyricsText(ws, id, String(body.text ?? ""))));
     if (body.action === "restore") return Response.json(withWorkspace((ws) => restoreLyrics(ws, id, String(body.file ?? ""))));
     return Response.json({ error: "Unknown action." }, { status: 400 });

@@ -11,11 +11,16 @@ import { eq } from "drizzle-orm";
 import { isHandTimeLine } from "../hand-times";
 import { HOOK_MARKER, normalizeLyric } from "../lrc";
 import { cachedFileHash, SOURCE_FILE, syncCollection } from "./collection";
-import { keepReplaced, storeCover, storeLyricsTxt } from "./project-settings";
-import { moveEntry, songPathsById } from "./song-folder";
+import { keepReplaced, placeRoleFile, storeCover, storeLyricsTxt } from "./project-settings";
+import { isWavFile, moveEntry, songPathsById } from "./song-folder";
+
+// A WAV without its extension keeps its name, with ".wav" added (so every program knows what it is).
+const wavName = (name: string) => (path.extname(name) ? name : `${name}.wav`);
 import { enqueueLyricTiming } from "./runs";
 import { resolveVoiceSource, storedStemCheck, type StemCheckRunner } from "./voice-source";
 import { storeProjectHint } from "./song-project";
+import { markNotUsed, type FileRole } from "./file-links";
+import { recognizeSongFiles, type UnassignedFile } from "./song-files";
 
 export const REMOVED_DIR = "_removed";
 
@@ -42,7 +47,9 @@ export type SongAssets = {
   // vocals.wav: Suno's vocal stem, the main guide for lyric timing (analysis only). status: lined up on the
   // song, rejected (doesn't follow the song: Demucs is used), or not checked yet (checked at the next timing).
   vocals: { file: string; name: string; status: "lined-up" | "rejected" | "unchecked"; message: string; offsetMs: number | null } | null;
-  backingVocals: string | null; // backing-vocals.wav (never used for timing)
+  backingVocals: string | null; // the backing vocals (any name; never used for timing)
+  // Files put into the song folder by hand that the app could not place: the Assets tab asks "What is this file?" once.
+  unassigned: UnassignedFile[];
   clips: ClipAsset[];
   removed: string[]; // in clips\_removed\
   usable: { vertical: number; horizontal: number }; // for 9:16 and 16:9 platforms
@@ -57,11 +64,13 @@ function orientation(width: number, height: number): ClipAsset["orientation"] {
 }
 
 // Everything the Assets tab shows. Clips are synced with the database on the way (thumbnail, size).
-export async function songAssets(ws: Workspace, projectId: string): Promise<SongAssets> {
-  const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
-  if (!p) throw new Error("Song not found.");
+export async function songAssets(ws: Workspace, projectId: string, options: { check?: StemCheckRunner; queue?: boolean } = {}): Promise<SongAssets> {
+  if (!ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get()) throw new Error("Song not found.");
+  // Files dropped into the folder by hand (any names) are recognised first.
+  const recognized = await recognizeSongFiles(ws, projectId, options);
+  const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get()!;
   const paths = songPathsById(ws, projectId);
-  const out: SongAssets = { folder: paths.legacy ? null : paths.rel, folderPath: paths.legacy ? null : paths.root, song: null, lyrics: null, instrumental: paths.instrumental, cover: null, hints: null, vocals: null, backingVocals: null, clips: [], removed: [], usable: { vertical: 0, horizontal: 0 } };
+  const out: SongAssets = { folder: paths.legacy ? null : paths.rel, folderPath: paths.legacy ? null : paths.root, song: null, lyrics: null, instrumental: paths.instrumental, cover: null, hints: null, vocals: null, backingVocals: null, unassigned: [], clips: [], removed: [], usable: { vertical: 0, horizontal: 0 } };
   if (paths.audio && existsSync(paths.audio)) out.song = { name: path.basename(paths.audio), file: rel(ws, paths.audio), durationMs: p.duration_ms ?? null, bpm: p.bpm ?? null };
   if (existsSync(paths.lyricsTxt)) out.lyrics = { file: rel(ws, paths.lyricsTxt), lines: readFileSync(paths.lyricsTxt, "utf8").split(/\r?\n/).filter((l) => l.replace(/^\*\s+/, "").trim()).length };
   if (paths.cover && existsSync(paths.cover)) out.cover = rel(ws, paths.cover);
@@ -80,6 +89,7 @@ export async function songAssets(ws: Workspace, projectId: string): Promise<Song
     };
   }
   if (paths.backingVocals && existsSync(paths.backingVocals)) out.backingVocals = rel(ws, paths.backingVocals);
+  out.unassigned = recognized.unassigned;
   if (!paths.clips) return out;
   const { hashes: _hashes, ...listed } = await folderClips(ws, paths.clips, songClipsCollection(projectId));
   return { ...out, ...listed };
@@ -243,7 +253,7 @@ export function restoreClipTo(ws: Workspace, folder: string, name: string): stri
   return rel(ws, target);
 }
 
-export type AssetKind = "song" | "lyrics" | "cover" | "hints" | "vocals";
+export type AssetKind = "song" | "lyrics" | "cover" | "hints" | "vocals" | "backingVocals";
 
 export function checkAsset(kind: AssetKind, file: string, name: string): string | null {
   const ext = path.extname(name).toLowerCase();
@@ -252,7 +262,9 @@ export function checkAsset(kind: AssetKind, file: string, name: string): string 
     if (ext !== ".txt") return `The lyrics must be a .txt file (got ${name}).`;
     if (!readFileSync(file, "utf8").split(/\r?\n/).some((l) => l.replace(/^\*\s+/, "").trim())) return "The lyrics file is empty.";
   }
-  if (kind === "vocals" && ext !== ".wav") return `The vocal stem must be a WAV file (got ${name}).`;
+  // A stem may come without its extension ("Love Is A Good Thing Lead Vocal"): a WAV by its content is fine.
+  if (kind === "vocals" && !(ext === ".wav" || (!ext && isWavFile(file)))) return `The vocal stem must be a WAV file (got ${name}).`;
+  if (kind === "backingVocals" && !(ext === ".wav" || (!ext && isWavFile(file)))) return `The backing vocals must be a WAV file (got ${name}).`;
   if (kind === "cover" && ![".jpg", ".jpeg", ".png", ".webp"].includes(ext)) return `The cover must be a JPG, PNG or WEBP picture (got ${name}).`;
   if (kind === "hints") {
     if (ext !== ".lrc") return `The hints must be an .lrc file of tapped times (got ${name}).`;
@@ -267,21 +279,26 @@ export async function replaceAsset(ws: Workspace, projectId: string, kind: Asset
   if (problem) throw new Error(problem);
   const paths = songPathsById(ws, projectId);
   if (paths.legacy) throw new Error("This song has no folder yet: run the migration first (pnpm songs:migrate).");
-  if (kind === "lyrics") return storeLyricsTxt(ws, projectId, file);
+  if (kind === "lyrics") return storeLyricsTxt(ws, projectId, file, name);
   if (kind === "cover") return storeCover(ws, projectId, file);
   if (kind === "vocals") return (await storeVocalStem(ws, projectId, file, name)).stored;
+  if (kind === "backingVocals") {
+    // Kept with the song for reference only: never used for timing, never in any video.
+    const info = await probeMedia(file).catch(() => null);
+    if (!info?.hasAudio) throw new Error(`No audio found in ${name}.`);
+    return rel(ws, placeRoleFile(paths.root, "backingVocals", paths.backingVocals, file, wavName(name)));
+  }
   if (kind === "hints") {
     if (existsSync(paths.hints!)) keepReplaced(paths.root, paths.hints!);
     copyFileSync(file, paths.hints!);
     storeProjectHint(ws, projectId, paths.hints!, `${name} (from the Assets tab)`);
     return rel(ws, paths.hints!);
   }
-  // A new mix or master of the same song: the old file is kept; timings stay (re-align if they moved).
-  const target = path.join(paths.root, `song${path.extname(name).toLowerCase()}`);
-  if (paths.audio && existsSync(paths.audio)) keepReplaced(paths.root, paths.audio);
-  copyFileSync(file, target);
-  const info = await probeMedia(target);
-  if (!info.hasAudio) throw new Error(`No audio found in ${name}.`);
+  // A new mix or master of the same song, under its own name: the old file is kept in .studio\replaced\
+  // (under its own name); timings stay (re-align if they moved). The song file is only ever copied or moved.
+  const info = await probeMedia(file).catch(() => null);
+  if (!info?.hasAudio) throw new Error(`No audio found in ${name}.`);
+  const target = placeRoleFile(paths.root, "song", paths.audio, file, name);
   ws.db
     .update(projectTable)
     .set({ audio_path: rel(ws, target), audio_hash: await cachedFileHash(ws, target), duration_ms: info.durationMs, bpm: null })
@@ -306,8 +323,8 @@ export async function storeVocalStem(ws: Workspace, projectId: string, file: str
   if (!info?.hasAudio) throw new Error(`No audio found in ${name}.`);
   const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get()!;
   if (!p.audio_path || !p.audio_hash || !existsSync(absPath(ws, p.audio_path))) throw new Error("Add the song file first: the vocal stem is checked against it.");
-  if (existsSync(paths.vocals)) keepReplaced(paths.root, paths.vocals);
-  copyFileSync(file, paths.vocals);
+  // Under its own name ("These Empty Roads (Lead Vocal).wav"), linked as the vocal stem.
+  const placed = placeRoleFile(paths.root, "vocals", existsSync(paths.vocals) ? paths.vocals : null, file, wavName(name));
   const voice = await resolveVoiceSource(ws, { project: p, songHash: p.audio_hash, songFile: absPath(ws, p.audio_path) }, { check: options.check });
   const stored = await storedStemCheck(ws, { project: p, songHash: p.audio_hash });
   const message = voice.message ?? stored?.check.message ?? "";
@@ -316,5 +333,29 @@ export async function storeVocalStem(ws: Workspace, projectId: string, file: str
     enqueueLyricTiming(ws, projectId);
     retimed = true;
   }
-  return { stored: rel(ws, paths.vocals), status: voice.kind === "stem" ? "lined-up" : "rejected", message, offsetMs: voice.offsetMs ?? null, retimed };
+  return { stored: rel(ws, placed), status: voice.kind === "stem" ? "lined-up" : "rejected", message, offsetMs: voice.offsetMs ?? null, retimed };
+}
+
+// "What is this file?" on the Assets tab: a file put into the song folder by hand gets its role (it keeps
+// its name and place; the file that had the role before moves to .studio\replaced\), or "Not used"
+// (it stays where it is and is not asked about again).
+export type AssignRole = Exclude<FileRole, "song"> | "notUsed";
+export async function assignSongFile(ws: Workspace, projectId: string, name: string, role: AssignRole, options: { check?: StemCheckRunner; queue?: boolean } = {}): Promise<string> {
+  const paths = songPathsById(ws, projectId);
+  if (paths.legacy) throw new Error("This song has no folder yet: run the migration first (pnpm songs:migrate).");
+  const file = path.join(paths.root, path.basename(name));
+  if (path.basename(name) !== name || !existsSync(file)) throw new Error(`No file ${name} in the song folder.`);
+  if (role === "notUsed") {
+    markNotUsed(paths.root, name);
+    return rel(ws, file);
+  }
+  if (role === "lyrics") {
+    const problem = checkAsset("lyrics", file, name);
+    if (problem) throw new Error(problem);
+    if (paths.instrumental) throw new Error("This song is an instrumental: its text is story.txt.");
+    return storeLyricsTxt(ws, projectId, file, name);
+  }
+  if (role === "vocals") return (await storeVocalStem(ws, projectId, file, name, options)).stored;
+  if (role === "backingVocals") return replaceAsset(ws, projectId, "backingVocals", file, name);
+  throw new Error(`Unknown role: ${String(role)}`);
 }

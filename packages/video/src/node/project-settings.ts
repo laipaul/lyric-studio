@@ -5,9 +5,10 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { absPath, project as projectTable, type Workspace } from "@lyric/db";
+import { absPath, project as projectTable, safeName, uniqueFileName, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
+import { linkFile, type FileRole } from "./file-links";
 import { readRecipe, writeRecipe } from "./recipe";
 import { songPathsById, STUDIO_DIR } from "./song-folder";
 
@@ -58,9 +59,33 @@ export function storeCover(ws: Workspace, projectId: string, file: string): stri
   return relative;
 }
 
-// The song's own lyrics.txt: <song folder>\lyrics.txt (songs not migrated yet: projects/<id>/lyrics/lyrics.txt).
-export function storeLyricsTxt(ws: Workspace, projectId: string, file: string): string {
+// A file added for a role (song, lyrics, vocal stem, backing vocals) keeps its own name in the song
+// folder and is linked in .studio\files.json; the file that had the role before moves to
+// .studio\replaced\ under its own name (never deleted). A file already in the folder is only linked.
+// Another file with the same name is never overwritten ("name-2.wav"). Returns the file's path.
+export function placeRoleFile(root: string, role: FileRole, current: string | null, file: string, name: string): string {
+  const same = (a: string, b: string) => path.resolve(a) === path.resolve(b);
+  const base = same(path.dirname(file), root) ? path.basename(file) : safeName(path.basename(name)); // already in the folder: its own name
+  if (current && existsSync(current) && !same(current, file)) keepReplaced(root, current);
+  const free = !existsSync(path.join(root, base)) || same(path.join(root, base), file);
+  const target = path.join(root, free ? base : uniqueFileName(root, base));
+  mkdirSync(root, { recursive: true });
+  if (!same(file, target)) copyFileSync(file, target);
+  linkFile(root, role, path.basename(target));
+  return target;
+}
+
+// The song's own lyrics: in its song folder under the name it came with (`name`, linked as the lyrics);
+// without a name, where the lyrics are now (lyrics.txt). Songs not migrated yet: projects/<id>/lyrics/lyrics.txt.
+export function storeLyricsTxt(ws: Workspace, projectId: string, file: string, name?: string): string {
   const paths = songPathsById(ws, projectId);
+  if (name && !paths.legacy && !paths.instrumental) {
+    if (!existsSync(file)) throw new Error(`Lyrics file not found: ${file}`);
+    const placed = placeRoleFile(paths.root, "lyrics", existsSync(paths.lyricsTxt) ? paths.lyricsTxt : null, file, name);
+    const relative = path.relative(ws.dir, placed).split(path.sep).join("/");
+    updateProjectSettings(ws, projectId, { lyricsTxt: relative });
+    return relative;
+  }
   const relative = path.relative(ws.dir, paths.lyricsTxt).split(path.sep).join("/");
   mkdirSync(path.dirname(absPath(ws, relative)), { recursive: true });
   if (!existsSync(file)) throw new Error(`Lyrics file not found: ${file}`);

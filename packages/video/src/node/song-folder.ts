@@ -6,12 +6,13 @@
 // Moving a folder (migration, renaming a song) rewrites the paths stored in the database and records
 // the move in WORKSPACE_DIR\.studio\moved-paths.json, so old manifests (never edited) still find their
 // files: resolveMoved() follows the moves.
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { absPath, clip, makeRun, project as projectTable, renderJob, variation, videoMark, type Project, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
+import { linkFile, readLinks, roleFile } from "./file-links";
 import { processAlive } from "./jobs";
 
 export const SONGS_DIR = "songs";
@@ -51,6 +52,24 @@ export const STORY_FILE = "story.txt";
 export const VOCALS_FILE = "vocals.wav";
 export const BACKING_VOCALS_FILE = "backing-vocals.wav";
 const STEM_FILE = /^(backing-)?vocals\.(wav|mp3|flac)$/i;
+// A stem by its name (any name): "Lead Vocal", "Vocals", "Vox", "Acapella", "Backing Vocals", "Harmonies", "BGV".
+export const STEM_NAME = /vocal|(?<![a-z])vox(?![a-z])|acapella|a cappella|backing|harmon|(?<![a-z])bgv(?![a-z])|(?<![a-z])stem/i;
+// A WAV by its content (RIFF/RF64 ... WAVE), for files that lost their extension.
+export function isWavFile(file: string): boolean {
+  try {
+    const fd = openSync(file, "r");
+    const head = Buffer.alloc(12);
+    try {
+      readSync(fd, head, 0, 12, 0);
+    } finally {
+      closeSync(fd);
+    }
+    return /^(RIFF|RF64)$/.test(head.toString("latin1", 0, 4)) && head.toString("latin1", 8, 12) === "WAVE";
+  } catch {
+    return false;
+  }
+}
+export const BACKING_NAME = /backing|harmon|(?<![a-z])(bgv|bvs?)(?![a-z])|choir/i;
 
 // song.json "instrumental": true (read directly: song paths are needed before the recipe is).
 export function isInstrumental(recipeFile: string): boolean {
@@ -67,11 +86,11 @@ export type SongPaths = {
   root: string;
   audio: string | null;
   cover: string | null;
-  lyricsTxt: string; // where the song's lyrics.txt lives (an instrumental: its story.txt)
+  lyricsTxt: string; // the song's lyrics (any name, linked in .studio\files.json; else lyrics.txt; an instrumental: its story.txt)
   instrumental: boolean; // song.json "instrumental": true (no sung lyrics; the text is story.txt)
   hints: string | null; // hints.lrc (song folders only)
-  vocals: string | null; // vocals.wav: Suno's vocal stem, the main guide for lyric timing (song folders only; analysis only)
-  backingVocals: string | null; // backing-vocals.wav (optional; never used for alignment)
+  vocals: string | null; // the vocal stem (any name, linked; else vocals.wav), the main guide for lyric timing (song folders only; analysis only)
+  backingVocals: string | null; // the backing vocals (any name, linked; else backing-vocals.wav) (optional; never used for alignment)
   clips: string | null; // the song's own clips (song folders only)
   exports: string;
   exportsRel: string;
@@ -110,17 +129,20 @@ export function songPaths(ws: Workspace, p: ProjectPaths): SongPaths {
   }
   const rel = p.folder;
   const instrumental = isInstrumental(absPath(ws, `${rel}/song.json`));
+  // Each file keeps the user's own name: the roles are linked in .studio\files.json (old fixed names as fallback).
+  const root = absPath(ws, rel);
+  const links = readLinks(root);
   return {
     legacy: false,
     rel,
     root: absPath(ws, rel),
     audio,
     cover,
-    lyricsTxt: absPath(ws, `${rel}/${instrumental ? STORY_FILE : "lyrics.txt"}`),
+    lyricsTxt: instrumental ? absPath(ws, `${rel}/${STORY_FILE}`) : roleFile(root, "lyrics", links),
     instrumental,
     hints: absPath(ws, `${rel}/hints.lrc`),
-    vocals: absPath(ws, `${rel}/${VOCALS_FILE}`),
-    backingVocals: absPath(ws, `${rel}/${BACKING_VOCALS_FILE}`),
+    vocals: roleFile(root, "vocals", links),
+    backingVocals: roleFile(root, "backingVocals", links),
     clips: absPath(ws, `${rel}/clips`),
     exports: absPath(ws, `${rel}/exports`),
     exportsRel: `${rel}/exports`,
@@ -265,7 +287,7 @@ export function renameSongFolder(ws: Workspace, projectId: string, opts: { selfP
   return target;
 }
 
-// A new song goes straight into its own folder: song.<ext> (and cover) are moved there from the
+// A new song goes straight into its own folder: the song file (under its own name) and cover are moved there from the
 // place createProject put them. A song file that already sits in a song folder nobody owns yet
 // (songs\<artist>\<title>\ made by hand) adopts that folder (title and artist from its names).
 // The folder is built in songs\.adding-<id>\ and renamed once at the end; the database names the
@@ -286,6 +308,7 @@ export function adoptIntoSongFolder(ws: Workspace, projectId: string, songFile?:
       .set({ title: own.title, artist: own.artist, folder: own.rel, audio_path: `${own.rel}/${path.basename(songFile!)}`, cover_path: folderCover ? `${own.rel}/${folderCover}` : p.cover_path })
       .where(eq(projectTable.id, p.id))
       .run();
+    linkFile(absPath(ws, own.rel), "song", path.basename(songFile!));
     removeOldProjectDirs(ws, p.id);
     return own.rel;
   }
@@ -293,13 +316,15 @@ export function adoptIntoSongFolder(ws: Workspace, projectId: string, songFile?:
   const stageAbs = absPath(ws, stage);
   mkdirSync(path.join(stageAbs, "clips"), { recursive: true });
   mkdirSync(path.join(stageAbs, "exports"), { recursive: true });
-  const into = (rel: string | null, name: string) => {
+  // The song keeps its own name (the role is linked in .studio\files.json); the cover becomes cover.<ext>.
+  const into = (rel: string | null, name: string | null) => {
     if (!rel || rel.startsWith(`${stage}/`) || !existsSync(absPath(ws, rel))) return rel;
-    const to = `${stage}/${name}${path.extname(rel).toLowerCase()}`;
+    const to = name ? `${stage}/${name}${path.extname(rel).toLowerCase()}` : `${stage}/${path.basename(rel)}`;
     moveEntry(absPath(ws, rel), absPath(ws, to));
     return to;
   };
-  const audio = into(p.audio_path, "song");
+  const audio = into(p.audio_path, null);
+  if (audio) linkFile(stageAbs, "song", path.basename(audio));
   const cover = into(p.cover_path, "cover");
   p = ws.db.update(projectTable).set({ audio_path: audio, cover_path: cover }).where(eq(projectTable.id, p.id)).returning().get();
   const target = songFolderFor(ws, p.artist, p.title, p.id);
@@ -324,20 +349,28 @@ function unownedSongFolder(ws: Workspace, songFile: string): { rel: string; arti
   return { rel: folder, artist: rel[1], title: rel[2] };
 }
 
-// The files of a song folder for "pnpm make <folder>": song.wav|mp3 (or the only audio file besides
-// the vocal stems vocals.wav / backing-vocals.wav), lyrics.txt, hints.lrc when there is one.
+// The files of a song folder for "pnpm make <folder>": the files linked in .studio\files.json (any
+// names), else song.wav|mp3 (or the only audio file besides the vocal stems), lyrics.txt (or the only
+// other .txt), hints.lrc when there is one.
+export const RESERVED_TXT = /^(story|stills|pins|publish|qa)\.txt$/i;
+export const AUDIO_FILE = /\.(wav|mp3|flac|aiff?|m4a)$/i;
 export function songFolderFiles(dir: string): { song: string; lyrics: string; hints?: string } {
   if (!existsSync(dir) || !statSync(dir).isDirectory()) throw new Error(`Song folder not found: ${dir}`);
-  const files = readdirSync(dir).filter((f) => statSync(path.join(dir, f)).isFile());
-  const audio = files.filter((f) => /\.(wav|mp3)$/i.test(f) && !STEM_FILE.test(f)); // the vocal stems are not the song
-  const song = audio.find((f) => /^song\.(wav|mp3)$/i.test(f)) ?? (audio.length === 1 ? audio[0] : undefined);
+  const links = readLinks(dir);
+  const files = readdirSync(dir).filter((f) => !f.startsWith(".") && statSync(path.join(dir, f)).isFile());
+  const has = (name: string | undefined) => !!name && files.includes(name);
+  const other = new Set([links.vocals, links.backingVocals, ...(links.notUsed ?? [])].filter((n): n is string => !!n));
+  const audio = files.filter((f) => /\.(wav|mp3)$/i.test(f) && !STEM_FILE.test(f) && !other.has(f)); // the vocal stems are not the song
+  const notStems = audio.length > 1 ? audio.filter((f) => !STEM_NAME.test(f)) : audio; // "… (Lead Vocal).wav" is not the song
+  const song = has(links.song) ? links.song : (audio.find((f) => /^song\.(wav|mp3)$/i.test(f)) ?? (notStems.length === 1 ? notStems[0] : undefined));
   if (!song) {
-    throw new Error(audio.length ? `${dir} has several audio files (${audio.join(", ")}); name the song song.wav or song.mp3.` : `No song.wav or song.mp3 in ${dir}`);
+    throw new Error(audio.length ? `${dir} has several audio files (${audio.join(", ")}); add the song in the studio (+ New song) so it knows which one is the song.` : `No song (WAV or MP3) in ${dir}`);
   }
-  const lyrics = files.find((f) => f.toLowerCase() === "lyrics.txt");
-  if (!lyrics) throw new Error(`No lyrics.txt in ${dir}`);
+  const texts = files.filter((f) => /\.txt$/i.test(f) && !RESERVED_TXT.test(f) && !other.has(f));
+  const lyrics = has(links.lyrics) ? links.lyrics : (texts.find((f) => f.toLowerCase() === "lyrics.txt") ?? (texts.length === 1 ? texts[0] : undefined));
+  if (!lyrics) throw new Error(texts.length ? `${dir} has several text files (${texts.join(", ")}); add the song in the studio (+ New song) so it knows which one has the lyrics.` : `No lyrics (.txt) in ${dir}`);
   const hints = files.find((f) => f.toLowerCase() === "hints.lrc");
-  return { song: path.join(dir, song), lyrics: path.join(dir, lyrics), ...(hints ? { hints: path.join(dir, hints) } : {}) };
+  return { song: path.join(dir, song!), lyrics: path.join(dir, lyrics!), ...(hints ? { hints: path.join(dir, hints) } : {}) };
 }
 
 // Shared collections: the folders in WORKSPACE_DIR\collections (and in the old clips\ until migrated).

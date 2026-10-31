@@ -69,6 +69,21 @@ async function main() {
     check(slot.includes("Vocal stem") && slot.includes("Add…") && slot.includes("the app separates the vocals itself"), `the Assets tab offers the vocal stem (${slot})`);
     const order = await page.$$eval("[data-asset]", (e: Element[]) => e.map((x) => x.getAttribute("data-asset")));
     check(order.indexOf("vocals") === order.indexOf("song") + 1, `the vocal stem sits next to the song (${order.join(", ")})`);
+    // Original file names: files put into the song folder by hand are recognised, the rest asked about once.
+    const wsF = openWorkspace(wsDir);
+    const folder = songPathsById(wsF, id).root;
+    wsF.close();
+    check(readFileSync(path.join(folder, ".studio", "files.json"), "utf8").includes('"song": "Hold On.wav"'), "the song keeps its own name (Hold On.wav, linked in .studio\\files.json)");
+    ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=2", path.join(folder, "Hold On (Backing Vocals).wav"));
+    writeFileSync(path.join(folder, "notes.txt"), "call the label\n");
+    await page.reload();
+    await page.click("[data-todo-item=vocals] button");
+    await page.waitForSelector("[data-unassigned-file='notes.txt']");
+    check(((await page.textContent("[data-asset=backingVocals]")) ?? "").includes("Hold On (Backing Vocals).wav"), "a backing-vocals file dropped by hand is recognised by its name");
+    check(!(await page.$("[data-unassigned-file='Hold On (Backing Vocals).wav']")), "…and not asked about");
+    await page.click("[data-unassigned-file='notes.txt'] [data-assign=notUsed]");
+    await page.waitForFunction(() => !document.querySelector("[data-unassigned]"));
+    check(true, "\"What is this file?\" → Not used: not asked again");
     await page.click("[data-todo-item=labels] button");
     check((await page.getAttribute("[role=tab][data-state=active]", "id"))?.endsWith("lyrics") ?? false, "the label item's button opens the Lyrics tab");
 

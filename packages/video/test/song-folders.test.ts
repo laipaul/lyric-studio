@@ -160,13 +160,13 @@ describe("a song's folder in pnpm make", () => {
   let folder: string;
   let projectId: string;
 
-  it("a new song gets songs\\<artist>\\<title>\\ with song.wav, clips\\ and exports\\; --collection goes into song.json", async () => {
+  it("a new song gets songs\\<artist>\\<title>\\ with its song (own name), clips\\ and exports\\; --collection goes into song.json", async () => {
     const r = await run({ collection: "wedding" });
     const p = ws.db.select().from(project).get()!;
     projectId = p.id;
     expect(p.folder).toBe("songs/Life Lyrics/Hold On");
     folder = path.join(wsDir, "songs", "Life Lyrics", "Hold On");
-    expect(readdirSync(folder).sort()).toEqual([".studio", "clips", "exports", "song.json", "song.wav"]);
+    expect(readdirSync(folder).sort()).toEqual([".studio", "Hold On.wav", "clips", "exports", "song.json"]); // the song keeps its own name
     expect(path.dirname(r.exportDir)).toBe(path.join(folder, "exports"));
     expect(readRecipe(path.join(folder, "song.json")).collections).toEqual(["wedding"]);
     expect(existsSync(path.join(wsDir, "projects", p.id))).toBe(false);
@@ -180,7 +180,7 @@ describe("a song's folder in pnpm make", () => {
     writeRecipe(path.join(folder, "song.json"), { ...readRecipe(path.join(folder, "song.json")), verseEffect: "soft-blur:subtle", variations: { reels: 2 }, locked: ["verseEffect"] });
 
     const { options } = parseMakeArgs([folder, "--platforms", "reels", "--line-effect", "floating"], "/");
-    expect([options.song, options.lyrics, options.hint, options.songFolder]).toEqual([path.join(folder, "song.wav"), path.join(folder, "lyrics.txt"), path.join(folder, "hints.lrc"), folder]);
+    expect([options.song, options.lyrics, options.hint, options.songFolder]).toEqual([path.join(folder, "Hold On.wav"), path.join(folder, "lyrics.txt"), path.join(folder, "hints.lrc"), folder]);
     expect(options.section).toBeUndefined(); // the recipe decides
     expect(() => parseMakeArgs([path.join(root, "nothing-here")], "/")).toThrow(/is not a song folder/);
 
@@ -202,7 +202,7 @@ describe("a song's folder in pnpm make", () => {
     const r = await run({ title: "Hold On (Acoustic)" });
     const p = ws.db.select().from(project).where(eq(project.id, projectId)).get()!;
     expect(p.folder).toBe("songs/Life Lyrics/Hold On (Acoustic)");
-    expect(p.audio_path).toBe("songs/Life Lyrics/Hold On (Acoustic)/song.wav");
+    expect(p.audio_path).toBe("songs/Life Lyrics/Hold On (Acoustic)/Hold On.wav");
     expect(existsSync(folder)).toBe(false);
     expect(path.dirname(r.exportDir)).toBe(path.join(wsDir, "songs", "Life Lyrics", "Hold On (Acoustic)", "exports"));
     const clips = ws.db.select().from(clip).all().filter((c) => c.path.includes("01_own.mp4"));
@@ -283,7 +283,7 @@ describe("the Assets tab", () => {
   it("lists the song's files and clips with thumbnail, orientation, duration, size and duplicates", async () => {
     const a = await songAssets(ws, projectId());
     expect(a.folder).toBe("songs/Life Lyrics/Hold On (Acoustic)");
-    expect(a.song?.name).toBe("song.wav");
+    expect(a.song?.name).toBe("Hold On.wav");
     expect(a.lyrics?.lines).toBe(LYRICS.length);
     expect(a.hints?.stamps).toBe(1);
     expect(a.clips.map((c) => [c.name, c.kind, c.orientation, c.width, c.height, c.duplicateOf])).toEqual([
@@ -331,7 +331,9 @@ describe("the Assets tab", () => {
     const txt = path.join(root, "new-lyrics.txt");
     writeFileSync(txt, "Only one line\n");
     await replaceAsset(ws, projectId(), "lyrics", txt, "new-lyrics.txt");
-    expect(readFileSync(path.join(folder(), "lyrics.txt"), "utf8")).toBe("Only one line\n");
+    expect(readFileSync(path.join(folder(), "new-lyrics.txt"), "utf8")).toBe("Only one line\n"); // under its own name
+    expect(existsSync(path.join(folder(), "lyrics.txt"))).toBe(false); // the old one moved to .studio\replaced\
+    expect(songPathsById(ws, projectId()).lyricsTxt).toBe(path.join(folder(), "new-lyrics.txt"));
     const taps = path.join(root, "taps.lrc");
     writeFileSync(taps, "[00:02.00]Only one line\n");
     await replaceAsset(ws, projectId(), "hints", taps, "taps.lrc");

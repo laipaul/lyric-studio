@@ -1,11 +1,11 @@
 // Which vocal track everything that listens to the voice uses (pnpm align, the voice map, first_words,
-// the vocal-start check, QA "Lines start with the vocals"): Suno's vocal stem (vocals.wav in the song
-// folder), lined up on the song, when it is there and follows the song; else the vocals the app
+// the vocal-start check, QA "Lines start with the vocals"): the vocal stem (any name, linked in the song
+// folder's .studio\files.json; else vocals.wav), lined up on the song, when it is there and follows the song; else the vocals the app
 // separates itself (Demucs), the fallback. The stem is checked once per song and stem content by
 // services/audio vocal_stem (cross-correlation at several points along the song; analysis only), and the
 // result is kept in the song's .studio\lyrics\stem-check-<song>-<stem>.json.
 // Neither the song nor the stem is ever written: they are only read. backing-vocals.wav is never used here.
-import { existsSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import type { Workspace } from "@lyric/db";
@@ -77,7 +77,35 @@ export async function storedStemCheck(ws: Workspace, sp: Pick<SongProject, "proj
   }
 }
 
-// The voice source of a song: checks vocals.wav against the song the first time (a few seconds; cached).
+// Checks a stem file against the song (once per song and stem content; the result is kept in the song's
+// .studio\lyrics). null: not checked (LYRIC_VOICE_MAP=off without a runner: the tests).
+export async function checkStemFile(
+  ws: Workspace,
+  storeDir: string,
+  song: { file: string; hash: string },
+  stem: string,
+  options: { log?: (m: string) => void; check?: StemCheckRunner } = {},
+): Promise<{ check: StemCheck } | { error: string } | null> {
+  const log = options.log ?? (() => {});
+  const file = stemCheckFile(storeDir, song.hash, await cachedFileHash(ws, stem));
+  if (!existsSync(file)) {
+    if (!options.check && process.env.LYRIC_VOICE_MAP === "off") return null; // the tests
+    log(`lyrics: checking the vocal stem ${path.basename(stem)} against the song (analysis only; once per stem)`);
+    const tmp = `${file}.${process.pid}.part`;
+    try {
+      mkdirSync(storeDir, { recursive: true });
+      await (options.check ?? runStemCheckCommand)({ song: song.file, stem, out: tmp });
+      renameSync(tmp, file);
+    } catch (error) {
+      rmSync(tmp, { force: true });
+      return { error: (error as Error).message.split("\n").pop() ?? "" };
+    }
+  }
+  return { check: JSON.parse(readFileSync(file, "utf8")) as StemCheck };
+}
+
+// The voice source of a song: checks the vocal stem (any name, linked in .studio\files.json; else
+// vocals.wav) against the song the first time (a few seconds; cached).
 // options.check: runs the check (the tests); without it, and with LYRIC_VOICE_MAP=off (the tests), an
 // unchecked stem counts as not there.
 export async function resolveVoiceSource(
@@ -88,29 +116,18 @@ export async function resolveVoiceSource(
   const log = options.log ?? (() => {});
   const paths = songPaths(ws, sp.project);
   if (!paths.vocals || !existsSync(paths.vocals)) return DEMUCS;
-  const stemHash = await cachedFileHash(ws, paths.vocals);
-  const file = stemCheckFile(paths.store, sp.songHash, stemHash);
-  if (!existsSync(file)) {
-    if (!options.check && process.env.LYRIC_VOICE_MAP === "off") return DEMUCS; // the tests
-    log(`lyrics: checking the vocal stem ${path.basename(paths.vocals)} against the song (analysis only; once per stem)`);
-    const tmp = `${file}.${process.pid}.part`;
-    try {
-      await (options.check ?? runStemCheckCommand)({ song: sp.songFile, stem: paths.vocals, out: tmp });
-      renameSync(tmp, file);
-    } catch (error) {
-      rmSync(tmp, { force: true });
-      const why = (error as Error).message.split("\n").pop();
-      log(`lyrics: the vocal stem could not be checked (${why}); the app separates the vocals itself`);
-      return { ...DEMUCS, message: `The vocal stem could not be checked (${why}).` };
-    }
+  const result = await checkStemFile(ws, paths.store, { file: sp.songFile, hash: sp.songHash }, paths.vocals, options);
+  if (!result) return DEMUCS;
+  if ("error" in result) {
+    log(`lyrics: the vocal stem could not be checked (${result.error}); the app separates the vocals itself`);
+    return { ...DEMUCS, message: `The vocal stem could not be checked (${result.error}).` };
   }
-  const check = JSON.parse(readFileSync(file, "utf8")) as StemCheck;
-  return sourceFromCheck(check, paths.vocals);
+  return sourceFromCheck(result.check, paths.vocals);
 }
 
 // The line pnpm make and the run log print.
 export function voiceLine(v: VoiceSource): string {
-  if (v.kind === "stem") return `lyrics: voice: ${v.label} (vocals.wav). ${v.message ?? ""}`.trim();
+  if (v.kind === "stem") return `lyrics: voice: ${v.label} (${path.basename(v.stemFile ?? "vocals.wav")}). ${v.message ?? ""}`.trim();
   return `lyrics: voice: ${v.label}${v.message ? `. ${v.message}` : ""}`;
 }
 

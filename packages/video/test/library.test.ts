@@ -54,7 +54,7 @@ describe("+ New song", () => {
     // Its own folder songs\Pômé\Hold On Tight\ (renamed from songs\Life Lyrics\... when the artist was set).
     expect(p.folder).toBe("songs/Pômé/Hold On Tight");
     expect(existsSync(path.join(ws.dir, "songs", "Life Lyrics"))).toBe(false);
-    expect([p.title, p.artist, p.cover_path, p.audio_path]).toEqual(["Hold On Tight", "Pômé", "songs/Pômé/Hold On Tight/cover.jpg", "songs/Pômé/Hold On Tight/song.wav"]);
+    expect([p.title, p.artist, p.cover_path, p.audio_path]).toEqual(["Hold On Tight", "Pômé", "songs/Pômé/Hold On Tight/cover.jpg", "songs/Pômé/Hold On Tight/Hold On Tight.wav"]); // the song keeps its own name
     const settings = readProjectSettings(ws, r.id);
     expect(settings).toMatchObject({ lyricsTxt: "songs/Pômé/Hold On Tight/lyrics.txt" });
     expect(readRecipe(path.join(ws.dir, "songs", "Pômé", "Hold On Tight", "song.json")).ep).toBe("In The Mood for Life"); // the EP is the song's recipe

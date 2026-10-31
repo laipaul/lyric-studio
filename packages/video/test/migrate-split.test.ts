@@ -176,10 +176,10 @@ describe("an interrupted run is finished, never split", () => {
     // Put it back into the half-way state: song file in songs\.adding-<id>\, no folder named yet.
     const stage = `songs/.adding-${sp.project.id}`;
     moveEntry(absPath(ws, sp.project.folder!), absPath(ws, stage));
-    ws.db.update(project).set({ folder: null, audio_path: `${stage}/song.wav` }).where(eq(project.id, sp.project.id)).run();
+    ws.db.update(project).set({ folder: null, audio_path: `${stage}/New One.wav` }).where(eq(project.id, sp.project.id)).run();
     const again = await findOrCreateSongProject(ws, file);
     expect(again.project.folder).toBe("songs/Life Lyrics/New One");
-    expect(existsSync(absPath(ws, "songs/Life Lyrics/New One/song.wav"))).toBe(true);
+    expect(existsSync(absPath(ws, "songs/Life Lyrics/New One/New One.wav"))).toBe(true); // its own name
     expect(existsSync(absPath(ws, stage))).toBe(false);
   });
 });

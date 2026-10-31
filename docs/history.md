@@ -4,6 +4,16 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Effects, batch 2 step 1: Clarify, Ascend, Ink ✅ (to verify on the Windows PC)
+- **clarify**: each word pulls into focus (blurred and dim -> sharp) as it is sung, like a camera finding focus.
+- **ascend**: the letters rise into place one after another, a soft wave across the line (titles too).
+- **ink**: the line flows in left to right behind a soft-edged reveal, in time with the singing, row after row;
+  made for script fonts (titles too).
+- All three in Verse / Hook effect, the Textboard and "Try an effect". Tests: effects-canva.test.ts (sharp when
+  sung, letters in place on time, uncovered by the last word, QA box counts the rising letters), effects.test.ts
+  (14 effects, no jumps).
+- Step 2 next: Held-note glow, Chorus lift, Shine (music-reactive add-ons, off by default).
+
 ### Fix — title opening fits itself, loop check accepts its lead-in ✅ (verified by the user on the Windows PC, 30 Oct 2026: These Empty Roads Reel now "Ready to post")
 - Found on These Empty Roads (Reels, title opening on): "Not ready — the title opening reaches under the
   platform's buttons" (asking you to shorten the title or pick a smaller size) and "the jump back to the start may

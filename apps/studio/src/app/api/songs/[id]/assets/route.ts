@@ -1,7 +1,9 @@
 // The song page's Assets tab. GET: the song's files and clips. POST (multipart): "clips" = files
 // dropped on the clips area (copied into the song's clips\), or "kind" = song | lyrics | cover |
-// hints | vocals with one "file" (the old one is kept in .studio\replaced\; vocals: Suno's vocal stem,
-// checked against the song and the lyric timing queued again on it). DELETE ?name= : the clip moves to
+// hints | vocals | backingVocals with one "file" (kept under its own name; the old one is kept in
+// .studio\replaced\; vocals: the vocal stem, checked against the song and the lyric timing queued again
+// on it), or "kind" = assign with "name" and "role" (lyrics | vocals | backingVocals | notUsed): "What is
+// this file?" for a file put into the song folder by hand. DELETE ?name= : the clip moves to
 // clips\_removed\ (never deleted).
 import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -9,7 +11,7 @@ import path from "node:path";
 import { connection } from "next/server";
 
 import { resolveWorkspaceDir, safeName } from "@lyric/db";
-import { importSongClips, removeSongClip, replaceAsset, songAssets, storeVocalStem, type AssetKind } from "@lyric/video/assets";
+import { assignSongFile, importSongClips, removeSongClip, replaceAsset, songAssets, storeVocalStem, type AssetKind, type AssignRole } from "@lyric/video/assets";
 
 import { withWorkspaceAsync } from "@/lib/workspace";
 
@@ -44,11 +46,17 @@ export async function POST(request: Request, { params }: Params) {
       const saved = await Promise.all(files.map(save));
       return Response.json(await withWorkspaceAsync((ws) => importSongClips(ws, id, saved)));
     }
-    if (!["song", "lyrics", "cover", "hints", "vocals"].includes(kind)) return Response.json({ error: "Unknown kind of file." }, { status: 400 });
+    if (kind === "assign") {
+      const name = String(form.get("name") ?? "");
+      const role = String(form.get("role") ?? "");
+      if (!["lyrics", "vocals", "backingVocals", "notUsed"].includes(role)) return Response.json({ error: "Choose what the file is." }, { status: 400 });
+      return Response.json({ stored: await withWorkspaceAsync((ws) => assignSongFile(ws, id, name, role as AssignRole)) });
+    }
+    if (!["song", "lyrics", "cover", "hints", "vocals", "backingVocals"].includes(kind)) return Response.json({ error: "Unknown kind of file." }, { status: 400 });
     const value = form.get("file");
     if (!(value instanceof File) || !value.size) return Response.json({ error: "Choose a file." }, { status: 400 });
     const one = await save(value, 0);
-    // The Suno vocal stem: checked against the song at once, then the lyric timing is queued again on it.
+    // The vocal stem: checked against the song at once, then the lyric timing is queued again on it.
     if (kind === "vocals") return Response.json(await withWorkspaceAsync((ws) => storeVocalStem(ws, id, one.file, one.name)));
     const stored = await withWorkspaceAsync((ws) => replaceAsset(ws, id, kind as AssetKind, one.file, one.name));
     return Response.json({ stored });

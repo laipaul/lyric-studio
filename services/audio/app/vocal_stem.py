@@ -300,8 +300,15 @@ class VoiceSource:
 
 
 def stem_argument(song: Path, value: str | None) -> Path | None:
-    """--stem: a file, "none", or "auto" (default): vocals.wav next to the song when there is one."""
+    """--stem: a file, "none", or "auto" (default): the song folder's vocal stem, any name, as linked in
+    .studio/files.json ("vocals"), else vocals.wav next to the song when there is one."""
     if value is None or value == "auto":
+        try:
+            linked = json.loads((song.parent / ".studio" / "files.json").read_text(encoding="utf-8")).get("vocals")
+        except (OSError, ValueError, AttributeError):
+            linked = None
+        if isinstance(linked, str) and linked and Path(linked).name == linked and (song.parent / linked).is_file():
+            return song.parent / linked
         own = song.parent / "vocals.wav"
         return own if own.is_file() else None
     if value == "none":

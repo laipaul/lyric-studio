@@ -150,6 +150,18 @@ def test_stem_argument(tmp_path: Path) -> None:
     assert stem_argument(song, "none") is None
 
 
+def test_stem_argument_follows_the_link(tmp_path: Path) -> None:
+    # The vocal stem under its own name, linked in .studio/files.json; vocals.wav is only the fallback.
+    song = tmp_path / "These Empty Roads (Master).wav"
+    (tmp_path / "vocals.wav").write_bytes(b"x")
+    (tmp_path / "These Empty Roads (Lead Vocal).wav").write_bytes(b"x")
+    (tmp_path / ".studio").mkdir()
+    (tmp_path / ".studio" / "files.json").write_text(json.dumps({"version": 1, "vocals": "These Empty Roads (Lead Vocal).wav"}), encoding="utf-8")
+    assert stem_argument(song, "auto") == tmp_path / "These Empty Roads (Lead Vocal).wav"
+    (tmp_path / ".studio" / "files.json").write_text(json.dumps({"version": 1, "vocals": "../elsewhere.wav"}), encoding="utf-8")
+    assert stem_argument(song, "auto") == tmp_path / "vocals.wav"  # never a path outside the folder
+
+
 def test_voice_map_uses_the_lined_up_stem(workspace: Path, tmp_path: Path, suno) -> None:
     song = suno["mix"][int(1.8 * SR) :]
     s, v = song_and_stem(tmp_path, song, suno["voice"])

@@ -171,6 +171,7 @@ export type NewSongInput = {
   cover?: string;
   hints?: string;
   hintsName?: string; // the hints file's own name (the upload is saved under a temporary path)
+  lyricsName?: string; // the lyrics file's own name: it keeps it in the song folder (linked as the lyrics)
   title?: string;
   artist?: string;
   ep?: string;
@@ -228,7 +229,7 @@ export async function createSong(ws: Workspace, input: NewSongInput): Promise<{ 
   }
   const paths = songPathsById(ws, id);
   if (input.lyrics) {
-    storeLyricsTxt(ws, id, input.lyrics);
+    storeLyricsTxt(ws, id, input.lyrics, input.lyricsName);
     updated.push(paths.instrumental ? "story" : "lyrics");
   } else if (paths.instrumental && !existsSync(paths.lyricsTxt)) {
     writeFileSync(paths.lyricsTxt, ""); // an empty story.txt: music only (add sentences any time)
