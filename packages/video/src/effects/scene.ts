@@ -208,7 +208,8 @@ function typingLook(t: SceneTimeline, i: number, frame: number): WordLook[] {
   const plan = typingPlan(typingStartFrame(t, i), timings, letters.slice(0, timings.length), t.o.fps, own.amount);
   const w = t.exitWindow[i];
   const erase = own.effect.typing?.exit === "erase" && w && w.by === "own" && frame >= w.start ? clamp01((frame - w.start) / Math.max(1, w.end - w.start)) : 0;
-  return typingWords(plan, frame, t.o.fps, erase).map((x) => ({ ...WORD_REST, chars: x.chars, cursor: x.cursor }));
+  // No cursor on screen (Paul, 31 Oct 2026: the accent-coloured bar was irritating); only the letters.
+  return typingWords(plan, frame, t.o.fps, erase).map((x) => ({ ...WORD_REST, chars: x.chars }));
 }
 
 // Ink: the share of the line's letters uncovered (left to right), at the typewriter's pace (in time with

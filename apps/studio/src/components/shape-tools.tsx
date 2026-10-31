@@ -4,7 +4,7 @@ import { Check, ChevronDown, Lock, Plus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { BACKING_LABELS, effectTitle, FALLBACK_LABELS, GRADE_LABELS, patchChoice, pictureOf, TITLE_STYLE_LABELS, TITLE_WARP_LABELS, titleStyleCss, VIGNETTE_LABELS, warpLetter, type TitleStyle, type TitleWarp, previewBacking, previewFace, previewLyrics, type LookPatch, type LookPreviewProps, type PatchFace, type Readability } from "@lyric/video";
+import { BACKING_LABELS, effectTitle, parseColourRef, FALLBACK_LABELS, GRADE_LABELS, patchChoice, pictureOf, TITLE_STYLE_LABELS, TITLE_WARP_LABELS, titleStyleCss, VIGNETTE_LABELS, warpLetter, type TitleStyle, type TitleWarp, previewBacking, previewFace, previewLyrics, type LookPatch, type LookPreviewProps, type PatchFace, type Readability } from "@lyric/video";
 import type { PairingCard, PairingsView } from "@lyric/video/pairings";
 import type { StyleData, StyleField, StyleFont, StyleTheme } from "@lyric/video/style";
 
@@ -340,19 +340,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
       );
     }
     if (f.field === "accentColour" || f.field === "textColour" || f.field === "fallbackColour") {
-      return (
-        <div className="flex items-center gap-2">
-          <input
-            type="color"
-            aria-label={`${f.label} ${platform ?? ""}`}
-            data-edit={key}
-            value={String(value)}
-            onChange={(e) => {
-              void set(e.target.value.toUpperCase());
-            }} className="h-8 w-12 rounded border bg-transparent" />
-          <span className="text-muted-foreground text-xs tabular-nums">{String(value)}</span>
-        </div>
-      );
+      return <ColourField label={`${f.label} ${platform ?? ""}`.trim()} editKey={key} value={String(value)} onSet={(c) => void set(c)} />;
     }
     if (f.field === "collections" || f.field === "platforms") {
       const all = f.field === "collections" ? data.collections : data.platforms.map((p) => p.name);
@@ -705,6 +693,43 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                   Your unsaved changes from last time are back. Save keeps them; Cancel drops them.
                 </p>
               ) : null}
+              {/* The save bar, right below "Editing:" and staying in view while the sections scroll (moved up from the
+                  bottom on 31 Oct 2026: Save as new theme was easy to miss there). The only place a change is saved. */}
+              <div data-theme-footer className="bg-card/95 sticky top-0 z-10 -mx-3 -mt-2 flex flex-col gap-2 border-b px-3 py-2.5 backdrop-blur">
+                {savingAs !== null ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      autoFocus
+                      data-theme-save-as-name
+                      aria-label="New theme name"
+                      placeholder="Name the new theme"
+                      className={cn(input, "min-w-0 flex-1")}
+                      value={savingAs}
+                      onChange={(e) => setSavingAs(e.target.value)}
+                      onKeyDown={(e) => e.key === "Escape" && setSavingAs(null)}
+                    />
+                    <button type="button" data-theme-save-as-confirm disabled={!savingAs.trim()} onClick={() => void themeAction({ action: "saveAs", theme: draft.name, name: savingAs, look: draft.look, perPlatform: draft.perPlatform }).then((ok) => ok && setSavingAs(null))} className="bg-brand text-brand-foreground rounded-md px-3 py-1 text-xs font-medium disabled:opacity-50">
+                      Save
+                    </button>
+                    <button type="button" onClick={() => setSavingAs(null)} className="text-muted-foreground text-xs underline underline-offset-2">
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" data-theme-save onClick={() => void themeAction({ action: "save", theme: draft.name, look: draft.look, perPlatform: draft.perPlatform })} className="bg-brand text-brand-foreground rounded-md px-3 py-1 text-xs font-medium">
+                      {editingTheme.users.length > 1 ? `Save (changes ${editingTheme.users.length} songs)` : "Save"}
+                    </button>
+                    <button type="button" data-theme-save-as onClick={() => setSavingAs(`${editingTheme.name} 2`)} className="bg-muted rounded-md px-3 py-1 text-xs">
+                      Save as new theme
+                    </button>
+                    <button type="button" data-theme-cancel onClick={() => (closeEditor(), setDirty(false))} className="text-muted-foreground ml-auto text-xs underline underline-offset-2">
+                      Cancel
+                    </button>
+                  </div>
+                )}
+                {editingTheme.users.length > 1 && savingAs === null ? <p className="text-muted-foreground text-[11px]">Used by {editingTheme.users.join(", ")}. “Save as new theme” keeps it as it is for them.</p> : null}
+              </div>
 
               <EditorSection id="text" title="Text">
                 <PairingsRow
@@ -781,42 +806,6 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                 <ExtraCardControls value={(k) => valueOf(k)} onSet={(field, value) => void act({ action: "set", field, value })} font={String(valueOf("hookFont") ?? valueOf("verseFont") ?? "")} hookSample={String(valueOf("hookText") || data.sampleLines.find((_, i) => i === 1) || "Your chorus")} endSample={String(valueOf("endText") || "Stream {title} on Spotify").replace(/\{title\}/gi, data.title || "Your song").replace(/\{artist\}/gi, "")} />
               </EditorSection>
 
-              {/* The footer: the only place a change is saved. */}
-              <div data-theme-footer className="bg-card/95 sticky bottom-0 -mx-3 flex flex-col gap-2 border-t px-3 py-2.5">
-                {savingAs !== null ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      autoFocus
-                      data-theme-save-as-name
-                      aria-label="New theme name"
-                      placeholder="Name the new theme"
-                      className={cn(input, "min-w-0 flex-1")}
-                      value={savingAs}
-                      onChange={(e) => setSavingAs(e.target.value)}
-                      onKeyDown={(e) => e.key === "Escape" && setSavingAs(null)}
-                    />
-                    <button type="button" data-theme-save-as-confirm disabled={!savingAs.trim()} onClick={() => void themeAction({ action: "saveAs", theme: draft.name, name: savingAs, look: draft.look, perPlatform: draft.perPlatform }).then((ok) => ok && setSavingAs(null))} className="bg-brand text-brand-foreground rounded-md px-3 py-1 text-xs font-medium disabled:opacity-50">
-                      Save
-                    </button>
-                    <button type="button" onClick={() => setSavingAs(null)} className="text-muted-foreground text-xs underline underline-offset-2">
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button type="button" data-theme-save onClick={() => void themeAction({ action: "save", theme: draft.name, look: draft.look, perPlatform: draft.perPlatform })} className="bg-brand text-brand-foreground rounded-md px-3 py-1 text-xs font-medium">
-                      {editingTheme.users.length > 1 ? `Save (changes ${editingTheme.users.length} songs)` : "Save"}
-                    </button>
-                    <button type="button" data-theme-save-as onClick={() => setSavingAs(`${editingTheme.name} 2`)} className="bg-muted rounded-md px-3 py-1 text-xs">
-                      Save as new theme
-                    </button>
-                    <button type="button" data-theme-cancel onClick={() => (closeEditor(), setDirty(false))} className="text-muted-foreground ml-auto text-xs underline underline-offset-2">
-                      Cancel
-                    </button>
-                  </div>
-                )}
-                {editingTheme.users.length > 1 && savingAs === null ? <p className="text-muted-foreground text-[11px]">Used by {editingTheme.users.join(", ")}. “Save as new theme” keeps it as it is for them.</p> : null}
-              </div>
             </div>
           ) : (
             <>
@@ -1373,6 +1362,62 @@ function ExtraCardControls({ value, onSet, font, hookSample, endSample }: { valu
     <div className="flex flex-col gap-2" data-extra-cards>
       {card("hook")}
       {card("end")}
+    </div>
+  );
+}
+
+// A colour: the picker, plus a box to type or paste the colour reference (31 Oct 2026): "#FF2D95", "FF2D95",
+// "#F29", "rgb(255, 45, 149)" or "255, 45, 149". Saved when it reads as a colour (Enter or leaving the box);
+// otherwise the box says what it expects and the colour stays as it was.
+function ColourField({ label, editKey, value, onSet }: { label: string; editKey: string; value: string; onSet: (colour: string) => void }) {
+  const [text, setText] = useState(value);
+  const [bad, setBad] = useState(false);
+  useEffect(() => {
+    setText(value);
+    setBad(false);
+  }, [value]);
+  const commit = () => {
+    if (text.trim() === "" || text.trim().toUpperCase() === value.toUpperCase()) {
+      setText(value);
+      setBad(false);
+      return;
+    }
+    const c = parseColourRef(text);
+    if (!c) return setBad(true);
+    setBad(false);
+    setText(c);
+    if (c !== value.toUpperCase()) onSet(c);
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <input type="color" aria-label={label} data-edit={editKey} value={/^#[0-9a-f]{6}$/i.test(value) ? value : "#FFFFFF"} onChange={(e) => onSet(e.target.value.toUpperCase())} className="h-8 w-12 rounded border bg-transparent" />
+      <input
+        type="text"
+        aria-label={`${label} code`}
+        data-edit-code={editKey}
+        value={text}
+        spellCheck={false}
+        placeholder="#FF2D95"
+        title="Type or paste a colour: #FF2D95, FF2D95, #F29, rgb(255, 45, 149) or 255, 45, 149. Press Enter."
+        onChange={(e) => {
+          setText(e.target.value);
+          setBad(false);
+        }}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") {
+            setText(value);
+            setBad(false);
+          }
+        }}
+        className={cn("h-8 w-36 rounded border bg-transparent px-2 font-mono text-xs uppercase tabular-nums", bad && "border-destructive")}
+      />
+      {bad ? (
+        <span data-colour-bad className="text-destructive basis-full text-xs">
+          Not a colour yet: type #FF2D95 or 255, 45, 149.
+        </span>
+      ) : null}
     </div>
   );
 }

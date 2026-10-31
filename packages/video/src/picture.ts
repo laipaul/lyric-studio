@@ -97,8 +97,9 @@ export function backingShadow(b: TextBacking | undefined, accent: string): strin
   return BASE_TEXT_SHADOW;
 }
 
-// "box": each printed line on its own dark rounded box.
-export const BOX_STYLE: React.CSSProperties = { background: "rgba(0,0,0,0.55)", borderRadius: "0.18em", padding: "0 0.32em", boxDecorationBreak: "clone", WebkitBoxDecorationBreak: "clone" };
+// "box": each printed line on its own dark rounded box, a clear caption box (31 Oct 2026: stronger and roomier,
+// the first one at 55% with no top/bottom room hardly read as a box).
+export const BOX_STYLE: React.CSSProperties = { background: "rgba(0,0,0,0.72)", borderRadius: "0.22em", padding: "0.06em 0.45em", boxDecorationBreak: "clone", WebkitBoxDecorationBreak: "clone" };
 
 // The theme's picture fields as props (recipe values; the Canvas without the grade when gradeCanvas is off).
 export function pictureOf(

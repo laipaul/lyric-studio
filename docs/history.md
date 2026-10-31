@@ -4,6 +4,17 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Themes, step 4: Make compares themes; the font and effect dropdowns are gone ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026 ("redesign the app around themes"). Make → More options no longer has the
+  Verse effect / Hook effect dropdowns or "Compare font pairings": the look comes from the song's theme.
+- **Theme** (for this run only): make the videos with another theme without changing the song's theme.
+- **Compare themes**: tick 2 or 3 themes; one run per theme with the same section, clips and order (only the
+  look differs), labelled "Compare themes: A, B". Not together with Picture versions.
+- Every video records the theme it was made with (manifest settings.theme); the Videos tab shows a "Theme"
+  row next to the song's theme now, with "Use these settings" bringing it back.
+- Tests: run-settings / library / themes unit tests; browser: themes.e2e.ts (Compare themes queues one run per
+  theme), style-lock, videos-post, pairings. themes.e2e.ts and song-title.e2e.ts are now part of pnpm test:e2e.
+
 ### Song title and Delete song ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026. On a song's page, **click the title** (or the pencil) to change it: Enter
   saves, Escape cancels; the song folder is renamed to match (not while it renders).

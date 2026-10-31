@@ -1,6 +1,6 @@
 // Typewriters. The intensity is the typing pace: subtle = calm (~8 letters/s), balanced (~14), expressive =
 // quick (~21); never behind the singer. "typewriter": the line is typed letter by letter at a steady pace, in time with the song
-// (every word fully typed when it is sung; src/effects/typing.ts), with a thin cursor; it fades out.
+// (every word fully typed when it is sung; src/effects/typing.ts), no cursor on screen; it fades out.
 // "typewriter-erase": the same, leaving by erasing its letters right to left. "typewriter-words": each
 // word typed in quickly just before it is sung (the first typewriter).
 import { clamp01, type LyricEffect } from "./types";
@@ -10,11 +10,11 @@ export const TYPE_FRAMES = 6; // typewriter-words: a word takes 0.2 s to type (l
 export const typewriter: LyricEffect = {
   name: "typewriter",
   label: "Typewriter",
-  description: "typed letter by letter in time with the singing, with a cursor",
+  description: "typed letter by letter in time with the singing",
   unit: "word",
   transition: "swap",
   defaults: { durationMs: 300, easing: "linear" },
-  enter: (p) => ({ opacity: p }), // the cursor fades in; the letters appear as they are typed
+  enter: (p) => ({ opacity: p }), // the letters appear as they are typed
   exit: (q) => ({ opacity: 1 - q }),
   typing: { exit: "fade" },
 };

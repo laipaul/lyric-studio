@@ -20,7 +20,8 @@ type Font = { family: string; weight: number; italic?: boolean };
 
 const BASE_SHADOW = "0 2px 12px rgba(0,0,0,0.55)";
 // "box": each printed row on its own dark rounded box (centred, as wide as its words).
-const BOX_ROW: CSSProperties = { ...BOX_STYLE, width: "fit-content", marginLeft: "auto", marginRight: "auto" };
+// The box's top/bottom room is taken back by the margins, so the lines sit exactly where they would without it.
+const BOX_ROW: CSSProperties = { ...BOX_STYLE, width: "fit-content", marginLeft: "auto", marginRight: "auto", marginTop: "-0.06em", marginBottom: "-0.06em" };
 const SHADOWS: Record<string, string> = { none: BASE_SHADOW, shadow: "0 6px 0 rgba(0,0,0,0.35), 0 0 28px rgba(0,0,0,0.65)" };
 
 // "#ffffff" + "#E8A3B5" at t -> "rgb(...)"

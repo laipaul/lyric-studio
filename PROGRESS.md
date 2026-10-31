@@ -4,6 +4,19 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Theme editor fixes: colour codes, save bar on top, a clear Box, no typewriter cursor ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026.
+- **Text colour / Accent colour** (Edit theme → Colours): next to the picker, a box to type or paste the colour
+  code: #FF2D95, FF2D95, #F29, rgb(255, 45, 149) or 255, 45, 149 (Enter or click away saves it; anything else
+  says what to type). src/colour-ref.ts parseColourRef.
+- **Save · Save as new theme · Cancel** moved from the bottom to right below "Editing: X", and stay in view
+  while the sections scroll.
+- **Behind the words → Box** did draw, but too faint to notice (55 % black, no room above or below the words):
+  now 72 % black with room around the words, the lines staying exactly where they were.
+- **Typewriter**: no cursor any more (the accent-coloured bar was irritating); only the letters type in.
+- Tests: colour-ref.test.ts, effects-canva.test.ts (no cursor on screen); browser: song-stages (Box drawn,
+  save bar position, typed RGB code, a wrong code).
+
 ### Themes, step 7: Hook card and End card ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026 ("yes" to building them).
 - **Edit theme → Cards** has **Hook card** and **End card** next to Title: Off / On and a Style each (Plain,
@@ -91,17 +104,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: picture.test.ts (grades, vignette, backing, fallback, the Canvas rule, recipe and theme checks,
   older theme.json files get the defaults, the viewer patch); song-stages.e2e.ts (Picture section, the viewer
   shows the grade at once, Save keeps all of it).
-
-### Themes, step 4: Make compares themes; the font and effect dropdowns are gone ✅ (to verify on the Windows PC)
-- Asked by the user on 31 Oct 2026 ("redesign the app around themes"). Make → More options no longer has the
-  Verse effect / Hook effect dropdowns or "Compare font pairings": the look comes from the song's theme.
-- **Theme** (for this run only): make the videos with another theme without changing the song's theme.
-- **Compare themes**: tick 2 or 3 themes; one run per theme with the same section, clips and order (only the
-  look differs), labelled "Compare themes: A, B". Not together with Picture versions.
-- Every video records the theme it was made with (manifest settings.theme); the Videos tab shows a "Theme"
-  row next to the song's theme now, with "Use these settings" bringing it back.
-- Tests: run-settings / library / themes unit tests; browser: themes.e2e.ts (Compare themes queues one run per
-  theme), style-lock, videos-post, pairings. themes.e2e.ts and song-title.e2e.ts are now part of pnpm test:e2e.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

@@ -47,3 +47,4 @@ export * from "./look-preview";
 export * from "./look-patch";
 export * from "./LookPreview";
 export * from "./LyricBacking";
+export * from "./colour-ref";

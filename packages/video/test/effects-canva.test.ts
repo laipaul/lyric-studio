@@ -62,6 +62,13 @@ describe("typewriter: letter by letter", () => {
     expect(typingWords(plan, Math.ceil(done) + 2, FPS).slice(0, 2).every((w) => w.cursor === 0)).toBe(true);
   });
 
+  it("no cursor is drawn on screen (the user found it irritating)", () => {
+    for (const name of ["typewriter", "typewriter-erase"]) {
+      const t = sceneTimeline(lines(), options({ name, intensity: "balanced" }));
+      for (let f = 0; f < 600; f += 3) for (const item of lyricScene(t, f)) for (const w of item.words ?? []) expect(w.cursor ?? 0, `${name} frame ${f}`).toBe(0);
+    }
+  });
+
   it("the intensity is the pace (calm / normal / quick), never behind the singer", () => {
     const slow = [{ startFrame: 200, endFrame: 210 }, { startFrame: 210, endFrame: 220 }, { startFrame: 220, endFrame: 230 }];
     const calm = typingPlan(0, slow, LETTERS, FPS, 0.6);

@@ -332,6 +332,24 @@ async function main() {
     check(true, "Picture: the colour grade reaches the viewer at once");
     await page.selectOption("[data-picture-select='vignette']", "soft");
     await page.selectOption("[data-picture-select='textBacking']", "box");
+    const boxed = await page
+      .waitForFunction(() => [...document.querySelectorAll("[data-lyric] div")].some((d) => getComputedStyle(d).backgroundColor === "rgba(0, 0, 0, 0.72)"), null, { timeout: 10_000 })
+      .then(() => true)
+      .catch(() => false);
+    await page.screenshot({ path: path.join(os.tmpdir(), "box-viewer.png") });
+    check(boxed, "Behind the words: Box draws a dark box behind the lines in the viewer");
+    const barAt = await page.evaluate(() =>
+      Object.fromEntries((["editing", "[data-theme-editing]", "bar", "[data-theme-save-as]", "text", "[data-editor-section='text']"] as string[]).flatMap((v, i, a) => (i % 2 ? [] : [[v, document.querySelector(a[i + 1])?.getBoundingClientRect().top ?? NaN]]))),
+    );
+    check(barAt.editing < barAt.bar && barAt.bar < barAt.text, "Save and Save as new theme sit right below Editing:, above the sections");
+    await page.fill("[data-edit-code^='textColour']", "255, 45, 149");
+    await page.press("[data-edit-code^='textColour']", "Enter");
+    await page.waitForFunction(() => (document.querySelector("[data-edit-code^='textColour']") as HTMLInputElement | null)?.value === "#FF2D95", null, { timeout: 5_000 }).catch(() => {});
+    check((await page.inputValue("[data-edit-code^='textColour']")) === "#FF2D95", "Text colour: a typed RGB code becomes #FF2D95");
+    await page.fill("[data-edit-code^='textColour']", "pinkish");
+    await page.press("[data-edit-code^='textColour']", "Enter");
+    check(!!(await page.$("[data-colour-bad]")), "…and something that is not a colour says what to type");
+    await page.press("[data-edit-code^='textColour']", "Escape");
     await page.selectOption("[data-picture-select='fallback']", "colour");
     await page.waitForSelector("[data-field='fallbackColour']");
     check(true, "Background without a clip: Plain colour shows its colour row");
