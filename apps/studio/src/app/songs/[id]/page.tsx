@@ -146,7 +146,8 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
         <TabsContent value="storyboard">
           <StoryboardTab projectId={song.id} />
         </TabsContent>
-        <TabsContent value="generate">
+        {/* Kept mounted (hidden when inactive) so what was chosen here (platforms, collections, effects...) survives a trip to another stage. */}
+        <TabsContent value="generate" forceMount className="data-[state=inactive]:hidden">
           <div className="flex flex-col gap-4">
             {!preset ? (
               <ReleasePack

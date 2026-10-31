@@ -99,6 +99,17 @@ async function main() {
     const options = (run?.options_json ?? {}) as { platforms?: string; variations?: number };
     check(run?.status === "queued" && options.platforms === "reels,youtube" && options.variations === 1, `queued: Reels + YouTube, one video each (${JSON.stringify(options)})`);
 
+    // What was chosen in Make survives a trip to Prepare and back (the Generate tab stays mounted, hidden meanwhile).
+    await page.click("button[aria-expanded]:has-text('Generate videos')");
+    await page.click("[data-platform-choice=tiktok]");
+    const chosen = () => page.$$eval("[data-platform-choice]", (e: Element[]) => e.filter((x) => x.className.includes("bg-brand")).map((x) => x.getAttribute("data-platform-choice")));
+    check(JSON.stringify(await chosen()) === JSON.stringify(["reels", "tiktok", "youtube"]), "Make: TikTok ticked next to the recipe's platforms");
+    await page.click("[data-stage=prepare]");
+    check(!(await page.isVisible("[data-generate]")), "the hidden Generate panel is not visible on Prepare");
+    await page.click("[data-stage=make]");
+    await page.waitForSelector("[data-generate]", { state: "visible" });
+    check(JSON.stringify(await chosen()) === JSON.stringify(["reels", "tiktok", "youtube"]), "Make -> Prepare -> Make keeps the ticked platforms");
+
     // Part 2. Two runs of Reels (v1 ready, v2 with a point) and one discarded video: Make counts every kept
     // video; Post offers the ready one; "Try another take" queues take 3; Style shows only what differs.
     const exportsDir = songPathsById(ws2, id).exports;
