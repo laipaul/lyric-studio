@@ -4,6 +4,29 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Themes, step 1: every song's look comes from a theme ✅ (to verify on the Windows PC)
+- Decided by the user on 31 Oct 2026: like a website theme, a song **uses a theme** and the user no longer
+  thinks about fonts, effects or colours one by one. A theme is one folder `workspace\themes\<name>\`
+  (theme.json with the fonts, effects, accent colour and per-platform values, plus fonts\ and overlays\ for
+  later), self-contained so themes can be shared or sold as files later.
+- **Nothing looks different after the update**: the first time a song opens (or pnpm make runs), a song that
+  never changed its look moves to the artist's default theme ("Life Lyrics", made from brand.json); a song with
+  its own look gets its own theme named after the song. song.json keeps only the song's other settings.
+- **Shape rail: Theme · Clips · This song · To make · Automatic.** Fonts, Effects and Colour are gone as menus;
+  they live in the Theme panel: the song's theme with "Used by N songs", a tile per theme (point at it to try it
+  in the viewer, click to use it), Rename, Duplicate, and **Edit theme** (font pairing, Fine-tune, Set effect,
+  accent colour). When several songs share the theme, Edit theme asks first: **All N songs** or **Only this song
+  (saves a copy)**. Theme settings have no locks, no "Back to the brand", no "Use for all my songs".
+- The Text panel (text cards, textboard templates) opens by clicking a text card on the timeline (no rail menu).
+- pnpm make uses the song's theme (the log says which); `--theme "<name>"` tries another theme for one run.
+- Tests: themes.test.ts (recipe order, theme.json check, the move to themes, all songs vs a copy, Style
+  actions, use / duplicate / rename, a missing theme named); style, pairings and make tests updated; browser:
+  song-stages.e2e.ts (rail, Theme panel, tiles, Edit theme, saves into the theme, the "Only this song" copy),
+  pairings, storyboard, style-lock and textboard e2e updated.
+- Not yet (next steps, as agreed): the editable song title and Delete song; then the Themes page (Canva-style
+  gallery and a detail view: big preview on your song, Use this theme, Duplicate / Edit, designer credit, more
+  like this), themes on Library cards, Make "Compare themes", reactions that fix the theme.
+
 ### Controls in one bar under the timeline ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026: the transport bar sat too low on the screen. The viewer is smaller, the
   timeline sits right under it, and **one command bar under the timeline** holds everything: which video (Plan
@@ -75,19 +98,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   storyboard.e2e.ts (planned on opening, viewer → soundtrack → shots → clips, drop on a shot anchors, a look
   change patches the viewer then re-plans, the tempo re-plans on the same page), style-lock.e2e.ts (locks via
   the ⋯ menu, locked chips greyed out), pairings.e2e.ts, textboard.e2e.ts.
-
-### Fix — vocal stem check corrects a small speed difference ✅ (verified by the user on the Windows PC, 31 Oct 2026: all 4 songs pass with the vocal stem)
-- A song exported from the DAW can play a little faster or slower than Suno's stem (Love Is A Good Thing:
-  about 0.2 %, so the gap grew from 0.66 s to 0.77 s along the song and the stem was refused). The check now
-  measures that speed (up to 1 %) and lines up the app's private analysis copy of the stem with it; your song
-  and stem files are never changed and nothing reaches a video. Assets says e.g. "Vocal stem lined up: 0.7 s
-  offset, from trimming the song's start; the song plays 0.2 % faster than the stem (from the export),
-  corrected for the lyric timing." A song edited in the middle, another take, or more than 1 % stays refused.
-- Stored checks are redone once (new version), so a stem refused before is checked again by itself.
-- Assets wording: adding a stem says your taps are kept and starts set by hand before the stem are reset once.
-- Tests: test_vocal_stem.py (speed corrected at 0.4 %, the real song's case at 48/44.1 kHz with a lined-up copy
-  checked at 30 s and 80 s, a 4-minute song 0.2 % off, 2 % refused, middle edit + speed refused),
-  vocal-stem.test.ts (label, key and record with a speed).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -302,6 +312,21 @@ before Releases step 2 and the Lyric Sheet, one step each, plan first:
   platforms, length, clips); after generating, go straight to Review; Make's per-run choices clearly marked
   "this run only" vs saved to the song.
 - **U5.** Then Releases step 2 (item 5 above) and the Lyric Sheet (item 6).
+**Themes (approved by the user 31 Oct 2026, one step each, plan first):**
+- ✅ (built 31 Oct, to verify) **T1. Theme foundation + Shape Theme panel** (see Latest steps).
+- **T2. Editable song title + Delete song** (moves to songs\_removed\ with Restore, like Collections).
+- **T3. Themes page** in the top nav (Library · Themes · Collections · Releases): Canva-style gallery (tall
+  preview tiles that play on hover, filter chips) and a theme detail view (big preview on your own song, Use this
+  theme, Duplicate / Edit, designer credit, favourite, more like this); create / duplicate / edit / delete (to
+  `_removed\` with Restore); the artist's default theme. Library cards show each song's theme.
+- **T4. Make:** Compare themes (up to 3); the font and effect dropdowns go; videos show their theme; reactions
+  offer to fix the theme.
+- Later, inside a theme: text auto-placement and placement presets per format; a **Hook card** and an **End card**
+  (styled by the theme; text per song or artist such as "Stream on Spotify" or a link; per platform); a text
+  section like Canva's Text panel (font search, brand fonts first, Title / Lyric line / Hook styles as live
+  previews, recently used combinations); overlays; cover colours; starter themes; Phone check; drag and
+  alignment; theme zip export / import (designers, resale).
+
 **Open decisions (paused 30 Oct 2026, 23:40 — the user is rethinking the strategy; build nothing of this until he decides):**
 - ✅ Style tab rebuild: decided and built 31 Oct 2026 as "Shape as one page" (see Latest steps); font
   pairings stay a dropdown.

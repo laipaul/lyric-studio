@@ -11,7 +11,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { openWorkspace } from "@lyric/db";
-import { findOrCreateSongProject, songPathsById } from "@lyric/video/node";
+import { findOrCreateSongProject, loadTheme, readRecipe, songPathsById } from "@lyric/video/node";
 import { menuItem, openPanel, openTab } from "./stage-tabs";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-"));
@@ -72,20 +72,18 @@ async function main() {
     check(!!(await page.$("[data-locked=length]")), "the length's padlock shows at once");
     await page.waitForSelector("[data-saving=saved]");
     await menuItem(page, "length", 'data-lock="length"'); // unlock again
-    // The effect settings are set in Effects; their own rows (lock, per platform) under its ⋯ → Per platform.
+    // The effects belong to the song's theme: their rows offer only "Per platform…" (no lock, no reset); the
+    // song's old YouTube effect moved into its theme.
     await openPanel(page, "effects");
     await menuItem(page, "effects", "data-effects-per-platform");
     await page.waitForSelector("[data-field=hookEffect]");
-    await menuItem(page, "hookEffect", 'data-lock="hookEffect"');
-    check(!!(await page.$("[data-locked=hookEffect]")), "the padlock shows locked at once");
-    await page.waitForSelector("[data-saving=saved]");
-    check(!!(await page.$("[data-locked=hookEffect]")), "the padlock still shows locked after saving");
-    await page.click("[data-part=hook]");
-    await page.waitForSelector("[data-effect-part=hook]");
-    check(await page.$eval("[data-try-effect=glide]", (b: HTMLButtonElement) => b.disabled), "Set effect: a locked chorus effect cannot be changed (chips greyed out)");
-    await page.click("[data-part=verse]");
+    await page.click(`[data-row-menu="hookEffect"]`);
+    const items = await page.$$eval("[role=menuitem]", (e: Element[]) => e.map((x) => x.textContent));
+    check(JSON.stringify(items) === JSON.stringify(["Per platform…"]) || JSON.stringify(items) === JSON.stringify(["Hide the per-platform values"]), `a theme setting's ⋯ menu: per platform only (${items.join(" | ")})`);
+    await page.keyboard.press("Escape");
+    const song = readRecipe(paths.recipe!);
+    check(!!song.theme && loadTheme(wsDir, song.theme).perPlatform.youtube?.verseEffect === "cinematic-fade" && !song.perPlatform?.youtube, `the song's YouTube effect is now in its theme (${song.theme})`);
     const recipe = JSON.parse(readFileSync(paths.recipe!, "utf8")) as { locked?: string[]; perPlatform?: { reels?: { length?: number } } };
-    check(!!recipe.locked?.includes("hookEffect"), 'song.json holds "locked": ["hookEffect"]');
     check(recipe.perPlatform?.reels?.length === 90, "song.json holds the Reels length typed just before (90)");
     // Ending (Reels, TikTok, Shorts): auto by default, the song may ask for one.
     await openPanel(page, "auto");
@@ -126,28 +124,11 @@ async function main() {
 
     await openTab(page, "Generate");
     await page.waitForSelector("[aria-label='Hook effect']");
-    check(await page.$eval("[aria-label='Hook effect']", (s: HTMLSelectElement) => (s).disabled), "Generate: Hook effect is locked (greyed out)");
     check(await page.$eval("[aria-label='Verse effect']", (s: HTMLSelectElement) => !(s).disabled), "Generate: Verse effect can be changed");
     const chips = await page.$$eval("[data-platform-choice]", (e: Element[]) => e.filter((x) => x.className.includes("bg-brand")).map((x) => x.getAttribute("data-platform-choice")));
     check(JSON.stringify(chips) === JSON.stringify(["reels", "youtube"]), `Generate starts with Reels + YouTube (got ${(chips as string[]).join(", ")})`);
     check((await page.$eval("[aria-label='Verse effect'] option", (o: Element) => o.textContent)) === "From the recipe (glide)", 'the recipe option is short: "From the recipe (glide)"');
     check((await page.textContent("[data-per-platform-effects=verse]")) === "YouTube: cinematic-fade", 'per-platform effects on a line under the list ("YouTube: cinematic-fade")');
-
-    // Unlock again.
-    await openTab(page, "Style");
-    await openPanel(page, "effects");
-    if (!(await page.$("[data-field=hookEffect]"))) await menuItem(page, "effects", "data-effects-per-platform");
-    await page.waitForSelector("[data-locked=hookEffect]");
-    check((await page.getAttribute(`[data-row-menu="hookEffect"]`, "aria-label")) === "More for Hook effect", "the ⋯ menu names its setting");
-    await menuItem(page, "hookEffect", 'data-lock="hookEffect"');
-    await page.waitForSelector("[data-saving=saved]");
-    await page.waitForFunction(() => !document.querySelector("[data-locked=hookEffect]"), null, { timeout: 5000 }).catch(() => {});
-    check(!(await page.$("[data-locked=hookEffect]")), "unlocked: the padlock is gone");
-    await openTab(page, "Generate");
-    await page.waitForSelector("[aria-label='Hook effect']");
-    // The page refreshes after the unlock: give it a moment before checking.
-    await page.waitForFunction(() => !(document.querySelector("[aria-label='Hook effect']") as HTMLSelectElement | null)?.disabled, null, { timeout: 10_000 }).catch(() => {});
-    check(await page.$eval("[aria-label='Hook effect']", (s: HTMLSelectElement) => !(s).disabled), "Generate: Hook effect can be changed again");
 
     // + New song: Instrumental -> an optional story.txt instead of lyrics.txt; song.json "instrumental".
     const instrumentalSong = path.join(root, "Tea With The Monk.wav");

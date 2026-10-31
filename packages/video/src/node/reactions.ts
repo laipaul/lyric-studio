@@ -16,6 +16,8 @@ import type { Manifest } from "./manifest";
 import { readRecipe, resolveRecipe, setField, writeRecipe, type RecipeField } from "./recipe";
 import { songPathsById, STUDIO_DIR } from "./song-folder";
 import { recipeInputFor, setBrandPerPlatform } from "./style";
+import { isThemeField, setThemeLook } from "./themes";
+import { loadFontCatalog } from "./font-catalog";
 import { parsePresets } from "../platform";
 import { LOOP_PLATFORMS, REACTIONS, type Reaction } from "../reactions-list";
 
@@ -133,7 +135,13 @@ export function applyReaction(ws: Workspace, projectId: string, o: { video: stri
   let applied: string;
   if (o.scope === "song" || !plan.changes.length) {
     let song = readRecipe(paths.recipe);
-    for (const c of plan.changes) {
+    // Fonts and effects belong to the song's theme (a copy for this song when other songs share it).
+    const look = Object.fromEntries(plan.changes.filter((c) => isThemeField(c.field)).map((c) => [c.field, c.value]));
+    if (Object.keys(look).length) {
+      setThemeLook(ws, { projectId, values: look, scope: "song", catalog: loadFontCatalog(ws.dir) });
+      song = readRecipe(paths.recipe);
+    }
+    for (const c of plan.changes.filter((x) => !isThemeField(x.field))) {
       song = setField(song, c.field, c.value);
       // A per-platform value of this song for the video's platform would hide the new default: it goes.
       const own = song.perPlatform?.[platform] as Record<string, unknown> | undefined;

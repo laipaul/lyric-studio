@@ -33,6 +33,7 @@ import {
   type SongRecipe,
 } from "./recipe";
 import { sharedCollections, songPathsById } from "./song-folder";
+import { ensureSongTheme, isThemeField, listThemes, loadTheme, setThemeLook, themeLayer, type ThemeLook } from "./themes";
 import { SHORT_LABELS } from "./exports";
 
 // The characters the font preview checks (French accents).
@@ -71,6 +72,8 @@ export const FIELD_LABELS: Record<RecipeField, string> = {
 };
 
 export type StyleValue = { value: unknown; source: string; own: boolean };
+// A theme as the Theme panel shows it: name, the look (default and per platform), how many songs use it.
+export type StyleTheme = { name: string; description: string; look: ThemeLook; perPlatform: Record<string, Partial<ThemeLook>>; users: string[]; problems: string[]; preview: boolean };
 export type StyleField = StyleValue & {
   field: RecipeField;
   label: string;
@@ -91,6 +94,8 @@ export type StyleData = {
   previewLine: string;
   sampleLines: string[]; // the song's first sung lines (the effects preview)
   userFonts: string; // the folder for the user's own fonts (WORKSPACE_DIR\fonts)
+  theme: StyleTheme | null; // the song's theme
+  themes: StyleTheme[]; // every theme, for the Theme panel's tiles
   song: { file: string | null; bpm: number | null }; // workspace-relative song file (the Tap button plays it); the BPM the last video used
 };
 
@@ -110,9 +115,10 @@ export function recipeInputFor(ws: Workspace, projectId: string, catalog: FontCa
   const p = songPathsById(ws, projectId);
   const artist = artistOf(ws, projectId);
   const brand = loadBrand(ws.dir, catalog, artist);
-  const song = p.recipe ? readRecipe(p.recipe) : {};
+  const song = p.recipe ? ensureSongTheme(ws, projectId, catalog) : {};
+  const theme = song.theme ? loadTheme(ws.dir, song.theme, catalog) : null;
   return {
-    input: { library: LIBRARY_RECIPE, artist: artistRecipe(brand.brand), artistPlatforms: brand.brand.perPlatform, song },
+    input: { library: LIBRARY_RECIPE, artist: artistRecipe(brand.brand), artistPlatforms: brand.brand.perPlatform, ...(theme ? { theme: themeLayer(theme) } : {}), song },
     song,
     recipeFile: p.recipe ? path.relative(ws.dir, p.recipe).split(path.sep).join("/") : null,
     brandFile: path.relative(ws.dir, brand.file).split(path.sep).join("/"),
@@ -171,7 +177,8 @@ export function styleData(ws: Workspace, projectId: string): StyleData {
           label: p.label,
           value: byPlatform[p.name].values[field],
           source: byPlatform[p.name].sources[field],
-          own: songValue(song, field, p.name) !== undefined,
+          // a theme setting: "own" = the theme's own value for this platform (it can be reset to the theme's default)
+          own: isThemeField(field) ? byPlatform[p.name].sources[field] === `theme:${p.name}` : songValue(song, field, p.name) !== undefined,
         }))
       : null,
   }));
@@ -189,7 +196,24 @@ export function styleData(ws: Workspace, projectId: string): StyleData {
     sampleLines: sampleLines(ws, projectId),
     userFonts: userFontsDir(ws.dir),
     song: songRow(ws, projectId),
+    ...themesOf(ws, song.theme ?? null, catalog),
   };
+}
+
+function themesOf(ws: Workspace, current: string | null, catalog: FontCatalog): { theme: StyleTheme | null; themes: StyleTheme[] } {
+  const users = new Map<string, string[]>();
+  for (const p of ws.db.select({ id: projectTable.id, title: projectTable.title }).from(projectTable).all()) {
+    const file = songPathsById(ws, p.id).recipe;
+    if (!file || !existsSync(file)) continue;
+    try {
+      const t = readRecipe(file).theme;
+      if (t) users.set(t, [...(users.get(t) ?? []), p.title]);
+    } catch {
+      // a broken song.json is named on that song's page
+    }
+  }
+  const themes = listThemes(ws.dir, catalog).map((t) => ({ name: t.name, description: t.theme.description, look: t.theme.look, perPlatform: t.theme.perPlatform, users: users.get(t.name) ?? [], problems: t.problems, preview: !!t.preview }));
+  return { theme: themes.find((t) => t.name === current) ?? null, themes };
 }
 
 // The song's first three sung lines (hook marks removed), for the effects preview.
@@ -207,7 +231,9 @@ function sampleLines(ws: Workspace, projectId: string): string[] {
   return ["Hold on to the light", "We had a heart for two", "And it carried us home"];
 }
 
-export type StyleAction = { action: "set" | "reset" | "lock" | "unlock" | "brand"; field: RecipeField; platform?: string; value?: unknown };
+// scope (theme settings: fonts, effects, colour, add-ons): "all" = the theme itself, every song using it;
+// "song" = only this song (a copy of the theme when other songs use it).
+export type StyleAction = { action: "set" | "reset" | "lock" | "unlock" | "brand"; field: RecipeField; platform?: string; value?: unknown; scope?: "all" | "song" };
 
 // "Use for all my songs" (the music-reactive add-ons and Breathe): the value in the artist's brand.json for
 // every platform with lyrics, and this song's own value removed so it follows the brand too.
@@ -234,6 +260,15 @@ export function setBrandAllPlatforms(ws: Workspace, projectId: string, field: Re
 // One change from the Style tab, checked like song.json is checked when it is read.
 export function applyStyleAction(ws: Workspace, projectId: string, a: StyleAction): SongRecipe {
   if (!(RECIPE_FIELDS as readonly string[]).includes(a.field)) throw new Error(`Unknown setting ${a.field}.`);
+  if (isThemeField(a.field)) {
+    // Fonts, effects, colour and add-ons live in the song's theme.
+    if (a.action === "set" || (a.action === "reset" && a.platform)) {
+      const catalog = loadFontCatalog(ws.dir);
+      setThemeLook(ws, { projectId, values: { [a.field]: a.action === "set" ? a.value : null }, platform: a.platform, scope: a.scope ?? "all", catalog });
+      return readRecipe(songPathsById(ws, projectId).recipe);
+    }
+    throw new Error(`${FIELD_LABELS[a.field]} is part of the song's theme: change it in the theme.`);
+  }
   if (a.action === "brand") {
     setBrandAllPlatforms(ws, projectId, a.field, String(a.value));
     return readRecipe(songPathsById(ws, projectId).recipe);
@@ -267,11 +302,16 @@ export function applyStyleAction(ws: Workspace, projectId: string, a: StyleActio
 export function saveRunToSong(ws: Workspace, projectId: string, options: Parameters<typeof runRecipe>[0]): { saved: RecipeField[]; kept: RecipeField[] } {
   const file = songPathsById(ws, projectId).recipe;
   if (!file) throw new Error("This song has no folder yet: run the migration first (pnpm songs:migrate).");
-  const song = readRecipe(file);
+  const catalog = loadFontCatalog(ws.dir);
+  const song = ensureSongTheme(ws, projectId, catalog);
   const run = runRecipe(options);
   const fields = RECIPE_FIELDS.filter((k) => run[k] !== undefined);
   const kept = fields.filter((k) => (song.locked ?? []).includes(k));
-  writeRecipe(file, saveToSong(song, run));
+  // Fonts and effects go into the song's theme (a copy when other songs share it); the rest into song.json.
+  const look = Object.fromEntries(fields.filter((k) => isThemeField(k) && !kept.includes(k)).map((k) => [k, run[k]]));
+  const rest = Object.fromEntries(Object.entries(run).filter(([k]) => !isThemeField(k)));
+  writeRecipe(file, saveToSong(song, rest));
+  if (Object.keys(look).length) setThemeLook(ws, { projectId, values: look, scope: "song", catalog });
   return { saved: fields.filter((k) => !kept.includes(k)), kept };
 }
 

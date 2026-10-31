@@ -4,6 +4,19 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Fix — vocal stem check corrects a small speed difference ✅ (verified by the user on the Windows PC, 31 Oct 2026: all 4 songs pass with the vocal stem)
+- A song exported from the DAW can play a little faster or slower than Suno's stem (Love Is A Good Thing:
+  about 0.2 %, so the gap grew from 0.66 s to 0.77 s along the song and the stem was refused). The check now
+  measures that speed (up to 1 %) and lines up the app's private analysis copy of the stem with it; your song
+  and stem files are never changed and nothing reaches a video. Assets says e.g. "Vocal stem lined up: 0.7 s
+  offset, from trimming the song's start; the song plays 0.2 % faster than the stem (from the export),
+  corrected for the lyric timing." A song edited in the middle, another take, or more than 1 % stays refused.
+- Stored checks are redone once (new version), so a stem refused before is checked again by itself.
+- Assets wording: adding a stem says your taps are kept and starts set by hand before the stem are reset once.
+- Tests: test_vocal_stem.py (speed corrected at 0.4 %, the real song's case at 48/44.1 kHz with a lined-up copy
+  checked at 30 s and 80 s, a 4-minute song 0.2 % off, 2 % refused, middle edit + speed refused),
+  vocal-stem.test.ts (label, key and record with a speed).
+
 ### Original file names + the vocal stem's timing as the base ✅ (verified by the user on the Windows PC, 31 Oct 2026)
 - **Your files keep their own names.** The song, the lyrics, the vocal stem and the backing vocals are stored
   under the names they came with ("These Empty Roads (Master).wav", "TER lyrics v3.txt", "These Empty Roads

@@ -12,11 +12,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { EFFECTS, lyricArea, sectionWindow, toSrt, type EffectsPreviewProps } from "../src";
 
 import {
+  artistDefaultTheme,
   effectsPreview,
   ensureAlignment,
   exportFolder,
   failureSummary,
   findOrCreateSongProject,
+  loadFontCatalog,
+  loadTheme,
   makeVideos,
   planVariations,
   readManifest,
@@ -953,7 +956,7 @@ describe("platform presets (stand-in renderer)", () => {
     const m = readManifest(first.variations[0].manifestFile);
     expect(m.props.lyricEffects).toEqual({ verse: { name: "glide", intensity: "balanced" }, hook: { name: "karaoke-highlight", intensity: "balanced" }, accent: "#E8A3B5", gap: { hideMs: 3000, leadInMs: 1000 } });
     expect(m.props.nextLine).toBe(true);
-    expect(plans[0].effects).toEqual({ verse: "glide", hook: "karaoke-highlight", from: { verse: "brand.json", hook: "brand.json" }, showNextLine: true });
+    expect(plans[0].effects).toEqual({ verse: "glide", hook: "karaoke-highlight", from: { verse: "theme", hook: "theme" }, showNextLine: true }); // the artist's default theme, made from brand.json
     expect(m.settings).toMatchObject({ line_effect: "glide", hook_effect: "karaoke-highlight", show_next_line: true });
     // Every shown line knows when it is sung and when its singing ends (from the alignment report).
     for (const l of m.props.lyrics.filter((x) => x.startFrame > 0)) {
@@ -963,9 +966,13 @@ describe("platform presets (stand-in renderer)", () => {
     }
     expect(readFileSync(first.variations[0].qaFile, "utf8")).toContain("[ok  ] Lyrics inside the safe zone"); // incl. the waiting next line
 
-    // brand.json motion; a platform's old "motion" in platforms.json is ignored (format only); then the command line.
+    // The song's theme (made from brand.json's motion the first time); a platform's old "motion" in
+    // platforms.json is ignored (format only); then the command line.
     const brand = JSON.parse(brandBefore);
-    writeFileSync(brandFile, JSON.stringify({ ...brand, motion: { verseEffect: "floating:subtle", hookEffect: "word-reveal" } }));
+    const themeFile = path.join(wsDir, "themes", "Life Lyrics", "theme.json");
+    const themeBefore = readFileSync(themeFile, "utf8");
+    const t = JSON.parse(themeBefore);
+    writeFileSync(themeFile, JSON.stringify({ ...t, look: { ...t.look, verseEffect: "floating:subtle", hookEffect: "word-reveal" } }));
     try {
       const fromBrand = readManifest((await run({ platforms: "reels", variations: 1 })).variations[0].manifestFile);
       expect([fromBrand.props.lyricEffects!.verse, fromBrand.props.lyricEffects!.hook]).toEqual([{ name: "floating", intensity: "subtle" }, { name: "word-reveal", intensity: "balanced" }]);
@@ -975,7 +982,7 @@ describe("platform presets (stand-in renderer)", () => {
       writeFileSync(file, JSON.stringify(json));
       const fromPlatform = await run({ platforms: "tiktok", variations: 1, presetsFile: file });
       const pm = readManifest(fromPlatform.variations[0].manifestFile);
-      expect(pm.props.lyricEffects!.verse).toEqual({ name: "floating", intensity: "subtle" }); // the brand's, not the preset's cinematic-fade
+      expect(pm.props.lyricEffects!.verse).toEqual({ name: "floating", intensity: "subtle" }); // the theme's, not the preset's cinematic-fade
       expect(pm.props.lyricEffects!.hook).toEqual({ name: "word-reveal", intensity: "balanced" });
       expect(pm.props.nextLine).toBe(false);
       const cli = readManifest((await run({ platforms: "tiktok", variations: 1, presetsFile: file, lineEffect: "soft-blur:expressive", hookEffect: "typewriter" })).variations[0].manifestFile);
@@ -984,6 +991,7 @@ describe("platform presets (stand-in renderer)", () => {
       await expect(run({ platforms: "reels", variations: 1 })).rejects.toThrow(/motion.verseEffect: unknown effect "spin"/);
     } finally {
       writeFileSync(brandFile, brandBefore);
+      writeFileSync(themeFile, themeBefore);
     }
     await expect(run({ platforms: "reels", lineEffect: "wobble" })).rejects.toThrow(/--line-effect: unknown effect "wobble"/);
   });
@@ -1073,7 +1081,9 @@ describe("platform presets (stand-in renderer)", () => {
     try {
       const r = await run({ platforms: "reels", variations: 1, artist: "Pômé", ep: "Night Songs" });
       const m = readManifest(r.variations[0].manifestFile);
-      expect(m.props.lyricEffects!.accent).toBe("#88AACC"); // brand\Pômé\brand.json
+      // Themes: the song keeps the theme it has; Pômé's default theme (for Pômé's new songs) comes from brand\Pômé\brand.json.
+      expect(m.props.lyricEffects!.accent).toBe("#E8A3B5");
+      expect(loadTheme(wsDir, artistDefaultTheme(ws, "Pômé", loadFontCatalog(wsDir))).look.accentColour).toBe("#88AACC");
       const p = ws.db.select().from(project).where(eq(project.title, r.projectTitle)).get()!;
       expect(p.artist).toBe("Pômé");
       expect(readRecipe(songPathsById(ws, p.id).recipe).ep).toBe("Night Songs"); // song.json

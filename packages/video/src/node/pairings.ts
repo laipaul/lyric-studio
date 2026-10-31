@@ -18,6 +18,7 @@ import { isWeight } from "./per-platform";
 import { readRecipe, resetField, resolveRecipe, setField, writeRecipe, type RecipeField, type SongRecipe } from "./recipe";
 import { songPathsById } from "./song-folder";
 import { recipeInputFor } from "./style";
+import { setThemeLook } from "./themes";
 import { bandLuminance } from "./lyric-band";
 import { isThinFace, lyricContrast, type Readability } from "../readability";
 
@@ -205,27 +206,24 @@ export function plainNotes(notes: readonly PairingNote[]): string[] {
 // ---------------------------------------------------------------- applying
 
 // "This song": the pair's fonts, weights and italic into song.json; locked fields keep their value (named).
-export function applyPairing(ws: Workspace, projectId: string, id: string): { pairing: Pairing; applied: RecipeField[]; kept: RecipeField[] } {
-  const { file, song, pairings } = context(ws, projectId);
+// The pair's fonts, weights and italic go into the song's theme (scope: see setThemeLook).
+export function applyPairing(ws: Workspace, projectId: string, id: string, scope: "all" | "song" = "all"): { pairing: Pairing; applied: RecipeField[]; kept: RecipeField[] } {
+  const { pairings } = context(ws, projectId);
   const p = findPairing(pairings, id);
   const values: Record<(typeof PAIRING_FIELDS)[number], unknown> = {
     verseFont: p.verse.family, hookFont: p.hook.family, verseWeight: p.verse.weight, hookWeight: p.hook.weight, verseItalic: p.verse.italic, hookItalic: p.hook.italic,
   };
-  const kept = PAIRING_FIELDS.filter((k) => (song.locked ?? []).includes(k));
-  let next: SongRecipe = song;
-  for (const k of PAIRING_FIELDS) if (!kept.includes(k)) next = setField(next, k, values[k]);
-  writeRecipe(file, next);
-  return { pairing: p, applied: PAIRING_FIELDS.filter((k) => !kept.includes(k)), kept };
+  setThemeLook(ws, { projectId, values, scope, catalog: loadFontCatalog(ws.dir) });
+  return { pairing: p, applied: [...PAIRING_FIELDS], kept: [] };
 }
 
-// Back to the fonts the song inherits (the brand's), except locked fields.
-export function resetPairing(ws: Workspace, projectId: string): { reset: RecipeField[]; kept: RecipeField[] } {
-  const { file, song } = context(ws, projectId);
-  const kept = PAIRING_FIELDS.filter((k) => (song.locked ?? []).includes(k));
-  let next: SongRecipe = song;
-  for (const k of PAIRING_FIELDS) if (!kept.includes(k)) next = resetField(next, k);
-  writeRecipe(file, next);
-  return { reset: PAIRING_FIELDS.filter((k) => !kept.includes(k)), kept };
+// "Back to the brand": the song's theme gets the brand's fonts again.
+export function resetPairing(ws: Workspace, projectId: string, scope: "all" | "song" = "all"): { reset: RecipeField[]; kept: RecipeField[] } {
+  const catalog = loadFontCatalog(ws.dir);
+  const brand = loadBrand(ws.dir, catalog, artistOf(ws, projectId)).brand;
+  const values = { verseFont: brand.verseFont.family, verseWeight: brand.verseFont.weight, verseItalic: brand.verseFont.italic === true, hookFont: brand.hookFont.family, hookWeight: brand.hookFont.weight, hookItalic: brand.hookFont.italic === true };
+  setThemeLook(ws, { projectId, values, scope, catalog });
+  return { reset: [...PAIRING_FIELDS], kept: [] };
 }
 
 // "Save to brand" (an explicit action): the pair becomes the artist's brand.json fonts (every song of

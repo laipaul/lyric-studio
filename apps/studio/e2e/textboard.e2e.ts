@@ -126,7 +126,8 @@ async function main() {
     await page.click("[aria-label='close the card editor']");
 
     // Save as template (the design, not the words), then apply it: in the Text panel.
-    await openPanel(page, "text");
+    await page.click("[data-open-card='title']"); // the Text panel opens from a text card (no rail menu since themes)
+    await page.waitForSelector("[data-text-panel]");
     await page.fill("[data-template-name]", "Clean");
     await page.click("[data-template-save]");
     await page.waitForSelector("[data-textboard-notice]");

@@ -37,6 +37,7 @@ export * from "./recipe";
 export * from "./migrate";
 export * from "./assets";
 export * from "./style";
+export * from "./themes";
 export * from "./run-settings";
 export * from "./lyrics-view";
 export * from "./audio-check";

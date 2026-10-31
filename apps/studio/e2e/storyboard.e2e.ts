@@ -12,7 +12,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { absPath, openWorkspace, project } from "@lyric/db";
-import { ensureAlignment, findOrCreateSongProject, songPathsById, type AlignRunner } from "@lyric/video/node";
+import { ensureAlignment, findOrCreateSongProject, loadTheme, readRecipe, songPathsById, type AlignRunner } from "@lyric/video/node";
 import { eq } from "drizzle-orm";
 import { openPanel, unfoldStyle } from "./stage-tabs";
 
@@ -311,13 +311,13 @@ async function main() {
       check(anchors.some((a) => a.line === shotWithLine.line && a.clip === "01_a.mp4"), `dropping 01_a on shot ${shotWithLine.shot} anchors it on line ${shotWithLine.line} (${JSON.stringify(anchors)})`);
     }
 
-    // A look change on the same page: the viewer shows it at once, song.json has it, the video is planned again.
+    // A look change on the same page: the viewer shows it at once, the song's theme has it, the video is planned again.
     await openPanel(page, "effects");
     await page.click("[data-try-effect=spread]");
     await page.waitForFunction(() => document.querySelector("[data-viewer]")?.getAttribute("data-effect") === "spread", null, { timeout: 5000 }).catch(() => {});
     check((await page.getAttribute("[data-viewer]", "data-effect")) === "spread", "Set effect: the viewer plays the new verse effect at once");
     await replanned();
-    check(JSON.parse(readFileSync(paths.recipe!, "utf8")).verseEffect === "spread", "…saved in song.json");
+    check(loadTheme(wsDir, readRecipe(paths.recipe!).theme!).look.verseEffect === "spread", "…saved in the song's theme");
     await page.waitForFunction(() => document.querySelector("[data-viewer]")?.getAttribute("data-patched") === "0", null, { timeout: 60_000 }).catch(() => {});
     check((await page.getAttribute("[data-viewer]", "data-patched")) === "0" && (await page.getAttribute("[data-viewer]", "data-effect")) === "spread", "…and the new plan has it (nothing patched any more)");
     await page.click("[data-next-make]");

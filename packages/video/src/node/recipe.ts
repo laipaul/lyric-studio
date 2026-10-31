@@ -58,7 +58,8 @@ export { isPlatformField, isWeight, ITALIC_FIELDS, PLATFORM_FIELDS, WEIGHT_FIELD
 // anchors and gapOrder belong to the song only (story anchors, the Lyrics tab): never from the brand,
 // outside Reset / Lock.
 // canvas: the clip (and moment, seconds) chosen for the Spotify Canvas (the clip editor's "Use for Canvas").
-export type SongRecipe = Partial<RecipeValues> & { perPlatform?: PerPlatform; locked?: RecipeField[]; anchors?: AnchorSpec[]; gapOrder?: GapOrder; canvas?: { clip: string; at?: number }; instrumental?: boolean };
+// theme: the song's theme (themes\<name>\theme.json): its fonts, effects, accent colour and add-ons.
+export type SongRecipe = Partial<RecipeValues> & { theme?: string; perPlatform?: PerPlatform; locked?: RecipeField[]; anchors?: AnchorSpec[]; gapOrder?: GapOrder; canvas?: { clip: string; at?: number }; instrumental?: boolean };
 // library | artist | artist:<platform> | song | song:<platform> | run
 export type RecipeSource = string;
 
@@ -70,7 +71,8 @@ export type ResolvedRecipe = {
 };
 
 export const RECIPE_HELP =
-  "The recipe of this song. A setting that is not here is inherited from the artist's brand (brand.json) " +
+  'The recipe of this song. "theme": the name of the song\'s theme (themes\\<name>\\theme.json), which sets its fonts, lyric effects, accent colour and add-ons; pick or edit it in the studio (Shape → Theme). ' +
+  "The other settings: A setting that is not here is inherited from the artist's brand (brand.json) " +
   "or the library defaults; a setting here is this song's own. \"locked\": settings that keep this song's value " +
   "(a brand change does not reach them, and Generate cannot change them for one run). Fields: verseEffect, hookEffect " +
   '("glide", "soft-blur:subtle", ...), verseFont, hookFont, verseWeight / hookWeight (400 = regular, 600 = semibold, 700 = bold), verseItalic / hookItalic (true / false), accentColour ("#E8A3B5"), shotLength ("auto" = the app chooses from the song and your clips; or "1", "2", "4", "8" bars per shot, "story": 2 bars on hooks, 4 on verses, never under 3 s, or "rate": the cut rate), tempo (the real BPM of this song when the detected one is wrong, e.g. 92), collections (shared collections used ' +
@@ -199,6 +201,10 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
     if (r.instrumental === true) recipe.instrumental = true;
     else if (r.instrumental !== false) problems.push("instrumental must be true or false (true: no sung lyrics; the text is story.txt)");
   }
+  if (r.theme !== undefined) {
+    if (typeof r.theme === "string" && r.theme.trim()) recipe.theme = r.theme.trim();
+    else problems.push("theme must be the name of a theme");
+  }
   if (r.gapOrder !== undefined) {
     if (r.gapOrder === "story" || r.gapOrder === "shuffle") recipe.gapOrder = r.gapOrder;
     else problems.push('gapOrder must be "story" or "shuffle"');
@@ -223,6 +229,7 @@ export function readRecipe(file: string | null): SongRecipe {
 export function recipeJson(recipe: SongRecipe): string {
   const ordered: Record<string, unknown> = { _help: RECIPE_HELP };
   if (recipe.instrumental) ordered.instrumental = true;
+  if (recipe.theme) ordered.theme = recipe.theme;
   for (const k of RECIPE_FIELDS) if (recipe[k] !== undefined) ordered[k] = recipe[k];
   if (recipe.perPlatform && Object.keys(recipe.perPlatform).length) ordered.perPlatform = recipe.perPlatform;
   if (recipe.locked?.length) ordered.locked = recipe.locked;
@@ -242,6 +249,7 @@ export type RecipeInput = {
   library: RecipeValues;
   artist: Partial<RecipeValues>;
   artistPlatforms?: PerPlatform; // brand.json perPlatform
+  theme?: { look: Partial<RecipeValues>; perPlatform: PerPlatform }; // the song's theme (themes.ts)
   song: SongRecipe;
   run?: Partial<RecipeValues>;
 };
@@ -257,6 +265,8 @@ export function resolveRecipe(input: RecipeInput, platform?: string): ResolvedRe
       ["library", input.library[k]],
       ["artist", input.artist[k]],
       ...(each ? ([[`artist:${platform}`, input.artistPlatforms?.[platform]?.[k as PlatformField]]] as [RecipeSource, unknown][]) : []),
+      ["theme", input.theme?.look[k]],
+      ...(each ? ([[`theme:${platform}`, input.theme?.perPlatform[platform]?.[k as PlatformField]]] as [RecipeSource, unknown][]) : []),
       ["song", input.song[k]],
       ...(each ? ([[`song:${platform}`, input.song.perPlatform?.[platform]?.[k as PlatformField]]] as [RecipeSource, unknown][]) : []),
     ];

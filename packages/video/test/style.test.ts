@@ -20,6 +20,7 @@ import {
   LIBRARY_RECIPE,
   loadBrand,
   loadFontCatalog,
+  loadTheme,
   lockField,
   makeVideos,
   readManifest,
@@ -150,28 +151,33 @@ describe("the Style tab, Generate and pnpm make", () => {
   it("styleData: every setting with value and source, per platform, and fonts with the accent check", () => {
     const d = styleData(ws, id);
     const verse = d.fields.find((f) => f.field === "verseEffect")!;
-    expect([verse.value, verse.source, verse.own, verse.locked]).toEqual(["glide", "artist", false, false]);
-    expect(verse.perPlatform!.find((p) => p.platform === "tiktok")).toMatchObject({ value: "cinematic-fade", source: "artist:tiktok", own: false });
+    // Themes (31 Oct 2026): the song moved to the artist's default theme, made from brand.json (its TikTok effect too).
+    expect([verse.value, verse.source, verse.own, verse.locked]).toEqual(["glide", "theme", false, false]);
+    expect(verse.perPlatform!.find((p) => p.platform === "tiktok")).toMatchObject({ value: "cinematic-fade", source: "theme:tiktok", own: true });
+    expect(d.theme?.name).toBe("Life Lyrics");
     expect(d.fields.find((f) => f.field === "collections")!.perPlatform).toBeNull();
     expect(d.fonts.find((f) => f.family === "Cormorant Garamond" && f.source === "bundled")!.missing).toEqual([]);
     expect(d.fonts.find((f) => f.source === "user")).toMatchObject({ missing: ["é", "è", "ç", "à", "ô", "É", "È", "Ç", "À", "Ô"] });
     expect(d.previewLine).toMatch(/é.*à.*ô.*ç/);
   });
 
-  it("set / reset / lock / unlock write song.json; bad values are refused", () => {
+  it("set / reset / lock / unlock write song.json; theme settings go to the theme; bad values are refused", () => {
     applyStyleAction(ws, id, { action: "set", field: "verseEffect", value: "soft-blur:subtle", platform: "reels" });
     applyStyleAction(ws, id, { action: "set", field: "collections", value: ["wedding"] });
-    applyStyleAction(ws, id, { action: "lock", field: "hookEffect" });
+    applyStyleAction(ws, id, { action: "lock", field: "collections" });
     const file = songPathsById(ws, id).recipe!;
-    expect(readRecipe(file)).toEqual({ hookEffect: "karaoke-highlight", collections: ["wedding"], perPlatform: { reels: { verseEffect: "soft-blur:subtle" } }, locked: ["hookEffect"] });
+    expect(readRecipe(file)).toEqual({ theme: "Life Lyrics", collections: ["wedding"], locked: ["collections"] });
+    expect(loadTheme(wsDir, "Life Lyrics").perPlatform.reels).toEqual({ verseEffect: "soft-blur:subtle" });
     const d = styleData(ws, id);
-    expect(d.fields.find((f) => f.field === "verseEffect")!.perPlatform!.find((p) => p.platform === "reels")).toMatchObject({ value: "soft-blur:subtle", source: "song:reels", own: true });
-    expect(d.fields.find((f) => f.field === "hookEffect")).toMatchObject({ locked: true, own: true, source: "song" });
+    expect(d.fields.find((f) => f.field === "verseEffect")!.perPlatform!.find((p) => p.platform === "reels")).toMatchObject({ value: "soft-blur:subtle", source: "theme:reels", own: true });
+    expect(d.fields.find((f) => f.field === "collections")).toMatchObject({ locked: true, own: true, source: "song" });
     expect(() => applyStyleAction(ws, id, { action: "set", field: "verseFont", value: "Nope Sans" })).toThrow(/font "Nope Sans" not found/);
     expect(() => applyStyleAction(ws, id, { action: "set", field: "accentColour", value: "pink" })).toThrow(/accentColour must look like/);
-    applyStyleAction(ws, id, { action: "unlock", field: "hookEffect" });
-    applyStyleAction(ws, id, { action: "reset", field: "hookEffect" });
-    expect(readRecipe(file).hookEffect).toBeUndefined();
+    expect(() => applyStyleAction(ws, id, { action: "lock", field: "hookEffect" })).toThrow(/part of the song's theme/);
+    applyStyleAction(ws, id, { action: "unlock", field: "collections" });
+    applyStyleAction(ws, id, { action: "reset", field: "collections" });
+    expect(readRecipe(file).collections).toBeUndefined();
+    applyStyleAction(ws, id, { action: "set", field: "collections", value: ["wedding"] });
   });
 
   it("Generate starts from the recipe; save to song keeps locked settings", () => {
@@ -186,8 +192,11 @@ describe("the Style tab, Generate and pnpm make", () => {
     expect(generatePanelData(ws, p).recipe).toMatchObject({ section: "full", locked: ["section"] });
     const r = saveRunToSong(ws, id, { section: "0:10-0:40", hookEffect: "word-reveal", lineEffect: undefined });
     expect(r).toEqual({ saved: ["hookEffect"], kept: ["section"] });
-    expect(readRecipe(file)).toMatchObject({ section: "full", hookEffect: "word-reveal" });
-    writeRecipe(file, { collections: ["wedding"], perPlatform: { reels: { verseEffect: "soft-blur:subtle" } } });
+    expect(readRecipe(file)).toMatchObject({ section: "full" });
+    expect(readRecipe(file).hookEffect).toBeUndefined();
+    expect(loadTheme(wsDir, readRecipe(file).theme!).look.hookEffect).toBe("word-reveal"); // the effect went into the song's theme
+    applyStyleAction(ws, id, { action: "set", field: "hookEffect", value: "karaoke-highlight" });
+    writeRecipe(file, { theme: readRecipe(file).theme, collections: ["wedding"] });
   });
 
   it("pnpm make uses the right value per platform (song, brand and platforms.json levels) and says so", async () => {
@@ -197,13 +206,14 @@ describe("the Style tab, Generate and pnpm make", () => {
       align: fakeAlign, frameCheck: false, renderer, platform: "win32", log: (m) => logs.push(m),
     });
     const effectOf = (name: string) => readManifest(r.platforms.find((x) => x.name === name)!.variations[0].manifestFile).props.lyricEffects!.verse;
-    expect(effectOf("reels")).toEqual({ name: "soft-blur", intensity: "subtle" }); // song.json perPlatform
-    expect(effectOf("tiktok")).toEqual({ name: "cinematic-fade", intensity: "balanced" }); // brand.json perPlatform
-    expect(effectOf("shorts")).toEqual({ name: "glide", intensity: "balanced" }); // the brand's default
-    expect(logs).toContain("reels: recipe verseEffect soft-blur:subtle (song:reels)");
-    expect(logs).toContain("tiktok: recipe verseEffect cinematic-fade (artist:tiktok)");
+    expect(effectOf("reels")).toEqual({ name: "soft-blur", intensity: "subtle" }); // the theme's Reels value
+    expect(effectOf("tiktok")).toEqual({ name: "cinematic-fade", intensity: "balanced" }); // the theme's TikTok value (from brand.json)
+    expect(effectOf("shorts")).toEqual({ name: "glide", intensity: "balanced" }); // the theme's default
+    expect(logs).toContain("theme: Life Lyrics");
+    expect(logs).toContain("reels: recipe verseEffect soft-blur:subtle (theme:reels)");
+    expect(logs).toContain("tiktok: recipe verseEffect cinematic-fade (theme:tiktok)");
     const m = readManifest(r.platforms.find((x) => x.name === "reels")!.variations[0].manifestFile);
-    expect((m as unknown as { effects: { from: { verse: string } } }).effects?.from?.verse ?? "song.json (reels)").toBe("song.json (reels)");
+    expect((m as unknown as { effects: { from: { verse: string } } }).effects?.from?.verse ?? "theme (reels)").toBe("theme (reels)");
     expect(readdirSync(r.exportDir).sort()).toEqual(expect.arrayContaining(["reels", "shorts", "tiktok"]));
   });
 });

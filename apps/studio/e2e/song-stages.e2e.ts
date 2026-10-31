@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { makeRun, openWorkspace } from "@lyric/db";
-import { createSong, readRecipe, songPathsById, writeRecipe } from "@lyric/video/node";
+import { createSong, loadTheme, readRecipe, songPathsById, writeRecipe } from "@lyric/video/node";
 import { openPanel } from "./stage-tabs";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-stages-"));
@@ -166,18 +166,24 @@ async function main() {
     const stageIds = await page.$$eval("[data-rail] [data-stage]", (e: Element[]) => e.map((x) => x.getAttribute("data-stage")));
     check(JSON.stringify(stageIds) === JSON.stringify(["prepare", "shape", "make", "review"]) && !!railBox && railBox.x < 5 && railBox.width < 100, `the stages sit in the rail on the left (${stageIds.join(", ")})`);
     const menus = await page.$$eval("[data-rail-item]", (e: Element[]) => e.map((x) => x.getAttribute("data-rail-item")));
-    check(JSON.stringify(menus) === JSON.stringify(["fonts", "effects", "colour", "clips", "text", "song", "make", "auto"]), `Shape's menus in the rail (${menus.join(", ")})`);
+    check(JSON.stringify(menus) === JSON.stringify(["theme", "clips", "song", "make", "auto"]), `Shape's menus in the rail (${menus.join(", ")})`);
     check(!(await page.isVisible("[data-shape-tools]")), "no panel open: the editor takes the whole width");
     const viewerBox = await (await page.waitForSelector("[data-viewer], [data-look-preview]")).boundingBox();
     check(!!viewerBox && viewerBox.y < 300, `the viewer at the top of the editor (${JSON.stringify(viewerBox)})`);
     check(!!(await page.$("[data-next-make]")), '"Next: Make" under the viewer');
     const inBlock = async (b: string) => page.$$eval(`[data-style-block=${b}] [data-field]`, (e: Element[]) => e.map((x) => x.getAttribute("data-field")));
+    await openPanel(page, "theme");
+    // The Theme panel: the song's theme (a new song: the artist's default theme) and a tile per theme.
+    const themeName = (await page.getAttribute("[data-theme-current]", "data-theme-current")) ?? "";
+    check(themeName.length > 0 && (await page.getAttribute(`[data-theme-tile="${themeName}"]`, "aria-pressed")) === "true", `the song's theme, its tile chosen (${themeName})`);
+    check(((await page.textContent("[data-theme-users]")) ?? "") === "Used by this song only", "used by this song only");
+    check((await page.$("[data-theme-editors]")) === null, "the editors open with Edit theme");
     await openPanel(page, "colour");
     const toolsBox = await (await page.$("[data-shape-tools]"))!.boundingBox();
     const viewerAfter = await (await page.$("[data-viewer], [data-look-preview]"))!.boundingBox();
     check(!!toolsBox && !!viewerAfter && toolsBox.x + toolsBox.width <= viewerAfter.x + 1, `the panel opens beside the rail, left of the viewer (${JSON.stringify(toolsBox)} / ${JSON.stringify(viewerAfter)})`);
-    check(JSON.stringify(await inBlock("colour")) === JSON.stringify(["accentColour"]), `Colour: the accent colour row (${(await inBlock("colour")).join(", ")})`);
-    await page.click("[data-rail-item=colour]");
+    check((await inBlock("theme")).includes("accentColour"), `Edit theme: the accent colour row (${(await inBlock("theme")).join(", ")})`);
+    await page.click("[data-rail-item=theme]");
     check(!(await page.isVisible("[data-shape-tools]")), "a second click on the menu closes its panel");
     await openPanel(page, "song");
     const songLine = (await page.textContent("[data-compact-summary=song]")) ?? "";
@@ -191,8 +197,9 @@ async function main() {
     await page.click("[data-panel-close]");
     check(!(await page.isVisible("[data-shape-tools]")), "the panel's × closes it");
     if (process.env.STYLE_SHOT) {
-      await openPanel(page, "fonts");
-      await page.waitForSelector("[data-pairing-select]");
+      await openPanel(page, "theme");
+      if (await page.$("[data-theme-done]")) await page.click("[data-theme-done]");
+      await page.waitForSelector("[data-theme-tiles]");
       await sleep(1500);
       await page.screenshot({ path: process.env.STYLE_SHOT });
     }
@@ -213,8 +220,7 @@ async function main() {
     check(!!(await page.$("[data-platform-value=shotLength-reels]")), "'Per platform…' opens the per-platform editors");
     check(!((await page.textContent("[data-style]")) ?? "").includes("the same on every platform"), "no 'the same on every platform' lines");
     // Fonts: one summary line; Fine-tune shows the six rows.
-    await page.click("[data-rail-item=fonts]");
-    await page.waitForSelector("[data-shape-panel=fonts]");
+    await openPanel(page, "effects"); // the Theme panel with its editors, Fine-tune folded
     const fontLine = (await page.textContent("[data-font-summary-text]")) ?? "";
     check(/^Fonts: verses .+ \d00(?: italic)? · choruses .+ \d00(?: italic)?$/.test(fontLine), `the font summary line (${fontLine})`);
     check((await page.$("[data-field=verseFont]")) === null, "the six font rows are folded");
@@ -224,9 +230,11 @@ async function main() {
     const verseFont = await page.$eval("[data-edit='verseFont-default']", (e: Element) => (e as HTMLSelectElement).value);
     check(fontLine.startsWith(`Fonts: verses ${verseFont} `), "the summary names the verse font of the rows");
     // Set effect: every click is saved at once; the viewer (here the stand-in: the song has no timed lyrics) shows it.
+    // The look is saved in the song's theme (themes\<name>\theme.json), not in song.json.
+    const look = (key: string): unknown => (loadTheme(wsDir, readRecipe(recipe).theme!).look as Record<string, unknown>)[key];
     const saved = async (key: string, value: unknown) => {
       for (let i = 0; i < 40; i++) {
-        if (JSON.stringify(JSON.parse(readFileSync(recipe, "utf8"))[key]) === JSON.stringify(value)) return true;
+        if (JSON.stringify(look(key)) === JSON.stringify(value) && JSON.parse(readFileSync(recipe, "utf8"))[key] === undefined) return true;
         await sleep(150);
       }
       return false;
@@ -236,7 +244,7 @@ async function main() {
     check((await page.$$("[data-use-effect]")).length === 0 && (await page.$$("[data-unsaved]")).length === 0, "no Save to recipe buttons, no 'not saved yet' line");
     check((await page.getAttribute("[data-effect-part]", "data-effect-part")) === "verse", "Set effect starts on Verses");
     await page.click("[data-try-effect=typewriter]");
-    check(await saved("verseEffect", "typewriter"), "a click on typewriter saves it as the verse effect (song.json)");
+    check(await saved("verseEffect", "typewriter"), "a click on typewriter saves it as the verse effect (in the theme)");
     await page.selectOption("[data-try-breathe]", "beat");
     check(await saved("breathe", "beat"), "Breathe with the beat: saved at once");
     await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-effect") === "typewriter" && document.querySelector("[data-look-preview]")?.getAttribute("data-breathe") === "beat");
@@ -251,27 +259,38 @@ async function main() {
     await page.click("[data-part=hook]");
     await page.click("[data-try-effect=spread]");
     check(await saved("hookEffect", "spread"), "Choruses: spread saved as the hook effect (the choruses' own intensity)");
-    check(JSON.parse(readFileSync(recipe, "utf8")).verseEffect === "typewriter:subtle", "…the verse effect unchanged");
+    check(look("verseEffect") === "typewriter:subtle", "…the verse effect unchanged");
     check((await page.getAttribute("[data-try-effect=spread]", "aria-pressed")) === "true", `the chorus effect shows as chosen (${await page.$$eval("[data-try-effect][aria-pressed=true]", (e: Element[]) => e.map((x) => x.textContent).join())} ${await page.textContent("[data-set-effect] p.text-muted-foreground")})`);
     await page.click("[data-part=verse]");
     check((await page.getAttribute("[data-try-effect=typewriter]", "aria-pressed")) === "true", "back on Verses: typewriter is chosen");
-    // Held-note glow: on for this song, then "Use Breathe and add-ons for all my songs" (brand.json, every platform with lyrics).
+    // A second song on the same theme: Edit theme asks first; "Only this song" saves a copy for this song.
+    const shared = readRecipe(recipe).theme!;
+    const other = path.join(root, "Let Go.wav");
+    ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=4", other);
+    const otherId = (await createSong(ws2, { song: other, lyrics })).id;
+    writeRecipe(songPathsById(ws2, otherId).recipe!, { theme: shared });
+    await page.reload();
+    await page.click("[data-stage=shape]");
+    await page.waitForSelector("[data-shape-menus]");
+    await openPanel(page, "theme");
+    check(((await page.textContent("[data-theme-users]")) ?? "").startsWith("Used by 2 songs"), `a shared theme says so (${await page.textContent("[data-theme-users]")})`);
+    await page.click("[data-theme-edit]");
+    await page.waitForSelector("[data-theme-scope-ask]");
+    check(((await page.textContent("[data-theme-scope=all]")) ?? "") === "All 2 songs", "Edit theme asks: all 2 songs or only this one");
+    await page.click("[data-theme-scope=song]");
+    await page.waitForSelector("[data-try-addon=heldGlow]");
     await page.check("[data-try-addon=heldGlow]");
-    check(await saved("heldGlow", "on"), "Held-note glow on: saved at once");
-    await page.click("[data-row-menu=effects]");
-    await page.click("[role=menuitem][data-brand-all=effects]");
-    await page.click("[data-brand-all-yes=effects]");
-    await page.waitForFunction(() => !document.querySelector("[data-brand-all-ask=effects]"));
-    await page.waitForSelector("[data-saving=saved]");
-    await sleep(800);
-    const brand = JSON.parse(readFileSync(path.join(wsDir, "brand", "brand.json"), "utf8")) as { perPlatform?: Record<string, { heldGlow?: string; breathe?: string }> };
-    check(brand.perPlatform?.reels?.heldGlow === "on" && brand.perPlatform?.youtube?.heldGlow === "on" && brand.perPlatform?.reels?.breathe === "beat" && !brand.perPlatform?.canvas, `Use for all my songs: brand.json on every platform with lyrics (${JSON.stringify(brand.perPlatform)})`);
-    check(JSON.parse(readFileSync(recipe, "utf8")).heldGlow === undefined, "…and the song follows the brand (its own value removed)");
-    check((await page.isChecked("[data-try-addon=heldGlow]")) === true, "…still on, now from the brand");
+    for (let i = 0; i < 40 && readRecipe(recipe).theme === shared; i++) await sleep(150);
+    const copy = readRecipe(recipe).theme!;
+    check(copy !== shared && loadTheme(wsDir, copy).look.heldGlow === "on", `only this song: a copy of the theme (${copy}) with Held-note glow on`);
+    check(loadTheme(wsDir, shared).look.heldGlow !== "on" && readRecipe(songPathsById(ws2, otherId).recipe!).theme === shared, "…the other song keeps its theme as it was");
+    await page.waitForSelector(`[data-theme-current="${copy}"]`);
+    check(((await page.textContent("[data-theme-users]")) ?? "") === "Used by this song only", "the copy is used by this song only");
     // Shape -> Make -> Shape: it is all saved, so it is all still there.
     await page.click("[data-stage=make]");
     await page.waitForFunction(() => !document.querySelector("[data-effect-preview]"));
     await page.click("[data-stage=shape]");
+    await openPanel(page, "effects");
     await page.waitForSelector("[data-effect-preview]");
     check((await page.getAttribute("[data-try-effect=typewriter]", "aria-pressed")) === "true" && (await page.$eval("[data-try-breathe]", (s: Element) => (s as HTMLSelectElement).value)) === "beat", "Shape -> Make -> Shape: the saved effect and Breathe are there");
     for (const w of [1280, 1366]) {
@@ -293,7 +312,7 @@ async function main() {
     check(true, "the accent colour reaches the viewer as soon as it changes");
     await page.waitForFunction(() => document.querySelector("[data-saving]")?.getAttribute("data-saving") === "saved");
     await sleep(500);
-    check(JSON.parse(readFileSync(recipe, "utf8")).accentColour === "#33AAFF" && (await page.getAttribute("[data-look-preview]", "data-accent")) === "#33AAFF", "…and stays after the save");
+    check(look("accentColour") === "#33AAFF" && (await page.getAttribute("[data-look-preview]", "data-accent")) === "#33AAFF", "…and stays after the save");
     // Next: Make.
     await page.click("[data-next-make]");
     await page.waitForSelector("[data-release-pack]");

@@ -1,6 +1,6 @@
 "use client";
 
-import { Captions, Check, CheckCheck, ChevronRight, Clapperboard, ClipboardCheck, FileMusic, Film, ListChecks, Package, Palette, Shapes, Sparkles, Type, Wand2 } from "lucide-react";
+import { Check, CheckCheck, ChevronRight, Clapperboard, ClipboardCheck, FileMusic, Film, ListChecks, Package, Palette, Shapes, Wand2 } from "lucide-react";
 import { createContext, useContext, useState } from "react";
 
 import type { TodoItem } from "@lyric/video/song-stages";
@@ -36,18 +36,16 @@ const GoToTab = createContext<(tab: string) => void>(() => {});
 export const useGoToTab = () => useContext(GoToTab);
 
 // The Shape page's menus in the left rail (Canva style): each opens one panel beside the rail; a second
-// click closes it. "shot" is opened by clicking a shot on the timeline (no rail icon).
+// click closes it. Theme holds the whole look (fonts, effects, colour: a song points to its theme, 31 Oct
+// 2026). "shot" opens by clicking a shot on the timeline, "text" by clicking a text card (no rail icons).
 export const SHAPE_PANELS = [
-  { id: "fonts", label: "Fonts", icon: Type },
-  { id: "effects", label: "Effects", icon: Sparkles },
-  { id: "colour", label: "Colour", icon: Palette },
+  { id: "theme", label: "Theme", icon: Palette },
   { id: "clips", label: "Clips", icon: Film },
-  { id: "text", label: "Text", icon: Captions },
   { id: "song", label: "This song", icon: FileMusic },
   { id: "make", label: "To make", icon: ListChecks },
   { id: "auto", label: "Automatic", icon: Wand2 },
 ] as const;
-export type ShapePanelId = (typeof SHAPE_PANELS)[number]["id"] | "shot";
+export type ShapePanelId = (typeof SHAPE_PANELS)[number]["id"] | "shot" | "text";
 type PanelState = { panel: ShapePanelId | null; setPanel: (p: ShapePanelId | null) => void };
 const ShapePanel = createContext<PanelState>({ panel: null, setPanel: () => {} });
 export const useShapePanel = () => useContext(ShapePanel);

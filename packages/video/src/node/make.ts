@@ -60,6 +60,7 @@ import { readProjectSettings, rememberCollection, rememberedCollection, updatePr
 import { PLATFORM_FIELDS, type PlatformField } from "./per-platform";
 import { artistRecipe, LIBRARY_RECIPE, readRecipe, recipeSummary, recipeText, resolveRecipe, runRecipe, writeRecipe, type RecipeField, type RecipeInput, type ResolvedRecipe } from "./recipe";
 import { renameSongFolder, songPathsById, STORY_FILE } from "./song-folder";
+import { ensureSongTheme, loadTheme, themeLayer } from "./themes";
 import { barStarts, rmsLevel, strongestStretch } from "../story";
 import { mergeCollections, prepareForFormat, SOURCE_FILE, syncCollection, type CollectionSync, type PreparedForFormat } from "./collection";
 import { fontFileRefs, forText, loadFontCatalog, missingCharacters, resolveFace, type FontCatalog } from "./font-catalog";
@@ -154,6 +155,7 @@ export type MakeOptions = {
   // hand-set starts and the vocal-start check (src/node/lyric-timing.ts), no videos. Needs projectId.
   lyricsOnly?: boolean;
   projectId?: string;
+  theme?: string; // this run's theme instead of the song's (pnpm make --theme "Night drive")
   lineEffect?: string; // lyric effect for verse lines, e.g. "glide" or "soft-blur:subtle" (default: platform / brand)
   hookEffect?: string; // lyric effect for hook lines (default: platform / brand)
   pins?: string;
@@ -546,17 +548,22 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     if (brand.created) log(`brand settings created: ${brand.file} (edit fonts, colour and logo there)`);
 
     // The recipe: library -> artist brand -> song.json -> this run (locked song settings win).
-    const songRecipe = readRecipe(paths.recipe);
+    // The song's theme (its fonts, effects, colour, add-ons): song.json "theme", or --theme for this run.
+    const songRecipe = paths.recipe ? ensureSongTheme(ws, sp.project.id, catalog) : readRecipe(paths.recipe);
+    const themeName = options.theme?.trim() || songRecipe.theme;
+    const theme = themeName ? loadTheme(ws.dir, themeName, catalog) : null;
+    if (theme) log(`theme: ${theme.name}${options.theme?.trim() ? " (this run)" : ""}`);
     const recipeInput: RecipeInput = {
       library: LIBRARY_RECIPE,
       artist: artistRecipe(brand.brand),
       artistPlatforms: brand.brand.perPlatform,
+      ...(theme ? { theme: themeLayer(theme) } : {}),
       song: songRecipe,
       run: runRecipe(options),
     };
     const recipe = resolveRecipe(recipeInput);
     for (const i of recipe.ignored) log(`song.json locks ${i.field}: keeping ${recipeText(i.kept)} (this run asked for ${recipeText(i.run)})`);
-    const own = (k: RecipeField) => recipe.sources[k] === "song" || recipe.sources[k] === "run"; // set for this song or run
+    const own = (k: RecipeField) => recipe.sources[k] === "song" || recipe.sources[k] === "run" || recipe.sources[k] === "theme"; // set by this song's theme, the song or the run
     const effective: MakeOptions = {
       ...options,
       lineEffect: own("verseEffect") ? recipe.values.verseEffect : undefined,
@@ -586,7 +593,8 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     if (own("accentColour")) brand = { ...brand, brand: { ...brand.brand, accentColour: recipe.values.accentColour } };
     const chosenPlatforms = choosePlatforms(effective.platforms, presets);
     const variationsFor = (preset: PlatformPreset) => recipe.values.variations[preset.name] ?? recipe.values.variations["*"] ?? preset.variations;
-    const effectLabels = { verse: recipe.sources.verseEffect === "song" ? "song.json" : "--line-effect", hook: recipe.sources.hookEffect === "song" ? "song.json" : "--hook-effect" };
+    const fromLabel = (k: RecipeField, flag: string) => (recipe.sources[k] === "song" ? "song.json" : recipe.sources[k] === "theme" ? `theme "${theme?.name}"` : flag);
+    const effectLabels = { verse: fromLabel("verseEffect", "--line-effect"), hook: fromLabel("hookEffect", "--hook-effect") };
     log(`recipe: ${recipeSummary(recipe)}`);
 
     const lyricsText = existsSync(options.lyrics) ? readFileSync(options.lyrics, "utf8") : ""; // a CJK font loads only the pieces these lines use
@@ -892,7 +900,7 @@ function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: Pl
   const preset = base;
   const label = (k: PlatformField, flag: string) => {
     const source = r.sources[k];
-    return source === "run" ? flag : source.startsWith("song") ? `song.json${source.includes(":") ? ` (${preset.name})` : ""}` : `brand.json (${preset.name})`;
+    return source === "run" ? flag : source.startsWith("song") ? `song.json${source.includes(":") ? ` (${preset.name})` : ""}` : source.startsWith("theme") ? `theme${source.includes(":") ? ` (${preset.name})` : ""}` : `brand.json (${preset.name})`;
   };
   const font = pick("verseFont");
   const fontHook = pick("hookFont");

@@ -10,8 +10,8 @@ import { ffmpegBin, openWorkspace, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
-  ACCENTS, applyPairing, BUNDLED_FONTS, checkRecipe, createSong, DEFAULT_BRAND, forText, loadBrand, loadFontCatalog, loadPairings, loadStyles, lockField,
-  missingCharacters, pairingNotes, pairingWarnings, pairingsView, plainNotes, parsePairings, readRecipe, resetPairing, resolveFont, savePairingToBrand, songPathsById, writeRecipe,
+  ACCENTS, applyPairing, BUNDLED_FONTS, checkRecipe, createSong, DEFAULT_BRAND, forText, loadBrand, loadFontCatalog, loadPairings, loadStyles,
+  loadTheme, missingCharacters, pairingNotes, pairingWarnings, pairingsView, plainNotes, parsePairings, readRecipe, resetPairing, resolveFont, savePairingToBrand, songPathsById, writeRecipe,
 } from "../src/node";
 
 const catalog = loadFontCatalog(path.join(os.tmpdir(), "no-workspace"));
@@ -157,26 +157,23 @@ describe("pairings on a song", () => {
   });
   const brandFile = () => loadBrand(ws.dir, catalog, "Life Lyrics").file;
 
-  it('"This song" applies the pair (fonts, weights, italic); the brand is untouched; Reset goes back to the brand', () => {
-    const brandBefore = readFileSync(brandFile(), "utf8");
+  it("a pair goes into the song's theme (fonts, weights, italic); song.json and the brand are untouched; Back to the brand", () => {
+    const brandLook = () => {
+      const b = JSON.parse(readFileSync(brandFile(), "utf8"));
+      delete b.theme; // brand.json names the artist's default theme once it exists
+      return b;
+    };
+    const brandBefore = brandLook();
     expect(applyPairing(ws, id, "elegant")).toMatchObject({ applied: ["verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic"], kept: [] });
     const song = readRecipe(songPathsById(ws, id).recipe);
-    expect([song.verseFont, song.verseWeight, song.verseItalic, song.hookFont, song.hookWeight, song.hookItalic]).toEqual(["Cormorant Garamond", 400, false, "Cormorant Garamond", 600, true]);
-    expect(readFileSync(brandFile(), "utf8")).toBe(brandBefore);
+    expect([song.verseFont, song.hookFont]).toEqual([undefined, undefined]);
+    const look = loadTheme(ws.dir, song.theme!).look;
+    expect([look.verseFont, look.verseWeight, look.verseItalic, look.hookFont, look.hookWeight, look.hookItalic]).toEqual(["Cormorant Garamond", 400, false, "Cormorant Garamond", 600, true]);
+    expect(brandLook()).toEqual(brandBefore);
     resetPairing(ws, id);
-    const reset = readRecipe(songPathsById(ws, id).recipe);
-    expect([reset.verseFont, reset.hookFont, reset.verseWeight, reset.hookItalic]).toEqual([undefined, undefined, undefined, undefined]);
-  });
-
-  it("locks are respected (and named)", () => {
-    const file = songPathsById(ws, id).recipe!;
-    writeRecipe(file, lockField({ hookFont: "Kaushan Script" }, "hookFont", "Kaushan Script"));
-    const r = applyPairing(ws, id, "dramatic");
-    expect(r.kept).toEqual(["hookFont"]);
-    expect(readRecipe(file).hookFont).toBe("Kaushan Script");
-    expect(readRecipe(file).hookItalic).toBe(true); // the rest of the pair applied
-    expect(resetPairing(ws, id).kept).toEqual(["hookFont"]);
-    writeRecipe(file, {});
+    const back = loadTheme(ws.dir, song.theme!).look;
+    expect([back.verseFont, back.hookFont]).toEqual([DEFAULT_BRAND.verseFont.family, DEFAULT_BRAND.hookFont.family]);
+    applyPairing(ws, id, "dramatic");
   });
 
   it('"Save to brand" writes the pair into the artist\'s brand.json (title too), checked', () => {
@@ -199,7 +196,7 @@ describe("pairings on a song", () => {
     expect(elegant.warnings.some((w) => w.startsWith("low contrast over this frame"))).toBe(true);
     expect(elegant.plain).toEqual(["Lyrics may be hard to read over bright clips like this one: the app adds a soft backing behind them when your clips need it."]);
     expect(v.readability).toBe("auto");
-    expect(v.cards.find((c) => c.brand)!.current).toBe(true); // the song uses its brand's fonts
+    expect(v.cards.filter((c) => c.current).map((c) => c.id)).toEqual(["dramatic"]); // the song's theme has the Dramatic pair
     expect(v.highlightWords).toBe(3); // karaoke hooks: half the words sung
   });
 });

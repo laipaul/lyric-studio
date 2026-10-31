@@ -38,8 +38,10 @@ export function PairingsRow({
   onChanged,
   onView,
   onHover,
+  scope,
 }: {
   projectId: string;
+  scope?: "all" | "song"; // in the Theme panel: the pair goes into the song's theme (every song of it, or a copy for this song); no brand buttons
   onChanged: () => void;
   onView?: (view: PairingsView) => void; // the Look preview uses the same frame, lines and layout
   onHover?: (card: PairingCard | null) => void; // a card under the pointer / focus: the Look preview tries it (nothing saved)
@@ -109,14 +111,14 @@ export function PairingsRow({
 
   async function choose(card: PairingCard) {
     if (busy || card.current) return;
-    const d = await post({ action: "apply", id: card.id });
+    const d = await post({ action: "apply", id: card.id, ...(scope ? { scope } : {}) });
     if (!d) return;
     // Only what the user needs to know: locked fonts kept, a title font that waits for "Save to brand".
     const extra = [
       ...(d.kept?.length
         ? [`Locked, kept as they are: ${d.kept.join(", ")}.`]
         : []),
-      ...(card.title && !card.brand
+      ...(card.title && !card.brand && !scope
         ? [
             `Its title font (${card.title.family}) applies with "Save to brand".`,
           ]
@@ -124,7 +126,7 @@ export function PairingsRow({
     ];
     setNotice(
       extra.length
-        ? `${card.name} chosen for this song. ${extra.join(" ")}`
+        ? `${card.name} chosen${scope ? " for the theme" : " for this song"}. ${extra.join(" ")}`
         : null,
     );
     await load();
@@ -365,6 +367,7 @@ export function PairingsRow({
             </Popover.Content>
           </Popover.Portal>
         </Popover.Root>
+        {scope ? null : (
         <Button
           size="sm"
           variant="ghost"
@@ -374,7 +377,8 @@ export function PairingsRow({
         >
           <RotateCcw /> Back to the brand
         </Button>
-        {chosen && !chosen.brand ? (
+        )}
+        {chosen && !chosen.brand && !scope ? (
           confirmBrand === chosen.id ? (
             <span className="flex flex-wrap items-center gap-1 text-[11px]">
               Use these fonts for every song of this artist that does not set

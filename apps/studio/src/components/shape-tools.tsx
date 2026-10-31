@@ -1,12 +1,12 @@
 "use client";
 
-import { ChevronDown, Lock } from "lucide-react";
+import { Check, ChevronDown, Copy, Lock, Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { patchChoice, previewBacking, previewFace, previewLyrics, type LookPatch, type LookPreviewProps, type PatchFace, type Readability } from "@lyric/video";
 import type { PairingCard, PairingsView } from "@lyric/video/pairings";
-import type { StyleData, StyleField, StyleFont } from "@lyric/video/style";
+import type { StyleData, StyleField, StyleFont, StyleTheme } from "@lyric/video/style";
 
 import { PairingsRow } from "@/components/pairings-row";
 import { RowMenu, type RowMenuItem } from "@/components/row-menu";
@@ -25,6 +25,7 @@ function sourceLabel(source: string, platforms: StyleData["platforms"]): string 
   const [level, platform] = source.split(":");
   const name = platform ? ` (${platforms.find((p) => p.name === platform)?.label ?? platform})` : "";
   if (level === "song") return `This song${name}`;
+  if (level === "theme") return `The theme${name}`;
   if (level === "artist") return `Artist's brand${name}`;
   if (level === "platforms.json") return "Platform preset";
   if (level === "run") return "This run";
@@ -58,9 +59,13 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
   const [part, setPart] = useState<EffectPart>("verse"); // Set effect: verses or choruses
   const [effectPlatforms, setEffectPlatforms] = useState(false); // Set effect ⋯ → Per platform
   const [effectSaved, setEffectSaved] = useState(false);
-  const [asking, setAsking] = useState<string | null>(null); // "Use for all my songs" asking for this field
   const [dirty, setDirty] = useState(false); // a look change the planned video does not have yet
   const [hovered, setHovered] = useState<PairingCard | null>(null);
+  const [hoverTheme, setHoverTheme] = useState<StyleTheme | null>(null); // a theme tile under the pointer: the viewer tries it
+  const [editing, setEditing] = useState(false); // the theme's editors are open
+  const [scope, setScope] = useState<"all" | "song" | null>(null); // a shared theme: every song of it, or a copy for this song
+  const [naming, setNaming] = useState<string | null>(null); // Rename: the new name being typed
+  const [askScope, setAskScope] = useState(false); // Edit theme on a shared theme: asking "all songs or only this one"
   const [pairView, setPairView] = useState<PairingsView | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(savedTimer.current), []);
@@ -85,14 +90,16 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
     if (!pending.current) setDirty(false);
   }, [planned]);
 
-  function act(body: { action: "set" | "reset" | "lock" | "unlock" | "brand"; field: string; platform?: string; value?: unknown }) {
+  function act(raw: { action: "set" | "reset" | "lock" | "unlock" | "brand"; field: string; platform?: string; value?: unknown }) {
+    // A theme setting is saved into the song's theme: for every song of it, or (asked first) a copy for this song.
+    const body = LOOK_FIELDS_PATCHED.has(raw.field) ? { ...raw, scope: scope ?? "all" } : raw;
     // The new value shows at once (the save follows): the padlock, and a song-wide value.
     if (body.action === "lock" || body.action === "unlock") {
       setData((d) => (d ? { ...d, fields: d.fields.map((f) => (f.field === body.field ? { ...f, locked: body.action === "lock" } : f)) } : d));
     }
     if (body.action === "set" && !body.platform) {
       // The platforms without their own value in this song follow the new default too.
-      setData((d) => (d ? { ...d, fields: d.fields.map((f) => (f.field === body.field ? { ...f, value: body.value, own: true, perPlatform: f.perPlatform?.map((p) => (p.source.startsWith("song:") ? p : { ...p, value: body.value })) ?? null } : f)) } : d));
+      setData((d) => (d ? { ...d, fields: d.fields.map((f) => (f.field === body.field ? { ...f, value: body.value, own: true, perPlatform: f.perPlatform?.map((p) => (p.source.startsWith("song:") || p.source.startsWith("theme:") ? p : { ...p, value: body.value })) ?? null } : f)) } : d));
     }
     if (LOOK_FIELDS_PATCHED.has(body.field)) setDirty(true);
     pending.current += 1;
@@ -143,11 +150,34 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
     router.refresh();
   }
 
+  // Use, duplicate or rename the song's theme.
+  async function themeAction(body: { action: "use" | "duplicate" | "rename"; name?: string }) {
+    setSaving("saving");
+    setError(null);
+    try {
+      const r = await api(`/api/songs/${projectId}/theme`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const d = (await r.json()) as StyleData & { error?: string };
+      if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
+      setData(d);
+      if (body.action !== "rename") {
+        setDirty(true);
+        setEditing(false);
+        setScope(null);
+        onSaved();
+        router.refresh();
+      }
+      setSaving("saved");
+    } catch (e) {
+      setError((e as Error).message);
+      setSaving("idle");
+    }
+  }
+
   // The look for the viewer, sent up whenever it changes.
   useEffect(() => {
     if (!data) return;
-    onLook(lookOf(data, { dirty, hovered, pairView, part }));
-  }, [data, dirty, hovered, pairView, part, onLook]);
+    onLook(lookOf(hoverTheme ? withTheme(data, hoverTheme) : data, { dirty: dirty || !!hoverTheme, hovered, pairView, part, trying: hoverTheme?.name ?? null }));
+  }, [data, dirty, hovered, hoverTheme, pairView, part, onLook]);
 
   if (error && !data) return <p className="text-sm text-red-300">{error}</p>;
   if (!data) return <p className="text-muted-foreground text-sm">Loading the song&apos;s recipe…</p>;
@@ -490,11 +520,11 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
   const autoFields = pick(AUTO_FIELDS);
   // "Set by you": the song's own value (default or one platform) or a lock.
   const setByYou = autoFields.filter((f) => f.own || f.locked || (f.perPlatform ?? []).some((p) => p.own));
-  const fontsOwn = fontFields.some((f) => f.own || (f.perPlatform ?? []).some((p) => p.own));
   const face = (role: "verse" | "hook") => `${String(valueOf(`${role}Font`))} ${String(valueOf(`${role}Weight`))}${valueOf(`${role}Italic`) === true ? " italic" : ""}`;
-  const locked = data.fields.filter((f) => f.locked).map((f) => f.field);
 
-  const menuFor = (f: StyleField, differsPerPlatform: boolean): RowMenuItem[] => [
+  const menuFor = (f: StyleField, differsPerPlatform: boolean): RowMenuItem[] => LOOK_FIELDS_PATCHED.has(f.field) ? (f.perPlatform && !differsPerPlatform
+      ? [{ key: "platform", label: open[f.field] ? "Hide the per-platform values" : "Per platform…", onSelect: () => setOpen((o) => ({ ...o, [f.field]: !o[f.field] })), attrs: { "data-per-platform": f.field } }]
+      : []) : [
     ...(f.perPlatform && !differsPerPlatform
       ? [{ key: "platform", label: open[f.field] ? "Hide the per-platform values" : "Per platform…", onSelect: () => setOpen((o) => ({ ...o, [f.field]: !o[f.field] })), attrs: { "data-per-platform": f.field } }]
       : []),
@@ -505,7 +535,6 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
       onSelect: () => void act({ action: f.locked ? "unlock" : "lock", field: f.field }),
       attrs: { "data-lock": f.field, "aria-pressed": f.locked ? "true" : "false" },
     },
-    ...((BRAND_ALL as readonly string[]).includes(f.field) ? [{ key: "brand", label: "Use for all my songs…", onSelect: () => setAsking(f.field), attrs: { "data-brand-all": f.field } }] : []),
   ];
 
   const row = (f: StyleField) => {
@@ -525,17 +554,6 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
           <RowMenu label={f.label} menuId={f.field} items={menuFor(f, differsPerPlatform)} />
         </div>
         <div className="mt-1.5 min-w-0">{editor(f, f.value)}</div>
-        {asking === f.field ? (
-          <p className="mt-1.5 flex flex-wrap items-center gap-2 text-xs" data-brand-all-ask={f.field}>
-            Set “{show(f.value)}” for every song of this artist?
-            <button type="button" data-brand-all-yes={f.field} className="text-brand underline underline-offset-2" onClick={() => (setAsking(null), void act({ action: "brand", field: f.field, value: String(f.value ?? "off") }))}>
-              Yes
-            </button>
-            <button type="button" className="text-muted-foreground underline underline-offset-2" onClick={() => setAsking(null)}>
-              Cancel
-            </button>
-          </p>
-        ) : null}
         {f.perPlatform && (differsPerPlatform || open[f.field]) ? (
           <div className="mt-2">
             {differsPerPlatform ? (
@@ -561,7 +579,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                         </span>
                       ) : null}
                       {p.own ? (
-                        <button type="button" data-reset={`${f.field}-${p.platform}`} title="Back to the song's default" onClick={() => act({ action: "reset", field: f.field, platform: p.platform })} className="text-muted-foreground hover:text-foreground rounded px-1 text-xs underline underline-offset-2">
+                        <button type="button" data-reset={`${f.field}-${p.platform}`} title={LOOK_FIELDS_PATCHED.has(f.field) ? "Back to the theme's default" : "Back to the song's default"} onClick={() => act({ action: "reset", field: f.field, platform: p.platform })} className="text-muted-foreground hover:text-foreground rounded px-1 text-xs underline underline-offset-2">
                           reset
                         </button>
                       ) : null}
@@ -600,67 +618,164 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
         data-saving={saving}
         className="text-muted-foreground -mb-2 h-4 truncate text-xs"
         aria-live="polite"
-        title={`This song's recipe (${data.recipeFile?.split("/").pop()}). A setting comes from the library defaults, the artist's brand (${data.brandFile.split("/").join("\\")}) or this song; a change here is saved for this song at once. A locked setting keeps this song's value: a brand change does not reach it and Make cannot change it for one run.`}
+        title={`This song's recipe (${data.recipeFile?.split("/").pop()}). A setting comes from the library defaults, the artist's brand (${data.brandFile.split("/").join("\\")}), the song's theme (fonts, effects, colour) or this song; a change here is saved at once. A locked setting keeps this song's value: a brand change does not reach it and Make cannot change it for one run.`}
       >
-        {saving === "saving" ? "Saving…" : saving === "saved" ? "✓ Saved for this song" : "Every change is saved for this song at once."}
+        {saving === "saving" ? "Saving…" : saving === "saved" ? (section === "theme" ? "✓ Saved in the theme" : "✓ Saved for this song") : section === "theme" ? "The song's look comes from its theme." : "Every change is saved for this song at once."}
       </p>
       {error ? <p className="rounded-md border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-200">{error}</p> : null}
 
-      {section === "fonts" ? (
-        <Block id="fonts" title="Fonts">
-          <PairingsRow projectId={projectId} onChanged={reload} onView={setPairView} onHover={setHovered} />
-          <div data-font-summary className="bg-card flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2.5">
-            <span className="min-w-0 flex-1 text-sm" data-font-summary-text>
-              Fonts: verses {face("verse")} · choruses {face("hook")}
-            </span>
-            {fontsOwn ? <span data-source className="border-brand/40 text-brand rounded-full border px-2 py-0.5 text-xs">This song</span> : null}
-            <button type="button" data-fine-tune aria-expanded={fineTune} onClick={() => setFineTune((v) => !v)} className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs underline underline-offset-2">
-              <ChevronDown className={cn("size-3 transition-transform", fineTune && "rotate-180")} />
-              Fine-tune
-            </button>
-          </div>
-          {fineTune ? (
-            <div data-fine-tune-rows className="flex flex-col gap-2 border-l pl-3">
-              {rows(fontFields)}
-              <p data-user-fonts className="text-muted-foreground text-xs" title={`Your own fonts: put .ttf, .otf, .woff or .woff2 files in ${data.userFonts}; they appear in the font lists after reloading this page.`}>
-                Your own fonts: put .ttf, .otf, .woff or .woff2 files in <span className="text-foreground font-mono break-all">{data.userFonts}</span>, then reload this page.
+      {section === "theme" ? (
+        <Block id="theme" title="Theme">
+          {data.theme ? (
+            <div data-theme-current={data.theme.name} className="bg-card flex flex-col gap-1.5 rounded-lg border px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                {naming !== null ? (
+                  <input
+                    autoFocus
+                    data-theme-name-input
+                    aria-label="Theme name"
+                    className={cn(input, "min-w-0 flex-1")}
+                    value={naming}
+                    onChange={(e) => setNaming(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") setNaming(null);
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    }}
+                    onBlur={() => {
+                      const name = naming.trim();
+                      setNaming(null);
+                      if (name && name !== data.theme?.name) void themeAction({ action: "rename", name });
+                    }}
+                  />
+                ) : (
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">Theme: {data.theme.name}</span>
+                )}
+                <button type="button" data-theme-rename title="Rename the theme" aria-label="Rename the theme" onClick={() => setNaming(data.theme?.name ?? "")} className="text-muted-foreground hover:text-foreground rounded p-1">
+                  <Pencil className="size-3.5" />
+                </button>
+                <button type="button" data-theme-duplicate title="Duplicate: a copy of this theme for this song" aria-label="Duplicate the theme" onClick={() => void themeAction({ action: "duplicate" })} className="text-muted-foreground hover:text-foreground rounded p-1">
+                  <Copy className="size-3.5" />
+                </button>
+              </div>
+              <p data-theme-users className="text-muted-foreground text-xs" title={data.theme.users.join(", ")}>
+                {data.theme.users.length > 1 ? `Used by ${data.theme.users.length} songs: ${data.theme.users.join(", ")}` : "Used by this song only"}
               </p>
+              {data.theme.problems.length ? <p className="text-xs text-amber-300">{data.theme.problems.join(" ")}</p> : null}
+              {editing ? (
+                <button type="button" data-theme-done onClick={() => (setEditing(false), setScope(null))} className="text-brand self-start text-xs underline underline-offset-2">
+                  Done editing
+                </button>
+              ) : data.theme.users.length > 1 && scope === null && askScope ? (
+                <div data-theme-scope-ask className="flex flex-col gap-1.5 text-xs">
+                  <span>{data.theme.users.length} songs use this theme. Change it for:</span>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" data-theme-scope="all" onClick={() => (setScope("all"), setEditing(true), setAskScope(false))} className="bg-brand/15 text-brand rounded-md px-2 py-1">
+                      All {data.theme.users.length} songs
+                    </button>
+                    <button type="button" data-theme-scope="song" onClick={() => (setScope("song"), setEditing(true), setAskScope(false))} className="bg-muted rounded-md px-2 py-1">
+                      Only this song (saves a copy)
+                    </button>
+                    <button type="button" onClick={() => setAskScope(false)} className="text-muted-foreground underline underline-offset-2">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  data-theme-edit
+                  onClick={() => (data.theme && data.theme.users.length > 1 ? setAskScope(true) : (setScope("all"), setEditing(true)))}
+                  className="bg-brand text-brand-foreground self-start rounded-md px-3 py-1 text-xs font-medium"
+                >
+                  Edit theme
+                </button>
+              )}
             </div>
           ) : null}
-        </Block>
-      ) : null}
 
-      {section === "effects" ? (
-        <Block id="effects" title="Effects">
-          <SetEffect
-            effects={data.effects}
-            values={effectValues}
-            part={part}
-            setPart={setPart}
-            locked={locked}
-            saved={effectSaved}
-            onSet={(field, value) => {
-              flashSaved();
-              void act({ action: "set", field, value });
-            }}
-            onBrandAll={() => {
-              flashSaved();
-              for (const field of BRAND_ALL) void act({ action: "brand", field, value: field === "breathe" ? effectValues.breathe : effectValues[field] ? "on" : "off" });
-            }}
-            perPlatformOpen={effectPlatforms}
-            onPerPlatform={() => {
-              const next = !effectPlatforms;
-              setEffectPlatforms(next);
-              setOpen((o) => ({ ...o, ...Object.fromEntries(EFFECT_FIELDS.map((k) => [k, next])) }));
-            }}
-          />
-          {effectPlatforms ? <div data-effect-platform-rows className="border-l pl-3">{rows(pick(EFFECT_FIELDS))}</div> : null}
-        </Block>
-      ) : null}
-
-      {section === "colour" ? (
-        <Block id="colour" title="Colour">
-          {rows(pick(LOOK_FIELDS))}
+          {editing ? (
+            <div data-theme-editors className="flex flex-col gap-3">
+              <p className="text-muted-foreground text-xs">
+                {scope === "song" ? "Changes go into a copy of the theme for this song only." : `Changes go into the theme${data.theme && data.theme.users.length > 1 ? ` for all ${data.theme.users.length} songs` : ""}.`}
+              </p>
+              <PairingsRow projectId={projectId} scope={scope ?? "all"} onChanged={reload} onView={setPairView} onHover={setHovered} />
+              <div data-font-summary className="bg-card flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2.5">
+                <span className="min-w-0 flex-1 text-sm" data-font-summary-text>
+                  Fonts: verses {face("verse")} · choruses {face("hook")}
+                </span>
+                <button type="button" data-fine-tune aria-expanded={fineTune} onClick={() => setFineTune((v) => !v)} className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs underline underline-offset-2">
+                  <ChevronDown className={cn("size-3 transition-transform", fineTune && "rotate-180")} />
+                  Fine-tune
+                </button>
+              </div>
+              {fineTune ? (
+                <div data-fine-tune-rows className="flex flex-col gap-2 border-l pl-3">
+                  {rows(fontFields)}
+                  <p data-user-fonts className="text-muted-foreground text-xs" title={`Your own fonts: put .ttf, .otf, .woff or .woff2 files in ${data.userFonts}; they appear in the font lists after reloading this page.`}>
+                    Your own fonts: put .ttf, .otf, .woff or .woff2 files in <span className="text-foreground font-mono break-all">{data.userFonts}</span>, then reload this page.
+                  </p>
+                </div>
+              ) : null}
+              <SetEffect
+                effects={data.effects}
+                values={effectValues}
+                part={part}
+                setPart={setPart}
+                locked={[]}
+                saved={effectSaved}
+                onSet={(field, value) => {
+                  flashSaved();
+                  void act({ action: "set", field, value });
+                }}
+                perPlatformOpen={effectPlatforms}
+                onPerPlatform={() => {
+                  const next = !effectPlatforms;
+                  setEffectPlatforms(next);
+                  setOpen((o) => ({ ...o, ...Object.fromEntries(EFFECT_FIELDS.map((k) => [k, next])) }));
+                }}
+              />
+              {effectPlatforms ? <div data-effect-platform-rows className="border-l pl-3">{rows(pick(EFFECT_FIELDS))}</div> : null}
+              {rows(pick(LOOK_FIELDS))}
+            </div>
+          ) : (
+            <div data-theme-tiles className="grid grid-cols-2 gap-2">
+              {data.themes.map((t) => {
+                const current = t.name === data.theme?.name;
+                const v = t.look as Record<string, unknown>;
+                const fam = (role: "verse" | "hook") => ({ fontFamily: `"${String(v[`${role}Font`])} preview", serif`, fontWeight: Number(v[`${role}Weight`] ?? 400), fontStyle: v[`${role}Italic`] === true ? "italic" : "normal" });
+                return (
+                  <button
+                    key={t.name}
+                    type="button"
+                    data-theme-tile={t.name}
+                    aria-pressed={current}
+                    title={`${t.name}: verses ${String(v.verseFont)}, choruses ${String(v.hookFont)}; ${String(v.verseEffect).split(":")[0]} / ${String(v.hookEffect || v.verseEffect).split(":")[0]}`}
+                    onMouseEnter={() => !current && setHoverTheme(t)}
+                    onMouseLeave={() => setHoverTheme(null)}
+                    onFocus={() => !current && setHoverTheme(t)}
+                    onBlur={() => setHoverTheme(null)}
+                    onClick={() => !current && (setHoverTheme(null), void themeAction({ action: "use", name: t.name }))}
+                    className={cn("bg-card hover:border-foreground/40 relative flex min-w-0 flex-col gap-1 rounded-lg border p-2 text-left", current && "border-brand")}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span className="size-3 shrink-0 rounded-full border" style={{ background: String(v.accentColour ?? "#E8A3B5") }} />
+                      <span className="min-w-0 flex-1 truncate text-xs font-medium">{t.name}</span>
+                      {current ? <Check className="text-brand size-3.5 shrink-0" aria-label="this song's theme" /> : null}
+                    </span>
+                    <span className="truncate text-base leading-tight" style={fam("verse")}>
+                      {data.sampleLines[0] || data.previewLine || "Your words here"}
+                    </span>
+                    <span className="truncate text-base leading-tight" style={{ ...fam("hook"), color: String(v.accentColour ?? "inherit") }}>
+                      {data.sampleLines[1] || "The chorus"}
+                    </span>
+                    <span className="text-muted-foreground truncate text-[10px]">
+                      {String(v.verseEffect).split(":")[0]} · {String(v.hookEffect || v.verseEffect).split(":")[0]} · {t.users.length} song{t.users.length === 1 ? "" : "s"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </Block>
       ) : null}
 
@@ -696,7 +811,13 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
 
 // The look the viewer shows: the recipe's (or the pairing pointed at), patched into the planned video
 // while a change is not planned yet; and the stand-in preview.
-function lookOf(data: StyleData, s: { dirty: boolean; hovered: PairingCard | null; pairView: PairingsView | null; part: EffectPart }): ShapeLook {
+// The song's Style data as if it used another theme (the theme tile under the pointer).
+function withTheme(data: StyleData, theme: StyleTheme): StyleData {
+  const look = theme.look as Record<string, unknown>;
+  return { ...data, fields: data.fields.map((f) => (f.field in look ? { ...f, value: look[f.field], own: true, perPlatform: null } : f)) };
+}
+
+function lookOf(data: StyleData, s: { dirty: boolean; hovered: PairingCard | null; pairView: PairingsView | null; part: EffectPart; trying?: string | null }): ShapeLook {
   const value = (field: string) => data.fields.find((f) => f.field === field)?.value;
   const verseRecipe = { family: String(value("verseFont") ?? "Cormorant Garamond"), weight: Number(value("verseWeight") ?? 400), italic: value("verseItalic") === true };
   const hookRecipe = { family: String(value("hookFont") ?? verseRecipe.family), weight: Number(value("hookWeight") ?? 400), italic: value("hookItalic") === true };
@@ -731,7 +852,7 @@ function lookOf(data: StyleData, s: { dirty: boolean; hovered: PairingCard | nul
     area: s.pairView?.area ?? null,
     backing: previewBacking((value("readability") as Readability | undefined) ?? "auto", s.pairView?.bandLuminance ?? null, { colour, accent, verse, hook }),
   };
-  const caption = s.hovered ? `Trying ${s.hovered.name}: click it in the list to use it.` : "Your song's first lines with your look (no planned video yet).";
+  const caption = s.trying ? `Trying the theme ${s.trying}: click it to use it for this song.` : s.hovered ? `Trying ${s.hovered.name}: click it in the list to use it.` : "Your song's first lines with your theme (no planned video yet).";
   return { patch, fallback, caption, previewing: s.hovered?.id ?? null };
 }
 
@@ -775,11 +896,10 @@ const shortLabel = (label: string) => label.replace(/\s*\(.*\)\s*$/, "");
 const SONG_FIELDS = ["tagline", "ep", "youtubeLayout", "titleOpening"] as const;
 const LOOK_FIELDS = ["accentColour"] as const;
 const EFFECT_FIELDS = ["verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine"] as const;
-const BRAND_ALL = ["breathe", "heldGlow", "chorusLift", "shine"] as const;
 const MAKE_FIELDS = ["platforms", "variations", "collections"] as const;
 const AUTO_FIELDS = ["shotLength", "tempo", "section", "length", "ending", "transitions", "paceShift", "readability"] as const;
 const RELEASE = ["reels", "tiktok", "shorts", "youtube", "canvas"];
-const TOOL_SECTIONS = ["fonts", "effects", "colour", "song", "make", "auto"] as const;
+const TOOL_SECTIONS = ["theme", "song", "make", "auto"] as const;
 
 // A control's explanation: one line (cut with …), the whole text on hover.
 function Hint({ text }: { text: string }) {

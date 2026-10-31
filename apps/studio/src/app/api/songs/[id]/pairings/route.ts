@@ -23,10 +23,10 @@ export async function GET(_request: Request, { params }: Params) {
 
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
-  const body = (await request.json().catch(() => null)) as { action?: string; id?: string } | null;
+  const body = (await request.json().catch(() => null)) as { action?: string; id?: string; scope?: string } | null;
   try {
-    if (body?.action === "apply") return Response.json(withWorkspace((ws) => applyPairing(ws, id, String(body.id ?? ""))));
-    if (body?.action === "reset") return Response.json(withWorkspace((ws) => resetPairing(ws, id)));
+    if (body?.action === "apply") return Response.json(withWorkspace((ws) => applyPairing(ws, id, String(body.id ?? ""), body.scope === "song" ? "song" : "all")));
+    if (body?.action === "reset") return Response.json(withWorkspace((ws) => resetPairing(ws, id, body.scope === "song" ? "song" : "all")));
     if (body?.action === "brand") return Response.json(withWorkspace((ws) => savePairingToBrand(ws, id, String(body.id ?? ""))));
     return Response.json({ error: "Unknown action." }, { status: 400 });
   } catch (error) {

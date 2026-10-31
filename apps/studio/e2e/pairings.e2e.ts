@@ -12,8 +12,8 @@ import os from "node:os";
 import path from "node:path";
 
 import { openWorkspace } from "@lyric/db";
-import { findOrCreateSongProject, loadBrand, loadFontCatalog, songPathsById } from "@lyric/video/node";
-import { openTab } from "./stage-tabs";
+import { findOrCreateSongProject, loadBrand, loadFontCatalog, loadTheme, readRecipe, songPathsById } from "@lyric/video/node";
+import { openPanel, openTab } from "./stage-tabs";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-pairings-"));
 const wsDir = path.join(root, "workspace");
@@ -39,7 +39,13 @@ async function main() {
   writeFileSync(paths.recipe!, "{}\n");
   mkdirSync(paths.clips!, { recursive: true });
   ffmpeg("-f", "lavfi", "-i", "color=c=0xf0ece4:s=216x384:r=30:d=2", "-pix_fmt", "yuv420p", path.join(paths.clips!, "01_dress.mp4")); // a cream frame: low contrast
-  const brandBefore = readFileSync(brandFile, "utf8");
+  // brand.json without the "theme" key the move to themes adds (the song's look now lives in its theme)
+  const brandText = () => {
+    const { theme: _theme, ...rest } = JSON.parse(readFileSync(brandFile, "utf8")) as Record<string, unknown>; // eslint-disable-line @typescript-eslint/no-unused-vars
+    return JSON.stringify(rest);
+  };
+  const brandBefore = brandText();
+  const themeLook = () => loadTheme(wsDir, readRecipe(paths.recipe!).theme!).look as Record<string, unknown>;
 
   const server = spawn(process.execPath, [path.join(path.dirname(require.resolve("next/package.json")), "dist", "bin", "next"), "start", "-p", String(port), "-H", "127.0.0.1"], {
     cwd: path.resolve(__dirname, ".."),
@@ -70,8 +76,8 @@ async function main() {
       await page.click(`[data-pairing=${id}]`);
       await page.waitForSelector("[data-pairing-list]", { state: "detached" });
     };
-    await page.waitForSelector("[data-rail-item=fonts]");
-    await page.click("[data-rail-item=fonts]"); // the Fonts panel, from the rail
+    await page.waitForSelector("[data-rail-item=theme]");
+    await openPanel(page, "effects"); // the Theme panel, Edit theme (the pairing dropdown sits on top)
     await page.waitForSelector("[data-pairing-select]");
     await page.waitForFunction(() => document.querySelector("[data-pairing-current]")?.textContent?.length);
     check((await page.$$("[data-pairing-grid], [data-pairings] img, [data-pairings] canvas")).length === 0, "no card grid and no card thumbnails: just the dropdown");
@@ -116,16 +122,17 @@ async function main() {
     const plain = await page.$$eval("[data-pairing-warning]", (e: Element[]) => e.map((x) => x.textContent ?? ""));
     check(plain.length === 2 && plain[0].includes("Great Vibes is a thin script: short hooks only") && plain[1].includes("the app adds a soft backing"), `the chosen pair's lines in plain words: its advice, then readability (${plain.join(" | ")})`);
     check((await page.$("[data-pairing=romantic-script] [data-pairing-flag]")) === null && !!(await page.$("[data-pairing=elegant] [data-pairing-flag]")), "the chosen option has no '!'; the others keep theirs");
-    check(!!(await page.$("[data-pairing-brand]")), "'Save to brand…' shows for the chosen pair");
+    check(!(await page.$("[data-pairing-brand]")) && !(await page.$("[data-pairing-reset]")), "in the theme: no 'Save to brand' or 'Back to the brand'");
     await page.keyboard.press("Escape");
     await pickOption("elegant");
     await page.waitForFunction(() => /elegant/i.test(document.querySelector("[data-pairing-current]")?.textContent ?? ""));
-    const recipe = JSON.parse(readFileSync(paths.recipe!, "utf8")) as Record<string, unknown>;
-    check(recipe.verseFont === "Cormorant Garamond" && recipe.hookWeight === 600 && recipe.hookItalic === true && recipe.verseWeight === 400, `song.json holds the pair (${JSON.stringify(recipe)})`);
-    check(readFileSync(brandFile, "utf8") === brandBefore, "brand.json is untouched");
+    for (let i = 0; i < 20 && themeLook().verseFont !== "Cormorant Garamond"; i++) await sleep(150);
+    const recipe = themeLook();
+    check(recipe.verseFont === "Cormorant Garamond" && recipe.hookWeight === 600 && recipe.hookItalic === true && recipe.verseWeight === 400, `the song's theme holds the pair (${JSON.stringify(recipe)})`);
+    check(readRecipe(paths.recipe!).verseFont === undefined, "…not song.json");
+    check(brandText() === brandBefore, "brand.json is untouched");
     await page.waitForFunction(() => document.querySelector("[data-font-summary-text]")?.textContent?.includes("Cormorant Garamond 600 italic"));
     check((await page.textContent("[data-font-summary-text]")) === "Fonts: verses Cormorant Garamond 400 · choruses Cormorant Garamond 600 italic", `the font summary line follows (${await page.textContent("[data-font-summary-text]")})`);
-    check((await page.textContent("[data-font-summary] [data-source]")) === "This song", "…with the 'This song' badge");
     // The weight / italic controls follow, with only the family's weights.
     await page.waitForFunction(() => (document.querySelector("[data-edit='hookWeight-default']") as HTMLSelectElement | null)?.value === "600");
     const weights = await page.$$eval("[data-edit='hookWeight-default'] option", (os: HTMLOptionElement[]) => os.map((o) => o.value));
@@ -147,7 +154,7 @@ async function main() {
     await page.hover("[data-pairing=dramatic]");
     await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-hook-family") === "Playfair Display");
     check((await page.getAttribute("[data-look-preview]", "data-previewing-pair")) === "dramatic", "hovering an option tries its pair in the big preview (Playfair Display hook)");
-    check(JSON.parse(readFileSync(paths.recipe!, "utf8")).hookFont === "Cormorant Garamond", "…without saving it");
+    check(themeLook().hookFont === "Cormorant Garamond", "…without saving it");
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-hook-family") === "Cormorant Garamond");
     check(!(await page.getAttribute("[data-look-preview]", "data-previewing-pair")) && !(await page.$("[data-pairing-list]")), "Escape closes the list and the song's fonts are back in the preview");
@@ -185,21 +192,18 @@ async function main() {
     if (process.env.LOOK_SHOT) {
       await page.setViewportSize({ width: 1440, height: 2400 });
       await page.mouse.move(0, 0);
-      await page.$eval("[data-style-block=fonts]", (e: Element) => e.scrollIntoView());
+      await page.$eval("[data-style-block=theme]", (e: Element) => e.scrollIntoView());
       await sleep(800);
-      await (await page.$("[data-style-block=fonts]")).screenshot({ path: process.env.LOOK_SHOT });
+      await (await page.$("[data-style-block=theme]")).screenshot({ path: process.env.LOOK_SHOT });
       await page.setViewportSize({ width: 1440, height: 1100 });
     }
 
-    // "Save to brand" asks first, then writes brand.json.
+    // Another pair goes into the theme as well; the brand stays as it was.
     await pickOption("dramatic");
     await page.waitForFunction(() => /dramatic/i.test(document.querySelector("[data-pairing-current]")?.textContent ?? ""));
-    await page.click("[data-pairing-brand]");
-    check(readFileSync(brandFile, "utf8") === brandBefore, "Save to brand only asks first");
-    await page.click("[data-pairing-brand-confirm]");
-    await page.waitForFunction(() => document.querySelector("[data-pairings] [role=status]")?.textContent?.includes("saved to the brand"));
-    const brand = JSON.parse(readFileSync(brandFile, "utf8")) as { hookFont: { family: string; italic: boolean } };
-    check(brand.hookFont.family === "Playfair Display" && brand.hookFont.italic === true, "brand.json now has the Dramatic pair");
+    for (let i = 0; i < 20 && themeLook().hookFont !== "Playfair Display"; i++) await sleep(150);
+    check(themeLook().hookFont === "Playfair Display" && themeLook().hookItalic === true, "the theme now has the Dramatic pair");
+    check(brandText() === brandBefore, "…brand.json still untouched");
     await (await page.$("[data-pairings]"))!.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "pairing-card.png") });
 
     // Generate: compare pairings.

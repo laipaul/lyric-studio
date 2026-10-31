@@ -49,7 +49,7 @@ export function SetEffect({
   locked: string[];
   saved: boolean; // "✓ Saved" for a few seconds after a change
   onSet: (field: Field, value: string) => void;
-  onBrandAll: () => void;
+  onBrandAll?: () => void; // themes: absent (a theme is shared by choosing it for other songs)
   perPlatformOpen: boolean;
   onPerPlatform: () => void;
 }) {
@@ -85,7 +85,7 @@ export function SetEffect({
           label="Set effect"
           menuId="effects"
           items={[
-            { key: "brand", label: "Use Breathe and add-ons for all my songs…", onSelect: () => setAsking(true), attrs: { "data-brand-all": "effects" } },
+            ...(onBrandAll ? [{ key: "brand", label: "Use Breathe and add-ons for all my songs…", onSelect: () => setAsking(true), attrs: { "data-brand-all": "effects" } }] : []),
             { key: "platform", label: perPlatformOpen ? "Hide the per-platform values" : "Per platform…", onSelect: onPerPlatform, attrs: { "data-effects-per-platform": true } },
           ]}
         />
@@ -93,7 +93,7 @@ export function SetEffect({
       {asking ? (
         <p className="flex flex-wrap items-center gap-2 text-xs" data-brand-all-ask="effects">
           Use Breathe {values.breathe}, Held-note glow {values.heldGlow ? "on" : "off"}, Chorus lift {values.chorusLift ? "on" : "off"} and Shine {values.shine ? "on" : "off"} for every song of this artist?
-          <button type="button" data-brand-all-yes="effects" className="text-brand underline underline-offset-2" onClick={() => (setAsking(false), onBrandAll())}>
+          <button type="button" data-brand-all-yes="effects" className="text-brand underline underline-offset-2" onClick={() => (setAsking(false), onBrandAll?.())}>
             Yes
           </button>
           <button type="button" className="text-muted-foreground underline underline-offset-2" onClick={() => setAsking(false)}>
