@@ -399,28 +399,31 @@ export function createTheme(ws: Workspace, o: { projectId: string; name: string;
   return name;
 }
 
-// "Save": the editor's whole look into the song's theme (every song that uses it).
-export function saveTheme(ws: Workspace, o: { projectId: string; look: unknown; perPlatform: unknown; catalog: FontCatalog }): string {
+// "Save": the editor's whole look into the theme being edited (the song's own unless the editor was opened
+// on another theme from the Themes page); every song that uses it follows.
+export function saveTheme(ws: Workspace, o: { projectId: string; theme?: string; look: unknown; perPlatform: unknown; catalog: FontCatalog }): string {
   const song = ensureSongTheme(ws, o.projectId, o.catalog);
-  if (!song.theme) throw new Error("This song has no theme yet.");
-  const base = loadTheme(ws.dir, song.theme, o.catalog);
+  const name = o.theme || song.theme;
+  if (!name) throw new Error("This song has no theme yet.");
+  const base = loadTheme(ws.dir, name, o.catalog);
   writeTheme(ws.dir, lookFrom(ws, base.name, base, o.look, o.perPlatform, o.catalog));
   return base.name;
 }
 
-// "Save as new theme": the editor's look as a new theme (named first) that this song uses; the theme it
-// came from stays as it was for the other songs.
-export function saveThemeAs(ws: Workspace, o: { projectId: string; name: string; look: unknown; perPlatform: unknown; catalog: FontCatalog }): string {
+// "Save as new theme": the editor's look as a new theme (named first); the theme it came from stays as it
+// was. When the editor was on the song's own theme, the song uses the new one.
+export function saveThemeAs(ws: Workspace, o: { projectId: string; theme?: string; name: string; look: unknown; perPlatform: unknown; catalog: FontCatalog }): string {
   const name = mustBeFree(ws.dir, o.name);
   const song = ensureSongTheme(ws, o.projectId, o.catalog);
-  const base = loadTheme(ws.dir, song.theme!, o.catalog);
+  const from = o.theme || song.theme!;
+  const base = loadTheme(ws.dir, from, o.catalog);
   writeTheme(ws.dir, { ...lookFrom(ws, name, base, o.look, o.perPlatform, o.catalog), description: `Made from ${base.name}`, createdAt: new Date().toISOString() });
-  chooseTheme(ws, o.projectId, name, o.catalog);
+  if (from === song.theme) chooseTheme(ws, o.projectId, name, o.catalog);
   return name;
 }
 
 // The themes the artists' brands start new songs on (brand.json "theme").
-function brandThemes(ws: Workspace, catalog: FontCatalog): Map<string, string> {
+export function brandThemes(ws: Workspace, catalog: FontCatalog): Map<string, string> {
   const out = new Map<string, string>(); // theme -> artist
   const artists = new Set(ws.db.select({ artist: projectTable.artist }).from(projectTable).all().map((r) => r.artist));
   for (const artist of artists) {
@@ -476,4 +479,18 @@ export function restoreTheme(workspaceDir: string, folder: string): string {
   renameSync(from, themeFolder(workspaceDir, name));
   if (name !== theme.name) writeFileSync(path.join(themeFolder(workspaceDir, name), "theme.json"), `${JSON.stringify({ ...theme, name }, null, 2)}\n`);
   return name;
+}
+
+// The theme's details on the Themes page: its description and who made it (the designer credit).
+export function setThemeDetails(workspaceDir: string, name: string, d: { description?: string; author?: string; licence?: string }): void {
+  const theme = loadTheme(workspaceDir, name);
+  writeTheme(workspaceDir, { ...theme, description: d.description?.trim() ?? theme.description, author: d.author?.trim() ?? theme.author, licence: d.licence?.trim() ?? theme.licence });
+}
+
+// The Themes page's "+ New theme": named first, a copy of another theme (no song changes).
+export function newTheme(workspaceDir: string, name: string, from: string): string {
+  const clean = mustBeFree(workspaceDir, name);
+  const base = loadTheme(workspaceDir, from);
+  writeTheme(workspaceDir, { ...base, name: clean, description: `Started from ${base.name}`, createdAt: new Date().toISOString() });
+  return clean;
 }

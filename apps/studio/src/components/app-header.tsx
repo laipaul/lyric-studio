@@ -9,8 +9,9 @@ import { cn } from "@/lib/utils";
 // Only menu items that lead somewhere real (the Studio editor and the content board come later).
 const NAV = [
   { href: "/", label: "Library" },
-  { href: "/releases", label: "Releases" },
+  { href: "/themes", label: "Themes" },
   { href: "/collections", label: "Collections" },
+  { href: "/releases", label: "Releases" },
 ];
 
 // The header: the app's name and icon, navigation, and the Tasks menu (live progress of the runs).

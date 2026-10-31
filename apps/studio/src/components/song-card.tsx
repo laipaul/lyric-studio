@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Eye, RotateCw, Sparkles, Wrench } from "lucide-react";
+import { AlertTriangle, Eye, Palette, RotateCw, Sparkles, Wrench } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -98,6 +98,11 @@ export function SongCard({ song }: { song: Song }) {
             {song.ep ? ` · ${song.ep}` : ""}
             {length ? ` · ${length}` : ""}
           </p>
+          {song.theme ? (
+            <p data-card-theme={song.theme} className="text-muted-foreground mt-0.5 flex items-center gap-1 truncate text-[11px]" title={`Theme: ${song.theme} (Shape → Theme to change it)`}>
+              <Palette className="size-3 shrink-0" /> {song.theme}
+            </p>
+          ) : null}
         </Link>
         <p className={cn("text-xs", summary.errors ? "text-red-300" : summary.review ? "text-amber-200" : summary.ready ? "text-emerald-300" : "text-muted-foreground")} data-summary>
           {summary.text}

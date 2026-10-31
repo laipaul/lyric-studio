@@ -4,6 +4,22 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Shape page, Canva style (rail, menus, panels) ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026, after the first Shape page. **The top stage bar is gone**: Prepare, Shape,
+  Make and Review sit in a slim **rail on the left**, with a coloured dot for their status. On Shape the rail
+  also lists its menus: **Fonts, Effects, Colour, Clips, Text, This song, To make, Automatic**.
+- A menu opens **one panel** beside the rail (click again or ✕ to close it); with no panel open the editor uses
+  the whole width. **Clips** works like Canva's Uploads: the clips used as a grid, dragged onto a shot or a
+  lyric line, or onto each other to reorder. Clicking a shot opens its details in the panel; clicking a text
+  card opens the Text panel (card editor and templates).
+- **The editor fills the rest**: the viewer as tall as the screen allows, the timeline across the full width,
+  the verdict with **Next: Make →**, and the plan's details folded behind it.
+- **Slim header**: back arrow, the cover, the song title, the artist and the video chips (Reels 1 …) on one line.
+- Tests: song-stages.e2e.ts (the rail with the four stages and the eight menus, one panel at a time, open /
+  close, the panel left of the viewer, each panel's rows and summary lines), storyboard.e2e.ts (viewer above a
+  full-width timeline, Clips panel, details folded, drags from the panel), pairings.e2e.ts (Fonts panel, fits
+  at 1024 px), textboard.e2e.ts (Text panel), style-lock.e2e.ts (settings reached through the menus).
+
 ### Shape as one page (Style + Storyboard merged) ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026 (replaces the "Style tab rebuild" open decision). Shape has no tabs any
   more: **the video viewer at the top in the middle**, under it the **soundtrack** (bar lines, waveform, lyric

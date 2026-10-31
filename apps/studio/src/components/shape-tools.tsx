@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, ChevronDown, Lock, Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { patchChoice, previewBacking, previewFace, previewLyrics, type LookPatch, type LookPreviewProps, type PatchFace, type Readability } from "@lyric/video";
@@ -55,6 +55,9 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
   // The theme editor's draft: nothing is saved until "Save" / "Save as new theme"; null = not editing.
   const [draft, setDraft] = useState<Draft | null>(null);
   const data = useMemo(() => (saved && draft ? withDraft(saved, draft) : saved), [saved, draft]); // what the tools and the viewer show
+  const editingTheme = draft && saved ? (saved.themes.find((t) => t.name === draft.name) ?? null) : null;
+  // ?edit=<theme> (the Themes page's "Edit"): the editor opens on that theme, shown on this song.
+  const editParam = useSearchParams().get("edit");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<"idle" | "saving" | "saved">("idle");
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -78,12 +81,18 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
     let alive = true;
     api(`/api/songs/${projectId}/recipe`, { cache: "no-store" })
       .then((r) => r.json() as Promise<StyleData & { error?: string }>)
-      .then((d) => alive && (d.error ? setError(d.error) : setData(d)))
+      .then((d) => {
+        if (!alive) return;
+        if (d.error) return setError(d.error);
+        setData(d);
+        const t = editParam ? d.themes.find((x) => x.name === editParam) : undefined;
+        if (t) setDraft(draftOf(t));
+      })
       .catch((e: Error) => alive && setError(e.message));
     return () => {
       alive = false;
     };
-  }, [projectId]);
+  }, [projectId, editParam]);
 
   // A new plan arrived with every saved change in it: the viewer plays the plan as it is.
   useEffect(() => {
@@ -156,7 +165,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
 
   // The Theme panel's actions (use, new, save, save as, rename, delete, restore): each answers with the
   // song's settings. Returns whether it worked.
-  async function themeAction(body: { action: "use" | "create" | "save" | "saveAs" | "rename" | "remove" | "restore"; name?: string; from?: string; folder?: string; look?: unknown; perPlatform?: unknown }): Promise<boolean> {
+  async function themeAction(body: { action: "use" | "create" | "save" | "saveAs" | "rename" | "remove" | "restore"; theme?: string; name?: string; from?: string; folder?: string; look?: unknown; perPlatform?: unknown }): Promise<boolean> {
     setSaving("saving");
     setError(null);
     try {
@@ -628,12 +637,13 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
 
       {section === "theme" ? (
         <Block id="theme" title="Theme">
-          {draft && saved?.theme ? (
+          {draft && editingTheme ? (
             // The theme editor: four sections, the viewer shows every change at once; nothing is saved until Save.
             <div data-theme-editors className="flex flex-col gap-4">
               <div className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate text-sm font-medium" data-theme-editing={saved.theme.name}>
-                  Editing: {saved.theme.name}
+                <span className="min-w-0 flex-1 truncate text-sm font-medium" data-theme-editing={editingTheme.name}>
+                  Editing: {editingTheme.name}
+                  {editingTheme.name !== saved?.theme?.name ? <span className="text-muted-foreground font-normal"> (shown on this song)</span> : null}
                 </span>
                 {draft.changed ? <span data-theme-unsaved className="text-xs text-amber-300">not saved yet</span> : null}
               </div>
@@ -717,7 +727,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                       onChange={(e) => setSavingAs(e.target.value)}
                       onKeyDown={(e) => e.key === "Escape" && setSavingAs(null)}
                     />
-                    <button type="button" data-theme-save-as-confirm disabled={!savingAs.trim()} onClick={() => void themeAction({ action: "saveAs", name: savingAs, look: draft.look, perPlatform: draft.perPlatform }).then((ok) => ok && setSavingAs(null))} className="bg-brand text-brand-foreground rounded-md px-3 py-1 text-xs font-medium disabled:opacity-50">
+                    <button type="button" data-theme-save-as-confirm disabled={!savingAs.trim()} onClick={() => void themeAction({ action: "saveAs", theme: draft.name, name: savingAs, look: draft.look, perPlatform: draft.perPlatform }).then((ok) => ok && setSavingAs(null))} className="bg-brand text-brand-foreground rounded-md px-3 py-1 text-xs font-medium disabled:opacity-50">
                       Save
                     </button>
                     <button type="button" onClick={() => setSavingAs(null)} className="text-muted-foreground text-xs underline underline-offset-2">
@@ -726,10 +736,10 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                   </div>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
-                    <button type="button" data-theme-save onClick={() => void themeAction({ action: "save", look: draft.look, perPlatform: draft.perPlatform })} className="bg-brand text-brand-foreground rounded-md px-3 py-1 text-xs font-medium">
-                      {saved.theme.users.length > 1 ? `Save (changes ${saved.theme.users.length} songs)` : "Save"}
+                    <button type="button" data-theme-save onClick={() => void themeAction({ action: "save", theme: draft.name, look: draft.look, perPlatform: draft.perPlatform })} className="bg-brand text-brand-foreground rounded-md px-3 py-1 text-xs font-medium">
+                      {editingTheme.users.length > 1 ? `Save (changes ${editingTheme.users.length} songs)` : "Save"}
                     </button>
-                    <button type="button" data-theme-save-as onClick={() => setSavingAs(`${saved.theme?.name ?? "Theme"} 2`)} className="bg-muted rounded-md px-3 py-1 text-xs">
+                    <button type="button" data-theme-save-as onClick={() => setSavingAs(`${editingTheme.name} 2`)} className="bg-muted rounded-md px-3 py-1 text-xs">
                       Save as new theme
                     </button>
                     <button type="button" data-theme-cancel onClick={() => (setDraft(null), setDirty(false))} className="text-muted-foreground ml-auto text-xs underline underline-offset-2">
@@ -737,7 +747,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                     </button>
                   </div>
                 )}
-                {saved.theme.users.length > 1 && savingAs === null ? <p className="text-muted-foreground text-[11px]">Used by {saved.theme.users.join(", ")}. “Save as new theme” keeps it as it is for them.</p> : null}
+                {editingTheme.users.length > 1 && savingAs === null ? <p className="text-muted-foreground text-[11px]">Used by {editingTheme.users.join(", ")}. “Save as new theme” keeps it as it is for them.</p> : null}
               </div>
             </div>
           ) : (
@@ -908,6 +918,12 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
       ) : null}
     </div>
   );
+}
+
+// The stand-in preview of a theme on a few lyric lines (the Themes page's tiles and detail view).
+export function themePreview(look: Record<string, unknown>, fonts: StyleFont[], sampleLines: string[]): LookPreviewProps {
+  const fields = Object.entries(look).map(([field, value]) => ({ field, value })) as unknown as StyleField[];
+  return lookOf({ fields, fonts, sampleLines } as unknown as StyleData, { dirty: false, hovered: null, pairView: null, part: "verse" }).fallback;
 }
 
 // The look the viewer shows: the recipe's (or the pairing pointed at), patched into the planned video
@@ -1171,9 +1187,9 @@ function FontEditor({ fonts, value, font, look, previewLine, onChange, testId }:
 }
 
 // ---- The theme editor's draft (nothing saved until Save) ----
-type Draft = { look: Record<string, unknown>; perPlatform: Record<string, Record<string, unknown>>; changed: boolean };
+type Draft = { name: string; look: Record<string, unknown>; perPlatform: Record<string, Record<string, unknown>>; changed: boolean }; // name: the theme being edited
 
-const draftOf = (t: StyleTheme): Draft => ({ look: { ...(t.look as Record<string, unknown>) }, perPlatform: JSON.parse(JSON.stringify(t.perPlatform ?? {})) as Draft["perPlatform"], changed: false });
+const draftOf = (t: StyleTheme): Draft => ({ name: t.name, look: { ...(t.look as Record<string, unknown>) }, perPlatform: JSON.parse(JSON.stringify(t.perPlatform ?? {})) as Draft["perPlatform"], changed: false });
 
 // One change: the default look, or one platform's own value (null removes it: back to the theme's default).
 function draftSet(d: Draft, field: string, value: unknown, platform?: string): Draft {

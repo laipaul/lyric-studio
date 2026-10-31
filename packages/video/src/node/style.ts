@@ -33,7 +33,7 @@ import {
   type SongRecipe,
 } from "./recipe";
 import { sharedCollections, songPathsById } from "./song-folder";
-import { ensureAllThemes, ensureSongTheme, isThemeField, listThemes, loadTheme, removedThemes, setThemeLook, themeLayer, type RemovedTheme, type ThemeLook } from "./themes";
+import { brandThemes, ensureAllThemes, ensureSongTheme, isThemeField, listThemes, loadTheme, removedThemes, setThemeLook, themeLayer, type RemovedTheme, type ThemeLook } from "./themes";
 import { SHORT_LABELS } from "./exports";
 
 // The characters the font preview checks (French accents).
@@ -387,4 +387,57 @@ export function setBrandTitleFont(ws: Workspace, o: { artist: string; family: st
     throw error;
   }
   return { file: brand.file, family };
+}
+
+// The Themes page (31 Oct 2026): every theme with its songs, the fonts to draw them, a few lyric lines to
+// preview them on (the newest song with lyrics), the songs to use a theme for, and the deleted themes.
+export type ThemeCard = StyleTheme & { author: string; licence: string; createdAt: string; songs: { id: string; title: string }[]; brandDefault: string | null };
+export type ThemesPageData = { themes: ThemeCard[]; fonts: StyleFont[]; sampleLines: string[]; sampleSong: string | null; songs: { id: string; title: string; theme: string | null }[]; removed: RemovedTheme[] };
+
+export function themesPageData(ws: Workspace): ThemesPageData {
+  const catalog = loadFontCatalog(ws.dir);
+  ensureAllThemes(ws, catalog);
+  const projects = ws.db.select({ id: projectTable.id, title: projectTable.title, created: projectTable.created_at }).from(projectTable).all();
+  const songs = projects.map((p) => {
+    let theme: string | null = null;
+    try {
+      theme = readRecipe(songPathsById(ws, p.id).recipe).theme ?? null;
+    } catch {
+      // named on the song's page
+    }
+    return { id: p.id, title: p.title, theme };
+  });
+  const defaults = brandThemes(ws, catalog);
+  const themes = listThemes(ws.dir, catalog).map((t) => {
+    const users = songs.filter((s) => s.theme === t.name);
+    return {
+      name: t.name,
+      description: t.theme.description,
+      look: t.theme.look,
+      perPlatform: t.theme.perPlatform,
+      users: users.map((u) => u.title),
+      songs: users.map((u) => ({ id: u.id, title: u.title })),
+      problems: t.problems,
+      preview: !!t.preview,
+      author: t.theme.author,
+      licence: t.theme.licence,
+      createdAt: t.theme.createdAt,
+      brandDefault: defaults.has(t.name) ? defaults.get(t.name) || "" : null,
+    };
+  });
+  let sample: string[] = [];
+  let sampleSong: string | null = null;
+  for (const p of [...projects].sort((a, b) => b.created.getTime() - a.created.getTime())) {
+    try {
+      const lines = sampleLines(ws, p.id);
+      if (lines.length) {
+        sample = lines;
+        sampleSong = p.title;
+        break;
+      }
+    } catch {
+      // no lyrics yet
+    }
+  }
+  return { themes, fonts: styleFonts(catalog), sampleLines: sample, sampleSong, songs: songs.sort((a, b) => a.title.localeCompare(b.title)), removed: removedThemes(ws.dir) };
 }

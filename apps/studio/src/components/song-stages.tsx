@@ -59,19 +59,21 @@ const DOT: Record<StageStatus["tone"], string> = { done: "bg-emerald-400", todo:
 // them at the top of its work area; Prepare lists what still needs the user's ears or eyes.
 export function SongStages({
   initialTab,
+  initialPanel,
   statuses,
   todo,
   counts,
   children,
 }: {
   initialTab: string;
+  initialPanel?: ShapePanelId | null; // ?panel= (e.g. the Themes page's Edit opens Shape → Theme)
   statuses: Record<StageId, StageStatus>;
   todo: TodoItem[];
   counts: Partial<Record<string, number>>; // a number next to a tab (Post: approved videos)
   children: React.ReactNode; // the TabsContent of every tab
 }) {
   const [tab, setTab] = useState(initialTab);
-  const [panel, setPanel] = useState<ShapePanelId | null>(null);
+  const [panel, setPanel] = useState<ShapePanelId | null>(initialPanel ?? null);
   const stage = stageOf(tab);
   const current = STAGES.find((s) => s.id === stage)!;
   return (

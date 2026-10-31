@@ -20,6 +20,7 @@ import { SOURCE_FILE } from "./collection";
 import { readRecipe, resolveRecipe, writeRecipe } from "./recipe";
 import { renameSongFolder, sharedCollections, songPathsById } from "./song-folder";
 import { presetLengthText, recipeInputFor } from "./style";
+import { ensureAllThemes } from "./themes";
 import { findOrCreateSongProject, storeProjectHint } from "./song-project";
 
 export type PlatformStatus = "PASS" | "WARN" | "FAILED" | "interrupted" | "Rendering" | "none";
@@ -39,6 +40,7 @@ export type SongCard = {
   title: string;
   artist: string;
   ep: string | null;
+  theme: string | null; // the song's theme (song.json "theme")
   cover: string | null; // workspace-relative
   durationMs: number | null;
   createdAt: string;
@@ -102,6 +104,7 @@ export function songCard(ws: Workspace, p: typeof projectTable.$inferSelect, lab
     title: p.title,
     artist: p.artist,
     ep: songEp(ws, p.id) ?? null,
+    theme: songTheme(ws, p.id),
     cover: p.cover_path && existsSync(absPath(ws, p.cover_path)) ? p.cover_path : null,
     durationMs: p.duration_ms ?? null,
     createdAt: p.created_at.toISOString(),
@@ -111,6 +114,14 @@ export function songCard(ws: Workspace, p: typeof projectTable.$inferSelect, lab
     sameCover: [],
     wanted: songPlatforms(ws, p.id),
   };
+}
+
+function songTheme(ws: Workspace, projectId: string): string | null {
+  try {
+    return readRecipe(songPathsById(ws, projectId).recipe).theme ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // The song's own platforms: song.json "platforms" (set in the Style tab), else null (= all of them).
@@ -136,6 +147,11 @@ function coverKey(ws: Workspace, cover: string | null): string | null {
 // Every song, the most recently worked on first.
 export function listSongs(ws: Workspace): SongCard[] {
   const labels = platformLabels();
+  try {
+    ensureAllThemes(ws, loadFontCatalog(ws.dir)); // every song on a theme, so each card can name it
+  } catch {
+    // a theme problem is named on the song's page
+  }
   const cards = ws.db
     .select()
     .from(projectTable)

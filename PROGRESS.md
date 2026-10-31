@@ -4,6 +4,19 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Themes, step 3: the Themes page and the theme on Library cards ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026 ("redesign the app around themes"). **Themes** is in the top menu
+  (Library · Themes · Collections · Releases): a Canva-style gallery of tall tiles, each theme on your newest
+  song's lyric lines in its fonts and colours; point at a tile and it plays. Filters: All · In use · Not used yet.
+  **+ New theme** (name first, start from any theme). Deleted themes come back with Restore.
+- Click a tile for its **detail view**: the theme playing large, its name, **Designer** (the credit, for themes
+  you buy or sell later) and **About**, the songs that use it, **Use this theme for the song** (pick a song),
+  **Edit** (opens the theme editor on a song with that theme shown; Save changes that theme only), Duplicate,
+  Delete (not while songs use it), and **More like this**.
+- **Library cards** now show each song's theme under the artist.
+- Tests: themes.e2e.ts (new browser test: menu, cards, gallery, hover plays, new theme, designer, use for a
+  song, filters, duplicate, delete, restore, edit on a song and save); themes.test.ts unchanged (pass).
+
 ### Themes, step 2: building a theme ("+ New theme" and the theme editor) ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026 ("it's not clear how we build the themes", then "redesign the app around
   themes"). In Shape → Theme:
@@ -73,22 +86,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: transport.test.ts (bar steps forward / back, the grace while playing, frame steps); browser:
   storyboard.e2e.ts (each button, Shift steps, 0.5x plays at half speed, Loop plays on from the start, mute and
   the volume slider, the keys).
-
-### Shape page, Canva style (rail, menus, panels) ✅ (to verify on the Windows PC)
-- Asked by the user on 31 Oct 2026, after the first Shape page. **The top stage bar is gone**: Prepare, Shape,
-  Make and Review sit in a slim **rail on the left**, with a coloured dot for their status. On Shape the rail
-  also lists its menus: **Fonts, Effects, Colour, Clips, Text, This song, To make, Automatic**.
-- A menu opens **one panel** beside the rail (click again or ✕ to close it); with no panel open the editor uses
-  the whole width. **Clips** works like Canva's Uploads: the clips used as a grid, dragged onto a shot or a
-  lyric line, or onto each other to reorder. Clicking a shot opens its details in the panel; clicking a text
-  card opens the Text panel (card editor and templates).
-- **The editor fills the rest**: the viewer as tall as the screen allows, the timeline across the full width,
-  the verdict with **Next: Make →**, and the plan's details folded behind it.
-- **Slim header**: back arrow, the cover, the song title, the artist and the video chips (Reels 1 …) on one line.
-- Tests: song-stages.e2e.ts (the rail with the four stages and the eight menus, one panel at a time, open /
-  close, the panel left of the viewer, each panel's rows and summary lines), storyboard.e2e.ts (viewer above a
-  full-width timeline, Clips panel, details folded, drags from the panel), pairings.e2e.ts (Fonts panel, fits
-  at 1024 px), textboard.e2e.ts (Text panel), style-lock.e2e.ts (settings reached through the menus).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -307,7 +304,7 @@ before Releases step 2 and the Lyric Sheet, one step each, plan first:
 - ✅ (built 31 Oct, to verify) **T1. Theme foundation + Shape Theme panel** (see Latest steps).
 - ✅ (built 31 Oct, to verify) **T1b. Building a theme:** + New theme and the theme editor with Save / Save as new / Cancel (see Latest steps).
 - **T2. Editable song title + Delete song** (moves to songs\_removed\ with Restore, like Collections).
-- **T3. Themes page** in the top nav (Library · Themes · Collections · Releases): Canva-style gallery (tall
+- ✅ (built 31 Oct, to verify) **T3. Themes page** in the top nav (Library · Themes · Collections · Releases): Canva-style gallery (tall
   preview tiles that play on hover, filter chips) and a theme detail view (big preview on your own song, Use this
   theme, Duplicate / Edit, designer credit, favourite, more like this); create / duplicate / edit / delete (to
   `_removed\` with Restore); the artist's default theme. Library cards show each song's theme.

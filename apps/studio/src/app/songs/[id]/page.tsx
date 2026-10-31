@@ -19,7 +19,9 @@ import { PostTab } from "@/components/post-tab";
 import { StatusBadge } from "@/components/status-badge";
 import { ShapePage } from "@/components/shape-page";
 import { SongView, type RunView } from "@/components/song-view";
-import { ReleasePack, SongStages, type StageId, type StageStatus } from "@/components/song-stages";
+import { ReleasePack, SongStages, type ShapePanelId, type StageId, type StageStatus } from "@/components/song-stages";
+
+const SHAPE_PANEL_IDS = ["theme", "clips", "song", "make", "auto"]; // the Shape rail's menus (SHAPE_PANELS in song-stages.tsx, a client module)
 import { TabsContent } from "@/components/ui/tabs";
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
@@ -32,7 +34,7 @@ import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 // (Prepare -> Shape -> Make -> Review & Post) with the Prepare to-do list and "Make release pack".
 const TABS = ["assets", "lyrics", "shape", "generate", "videos", "post"];
 const OLD_TABS: Record<string, string> = { style: "shape", storyboard: "shape" }; // links from before Style and Storyboard became one Shape page
-type Search = Promise<{ tab?: string; from?: string }>;
+type Search = Promise<{ tab?: string; from?: string; panel?: string; edit?: string }>; // panel: a Shape panel to open (theme, clips, …); edit: a theme to open in the Theme editor
 
 export default function SongPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Search }) {
   return (
@@ -133,7 +135,7 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
             ))}
         </ul>
       </div>
-      <SongStages key={`${tab}:${search.from ?? ""}`} initialTab={tab} statuses={statuses} todo={todo} counts={{ post: approved.reduce((n, g) => n + g.videos.length, 0) + offered.length }}>
+      <SongStages key={`${tab}:${search.from ?? ""}`} initialTab={tab} initialPanel={tab === "shape" && SHAPE_PANEL_IDS.includes(search.panel ?? "") ? (search.panel as ShapePanelId) : null} statuses={statuses} todo={todo} counts={{ post: approved.reduce((n, g) => n + g.videos.length, 0) + offered.length }}>
         <TabsContent value="assets">
           <AssetsTab projectId={song.id} />
         </TabsContent>

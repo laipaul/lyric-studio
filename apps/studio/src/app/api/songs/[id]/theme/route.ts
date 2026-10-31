@@ -13,7 +13,7 @@ import { chooseTheme, createTheme, removeTheme, renameTheme, restoreTheme, saveT
 import { withWorkspace } from "@/lib/workspace";
 
 type Params = { params: Promise<{ id: string }> };
-type Body = { action?: string; name?: string; from?: string; folder?: string; look?: unknown; perPlatform?: unknown };
+type Body = { action?: string; name?: string; from?: string; folder?: string; theme?: string; look?: unknown; perPlatform?: unknown }; // theme: the theme being edited (default: the song's)
 
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
@@ -33,8 +33,8 @@ export async function POST(request: Request, { params }: Params) {
           if (!name) throw new Error("Which theme?");
           chooseTheme(ws, id, name, catalog);
         } else if (body.action === "create") createTheme(ws, { projectId: id, name, from: String(body.from ?? "") || current(), catalog });
-        else if (body.action === "save") saveTheme(ws, { projectId: id, look: body.look, perPlatform: body.perPlatform, catalog });
-        else if (body.action === "saveAs") saveThemeAs(ws, { projectId: id, name, look: body.look, perPlatform: body.perPlatform, catalog });
+        else if (body.action === "save") saveTheme(ws, { projectId: id, theme: body.theme, look: body.look, perPlatform: body.perPlatform, catalog });
+        else if (body.action === "saveAs") saveThemeAs(ws, { projectId: id, theme: body.theme, name, look: body.look, perPlatform: body.perPlatform, catalog });
         else if (body.action === "rename") {
           if (!name) throw new Error("Give the theme a name.");
           renameTheme(ws, String(body.from ?? "") || current(), name);
