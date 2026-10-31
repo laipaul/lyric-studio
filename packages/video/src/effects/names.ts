@@ -9,7 +9,7 @@ export const EASING_NAMES: readonly EasingName[] = ["ease-in-out", "ease-out", "
 // What the user picks (brand.json motion, platforms.json motion, --line-effect / --hook-effect).
 export type EffectChoice = { name: string; intensity: Intensity; durationMs?: number; easing?: EasingName };
 
-export const EFFECT_NAMES = ["glide", "cinematic-fade", "soft-blur", "dreamy-glow", "word-reveal", "karaoke-highlight", "floating", "typewriter", "spread", "typewriter-erase", "typewriter-words", "clarify", "ascend", "ink", "word-pop", "highlight-sweep", "mask-reveal", "tilt-3d", "glitch", "wave", "echo-stack", "slice", "kinetic-stack", "neon"] as const;
+export const EFFECT_NAMES = ["glide", "cinematic-fade", "soft-blur", "dreamy-glow", "word-reveal", "karaoke-highlight", "floating", "typewriter", "spread", "typewriter-erase", "typewriter-words", "clarify", "ascend", "ink", "word-pop", "highlight-sweep", "mask-reveal", "tilt-3d", "glitch", "wave", "echo-stack", "slice", "kinetic-stack", "neon", "word-rise", "slide-left", "slide-right", "slide-down", "dissolve"] as const;
 
 // What each effect is best for, shown next to its name in every list ("glide · verses").
 export const EFFECT_HINTS: Record<(typeof EFFECT_NAMES)[number], string> = {
@@ -34,6 +34,11 @@ export const EFFECT_HINTS: Record<(typeof EFFECT_NAMES)[number], string> = {
   "tilt-3d": "hooks, dreamy songs",
   glitch: "edgy or electronic tracks",
   neon: "night, city or synth tracks",
+  "word-rise": "verses, building lines",
+  "slide-left": "verses, story lines",
+  "slide-right": "verses, answers to a line",
+  "slide-down": "hooks, heavy drops",
+  dissolve: "endings, soft or sad lines",
   wave: "playful lines, summer songs",
   "echo-stack": "hooks, repeated lines",
   slice: "intros, drops, strong lines",
@@ -65,6 +70,11 @@ export const EFFECT_TITLES: Record<(typeof EFFECT_NAMES)[number], string> = {
   "echo-stack": "Echo stack",
   slice: "Slice",
   neon: "Neon",
+  "word-rise": "Word rise",
+  "slide-left": "Slide in from left",
+  "slide-right": "Slide in from right",
+  "slide-down": "Slide down",
+  dissolve: "Dissolve",
 };
 
 // The Motion gallery's filter chips: each effect under one or more kinds.
@@ -94,6 +104,11 @@ export const EFFECT_CATEGORIES: Record<(typeof EFFECT_NAMES)[number], readonly (
   "echo-stack": ["3D", "Glitch"],
   slice: ["Glitch", "Slide"],
   neon: ["Glow", "Glitch"],
+  "word-rise": ["Word", "Slide"],
+  "slide-left": ["Slide"],
+  "slide-right": ["Slide"],
+  "slide-down": ["Slide"],
+  dissolve: ["Calm", "Glow"],
 };
 export const effectTitle = (name: string): string => EFFECT_TITLES[name as keyof typeof EFFECT_TITLES] ?? name;
 

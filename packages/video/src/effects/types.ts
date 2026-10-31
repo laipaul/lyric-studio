@@ -26,8 +26,9 @@ export type LineLook = {
   opacity: number; x: number; y: number; scale: number; blur: number; glow: number; spacing?: number; chars?: number; wave?: number; reveal?: number; shine?: number;
   // The trending effects (./trending.ts): mask reveal, 3D tilt, glitch, echo stack, wave, slice.
   rise?: number; tiltX?: number; tiltY?: number; split?: number; echo?: number; ripple?: number; rippleAmp?: number; slice?: number;
+  dust?: number; // dissolve (./slides.ts): 0 = whole, 1 = the letters scattered into thin air (left to right)
 };
-export const EXTRA_LOOK_KEYS = ["rise", "tiltX", "tiltY", "split", "echo", "ripple", "rippleAmp", "slice"] as const;
+export const EXTRA_LOOK_KEYS = ["rise", "tiltX", "tiltY", "split", "echo", "ripple", "rippleAmp", "slice", "dust"] as const;
 export const REST: LineLook = { opacity: 1, x: 0, y: 0, scale: 1, blur: 0, glow: 0 };
 
 // The look of one word: chars = share of its letters shown (typewriter), accent = 0-1 mix towards
@@ -65,6 +66,8 @@ export type LyricEffect = {
   kinetic?: true;
   // Glitch: jumps sideways on purpose (the smoothness checks allow it).
   jumpy?: true;
+  // Slides in from the side (./slides.ts): moves sideways fast on purpose while it comes in and goes.
+  slides?: true;
   // How far the effect moves parts of a line beyond its enter / exit / hold looks (px, x the amount), for QA.
   reach?: (amount: number) => { up?: number; down?: number };
 };

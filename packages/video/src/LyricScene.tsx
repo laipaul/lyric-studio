@@ -6,6 +6,7 @@ import { useCurrentFrame, useVideoConfig } from "remotion";
 
 import { lyricScene, sceneTimeline, wordTimings } from "./effects/scene";
 import { kineticAt, kineticGroups } from "./effects/trending";
+import { dustLetter } from "./effects/slides";
 import { EMPHASIS_SCALE, emphasisWord } from "./effects/accents";
 import { ascendLetter } from "./effects/ascend";
 import { inkMask } from "./effects/ink";
@@ -221,6 +222,8 @@ export function LyricScene(props: {
                     ? waveLetters(layout.lines, r, look.wave, AMOUNT[(line.card?.effect ?? (line.isHook ? effects.hook : effects.verse)).intensity] ?? 1)
                     : look.ripple !== undefined
                       ? rippleLetters(layout.lines, r, look.ripple, look.rippleAmp ?? 6)
+                      : (look.dust ?? 0) > 0.001
+                        ? dustLetters(layout.lines, r, look.dust!)
                       : emph >= 0
                         ? text.split(" ").map((word, k) => {
                             const isEm = pw++ === emph;
@@ -302,6 +305,20 @@ function waveLetters(rows: readonly string[], r: number, wave: number, amount: n
     const { y, opacity } = ascendLetter(before + k, n, wave, amount);
     return (
       <span key={k} style={{ display: "inline-block", whiteSpace: "pre", transform: y > 0.01 ? `translateY(${y.toFixed(2)}px)` : undefined, opacity }}>
+        {ch}
+      </span>
+    );
+  });
+}
+
+// Dissolve: each letter of row r drifts away into thin air (src/effects/slides.ts dustLetter).
+function dustLetters(rows: readonly string[], r: number, dust: number) {
+  const all = rows.reduce((a, row) => a + [...row].length, 0);
+  const before = rows.slice(0, r).reduce((a, row) => a + [...row].length, 0);
+  return [...rows[r]].map((ch, k) => {
+    const d = dustLetter(before + k, all, dust);
+    return (
+      <span key={k} style={{ display: "inline-block", whiteSpace: "pre", opacity: d.opacity, transform: `translate(${d.x.toFixed(2)}px, ${d.y.toFixed(2)}px)`, filter: d.blur > 0.05 ? `blur(${d.blur.toFixed(2)}px)` : undefined }}>
         {ch}
       </span>
     );

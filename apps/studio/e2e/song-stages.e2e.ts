@@ -247,6 +247,18 @@ async function main() {
     const before = look("verseEffect");
     await page.click("[data-effect-picker]"); // the effect picker opens the gallery
     check(!!(await page.$("[data-effect-gallery] [data-effect-kind=Glitch]")), "the gallery has its filter chips");
+    // Every new effect plays in its tile without an error (the name drawn letter by letter for Dissolve).
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    for (const name of ["neon", "word-rise", "slide-left", "slide-right", "slide-down", "dissolve", "spread", "soft-blur"]) {
+      await page.hover(`[data-try-effect=${name}]`);
+      await page.waitForSelector(`[data-try-effect=${name}] [data-lyric]`, { timeout: 5000 }).catch(() => {});
+      check(!!(await page.$(`[data-try-effect=${name}] [data-lyric]`)), `the ${name} tile plays its name`);
+    }
+    await page.hover(`[data-try-effect=dissolve]`);
+    await sleep(3000); // into the line's exit: letters drift away
+    check(errors.length === 0, `no page errors while the tiles play (${errors.join("; ")})`);
+    await page.mouse.move(5, 5);
     await page.click("[data-try-effect=typewriter]");
     await page.selectOption("[data-try-breathe]", "beat");
     await page.waitForFunction(() => document.querySelector("[data-look-preview]")?.getAttribute("data-effect") === "typewriter" && document.querySelector("[data-look-preview]")?.getAttribute("data-breathe") === "beat");

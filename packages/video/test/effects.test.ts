@@ -72,9 +72,9 @@ function track(ls: SceneLine[], o: SceneOptions): Map<number, Sample>[] {
 const ALL = EFFECTS.flatMap((e) => INTENSITIES.map((intensity) => ({ name: e.name, intensity })));
 
 describe("lyric effects registry", () => {
-  it("has the 24 effects, glide first (the default)", () => {
-    expect(EFFECTS.map((e) => e.name)).toEqual(["glide", "cinematic-fade", "soft-blur", "dreamy-glow", "word-reveal", "karaoke-highlight", "floating", "typewriter", "spread", "typewriter-erase", "typewriter-words", "clarify", "ascend", "ink", "word-pop", "highlight-sweep", "mask-reveal", "tilt-3d", "glitch", "wave", "echo-stack", "slice", "kinetic-stack", "neon"]);
-    expect(EFFECTS.filter((e) => e.unit === "word").map((e) => e.name)).toEqual(["word-reveal", "karaoke-highlight", "typewriter", "typewriter-erase", "typewriter-words", "clarify", "word-pop", "highlight-sweep", "kinetic-stack"]);
+  it("has the 29 effects, glide first (the default)", () => {
+    expect(EFFECTS.map((e) => e.name)).toEqual(["glide", "cinematic-fade", "soft-blur", "dreamy-glow", "word-reveal", "karaoke-highlight", "floating", "typewriter", "spread", "typewriter-erase", "typewriter-words", "clarify", "ascend", "ink", "word-pop", "highlight-sweep", "mask-reveal", "tilt-3d", "glitch", "wave", "echo-stack", "slice", "kinetic-stack", "neon", "word-rise", "slide-left", "slide-right", "slide-down", "dissolve"]);
+    expect(EFFECTS.filter((e) => e.unit === "word").map((e) => e.name)).toEqual(["word-reveal", "karaoke-highlight", "typewriter", "typewriter-erase", "typewriter-words", "clarify", "word-pop", "highlight-sweep", "kinetic-stack", "word-rise"]);
     expect(EFFECTS.map((e) => e.name)).toEqual([...EFFECT_NAMES]); // the settings checks know every module
   });
 
@@ -103,7 +103,7 @@ describe("no frame-to-frame jumps beyond the easing", () => {
           expect(Math.abs((b?.opacity ?? 0) - (a?.opacity ?? 0)), where).toBeLessThanOrEqual(0.25);
           if (!a || !b) continue;
           expect(Math.abs(b.y - a.y), `${where} y`).toBeLessThanOrEqual(30);
-          if (!lyricEffect(name)?.jumpy) expect(Math.abs(b.x - a.x), `${where} x`).toBeLessThanOrEqual(2); // glitch jumps on purpose
+          if (!lyricEffect(name)?.jumpy) expect(Math.abs(b.x - a.x), `${where} x`).toBeLessThanOrEqual(lyricEffect(name)?.slides ? 40 : 2); // glitch jumps on purpose; slides travel sideways
           expect(Math.abs(b.scale - a.scale), `${where} scale`).toBeLessThanOrEqual(0.06);
           expect(Math.abs(b.blur - a.blur), `${where} blur`).toBeLessThanOrEqual(2); // px at 1080 wide: Blur in pulls focus from 12 px
           for (const [k, w] of (b.words ?? []).entries()) {

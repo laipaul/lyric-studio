@@ -18,11 +18,13 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   larger with its letters drawing together; Blur in pulls focus from 12 px (was 4 px, not seen); Dreamy glow
   comes out of a real haze and glows. **Spread** now works like Canva's: letters float in from wide apart and
   drift apart and up as the line leaves (wide only while the line is faint). New **Neon** effect: glowing
-  tube letters in the accent that flicker on and hum (new gallery chip "Glow"). 24 effects.
+  tube letters in the accent that flicker on and hum (new gallery chip "Glow"). Also new: **Word rise** (each
+  word rises into place as it is sung), **Slide in from left**, **Slide in from right**, **Slide down**, and
+  **Dissolve** (the letters drift up and fade into thin air when the line ends; src/effects/slides.ts). 29 effects.
 - **Motion**: gallery tiles show the effect's name big; pointing at or picking an effect shows its name
   moving in that effect over the paused frame in the big viewer; pressing play plays the song with the
   effect on the real lyrics.
-- Tests: retext-lrc.test.ts, lyrics-view.test.ts (fix keeps timing and hand-set start); browser: textboard
+- Tests: slides-effects.test.ts, effects tests for all 29; retext-lrc.test.ts, lyrics-view.test.ts (fix keeps timing and hand-set start); browser: textboard
   (Text → Fix), storyboard (effect name over the frame, gone on play), song-stages.
 
 ### Themes, step 6: lyric effects gallery, nine new effects, Emphasis word, title styles ✅ (to verify on the Windows PC)
