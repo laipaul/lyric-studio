@@ -151,7 +151,7 @@ export function SetEffect({
                   onMouseLeave={() => setHovered((h) => (h === e.name ? null : h))}
                   className={cn("flex flex-col gap-1 rounded-md border p-1 text-left text-[11px]", name === e.name ? "border-brand bg-brand/10" : "hover:border-foreground/40")}
                 >
-                  <span className="relative block w-full overflow-hidden rounded bg-black" style={{ aspectRatio: "9 / 12" }}>
+                  <span className="relative block w-full overflow-hidden rounded bg-black" style={{ aspectRatio: "9 / 16" }}>
                     {hovered === e.name && preview ? (
                       <PreviewPlayer input={preview(join(e.name, intensity))} />
                     ) : (
