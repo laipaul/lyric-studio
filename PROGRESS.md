@@ -9,6 +9,9 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **Text colour / Accent colour** (Edit theme → Colours): next to the picker, a box to type or paste the colour
   code: #FF2D95, FF2D95, #F29, rgb(255, 45, 149) or 255, 45, 149 (Enter or click away saves it; anything else
   says what to type). src/colour-ref.ts parseColourRef.
+- **This song → Card text**: every card's words for this song in one place: Title (the same as the header's
+  pencil), Tagline, Hook card text, End card text. Theme → Cards keeps only the look, with a link "This song →
+  Card text".
 - **An effect's name over a title card**: when the paused frame shows a title / tagline / hook / end card, the
   effect's name gets a dark veil over the frame, so the two never read on top of each other.
 - **Cards** is now the first section of Edit theme (the order a design is made in), then Text, Motion, Colours,

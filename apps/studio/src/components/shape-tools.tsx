@@ -50,7 +50,7 @@ const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", 
 export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId: string; onLook: (look: ShapeLook) => void; onSaved: () => void; planned: number }) {
   // The panel open in the rail (Fonts, Effects, Colour, This song, What to make, Automatic): only that
   // block shows; the tools stay mounted (hidden) for the other panels, so the viewer keeps its look.
-  const { panel } = useShapePanel();
+  const { panel, setPanel } = useShapePanel();
   const section = panel && (TOOL_SECTIONS as readonly string[]).includes(panel) ? panel : null;
   const router = useRouter();
   const [saved, setData] = useState<StyleData | null>(null); // the song's settings as saved
@@ -571,7 +571,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
   const pick = (names: readonly string[]) => names.map((n) => byField.get(n as StyleField["field"])).filter((f): f is StyleField => !!f);
   // Any setting not named in a block (a future one) lands in "This song".
   const placed = new Set<string>([...SONG_FIELDS, ...LOOK_FIELDS, ...PICTURE_FIELDS, ...EFFECT_FIELDS, ...FONT_ORDER, ...MAKE_FIELDS, ...AUTO_FIELDS]);
-  const songFields = [...pick(SONG_FIELDS), ...data.fields.filter((f) => !placed.has(f.field))];
+  const songFields = [...pick(SONG_OTHER_FIELDS), ...data.fields.filter((f) => !placed.has(f.field))];
   const fontFields = pick(FONT_ORDER);
   const autoFields = pick(AUTO_FIELDS);
   // "Set by you": the song's own value (default or one platform) or a lock.
@@ -732,6 +732,12 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
               </div>
 
               <EditorSection id="cards" title="Cards">
+                <p className="text-muted-foreground -mt-1 text-[11px]">
+                  How the cards look, for every song on this theme. Their words (title, tagline, Hook and End card text) are this song&apos;s:{" "}
+                  <button type="button" data-card-text-link onClick={() => setPanel("song")} className="text-foreground underline underline-offset-2">
+                    This song → Card text
+                  </button>
+                </p>
                 <TitleStyleControls value={(k) => valueOf(k)} onSet={(field, value) => void act({ action: "set", field, value })} sample={data.title || "Your title"} font={String(valueOf("verseFont") ?? "")} />
                 <ExtraCardControls value={(k) => valueOf(k)} onSet={(field, value) => void act({ action: "set", field, value })} font={String(valueOf("hookFont") ?? valueOf("verseFont") ?? "")} hookSample={String(valueOf("hookText") || data.sampleLines.find((_, i) => i === 1) || "Your chorus")} endSample={String(valueOf("endText") || "Stream {title} on Spotify").replace(/\{title\}/gi, data.title || "Your song").replace(/\{artist\}/gi, "")} />
               </EditorSection>
@@ -952,6 +958,20 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
           <p data-compact-summary="song" className="text-muted-foreground text-xs">
             {songLine}
           </p>
+          {/* Card text (31 Oct 2026): every card's words for this song in one place; how the cards look is the theme's (Theme → Cards). */}
+          <div data-card-text className="bg-card flex flex-col gap-2 rounded-lg border px-3 py-2.5">
+            <h4 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Card text</h4>
+            <p className="text-muted-foreground -mt-1 text-[11px]">The words on this song&apos;s cards. How the cards look (on or off, style, font, colour) comes from the theme: Theme → Cards.</p>
+            <CardTitleRow
+              projectId={projectId}
+              title={data.title}
+              onSaved={(t) => {
+                setData((d) => (d ? { ...d, title: t } : d));
+                router.refresh();
+              }}
+            />
+            {rows(pick(CARD_TEXT_FIELDS))}
+          </div>
           {rows(songFields)}
         </Block>
       ) : null}
@@ -1075,7 +1095,9 @@ const shortLabel = (label: string) => label.replace(/\s*\(.*\)\s*$/, "");
 
 // The tools column's blocks, each in its order (the six font rows sit under Look's "Fine-tune"; the
 // effect, Breathe and add-on settings are set in Set effect, their per-platform values under its ⋯).
-const SONG_FIELDS = ["tagline", "ep", "youtubeLayout", "titleOpening", "hookText", "endText"] as const;
+const CARD_TEXT_FIELDS = ["tagline", "hookText", "endText"] as const; // This song → Card text (with the title)
+const SONG_OTHER_FIELDS = ["ep", "youtubeLayout", "titleOpening"] as const;
+const SONG_FIELDS = [...CARD_TEXT_FIELDS, ...SONG_OTHER_FIELDS] as const;
 const LOOK_FIELDS = ["textColour", "accentColour"] as const;
 const PICTURE_FIELDS = ["grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp", "hookCard", "hookCardStyle", "endCard", "endCardStyle"] as const;
 const EFFECT_FIELDS = ["verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "emphasis"] as const;
@@ -1362,6 +1384,35 @@ function ExtraCardControls({ value, onSet, font, hookSample, endSample }: { valu
     <div className="flex flex-col gap-2" data-extra-cards>
       {card("hook")}
       {card("end")}
+    </div>
+  );
+}
+
+// Card text → Title: the song's title (the same as the page header's pencil; the song folder follows it).
+function CardTitleRow({ projectId, title, onSaved }: { projectId: string; title: string; onSaved: (title: string) => void }) {
+  const [error, setError] = useState<string | null>(null);
+  const save = async (next: string) => {
+    const clean = next.trim();
+    if (!clean || clean === title) return;
+    setError(null);
+    const r = await api(`/api/songs/${projectId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: clean }) });
+    const d = (await r.json().catch(() => ({}))) as { title?: string; error?: string };
+    if (!r.ok || d.error) return setError(d.error ?? `The studio answered ${r.status}`);
+    onSaved(d.title ?? clean);
+  };
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-sm">Title</span>
+      <input
+        key={title}
+        data-card-title
+        aria-label="Title"
+        defaultValue={title}
+        onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+        onBlur={(e) => void save(e.target.value)}
+        className="bg-input/30 border-input h-8 w-full rounded-md border px-2 text-sm"
+      />
+      {error ? <span className="text-destructive text-xs">{error}</span> : null}
     </div>
   );
 }

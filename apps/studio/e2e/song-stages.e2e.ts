@@ -188,7 +188,7 @@ async function main() {
     await openPanel(page, "song");
     const songLine = (await page.textContent("[data-compact-summary=song]")) ?? "";
     check(songLine === "Tagline: none · EP: none · YouTube: cover · Title opening: off", `This song's line (${songLine})`);
-    check(JSON.stringify(await inBlock("song")) === JSON.stringify(["tagline", "ep", "youtubeLayout", "titleOpening", "hookText", "endText"]), `This song: tagline, EP, YouTube layout, title opening, hook and end card texts (${(await inBlock("song")).join(", ")})`);
+    check(JSON.stringify(await inBlock("song")) === JSON.stringify(["tagline", "hookText", "endText", "ep", "youtubeLayout", "titleOpening"]), `This song: Card text (tagline, hook and end card texts) first, then EP, YouTube layout, title opening (${(await inBlock("song")).join(", ")})`);
     await openPanel(page, "make");
     const makeLine = (await page.textContent("[data-compact-summary=make]")) ?? "";
     check(makeLine.startsWith("Reels 3 · YouTube 1") && makeLine.includes("clips: the song's own"), `What to make's line (${makeLine})`);
@@ -342,6 +342,12 @@ async function main() {
       Object.fromEntries((["editing", "[data-theme-editing]", "bar", "[data-theme-save-as]", "text", "[data-editor-section='cards']"] as string[]).flatMap((v, i, a) => (i % 2 ? [] : [[v, document.querySelector(a[i + 1])?.getBoundingClientRect().top ?? NaN]]))),
     );
     check(barAt.editing < barAt.bar && barAt.bar < barAt.text, "Save and Save as new theme sit right below Editing:, above the sections");
+    // Cards → "This song → Card text": all the cards' words for this song in one place.
+    await page.click("[data-card-text-link]");
+    await page.waitForSelector("[data-card-text]", { timeout: 5000 }).catch(() => {});
+    const cardText = await page.$$eval("[data-card-text] [data-field]", (els) => els.map((e) => e.getAttribute("data-field")));
+    check(!!(await page.$("[data-card-text] [data-card-title]")) && ["tagline", "hookText", "endText"].every((f) => cardText.includes(f)), `This song → Card text: Title, Tagline, Hook and End card text together (${cardText.join(", ")})`);
+    await openPanel(page, "colour");
     await page.fill("[data-edit-code^='textColour']", "255, 45, 149");
     await page.press("[data-edit-code^='textColour']", "Enter");
     await page.waitForFunction(() => (document.querySelector("[data-edit-code^='textColour']") as HTMLInputElement | null)?.value === "#FF2D95", null, { timeout: 5_000 }).catch(() => {});

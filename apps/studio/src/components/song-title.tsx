@@ -5,7 +5,7 @@
 // folder moves to songs\_removed\, and the Library's "Deleted songs" brings it back).
 import { Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { RowMenu } from "@/components/row-menu";
 import { api } from "@/lib/api";
@@ -16,6 +16,7 @@ export function SongTitle({ id, title }: { id: string; title: string }) {
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shown, setShown] = useState(title);
+  useEffect(() => setShown(title), [title]); // changed elsewhere too (Shape → This song → Card text → Title)
 
   async function save(next: string) {
     setEditing(null);
