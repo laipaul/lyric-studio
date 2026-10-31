@@ -125,6 +125,78 @@ async function main() {
     }
     await page.click("[data-shot='1']");
     check(((await page.textContent("[data-shot-details]")) ?? "").includes("Shot 1:"), "a shot's details: clip, in / out, speed");
+    // The transport bar under the viewer: start, back / forward one bar, play / pause, stop, end; keys too.
+    check((await page.$$("[data-transport-button]")).length === 9, "the transport bar: start, back, play, stop, forward, end, loop, mute, full screen");
+    check(!!(await page.$("[data-transport-speed]")) && !!(await page.$("[data-transport-volume]")) && /^\d+:\d\d \/ \d+:\d\d$/.test(((await page.textContent("[data-transport-time]")) ?? "").trim()), `…a speed choice, a volume slider and the time (${await page.textContent("[data-transport-time]")})`);
+    const tFrame = async () => Number(await page.getAttribute("[data-transport]", "data-frame"));
+    const tWait = (f: number) => page.waitForFunction((n: number) => Number(document.querySelector("[data-transport]")?.getAttribute("data-frame")) === n, f, { timeout: 5000 }).catch(() => {});
+    const tLast = Number(await page.getAttribute("[data-transport]", "data-last"));
+    await page.click("[data-transport-button=end]");
+    await tWait(tLast);
+    check((await tFrame()) === tLast, `⏭ goes to the end (frame ${await tFrame()} of ${tLast})`);
+    await page.click("[data-transport-button=start]");
+    await tWait(0);
+    check((await tFrame()) === 0, "⏮ goes to the start");
+    await page.click("[data-transport-button=forward]");
+    await page.waitForFunction(() => Number(document.querySelector("[data-transport]")?.getAttribute("data-frame")) > 0, null, { timeout: 5000 }).catch(() => {});
+    const bar1 = await tFrame();
+    const barXs = await page.$$eval("[data-bar]", (els: Element[]) => els.map((e) => parseFloat((e as HTMLElement).style.left)));
+    check(bar1 > 0 && bar1 < tLast, `⏩ jumps one bar forward (frame ${bar1}; bar lines at ${barXs.slice(0, 3).join(", ")} px)`);
+    await page.click("[data-transport-button=forward]", { modifiers: ["Shift"] });
+    await tWait(bar1 + 1);
+    check((await tFrame()) === bar1 + 1, "Shift + ⏩ steps one frame");
+    await page.click("[data-transport-button=back]");
+    await tWait(bar1);
+    check((await tFrame()) === bar1, "⏪ goes back to the bar line");
+    await page.click("[data-transport-button=play]");
+    await page.waitForSelector("[data-transport][data-playing='1']", { timeout: 5000 }).catch(() => null);
+    check((await page.getAttribute("[data-transport]", "data-playing")) === "1", "▶ plays");
+    await sleep(600);
+    await page.click("[data-transport-button=stop]");
+    await page.waitForSelector("[data-transport][data-playing='0']", { timeout: 5000 }).catch(() => null);
+    await tWait(0);
+    check((await page.getAttribute("[data-transport]", "data-playing")) === "0" && (await tFrame()) === 0, "⏹ stops and goes back to the start");
+    // Speed 0.5x: the playhead moves at half speed (the preview only).
+    await page.selectOption("[data-transport-speed]", "0.5");
+    await page.click("[data-transport-button=play]");
+    await page.waitForSelector("[data-transport][data-playing='1']", { timeout: 5000 }).catch(() => null);
+    await sleep(2000);
+    await page.click("[data-transport-button=stop]");
+    await page.waitForSelector("[data-transport][data-playing='0']", { timeout: 5000 }).catch(() => null);
+    await page.click("[data-transport-button=play]");
+    await sleep(2000);
+    const at05 = await tFrame();
+    await page.click("[data-transport-button=play]"); // pause
+    check(at05 > 10 && at05 < 45, `0.5x plays at half speed (frame ${at05} after 2 s; 1x would be about 60)`);
+    await page.selectOption("[data-transport-speed]", "1");
+    // Loop on: playing past the end starts again from the start.
+    check((await page.getAttribute("[data-transport-button=loop]", "aria-pressed")) === "false", "Loop is off by default");
+    await page.click("[data-transport-button=loop]");
+    check((await page.getAttribute("[data-transport-button=loop]", "aria-pressed")) === "true", "Loop on");
+    await page.click("[data-transport-button=end]");
+    await tWait(tLast);
+    await page.click("[data-transport-button=back]", { modifiers: ["Shift"] });
+    for (let k = 0; k < 9; k++) await page.click("[data-transport-button=back]", { modifiers: ["Shift"] });
+    await page.click("[data-transport-button=play]");
+    await sleep(1500);
+    const looped = await tFrame();
+    check((await page.getAttribute("[data-transport]", "data-playing")) === "1" && looped < tLast - 10, `with Loop on it plays on from the start (frame ${looped})`);
+    await page.click("[data-transport-button=stop]");
+    await page.click("[data-transport-button=loop]");
+    // Volume: the slider; mute sets it to 0.
+    await page.click("[data-transport-button=mute]");
+    check((await page.inputValue("[data-transport-volume]")) === "0", `mute: the volume slider shows 0 (${await page.inputValue("[data-transport-volume]")}, ${await page.getAttribute("[data-transport-button=mute]", "aria-label")})`);
+    await page.click("[data-transport-button=mute]");
+    check((await page.inputValue("[data-transport-volume]")) === "1", "sound on: back to full volume");
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur()); // nothing focused: the keys go to the player
+    await page.keyboard.press("End");
+    await tWait(tLast);
+    check((await tFrame()) === tLast, "the End key goes to the end");
+    await page.keyboard.press("Home");
+    await tWait(0);
+    await page.keyboard.press("ArrowRight");
+    await tWait(bar1);
+    check((await tFrame()) === bar1, "Home, then → steps one bar");
     // Play from a point: the playhead moves.
     await page.mouse.click(...(await (async () => {
       const box = await (await page.$("[data-waveform]")).boundingBox();

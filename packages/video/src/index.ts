@@ -25,6 +25,7 @@ export * from "./youtube-layout";
 export * from "./Thumbnail";
 export * from "./canvas";
 export * from "./follow";
+export * from "./transport";
 export * from "./ending";
 export * from "./pace";
 export * from "./transitions";

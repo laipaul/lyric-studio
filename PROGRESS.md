@@ -4,6 +4,18 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Transport bar under the video ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026. Under the Shape page's viewer, instead of the play button inside the
+  video: ⏮ go to start, ⏪ back one bar, ▶/⏸ play or pause, ⏹ stop (pause and back to the start), ⏩ forward
+  one bar, ⏭ go to end. The steps land on bar lines (where cuts fall); Shift-click moves one frame.
+- On the right: the time (0:35 / 1:30), **Speed** 1x / 0.75x / 0.5x / 0.25x to have time to check the lyrics,
+  **Loop** on / off, mute with a **volume slider**, full screen. Speed and volume change only the preview, never
+  the song file or a made video.
+- Keys (when no field is being typed in): Space play / pause, ← / → one bar (Shift: one frame), Home, End.
+- Tests: transport.test.ts (bar steps forward / back, the grace while playing, frame steps); browser:
+  storyboard.e2e.ts (each button, Shift steps, 0.5x plays at half speed, Loop plays on from the start, mute and
+  the volume slider, the keys).
+
 ### Shape page, Canva style (rail, menus, panels) ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026, after the first Shape page. **The top stage bar is gone**: Prepare, Shape,
   Make and Review sit in a slim **rail on the left**, with a coloured dot for their status. On Shape the rail
@@ -89,41 +101,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: song-files.test.ts (19: a stem without extension, original names in all four roles, Replace keeping names, no overwrite, hand-dropped
   files, the unclear file asked once, the song renamed in Explorer, a stem found by lining up, old songs unchanged,
   the song hash unchanged, the reset once / Undo / Reset all), test_vocal_stem.py (the linked stem).
-
-### L1a. Vocal stem (vocals.wav) as the main guide for lyric timing ✅ (verified by the user on the Windows PC, 31 Oct 2026: These Empty Roads "the result is perfect now")
-- Put Suno's vocal stem, untouched, in the song folder as **vocals.wav** (Assets tab: "Vocal stem" →
-  Add… / Replace…; the old one goes to .studio\replaced\). From then on everything that listens to the voice uses
-  it: pnpm align, the voice map, the recognised first words, the vocal-start check and QA "Lines start with the
-  vocals". Demucs is only the fallback for a song without a usable stem.
-- **The app checks the stem itself** (analysis only): it compares the stem with your trimmed song.wav
-  (cross-correlation on the voice band) for one offset over the whole song, then measures it again at 5 points from
-  start to end. One steady offset → lined up by itself: "Vocal stem lined up: 1.8 s offset, from trimming the
-  song's start." (only the part that overlaps the song counts). The offset changes along the song (a part cut or
-  repeated, a tempo change) or no clear match (another Suno version) → "This vocal stem doesn't follow the song:
-  probably another version of the song, or the song was edited in the middle." and Demucs is used. Any sample rate.
-- **Adding or replacing vocals.wav re-aligns the song by itself**: a "Lyric timing · vocal stem" task runs (Tasks
-  menu; alignment + vocal-start check, no videos), with your stored hints and hand-set starts kept. Caches are keyed
-  by the stem's content and offset; everything aligned on Demucs before keeps its key (nothing is redone for songs
-  without a stem). The manifest (lyrics.voice_source) and pnpm make's log say which voice was used ("vocal
-  stem, offset 1.8 s" / "separated by the app"). Prepare's to-do suggests "Add the vocal stem for better lyric
-  timing" (never a blocker). backing-vocals.wav may sit in the folder; it is never used for alignment.
-- **The song file is never touched**; vocals.wav and backing-vocals.wav are only read (never edited, mixed back
-  or in any output). Tests check the hashes before and after, and that a planned video's props hold no stem.
-- **Vocal-start rules on a clean stem**: same thresholds (no new settings). The clean-stem tests showed two
-  places where a *wet* stem (Suno's keeps the reverb) differs from Demucs, both fixed: a reverb tail filling a
-  short pause no longer joins two phrases (a pause followed by a sharp attack starts a new voice stretch), and a
-  tail ending just before a line's stamp no longer counts as that line's voice. Every earlier PC case still passes.
-- **New command** `pnpm lyrics:compare-voice "<song folder>"`: Demucs and the vocal stem side by side (per line:
-  start, confidence, check result; totals: flagged for review, low confidence, moved by the vocal-start check),
-  also saved to .studio\lyrics\compare-voice-<time>.md.
-- Tests: services/audio tests/test_vocal_stem.py (identical, trimmed start, trimmed end, stem starting later,
-  48 kHz stem, middle cut and repeated part rejected, another version rejected, tempo change rejected, silent stem,
-  check cached, lined-up copy on the song's timeline, fallback to Demucs, voice map / first words on the stem,
-  song and stem hashes unchanged); packages/video test/vocal-stem.test.ts (voice source, cache keys, re-align on
-  add/replace with hints kept, rejected stem → stored Demucs alignment, Assets slot, Prepare to-do, the queued
-  lyric-timing run, nothing from the stems in the planned video); vocal-guard.test.ts (clean-stem block).
-- Not checked here: a real stem against a real Suno mix (no songs in the cloud). The before/after on These Empty
-  Roads is the real test (commands in the step's reply).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

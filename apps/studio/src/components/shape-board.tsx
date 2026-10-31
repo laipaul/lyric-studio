@@ -22,6 +22,7 @@ import { AssessmentDetails, VerdictBadge } from "@/components/assessment";
 import { LookViewer, VIEWER_HEIGHT } from "@/components/look-preview";
 import type { ShapeLook } from "@/components/shape-tools";
 import { SHAPE_PANELS, useGoToTab, useShapePanel } from "@/components/song-stages";
+import { TransportBar } from "@/components/transport-bar";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -58,6 +59,9 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   // Scrolling the timeline by hand pauses it until the next play.
   const [follow, setFollow] = useState(false);
   const [playing, setPlaying] = useState(false);
+  // The transport bar's speed (the preview only: time to check the lyrics) and Loop on / off.
+  const [rate, setRate] = useState(1);
+  const [loop, setLoop] = useState(false);
   const timeline = useRef<HTMLDivElement>(null);
   const autoScroll = useRef(false); // the next scroll event is ours, not the user's
   const heldByUser = useRef(false);
@@ -283,6 +287,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   const width = view ? Math.ceil((view.durationMs / 1000) * zoom) : 0;
   const x = (ms: number) => (ms / 1000) * zoom;
   const playhead = (frame * 1000) / 30;
+  const barFrames = useMemo(() => (view ? view.bars.map((ms) => Math.round((ms * 30) / 1000)) : []), [view]);
   const shot = view && selected !== null ? view.shots[selected] : null;
   const wide = !!props?.format && props.format.width > props.format.height;
   // A clip dropped on a shot: anchored on the lyric line that starts in that shot; a shot without a line
@@ -393,7 +398,9 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
           compositionWidth={props.format?.width ?? 1080}
           compositionHeight={props.format?.height ?? 1920}
           fps={30}
-          controls
+          clickToPlay
+          playbackRate={rate}
+          loop={loop}
           style={{ width: "100%", height: "100%" }}
         />
       </div>
@@ -510,6 +517,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
         {/* 1. the viewer */}
         <div className="flex flex-col items-center gap-2" data-viewer-block>
           {viewer}
+          {view && props ? <TransportBar player={player} frame={frame} playing={playing} durationInFrames={props.durationInFrames} barFrames={barFrames} rate={rate} onRate={setRate} loop={loop} onLoop={setLoop} /> : null}
           {view ? (
             <div className="flex w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs" data-storyboard-summary>
               <span className="font-medium">
