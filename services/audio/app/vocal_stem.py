@@ -13,7 +13,10 @@ How it is checked (analysis only, both resampled to 8 kHz mono, voice band 150 H
      each must find a clear peak at the same offset (within MAX_SPREAD_S). A part cut or repeated in the
      middle, a tempo change or another version of the song breaks this, and the stem is not used (the app
      falls back to Demucs and says why in plain words).
-When it matches, a lined-up copy on the song's own timeline (16 kHz mono, only the part that overlaps
+A constant speed difference (the master exported a little faster or slower than the stem, e.g. 0.2 %) makes
+the offset creep along the song and breaks that check; then the speed is searched (stem time = offset +
+speed x song time; analysis copy of the stem only), and the same check is run on the stem warped to the
+song's speed. When it matches, a lined-up copy on the song's own timeline (16 kHz mono, only the part that overlaps
 the song, silence where the stem does not reach) is written to <workspace>/cache/stems/ and used by
 pnpm align, the voice map and first_words instead of the Demucs stem. The check is cached per song and
 stem content (cache/stems/match-<song>-<stem>.v<N>.json).
@@ -34,16 +37,23 @@ import numpy as np
 from .cache import file_hash
 from .config import workspace_dir
 
-VERSION = 1  # bump when the check or the lined-up copy changes
+VERSION = 2  # bump when the check or the lined-up copy changes
 RATE = 8_000  # analysis rate for the comparison
 BAND_HZ = (150.0, 3_800.0)  # the voice band
 LINED_RATE = 16_000  # the lined-up copy: what the aligner, the voice map and first_words read
 POINTS = 5  # stretches measured along the song (start ... middle ... end)
 WINDOW_S = 12.0  # length of each measured stretch
 MIN_POINTS = 3  # at least this many stretches with voice
+# A drifting stem smears the whole-song peak, so the speed is searched from a lower strength (still above
+# unrelated audio); the result must then pass every check above at MIN_STRENGTH.
+SPEED_SEARCH_MIN_STRENGTH = 9.0
 MIN_STRENGTH = 12.0  # a clear peak: this many standard deviations above the rest (unrelated audio: about 5-7)
 MAX_SPREAD_S = 0.05  # every stretch must agree with the whole-song offset within this
 MAX_UNCOVERED_S = 10.0  # the stem may miss at most this much of the song (start + end)
+SPEED_RANGE = 0.01  # the speed difference searched: 0.99 ... 1.01
+SPEED_COARSE = 0.001
+SPEED_FINE = 0.0001
+MIN_SPEED_DIFF = 0.0002  # a best speed closer to 1 than this is no speed difference
 
 NOT_FOLLOWING = (
     "This vocal stem doesn't follow the song: probably another version of the song, or the song was "
@@ -62,7 +72,7 @@ class Point:
 class StemMatch:
     version: int
     status: str  # "lined-up" | "rejected"
-    offset_ms: int | None  # stem time = song time + offset (positive: the song was trimmed at the start)
+    offset_ms: int | None  # stem time = offset + speed x song time (positive: the song was trimmed at the start)
     message: str  # plain words for the user
     reason: str  # technical detail (the log)
     stem_hash: str
@@ -72,6 +82,7 @@ class StemMatch:
     covered_s: float | None = None  # how much of the song the stem covers
     strength: float | None = None  # the whole-song peak
     points: list[Point] = field(default_factory=list)
+    speed: float | None = None  # stem seconds per song second, only when a speed difference was corrected
 
     @property
     def lined_up(self) -> bool:
@@ -82,12 +93,25 @@ def offset_text(offset_ms: int) -> str:
     return f"{abs(offset_ms) / 1000:.1f} s"
 
 
-def lined_up_message(offset_ms: int) -> str:
+def speed_text(speed: float) -> str:
+    """"the song plays 0.2 % slower than the stem": stem time = offset + speed x song time, so a speed above 1
+    means the stem gets through its material faster than the song does, i.e. the song plays faster."""
+    pct = abs(speed - 1) * 100
+    return f"the song plays {pct:.2g} % {'faster' if speed > 1 else 'slower'} than the stem"
+
+
+def lined_up_message(offset_ms: int, speed: float | None = None) -> str:
+    if speed is None:
+        if abs(offset_ms) < 50:
+            return "Vocal stem lined up: it starts with the song (no offset)."
+        # A positive offset: the stem has more at its start than the song (silence trimmed from the song).
+        side = "from trimming the song's start" if offset_ms > 0 else "the song starts earlier than the stem"
+        return f"Vocal stem lined up: {offset_text(offset_ms)} offset, {side}."
+    fix = f"{speed_text(speed)} (from the export), corrected for the lyric timing."
     if abs(offset_ms) < 50:
-        return "Vocal stem lined up: it starts with the song (no offset)."
-    # A positive offset: the stem has more at its start than the song (silence trimmed from the song).
+        return f"Vocal stem lined up: it starts with the song; {fix}"
     side = "from trimming the song's start" if offset_ms > 0 else "the song starts earlier than the stem"
-    return f"Vocal stem lined up: {offset_text(offset_ms)} offset, {side}."
+    return f"Vocal stem lined up: {offset_text(offset_ms)} offset, {side}; {fix}"
 
 
 # --------------------------------------------------------------------------- signal helpers
@@ -135,8 +159,9 @@ def rms(audio: np.ndarray) -> float:
 
 # --------------------------------------------------------------------------- the check
 
-def match_audio(song: np.ndarray, stem: np.ndarray, rate: int = RATE) -> tuple[str, int | None, str, float | None, float | None, list[Point]]:
-    """(status, offset in samples, reason, covered seconds, whole-song strength, points)."""
+def check_at_speed_one(song: np.ndarray, stem: np.ndarray, rate: int = RATE) -> tuple[str, int | None, str, float | None, float | None, list[Point]]:
+    """The check for a stem at the song's own speed: (status, offset in samples, reason, covered seconds,
+    whole-song strength, points)."""
     if rms(stem) < 1e-4:
         return "rejected", None, "the stem is silent", None, None, []
     if rms(song) < 1e-4:
@@ -199,14 +224,70 @@ def match_audio(song: np.ndarray, stem: np.ndarray, rate: int = RATE) -> tuple[s
         return "rejected", offset, f"the stem covers only {covered:.1f} s of the song's {len(song) / rate:.1f} s", covered, strength, points
     return "lined-up", offset, f"offset {offset / rate:+.3f} s at every measured stretch (strength {strength:.1f} for the whole song)", covered, strength, points
 
+# --------------------------------------------------------------------------- a constant speed difference
+
+def warp(stem: np.ndarray, f: float, rate: int = RATE, quality: str = "HQ") -> np.ndarray:
+    """The stem (analysis copy) played at another speed: warped[x] = stem[f * x]."""
+    import soxr
+
+    return np.ascontiguousarray(soxr.resample(stem, f * rate, rate, quality=quality), dtype=np.float32)
+
+
+def find_speed(song: np.ndarray, stem: np.ndarray, rate: int = RATE) -> tuple[float, float]:
+    """The speed f (0.99 ... 1.01) at which the warped stem matches the whole song best: (f, strength).
+    Coarse steps first, then fine steps around the best."""
+    from scipy import fft as sfft
+
+    n = sfft.next_fast_len(int(len(song) + len(stem) / (1 - SPEED_RANGE)) + 16, real=True)
+    weights = _band_weights(n, rate).astype(np.float32)
+    a = np.conj(sfft.rfft(song.astype(np.float32), n, workers=-1))
+    guard = int(0.02 * rate)
+    tried: dict[float, float] = {}
+
+    def strength_at(f: float) -> float:
+        f = round(f, 6)
+        if f not in tried:
+            b = sfft.rfft(warp(stem, f, rate, "MQ"), n, workers=-1)
+            cross = a * b
+            cross *= weights / (np.abs(cross) + 1e-9)
+            corr = sfft.irfft(cross, n, workers=-1)
+            lags = np.arange(-(len(song) - 1), int(len(stem) / f) + 1)
+            tried[f] = peak(corr, lags, guard)[1]
+        return tried[f]
+
+    steps = int(round(SPEED_RANGE / SPEED_COARSE))
+    best = max((1 + k * SPEED_COARSE for k in range(-steps, steps + 1)), key=strength_at)
+    ratio = int(round(SPEED_COARSE / SPEED_FINE))
+    best = max((best + k * SPEED_FINE for k in range(-ratio, ratio + 1)), key=strength_at)
+    best = round(best, 6)
+    return best, tried[best]
+
+
+def match_audio(song: np.ndarray, stem: np.ndarray, rate: int = RATE) -> tuple[str, int | None, str, float | None, float | None, list[Point], float | None]:
+    """(status, offset in samples of real stem time, reason, covered seconds, whole-song strength, points,
+    speed). The speed is None unless a constant speed difference had to be corrected."""
+    status, offset, reason, covered, strength, points = check_at_speed_one(song, stem, rate)
+    if status == "lined-up" or strength is None or strength < SPEED_SEARCH_MIN_STRENGTH:
+        return status, offset, reason, covered, strength, points, None
+    f, f_strength = find_speed(song, stem, rate)
+    if abs(f - 1) < MIN_SPEED_DIFF:
+        return status, offset, reason, covered, strength, points, None
+    w_status, w_offset, w_reason, w_covered, w_strength, w_points = check_at_speed_one(song, warp(stem, f, rate), rate)
+    if w_status == "lined-up" and w_offset is not None:
+        # warped[x + d] matches song[x], warped[x] = stem[f x]: stem time = f d + f x.
+        real = int(round(f * w_offset))
+        return "lined-up", real, f"offset {real / rate:+.3f} s, speed {f:.5f} at every measured stretch (strength {f_strength:.1f} for the whole song)", w_covered, f_strength, w_points, f
+    why = f"{reason}; with the stem's speed corrected by {f:.5f} (strength {f_strength:.1f}) it fails too: {w_reason}"
+    return status, offset, why, covered, strength, points, None
+
 
 def match_files(song: Path, stem: Path) -> StemMatch:
     song_audio, song_rate = load_mono(song, RATE)
     stem_audio, stem_rate = load_mono(stem, RATE)
-    status, offset, reason, covered, strength, points = match_audio(song_audio, stem_audio, RATE)
+    status, offset, reason, covered, strength, points, speed = match_audio(song_audio, stem_audio, RATE)
     offset_ms = round(offset * 1000 / RATE) if offset is not None and status == "lined-up" else None
     if status == "lined-up":
-        message = lined_up_message(offset_ms or 0)
+        message = lined_up_message(offset_ms or 0, speed)
     elif "silent" in reason and "stem" in reason:
         message = "This vocal stem is silent: download the vocal stem again. The app separates the vocals itself (Demucs) meanwhile."
     elif "covers only" in reason:
@@ -226,6 +307,7 @@ def match_files(song: Path, stem: Path) -> StemMatch:
         covered_s=round(covered, 2) if covered is not None else None,
         strength=round(strength, 1) if strength is not None else None,
         points=points,
+        speed=round(speed, 6) if speed is not None else None,
     )
 
 
@@ -237,8 +319,9 @@ def match_cache_file(song_hash: str, stem_hash: str) -> Path:
     return stems_dir() / f"match-{song_hash[:16]}-{stem_hash[:16]}.v{VERSION}.json"
 
 
-def lined_up_file(song_hash: str, stem_hash: str, offset_ms: int) -> Path:
-    return stems_dir() / f"{song_hash}-suno-{stem_hash[:12]}-{offset_ms:+d}ms-vocals.wav"
+def lined_up_file(song_hash: str, stem_hash: str, offset_ms: int, speed: float | None = None) -> Path:
+    corrected = f"-x{speed:.5f}" if speed is not None else ""
+    return stems_dir() / f"{song_hash}-suno-{stem_hash[:12]}-{offset_ms:+d}ms{corrected}-vocals.wav"
 
 
 def check_stem(song: Path, stem: Path, log: Callable[[str], None] = print) -> StemMatch:
@@ -267,12 +350,17 @@ def write_lined_up(song: Path, stem: Path, m: StemMatch) -> Path:
     import soundfile as sf
 
     assert m.lined_up and m.offset_ms is not None
-    out = lined_up_file(m.song_hash, m.stem_hash, m.offset_ms)
+    out = lined_up_file(m.song_hash, m.stem_hash, m.offset_ms, m.speed)
     if out.exists():
         return out
     stem_audio, _ = load_mono(stem, LINED_RATE)
     length = int(round(sf.info(str(song)).duration * LINED_RATE))
     shift = int(round(m.offset_ms * LINED_RATE / 1000))
+    if m.speed is not None:
+        # stem time = offset + speed x song time: play the stem at the song's speed (warped[x] = stem[speed x]),
+        # then the offset in song-speed seconds is offset / speed.
+        stem_audio = warp(stem_audio, m.speed, LINED_RATE)
+        shift = int(round(m.offset_ms * LINED_RATE / 1000 / m.speed))
     lined = np.zeros(length, dtype=np.float32)
     first = max(0, -shift)
     last = min(length, len(stem_audio) - shift)
@@ -294,6 +382,7 @@ class VoiceSource:
     offset_ms: int | None = None
     stem_hash: str | None = None
     message: str | None = None  # the check's message (lined up, or why the stem is not used)
+    speed: float | None = None  # only when a speed difference is corrected
 
     def as_dict(self) -> dict:
         return {k: v for k, v in asdict(self).items() if v is not None}
@@ -328,9 +417,9 @@ def stem_track(song: Path, stem: Path | None, log: Callable[[str], None]) -> tup
         log(f"vocal stem: {m.message} ({m.reason})")
         return None, VoiceSource("demucs", "separated by the app (the vocal stem doesn't follow the song)", stem_hash=m.stem_hash, message=m.message)
     out = write_lined_up(song, stem, m)
-    label = f"vocal stem, offset {offset_text(m.offset_ms or 0)}"
+    label = f"vocal stem, offset {offset_text(m.offset_ms or 0)}" + (", speed corrected" if m.speed is not None else "")
     log(f"vocal stem: {m.message} Using {stem.name} ({out.name})")
-    return out, VoiceSource("stem", label, offset_ms=m.offset_ms, stem_hash=m.stem_hash, message=m.message)
+    return out, VoiceSource("stem", label, offset_ms=m.offset_ms, stem_hash=m.stem_hash, message=m.message, speed=m.speed)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -351,6 +440,8 @@ def main(argv: list[str] | None = None) -> int:
     if m.lined_up and args.line_up:
         result["lined_up_file"] = str(write_lined_up(song, stem, m))
     print(m.message)
+    if m.speed is not None:
+        print(f"  speed: x{m.speed:.5f} (stem time = offset + speed x song time)")
     print(f"  ({m.reason})")
     if args.out:
         out = Path(args.out)

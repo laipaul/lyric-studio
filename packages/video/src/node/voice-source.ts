@@ -20,7 +20,8 @@ export type VoiceSource = {
   label: string; // "vocal stem, offset 1.8 s" | "separated by the app"
   stemFile?: string; // the stem (kind "stem")
   stemHash?: string;
-  offsetMs?: number; // stem time = song time + offset
+  offsetMs?: number; // stem time = offset + speed x song time
+  speed?: number; // only when a constant speed difference between the stem and the song is corrected
   message?: string; // the check's words for the user (lined up, or why the stem is not used)
 };
 
@@ -30,6 +31,7 @@ export const DEMUCS: VoiceSource = { kind: "demucs", label: "separated by the ap
 export type StemCheck = {
   status: "lined-up" | "rejected";
   offset_ms: number | null;
+  speed?: number | null; // stem seconds per song second; only when corrected
   message: string;
   reason: string;
   stem_hash: string;
@@ -44,14 +46,15 @@ export const runStemCheckCommand: StemCheckRunner = (a) => runAudioScript("vocal
 
 export const offsetText = (ms: number) => `${(Math.abs(ms) / 1000).toFixed(1)} s`;
 
+// .v2: the check learned to correct a constant speed difference, so a stored rejection is checked again.
 export function stemCheckFile(storeDir: string, songHash: string, stemHash: string): string {
-  return path.join(storeDir, `stem-check-${songHash.slice(0, 12)}-${stemHash.slice(0, 12)}.json`);
+  return path.join(storeDir, `stem-check-${songHash.slice(0, 12)}-${stemHash.slice(0, 12)}.v2.json`);
 }
 
 // The key part that tells alignments, voice maps and recognised words of the stem apart ("" for Demucs,
 // so everything stored before the stem existed keeps its name).
 export function voiceKey(v: VoiceSource): string {
-  return v.kind === "stem" ? `stem-${v.stemHash!.slice(0, 12)}-${v.offsetMs}ms` : "";
+  return v.kind === "stem" ? `stem-${v.stemHash!.slice(0, 12)}-${v.offsetMs}ms${v.speed != null ? `-x${v.speed.toFixed(5)}` : ""}` : "";
 }
 
 // What the audio scripts get: the stem file, or "none" (Demucs; also when the stem does not follow the song).
@@ -59,7 +62,16 @@ export const stemArgument = (v: VoiceSource) => (v.kind === "stem" ? v.stemFile!
 
 export function sourceFromCheck(check: StemCheck, stemFile: string): VoiceSource {
   if (check.status === "lined-up" && check.offset_ms !== null) {
-    return { kind: "stem", label: `vocal stem, offset ${offsetText(check.offset_ms)}`, stemFile, stemHash: check.stem_hash, offsetMs: check.offset_ms, message: check.message };
+    const speed = typeof check.speed === "number" ? check.speed : undefined;
+    return {
+      kind: "stem",
+      label: `vocal stem, offset ${offsetText(check.offset_ms)}${speed !== undefined ? ", speed corrected" : ""}`,
+      stemFile,
+      stemHash: check.stem_hash,
+      offsetMs: check.offset_ms,
+      ...(speed !== undefined ? { speed } : {}),
+      message: check.message,
+    };
   }
   return { ...DEMUCS, label: "separated by the app (the vocal stem doesn't follow the song)", stemHash: check.stem_hash, message: check.message };
 }
@@ -132,7 +144,7 @@ export function voiceLine(v: VoiceSource): string {
 }
 
 // What the manifest keeps (no paths: the stem never goes into any output).
-export type VoiceRecord = { kind: "stem" | "demucs"; label: string; offset_ms?: number; stem_sha256?: string; message?: string };
+export type VoiceRecord = { kind: "stem" | "demucs"; label: string; offset_ms?: number; speed?: number; stem_sha256?: string; message?: string };
 export function voiceRecord(v: VoiceSource): VoiceRecord {
-  return { kind: v.kind, label: v.label, ...(v.offsetMs !== undefined ? { offset_ms: v.offsetMs } : {}), ...(v.stemHash ? { stem_sha256: v.stemHash } : {}), ...(v.message ? { message: v.message } : {}) };
+  return { kind: v.kind, label: v.label, ...(v.offsetMs !== undefined ? { offset_ms: v.offsetMs } : {}), ...(v.speed != null ? { speed: v.speed } : {}), ...(v.stemHash ? { stem_sha256: v.stemHash } : {}), ...(v.message ? { message: v.message } : {}) };
 }

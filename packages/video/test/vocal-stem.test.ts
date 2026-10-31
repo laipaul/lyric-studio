@@ -16,7 +16,7 @@ import { songAssets, storeVocalStem } from "../src/node/assets";
 import { timeLyrics } from "../src/node/lyric-timing";
 import { workOnce } from "../src/node/run-worker";
 import { songTodo } from "../src/node/song-stages";
-import { DEMUCS, resolveVoiceSource, voiceKey, voiceRecord, type StemCheck, type StemCheckRunner } from "../src/node/voice-source";
+import { DEMUCS, resolveVoiceSource, sourceFromCheck, stemCheckFile, voiceKey, voiceRecord, type StemCheck, type StemCheckRunner } from "../src/node/voice-source";
 import { applyVocalGuard, ensureAlignment, findOrCreateSongProject, makeVideos, songFolderFiles, songPathsById, type AlignRunner, type FirstWordsRunner, type SongProject, type VoiceMapRunner } from "../src/node";
 import { fakeAlign, LYRICS, makeClip, makeSong } from "./media-helpers";
 
@@ -120,13 +120,27 @@ describe("the voice source", () => {
     expect(voiceRecord(v)).toEqual({ kind: "stem", label: "vocal stem, offset 1.8 s", offset_ms: 1800, stem_sha256: v.stemHash, message: v.message });
   });
 
+  it("a corrected speed difference is part of the label, the key and the record (only then)", () => {
+    const base: StemCheck = { status: "lined-up", offset_ms: 660, message: "m", reason: "r", stem_hash: "ab".repeat(32), song_hash: "cd".repeat(32) };
+    const plain = sourceFromCheck(base, "vocals.wav");
+    expect(plain.label).toBe("vocal stem, offset 0.7 s");
+    expect(voiceKey(plain)).toBe(`stem-${"ab".repeat(6)}-660ms`);
+    expect(voiceRecord(plain)).not.toHaveProperty("speed");
+    expect(voiceKey(sourceFromCheck({ ...base, speed: null }, "vocals.wav"))).toBe(voiceKey(plain));
+    const fast = sourceFromCheck({ ...base, speed: 1.002 }, "vocals.wav");
+    expect(fast).toMatchObject({ label: "vocal stem, offset 0.7 s, speed corrected", speed: 1.002 });
+    expect(voiceKey(fast)).toBe(`stem-${"ab".repeat(6)}-660ms-x1.00200`);
+    expect(voiceRecord(fast)).toMatchObject({ offset_ms: 660, speed: 1.002 });
+    expect(stemCheckFile("/s", "c".repeat(20), "d".repeat(20))).toMatch(/stem-check-c{12}-d{12}\.v2\.json$/);
+  });
+
   it("re-aligns on the stem (new cache key), keeps the hints, and the Demucs alignment stays stored", async () => {
     const log: string[] = [];
     const a = await ensureAlignment(ws, sp, { lyricsTxt: lyricsTxt(), hint: hints(), durationMs: 12_000, align, log: (m) => log.push(m), stemCheck });
     expect(a.voice.kind).toBe("stem");
     expect(aligned.at(-1)!.stem).toBe(path.join(folder, "vocals.wav"));
     expect(aligned.at(-1)!.hint).toBe(aligned[0].hint); // the same stored hints
-    expect(log).toContain("lyrics: the vocal stem is new: the song is aligned again on it (stored hints and hand-set starts are kept).");
+    expect(log).toContain("lyrics: the vocal stem is new: the song is aligned again on it (taps in hints.lrc kept; starts set by hand before the stem are reset once, with Undo in the Lyrics tab).");
     expect(log.some((l) => l.startsWith("lyrics: voice: vocal stem, offset 1.8 s (vocals.wav)."))).toBe(true);
     const stored = readdirSync(path.dirname(a.lrcFile)).filter((f) => /^aligned-.*\.lrc$/.test(f));
     expect(stored.length).toBe(2);

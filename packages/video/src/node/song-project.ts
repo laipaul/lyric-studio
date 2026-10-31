@@ -521,11 +521,11 @@ export function whyNotStored(dir: string, lyricsText: string, hintHash: string, 
     }
   });
   if (vocalKey && keys.has(alignKey(words, hintHash, lang, ""))) {
-    out.push("the vocal stem is new: the song is aligned again on it (stored hints and hand-set starts are kept).");
+    out.push("the vocal stem is new: the song is aligned again on it (taps in hints.lrc kept; starts set by hand before the stem are reset once, with Undo in the Lyrics tab).");
     return out;
   }
   if (vocalKey && stemAligned) {
-    out.push("the vocal stem was replaced: the song is aligned again on the new one (stored hints and hand-set starts are kept).");
+    out.push("the vocal stem was replaced: the song is aligned again on the new one (taps and hand-set starts kept).");
     return out;
   }
   if (!vocalKey && stemAligned) {

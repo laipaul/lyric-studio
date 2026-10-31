@@ -98,7 +98,7 @@ export function AssetsTab({ projectId }: { projectId: string }) {
     if (kind === "vocals") {
       // Checked against the song at once; the lyric timing runs again on it (Tasks menu).
       const r = (await send(body)) as { status: "lined-up" | "rejected"; message: string; retimed: boolean } | null;
-      if (r) setNotice({ ok: r.status === "lined-up", text: `${r.message}${r.retimed ? (r.status === "lined-up" ? " The lyric timing runs again on it now (see Tasks); your hints and hand-set starts are kept." : "") : ""}` });
+      if (r) setNotice({ ok: r.status === "lined-up", text: `${r.message}${r.retimed ? (r.status === "lined-up" ? " The lyric timing runs again on it now (see Tasks): every line follows the stem; your taps (hints.lrc) are kept, and starts you set by hand before the stem are reset once (Undo in the Lyrics tab)." : "") : ""}` });
       return;
     }
     if (await send(body)) setNotice({ ok: true, text: `${file.name} is now the song's ${kind === "song" ? "song file" : kind === "lyrics" ? (data?.instrumental ? "story.txt" : "lyrics") : kind === "hints" ? "hints.lrc" : kind === "backingVocals" ? "backing vocals (kept for reference, not used for timing)" : "cover"}${kind === "cover" ? "" : " (the previous one is kept in .studio\\replaced\\)"}.` });

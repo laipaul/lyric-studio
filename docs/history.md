@@ -4,6 +4,18 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Effects, batch 2 step 2: Held-note glow, Chorus lift, Shine ✅ (to verify on the Windows PC)
+- Three settings in Shape → Style, next to Breathe (off by default, per platform), each with **"Use for all my
+  songs"** (asks first; writes your brand, and the song follows it):
+  - **Held-note glow**: a word sung for about a second or longer glows softly in your accent colour while it is
+    held, then settles (needs the song's word timings, which every aligned song has).
+  - **Chorus lift**: the first line of each chorus arrives about 5% bigger with a soft glow, then eases back.
+  - **Shine**: one soft light sweep across each chorus line, on a downbeat.
+- All three work with every effect, are in "Try an effect" (checkboxes) and count in the safe-zone check.
+- Tests: accents.test.ts (glow only on held words, lift only on the first chorus line, one shine on a downbeat,
+  smooth, settings checked); song-stages.e2e.ts (setting saved, Use for all my songs -> brand.json).
+- Next: Focus Word + Slide, then Emotion presets (Creative Director).
+
 ### Effects, batch 2 step 1: Clarify, Ascend, Ink ✅ (to verify on the Windows PC)
 - **clarify**: each word pulls into focus (blurred and dim -> sharp) as it is sung, like a camera finding focus.
 - **ascend**: the letters rise into place one after another, a soft wave across the line (titles too).

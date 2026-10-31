@@ -97,10 +97,74 @@ def test_another_version_is_rejected(workspace: Path, tmp_path: Path, suno) -> N
     assert m.status == "rejected" and m.message == NOT_FOLLOWING
 
 
-def test_tempo_change_is_rejected(workspace: Path, tmp_path: Path, suno) -> None:
-    slower = resample(suno["mix"], SR, int(SR * 1.004))  # 0.4 % slower: 0.4 s off by the end
+def slowed(x: np.ndarray, sr: int) -> tuple[np.ndarray, float]:
+    """x played at another speed (resampled to `sr`, played at SR) and the speed: stem time per song time."""
+    y = resample(x, SR, sr)
+    return y, len(x) / len(y)
+
+
+def test_small_speed_difference_is_corrected(workspace: Path, tmp_path: Path, suno) -> None:
+    slower, speed = slowed(suno["mix"], int(SR * 1.004))  # 0.4 % slower: 0.4 s off by the end
     m = checked(tmp_path, slower, suno["voice"])
-    assert m.status == "rejected"
+    assert m.status == "lined-up" and abs(m.offset_ms) <= 5
+    assert m.speed == pytest.approx(speed, abs=0.0002) and m.speed < 1
+    assert "plays 0.4 % slower than the stem" in m.message
+
+
+def test_speed_difference_of_the_real_song(workspace: Path, tmp_path: Path, suno) -> None:
+    # Suno stem 48 kHz; the song: 0.66 s trimmed at the start, 0.2 % off, 44.1 kHz, faded end.
+    stem48 = resample(suno["voice"], SR, 48_000)
+    cut, speed = slowed(suno["mix"][int(0.66 * SR) :], int(SR * 0.998))
+    song = fade(cut[: -int(4 * SR)], 0.0, 3.0)
+    assert speed > 1.0019
+    s, v = song_and_stem(tmp_path, song, stem48, 48_000)
+    before = (file_hash(s), file_hash(v))
+    lined, source = stem_track(s, v, log=lambda _m: None)
+    assert (file_hash(s), file_hash(v)) == before
+    m = check_stem(s, v, log=lambda _m: None)
+    assert m.status == "lined-up" and m.speed == pytest.approx(speed, abs=0.0002)
+    # stem time = offset + speed x song time: the 0.66 s cut off the song's start is the offset.
+    assert abs(m.offset_ms - 660) <= 5 and "plays 0.2 % faster than the stem" in m.message
+    assert lined is not None and source.kind == "stem" and source.speed == m.speed and source.label == "vocal stem, offset 0.7 s, speed corrected"
+    assert lined == lined_up_file(file_hash(s), file_hash(v), m.offset_ms, m.speed) and "-x1.00" in lined.name
+    audio, sr = sf.read(str(lined))
+    assert sr == 16_000 and abs(len(audio) / sr - len(song) / SR) < 0.01
+    # The voice as it is in the song (cut at 0.66 s, 0.2 % off), on the 16 kHz timeline: the copy matches it
+    # at two song times (a lag of a few samples at most; a wrong speed would be 10 ms or more at 80 s).
+    in_song = resample(resample(suno["voice"][int(0.66 * SR) :], SR, int(SR * 0.998)), SR, 16_000)
+    for t in (30.0, 80.0):
+        a = int(t * 16_000)
+        piece, window = audio[a : a + 8_000], in_song[a - 64 : a + 8_000 + 64]
+        corr = np.correlate(window, piece, mode="valid")
+        lag = int(np.argmax(corr))
+        assert abs(lag - 64) <= 48  # 3 ms
+        assert corr[lag] / (np.linalg.norm(piece) * np.linalg.norm(window[lag : lag + 8_000])) > 0.95
+
+
+def test_four_minute_song_with_a_speed_difference(workspace: Path, tmp_path: Path) -> None:
+    # A whole 4-minute song 0.2 % off: the drift smears the whole-song peak (strength about 12), yet it lines up.
+    v, b = voice(240.0, seed=3), band(240.0)
+    song, speed = slowed(mix(v, b)[int(0.66 * SR) :], int(SR * 0.998))
+    m = checked(tmp_path, song, v)
+    assert m.status == "lined-up" and m.speed == pytest.approx(speed, abs=0.0002) and abs(m.offset_ms - 660) <= 5
+
+
+def test_no_speed_in_the_normal_case(workspace: Path, tmp_path: Path, suno) -> None:
+    m = checked(tmp_path, suno["mix"][int(1.8 * SR) :], suno["voice"])
+    assert m.speed is None and "speed" not in m.message and "-x" not in lined_up_file("a", "b", m.offset_ms).name
+
+
+def test_big_speed_difference_is_rejected(workspace: Path, tmp_path: Path, suno) -> None:
+    slower, _ = slowed(suno["mix"], int(SR * 1.02))
+    m = checked(tmp_path, slower, suno["voice"])
+    assert m.status == "rejected" and m.speed is None and m.message == NOT_FOLLOWING
+
+
+def test_middle_edit_with_speed_difference_is_rejected(workspace: Path, tmp_path: Path, suno) -> None:
+    cut = np.concatenate([suno["mix"][: int(45 * SR)], suno["mix"][int(58 * SR) :]])
+    slower, _ = slowed(cut, int(SR * 1.002))
+    m = checked(tmp_path, slower, suno["voice"])
+    assert m.status == "rejected" and m.speed is None and m.message == NOT_FOLLOWING
 
 
 def test_silent_stem_is_rejected(workspace: Path, tmp_path: Path, suno) -> None:

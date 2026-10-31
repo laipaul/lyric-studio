@@ -4,6 +4,19 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Fix — vocal stem check corrects a small speed difference ✅ (to verify on the Windows PC)
+- A song exported from the DAW can play a little faster or slower than Suno's stem (Love Is A Good Thing:
+  about 0.2 %, so the gap grew from 0.66 s to 0.77 s along the song and the stem was refused). The check now
+  measures that speed (up to 1 %) and lines up the app's private analysis copy of the stem with it; your song
+  and stem files are never changed and nothing reaches a video. Assets says e.g. "Vocal stem lined up: 0.7 s
+  offset, from trimming the song's start; the song plays 0.2 % faster than the stem (from the export),
+  corrected for the lyric timing." A song edited in the middle, another take, or more than 1 % stays refused.
+- Stored checks are redone once (new version), so a stem refused before is checked again by itself.
+- Assets wording: adding a stem says your taps are kept and starts set by hand before the stem are reset once.
+- Tests: test_vocal_stem.py (speed corrected at 0.4 %, the real song's case at 48/44.1 kHz with a lined-up copy
+  checked at 30 s and 80 s, a 4-minute song 0.2 % off, 2 % refused, middle edit + speed refused),
+  vocal-stem.test.ts (label, key and record with a speed).
+
 ### Original file names + the vocal stem's timing as the base ✅ (to verify on the Windows PC)
 - **Your files keep their own names.** The song, the lyrics, the vocal stem and the backing vocals are stored
   under the names they came with ("These Empty Roads (Master).wav", "TER lyrics v3.txt", "These Empty Roads
@@ -146,18 +159,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   Platforms note says what an empty choice does (Make release pack: all five; More options: Reels + YouTube).
 - Built by a Sonnet helper (bug-fix rule), checked here (clean build, Style / Storyboard / Pairings / Song-stages
   browser tests pass).
-
-### Effects, batch 2 step 2: Held-note glow, Chorus lift, Shine ✅ (to verify on the Windows PC)
-- Three settings in Shape → Style, next to Breathe (off by default, per platform), each with **"Use for all my
-  songs"** (asks first; writes your brand, and the song follows it):
-  - **Held-note glow**: a word sung for about a second or longer glows softly in your accent colour while it is
-    held, then settles (needs the song's word timings, which every aligned song has).
-  - **Chorus lift**: the first line of each chorus arrives about 5% bigger with a soft glow, then eases back.
-  - **Shine**: one soft light sweep across each chorus line, on a downbeat.
-- All three work with every effect, are in "Try an effect" (checkboxes) and count in the safe-zone check.
-- Tests: accents.test.ts (glow only on held words, lift only on the first chorus line, one shine on a downbeat,
-  smooth, settings checked); song-stages.e2e.ts (setting saved, Use for all my songs -> brand.json).
-- Next: Focus Word + Slide, then Emotion presets (Creative Director).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
