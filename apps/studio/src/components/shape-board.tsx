@@ -20,6 +20,7 @@ import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData }
 
 import { AssessmentDetails, VerdictBadge } from "@/components/assessment";
 import { LookViewer, VIEWER_HEIGHT } from "@/components/look-preview";
+import { PreviewPlayer } from "@/components/preview-player";
 import type { ShapeLook } from "@/components/shape-tools";
 import { SHAPE_PANELS, useGoToTab, useShapePanel } from "@/components/song-stages";
 import { TransportBar } from "@/components/transport-bar";
@@ -59,6 +60,13 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   // Scrolling the timeline by hand pauses it until the next play.
   const [follow, setFollow] = useState(false);
   const [playing, setPlaying] = useState(false);
+  // An effect pointed at or picked in Motion: its name moves in it over the paused frame; playing hides it
+  // (the song then plays with the effect on the real lyrics) until another effect is pointed at or picked.
+  const [demoSeen, setDemoSeen] = useState<string | null>(null);
+  const demo = look?.demo && !playing && look.demo.key !== demoSeen ? look.demo : null;
+  useEffect(() => {
+    if (playing && look?.demo) setDemoSeen(look.demo.key);
+  }, [playing, look?.demo]);
   // The transport bar's speed (the preview only: time to check the lyrics) and Loop on / off.
   const [rate, setRate] = useState(1);
   const [loop, setLoop] = useState(false);
@@ -380,7 +388,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
 
   const viewer =
     view && props ? (
-      <div className="mx-auto max-w-full overflow-hidden rounded-xl border bg-black shadow-lg" style={{ height: VIEWER_HEIGHT, aspectRatio: wide ? "16 / 9" : "9 / 16" }}
+      <div className="relative mx-auto max-w-full overflow-hidden rounded-xl border bg-black shadow-lg" style={{ height: VIEWER_HEIGHT, aspectRatio: wide ? "16 / 9" : "9 / 16" }}
         data-viewer
         data-patched={look?.patch && view.source === "plan" ? "1" : "0"}
         data-previewing-pair={look?.previewing ?? undefined}
@@ -405,6 +413,11 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
           loop={loop}
           style={{ width: "100%", height: "100%" }}
         />
+        {demo ? (
+          <div data-effect-demo={demo.input.effect.name} className="pointer-events-none absolute inset-0" style={{ background: "rgba(0,0,0,0.35)" }}>
+            <PreviewPlayer input={demo.input} />
+          </div>
+        ) : null}
       </div>
     ) : look ? (
       <LookViewer input={look.fallback} caption={look.caption} previewing={look.previewing} />

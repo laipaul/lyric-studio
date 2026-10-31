@@ -4,7 +4,7 @@ import { Check, ChevronDown, Lock, Plus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { BACKING_LABELS, FALLBACK_LABELS, GRADE_LABELS, patchChoice, pictureOf, TITLE_STYLE_LABELS, TITLE_WARP_LABELS, titleStyleCss, VIGNETTE_LABELS, warpLetter, type TitleStyle, type TitleWarp, previewBacking, previewFace, previewLyrics, type LookPatch, type LookPreviewProps, type PatchFace, type Readability } from "@lyric/video";
+import { BACKING_LABELS, effectTitle, FALLBACK_LABELS, GRADE_LABELS, patchChoice, pictureOf, TITLE_STYLE_LABELS, TITLE_WARP_LABELS, titleStyleCss, VIGNETTE_LABELS, warpLetter, type TitleStyle, type TitleWarp, previewBacking, previewFace, previewLyrics, type LookPatch, type LookPreviewProps, type PatchFace, type Readability } from "@lyric/video";
 import type { PairingCard, PairingsView } from "@lyric/video/pairings";
 import type { StyleData, StyleField, StyleFont, StyleTheme } from "@lyric/video/style";
 
@@ -36,7 +36,9 @@ const show = (v: unknown) => (v === null ? "preset" : Array.isArray(v) ? (v.leng
 
 // What the Shape page's viewer needs from the tools: the look to patch into the planned video until it is
 // planned again (or while a pairing is pointed at), and the stand-in preview when there is no plan.
-export type ShapeLook = { patch: LookPatch | null; fallback: LookPreviewProps; caption: string; previewing: string | null }; // previewing: the pairing pointed at
+// demo: an effect just pointed at or picked in Motion: the viewer shows its name moving in it over the
+// video's frame, until the user plays (then the song plays with the effect on the real lyrics).
+export type ShapeLook = { patch: LookPatch | null; fallback: LookPreviewProps; caption: string; previewing: string | null; demo?: { key: string; input: LookPreviewProps } | null }; // previewing: the pairing pointed at
 const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "emphasis", "accentColour", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp"]);
 
 // The Shape page's tool panels (the song's recipe, song.json), one at a time as chosen in the rail: Fonts
@@ -67,7 +69,8 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
   const [dirty, setDirty] = useState(false); // a look change the planned video does not have yet
   const [hovered, setHovered] = useState<PairingCard | null>(null);
   const [hoverTheme, setHoverTheme] = useState<StyleTheme | null>(null);
-  const [hoverEffect, setHoverEffect] = useState<{ field: string; value: string } | null>(null); // a Motion gallery tile under the pointer // a theme tile under the pointer: the viewer tries it
+  const [hoverEffect, setHoverEffect] = useState<{ field: string; value: string } | null>(null);
+  const [pickedEffect, setPickedEffect] = useState<{ field: string; value: string; at: number } | null>(null); // the effect just picked: its name shows in the viewer // a Motion gallery tile under the pointer // a theme tile under the pointer: the viewer tries it
   const [naming, setNaming] = useState<{ from: string; name: string } | null>(null); // a tile's Rename: the new name being typed
   const [creating, setCreating] = useState<{ name: string; from: string } | null>(null); // "+ New theme": name first, then where to start
   const [savingAs, setSavingAs] = useState<string | null>(null); // "Save as new theme": the name being typed
@@ -195,8 +198,15 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
     // A gallery tile under the pointer: the big viewer plays that effect on the song (nothing is set).
     const base = hoverTheme ? withTheme(data, hoverTheme) : data;
     const shown = hoverEffect ? { ...base, fields: base.fields.map((f) => (f.field === hoverEffect.field ? { ...f, value: hoverEffect.value, own: true, perPlatform: null } : f)) } : base;
-    onLook(lookOf(shown, { dirty: dirty || !!hoverTheme || !!hoverEffect || !!draft?.changed, hovered, pairView, part, trying: hoverTheme?.name ?? null }));
-  }, [data, dirty, draft?.changed, hovered, hoverTheme, hoverEffect, pairView, part, onLook]);
+    const look = lookOf(shown, { dirty: dirty || !!hoverTheme || !!hoverEffect || !!draft?.changed, hovered, pairView, part, trying: hoverTheme?.name ?? null });
+    // The effect pointed at (or just picked): its plain name, moving in it, over the viewer's frame.
+    const demoOf = hoverEffect ?? pickedEffect;
+    const demoName = demoOf?.value.split(":")[0];
+    const demo = demoOf && demoName
+      ? { key: `${demoOf.field}:${demoOf.value}:${pickedEffect && !hoverEffect ? pickedEffect.at : "hover"}`, input: { ...look.fallback, background: null, backing: false, picture: null, transparent: true, lyrics: previewLyrics([effectTitle(demoName)]), textSize: 140, area: null, effect: patchChoice(demoOf.value, undefined) } }
+      : null;
+    onLook({ ...look, demo, ...(demo && hoverEffect ? { fallback: { ...look.fallback, lyrics: previewLyrics([effectTitle(demoName!)]), textSize: 110 } } : {}) });
+  }, [data, dirty, draft?.changed, hovered, hoverTheme, hoverEffect, pickedEffect, pairView, part, onLook]);
 
   if (error && !data) return <p className="text-sm text-red-300">{error}</p>;
   if (!data) return <p className="text-muted-foreground text-sm">Loading the song&apos;s recipe…</p>;
@@ -698,7 +708,10 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                   setPart={setPart}
                   locked={[]}
                   saved={false}
-                  onSet={(field, value) => void act({ action: "set", field, value })}
+                  onSet={(field, value) => {
+                    if (field === "verseEffect" || field === "hookEffect") setPickedEffect({ field, value, at: Date.now() });
+                    void act({ action: "set", field, value });
+                  }}
                   preview={(effect, title) => {
                     // The tile: the effect's own name, big, on a plain dark tile (the song's look is in the big viewer).
                     const p = lookOf(data, { dirty: false, hovered: null, pairView: null, part }).fallback;

@@ -317,6 +317,14 @@ async function main() {
     await page.click("[data-try-effect=spread]");
     await page.waitForFunction(() => document.querySelector("[data-viewer]")?.getAttribute("data-effect") === "spread", null, { timeout: 5000 }).catch(() => {});
     check((await page.getAttribute("[data-viewer]", "data-effect")) === "spread", "Set effect: the viewer plays the new verse effect at once");
+    await page.waitForSelector("[data-viewer] [data-effect-demo=spread]", { timeout: 5000 }).catch(() => {});
+    check(!!(await page.$("[data-viewer] [data-effect-demo=spread] .__remotion-player")), "…and its name moves in it over the video's frame");
+    await page.mouse.move(5, 5); // off the gallery: the picked effect's name stays until play
+    check(!!(await page.$("[data-viewer] [data-effect-demo=spread]")), "…the picked effect's name stays on the paused frame");
+    await page.click("[data-viewer]"); // play: the song plays with the effect on its real lyrics
+    await page.waitForFunction(() => !document.querySelector("[data-effect-demo]"), null, { timeout: 5000 }).catch(() => {});
+    check(!(await page.$("[data-effect-demo]")), "…and pressing play shows the real lyrics with the effect");
+    await page.click("[data-viewer]"); // pause again
     await saveTheme(page);
     await replanned();
     check(loadTheme(wsDir, readRecipe(paths.recipe!).theme!).look.verseEffect === "spread", "…saved in the song's theme");

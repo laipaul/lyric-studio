@@ -31,6 +31,7 @@ export type LookPreviewProps = {
   textSize: number;
   area: LyricArea | null; // the platform's lyric area (1080x1920); null: the default
   backing: boolean; // the render's soft backing behind the lyrics (readability)
+  transparent?: boolean; // only the words (drawn over another player: the effect's name over the video's frame)
   picture?: PictureProps | null; // the theme's grade, vignette, behind the words and background without a clip
 };
 
@@ -46,10 +47,10 @@ export function LookPreview(p: LookPreviewProps) {
     [p.verse.family, p.verse.weight, p.verse.italic],
   );
   return (
-    <AbsoluteFill style={{ background: p.background ? "#000" : p.picture ? fallbackBackground(p.picture) : "radial-gradient(ellipse at 50% 40%, #3a2630 0%, #141417 60%, #0b0b0d 100%)" }}>
+    <AbsoluteFill style={{ background: p.transparent ? "transparent" : p.background ? "#000" : p.picture ? fallbackBackground(p.picture) : "radial-gradient(ellipse at 50% 40%, #3a2630 0%, #141417 60%, #0b0b0d 100%)" }}>
       {p.background ? <Img src={p.background} style={{ width: "100%", height: "100%", objectFit: "cover", filter: grade.filter }} /> : null}
       {p.background && grade.veil ? <AbsoluteFill data-grade={p.picture?.grade} style={{ backgroundColor: grade.veil.colour, mixBlendMode: grade.veil.blend }} /> : null}
-      {vignette ? <AbsoluteFill data-vignette={p.picture?.vignette} style={{ background: vignette }} /> : null}
+      {vignette && !p.transparent ? <AbsoluteFill data-vignette={p.picture?.vignette} style={{ background: vignette }} /> : null}
       {p.backing || p.picture?.backing === "band" ? <LyricBacking area={area} height={1920} /> : null}
       <LyricScene
         lyrics={p.lyrics}
