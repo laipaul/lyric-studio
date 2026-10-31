@@ -4,7 +4,7 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### L1a. Vocal stem (vocals.wav) as the main guide for lyric timing ✅ (to verify on the Windows PC)
+### L1a. Vocal stem (vocals.wav) as the main guide for lyric timing ✅ (verified by the user on the Windows PC, 31 Oct 2026: These Empty Roads "the result is perfect now")
 - Put Suno's vocal stem, untouched, in the song folder as **vocals.wav** (Assets tab: "Vocal stem" →
   Add… / Replace…; the old one goes to .studio\replaced\). From then on everything that listens to the voice uses
   it: pnpm align, the voice map, the recognised first words, the vocal-start check and QA "Lines start with the
@@ -316,7 +316,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 
 **Lyric timing first (agreed 31 Oct 2026): L1a and L1b come before the Style rebuild and the UX steps below;
 the open decisions stay paused.**
-- ✅ (built 31 Oct, to verify) **L1a. Vocal stem (vocals.wav) as the main guide for lyric timing**; Demucs only
+- ✅ (verified 31 Oct: These Empty Roads "perfect") **L1a. Vocal stem (vocals.wav) as the main guide for lyric timing**; Demucs only
   the fallback (see Latest steps). Verify with `pnpm lyrics:compare-voice` on These Empty Roads.
 - **L1b. The Lyric Map** (do not build before the user's OK; plan first): a stable ID per word from the song's
   structure (V1.L2.W3); the song as a map of sections; the app picks the few points most worth checking by ear
