@@ -4,7 +4,8 @@ import { measureText } from "@remotion/layout-utils";
 import { useMemo, type CSSProperties } from "react";
 import { useCurrentFrame, useVideoConfig } from "remotion";
 
-import { lyricScene, sceneTimeline } from "./effects/scene";
+import { lyricScene, sceneTimeline, wordTimings } from "./effects/scene";
+import { kineticAt, kineticGroups } from "./effects/trending";
 import { ascendLetter } from "./effects/ascend";
 import { inkMask } from "./effects/ink";
 import { AMOUNT } from "./effects/types";
@@ -106,6 +107,31 @@ export function LyricScene(props: {
   );
   if (!layouts || !timeline) return null;
 
+  // Kinetic stack: one or two big words at a time (each on its own row), popping in on the voice.
+  const t0 = (item: { index: number }) => !!timeline.own[item.index].effect.kinetic;
+  const kineticBlock = (line: LyricLineProps, layout: LyricLayout, item: { index: number; words: unknown }, f: number, font: Font, area: LyricArea) => {
+    const words = layout.lines.join(" ").split(" ").filter(Boolean);
+    if (!words.length) return null;
+    const groups = kineticGroups(words);
+    const starts = wordTimings(timeline, item.index).map((w) => w.startFrame);
+    const { group, pop } = kineticAt(groups, starts, f);
+    const shown = groups[group].map((k) => words[k]);
+    const width = area.right - area.left;
+    const measure = (t: string, size: number) => measureText({ text: t, fontFamily: font.family, fontWeight: font.weight, fontSize: size, ...(font.italic ? { additionalStyles: { fontStyle: "italic" } } : {}) }).width;
+    const big = layout.fontSize * 1.9;
+    const size = Math.max(layout.fontSize, Math.min(big, ...shown.map((t) => (big * width * 0.92) / Math.max(1, measure(t, big)))));
+    const k = 0.75 + 0.25 * pop + 0.1 * Math.sin(Math.PI * pop);
+    return (
+      <div data-kinetic={shown.join(" ")} style={{ fontSize: size, lineHeight: 1.02, transform: `scale(${k.toFixed(4)})`, opacity: Math.min(1, 0.2 + pop * 1.6) }}>
+        {shown.map((t, i) => (
+          <div key={i} style={{ whiteSpace: "nowrap", ...(line.isHook && i === shown.length - 1 ? {} : {}) }}>
+            {t}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <>
       {lyricScene(timeline, frame).map((item) => {
@@ -118,6 +144,12 @@ export function LyricScene(props: {
         const shadows = [style.effect !== "none" && SHADOWS[style.effect] ? SHADOWS[style.effect] : backingShadow(props.backing, effects.accent)];
         if (look.glow > 0.001) shadows.push(`0 0 ${Math.round(16 + 34 * look.glow)}px ${rgba(effects.accent, 0.85 * look.glow)}`, `0 0 ${Math.round(6 + 10 * look.glow)}px ${rgba("#ffffff", 0.6 * look.glow)}`);
         if (props.glow) shadows.push(props.glow);
+        // Glitch: red / cyan copies; Echo stack: faint copies stacked under the line.
+        if (look.split) shadows.push(`${look.split.toFixed(1)}px 0 0 rgba(255,0,80,0.75)`, `${(-look.split).toFixed(1)}px 0 0 rgba(0,220,255,0.75)`);
+        if (look.echo) [0.42, 0.24, 0.12].forEach((a, k) => shadows.push(`0 ${((k + 1) * layout.fontSize * 0.62 * look.echo!).toFixed(1)}px 0 ${rgba(colour, a * Math.min(1, look.echo! * 1.6))}`));
+        const tilt = look.tiltX || look.tiltY ? ` perspective(900px) rotateX(${(look.tiltX ?? 0).toFixed(2)}deg) rotateY(${(look.tiltY ?? 0).toFixed(2)}deg)` : "";
+        const rise = look.rise ? Math.min(1, look.rise) : 0;
+        const kinetic = t0(item) && item.role !== "next" ? kineticBlock(line, layout, item, frame, font, area) : null;
         let w = 0;
         return (
           <div
@@ -129,7 +161,8 @@ export function LyricScene(props: {
               left: area.left,
               width: area.right - area.left,
               top: area.centerY + look.y,
-              transform: `translate(${look.x.toFixed(2)}px, -50%) scale(${look.scale.toFixed(4)})`,
+              transform: `translate(${look.x.toFixed(2)}px, -50%)${rise ? ` translateY(${(rise * 100).toFixed(2)}%)` : ""}${tilt} scale(${look.scale.toFixed(4)})`,
+              clipPath: rise ? `inset(0 0 ${(rise * 100).toFixed(2)}% 0)` : undefined,
               textAlign: "center",
               color: colour,
               fontFamily: `"${font.family}", sans-serif`,
@@ -144,6 +177,8 @@ export function LyricScene(props: {
               letterSpacing: look.spacing ? `${look.spacing.toFixed(4)}em` : undefined,
             }}
           >
+            {kinetic ?? (
+            <div style={look.slice ? { clipPath: "inset(0 0 50% 0)", transform: `translateX(${look.slice.toFixed(1)}px)` } : undefined}>
             {layout.lines.map((text, r) => (
               <div key={r} style={{ whiteSpace: "nowrap", ...(props.backing === "box" && item.role !== "next" ? BOX_ROW : {}), ...(look.reveal !== undefined ? rowMask(layout.lines, r, look.reveal) : {}) }}>
                 {item.words
@@ -174,9 +209,23 @@ export function LyricScene(props: {
                     })
                   : look.wave !== undefined
                     ? waveLetters(layout.lines, r, look.wave, AMOUNT[(line.card?.effect ?? (line.isHook ? effects.hook : effects.verse)).intensity] ?? 1)
-                    : text}
+                    : look.ripple !== undefined
+                      ? rippleLetters(layout.lines, r, look.ripple, look.rippleAmp ?? 6)
+                      : text}
               </div>
             ))}
+            </div>
+            )}
+            {look.slice && !kinetic ? (
+              // Slice: the bottom half, pushed the other way.
+              <div aria-hidden data-slice style={{ position: "absolute", inset: 0, clipPath: "inset(50% 0 0 0)", transform: `translateX(${(-look.slice).toFixed(1)}px)` }}>
+                {layout.lines.map((text, r) => (
+                  <div key={r} style={{ whiteSpace: "nowrap" }}>
+                    {text}
+                  </div>
+                ))}
+              </div>
+            ) : null}
             {look.shine !== undefined && (!item.words || item.words.every((wd) => wd.chars >= 1)) ? (
               <div
                 aria-hidden
@@ -227,6 +276,19 @@ function waveLetters(rows: readonly string[], r: number, wave: number, amount: n
     const { y, opacity } = ascendLetter(before + k, n, wave, amount);
     return (
       <span key={k} style={{ display: "inline-block", whiteSpace: "pre", transform: y > 0.01 ? `translateY(${y.toFixed(2)}px)` : undefined, opacity }}>
+        {ch}
+      </span>
+    );
+  });
+}
+
+// Wave: each letter of row r rides a gentle wave running along the line.
+function rippleLetters(rows: readonly string[], r: number, phase: number, amp: number) {
+  const before = rows.slice(0, r).reduce((a, row) => a + [...row].length, 0);
+  return [...rows[r]].map((ch, k) => {
+    const y = amp * Math.sin(phase - (before + k) * 0.55);
+    return (
+      <span key={k} style={{ display: "inline-block", whiteSpace: "pre", transform: `translateY(${y.toFixed(2)}px)` }}>
         {ch}
       </span>
     );

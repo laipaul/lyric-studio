@@ -14,6 +14,7 @@ import { ink } from "./ink";
 import { DEFAULT_VERSE_EFFECT } from "./names";
 import { AMOUNT, EASINGS, type EffectChoice, type LyricEffect } from "./types";
 import { wordReveal } from "./word-reveal";
+import { TRENDING } from "./trending";
 
 export * from "./types";
 export * from "./names";
@@ -24,8 +25,9 @@ export * from "./breathe";
 export { ascendLetter, ASCEND_LIFT_PX } from "./ascend";
 export { inkMask } from "./ink";
 export * from "./accents";
+export { kineticAt, kineticGroups, POP_FRAMES } from "./trending";
 
-export const EFFECTS: readonly LyricEffect[] = [glide, cinematicFade, softBlur, dreamyGlow, wordReveal, karaokeHighlight, floating, typewriter, spread, typewriterErase, typewriterWords, clarify, ascend, ink];
+export const EFFECTS: readonly LyricEffect[] = [glide, cinematicFade, softBlur, dreamyGlow, wordReveal, karaokeHighlight, floating, typewriter, spread, typewriterErase, typewriterWords, clarify, ascend, ink, ...TRENDING];
 const BY_NAME = new Map(EFFECTS.map((e) => [e.name, e]));
 
 // A plain fade, used to move lines when both verse and hook effects are word effects.

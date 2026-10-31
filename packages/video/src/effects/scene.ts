@@ -10,7 +10,7 @@
 // "glide" lines scroll: the next line waits small underneath (showNext) and rises into place; the
 // old line moves up and fades. "swap" lines: the old line goes in the first half of D, the new one
 // comes in the second half, in the same place.
-import { clamp01, REST, WORD_REST, type EffectChoice, type LineLook, type WordLook, type WordTiming } from "./types";
+import { clamp01, EXTRA_LOOK_KEYS, REST, WORD_REST, type EffectChoice, type LineLook, type WordLook, type WordTiming } from "./types";
 import { GLIDE_LIFT_PX } from "./glide";
 import { motionOf, resolveEffect, type ResolvedEffect } from "./index";
 import { BREATHE_MAX_SCALE, breatheScale, type BreatheProps } from "./breathe";
@@ -157,6 +157,10 @@ export function lyricScene(t: SceneTimeline, frame: number): SceneItem[] {
       glow: clamp01(base.look.glow + (hold.glow ?? 0)),
     };
     if (base.look.spacing) look.spacing = base.look.spacing;
+    for (const k of EXTRA_LOOK_KEYS) {
+      const v = (base.look[k] ?? 0) + (hold[k] ?? 0);
+      if (v) look[k] = v;
+    }
     if (base.look.wave !== undefined && base.look.wave < 1) look.wave = base.look.wave;
     if (t.own[i].effect.reveal) {
       const share = inkShare(t, i, frame);

@@ -9,7 +9,7 @@ export const EASING_NAMES: readonly EasingName[] = ["ease-in-out", "ease-out", "
 // What the user picks (brand.json motion, platforms.json motion, --line-effect / --hook-effect).
 export type EffectChoice = { name: string; intensity: Intensity; durationMs?: number; easing?: EasingName };
 
-export const EFFECT_NAMES = ["glide", "cinematic-fade", "soft-blur", "dreamy-glow", "word-reveal", "karaoke-highlight", "floating", "typewriter", "spread", "typewriter-erase", "typewriter-words", "clarify", "ascend", "ink"] as const;
+export const EFFECT_NAMES = ["glide", "cinematic-fade", "soft-blur", "dreamy-glow", "word-reveal", "karaoke-highlight", "floating", "typewriter", "spread", "typewriter-erase", "typewriter-words", "clarify", "ascend", "ink", "word-pop", "highlight-sweep", "mask-reveal", "tilt-3d", "glitch", "wave", "echo-stack", "slice", "kinetic-stack"] as const;
 
 // What each effect is best for, shown next to its name in every list ("glide · verses").
 export const EFFECT_HINTS: Record<(typeof EFFECT_NAMES)[number], string> = {
@@ -27,6 +27,15 @@ export const EFFECT_HINTS: Record<(typeof EFFECT_NAMES)[number], string> = {
   clarify: "verses, slow songs",
   ascend: "titles, short hooks",
   ink: "script fonts, titles",
+  "word-pop": "hooks, upbeat songs",
+  "highlight-sweep": "hooks, sing-along lines",
+  "kinetic-stack": "short punchy lines",
+  "mask-reveal": "verses, clean modern look",
+  "tilt-3d": "hooks, dreamy songs",
+  glitch: "edgy or electronic tracks",
+  wave: "playful lines, summer songs",
+  "echo-stack": "hooks, repeated lines",
+  slice: "intros, drops, strong lines",
 };
 
 // The name shown in the studio (the stored name stays the code name above).
@@ -45,6 +54,43 @@ export const EFFECT_TITLES: Record<(typeof EFFECT_NAMES)[number], string> = {
   clarify: "Focus pull",
   ascend: "Rise",
   ink: "Handwriting",
+  "word-pop": "Word pop",
+  "highlight-sweep": "Highlight sweep",
+  "kinetic-stack": "Kinetic stack",
+  "mask-reveal": "Mask reveal",
+  "tilt-3d": "3D tilt",
+  glitch: "Glitch",
+  wave: "Wave",
+  "echo-stack": "Echo stack",
+  slice: "Slice",
+};
+
+// The Motion gallery's filter chips: each effect under one or more kinds.
+export const EFFECT_KINDS = ["Word", "Calm", "Slide", "Bounce", "Wave", "3D", "Glitch", "Type"] as const;
+export const EFFECT_CATEGORIES: Record<(typeof EFFECT_NAMES)[number], readonly (typeof EFFECT_KINDS)[number][]> = {
+  glide: ["Slide", "Calm"],
+  "cinematic-fade": ["Calm"],
+  "soft-blur": ["Calm"],
+  "dreamy-glow": ["Calm"],
+  "word-reveal": ["Word", "Slide"],
+  "karaoke-highlight": ["Word"],
+  floating: ["Calm", "Wave"],
+  typewriter: ["Type"],
+  spread: ["Calm"],
+  "typewriter-erase": ["Type"],
+  "typewriter-words": ["Type", "Word"],
+  clarify: ["Word", "Calm"],
+  ascend: ["Wave", "Slide"],
+  ink: ["Type"],
+  "word-pop": ["Word", "Bounce"],
+  "highlight-sweep": ["Word"],
+  "kinetic-stack": ["Word", "Bounce"],
+  "mask-reveal": ["Slide"],
+  "tilt-3d": ["3D"],
+  glitch: ["Glitch"],
+  wave: ["Wave"],
+  "echo-stack": ["3D", "Glitch"],
+  slice: ["Glitch", "Slide"],
 };
 export const effectTitle = (name: string): string => EFFECT_TITLES[name as keyof typeof EFFECT_TITLES] ?? name;
 

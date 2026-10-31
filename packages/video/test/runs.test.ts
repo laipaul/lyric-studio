@@ -70,7 +70,7 @@ describe("Generate: request -> run options", () => {
     expect(checkRunRequest({ platforms: ["reels", "myspace"], variations: 40, lineEffect: "wobble", section: "soon", layout: "grid" as never }, PLATFORMS)).toEqual([
       'Unknown platform "myspace".',
       "Videos per platform must be 1-24.",
-      'Verse effect: unknown effect "wobble". Known: glide, cinematic-fade, soft-blur, dreamy-glow, word-reveal, karaoke-highlight, floating, typewriter, spread, typewriter-erase, typewriter-words, clarify, ascend, ink (optionally with :subtle, :balanced or :expressive)',
+      'Verse effect: unknown effect "wobble". Known: glide, cinematic-fade, soft-blur, dreamy-glow, word-reveal, karaoke-highlight, floating, typewriter, spread, typewriter-erase, typewriter-words, clarify, ascend, ink, word-pop, highlight-sweep, mask-reveal, tilt-3d, glitch, wave, echo-stack, slice, kinetic-stack (optionally with :subtle, :balanced or :expressive)',
       'Section must be "auto", "full" or like 0:11-1:10.',
       "YouTube layout must be cover, stills or clips.",
     ]);
