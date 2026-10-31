@@ -4,7 +4,7 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### Fix a lyric line's words on its card; effect names in the viewer ✅ (to verify on the Windows PC)
+### Fix a lyric line's words on its card; effect names in the viewer; stronger effects and Neon ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026 ("how do i correct the text here directly?", and "pick an effect and
   display immediately the effect name on the viewer").
 - **Line card → Text → Fix** (Shape, click a lyric line): the words are fixed in lyrics.txt (the old one
@@ -14,6 +14,11 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   nothing is aligned again; the line's hand-set start and its card's look follow the new words.
 - Line card wording: "the theme's" font / effect, plain effect names; "Text layout" with "Save this
   layout" / "Use this layout" instead of templates.
+- **Effects made clearly visible** (the user: "some effects don't work"): Cinematic fade settles from 12%
+  larger with its letters drawing together; Blur in pulls focus from 12 px (was 4 px, not seen); Dreamy glow
+  comes out of a real haze and glows. **Spread** now works like Canva's: letters float in from wide apart and
+  drift apart and up as the line leaves (wide only while the line is faint). New **Neon** effect: glowing
+  tube letters in the accent that flicker on and hum (new gallery chip "Glow"). 24 effects.
 - **Motion**: gallery tiles show the effect's name big; pointing at or picking an effect shows its name
   moving in that effect over the paused frame in the big viewer; pressing play plays the song with the
   effect on the real lyrics.

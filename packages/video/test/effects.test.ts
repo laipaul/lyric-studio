@@ -72,8 +72,8 @@ function track(ls: SceneLine[], o: SceneOptions): Map<number, Sample>[] {
 const ALL = EFFECTS.flatMap((e) => INTENSITIES.map((intensity) => ({ name: e.name, intensity })));
 
 describe("lyric effects registry", () => {
-  it("has the 23 effects, glide first (the default)", () => {
-    expect(EFFECTS.map((e) => e.name)).toEqual(["glide", "cinematic-fade", "soft-blur", "dreamy-glow", "word-reveal", "karaoke-highlight", "floating", "typewriter", "spread", "typewriter-erase", "typewriter-words", "clarify", "ascend", "ink", "word-pop", "highlight-sweep", "mask-reveal", "tilt-3d", "glitch", "wave", "echo-stack", "slice", "kinetic-stack"]);
+  it("has the 24 effects, glide first (the default)", () => {
+    expect(EFFECTS.map((e) => e.name)).toEqual(["glide", "cinematic-fade", "soft-blur", "dreamy-glow", "word-reveal", "karaoke-highlight", "floating", "typewriter", "spread", "typewriter-erase", "typewriter-words", "clarify", "ascend", "ink", "word-pop", "highlight-sweep", "mask-reveal", "tilt-3d", "glitch", "wave", "echo-stack", "slice", "kinetic-stack", "neon"]);
     expect(EFFECTS.filter((e) => e.unit === "word").map((e) => e.name)).toEqual(["word-reveal", "karaoke-highlight", "typewriter", "typewriter-erase", "typewriter-words", "clarify", "word-pop", "highlight-sweep", "kinetic-stack"]);
     expect(EFFECTS.map((e) => e.name)).toEqual([...EFFECT_NAMES]); // the settings checks know every module
   });
@@ -105,7 +105,7 @@ describe("no frame-to-frame jumps beyond the easing", () => {
           expect(Math.abs(b.y - a.y), `${where} y`).toBeLessThanOrEqual(30);
           if (!lyricEffect(name)?.jumpy) expect(Math.abs(b.x - a.x), `${where} x`).toBeLessThanOrEqual(2); // glitch jumps on purpose
           expect(Math.abs(b.scale - a.scale), `${where} scale`).toBeLessThanOrEqual(0.06);
-          expect(Math.abs(b.blur - a.blur), `${where} blur`).toBeLessThanOrEqual(1);
+          expect(Math.abs(b.blur - a.blur), `${where} blur`).toBeLessThanOrEqual(2); // px at 1080 wide: Blur in pulls focus from 12 px
           for (const [k, w] of (b.words ?? []).entries()) {
             const v = a.words?.[k];
             if (!v) continue;
@@ -117,7 +117,7 @@ describe("no frame-to-frame jumps beyond the easing", () => {
     }
   });
 
-  it("soft-blur never blurs more than ~4 px", () => {
+  it("soft-blur never blurs more than 12 px", () => {
     for (const intensity of INTENSITIES) {
       const frames = track(lines(), options({ name: "soft-blur", intensity }));
       const most = Math.max(...frames.flatMap((m) => [...m.values()].map((s) => s.blur)));
@@ -142,7 +142,7 @@ describe("the active line is fully readable at its timestamp", () => {
           expect(s!.blur, where).toBe(0);
           expect(Math.abs(s!.scale - 1), where).toBeLessThan(0.001);
           expect(Math.abs(s!.y), where).toBeLessThanOrEqual(11); // floating sways a few px
-          if (name !== "floating") expect(s!.y, where).toBe(0);
+          if (name !== "floating" && name !== "spread") expect(s!.y, where).toBe(0); // spread floats a few px too
           // Its first word is readable when the line is sung.
           if (f === l.stampFrame && s!.words) expect(s!.words[0].opacity, where).toBe(1);
         }
@@ -283,7 +283,7 @@ describe("deterministic", () => {
     const g = effectExtents({ name: "glide", intensity: "balanced" }, { name: "glide", intensity: "balanced" }, FPS);
     expect(g.up).toBeGreaterThanOrEqual(GLIDE_LIFT_PX);
     const c = effectExtents({ name: "cinematic-fade", intensity: "expressive" }, { name: "glide", intensity: "balanced" }, FPS);
-    expect(c.maxScale).toBeCloseTo(1.06, 5);
+    expect(c.maxScale).toBeCloseTo(1.18, 5); // settles from 12% larger (x1.5 expressive)
     const k = effectExtents({ name: "karaoke-highlight", intensity: "balanced" }, { name: "floating", intensity: "balanced" }, FPS);
     expect(k.side).toBeGreaterThan(0); // the hook floats like the verses
   });

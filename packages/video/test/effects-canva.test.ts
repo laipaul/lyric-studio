@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ascendLetter, ASCEND_LIFT_PX, BREATHE_MAX_SCALE, breatheScale, effectExtents, inkMask, lyricScene, sceneTimeline, textCardLook, typedShare, typingPlan, typingWords, type EffectChoice, type SceneLine, type SceneOptions } from "../src";
+import { SPREAD_FROM_EM } from "../src/effects/spread";
 
 const FPS = 30;
 const LETTERS = [3, 3, 5]; // "one two three"
@@ -101,18 +102,25 @@ describe("typewriter: letter by letter", () => {
 });
 
 describe("spread", () => {
-  it("letters gather close and open up to their spacing as the line comes in; never wider", () => {
+  it("letters float in from wide apart and drift apart as the line leaves; wide only while the line is faint", () => {
     const ls = lines();
     const t = sceneTimeline(ls, options({ name: "spread", intensity: "balanced" }));
     const first = ls[0];
     const look = (f: number) => lyricScene(t, f).find((x) => x.index === 0)?.look;
-    const early = look(first.startFrame - 10)!;
-    expect(early.spacing).toBeLessThan(0);
-    expect(early.opacity).toBeLessThan(1);
+    const before = Array.from({ length: 30 }, (_, k) => look(first.startFrame - 1 - k)).filter((x) => !!x);
+    expect(Math.max(...before.map((x) => x!.spacing ?? 0))).toBeGreaterThan(0.1);
+    expect(before.every((x) => x!.opacity < 1)).toBe(true);
     expect(look(first.startFrame)!.spacing ?? 0).toBeCloseTo(0, 5); // readable at its usual time
-    for (let f = 0; f < 600; f++) for (const s of lyricScene(t, f)) expect(s.look.spacing ?? 0, `frame ${f}`).toBeLessThanOrEqual(0);
+    let left = false;
+    for (let f = 0; f < 600; f++)
+      for (const s of lyricScene(t, f)) {
+        const sp = s.look.spacing ?? 0;
+        expect(sp, `frame ${f}`).toBeLessThanOrEqual(SPREAD_FROM_EM * 1.25 * (1 - s.look.opacity) ** 2 + 1e-6);
+        if (s.index === 0 && f > first.startFrame + 20 && sp > 0.02) left = true;
+      }
+    expect(left).toBe(true); // drifts apart on the way out
     const card = textCardLook({ startFrame: 0, endFrame: 120, effect: { name: "spread", intensity: "balanced" } }, 5, FPS)!;
-    expect(card.spacing).toBeLessThan(0);
+    expect(card.spacing).toBeGreaterThan(0);
   });
 });
 

@@ -149,7 +149,28 @@ export const kineticStack: LyricEffect = {
   reach: () => ({ up: 70, down: 70 }), // two big rows instead of the line
 };
 
-export const TRENDING = [wordPop, highlightSweep, maskReveal, tilt3d, glitch, wave, echoStack, slice, kineticStack];
+// Neon: glowing tube letters (a white core in a halo of the accent colour) that flicker on as the line
+// lands, then hum, with a short flicker now and then (31 Oct 2026, asked by the user). The flicker is in
+// the glow only, so the words stay readable.
+const NEON_FLICKER = [1, 0.15, 1, 1, 0.25, 0.1, 1, 0.4, 1, 1, 1, 1];
+export const neon: LyricEffect = {
+  name: "neon",
+  label: "Neon",
+  description: "glowing neon letters that flicker on",
+  unit: "line",
+  transition: "swap",
+  defaults: { durationMs: 600, easing: "linear" },
+  enter: (p, a) => ({ opacity: p, glow: Math.min(1, (0.55 + 0.35 * a) * NEON_FLICKER[Math.min(NEON_FLICKER.length - 1, Math.floor(p * NEON_FLICKER.length))]) }),
+  exit: (q, a) => ({ opacity: 1 - q, glow: Math.min(1, (0.55 + 0.35 * a) * (1 - q)) }),
+  hold: (frame, a, seed, fps) => {
+    const hum = (0.55 + 0.35 * a) * (0.92 + 0.08 * Math.sin((frame / fps) * 9 + seed));
+    const period = Math.round(fps * 3.4);
+    const k = (frame + Math.round(seed * 17)) % period;
+    return { glow: Math.min(1, k === 0 || k === 2 ? hum * 0.3 : hum) };
+  },
+};
+
+export const TRENDING = [wordPop, highlightSweep, maskReveal, tilt3d, glitch, wave, echoStack, slice, kineticStack, neon];
 
 // Kinetic stack: the line's words in groups of one or two (a long word stands alone), each group shown
 // from its first word's time until the next group's. Returns the group index on screen at `frame`.
