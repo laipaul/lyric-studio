@@ -45,6 +45,7 @@ export function SetEffect({
   perPlatformOpen,
   onPerPlatform,
   preview,
+  onTry,
 }: {
   effects: { name: string; label: string }[];
   values: EffectValues;
@@ -56,7 +57,8 @@ export function SetEffect({
   onBrandAll?: () => void; // themes: absent (a theme is shared by choosing it for other songs)
   perPlatformOpen: boolean;
   onPerPlatform: () => void;
-  preview?: (effect: string) => LookPreviewProps; // the gallery tile's live preview of one effect
+  preview?: (effect: string, title: string) => LookPreviewProps; // the gallery tile: the effect's name moving in that effect
+  onTry?: (field: Field, value: string | null) => void; // a tile under the pointer: the big viewer plays it (null: back)
 }) {
   const [asking, setAsking] = useState(false);
   const [gallery, setGallery] = useState(false); // the effect gallery under the picker
@@ -144,16 +146,16 @@ export function SetEffect({
                   key={e.name}
                   type="button"
                   data-try-effect={e.name}
-                  title={e.label}
+                  title={`${effectTitle(e.name)} · ${e.label.split(" · ").slice(1).join(" · ")}`}
                   aria-pressed={name === e.name}
                   onClick={() => onSet(field, join(e.name, intensity))}
-                  onMouseEnter={() => setHovered(e.name)}
-                  onMouseLeave={() => setHovered((h) => (h === e.name ? null : h))}
+                  onMouseEnter={() => (setHovered(e.name), onTry?.(field, join(e.name, intensity)))}
+                  onMouseLeave={() => (setHovered((h) => (h === e.name ? null : h)), onTry?.(field, null))}
                   className={cn("flex flex-col gap-1 rounded-md border p-1 text-left text-[11px]", name === e.name ? "border-brand bg-brand/10" : "hover:border-foreground/40")}
                 >
                   <span className="relative block w-full overflow-hidden rounded bg-black" style={{ aspectRatio: "9 / 16" }}>
                     {hovered === e.name && preview ? (
-                      <PreviewPlayer input={preview(join(e.name, intensity))} />
+                      <PreviewPlayer input={preview(join(e.name, intensity), effectTitle(e.name))} />
                     ) : (
                       <span className="absolute inset-0 flex items-center justify-center px-1 text-center text-sm text-white/90" style={{ background: "radial-gradient(circle at 50% 40%, #3a2630, #0b0b0d 75%)" }}>
                         {effectTitle(e.name)}
@@ -164,7 +166,7 @@ export function SetEffect({
                 </button>
               ))}
           </div>
-          <p className="text-muted-foreground text-[11px]">Point at a tile to see it move; click it to use it. The big viewer shows it on your song.</p>
+          <p className="text-muted-foreground text-[11px]">Point at a tile: it moves, and the big viewer plays it on your song. Click it to use it.</p>
         </div>
       ) : null}
       <div className="flex flex-wrap items-center gap-3 text-xs">

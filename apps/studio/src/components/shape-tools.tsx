@@ -66,7 +66,8 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
   const [effectPlatforms, setEffectPlatforms] = useState(false); // Set effect ⋯ → Per platform
   const [dirty, setDirty] = useState(false); // a look change the planned video does not have yet
   const [hovered, setHovered] = useState<PairingCard | null>(null);
-  const [hoverTheme, setHoverTheme] = useState<StyleTheme | null>(null); // a theme tile under the pointer: the viewer tries it
+  const [hoverTheme, setHoverTheme] = useState<StyleTheme | null>(null);
+  const [hoverEffect, setHoverEffect] = useState<{ field: string; value: string } | null>(null); // a Motion gallery tile under the pointer // a theme tile under the pointer: the viewer tries it
   const [naming, setNaming] = useState<{ from: string; name: string } | null>(null); // a tile's Rename: the new name being typed
   const [creating, setCreating] = useState<{ name: string; from: string } | null>(null); // "+ New theme": name first, then where to start
   const [savingAs, setSavingAs] = useState<string | null>(null); // "Save as new theme": the name being typed
@@ -191,8 +192,11 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
   // The look for the viewer, sent up whenever it changes.
   useEffect(() => {
     if (!data) return;
-    onLook(lookOf(hoverTheme ? withTheme(data, hoverTheme) : data, { dirty: dirty || !!hoverTheme || !!draft?.changed, hovered, pairView, part, trying: hoverTheme?.name ?? null }));
-  }, [data, dirty, draft?.changed, hovered, hoverTheme, pairView, part, onLook]);
+    // A gallery tile under the pointer: the big viewer plays that effect on the song (nothing is set).
+    const base = hoverTheme ? withTheme(data, hoverTheme) : data;
+    const shown = hoverEffect ? { ...base, fields: base.fields.map((f) => (f.field === hoverEffect.field ? { ...f, value: hoverEffect.value, own: true, perPlatform: null } : f)) } : base;
+    onLook(lookOf(shown, { dirty: dirty || !!hoverTheme || !!hoverEffect || !!draft?.changed, hovered, pairView, part, trying: hoverTheme?.name ?? null }));
+  }, [data, dirty, draft?.changed, hovered, hoverTheme, hoverEffect, pairView, part, onLook]);
 
   if (error && !data) return <p className="text-sm text-red-300">{error}</p>;
   if (!data) return <p className="text-muted-foreground text-sm">Loading the song&apos;s recipe…</p>;
@@ -695,7 +699,12 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                   locked={[]}
                   saved={false}
                   onSet={(field, value) => void act({ action: "set", field, value })}
-                  preview={(effect) => ({ ...lookOf(data, { dirty: false, hovered: null, pairView, part }).fallback, effect: patchChoice(effect, undefined) })}
+                  preview={(effect, title) => {
+                    // The tile: the effect's own name, big, on a plain dark tile (the song's look is in the big viewer).
+                    const p = lookOf(data, { dirty: false, hovered: null, pairView: null, part }).fallback;
+                    return { ...p, background: null, backing: false, picture: null, lyrics: previewLyrics([title]), textSize: 260, area: null, effect: patchChoice(effect, undefined) };
+                  }}
+                  onTry={(field, value) => setHoverEffect(value ? { field, value } : null)}
                   perPlatformOpen={effectPlatforms}
                   onPerPlatform={() => {
                     const next = !effectPlatforms;
