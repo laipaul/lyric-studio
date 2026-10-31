@@ -4,7 +4,7 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### Fix — vocal stem check corrects a small speed difference ✅ (to verify on the Windows PC)
+### Fix — vocal stem check corrects a small speed difference ✅ (verified by the user on the Windows PC, 31 Oct 2026: all 4 songs pass with the vocal stem)
 - A song exported from the DAW can play a little faster or slower than Suno's stem (Love Is A Good Thing:
   about 0.2 %, so the gap grew from 0.66 s to 0.77 s along the song and the stem was refused). The check now
   measures that speed (up to 1 %) and lines up the app's private analysis copy of the stem with it; your song
@@ -17,7 +17,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   checked at 30 s and 80 s, a 4-minute song 0.2 % off, 2 % refused, middle edit + speed refused),
   vocal-stem.test.ts (label, key and record with a speed).
 
-### Original file names + the vocal stem's timing as the base ✅ (to verify on the Windows PC)
+### Original file names + the vocal stem's timing as the base ✅ (verified by the user on the Windows PC, 31 Oct 2026)
 - **Your files keep their own names.** The song, the lyrics, the vocal stem and the backing vocals are stored
   under the names they came with ("These Empty Roads (Master).wav", "TER lyrics v3.txt", "These Empty Roads
   (Lead Vocal).wav"); the app remembers which file is which in the song's hidden .studio\files.json. "+ New
@@ -335,9 +335,9 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 
 **Lyric timing first (agreed 31 Oct 2026): L1a and L1b come before the Style rebuild and the UX steps below;
 the open decisions stay paused.**
-- ✅ (verified 31 Oct: These Empty Roads "perfect") **L1a. Vocal stem (vocals.wav) as the main guide for lyric timing**; Demucs only
+- ✅ (verified 31 Oct: These Empty Roads "perfect"; then all 4 of the user's songs pass with the vocal stem) **L1a. Vocal stem (vocals.wav) as the main guide for lyric timing**; Demucs only
   the fallback (see Latest steps). Verify with `pnpm lyrics:compare-voice` on These Empty Roads.
-- ✅ (built 31 Oct, to verify) **Original file names + the vocal stem's timing as the base** (see Latest steps).
+- ✅ (verified 31 Oct) **Original file names + the vocal stem's timing as the base** (see Latest steps).
 - **L1b. The Lyric Map** (do not build before the user's OK; plan first): a stable ID per word from the song's
   structure (V1.L2.W3); the song as a map of sections; the app picks the few points most worth checking by ear
   (section starts, the first word after a gap, chorus entries, the least-certain lines); the user hears 2 s around
