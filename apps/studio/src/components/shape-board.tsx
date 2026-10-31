@@ -12,7 +12,7 @@
 // effect with a live preview (saved in textboard.json), save the design as a template or apply one.
 // Pictures: the same textboard over another clip set; an anchor whose clip is missing is a slot.
 import { Player, type PlayerRef } from "@remotion/player";
-import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2, Pencil, Repeat, Scissors, Star, Type, X } from "lucide-react";
+import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2, Pencil, RefreshCw, Repeat, Scissors, Star, Type, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { EFFECT_NAMES, followScrollLeft, LyricVideo, patchLook, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
@@ -39,7 +39,7 @@ const readFollow = () => {
     return false;
   }
 };
-const select = "bg-input/30 border-input h-8 rounded-md border px-2 text-sm";
+const select = "bg-input/30 border-input h-7 rounded-md border px-1.5 text-xs";
 
 type Source = { kind: "plan"; platform: string; video: string } | { kind: "run"; run: string; platform: string; video: string };
 
@@ -408,29 +408,11 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
       <LookViewer input={look.fallback} caption={look.caption} previewing={look.previewing} />
     ) : null;
 
-  return (
-    <div data-storyboard data-shape className="flex min-w-0 items-start gap-4">
-      <aside
-        data-shape-panel={panel ?? ""}
-        data-shape-tools
-        className={cn("bg-card/40 sticky top-0 flex max-h-[calc(100vh-8rem)] w-[340px] shrink-0 flex-col gap-3 overflow-x-hidden overflow-y-auto rounded-lg border p-3 [&_input]:max-w-full [&_select]:max-w-full", !panel && "hidden")}
-      >
-        <div className="flex items-center gap-2">
-          <h2 className="flex-1 text-base font-semibold">{panelTitle}</h2>
-          <button type="button" data-panel-close onClick={closePanel} aria-label="close the panel" className="text-muted-foreground hover:text-foreground rounded p-1">
-            <X className="size-4" />
-          </button>
-        </div>
-        {panelBody}
-        {tools}
-      </aside>
-
-      <div className="flex min-w-0 flex-1 flex-col gap-3">
-        {/* which video: the plan now (per platform and video) or a past run */}
-        {choices?.ready ? (
-          <div className="flex flex-wrap items-center gap-3 text-sm">
+  // Which video: the plan now (per platform and video) or a past run; Pictures; Plan again.
+  const sourceControls = choices?.ready ? (
+    <>
             <label className="flex items-center gap-1.5">
-              <span className="text-muted-foreground text-xs">Show</span>
+              <span className="text-muted-foreground sr-only text-xs">Show</span>
               <select
                 className={select}
                 data-storyboard-source
@@ -444,7 +426,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                   }
                 }}
               >
-                <option value="plan">The plan now (as Make would make it)</option>
+                <option value="plan" title="The plan now, as Make would make it">Plan now</option>
                 {choices.runs.map((r) => (
                   <option key={r.folder} value={r.folder}>
                     Run {r.folder.replace("_", " ").replace(/(\d{2})(\d{2})$/, "$1:$2")}
@@ -453,7 +435,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
               </select>
             </label>
             <label className="flex items-center gap-1.5">
-              <span className="text-muted-foreground text-xs">Platform</span>
+              <span className="text-muted-foreground sr-only text-xs">Platform</span>
               <select className={select} data-storyboard-platform value={source?.platform ?? ""} onChange={(e) => source && setSource({ ...source, platform: e.target.value, video: platforms.find((p) => p.name === e.target.value)?.videos[0] ?? "v1" })}>
                 {platforms.map((p) => (
                   <option key={p.name} value={p.name}>
@@ -463,7 +445,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
               </select>
             </label>
             <label className="flex items-center gap-1.5">
-              <span className="text-muted-foreground text-xs">Video</span>
+              <span className="text-muted-foreground sr-only text-xs">Video</span>
               <select className={select} data-storyboard-video value={source?.video ?? "v1"} onChange={(e) => source && setSource({ ...source, video: e.target.value })}>
                 {videos.map((v) => (
                   <option key={v} value={v}>
@@ -475,7 +457,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
             {source?.kind === "plan" && pictures ? (
               <details className="relative" data-pictures>
                 <summary className={cn(select, "flex cursor-pointer items-center")}>Pictures: {clipSet(pictures) ? clipSet(pictures)!.replace(/\+/g, " + ").replace(/^song/, "the song's clips") : "as the recipe"}</summary>
-                <div className="bg-popover absolute z-10 mt-1 flex w-64 flex-col gap-1 rounded-md border p-2 text-xs shadow-lg">
+                <div className="bg-popover absolute bottom-full z-10 mb-1 flex w-64 flex-col gap-1 rounded-md border p-2 text-xs shadow-lg">
                   <p className="text-muted-foreground">The same textboard over other clips (this plan only; anchors whose clip is missing become slots).</p>
                   {choices.pictures.songClips ? (
                     <label className="flex items-center gap-2">
@@ -507,38 +489,38 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                 </div>
               </details>
             ) : null}
-            <Button size="sm" variant="outline" disabled={!source || loading} onClick={() => source && show(source)} data-storyboard-show title="Plan this video again">
-              {loading ? <Loader2 className="animate-spin" /> : null} {loading ? "Planning…" : "Plan again"}
+            <Button size="icon" variant="outline" className="size-7" disabled={!source || loading} onClick={() => source && show(source)} data-storyboard-show title={loading ? "Planning…" : "Plan this video again"}>
+              {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />} <span className="sr-only">{loading ? "Planning…" : "Plan again"}</span>
             </Button>
-          </div>
-        ) : null}
+    </>
+  ) : null;
+
+  return (
+    <div data-storyboard data-shape className="flex min-w-0 items-start gap-4">
+      <aside
+        data-shape-panel={panel ?? ""}
+        data-shape-tools
+        className={cn("bg-card/40 sticky top-0 flex max-h-[calc(100vh-8rem)] w-[340px] shrink-0 flex-col gap-3 overflow-x-hidden overflow-y-auto rounded-lg border p-3 [&_input]:max-w-full [&_select]:max-w-full", !panel && "hidden")}
+      >
+        <div className="flex items-center gap-2">
+          <h2 className="flex-1 text-base font-semibold">{panelTitle}</h2>
+          <button type="button" data-panel-close onClick={closePanel} aria-label="close the panel" className="text-muted-foreground hover:text-foreground rounded p-1">
+            <X className="size-4" />
+          </button>
+        </div>
+        {panelBody}
+        {tools}
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        {/* which video, before there is a plan (with a plan these sit in the command bar under the timeline) */}
+        {choices?.ready && !(view && props) ? <div className="flex flex-wrap items-center gap-3 text-sm">{sourceControls}</div> : null}
         {error ? <p className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{error}</p> : null}
 
         {/* 1. the viewer */}
         <div className="flex flex-col items-center gap-2" data-viewer-block>
           {viewer}
-          {view && props ? <TransportBar player={player} frame={frame} playing={playing} durationInFrames={props.durationInFrames} barFrames={barFrames} rate={rate} onRate={setRate} loop={loop} onLoop={setLoop} /> : null}
-          {view ? (
-            <div className="flex w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs" data-storyboard-summary>
-              <span className="font-medium">
-                {view.platform.label} {view.video}
-              </span>
-              <span className="text-muted-foreground">
-                {view.source === "plan" ? "planned now" : `run ${view.run}`} · {secs(view.durationMs)} ({clock(view.section.startMs)}–{clock(view.section.endMs)} in the song) · {Math.round(view.bpm)} BPM · {view.shots.length} shots · {clock(playhead)}
-                {view.picture ? <span data-storyboard-picture> · pictures: {view.picture.replace(/\+/g, " + ").replace(/^song\b/, "the song's clips")}</span> : null}
-              </span>
-              {saving || loading ? (
-                <span className="text-brand" data-replanning>
-                  <Loader2 className="mr-1 inline size-3 animate-spin" />
-                  planning again…
-                </span>
-              ) : null}
-              <VerdictBadge a={view.assessment} heading="Predicted before rendering" />
-              <Button size="sm" data-next-make onClick={() => goTo("generate")}>
-                Next: Make <ChevronRight />
-              </Button>
-            </div>
-          ) : !choices ? (
+          {view ? null : !choices ? (
             <p className="text-muted-foreground text-sm">Loading the plan…</p>
           ) : !choices.ready ? (
             <p className="text-muted-foreground rounded-xl border border-dashed p-4 text-sm" data-storyboard-why>
@@ -558,20 +540,8 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
 
         {view && props ? (
           <>
-            <div className="flex flex-wrap items-center justify-end gap-1 text-xs">
-              <label className="mr-3 flex cursor-pointer items-center gap-1.5" title="While the video plays, the timeline scrolls with the playhead. Scroll by hand to stop it until the next play.">
-                <input type="checkbox" checked={follow} onChange={toggleFollow} className="accent-brand" data-follow-playback />
-                Follow playback
-              </label>
-              Zoom
-              {ZOOMS.map((z) => (
-                <button key={z} type="button" onClick={() => setZoom(z)} className={cn("rounded border px-1.5", zoom === z ? "border-brand text-brand" : "text-muted-foreground")}>
-                  {z / 40}x
-                </button>
-              ))}
-            </div>
             {/* 2. the soundtrack (bars, waveform, lyric lines) and 3. the shots */}
-            <div ref={timeline} onScroll={onTimelineScroll} className="-mt-2 overflow-x-auto rounded-lg border" data-storyboard-timeline>
+            <div ref={timeline} onScroll={onTimelineScroll} className="overflow-x-auto rounded-lg border" data-storyboard-timeline>
               <div className="relative" style={{ width: width + 16 }} onClick={(e) => playFrom(((e.clientX - e.currentTarget.getBoundingClientRect().left) / zoom) * 1000)}>
                 <div className="relative h-6 border-b text-[10px]">
                   {view.hooks.map((h, i) => (
@@ -688,7 +658,45 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                 <div className="pointer-events-none absolute top-0 bottom-0 w-px bg-white" style={{ left: x(playhead) }} data-playhead />
               </div>
             </div>
-            <p className="text-muted-foreground -mt-1 text-xs">
+            {/* 4. one command bar under the timeline: which video, the transport, follow / zoom, the verdict, Next */}
+            <div className="bg-card/60 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-2 py-1 text-xs" data-command-bar>
+              <div className="flex items-center gap-2">{sourceControls}</div>
+              <span className="bg-border hidden h-6 w-px sm:block" />
+              <TransportBar player={player} frame={frame} playing={playing} durationInFrames={props.durationInFrames} barFrames={barFrames} rate={rate} onRate={setRate} loop={loop} onLoop={setLoop} />
+              <span className="bg-border hidden h-6 w-px sm:block" />
+              <div className="flex items-center gap-1 text-xs">
+                <label className="mr-2 flex cursor-pointer items-center gap-1.5" title="While the video plays, the timeline scrolls with the playhead. Scroll by hand to stop it until the next play.">
+                  <input type="checkbox" checked={follow} onChange={toggleFollow} className="accent-brand" data-follow-playback />
+                  Follow
+                </label>
+                Zoom
+                {ZOOMS.map((z) => (
+                  <button key={z} type="button" onClick={() => setZoom(z)} className={cn("rounded border px-1.5", zoom === z ? "border-brand text-brand" : "text-muted-foreground")}>
+                    {z / 40}x
+                  </button>
+                ))}
+              </div>
+              <div className="ml-auto flex items-center gap-2">
+                <VerdictBadge a={view.assessment} heading="Predicted before rendering" />
+                <Button size="sm" className="h-7" data-next-make onClick={() => goTo("generate")}>
+                  Next: Make <ChevronRight />
+                </Button>
+              </div>
+            </div>
+            <p className="text-muted-foreground text-xs" data-storyboard-summary>
+              <span className="text-foreground font-medium">
+                {view.platform.label} {view.video}
+              </span>{" "}
+              · {view.source === "plan" ? "planned now" : `run ${view.run}`} · {secs(view.durationMs)} ({clock(view.section.startMs)}–{clock(view.section.endMs)} in the song) · {Math.round(view.bpm)} BPM · {view.shots.length} shots
+              {view.picture ? <span data-storyboard-picture> · pictures: {view.picture.replace(/\+/g, " + ").replace(/^song\b/, "the song's clips")}</span> : null}
+              {saving || loading ? (
+                <span className="text-brand ml-2" data-replanning>
+                  <Loader2 className="mr-1 inline size-3 animate-spin" />
+                  planning again…
+                </span>
+              ) : null}
+            </p>
+            <p className="text-muted-foreground -mt-2 text-xs">
               Click a shot for its details{view.editable ? " (and to edit its clip)" : ""}. Open{" "}
               <button type="button" className="underline underline-offset-2" onClick={() => setPanel("clips")} data-open-clips>
                 Clips

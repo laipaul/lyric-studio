@@ -9,8 +9,8 @@ import { Player } from "@remotion/player";
 
 import { LOOK_FPS, LookPreview, lookPreviewDuration, type LookPreviewProps } from "@lyric/video";
 
-// The viewer as tall as the screen allows, leaving room for the header above and most of the timeline below.
-export const VIEWER_HEIGHT = "max(300px, min(calc(100vh - 31rem), 860px))";
+// The viewer as tall as the screen allows, leaving room for the header above and, below it, the timeline and the command bar (all on one screen).
+export const VIEWER_HEIGHT = "max(260px, min(calc(100vh - 36rem), 760px))";
 
 export function LookViewer({ input, caption, previewing }: { input: LookPreviewProps; caption: string; previewing?: string | null }) {
   return (

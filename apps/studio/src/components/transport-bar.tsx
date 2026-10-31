@@ -92,7 +92,7 @@ export function TransportBar({ player, frame, playing, durationInFrames, barFram
   }, [player, last, barFrames, durationInFrames]);
 
   return (
-    <div data-transport data-frame={frame} data-playing={playing ? "1" : "0"} data-last={last} className="bg-card/60 flex w-full max-w-3xl flex-wrap items-center gap-1 rounded-lg border px-2 py-1">
+    <div data-transport data-frame={frame} data-playing={playing ? "1" : "0"} data-last={last} className="flex flex-wrap items-center gap-1">
       <Btn id="start" label="Go to the start (Home)" onClick={() => seek(0)}>
         <SkipBack className="size-4" />
       </Btn>
@@ -114,8 +114,7 @@ export function TransportBar({ player, frame, playing, durationInFrames, barFram
       <span data-transport-time className="ml-2 font-mono text-xs tabular-nums" title="Where the playhead is / the video's length">
         {clock(frame)} <span className="text-muted-foreground">/ {clock(durationInFrames)}</span>
       </span>
-      <span className="flex-1" />
-      <label className="text-muted-foreground flex items-center gap-1 text-xs" title="Play slower to check the lyrics (the preview only)">
+      <label className="text-muted-foreground ml-2 flex items-center gap-1 text-xs" title="Play slower to check the lyrics (the preview only)">
         Speed
         <select data-transport-speed value={String(rate)} onChange={(e) => onRate(Number(e.target.value))} className={`bg-background rounded border px-1 py-0.5 text-xs ${rate !== 1 ? "text-brand border-brand/60" : ""}`}>
           {SPEEDS.map((r) => (
@@ -131,7 +130,7 @@ export function TransportBar({ player, frame, playing, durationInFrames, barFram
         aria-pressed={loop}
         title={loop ? "Loop on: plays again from the start" : "Loop off: stops at the end"}
         onClick={() => onLoop(!loop)}
-        className={`flex h-8 items-center gap-1 rounded-md px-2 text-xs ${loop ? "bg-brand/25 text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}
+        className={`flex h-7 items-center gap-1 rounded-md px-1.5 text-xs ${loop ? "bg-brand/25 text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}
       >
         <Repeat className="size-4" /> Loop
       </button>
@@ -148,7 +147,7 @@ export function TransportBar({ player, frame, playing, durationInFrames, barFram
         step={0.05}
         value={muted ? 0 : volume}
         onChange={(e) => changeVolume(Number(e.target.value))}
-        className="accent-brand w-20"
+        className="accent-brand w-16"
       />
       <Btn id="fullscreen" label="Full screen" onClick={() => player.current?.requestFullscreen()}>
         <Maximize className="size-4" />
@@ -165,7 +164,7 @@ function Btn({ id, label, onClick, big, children }: { id: string; label: string;
       aria-label={label}
       title={label}
       onClick={onClick}
-      className={big ? "bg-brand text-primary-foreground hover:bg-brand/90 mx-1 flex size-9 items-center justify-center rounded-full" : "text-muted-foreground hover:bg-accent hover:text-foreground flex size-8 items-center justify-center rounded-md"}
+      className={big ? "bg-brand text-primary-foreground hover:bg-brand/90 mx-0.5 flex size-8 items-center justify-center rounded-full" : "text-muted-foreground hover:bg-accent hover:text-foreground flex size-7 items-center justify-center rounded-md"}
     >
       {children}
     </button>

@@ -83,6 +83,16 @@ async function main() {
     check(!!(await page.$("[data-viewer] .__remotion-player, [data-viewer] video, [data-viewer] div")), "the viewer plays the planned video");
     const [vb, tl] = await Promise.all(["[data-viewer]", "[data-storyboard-timeline]"].map(async (sel) => (await page.$(sel))!.boundingBox()));
     check(!!vb && !!tl && vb.y + vb.height <= tl.y && tl.width > 900, `top to bottom: the viewer, then the soundtrack and shots across the editor (${JSON.stringify(tl)})`);
+    // One screen: the viewer, the timeline, then one command bar (which video, the transport, zoom, verdict, Next).
+    const fits = async () => {
+      const [v, t, c] = await Promise.all(["[data-viewer]", "[data-storyboard-timeline]", "[data-command-bar]"].map(async (sel) => (await page.$(sel))!.boundingBox()));
+      return { ok: !!v && !!t && !!c && v.y + v.height <= t.y && t.y + t.height <= c.y && c.y + c.height <= 1000, v, t, c };
+    };
+    const fit9 = await fits();
+    check(fit9.ok, `9:16: viewer, timeline and command bar all on one 1440×1000 screen (${JSON.stringify(fit9.c)})`);
+    const inBar = await page.$$eval("[data-command-bar] [data-storyboard-source], [data-command-bar] [data-storyboard-platform], [data-command-bar] [data-transport], [data-command-bar] [data-follow-playback], [data-command-bar] [data-next-make]", (e: Element[]) => e.length);
+    check(inBar === 5, `the command bar holds Show / Platform, the transport, Follow / Zoom and Next: Make (${inBar} of 5)`);
+    check(!(await page.$("[data-viewer-block] [data-transport]")), "nothing between the viewer and the timeline");
     check(!(await page.$("[data-story-strip]")), "the clips are not on the page until the Clips menu opens them");
     await openPanel(page, "clips");
     const strip0 = await (await page.waitForSelector("[data-clips-panel] [data-story-strip]")).boundingBox();
@@ -335,6 +345,18 @@ async function main() {
     // The beats are tracked again around 80 (on this 120 BPM click track they settle near it).
     check(Math.abs(bpm80 - 80) <= 4, `planned again on the same page with the tempo (${summary80})`);
     await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "storyboard-stage2.png") });
+    // 16:9 (YouTube): the same editor, the wide viewer smaller in height so it all still fits on one screen.
+    ffmpeg("-f", "lavfi", "-i", "color=c=0x553344:s=600x600:d=1", "-frames:v", "1", path.join(paths.root, "cover.jpg")); // YouTube's cover layout needs a cover
+    writeFileSync(paths.recipe!, JSON.stringify({ ...JSON.parse(readFileSync(paths.recipe!, "utf8")), platforms: ["reels", "youtube"] }));
+    await page.reload();
+    await page.waitForSelector("[data-shot='1']", { timeout: 180_000 });
+    await page.selectOption("[data-storyboard-platform]", "youtube");
+    await page.waitForFunction(() => /YouTube/.test(document.querySelector("[data-storyboard-summary]")?.textContent ?? ""), null, { timeout: 180_000 }).catch(() => {});
+    await page.waitForSelector("[data-replanning]", { state: "detached", timeout: 180_000 }).catch(() => null);
+    const vw = await (await page.waitForSelector("[data-viewer]", { timeout: 60_000 })).boundingBox();
+    const wideFit = await fits();
+    check(!!vw && vw.width > vw.height * 1.7 && wideFit.ok, `16:9: the wide viewer (${Math.round(vw?.width ?? 0)}×${Math.round(vw?.height ?? 0)}), timeline and command bar on one screen`);
+    await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "storyboard-youtube.png") });
     check(existsSync(songFile), "the song file is untouched");
     await browser.close();
   } finally {

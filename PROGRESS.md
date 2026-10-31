@@ -4,6 +4,17 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Controls in one bar under the timeline ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026: the transport bar sat too low on the screen. The viewer is smaller, the
+  timeline sits right under it, and **one command bar under the timeline** holds everything: which video (Plan
+  now / a run, platform, video, Pictures, ↻ plan again), the transport (start, bar back, play, stop, bar
+  forward, end, time, Speed, Loop, volume, full screen), Follow and Zoom, the verdict and Next: Make. The
+  summary line and the hint follow under it. It all fits on one screen, for 9:16 and for 16:9 (YouTube: pick
+  it under Platform; the wide viewer gets the same height).
+- Tests: storyboard.e2e.ts (viewer, timeline and command bar on one 1440×1000 screen for Reels and for
+  YouTube; the bar holds the source, the transport, Follow / Zoom and Next: Make; nothing between the viewer
+  and the timeline).
+
 ### Transport bar under the video ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026. Under the Shape page's viewer, instead of the play button inside the
   video: ⏮ go to start, ⏪ back one bar, ▶/⏸ play or pause, ⏹ stop (pause and back to the start), ⏩ forward
@@ -75,32 +86,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: test_vocal_stem.py (speed corrected at 0.4 %, the real song's case at 48/44.1 kHz with a lined-up copy
   checked at 30 s and 80 s, a 4-minute song 0.2 % off, 2 % refused, middle edit + speed refused),
   vocal-stem.test.ts (label, key and record with a speed).
-
-### Original file names + the vocal stem's timing as the base ✅ (verified by the user on the Windows PC, 31 Oct 2026)
-- **Your files keep their own names.** The song, the lyrics, the vocal stem and the backing vocals are stored
-  under the names they came with ("These Empty Roads (Master).wav", "TER lyrics v3.txt", "These Empty Roads
-  (Lead Vocal).wav"); the app remembers which file is which in the song's hidden .studio\files.json. "+ New
-  song" and the Assets tab's Add / Replace no longer rename anything; Replace moves the old file to
-  .studio\replaced\ under its own name. A new file never overwrites another one ("name-2.wav").
-- **Files put into the song folder by hand are recognised**: the song by its content (also after renaming it in
-  Explorer; a copy of it is simply not used), the only .txt as the lyrics, "Lead Vocal / Vocals / Vox /
-  Acapella" as the vocal stem, "Backing / Harmonies / BGV" as the backing vocals, and a WAV with any other name
-  as the vocal stem when it lines up on the song. A new vocal stem re-times the lyrics by itself. What is still
-  unclear is asked once on the Assets tab: **"What is this file?"** (Lyrics / Vocal stem / Backing vocals / Not used).
-- A stem that lost its extension ("Love Is A Good Thing Lead Vocal", no .wav) is accepted when its content is a WAV
-  (stored with ".wav" added; dropped by hand it keeps its name). Before, Add… refused it.
-- New **"Backing vocals"** row on the Assets tab (optional; kept with the song, never used for timing or output).
-- **Songs made before work unchanged**: song.wav, lyrics.txt, vocals.wav and backing-vocals.wav are the fallback,
-  nothing is renamed. The song file is never renamed, edited or written (tests compare its content hash).
-- `pnpm make "<song folder>"`, `pnpm lyrics:compare-voice` and the audio service's `--stem auto` use the same links.
-- **The vocal stem's timing is the base (your decision, 31 Oct):** the start times you set by hand before the
-  song had a vocal stem were corrections of the old timing, so they are reset once, as soon as the timing on the
-  stem is used; the old hints.lrc is kept in .studio\replaced\ and the Lyrics tab shows a notice with **Undo**.
-  Starts you set from now on stay on top of the stem's timing. Back to the stem's timing any time: ↺ on a line,
-  or the new **"Reset all to the vocal stem's timing"** (with Undo). Taps (pnpm tap) are never touched.
-- Tests: song-files.test.ts (19: a stem without extension, original names in all four roles, Replace keeping names, no overwrite, hand-dropped
-  files, the unclear file asked once, the song renamed in Explorer, a stem found by lining up, old songs unchanged,
-  the song hash unchanged, the reset once / Undo / Reset all), test_vocal_stem.py (the linked stem).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
