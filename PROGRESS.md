@@ -14,6 +14,10 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **Behind the words → Box** did draw, but too faint to notice (55 % black, no room above or below the words):
   now 72 % black with room around the words, the lines staying exactly where they were.
 - **Typewriter**: no cursor any more (the accent-coloured bar was irritating); only the letters type in.
+- **Typewriter feels like typing again** (the user: "it just glides, even at 0 %"): with the stronger effect
+  amounts the typing pace had run away (a short line typed in half a second, mostly during its fade-in). Now
+  Strength is only the speed: 0 % calm ~8 letters/s, 50 % ~15, 100 % ~22 (typing.ts typingPace), and
+  typing starts halfway through the line's quick fade-in, so the letters appear one by one at full strength.
 - **The viewer while choosing an effect** (the user: "the effects stop working"): after pressing play once, the
   viewer no longer showed the effect's name, so paused at the start (no lyric yet) it looked empty. Now the
   name comes back when paused where no lyric is on screen, and pointing at any tile always shows it.

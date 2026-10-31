@@ -3,7 +3,7 @@
 // comes in and goes like that lyric effect. Pure (the composition and the tests use it).
 import { GLIDE_LIFT_PX, motionOf, resolveEffect } from "./effects";
 import { clamp01, REST, type LineLook } from "./effects/types";
-import { typedShare } from "./effects/typing";
+import { typedShare, typingPace } from "./effects/typing";
 import type { TextCardProps } from "./props";
 
 export const CARD_FADE_FRAMES = 30;
@@ -26,7 +26,7 @@ export function textCardLook(card: Pick<TextCardProps, "startFrame" | "endFrame"
   const hold = m.effect.hold?.(frame, m.amount, 1.3, fps) ?? {};
   const typing = own.effect.typing;
   const letters = card.text ? [...card.text].filter((c) => c.trim()).length : 0;
-  const chars = typing ? typedShare(card.startFrame, letters, frame, fps, Math.max(card.startFrame + 1, card.endFrame - fps), own.amount) * (typing.exit === "erase" ? 1 - q : 1) : undefined;
+  const chars = typing ? typedShare(card.startFrame, letters, frame, fps, Math.max(card.startFrame + 1, card.endFrame - fps), typingPace(own.amount)) * (typing.exit === "erase" ? 1 - q : 1) : undefined;
   const spacing = (enter.spacing ?? 0) + (exit.spacing ?? 0);
   // Ink: uncovered left to right at the calm pace (a little quicker), done a second before it ends.
   const reveal = own.effect.reveal ? typedShare(card.startFrame, letters, frame, fps, Math.max(card.startFrame + 1, card.endFrame - fps), own.amount * 1.3) : undefined;

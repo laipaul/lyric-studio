@@ -14,7 +14,7 @@ import { clamp01, EXTRA_LOOK_KEYS, REST, WORD_REST, type EffectChoice, type Line
 import { GLIDE_LIFT_PX } from "./glide";
 import { motionOf, resolveEffect, type ResolvedEffect } from "./index";
 import { BREATHE_MAX_SCALE, breatheScale, type BreatheProps } from "./breathe";
-import { typingPlan, typingWords } from "./typing";
+import { typingPace, typingPlan, typingWords } from "./typing";
 import { heldGlow, liftAt, LIFT_GLOW, LIFT_MAX_SCALE, LIFT_SCALE, shineAt, type Accents } from "./accents";
 
 export const NEXT_OPACITY = 0.45; // the waiting next line
@@ -197,15 +197,16 @@ export function lyricScene(t: SceneTimeline, frame: number): SceneItem[] {
 
 // The letter-by-letter typewriter: typed from the moment the line appears (after the previous line has
 // gone), never behind the singer; "erase" removes the letters over its exit.
+// Typing starts halfway through the line's quick fade-in, so the letters are seen appearing one by one at
+// (nearly) full strength rather than fading in together (31 Oct 2026: it read as a glide).
 export function typingStartFrame(t: SceneTimeline, i: number): number {
-  const half = t.connected(i - 1) ? Math.max(1, Math.round(t.D[i] / 2)) : 0;
-  return t.enterStart[i] + half;
+  return t.enterStart[i] + Math.max(1, Math.round(t.D[i] / 2));
 }
 function typingLook(t: SceneTimeline, i: number, frame: number): WordLook[] {
   const own = t.own[i];
   const timings = wordTimings(t, i);
   const letters = t.o.wordLetters?.(i) ?? timings.map(() => 4);
-  const plan = typingPlan(typingStartFrame(t, i), timings, letters.slice(0, timings.length), t.o.fps, own.amount);
+  const plan = typingPlan(typingStartFrame(t, i), timings, letters.slice(0, timings.length), t.o.fps, typingPace(own.amount));
   const w = t.exitWindow[i];
   const erase = own.effect.typing?.exit === "erase" && w && w.by === "own" && frame >= w.start ? clamp01((frame - w.start) / Math.max(1, w.end - w.start)) : 0;
   // No cursor on screen (Paul, 31 Oct 2026: the accent-coloured bar was irritating); only the letters.

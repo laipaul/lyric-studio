@@ -1,12 +1,19 @@
 // The letter-by-letter typewriter: a line is typed one letter at a time at a steady pace, from the moment
-// it appears, never behind the singer (each word fully typed by the moment it is sung), with a thin
-// cursor after the last typed letter that blinks softly once the line is complete. Pure: the composition
+// it appears, never behind the singer (each word fully typed by the moment it is sung). The cursor is
+// still computed (after the last typed letter, blinking softly once the line is complete) but not drawn. Pure: the composition
 // draws exactly what the tests check. Titles (not sung) type at the calm base pace.
-import { clamp01, type WordTiming } from "./types";
+import { AMOUNT, clamp01, type WordTiming } from "./types";
 
 export const TYPE_BASE_CPS = 14; // letters per second when there is time (a calm, readable typing pace)
 export const TYPE_MAX_CPS = 90; // never faster (a word sung right away is then typed as fast as it reads)
 export const CURSOR_BLINK_S = 1.1; // one soft blink once the line is typed
+
+// The typing pace from the effect's amount (Strength / intensity): 0 % calm (~8 letters/s), 50 % normal
+// (~15), 100 % quick (~22). Never 0: at 0 % it still types visibly letter by letter (31 Oct 2026: with the
+// stronger amounts the pace had run away to a near-instant line at 50 %, which read as a glide).
+export function typingPace(amount: number): number {
+  return 0.55 + 0.5 * Math.min(2, Math.max(0, amount / AMOUNT.balanced));
+}
 
 export type TypingPlan = { startFrame: number; perFrame: number; letters: number[]; total: number };
 

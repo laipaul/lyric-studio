@@ -14,7 +14,7 @@ export const typewriter: LyricEffect = {
   unit: "word",
   transition: "swap",
   defaults: { durationMs: 300, easing: "linear" },
-  enter: (p) => ({ opacity: p }), // the letters appear as they are typed
+  enter: (p) => ({ opacity: p }), // the (still empty) line fades in quickly; typing starts halfway (src/effects/scene.ts typingStartFrame)
   exit: (q) => ({ opacity: 1 - q }),
   typing: { exit: "fade" },
 };

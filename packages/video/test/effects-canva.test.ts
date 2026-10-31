@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 
 import { ascendLetter, ASCEND_LIFT_PX, BREATHE_MAX_SCALE, breatheScale, effectExtents, inkMask, lyricScene, sceneTimeline, textCardLook, typedShare, typingPlan, typingWords, type EffectChoice, type SceneLine, type SceneOptions } from "../src";
 import { SPREAD_FROM_EM } from "../src/effects/spread";
+import { TYPE_BASE_CPS, typingPace } from "../src/effects/typing";
+import { strengthAmount } from "../src/effects/types";
 
 const FPS = 30;
 const LETTERS = [3, 3, 5]; // "one two three"
@@ -60,6 +62,20 @@ describe("typewriter: letter by letter", () => {
     const after = [0, 8, 16].map((d) => typingWords(plan, Math.ceil(done) + d, FPS)[2].cursor);
     expect(Math.max(...after) - Math.min(...after)).toBeGreaterThan(0.2); // it blinks
     expect(typingWords(plan, Math.ceil(done) + 2, FPS).slice(0, 2).every((w) => w.cursor === 0)).toBe(true);
+  });
+
+  it("Strength is only the typing speed: 0 % calm, 50 % normal, 100 % quick, never instant", () => {
+    const cps = (pct: number) => TYPE_BASE_CPS * typingPace(strengthAmount(pct));
+    expect(cps(0)).toBeGreaterThan(6);
+    expect(cps(0)).toBeLessThan(9);
+    expect(cps(50)).toBeGreaterThan(13);
+    expect(cps(50)).toBeLessThan(16);
+    expect(cps(100)).toBeLessThan(23);
+    // With room before the singing, a line of 11 letters takes most of a second at 50 %, one letter at a time.
+    const late = [{ startFrame: 200, endFrame: 210 }, { startFrame: 210, endFrame: 220 }, { startFrame: 220, endFrame: 230 }];
+    const plan = typingPlan(0, late, LETTERS, FPS, typingPace(strengthAmount(50)));
+    expect(plan.total / plan.perFrame / FPS).toBeGreaterThan(0.65);
+    expect(plan.perFrame).toBeLessThan(0.6);
   });
 
   it("no cursor is drawn on screen (the user found it irritating)", () => {
