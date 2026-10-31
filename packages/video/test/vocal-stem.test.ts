@@ -35,7 +35,7 @@ const stemCheck: StemCheckRunner = async (a) => {
   checks.push(a.stem);
   const other = others.has(sha(a.stem));
   const result: StemCheck = other
-    ? { status: "rejected", offset_ms: null, message: "This vocal stem doesn't follow the song: probably another version from Suno, or the song was edited in the middle. The app separates the vocals itself (Demucs) instead.", reason: "test", stem_hash: sha(a.stem), song_hash: sha(a.song) }
+    ? { status: "rejected", offset_ms: null, message: "This vocal stem doesn't follow the song: probably another version of the song, or the song was edited in the middle. The app separates the vocals itself (Demucs) instead.", reason: "test", stem_hash: sha(a.stem), song_hash: sha(a.song) }
     : { status: "lined-up", offset_ms: 1800, message: "Vocal stem lined up: 1.8 s offset, from trimming the song's start.", reason: "test", stem_hash: sha(a.stem), song_hash: sha(a.song) };
   writeFileSync(a.out, JSON.stringify(result));
 };
@@ -112,12 +112,12 @@ describe("the voice source", () => {
   it("vocals.wav that follows the song: lined up, checked once per stem content", async () => {
     copyFileSync(writeStem("stem-take-1"), path.join(folder, "vocals.wav"));
     const v = await resolveVoiceSource(ws, sp, { check: stemCheck });
-    expect(v).toMatchObject({ kind: "stem", label: "Suno vocal stem, offset 1.8 s", offsetMs: 1800, message: "Vocal stem lined up: 1.8 s offset, from trimming the song's start." });
+    expect(v).toMatchObject({ kind: "stem", label: "vocal stem, offset 1.8 s", offsetMs: 1800, message: "Vocal stem lined up: 1.8 s offset, from trimming the song's start." });
     expect(voiceKey(v)).toMatch(/^stem-[0-9a-f]{12}-1800ms$/);
     await resolveVoiceSource(ws, sp, { check: stemCheck });
     expect(checks.length).toBe(1); // cached
     // The record for the manifest: no paths (the stem is never part of an output).
-    expect(voiceRecord(v)).toEqual({ kind: "stem", label: "Suno vocal stem, offset 1.8 s", offset_ms: 1800, stem_sha256: v.stemHash, message: v.message });
+    expect(voiceRecord(v)).toEqual({ kind: "stem", label: "vocal stem, offset 1.8 s", offset_ms: 1800, stem_sha256: v.stemHash, message: v.message });
   });
 
   it("re-aligns on the stem (new cache key), keeps the hints, and the Demucs alignment stays stored", async () => {
@@ -127,14 +127,14 @@ describe("the voice source", () => {
     expect(aligned.at(-1)!.stem).toBe(path.join(folder, "vocals.wav"));
     expect(aligned.at(-1)!.hint).toBe(aligned[0].hint); // the same stored hints
     expect(log).toContain("lyrics: the vocal stem (vocals.wav) is new: the song is aligned again on it (stored hints and hand-set starts are kept).");
-    expect(log.some((l) => l.startsWith("lyrics: voice: Suno vocal stem, offset 1.8 s (vocals.wav)."))).toBe(true);
+    expect(log.some((l) => l.startsWith("lyrics: voice: vocal stem, offset 1.8 s (vocals.wav)."))).toBe(true);
     const stored = readdirSync(path.dirname(a.lrcFile)).filter((f) => /^aligned-.*\.lrc$/.test(f));
     expect(stored.length).toBe(2);
     // The voice map and the recognised words are keyed by the stem too.
     const guarded = await applyVocalGuard(ws, sp, a, { voiceMap, firstWords });
     expect(maps.at(-1)).toBe(path.join(folder, "vocals.wav"));
     expect(guarded.guard!.voiceMap).toMatch(/\/voice-[0-9a-f]{12}-stem-[0-9a-f]{12}-1800ms\.v2\.json$/);
-    expect(guarded.guard!.check.voice).toBe("Suno vocal stem, offset 1.8 s");
+    expect(guarded.guard!.check.voice).toBe("vocal stem, offset 1.8 s");
     if (words.length) expect(words.at(-1)).toBe(path.join(folder, "vocals.wav"));
     // A second run reuses everything.
     const again = await ensureAlignment(ws, sp, { lyricsTxt: lyricsTxt(), hint: hints(), durationMs: 12_000, align, stemCheck });
@@ -148,7 +148,7 @@ describe("the voice source", () => {
     const a = await ensureAlignment(ws, sp, { lyricsTxt: lyricsTxt(), hint: hints(), durationMs: 12_000, align, log: (m) => log.push(m), stemCheck });
     expect(a.voice).toMatchObject({ kind: "demucs", label: "separated by the app (the vocal stem doesn't follow the song)" });
     expect(aligned.length).toBe(before); // the Demucs alignment was stored: not aligned again
-    expect(log.some((l) => l.includes("This vocal stem doesn't follow the song: probably another version from Suno, or the song was edited in the middle."))).toBe(true);
+    expect(log.some((l) => l.includes("This vocal stem doesn't follow the song: probably another version of the song, or the song was edited in the middle."))).toBe(true);
   });
 });
 
@@ -174,7 +174,7 @@ describe("the Assets tab and the Prepare to-do", () => {
     expect(queued.length).toBe(1); // one lyric-timing run waiting, not two
     expect(queued[0].label).toBe("Lyric timing · vocal stem");
     expect(sha(songFile)).toBe(before);
-    await expect(storeVocalStem(ws, sp.project.id, writeStem("stem-take-1"), "vocals.mp3", { check: stemCheck })).rejects.toThrow("The vocal stem must be the WAV file downloaded from Suno");
+    await expect(storeVocalStem(ws, sp.project.id, writeStem("stem-take-1"), "vocals.mp3", { check: stemCheck })).rejects.toThrow("The vocal stem must be a WAV file");
   });
 
   it("the Assets tab shows which stem is used; Prepare suggests one only when there is none (never a blocker)", async () => {
@@ -185,14 +185,14 @@ describe("the Assets tab and the Prepare to-do", () => {
     const kept = readFileSync(stem);
     rmSync(stem);
     const todo = (await songTodo(ws, sp.project.id)).find((t) => t.id === "vocals")!;
-    expect(todo).toMatchObject({ text: "Add the vocal stem for better lyric timing (vocals.wav, downloaded from Suno).", tab: "assets", blocking: false });
+    expect(todo).toMatchObject({ text: "Add the vocal stem for better lyric timing (vocals.wav).", tab: "assets", blocking: false });
     writeFileSync(stem, kept);
   });
 
   it("the queued lyric-timing run aligns on the stem and says so", async () => {
     const run = await workOnce(ws, undefined, { align, voiceMap, firstWords });
     expect(run).toMatchObject({ status: "done", label: "Lyric timing · vocal stem" });
-    expect(run!.message).toMatch(/^Lyric timing on the Suno vocal stem, offset 1\.8 s: \d+ lines? to review · \d+ lines? low confidence · \d+ lines? moved to the vocals$/);
+    expect(run!.message).toMatch(/^Lyric timing on the vocal stem, offset 1\.8 s: \d+ lines? to review · \d+ lines? low confidence · \d+ lines? moved to the vocals$/);
     expect(aligned.at(-1)!.stem).toBe(path.join(folder, "vocals.wav"));
   });
 

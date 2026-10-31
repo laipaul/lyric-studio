@@ -41,7 +41,7 @@ async function main() {
     const quiet = (m: string) => (/^(lyrics: (aligning|voice|the vocal stem|checking)|vocal stem)/.test(m) ? console.log(`  ${m}`) : undefined);
     const voice = await resolveVoiceSource(ws, sp, { log: quiet });
     if (voice.kind !== "stem") {
-      console.error(voice.message ?? `No vocal stem: put Suno's vocal stem as vocals.wav in ${songPathsById(ws, id).root} first.`);
+      console.error(voice.message ?? `No vocal stem: put the vocal stem as vocals.wav in ${songPathsById(ws, id).root} first.`);
       process.exit(1);
     }
     console.log(`"${sp.project.title}": lyric timing on the vocals separated by the app (Demucs) vs ${voice.label}`);

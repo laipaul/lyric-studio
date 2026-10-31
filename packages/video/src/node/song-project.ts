@@ -122,7 +122,7 @@ export type VocalGuard = {
   // What was measured (printed by pnpm make and kept in the manifest): the song's singing level, the
   // voice threshold, and per checked line its stamp, where the voice starts, the difference and result.
   check: {
-    voice?: string; // the vocal track listened to ("Suno vocal stem, offset 1.8 s" / "separated by the app")
+    voice?: string; // the vocal track listened to ("vocal stem, offset 1.8 s" / "separated by the app")
     level_db: number;
     threshold_db: number;
     words_check: string; // the recognised-words pass: "ran", or why it did not

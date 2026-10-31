@@ -11,7 +11,7 @@ How it is checked (analysis only, both resampled to 8 kHz mono, voice band 150 H
   1. one offset for the whole song: cross-correlation (GCC-PHAT) of the stem against the song;
   2. the same measured again on several stretches where the stem has voice (start ... middle ... end):
      each must find a clear peak at the same offset (within MAX_SPREAD_S). A part cut or repeated in the
-     middle, a tempo change or another version from Suno breaks this, and the stem is not used (the app
+     middle, a tempo change or another version of the song breaks this, and the stem is not used (the app
      falls back to Demucs and says why in plain words).
 When it matches, a lined-up copy on the song's own timeline (16 kHz mono, only the part that overlaps
 the song, silence where the stem does not reach) is written to <workspace>/cache/stems/ and used by
@@ -46,7 +46,7 @@ MAX_SPREAD_S = 0.05  # every stretch must agree with the whole-song offset withi
 MAX_UNCOVERED_S = 10.0  # the stem may miss at most this much of the song (start + end)
 
 NOT_FOLLOWING = (
-    "This vocal stem doesn't follow the song: probably another version from Suno, or the song was "
+    "This vocal stem doesn't follow the song: probably another version of the song, or the song was "
     "edited in the middle. The app separates the vocals itself (Demucs) instead."
 )
 
@@ -208,9 +208,9 @@ def match_files(song: Path, stem: Path) -> StemMatch:
     if status == "lined-up":
         message = lined_up_message(offset_ms or 0)
     elif "silent" in reason and "stem" in reason:
-        message = "This vocal stem is silent: download the vocal stem from Suno again. The app separates the vocals itself (Demucs) meanwhile."
+        message = "This vocal stem is silent: download the vocal stem again. The app separates the vocals itself (Demucs) meanwhile."
     elif "covers only" in reason:
-        message = "This vocal stem is much shorter than the song: download the whole vocal stem from Suno. The app separates the vocals itself (Demucs) meanwhile."
+        message = "This vocal stem is much shorter than the song: download the whole vocal stem. The app separates the vocals itself (Demucs) meanwhile."
     else:
         message = NOT_FOLLOWING
     return StemMatch(
@@ -290,7 +290,7 @@ def write_lined_up(song: Path, stem: Path, m: StemMatch) -> Path:
 @dataclass
 class VoiceSource:
     kind: str  # "stem" (Suno's vocal stem, lined up) | "demucs" (separated by the app)
-    label: str  # "Suno vocal stem, offset 1.8 s" | "separated by the app"
+    label: str  # "vocal stem, offset 1.8 s" | "separated by the app"
     offset_ms: int | None = None
     stem_hash: str | None = None
     message: str | None = None  # the check's message (lined up, or why the stem is not used)
@@ -321,7 +321,7 @@ def stem_track(song: Path, stem: Path | None, log: Callable[[str], None]) -> tup
         log(f"vocal stem: {m.message} ({m.reason})")
         return None, VoiceSource("demucs", "separated by the app (the vocal stem doesn't follow the song)", stem_hash=m.stem_hash, message=m.message)
     out = write_lined_up(song, stem, m)
-    label = f"Suno vocal stem, offset {offset_text(m.offset_ms or 0)}"
+    label = f"vocal stem, offset {offset_text(m.offset_ms or 0)}"
     log(f"vocal stem: {m.message} Using {stem.name} ({out.name})")
     return out, VoiceSource("stem", label, offset_ms=m.offset_ms, stem_hash=m.stem_hash, message=m.message)
 

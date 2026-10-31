@@ -17,7 +17,7 @@ import type { SongProject } from "./song-project";
 
 export type VoiceSource = {
   kind: "stem" | "demucs";
-  label: string; // "Suno vocal stem, offset 1.8 s" | "separated by the app"
+  label: string; // "vocal stem, offset 1.8 s" | "separated by the app"
   stemFile?: string; // the stem (kind "stem")
   stemHash?: string;
   offsetMs?: number; // stem time = song time + offset
@@ -59,7 +59,7 @@ export const stemArgument = (v: VoiceSource) => (v.kind === "stem" ? v.stemFile!
 
 export function sourceFromCheck(check: StemCheck, stemFile: string): VoiceSource {
   if (check.status === "lined-up" && check.offset_ms !== null) {
-    return { kind: "stem", label: `Suno vocal stem, offset ${offsetText(check.offset_ms)}`, stemFile, stemHash: check.stem_hash, offsetMs: check.offset_ms, message: check.message };
+    return { kind: "stem", label: `vocal stem, offset ${offsetText(check.offset_ms)}`, stemFile, stemHash: check.stem_hash, offsetMs: check.offset_ms, message: check.message };
   }
   return { ...DEMUCS, label: "separated by the app (the vocal stem doesn't follow the song)", stemHash: check.stem_hash, message: check.message };
 }

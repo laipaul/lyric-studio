@@ -157,10 +157,10 @@ export function AssetsTab({ projectId }: { projectId: string }) {
           : fileRow(
               "vocals",
               <AudioLines className="size-5" />,
-              "Vocal stem (from Suno)",
+              "Vocal stem",
               data.vocals
                 ? `${data.vocals.name} · ${data.vocals.status === "lined-up" ? `used for lyric timing${data.vocals.offsetMs !== null && Math.abs(data.vocals.offsetMs) >= 50 ? ` (lined up: ${(Math.abs(data.vocals.offsetMs) / 1000).toFixed(1)} s offset, from trimming)` : " (lined up)"}` : data.vocals.status === "rejected" ? "not used: the app separates the vocals itself" : "not checked yet"}${data.backingVocals ? " · backing-vocals.wav: not used for timing" : ""}`
-                : "none: the app separates the vocals itself. Add Suno's vocal stem (vocals.wav) for better lyric timing.",
+                : "none: the app separates the vocals itself. Add the vocal stem (vocals.wav) for better lyric timing.",
               data.vocals?.status === "rejected" ? data.vocals.message : undefined,
               data.vocals ? "Replace…" : "Add…",
             )}

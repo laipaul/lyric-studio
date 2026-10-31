@@ -252,7 +252,7 @@ export function checkAsset(kind: AssetKind, file: string, name: string): string 
     if (ext !== ".txt") return `The lyrics must be a .txt file (got ${name}).`;
     if (!readFileSync(file, "utf8").split(/\r?\n/).some((l) => l.replace(/^\*\s+/, "").trim())) return "The lyrics file is empty.";
   }
-  if (kind === "vocals" && ext !== ".wav") return `The vocal stem must be the WAV file downloaded from Suno (got ${name}).`;
+  if (kind === "vocals" && ext !== ".wav") return `The vocal stem must be a WAV file (got ${name}).`;
   if (kind === "cover" && ![".jpg", ".jpeg", ".png", ".webp"].includes(ext)) return `The cover must be a JPG, PNG or WEBP picture (got ${name}).`;
   if (kind === "hints") {
     if (ext !== ".lrc") return `The hints must be an .lrc file of tapped times (got ${name}).`;
@@ -293,7 +293,7 @@ export async function replaceAsset(ws: Workspace, projectId: string, kind: Asset
 
 export type VocalStemResult = { stored: string; status: "lined-up" | "rejected"; message: string; offsetMs: number | null; retimed: boolean };
 
-// The Assets tab's "Vocal stem (from Suno)": the file becomes the song folder's vocals.wav (the old one
+// The Assets tab's "Vocal stem": the file becomes the song folder's vocals.wav (the old one
 // is kept in .studio\replaced\), is checked against the song at once (same version? the offset from
 // trimming; analysis only, the song is never touched) and the song's lyric timing is queued again on it
 // (stored hints and hand-set starts are kept). A stem that doesn't follow the song is kept but not used.

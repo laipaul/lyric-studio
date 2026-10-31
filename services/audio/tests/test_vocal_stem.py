@@ -121,7 +121,7 @@ def test_lined_up_copy_is_on_the_song_timeline(workspace: Path, tmp_path: Path, 
     song = suno["mix"][int(1.8 * SR) : -int(6 * SR)]
     s, v = song_and_stem(tmp_path, song, suno["voice"])
     lined, source = stem_track(s, v, log=lambda _m: None)
-    assert lined is not None and source.kind == "stem" and source.label == "Suno vocal stem, offset 1.8 s"
+    assert lined is not None and source.kind == "stem" and source.label == "vocal stem, offset 1.8 s"
     assert lined.parent == workspace / "cache" / "stems"  # analysis only, never next to the song
     audio, sr = sf.read(str(lined))
     assert sr == 16_000 and abs(len(audio) / sr - len(song) / SR) < 0.01  # exactly the song's length

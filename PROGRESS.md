@@ -4,8 +4,8 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### L1a. Suno vocal stem (vocals.wav) as the main guide for lyric timing ✅ (to verify on the Windows PC)
-- Put Suno's vocal stem, untouched, in the song folder as **vocals.wav** (Assets tab: "Vocal stem (from Suno)" →
+### L1a. Vocal stem (vocals.wav) as the main guide for lyric timing ✅ (to verify on the Windows PC)
+- Put Suno's vocal stem, untouched, in the song folder as **vocals.wav** (Assets tab: "Vocal stem" →
   Add… / Replace…; the old one goes to .studio\replaced\). From then on everything that listens to the voice uses
   it: pnpm align, the voice map, the recognised first words, the vocal-start check and QA "Lines start with the
   vocals". Demucs is only the fallback for a song without a usable stem.
@@ -14,11 +14,11 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   start to end. One steady offset → lined up by itself: "Vocal stem lined up: 1.8 s offset, from trimming the
   song's start." (only the part that overlaps the song counts). The offset changes along the song (a part cut or
   repeated, a tempo change) or no clear match (another Suno version) → "This vocal stem doesn't follow the song:
-  probably another version from Suno, or the song was edited in the middle." and Demucs is used. Any sample rate.
+  probably another version of the song, or the song was edited in the middle." and Demucs is used. Any sample rate.
 - **Adding or replacing vocals.wav re-aligns the song by itself**: a "Lyric timing · vocal stem" task runs (Tasks
   menu; alignment + vocal-start check, no videos), with your stored hints and hand-set starts kept. Caches are keyed
   by the stem's content and offset; everything aligned on Demucs before keeps its key (nothing is redone for songs
-  without a stem). The manifest (lyrics.voice_source) and pnpm make's log say which voice was used ("Suno vocal
+  without a stem). The manifest (lyrics.voice_source) and pnpm make's log say which voice was used ("vocal
   stem, offset 1.8 s" / "separated by the app"). Prepare's to-do suggests "Add the vocal stem for better lyric
   timing" (never a blocker). backing-vocals.wav may sit in the folder; it is never used for alignment.
 - **The song file is never touched**; vocals.wav and backing-vocals.wav are only read (never edited, mixed back
@@ -316,7 +316,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 
 **Lyric timing first (agreed 31 Oct 2026): L1a and L1b come before the Style rebuild and the UX steps below;
 the open decisions stay paused.**
-- ✅ (built 31 Oct, to verify) **L1a. Suno vocal stem (vocals.wav) as the main guide for lyric timing**; Demucs only
+- ✅ (built 31 Oct, to verify) **L1a. Vocal stem (vocals.wav) as the main guide for lyric timing**; Demucs only
   the fallback (see Latest steps). Verify with `pnpm lyrics:compare-voice` on These Empty Roads.
 - **L1b. The Lyric Map** (do not build before the user's OK; plan first): a stable ID per word from the song's
   structure (V1.L2.W3); the song as a map of sections; the app picks the few points most worth checking by ear

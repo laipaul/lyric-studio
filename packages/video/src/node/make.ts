@@ -1975,7 +1975,7 @@ function buildManifest(c: {
       vocal_guard: c.alignment.guard?.moves ?? null, // lines moved to where the voice starts (not in the stored LRC)
       hand_times: c.alignment.handTimes ?? null, // lines set by hand in the Lyrics tab (hints.lrc "!" lines)
       vocal_check: c.alignment.guard?.check ?? null, // what the vocal-start check measured (singing level, per checked line)
-      // The vocal track the timing listened to (analysis only; never in the video): "Suno vocal stem, offset 1.8 s" / "separated by the app".
+      // The vocal track the timing listened to (analysis only; never in the video): "vocal stem, offset 1.8 s" / "separated by the app".
       voice_source: c.alignment.source === "given" || c.alignment.source === "story" ? null : voiceRecord(c.alignment.voice),
       source: c.alignment.source,
       hint: c.alignment.hint

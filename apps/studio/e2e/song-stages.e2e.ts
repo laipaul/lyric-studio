@@ -66,7 +66,7 @@ async function main() {
     await page.click("[data-todo-item=vocals] button");
     await page.waitForSelector("[data-asset=vocals]");
     const slot = (await page.textContent("[data-asset=vocals]")) ?? "";
-    check(slot.includes("Vocal stem (from Suno)") && slot.includes("Add…") && slot.includes("the app separates the vocals itself"), `the Assets tab offers the vocal stem (${slot})`);
+    check(slot.includes("Vocal stem") && slot.includes("Add…") && slot.includes("the app separates the vocals itself"), `the Assets tab offers the vocal stem (${slot})`);
     const order = await page.$$eval("[data-asset]", (e: Element[]) => e.map((x) => x.getAttribute("data-asset")));
     check(order.indexOf("vocals") === order.indexOf("song") + 1, `the vocal stem sits next to the song (${order.join(", ")})`);
     await page.click("[data-todo-item=labels] button");
