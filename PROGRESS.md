@@ -18,6 +18,10 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   accent colour). When several songs share the theme, Edit theme asks first: **All N songs** or **Only this song
   (saves a copy)**. Theme settings have no locks, no "Back to the brand", no "Use for all my songs".
 - The Text panel (text cards, textboard templates) opens by clicking a text card on the timeline (no rail menu).
+- Fix after the first look on the PC (31 Oct): the Theme panel now always lists the brand's default theme and
+  every song's theme (before, only the themes of songs already opened showed, so a song with its own look had
+  nothing to switch to); the tiles are one per row so the names and lines are not cut; the fonts line is now
+  a live sample of the two fonts.
 - pnpm make uses the song's theme (the log says which); `--theme "<name>"` tries another theme for one run.
 - Tests: themes.test.ts (recipe order, theme.json check, the move to themes, all songs vs a copy, Style
   actions, use / duplicate / rename, a missing theme named); style, pairings and make tests updated; browser:

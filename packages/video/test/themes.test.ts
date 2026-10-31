@@ -77,6 +77,13 @@ describe("songs and themes", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  it("the Theme panel offers every song's theme and the brand's default theme from the start", () => {
+    const data = styleData(ws, ids["Own Look"]); // the first song opened has its own look
+    expect(data.theme?.name).toBe("Own Look");
+    expect(data.themes.map((t) => t.name)).toEqual(["Life Lyrics", "Own Look"]);
+    expect(data.themes.find((t) => t.name === "Life Lyrics")!.users.sort()).toEqual(["Plain", "Third"]);
+  });
+
   it("a song without a look of its own moves to the artist's default theme; nothing looks different", () => {
     const catalog = loadFontCatalog(wsDir);
     const before = resolveRecipe({ library: LIBRARY_RECIPE, artist: {}, song: {} }).values;

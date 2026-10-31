@@ -520,6 +520,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
   const autoFields = pick(AUTO_FIELDS);
   // "Set by you": the song's own value (default or one platform) or a lock.
   const setByYou = autoFields.filter((f) => f.own || f.locked || (f.perPlatform ?? []).some((p) => p.own));
+  const sampleStyle = (role: "verse" | "hook") => ({ fontFamily: `"${String(valueOf(`${role}Font`))} preview", serif`, fontWeight: Number(valueOf(`${role}Weight`) ?? 400), fontStyle: valueOf(`${role}Italic`) === true ? "italic" : "normal" });
   const face = (role: "verse" | "hook") => `${String(valueOf(`${role}Font`))} ${String(valueOf(`${role}Weight`))}${valueOf(`${role}Italic`) === true ? " italic" : ""}`;
 
   const menuFor = (f: StyleField, differsPerPlatform: boolean): RowMenuItem[] => LOOK_FIELDS_PATCHED.has(f.field) ? (f.perPlatform && !differsPerPlatform
@@ -700,8 +701,20 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
               </p>
               <PairingsRow projectId={projectId} scope={scope ?? "all"} onChanged={reload} onView={setPairView} onHover={setHovered} />
               <div data-font-summary className="bg-card flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2.5">
-                <span className="min-w-0 flex-1 text-sm" data-font-summary-text>
-                  Fonts: verses {face("verse")} · choruses {face("hook")}
+                {/* the theme's two fonts as live samples (the exact names on hover and for screen readers) */}
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5" title={`Verses: ${face("verse")} · Choruses: ${face("hook")}`}>
+                  <span className="sr-only" data-font-summary-text>
+                    Fonts: verses {face("verse")} · choruses {face("hook")}
+                  </span>
+                  <span data-font-sample="verse" className="truncate text-lg leading-tight" style={sampleStyle("verse")}>
+                    {data.sampleLines[0] || "Your verses"}
+                  </span>
+                  <span data-font-sample="hook" className="truncate text-lg leading-tight" style={{ ...sampleStyle("hook"), color: String(valueOf("accentColour") ?? "inherit") }}>
+                    {data.sampleLines[1] || "Your choruses"}
+                  </span>
+                  <span className="text-muted-foreground truncate text-[11px]">
+                    {String(valueOf("verseFont"))} · {String(valueOf("hookFont"))}
+                  </span>
                 </span>
                 <button type="button" data-fine-tune aria-expanded={fineTune} onClick={() => setFineTune((v) => !v)} className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs underline underline-offset-2">
                   <ChevronDown className={cn("size-3 transition-transform", fineTune && "rotate-180")} />
@@ -738,7 +751,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
               {rows(pick(LOOK_FIELDS))}
             </div>
           ) : (
-            <div data-theme-tiles className="grid grid-cols-2 gap-2">
+            <div data-theme-tiles className="flex flex-col gap-2">
               {data.themes.map((t) => {
                 const current = t.name === data.theme?.name;
                 const v = t.look as Record<string, unknown>;
@@ -762,10 +775,10 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                       <span className="min-w-0 flex-1 truncate text-xs font-medium">{t.name}</span>
                       {current ? <Check className="text-brand size-3.5 shrink-0" aria-label="this song's theme" /> : null}
                     </span>
-                    <span className="truncate text-base leading-tight" style={fam("verse")}>
+                    <span className="line-clamp-2 text-base leading-tight" style={fam("verse")}>
                       {data.sampleLines[0] || data.previewLine || "Your words here"}
                     </span>
-                    <span className="truncate text-base leading-tight" style={{ ...fam("hook"), color: String(v.accentColour ?? "inherit") }}>
+                    <span className="line-clamp-2 text-base leading-tight" style={{ ...fam("hook"), color: String(v.accentColour ?? "inherit") }}>
                       {data.sampleLines[1] || "The chorus"}
                     </span>
                     <span className="text-muted-foreground truncate text-[10px]">

@@ -267,6 +267,28 @@ export function ensureSongTheme(ws: Workspace, projectId: string, catalog: FontC
   return next;
 }
 
+// Every song on a theme and every artist's default theme there, so that the theme list offers them all (the
+// Theme panel shows the brand's theme even before another song was opened). A song that cannot be read is
+// skipped here (its own page names the problem).
+export function ensureAllThemes(ws: Workspace, catalog: FontCatalog): void {
+  const artists = new Set<string>();
+  for (const p of ws.db.select({ id: projectTable.id, artist: projectTable.artist }).from(projectTable).all()) {
+    artists.add(p.artist);
+    try {
+      ensureSongTheme(ws, p.id, catalog);
+    } catch {
+      // named on that song's page
+    }
+  }
+  for (const artist of artists) {
+    try {
+      artistDefaultTheme(ws, artist, catalog);
+    } catch {
+      // a broken brand.json is named on the song pages
+    }
+  }
+}
+
 // The songs that use a theme (title and id).
 export function themeUsers(ws: Workspace, name: string): { id: string; title: string }[] {
   const out: { id: string; title: string }[] = [];

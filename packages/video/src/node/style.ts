@@ -33,7 +33,7 @@ import {
   type SongRecipe,
 } from "./recipe";
 import { sharedCollections, songPathsById } from "./song-folder";
-import { ensureSongTheme, isThemeField, listThemes, loadTheme, setThemeLook, themeLayer, type ThemeLook } from "./themes";
+import { ensureAllThemes, ensureSongTheme, isThemeField, listThemes, loadTheme, setThemeLook, themeLayer, type ThemeLook } from "./themes";
 import { SHORT_LABELS } from "./exports";
 
 // The characters the font preview checks (French accents).
@@ -201,6 +201,7 @@ export function styleData(ws: Workspace, projectId: string): StyleData {
 }
 
 function themesOf(ws: Workspace, current: string | null, catalog: FontCatalog): { theme: StyleTheme | null; themes: StyleTheme[] } {
+  ensureAllThemes(ws, catalog); // every song's theme and the brand's default theme are offered
   const users = new Map<string, string[]>();
   for (const p of ws.db.select({ id: projectTable.id, title: projectTable.title }).from(projectTable).all()) {
     const file = songPathsById(ws, p.id).recipe;
