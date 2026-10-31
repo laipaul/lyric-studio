@@ -67,6 +67,9 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   // the viewer never looks empty while choosing an effect (31 Oct 2026: it read as "the effects stopped working").
   const lyricOnScreen = !!view && view.props.lyrics.some((l) => frame >= (l.enterFrame ?? l.startFrame) && frame < l.endFrame);
   const demo = look?.demo && !playing && (look.demo.key !== demoSeen || !lyricOnScreen) ? look.demo : null;
+  // A title / tagline / hook / end card on the paused frame: the effect's name gets a dark veil over the
+  // whole frame so the two never read on top of each other (31 Oct 2026).
+  const cardOnScreen = !!view && (view.props.textCards ?? []).some((c) => !c.off && frame >= c.startFrame && frame < c.endFrame);
   useEffect(() => {
     if (playing && look?.demo) setDemoSeen(look.demo.key);
   }, [playing, look?.demo]);
@@ -437,7 +440,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
           style={{ width: "100%", height: "100%" }}
         />
         {demo ? (
-          <div data-effect-demo={demo.input.effect.name} className="pointer-events-none absolute inset-0" style={{ background: "rgba(0,0,0,0.35)" }}>
+          <div data-effect-demo={demo.input.effect.name} data-demo-veil={cardOnScreen ? "card" : undefined} className="pointer-events-none absolute inset-0" style={{ background: cardOnScreen ? "rgba(10,10,12,0.86)" : "rgba(0,0,0,0.35)" }}>
             <PreviewPlayer input={demo.input} />
           </div>
         ) : null}
