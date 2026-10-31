@@ -1,3 +1,4 @@
+import type { TitleStyle } from "./picture";
 import type { BreatheProps } from "./effects/breathe";
 import type { FontFileRef } from "./font-files";
 import type { KenBurns } from "./photo";
@@ -54,10 +55,13 @@ export type LyricLineProps = {
   };
 };
 
-// Title, byline and tagline cards (the textboard's opening): drawn over the picture.
+// Title, byline and tagline cards (the textboard's opening), and the theme's hook and end cards
+// (src/extra-cards.ts): drawn over the picture.
 export type TextCardProps = {
   id: string;
-  type: "title" | "byline" | "tagline";
+  type: "title" | "byline" | "tagline" | "hook" | "end";
+  cardStyle?: TitleStyle; // hook / end card: the theme's style for it (the title card uses picture.titleStyle)
+  off?: boolean; // planned but switched off in the theme: not drawn, not checked (the editor can switch it on)
   text: string;
   font: string;
   fallbackFont?: string; // for characters the font lacks (e.g. Japanese: Noto Sans JP), same in preview and render

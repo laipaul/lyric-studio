@@ -80,6 +80,12 @@ export const FIELD_LABELS: Record<RecipeField, string> = {
   gradeCanvas: "Grade on the Canvas",
   titleStyle: "Title style",
   titleWarp: "Title shape",
+  hookCard: "Hook card (Reels, TikTok, Shorts)",
+  hookCardStyle: "Hook card style",
+  endCard: "End card (Reels, TikTok, Shorts)",
+  endCardStyle: "End card style",
+  hookText: "Hook card text",
+  endText: "End card text",
 };
 
 export type StyleValue = { value: unknown; source: string; own: boolean };

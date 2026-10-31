@@ -63,7 +63,7 @@ describe("the textboard in the planner", () => {
     expect(m.props.lyrics.find((l) => l.text === "Verse two here")!.card).toEqual({ id: "line-4" }); // nothing changed on it
     expect(m.props.fonts.some((f) => f.family === "Playfair Display" && f.weight === 700)).toBe(true);
     // A title card on Reels (shown, centred, 3 s, cinematic fade) in the brand title font.
-    expect(m.props.textCards).toEqual([expect.objectContaining({ id: "title", text: "Text Test", font: "Cinzel", startFrame: 0, endFrame: 90, effect: { name: "cinematic-fade", intensity: "balanced" } })]);
+    expect(m.props.textCards?.filter((c) => !c.off)).toEqual([expect.objectContaining({ id: "title", text: "Text Test", font: "Cinzel", startFrame: 0, endFrame: 90, effect: { name: "cinematic-fade", intensity: "balanced" } })]);
     expect(m.props.fonts.some((f) => f.family === "Cinzel")).toBe(true);
     expect(m.textboard).toEqual({ file: "textboard.json", hash: expect.stringMatching(/^[0-9a-f]{12}$/), template: "Cinematic", changes: 3, cards: 9 });
 

@@ -4,6 +4,15 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Song title and Delete song ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026. On a song's page, **click the title** (or the pencil) to change it: Enter
+  saves, Escape cancels; the song folder is renamed to match (not while it renders).
+- The ⋯ next to the title: **Delete song…** asks first, then moves the whole song folder (song, lyrics, clips,
+  videos) to `songs\_removed\` and goes back to the Library. Nothing is deleted: **Deleted songs** at the bottom
+  of the Library has **Restore** (the song comes back with its videos, marks and settings).
+- Tests: song-delete.test.ts (rename and its folder, delete hides it from the Library and Themes, restore);
+  browser: song-title.e2e.ts (title in place, folder follows, delete asks, Library without it, restore).
+
 ### Themes, step 3: the Themes page and the theme on Library cards ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026 ("redesign the app around themes"). **Themes** is in the top menu
   (Library · Themes · Collections · Releases): a Canva-style gallery of tall tiles, each theme on your newest

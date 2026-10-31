@@ -53,7 +53,7 @@ describe("the title opening", () => {
     });
     const v = r.platforms[0].variations[0];
     const m = readManifest(v.manifestFile);
-    const cards = m.props.textCards ?? [];
+    const cards = (m.props.textCards ?? []).filter((c) => !c.off); // the theme's hook / end card are planned but off
     expect(cards.map((c) => c.type)).toEqual(["title", "byline", "tagline"]);
     expect(cards.find((c) => c.type === "tagline")!.text).toBe("A song for the road");
     const first = m.props.lyrics[0];
@@ -82,7 +82,29 @@ describe("the title opening", () => {
       coverRenderer: async (o) => (covers.push((o.props.textCards ?? []).map((c) => c.type)), writeFileSync(o.outFile, "jpg"), o.outFile),
     });
     const m = readManifest(r.platforms[0].variations[0].manifestFile);
-    expect(m.props.textCards ?? []).toEqual([]);
+    expect((m.props.textCards ?? []).filter((c) => !c.off)).toEqual([]);
     expect(covers).toEqual([["title", "byline", "tagline"]]);
+  }, 300_000);
+  it("the theme's End card on: the Reel ends with the call to action, never over a lyric line; the manifest records it", async () => {
+    writeRecipe(paths.recipe!, { platforms: ["reels"], section: "0:00-0:16", variations: { reels: 1 }, endCard: "on", endText: "Stream {title} on Spotify" } as never);
+    const r = await makeVideos({
+      workspaceDir: wsDir, song: paths.audio!, lyrics: paths.lyricsTxt, platforms: "reels", align: fakeAlign, frameCheck: false, renderer, platform: "win32",
+      coverRenderer: async (o) => (writeFileSync(o.outFile, "jpg"), o.outFile),
+    });
+    const v = r.platforms[0].variations[0];
+    const m = readManifest(v.manifestFile);
+    const end = (m.props.textCards ?? []).find((c) => c.type === "end")!;
+    expect(end.off).toBeUndefined();
+    expect(end.text).toBe("Stream Opening Test on Spotify");
+    expect(end.cardStyle).toBe("label");
+    expect(end.endFrame).toBeGreaterThan(m.props.durationInFrames); // stays to the very end
+    expect(end.startFrame).toBeGreaterThan(m.props.durationInFrames - 4 * 30);
+    const hook = (m.props.textCards ?? []).find((c) => c.type === "hook");
+    if (hook) expect(hook.off).toBe(true); // the hook card is off in this theme
+    const raw = JSON.parse(readFileSync(v.manifestFile, "utf8")) as { settings?: { extra_cards?: { type: string; text: string }[] } };
+    expect(raw.settings?.extra_cards).toEqual([expect.objectContaining({ type: "end", text: "Stream Opening Test on Spotify", style: "label" })]);
+    const qa = readFileSync(v.manifestFile.replace(/\.manifest\.json$/, ".qa.txt"), "utf8");
+    expect(qa).toContain("Title cards inside the safe zone");
+    expect(qa).not.toMatch(/FAIL.*Title cards clear of the first lyric/);
   }, 300_000);
 });

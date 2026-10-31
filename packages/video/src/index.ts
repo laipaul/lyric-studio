@@ -35,6 +35,7 @@ export * from "./anchors";
 export * from "./storyboard";
 export * from "./textboard";
 export * from "./text-cards";
+export * from "./extra-cards";
 export * from "./story";
 export * from "./effects";
 export * from "./effects/scene";

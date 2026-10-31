@@ -6,7 +6,7 @@
 import type { Intensity, EffectChoice } from "./effects/names";
 import type { FontFileRef } from "./font-files";
 import type { LyricVideoProps } from "./props";
-import type { PictureProps } from "./picture";
+import type { PictureProps, TitleStyle } from "./picture";
 
 export type PatchFace = { family: string; weight: number; italic: boolean; files: FontFileRef[] };
 export type LookPatch = {
@@ -22,6 +22,7 @@ export type LookPatch = {
   accent?: string;
   colour?: string; // the theme's text colour
   picture?: Omit<PictureProps, "coverSrc">; // the theme's grade, vignette, behind the words, background without a clip
+  cards?: { hook: boolean; hookStyle: TitleStyle; end: boolean; endStyle: TitleStyle }; // the theme's hook / end card on or off and their style
 };
 
 const INTENSITY: readonly Intensity[] = ["subtle", "balanced", "expressive"];
@@ -58,6 +59,17 @@ export function patchLook(props: LyricVideoProps, patch: LookPatch | null, barFr
   }
   if (patch.colour) next.colour = patch.colour;
   if (patch.picture) next.picture = { ...patch.picture, ...(props.picture?.coverSrc ? { coverSrc: props.picture.coverSrc } : {}) };
+  if (patch.cards && props.textCards?.length) {
+    // The planned hook / end card (always planned on Reels, TikTok, Shorts): on or off, and its style.
+    const c = patch.cards;
+    next.textCards = props.textCards.map((t) => {
+      if (t.type !== "hook" && t.type !== "end") return t;
+      const on = t.type === "hook" ? c.hook : c.end;
+      const style = t.type === "hook" ? c.hookStyle : c.endStyle;
+      const { off: _o, cardStyle: _s, ...rest } = t;
+      return { ...rest, ...(style !== "plain" ? { cardStyle: style } : {}), ...(on ? {} : { off: true }) };
+    });
+  }
   const fx = props.lyricEffects;
   if (fx) {
     const e = { ...fx };

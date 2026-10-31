@@ -188,7 +188,7 @@ async function main() {
     await openPanel(page, "song");
     const songLine = (await page.textContent("[data-compact-summary=song]")) ?? "";
     check(songLine === "Tagline: none · EP: none · YouTube: cover · Title opening: off", `This song's line (${songLine})`);
-    check(JSON.stringify(await inBlock("song")) === JSON.stringify(["tagline", "ep", "youtubeLayout", "titleOpening"]), `This song: tagline, EP, YouTube layout, title opening (${(await inBlock("song")).join(", ")})`);
+    check(JSON.stringify(await inBlock("song")) === JSON.stringify(["tagline", "ep", "youtubeLayout", "titleOpening", "hookText", "endText"]), `This song: tagline, EP, YouTube layout, title opening, hook and end card texts (${(await inBlock("song")).join(", ")})`);
     await openPanel(page, "make");
     const makeLine = (await page.textContent("[data-compact-summary=make]")) ?? "";
     check(makeLine.startsWith("Reels 3 · YouTube 1") && makeLine.includes("clips: the song's own"), `What to make's line (${makeLine})`);

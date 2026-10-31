@@ -40,7 +40,8 @@ import { clipBandLuminances } from "./lyric-band";
 import { isThinFace, lyricBackingFor, type BackingDecision, type Readability } from "../readability";
 import { pictureOf } from "../picture";
 import { editOf, rankOf, readClipEdits } from "./clip-edits";
-import { boardForRun, cardFont, cardMeasure, overrideCount, titleCards, type RunBoard } from "./textboard";
+import { boardForRun, cardFont, cardMeasure, overrideCount, TITLE_SIZE_VERTICAL, titleCards, type RunBoard } from "./textboard";
+import { extraCards, fillCardText } from "../extra-cards";
 import { matchPinClips, parsePins } from "../pins";
 import type { LyricEffectsProps, LyricVideoProps } from "../props";
 import { formatQa, LOW_CONFIDENCE, qaReasons, runQa, type QaInput, type QaReport } from "../qa";
@@ -69,7 +70,7 @@ import { sha256File, toolInfo, writeManifest, type Manifest } from "./manifest";
 import { findPairing, loadPairings } from "./pairings";
 import { resolveMediaPath, type MediaRoots } from "./media";
 import { tooLongLines } from "./measure";
-import { cardBlocks, gridCrop } from "../text-cards";
+import { cardBlocks, fitCardBlocks, gridCrop } from "../text-cards";
 import { loadStyles, lyricLineNumbers, parseSection, snapToDownbeat, songMedia, type StyleFaces } from "./prepare";
 import { detectBadFrames, measureLyrics } from "./qa-check";
 import { getBundle, renderCover, renderLyricVideo, renderThumbnail, type RenderOptions } from "./render";
@@ -148,7 +149,7 @@ export type MakeOptions = {
   titleOpening?: "off" | "on"; // Reels / TikTok / Shorts: title, byline and tagline before the first hook
   // The theme's picture (src/picture.ts; recipe textColour, grade, vignette, textBacking, fallback,
   // fallbackColour, gradeCanvas). Absent (pnpm make without a song.json): the videos as before.
-  picture?: Pick<RecipeValues, "textColour" | "grade" | "vignette" | "textBacking" | "fallback" | "fallbackColour" | "gradeCanvas" | "titleStyle" | "titleWarp">;
+  picture?: Pick<RecipeValues, "textColour" | "grade" | "vignette" | "textBacking" | "fallback" | "fallbackColour" | "gradeCanvas" | "titleStyle" | "titleWarp" | "hookCard" | "hookCardStyle" | "endCard" | "endCardStyle" | "hookText" | "endText">;
   transitions?: TransitionStyle; // between shots: "auto" (default: from the music), "crisp" (cuts), "flowing" (dissolves)
   ending?: EndingChoice; // Reels / TikTok / Shorts: "auto" (default: the app chooses tight loop, soft fade or ring-out) or one of them
   tempo?: number; // the song's real BPM (song.json "tempo"): the beats are re-tracked around it
@@ -935,7 +936,7 @@ function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: Pl
 
 // The theme's picture fields of a recipe (MakeOptions.picture).
 function pictureFields(v: RecipeValues): NonNullable<MakeOptions["picture"]> {
-  return { textColour: v.textColour, grade: v.grade, vignette: v.vignette, textBacking: v.textBacking, fallback: v.fallback, fallbackColour: v.fallbackColour, gradeCanvas: v.gradeCanvas, titleStyle: v.titleStyle, titleWarp: v.titleWarp };
+  return { textColour: v.textColour, grade: v.grade, vignette: v.vignette, textBacking: v.textBacking, fallback: v.fallback, fallbackColour: v.fallbackColour, gradeCanvas: v.gradeCanvas, titleStyle: v.titleStyle, titleWarp: v.titleWarp, hookCard: v.hookCard, hookCardStyle: v.hookCardStyle, endCard: v.endCard, endCardStyle: v.endCardStyle, hookText: v.hookText, endText: v.endText };
 }
 
 // The Reel cover's props: the video's frame with the title opening's cards (title, byline, tagline) on it
@@ -1406,6 +1407,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     ? planTake(options.take, story ? { rate: options.rate ?? "1x" } : undefined)
     : planVariations(canvas ? Math.max(1, canvas.loops.length) : sh.variationsFor(preset), story ? { rate: options.rate ?? "1x" } : undefined);
   const plans = new Map<CutRate, typeof plan>([[options.rate ?? "1x", plan]]);
+  const cardNotesBySpec = new Map<string, string[]>(); // the hook / end card's notes (no room for it in this video)
   const planOf = (spec: VariationSpec) => {
     const rate = spec.rate ?? options.rate ?? "1x";
     if (!plans.has(rate)) plans.set(rate, planFor(rate));
@@ -1438,6 +1440,8 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   const composedBySpec = new Map(
     specs.map((spec) => {
       const composed = composeProps(baseFor(spec), choicesFor(spec));
+      const cardNotes: string[] = [];
+      cardNotesBySpec.set(spec.name, cardNotes);
       if (composed.anchors && spec === specs[0]) {
         // One line per anchor (what the first video does with it), then the conflicts once.
         for (const u of composed.anchors.uses) {
@@ -1484,6 +1488,26 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
           fit: { safeZone: preset.safeZone, catalog: sh.catalog },
         });
         for (const w of tc.warnings) if (!warnings.includes(`${preset.name}: textboard: ${w}`)) warnings.push(`${preset.name}: textboard: ${w}`);
+        // The theme's hook and end cards (Reels, TikTok, Shorts): always planned, drawn only when on.
+        if (loops && options.picture) {
+          const pic = options.picture;
+          const song = sh.getProject();
+          const titleCard = sh.textboard.board.cards.find((c) => c.type === "title");
+          const title = (titleCard?.overrides.text ?? titleCard?.text ?? song.title).trim() || song.title;
+          const firstHook = rest.lyrics.find((l) => l.isHook)?.text ?? "";
+          const hookFace = rest.hookFont ? { family: rest.hookFont.font, weight: rest.hookFont.weight, italic: rest.hookFont.italic === true } : { family: rest.style.font, weight: rest.style.weight ?? 400, italic: rest.style.italic === true };
+          const titleEnd = Math.max(0, ...tc.cards.map((c) => (c.endFrame === Infinity ? 0 : c.endFrame)));
+          const ex = extraCards({
+            lyrics: rest.lyrics, fps: VIDEO.fps, durationInFrames: rest.durationInFrames, area: rest.lyricArea!, titleEndFrame: Math.min(titleEnd, rest.durationInFrames),
+            hook: { text: (pic.hookText || firstHook).trim(), font: hookFace, size: Math.round(TITLE_SIZE_VERTICAL * preset.textScale * 1.1), colour: sh.brand.brand.accentColour, style: pic.hookCardStyle ?? "plain", off: pic.hookCard !== "on" },
+            end: { text: fillCardText(pic.endText ?? "", { title, artist: song.artist }), font: { family: sh.brand.brand.titleFont.family, weight: sh.brand.brand.titleFont.weight }, size: Math.round(TITLE_SIZE_VERTICAL * preset.textScale * 0.6), colour: textColour, style: pic.endCardStyle ?? "label", off: pic.endCard !== "on" },
+          });
+          if (ex.cards.length) {
+            const measure = cardMeasure(sh.catalog, ex.cards);
+            tc.cards.push(...fitCardBlocks(ex.cards, { format, safeZone: preset.safeZone, measure }));
+          }
+          for (const n of ex.notes) if ((n.startsWith("Hook") ? pic.hookCard : pic.endCard) === "on") cardNotes.push(n);
+        }
         const titleFace = tc.cards.some((c) => c.font === sh.brand.brand.titleFont.family) && !ytLayout ? fontFileRefs(resolveFace(sh.catalog, sh.brand.brand.titleFont.family, sh.brand.brand.titleFont.weight)) : [];
         const fonts = [...rest.fonts, ...cardFonts, ...tc.fonts, ...titleFace].filter((f, k, all) => all.findIndex((x) => x.src === f.src) === k);
         composed.props = { ...rest, ...(tc.cards.length ? { textCards: tc.cards } : {}), fonts };
@@ -1504,7 +1528,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
           return {
             spec, props: composed.props, anchors: anchors.length || anchorMissing.length ? { ...(composed.anchors ?? { uses: [], conflicts: [], notes: [] }), missing: anchorMissing } : null,
             loop: loops ? loopResult(composed.props, prepared.clips, { bpm: analysis.bpm, downbeats: downbeatTimes, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers, ending, titleLeadMs: titleLead }) : null,
-            decisions: [pace?.text, composed.transitions?.text].filter((x): x is string => !!x),
+            decisions: [pace?.text, composed.transitions?.text, ...(cardNotesBySpec.get(spec.name) ?? [])].filter((x): x is string => !!x),
           };
         }),
         // Loop platforms: target lengths whose end loops well from this start (beat, level, harmony).
@@ -1877,14 +1901,14 @@ async function checkVariation(
     canvas: ctx.frameCheck && ctx.canvas ? { ...(await loopCheck(file)), ...ctx.canvas } : null,
     loop: ctx.loop ?? null,
     anchors: ctx.anchors ?? null,
-    titleCards: ctx.catalog && props.textCards?.length && (props.format?.height ?? 1920) > (props.format?.width ?? 1080) ? titleCardsQa(props, ctx.catalog) : null,
+    titleCards: ctx.catalog && props.textCards?.some((c) => !c.off) && (props.format?.height ?? 1920) > (props.format?.width ?? 1080) ? titleCardsQa(props, ctx.catalog) : null,
   });
 }
 
 // The title opening for QA: the cards' blocks (measured in their own fonts), when the first lyric line
 // appears, characters no font draws, and the profile grid's 3:4 crop (vertical videos).
 export function titleCardsQa(props: Omit<LyricVideoProps, "mediaBaseUrl">, catalog: FontCatalog): NonNullable<QaInput["titleCards"]> {
-  const cards = props.textCards ?? [];
+  const cards = (props.textCards ?? []).filter((c) => !c.off); // a card the theme has off is not drawn
   const faces = new Map<string, ReturnType<typeof resolveFace> | null>();
   const faceOf = (c: (typeof cards)[number]) => {
     const key = `${c.font}|${c.weight}|${c.italic ? 1 : 0}`;
@@ -2023,6 +2047,8 @@ function buildManifest(c: {
       cut_rate: spec.rate ?? c.options.rate ?? "1x",
       theme: c.options.theme ?? null, // the song's theme (or --theme / Compare themes for this run)
       picture: c.props.picture ? { grade: c.props.picture.grade, vignette: c.props.picture.vignette, text_backing: c.props.picture.backing, fallback: c.props.picture.fallback, text_colour: c.props.colour } : null, // the theme's picture (src/picture.ts)
+      // The theme's hook / end card as drawn (src/extra-cards.ts): only the ones switched on.
+      extra_cards: (c.props.textCards ?? []).filter((t) => (t.type === "hook" || t.type === "end") && !t.off).map((t) => ({ type: t.type, text: t.text, start_s: Math.round((t.startFrame / VIDEO.fps) * 100) / 100, style: t.cardStyle ?? "plain" })),
       gap_order: c.gapOrder ?? null, // "story": every video in story order (story anchors)
       transitions: spec.transitions ?? null, // story variations: the anchors' own ("as-set"), all "dissolve" or all "cut"
       energy: c.options.energy ?? "medium",

@@ -20,7 +20,7 @@ import { choiceText, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, parseEffectChoic
 import { DEFAULT_BRAND, type Brand } from "./brand";
 import { checkPerPlatform, isPlatformField, isWeight, SHOT_LENGTH_VALUES, PLATFORM_FIELDS, type PerPlatform, type PlatformField } from "./per-platform";
 
-export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "tempo", "collections", "platforms", "variations", "section", "length", "ending", "transitions", "paceShift", "readability", "breathe", "heldGlow", "chorusLift", "shine", "emphasis", "titleOpening", "tagline", "ep", "youtubeLayout", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp"] as const;
+export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "tempo", "collections", "platforms", "variations", "section", "length", "ending", "transitions", "paceShift", "readability", "breathe", "heldGlow", "chorusLift", "shine", "emphasis", "titleOpening", "tagline", "ep", "youtubeLayout", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp", "hookCard", "hookCardStyle", "endCard", "endCardStyle", "hookText", "endText"] as const;
 export type RecipeField = (typeof RECIPE_FIELDS)[number];
 
 export type RecipeValues = {
@@ -63,6 +63,13 @@ export type RecipeValues = {
   gradeCanvas: "off" | "on"; // the Spotify Canvas gets the grade too (on) or keeps the clips' colours (off)
   titleStyle: TitleStyle; // the title card: plain, outline, layered (outline over an accent copy), extrude (3D), label (on an accent bar)
   titleWarp: TitleWarp; // the title card's shape: none, arc, wave
+  // The theme's extra cards (Reels / TikTok / Shorts; the app places and times them, never over a lyric line):
+  hookCard: "off" | "on"; // a big card in the pause before the first chorus (hookText, else the chorus's first line)
+  hookCardStyle: TitleStyle;
+  endCard: "off" | "on"; // the call to action at the end (endText)
+  endCardStyle: TitleStyle;
+  hookText: string; // the song's hook card text; empty: the first chorus line
+  endText: string; // the end card's text; {title} and {artist} are filled in
 };
 
 export { isPlatformField, isWeight, ITALIC_FIELDS, PLATFORM_FIELDS, WEIGHT_FIELDS, type PerPlatform, type PlatformField, type PlatformValues } from "./per-platform";
@@ -124,6 +131,11 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
     if (r.titleOpening === "off" || r.titleOpening === "on") recipe.titleOpening = r.titleOpening;
     else problems.push("titleOpening must be off or on");
   }
+  for (const k of ["hookText", "endText"] as const) {
+    if (r[k] === undefined) continue;
+    if (typeof r[k] === "string" && (r[k] as string).length <= 80) recipe[k] = (r[k] as string).trim();
+    else problems.push(`${k} must be a short text (at most 80 characters)`);
+  }
   if (r.tagline !== undefined) {
     if (typeof r.tagline === "string" && r.tagline.length <= 120) recipe.tagline = r.tagline.trim();
     else problems.push("tagline must be a short text (at most 120 characters)");
@@ -176,7 +188,7 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
     if (typeof r[k] === "string" && /^#[0-9a-fA-F]{6}$/.test(r[k] as string)) recipe[k] = r[k] as string;
     else problems.push(`${k} must look like "#FFFFFF"`);
   }
-  for (const [k, list] of [["grade", GRADES], ["vignette", VIGNETTES], ["textBacking", TEXT_BACKINGS], ["fallback", FALLBACKS], ["gradeCanvas", ["off", "on"]], ["titleStyle", TITLE_STYLES], ["titleWarp", TITLE_WARPS]] as const) {
+  for (const [k, list] of [["grade", GRADES], ["vignette", VIGNETTES], ["textBacking", TEXT_BACKINGS], ["fallback", FALLBACKS], ["gradeCanvas", ["off", "on"]], ["titleStyle", TITLE_STYLES], ["titleWarp", TITLE_WARPS], ["hookCard", ["off", "on"]], ["endCard", ["off", "on"]], ["hookCardStyle", TITLE_STYLES], ["endCardStyle", TITLE_STYLES]] as const) {
     if (r[k] === undefined) continue;
     if ((list as readonly unknown[]).includes(r[k])) (recipe as Record<string, unknown>)[k] = r[k];
     else problems.push(`${k} must be ${list.join(", ")}`);
@@ -401,6 +413,12 @@ export const LIBRARY_RECIPE: RecipeValues = {
   gradeCanvas: "on",
   titleStyle: "plain",
   titleWarp: "none",
+  hookCard: "off",
+  hookCardStyle: "plain",
+  endCard: "off",
+  endCardStyle: "label",
+  hookText: "",
+  endText: "Stream {title} on Spotify",
 };
 
 // The artist's brand.json (fonts, accent colour, lyric effects).

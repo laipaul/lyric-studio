@@ -602,14 +602,15 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                         data-text-card={c.id}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (view.editable) openCard(c.id);
+                          if (c.type === "hook" || c.type === "end") setPanel("theme"); // the theme's card: Edit theme → Cards
+                          else if (view.editable) openCard(c.id);
                         }}
                         className={cn("bg-brand/20 absolute overflow-hidden rounded border px-1 text-left text-[10px]", cardId === c.id && "ring-brand ring-2")}
                         style={{ left: x(c.startMs), width: Math.max(8, x(c.endMs - c.startMs) - 2), top: 2, height: 18 }}
-                        title={`${c.type}: ${c.text}`}
+                        title={`${CARD_TYPE_LABELS[c.type] ?? c.type}: ${c.text}${c.type === "hook" || c.type === "end" ? " (the theme's card: Edit theme → Cards)" : ""}`}
                       >
                         <Type className="mr-0.5 inline size-2.5" />
-                        {c.type}: {c.text}
+                        {CARD_TYPE_LABELS[c.type] ?? c.type}: {c.text}
                       </button>
                     ))}
                   </div>
@@ -1115,6 +1116,7 @@ function ClipEditor({ clip, mediaUrl, busy, onSave, onClose, onCanvas }: { clip:
   );
 }
 
+const CARD_TYPE_LABELS: Record<string, string> = { title: "title", byline: "byline", tagline: "tagline", hook: "Hook card", end: "End card" };
 const POSITION_LABELS: Record<string, string> = { lyrics: "the lyric spot", "with-title": "under the title", top: "top", upper: "upper", centre: "centre", lower: "lower", "upper-third": "upper third (title opening)", "lower-third": "lower third (title opening)" };
 
 // A card's own look: place, size, hold, effect (and, for title / byline / tagline, its text and whether

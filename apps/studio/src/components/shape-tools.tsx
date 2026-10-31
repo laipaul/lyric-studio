@@ -39,7 +39,7 @@ const show = (v: unknown) => (v === null ? "preset" : Array.isArray(v) ? (v.leng
 // demo: an effect just pointed at or picked in Motion: the viewer shows its name moving in it over the
 // video's frame, until the user plays (then the song plays with the effect on the real lyrics).
 export type ShapeLook = { patch: LookPatch | null; fallback: LookPreviewProps; caption: string; previewing: string | null; demo?: { key: string; input: LookPreviewProps } | null }; // previewing: the pairing pointed at
-const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "emphasis", "accentColour", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp"]);
+const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "emphasis", "accentColour", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp", "hookCard", "hookCardStyle", "endCard", "endCardStyle"]);
 
 // The Shape page's tool panels (the song's recipe, song.json), one at a time as chosen in the rail: Fonts
 // (font pairing, the fonts line with Fine-tune), Effects (Set effect with its Verses / Choruses switch),
@@ -571,7 +571,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
         data-edit={key}
         className={cn(input, "w-48")}
         defaultValue={String(value ?? "")}
-        placeholder={f.field === "section" ? "auto, full or 0:11-1:10" : ""}
+        placeholder={f.field === "section" ? "auto, full or 0:11-1:10" : f.field === "hookText" ? "the first chorus line" : f.field === "endText" ? "Stream {title} on Spotify" : ""}
        
         onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
         onBlur={(e) => e.target.value.trim() !== String(value ?? "") && set(e.target.value.trim())}
@@ -778,7 +778,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
 
               <EditorSection id="cards" title="Cards">
                 <TitleStyleControls value={(k) => valueOf(k)} onSet={(field, value) => void act({ action: "set", field, value })} sample={data.title || "Your title"} font={String(valueOf("verseFont") ?? "")} />
-                <p className="text-muted-foreground text-xs">A Hook card and an End card (for example “Stream on Spotify”), styled by this theme: coming in a next step.</p>
+                <ExtraCardControls value={(k) => valueOf(k)} onSet={(field, value) => void act({ action: "set", field, value })} font={String(valueOf("hookFont") ?? valueOf("verseFont") ?? "")} hookSample={String(valueOf("hookText") || data.sampleLines.find((_, i) => i === 1) || "Your chorus")} endSample={String(valueOf("endText") || "Stream {title} on Spotify").replace(/\{title\}/gi, data.title || "Your song").replace(/\{artist\}/gi, "")} />
               </EditorSection>
 
               {/* The footer: the only place a change is saved. */}
@@ -1022,7 +1022,8 @@ function lookOf(data: StyleData, s: { dirty: boolean; hovered: PairingCard | nul
   const accent = String(value("accentColour") ?? "#E8A3B5");
   const colour = String(value("textColour") ?? s.pairView?.colour ?? "#FFFFFF");
   const picture = pictureOf({ grade: str(value("grade")), vignette: str(value("vignette")), textBacking: str(value("textBacking")), fallback: str(value("fallback")), fallbackColour: str(value("fallbackColour")), titleStyle: str(value("titleStyle")), titleWarp: str(value("titleWarp")), accentColour: accent });
-  const patch: LookPatch | null = s.dirty ? { verse, hook, verseEffect, hookEffect, breathe, ...addOns, accent, colour, picture } : s.hovered ? { verse, hook } : null;
+  const cards = { hook: value("hookCard") === "on", hookStyle: (str(value("hookCardStyle")) ?? "plain") as TitleStyle, end: value("endCard") === "on", endStyle: (str(value("endCardStyle")) ?? "label") as TitleStyle };
+  const patch: LookPatch | null = s.dirty ? { verse, hook, verseEffect, hookEffect, breathe, ...addOns, accent, colour, picture, cards } : s.hovered ? { verse, hook } : null;
   const all = [...verse.files, ...hook.files];
   const fallback: LookPreviewProps = {
     mediaBaseUrl: "/api/fonts",
@@ -1085,9 +1086,9 @@ const shortLabel = (label: string) => label.replace(/\s*\(.*\)\s*$/, "");
 
 // The tools column's blocks, each in its order (the six font rows sit under Look's "Fine-tune"; the
 // effect, Breathe and add-on settings are set in Set effect, their per-platform values under its ⋯).
-const SONG_FIELDS = ["tagline", "ep", "youtubeLayout", "titleOpening"] as const;
+const SONG_FIELDS = ["tagline", "ep", "youtubeLayout", "titleOpening", "hookText", "endText"] as const;
 const LOOK_FIELDS = ["textColour", "accentColour"] as const;
-const PICTURE_FIELDS = ["grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp"] as const;
+const PICTURE_FIELDS = ["grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp", "hookCard", "hookCardStyle", "endCard", "endCardStyle"] as const;
 const EFFECT_FIELDS = ["verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "emphasis"] as const;
 const MAKE_FIELDS = ["platforms", "variations", "collections"] as const;
 const AUTO_FIELDS = ["shotLength", "tempo", "section", "length", "ending", "transitions", "paceShift", "readability"] as const;
@@ -1322,6 +1323,57 @@ function EditorSection({ id, title, children }: { id: string; title: string; chi
       <h4 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">{title}</h4>
       {children}
     </section>
+  );
+}
+
+// The theme's Hook card and End card (src/extra-cards.ts): on / off and a style each, with a sample. The app
+// places and times them (the pause before the first chorus; the video's last seconds), never over a lyric.
+function ExtraCardControls({ value, onSet, font, hookSample, endSample }: { value: (field: string) => unknown; onSet: (field: string, value: string) => void; font: string; hookSample: string; endSample: string }) {
+  const accent = String(value("accentColour") ?? "#E8A3B5");
+  const colour = String(value("textColour") ?? "#FFFFFF");
+  const card = (id: "hook" | "end") => {
+    const on = value(`${id}Card`) === "on";
+    const style = (String(value(`${id}CardStyle`) ?? (id === "end" ? "label" : "plain")) as TitleStyle) || "plain";
+    const sample = id === "hook" ? hookSample.toUpperCase() : endSample;
+    return (
+      <div key={id} data-extra-card={id} className="bg-card flex flex-col gap-2 rounded-lg border px-3 py-2.5 text-sm">
+        <label className="flex items-center gap-2">
+          <span className="flex-1 font-medium">{id === "hook" ? "Hook card" : "End card"}</span>
+          <select data-picture-select={`${id}Card`} className="bg-background rounded-md border px-2 py-1 text-xs" value={on ? "on" : "off"} onChange={(e) => onSet(`${id}Card`, e.target.value)}>
+            <option value="off">Off</option>
+            <option value="on">On</option>
+          </select>
+        </label>
+        {on ? (
+          <>
+            <div data-extra-card-sample={id} className="flex min-h-12 items-center justify-center overflow-hidden rounded bg-[#1a1418] px-2 py-2 text-center" style={{ fontFamily: `"${font} preview", serif`, color: id === "hook" ? accent : colour, fontSize: id === "hook" ? 20 : 15 }}>
+              <span style={titleStyleCss(style, id === "hook" ? 20 : 15, id === "hook" ? accent : colour, accent)}>{sample}</span>
+            </div>
+            <label className="flex items-center gap-2 text-xs">
+              <span className="flex-1">Style</span>
+              <select data-picture-select={`${id}CardStyle`} className="bg-background rounded-md border px-2 py-1 text-xs" value={style} onChange={(e) => onSet(`${id}CardStyle`, e.target.value)}>
+                {Object.entries(TITLE_STYLE_LABELS).map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        ) : null}
+        <p className="text-muted-foreground text-xs">
+          {id === "hook"
+            ? "Reels, TikTok, Shorts: big, in the pause just before the first chorus (the app finds it; no pause, no card). Its words: This song → Hook card text, else the chorus's first line."
+            : "Reels, TikTok, Shorts: the last seconds of the video, never over a lyric. Its words: This song → End card text ({title} = the song's title)."}
+        </p>
+      </div>
+    );
+  };
+  return (
+    <div className="flex flex-col gap-2" data-extra-cards>
+      {card("hook")}
+      {card("end")}
+    </div>
   );
 }
 

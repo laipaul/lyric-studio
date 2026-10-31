@@ -270,7 +270,7 @@ export function runQa(input: QaInput): QaReport {
       checks.push({ name: "Title cards inside the profile grid (3:4)", ok: !cut.length, details: cut.map((b) => `"${b.text}" reaches ${b.box.top < tc.grid!.top ? "above" : "below"} the 3:4 area the profile grid shows (${Math.round(tc.grid!.top)}-${Math.round(tc.grid!.bottom)} px)`) });
     }
     if (tc.firstLyricFrame !== null) {
-      const late = tc.blocks.filter((b) => b.endFrame > tc.firstLyricFrame! + 1);
+      const late = tc.blocks.filter((b) => b.endFrame > tc.firstLyricFrame! + 1 && b.ids.some((id) => id === "title" || id === "byline" || id === "tagline")); // the hook / end card come later by design
       checks.push({ name: "Title cards clear of the first lyric", ok: !late.length, details: late.map((b) => `"${b.text}" is still on screen ${((b.endFrame - tc.firstLyricFrame!) / VIDEO.fps).toFixed(1)} s after the first lyric line appears`) });
     }
     checks.push({ name: "Title characters", ok: !tc.missing.length, details: tc.missing.length ? [`no font draws ${tc.missing.join(" ")} (they would show as boxes)`] : [] });

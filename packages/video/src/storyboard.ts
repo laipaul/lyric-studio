@@ -120,7 +120,7 @@ export function storyLines(
 
 // The title, byline and tagline cards on the timeline (video time).
 export function storyTitleCards(props: Pick<LyricVideoProps, "textCards" | "durationInFrames">): { id: string; type: string; text: string; startMs: number; endMs: number }[] {
-  return (props.textCards ?? []).map((c) => ({ id: c.id, type: c.type, text: c.text, startMs: frameMs(c.startFrame), endMs: frameMs(Math.min(c.endFrame, props.durationInFrames)) }));
+  return (props.textCards ?? []).filter((c) => !c.off).map((c) => ({ id: c.id, type: c.type, text: c.text, startMs: frameMs(c.startFrame), endMs: frameMs(Math.min(c.endFrame, props.durationInFrames)) }));
 }
 
 // Hook (chorus) sections: runs of hook lines, from the first one's start to the last one's end.

@@ -432,6 +432,7 @@ function WarpedText({ text, warp, size }: { text: string; warp: NonNullable<NonN
 function TextCards({ cards, format, picture }: { cards: TextCardProps[]; format: Format; picture?: LyricVideoProps["picture"] }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  cards = cards.filter((c) => !c.off);
   const shown = new Set(cards.map((c) => c.id));
   const roots = cards.filter((c) => !c.stackOn || !shown.has(c.stackOn));
   const line = (c: TextCardProps, parent: TextCardProps | null, rootLook?: LineLook) => {
@@ -440,13 +441,14 @@ function TextCards({ cards, format, picture }: { cards: TextCardProps[]; format:
     const body = c.lines?.length ? c.lines.join("\n") : c.text;
     // The theme's title style and shape (src/picture.ts): only on the title card.
     const titled = c.type === "title" && picture ? picture : null;
-    const styled = titled?.titleStyle ? titleStyleCss(titled.titleStyle, c.size, c.colour, titled.accent, look.opacity * 1.4) : {};
+    const cardStyle = c.cardStyle ?? titled?.titleStyle; // hook / end card: their own style from the theme
+    const styled = cardStyle ? titleStyleCss(cardStyle, c.size, c.colour, picture?.accent ?? c.colour, look.opacity * 1.4) : {};
     const warped = titled?.titleWarp && look.chars === undefined && look.wave === undefined ? titled.titleWarp : undefined;
     return (
       <div
         key={c.id}
         data-text-card={c.id}
-        data-title-style={titled?.titleStyle}
+        data-title-style={cardStyle}
         style={{
           fontSize: c.size,
           ...styled,

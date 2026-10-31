@@ -325,9 +325,19 @@ async function main() {
     await page.waitForFunction(() => !document.querySelector("[data-effect-demo]"), null, { timeout: 5000 }).catch(() => {});
     check(!(await page.$("[data-effect-demo]")), "…and pressing play shows the real lyrics with the effect");
     await page.click("[data-viewer]"); // pause again
+    // Cards → End card on: the viewer shows it at once (the planned card switched on), in the last seconds.
+    await page.selectOption("[data-picture-select=endCard]", "on");
+    check(!!(await page.$("[data-extra-card-sample=end]")), "Cards → End card: a sample of it in the theme's style");
+    const lastFrame = Number(await page.getAttribute("[data-transport]", "data-last").catch(() => "0"));
+    await page.click("[data-transport-button=end]");
+    await page.waitForSelector("[data-viewer] [data-text-card=end]", { timeout: 8000 }).catch(() => {});
+    check(!!(await page.$("[data-viewer] [data-text-card=end]")), `…the viewer shows the end card at the video's end at once (last frame ${lastFrame})`);
     await saveTheme(page);
     await replanned();
     check(loadTheme(wsDir, readRecipe(paths.recipe!).theme!).look.verseEffect === "spread", "…saved in the song's theme");
+    check(loadTheme(wsDir, readRecipe(paths.recipe!).theme!).look.endCard === "on", "…the End card too");
+    await page.waitForSelector("[data-textboard-titles] [data-text-card=end]", { timeout: 60_000 }).catch(() => {});
+    check(((await page.textContent("[data-textboard-titles] [data-text-card=end]").catch(() => "")) ?? "").includes("on Spotify"), "…the plan has it on the timeline (End card: Stream … on Spotify)");
     await page.waitForFunction(() => document.querySelector("[data-viewer]")?.getAttribute("data-patched") === "0", null, { timeout: 60_000 }).catch(() => {});
     check((await page.getAttribute("[data-viewer]", "data-patched")) === "0" && (await page.getAttribute("[data-viewer]", "data-effect")) === "spread", "…and the new plan has it (nothing patched any more)");
     await page.click("[data-next-make]");

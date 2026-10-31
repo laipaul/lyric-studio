@@ -887,7 +887,7 @@ describe("platform presets (stand-in renderer)", () => {
     expect(m.props.audio).toBeNull();
     expect(m.props.lyrics).toEqual([]);
     expect(m.props.titleOverlay).toBeUndefined();
-    expect(m.props.textCards).toBeUndefined();
+    expect((m.props.textCards ?? []).filter((c) => !c.off)).toEqual([]);
     expect(m.props.logo).toBeUndefined();
     expect(m.props.cutFrames).toEqual([]);
     expect(m.props.shots).toHaveLength(1);
