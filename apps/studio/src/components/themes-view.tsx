@@ -74,7 +74,7 @@ export function ThemesView() {
       <style>{fontCss}</style>
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="font-display text-2xl">Themes</h1>
-        <p className="text-muted-foreground text-sm">A theme is a song&apos;s whole look: fonts, motion and colours. Pick one per song; change it once for every song that uses it.</p>
+        <p className="text-muted-foreground text-sm">A theme is a song&apos;s whole look: fonts, motion and colours. Click a theme, then <b>Edit theme</b> to change it; <b>+ New theme</b> starts one from a copy.</p>
         <button type="button" data-themes-new onClick={() => setCreating({ name: "", from: data.themes[0]?.name ?? "" })} className="bg-brand text-brand-foreground ml-auto flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium">
           <Plus className="size-4" /> New theme
         </button>
@@ -319,8 +319,13 @@ function ThemeDetail({ theme, data, act, onOpen, onClose }: { theme: ThemeCard; 
             ) : null}
             <div className="flex flex-wrap items-center gap-2">
               {editSong ? (
-                <Link data-theme-detail-edit href={`/songs/${editSong}?tab=shape&panel=theme&edit=${encodeURIComponent(theme.name)}`} className="bg-muted rounded-md px-3 py-1.5 text-sm">
-                  Edit (on {data.songs.find((s) => s.id === editSong)?.title ?? "a song"})
+                <Link
+                  data-theme-detail-edit
+                  href={`/songs/${editSong}?tab=shape&panel=theme&edit=${encodeURIComponent(theme.name)}`}
+                  title={`Opens the theme editor next to ${data.songs.find((s) => s.id === editSong)?.title ?? "a song"}'s video: fonts, motion, colours, cards`}
+                  className="bg-brand text-brand-foreground rounded-md px-4 py-1.5 text-sm font-medium"
+                >
+                  Edit theme
                 </Link>
               ) : null}
               <button type="button" data-theme-detail-duplicate onClick={() => void act({ action: "duplicate", name: theme.name })} className="bg-muted rounded-md px-3 py-1.5 text-sm">
