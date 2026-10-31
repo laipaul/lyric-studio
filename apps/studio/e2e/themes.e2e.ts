@@ -8,8 +8,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { openWorkspace } from "@lyric/db";
+import { makeRun, openWorkspace } from "@lyric/db";
 import { createSong, loadTheme, readRecipe, songPathsById } from "@lyric/video/node";
+import { openTab } from "./stage-tabs";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-themes-"));
 const wsDir = path.join(root, "workspace");
@@ -120,6 +121,18 @@ async function main() {
     await page.click("[data-theme-save]");
     await page.waitForSelector("[data-theme-editors]", { state: "detached" });
     check(loadTheme(wsDir, "Night Drive copy").look.verseEffect === "ink" && theme(ids[0]) === "Life Lyrics" && loadTheme(wsDir, "Life Lyrics").look.verseEffect !== "ink", "Save edits that theme; the song keeps its own");
+    // Make → Generate: the theme for this run and Compare themes (one run per theme, the same choices).
+    await page.goto(`${base}/songs/${ids[0]}`);
+    await page.waitForSelector("[data-stages]");
+    await openTab(page, "Generate");
+    await page.waitForSelector("[data-compare-themes]");
+    await page.check("[data-theme-option='Life Lyrics']");
+    await page.check("[data-theme-option='Night Drive']");
+    check(await page.$eval("[data-generate-theme]", (s: HTMLSelectElement) => s.disabled), "Compare themes: the single theme choice steps aside");
+    await page.click("[data-generate] button[type=submit]");
+    await page.waitForSelector("[data-generate] [role=status], [data-generate] .text-emerald-300, [data-generate] p:has-text('Queued')", { timeout: 15_000 }).catch(() => {});
+    const runs = ws.db.select().from(makeRun).all().map((r) => ({ label: r.label, theme: (r.options_json as { theme?: string }).theme }));
+    check(runs.length === 2 && runs.some((r) => r.theme === "Life Lyrics" && r.label.includes("theme Life Lyrics")) && runs.some((r) => r.theme === "Night Drive"), `Compare themes: one run per theme (${JSON.stringify(runs)})`);
     if (process.env.THEMES_SHOT) {
       await page.goto(`${base}/themes`);
       await page.waitForSelector("[data-themes-tile]");

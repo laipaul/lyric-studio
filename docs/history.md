@@ -4,6 +4,19 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Controls in one bar under the timeline ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026: the transport bar sat too low on the screen. The viewer is smaller, the
+  timeline sits right under it, and **one command bar under the timeline** holds everything: which video (Plan
+  now / a run, platform, video, Pictures, ↻ plan again), the transport (start, bar back, play, stop, bar
+  forward, end, time, Speed, Loop, volume, full screen), Follow and Zoom, the verdict and Next: Make. The
+  summary line and the hint follow under it. It all fits on one screen, for 9:16 and for 16:9 (YouTube: pick
+  it under Platform; the wide viewer gets the same height).
+- A YouTube video in the cover layout has no clip shots (your cover art plays the whole song): the empty
+  shots lane now says so, with a link to This song → YouTube layout to build it from clips instead.
+- Tests: storyboard.e2e.ts (viewer, timeline and command bar on one 1440×1000 screen for Reels and for
+  YouTube; the bar holds the source, the transport, Follow / Zoom and Next: Make; nothing between the viewer
+  and the timeline).
+
 ### Transport bar under the video ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026. Under the Shape page's viewer, instead of the play button inside the
   video: ⏮ go to start, ⏪ back one bar, ▶/⏸ play or pause, ⏹ stop (pause and back to the start), ⏩ forward

@@ -123,12 +123,11 @@ async function main() {
     await page.waitForSelector("[data-edit='ending-default']");
 
     await openTab(page, "Generate");
-    await page.waitForSelector("[aria-label='Hook effect']");
-    check(await page.$eval("[aria-label='Verse effect']", (s: HTMLSelectElement) => !(s).disabled), "Generate: Verse effect can be changed");
+    await page.waitForSelector("[data-generate-theme]");
+    check((await page.$$("[aria-label='Verse effect'], [aria-label='Hook effect']")).length === 0, "Generate: no font or effect lists any more (the theme holds them)");
+    check(((await page.$eval("[data-generate-theme] option:checked", (o: Element) => o.textContent)) ?? "").includes("(this song's)"), "Generate: the song's theme is chosen");
     const chips = await page.$$eval("[data-platform-choice]", (e: Element[]) => e.filter((x) => x.className.includes("bg-brand")).map((x) => x.getAttribute("data-platform-choice")));
     check(JSON.stringify(chips) === JSON.stringify(["reels", "youtube"]), `Generate starts with Reels + YouTube (got ${(chips as string[]).join(", ")})`);
-    check((await page.$eval("[aria-label='Verse effect'] option", (o: Element) => o.textContent)) === "From the recipe (glide)", 'the recipe option is short: "From the recipe (glide)"');
-    check((await page.textContent("[data-per-platform-effects=verse]")) === "YouTube: cinematic-fade", 'per-platform effects on a line under the list ("YouTube: cinematic-fade")');
 
     // + New song: Instrumental -> an optional story.txt instead of lyrics.txt; song.json "instrumental".
     const instrumentalSong = path.join(root, "Tea With The Monk.wav");

@@ -118,7 +118,6 @@ async function main() {
     await page.waitForSelector("[data-from-run]");
     check(page.url().includes("tab=generate") && page.url().includes("from=2026-10-20_1430"), "Use these settings opens Generate for that run");
     check((await page.textContent("[data-run-section-label]")) === "0:34–1:06 (from that run)", 'section "0:34–1:06 (from that run)"');
-    check((await page.$eval("[aria-label='Verse effect']", (s: HTMLSelectElement) => s.value)) === "floating", "the verse effect of that run (floating) is chosen");
     const chips = await page.$$eval("[data-platform-choice]", (e: Element[]) => e.filter((x) => x.className.includes("bg-brand")).map((x) => x.getAttribute("data-platform-choice")));
     check(JSON.stringify(chips) === JSON.stringify(["reels"]), `the platforms of that run (got ${(chips as string[]).join(", ")})`);
     await page.click("[data-switch-auto]");

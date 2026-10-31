@@ -13,7 +13,7 @@ import path from "node:path";
 
 import { openWorkspace } from "@lyric/db";
 import { findOrCreateSongProject, loadBrand, loadFontCatalog, loadTheme, readRecipe, songPathsById } from "@lyric/video/node";
-import { openPanel, openTab, saveTheme } from "./stage-tabs";
+import { openPanel, saveTheme } from "./stage-tabs";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-pairings-"));
 const wsDir = path.join(root, "workspace");
@@ -210,13 +210,6 @@ async function main() {
     check(themeLook().hookFont === "Playfair Display" && themeLook().hookItalic === true, "the theme now has the Dramatic pair");
     check(brandText() === brandBefore, "…brand.json still untouched");
 
-    // Generate: compare pairings.
-    await openTab(page, "Generate");
-    await page.waitForSelector("[data-compare-pairings]");
-    await page.check("[data-pairing-option=elegant]");
-    await page.check("[data-pairing-option=dramatic]");
-    await page.check("[data-pairing-option=gentle]");
-    check(await page.$eval("[data-pairing-option=literary]", (c: HTMLInputElement) => c.disabled), "Generate: at most 3 pairings to compare");
     await browser.close();
   } finally {
     server.kill();

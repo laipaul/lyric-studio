@@ -10,7 +10,7 @@ import type { AnchorUse } from "../anchors";
 import { clockText } from "../section";
 import { SHORT_LABELS } from "./exports";
 import type { Manifest } from "./manifest";
-import { resolveRecipe, type RecipeValues } from "./recipe";
+import { readRecipe, resolveRecipe, type RecipeValues } from "./recipe";
 import { songPathsById } from "./song-folder";
 import { recipeInputFor } from "./style";
 import { overrideCount, readTextboard, textboardHash } from "./textboard";
@@ -19,6 +19,7 @@ export type RunPlatformSettings = {
   platform: string;
   label: string;
   videos: number;
+  theme: string | null; // the theme the videos were made with (null: before themes)
   verseEffect: string | null; // null: not recorded (older runs)
   hookEffect: string | null;
   verseFont: string | null;
@@ -86,6 +87,7 @@ export function runSettings(ws: Workspace, projectId: string, folder: string): R
       platform,
       label: SHORT_LABELS[platform] ?? m.platform?.preset?.label ?? platform,
       videos: ms.length,
+      theme: str(s.theme),
       verseEffect: str(s.line_effect),
       hookEffect: str(s.hook_effect),
       verseFont: str(m.props?.style?.font) ?? str(s.font),
@@ -120,6 +122,7 @@ export function compareRunToRecipe(ws: Workspace, projectId: string, folder: str
       rows.push({ key, label, then: then ?? "not recorded", now: current, differs: compare && then !== null && then.toLowerCase() !== current.toLowerCase() });
     const isCanvas = r.platform === "canvas";
     if (!isCanvas) {
+      if (r.theme) add("theme", "Theme", r.theme, readRecipe(songPathsById(ws, projectId).recipe).theme ?? "none");
       add("verseEffect", "Verse effect", r.verseEffect, now.verseEffect);
       add("hookEffect", "Hook effect", r.hookEffect, now.hookEffect);
       add("verseFont", "Verse font", r.verseFont, now.verseFont);

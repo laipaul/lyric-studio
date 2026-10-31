@@ -20,7 +20,7 @@ import { SOURCE_FILE } from "./collection";
 import { readRecipe, resolveRecipe, writeRecipe } from "./recipe";
 import { isRemovedSong, moveEntry, relocatePaths, removeEmptyDirs, REMOVED_SONGS, renameSongFolder, sharedCollections, songBusy, songFolderFor, songPathsById, SONGS_DIR } from "./song-folder";
 import { presetLengthText, recipeInputFor } from "./style";
-import { ensureAllThemes } from "./themes";
+import { ensureAllThemes, listThemes, themeUsers } from "./themes";
 import { findOrCreateSongProject, storeProjectHint } from "./song-project";
 
 export type PlatformStatus = "PASS" | "WARN" | "FAILED" | "interrupted" | "Rendering" | "none";
@@ -298,6 +298,8 @@ export type GeneratePanelData = {
   };
   lyricsReady: boolean;
   pairings: { id: string; name: string; note: string }[]; // "Compare pairings": one video per pairing
+  theme: string | null; // the song's theme
+  themes: { name: string; songs: number }[]; // "Compare themes": one video set per theme
   title: string;
   artist: string;
   ep: string;
@@ -326,8 +328,12 @@ export function generatePanelData(ws: Workspace, p: typeof projectTable.$inferSe
   }
   const catalog = loadFontCatalog(ws.dir);
   const pairings = loadPairings(catalog, loadBrand(ws.dir, catalog, p.artist).brand).pairings.map((x) => ({ id: x.id, name: x.name, note: x.note }));
+  const songTheme = readRecipe(paths.recipe).theme ?? null;
+  const themes = listThemes(ws.dir).map((t) => ({ name: t.name, songs: themeUsers(ws, t.name).length }));
   return {
     pairings,
+    theme: songTheme,
+    themes,
     platforms: presets.map((x) => ({ name: x.name, label: SHORT_LABELS[x.name] ?? x.label, variations: x.variations, lyrics: x.lyrics })),
     collections,
     chosen,

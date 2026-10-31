@@ -36,6 +36,8 @@ export type RunRequest = {
   saveToSong?: boolean; // keep this run's choices in the song's recipe (song.json; locked settings stay)
   pairings?: string[]; // compare font pairings: one video per pairing (ids from presets/font-pairings.json, "brand")
   pictures?: string[]; // picture versions: one video per clip set ("song+wedding", "city"), the same textboard
+  themes?: string[]; // Compare themes: one run per theme (2-3), the same choices otherwise
+  theme?: string; // this run uses another theme (one of a Compare themes set)
 };
 
 // The options a run is made with (MakeOptions without callbacks), stored in make_run.options_json.
@@ -61,6 +63,8 @@ export function checkRunRequest(req: RunRequest, platformNames: readonly string[
   if (req.pairings !== undefined && !(Array.isArray(req.pairings) && req.pairings.length <= 3 && req.pairings.every((x) => typeof x === "string" && /^[a-z0-9-]+$/.test(x)))) problems.push("Compare pairings: choose up to 3.");
   if (req.layout && !["cover", "stills", "clips"].includes(req.layout)) problems.push("YouTube layout must be cover, stills or clips.");
   if (req.pictures !== undefined && !(Array.isArray(req.pictures) && req.pictures.length >= 2 && req.pictures.length <= 4 && req.pictures.every((x) => typeof x === "string" && /^[^\\/:*?"<>|,]+$/.test(x)))) problems.push("Picture versions: choose 2-4 clip sets.");
+  if (req.themes !== undefined && !(Array.isArray(req.themes) && req.themes.length >= 2 && req.themes.length <= 3 && req.themes.every((x) => typeof x === "string" && x.trim() && x.length <= 100))) problems.push("Compare themes: choose 2-3 themes.");
+  if (req.themes?.length && (req.pairings?.length || req.pictures?.length)) problems.push("Compare themes cannot be combined with font pairings or picture versions in one run.");
   if (req.pictures?.length && req.pairings?.length) problems.push("Compare font pairings and picture versions cannot be combined in one run.");
   if (req.shotLength !== undefined && !["auto", "1", "2", "4", "8", "story", "rate"].includes(req.shotLength)) problems.push("Shot length must be auto, 1, 2, 4 or 8 bars, story or the cut rate.");
   if (req.collection !== undefined && !/^[^\\/:*?"<>|]+$/.test(req.collection)) problems.push("Choose a collection.");
@@ -113,6 +117,7 @@ export function generateOptions(ws: Workspace, projectId: string, req: RunReques
     ...(req.realign ? { realign: true } : {}),
     ...(req.pairings?.length ? { pairings: req.pairings.join(",") } : {}),
     ...(req.pictures?.length ? { pictures: req.pictures.join(",") } : {}),
+    ...(req.theme?.trim() ? { theme: req.theme.trim() } : {}),
     command: "Lyric Studio: Generate",
   };
 }
@@ -164,7 +169,7 @@ export const platformListLabel = (platforms: string | undefined) => (platforms ?
 export function enqueueRun(ws: Workspace, projectId: string, options: RunOptions, label?: string): MakeRun {
   return ws.db
     .insert(makeRun)
-    .values({ project_id: projectId, options_json: options as Record<string, unknown>, ...(options.resume && options.resumeFolder ? { export_dir: storedPath(ws, options.resumeFolder) } : {}), label: label ?? (options.resume ? `Resume ${platformListLabel(options.platforms)}` : `${platformListLabel(options.platforms)}${options.take ? ` · take ${options.take}` : ""}`) })
+    .values({ project_id: projectId, options_json: options as Record<string, unknown>, ...(options.resume && options.resumeFolder ? { export_dir: storedPath(ws, options.resumeFolder) } : {}), label: label ?? (options.resume ? `Resume ${platformListLabel(options.platforms)}` : `${platformListLabel(options.platforms)}${options.take ? ` · take ${options.take}` : ""}${options.theme ? ` · theme ${options.theme}` : ""}`) })
     .returning()
     .get();
 }

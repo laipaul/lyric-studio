@@ -35,6 +35,12 @@ export async function POST(request: Request) {
     const { run, saved } = withWorkspace((ws) => {
       if (coverFile) storeCover(ws, projectId, coverFile);
       const options = generateOptions(ws, projectId, req);
+      // Compare themes: one run per theme with the same choices (same section, clips and order: the plan
+      // is deterministic), so only the look differs; nothing is saved to the song.
+      if (req.themes?.length) {
+        const runs = req.themes.map((theme) => enqueueRun(ws, projectId, { ...options, theme: theme.trim() }));
+        return { run: { id: runs[0].id, label: `Compare themes: ${req.themes.join(", ")}` }, saved: null };
+      }
       // "Save to song": this run's choices become the song's own settings (locked ones stay).
       const saved = req.saveToSong ? saveRunToSong(ws, projectId, options) : null;
       return { run: enqueueRun(ws, projectId, options), saved };

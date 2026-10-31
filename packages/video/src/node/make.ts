@@ -566,6 +566,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const own = (k: RecipeField) => recipe.sources[k] === "song" || recipe.sources[k] === "run" || recipe.sources[k] === "theme"; // set by this song's theme, the song or the run
     const effective: MakeOptions = {
       ...options,
+      ...(theme ? { theme: theme.name } : {}), // the theme this run uses (the manifest names it)
       lineEffect: own("verseEffect") ? recipe.values.verseEffect : undefined,
       hookEffect: own("hookEffect") ? recipe.values.hookEffect : undefined,
       font: own("verseFont") ? recipe.values.verseFont : undefined,
@@ -1995,6 +1996,7 @@ function buildManifest(c: {
     },
     settings: {
       cut_rate: spec.rate ?? c.options.rate ?? "1x",
+      theme: c.options.theme ?? null, // the song's theme (or --theme / Compare themes for this run)
       gap_order: c.gapOrder ?? null, // "story": every video in story order (story anchors)
       transitions: spec.transitions ?? null, // story variations: the anchors' own ("as-set"), all "dissolve" or all "cut"
       energy: c.options.energy ?? "medium",

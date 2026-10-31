@@ -12,8 +12,6 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 
-const INTENSITIES = ["subtle", "balanced", "expressive"] as const;
-const join = (name: string, intensity: string) => (intensity === "balanced" ? name : `${name}:${intensity}`);
 
 const label = "flex flex-col gap-1.5 text-sm";
 const select = "bg-input/30 border-input h-9 rounded-md border px-2 text-sm";
@@ -53,14 +51,9 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
     return counts.length && counts.every(([, c]) => c === n) && counts.some(([p, c]) => c !== (r.variations[p] ?? r.variations["*"] ?? data.platforms.find((x) => x.name === p)?.variations)) ? String(n) : "";
   })();
   const [variations, setVariations] = useState(runVideos);
-  // "" = from the recipe (per platform where it differs); a choice here applies to this run only
-  const runEffect = (value: string | null, recipeValue: string, field: string) => {
-    if (!value || locked(field) || value === recipeValue) return { name: "", intensity: "balanced" };
-    const [name, intensity = "balanced"] = value.split(":");
-    return { name, intensity };
-  };
-  const [verse, setVerse] = useState(runEffect(from?.lineEffect ?? null, data.verseEffect, "verseEffect"));
-  const [hook, setHook] = useState(runEffect(from?.hookEffect ?? null, data.hookEffect, "hookEffect"));
+  // The theme for this run ("" = the song's own) and Compare themes (2-3: one set of videos per theme).
+  const [runTheme, setRunTheme] = useState("");
+  const [compareThemes, setCompareThemes] = useState<string[]>([]);
   // Section and target length: the run's exact times ("0:34–1:06 (from that run)") until switched back to auto.
   const runSection = from?.section && !locked("section") ? from.section : null;
   const [section, setSection] = useState(runSection ?? r.section);
@@ -71,7 +64,6 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
   const [saveToSong, setSaveToSong] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
-  const [pairings, setPairings] = useState<string[]>([]); // compare font pairings: one video per pairing
   const [pictureSets, setPictureSets] = useState<{ songClips: boolean; collections: string[] }[]>([]); // picture versions: one video per clip set
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -87,8 +79,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
       platforms,
       collection: sameCollections || !collections.length ? undefined : collections.join(","),
       variations: variations ? Number(variations) : recipeCounts ? undefined : 1,
-      lineEffect: verse.name ? join(verse.name, verse.intensity) : undefined,
-      hookEffect: hook.name ? join(hook.name, hook.intensity) : undefined,
+      ...(runTheme && runTheme !== data.theme && compareThemes.length < 2 ? { theme: runTheme } : {}),
       title: String(f.get("title") ?? ""),
       artist: String(f.get("artist") ?? ""),
       ep: changed(String(f.get("ep") ?? ""), data.ep),
@@ -99,7 +90,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
       layout: (layout || undefined) as "cover" | "stills" | "clips" | undefined,
       shotLength: shotLength || undefined,
       realign: f.get("realign") === "on",
-      ...(pairings.length ? { pairings } : {}),
+      ...(compareThemes.length >= 2 ? { themes: compareThemes } : {}),
       ...(pictureSets.length >= 2 ? { pictures: pictureSets.map((x) => [...(x.songClips ? ["song"] : []), ...x.collections].join("+")).filter(Boolean) } : {}),
     };
     const body = new FormData();
@@ -122,42 +113,6 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
       setBusy(false);
     }
   }
-
-  // "From the recipe (glide)"; the platforms with their own value go on a line under the list.
-  const fromRecipe = (kind: "verse" | "hook") => `From the recipe (${kind === "verse" ? data.verseEffect : data.hookEffect})`;
-  const perPlatform = (kind: "verse" | "hook") =>
-    Object.entries(r.effects)
-      .filter(([name, e]) => platforms.includes(name) && e[kind] !== (kind === "verse" ? data.verseEffect : data.hookEffect))
-      .map(([name, e]) => `${data.platforms.find((p) => p.name === name)?.label ?? name}: ${e[kind]}`);
-  const effectSelect = (value: { name: string; intensity: string }, set: (v: { name: string; intensity: string }) => void, name: string) => (
-    <div className="flex gap-2">
-      <select
-        aria-label={`${name} effect`}
-        className={cn(select, "min-w-0 flex-1")}
-        value={value.name}
-        disabled={locked(name === "Verse" ? "verseEffect" : "hookEffect")}
-        onChange={(e) => set({ ...value, name: e.target.value })}
-      >
-        <option value="">{fromRecipe(name === "Verse" ? "verse" : "hook")}</option>
-        {data.effects.map((e) => {
-          const brandDefault = (name === "Verse" ? r.brandDefaults.verseEffect : r.brandDefaults.hookEffect).split(":")[0];
-          return (
-            <option key={e.name} value={e.name}>
-              {e.label}
-              {brandDefault === e.name ? " · brand default" : ""}
-            </option>
-          );
-        })}
-      </select>
-      <select aria-label={`${name} intensity`} className={select} value={value.intensity} disabled={!value.name} onChange={(e) => set({ ...value, intensity: e.target.value })}>
-        {INTENSITIES.map((i) => (
-          <option key={i} value={i}>
-            {i}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
 
   return (
     <section data-generate className="bg-card rounded-xl border">
@@ -231,46 +186,41 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
               </div>
             </fieldset>
             <label className={label}>
-              <span className="font-medium">Verse effect{locked("verseEffect") ? " 🔒 locked in the song's recipe" : ""}</span>
-              {effectSelect(verse, setVerse, "Verse")}
-              {!verse.name && perPlatform("verse").length ? (
-                <span data-per-platform-effects="verse" className="text-muted-foreground text-xs">
-                  {perPlatform("verse").join(" · ")}
-                </span>
-              ) : null}
-            </label>
-            <label className={label}>
-              <span className="font-medium">Hook effect{locked("hookEffect") ? " 🔒 locked in the song's recipe" : ""}</span>
-              {effectSelect(hook, setHook, "Hook")}
-              {!hook.name && perPlatform("hook").length ? (
-                <span data-per-platform-effects="hook" className="text-muted-foreground text-xs">
-                  {perPlatform("hook").join(" · ")}
-                </span>
-              ) : null}
+              <span className="font-medium">Theme</span>
+              <select data-generate-theme aria-label="Theme" className={select} value={runTheme || data.theme || ""} disabled={compareThemes.length >= 2} onChange={(e) => setRunTheme(e.target.value === data.theme ? "" : e.target.value)}>
+                {data.themes.map((t) => (
+                  <option key={t.name} value={t.name}>
+                    {t.name}
+                    {t.name === data.theme ? " (this song's)" : ""}
+                  </option>
+                ))}
+              </select>
+              <span className="text-muted-foreground text-xs">{runTheme ? "For this run only: the song keeps its own theme." : "The song's look: fonts, motion and colours (change it in Shape → Theme)."}</span>
             </label>
           </div>
-          {data.pairings.length ? (
-            <fieldset data-compare-pairings className="flex flex-col gap-1.5 text-sm">
-              <legend className="font-medium">Compare font pairings (optional)</legend>
+          {data.themes.length >= 2 ? (
+            <fieldset data-compare-themes className="flex flex-col gap-1.5 text-sm">
+              <legend className="font-medium">Compare themes (optional)</legend>
               <span className="text-muted-foreground text-xs">
-                Tick 2–3: each platform gets one video per pairing, with the same section, clips and order, so only the fonts differ (compare them in Videos and on your phone). Without: the song&apos;s own fonts.
+                Tick 2–3: each theme gets its own videos with the same section, clips and order, so only the look differs (compare them in Videos and on your phone). The song keeps its own theme.
               </span>
               <div className="flex flex-wrap gap-x-4 gap-y-1">
-                {data.pairings.map((p) => (
-                  <label key={p.id} className="flex items-center gap-1.5" title={p.note}>
+                {data.themes.map((t) => (
+                  <label key={t.name} className="flex items-center gap-1.5">
                     <input
                       type="checkbox"
                       className="accent-brand"
-                      data-pairing-option={p.id}
-                      checked={pairings.includes(p.id)}
-                      disabled={!pairings.includes(p.id) && pairings.length >= 3}
-                      onChange={(e) => setPairings((list) => (e.target.checked ? [...list, p.id] : list.filter((x) => x !== p.id)))}
+                      data-theme-option={t.name}
+                      checked={compareThemes.includes(t.name)}
+                      disabled={(!compareThemes.includes(t.name) && compareThemes.length >= 3) || pictureSets.length > 0}
+                      onChange={(e) => setCompareThemes((list) => (e.target.checked ? [...list, t.name] : list.filter((x) => x !== t.name)))}
                     />
-                    {p.name}
+                    {t.name}
+                    {t.name === data.theme ? <span className="text-muted-foreground text-xs">(this song&apos;s)</span> : null}
                   </label>
                 ))}
               </div>
-              {pairings.length === 1 ? <span className="text-xs text-amber-300">Tick one more to compare (one pairing makes one video in it).</span> : null}
+              {compareThemes.length === 1 ? <span className="text-xs text-amber-300">Tick one more to compare.</span> : null}
             </fieldset>
           ) : null}
           <fieldset data-picture-versions className="flex flex-col gap-1.5 text-sm">
@@ -309,14 +259,14 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
                   type="button"
                   data-add-picture
                   className="hover:bg-accent w-fit rounded-md border px-2 py-0.5 text-xs"
-                  disabled={pairings.length > 0}
+                  disabled={compareThemes.length > 0}
                   onClick={() => setPictureSets((all) => [...all, all.length ? { songClips: false, collections: data.collections.filter((c) => !all.some((x) => x.collections.includes(c))).slice(0, 1) } : { songClips: data.songClips > 0, collections: [...collections] }])}
                 >
                   + Add a picture version
                 </button>
               ) : null}
               {pictureSets.length === 1 ? <span className="text-xs text-amber-300">Add one more to compare (one set makes one video).</span> : null}
-              {pairings.length ? <span className="text-muted-foreground text-xs">(not together with Compare font pairings)</span> : null}
+              {compareThemes.length ? <span className="text-muted-foreground text-xs">(not together with Compare themes)</span> : null}
             </div>
           </fieldset>
           <div className="grid gap-4 md:grid-cols-4">
