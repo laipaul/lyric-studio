@@ -106,7 +106,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
   const [dirty, setDirty] = useState(false); // a look change the planned video does not have yet
   const [hovered, setHovered] = useState<PairingCard | null>(null);
   const [hoverTheme, setHoverTheme] = useState<StyleTheme | null>(null);
-  const [hoverEffect, setHoverEffect] = useState<{ field: string; value: string } | null>(null);
+  const [hoverEffect, setHoverEffect] = useState<{ field: string; value: string; at: number } | null>(null);
   const [pickedEffect, setPickedEffect] = useState<{ field: string; value: string; at: number } | null>(null); // the effect just picked: its name shows in the viewer // a Motion gallery tile under the pointer // a theme tile under the pointer: the viewer tries it
   const [naming, setNaming] = useState<{ from: string; name: string } | null>(null); // a tile's Rename: the new name being typed
   const [creating, setCreating] = useState<{ name: string; from: string } | null>(null); // "+ New theme": name first, then where to start
@@ -241,7 +241,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
     const demoOf = hoverEffect ?? pickedEffect;
     const demoName = demoOf?.value.split(":")[0];
     const demo = demoOf && demoName
-      ? { key: `${demoOf.field}:${demoOf.value}:${pickedEffect && !hoverEffect ? pickedEffect.at : "hover"}`, input: { ...look.fallback, background: null, backing: false, picture: null, transparent: true, lyrics: previewLyrics([effectTitle(demoName)]), textSize: 140, area: null, effect: patchChoice(demoOf.value, undefined) } }
+      ? { key: `${demoOf.field}:${demoOf.value}:${hoverEffect ? `hover${hoverEffect.at}` : pickedEffect!.at}`, input: { ...look.fallback, background: null, backing: false, picture: null, transparent: true, lyrics: previewLyrics([effectTitle(demoName)]), textSize: 140, area: null, effect: patchChoice(demoOf.value, undefined) } }
       : null;
     onLook({ ...look, demo, ...(demo && hoverEffect ? { fallback: { ...look.fallback, lyrics: previewLyrics([effectTitle(demoName!)]), textSize: 110 } } : {}) });
   }, [data, dirty, draft?.changed, hovered, hoverTheme, hoverEffect, pickedEffect, pairView, part, onLook]);
@@ -780,7 +780,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                     if (field === "verseEffect" || field === "hookEffect") setPickedEffect({ field, value, at: Date.now() });
                     void act({ action: "set", field, value });
                   }}
-                  onTry={(field, value) => setHoverEffect(value ? { field, value } : null)}
+                  onTry={(field, value) => setHoverEffect(value ? { field, value, at: Date.now() } : null)}
                   perPlatformOpen={effectPlatforms}
                   onPerPlatform={() => {
                     const next = !effectPlatforms;

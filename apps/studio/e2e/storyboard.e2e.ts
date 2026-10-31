@@ -325,6 +325,14 @@ async function main() {
     await page.waitForFunction(() => !document.querySelector("[data-effect-demo]"), null, { timeout: 5000 }).catch(() => {});
     check(!(await page.$("[data-effect-demo]")), "…and pressing play shows the real lyrics with the effect");
     await page.click("[data-viewer]"); // pause again
+    if (!(await page.$("[data-try-effect=clarify]"))) await page.click("[data-effect-picker]");
+    await page.hover("[data-try-effect=clarify]");
+    await page.waitForSelector("[data-viewer] [data-effect-demo=clarify]", { timeout: 5000 }).catch(() => {});
+    check(!!(await page.$("[data-viewer] [data-effect-demo=clarify]")), "…after playing, pointing at an effect shows it in the viewer again");
+    await page.hover("[data-try-effect=spread]");
+    await page.waitForSelector("[data-viewer] [data-effect-demo=spread]", { timeout: 5000 }).catch(() => {});
+    check(!!(await page.$("[data-viewer] [data-effect-demo=spread]")), "…and so does pointing at the effect already played");
+    await page.mouse.move(5, 5);
     // Cards → End card on: the viewer shows it at once (the planned card switched on), in the last seconds.
     await page.selectOption("[data-picture-select=endCard]", "on");
     check(!!(await page.$("[data-extra-card-sample=end]")), "Cards → End card: a sample of it in the theme's style");

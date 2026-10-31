@@ -14,6 +14,9 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **Behind the words → Box** did draw, but too faint to notice (55 % black, no room above or below the words):
   now 72 % black with room around the words, the lines staying exactly where they were.
 - **Typewriter**: no cursor any more (the accent-coloured bar was irritating); only the letters type in.
+- **The viewer while choosing an effect** (the user: "the effects stop working"): after pressing play once, the
+  viewer no longer showed the effect's name, so paused at the start (no lyric yet) it looked empty. Now the
+  name comes back when paused where no lyric is on screen, and pointing at any tile always shows it.
 - Tests: colour-ref.test.ts, effects-canva.test.ts (no cursor on screen); browser: song-stages (Box drawn,
   save bar position, typed RGB code, a wrong code).
 

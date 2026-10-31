@@ -63,7 +63,10 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   // An effect pointed at or picked in Motion: its name moves in it over the paused frame; playing hides it
   // (the song then plays with the effect on the real lyrics) until another effect is pointed at or picked.
   const [demoSeen, setDemoSeen] = useState<string | null>(null);
-  const demo = look?.demo && !playing && look.demo.key !== demoSeen ? look.demo : null;
+  // Paused where no lyric line is on screen (e.g. back at the start), the picked effect's name comes back, so
+  // the viewer never looks empty while choosing an effect (31 Oct 2026: it read as "the effects stopped working").
+  const lyricOnScreen = !!view && view.props.lyrics.some((l) => frame >= (l.enterFrame ?? l.startFrame) && frame < l.endFrame);
+  const demo = look?.demo && !playing && (look.demo.key !== demoSeen || !lyricOnScreen) ? look.demo : null;
   useEffect(() => {
     if (playing && look?.demo) setDemoSeen(look.demo.key);
   }, [playing, look?.demo]);
