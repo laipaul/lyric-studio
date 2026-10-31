@@ -28,6 +28,8 @@ import { analyzeSong } from "./analysis";
 import { cachedFileHash } from "./collection";
 import { processAlive } from "./jobs";
 import { ADDING_PREFIX, adoptIntoSongFolder, songPaths, songPathsById } from "./song-folder";
+import { alignFailure, runAudioScript } from "./audio-script";
+import { DEMUCS, resolveVoiceSource, stemArgument, voiceKey, voiceLine, type StemCheckRunner, type VoiceSource } from "./voice-source";
 
 export const ALIGN_STORE_VERSION = 2; // 2: key without hook markers, LRC with word end tags
 
@@ -92,6 +94,7 @@ export type Alignment = {
   lines: TimedLine[]; // parsed, with hooks from lyrics.txt (and the vocal-start guard's moves, see applyVocalGuard)
   guard?: VocalGuard | null; // null: not checked (a given LRC, or no vocal track)
   handTimes?: { number: number; text: string; from_ms: number; to_ms: number }[]; // hand-set starts applied (Lyrics tab)
+  voice: VoiceSource; // the vocal track the timing listens to: Suno's vocal stem (lined up) or Demucs
 };
 
 // The hand-set starts of hints.lrc (the Lyrics tab) on the alignment: those lines start exactly there,
@@ -119,6 +122,7 @@ export type VocalGuard = {
   // What was measured (printed by pnpm make and kept in the manifest): the song's singing level, the
   // voice threshold, and per checked line its stamp, where the voice starts, the difference and result.
   check: {
+    voice?: string; // the vocal track listened to ("Suno vocal stem, offset 1.8 s" / "separated by the app")
     level_db: number;
     threshold_db: number;
     words_check: string; // the recognised-words pass: "ran", or why it did not
@@ -143,30 +147,16 @@ export type VocalGuard = {
 
 const seconds = (ms: number) => `${ms >= 0 ? "+" : "-"}${(Math.abs(ms) / 1000).toFixed(1)} s`;
 
-export type VoiceMapRunner = (args: { song: string; out: string }) => Promise<void>;
-export type FirstWordsRunner = (args: { song: string; windows: [number, number, number][]; lang: string; out: string }) => Promise<void>;
-
-// A Node script of services/audio, its last messages in the error when it fails.
-function runAudioScript(script: string, args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [path.join(REPO_ROOT, "services/audio/scripts", script), ...args], { cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
-    const tail: string[] = [];
-    const keep = (chunk: Buffer) => {
-      for (const line of chunk.toString("utf8").split(/[\r\n]+/)) if (line.trim()) tail.push(line.trim());
-      tail.splice(0, Math.max(0, tail.length - 6));
-    };
-    child.stdout.on("data", keep);
-    child.stderr.on("data", keep);
-    child.on("error", reject);
-    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(alignFailure(tail)))));
-  });
-}
+// stem: the Suno vocal stem (lined up by the audio service) or "none" (Demucs).
+export type VoiceMapRunner = (args: { song: string; out: string; stem: string }) => Promise<void>;
+export type FirstWordsRunner = (args: { song: string; windows: [number, number, number][]; lang: string; out: string; stem: string }) => Promise<void>;
 
 // The words sung around the checked lines (services/audio first_words: speech recognition on the vocal track).
-export const runFirstWordsCommand: FirstWordsRunner = (a) => runAudioScript("first-words.mjs", [a.song, "--windows", JSON.stringify(a.windows), "--lang", a.lang, "--out", a.out]);
+export const runFirstWordsCommand: FirstWordsRunner = (a) => runAudioScript("first-words.mjs", [a.song, "--windows", JSON.stringify(a.windows), "--lang", a.lang, "--out", a.out, "--stem", a.stem]);
 
-// Where the voice is heard (services/audio voice_map: the cached vocal stem; Demucs only if not cached).
-export const runVoiceMapCommand: VoiceMapRunner = (a) => runAudioScript("voice-map.mjs", [a.song, "--out", a.out]);
+// Where the voice is heard (services/audio voice_map: the Suno vocal stem lined up, else the cached
+// Demucs stem; Demucs only if not cached).
+export const runVoiceMapCommand: VoiceMapRunner = (a) => runAudioScript("voice-map.mjs", [a.song, "--out", a.out, "--stem", a.stem]);
 
 // The vocal-start guard on an alignment (stored or new), never re-aligning: line 1 and lines after an
 // instrumental gap that start more than 1 s before the voice move to where the voice starts. The voice
@@ -184,12 +174,16 @@ export async function applyVocalGuard(
   if (alignment.source === "given" || alignment.source === "story") return { ...alignment, guard: null };
   if (!options.voiceMap && process.env.LYRIC_VOICE_MAP === "off") return { ...alignment, guard: null }; // the tests
   const dir = path.dirname(alignment.lrcFile);
-  const mapFile = path.join(dir, `voice-${sp.songHash.slice(0, 12)}.v2.json`);
+  // Keyed by the song and, for the Suno stem, the stem's content and offset (Demucs: the old name).
+  const voice = alignment.voice ?? DEMUCS;
+  const vkey = voiceKey(voice);
+  const mapName = `voice-${sp.songHash.slice(0, 12)}${vkey ? `-${vkey}` : ""}`;
+  const mapFile = path.join(dir, `${mapName}.v2.json`);
   if (!existsSync(mapFile)) {
-    log("lyrics: vocal-start check: reading where the voice is heard (the cached vocal track; Demucs only if it is not cached)");
-    const tmp = path.join(dir, `.voice-${sp.songHash.slice(0, 12)}.${process.pid}.part`);
+    log(`lyrics: vocal-start check: reading where the voice is heard (${voice.kind === "stem" ? `the ${voice.label}` : "the cached vocal track; Demucs only if it is not cached"})`);
+    const tmp = path.join(dir, `.${mapName}.${process.pid}.part`);
     try {
-      await (options.voiceMap ?? runVoiceMapCommand)({ song: sp.songFile, out: tmp });
+      await (options.voiceMap ?? runVoiceMapCommand)({ song: sp.songFile, out: tmp, stem: stemArgument(voice) });
       renameSync(tmp, mapFile);
     } catch (error) {
       rmSync(tmp, { force: true });
@@ -208,13 +202,13 @@ export async function applyVocalGuard(
   let wordsCheck = "ran";
   if (windows.length && !options.firstWords && process.env.LYRIC_VOICE_MAP === "off") wordsCheck = "off (tests)";
   else if (windows.length) {
-    const key = sha256(`v1|${sp.songHash}|${JSON.stringify(windows)}|${lang}|${process.env.FIRST_WORDS_MODEL ?? "small"}`).slice(0, 12);
+    const key = sha256(`v1|${sp.songHash}|${JSON.stringify(windows)}|${lang}|${process.env.FIRST_WORDS_MODEL ?? "small"}${vkey ? `|${vkey}` : ""}`).slice(0, 12);
     const wordsFile = path.join(dir, `words-${key}.json`);
     if (!existsSync(wordsFile)) {
       log(`lyrics: vocal-start check: recognising the first sung words of ${windows.length} line(s) (a short speech-recognition pass on the vocal track; never re-aligns)`);
       const tmp = path.join(dir, `.words-${key}.${process.pid}.part`);
       try {
-        await (options.firstWords ?? runFirstWordsCommand)({ song: sp.songFile, windows, lang, out: tmp });
+        await (options.firstWords ?? runFirstWordsCommand)({ song: sp.songFile, windows, lang, out: tmp, stem: stemArgument(voice) });
         renameSync(tmp, wordsFile);
       } catch (error) {
         rmSync(tmp, { force: true });
@@ -229,7 +223,7 @@ export async function applyVocalGuard(
   }
   const check = checkVocalStart(alignment.lines, levels, { asr, reviewMs: options.reviewMs, all: options.all, skip: options.skip });
   const lines = applyGuard(alignment.lines, check.moves);
-  log(`vocal-start check: singing level ${check.levelDb.toFixed(1)} dB; voice = at least 0.5 s above ${check.thresholdDb.toFixed(1)} dB; recognised words: ${wordsCheck}`);
+  log(`vocal-start check: listening to the ${voice.kind === "stem" ? voice.label : "vocals separated by the app (Demucs)"}; singing level ${check.levelDb.toFixed(1)} dB; voice = at least 0.5 s above ${check.thresholdDb.toFixed(1)} dB; recognised words: ${wordsCheck}`);
   for (const c of check.lines) {
     const at = (ms: number | null) => (ms === null ? "–" : clockText(ms));
     const heard = c.wordsMs === null ? "words –" : `words ${at(c.wordsMs)} "${c.wordsText}"`;
@@ -256,6 +250,7 @@ export async function applyVocalGuard(
     earlyMs: earlyMs(lines, check.stretches),
     voiceMap: path.relative(ws.dir, mapFile).split(path.sep).join("/"),
     check: {
+      voice: voice.label,
       level_db: check.levelDb,
       threshold_db: check.thresholdDb,
       words_check: wordsCheck,
@@ -283,12 +278,12 @@ export async function applyVocalGuard(
   return { ...alignment, lines, guard };
 }
 
-export type AlignRunner = (args: { song: string; lyrics: string; out: string; report: string; hint?: string; fresh: boolean; lang: string }) => Promise<void>;
+export type AlignRunner = (args: { song: string; lyrics: string; out: string; report: string; hint?: string; fresh: boolean; lang: string; stem: string }) => Promise<void>;
 
 // Runs "pnpm align" (services/audio) with its output going straight to the terminal.
 export const runAlignCommand: AlignRunner = (a) =>
   new Promise((resolve, reject) => {
-    const args = [path.join(REPO_ROOT, "services/audio/scripts/align.mjs"), a.song, a.lyrics, "--out", a.out, "--report", a.report, "--lang", a.lang];
+    const args = [path.join(REPO_ROOT, "services/audio/scripts/align.mjs"), a.song, a.lyrics, "--out", a.out, "--report", a.report, "--lang", a.lang, "--stem", a.stem];
     if (a.hint) args.push("--hint", a.hint);
     if (a.fresh) args.push("--fresh");
     // The output still shows as it comes (terminal), and its last lines go into the error, so the
@@ -306,11 +301,7 @@ export const runAlignCommand: AlignRunner = (a) =>
     child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`pnpm align failed:\n${alignFailure(tail)}`))));
   });
 
-// The useful part of the aligner's last messages (not progress bars).
-export function alignFailure(lines: readonly string[]): string {
-  const useful = lines.filter((l) => !/^\d+%|it\/s\]$|^\[?[#=\-> ]+\]?$/.test(l));
-  return (useful.length ? useful : lines).slice(-4).join("\n") || "no message";
-}
+export { alignFailure };
 
 const stamp = (d: Date) => {
   const p = (n: number) => String(n).padStart(2, "0");
@@ -333,6 +324,8 @@ export async function ensureAlignment(
     now?: Date;
     beats?: readonly Beat[]; // an instrumental's story is timed on these (else the song is analysed, cached)
     leadMs?: number;
+    voice?: VoiceSource; // the vocal track to align on (default: resolveVoiceSource: vocals.wav when it follows the song, else Demucs)
+    stemCheck?: StemCheckRunner; // the tests
   },
 ): Promise<Alignment> {
   const log = options.log ?? (() => {});
@@ -356,6 +349,7 @@ export async function ensureAlignment(
   let key: string;
   let name: string;
   let source: Alignment["source"];
+  let voice: VoiceSource = DEMUCS;
   if (options.lrc) {
     const lrcHash = sha256(readFileSync(options.lrc));
     key = lrcHash.slice(0, 12);
@@ -363,7 +357,9 @@ export async function ensureAlignment(
     source = "given";
     if (!existsSync(path.join(dir, name))) writeFileAtomic(path.join(dir, name), readFileSync(options.lrc));
   } else {
-    key = sha256(`v${ALIGN_STORE_VERSION}|${sha256(wordsOfLyrics(txtContent.toString("utf8")))}|${hint?.hash ?? ""}|${lang}`).slice(0, 12);
+    voice = options.voice ?? (await resolveVoiceSource(ws, sp, { log, check: options.stemCheck }));
+    log(voiceLine(voice));
+    key = alignKey(wordsOfLyrics(txtContent.toString("utf8")), hint?.hash ?? "", lang, voiceKey(voice));
     const stored = readdirSync(dir)
       .filter((f) => f.startsWith(`aligned-${key}-`) && f.endsWith(".lrc") && existsSync(path.join(dir, f.replace(/\.lrc$/, ".report.json"))))
       .sort();
@@ -379,8 +375,8 @@ export async function ensureAlignment(
       // only temporary files, which the next run removes.
       const tmpLrc = path.join(dir, `.${name}.${process.pid}.part`);
       const tmpReport = path.join(dir, `.${name}.report.${process.pid}.part`);
-      if (!stored.length) for (const line of whyNotStored(dir, txtContent.toString("utf8"), hint?.hash ?? "", lang)) log(`lyrics: ${line}`);
-      log(`lyrics: aligning ${path.basename(options.lyricsTxt)} with pnpm align${hint ? ` (hint ${path.basename(hint.file)})` : ""}`);
+      if (!stored.length) for (const line of whyNotStored(dir, txtContent.toString("utf8"), hint?.hash ?? "", lang, voiceKey(voice))) log(`lyrics: ${line}`);
+      log(`lyrics: aligning ${path.basename(options.lyricsTxt)} with pnpm align on the ${voice.kind === "stem" ? voice.label : "vocals separated by the app"}${hint ? ` (hint ${path.basename(hint.file)})` : ""}`);
       try {
         await (options.align ?? runAlignCommand)({
           song: sp.songFile,
@@ -390,6 +386,7 @@ export async function ensureAlignment(
           hint: hint?.file,
           fresh: !!options.realign,
           lang,
+          stem: stemArgument(voice),
         });
         checkAlignerOutput(tmpLrc, tmpReport, txtContent.toString("utf8"));
         renameSync(tmpReport, path.join(dir, name.replace(/\.lrc$/, ".report.json")));
@@ -422,6 +419,7 @@ export async function ensureAlignment(
     hint,
     lines,
     warnings,
+    voice,
   };
 }
 
@@ -480,6 +478,7 @@ async function storyAlignment(
     hint: null,
     lines,
     warnings: planned.warnings,
+    voice: DEMUCS,
   };
 }
 const formatStamp = (ms: number) => {
@@ -489,18 +488,44 @@ const formatStamp = (ms: number) => {
 
 // Why a song with stored alignments is aligned again: which input differs from the newest one
 // (its lyrics words, the hints or the language). Lines to print; empty when nothing was stored.
-export function whyNotStored(dir: string, lyricsText: string, hintHash: string, lang: string): string[] {
+// The stored alignment's key: the words, the hints, the language and the voice (vocalKey "" = Demucs,
+// so alignments stored before the Suno stem keep their key).
+export function alignKey(words: string, hintHash: string, lang: string, vocalKey = ""): string {
+  return sha256(`v${ALIGN_STORE_VERSION}|${sha256(words)}|${hintHash}|${lang}${vocalKey ? `|${vocalKey}` : ""}`).slice(0, 12);
+}
+
+export function whyNotStored(dir: string, lyricsText: string, hintHash: string, lang: string, vocalKey = ""): string[] {
   const aligned = readdirSync(dir)
     .filter((f) => /^aligned-[0-9a-f]{12}-.*\.lrc$/.test(f))
     .sort((a, b) => statSync(path.join(dir, b)).mtimeMs - statSync(path.join(dir, a)).mtimeMs);
   if (!aligned.length) return [];
-  const keyOf = (words: string, h: string, l: string) => sha256(`v${ALIGN_STORE_VERSION}|${sha256(words)}|${h}|${l}`).slice(0, 12);
+  const keyOf = (words: string, h: string, l: string) => alignKey(words, h, l, vocalKey);
   const keys = new Set(aligned.map((f) => f.slice("aligned-".length, "aligned-".length + 12)));
   const copies = readdirSync(dir)
     .filter((f) => /^lyrics-[0-9a-f]{12}\.txt$/.test(f))
     .sort((a, b) => statSync(path.join(dir, b)).mtimeMs - statSync(path.join(dir, a)).mtimeMs);
   const words = wordsOfLyrics(lyricsText);
-  const out = [`no stored alignment for these words, hints and language (${aligned.length} stored for this song), so it aligns again (never overwritten).`];
+  const out = [`no stored alignment for these words, hints, language and voice (${aligned.length} stored for this song), so it aligns again (never overwritten).`];
+  // The voice changed: the Suno vocal stem was added, replaced or is not used any more.
+  const stemAligned = aligned.some((f) => {
+    try {
+      return (JSON.parse(readFileSync(path.join(dir, f.replace(/\.lrc$/, ".report.json")), "utf8")) as { voice?: { kind?: string } }).voice?.kind === "stem";
+    } catch {
+      return false;
+    }
+  });
+  if (vocalKey && keys.has(alignKey(words, hintHash, lang, ""))) {
+    out.push("the vocal stem (vocals.wav) is new: the song is aligned again on it (stored hints and hand-set starts are kept).");
+    return out;
+  }
+  if (vocalKey && stemAligned) {
+    out.push("the vocal stem (vocals.wav) was replaced: the song is aligned again on the new one (stored hints and hand-set starts are kept).");
+    return out;
+  }
+  if (!vocalKey && stemAligned) {
+    out.push("the vocal stem (vocals.wav) is gone or doesn't follow the song: aligned again on the vocals the app separates (Demucs).");
+    return out;
+  }
   const hints = [hintHash, ""];
   for (const f of readdirSync(dir).filter((x) => /^hints-[0-9a-f]{12}\.lrc$/.test(x))) hints.push(sha256(readFileSync(path.join(dir, f))));
   if (hints.some((h) => h !== hintHash && keys.has(keyOf(words, h, lang)))) {

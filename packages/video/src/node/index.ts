@@ -10,6 +10,8 @@ export * from "./prepare";
 export * from "./render";
 export * from "./collection";
 export * from "./song-project";
+export * from "./voice-source";
+export * from "./lyric-timing";
 export * from "./manifest";
 export * from "./qa-check";
 export * from "./make";

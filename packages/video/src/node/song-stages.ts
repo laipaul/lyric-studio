@@ -35,6 +35,11 @@ export async function songTodo(ws: Workspace, projectId: string): Promise<TodoIt
   const collections = songCollections(ws, projectId);
   if (assets && !assets.clips.length && !collections.length)
     todo.push({ id: "clips", text: "Add your clips: drop them in Assets, or tick a collection (e.g. wedding).", tab: "assets", action: "Add clips", blocking: true });
+  // The vocal stem: a suggestion, never a blocker (without it the app separates the vocals itself).
+  if (assets && !paths.instrumental && !paths.legacy) {
+    if (!assets.vocals) todo.push({ id: "vocals", text: "Add the vocal stem for better lyric timing (vocals.wav, downloaded from Suno).", tab: "assets", action: "Add the vocal stem", blocking: false });
+    else if (assets.vocals.status === "rejected") todo.push({ id: "vocals", text: assets.vocals.message, tab: "assets", action: "Replace the vocal stem", blocking: false });
+  }
   if (assets && !assets.cover) todo.push({ id: "cover", text: "Add a cover picture (used for YouTube, the Library and your thumbnails).", tab: "assets", action: "Add a cover", blocking: false });
 
   const view = await lyricsView(ws, projectId).catch(() => null);

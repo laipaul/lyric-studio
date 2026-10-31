@@ -3,7 +3,8 @@
 python -m app.first_words <song> --windows '[[1, 0, 20000], [31, 118000, 140000]]' --lang en --out words.json
 
 A short speech-recognition pass (faster-whisper, the one pnpm align's WhisperX uses, model "small" by
-default: FIRST_WORDS_MODEL) on the cached vocal stem, only inside the given windows (line number,
+default: FIRST_WORDS_MODEL) on the vocal track (the Suno vocal stem lined up on the song when it follows
+the song (--stem), else the cached Demucs stem), only inside the given windows (line number,
 from ms, to ms; at most 30 s each). It never re-aligns the lyrics. Writes {"version": 1, "model": ...,
 "windows": [{"line": 1, "from_ms": 0, "to_ms": 20000, "words": [{"text", "start_ms", "end_ms",
 "prob"}]}]}. Exit code 3: the AI packages are not installed (or the vocal stem is missing and Demucs
@@ -103,10 +104,12 @@ def main(argv: list[str] | None = None, transcribe: Transcriber | None = None) -
     parser.add_argument("--windows", required=True, help="JSON list of [line, from_ms, to_ms]")
     parser.add_argument("--lang", default="en")
     parser.add_argument("--out", required=True)
+    parser.add_argument("--stem", default="auto", help='the Suno vocal stem: a file, "none" (Demucs) or "auto" (vocals.wav next to the song)')
     args = parser.parse_args(argv)
     windows = [(int(l), int(a), int(b)) for l, a, b in json.loads(args.windows)]
     model_name = os.environ.get("FIRST_WORDS_MODEL", "small")
-    from .align import separate_vocals
+    from .align import vocal_track
+    from .vocal_stem import stem_argument
 
     log = lambda m: print(m, flush=True)  # noqa: E731
     try:
@@ -115,7 +118,8 @@ def main(argv: list[str] | None = None, transcribe: Transcriber | None = None) -
             import torch
 
             device = choose_device(torch)
-        vocals, device = separate_vocals(Path(args.song).resolve(), device, log)
+        song = Path(args.song).resolve()
+        vocals, device, source = vocal_track(song, stem_argument(song, args.stem), device, log)
         if transcribe is None:
             log(f"first words: recognising the singing in {len(windows)} short window(s) with faster-whisper {model_name} on {device.description}")
             transcribe = whisper_transcriber(model_name, device, log)
@@ -125,7 +129,7 @@ def main(argv: list[str] | None = None, transcribe: Transcriber | None = None) -
     import librosa
 
     audio, _ = librosa.load(str(vocals), sr=SAMPLE_RATE, mono=True)
-    result = {"version": VERSION, "model": model_name, "lang": args.lang, "windows": words_in_windows(audio, windows, args.lang, transcribe)}
+    result = {"version": VERSION, "model": model_name, "lang": args.lang, "voice": source.as_dict(), "windows": words_in_windows(audio, windows, args.lang, transcribe)}
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result), encoding="utf-8")

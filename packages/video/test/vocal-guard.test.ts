@@ -368,6 +368,80 @@ describe("vocal-start check (pure)", () => {
   });
 });
 
+// L1a: the same checks on a clean vocal stem (Suno's vocals.wav) instead of a Demucs stem. The rules
+// were tuned on Demucs stems (bleed in the intro and the solo); a clean stem has true silence between
+// phrases, but audible breaths, a wet reverb tail after each phrase, delay echoes and ad-libs. These
+// tests check that the thresholds (voice = 0.5 s within 15 dB of the singing level, two signals to move)
+// decide the same on a clean stem: they do, after two changes the tests showed were needed (the reverb
+// tail filling a short pause joined two phrases, and a tail ending just before a stamp counted as that
+// line's voice): see splitAtAttacks and the stretch a line is in (src/vocal-guard.ts).
+describe("vocal-start check on a clean vocal stem (Suno)", () => {
+  const lines = parseLrc(LRC, 60_000);
+  // A reverb tail: from the singing level down 40 dB per second (wet stems keep the room).
+  const tail = (from: number): [number, number, number][] => Array.from({ length: 50 }, (_, k) => [from + k * 20, from + (k + 1) * 20, SINGING - (40 * (k * 20)) / 1000] as [number, number, number]);
+  const CLEAN: VoiceLevels = levels([
+    [5_000, 5_300, -24], // a breath, louder than on the Demucs stem (nothing masks it)
+    [9_000, 9_300, -24],
+    [10_400, 10_750, -17], // a short hum
+    [11_800, 14_000, SINGING],
+    ...tail(14_000),
+    [15_000, 18_000, SINGING],
+    ...tail(18_000),
+    [19_300, 19_700, -20], // a delay echo of the last word
+    [45_000, 46_500, SINGING],
+    ...tail(46_500),
+    [47_000, 50_000, SINGING],
+  ]);
+
+  it("decides exactly as on the Demucs stem: line 1 moved, line 3 flagged without words, line 4 in time", () => {
+    const demucs = checkVocalStart(lines, HEART);
+    const clean = checkVocalStart(lines, CLEAN);
+    expect(clean.levelDb).toBe(SINGING);
+    expect(clean.lines.map((c) => [c.index + 1, c.voiceMs, c.targetMs, c.result])).toEqual(demucs.lines.map((c) => [c.index + 1, c.voiceMs, c.targetMs, c.result]));
+    expect(clean.lines.map(row)).toEqual([
+      [1, 3_200, 11_800, null, 11_800, 11_800, "moved", "voice + word durations"],
+      [3, 40_000, 45_000, null, 40_000, 40_000, "flagged for review", ""],
+      [4, 47_000, 47_000, null, 47_000, 47_000, "in time", "stamp + voice"],
+    ]);
+  });
+
+  it("with the recognised words: the same moves as on the Demucs stem", () => {
+    const asr = new Map([
+      [0, asrAt(11_850, "A heart for two")],
+      [2, asrAt(45_080, "after the solo")],
+    ]);
+    const c = checkVocalStart(lines, CLEAN, { asr });
+    expect(c.lines.map(row).slice(0, 2)).toEqual([
+      [1, 3_200, 11_800, 11_850, 11_800, 11_800, "moved", "voice + words + word durations"],
+      [3, 40_000, 45_000, 45_080, 40_000, 45_000, "moved", "voice + words"],
+    ]);
+  });
+
+  it("breaths, a reverb tail and a delay echo are not voice; the silence between phrases is true silence", () => {
+    const stretches = voiceStretches(CLEAN, SINGING - 15);
+    // The tails join their phrase (no separate voice), the breaths, the hum and the echo are too short.
+    expect(stretches.map(([a]) => a)).toEqual([11_800, 15_000, 45_000, 47_000]);
+    expect(stretches[0][1]).toBeLessThan(14_500); // the tail ends the phrase within 0.4 s (40 dB/s down to -29 dB)
+    expect(Math.min(...CLEAN.db)).toBe(-100);
+  });
+
+  it("an ad-lib on the lead stem before a line is voice, but never moves the line on its own", () => {
+    // "Ooh" sung 2.5 s before the line after the solo, the line itself in time.
+    const timed = parseLrc(LRC.replace("[00:40.00]<00:40.00>After <00:40.60>the <00:41.00>solo <00:42.00>", "[00:45.00]<00:45.00>After <00:45.40>the <00:45.80>solo <00:46.40>"), 60_000);
+    const adlib = levels([
+      [11_800, 14_000, SINGING],
+      [15_000, 18_000, SINGING],
+      [42_500, 43_400, -16], // the ad-lib
+      [45_000, 46_500, SINGING],
+      [47_000, 50_000, SINGING],
+    ]);
+    const c = checkVocalStart(timed, adlib, { asr: new Map([[2, asrAt(45_050, "after the solo")]]) });
+    const line3 = c.lines.find((l) => l.index === 2)!;
+    expect(line3.result).not.toBe("moved");
+    expect(applyGuard(timed, c.moves)[2].start_ms).toBe(45_000);
+  });
+});
+
 describe("pnpm make: the guard on the stored alignment", () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "lyric-guard-"));
   let ws: Workspace;
@@ -423,7 +497,7 @@ describe("pnpm make: the guard on the stored alignment", () => {
     expect(heard.calls).toBe(1); // the recognised words are cached too
     // What was measured is always printed, also for lines that stay.
     expect(log.filter((l) => l.startsWith("vocal-start check:"))).toEqual([
-      "vocal-start check: singing level -14.0 dB; voice = at least 0.5 s above -29.0 dB; recognised words: ran",
+      "vocal-start check: listening to the vocals separated by the app (Demucs); singing level -14.0 dB; voice = at least 0.5 s above -29.0 dB; recognised words: ran",
       'vocal-start check: line 1 stamp 0:03.2 · voice 0:11.8 (vocal track at the stamp: up to -22.0 dB) · words 0:11.8 "A heart for" · word durations 0:11.8 (first word 8.7 s) -> 0:11.8: moved (+8.6 s); the first word lasts 8.7 s and the recognised words are within 0.1 s of the word-duration estimate; loudest sound before it -17.0 dB',
       'vocal-start check: line 3 stamp 0:40.0 · voice 0:45.0 (vocal track at the stamp: up to -32.0 dB, under the voice level -29.0 dB) · words 0:45.1 "after the solo" · first word 0.6 s -> 0:45.0: moved (+5.0 s); voice, words agree; loudest sound before it -32.0 dB',
       'vocal-start check: line 4 stamp 0:47.0 · voice 0:47.0 (vocal track at the stamp: up to -14.0 dB) · words 0:47.0 "last line" · first word 0.5 s -> 0:47.0: in time; stamp, voice, words agree',

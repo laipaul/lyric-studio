@@ -4,6 +4,41 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### L1a. Suno vocal stem (vocals.wav) as the main guide for lyric timing ✅ (to verify on the Windows PC)
+- Put Suno's vocal stem, untouched, in the song folder as **vocals.wav** (Assets tab: "Vocal stem (from Suno)" →
+  Add… / Replace…; the old one goes to .studio\replaced\). From then on everything that listens to the voice uses
+  it: pnpm align, the voice map, the recognised first words, the vocal-start check and QA "Lines start with the
+  vocals". Demucs is only the fallback for a song without a usable stem.
+- **The app checks the stem itself** (analysis only): it compares the stem with your trimmed song.wav
+  (cross-correlation on the voice band) for one offset over the whole song, then measures it again at 5 points from
+  start to end. One steady offset → lined up by itself: "Vocal stem lined up: 1.8 s offset, from trimming the
+  song's start." (only the part that overlaps the song counts). The offset changes along the song (a part cut or
+  repeated, a tempo change) or no clear match (another Suno version) → "This vocal stem doesn't follow the song:
+  probably another version from Suno, or the song was edited in the middle." and Demucs is used. Any sample rate.
+- **Adding or replacing vocals.wav re-aligns the song by itself**: a "Lyric timing · vocal stem" task runs (Tasks
+  menu; alignment + vocal-start check, no videos), with your stored hints and hand-set starts kept. Caches are keyed
+  by the stem's content and offset; everything aligned on Demucs before keeps its key (nothing is redone for songs
+  without a stem). The manifest (lyrics.voice_source) and pnpm make's log say which voice was used ("Suno vocal
+  stem, offset 1.8 s" / "separated by the app"). Prepare's to-do suggests "Add the vocal stem for better lyric
+  timing" (never a blocker). backing-vocals.wav may sit in the folder; it is never used for alignment.
+- **The song file is never touched**; vocals.wav and backing-vocals.wav are only read (never edited, mixed back
+  or in any output). Tests check the hashes before and after, and that a planned video's props hold no stem.
+- **Vocal-start rules on a clean stem**: same thresholds (no new settings). The clean-stem tests showed two
+  places where a *wet* stem (Suno's keeps the reverb) differs from Demucs, both fixed: a reverb tail filling a
+  short pause no longer joins two phrases (a pause followed by a sharp attack starts a new voice stretch), and a
+  tail ending just before a line's stamp no longer counts as that line's voice. Every earlier PC case still passes.
+- **New command** `pnpm lyrics:compare-voice "<song folder>"`: Demucs and the vocal stem side by side (per line:
+  start, confidence, check result; totals: flagged for review, low confidence, moved by the vocal-start check),
+  also saved to .studio\lyrics\compare-voice-<time>.md.
+- Tests: services/audio tests/test_vocal_stem.py (identical, trimmed start, trimmed end, stem starting later,
+  48 kHz stem, middle cut and repeated part rejected, another version rejected, tempo change rejected, silent stem,
+  check cached, lined-up copy on the song's timeline, fallback to Demucs, voice map / first words on the stem,
+  song and stem hashes unchanged); packages/video test/vocal-stem.test.ts (voice source, cache keys, re-align on
+  add/replace with hints kept, rejected stem → stored Demucs alignment, Assets slot, Prepare to-do, the queued
+  lyric-timing run, nothing from the stems in the planned video); vocal-guard.test.ts (clean-stem block).
+- Not checked here: a real stem against a real Suno mix (no songs in the cloud). The before/after on These Empty
+  Roads is the real test (commands in the step's reply).
+
 ### U2. One big live preview ✅ (to verify on the Windows PC)
 - Shape → Style → Look is now **two columns** on a wide screen: your choices on the left (font cards, the Fonts
   line + Fine-tune, Set effect, Accent colour, the effect rows) and **one big preview** on the right (9:16, about
@@ -107,21 +142,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   sung, letters in place on time, uncovered by the last word, QA box counts the rising letters), effects.test.ts
   (14 effects, no jumps).
 - Step 2 next: Held-note glow, Chorus lift, Shine (music-reactive add-ons, off by default).
-
-### Fix — title opening fits itself, loop check accepts its lead-in ✅ (verified by the user on the Windows PC, 30 Oct 2026: These Empty Roads Reel now "Ready to post")
-- Found on These Empty Roads (Reels, title opening on): "Not ready — the title opening reaches under the
-  platform's buttons" (asking you to shorten the title or pick a smaller size) and "the jump back to the start may
-  be noticeable (phrase)". Both were the app's job.
-- **Title opening fits itself** (src/card-layout.ts fitCardBlocks): a long title wraps onto at most 2 balanced
-  lines inside the safe area, then the title block shrinks step by step (at most 25% smaller), and it is moved
-  inside the safe area (and the 3:4 profile grid when it fits). The composition draws exactly what QA measures.
-  Only when it truly cannot fit does QA fail, and the advice is creative ("a shorter title or tagline").
-- **Loop check**: with the title opening on, the "phrase" point accepts the app's own lead-in (up to 2 bars
-  before the first sung line) instead of warning about it.
-- Built by a Sonnet helper (bug-fix rule), checked here: the change made the Textboard's server code load the
-  video renderer and broke the production build; fixed by moving the layout into its own Remotion-free file
-  (src/card-layout.ts). All browser tests and the title / textboard / loop / QA tests pass; a real render
-  could not be checked in the cloud (renders need a download this sandbox cannot make).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -293,6 +313,24 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
    with ✅ / 🟡 / 🔴 / not made; "Make all" queues every missing video of the release (overnight); per-artist
    **looks** (named complete styles, e.g. "Life Lyrics Cinematic", "Pômé Polaroid") apply to a whole release;
    Scheduled / Published with manually entered results as planned for 6.3.
+
+**Lyric timing first (agreed 31 Oct 2026): L1a and L1b come before the Style rebuild and the UX steps below;
+the open decisions stay paused.**
+- ✅ (built 31 Oct, to verify) **L1a. Suno vocal stem (vocals.wav) as the main guide for lyric timing**; Demucs only
+  the fallback (see Latest steps). Verify with `pnpm lyrics:compare-voice` on These Empty Roads.
+- **L1b. The Lyric Map** (do not build before the user's OK; plan first): a stable ID per word from the song's
+  structure (V1.L2.W3); the song as a map of sections; the app picks the few points most worth checking by ear
+  (section starts, the first word after a gap, chorus entries, the least-certain lines); the user hears 2 s around
+  a point and confirms ✓ or taps the right moment; confirmed points become fixed anchors and the song re-aligns
+  between them at once (alignment section by section, so a repeated chorus can never jump to another one); a fix
+  in one chorus is offered for its repeats. Ideas noted 31 Oct: Suno's bar grid (BPM, 4/4, bar 1) placed on the
+  trimmed song with the L1a offset, so section starts and chorus entries fall on bars; a DAW marker list (Verse 1,
+  Chorus...) as section starts if the user exports one.
+- **L2 (later).** The user's confirmed songs become a test set to measure accuracy and to compare aligner models on
+  his own songs. Candidates noted 31 Oct (from outside reviews): a phoneme-based or singing-trained aligner (DALI),
+  a trained voice detector (Silero VAD) and pitch (pYIN) as a sign of quiet / breathy singing, snapping word starts
+  to consonant attacks, a per-word confidence score. Skipped on purpose: parsing DAW screenshots, snapping lyrics to
+  the beat, a spectrogram to drag by hand.
 
 **UX order agreed 30 Oct 2026 (after the Style tab simplification and an outside UX review).** Do these
 before Releases step 2 and the Lyric Sheet, one step each, plan first:

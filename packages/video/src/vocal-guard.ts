@@ -139,6 +139,38 @@ export function voiceStretches(v: VoiceLevels, thresholdDb: number, minMs = MIN_
     last = ms;
   });
   close();
+  return out.flatMap((st) => splitAtAttacks(v, thresholdDb, st, minMs));
+}
+
+// A wet vocal stem (Suno's vocals.wav keeps the reverb) fills a short pause with the tail of the phrase
+// before, so the next phrase joined it (pauses under JOIN_GAP_MS join) and its own start was lost. Found
+// with the clean-stem tests of L1a: a pause of at least SPLIT_GAP_MS under the threshold followed by a
+// sharp attack (ATTACK_DB up within ATTACK_MS) starts a new stretch, when both parts last at least minMs
+// (so no voice is ever dropped). Demucs stems rarely have such pauses inside a stretch.
+const SPLIT_GAP_MS = 100;
+const ATTACK_DB = 12;
+const ATTACK_MS = 60;
+function splitAtAttacks(v: VoiceLevels, thresholdDb: number, [start, end]: VoiceStretch, minMs: number): VoiceStretch[] {
+  const out: VoiceStretch[] = [];
+  let from = start;
+  let gapStart: number | null = null;
+  for (let ms = start; ms < end; ms += v.hopMs) {
+    const db = v.db[Math.round(ms / v.hopMs)];
+    if (db <= thresholdDb) {
+      if (gapStart === null) gapStart = ms;
+      continue;
+    }
+    if (gapStart !== null && ms - gapStart >= SPLIT_GAP_MS && ms - from >= minMs && end - ms >= minMs) {
+      const gap = v.db.slice(Math.round(gapStart / v.hopMs), Math.round(ms / v.hopMs));
+      const attack = Math.max(...v.db.slice(Math.round(ms / v.hopMs), Math.round((ms + ATTACK_MS) / v.hopMs) + 1));
+      if (attack - Math.min(...gap) >= ATTACK_DB && gapStart - from >= minMs) {
+        out.push([from, gapStart]);
+        from = ms;
+      }
+    }
+    gapStart = null;
+  }
+  out.push([from, end]);
   return out;
 }
 
@@ -208,7 +240,13 @@ function signalsFor(lines: readonly TimedLine[], v: VoiceLevels, levelDb: number
     // even when it ends just before this stamp (an early stamp right after the previous line).
     const prevLast = prev ? (prev.words?.at(-1)?.start_ms ?? prev.start_ms) : null;
     const mine = stretches.filter(([start, end]) => prevLast === null || !(start <= prevLast && end > prevLast));
-    const inside = mine.find(([start, end]) => start <= l.start_ms + PRE_ROLL_MS && end > l.start_ms - PRE_ROLL_MS);
+    // The stretch the line is in: one going on at the stamp, else one starting within the pre-roll, else
+    // one ending within it. (In that order since L1a: on a wet stem a phrase's reverb tail can end just
+    // before the next line's stamp, and that phrase is not the next line's voice.)
+    const inside =
+      mine.find(([start, end]) => start <= l.start_ms && end > l.start_ms) ??
+      mine.find(([start]) => start >= l.start_ms - PRE_ROLL_MS && start <= l.start_ms + PRE_ROLL_MS) ??
+      mine.find(([start, end]) => start <= l.start_ms + PRE_ROLL_MS && end > l.start_ms - PRE_ROLL_MS);
     // Sung on without a pause from the previous line: no onset of its own to measure (no voice signal).
     const continuous = prevLast !== null && stretches.some(([start, end]) => start <= prevLast && end > l.start_ms + PRE_ROLL_MS);
     const voice = continuous ? null : inside ? inside[0] : voiceFrom(mine, l.start_ms - PRE_ROLL_MS);

@@ -9,6 +9,7 @@ import { eq } from "drizzle-orm";
 import { assessMade } from "./exports";
 import { markInterruptedJobs } from "./jobs";
 import { failureSummary, makeVideos, type MakeOptions, type MakeResult, type RenderState } from "./make";
+import { timeLyrics } from "./lyric-timing";
 import { claimNextRun, stopRequested, type RunOptions } from "./runs";
 
 type State = { platform: string; name: string; status: string; progress: number };
@@ -54,6 +55,7 @@ export function runSummary(result: MakeResult, stopped: boolean): string {
 
 export async function executeRun(ws: Workspace, run: MakeRun, make: (o: MakeOptions) => Promise<MakeResult> = makeVideos, extra: Partial<MakeOptions> = {}): Promise<MakeRun> {
   const options = run.options_json as RunOptions;
+  if (options.lyricsOnly) return executeLyricTiming(ws, run, extra);
   const platforms = (options.platforms ?? "standard").split(",");
   const states = new Map<string, State>();
   let lastWrite = 0;
@@ -108,6 +110,18 @@ export async function executeRun(ws: Workspace, run: MakeRun, make: (o: MakeOpti
       .get()!;
   } finally {
     markInterruptedJobs(ws); // a crash inside makeVideos never leaves jobs "rendering"
+  }
+}
+
+// A lyric-timing run (after a new vocals.wav): align on the song's voice source and check, no videos.
+async function executeLyricTiming(ws: Workspace, run: MakeRun, extra: Partial<MakeOptions>): Promise<MakeRun> {
+  const set = (values: Partial<MakeRun>) => ws.db.update(makeRun).set(values).where(eq(makeRun.id, run.id)).returning().get()!;
+  try {
+    set({ current: "lyric timing: aligning on the vocal stem…" });
+    const timing = await timeLyrics(ws, run.project_id, { log: extra.log, align: extra.align, voiceMap: extra.voiceMap, firstWords: extra.firstWords });
+    return set({ status: "done", progress: 1, current: null, message: timing.summary, finished_at: new Date() });
+  } catch (error) {
+    return set({ status: "failed", current: null, message: (error as Error).message.split("\n").slice(0, 6).join("\n"), finished_at: new Date() });
   }
 }
 

@@ -71,6 +71,7 @@ import { cardBlocks, gridCrop } from "../text-cards";
 import { loadStyles, lyricLineNumbers, parseSection, snapToDownbeat, songMedia, type StyleFaces } from "./prepare";
 import { detectBadFrames, measureLyrics } from "./qa-check";
 import { getBundle, renderCover, renderLyricVideo, renderThumbnail, type RenderOptions } from "./render";
+import { voiceRecord } from "./voice-source";
 import { applyHandSet, applyVocalGuard, ensureAlignment, findOrCreateSongProject, matchReport, type Alignment, type AlignRunner, type VoiceMapRunner, type FirstWordsRunner } from "./song-project";
 import { COVER_TEXT_SCALE } from "../youtube-layout";
 import { endScreenText, lyricSections } from "../youtube";
@@ -149,6 +150,10 @@ export type MakeOptions = {
   // make no output (no run folder, section / job rows, song.json changes or .lrc; never aligns: it needs
   // the stored alignment). Caches are filled as usual (clip import and preparation, analysis).
   dryRun?: boolean;
+  // A lyric-timing run (the studio queues one when vocals.wav is added or replaced): the alignment, the
+  // hand-set starts and the vocal-start check (src/node/lyric-timing.ts), no videos. Needs projectId.
+  lyricsOnly?: boolean;
+  projectId?: string;
   lineEffect?: string; // lyric effect for verse lines, e.g. "glide" or "soft-blur:subtle" (default: platform / brand)
   hookEffect?: string; // lyric effect for hook lines (default: platform / brand)
   pins?: string;
@@ -1970,6 +1975,8 @@ function buildManifest(c: {
       vocal_guard: c.alignment.guard?.moves ?? null, // lines moved to where the voice starts (not in the stored LRC)
       hand_times: c.alignment.handTimes ?? null, // lines set by hand in the Lyrics tab (hints.lrc "!" lines)
       vocal_check: c.alignment.guard?.check ?? null, // what the vocal-start check measured (singing level, per checked line)
+      // The vocal track the timing listened to (analysis only; never in the video): "Suno vocal stem, offset 1.8 s" / "separated by the app".
+      voice_source: c.alignment.source === "given" || c.alignment.source === "story" ? null : voiceRecord(c.alignment.voice),
       source: c.alignment.source,
       hint: c.alignment.hint
         ? { file: c.alignment.hint.file, sha256: c.alignment.hint.hash, source: c.alignment.hint.source, stored: c.alignment.hint.stored }

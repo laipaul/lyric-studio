@@ -1,6 +1,7 @@
 // The song page's Assets tab. GET: the song's files and clips. POST (multipart): "clips" = files
 // dropped on the clips area (copied into the song's clips\), or "kind" = song | lyrics | cover |
-// hints with one "file" (the old one is kept in .studio\replaced\). DELETE ?name= : the clip moves to
+// hints | vocals with one "file" (the old one is kept in .studio\replaced\; vocals: Suno's vocal stem,
+// checked against the song and the lyric timing queued again on it). DELETE ?name= : the clip moves to
 // clips\_removed\ (never deleted).
 import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -8,7 +9,7 @@ import path from "node:path";
 import { connection } from "next/server";
 
 import { resolveWorkspaceDir, safeName } from "@lyric/db";
-import { importSongClips, removeSongClip, replaceAsset, songAssets, type AssetKind } from "@lyric/video/assets";
+import { importSongClips, removeSongClip, replaceAsset, songAssets, storeVocalStem, type AssetKind } from "@lyric/video/assets";
 
 import { withWorkspaceAsync } from "@/lib/workspace";
 
@@ -43,10 +44,12 @@ export async function POST(request: Request, { params }: Params) {
       const saved = await Promise.all(files.map(save));
       return Response.json(await withWorkspaceAsync((ws) => importSongClips(ws, id, saved)));
     }
-    if (!["song", "lyrics", "cover", "hints"].includes(kind)) return Response.json({ error: "Unknown kind of file." }, { status: 400 });
+    if (!["song", "lyrics", "cover", "hints", "vocals"].includes(kind)) return Response.json({ error: "Unknown kind of file." }, { status: 400 });
     const value = form.get("file");
     if (!(value instanceof File) || !value.size) return Response.json({ error: "Choose a file." }, { status: 400 });
     const one = await save(value, 0);
+    // The Suno vocal stem: checked against the song at once, then the lyric timing is queued again on it.
+    if (kind === "vocals") return Response.json(await withWorkspaceAsync((ws) => storeVocalStem(ws, id, one.file, one.name)));
     const stored = await withWorkspaceAsync((ws) => replaceAsset(ws, id, kind as AssetKind, one.file, one.name));
     return Response.json({ stored });
   } catch (error) {

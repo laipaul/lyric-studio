@@ -4,6 +4,21 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Fix — title opening fits itself, loop check accepts its lead-in ✅ (verified by the user on the Windows PC, 30 Oct 2026: These Empty Roads Reel now "Ready to post")
+- Found on These Empty Roads (Reels, title opening on): "Not ready — the title opening reaches under the
+  platform's buttons" (asking you to shorten the title or pick a smaller size) and "the jump back to the start may
+  be noticeable (phrase)". Both were the app's job.
+- **Title opening fits itself** (src/card-layout.ts fitCardBlocks): a long title wraps onto at most 2 balanced
+  lines inside the safe area, then the title block shrinks step by step (at most 25% smaller), and it is moved
+  inside the safe area (and the 3:4 profile grid when it fits). The composition draws exactly what QA measures.
+  Only when it truly cannot fit does QA fail, and the advice is creative ("a shorter title or tagline").
+- **Loop check**: with the title opening on, the "phrase" point accepts the app's own lead-in (up to 2 bars
+  before the first sung line) instead of warning about it.
+- Built by a Sonnet helper (bug-fix rule), checked here: the change made the Textboard's server code load the
+  video renderer and broke the production build; fixed by moving the layout into its own Remotion-free file
+  (src/card-layout.ts). All browser tests and the title / textboard / loop / QA tests pass; a real render
+  could not be checked in the cloud (renders need a download this sandbox cannot make).
+
 ### Effects: letter-by-letter typewriter, Spread, Breathe ✅ (to verify on the Windows PC)
 - **Typewriter** now types **letter by letter** like Canva, at a steady pace, with a thin **cursor** in your
   accent colour that blinks softly once the line is typed. Never behind the singer: every word is fully typed

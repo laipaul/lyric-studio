@@ -169,6 +169,22 @@ export function enqueueRun(ws: Workspace, projectId: string, options: RunOptions
     .get();
 }
 
+// A lyric-timing run for the song (after vocals.wav was added or replaced), unless one is already waiting.
+export const LYRIC_TIMING_LABEL = "Lyric timing · vocal stem";
+export function enqueueLyricTiming(ws: Workspace, projectId: string): MakeRun {
+  const waiting = ws.db
+    .select()
+    .from(makeRun)
+    .where(and(eq(makeRun.project_id, projectId), eq(makeRun.status, "queued")))
+    .all()
+    .find((r) => (r.options_json as RunOptions | null)?.lyricsOnly);
+  if (waiting) return waiting;
+  const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
+  if (!p) throw new Error("Song not found.");
+  const options: RunOptions = { song: projectSong(ws, p), lyrics: songPathsById(ws, projectId).lyricsTxt, lyricsOnly: true, projectId, command: "Lyric Studio: lyric timing (vocal stem)" };
+  return ws.db.insert(makeRun).values({ project_id: projectId, options_json: options as Record<string, unknown>, label: LYRIC_TIMING_LABEL }).returning().get();
+}
+
 // Runs whose worker is gone (closed, PC restarted) become "interrupted".
 export function markInterruptedRuns(ws: Workspace, isAlive: (pid: number) => boolean = processAlive): number {
   const running = ws.db.select().from(makeRun).where(eq(makeRun.status, "running")).all();

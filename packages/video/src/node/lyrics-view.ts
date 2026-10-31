@@ -25,6 +25,7 @@ import { syncCollection } from "./collection";
 import { keepReplaced, rememberedCollection } from "./project-settings";
 import { readRecipe, writeRecipe } from "./recipe";
 import { songPathsById } from "./song-folder";
+import { DEMUCS, resolveVoiceSource } from "./voice-source";
 import { applyHandSet, ensureAlignment, matchReport, wordsOfLyrics, type AlignRunner, type Alignment, type VocalGuard } from "./song-project";
 
 export type LyricsLine = {
@@ -104,12 +105,17 @@ async function storedAlignment(ws: Workspace, projectId: string): Promise<{ alig
   if (!existsSync(paths.lyricsTxt)) return null;
   const hints = paths.hints && existsSync(paths.hints) ? paths.hints : null;
   const sp = { project: p, songFile: absPath(ws, p.audio_path), songHash: p.audio_hash, created: false };
-  for (const lang of ["en", "fr"]) {
-    try {
-      const alignment = await ensureAlignment(ws, sp, { lyricsTxt: paths.lyricsTxt, hint: hints ?? undefined, lang, durationMs: p.duration_ms ?? 600_000, align: refuse });
-      return { alignment, hints };
-    } catch {
-      // not aligned in this language
+  // The vocal stem's alignment when there is one; until it is made (a new vocals.wav is being aligned),
+  // the one on the vocals the app separated.
+  const voice = await resolveVoiceSource(ws, sp);
+  for (const v of voice.kind === "stem" ? [voice, DEMUCS] : [voice]) {
+    for (const lang of ["en", "fr"]) {
+      try {
+        const alignment = await ensureAlignment(ws, sp, { lyricsTxt: paths.lyricsTxt, hint: hints ?? undefined, lang, durationMs: p.duration_ms ?? 600_000, align: refuse, voice: v });
+        return { alignment, hints };
+      } catch {
+        // not aligned in this language
+      }
     }
   }
   return null;

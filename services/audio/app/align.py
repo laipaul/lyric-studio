@@ -1,7 +1,9 @@
 """pnpm align <song> <lyrics.txt> [--lang en|fr] [--compare taps.lrc] [--hint taps.lrc] [--diagnose 2,9]
-                  [--trim on|off] [--out file.lrc] [--report file.json] [--fresh]
+                  [--trim on|off] [--out file.lrc] [--report file.json] [--fresh] [--stem vocals.wav|none|auto]
 
-Writes <lyrics>.lrc automatically: Demucs (htdemucs) separates the vocals, then WhisperX forced
+Writes <lyrics>.lrc automatically: the vocal track is Suno's vocal stem (vocals.wav next to the song,
+lined up on the song: app/vocal_stem.py) when it is there and follows the song, else Demucs (htdemucs)
+separates the vocals; then WhisperX forced
 alignment (wav2vec2) places every word of the known lyrics on the vocal track. Output is standard
 LRC per line with enhanced word tags (<mm:ss.xx>) for future karaoke effects. "* " hook markers and
 blank-line pauses from lyrics.txt are kept.
@@ -29,6 +31,7 @@ from .diagnose import diagnose_line
 from .hint import HINT_CONFIDENCE, HintDecision, plan_hints, shift_line, voice_onsets
 from .refine import loudness_envelope, refine_words, voice_threshold
 from .tap import parse_lyrics_txt
+from .vocal_stem import VoiceSource, stem_argument, stem_track
 
 LOW_CONFIDENCE = 0.5
 SEPARATION_MODEL = "htdemucs"
@@ -90,6 +93,17 @@ def separate_vocals(song: Path, device: Device, log: Callable[[str], None]) -> t
     sf.write(str(tmp), vocals, rate, subtype="FLOAT")
     os.replace(tmp, out)
     return out, device
+
+
+def vocal_track(song: Path, stem: Path | None, device: Device, log: Callable[[str], None]) -> tuple[Path, Device, VoiceSource]:
+    """The vocal track everything that listens to the voice uses: the Suno vocal stem (vocals.wav),
+    lined up on the song, when it is there and follows the song; else the Demucs stem (the fallback).
+    Analysis only: neither the song nor the stem is ever written."""
+    lined, source = stem_track(song, stem, log)
+    if lined is not None:
+        return lined, device, source
+    vocals, device = separate_vocals(song, device, log)
+    return vocals, device, source
 
 
 # --------------------------------------------------------------------------- alignment (WhisperX)
@@ -396,15 +410,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--report", metavar="FILE.json", help="also write per-line confidence and timings as JSON (used by pnpm make)")
     p.add_argument("--fresh", action="store_true", help="ignore the cached alignment and align again")
+    p.add_argument(
+        "--stem",
+        default="auto",
+        help='the Suno vocal stem: a file, "none" (Demucs), or "auto" (default: vocals.wav next to the song)',
+    )
     p.add_argument("--cwd", help=argparse.SUPPRESS)
     return p
 
 
-def line_report(aligned: list[AlignedLine], model_name: str, lang: str) -> dict:
+def line_report(aligned: list[AlignedLine], model_name: str, lang: str, voice: VoiceSource | None = None) -> dict:
     """Per-line confidence and sung times (start of the first word, end of the last word)."""
     return {
         "model": model_name,
         "lang": lang,
+        **({"voice": voice.as_dict()} if voice else {}),
         "low_confidence": LOW_CONFIDENCE,
         "lines": [
             {
@@ -455,7 +475,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Song:    {song}")
     print(f"Lyrics:  {len(texts)} lines from {lyrics.name} ({args.lang}, gap trim {args.trim})")
 
-    vocals, device = separate_vocals(song, device, log)
+    vocals, device, voice_source = vocal_track(song, stem_argument(song, args.stem), device, log)
+    print(f"Voice:   {voice_source.label}")
 
     # Cache: same vocals + same lyrics + same model = same alignment.
     key = hashlib.sha256(
@@ -509,7 +530,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.report:
         report = resolve(args.report)
-        write_atomic(report, json.dumps(line_report(aligned, model_name, args.lang), indent=1))
+        write_atomic(report, json.dumps(line_report(aligned, model_name, args.lang, voice_source), indent=1))
 
     comparison = compare(aligned, parse_lrc(reference.read_text(encoding="utf-8-sig"))) if reference else None
     print_lines(aligned, comparison)

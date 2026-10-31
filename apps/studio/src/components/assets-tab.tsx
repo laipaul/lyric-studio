@@ -1,6 +1,6 @@
 "use client";
 
-import { FileAudio, FileText, ImageIcon, ListMusic, Trash2, Upload } from "lucide-react";
+import { AudioLines, FileAudio, FileText, ImageIcon, ListMusic, Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
@@ -13,7 +13,7 @@ import { api } from "@/lib/api";
 const clock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 const win = (rel: string) => rel.split("/").join("\\");
-const ACCEPT: Record<AssetKind, string> = { song: ".wav,.mp3", lyrics: ".txt", cover: ".jpg,.jpeg,.png,.webp", hints: ".lrc" };
+const ACCEPT: Record<AssetKind, string> = { song: ".wav,.mp3", lyrics: ".txt", cover: ".jpg,.jpeg,.png,.webp", hints: ".lrc", vocals: ".wav" };
 
 // The song's files: song, lyrics.txt, cover, hints.lrc and its own clips (drop videos and photos;
 // Remove moves a clip to clips\_removed\, nothing is deleted).
@@ -91,6 +91,12 @@ export function AssetsTab({ projectId }: { projectId: string }) {
     const body = new FormData();
     body.set("kind", kind);
     body.set("file", file);
+    if (kind === "vocals") {
+      // Checked against the song at once; the lyric timing runs again on it (Tasks menu).
+      const r = (await send(body)) as { status: "lined-up" | "rejected"; message: string; retimed: boolean } | null;
+      if (r) setNotice({ ok: r.status === "lined-up", text: `${r.message}${r.retimed ? (r.status === "lined-up" ? " The lyric timing runs again on it now (see Tasks); your hints and hand-set starts are kept." : "") : ""}` });
+      return;
+    }
     if (await send(body)) setNotice({ ok: true, text: `${file.name} is now the song's ${kind === "song" ? "song file" : kind === "lyrics" ? (data?.instrumental ? "story.txt" : "lyrics.txt") : kind === "hints" ? "hints.lrc" : "cover"}${kind === "cover" ? "" : " (the previous one is kept in .studio\\replaced\\)"}.` });
   }
 
@@ -116,7 +122,7 @@ export function AssetsTab({ projectId }: { projectId: string }) {
     );
   }
 
-  const fileRow = (kind: AssetKind, icon: React.ReactNode, title: string, value: React.ReactNode, warning?: React.ReactNode) => (
+  const fileRow = (kind: AssetKind, icon: React.ReactNode, title: string, value: React.ReactNode, warning?: React.ReactNode, button = "Replace…") => (
     <li data-asset={kind} className={cn("bg-card flex items-center gap-3 rounded-lg border px-4 py-3", warning && "border-amber-400/40")}>
       <span className="text-brand">{icon}</span>
       <div className="min-w-0 flex-1">
@@ -129,7 +135,7 @@ export function AssetsTab({ projectId }: { projectId: string }) {
         ) : null}
       </div>
       <label className={cn("border-input hover:bg-accent cursor-pointer rounded-md border px-3 py-1.5 text-xs", busy && "pointer-events-none opacity-50")}>
-        Replace…
+        {button}
         <input type="file" accept={ACCEPT[kind]} className="hidden" data-replace={kind} onChange={(e) => replace(kind, e.target.files?.[0])} />
       </label>
     </li>
@@ -146,6 +152,18 @@ export function AssetsTab({ projectId }: { projectId: string }) {
       <TaglineField projectId={projectId} />
       <ul className="grid gap-3 md:grid-cols-2">
         {fileRow("song", <FileAudio className="size-5" />, "Song", data.song ? `${data.song.name}${data.song.durationMs ? ` · ${clock(data.song.durationMs)}` : ""}${data.song.bpm ? ` · ${Math.round(data.song.bpm)} BPM` : ""}` : "missing")}
+        {data.instrumental
+          ? null
+          : fileRow(
+              "vocals",
+              <AudioLines className="size-5" />,
+              "Vocal stem (from Suno)",
+              data.vocals
+                ? `${data.vocals.name} · ${data.vocals.status === "lined-up" ? `used for lyric timing${data.vocals.offsetMs !== null && Math.abs(data.vocals.offsetMs) >= 50 ? ` (lined up: ${(Math.abs(data.vocals.offsetMs) / 1000).toFixed(1)} s offset, from trimming)` : " (lined up)"}` : data.vocals.status === "rejected" ? "not used: the app separates the vocals itself" : "not checked yet"}${data.backingVocals ? " · backing-vocals.wav: not used for timing" : ""}`
+                : "none: the app separates the vocals itself. Add Suno's vocal stem (vocals.wav) for better lyric timing.",
+              data.vocals?.status === "rejected" ? data.vocals.message : undefined,
+              data.vocals ? "Replace…" : "Add…",
+            )}
         {data.instrumental
           ? fileRow("lyrics", <FileText className="size-5" />, "Story (instrumental)", data.lyrics?.lines ? `story.txt · ${data.lyrics.lines} sentence${data.lyrics.lines === 1 ? "" : "s"}, timed by the app` : "no story: music only (Replace adds a story.txt)")
           : fileRow("lyrics", <FileText className="size-5" />, "Lyrics", data.lyrics ? `lyrics.txt · ${data.lyrics.lines} lines` : "no lyrics.txt yet")}

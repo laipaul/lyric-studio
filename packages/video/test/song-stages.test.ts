@@ -1,6 +1,6 @@
 // The four-stage song page: the Prepare to-do list (only what needs the user) and the song's platforms.
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -31,18 +31,22 @@ afterAll(() => {
 describe("Prepare to-do list", () => {
   it("names what is missing, in plain words, with where to fix it", async () => {
     const todo = await songTodo(ws, id);
-    expect(todo.map((t) => t.id)).toEqual(["clips", "cover", "labels"]);
+    expect(todo.map((t) => t.id)).toEqual(["clips", "vocals", "cover", "labels"]);
     expect(todo.find((t) => t.id === "clips")).toMatchObject({ tab: "assets", blocking: true });
+    // L1a: the vocal stem is suggested, never a blocker.
+    expect(todo.find((t) => t.id === "vocals")).toMatchObject({ text: "Add the vocal stem for better lyric timing (vocals.wav, downloaded from Suno).", tab: "assets", blocking: false });
     expect(todo.find((t) => t.id === "cover")).toMatchObject({ tab: "assets", blocking: false });
     expect(todo.find((t) => t.id === "labels")?.text).toMatch(/1 line in the lyrics looks like a label \(e\.g\. “Chorus:”\)/);
   });
 
-  it("a collection counts as clips; a cover clears its item; fixing the lyrics clears the label", async () => {
+  it("a collection counts as clips; a cover clears its item; fixing the lyrics clears the label; a vocal stem clears its suggestion", async () => {
     const recipe = songPathsById(ws, id).recipe!;
     writeRecipe(recipe, { ...readRecipe(recipe), collections: ["wedding"] });
     const { storeCover } = await import("../src/node/project-settings");
     storeCover(ws, id, path.join(inDir, "cover.jpg"));
     writeFileSync(songPathsById(ws, id).lyricsTxt, "Hold on to me\nNever let go\n");
+    expect((await songTodo(ws, id)).map((t) => t.id)).toEqual(["vocals"]);
+    copyFileSync(songPathsById(ws, id).audio!, songPathsById(ws, id).vocals!); // any vocals.wav (not checked in the tests)
     expect(await songTodo(ws, id)).toEqual([]);
   });
 

@@ -54,6 +54,7 @@ export type Manifest = {
     vocal_guard?: { number: number; text: string; from_ms: number; to_ms: number }[] | null; // lines moved to the voice start (pnpm make)
     hand_times?: { number: number; text: string; from_ms: number; to_ms: number }[] | null; // set by hand (Lyrics tab)
     vocal_check?: import("./song-project").VocalGuard["check"] | null; // what the vocal-start check measured and decided
+    voice_source?: import("./voice-source").VoiceRecord | null; // the vocal track the timing listened to (Suno stem / Demucs)
   };
   settings: Record<string, unknown>;
   clips: ManifestClip[];

@@ -57,11 +57,18 @@ async function main() {
 
     // Opens on Prepare (no clips: blocking), with the to-do list.
     check((await page.getAttribute("[data-stage=prepare]", "aria-current")) === "step", "opens on Prepare when something blocks");
-    check(((await page.textContent("[data-stage=prepare] [data-stage-status]")) ?? "").includes("3 to do"), "Prepare: 3 to do");
+    check(((await page.textContent("[data-stage=prepare] [data-stage-status]")) ?? "").includes("4 to do"), "Prepare: 4 to do");
     const items = await page.$$eval("[data-todo-item]", (e: Element[]) => e.map((x) => x.getAttribute("data-todo-item")));
-    check(JSON.stringify(items) === JSON.stringify(["clips", "cover", "labels"]), `to-do: clips, cover, labels (${items.join(", ")})`);
+    check(JSON.stringify(items) === JSON.stringify(["clips", "vocals", "cover", "labels"]), `to-do: clips, vocal stem (a suggestion), cover, labels (${items.join(", ")})`);
     const tabs = async () => page.$$eval("[role=tab]", (e: Element[]) => e.map((x) => x.textContent?.trim()));
     check(JSON.stringify(await tabs()) === JSON.stringify(["Assets", "Lyrics"]), "Prepare shows only Assets and Lyrics");
+    // L1a: the Assets tab has the vocal stem slot next to the song (none yet: "Add…").
+    await page.click("[data-todo-item=vocals] button");
+    await page.waitForSelector("[data-asset=vocals]");
+    const slot = (await page.textContent("[data-asset=vocals]")) ?? "";
+    check(slot.includes("Vocal stem (from Suno)") && slot.includes("Add…") && slot.includes("the app separates the vocals itself"), `the Assets tab offers the vocal stem (${slot})`);
+    const order = await page.$$eval("[data-asset]", (e: Element[]) => e.map((x) => x.getAttribute("data-asset")));
+    check(order.indexOf("vocals") === order.indexOf("song") + 1, `the vocal stem sits next to the song (${order.join(", ")})`);
     await page.click("[data-todo-item=labels] button");
     check((await page.getAttribute("[role=tab][data-state=active]", "id"))?.endsWith("lyrics") ?? false, "the label item's button opens the Lyrics tab");
 
@@ -82,8 +89,8 @@ async function main() {
     writeRecipe(recipe, { ...readRecipe(recipe), collections: ["wedding"], platforms: ["reels", "youtube"] });
     await page.goto(`${base}/songs/${id}`);
     await page.waitForSelector("[data-stages]");
-    // Still 2 things to check (cover, label line), none blocking: Prepare says "to check", Make is open.
-    check(((await page.textContent("[data-stage=prepare] [data-stage-status]")) ?? "").includes("2 to check"), "nothing blocking: Prepare says 2 to check");
+    // Still 3 things to check (vocal stem, cover, label line), none blocking: Prepare says "to check", Make is open.
+    check(((await page.textContent("[data-stage=prepare] [data-stage-status]")) ?? "").includes("3 to check"), "nothing blocking: Prepare says 3 to check");
     await page.click("[data-stage=make]");
     check(((await page.textContent("[data-release-platforms]")) ?? "").includes("Reels · YouTube (this song's platforms)"), "release pack: the song's own platforms");
     await page.click("[data-make-release]");

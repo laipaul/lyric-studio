@@ -47,6 +47,10 @@ export function songFolderFor(ws: Workspace, artist: string, title: string, proj
 }
 
 export const STORY_FILE = "story.txt";
+// Suno's vocal stems (analysis only: never edited, never mixed back, never in any output).
+export const VOCALS_FILE = "vocals.wav";
+export const BACKING_VOCALS_FILE = "backing-vocals.wav";
+const STEM_FILE = /^(backing-)?vocals\.(wav|mp3|flac)$/i;
 
 // song.json "instrumental": true (read directly: song paths are needed before the recipe is).
 export function isInstrumental(recipeFile: string): boolean {
@@ -66,6 +70,8 @@ export type SongPaths = {
   lyricsTxt: string; // where the song's lyrics.txt lives (an instrumental: its story.txt)
   instrumental: boolean; // song.json "instrumental": true (no sung lyrics; the text is story.txt)
   hints: string | null; // hints.lrc (song folders only)
+  vocals: string | null; // vocals.wav: Suno's vocal stem, the main guide for lyric timing (song folders only; analysis only)
+  backingVocals: string | null; // backing-vocals.wav (optional; never used for alignment)
   clips: string | null; // the song's own clips (song folders only)
   exports: string;
   exportsRel: string;
@@ -91,6 +97,8 @@ export function songPaths(ws: Workspace, p: ProjectPaths): SongPaths {
       lyricsTxt: absPath(ws, `${rel}/lyrics/lyrics.txt`),
       instrumental: false,
       hints: null,
+      vocals: null,
+      backingVocals: null,
       clips: null,
       exports: absPath(ws, `${rel}/exports`),
       exportsRel: `${rel}/exports`,
@@ -111,6 +119,8 @@ export function songPaths(ws: Workspace, p: ProjectPaths): SongPaths {
     lyricsTxt: absPath(ws, `${rel}/${instrumental ? STORY_FILE : "lyrics.txt"}`),
     instrumental,
     hints: absPath(ws, `${rel}/hints.lrc`),
+    vocals: absPath(ws, `${rel}/${VOCALS_FILE}`),
+    backingVocals: absPath(ws, `${rel}/${BACKING_VOCALS_FILE}`),
     clips: absPath(ws, `${rel}/clips`),
     exports: absPath(ws, `${rel}/exports`),
     exportsRel: `${rel}/exports`,
@@ -314,12 +324,12 @@ function unownedSongFolder(ws: Workspace, songFile: string): { rel: string; arti
   return { rel: folder, artist: rel[1], title: rel[2] };
 }
 
-// The files of a song folder for "pnpm make <folder>": song.wav|mp3 (or the only audio file),
-// lyrics.txt, hints.lrc when there is one.
+// The files of a song folder for "pnpm make <folder>": song.wav|mp3 (or the only audio file besides
+// the vocal stems vocals.wav / backing-vocals.wav), lyrics.txt, hints.lrc when there is one.
 export function songFolderFiles(dir: string): { song: string; lyrics: string; hints?: string } {
   if (!existsSync(dir) || !statSync(dir).isDirectory()) throw new Error(`Song folder not found: ${dir}`);
   const files = readdirSync(dir).filter((f) => statSync(path.join(dir, f)).isFile());
-  const audio = files.filter((f) => /\.(wav|mp3)$/i.test(f));
+  const audio = files.filter((f) => /\.(wav|mp3)$/i.test(f) && !STEM_FILE.test(f)); // the vocal stems are not the song
   const song = audio.find((f) => /^song\.(wav|mp3)$/i.test(f)) ?? (audio.length === 1 ? audio[0] : undefined);
   if (!song) {
     throw new Error(audio.length ? `${dir} has several audio files (${audio.join(", ")}); name the song song.wav or song.mp3.` : `No song.wav or song.mp3 in ${dir}`);
