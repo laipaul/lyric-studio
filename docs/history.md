@@ -4,6 +4,18 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Transport bar under the video ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026. Under the Shape page's viewer, instead of the play button inside the
+  video: ⏮ go to start, ⏪ back one bar, ▶/⏸ play or pause, ⏹ stop (pause and back to the start), ⏩ forward
+  one bar, ⏭ go to end. The steps land on bar lines (where cuts fall); Shift-click moves one frame.
+- On the right: the time (0:35 / 1:30), **Speed** 1x / 0.75x / 0.5x / 0.25x to have time to check the lyrics,
+  **Loop** on / off, mute with a **volume slider**, full screen. Speed and volume change only the preview, never
+  the song file or a made video.
+- Keys (when no field is being typed in): Space play / pause, ← / → one bar (Shift: one frame), Home, End.
+- Tests: transport.test.ts (bar steps forward / back, the grace while playing, frame steps); browser:
+  storyboard.e2e.ts (each button, Shift steps, 0.5x plays at half speed, Loop plays on from the start, mute and
+  the volume slider, the keys).
+
 ### Shape page, Canva style (rail, menus, panels) ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026, after the first Shape page. **The top stage bar is gone**: Prepare, Shape,
   Make and Review sit in a slim **rail on the left**, with a coloured dot for their status. On Shape the rail

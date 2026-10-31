@@ -259,6 +259,12 @@ export function removeEmptyDirs(dir: string, stop: string): void {
   }
 }
 
+// Deleted songs (31 Oct 2026): the song's folder moves to songs\_removed\<artist> - <title> (removed <date>) and
+// its row stays (so its videos, marks and runs come back with Restore); the Library, Themes, Collections and
+// Releases skip it.
+export const REMOVED_SONGS = `${SONGS_DIR}/_removed`;
+export const isRemovedSong = (folder: string | null | undefined): boolean => !!folder && (folder === REMOVED_SONGS || folder.startsWith(`${REMOVED_SONGS}/`));
+
 // Is anything rendering for this song right now (a studio run or a terminal "pnpm make")?
 // `selfPid`: this process (a run renaming its own song) does not count.
 export function songBusy(ws: Workspace, projectId: string, selfPid?: number): boolean {

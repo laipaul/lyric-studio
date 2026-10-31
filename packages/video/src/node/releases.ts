@@ -10,6 +10,7 @@ import { absPath, makeRun, project as projectTable, safeName, type Workspace } f
 
 import { chipState, type ChipState } from "../library-status";
 import { platformLabels, songCard, type SongCard } from "./library";
+import { isRemovedSong } from "./song-folder";
 import { songEp } from "./project-settings";
 import { enqueueRun, generateOptions } from "./runs";
 import { RELEASE_PLATFORMS, songTodo } from "./song-stages";
@@ -151,7 +152,7 @@ const usedBy = (card: SongCard) => card.wanted ?? RELEASE_PLATFORMS;
 export function releaseView(ws: Workspace, name: string): ReleaseView {
   const r = getRelease(ws, name);
   const labels = platformLabels();
-  const byId = new Map(ws.db.select().from(projectTable).all().map((p) => [p.id, p]));
+  const byId = new Map(ws.db.select().from(projectTable).all().filter((p) => !isRemovedSong(p.folder)).map((p) => [p.id, p]));
   const cards = r.songs.flatMap((id) => (byId.has(id) ? [songCard(ws, byId.get(id)!, labels)] : []));
   const used = new Set(cards.flatMap((c) => usedBy(c)));
   const platforms = labels.filter((l) => used.has(l.name));

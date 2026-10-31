@@ -18,6 +18,7 @@ import { LyricsTab } from "@/components/lyrics-tab";
 import { PostTab } from "@/components/post-tab";
 import { StatusBadge } from "@/components/status-badge";
 import { ShapePage } from "@/components/shape-page";
+import { SongTitle } from "@/components/song-title";
 import { SongView, type RunView } from "@/components/song-view";
 import { ReleasePack, SongStages, type ShapePanelId, type StageId, type StageStatus } from "@/components/song-stages";
 
@@ -116,7 +117,7 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
           {song.cover ? <img src={`/api/files/${song.cover}`} alt="" className="size-full object-cover" /> : null}
         </div>
         <div className="min-w-0">
-          <h1 className="truncate text-xl leading-tight">{song.title}</h1>
+          <SongTitle key={song.title} id={song.id} title={song.title} />
           <p className="text-muted-foreground truncate text-xs">
             {song.artist}
             {song.ep ? ` · ${song.ep}` : ""}

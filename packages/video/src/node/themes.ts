@@ -21,7 +21,7 @@ import type { FontCatalog } from "./font-catalog";
 import { findFamily } from "./font-catalog";
 import { checkPerPlatform, type PerPlatform, type PlatformValues } from "./per-platform";
 import { artistRecipe, checkRecipe, LIBRARY_RECIPE, readRecipe, resolveRecipe, writeRecipe, type RecipeField, type RecipeValues, type SongRecipe } from "./recipe";
-import { songPathsById } from "./song-folder";
+import { isRemovedSong, songPathsById } from "./song-folder";
 
 export const THEME_VERSION = 1;
 // What a theme decides: the fonts, the lyric effects, the accent colour and the add-ons.
@@ -272,7 +272,8 @@ export function ensureSongTheme(ws: Workspace, projectId: string, catalog: FontC
 // skipped here (its own page names the problem).
 export function ensureAllThemes(ws: Workspace, catalog: FontCatalog): void {
   const artists = new Set<string>();
-  for (const p of ws.db.select({ id: projectTable.id, artist: projectTable.artist }).from(projectTable).all()) {
+  for (const p of ws.db.select({ id: projectTable.id, artist: projectTable.artist, folder: projectTable.folder }).from(projectTable).all()) {
+    if (isRemovedSong(p.folder)) continue; // a deleted song keeps its song.json as it was
     artists.add(p.artist);
     try {
       ensureSongTheme(ws, p.id, catalog);
@@ -292,7 +293,8 @@ export function ensureAllThemes(ws: Workspace, catalog: FontCatalog): void {
 // The songs that use a theme (title and id).
 export function themeUsers(ws: Workspace, name: string): { id: string; title: string }[] {
   const out: { id: string; title: string }[] = [];
-  for (const p of ws.db.select({ id: projectTable.id, title: projectTable.title }).from(projectTable).all()) {
+  for (const p of ws.db.select({ id: projectTable.id, title: projectTable.title, folder: projectTable.folder }).from(projectTable).all()) {
+    if (isRemovedSong(p.folder)) continue; // a deleted song (songs\_removed\)
     const file = songPathsById(ws, p.id).recipe;
     if (!file || !existsSync(file)) continue;
     try {

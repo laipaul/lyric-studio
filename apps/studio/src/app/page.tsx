@@ -1,7 +1,7 @@
 import { connection } from "next/server";
 import { Suspense } from "react";
 
-import { knownArtists, listSongs } from "@lyric/video/library";
+import { knownArtists, listSongs, removedSongs } from "@lyric/video/library";
 import { migrationStatus } from "@lyric/video/migrate";
 
 import { LibraryView } from "@/components/library-view";
@@ -19,6 +19,6 @@ export default function LibraryPage() {
 
 async function Library() {
   await connection(); // always fresh: read the workspace on every visit
-  const { songs, artists, old } = withWorkspace((ws) => ({ songs: listSongs(ws), artists: knownArtists(ws), old: migrationStatus(ws) }));
-  return <LibraryView songs={songs} artists={artists} banner={<MigrationBanner songs={old.songs} collections={old.collections} tidy={old.tidy} />} />;
+  const { songs, artists, old, removed } = withWorkspace((ws) => ({ songs: listSongs(ws), artists: knownArtists(ws), old: migrationStatus(ws), removed: removedSongs(ws) }));
+  return <LibraryView songs={songs} artists={artists} removed={removed} banner={<MigrationBanner songs={old.songs} collections={old.collections} tidy={old.tidy} />} />;
 }

@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { REPO_ROOT, absPath, project as projectTable, type Workspace } from "@lyric/db";
+import { REPO_ROOT, absPath, project as projectTable, safeName, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
 import { parsePresets } from "../platform";
@@ -18,7 +18,7 @@ import { keepReplaced, setSongEp, songCollections, songEp, storeCover, storeLyri
 import { projectLyricsTxt } from "./runs";
 import { SOURCE_FILE } from "./collection";
 import { readRecipe, resolveRecipe, writeRecipe } from "./recipe";
-import { renameSongFolder, sharedCollections, songPathsById } from "./song-folder";
+import { isRemovedSong, moveEntry, relocatePaths, removeEmptyDirs, REMOVED_SONGS, renameSongFolder, sharedCollections, songBusy, songFolderFor, songPathsById, SONGS_DIR } from "./song-folder";
 import { presetLengthText, recipeInputFor } from "./style";
 import { ensureAllThemes } from "./themes";
 import { findOrCreateSongProject, storeProjectHint } from "./song-project";
@@ -156,6 +156,7 @@ export function listSongs(ws: Workspace): SongCard[] {
     .select()
     .from(projectTable)
     .all()
+    .filter((p) => !isRemovedSong(p.folder))
     .map((p) => songCard(ws, p, labels))
     .sort((a, b) => (b.lastRun ?? b.createdAt).localeCompare(a.lastRun ?? a.createdAt));
   // Two songs with the very same cover look alike in the Library: each card names the others.
@@ -358,3 +359,69 @@ export function generatePanelData(ws: Workspace, p: typeof projectTable.$inferSe
 
 export { sharedCollections } from "./song-folder";
 
+
+// ---- Song title and Delete song (31 Oct 2026) ----
+
+// A new title (the song's page header): the folder songs\<artist>\<title>\ follows. Not while it renders.
+export function renameSong(ws: Workspace, projectId: string, title: string): string {
+  const clean = title.trim().replace(/\s+/g, " ");
+  if (!clean) throw new Error("A song needs a title.");
+  if (clean.length > 200) throw new Error("The title is too long.");
+  const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
+  if (!p) throw new Error("Song not found.");
+  if (isRemovedSong(p.folder)) throw new Error("This song is deleted: restore it first.");
+  if (clean === p.title) return clean;
+  if (songBusy(ws, projectId)) throw new Error(`"${p.title}" is being rendered right now; rename it when the run has finished.`);
+  ws.db.update(projectTable).set({ title: clean }).where(eq(projectTable.id, projectId)).run();
+  try {
+    renameSongFolder(ws, projectId);
+  } catch (error) {
+    ws.db.update(projectTable).set({ title: p.title }).where(eq(projectTable.id, projectId)).run();
+    throw error;
+  }
+  return clean;
+}
+
+export type RemovedSong = { id: string; title: string; artist: string; folder: string; removedAt: string };
+const pad = (n: number) => String(n).padStart(2, "0");
+const REMOVED_AT = / \(removed (\d{4})-(\d{2})-(\d{2}) (\d{2})(\d{2})(\d{2})\)$/;
+
+// "Delete song": the whole song folder (song, lyrics, clips, videos) moves to songs\_removed\ — nothing is
+// deleted — and the song leaves the Library. Not while it renders.
+export function removeSong(ws: Workspace, projectId: string): string {
+  const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
+  if (!p) throw new Error("Song not found.");
+  if (!p.folder) throw new Error("This song still uses the old folders: migrate it first (Library → Migrate).");
+  if (isRemovedSong(p.folder)) return p.folder;
+  if (songBusy(ws, projectId)) throw new Error(`"${p.title}" is being rendered right now; delete it when the run has finished.`);
+  const at = new Date();
+  const label = `${safeName(p.artist || "Life Lyrics")} - ${path.posix.basename(p.folder)} (removed ${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}${pad(at.getMinutes())}${pad(at.getSeconds())})`;
+  const to = `${REMOVED_SONGS}/${label}`;
+  moveEntry(absPath(ws, p.folder), absPath(ws, to));
+  relocatePaths(ws, p.folder, to);
+  removeEmptyDirs(path.dirname(absPath(ws, p.folder)), absPath(ws, SONGS_DIR));
+  return to;
+}
+
+export function removedSongs(ws: Workspace): RemovedSong[] {
+  return ws.db
+    .select()
+    .from(projectTable)
+    .all()
+    .filter((p) => isRemovedSong(p.folder))
+    .map((p) => {
+      const m = REMOVED_AT.exec(p.folder!);
+      return { id: p.id, title: p.title, artist: p.artist, folder: p.folder!, removedAt: m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).toISOString() : "" };
+    })
+    .sort((a, b) => b.removedAt.localeCompare(a.removedAt));
+}
+
+// "Restore": back to songs\<artist>\<title>\ (" (2)" when that folder was taken since), back in the Library.
+export function restoreSong(ws: Workspace, projectId: string): string {
+  const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
+  if (!p || !isRemovedSong(p.folder)) throw new Error("This song is not deleted.");
+  const to = songFolderFor(ws, p.artist, p.title, p.id);
+  moveEntry(absPath(ws, p.folder!), absPath(ws, to));
+  relocatePaths(ws, p.folder!, to);
+  return to;
+}

@@ -1,20 +1,22 @@
 "use client";
 
 import { Music, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
-import type { SongCard as Song } from "@lyric/video/library";
+import type { RemovedSong, SongCard as Song } from "@lyric/video/library";
 import { chipState, SONG_FILTERS, SONG_SORTS, songSummary, sortSongs, type SongFilter, type SongSort } from "@lyric/video/library-status";
 
 import { NewSongDialog } from "@/components/new-song-dialog";
 import { cardPlatforms, SongCard } from "@/components/song-card";
 import { Input } from "@/components/ui/input";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 // The filters each song appears under ("Needs review", "Errors", ...), from its card's chips.
 const filtersOf = (s: Song) => songSummary(cardPlatforms(s).map((p) => chipState(p))).filters;
 
-export function LibraryView({ songs, artists, banner }: { songs: Song[]; artists: string[]; banner?: React.ReactNode }) {
+export function LibraryView({ songs, artists, banner, removed = [] }: { songs: Song[]; artists: string[]; banner?: React.ReactNode; removed?: RemovedSong[] }) {
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [filter, setFilter] = useState<SongFilter>("all");
@@ -98,6 +100,41 @@ export function LibraryView({ songs, artists, banner }: { songs: Song[]; artists
           ))}
         </div>
       )}
+      {removed.length ? <DeletedSongs removed={removed} /> : null}
+    </div>
+  );
+}
+
+// "Deleted songs (N)" under the cards, folded: each with Restore (its folder comes back from songs\_removed\).
+function DeletedSongs({ removed }: { removed: RemovedSong[] }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function restore(id: string) {
+    setError(null);
+    const r = await api(`/api/songs/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "restore" }) });
+    const d = (await r.json().catch(() => ({}))) as { error?: string };
+    if (!r.ok || d.error) return setError(d.error ?? `The studio answered ${r.status}`);
+    router.refresh();
+  }
+  return (
+    <div data-deleted-songs className="flex flex-col gap-1 text-xs">
+      <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="text-muted-foreground hover:text-foreground self-start underline underline-offset-2">
+        Deleted songs ({removed.length})
+      </button>
+      {open
+        ? removed.map((s) => (
+            <div key={s.id} className="flex items-center gap-3 pl-4">
+              <span>
+                {s.title} <span className="text-muted-foreground">· {s.artist}</span>
+              </span>
+              <button type="button" data-song-restore={s.title} onClick={() => void restore(s.id)} className="text-brand underline underline-offset-2">
+                Restore
+              </button>
+            </div>
+          ))
+        : null}
+      {error ? <p className="text-red-300">{error}</p> : null}
     </div>
   );
 }

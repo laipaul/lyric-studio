@@ -4,6 +4,15 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Song title and Delete song ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026. On a song's page, **click the title** (or the pencil) to change it: Enter
+  saves, Escape cancels; the song folder is renamed to match (not while it renders).
+- The ⋯ next to the title: **Delete song…** asks first, then moves the whole song folder (song, lyrics, clips,
+  videos) to `songs\_removed\` and goes back to the Library. Nothing is deleted: **Deleted songs** at the bottom
+  of the Library has **Restore** (the song comes back with its videos, marks and settings).
+- Tests: song-delete.test.ts (rename and its folder, delete hides it from the Library and Themes, restore);
+  browser: song-title.e2e.ts (title in place, folder follows, delete asks, Library without it, restore).
+
 ### Themes, step 3: the Themes page and the theme on Library cards ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026 ("redesign the app around themes"). **Themes** is in the top menu
   (Library · Themes · Collections · Releases): a Canva-style gallery of tall tiles, each theme on your newest
@@ -74,18 +83,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: storyboard.e2e.ts (viewer, timeline and command bar on one 1440×1000 screen for Reels and for
   YouTube; the bar holds the source, the transport, Follow / Zoom and Next: Make; nothing between the viewer
   and the timeline).
-
-### Transport bar under the video ✅ (to verify on the Windows PC)
-- Asked by the user on 31 Oct 2026. Under the Shape page's viewer, instead of the play button inside the
-  video: ⏮ go to start, ⏪ back one bar, ▶/⏸ play or pause, ⏹ stop (pause and back to the start), ⏩ forward
-  one bar, ⏭ go to end. The steps land on bar lines (where cuts fall); Shift-click moves one frame.
-- On the right: the time (0:35 / 1:30), **Speed** 1x / 0.75x / 0.5x / 0.25x to have time to check the lyrics,
-  **Loop** on / off, mute with a **volume slider**, full screen. Speed and volume change only the preview, never
-  the song file or a made video.
-- Keys (when no field is being typed in): Space play / pause, ← / → one bar (Shift: one frame), Home, End.
-- Tests: transport.test.ts (bar steps forward / back, the grace while playing, frame steps); browser:
-  storyboard.e2e.ts (each button, Shift steps, 0.5x plays at half speed, Loop plays on from the start, mute and
-  the volume slider, the keys).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -303,7 +300,7 @@ before Releases step 2 and the Lyric Sheet, one step each, plan first:
 **Themes (approved by the user 31 Oct 2026, one step each, plan first):**
 - ✅ (built 31 Oct, to verify) **T1. Theme foundation + Shape Theme panel** (see Latest steps).
 - ✅ (built 31 Oct, to verify) **T1b. Building a theme:** + New theme and the theme editor with Save / Save as new / Cancel (see Latest steps).
-- **T2. Editable song title + Delete song** (moves to songs\_removed\ with Restore, like Collections).
+- ✅ (built 31 Oct, to verify) **T2. Editable song title + Delete song** (moves to songs\_removed\ with Restore, like Collections).
 - ✅ (built 31 Oct, to verify) **T3. Themes page** in the top nav (Library · Themes · Collections · Releases): Canva-style gallery (tall
   preview tiles that play on hover, filter chips) and a theme detail view (big preview on your own song, Use this
   theme, Duplicate / Edit, designer credit, favourite, more like this); create / duplicate / edit / delete (to

@@ -11,7 +11,7 @@ import { eq } from "drizzle-orm";
 import { folderClips, importClipsInto, removeClipFrom, restoreClipTo, type ClipAsset, type ImportResult } from "./assets";
 import { rememberCollection, rememberedCollection, updateProjectSettings } from "./project-settings";
 import { readRecipe, writeRecipe } from "./recipe";
-import { COLLECTIONS_DIR, moveEntry, relocatePaths, REMOVED_COLLECTIONS_DIR, sharedCollections, songBusy, songPathsById } from "./song-folder";
+import { COLLECTIONS_DIR, isRemovedSong, moveEntry, relocatePaths, REMOVED_COLLECTIONS_DIR, sharedCollections, songBusy, songPathsById } from "./song-folder";
 
 export type CollectionSummary = {
   name: string;
@@ -39,6 +39,7 @@ export function collectionFolder(ws: Workspace, name: string): string {
 function songsByCollection(ws: Workspace): Map<string, CollectionSummary["songs"]> {
   const out = new Map<string, CollectionSummary["songs"]>();
   for (const p of ws.db.select().from(projectTable).all()) {
+    if (isRemovedSong(p.folder)) continue; // a deleted song (songs\_removed\)
     let names: string[] = [];
     try {
       const recipe = readRecipe(songPathsById(ws, p.id).recipe);

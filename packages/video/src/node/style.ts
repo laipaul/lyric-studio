@@ -32,7 +32,7 @@ import {
   type RecipeInput,
   type SongRecipe,
 } from "./recipe";
-import { sharedCollections, songPathsById } from "./song-folder";
+import { isRemovedSong, sharedCollections, songPathsById } from "./song-folder";
 import { brandThemes, ensureAllThemes, ensureSongTheme, isThemeField, listThemes, loadTheme, removedThemes, setThemeLook, themeLayer, type RemovedTheme, type ThemeLook } from "./themes";
 import { SHORT_LABELS } from "./exports";
 
@@ -212,7 +212,8 @@ export function styleData(ws: Workspace, projectId: string): StyleData {
 function themesOf(ws: Workspace, current: string | null, catalog: FontCatalog): { theme: StyleTheme | null; themes: StyleTheme[] } {
   ensureAllThemes(ws, catalog); // every song's theme and the brand's default theme are offered
   const users = new Map<string, string[]>();
-  for (const p of ws.db.select({ id: projectTable.id, title: projectTable.title }).from(projectTable).all()) {
+  for (const p of ws.db.select({ id: projectTable.id, title: projectTable.title, folder: projectTable.folder }).from(projectTable).all()) {
+    if (isRemovedSong(p.folder)) continue; // a deleted song
     const file = songPathsById(ws, p.id).recipe;
     if (!file || !existsSync(file)) continue;
     try {
@@ -397,7 +398,7 @@ export type ThemesPageData = { themes: ThemeCard[]; fonts: StyleFont[]; sampleLi
 export function themesPageData(ws: Workspace): ThemesPageData {
   const catalog = loadFontCatalog(ws.dir);
   ensureAllThemes(ws, catalog);
-  const projects = ws.db.select({ id: projectTable.id, title: projectTable.title, created: projectTable.created_at }).from(projectTable).all();
+  const projects = ws.db.select({ id: projectTable.id, title: projectTable.title, created: projectTable.created_at, folder: projectTable.folder }).from(projectTable).all().filter((p) => !isRemovedSong(p.folder));
   const songs = projects.map((p) => {
     let theme: string | null = null;
     try {
