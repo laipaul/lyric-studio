@@ -4,6 +4,16 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Review: one card per platform at the top ✅ (to verify on the Windows PC)
+- Asked by the user on 1 Nov 2026 ("the top titles are confusing; the goal is to see, for a song, what has
+  been built per platform"; the versions below stay as they are: dates, Approve, Post, …).
+- The top of Review → Videos is now one card per platform (the song's own platforms first, then any made):
+  "N versions · M approved · K to check", the latest date, and **Make another** (the former "Try another
+  take"; not for the Canvas). A platform with nothing made yet says so, with **Make**. Clicking a card shows
+  only that platform; clicking again (or "show all") shows every platform.
+- Gone: the All / Reels / … filter chips, the "Try another take" row and the "Review & Post · N to review"
+  line. Favourites only and Show discarded stay, small, on the right.
+
 ### Make: pickers instead of tick boxes, the Generate panel in clear groups, theme on every video ✅ (to verify on the Windows PC)
 - Asked by the user on 1 Nov 2026 ("only make tick boxes when the choices are limited and clear"; "rearrange
   this screen, feels messy").

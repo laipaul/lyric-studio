@@ -178,9 +178,12 @@ export function SongStages({
                 </button>
               </div>
             ) : null}
-            <p className="text-muted-foreground text-xs" data-work-status>
-              <span className="text-foreground font-medium">{current.name}</span> · <span className={TONE[statuses[stage].tone]}>{statuses[stage].text}</span>
-            </p>
+            {/* Review says it per platform in its own overview (1 Nov 2026), so no summary line there. */}
+            {stage !== "review" ? (
+              <p className="text-muted-foreground text-xs" data-work-status>
+                <span className="text-foreground font-medium">{current.name}</span> · <span className={TONE[statuses[stage].tone]}>{statuses[stage].text}</span>
+              </p>
+            ) : null}
             {stage === "shape" && themeNow && !themeMode ? (
               // What belongs to whom, in one line (1 Nov 2026): the look comes from the theme, the content is this song's.
               <p data-look-content className="-mt-3 flex flex-wrap items-center gap-1.5 text-xs">

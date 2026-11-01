@@ -164,7 +164,7 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
           </div>
         </TabsContent>
         <TabsContent value="videos">
-          <SongView projectId={song.id} songTitle={song.title} runs={runs} settings={settings} />
+          <SongView projectId={song.id} songTitle={song.title} runs={runs} settings={settings} platforms={(song.wanted ?? []).filter((n) => labels[n]).map((n) => ({ name: n, label: labels[n] }))} />
         </TabsContent>
         <TabsContent value="post">
           <PostTab projectId={song.id} songTitle={song.title} groups={approved} offered={offered} />
