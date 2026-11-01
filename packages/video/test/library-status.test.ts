@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { chipCount, chipState, songSummary, sortSongs, type ChipInput } from "../src/library-status";
 
-const chip = (status: ChipInput["status"], videos = 0, approved = 0): ChipInput => ({ status, videos, approved });
+const chip = (status: ChipInput["status"], videos = 0, approved = 0, approvedLatest = approved): ChipInput => ({ status, videos, approved, approvedLatest });
 
 describe("chip state", () => {
   it("grey not made, amber to review, green approved, red failed / stopped", () => {
@@ -23,6 +23,15 @@ describe("chip state", () => {
     expect(chipState(chip("PASS", 0, 2))).toBe("ready"); // approved in an older run
     expect(chipCount(chip("PASS", 0, 2))).toBe("2");
     expect(chipState(chip("FAILED", 0, 1))).toBe("ready"); // something approved to post wins over a failed newer run
+  });
+
+  it("a new render starts unreviewed: approval counts in the latest run, older ones only when it kept nothing", () => {
+    expect(chipState(chip("PASS", 1, 1, 0))).toBe("review"); // new unapproved run after an older approved one
+    expect(chipState(chip("PASS", 2, 2, 1))).toBe("ready"); // approved in the latest run
+    expect(chipState(chip("PASS", 0, 1, 0))).toBe("ready"); // latest run all discarded: older approval stands
+    expect(chipState(chip("FAILED", 1, 1, 0))).toBe("error");
+    expect(chipState(chip("Rendering", 1, 1, 0))).toBe("rendering");
+    expect(chipCount(chip("PASS", 1, 1, 0))).toBe("1"); // review shows the kept videos
   });
 
   it("the number: approved when ready, made when to review, ! for an error", () => {

@@ -111,6 +111,15 @@ export function resumeCommandFor(command: string | null): string | null {
   return /\s--resume(\s|$)/.test(command) ? command : `${command} --resume`;
 }
 
+// A mark belongs to a video only when it was made after the video: a mark older than the manifest's
+// created_at is left over from an earlier video on the same path (resume, rerender, re-used folder), so a
+// new render always starts unapproved.
+export function markApplies(mark: { updated_at: Date } | undefined | null, createdAt: string | undefined | null): boolean {
+  if (!mark) return false;
+  const made = createdAt ? Date.parse(createdAt) : NaN;
+  return Number.isNaN(made) || mark.updated_at.getTime() >= made;
+}
+
 type JobRow = { status: string; error: string | null; started: Date | null; pid: number | null; seed: number; overrides: Record<string, unknown> | null };
 
 // Jobs still in trouble: interrupted / failed ones whose video (same seed = same vN) has not been made
@@ -163,7 +172,8 @@ export function songRuns(ws: Workspace, projectId: string, labels: Record<string
         }
         command ??= m.command ?? null;
         const id = storedPath(ws, path.join(dir, `${n}.manifest.json`));
-        const mark = marks.get(id);
+        const found = marks.get(id);
+        const mark = markApplies(found, m.created_at) ? found : undefined; // a stale mark is no mark
         const settings = (m.settings ?? {}) as Record<string, unknown>;
         const rel = (f: string) => (files.includes(f) ? storedPath(ws, path.join(dir, f)) : null);
         videos.push({
@@ -260,9 +270,11 @@ export function setVideoMark(ws: Workspace, projectId: string, video: string, ch
   })();
   if (!exportsRel || video.includes("..") || !video.startsWith(`${exportsRel}/`) || !/\/v\d+\.manifest\.json$/.test(video)) throw new Error(`Not a video of this song: ${video}`);
   if (!existsSync(absPath(ws, video))) throw new Error(`Video not found: ${video}`);
-  const current = ws.db.select().from(videoMark).where(eq(videoMark.video, video)).get();
+  const row = ws.db.select().from(videoMark).where(eq(videoMark.video, video)).get();
+  const created = readJson<Manifest>(absPath(ws, video))?.created_at;
+  const current = markApplies(row, created) ? row : undefined; // an older video's mark is not carried over
   const next = { favourite: change.favourite ?? current?.favourite ?? false, status: change.status ?? current?.status ?? "generated" };
-  if (current) ws.db.update(videoMark).set({ ...next, updated_at: new Date() }).where(eq(videoMark.id, current.id)).run();
+  if (row) ws.db.update(videoMark).set({ ...next, updated_at: new Date() }).where(eq(videoMark.id, row.id)).run();
   else ws.db.insert(videoMark).values({ project_id: projectId, video, ...next }).run();
   return next;
 }

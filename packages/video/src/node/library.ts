@@ -33,7 +33,8 @@ export type PlatformCount = {
   details: string[]; // why WARN / FAILED / interrupted (per video, from its QA report)
   resumeCommand: string | null; // interrupted: the command that finishes the run
   resumeFolder: string | null; // interrupted: the run folder to resume (one click in the studio)
-  approved: number; // approved videos of this platform, in any run (Step H: the chip is green)
+  approved: number; // approved videos of this platform, in any run (the number on the chip)
+  approvedLatest: number; // approved videos in its latest run (Step H: green only when the newest render is approved)
 };
 export type SongCard = {
   id: string;
@@ -83,8 +84,9 @@ export function songCard(ws: Workspace, p: typeof projectTable.$inferSelect, lab
     const withIt = runs.map((r) => ({ run: r, pr: r.platforms.find((x) => x.name === name) })).filter((x) => x.pr);
     const latest = withIt[withIt.length - 1];
     const approved = withIt.reduce((n, x) => n + (x.pr?.videos.filter((v) => v.mark.status === "approved").length ?? 0), 0);
-    if (rendering.has(name)) return { name, label, videos: latest?.pr?.videos.length ?? 0, status: "Rendering", runs: withIt.length, details: ["rendering now"], resumeCommand: null, resumeFolder: null, approved };
-    if (!latest?.pr) return { name, label, videos: 0, status: "none", runs: 0, details: [], resumeCommand: null, resumeFolder: null, approved };
+    const approvedLatest = latest?.pr?.videos.filter((v) => v.mark.status === "approved").length ?? 0;
+    if (rendering.has(name)) return { name, label, videos: latest?.pr?.videos.length ?? 0, status: "Rendering", runs: withIt.length, details: ["rendering now"], resumeCommand: null, resumeFolder: null, approved, approvedLatest };
+    if (!latest?.pr) return { name, label, videos: 0, status: "none", runs: 0, details: [], resumeCommand: null, resumeFolder: null, approved, approvedLatest };
     const state = platformState(latest.pr);
     return {
       name,
@@ -96,6 +98,7 @@ export function songCard(ws: Workspace, p: typeof projectTable.$inferSelect, lab
       resumeCommand: state.status === "interrupted" ? latest.run.resumeCommand : null,
       resumeFolder: state.status === "interrupted" ? latest.run.folder : null,
       approved,
+      approvedLatest,
     };
   });
   const last = runs[runs.length - 1];

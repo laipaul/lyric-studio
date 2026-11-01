@@ -4,6 +4,17 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Bug fix: a new render starts unapproved ✅ (to verify on the Windows PC)
+- Reported by the user on 1 Nov 2026: a newly made YouTube video already showed "Approved".
+- Cause: marks (favourite / approved / discarded) are stored by the video's file path only, so a new render
+  landing on a path that had a mark (resume, rerender, a re-used run folder) inherited it.
+- Fix: a mark older than the video's manifest (created_at) is ignored (`markApplies` in node/exports.ts) by the
+  Videos tab and when marking again; the video starts as "generated".
+- Chips: a platform is green only when its latest run has an approved video (or, when that run kept none,
+  an older run does); a fresh unreviewed render shows "to review" again. The number stays "approved in any run".
+- Tests: library-status.test.ts (new run after an approved one, approve, all discarded), exports.test.ts
+  (stale mark ignored, not carried over).
+
 ### Theme cover: each theme has its own picture ✅ (to verify on the Windows PC)
 - Asked by the user on 1 Nov 2026 (themes looked like songs: their previews showed a song's clip or cover and
   that song's lyric lines).
@@ -98,27 +109,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   effect on the real lyrics.
 - Tests: slides-effects.test.ts, effects tests for all 29; retext-lrc.test.ts, lyrics-view.test.ts (fix keeps timing and hand-set start); browser: textboard
   (Text → Fix), storyboard (effect name over the frame, gone on play), song-stages.
-
-### Themes, step 6: lyric effects gallery, nine new effects, Emphasis word, title styles ✅ (to verify on the Windows PC)
-- Asked by the user on 31 Oct 2026 ("make all of them", with Canva MotionText / TypeCraft references).
-- **Motion** is compact: one effect picker; it opens a gallery of tiles (each plays the effect on your own
-  lines when pointed at) with filter chips All · Word · Calm · Slide · Bounce · Wave · 3D · Glitch · Type.
-  Effects have plain names (Karaoke, Blur in, Handwriting…); the stored names stay the same.
-- New effects (src/effects/trending.ts): Word pop, Highlight sweep, Mask reveal, 3D tilt, Glitch, Wave,
-  Echo stack, Slice, Kinetic stack (one or two big words at a time). Already there under plain names:
-  Typewriter, Blur in / Focus pull, Handwriting (ink), Beat pulse = Breathe "with the beat".
-- **Emphasis word** add-on (recipe/theme emphasis on): the key word of each line (the one held longest,
-  never a small word) in the hook font, a touch bigger, in the accent colour.
-- **Cards → Title**: Style (Plain, Outline, Layered outline, 3D extrude, Label bar that wipes in) and Shape
-  (Straight, Arc, Wave), with a live sample of the song's title; drawn on the title card (YouTube, and the
-  title opening on Reels / TikTok / Shorts) and on the Reel cover.
-- Picture settings and Intensity are dropdowns now. The brand pairing is called "Artist's fonts".
-- Not yet: marking the emphasis word by hand in lyrics.txt; glitch on hard cuts (it glitches as a line lands
-  and briefly every few seconds).
-- Tests: effects.test.ts (all 23 effects: smooth, readable at the stamp; glitch may jump sideways),
-  trending-effects.test.ts (emphasis pick, kinetic groups, names and gallery kinds), picture.test.ts (title
-  styles and shapes); browser: song-stages (picker, gallery chips, dropdowns, title style saved), storyboard,
-  themes, pairings, style-lock, videos-post, textboard.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

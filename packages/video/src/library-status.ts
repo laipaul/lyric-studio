@@ -1,7 +1,7 @@
 // Library cards (Step H): one colour system for every platform chip and one summary per song.
 //   grey   none      not made yet (or every video discarded)
 //   amber  review    made, not approved yet
-//   green  ready     at least one approved video (in any run)
+//   green  ready     an approved video in the latest run (or, when that run kept none, in an older one)
 //   red    error     the latest run failed;  stopped: it was stopped / interrupted (Resume makes the rest)
 //   pulse  rendering
 // Pure: the studio and the tests use it the same way.
@@ -11,12 +11,14 @@ export type ChipState = "none" | "rendering" | "ready" | "review" | "error" | "s
 export type ChipInput = {
   status: "PASS" | "WARN" | "FAILED" | "interrupted" | "Rendering" | "none"; // the latest run (QA-level)
   videos: number; // kept (not discarded) in the latest run
-  approved: number; // approved, in any run
+  approved: number; // approved, in any run (the number shown)
+  approvedLatest: number; // approved, in the latest run: a new unreviewed render is "review" again
 };
 
 export function chipState(p: ChipInput): ChipState {
   if (p.status === "Rendering") return "rendering";
-  if (p.approved > 0) return "ready";
+  if (p.approvedLatest > 0) return "ready";
+  if (p.videos === 0 && p.approved > 0) return "ready"; // latest run all discarded: the older approval stands
   if (p.status === "FAILED") return "error";
   if (p.status === "interrupted") return "stopped";
   if (p.status === "none" || p.videos === 0) return "none";

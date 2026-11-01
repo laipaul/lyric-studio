@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import os from "node:os";
 import path from "node:path";
 
-import { ffmpegBin, openWorkspace, project, renderJob, variation, type Workspace } from "@lyric/db";
+import { ffmpegBin, openWorkspace, project, renderJob, variation, videoMark, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -14,6 +14,7 @@ import {
   fillCaption,
   firstHookLine,
   makeOwnCaptionTemplate,
+  markApplies,
   markInterruptedJobs,
   parseQaReport,
   platformState,
@@ -166,6 +167,27 @@ describe("song runs (also from the command line)", () => {
     setVideoMark(ws, projectId, id, { status: "generated" });
     expect(() => setVideoMark(ws, projectId, "studio.db", { favourite: true })).toThrow(/Not a video of this song/);
     expect(() => setVideoMark(ws, "other", id, { favourite: true })).toThrow(/Not a video of this song/);
+  });
+});
+
+describe("a new render starts unapproved", () => {
+  it("markApplies: only a mark made after the video was created belongs to it", () => {
+    const at = (iso: string) => ({ updated_at: new Date(iso) });
+    expect(markApplies(undefined, "2026-10-25T10:00:00.000Z")).toBe(false);
+    expect(markApplies(at("2026-10-25T09:59:59.000Z"), "2026-10-25T10:00:00.000Z")).toBe(false);
+    expect(markApplies(at("2026-10-25T10:00:00.000Z"), "2026-10-25T10:00:00.000Z")).toBe(true);
+    expect(markApplies(at("2026-10-26T10:00:00.000Z"), "2026-10-25T10:00:00.000Z")).toBe(true);
+    expect(markApplies(at("2020-01-01T00:00:00.000Z"), undefined)).toBe(true); // no date to compare: keep the mark
+  });
+
+  it("a stale mark row (older than the manifest) is ignored by songRuns and not carried over by setVideoMark", () => {
+    const rel = `${songPathsById(ws, projectId).exportsRel}/2026-10-25_1000/reels/v1.manifest.json`;
+    ws.db.insert(videoMark).values({ project_id: projectId, video: rel, favourite: true, status: "approved", updated_at: new Date("2026-10-24T00:00:00Z") }).run();
+    expect(songRuns(ws, projectId)[0].platforms[0].videos[0].mark).toEqual({ favourite: false, status: "generated" });
+    expect(setVideoMark(ws, projectId, rel, { favourite: true })).toEqual({ favourite: true, status: "generated" }); // status not inherited
+    expect(songRuns(ws, projectId)[0].platforms[0].videos[0].mark).toEqual({ favourite: true, status: "generated" });
+    setVideoMark(ws, projectId, rel, { favourite: false }); // back to the neutral state for the other tests
+    ws.db.delete(videoMark).where(eq(videoMark.video, rel)).run();
   });
 });
 

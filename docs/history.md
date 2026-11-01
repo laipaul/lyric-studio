@@ -4,6 +4,27 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Themes, step 6: lyric effects gallery, nine new effects, Emphasis word, title styles ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026 ("make all of them", with Canva MotionText / TypeCraft references).
+- **Motion** is compact: one effect picker; it opens a gallery of tiles (each plays the effect on your own
+  lines when pointed at) with filter chips All · Word · Calm · Slide · Bounce · Wave · 3D · Glitch · Type.
+  Effects have plain names (Karaoke, Blur in, Handwriting…); the stored names stay the same.
+- New effects (src/effects/trending.ts): Word pop, Highlight sweep, Mask reveal, 3D tilt, Glitch, Wave,
+  Echo stack, Slice, Kinetic stack (one or two big words at a time). Already there under plain names:
+  Typewriter, Blur in / Focus pull, Handwriting (ink), Beat pulse = Breathe "with the beat".
+- **Emphasis word** add-on (recipe/theme emphasis on): the key word of each line (the one held longest,
+  never a small word) in the hook font, a touch bigger, in the accent colour.
+- **Cards → Title**: Style (Plain, Outline, Layered outline, 3D extrude, Label bar that wipes in) and Shape
+  (Straight, Arc, Wave), with a live sample of the song's title; drawn on the title card (YouTube, and the
+  title opening on Reels / TikTok / Shorts) and on the Reel cover.
+- Picture settings and Intensity are dropdowns now. The brand pairing is called "Artist's fonts".
+- Not yet: marking the emphasis word by hand in lyrics.txt; glitch on hard cuts (it glitches as a line lands
+  and briefly every few seconds).
+- Tests: effects.test.ts (all 23 effects: smooth, readable at the stamp; glitch may jump sideways),
+  trending-effects.test.ts (emphasis pick, kinetic groups, names and gallery kinds), picture.test.ts (title
+  styles and shapes); browser: song-stages (picker, gallery chips, dropdowns, title style saved), storyboard,
+  themes, pairings, style-lock, videos-post, textboard.
+
 ### Themes, step 5: background and colours (the theme's Picture) ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026 ("how about the background, colors?"). The theme editor has a new
   **Picture** section, and Colours has a **Text colour** next to the accent:
