@@ -1001,7 +1001,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
 export function themePreview(look: Record<string, unknown>, fonts: StyleFont[], sampleLines: string[], background: string | null = null): LookPreviewProps {
   const fields = Object.entries(look).map(([field, value]) => ({ field, value })) as unknown as StyleField[];
   const p = lookOf({ fields, fonts, sampleLines } as unknown as StyleData, { dirty: false, hovered: null, pairView: null, part: "verse" }).fallback;
-  // background: a frame of a real clip (workspace-relative), so the theme is seen as in a video.
+  // background: the Theme cover (workspace-relative; Themes page) or a frame of the song's clip (Shape).
   return background ? { ...p, background: `/api/files/${background}` } : p;
 }
 

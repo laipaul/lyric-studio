@@ -2,7 +2,7 @@
 // from (library, the artist's brand, the song), per platform where it can differ, and
 // the song's own changes: set, reset (back to inherited), lock / unlock. Writes song.json only.
 // No rendering code is imported here, so the studio's server can use it directly.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { absPath, project as projectTable, REPO_ROOT, type Workspace } from "@lyric/db";
@@ -33,8 +33,7 @@ import {
   type SongRecipe,
 } from "./recipe";
 import { isRemovedSong, sharedCollections, songPathsById } from "./song-folder";
-import { anchorClips } from "./lyrics-view";
-import { brandThemes, ensureAllThemes, ensureSongTheme, isThemeField, listThemes, loadTheme, removedThemes, setThemeLook, themeLayer, type RemovedTheme, type ThemeLook } from "./themes";
+import { brandThemes, ensureAllThemes, ensureSongTheme, isThemeField, listThemes, loadTheme, removedThemes, setThemeLook, themeCover, themeLayer, type RemovedTheme, type ThemeLook } from "./themes";
 import { SHORT_LABELS } from "./exports";
 
 // The characters the font preview checks (French accents).
@@ -411,6 +410,7 @@ export function setBrandTitleFont(ws: Workspace, o: { artist: string; family: st
 
 // The Themes page (31 Oct 2026): every theme with its songs, the fonts to draw them, a few lyric lines to
 // preview them on (the newest song with lyrics), the songs to use a theme for, and the deleted themes.
+export const THEME_SAMPLE_LINES = ["Your lyric line here", "Your chorus here"] as const;
 export type ThemeCard = StyleTheme & { author: string; licence: string; createdAt: string; songs: { id: string; title: string }[]; brandDefault: string | null; background?: string | null };
 export type ThemesPageData = { themes: ThemeCard[]; fonts: StyleFont[]; sampleLines: string[]; sampleSong: string | null; songs: { id: string; title: string; theme: string | null }[]; removed: RemovedTheme[] };
 
@@ -445,56 +445,20 @@ export function themesPageData(ws: Workspace): ThemesPageData {
       brandDefault: defaults.has(t.name) ? defaults.get(t.name) || "" : null,
     };
   });
-  let sample: string[] = [];
-  let sampleSong: string | null = null;
-  for (const p of [...projects].sort((a, b) => b.created.getTime() - a.created.getTime())) {
-    try {
-      const lines = sampleLines(ws, p.id);
-      if (lines.length) {
-        sample = lines;
-        sampleSong = p.title;
-        break;
-      }
-    } catch {
-      // no lyrics yet
-    }
-  }
+  // Neutral words on every theme preview (1 Nov 2026): lines from one of the songs made a theme look like it.
+  const sample = [...THEME_SAMPLE_LINES];
+  const sampleSong: string | null = null;
   return { themes, fonts: styleFonts(catalog), sampleLines: sample, sampleSong, songs: songs.sort((a, b) => a.title.localeCompare(b.title)), removed: removedThemes(ws.dir) };
 }
 
-// The Themes page with a real picture behind each theme: a frame of a clip of the first song that uses it
-// (else of the newest song with clips), else that song's cover; null when no song has either.
+// The Themes page with each theme's own picture: its Theme cover (themes\<name>\cover.jpg), else none (the
+// tile draws a neutral backdrop in the theme's colours). Never a song's clip or cover (1 Nov 2026: themes
+// showing a song's picture looked like that song).
 export async function themesPageWithFrames(ws: Workspace): Promise<ThemesPageData> {
   const data = themesPageData(ws);
-  const frames = new Map<string, string | null>();
-  const frameOf = async (id: string): Promise<string | null> => {
-    if (frames.has(id)) return frames.get(id)!;
-    let frame: string | null = null;
-    try {
-      frame = (await anchorClips(ws, id)).clips.find((c) => c.thumb)?.thumb ?? null;
-    } catch {
-      // no clips yet
-    }
-    if (!frame) {
-      const cover = songPathsById(ws, id).cover;
-      frame = cover && existsSync(cover) ? path.relative(ws.dir, cover).split(path.sep).join("/") : null;
-    }
-    frames.set(id, frame);
-    return frame;
-  };
-  const newest = [...data.songs].reverse();
-  let any: string | null | undefined;
   for (const t of data.themes) {
-    let bg: string | null = null;
-    for (const s of t.songs) if ((bg = await frameOf(s.id))) break;
-    if (!bg) {
-      if (any === undefined) {
-        any = null;
-        for (const s of newest) if ((any = await frameOf(s.id))) break;
-      }
-      bg = any;
-    }
-    t.background = bg;
+    const cover = themeCover(ws.dir, t.name);
+    t.background = cover ? `${path.relative(ws.dir, cover).split(path.sep).join("/")}?v=${Math.round(statSync(cover).mtimeMs)}` : null;
   }
   return data;
 }

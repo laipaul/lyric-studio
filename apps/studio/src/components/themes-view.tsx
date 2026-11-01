@@ -41,9 +41,13 @@ export function ThemesView() {
   }, []);
 
   async function act(body: Record<string, unknown>): Promise<boolean> {
+    return send("/api/themes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  }
+  // Any Themes request that answers with the page's data (the Theme cover's upload and Remove too).
+  async function send(url: string, init: RequestInit): Promise<boolean> {
     setError(null);
     try {
-      const r = await api("/api/themes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const r = await api(url, init);
       const d = (await r.json()) as ThemesPageData & { error?: string };
       if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
       setData(d);
@@ -149,7 +153,7 @@ export function ThemesView() {
         </div>
       ) : null}
 
-      {detail ? <ThemeDetail theme={detail} data={data} act={act} onOpen={setOpen} onClose={() => setOpen(null)} /> : null}
+      {detail ? <ThemeDetail theme={detail} data={data} act={act} send={send} onOpen={setOpen} onClose={() => setOpen(null)} /> : null}
     </div>
   );
 }
@@ -180,10 +184,10 @@ function ThemeTile({ theme, data, onOpen }: { theme: ThemeCard; data: ThemesPage
             {vignetteBackground(pic.vignette) ? <span aria-hidden className="absolute inset-0" style={{ background: vignetteBackground(pic.vignette)! }} /> : null}
             {pic.backing === "band" ? <span aria-hidden className="absolute inset-x-0 top-1/3 h-1/3" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.42) 35%, rgba(0,0,0,0.42) 65%, rgba(0,0,0,0) 100%)" }} /> : null}
             <span className="relative line-clamp-2 text-lg leading-tight" style={{ ...fam("verse"), ...textLook }}>
-              {data.sampleLines[0] || "Your words here"}
+              {data.sampleLines[0] || "Your lyric line here"}
             </span>
             <span className="relative line-clamp-2 text-lg leading-tight" style={{ ...fam("hook"), ...textLook, color: accent }}>
-              {data.sampleLines[1] || "The chorus"}
+              {data.sampleLines[1] || "Your chorus here"}
             </span>
           </div>
         )}
@@ -202,7 +206,7 @@ function ThemeTile({ theme, data, onOpen }: { theme: ThemeCard; data: ThemesPage
 
 // The detail view (like Canva's template page): the theme playing large, name, designer credit, the songs,
 // the main actions and "More like this".
-function ThemeDetail({ theme, data, act, onOpen, onClose }: { theme: ThemeCard; data: ThemesPageData; act: (body: Record<string, unknown>) => Promise<boolean>; onOpen: (name: string) => void; onClose: () => void }) {
+function ThemeDetail({ theme, data, act, send, onOpen, onClose }: { theme: ThemeCard; data: ThemesPageData; act: (body: Record<string, unknown>) => Promise<boolean>; send: (url: string, init: RequestInit) => Promise<boolean>; onOpen: (name: string) => void; onClose: () => void }) {
   const [naming, setNaming] = useState<string | null>(null);
   const [song, setSong] = useState<string>(theme.songs[0]?.id ?? data.songs[0]?.id ?? "");
   const [notice, setNotice] = useState<string | null>(null);
@@ -272,6 +276,39 @@ function ThemeDetail({ theme, data, act, onOpen, onClose }: { theme: ThemeCard; 
               <span className="text-muted-foreground w-20 shrink-0 text-xs">About</span>
               <input key={`${theme.name}-description`} data-theme-detail-description className={cn(input, "flex-1")} defaultValue={theme.description} placeholder="a line about the mood" onBlur={(e) => e.target.value.trim() !== theme.description && void act({ action: "details", name: theme.name, description: e.target.value })} />
             </label>
+            {/* Theme cover (1 Nov 2026): the theme's own picture, kept in its folder; without one its previews show a neutral backdrop in its colours (never a song's picture). */}
+            <div data-theme-cover-row className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground w-20 shrink-0 text-xs">Theme cover</span>
+              {theme.background ? (
+                // eslint-disable-next-line @next/next/no-img-element -- the theme folder's picture, served by /api/files
+                <img data-theme-cover alt="Theme cover" src={`/api/files/${theme.background}`} className="h-12 w-[27px] shrink-0 rounded border object-cover" />
+              ) : (
+                <span className="text-muted-foreground text-xs">none: a neutral backdrop in the theme&apos;s colours</span>
+              )}
+              <label className="bg-muted hover:bg-accent cursor-pointer rounded-md px-2.5 py-1 text-xs">
+                {theme.background ? "Change…" : "Set theme cover…"}
+                <input
+                  type="file"
+                  data-theme-cover-file
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!file) return;
+                    const form = new FormData();
+                    form.set("name", theme.name);
+                    form.set("file", file);
+                    void send("/api/themes/cover", { method: "POST", body: form });
+                  }}
+                />
+              </label>
+              {theme.background ? (
+                <button type="button" data-theme-cover-remove onClick={() => void send(`/api/themes/cover?name=${encodeURIComponent(theme.name)}`, { method: "DELETE" })} className="text-muted-foreground text-xs underline underline-offset-2">
+                  Remove
+                </button>
+              ) : null}
+            </div>
             <p data-theme-detail-songs className="text-sm">
               {theme.songs.length ? (
                 <>

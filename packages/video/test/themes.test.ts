@@ -1,6 +1,6 @@
 // Themes (31 Oct 2026): a song's look in themes\<name>\theme.json; the recipe order library -> brand ->
 // theme -> song -> run; the move of a song's look into a theme; changes for every song or only this one.
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -23,6 +23,11 @@ import {
   removedThemes,
   renameTheme,
   brandThemes,
+  setThemeCover,
+  removeThemeCover,
+  themeCover,
+  themesPageWithFrames,
+  THEME_SAMPLE_LINES,
   artistDefaultTheme,
   resolveRecipe,
   restoreTheme,
@@ -186,6 +191,29 @@ describe("songs and themes", () => {
     writeFileSync(file, JSON.stringify({ theme: "Gone" }));
     expect(() => styleData(ws, ids.Third)).toThrow(/Theme "Gone" not found/);
     expect(() => chooseTheme(ws, ids.Third, "Nope", catalog)).toThrow(/Theme "Nope" not found/);
+  });
+
+  it("Theme cover: its own picture in the theme folder; none = a neutral backdrop, never a song's picture", async () => {
+    const pic = path.join(root, "my cover.JPEG");
+    writeFileSync(pic, "jpeg bytes");
+    let page = await themesPageWithFrames(ws);
+    expect(page.themes.every((t) => t.background === null)).toBe(true); // no song pictures borrowed
+    expect(page.sampleLines).toEqual([...THEME_SAMPLE_LINES]);
+    expect(() => setThemeCover(wsDir, "Life Lyrics", pic, "notes.txt")).toThrow(/JPG, PNG or WebP/);
+    const cover = setThemeCover(wsDir, "Life Lyrics", pic, "my cover.JPEG");
+    expect(path.basename(cover)).toBe("cover.jpg");
+    expect(existsSync(pic)).toBe(true); // copied, the original stays
+    page = await themesPageWithFrames(ws);
+    expect(page.themes.find((t) => t.name === "Life Lyrics")!.background).toMatch(/^themes\/Life Lyrics\/cover\.jpg\?v=\d+$/);
+    const png = path.join(root, "b.png");
+    writeFileSync(png, "png bytes");
+    setThemeCover(wsDir, "Life Lyrics", png); // the old one goes to _replaced
+    expect(path.basename(themeCover(wsDir, "Life Lyrics")!)).toBe("cover.png");
+    const copy = duplicateTheme(wsDir, "Life Lyrics", "Cover Copy");
+    expect(path.basename(themeCover(wsDir, copy)!)).toBe("cover.png"); // a duplicate keeps the cover
+    removeThemeCover(wsDir, "Life Lyrics");
+    expect(themeCover(wsDir, "Life Lyrics")).toBeNull();
+    expect(readdirSync(path.join(wsDir, "themes", "Life Lyrics", "_replaced")).length).toBe(2); // nothing deleted
   });
 
   it("renaming the artist's default theme keeps it the default (brand.json follows)", () => {

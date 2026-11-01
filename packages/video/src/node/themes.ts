@@ -4,13 +4,16 @@
 //   WORKSPACE_DIR\themes\<name>\fonts\       font files the theme brings (later step: the Theme editor)
 //   WORKSPACE_DIR\themes\<name>\overlays\    transparent PNGs per format (later step)
 //   WORKSPACE_DIR\themes\<name>\preview.png  the tile picture (optional)
+//   WORKSPACE_DIR\themes\<name>\cover.jpg    the Theme cover (.jpg / .png / .webp; optional, set on the Themes page):
+//                                              the picture its previews show; without one, a neutral backdrop
+//                                              in the theme's colours (never a song's picture, 1 Nov 2026)
 // A song points to its theme with song.json "theme". In the recipe the theme sits above the artist's brand
 // and below the song: library -> brand -> brand (platform) -> theme -> theme (platform) -> song -> run.
 // The first time a song without a theme is read, its look moves into a theme (ensureSongTheme): a song
 // with no look of its own follows the artist's default theme (named after the artist, made from brand.json);
 // a song with its own fonts / effects / colour gets a theme named after it (or an identical existing one).
 // Nothing looks different afterwards.
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { project as projectTable, safeName, type Workspace } from "@lyric/db";
@@ -349,12 +352,58 @@ export function setThemeLook(
   return { theme: next.name, copied };
 }
 
-// Duplicates a theme (a new name; the song keeps its own until it is told to use the copy).
+// Duplicates a theme (a new name; the song keeps its own until it is told to use the copy). Its Theme cover
+// comes along.
 export function duplicateTheme(workspaceDir: string, name: string, newName?: string): string {
   const theme = loadTheme(workspaceDir, name);
   const copy = freeThemeName(workspaceDir, newName?.trim() || `${theme.name} copy`);
   writeTheme(workspaceDir, { ...theme, name: copy, description: `Made from ${theme.name}`, createdAt: new Date().toISOString() });
+  const cover = themeCover(workspaceDir, name);
+  if (cover) copyFileSync(cover, path.join(themeFolder(workspaceDir, copy), path.basename(cover)));
   return copy;
+}
+
+// ---- The Theme cover (1 Nov 2026): the theme's own picture, kept in its folder (portable with it) ----
+
+export const THEME_COVER_EXTS = [".jpg", ".jpeg", ".png", ".webp"] as const;
+
+export function themeCover(workspaceDir: string, name: string): string | null {
+  const dir = themeFolder(workspaceDir, name);
+  for (const ext of THEME_COVER_EXTS) {
+    const file = path.join(dir, `cover${ext}`);
+    if (existsSync(file)) return file;
+  }
+  return null;
+}
+
+// The cover in use goes to the theme folder's _replaced\ (nothing the user made is deleted).
+function retireCover(workspaceDir: string, name: string): string | null {
+  const cover = themeCover(workspaceDir, name);
+  if (!cover) return null;
+  const dir = path.join(themeFolder(workspaceDir, name), "_replaced");
+  mkdirSync(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*$/, "").replace("T", "-");
+  const to = path.join(dir, `cover-${stamp}${path.extname(cover)}`);
+  renameSync(cover, to);
+  return to;
+}
+
+// Sets the Theme cover from a picture file (copied in; the file itself is left where it is).
+export function setThemeCover(workspaceDir: string, name: string, file: string, originalName = file): string {
+  loadTheme(workspaceDir, name);
+  let ext = path.extname(originalName).toLowerCase();
+  if (ext === ".jpeg") ext = ".jpg";
+  if (!(THEME_COVER_EXTS as readonly string[]).includes(ext)) throw new Error("A Theme cover is a picture: JPG, PNG or WebP.");
+  retireCover(workspaceDir, name);
+  const to = path.join(themeFolder(workspaceDir, name), `cover${ext}`);
+  copyFileSync(file, to);
+  return to;
+}
+
+// Takes the Theme cover off (kept in _replaced\): the previews show the neutral backdrop again.
+export function removeThemeCover(workspaceDir: string, name: string): string | null {
+  loadTheme(workspaceDir, name);
+  return retireCover(workspaceDir, name);
 }
 
 // Renames a theme folder and every song.json pointing to it.

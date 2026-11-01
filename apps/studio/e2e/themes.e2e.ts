@@ -4,7 +4,7 @@
 // songs, Use this theme for the song, Edit on a song, Duplicate, Delete and Restore), and the theme on
 // the Library cards.
 import { execFileSync, spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -67,7 +67,7 @@ async function main() {
     await page.click("header nav a:has-text('Themes')");
     await page.waitForSelector("[data-themes-tile]");
     check((await page.$$("[data-themes-tile]")).length === 1, "the gallery: the brand's theme");
-    check(((await page.textContent("[data-themes-tile='Life Lyrics']")) ?? "").includes("2 songs") && ((await page.textContent("[data-themes-tile='Life Lyrics']")) ?? "").includes("Hold on to me"), "a tile: the theme on real lyric lines, with how many songs use it");
+    check(((await page.textContent("[data-themes-tile='Life Lyrics']")) ?? "").includes("2 songs") && ((await page.textContent("[data-themes-tile='Life Lyrics']")) ?? "").includes("Your lyric line here"), "a tile: the theme on neutral sample words (not a song's), with how many songs use it");
     await page.hover("[data-themes-tile='Life Lyrics']");
     await page.waitForSelector("[data-themes-tile='Life Lyrics'] .__remotion-player", { timeout: 10_000 }).catch(() => {});
     check(!!(await page.$("[data-themes-tile='Life Lyrics'] .__remotion-player")), "pointing at a tile plays it");
@@ -91,6 +91,17 @@ async function main() {
     check(theme(ids[1]) === "Night Drive" && theme(ids[0]) === "Life Lyrics", "Use this theme for the song: Let Go uses Night Drive, Hold On keeps Life Lyrics");
     check(((await page.textContent("[data-theme-detail-songs]")) ?? "").includes("Let Go"), "…and the detail view lists it");
     check(((await page.textContent("[data-theme-detail-kind]")) ?? "") === "Theme" && ((await page.getAttribute("[data-theme-detail-rename]", "aria-label")) ?? "") === "Rename the theme", "the detail view says Theme above the name; its pencil renames the theme");
+    // Theme cover: none = a neutral backdrop (no song picture); set one, it shows; Remove puts it aside.
+    check(!(await page.$("[data-theme-cover]")) && !(await page.$("[data-themes-tile] [data-tile-frame]")), "Theme cover: none yet, and no tile borrows a song's picture");
+    const coverPic = path.join(root, "night cover.jpg");
+    ffmpeg("-f", "lavfi", "-i", "color=c=navy:s=360x640", "-frames:v", "1", coverPic);
+    await page.setInputFiles("[data-theme-cover-file]", coverPic);
+    await page.waitForSelector("[data-theme-cover]", { timeout: 10_000 }).catch(() => {});
+    const coverOk = await page.waitForFunction(() => ((document.querySelector("[data-theme-cover]") as HTMLImageElement | null)?.naturalWidth ?? 0) > 0, null, { timeout: 10_000 }).then(() => true).catch(() => false);
+    check(coverOk && existsSync(path.join(wsDir, "themes", "Night Drive", "cover.jpg")), "Set theme cover…: the picture is kept in the theme folder and shown");
+    await page.click("[data-theme-cover-remove]");
+    await page.waitForFunction(() => !document.querySelector("[data-theme-cover]"), null, { timeout: 10_000 }).catch(() => {});
+    check(!existsSync(path.join(wsDir, "themes", "Night Drive", "cover.jpg")) && existsSync(path.join(wsDir, "themes", "Night Drive", "_replaced")), "Remove: back to the neutral backdrop, the picture kept in _replaced");
     await page.keyboard.press("Escape");
     await page.click("[data-theme-detail] [aria-label=Close]");
     // Filters.

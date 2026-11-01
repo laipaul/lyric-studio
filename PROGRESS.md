@@ -4,6 +4,18 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Theme cover: each theme has its own picture ✅ (to verify on the Windows PC)
+- Asked by the user on 1 Nov 2026 (themes looked like songs: their previews showed a song's clip or cover and
+  that song's lyric lines).
+- **Themes → a theme → Theme cover**: "Set theme cover…" (JPG, PNG or WebP), "Change…", "Remove". The
+  picture is copied into the theme folder (themes\<name>\cover.jpg), so it travels with the theme; the one
+  it replaces (or Remove) goes to the theme folder's _replaced\. Duplicate keeps it.
+- Without a cover, theme previews show a neutral backdrop in the theme's own colours, never a song's picture.
+- Every theme preview on the Themes page uses the same neutral words: "Your lyric line here / Your chorus
+  here". (Inside a song, Shape → Theme still previews on that song's own clip and lines.)
+- Tests: themes.test.ts (cover set / replace / duplicate / remove, no borrowed pictures, neutral words);
+  browser: themes.e2e.ts (set, shown, Remove).
+
 ### Theme editor fixes: colour codes, save bar on top, a clear Box, no typewriter cursor ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026.
 - **Text colour / Accent colour** (Edit theme → Colours): next to the picker, a box to type or paste the colour
@@ -106,23 +118,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   trending-effects.test.ts (emphasis pick, kinetic groups, names and gallery kinds), picture.test.ts (title
   styles and shapes); browser: song-stages (picker, gallery chips, dropdowns, title style saved), storyboard,
   themes, pairings, style-lock, videos-post, textboard.
-
-### Themes, step 5: background and colours (the theme's Picture) ✅ (to verify on the Windows PC)
-- Asked by the user on 31 Oct 2026 ("how about the background, colors?"). The theme editor has a new
-  **Picture** section, and Colours has a **Text colour** next to the accent:
-  - **Colour grade**: Natural, Warm, Cool, Faded film, Black & white, Moody: one look on every clip, so
-    mixed footage feels like one film. Drawn over the clips by the video (preview = render); the clip
-    files are never changed.
-  - **Vignette**: Off, Soft, Strong. **Behind the words**: None, Soft shadow, Glow (in the accent),
-    Dark band, Box. The app still adds the soft band by itself when a clip is too bright (readability auto).
-  - **Background without a clip** (a song with no clips, a slot): Gradient in the accent, Plain colour,
-    Blurred cover. **Grade the Spotify Canvas too**: on by default; off keeps the Canvas natural.
-- Themes page tiles and the detail view now show the theme over a real frame of a clip (the first song
-  that uses it, else another song), with its grade, vignette and text colour.
-- Videos record it: manifest settings.picture (grade, vignette, text_backing, fallback, text_colour).
-- Tests: picture.test.ts (grades, vignette, backing, fallback, the Canvas rule, recipe and theme checks,
-  older theme.json files get the defaults, the viewer patch); song-stages.e2e.ts (Picture section, the viewer
-  shows the grade at once, Save keeps all of it).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

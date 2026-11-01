@@ -4,6 +4,23 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Themes, step 5: background and colours (the theme's Picture) ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026 ("how about the background, colors?"). The theme editor has a new
+  **Picture** section, and Colours has a **Text colour** next to the accent:
+  - **Colour grade**: Natural, Warm, Cool, Faded film, Black & white, Moody: one look on every clip, so
+    mixed footage feels like one film. Drawn over the clips by the video (preview = render); the clip
+    files are never changed.
+  - **Vignette**: Off, Soft, Strong. **Behind the words**: None, Soft shadow, Glow (in the accent),
+    Dark band, Box. The app still adds the soft band by itself when a clip is too bright (readability auto).
+  - **Background without a clip** (a song with no clips, a slot): Gradient in the accent, Plain colour,
+    Blurred cover. **Grade the Spotify Canvas too**: on by default; off keeps the Canvas natural.
+- Themes page tiles and the detail view now show the theme over a real frame of a clip (the first song
+  that uses it, else another song), with its grade, vignette and text colour.
+- Videos record it: manifest settings.picture (grade, vignette, text_backing, fallback, text_colour).
+- Tests: picture.test.ts (grades, vignette, backing, fallback, the Canvas rule, recipe and theme checks,
+  older theme.json files get the defaults, the viewer patch); song-stages.e2e.ts (Picture section, the viewer
+  shows the grade at once, Save keeps all of it).
+
 ### Themes, step 4: Make compares themes; the font and effect dropdowns are gone ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026 ("redesign the app around themes"). Make → More options no longer has the
   Verse effect / Hook effect dropdowns or "Compare font pairings": the look comes from the song's theme.
