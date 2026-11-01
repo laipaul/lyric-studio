@@ -164,6 +164,10 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
     anchorText = "the strongest stretch of the music (an instrumental)";
   } else if (firstHook >= 0) {
     lines.forEach((l, i) => l.isHook && chorus.add(i));
+    // The whole chorus, not only its marked line (1 Nov 2026): every occurrence of the most repeated
+    // block that holds a hook line, so an ending waits for the chorus's last line.
+    const block = mostRepeatedBlock(lines.map((l) => l.text));
+    if (block) for (const s0 of block.starts) if (lines.slice(s0, s0 + block.length).some((l) => l.isHook)) for (let k = 0; k < block.length; k++) chorus.add(s0 + k);
     anchor = { kind: "hook", line: firstHook + 1 };
     anchorText = `${before} the first hook line (line ${firstHook + 1}, "${lines[firstHook].text}")`;
   } else {
@@ -247,7 +251,14 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
   }
 
   // 3. End candidates: bar starts (and, with endOn "beat", other beats) where no line is being sung.
-  type Candidate = { at: number; afterLine: number; firstAfterLine: boolean; chorusLine: boolean; unit: "bar" | "beat" };
+  type Candidate = { at: number; afterLine: number; firstAfterLine: boolean; chorusLine: boolean; phraseEnd: boolean; unit: "bar" | "beat" };
+  // A finished phrase (1 Nov 2026): not a line whose sentence carries on (it ends in a comma, dash,
+  // colon or "and"), and inside a chorus only its last line (the next line is not a chorus line).
+  const phraseEnds = (i: number) => {
+    if (i < 0) return false;
+    if (/([,;:\u2013\u2014-]|\.\.\.|\u2026|\b(and|but|or|&))\s*$/i.test(lines[i].text.replace(/^\*\s*/, "").trim())) return false;
+    return !(chorus.has(i) && chorus.has(i + 1));
+  };
   const build = (grid: number[], unit: "bar" | "beat"): Candidate[] => {
     const out: Candidate[] = [];
     for (const at of grid) {
@@ -256,7 +267,7 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
       for (let i = 0; i < lines.length; i++) if (ends[i] <= at) afterLine = i;
       const previous = grid.filter((d) => d < at).pop();
       const firstAfterLine = afterLine >= 0 && (previous === undefined || previous < ends[afterLine]);
-      out.push({ at, afterLine, firstAfterLine, chorusLine: afterLine >= 0 && chorus.has(afterLine), unit });
+      out.push({ at, afterLine, firstAfterLine, chorusLine: afterLine >= 0 && chorus.has(afterLine), phraseEnd: phraseEnds(afterLine), unit });
     }
     return out;
   };
@@ -267,7 +278,9 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
 
   const length = (c: Candidate) => c.at - start;
   const within = (lo: number, hi: number) => (c: Candidate) => length(c) >= lo && length(c) <= hi;
-  const after = (pool: Candidate[]) => pool.filter((c) => c.firstAfterLine);
+  // Ends after a finished phrase first; only when none is in reach (any length tier), after any line.
+  let strictPhrases = true;
+  const after = (pool: Candidate[]) => pool.filter((c) => c.firstAfterLine && (!strictPhrases || c.phraseEnd));
   const target = options.targetMs;
   const nearest = (pool: Candidate[], to: number) => pool.reduce((best, c) => (Math.abs(length(c) - to) < Math.abs(length(best) - to) ? c : best));
 
@@ -324,14 +337,23 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
       }
       return undefined;
     };
-    const windowEnd = tier((g) => {
-      const pool = after(g.filter(within(minMs, maxMs)));
-      const chorusPool = pool.filter((c) => c.chorusLine);
-      const choose = (pool: Candidate[]) => (options.loopFit ? pickLoop : pick)(keepAnchors(pool));
-      return chorusPool.length ? choose(chorusPool) : pool.length ? choose(pool) : undefined;
-    });
-    const shorterEnd = target ? tier((g) => after(g.filter(within(shortestMs, minMs - 1))).pop()) : undefined;
-    const longerEnd = tier((g) => after(g.filter(within(maxMs + 1, hardMaxMs)))[0]);
+    const ends = () => {
+      const windowEnd = tier((g) => {
+        const pool = after(g.filter(within(minMs, maxMs)));
+        const chorusPool = pool.filter((c) => c.chorusLine);
+        const choose = (pool: Candidate[]) => (options.loopFit ? pickLoop : pick)(keepAnchors(pool));
+        return chorusPool.length ? choose(chorusPool) : pool.length ? choose(pool) : undefined;
+      });
+      const shorterEnd = target ? tier((g) => after(g.filter(within(shortestMs, minMs - 1))).pop()) : undefined;
+      const longerEnd = tier((g) => after(g.filter(within(maxMs + 1, hardMaxMs)))[0]);
+      return { windowEnd, shorterEnd, longerEnd };
+    };
+    let found = ends();
+    if (!found.windowEnd && !found.shorterEnd && !found.longerEnd) {
+      strictPhrases = false; // no finished phrase in reach: any clean line end
+      found = ends();
+    }
+    const { windowEnd, shorterEnd, longerEnd } = found;
     const quietEnd = tier((g) => {
       const pool = g.filter(within(shortestMs, hardMaxMs));
       return pool.length ? (target ? nearest(pool, target) : pool[0]) : undefined;

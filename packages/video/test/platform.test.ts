@@ -250,7 +250,9 @@ describe("platform sections", () => {
       expect(singing(s.start_ms)).toEqual([]);
       expect(singing(s.end_ms)).toEqual([]);
       expect(s.warnings).toEqual([]);
-      if (p.length.mode === "target") expect(Math.abs(s.end_ms - s.start_ms - w.targetMs)).toBeLessThanOrEqual(2000); // nearest bar to the target
+      // A finished phrase inside the window: after a whole chorus (its last line) when one ends there
+      // (1 Nov 2026: never between the chorus lines, even when another bar is nearer the target).
+      if (p.length.mode === "target" && s.endKind === "chorus-line") expect(s.reason).toContain('"Into the light"');
       const hook = lines[12];
       expect(s.start_ms).toBeLessThanOrEqual(hook.start_ms - 250); // the first hook is in the section
       if (p.anchor === "hook-first") {

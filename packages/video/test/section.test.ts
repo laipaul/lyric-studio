@@ -82,12 +82,13 @@ describe("auto section", () => {
     expect(length).toBeLessThanOrEqual(60_000);
     expect(isDownbeat(s.end_ms)).toBe(true);
     expect(singingAt(ls, s.end_ms)).toEqual([]);
-    // Chorus 2's hook (line 21) is sung 80.5-83.5 s: the first bar after it is 84 s.
+    // Chorus 2 (lines 21-22) is sung to 87.5 s: the first bar after its LAST line is 88 s (never
+    // between the chorus lines, 1 Nov 2026).
     expect(s.endKind).toBe("chorus-line");
     expect(s.start_ms).toBe(36_000); // see "never starts mid-line"
-    expect(s.end_ms).toBe(84_000);
-    expect(s.reason).toContain('the first bar after chorus line 21 "Hold on to me" finishes');
-    expect(s.reason).toContain("48.0 s");
+    expect(s.end_ms).toBe(88_000);
+    expect(s.reason).toContain('the first bar after chorus line 22 "Through the night" finishes');
+    expect(s.reason).toContain("52.0 s");
   });
 
   it("prefers a chorus line end, else the latest line end inside the window", () => {
@@ -179,4 +180,25 @@ describe("auto section", () => {
     expect(finishedBeforeStart(ls, 9_800, 250)).toEqual([]); // line 1 appears at 9.75 s: within 0.1 s, shown
     expect(finishedBeforeStart(ls, 12_000, 250, 2500)).toEqual([]); // offset +2.5 s: line 1 appears at 12.25 s, after the start
   });
+
+  it("finishes the phrase: never after a comma line or between chorus lines, longer rather than cut (Here With Me, 1 Nov 2026)", () => {
+    const texts = [
+      "The rain still whispers on the glass,", "I watch the hours slowly pass.", "Your voice still lives inside the air,", "I close my eyes — you’re almost there.",
+      "The city hums, the lights still glow,", "But in my heart, you never go.", "You walk beside each breath I take,", "A love the silence couldn’t break.",
+      "You’re here with me — in every sound,", "In dreams that lift me off the ground.", "I feel your warmth, though I can’t see,", "You’re gone, but still — you’re here with me.",
+      "Your sweater’s hanging by the door,", "I can’t let go, not anymore.", "The world has changed, the stars have too,", "But every one still points to you.",
+      "You’re here with me — in every sound,", "In dreams that lift me off the ground.", "I feel your warmth, though I can’t see,", "You’re gone, but still — you’re here with me.",
+      "Maybe love was never meant to fade,", "Just carried softly through the shade.", "If hearts can meet beyond what’s real,", "Then I still know the way you feel.",
+    ];
+    const ls = lines(texts, 500, 3000, ["You’re here with me — in every sound,"]); // only the hook line is marked
+    const target = 44_000;
+    const s = autoSection(ls, beats, { durationMs, targetMs: target, minMs: target * 0.95, maxMs: target * 1.05, shortestMs: target * 0.75, hardMaxMs: target * 1.3, anchorMode: "hook-first" });
+    expect(s.start_ms).toBe(32_000);
+    // Line 19 ("…can’t see,") ends inside the window (76 s) but the sentence and the chorus go on: the
+    // end waits for line 20, the chorus's last line (sung to 79.5 s), on the next bar.
+    expect(s.end_ms).toBe(80_000);
+    expect(s.endKind).toBe("extended");
+    expect(s.reason).toContain('line 20 "You’re gone, but still — you’re here with me."');
+  });
 });
+
