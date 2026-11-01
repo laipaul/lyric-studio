@@ -34,7 +34,7 @@ export async function songTodo(ws: Workspace, projectId: string): Promise<TodoIt
   const assets = await songAssets(ws, projectId).catch(() => null);
   const collections = songCollections(ws, projectId);
   if (assets && !assets.clips.length && !collections.length)
-    todo.push({ id: "clips", text: "Add your clips: drop them in Assets, or tick a collection (e.g. wedding).", tab: "assets", action: "Add clips", blocking: true });
+    todo.push({ id: "clips", text: "Add your clips: drop them in Assets, or add a collection in Make (e.g. wedding).", tab: "assets", action: "Add clips", blocking: true });
   // The vocal stem: a suggestion, never a blocker (without it the app separates the vocals itself).
   if (assets && !paths.instrumental && !paths.legacy) {
     if (!assets.vocals) todo.push({ id: "vocals", text: "Add the vocal stem for better lyric timing.", tab: "assets", action: "Add the vocal stem", blocking: false });

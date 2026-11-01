@@ -127,6 +127,9 @@ async function main() {
     check((await page.$$("[aria-label='Verse effect'], [aria-label='Hook effect']")).length === 0, "Generate: no font or effect lists any more (the theme holds them)");
     check(((await page.textContent("[data-generate-theme] [data-theme-chip]")) ?? "").includes("(this song's)"), "Generate: the song's theme is chosen");
     check((await page.$$("[data-generate] input[type=checkbox][data-collection-choice], [data-generate] input[type=checkbox][data-theme-option]")).length === 0, "Generate: no tick boxes for themes or collections (pickers with chips)");
+    const groups = await page.$$eval("[data-generate-group]", (e: Element[]) => e.map((x) => x.getAttribute("data-generate-group")));
+    check(JSON.stringify(groups) === JSON.stringify(["1", "2", "4"]) && !!(await page.$("[data-generate] details[data-compare]")) && !!(await page.$("[data-generate] details[data-advanced]")) && !!(await page.$("[data-generate-footer] [data-save-to-song]")), `Generate in clear groups: what, look and pictures, compare (folded), details, advanced (folded), footer (${groups.join(", ")})`);
+    if (process.env.GENERATE_SHOT) await page.screenshot({ path: process.env.GENERATE_SHOT, fullPage: true });
     const chips = await page.$$eval("[data-platform-choice]", (e: Element[]) => e.filter((x) => x.className.includes("bg-brand")).map((x) => x.getAttribute("data-platform-choice")));
     check(JSON.stringify(chips) === JSON.stringify(["reels", "youtube"]), `Generate starts with Reels + YouTube (got ${(chips as string[]).join(", ")})`);
 

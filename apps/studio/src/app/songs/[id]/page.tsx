@@ -159,7 +159,7 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
               />
             ) : null}
             {presetError ? <p className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{presetError}</p> : null}
-            {!preset ? <p className="text-muted-foreground text-xs">More options (platforms, videos per platform, effects, section, compare fonts or pictures):</p> : null}
+            {!preset ? <p className="text-muted-foreground text-xs">Or choose yourself: platforms, theme, clips, comparing versions:</p> : null}
             <GeneratePanel key={preset?.folder ?? "recipe"} projectId={song.id} data={panel} open={!!preset} preset={preset} />
           </div>
         </TabsContent>

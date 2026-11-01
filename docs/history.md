@@ -4,6 +4,26 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Themes, step 7: Hook card and End card ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026 ("yes" to building them).
+- **Edit theme → Cards** has **Hook card** and **End card** next to Title: Off / On and a Style each (Plain,
+  Outline, Layered outline, 3D extrude, Label bar), with a sample. Switching one on shows it in the viewer at
+  once (the cards are always planned, off until the theme has them on; look-patch.ts patches them).
+- Reels, TikTok, Shorts only (YouTube has its own end screen); the app places and times them, never over a
+  lyric line (src/extra-cards.ts):
+  - **Hook card**: big, in the hook font and accent, in the pause right before the first chorus line (up to
+    2.5 s, at least 0.8 s of pause); no pause = no card, and the plan's notes say so. Words: This song →
+    "Hook card text", else the chorus's first line.
+  - **End card**: the call to action, default "Stream {title} on Spotify" (This song → "End card text";
+    {title} / {artist} filled in), in the title font and text colour, Label bar by default; the last 3.5 s,
+    in the lyric spot after the last line, else above or below the lyrics; it stays to the very end.
+- Fitted into the safe zone by the same layout as the title opening; QA's title-card checks include them;
+  the manifest records settings.extra_cards. On the timeline they show as "Hook card" / "End card" (a
+  click opens the Theme panel).
+- Tests: extra-cards.test.ts (placement, no pause, end, {title}, patch on/off), title-opening-make.test.ts
+  (End card on a Reel, manifest, QA); browser: storyboard (End card on → viewer, saved, on the timeline),
+  song-stages.
+
 ### Fix a lyric line's words on its card; effect names in the viewer; stronger effects and Neon ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026 ("how do i correct the text here directly?", and "pick an effect and
   display immediately the effect name on the viewer").

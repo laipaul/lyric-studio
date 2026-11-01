@@ -4,6 +4,20 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Make: pickers instead of tick boxes, the Generate panel in clear groups, theme on every video ✅ (to verify on the Windows PC)
+- Asked by the user on 1 Nov 2026 ("only make tick boxes when the choices are limited and clear"; "rearrange
+  this screen, feels messy").
+- **Pickers** (components/search-picker.tsx): the run's Theme ("Change…"), Compare themes ("+ Add a theme to
+  compare", up to 3) and the collections ("+ Add a collection", also per picture version) open a searchable
+  list; themes as small cover tiles with mood filters, the song's own and the ones in use first. Chosen ones
+  show as chips with ×.
+- **Generate panel in five groups**: 1 What to make (platforms) · 2 Look and pictures (Theme and Clips side by
+  side) · 3 Compare (folded: themes, pictures) · 4 Video details (title, artist, EP, cover) · 5 Advanced
+  (folded; "automatic" instead of "from the recipe") · a footer that stays in view: "Keep these choices for
+  this song", the number of videos and Generate. Plain words (no song.json, recipe, QA, textboard).
+- **Each video shows its theme** (palette icon and name) on its tile in Videos and in Post (manifest
+  settings.theme; VideoInfo.theme).
+
 ### Clarity: feature icons, "Shared by N songs" badges, song or theme at a glance ✅ (to verify on the Windows PC)
 - Asked by the user on 1 Nov 2026 ("allocate icons to each core feature so users get to know instantly").
 - One map (apps/studio/src/lib/feature-icons.tsx): **Song** music note, white · **Theme** palette, pink ·
@@ -105,26 +119,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   name comes back when paused where no lyric is on screen, and pointing at any tile always shows it.
 - Tests: colour-ref.test.ts, effects-canva.test.ts (no cursor on screen); browser: song-stages (Box drawn,
   save bar position, typed RGB code, a wrong code).
-
-### Themes, step 7: Hook card and End card ✅ (to verify on the Windows PC)
-- Asked by the user on 31 Oct 2026 ("yes" to building them).
-- **Edit theme → Cards** has **Hook card** and **End card** next to Title: Off / On and a Style each (Plain,
-  Outline, Layered outline, 3D extrude, Label bar), with a sample. Switching one on shows it in the viewer at
-  once (the cards are always planned, off until the theme has them on; look-patch.ts patches them).
-- Reels, TikTok, Shorts only (YouTube has its own end screen); the app places and times them, never over a
-  lyric line (src/extra-cards.ts):
-  - **Hook card**: big, in the hook font and accent, in the pause right before the first chorus line (up to
-    2.5 s, at least 0.8 s of pause); no pause = no card, and the plan's notes say so. Words: This song →
-    "Hook card text", else the chorus's first line.
-  - **End card**: the call to action, default "Stream {title} on Spotify" (This song → "End card text";
-    {title} / {artist} filled in), in the title font and text colour, Label bar by default; the last 3.5 s,
-    in the lyric spot after the last line, else above or below the lyrics; it stays to the very end.
-- Fitted into the safe zone by the same layout as the title opening; QA's title-card checks include them;
-  the manifest records settings.extra_cards. On the timeline they show as "Hook card" / "End card" (a
-  click opens the Theme panel).
-- Tests: extra-cards.test.ts (placement, no pause, end, {title}, patch on/off), title-opening-make.test.ts
-  (End card on a Reel, manifest, QA); browser: storyboard (End card on → viewer, saved, on the timeline),
-  song-stages.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

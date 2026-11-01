@@ -120,7 +120,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
       const result = (await res.json()) as { error?: string; label?: string; saved?: { saved: string[]; kept: string[] } | null };
       if (!res.ok || result.error) throw new Error(result.error ?? `The studio answered ${res.status}`);
       const saved = result.saved
-        ? `\n${result.saved.saved.length ? `Saved to the song: ${result.saved.saved.join(", ")}.` : "Nothing to save: this run uses the song's recipe."}${result.saved.kept.length ? ` Locked, kept as they are: ${result.saved.kept.join(", ")}.` : ""}`
+        ? `\n${result.saved.saved.length ? `Saved to the song: ${result.saved.saved.join(", ")}.` : "Nothing to save: this run uses the song's own settings."}${result.saved.kept.length ? ` Locked, kept as they are: ${result.saved.kept.join(", ")}.` : ""}`
         : "";
       setNotice({ ok: true, text: `Queued: ${result.label}. Follow it in Tasks (top right); the videos appear in the Videos tab when they are made.${saved}` });
       window.dispatchEvent(new Event("lyric-tasks-changed"));
@@ -144,21 +144,22 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
         <form onSubmit={submit} className="flex flex-col gap-5 border-t px-5 py-5">
           {!data.lyricsReady ? (
             <p className="rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-200">
-              This song has no lyrics.txt in the app yet: use “+ New song” in the Library with the same song file and its lyrics (it updates this song).
+              This song has no lyrics in the app yet: use “+ New song” in the Library with the same song file and its lyrics (it updates this song).
             </p>
           ) : null}
           {from ? (
             <div data-from-run={from.folder} className="border-brand/30 bg-brand/10 flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm">
               <span>
-                Settings of the run {from.folder.replace(/_(\d{2})(\d{2})/, " $1:$2")}: check them, then Generate (locked settings stay as in the recipe).
+                Settings of the run {from.folder.replace(/_(\d{2})(\d{2})/, " $1:$2")}: check them, then Generate (locked settings stay as the song has them).
               </span>
               <Link href={`/songs/${projectId}?tab=generate`} className="text-muted-foreground hover:text-foreground text-xs underline">
-                Back to the recipe
+                Back to the song&apos;s settings
               </Link>
             </div>
           ) : null}
+          <Group n={1} title="What to make" hint="Pick the platforms: the app sets each one's size and length.">
           <fieldset className="flex flex-col gap-2">
-            <legend className="mb-2 text-sm font-medium">Platforms</legend>
+            <legend className="sr-only">Platforms</legend>
             <div className="flex flex-wrap gap-2">
               {choices.map((p) => {
                 const on = platforms.includes(p.name);
@@ -179,11 +180,27 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
               })}
             </div>
           </fieldset>
-          <div className="grid gap-4 md:grid-cols-3">
+          </Group>
+          <Group n={2} title="Look and pictures" hint="The theme gives the look; the clips give the pictures.">
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className={label}>
+              <span className="font-medium">Theme</span>
+              <div className="flex flex-wrap items-center gap-1.5" data-generate-theme={runTheme || data.theme || ""}>
+                {compareThemes.length >= 2 ? (
+                  <span className="text-muted-foreground text-xs">Compare themes below picks the themes.</span>
+                ) : (
+                  <>
+                    <ThemeChip theme={themeOf(runTheme || data.theme || "")} own={!runTheme} />
+                    <SearchPicker name="run-theme" items={themeItems} selected={[runTheme || data.theme || ""]} max={1} filters={THEME_MOODS} tiles render={renderTheme} onPick={(t) => setRunTheme(t === data.theme ? "" : t)} trigger={<>Change…</>} placeholder="Search themes…" />
+                  </>
+                )}
+              </div>
+              <span className="text-muted-foreground text-xs">{runTheme ? "For this run only: the song keeps its own theme." : "The song's look: fonts, motion and colours (change it in the Look → Theme menu)."}</span>
+            </div>
             <fieldset className={label} data-collections>
               <legend className="mb-1.5 font-medium">Clips</legend>
               <p className="text-muted-foreground text-xs">
-                {data.songClips ? `This song's own clips (${data.songClips})` : "No clips of its own yet (Assets tab)"}
+                {data.songClips ? `This song's own clips (${data.songClips})` : "No clips of its own yet (Prepare → Assets)"}
                 {data.collections.length ? ", plus:" : ""}
               </p>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -206,27 +223,18 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
                 ) : null}
               </div>
             </fieldset>
-            <div className={label}>
-              <span className="font-medium">Theme</span>
-              <div className="flex flex-wrap items-center gap-1.5" data-generate-theme={runTheme || data.theme || ""}>
-                {compareThemes.length >= 2 ? (
-                  <span className="text-muted-foreground text-xs">Compare themes below picks the themes.</span>
-                ) : (
-                  <>
-                    <ThemeChip theme={themeOf(runTheme || data.theme || "")} own={!runTheme} />
-                    <SearchPicker name="run-theme" items={themeItems} selected={[runTheme || data.theme || ""]} max={1} filters={THEME_MOODS} tiles render={renderTheme} onPick={(t) => setRunTheme(t === data.theme ? "" : t)} trigger={<>Change…</>} placeholder="Search themes…" />
-                  </>
-                )}
-              </div>
-              <span className="text-muted-foreground text-xs">{runTheme ? "For this run only: the song keeps its own theme." : "The song's look: fonts, motion and colours (change it in Shape → Theme)."}</span>
-            </div>
           </div>
+          </Group>
+          <details data-compare className="rounded-lg border px-4 py-3" open={compareThemes.length > 0 || pictureSets.length > 0 || undefined}>
+            <summary className="cursor-pointer text-sm">
+              <span className="font-medium">3 · Compare (optional)</span>
+              <span className="text-muted-foreground ml-2 text-xs">the same video in 2–3 themes, or over other clips, to choose the best</span>
+            </summary>
+            <div className="mt-3 flex flex-col gap-4">
           {data.themes.length >= 2 ? (
             <fieldset data-compare-themes className="flex flex-col gap-1.5 text-sm">
-              <legend className="font-medium">Compare themes (optional)</legend>
-              <span className="text-muted-foreground text-xs">
-                Pick 2–3 themes: each gets its own videos with the same section, clips and order, so only the look differs (compare them in Videos and on your phone). The song keeps its own theme.
-              </span>
+              <legend className="font-medium">Themes</legend>
+              <span className="text-muted-foreground text-xs">Pick 2–3: the same part of the song, clips and order, only the look differs. The song keeps its own theme.</span>
               <div className="flex flex-wrap items-center gap-1.5">
                 {compareThemes.map((t) => (
                   <PickedChip key={t} name="compare-theme" id={t} onRemove={() => setCompareThemes((list) => list.filter((x) => x !== t))}>
@@ -254,10 +262,8 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
             </fieldset>
           ) : null}
           <fieldset data-picture-versions className="flex flex-col gap-1.5 text-sm">
-            <legend className="font-medium">Picture versions (optional)</legend>
-            <span className="text-muted-foreground text-xs">
-              The same textboard over other clips: one video per clip set (2–4), with the same section, text and order. An anchor whose clip is not in a set is listed as a slot (QA), never dropped.
-            </span>
+            <legend className="font-medium">Pictures</legend>
+            <span className="text-muted-foreground text-xs">2–4 sets of clips: the same words and timing over other pictures, one video per set. A clip you pinned to a line that is not in a set is shown as &quot;needs a clip&quot;.</span>
             {pictureSets.map((set, k) => (
               <div key={k} className="flex flex-wrap items-center gap-x-4 gap-y-1" data-picture-set={k + 1}>
                 <span className="text-muted-foreground w-6 text-xs">v{k + 1}</span>
@@ -303,6 +309,9 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
               {compareThemes.length ? <span className="text-muted-foreground text-xs">(not together with Compare themes)</span> : null}
             </div>
           </fieldset>
+            </div>
+          </details>
+          <Group n={4} title="Video details" hint="The words on the title card and the cover.">
           <div className="grid gap-4 md:grid-cols-4">
             <label className={label}>
               <span className="font-medium">Title</span>
@@ -326,6 +335,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
               <input name="cover" type="file" accept=".jpg,.jpeg,.png,.webp,image/*" className="text-muted-foreground file:bg-secondary file:text-secondary-foreground block w-full text-xs file:mr-3 file:rounded-md file:border-0 file:px-3 file:py-1.5" />
             </label>
           </div>
+          </Group>
           {runSection ? (
             <div data-run-section className="flex flex-wrap items-center gap-3 text-sm">
               <span className="font-medium">Section</span>
@@ -368,16 +378,19 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
               )}
             </div>
           ) : null}
-          <details className="text-sm" open={!!runSection || undefined}>
-            <summary className="text-muted-foreground cursor-pointer">Advanced</summary>
+          <details data-advanced className="rounded-lg border px-4 py-3 text-sm" open={!!runSection || undefined}>
+            <summary className="cursor-pointer">
+              <span className="font-medium">5 · Advanced (optional)</span>
+              <span className="text-muted-foreground ml-2 text-xs">the app sets all of these; change one only to override it</span>
+            </summary>
             <div className="mt-4 grid gap-4 md:grid-cols-4">
               <label className={label}>
                 <span className="font-medium">Videos per platform</span>
-                <Input type="number" min={1} max={24} placeholder="from the recipe" value={variations} disabled={locked("variations")} onChange={(e) => setVariations(e.target.value)} />
+                <Input type="number" min={1} max={24} placeholder="automatic" value={variations} disabled={locked("variations")} onChange={(e) => setVariations(e.target.value)} />
               </label>
               <label className={label}>
                 <span className="font-medium">Target length (s)</span>
-                <Input type="number" name="length" min={3} max={600} placeholder="from the recipe" value={length} disabled={locked("length")} onChange={(e) => setLength(e.target.value)} />
+                <Input type="number" name="length" min={3} max={600} placeholder="automatic" value={length} disabled={locked("length")} onChange={(e) => setLength(e.target.value)} />
               </label>
               <label className={label}>
                 <span className="font-medium">Section</span>
@@ -386,7 +399,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
               <label className={label}>
                 <span className="font-medium">Shot length</span>
                 <select name="shotLength" data-shot-length className={select} value={shotLength} disabled={locked("shotLength")} onChange={(e) => setShotLength(e.target.value)}>
-                  <option value="">from the recipe ({shotLengthText(r.shotLength)}{Object.entries(r.shotLengths).some(([p, v]) => platforms.includes(p) && v !== r.shotLength) ? `; ${Object.entries(r.shotLengths).filter(([p, v]) => platforms.includes(p) && v !== r.shotLength).map(([p, v]) => `${data.platforms.find((x) => x.name === p)?.label ?? p}: ${shotLengthText(v)}`).join(", ")}` : ""})</option>
+                  <option value="">automatic ({shotLengthText(r.shotLength)}{Object.entries(r.shotLengths).some(([p, v]) => platforms.includes(p) && v !== r.shotLength) ? `; ${Object.entries(r.shotLengths).filter(([p, v]) => platforms.includes(p) && v !== r.shotLength).map(([p, v]) => `${data.platforms.find((x) => x.name === p)?.label ?? p}: ${shotLengthText(v)}`).join(", ")}` : ""})</option>
                   {["auto", "1", "2", "4", "8", "story", "rate"].map((v) => (
                     <option key={v} value={v}>
                       {shotLengthText(v)}
@@ -397,7 +410,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
               <label className={label}>
                 <span className="font-medium">YouTube layout</span>
                 <select name="layout" className={select} value={layout} disabled={locked("youtubeLayout")} onChange={(e) => setLayout(e.target.value)}>
-                  <option value="">from the recipe ({r.youtubeLayout})</option>
+                  <option value="">automatic ({r.youtubeLayout})</option>
                   <option value="cover">cover</option>
                   <option value="stills">stills</option>
                   <option value="clips">clips</option>
@@ -413,17 +426,17 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
               </div>
             </div>
           </details>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" data-save-to-song checked={saveToSong} onChange={(e) => setSaveToSong(e.target.checked)} className="accent-brand" />
-            Save these choices to the song (song.json); locked settings stay as they are
-          </label>
           {notice ? (
             <p role="status" className={cn("rounded-md border p-3 text-sm whitespace-pre-line", notice.ok ? "border-brand/30 bg-brand/10" : "border-red-400/30 bg-red-400/10 text-red-200")}>
               {notice.text}
             </p>
           ) : null}
-          <div className="flex items-center justify-end gap-3">
-            <span className="text-muted-foreground text-xs">
+          <div data-generate-footer className="bg-card/95 sticky bottom-0 z-20 -mx-5 -mb-5 flex flex-wrap items-center gap-3 rounded-b-xl border-t px-5 py-3 backdrop-blur">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" data-save-to-song checked={saveToSong} onChange={(e) => setSaveToSong(e.target.checked)} className="accent-brand" />
+              Keep these choices for this song
+            </label>
+            <span className="text-muted-foreground ml-auto text-xs">
               {platforms.length ? `${choices.filter((p) => platforms.includes(p.name)).reduce((a, p) => a + videosFor(p.name), 0)} video(s)` : "choose a platform"}
             </span>
             <Button type="submit" disabled={busy || !platforms.length || !data.lyricsReady}>
@@ -437,6 +450,21 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
 }
 
 type PickTheme = GeneratePanelData["themes"][number];
+
+// A numbered group of the Generate form (1 Nov 2026: the form in five clear groups, asked by the user).
+function Group({ n, title, hint, children }: { n: number; title: string; hint: string; children: React.ReactNode }) {
+  return (
+    <section data-generate-group={n} className="flex flex-col gap-3">
+      <h3 className="text-sm">
+        <span className="font-medium">
+          {n} · {title}
+        </span>
+        <span className="text-muted-foreground ml-2 text-xs">{hint}</span>
+      </h3>
+      {children}
+    </section>
+  );
+}
 
 // A theme's cover (its picture, or a backdrop in its accent colour when it has none).
 function ThemeCover({ theme, className }: { theme: PickTheme; className?: string }) {
