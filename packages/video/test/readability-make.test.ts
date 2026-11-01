@@ -101,4 +101,12 @@ describe("lyric readability in the render", () => {
     setLayout("centre");
     ws.close();
   }, 300_000);
+
+  it("an empty shared collection is skipped with a note, the run goes on with the other clips (1 Nov 2026)", async () => {
+    mkdirSync(path.join(wsDir, "clips", "Flowers"), { recursive: true }); // made in Collections, never filled
+    const r = await plan("night,Flowers");
+    expect(r.props.shots.length).toBeGreaterThan(0);
+    expect(r.logs.some((l) => /collection Flowers skipped: it has no clips/.test(l))).toBe(true);
+  });
 });
+

@@ -8,7 +8,7 @@ describe("rest width", () => {
   it("leaves room for the effect's scale and sideways drift", () => {
     const area = 1600;
     for (const [effect, lift] of [["glide", true], ["karaoke-highlight", true], ["soft-blur", false], ["glide", false]] as const) {
-      const ext = effectExtents(effect, "glide", 30, null, lift);
+      const ext = effectExtents(effect as never, "glide" as never, 30, null, lift);
       const w = restWidth(area, ext);
       expect(w * ext.maxScale + 2 * ext.side).toBeLessThanOrEqual(area + 0.001);
     }

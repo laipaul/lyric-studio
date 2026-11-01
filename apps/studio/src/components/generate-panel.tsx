@@ -44,7 +44,9 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
   // Videos makes one more when wanted); the platform presets' larger numbers are for the command line.
   const recipeCounts = Object.keys(r.variations).length > 0;
   const videosFor = (name: string) => (pictureSets.length >= 2 && name !== "canvas" ? pictureSets.length : variations ? Number(variations) : (r.variations[name] ?? r.variations["*"] ?? 1));
-  const recipeCollections = data.chosen.length || data.songClips ? data.chosen : data.collections.slice(0, 1);
+  // The song's own choice only: never a shared collection picked on the user's behalf (1 Nov 2026: a new
+  // song without clips yet got the first collection, an empty "Flowers", kept after its clips arrived).
+  const recipeCollections = data.chosen;
   const runCollections = from?.collections && !locked("collections") ? from.collections.filter((c) => data.collections.includes(c)) : null;
   const [collections] = useState<string[]>(runCollections ?? recipeCollections); // the song's (or the run's, "Use these settings"); set in Shape
   // A run's video counts: one number when they were the same on every platform and differ from the recipe.

@@ -633,8 +633,8 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const songClips = paths.clips && existsSync(paths.clips) && readdirSync(paths.clips).some((f) => SOURCE_FILE.test(f)) ? paths.clips : null;
     if (!collectionNames.length && !songClips) {
       throw new Error(
-        `--collection <name> is needed the first time for "${sp.project.title}" (the folder WORKSPACE_DIR\\collections\\<name>)` +
-          `${paths.clips ? `, or put clips in its own clips folder (${paths.clips})` : ""}; after that it is remembered.`,
+        `No clips yet for "${sp.project.title}": add clips in Prepare → Assets, or choose a collection in Make` +
+          ` (command line: --collection <name>, the folder WORKSPACE_DIR\\collections\\<name>; after that it is remembered).`,
       );
     }
     const collectionRemembered = !!remembered || recipe.sources.collections === "song";
@@ -720,8 +720,25 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const clipsOf = async (set: { songClips: boolean; collections: string[] }) => {
       const syncs: CollectionSync[] = [];
       if (set.songClips && songClips) syncs.push(await syncCollection(ws, { name: `song:${project.id}`, folder: songClips, log, prepare: false }));
-      for (const [i, name] of set.collections.entries()) syncs.push(await syncCollection(ws, { name, folder: collectionFolder(name, i), log, prepare: false }));
-      if (!syncs.length) throw new Error("This clip set has no clips: the song has no clips of its own.");
+      // An empty or missing shared collection is skipped with a note (1 Nov 2026: an empty "Flowers"
+      // ticked for a song with its own clips failed the whole run); only no clips at all is an error.
+      const skipped: string[] = [];
+      for (const [i, name] of set.collections.entries()) {
+        try {
+          syncs.push(await syncCollection(ws, { name, folder: collectionFolder(name, i), log, prepare: false }));
+        } catch (error) {
+          if (!/^(No videos or photos|Collection folder not found)/.test((error as Error).message)) throw error;
+          skipped.push(name);
+          log(`collection ${name} skipped: it has no clips (${(error as Error).message.split("\n")[0]})`);
+        }
+      }
+      if (!syncs.length) {
+        throw new Error(
+          skipped.length
+            ? `No clips to use: the collection${skipped.length > 1 ? "s" : ""} ${skipped.join(", ")} ${skipped.length > 1 ? "are" : "is"} empty and the song has no clips of its own. Add clips in Prepare → Assets, or choose another collection in Make.`
+            : "This clip set has no clips: the song has no clips of its own.",
+        );
+      }
       if (set.songClips && songClips) syncs[0] = { ...syncs[0], collection: { ...syncs[0].collection, name: "song clips" } };
       return mergeCollections(syncs);
     };

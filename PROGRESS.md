@@ -4,6 +4,15 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Fix: a new song's run failed on an empty collection it never chose ✅ (to verify on the Windows PC)
+- Reported by the user on 1 Nov 2026 (Familiar Strangers, 11 own clips: "No videos or photos in
+  collections\Flowers").
+- Cause: Make's panel, for a song with no collection and (at page load) no clips yet, silently picked the
+  first shared collection (an empty "Flowers") and kept it after the clips were added.
+- Now Make never picks a collection for the user (generate-panel.tsx); an empty or missing collection in a
+  run is skipped with a note and the run goes on with the other clips (make.ts; readability-make.test.ts);
+  with no clips at all it says "No clips yet …: add clips in Prepare → Assets, or choose a collection".
+
 ### Fix: lines a few px past the safe margin ("Not ready") ✅ (to verify on the Windows PC)
 - Reported by the user on 1 Nov 2026 (Here With Me YouTube: hook lines 33 px, line 15 7 px past the right 4%).
 - Cause: a line was fitted to the lyric area at rest; its effect (chorus lift, breathe, word scale, drift)
