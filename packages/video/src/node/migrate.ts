@@ -15,7 +15,7 @@ import { eq } from "drizzle-orm";
 import { processAlive } from "./jobs";
 import { recipeJson, type SongRecipe } from "./recipe";
 import { keepReplaced } from "./project-settings";
-import { COLLECTIONS_DIR, SONGS_DIR, holdsNoFiles, movesSince, resolveMoved, moveEntry, readMoves, relocatePaths, removeEmptyDirs, songBusy, songFolderFor, STUDIO_DIR, writeMoves } from "./song-folder";
+import { COLLECTIONS_DIR, SONGS_DIR, holdsNoFiles, movesSince, resolveMoved, moveEntry, readMoves, relocatePaths, removeEmptyDirs, songBusy, songFolderFor, songPaths, STUDIO_DIR, writeMoves } from "./song-folder";
 
 export const MIGRATIONS_DIR = "migrations"; // WORKSPACE_DIR\migrations\<date>\: backups and journals
 export const BACKUP_REMINDER = "Make sure your regular backup is recent before continuing (y/n)";
@@ -296,7 +296,15 @@ function planRepairs(ws: Workspace, p: Project, folder: string, extra: string[])
   const stores = all.map((f) => absPath(ws, `${f}/${STUDIO_DIR}/lyrics`));
   const exportsDirs = all.map((f) => absPath(ws, `${f}/exports`));
   const base = { projectId: p.id, title: p.title, folder };
-  if (all.every((f) => !existsSync(absPath(ws, `${f}/lyrics.txt`)))) {
+  // The lyrics under any name (linked in .studio\files.json, 31 Oct 2026) count: only a song with no lyrics file at all is repaired.
+  const ownLyrics = (() => {
+    try {
+      return songPaths(ws, p).lyricsTxt;
+    } catch {
+      return null;
+    }
+  })();
+  if ((!ownLyrics || !existsSync(ownLyrics)) && all.every((f) => !existsSync(absPath(ws, `${f}/lyrics.txt`)))) {
     const newest = newestVideoLyricsIn(exportsDirs, stores);
     if (newest) out.push({ ...base, kind: "lyrics", file: `${folder}/lyrics.txt`, source: newest.file });
   }
