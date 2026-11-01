@@ -4,6 +4,22 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Stability pass: no quiet choices, nothing replaced without a way back ✅ (to verify on the Windows PC)
+- Asked by the user on 1 Nov 2026 after the evening's bugs (a song taken over, a collection never ticked, a
+  Reel cut on a comma): the app must not "help" without saying so.
+- Two more takeover guards: "+ New song" with a deleted song's file says so (Restore it in Deleted songs)
+  instead of quietly bringing it back under the new title; Replace song refuses another song's file.
+- Nothing deleted: the spare copy of a song file adopted into a hand-made song folder now goes to
+  .studio\replaced\ (was deleted).
+- No quiet picks: a run from Lyric Studio never changes the song's collections (only "Keep these choices
+  for this song" does); a collection only remembered from an old terminal run is written into song.json by
+  the Library's Tidy, so Shape shows it; a missing lyrics file is said in plain words (no older copy used).
+- Assets: every Replace asks first (which file is in use, that it is kept); **Replaced files** lists every
+  kept file with what it was, and Restore makes it that again; removed clips have Restore too.
+- Tests: stability.test.ts; new browser test e2e/new-song-every-platform.e2e.ts (New song through the
+  Library, same file refused, clips, Replace lyrics + Restore, Make Reels/TikTok/Shorts/YouTube/Canvas by
+  the real worker; each video's size, audio and song checked). Its one stand-in is the lyric aligner.
+
 ### Fix: a new song's run failed on an empty collection it never chose ✅ (to verify on the Windows PC)
 - Reported by the user on 1 Nov 2026 (Familiar Strangers, 11 own clips: "No videos or photos in
   collections\Flowers").

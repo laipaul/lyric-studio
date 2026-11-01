@@ -72,7 +72,10 @@ export function AssetsTab({ projectId }: { projectId: string }) {
         else setData(d);
       })
       .catch((e: Error) => alive && setError(e.message));
-    void loadReplaced();
+    api(`/api/songs/${projectId}/replaced`, { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ files?: ReplacedFile[] }>)
+      .then((d) => alive && setReplaced(d.files ?? []))
+      .catch(() => {});
     return () => {
       alive = false;
     };
