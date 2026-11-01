@@ -67,7 +67,8 @@ async function main() {
     check(((await page.getAttribute("[data-collection=wedding] [data-used-by]", "title")) ?? "").includes("Hold On"), "…and which (on hover)");
 
     // A new collection (a dialog).
-    await page.click("[data-new-collection-button]");
+    check(!(await page.$("[data-new-collection-button]")) && !!(await page.$("[data-collections-grid] > li:first-child [data-new-collection-tile]")), "New collection is the first tile (no button at the top)");
+    await page.click("[data-new-collection-tile]");
     await page.fill("[data-collection-name]", "City nights");
     await page.click("[data-save-name]");
     await page.waitForSelector("[data-collection-view='City nights']");

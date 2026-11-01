@@ -33,6 +33,8 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   one); **Use these colours** sets them, nothing changes before (@lyric/video cover-palette.ts, tested; API
   /api/themes colours). In the editor a swatch click still sets just the accent; a theme without a cover uses
   the song's cover there.
+- **Collections like Themes**: "New collection" is the first tile of the grid (the button at the top right is
+  gone); the page says collections are added to a song in Shape → To make (no more "tick them in Generate").
 - **Each video shows its theme** (palette icon and name) on its tile in Videos and in Post (manifest
   settings.theme; VideoInfo.theme).
 

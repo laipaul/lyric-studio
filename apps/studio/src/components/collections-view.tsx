@@ -28,7 +28,7 @@ const openFolder = (collection: string) => void api("/api/open-folder", { method
 type Dialogue = { kind: "new" } | { kind: "rename"; c: CollectionSummary } | { kind: "remove"; c: CollectionSummary } | null;
 
 // The shared clip collections (workspace\collections\<name>\): one card each with a ⋯ menu (Rename, Open
-// folder, Delete), "+ New collection", and the removed ones (collections\_removed\) with Restore.
+// folder, Delete), the "New collection" tile first in the grid, and the removed ones (collections\_removed\) with Restore.
 export function CollectionsList() {
   const [list, setList] = useState<CollectionSummary[] | null>(null);
   const [removed, setRemoved] = useState<RemovedCollection[]>([]);
@@ -75,7 +75,7 @@ export function CollectionsList() {
   const restore = (r: RemovedCollection) =>
     act(async () => {
       const d = await call<{ name: string }>("/api/collections", { method: "POST", ...json({ restore: r.folder }) });
-      return `“${d.name}” is back. Tick it again in a song's Generate tab to use it.`;
+      return `“${d.name}” is back. Add it to a song in Shape → To make to use it.`;
     });
 
   return (
@@ -83,11 +83,8 @@ export function CollectionsList() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-brand flex items-center gap-2 text-xl tracking-[0.14em] uppercase"><FeatureIcon feature="collection" className="size-5" /> Collections</h1>
-          <p className="text-muted-foreground text-sm">Clips every song can use (tick them in a song&apos;s Generate tab). Each lives in a folder of your workspace.</p>
+          <p className="text-muted-foreground text-sm">Clips every song can use: add a collection to a song in Shape → To make. Each lives in a folder of your workspace.</p>
         </div>
-        <Button onClick={() => setDialogue({ kind: "new" })} data-new-collection-button>
-          <Plus /> New collection
-        </Button>
       </div>
       {error && !dialogue ? <p className="rounded-md border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-sm text-amber-100">{error}</p> : null}
       {notice ? (
@@ -97,10 +94,18 @@ export function CollectionsList() {
       ) : null}
       {!list ? (
         <p className="text-muted-foreground text-sm">Loading…</p>
-      ) : !list.length ? (
-        <p className="text-muted-foreground text-sm">No collections yet. Create one, then drop your clips into it.</p>
       ) : (
-        <ul className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+        <ul className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4" data-collections-grid>
+          {/* "New collection" as the first tile, like the Themes page (1 Nov 2026, asked by the user). */}
+          <li>
+            <button type="button" data-new-collection-tile onClick={() => setDialogue({ kind: "new" })} className="hover:border-brand/60 hover:text-foreground text-muted-foreground flex size-full min-h-[200px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed transition-colors">
+              <span className="border-brand/50 text-brand flex size-12 items-center justify-center rounded-full border">
+                <Plus className="size-6" />
+              </span>
+              <span className="text-sm font-medium">New collection</span>
+              {!list.length ? <span className="text-xs">Create one, then drop your clips into it.</span> : null}
+            </button>
+          </li>
           {list.map((c) => (
             <CollectionCard key={c.name} c={c} onRename={() => setDialogue({ kind: "rename", c })} onRemove={() => setDialogue({ kind: "remove", c })} />
           ))}
@@ -385,7 +390,7 @@ export function CollectionView({ name }: { name: string }) {
                     ))}
                   </>
                 ) : (
-                  "Not used by a song yet: tick it in a song's Generate tab."
+                  "Not used by a song yet: add it to a song in Shape → To make."
                 )}
               </p>
             </div>
