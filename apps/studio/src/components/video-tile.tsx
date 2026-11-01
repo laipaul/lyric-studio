@@ -7,6 +7,7 @@ import type { VideoInfo } from "@lyric/video/exports";
 
 import { VerdictBadge } from "@/components/assessment";
 import { api } from "@/lib/api";
+import { FeatureIcon } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
 
 export const seconds = (s: number | null) => (s === null ? "" : s >= 60 ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : `${s.toFixed(1)} s`);
@@ -89,6 +90,7 @@ export function VideoTile({
           </span>
           <span className="text-muted-foreground text-xs tabular-nums">{seconds(video.durationS)}</span>
         </div>
+        {video.theme ? <span data-video-theme={video.theme} className="text-brand flex items-center gap-1 text-[11px]"><FeatureIcon feature="theme" className="size-3" />{video.theme}</span> : null}
         <p className="text-muted-foreground text-[11px] leading-relaxed">
           {[video.style, orderText(video), video.bars ? "bars" : null, video.layout && video.layout !== "vertical" ? video.layout : null, video.effects ? `${video.effects.verse} / ${video.effects.hook}` : null]
             .filter(Boolean)

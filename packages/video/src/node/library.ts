@@ -2,7 +2,7 @@
 // the artists used so far, and "+ New song". No rendering code is imported here, so the studio's
 // server can use it directly.
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { REPO_ROOT, absPath, project as projectTable, safeName, type Workspace } from "@lyric/db";
@@ -20,7 +20,7 @@ import { SOURCE_FILE } from "./collection";
 import { readRecipe, resolveRecipe, writeRecipe } from "./recipe";
 import { isRemovedSong, moveEntry, relocatePaths, removeEmptyDirs, REMOVED_SONGS, renameSongFolder, sharedCollections, songBusy, songFolderFor, songPathsById, SONGS_DIR } from "./song-folder";
 import { presetLengthText, recipeInputFor } from "./style";
-import { ensureAllThemes, listThemes, themeUsers } from "./themes";
+import { ensureAllThemes, listThemes, themeCover, themeUsers } from "./themes";
 import { findOrCreateSongProject, storeProjectHint } from "./song-project";
 
 export type PlatformStatus = "PASS" | "WARN" | "FAILED" | "interrupted" | "Rendering" | "none";
@@ -302,7 +302,8 @@ export type GeneratePanelData = {
   lyricsReady: boolean;
   pairings: { id: string; name: string; note: string }[]; // "Compare pairings": one video per pairing
   theme: string | null; // the song's theme
-  themes: { name: string; songs: number }[]; // "Compare themes": one video set per theme
+  // The theme pickers ("Theme" for this run, "Compare themes"): cover (workspace-relative, ?v=mtime), moods and accent for the tiles.
+  themes: { name: string; songs: number; cover: string | null; moods: string[]; accent: string | null }[];
   title: string;
   artist: string;
   ep: string;
@@ -332,7 +333,16 @@ export function generatePanelData(ws: Workspace, p: typeof projectTable.$inferSe
   const catalog = loadFontCatalog(ws.dir);
   const pairings = loadPairings(catalog, loadBrand(ws.dir, catalog, p.artist).brand).pairings.map((x) => ({ id: x.id, name: x.name, note: x.note }));
   const songTheme = readRecipe(paths.recipe).theme ?? null;
-  const themes = listThemes(ws.dir).map((t) => ({ name: t.name, songs: themeUsers(ws, t.name).length }));
+  const themes = listThemes(ws.dir).map((t) => {
+    const cover = themeCover(ws.dir, t.name);
+    return {
+      name: t.name,
+      songs: themeUsers(ws, t.name).length,
+      cover: cover ? `${path.relative(ws.dir, cover).split(path.sep).join("/")}?v=${Math.round(statSync(cover).mtimeMs)}` : null,
+      moods: t.theme.moods ?? [],
+      accent: typeof t.theme.look.accentColour === "string" ? t.theme.look.accentColour : null,
+    };
+  });
   return {
     pairings,
     theme: songTheme,

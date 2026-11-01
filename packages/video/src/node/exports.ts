@@ -58,6 +58,7 @@ export type VideoInfo = {
   bars: boolean;
   effects: { verse: string; hook: string } | null;
   layout: string | null;
+  theme: string | null; // the theme that made it (manifest settings.theme; null: made before themes)
   createdAt: string;
   qa: QaResult;
   reactions: { id: Reaction; label: string }[]; // the reaction keywords this video offers
@@ -195,6 +196,7 @@ export function songRuns(ws: Workspace, projectId: string, labels: Record<string
           bars: m.variation?.cinematic_bars ?? false,
           effects: typeof settings.line_effect === "string" ? { verse: settings.line_effect, hook: String(settings.hook_effect ?? "") } : null,
           layout: m.props?.layout ?? null,
+          theme: typeof settings.theme === "string" && settings.theme ? settings.theme : null,
           createdAt: m.created_at,
           qa: parseQaReport(readFileSync(path.join(dir, `${n}.qa.txt`), "utf8")),
           reactions: reactionsFor(name),

@@ -4,11 +4,14 @@ import { ChevronDown, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
+import { THEME_MOODS } from "@lyric/video";
 import type { GeneratePanelData } from "@lyric/video/library";
 import type { GeneratePreset } from "@lyric/video/run-settings";
 
+import { PickedChip, SearchPicker } from "@/components/search-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FeatureIcon } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 
@@ -54,6 +57,20 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
   // The theme for this run ("" = the song's own) and Compare themes (2-3: one set of videos per theme).
   const [runTheme, setRunTheme] = useState("");
   const [compareThemes, setCompareThemes] = useState<string[]>([]);
+  // The pickers (the user's rule, 1 Nov 2026: no tick boxes for lists that grow): the song's theme first,
+  // then the themes in use, then the rest; collections with the song's own first.
+  const themeOf = (name: string) => data.themes.find((t) => t.name === name) ?? { name, songs: 0, cover: null, moods: [], accent: null };
+  const themeItems = [...data.themes]
+    .sort((a, b) => Number(b.name === data.theme) - Number(a.name === data.theme) || Number(b.songs > 0) - Number(a.songs > 0) || a.name.localeCompare(b.name))
+    .map((t) => ({ ...t, id: t.name, label: t.name, tags: t.moods }));
+  const renderTheme = (t: (typeof themeItems)[number]) => (
+    <>
+      <ThemeCover theme={t} className="aspect-[4/5] w-full rounded" />
+      <span className="truncate text-xs font-medium">{t.name}</span>
+      <span className="text-muted-foreground -mt-1 truncate text-[10px]">{t.name === data.theme ? "this song's" : t.songs ? `${t.songs} song${t.songs === 1 ? "" : "s"}` : "not used yet"}</span>
+    </>
+  );
+  const collectionItems = [...data.collections].sort((a, b) => Number(data.chosen.includes(b)) - Number(data.chosen.includes(a)) || a.localeCompare(b)).map((c) => ({ id: c, label: c, note: data.chosen.includes(c) ? "this song's" : undefined }));
   // Section and target length: the run's exact times ("0:34–1:06 (from that run)") until switched back to auto.
   const runSection = from?.section && !locked("section") ? from.section : null;
   const [section, setSection] = useState(runSection ?? r.section);
@@ -169,58 +186,71 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
                 {data.songClips ? `This song's own clips (${data.songClips})` : "No clips of its own yet (Assets tab)"}
                 {data.collections.length ? ", plus:" : ""}
               </p>
-              <div className="flex flex-wrap gap-x-3 gap-y-1">
-                {data.collections.map((c) => (
-                  <label key={c} className="flex items-center gap-1.5 text-sm">
-                    <input
-                      type="checkbox"
-                      data-collection-choice={c}
-                      disabled={locked("collections")}
-                      checked={collections.includes(c)}
-                      onChange={(e) => setCollections((list) => (e.target.checked ? [...list, c] : list.filter((x) => x !== c)))}
-                    />
+              <div className="flex flex-wrap items-center gap-1.5">
+                {collections.map((c) => (
+                  <PickedChip key={c} name="collection" id={c} onRemove={locked("collections") ? undefined : () => setCollections((list) => list.filter((x) => x !== c))}>
+                    <FeatureIcon feature="collection" className="size-3" />
                     {c}
-                    {data.chosen.includes(c) ? <span className="text-muted-foreground text-xs">(this song&apos;s)</span> : null}
-                  </label>
+                  </PickedChip>
                 ))}
+                {data.collections.length ? (
+                  <SearchPicker
+                    name="collections"
+                    items={collectionItems}
+                    selected={collections}
+                    disabled={locked("collections")}
+                    onPick={(c) => setCollections((list) => (list.includes(c) ? list.filter((x) => x !== c) : [...list, c]))}
+                    trigger={<>+ Add a collection</>}
+                    placeholder="Search collections…"
+                  />
+                ) : null}
               </div>
             </fieldset>
-            <label className={label}>
+            <div className={label}>
               <span className="font-medium">Theme</span>
-              <select data-generate-theme aria-label="Theme" className={select} value={runTheme || data.theme || ""} disabled={compareThemes.length >= 2} onChange={(e) => setRunTheme(e.target.value === data.theme ? "" : e.target.value)}>
-                {data.themes.map((t) => (
-                  <option key={t.name} value={t.name}>
-                    {t.name}
-                    {t.name === data.theme ? " (this song's)" : ""}
-                  </option>
-                ))}
-              </select>
+              <div className="flex flex-wrap items-center gap-1.5" data-generate-theme={runTheme || data.theme || ""}>
+                {compareThemes.length >= 2 ? (
+                  <span className="text-muted-foreground text-xs">Compare themes below picks the themes.</span>
+                ) : (
+                  <>
+                    <ThemeChip theme={themeOf(runTheme || data.theme || "")} own={!runTheme} />
+                    <SearchPicker name="run-theme" items={themeItems} selected={[runTheme || data.theme || ""]} max={1} filters={THEME_MOODS} tiles render={renderTheme} onPick={(t) => setRunTheme(t === data.theme ? "" : t)} trigger={<>Change…</>} placeholder="Search themes…" />
+                  </>
+                )}
+              </div>
               <span className="text-muted-foreground text-xs">{runTheme ? "For this run only: the song keeps its own theme." : "The song's look: fonts, motion and colours (change it in Shape → Theme)."}</span>
-            </label>
+            </div>
           </div>
           {data.themes.length >= 2 ? (
             <fieldset data-compare-themes className="flex flex-col gap-1.5 text-sm">
               <legend className="font-medium">Compare themes (optional)</legend>
               <span className="text-muted-foreground text-xs">
-                Tick 2–3: each theme gets its own videos with the same section, clips and order, so only the look differs (compare them in Videos and on your phone). The song keeps its own theme.
+                Pick 2–3 themes: each gets its own videos with the same section, clips and order, so only the look differs (compare them in Videos and on your phone). The song keeps its own theme.
               </span>
-              <div className="flex flex-wrap gap-x-4 gap-y-1">
-                {data.themes.map((t) => (
-                  <label key={t.name} className="flex items-center gap-1.5">
-                    <input
-                      type="checkbox"
-                      className="accent-brand"
-                      data-theme-option={t.name}
-                      checked={compareThemes.includes(t.name)}
-                      disabled={(!compareThemes.includes(t.name) && compareThemes.length >= 3) || pictureSets.length > 0}
-                      onChange={(e) => setCompareThemes((list) => (e.target.checked ? [...list, t.name] : list.filter((x) => x !== t.name)))}
-                    />
-                    {t.name}
-                    {t.name === data.theme ? <span className="text-muted-foreground text-xs">(this song&apos;s)</span> : null}
-                  </label>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {compareThemes.map((t) => (
+                  <PickedChip key={t} name="compare-theme" id={t} onRemove={() => setCompareThemes((list) => list.filter((x) => x !== t))}>
+                    <ThemeChip theme={themeOf(t)} own={t === data.theme} bare />
+                  </PickedChip>
                 ))}
+                {compareThemes.length < 3 ? (
+                  <SearchPicker
+                    name="compare-themes"
+                    items={themeItems}
+                    selected={compareThemes}
+                    max={3}
+                    filters={THEME_MOODS}
+                    tiles
+                    render={renderTheme}
+                    disabled={pictureSets.length > 0}
+                    onPick={(t) => setCompareThemes((list) => (list.includes(t) ? list.filter((x) => x !== t) : [...list, t]))}
+                    trigger={<>+ Add a theme to compare</>}
+                    placeholder="Search themes…"
+                  />
+                ) : null}
+                {pictureSets.length ? <span className="text-muted-foreground text-xs">(not together with Picture versions)</span> : null}
               </div>
-              {compareThemes.length === 1 ? <span className="text-xs text-amber-300">Tick one more to compare.</span> : null}
+              {compareThemes.length === 1 ? <span className="text-xs text-amber-300">Add one more to compare.</span> : null}
             </fieldset>
           ) : null}
           <fieldset data-picture-versions className="flex flex-col gap-1.5 text-sm">
@@ -236,18 +266,22 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
                     <input type="checkbox" className="accent-brand" checked={set.songClips} onChange={(e) => setPictureSets((all) => all.map((x, i) => (i === k ? { ...x, songClips: e.target.checked } : x)))} /> the song&apos;s clips
                   </label>
                 ) : null}
-                {data.collections.map((c) => (
-                  <label key={c} className="flex items-center gap-1.5">
-                    <input
-                      type="checkbox"
-                      className="accent-brand"
-                      data-picture-collection={c}
-                      checked={set.collections.includes(c)}
-                      onChange={(e) => setPictureSets((all) => all.map((x, i) => (i === k ? { ...x, collections: e.target.checked ? [...x.collections, c] : x.collections.filter((n) => n !== c) } : x)))}
-                    />
+                {set.collections.map((c) => (
+                  <PickedChip key={c} name="picture-collection" id={c} onRemove={() => setPictureSets((all) => all.map((x, i) => (i === k ? { ...x, collections: x.collections.filter((n) => n !== c) } : x)))}>
+                    <FeatureIcon feature="collection" className="size-3" />
                     {c}
-                  </label>
+                  </PickedChip>
                 ))}
+                {data.collections.length ? (
+                  <SearchPicker
+                    name={`picture-${k + 1}`}
+                    items={collectionItems}
+                    selected={set.collections}
+                    onPick={(c) => setPictureSets((all) => all.map((x, i) => (i === k ? { ...x, collections: x.collections.includes(c) ? x.collections.filter((n) => n !== c) : [...x.collections, c] } : x)))}
+                    trigger={<>+ Collection</>}
+                    placeholder="Search collections…"
+                  />
+                ) : null}
                 <button type="button" className="text-muted-foreground text-xs underline" onClick={() => setPictureSets((all) => all.filter((_, i) => i !== k))}>
                   remove
                 </button>
@@ -399,5 +433,28 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
         </form>
       ) : null}
     </section>
+  );
+}
+
+type PickTheme = GeneratePanelData["themes"][number];
+
+// A theme's cover (its picture, or a backdrop in its accent colour when it has none).
+function ThemeCover({ theme, className }: { theme: PickTheme; className?: string }) {
+  return theme.cover ? (
+    // eslint-disable-next-line @next/next/no-img-element -- a local file served by /api/files
+    <img alt="" src={`/api/files/${theme.cover}`} className={cn("object-cover", className)} />
+  ) : (
+    <span aria-hidden className={cn("block", className)} style={{ background: `linear-gradient(135deg, ${theme.accent ?? "#e8a3b5"}55, #141417)` }} />
+  );
+}
+
+// The chosen theme as a chip: a small cover, its name, "this song's".
+function ThemeChip({ theme, own, bare }: { theme: PickTheme; own: boolean; bare?: boolean }) {
+  return (
+    <span data-theme-chip={theme.name} className={cn("flex items-center gap-1.5 text-xs", !bare && "bg-card rounded-full border py-0.5 pr-2.5 pl-1")}>
+      <ThemeCover theme={theme} className="size-5 rounded-full" />
+      <span className="font-medium">{theme.name}</span>
+      {own ? <span className="text-muted-foreground">(this song&apos;s)</span> : null}
+    </span>
   );
 }

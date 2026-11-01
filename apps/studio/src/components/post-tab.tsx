@@ -9,6 +9,7 @@ import type { VideoInfo } from "@lyric/video/exports";
 import { PostPanel } from "@/components/ready-to-post";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { FeatureIcon } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
 
 type Group = { platform: string; label: string; videos: VideoInfo[] };
@@ -59,6 +60,7 @@ export function PostTab({ projectId, songTitle, groups, offered = [] }: { projec
                         {v.label} {v.name}
                         {v.mark.favourite ? <span className="text-brand"> ★</span> : null}
                       </span>
+                      {v.theme ? <span data-video-theme={v.theme} className="text-brand flex items-center gap-1 text-[11px]"><FeatureIcon feature="theme" className="size-3" />{v.theme}</span> : null}
                       <span className="text-muted-foreground text-xs">
                         {when(v.createdAt)}
                         {v.durationS ? ` · ${Math.round(v.durationS)} s` : ""}
@@ -123,6 +125,7 @@ function ReadyToApprove({ projectId, videos }: { projectId: string; videos: Vide
               <span className="font-medium">
                 {v.label} {v.name}
               </span>
+              {v.theme ? <span data-video-theme={v.theme} className="text-brand flex items-center gap-1 text-[11px]"><FeatureIcon feature="theme" className="size-3" />{v.theme}</span> : null}
               <span className="text-muted-foreground">{when(v.createdAt)}</span>
             </div>
             <Button size="sm" onClick={() => approve(v)} disabled={!!busy} data-approve={v.id}>
