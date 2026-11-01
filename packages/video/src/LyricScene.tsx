@@ -4,7 +4,7 @@ import { measureText } from "@remotion/layout-utils";
 import { useMemo, type CSSProperties } from "react";
 import { useCurrentFrame, useVideoConfig } from "remotion";
 
-import { lyricScene, sceneTimeline, wordTimings } from "./effects/scene";
+import { effectExtents, lyricScene, restWidth, sceneTimeline, wordTimings } from "./effects/scene";
 import { kineticAt, kineticGroups } from "./effects/trending";
 import { dustLetter } from "./effects/slides";
 import { EMPHASIS_SCALE, emphasisWord } from "./effects/accents";
@@ -78,7 +78,7 @@ export function LyricScene(props: {
             return layoutLyric(
               applyTextCase(l.text, style.textCase),
               Math.round(textSize * lineScale(l, effects.hookScale)),
-              area.right - area.left,
+              restWidth(area.right - area.left, effectExtents(l.card?.effect ?? (l.isHook ? effects.hook : effects.verse), effects.verse, 30, effects.breathe, !!effects.chorusLift && !!l.isHook)),
               (t, size) => measureText({ text: t, fontFamily: font.family, fontWeight: font.weight, fontSize: size, ...(font.italic ? { additionalStyles: { fontStyle: "italic" } } : {}) }).width,
               area.minScale,
             );
@@ -86,7 +86,7 @@ export function LyricScene(props: {
         : null,
     // areaFor depends only on the props it closes over (lyric area / end screen)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ready, lyrics, style, props.hookFont, textSize, effects.hookScale],
+    [ready, lyrics, style, props.hookFont, textSize, effects.hookScale, effects.hook, effects.verse, effects.breathe, effects.chorusLift],
   );
   const timeline = useMemo(
     () =>

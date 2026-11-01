@@ -264,6 +264,13 @@ export function effectExtents(choice: EffectChoice, verse: EffectChoice, fps: nu
   return { up: up + wordUp, down: down + wordDown, side: x1, maxScale };
 }
 
+// The width a line may take at rest so that, grown by its effect (scale, sideways drift), it still fits
+// the lyric area (1 Nov 2026: lines a few px past the safe margin made videos "Not ready"). Never less
+// than 60% of the area.
+export function restWidth(areaWidth: number, ext: { side: number; maxScale: number }): number {
+  return Math.max(areaWidth * 0.6, (areaWidth - 2 * ext.side) / ext.maxScale);
+}
+
 // "glide" or "swap": how lines with this effect move (word effects take the verse effect's way).
 export function motionKind(choice: EffectChoice, verse: EffectChoice, fps = 30): "glide" | "swap" | "inherit" {
   return motionOf(resolveEffect(choice, fps), resolveEffect(verse, fps), fps).effect.transition;

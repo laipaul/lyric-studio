@@ -4,7 +4,7 @@ import { execFile } from "node:child_process";
 
 import { ffmpegBin } from "@lyric/db";
 
-import { effectExtents, motionKind } from "../effects/scene";
+import { effectExtents, motionKind, restWidth } from "../effects/scene";
 import { parseFrameDetect, lyricBox, type QaLyric, type TimeRange } from "../qa";
 import type { LyricArea } from "../platform";
 import type { LyricEffectsProps, LyricLineProps, TextCase } from "../props";
@@ -36,7 +36,11 @@ export function measureLyrics(
   const areaOf = (l: LyricLineProps) => (fonts.area && l.card?.centerY !== undefined ? { ...fonts.area, centerY: l.card.centerY } : fonts.area);
   const measured = lyrics.map((l) => {
     const face = l.card?.font && fonts.cardFace ? fonts.cardFace(l.card.font) : l.isHook && fonts.hook ? fonts.hook : fonts.main;
-    const layout = layoutWithFace(l.text, face, fonts.textCase, Math.round(fonts.textSize * lineScale(l, fonts.effects?.hookScale)), areaOf(l));
+    // The same rest width as the render (LyricScene): room for the effect to grow inside the area.
+    const a = areaOf(l);
+    const fx = fonts.effects;
+    const fitted = fx && a ? { ...a, right: a.left + restWidth(a.right - a.left, effectExtents(l.card?.effect ?? (l.isHook ? fx.hook : fx.verse), fx.verse, 30, fx.breathe, !!fx.chorusLift && !!l.isHook)) } : a;
+    const layout = layoutWithFace(l.text, face, fonts.textCase, Math.round(fonts.textSize * lineScale(l, fonts.effects?.hookScale)), fitted);
     const measure = faceMeasure(face);
     const widest = Math.max(...layout.lines.map((line) => measure(line, layout.fontSize)));
     return { l, layout, widest };

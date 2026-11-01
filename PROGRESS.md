@@ -4,6 +4,12 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Fix: lines a few px past the safe margin ("Not ready") ✅ (to verify on the Windows PC)
+- Reported by the user on 1 Nov 2026 (Here With Me YouTube: hook lines 33 px, line 15 7 px past the right 4%).
+- Cause: a line was fitted to the lyric area at rest; its effect (chorus lift, breathe, word scale, drift)
+  then grew it past the margin. Now the render (LyricScene) and QA (qa-check) fit each line to the area
+  minus its effect's growth (effects/scene.ts restWidth; test rest-width.test.ts), so it stays inside.
+
 ### Fix: Reels ended mid-chorus ✅ (to verify on the Windows PC)
 - Reported by the user on 1 Nov 2026 (Here With Me, 90 s Reel "cut hard"). With Reels at 90 s the window fell
   inside the second chorus and the section ended after "I feel your warmth, though I can't see," at full level.
