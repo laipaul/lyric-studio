@@ -6,6 +6,7 @@ import path from "node:path";
 import { project } from "@lyric/db";
 import { makeOwnCaptionTemplate, postingPack } from "@lyric/video/captions";
 import { songEp } from "@lyric/video/project-settings";
+import { songLinks } from "@lyric/video/song-links-node";
 import { songPathsById } from "@lyric/video/song-folder";
 import { eq } from "drizzle-orm";
 
@@ -28,7 +29,10 @@ export async function GET(request: Request) {
         const file = path.join(ws.dir, ...video.split("/"));
         const m = JSON.parse(readFileSync(file, "utf8")) as ManifestBits;
         const platform = m.platform?.name ?? "standard";
+        const { links, postLinks } = songLinks(ws, projectId);
         return postingPack(ws, {
+          links,
+          postLinks,
           platform,
           artist: p.artist,
           song: p.title,

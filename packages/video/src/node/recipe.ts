@@ -16,6 +16,7 @@ import { ENDING_VALUES, type EndingChoice } from "../ending";
 import { TRANSITION_STYLES, type TransitionStyle } from "../transitions";
 import { READABILITY_VALUES, type Readability } from "../readability";
 import { FALLBACKS, GRADES, TEXT_BACKINGS, TITLE_STYLES, TITLE_WARPS, VIGNETTES, type Fallback, type Grade, type TextBacking, type TitleStyle, type TitleWarp, type Vignette } from "../picture";
+import { checkLinks, type SongLink } from "../song-links";
 import { TEXT_LAYOUTS, type TextLayout } from "../text-layout";
 import { choiceText, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, parseEffectChoice } from "../effects/names";
 import { DEFAULT_BRAND, type Brand } from "./brand";
@@ -80,7 +81,7 @@ export { isPlatformField, isWeight, ITALIC_FIELDS, PLATFORM_FIELDS, WEIGHT_FIELD
 // outside Reset / Lock.
 // canvas: the clip (and moment, seconds) chosen for the Spotify Canvas (the clip editor's "Use for Canvas").
 // theme: the song's theme (themes\<name>\theme.json): its fonts, effects, accent colour and add-ons.
-export type SongRecipe = Partial<RecipeValues> & { theme?: string; perPlatform?: PerPlatform; locked?: RecipeField[]; anchors?: AnchorSpec[]; gapOrder?: GapOrder; canvas?: { clip: string; at?: number }; instrumental?: boolean };
+export type SongRecipe = Partial<RecipeValues> & { theme?: string; perPlatform?: PerPlatform; locked?: RecipeField[]; anchors?: AnchorSpec[]; gapOrder?: GapOrder; canvas?: { clip: string; at?: number }; instrumental?: boolean; links?: SongLink[]; postLinks?: Record<string, string[]> };
 // library | artist | artist:<platform> | song | song:<platform> | run
 export type RecipeSource = string;
 
@@ -101,7 +102,8 @@ export const RECIPE_HELP =
   '"0:11-1:10"), length (seconds an "auto" section aims for, e.g. 90; empty = the platform preset), transitions ("auto" = the app chooses cuts, dissolves and dips from the music; "crisp" = cuts; "flowing" = dissolves), paceShift (bars added to the automatic pacing, e.g. 1 = calmer; set by the reactions), readability ("auto" = the app adds a soft dark band behind the lyrics when the clips are bright behind them; "strong" = always; "normal" = never), titleOpening ("on" = the title, byline and tagline before the first hook on Reels, TikTok and Shorts), tagline (a short line under the title; empty = none), ending ("auto" = the app chooses how a Reel / TikTok / Short ends: a tight loop, a soft fade or a ring-out; or "loop", "fade", "ring-out"), ep, youtubeLayout ("cover", "stills", "clips"). perPlatform: values for one platform only, e.g. ' +
   '{ "youtube": { "verseEffect": "cinematic-fade" } } (verseEffect, hookEffect, verseFont, hookFont, accentColour, section, length), e.g. { "reels": { "length": 90 }, "tiktok": { "length": 30 } }. ' +
   'Story anchors (the Lyrics tab sets them): anchors [{ "line": 9, "clip": "hands.mp4", "clipIn": 1.5, "transition": "dissolve" }] = that clip lands on lyrics.txt line 9 ' +
-  '(cut in on the downbeat before the line, held until it ends); gapOrder "story" (default with anchors: the other clips in file-name order in every video) or "shuffle".';
+  '(cut in on the downbeat before the line, held until it ends); gapOrder "story" (default with anchors: the other clips in file-name order in every video) or "shuffle". ' +
+  'links (the Assets tab sets them): [{ "service": "spotify", "url": "https://open.spotify.com/track/..." }] where to hear the song and find the artist, used in the posting texts; postLinks: per platform, the links picked for its posts.';
 
 // Checks a song.json; every problem is named.
 export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: string[] } {
@@ -245,6 +247,17 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
     if (r.gapOrder === "story" || r.gapOrder === "shuffle") recipe.gapOrder = r.gapOrder;
     else problems.push('gapOrder must be "story" or "shuffle"');
   }
+  // The song's links (Assets tab) and, per platform, the ones picked for its posts (Post panel).
+  if (r.links !== undefined) {
+    // A link that is not right is left out (never blocks the song); the Assets tab shows what is kept.
+    const checked = checkLinks(r.links);
+    if (checked.links.length) recipe.links = checked.links;
+  }
+  if (r.postLinks !== undefined && r.postLinks !== null) {
+    const pl = r.postLinks as Record<string, unknown>;
+    if (typeof pl === "object" && !Array.isArray(pl) && Object.values(pl).every((v) => Array.isArray(v) && v.every((x) => typeof x === "string"))) recipe.postLinks = pl as Record<string, string[]>;
+    else problems.push('postLinks must look like { "reels": ["https://ffm.to/..."] } (the links picked per platform)');
+  }
   return { recipe, problems };
 }
 
@@ -272,6 +285,8 @@ export function recipeJson(recipe: SongRecipe): string {
   if (recipe.gapOrder) ordered.gapOrder = recipe.gapOrder;
   if (recipe.anchors?.length) ordered.anchors = recipe.anchors;
   if (recipe.canvas) ordered.canvas = recipe.canvas;
+  if (recipe.links?.length) ordered.links = recipe.links;
+  if (recipe.postLinks && Object.keys(recipe.postLinks).length) ordered.postLinks = recipe.postLinks;
   return `${JSON.stringify(ordered, null, 2)}\n`;
 }
 

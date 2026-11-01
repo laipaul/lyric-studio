@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { AssetKind, SongAssets } from "@lyric/video/assets";
 
+import { LinksField } from "@/components/song-links";
 import { Button } from "@/components/ui/button";
 import { FeatureIcon } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
@@ -164,6 +165,7 @@ export function AssetsTab({ projectId }: { projectId: string }) {
         </button>
       </p>
       <TaglineField projectId={projectId} />
+      <LinksField projectId={projectId} />
       <ul className="grid gap-3 md:grid-cols-2">
         {fileRow("song", <FileAudio className="size-5" />, "Song", data.song ? `${data.song.name}${data.song.durationMs ? ` · ${clock(data.song.durationMs)}` : ""}${data.song.bpm ? ` · ${Math.round(data.song.bpm)} BPM` : ""}` : "missing")}
         {data.instrumental

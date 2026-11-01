@@ -16,6 +16,7 @@ import type { TimedLine } from "../lrc";
 import { kenBurns } from "../photo";
 import { lyricArea, type Format, type LyricArea, type PlatformPreset, type SafeZone } from "../platform";
 import { mulberry32 } from "../prng";
+import { dropEmptyLinkLines, linkPlaceholders, OLD_SPOTIFY_LINE, type SongLink } from "../song-links";
 import type { LyricVideoProps, StillProps } from "../props";
 import { COVER_DRIFT, COVER_LYRICS_LEFT, COVER_NEXT_LINE_SCALE, COVER_TEXT_SCALE, coverSide, PARALLAX } from "../youtube-layout";
 import {
@@ -247,7 +248,9 @@ Credits
 Music and lyrics: {{artist}}
 Lyric video: {{artist}}
 
-Listen on Spotify: https://open.spotify.com/ (add the link to the song)
+{{listen}}
+
+{{follow}}
 
 #{{artistTag}} #{{songTag}} #lyrics #lyricvideo
 
@@ -256,7 +259,8 @@ Listen on Spotify: https://open.spotify.com/ (add the link to the song)
 `;
 
 // WORKSPACE_DIR\brand\publish-template.txt (created the first time) filled in for one song.
-// Placeholders: {{song}} {{artist}} {{lyrics}} {{songTag}} {{artistTag}} {{year}} {{ep}} {{epLine}} {{endScreen}}.
+// Placeholders: {{song}} {{artist}} {{lyrics}} {{songTag}} {{artistTag}} {{year}} {{ep}} {{epLine}} {{endScreen}},
+// and the song's links picked for YouTube (song-links.ts: {{listen}} {{follow}} {{links}} {{spotify}} ...).
 // {{epLine}} is 'From the EP "<name>"' with --ep, otherwise its line is left out. A template from
 // before --ep existed gets that line right after the first line of the description.
 // {{endScreen}} is "End screen: the last 14 s (from 3:41)" (what to set in YouTube Studio; `endScreen`
@@ -264,7 +268,7 @@ Listen on Spotify: https://open.spotify.com/ (add the link to the song)
 // description and tags, so nothing of it is published by accident.
 export function publishText(
   workspaceDir: string,
-  values: { song: string; artist: string; lyricsTxt: string; year: number; ep?: string; endScreen?: string },
+  values: { song: string; artist: string; lyricsTxt: string; year: number; ep?: string; endScreen?: string; links?: SongLink[] },
   folder: string = brandDir(workspaceDir), // the artist's brand folder
 ): { text: string; template: string; created: boolean } {
   const template = path.join(folder, "publish-template.txt");
@@ -292,6 +296,7 @@ export function publishText(
     ep: values.ep ?? "",
     epLine: values.ep ? `From the EP "${values.ep}"` : "",
     endScreen: values.endScreen ? `End screen: ${values.endScreen}` : "",
+    ...linkPlaceholders(values.links ?? []),
   };
   let content = readFileSync(template, "utf8").replace(/\r\n/g, "\n");
   if (values.endScreen && !content.includes("{{endScreen}}")) content = `${content.replace(/\n*$/, "\n")}\n== End screen ==\n{{endScreen}}\n`;
@@ -302,6 +307,12 @@ export function publishText(
   }
   // Without --ep the {{epLine}} line disappears completely (no empty line left behind).
   if (!values.ep) content = content.replace(/^[ \t]*\{\{epLine\}\}[ \t]*\n/gm, "");
+  // The song's links (Assets tab): a line whose link is empty disappears; the old "Listen on Spotify"
+  // placeholder line of templates from before links becomes the links (or goes).
+  const linkBlock = [map.listen, map.follow].filter(Boolean).join("\n\n");
+  content = linkBlock ? content.replace(OLD_SPOTIFY_LINE, linkBlock) : content.replace(new RegExp(`${OLD_SPOTIFY_LINE.source}\\n?`, "m"), "");
+  const linked = dropEmptyLinkLines(content, map);
+  if (linked !== content) content = linked.replace(/\n{3,}/g, "\n\n"); // no gap left where a link line went
   const text = content.replace(/\{\{(\w+)\}\}/g, (m, k: string) => map[k] ?? m);
   return { text, template, created };
 }

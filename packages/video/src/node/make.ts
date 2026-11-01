@@ -61,6 +61,7 @@ import { loadBrand, type Brand } from "./brand";
 import { artistBrandFile } from "./captions";
 import { readProjectSettings, rememberCollection, rememberedCollection, updateProjectSettings } from "./project-settings";
 import { PLATFORM_FIELDS, type PlatformField } from "./per-platform";
+import { pickedLinks, type SongLink } from "../song-links";
 import { artistRecipe, LIBRARY_RECIPE, readRecipe, recipeSummary, recipeText, resolveRecipe, runRecipe, writeRecipe, type RecipeField, type RecipeInput, type RecipeValues, type ResolvedRecipe } from "./recipe";
 import { renameSongFolder, songPathsById, STORY_FILE } from "./song-folder";
 import { ensureSongTheme, loadTheme, themeLayer } from "./themes";
@@ -769,6 +770,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       loopAudio: () => (songAudio ??= readLoopAudio(sp.songFile)),
       anchors: songRecipe.anchors ?? [],
       canvasChoice: songRecipe.canvas ?? null,
+      youtubeLinks: pickedLinks(songRecipe.links ?? [], songRecipe.postLinks, "youtube"),
       gapOrder: songRecipe.gapOrder ?? null,
       textboard,
     };
@@ -855,6 +857,7 @@ type Shared = {
   loopAudio: () => Promise<LoopAudio | null>; // the song decoded once per run, for the loop checks
   anchors: AnchorSpec[]; // song.json: story anchors
   canvasChoice: { clip: string; at?: number } | null; // song.json "canvas": the clip chosen for the Canvas
+  youtubeLinks: SongLink[]; // song.json "links" picked for YouTube (publish.txt)
   gapOrder: GapOrder | null; // song.json (null: story with anchors, else v1 story and the others shuffled)
   textboard: RunBoard; // the song's text layer (textboard.json, else the brand's defaults)
   picture?: PictureSet & { index: number }; // picture versions: this video's clip set
@@ -1788,7 +1791,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
           outFile: result.thumbnailFile,
           log,
         });
-        const pack = publishText(ws.dir, { song: project.title, artist: project.artist, lyricsTxt: readFileSync(alignment.lyricsTxt, "utf8"), year: sh.now.getFullYear(), ep: sh.ep, ...(props.endScreen?.seconds ? { endScreen: endScreenText({ fromFrame: props.endScreen.fromFrame, seconds: props.endScreen.seconds }, VIDEO.fps) } : {}) }, path.dirname(artistBrandFile(ws.dir, project.artist, "publish-template.txt").file));
+        const pack = publishText(ws.dir, { song: project.title, artist: project.artist, lyricsTxt: readFileSync(alignment.lyricsTxt, "utf8"), year: sh.now.getFullYear(), ep: sh.ep, links: sh.youtubeLinks, ...(props.endScreen?.seconds ? { endScreen: endScreenText({ fromFrame: props.endScreen.fromFrame, seconds: props.endScreen.seconds }, VIDEO.fps) } : {}) }, path.dirname(artistBrandFile(ws.dir, project.artist, "publish-template.txt").file));
         if (pack.created) log(`publishing template created: ${pack.template} (edit it to change publish.txt)`);
         result.publishFile = path.join(exportDir, one ? "publish.txt" : `${spec.name}.publish.txt`);
         writeFileSync(result.publishFile, pack.text);

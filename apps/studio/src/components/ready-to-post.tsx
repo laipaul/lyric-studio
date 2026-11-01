@@ -7,6 +7,7 @@ import type { PostingPack } from "@lyric/video/captions";
 import type { VideoInfo } from "@lyric/video/exports";
 
 import { CopyButton } from "@/components/copy-button";
+import { PostLinks } from "@/components/song-links";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { VideoPlayer } from "@/components/video-player";
@@ -98,6 +99,9 @@ export function PostPanel({ projectId, songTitle, video }: { projectId: string; 
               </section>
             ))
           : null}
+        {pack && pack.kind !== "none" ? (
+          <PostLinks projectId={projectId} platform={pack.platform} all={pack.links.all} picked={pack.links.picked} own={pack.links.own} onChange={() => void load()} />
+        ) : null}
         {pack?.template ? (
           <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
             <span>

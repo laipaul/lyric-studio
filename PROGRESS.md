@@ -4,6 +4,25 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Song links: streaming, smart links and social pages per song, picked per post ✅ (to verify on the Windows PC)
+- Asked by the user on 1 Nov 2026 ("when we post per song and platform, we need the link to each platform for
+  the song like Spotify, Apple, YT; on the song assets we add these links"; also marketing platforms such as
+  Feature.fm, the artist's own website, Facebook, SoundCloud; "the artist picks the ones they need, or a copy
+  icon when creating the reel").
+- **Assets → Links**: paste a link and the app names its service (Spotify, Apple Music, YouTube Music,
+  Feature.fm, Linkfire, HyperFollow, Instagram, Facebook, …); change it with a searchable picker (Stores ·
+  Smart links & marketing · Artist & social; "Other" with its own name). Copy and remove on each row. Saved
+  at once in song.json "links".
+- **Post panel → Links for this post**: the song's links picked for this post, each with Copy; "Add a link"
+  (picker) and × change the pick, kept per platform (song.json "postLinks"; "Back to the usual ones").
+  The usual ones: YouTube all the links; Reels / TikTok / Shorts the one best link (a smart link, else the
+  website, else Spotify), since their captions are not clickable (bio, link sticker, pinned comment).
+- **Texts**: the YouTube description gets "Listen:" (stores and smart links) and "Follow:" (social pages);
+  the old "Listen on Spotify: … (add the link to the song)" line of existing templates becomes the real links.
+  Caption templates can use {{bestLink}} {{links}} {{listen}} {{follow}} {{spotify}} {{apple}} {{website}}
+  {{facebook}} … (a line whose link is empty disappears). Templates on disk are never changed.
+- Tests: packages/video test/song-links.test.ts; browser: videos-post.e2e.ts (Assets → Post, pick kept).
+
 ### Review: one card per platform at the top ✅ (to verify on the Windows PC)
 - Asked by the user on 1 Nov 2026 ("the top titles are confusing; the goal is to see, for a song, what has
   been built per platform"; the versions below stay as they are: dates, Approve, Post, …).
@@ -109,38 +128,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   here". (Inside a song, Shape → Theme still previews on that song's own clip and lines.)
 - Tests: themes.test.ts (cover set / replace / duplicate / remove, no borrowed pictures, neutral words);
   browser: themes.e2e.ts (set, shown, Remove).
-
-### Theme editor fixes: colour codes, save bar on top, a clear Box, no typewriter cursor ✅ (to verify on the Windows PC)
-- Asked by the user on 31 Oct 2026.
-- **Text colour / Accent colour** (Edit theme → Colours): next to the picker, a box to type or paste the colour
-  code: #FF2D95, FF2D95, #F29, rgb(255, 45, 149) or 255, 45, 149 (Enter or click away saves it; anything else
-  says what to type). src/colour-ref.ts parseColourRef.
-- **Renaming the default theme** ("Life Lyrics", the one new songs start on) now works: brand.json follows the
-  new name, so it stays the default and no new "Life Lyrics" theme comes back.
-- **"Theme" written above the name** in the Themes page's detail view (a theme made from a song carries the song's
-  name, which read as the song); its pencil is "Rename the theme"; "Used by the song …"; Edit theme says
-  "Editing theme: X".
-- **This song → Card text**: every card's words for this song in one place: Title (the same as the header's
-  pencil), Tagline, Hook card text, End card text. Theme → Cards keeps only the look, with a link "This song →
-  Card text".
-- **An effect's name over a title card**: when the paused frame shows a title / tagline / hook / end card, the
-  effect's name gets a dark veil over the frame, so the two never read on top of each other.
-- **Cards** is now the first section of Edit theme (the order a design is made in), then Text, Motion, Colours,
-  Picture.
-- **Save · Save as new theme · Cancel** moved from the bottom to right below "Editing: X", and stay in view
-  while the sections scroll.
-- **Behind the words → Box** did draw, but too faint to notice (55 % black, no room above or below the words):
-  now 72 % black with room around the words, the lines staying exactly where they were.
-- **Typewriter**: no cursor any more (the accent-coloured bar was irritating); only the letters type in.
-- **Typewriter feels like typing again** (the user: "it just glides, even at 0 %"): with the stronger effect
-  amounts the typing pace had run away (a short line typed in half a second, mostly during its fade-in). Now
-  Strength is only the speed: 0 % calm ~8 letters/s, 50 % ~15, 100 % ~22 (typing.ts typingPace), and
-  typing starts halfway through the line's quick fade-in, so the letters appear one by one at full strength.
-- **The viewer while choosing an effect** (the user: "the effects stop working"): after pressing play once, the
-  viewer no longer showed the effect's name, so paused at the start (no lyric yet) it looked empty. Now the
-  name comes back when paused where no lyric is on screen, and pointing at any tile always shows it.
-- Tests: colour-ref.test.ts, effects-canva.test.ts (no cursor on screen); browser: song-stages (Box drawn,
-  save bar position, typed RGB code, a wrong code).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

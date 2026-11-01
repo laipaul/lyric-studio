@@ -7,6 +7,8 @@ import path from "node:path";
 
 import { safeName } from "@lyric/db";
 
+import { dropEmptyLinkLines, linkPlaceholders, pickedLinks, relink, type SongLink } from "../song-links";
+
 import { brandDir, DEFAULT_ARTIST } from "./brand";
 
 export const CAPTION_PLATFORMS = ["standard", "reels", "tiktok", "shorts"] as const;
@@ -40,7 +42,9 @@ Full song on Spotify (link in bio).
 };
 DEFAULTS.standard = DEFAULTS.reels;
 
-const HELP = `Placeholders: {{song}} {{artist}} {{ep}} {{epLine}} {{hook}} {{songTag}} {{artistTag}} {{year}}.
+const HELP = `Placeholders: {{song}} {{artist}} {{ep}} {{epLine}} {{hook}} {{songTag}} {{artistTag}} {{year}};
+links picked for the post (the song's Assets tab, Post panel): {{bestLink}} {{links}} {{listen}} {{socials}} {{follow}}
+{{smartlink}} {{spotify}} {{apple}} {{youtube}} {{website}} {{instagram}} {{tiktok}} {{facebook}} ... (a line whose link is empty disappears).
 {{epLine}} is 'From the EP "<name>"' (its line disappears without an EP); write your own line with {{ep}}
 for another language, e.g. Extrait de l'EP « {{ep}} ». {{hook}} is the first hook line of the lyrics.`;
 
@@ -76,7 +80,7 @@ export function makeOwnCaptionTemplate(workspaceDir: string, artist: string, pla
   return target;
 }
 
-export type CaptionValues = { song: string; artist: string; ep?: string | null; hook?: string | null; year: number };
+export type CaptionValues = { song: string; artist: string; ep?: string | null; hook?: string | null; year: number; links?: SongLink[] };
 
 // Fills a template: returns its sections ("Caption", "Hashtags", ...) with the values in.
 export function fillCaption(template: string, v: CaptionValues): Record<string, string> {
@@ -90,10 +94,12 @@ export function fillCaption(template: string, v: CaptionValues): Record<string, 
     songTag: tag(v.song),
     artistTag: tag(v.artist),
     year: String(v.year),
+    ...linkPlaceholders(v.links ?? []),
   };
   // Notes are "# " lines (a hashtag has no space after the #).
   let text = template.replace(/\r\n/g, "\n").replace(/^# .*\n?/gm, "");
   for (const k of ["epLine", "hook", "ep"]) if (!map[k]) text = text.replace(new RegExp(`^[ \\t]*\\{\\{${k}\\}\\}[ \\t]*\\n`, "gm"), "");
+  text = dropEmptyLinkLines(text, map);
   const filled = text.replace(/\{\{(\w+)\}\}/g, (m, k: string) => map[k] ?? m);
   return parseSections(filled);
 }
@@ -132,23 +138,28 @@ export type PostingPack = {
   artist: string;
   sections: Record<string, string>; // "Caption" / "Hashtags", or YouTube's "Title" / "Description" / "Tags"
   template: { file: string; relative: string; own: boolean } | null; // where to edit the caption text
+  links: { all: SongLink[]; picked: string[]; own: boolean }; // the song's links, the urls picked for this post (own: picked on the Post panel)
 };
 
 // What to paste when posting one video: the caption and hashtags from the artist's template for its
 // platform, or (YouTube) the publish.txt written next to the video.
 export function postingPack(
   ws: { dir: string },
-  input: { platform: string; artist: string; song: string; ep?: string | null; hook?: string | null; publishFile?: string | null; now?: Date },
+  input: { platform: string; artist: string; song: string; ep?: string | null; hook?: string | null; publishFile?: string | null; now?: Date; links?: SongLink[]; postLinks?: Record<string, string[]> },
 ): PostingPack {
-  const base = { platform: input.platform, artist: input.artist };
+  const all = input.links ?? [];
+  const picked = pickedLinks(all, input.postLinks, input.platform);
+  const base = { platform: input.platform, artist: input.artist, links: { all, picked: picked.map((l) => l.url), own: !!input.postLinks?.[input.platform] } };
   if (input.platform === "canvas") return { ...base, kind: "none", sections: {}, template: null };
   if (input.platform === "youtube") {
     const text = input.publishFile && existsSync(input.publishFile) ? readFileSync(input.publishFile, "utf8") : "";
     const tpl = artistBrandFile(ws.dir, input.artist, "publish-template.txt");
-    return { ...base, kind: "youtube", sections: parseSections(text), template: { file: tpl.file, relative: rel(ws.dir, tpl.file), own: tpl.own } };
+    const sections = parseSections(text);
+    if (sections.Description !== undefined) sections.Description = relink(sections.Description, all, picked);
+    return { ...base, kind: "youtube", sections, template: { file: tpl.file, relative: rel(ws.dir, tpl.file), own: tpl.own } };
   }
   const platform = (CAPTION_PLATFORMS as readonly string[]).includes(input.platform) ? input.platform : "reels";
   const t = captionTemplate(ws.dir, input.artist, platform);
-  const sections = fillCaption(readFileSync(t.file, "utf8"), { song: input.song, artist: input.artist, ep: input.ep, hook: input.hook, year: (input.now ?? new Date()).getFullYear() });
+  const sections = fillCaption(readFileSync(t.file, "utf8"), { song: input.song, artist: input.artist, ep: input.ep, hook: input.hook, year: (input.now ?? new Date()).getFullYear(), links: picked });
   return { ...base, kind: "caption", sections, template: { file: t.file, relative: rel(ws.dir, t.file), own: t.own } };
 }

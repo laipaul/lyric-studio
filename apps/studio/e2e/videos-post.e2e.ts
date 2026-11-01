@@ -189,6 +189,30 @@ async function main() {
     check((await page.$$("[data-post-video]")).length === 1, "Post lists the approved video only (v1, not v2)");
     await page.waitForSelector("[data-post-panel] [data-section]");
     check(((await page.textContent("[data-post-panel]")) ?? "").includes("Caption"), "with its caption to copy");
+    // Song links: none yet = a pointer to Assets; added on Assets (the service recognised from the link),
+    // the Reel's post shows the best one (the smart link) with a copy button; "Add a link" picks another,
+    // kept per platform in song.json postLinks.
+    await page.waitForSelector("[data-post-links-none]");
+    check(true, "Post: no links yet, with a pointer to Assets");
+    await page.goto(`${base}/songs/${sp.project.id}?tab=assets`);
+    await page.waitForSelector("[data-links] [data-link-new]");
+    for (const url of ["https://open.spotify.com/track/abc", "https://ffm.to/posttest", "https://www.facebook.com/lifelyrics"]) {
+      await page.fill("[data-link-new]", url);
+      await Promise.all([page.waitForResponse((r: { url(): string; request(): { method(): string } }) => r.url().includes("/links") && r.request().method() === "PUT"), page.press("[data-link-new]", "Enter")]);
+    }
+    await page.waitForSelector("[data-link-row=facebook]");
+    const savedLinks = (JSON.parse(readFileSync(paths.recipe!, "utf8")) as { links?: { service: string }[] }).links ?? [];
+    check(savedLinks.map((l) => l.service).join(",") === "spotify,featurefm,facebook", `Assets: links saved with their services (${savedLinks.map((l) => l.service).join(",")})`);
+    await page.goto(`${base}/songs/${sp.project.id}?tab=post`);
+    await page.waitForSelector("[data-post-links] [data-post-link]");
+    const shown = await page.$$eval("[data-post-link]", (els: Element[]) => els.map((e) => e.getAttribute("data-post-link")));
+    check(shown.join(",") === "featurefm", `Post (Reels): the smart link by default (${shown.join(",")})`);
+    await page.click("[data-picker-open=post-links]");
+    await Promise.all([page.waitForResponse((r: { url(): string; request(): { method(): string } }) => r.url().includes("/links") && r.request().method() === "POST"), page.click("[data-picker=post-links] [data-picker-item='https://open.spotify.com/track/abc']")]);
+    await page.waitForSelector("[data-post-link=spotify]");
+    const picks = (JSON.parse(readFileSync(paths.recipe!, "utf8")) as { postLinks?: Record<string, string[]> }).postLinks ?? {};
+    check(JSON.stringify(picks.reels) === JSON.stringify(["https://ffm.to/posttest", "https://open.spotify.com/track/abc"]), `Post: the pick is kept for Reels (${JSON.stringify(picks)})`);
+    await page.keyboard.press("Escape");
     // The Post player: seekable over the whole video, and still after the end.
     await page.waitForSelector("[data-post-video] video");
     const pv = () =>

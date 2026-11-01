@@ -77,6 +77,8 @@
     "./jobs": "./src/node/jobs.ts",
     "./exports": "./src/node/exports.ts",
     "./captions": "./src/node/captions.ts",
+    "./song-links": "./src/song-links.ts",
+    "./song-links-node": "./src/node/song-links.ts",
     "./posters": "./src/node/posters.ts",
     "./project-settings": "./src/node/project-settings.ts",
     "./runs": "./src/node/runs.ts",
