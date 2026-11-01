@@ -4,6 +4,21 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Themes like Canva: text layouts, moods, livelier tiles ✅ (to verify on the Windows PC)
+- Asked by the user on 1 Nov 2026 ("build all except the Crown").
+- **Text layout** per theme (Edit theme → Text, three small frames): **Centred** (as before), **Lower third**
+  (the lyrics low, the picture open above them), **Big hook** (chorus lines 30 % larger). It goes into the
+  video itself (render, viewer, theme previews alike) and always stays inside each platform's safe zones:
+  Lower third sits at 68 % of the usable area, so even three big lines and the next line clear the TikTok /
+  Reels buttons (tested on every platform). YouTube's cover / stills layouts keep their own placement.
+- **Moods**: tick Romantic, Night, Warm, Minimal, Bright or Moody on a theme's page (kept in theme.json); the
+  mood chips at the top of Themes filter the gallery. No format filter: every theme fits every format.
+- **Tiles**: bigger words, placed like the theme's layout; pointing at a tile plays a tight ~3 s loop of one
+  line (the chorus line with Big hook), starting at once.
+- Tests: text-layout.test.ts (safe zones on every platform, Big hook, the viewer patch, recipe check),
+  readability-make.test.ts (the layout in the planned video), themes.test.ts (moods); browser: themes
+  (mood tick + filter, hover loop), song-stages (Text layout saved in the theme).
+
 ### Bug fix: a new render starts unapproved ✅ (to verify on the Windows PC)
 - Reported by the user on 1 Nov 2026: a newly made YouTube video already showed "Approved".
 - Cause: marks (favourite / approved / discarded) are stored by the video's file path only, so a new render

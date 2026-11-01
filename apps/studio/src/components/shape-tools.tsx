@@ -4,7 +4,7 @@ import { Check, ChevronDown, Lock, Plus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { BACKING_LABELS, effectTitle, parseColourRef, FALLBACK_LABELS, GRADE_LABELS, patchChoice, pictureOf, TITLE_STYLE_LABELS, TITLE_WARP_LABELS, titleStyleCss, VIGNETTE_LABELS, warpLetter, type TitleStyle, type TitleWarp, previewBacking, previewFace, previewLyrics, type LookPatch, type LookPreviewProps, type PatchFace, type Readability } from "@lyric/video";
+import { BACKING_LABELS, effectTitle, isTextLayout, parseColourRef, TEXT_LAYOUT_HINTS, TEXT_LAYOUT_LABELS, TEXT_LAYOUTS, type TextLayout, FALLBACK_LABELS, GRADE_LABELS, patchChoice, pictureOf, TITLE_STYLE_LABELS, TITLE_WARP_LABELS, titleStyleCss, VIGNETTE_LABELS, warpLetter, type TitleStyle, type TitleWarp, previewBacking, previewFace, previewLyrics, type LookPatch, type LookPreviewProps, type PatchFace, type Readability } from "@lyric/video";
 import type { PairingCard, PairingsView } from "@lyric/video/pairings";
 import type { StyleData, StyleField, StyleFont, StyleTheme } from "@lyric/video/style";
 
@@ -39,7 +39,7 @@ const show = (v: unknown) => (v === null ? "preset" : Array.isArray(v) ? (v.leng
 // demo: an effect just pointed at or picked in Motion: the viewer shows its name moving in it over the
 // video's frame, until the user plays (then the song plays with the effect on the real lyrics).
 export type ShapeLook = { patch: LookPatch | null; fallback: LookPreviewProps; caption: string; previewing: string | null; demo?: { key: string; input: LookPreviewProps } | null }; // previewing: the pairing pointed at
-const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "emphasis", "accentColour", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp", "hookCard", "hookCardStyle", "endCard", "endCardStyle"]);
+const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "emphasis", "accentColour", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp", "hookCard", "hookCardStyle", "endCard", "endCardStyle", "textLayout"]);
 
 // The Shape page's tool panels (the song's recipe, song.json), one at a time as chosen in the rail: Fonts
 // (font pairing, the fonts line with Fine-tune), Effects (Set effect with its Verses / Choruses switch),
@@ -743,6 +743,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
               </EditorSection>
 
               <EditorSection id="text" title="Text">
+                <TextLayoutControls value={(k) => valueOf(k)} onSet={(field, value) => void act({ action: "set", field, value })} />
                 <PairingsRow
                   projectId={projectId}
                   scope="all"
@@ -1032,7 +1033,8 @@ function lookOf(data: StyleData, s: { dirty: boolean; hovered: PairingCard | nul
   const colour = String(value("textColour") ?? s.pairView?.colour ?? "#FFFFFF");
   const picture = pictureOf({ grade: str(value("grade")), vignette: str(value("vignette")), textBacking: str(value("textBacking")), fallback: str(value("fallback")), fallbackColour: str(value("fallbackColour")), titleStyle: str(value("titleStyle")), titleWarp: str(value("titleWarp")), accentColour: accent });
   const cards = { hook: value("hookCard") === "on", hookStyle: (str(value("hookCardStyle")) ?? "plain") as TitleStyle, end: value("endCard") === "on", endStyle: (str(value("endCardStyle")) ?? "label") as TitleStyle };
-  const patch: LookPatch | null = s.dirty ? { verse, hook, verseEffect, hookEffect, breathe, ...addOns, accent, colour, picture, cards } : s.hovered ? { verse, hook } : null;
+  const textLayout: TextLayout = isTextLayout(value("textLayout")) ? (value("textLayout") as TextLayout) : "centre";
+  const patch: LookPatch | null = s.dirty ? { verse, hook, verseEffect, hookEffect, breathe, ...addOns, accent, colour, picture, cards, textLayout } : s.hovered ? { verse, hook } : null;
   const all = [...verse.files, ...hook.files];
   const fallback: LookPreviewProps = {
     mediaBaseUrl: "/api/fonts",
@@ -1049,6 +1051,7 @@ function lookOf(data: StyleData, s: { dirty: boolean; hovered: PairingCard | nul
     textSize: s.pairView?.textSize ?? 64,
     area: s.pairView?.area ?? null,
     picture,
+    ...(textLayout !== "centre" ? { textLayout } : {}),
     backing: previewBacking((value("readability") as Readability | undefined) ?? "auto", s.pairView?.bandLuminance ?? null, { colour, accent, verse, hook }),
   };
   const caption = s.trying ? `Trying the theme ${s.trying}: click it to use it for this song.` : s.hovered ? `Trying ${s.hovered.name}: click it in the list to use it.` : "Your song's first lines with your theme (no planned video yet).";
@@ -1099,7 +1102,7 @@ const CARD_TEXT_FIELDS = ["tagline", "hookText", "endText"] as const; // This so
 const SONG_OTHER_FIELDS = ["ep", "youtubeLayout", "titleOpening"] as const;
 const SONG_FIELDS = [...CARD_TEXT_FIELDS, ...SONG_OTHER_FIELDS] as const;
 const LOOK_FIELDS = ["textColour", "accentColour"] as const;
-const PICTURE_FIELDS = ["grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp", "hookCard", "hookCardStyle", "endCard", "endCardStyle"] as const;
+const PICTURE_FIELDS = ["grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp", "hookCard", "hookCardStyle", "endCard", "endCardStyle", "textLayout"] as const;
 const EFFECT_FIELDS = ["verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "emphasis"] as const;
 const MAKE_FIELDS = ["platforms", "variations", "collections"] as const;
 const AUTO_FIELDS = ["shotLength", "tempo", "section", "length", "ending", "transitions", "paceShift", "readability"] as const;
@@ -1516,6 +1519,38 @@ function TitleStyleControls({ value, onSet, sample, font }: { value: (field: str
         </label>
       ))}
       <p className="text-muted-foreground text-xs">For the song title: the YouTube video and, with the title opening on, Reels, TikTok and Shorts.</p>
+    </div>
+  );
+}
+
+// The theme's text layout (src/text-layout.ts): three small frames showing where the lyrics sit; the viewer
+// shows a click at once, Save keeps it. The app keeps every layout inside the platform's safe zones.
+function TextLayoutControls({ value, onSet }: { value: (field: string) => unknown; onSet: (field: string, value: string) => void }) {
+  const current = isTextLayout(value("textLayout")) ? (value("textLayout") as TextLayout) : "centre";
+  return (
+    <div data-text-layout-controls className="bg-card flex flex-col gap-2 rounded-lg border px-3 py-2.5 text-sm">
+      <span className="font-medium">Text layout</span>
+      <div className="grid grid-cols-3 gap-2">
+        {TEXT_LAYOUTS.map((l) => (
+          <button key={l} type="button" data-text-layout={l} aria-pressed={current === l} title={TEXT_LAYOUT_HINTS[l]} onClick={() => onSet("textLayout", l)} className={cn("flex flex-col items-center gap-1 rounded-md border p-1.5 text-[11px]", current === l ? "border-brand bg-brand/10" : "hover:border-foreground/40")}>
+            <span aria-hidden className="relative block h-16 w-9 overflow-hidden rounded-sm bg-[#2a2328]">
+              {l === "bighook" ? (
+                <>
+                  <span className="absolute inset-x-1.5 top-[34%] h-[3px] rounded bg-white/70" />
+                  <span className="bg-brand absolute inset-x-0.5 top-[44%] h-[6px] rounded" />
+                </>
+              ) : (
+                <>
+                  <span className={cn("absolute inset-x-1.5 h-[3px] rounded bg-white/80", l === "lower" ? "top-[62%]" : "top-[38%]")} />
+                  <span className={cn("absolute inset-x-2.5 h-[3px] rounded bg-white/60", l === "lower" ? "top-[70%]" : "top-[46%]")} />
+                </>
+              )}
+            </span>
+            {TEXT_LAYOUT_LABELS[l]}
+          </button>
+        ))}
+      </div>
+      <p className="text-muted-foreground text-xs">{TEXT_LAYOUT_HINTS[current]}. The app keeps the words clear of each platform&apos;s buttons.</p>
     </div>
   );
 }

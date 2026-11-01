@@ -7,6 +7,7 @@ import type { Intensity, EffectChoice } from "./effects/names";
 import type { FontFileRef } from "./font-files";
 import type { LyricVideoProps } from "./props";
 import type { PictureProps, TitleStyle } from "./picture";
+import { areaForLayout, BIG_HOOK_SCALE, type TextLayout } from "./text-layout";
 
 export type PatchFace = { family: string; weight: number; italic: boolean; files: FontFileRef[] };
 export type LookPatch = {
@@ -23,6 +24,7 @@ export type LookPatch = {
   colour?: string; // the theme's text colour
   picture?: Omit<PictureProps, "coverSrc">; // the theme's grade, vignette, behind the words, background without a clip
   cards?: { hook: boolean; hookStyle: TitleStyle; end: boolean; endStyle: TitleStyle }; // the theme's hook / end card on or off and their style
+  textLayout?: TextLayout; // the theme's text layout (src/text-layout.ts): the lyric area's height, Big hook's size
 };
 
 const INTENSITY: readonly Intensity[] = ["subtle", "balanced", "expressive"];
@@ -70,6 +72,10 @@ export function patchLook(props: LyricVideoProps, patch: LookPatch | null, barFr
       return { ...rest, ...(style !== "plain" ? { cardStyle: style } : {}), ...(on ? {} : { off: true }) };
     });
   }
+  // The text layout: the lyric area moves (not on YouTube's cover / stills, which place the lyrics themselves).
+  if (patch.textLayout && next.lyricArea && next.layout !== "cover" && next.layout !== "stills") {
+    next = { ...next, lyricArea: areaForLayout(next.lyricArea, patch.textLayout, next.lyricsAt ?? 0.45), textLayout: patch.textLayout };
+  }
   const fx = props.lyricEffects;
   if (fx) {
     const e = { ...fx };
@@ -87,6 +93,10 @@ export function patchLook(props: LyricVideoProps, patch: LookPatch | null, barFr
       else delete e[k];
     }
     if (e.shine && !e.downbeats) e.downbeats = bars;
+    if (patch.textLayout) {
+      if (patch.textLayout === "bighook") e.hookScale = BIG_HOOK_SCALE;
+      else delete e.hookScale;
+    }
     next = { ...next, lyricEffects: e };
   }
   return next;

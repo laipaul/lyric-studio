@@ -362,9 +362,11 @@ async function main() {
     await page.click("[data-picture-option='gradeCanvas']");
     await page.selectOption("[data-picture-select='titleStyle']", "extrude");
     await page.selectOption("[data-picture-select='titleWarp']", "arc");
+    await page.click("[data-text-layout=lower]");
+    check((await page.getAttribute("[data-text-layout=lower]", "aria-pressed")) === "true", "Text → Text layout: Lower third picked (Centred, Lower third, Big hook)");
     check(!!(await page.$("[data-title-sample] span span")), "Cards: the title sample is drawn in the chosen style and shape");
     await saveTheme(page);
-    check((await saved("grade", "warm")) && look("vignette") === "soft" && look("textBacking") === "box" && look("fallback") === "colour" && look("gradeCanvas") === "off" && look("titleStyle") === "extrude" && look("titleWarp") === "arc", "Save: the picture and the title style go into the theme");
+    check((await saved("grade", "warm")) && look("vignette") === "soft" && look("textBacking") === "box" && look("fallback") === "colour" && look("gradeCanvas") === "off" && look("titleStyle") === "extrude" && look("titleWarp") === "arc" && look("textLayout") === "lower", "Save: the picture, the title style and the text layout go into the theme");
     // A second song on the same theme: Save says so; "Save as new theme" keeps it as it is for the other song.
     const shared = readRecipe(recipe).theme!;
     const other = path.join(root, "Let Go.wav");

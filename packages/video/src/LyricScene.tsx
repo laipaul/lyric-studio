@@ -14,6 +14,7 @@ import { choiceAmount } from "./effects/types";
 import { applyTextCase, layoutLyric, type LyricLayout } from "./lyrics";
 import type { LyricArea } from "./platform";
 import { backingShadow, BOX_STYLE, type TextBacking } from "./picture";
+import { lineScale } from "./text-layout";
 import type { LyricEffectsProps, LyricLineProps, StyleProps } from "./props";
 
 type Font = { family: string; weight: number; italic?: boolean };
@@ -76,7 +77,7 @@ export function LyricScene(props: {
             const font = fontOf(l);
             return layoutLyric(
               applyTextCase(l.text, style.textCase),
-              Math.round(textSize * (l.card?.scale ?? 1)),
+              Math.round(textSize * lineScale(l, effects.hookScale)),
               area.right - area.left,
               (t, size) => measureText({ text: t, fontFamily: font.family, fontWeight: font.weight, fontSize: size, ...(font.italic ? { additionalStyles: { fontStyle: "italic" } } : {}) }).width,
               area.minScale,
@@ -85,7 +86,7 @@ export function LyricScene(props: {
         : null,
     // areaFor depends only on the props it closes over (lyric area / end screen)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ready, lyrics, style, props.hookFont, textSize],
+    [ready, lyrics, style, props.hookFont, textSize, effects.hookScale],
   );
   const timeline = useMemo(
     () =>

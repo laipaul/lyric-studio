@@ -20,6 +20,7 @@ import { project as projectTable, safeName, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
 import { brandDirFor, loadBrand } from "./brand";
+import { THEME_MOODS, type ThemeMood } from "../theme-moods";
 import type { FontCatalog } from "./font-catalog";
 import { findFamily } from "./font-catalog";
 import { checkPerPlatform, type PerPlatform, type PlatformValues } from "./per-platform";
@@ -28,7 +29,7 @@ import { isRemovedSong, songPathsById } from "./song-folder";
 
 export const THEME_VERSION = 1;
 // What a theme decides: the fonts, the lyric effects, the accent colour and the add-ons.
-export const THEME_FIELDS = ["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "accentColour", "breathe", "heldGlow", "chorusLift", "shine", "emphasis", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp", "hookCard", "hookCardStyle", "endCard", "endCardStyle"] as const satisfies readonly RecipeField[];
+export const THEME_FIELDS = ["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "accentColour", "breathe", "heldGlow", "chorusLift", "shine", "emphasis", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp", "hookCard", "hookCardStyle", "endCard", "endCardStyle", "textLayout"] as const satisfies readonly RecipeField[];
 export type ThemeField = (typeof THEME_FIELDS)[number];
 export type ThemeLook = Pick<RecipeValues, ThemeField>;
 // A theme folder is self-contained, so it can later be shared or sold as one file (a zip of the folder):
@@ -44,7 +45,10 @@ export type Theme = {
   look: ThemeLook; // every field set: a theme never depends on the brand
   perPlatform: Record<string, Partial<ThemeLook>>; // e.g. { "youtube": { "verseEffect": "cinematic-fade" } }
   createdAt: string;
+  moods: ThemeMood[]; // the Themes page's mood filters (1 Nov 2026), ticked on the theme's page
 };
+
+export { THEME_MOODS, type ThemeMood };
 export type ThemeInfo = { name: string; folder: string; theme: Theme; problems: string[]; preview: string | null };
 
 export const isThemeField = (k: string): k is ThemeField => (THEME_FIELDS as readonly string[]).includes(k);
@@ -52,8 +56,8 @@ export const isThemeField = (k: string): k is ThemeField => (THEME_FIELDS as rea
 const HELP =
   "A Lyric Studio theme: the whole look of a song (fonts, lyric effects, accent colour, add-ons). Songs point to it with " +
   'song.json "theme". look: verseFont / hookFont (a family from pnpm fonts), verseWeight / hookWeight (100-900), verseItalic / hookItalic (true / false), ' +
-  'verseEffect / hookEffect ("glide", "soft-blur:subtle", ...), accentColour ("#E8A3B5"), breathe (off | gentle | beat), heldGlow / chorusLift / shine / emphasis (off | on), textColour ("#FFFFFF"), grade (natural | warm | cool | faded | mono | moody), vignette (off | soft | strong), textBacking (none | shadow | glow | band | box), fallback (gradient | colour | cover: where there is no clip), fallbackColour ("#101014"), gradeCanvas (on | off: the Spotify Canvas graded too), titleStyle (plain | outline | layered | extrude | label), titleWarp (none | arc | wave), hookCard / endCard (off | on: a card in the pause before the first chorus / a call to action at the end, Reels, TikTok, Shorts), hookCardStyle / endCardStyle (like titleStyle). ' +
-  'perPlatform: values for one platform, e.g. { "youtube": { "verseEffect": "cinematic-fade" } }. author / licence: who made the theme and its terms; ' +
+  'verseEffect / hookEffect ("glide", "soft-blur:subtle", ...), accentColour ("#E8A3B5"), breathe (off | gentle | beat), heldGlow / chorusLift / shine / emphasis (off | on), textColour ("#FFFFFF"), grade (natural | warm | cool | faded | mono | moody), vignette (off | soft | strong), textBacking (none | shadow | glow | band | box), fallback (gradient | colour | cover: where there is no clip), fallbackColour ("#101014"), gradeCanvas (on | off: the Spotify Canvas graded too), titleStyle (plain | outline | layered | extrude | label), titleWarp (none | arc | wave), hookCard / endCard (off | on: a card in the pause before the first chorus / a call to action at the end, Reels, TikTok, Shorts), hookCardStyle / endCardStyle (like titleStyle), textLayout (centre | lower | bighook: where and how big the lyrics sit). ' +
+  'perPlatform: values for one platform, e.g. { "youtube": { "verseEffect": "cinematic-fade" } }. author / licence: who made the theme and its terms; moods: the mood filters of the Themes page (Romantic, Night, Warm, Minimal, Bright, Moody); ' +
   'fonts: the font files in this folder\'s fonts\\ with their licence. The folder is self-contained (fonts\\, overlays\\, preview.png). Edit it in the studio (Shape → Theme), not here.';
 
 export function themesDir(workspaceDir: string): string {
@@ -108,7 +112,16 @@ export function checkTheme(raw: unknown, catalog?: FontCatalog): { theme: Theme;
       }
   }
   const text = (k: string) => (typeof r[k] === "string" ? (r[k] as string) : "");
-  const theme: Theme = { version: THEME_VERSION, name, description: text("description"), author: text("author"), licence: text("licence"), fonts, look, perPlatform, createdAt: text("createdAt") };
+  const moods: ThemeMood[] = [];
+  if (r.moods !== undefined) {
+    if (!Array.isArray(r.moods)) problems.push(`moods must be a list like ["Romantic", "Night"] (${THEME_MOODS.join(", ")})`);
+    else
+      for (const m of r.moods) {
+        if ((THEME_MOODS as readonly unknown[]).includes(m)) moods.includes(m as ThemeMood) || moods.push(m as ThemeMood);
+        else problems.push(`moods: "${String(m)}" is not one of ${THEME_MOODS.join(", ")}`);
+      }
+  }
+  const theme: Theme = { version: THEME_VERSION, name, description: text("description"), author: text("author"), licence: text("licence"), fonts, look, perPlatform, createdAt: text("createdAt"), moods };
   return { theme, problems };
 }
 
@@ -117,6 +130,7 @@ function themeJson(theme: Theme): string {
   if (theme.description) out.description = theme.description;
   if (theme.author) out.author = theme.author;
   if (theme.licence) out.licence = theme.licence;
+  if (theme.moods?.length) out.moods = theme.moods;
   if (theme.fonts.length) out.fonts = theme.fonts;
   out.look = Object.fromEntries(THEME_FIELDS.map((k) => [k, theme.look[k]]));
   if (Object.keys(theme.perPlatform).length) out.perPlatform = theme.perPlatform;
@@ -197,7 +211,7 @@ export function themeForLook(workspaceDir: string, wanted: string, look: ThemeLo
   if (existing && sameLook(existing.theme, { look, perPlatform })) return existing.name;
   for (const t of listThemes(workspaceDir)) if (sameLook(t.theme, { look, perPlatform })) return t.name;
   const name = existing ? freeThemeName(workspaceDir, wanted) : wanted.trim() || freeThemeName(workspaceDir, "My theme");
-  writeTheme(workspaceDir, { version: THEME_VERSION, name, description, author: "", licence: "", fonts: [], look, perPlatform, createdAt: new Date().toISOString() });
+  writeTheme(workspaceDir, { version: THEME_VERSION, name, description, author: "", licence: "", fonts: [], look, perPlatform, createdAt: new Date().toISOString(), moods: [] });
   return name;
 }
 
@@ -546,9 +560,10 @@ export function restoreTheme(workspaceDir: string, folder: string): string {
 }
 
 // The theme's details on the Themes page: its description and who made it (the designer credit).
-export function setThemeDetails(workspaceDir: string, name: string, d: { description?: string; author?: string; licence?: string }): void {
+export function setThemeDetails(workspaceDir: string, name: string, d: { description?: string; author?: string; licence?: string; moods?: unknown }): void {
   const theme = loadTheme(workspaceDir, name);
-  writeTheme(workspaceDir, { ...theme, description: d.description?.trim() ?? theme.description, author: d.author?.trim() ?? theme.author, licence: d.licence?.trim() ?? theme.licence });
+  const moods = Array.isArray(d.moods) ? THEME_MOODS.filter((m) => (d.moods as unknown[]).includes(m)) : theme.moods;
+  writeTheme(workspaceDir, { ...theme, description: d.description?.trim() ?? theme.description, author: d.author?.trim() ?? theme.author, licence: d.licence?.trim() ?? theme.licence, moods });
 }
 
 // The Themes page's "+ New theme": named first, a copy of another theme (no song changes).

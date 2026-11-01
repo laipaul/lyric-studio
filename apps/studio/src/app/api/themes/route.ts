@@ -1,6 +1,6 @@
 // The Themes page. GET: every theme with its songs, the fonts, sample lyric lines, the songs and the
 // deleted themes. POST { action }: use { projectId, name } (a song uses the theme) · duplicate { name,
-// newName? } · rename { from, name } · details { name, description?, author? } · remove { name } (to
+// newName? } · rename { from, name } · details { name, description?, author?, moods? } · remove { name } (to
 // themes\_removed\) · restore { folder } · create { name, from } (a new theme, named first). Each answers with the page's data.
 import { connection } from "next/server";
 
@@ -10,7 +10,7 @@ import { chooseTheme, duplicateTheme, newTheme, removeTheme, renameTheme, restor
 
 import { withWorkspaceAsync } from "@/lib/workspace";
 
-type Body = { action?: string; projectId?: string; name?: string; newName?: string; from?: string; folder?: string; description?: string; author?: string };
+type Body = { action?: string; projectId?: string; name?: string; newName?: string; from?: string; folder?: string; description?: string; author?: string; moods?: unknown };
 
 export async function GET() {
   await connection();
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
         else if (body.action === "create") newTheme(ws.dir, name, String(body.from ?? ""));
         else if (body.action === "duplicate") duplicateTheme(ws.dir, name, body.newName);
         else if (body.action === "rename") renameTheme(ws, String(body.from ?? ""), name);
-        else if (body.action === "details") setThemeDetails(ws.dir, name, { description: body.description, author: body.author });
+        else if (body.action === "details") setThemeDetails(ws.dir, name, { description: body.description, author: body.author, moods: body.moods });
         else if (body.action === "remove") removeTheme(ws, name, catalog);
         else if (body.action === "restore") restoreTheme(ws.dir, String(body.folder ?? ""));
         else throw new Error("Unknown action.");

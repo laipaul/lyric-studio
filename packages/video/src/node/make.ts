@@ -32,6 +32,7 @@ import type { Beat } from "../beats";
 import { composeProps, DEFAULT_LEAD_MS, lyricFrames, rawLyric, type PlatformLayout, type RenderBase, type StyleChoice } from "../compose";
 import { choiceText, parseEffectChoice, type EffectChoice } from "../effects";
 import { cleanLrc } from "../lrc";
+import { areaForLayout, BIG_HOOK_SCALE, type TextLayout } from "../text-layout";
 import { choosePlatforms, lyricArea, parsePresets, sectionWindow, STANDARD, type LyricArea, type PlatformPreset } from "../platform";
 import { VIDEO } from "../config";
 import { getCutPoints, type CutRate, type Energy, type ShotLength } from "../cuts";
@@ -146,6 +147,7 @@ export type MakeOptions = {
   chorusLift?: "off" | "on"; // the first line of each chorus arrives a touch bigger and brighter
   shine?: "off" | "on"; // one soft light sweep across each chorus line, on a downbeat
   emphasis?: "off" | "on"; // the key word of each line in the hook font, bigger, in the accent
+  textLayout?: TextLayout; // the theme's text layout: centre | lower (the lower third) | bighook (chorus lines larger)
   titleOpening?: "off" | "on"; // Reels / TikTok / Shorts: title, byline and tagline before the first hook
   // The theme's picture (src/picture.ts; recipe textColour, grade, vignette, textBacking, fallback,
   // fallbackColour, gradeCanvas). Absent (pnpm make without a song.json): the videos as before.
@@ -921,7 +923,7 @@ function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: Pl
   const length = lengthFor(base, r.values.length, sh.analysis.duration_ms);
   if (length.note) sh.log(`${base.name}: ${length.note}`);
   const section = r.values.section === "auto" && length.wholeSong ? "full" : r.values.section;
-  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined, shotLength: r.values.shotLength ?? undefined, ending: r.values.ending, transitions: r.values.transitions, paceShift: r.values.paceShift, readability: r.values.readability, breathe: r.values.breathe, heldGlow: r.values.heldGlow, chorusLift: r.values.chorusLift, shine: r.values.shine, emphasis: r.values.emphasis, titleOpening: r.values.titleOpening, ...(sh.options.picture ? { picture: pictureFields(r.values) } : {}) };
+  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined, shotLength: r.values.shotLength ?? undefined, ending: r.values.ending, transitions: r.values.transitions, paceShift: r.values.paceShift, readability: r.values.readability, breathe: r.values.breathe, heldGlow: r.values.heldGlow, chorusLift: r.values.chorusLift, shine: r.values.shine, emphasis: r.values.emphasis, textLayout: r.values.textLayout, titleOpening: r.values.titleOpening, ...(sh.options.picture ? { picture: pictureFields(r.values) } : {}) };
   const own = PLATFORM_FIELDS.filter((k) => r.sources[k].includes(":"));
   if (own.length) sh.log(`${preset.name}: recipe ${own.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]})`).join(", ")}`);
   const out: Shared = {
@@ -1246,6 +1248,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     ...(options.chorusLift === "on" ? { chorusLift: true } : {}),
     ...(options.shine === "on" ? { shine: true, downbeats: barFrames } : {}),
     ...(options.emphasis === "on" ? { emphasis: true } : {}),
+    ...(options.textLayout === "bighook" ? { hookScale: BIG_HOOK_SCALE } : {}),
   };
   // A line whose singing is over but which is still on screen at the start (it lingers until the
   // next stamp) is not shown, so the video never opens on the tail of the previous line.
@@ -1277,7 +1280,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   // when at least a quarter of this video's clips are too bright behind them for the lyric colour or the
   // hook accent (thin strokes need more); "strong" / "normal" are the user's overrides. The clips are
   // measured at the moment their first shot is centred on (cached).
-  const readabilityArea = ytLayout ? lyricAreaFor(ytLayout, preset) : lyricArea(format, preset.safeZone, preset.lyricsAt);
+  const readabilityArea = ytLayout ? lyricAreaFor(ytLayout, preset) : areaForLayout(lyricArea(format, preset.safeZone, preset.lyricsAt), options.textLayout, preset.lyricsAt);
   // The theme's picture (src/picture.ts): the grade and vignette over the clips, what is behind the words,
   // the background where there is no clip (the cover blurred in advance for "cover"). The Canvas keeps the
   // clips' own colours when the theme says gradeCanvas "off".
@@ -1315,6 +1318,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     textScale: preset.textScale,
     loopEnding: preset.loopEnding,
     ...(ytLayout ? { lyricSafeZone: youtubeLyricSafeZone(ytLayout, preset.safeZone) } : {}),
+    ...(options.textLayout && options.textLayout !== "centre" ? { textLayout: options.textLayout } : {}),
   };
   const base: RenderBase = {
     plan,
@@ -1377,7 +1381,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   );
   for (const style of ["simple", "bold"] as const) {
     const s = styles[style];
-    const area = ytLayout ? lyricAreaFor(ytLayout, preset) : lyricArea(format, preset.safeZone, preset.lyricsAt);
+    const area = ytLayout ? lyricAreaFor(ytLayout, preset) : areaForLayout(lyricArea(format, preset.safeZone, preset.lyricsAt), options.textLayout, preset.lyricsAt);
     const textSize = Math.round(s.entry.textSize * preset.textScale * (ytLayout === "cover" ? COVER_TEXT_SCALE : 1));
     for (const l of tooLongLines(visible.map((i) => lines[i]), { main: s.main, hook: s.hook, textCase: s.entry.style.textCase, textSize, area })) {
       const n = numbers[lines.indexOf(l)] || lines.indexOf(l) + 1;

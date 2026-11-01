@@ -32,6 +32,14 @@ export function previewLyrics(texts: readonly string[]): LyricLineProps[] {
     };
   });
 }
+// A Themes page tile on hover (1 Nov 2026): one line, on at once, a ~3 s loop (the chorus line with Big hook).
+export const TILE_LOOP_FRAMES = 90;
+export function tileLyrics(text: string, hook = false): LyricLineProps[] {
+  return previewLyrics([text]).map((l) => {
+    const d = l.startFrame - 2;
+    return { ...l, startFrame: 2, endFrame: TILE_LOOP_FRAMES - 4, isHook: hook, stampFrame: l.stampFrame! - d, sungEndFrame: l.sungEndFrame! - d, words: l.words!.map((w) => ({ ...w, startFrame: w.startFrame - d, endFrame: w.endFrame - d })) };
+  });
+}
 export const lookPreviewDuration = (lines: number) => Math.max(1, lines) * LOOK_LINE_FRAMES + 45; // ~1 s empty at the end: the last line has left
 
 // A font family as the Style tab lists it (StyleData.fonts).

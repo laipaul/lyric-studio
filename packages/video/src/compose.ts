@@ -9,6 +9,7 @@ import type { FontFileRef } from "./font-files";
 import { kenBurns } from "./photo";
 import { pinsToShots, type ResolvedPin } from "./pins";
 import { DEFAULT_FORMAT, DEFAULT_SAFE_ZONE, lyricArea, type Format, type SafeZone } from "./platform";
+import { areaForLayout, type TextLayout } from "./text-layout";
 import { mulberry32 } from "./prng";
 import type { LyricEffectsProps, LyricLineProps, LyricVideoProps, StyleProps } from "./props";
 import type { PictureProps } from "./picture";
@@ -44,6 +45,7 @@ export type PlatformLayout = {
   textScale: number;
   loopEnding?: boolean;
   lyricSafeZone?: SafeZone; // where the lyrics may go, if narrower than the safe zone (YouTube cover layout)
+  textLayout?: TextLayout; // the theme's text layout (src/text-layout.ts); not with lyricSafeZone (YouTube's own placement)
 };
 export type RawLyric = {
   text: string;
@@ -185,7 +187,8 @@ export function composeProps(
   let plan = choices.plan ?? base.plan;
   const platform = base.platform ?? { format: DEFAULT_FORMAT, safeZone: DEFAULT_SAFE_ZONE, lyricsAt: 0.45, textScale: 1 };
   const bars = choices.cinematicBars ?? base.cinematicBars;
-  const area = lyricArea(platform.format, platform.lyricSafeZone ?? platform.safeZone, platform.lyricsAt, bars);
+  const layoutOf = platform.lyricSafeZone ? undefined : platform.textLayout;
+  const area = areaForLayout(lyricArea(platform.format, platform.lyricSafeZone ?? platform.safeZone, platform.lyricsAt, bars), layoutOf, platform.lyricsAt);
   const timed = lyricFrames(base, choices.leadMs ?? DEFAULT_LEAD_MS, choices.lyricsOffsetMs ?? 0, !!choices.effects, choices.effects?.gap);
   // Each line with its textboard card (the card's look; without a textboard: unchanged).
   const allLines = base.cards
@@ -334,6 +337,8 @@ export function composeProps(
       format: platform.format,
       safeZone: platform.safeZone,
       lyricArea: area,
+      lyricsAt: platform.lyricsAt,
+      ...(layoutOf ? { textLayout: layoutOf } : {}),
       ...(choices.effects ? { lyricEffects: choices.effects } : {}),
       ...(dips.length ? { dips } : {}),
       ...(base.lyricBacking ? { lyricBacking: true } : {}),

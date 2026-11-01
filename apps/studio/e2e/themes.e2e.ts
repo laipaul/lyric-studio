@@ -92,6 +92,10 @@ async function main() {
     check(theme(ids[1]) === "Night Drive" && theme(ids[0]) === "Life Lyrics", "Use this theme for the song: Let Go uses Night Drive, Hold On keeps Life Lyrics");
     check(((await page.textContent("[data-theme-detail-songs]")) ?? "").includes("Let Go"), "…and the detail view lists it");
     check(((await page.textContent("[data-theme-detail-kind]")) ?? "") === "Theme" && ((await page.getAttribute("[data-theme-detail-rename]", "aria-label")) ?? "") === "Rename the theme", "the detail view says Theme above the name; its pencil renames the theme");
+    // Moods: ticked on the theme's page; the mood chips filter the gallery.
+    await page.click("[data-theme-mood=Night]");
+    await page.waitForFunction(() => document.querySelector("[data-theme-mood=Night]")?.getAttribute("aria-pressed") === "true", null, { timeout: 5000 }).catch(() => {});
+    check(JSON.stringify(loadTheme(wsDir, "Night Drive").moods) === JSON.stringify(["Night"]), "Mood: Night ticked, saved in theme.json");
     // Theme cover: none = a neutral backdrop (no song picture); set one, it shows; Remove puts it aside.
     check(!(await page.$("[data-theme-cover]")) && !(await page.$("[data-themes-tile] [data-tile-frame]")), "Theme cover: none yet, and no tile borrows a song's picture");
     const coverPic = path.join(root, "night cover.jpg");
@@ -106,6 +110,14 @@ async function main() {
     await page.keyboard.press("Escape");
     await page.click("[data-theme-detail] [aria-label=Close]");
     // Filters.
+    await page.click("[data-theme-mood-filter=Night]");
+    const nightTiles = await page.$$eval("[data-themes-tile]", (e: Element[]) => e.map((x) => x.getAttribute("data-themes-tile")));
+    check(JSON.stringify(nightTiles) === JSON.stringify(["Night Drive"]), `the Night mood chip shows only Night themes (${nightTiles.join(", ")})`);
+    await page.click("[data-theme-mood-filter=Night]");
+    await page.hover("[data-themes-tile='Night Drive']");
+    await page.waitForSelector("[data-themes-tile='Night Drive'] .__remotion-player", { timeout: 5000 }).catch(() => {});
+    check(!!(await page.$("[data-themes-tile='Night Drive'] .__remotion-player")), "pointing at a tile plays its short motion loop");
+    await page.mouse.move(5, 5);
     await page.click("[data-theme-filter=unused]");
     check((await page.$$("[data-themes-tile]")).length === 0, "Not used yet: none");
     await page.click("[data-theme-filter=all]");

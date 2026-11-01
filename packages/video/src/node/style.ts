@@ -74,6 +74,7 @@ export const FIELD_LABELS: Record<RecipeField, string> = {
   grade: "Colour grade",
   vignette: "Vignette",
   textBacking: "Behind the words",
+  textLayout: "Text layout",
   fallback: "Background without a clip",
   fallbackColour: "Background colour",
   gradeCanvas: "Grade on the Canvas",
@@ -411,7 +412,7 @@ export function setBrandTitleFont(ws: Workspace, o: { artist: string; family: st
 // The Themes page (31 Oct 2026): every theme with its songs, the fonts to draw them, a few lyric lines to
 // preview them on (the newest song with lyrics), the songs to use a theme for, and the deleted themes.
 export const THEME_SAMPLE_LINES = ["Your lyric line here", "Your chorus here"] as const;
-export type ThemeCard = StyleTheme & { author: string; licence: string; createdAt: string; songs: { id: string; title: string }[]; brandDefault: string | null; background?: string | null };
+export type ThemeCard = StyleTheme & { author: string; licence: string; createdAt: string; moods: string[]; songs: { id: string; title: string }[]; brandDefault: string | null; background?: string | null };
 export type ThemesPageData = { themes: ThemeCard[]; fonts: StyleFont[]; sampleLines: string[]; sampleSong: string | null; songs: { id: string; title: string; theme: string | null }[]; removed: RemovedTheme[] };
 
 export function themesPageData(ws: Workspace): ThemesPageData {
@@ -442,6 +443,7 @@ export function themesPageData(ws: Workspace): ThemesPageData {
       author: t.theme.author,
       licence: t.theme.licence,
       createdAt: t.theme.createdAt,
+      moods: t.theme.moods ?? [],
       brandDefault: defaults.has(t.name) ? defaults.get(t.name) || "" : null,
     };
   });

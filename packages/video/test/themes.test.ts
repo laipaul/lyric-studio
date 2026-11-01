@@ -24,6 +24,7 @@ import {
   renameTheme,
   brandThemes,
   setThemeCover,
+  setThemeDetails,
   removeThemeCover,
   themeCover,
   themesPageWithFrames,
@@ -214,6 +215,17 @@ describe("songs and themes", () => {
     removeThemeCover(wsDir, "Life Lyrics");
     expect(themeCover(wsDir, "Life Lyrics")).toBeNull();
     expect(readdirSync(path.join(wsDir, "themes", "Life Lyrics", "_replaced")).length).toBe(2); // nothing deleted
+  });
+
+  it("moods: ticked on the theme's page, kept in theme.json, checked in plain words", async () => {
+    setThemeDetails(wsDir, "Life Lyrics", { moods: ["Night", "Romantic", "Spooky", "Night"] });
+    expect(loadTheme(wsDir, "Life Lyrics").moods).toEqual(["Romantic", "Night"]);
+    expect((await themesPageWithFrames(ws)).themes.find((t) => t.name === "Life Lyrics")!.moods).toEqual(["Romantic", "Night"]);
+    setThemeDetails(wsDir, "Life Lyrics", { author: "Paul" }); // other details keep the moods
+    expect(loadTheme(wsDir, "Life Lyrics").moods).toEqual(["Romantic", "Night"]);
+    expect(checkTheme({ name: "X", moods: ["Sad"] }).problems.join(" ")).toMatch(/moods: "Sad" is not one of Romantic, Night/);
+    expect(checkTheme({ name: "X" }).theme.moods).toEqual([]); // older themes: none
+    setThemeDetails(wsDir, "Life Lyrics", { moods: [], author: "" });
   });
 
   it("renaming the artist's default theme keeps it the default (brand.json follows)", () => {

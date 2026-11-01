@@ -9,7 +9,7 @@ import { ChevronDown, Pencil, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import { backingShadow, BOX_STYLE, fallbackBackground, gradeLook, pictureOf, vignetteBackground } from "@lyric/video";
+import { backingShadow, BOX_STYLE, fallbackBackground, gradeLook, isTextLayout, pictureOf, THEME_MOODS, TILE_LOOP_FRAMES, tileLyrics, vignetteBackground } from "@lyric/video";
 import type { ThemeCard, ThemesPageData } from "@lyric/video/style";
 
 import { PreviewPlayer } from "@/components/preview-player";
@@ -25,6 +25,7 @@ export function ThemesView() {
   const [data, setData] = useState<ThemesPageData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [mood, setMood] = useState<string | null>(null); // a mood filter (the theme's moods, ticked on its page)
   const [open, setOpen] = useState<string | null>(null); // the theme in the detail view
   const [creating, setCreating] = useState<{ name: string; from: string } | null>(null);
   const [showRemoved, setShowRemoved] = useState(false);
@@ -69,7 +70,7 @@ export function ThemesView() {
 
   if (error && !data) return <p className="p-6 text-sm text-red-300">{error}</p>;
   if (!data) return <p className="text-muted-foreground p-6 text-sm">Loading the themes…</p>;
-  const shown = data.themes.filter((t) => (filter === "used" ? t.songs.length > 0 : filter === "unused" ? t.songs.length === 0 : true));
+  const shown = data.themes.filter((t) => (filter === "used" ? t.songs.length > 0 : filter === "unused" ? t.songs.length === 0 : true) && (!mood || t.moods.includes(mood)));
   const detail = open ? data.themes.find((t) => t.name === open) ?? null : null;
   const counts = { all: data.themes.length, used: data.themes.filter((t) => t.songs.length).length, unused: data.themes.filter((t) => !t.songs.length).length };
 
@@ -93,6 +94,12 @@ export function ThemesView() {
         ).map(([id, label]) => (
           <button key={id} type="button" data-theme-filter={id} aria-pressed={filter === id} onClick={() => setFilter(id)} className={cn("rounded-full border px-3 py-1 text-xs", filter === id ? "border-brand bg-brand/15 text-foreground" : "text-muted-foreground hover:text-foreground")}>
             {label} · {counts[id]}
+          </button>
+        ))}
+        <span aria-hidden className="bg-border mx-1 w-px self-stretch" />
+        {THEME_MOODS.map((m) => (
+          <button key={m} type="button" data-theme-mood-filter={m} aria-pressed={mood === m} onClick={() => setMood((x) => (x === m ? null : m))} className={cn("rounded-full border px-3 py-1 text-xs", mood === m ? "border-brand bg-brand/15 text-foreground" : "text-muted-foreground hover:text-foreground")}>
+            {m} · {data.themes.filter((t) => t.moods.includes(m)).length}
           </button>
         ))}
       </div>
@@ -185,14 +192,16 @@ function ThemeTile({ theme, data, onOpen }: { theme: ThemeCard; data: ThemesPage
   const pic = pictureOf({ ...(v as Record<string, string>), accentColour: accent });
   const grade = gradeLook(pic.grade);
   const textLook: React.CSSProperties = { color: String(v.textColour ?? "#FFFFFF"), textShadow: backingShadow(pic.backing, accent).replace(/(\d+)px/g, (_m, n) => `${Math.max(1, Math.round(Number(n) / 3))}px`), ...(pic.backing === "box" ? { ...BOX_STYLE } : {}) };
+  const layout = isTextLayout(v.textLayout) ? v.textLayout : "centre";
   const fam = (role: "verse" | "hook") => ({ fontFamily: `"${String(v[`${role}Font`])} preview", serif`, fontWeight: Number(v[`${role}Weight`] ?? 400), fontStyle: v[`${role}Italic`] === true ? "italic" : "normal" });
   return (
     <button type="button" data-themes-tile={theme.name} onClick={onOpen} onMouseEnter={() => setPlaying(true)} onMouseLeave={() => setPlaying(false)} onFocus={() => setPlaying(true)} onBlur={() => setPlaying(false)} className="group flex min-w-0 flex-col gap-1.5 text-left">
       <div className="relative w-full overflow-hidden rounded-lg border bg-black group-hover:border-foreground/40" style={{ aspectRatio: "9 / 16" }}>
         {playing ? (
-          <PreviewPlayer input={themePreview(v, data.fonts, data.sampleLines, theme.background ?? null)} />
+          // A tight ~3 s loop of one line, moving at once (the chorus line in Big hook).
+          <PreviewPlayer input={{ ...themePreview(v, data.fonts, data.sampleLines, theme.background ?? null), lyrics: tileLyrics(layout === "bighook" ? data.sampleLines[1] || "Your chorus here" : data.sampleLines[0] || "Your lyric line here", layout === "bighook") }} durationInFrames={TILE_LOOP_FRAMES} />
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center" style={{ background: theme.background ? "#000" : fallbackBackground(pic) }}>
+          <div data-tile-layout={layout} className={cn("absolute inset-0 flex flex-col items-center gap-2 px-3 text-center", layout === "lower" ? "justify-end pb-[28%]" : "justify-center pb-[12%]")} style={{ background: theme.background ? "#000" : fallbackBackground(pic) }}>
             {theme.background ? (
               <>
                 {/* eslint-disable-next-line @next/next/no-img-element -- a workspace frame served by /api/files */}
@@ -202,10 +211,10 @@ function ThemeTile({ theme, data, onOpen }: { theme: ThemeCard; data: ThemesPage
             ) : null}
             {vignetteBackground(pic.vignette) ? <span aria-hidden className="absolute inset-0" style={{ background: vignetteBackground(pic.vignette)! }} /> : null}
             {pic.backing === "band" ? <span aria-hidden className="absolute inset-x-0 top-1/3 h-1/3" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.42) 35%, rgba(0,0,0,0.42) 65%, rgba(0,0,0,0) 100%)" }} /> : null}
-            <span className="relative line-clamp-2 text-lg leading-tight" style={{ ...fam("verse"), ...textLook }}>
+            <span className="relative line-clamp-2 text-xl leading-tight" style={{ ...fam("verse"), ...textLook }}>
               {data.sampleLines[0] || "Your lyric line here"}
             </span>
-            <span className="relative line-clamp-2 text-lg leading-tight" style={{ ...fam("hook"), ...textLook, color: accent }}>
+            <span className={cn("relative line-clamp-2 leading-tight", layout === "bighook" ? "text-[1.7rem]" : "text-xl")} style={{ ...fam("hook"), ...textLook, color: accent }}>
               {data.sampleLines[1] || "Your chorus here"}
             </span>
           </div>
@@ -295,6 +304,17 @@ function ThemeDetail({ theme, data, act, send, onOpen, onClose }: { theme: Theme
               <span className="text-muted-foreground w-20 shrink-0 text-xs">About</span>
               <input key={`${theme.name}-description`} data-theme-detail-description className={cn(input, "flex-1")} defaultValue={theme.description} placeholder="a line about the mood" onBlur={(e) => e.target.value.trim() !== theme.description && void act({ action: "details", name: theme.name, description: e.target.value })} />
             </label>
+            <div data-theme-detail-moods className="flex flex-wrap items-center gap-1.5 text-sm">
+              <span className="text-muted-foreground w-20 shrink-0 text-xs">Mood</span>
+              {THEME_MOODS.map((m) => {
+                const on = theme.moods.includes(m);
+                return (
+                  <button key={m} type="button" data-theme-mood={m} aria-pressed={on} onClick={() => void act({ action: "details", name: theme.name, moods: on ? theme.moods.filter((x) => x !== m) : [...theme.moods, m] })} className={cn("rounded-full border px-2.5 py-0.5 text-xs", on ? "border-brand bg-brand/15 text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                    {m}
+                  </button>
+                );
+              })}
+            </div>
             {/* Theme cover (1 Nov 2026): the theme's own picture, kept in its folder; without one its previews show a neutral backdrop in its colours (never a song's picture). */}
             <div data-theme-cover-row className="flex items-center gap-2 text-sm">
               <span className="text-muted-foreground w-20 shrink-0 text-xs">Theme cover</span>

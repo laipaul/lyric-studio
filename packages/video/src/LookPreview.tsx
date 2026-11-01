@@ -14,6 +14,7 @@ import { LyricScene } from "./LyricScene";
 import { fallbackBackground, gradeLook, vignetteBackground, type PictureProps } from "./picture";
 import { DEFAULT_LYRIC_AREA, type LyricArea } from "./platform";
 import type { LyricLineProps } from "./props";
+import { areaForLayout, BIG_HOOK_SCALE, type TextLayout } from "./text-layout";
 
 export type LookFace = { family: string; weight: number; italic: boolean };
 export type LookPreviewProps = {
@@ -33,12 +34,13 @@ export type LookPreviewProps = {
   backing: boolean; // the render's soft backing behind the lyrics (readability)
   transparent?: boolean; // only the words (drawn over another player: the effect's name over the video's frame)
   picture?: PictureProps | null; // the theme's grade, vignette, behind the words and background without a clip
+  textLayout?: TextLayout; // the theme's text layout: the lyric area's height, Big hook's chorus size
 };
 
 export function LookPreview(p: LookPreviewProps) {
   const ready = useFonts(p.mediaBaseUrl, p.fonts);
   const downbeats = useMemo(() => Array.from({ length: 12 }, (_, k) => k * LOOK_BAR_FRAMES), []);
-  const area = p.area ?? DEFAULT_LYRIC_AREA;
+  const area = p.textLayout ? areaForLayout(p.area ?? DEFAULT_LYRIC_AREA, p.textLayout) : (p.area ?? DEFAULT_LYRIC_AREA);
   const grade = gradeLook(p.picture?.grade);
   const vignette = vignetteBackground(p.picture?.vignette);
   const hookFont = useMemo(() => ({ font: p.hook.family, weight: p.hook.weight, italic: p.hook.italic }), [p.hook.family, p.hook.weight, p.hook.italic]);
@@ -64,6 +66,7 @@ export function LookPreview(p: LookPreviewProps) {
           shine: p.addOns.shine,
           emphasis: p.addOns.emphasis,
           downbeats,
+          ...(p.textLayout === "bighook" ? { hookScale: BIG_HOOK_SCALE } : {}),
         }}
         style={style}
         hookFont={hookFont}

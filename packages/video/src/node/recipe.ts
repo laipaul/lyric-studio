@@ -16,11 +16,12 @@ import { ENDING_VALUES, type EndingChoice } from "../ending";
 import { TRANSITION_STYLES, type TransitionStyle } from "../transitions";
 import { READABILITY_VALUES, type Readability } from "../readability";
 import { FALLBACKS, GRADES, TEXT_BACKINGS, TITLE_STYLES, TITLE_WARPS, VIGNETTES, type Fallback, type Grade, type TextBacking, type TitleStyle, type TitleWarp, type Vignette } from "../picture";
+import { TEXT_LAYOUTS, type TextLayout } from "../text-layout";
 import { choiceText, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, parseEffectChoice } from "../effects/names";
 import { DEFAULT_BRAND, type Brand } from "./brand";
 import { checkPerPlatform, isPlatformField, isWeight, SHOT_LENGTH_VALUES, PLATFORM_FIELDS, type PerPlatform, type PlatformField } from "./per-platform";
 
-export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "tempo", "collections", "platforms", "variations", "section", "length", "ending", "transitions", "paceShift", "readability", "breathe", "heldGlow", "chorusLift", "shine", "emphasis", "titleOpening", "tagline", "ep", "youtubeLayout", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp", "hookCard", "hookCardStyle", "endCard", "endCardStyle", "hookText", "endText"] as const;
+export const RECIPE_FIELDS = ["verseEffect", "hookEffect", "verseFont", "hookFont", "verseWeight", "hookWeight", "verseItalic", "hookItalic", "accentColour", "shotLength", "tempo", "collections", "platforms", "variations", "section", "length", "ending", "transitions", "paceShift", "readability", "breathe", "heldGlow", "chorusLift", "shine", "emphasis", "titleOpening", "tagline", "ep", "youtubeLayout", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp", "hookCard", "hookCardStyle", "endCard", "endCardStyle", "hookText", "endText", "textLayout"] as const;
 export type RecipeField = (typeof RECIPE_FIELDS)[number];
 
 export type RecipeValues = {
@@ -58,6 +59,7 @@ export type RecipeValues = {
   grade: Grade; // one colour grade on every clip
   vignette: Vignette;
   textBacking: TextBacking; // behind the words (readability "auto" still adds the band by itself when needed)
+  textLayout: TextLayout; // where and how big the lyrics sit (src/text-layout.ts): centre | lower | bighook
   fallback: Fallback; // where there is no clip
   fallbackColour: string; // #RRGGBB, for fallback "colour"
   gradeCanvas: "off" | "on"; // the Spotify Canvas gets the grade too (on) or keeps the clips' colours (off)
@@ -188,7 +190,7 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
     if (typeof r[k] === "string" && /^#[0-9a-fA-F]{6}$/.test(r[k] as string)) recipe[k] = r[k] as string;
     else problems.push(`${k} must look like "#FFFFFF"`);
   }
-  for (const [k, list] of [["grade", GRADES], ["vignette", VIGNETTES], ["textBacking", TEXT_BACKINGS], ["fallback", FALLBACKS], ["gradeCanvas", ["off", "on"]], ["titleStyle", TITLE_STYLES], ["titleWarp", TITLE_WARPS], ["hookCard", ["off", "on"]], ["endCard", ["off", "on"]], ["hookCardStyle", TITLE_STYLES], ["endCardStyle", TITLE_STYLES]] as const) {
+  for (const [k, list] of [["grade", GRADES], ["vignette", VIGNETTES], ["textBacking", TEXT_BACKINGS], ["fallback", FALLBACKS], ["gradeCanvas", ["off", "on"]], ["titleStyle", TITLE_STYLES], ["titleWarp", TITLE_WARPS], ["hookCard", ["off", "on"]], ["endCard", ["off", "on"]], ["hookCardStyle", TITLE_STYLES], ["endCardStyle", TITLE_STYLES], ["textLayout", TEXT_LAYOUTS]] as const) {
     if (r[k] === undefined) continue;
     if ((list as readonly unknown[]).includes(r[k])) (recipe as Record<string, unknown>)[k] = r[k];
     else problems.push(`${k} must be ${list.join(", ")}`);
@@ -408,6 +410,7 @@ export const LIBRARY_RECIPE: RecipeValues = {
   grade: "natural",
   vignette: "off",
   textBacking: "none",
+  textLayout: "centre",
   fallback: "gradient",
   fallbackColour: "#101014",
   gradeCanvas: "on",

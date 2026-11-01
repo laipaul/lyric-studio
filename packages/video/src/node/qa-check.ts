@@ -10,6 +10,7 @@ import type { LyricArea } from "../platform";
 import type { LyricEffectsProps, LyricLineProps, TextCase } from "../props";
 import type { FontFaceInfo } from "./font-catalog";
 import { faceMeasure, layoutWithFace } from "./measure";
+import { lineScale } from "../text-layout";
 
 export const POP_MAX_SCALE = 1.02; // the pop animation's spring overshoots the final size slightly
 
@@ -35,7 +36,7 @@ export function measureLyrics(
   const areaOf = (l: LyricLineProps) => (fonts.area && l.card?.centerY !== undefined ? { ...fonts.area, centerY: l.card.centerY } : fonts.area);
   const measured = lyrics.map((l) => {
     const face = l.card?.font && fonts.cardFace ? fonts.cardFace(l.card.font) : l.isHook && fonts.hook ? fonts.hook : fonts.main;
-    const layout = layoutWithFace(l.text, face, fonts.textCase, Math.round(fonts.textSize * (l.card?.scale ?? 1)), areaOf(l));
+    const layout = layoutWithFace(l.text, face, fonts.textCase, Math.round(fonts.textSize * lineScale(l, fonts.effects?.hookScale)), areaOf(l));
     const measure = faceMeasure(face);
     const widest = Math.max(...layout.lines.map((line) => measure(line, layout.fontSize)));
     return { l, layout, widest };

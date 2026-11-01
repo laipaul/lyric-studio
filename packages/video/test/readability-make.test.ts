@@ -9,7 +9,8 @@ import path from "node:path";
 import { ffmpegBin, openWorkspace, seedStylePresets } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { ensureAlignment, findOrCreateSongProject, makeVideos, songPathsById, writeRecipe, type AlignRunner } from "../src/node";
+import { ensureAlignment, findOrCreateSongProject, loadTheme, makeVideos, readRecipe, songPathsById, writeRecipe, writeTheme, type AlignRunner } from "../src/node";
+import { BIG_HOOK_SCALE } from "../src/text-layout";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-readability-"));
 const wsDir = path.join(root, "workspace");
@@ -77,5 +78,27 @@ describe("lyric readability in the render", () => {
     writeRecipe(songPathsById(ws, id).recipe!, { readability: "normal" });
     ws.close();
     expect((await plan("dress")).props.lyricBacking).toBeUndefined();
+  }, 300_000);
+
+  it("the theme's text layout goes into the planned video: Lower third moves the lyric area, Big hook sizes the chorus", async () => {
+    const before = (await plan("night")).props;
+    const ws = openWorkspace(wsDir);
+    const id = (await findOrCreateSongProject(ws, path.join(inDir, "song.wav"))).project.id;
+    const name = readRecipe(songPathsById(ws, id).recipe!).theme!;
+    const setLayout = (textLayout: "centre" | "lower" | "bighook") => {
+      const t = loadTheme(wsDir, name);
+      writeTheme(wsDir, { ...t, look: { ...t.look, textLayout } });
+    };
+    setLayout("lower");
+    const lower = (await plan("night")).props;
+    expect(lower.textLayout).toBe("lower");
+    expect(lower.lyricArea!.centerY).toBeGreaterThan(before.lyricArea!.centerY);
+    expect(lower.lyricEffects?.hookScale).toBeUndefined();
+    setLayout("bighook");
+    const big = (await plan("night")).props;
+    expect(big.lyricArea!.centerY).toBe(before.lyricArea!.centerY);
+    expect(big.lyricEffects?.hookScale).toBe(BIG_HOOK_SCALE);
+    setLayout("centre");
+    ws.close();
   }, 300_000);
 });

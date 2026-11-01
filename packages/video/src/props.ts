@@ -101,6 +101,7 @@ export type LyricEffectsProps = {
   shine?: boolean;
   emphasis?: boolean; // the key word of each line in the hook font, bigger, in the accent (src/effects/accents.ts emphasisWord)
   downbeats?: number[];
+  hookScale?: number; // the theme's text layout "Big hook": chorus lines this much larger (src/text-layout.ts)
 };
 
 export type StillProps = { src: string; startFrame: number; endFrame: number; fadeFrames: number; motion?: KenBurns; section: string };
@@ -169,7 +170,9 @@ export type LyricVideoProps = {
   grain?: boolean; // subtle film grain
   glow?: { colour: string; beatFrames: number[] } | null; // soft glow on the lyrics, pulsing on the beats
   safeZone?: SafeZone; // covered by the platform's buttons and captions (preview guides, QA)
-  lyricArea?: LyricArea; // where lyrics go, computed from the safe zones (see lyricArea())
+  lyricArea?: LyricArea; // where lyrics go, computed from the safe zones (see lyricArea()) and the theme's text layout
+  lyricsAt?: number; // the platform's lyricsAt (the viewer moves the area when the text layout changes)
+  textLayout?: "centre" | "lower" | "bighook"; // the theme's text layout (src/text-layout.ts), for the record
   // The theme's picture (src/picture.ts): the grade and vignette over the clips, what is behind the words,
   // and the background where there is no clip. Absent (older manifests): as before.
   picture?: PictureProps | null;
