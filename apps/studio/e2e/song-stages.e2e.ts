@@ -168,7 +168,7 @@ async function main() {
     const stageIds = await page.$$eval("[data-rail] [data-stage]", (e: Element[]) => e.map((x) => x.getAttribute("data-stage")));
     check(JSON.stringify(stageIds) === JSON.stringify(["prepare", "shape", "make", "review"]) && !!railBox && railBox.x < 5 && railBox.width < 100, `the stages sit in the rail on the left (${stageIds.join(", ")})`);
     const menus = await page.$$eval("[data-rail-item]", (e: Element[]) => e.map((x) => x.getAttribute("data-rail-item")));
-    check(JSON.stringify(menus) === JSON.stringify(["theme", "clips", "song", "make", "auto"]), `Shape's menus in the rail (${menus.join(", ")})`);
+    check(JSON.stringify(menus) === JSON.stringify(["clips", "song", "make", "auto", "theme"]) && !!(await page.$("[data-rail-group=look] [data-rail-item=theme]")), `Shape's menus in the rail, Theme apart in the Look group (${menus.join(", ")})`);
     check(!(await page.isVisible("[data-shape-tools]")), "no panel open: the editor takes the whole width");
     const viewerBox = await (await page.waitForSelector("[data-viewer], [data-look-preview]")).boundingBox();
     check(!!viewerBox && viewerBox.y < 300, `the viewer at the top of the editor (${JSON.stringify(viewerBox)})`);
@@ -180,6 +180,15 @@ async function main() {
     check(themeName.length > 0 && (await page.getAttribute(`[data-theme-tile="${themeName}"]`, "aria-pressed")) === "true", `the song's theme, its tile chosen (${themeName})`);
     check(((await page.textContent("[data-theme-users]")) ?? "") === "Used by this song only", "used by this song only");
     check((await page.$("[data-theme-editors]")) === null, "the editors open with Edit theme");
+    check((await page.getAttribute("[data-theme-current] [data-theme-reach]", "data-theme-reach")) === "single" && ((await page.textContent("[data-theme-current] [data-theme-reach]")) ?? "") === "This song only", "the badge: This song only");
+    check(!(await page.$("[data-theme-banner]")) && !(await page.$("[data-work-area][data-theme-mode]")), "not editing: no pink frame, no banner");
+    await page.click("[data-theme-edit]");
+    await page.waitForSelector("[data-theme-banner]");
+    const banner = (await page.textContent("[data-theme-banner]")) ?? "";
+    check(banner.includes(`Editing theme ${themeName}`) && banner.includes("Changes here reach: this song only") && (await page.getAttribute("[data-work-area]", "data-theme-mode")) === themeName, `Edit theme: the pink frame and the banner (${banner})`);
+    await page.click("[data-theme-done]");
+    await page.waitForSelector("[data-theme-banner]", { state: "detached" });
+    check((await page.$("[data-theme-editors]")) === null, "Done (no changes): the editor closes, back to the choice");
     await openPanel(page, "colour");
     const toolsBox = await (await page.$("[data-shape-tools]"))!.boundingBox();
     const viewerAfter = await (await page.$("[data-viewer], [data-look-preview]"))!.boundingBox();

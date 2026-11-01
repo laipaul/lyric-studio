@@ -4,14 +4,15 @@ import { Check, ChevronDown, Lock, Plus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { BACKING_LABELS, effectTitle, isTextLayout, parseColourRef, TEXT_LAYOUT_HINTS, TEXT_LAYOUT_LABELS, TEXT_LAYOUTS, type TextLayout, FALLBACK_LABELS, GRADE_LABELS, patchChoice, pictureOf, TITLE_STYLE_LABELS, TITLE_WARP_LABELS, titleStyleCss, VIGNETTE_LABELS, warpLetter, type TitleStyle, type TitleWarp, previewBacking, previewFace, previewLyrics, type LookPatch, type LookPreviewProps, type PatchFace, type Readability } from "@lyric/video";
+import { BACKING_LABELS, effectTitle, themeReach, isTextLayout, parseColourRef, TEXT_LAYOUT_HINTS, TEXT_LAYOUT_LABELS, TEXT_LAYOUTS, type TextLayout, FALLBACK_LABELS, GRADE_LABELS, patchChoice, pictureOf, TITLE_STYLE_LABELS, TITLE_WARP_LABELS, titleStyleCss, VIGNETTE_LABELS, warpLetter, type TitleStyle, type TitleWarp, previewBacking, previewFace, previewLyrics, type LookPatch, type LookPreviewProps, type PatchFace, type Readability } from "@lyric/video";
 import type { PairingCard, PairingsView } from "@lyric/video/pairings";
 import type { StyleData, StyleField, StyleFont, StyleTheme } from "@lyric/video/style";
 
 import { PairingsRow, type DraftFonts } from "@/components/pairings-row";
 import { RowMenu, type RowMenuItem } from "@/components/row-menu";
 import { SetEffect, type EffectPart, type EffectValues } from "@/components/set-effect";
-import { useShapePanel } from "@/components/song-stages";
+import { useSetThemeMode, useShapePanel } from "@/components/song-stages";
+import { ThemeReachBadge } from "@/components/theme-reach-badge";
 
 import { FeatureIcon } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
@@ -96,6 +97,16 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
       // private mode: nothing kept
     }
   }, [draft, draftKey]);
+  // Theme editing mode: the song page's pink frame and banner (song-stages). Done saves the changes (if
+  // any) and closes the editor.
+  const setThemeMode = useSetThemeMode();
+  const doneRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (!draft || !editingTheme) return setThemeMode(null);
+    const r = themeReach(editingTheme.users, saved?.title);
+    setThemeMode({ name: editingTheme.name, reach: r.reach, shared: r.tone === "shared", changed: draft.changed, done: () => doneRef.current() });
+  }, [draft, editingTheme, saved?.title, setThemeMode]);
+  useEffect(() => () => setThemeMode(null), [setThemeMode]);
   // ?edit=<theme> (the Themes page's "Edit"): the editor opens on that theme, shown on this song.
   const editParam = useSearchParams().get("edit");
   const [error, setError] = useState<string | null>(null);
@@ -230,6 +241,17 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
       return false;
     }
   }
+  // The banner's Done: saves the changes (to every song on the theme, as Save does) or, with none, just closes.
+  useEffect(() => {
+    doneRef.current = () => {
+      if (!draft) return;
+      if (draft.changed) void themeAction({ action: "save", theme: draft.name, look: draft.look, perPlatform: draft.perPlatform });
+      else {
+        closeEditor();
+        setDirty(false);
+      }
+    };
+  });
 
   // The look for the viewer, sent up whenever it changes.
   useEffect(() => {
@@ -819,7 +841,10 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
             <>
               {data.theme ? (
                 <div data-theme-current={data.theme.name} className="bg-card flex flex-col gap-1.5 rounded-lg border px-3 py-2.5">
-                  <span className="min-w-0 truncate text-sm font-medium">This song&apos;s theme: {data.theme.name}</span>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="min-w-0 truncate text-sm font-medium">This song uses: {data.theme.name}</span>
+                    <ThemeReachBadge users={data.theme.users} thisSong={data.title} />
+                  </span>
                   <p data-theme-users className="text-muted-foreground text-xs" title={data.theme.users.join(", ")}>
                     {data.theme.users.length > 1 ? `Used by ${data.theme.users.length} songs: ${data.theme.users.join(", ")}` : "Used by this song only"}
                   </p>
@@ -830,6 +855,9 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                     </button>
                     <button type="button" data-theme-new onClick={() => setCreating({ name: "", from: data.theme?.name ?? "" })} className="bg-muted flex items-center gap-1 rounded-md px-3 py-1 text-xs">
                       <Plus className="size-3.5" /> New theme
+                    </button>
+                    <button type="button" data-theme-change onClick={() => document.querySelector("[data-theme-tiles]")?.scrollIntoView({ behavior: "smooth", block: "start" })} className="text-muted-foreground ml-auto text-xs underline underline-offset-2">
+                      Change theme ↓
                     </button>
                   </div>
                 </div>
@@ -861,6 +889,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                 </div>
               ) : null}
 
+              <h4 className="text-muted-foreground -mb-1 text-xs font-semibold tracking-wide uppercase">Change theme</h4>
               <div data-theme-tiles className="flex flex-col gap-2">
                 {data.themes.map((t) => {
                   const current = t.name === data.theme?.name;
@@ -925,8 +954,9 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                         {data.sampleLines[1] || "The chorus"}
                       </span>
                       <span className="text-muted-foreground truncate text-[10px]">
-                        {String(v.verseEffect).split(":")[0]} · {String(v.hookEffect || v.verseEffect).split(":")[0]} · {t.users.length ? `used by ${t.users.length} song${t.users.length === 1 ? "" : "s"}` : "not used yet"}
+                        {String(v.verseEffect).split(":")[0]} · {String(v.hookEffect || v.verseEffect).split(":")[0]}
                       </span>
+                      <ThemeReachBadge users={t.users} thisSong={data.title} className="self-start" />
                     </div>
                   );
                 })}

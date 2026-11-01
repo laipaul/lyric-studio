@@ -14,6 +14,7 @@ import type { ThemeCard, ThemesPageData } from "@lyric/video/style";
 
 import { PreviewPlayer } from "@/components/preview-player";
 import { themePreview } from "@/components/shape-tools";
+import { ThemeReachBadge } from "@/components/theme-reach-badge";
 import { api } from "@/lib/api";
 import { FeatureIcon } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
@@ -234,10 +235,12 @@ function ThemeTile({ theme, data, onOpen }: { theme: ThemeCard; data: ThemesPage
         {/* always on top: the pointer stays on the same element while the player takes the tile's place, so a click opens the detail view */}
         <span className="absolute inset-0" aria-hidden />
       </div>
-      <span className="truncate text-sm font-medium">{theme.name}</span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="truncate text-sm font-medium">{theme.name}</span>
+        <ThemeReachBadge users={theme.users} />
+      </span>
       <span className="text-muted-foreground -mt-1 truncate text-[11px]">
-        {theme.author ? `by ${theme.author} · ` : ""}
-        {theme.songs.length ? `${theme.songs.length} song${theme.songs.length === 1 ? "" : "s"}` : "not used yet"}
+        {theme.author ? `by ${theme.author}` : ""}
         {theme.brandDefault !== null ? " · new songs start on it" : ""}
       </span>
     </button>
@@ -296,6 +299,7 @@ function ThemeDetail({ theme, data, act, send, onOpen, onClose }: { theme: Theme
                   {/* "Theme" written above the name (1 Nov 2026): a theme made from a song carries the song's name, so this says it is the look, not the song. */}
                   <span data-theme-detail-kind className="text-brand text-[11px] font-semibold tracking-[0.18em] uppercase">Theme</span>
                   <h2 className="font-display min-w-0 text-2xl">{theme.name}</h2>
+                  <ThemeReachBadge users={theme.users} className="self-start" />
                 </div>
               )}
               <button type="button" data-theme-detail-rename aria-label="Rename the theme" title="Rename the theme (your songs keep their names)" onClick={() => setNaming(theme.name)} className="text-muted-foreground hover:text-foreground rounded p-1.5">

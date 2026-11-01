@@ -4,7 +4,7 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### Feature icons and colours: one icon per feature, everywhere ✅ (to verify on the Windows PC)
+### Clarity: feature icons, "Shared by N songs" badges, song or theme at a glance ✅ (to verify on the Windows PC)
 - Asked by the user on 1 Nov 2026 ("allocate icons to each core feature so users get to know instantly").
 - One map (apps/studio/src/lib/feature-icons.tsx): **Song** music note, white · **Theme** palette, pink ·
   **Clips** film, teal (a **Collection** a stack) · **Lyrics / card text** "T", amber · steps **Prepare** ✓,
@@ -15,6 +15,15 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **Platform marks**: a small plain shape in each platform's colour before its name on the Library cards
   (Reels pink rounded square, TikTok cyan dot, Shorts red bar, YouTube red play triangle, Canvas green ring,
   Standard grey square), never the platforms' own logos.
+- **Badges** on every theme (Themes tiles and detail, Shape → Theme): "Shared by N songs" (amber), "This song
+  only" / "Only <song>" (pink), "Not used yet"; hover lists the songs (@lyric/video theme-reach.ts, tested).
+- **Song or theme** (asked by the user on 1 Nov 2026, "we don't know whether we are working on the song or the
+  theme"): the rail has the song's things on top and a separate **Look** group at the bottom with only
+  **Theme**, in pink (reachable from every stage). The Theme panel opens on the choice: "This song uses: X"
+  with its badge, Edit theme, New theme and "Change theme ↓" (the tiles). **Edit theme** puts a pink frame
+  round the work area and a banner "Editing theme X · Changes here reach: …" with **Done** ("Save and done"
+  when something changed; Cancel in the panel still drops the changes). Clicking Theme in the rail while an
+  untouched editor is open goes back to the choice.
 
 ### Themes like Canva: text layouts, moods, livelier tiles ✅ (to verify on the Windows PC)
 - Asked by the user on 1 Nov 2026 ("build all except the Crown").

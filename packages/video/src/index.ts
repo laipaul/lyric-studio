@@ -48,5 +48,6 @@ export * from "./look-patch";
 export * from "./LookPreview";
 export * from "./LyricBacking";
 export * from "./colour-ref";
+export * from "./theme-reach";
 export * from "./text-layout";
 export * from "./theme-moods";
