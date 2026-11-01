@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Eye, Palette, RotateCw, Sparkles, Wrench } from "lucide-react";
+import { AlertTriangle, Eye, RotateCw, Sparkles, Wrench } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -9,6 +9,7 @@ import { CHIP_TITLE, chipCount, chipState, songSummary, type ChipState } from "@
 
 import { StatusBadge } from "@/components/status-badge";
 import { api } from "@/lib/api";
+import { FeatureIcon, PlatformMark } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
 
 const minutes = (ms: number | null) => (ms ? `${Math.floor(ms / 60_000)}:${String(Math.round((ms % 60_000) / 1000)).padStart(2, "0")}` : null);
@@ -100,7 +101,7 @@ export function SongCard({ song }: { song: Song }) {
           </p>
           {song.theme ? (
             <p data-card-theme={song.theme} className="text-muted-foreground mt-0.5 flex items-center gap-1 truncate text-[11px]" title={`Theme: ${song.theme} (Shape → Theme to change it)`}>
-              <Palette className="size-3 shrink-0" /> {song.theme}
+              <FeatureIcon feature="theme" className="size-3" /> {song.theme}
             </p>
           ) : null}
         </Link>
@@ -111,6 +112,7 @@ export function SongCard({ song }: { song: Song }) {
           {platforms.map((p) => {
             const chip = (
               <>
+                <PlatformMark platform={p.name} />
                 <span>{p.label}</span>
                 <span className="font-medium tabular-nums">{chipCount(p, p.state)}</span>
               </>

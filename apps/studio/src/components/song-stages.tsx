@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, CheckCheck, ChevronRight, Clapperboard, ClipboardCheck, FileMusic, Film, ListChecks, Package, Palette, Shapes, Wand2 } from "lucide-react";
+import { Check, ChevronRight, ListChecks, Package } from "lucide-react";
 import { createContext, useContext, useState } from "react";
 
 import type { TodoItem } from "@lyric/video/song-stages";
@@ -8,6 +8,7 @@ import type { TodoItem } from "@lyric/video/song-stages";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
+import { FEATURE, FeatureIcon, type Feature } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
 
 // The four stages of a song (Prepare -> Shape -> Make -> Review & Post) over the existing tabs: a stage
@@ -39,18 +40,20 @@ export const useGoToTab = () => useContext(GoToTab);
 // click closes it. Theme holds the whole look (fonts, effects, colour: a song points to its theme, 31 Oct
 // 2026). "shot" opens by clicking a shot on the timeline, "text" by clicking a text card (no rail icons).
 export const SHAPE_PANELS = [
-  { id: "theme", label: "Theme", icon: Palette },
-  { id: "clips", label: "Clips", icon: Film },
-  { id: "song", label: "This song", icon: FileMusic },
-  { id: "make", label: "To make", icon: ListChecks },
-  { id: "auto", label: "Automatic", icon: Wand2 },
+  { id: "theme", label: "Theme", icon: FEATURE.theme.icon, colour: FEATURE.theme.colour },
+  { id: "clips", label: "Clips", icon: FEATURE.clips.icon, colour: FEATURE.clips.colour },
+  { id: "song", label: "This song", icon: FEATURE.song.icon, colour: FEATURE.song.colour },
+  { id: "make", label: "To make", icon: ListChecks, colour: "" },
+  { id: "auto", label: "Automatic", icon: FEATURE.auto.icon, colour: FEATURE.auto.colour },
 ] as const;
 export type ShapePanelId = (typeof SHAPE_PANELS)[number]["id"] | "shot" | "text";
 type PanelState = { panel: ShapePanelId | null; setPanel: (p: ShapePanelId | null) => void };
 const ShapePanel = createContext<PanelState>({ panel: null, setPanel: () => {} });
 export const useShapePanel = () => useContext(ShapePanel);
 
-const STAGE_ICON = { prepare: ClipboardCheck, shape: Shapes, make: Clapperboard, review: CheckCheck } as const;
+// The feature icons (lib/feature-icons.tsx): one icon per step, the same everywhere.
+const STAGE_ICON = { prepare: FEATURE.prepare.icon, shape: FEATURE.shape.icon, make: FEATURE.make.icon, review: FEATURE.review.icon } as const;
+const TAB_ICON: Record<string, Feature> = { assets: "song", lyrics: "lyrics", shape: "shape", generate: "make", videos: "review", post: "post" };
 const DOT: Record<StageStatus["tone"], string> = { done: "bg-emerald-400", todo: "bg-amber-300", blocked: "bg-red-400", muted: "bg-transparent", busy: "bg-brand animate-pulse" };
 
 // The song page as a Canva-style workspace: a narrow icon rail on the left with the four stages (a dot
@@ -111,7 +114,7 @@ export function SongStages({
                           onClick={() => setPanel(panel === m.id ? null : m.id)}
                           className={cn("flex flex-col items-center gap-0.5 rounded-md px-1 py-1.5 text-[10px] leading-tight", panel === m.id ? "bg-brand/25 text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground")}
                         >
-                          <m.icon className="size-4" />
+                          <m.icon aria-hidden data-feature-icon={m.id} className={cn("size-4", m.colour)} />
                           {m.label}
                         </button>
                       ))}
@@ -152,7 +155,8 @@ export function SongStages({
             {current.tabs.length > 1 ? (
               <TabsList>
                 {current.tabs.map((t) => (
-                  <TabsTrigger key={t} value={t}>
+                  <TabsTrigger key={t} value={t} className="gap-1.5">
+                    <FeatureIcon feature={TAB_ICON[t]} className="size-3.5" />
                     {TAB_LABEL[t]}
                     {counts[t] ? <span className="text-muted-foreground ml-1.5 tabular-nums">{counts[t]}</span> : null}
                   </TabsTrigger>

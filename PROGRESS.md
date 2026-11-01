@@ -4,6 +4,18 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Feature icons and colours: one icon per feature, everywhere ✅ (to verify on the Windows PC)
+- Asked by the user on 1 Nov 2026 ("allocate icons to each core feature so users get to know instantly").
+- One map (apps/studio/src/lib/feature-icons.tsx): **Song** music note, white · **Theme** palette, pink ·
+  **Clips** film, teal (a **Collection** a stack) · **Lyrics / card text** "T", amber · steps **Prepare** ✓,
+  **Shape** ◇, **Make** clapperboard, **Review** eye, **Post** paper plane · **Automatic** wand.
+- Used in the top menu (Library, Themes, Collections, Releases), the song page's rail and its tabs, the Shape
+  menus, page titles (Library, Themes, Collections, Assets → Clips, This song → Card text) and the Library
+  card's theme line.
+- **Platform marks**: a small plain shape in each platform's colour before its name on the Library cards
+  (Reels pink rounded square, TikTok cyan dot, Shorts red bar, YouTube red play triangle, Canvas green ring,
+  Standard grey square), never the platforms' own logos.
+
 ### Themes like Canva: text layouts, moods, livelier tiles ✅ (to verify on the Windows PC)
 - Asked by the user on 1 Nov 2026 ("build all except the Crown").
 - **Text layout** per theme (Edit theme → Text, three small frames): **Centred** (as before), **Lower third**
@@ -99,36 +111,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: extra-cards.test.ts (placement, no pause, end, {title}, patch on/off), title-opening-make.test.ts
   (End card on a Reel, manifest, QA); browser: storyboard (End card on → viewer, saved, on the timeline),
   song-stages.
-
-### Fix a lyric line's words on its card; effect names in the viewer; stronger effects and Neon ✅ (to verify on the Windows PC)
-- Asked by the user on 31 Oct 2026 ("how do i correct the text here directly?", and "pick an effect and
-  display immediately the effect name on the viewer").
-- **Line card → Text → Fix** (Shape, click a lyric line): the words are fixed in lyrics.txt (the old one
-  kept in .studio\replaced\, Restore in the Lyrics tab), for every platform and the captions. **The timing
-  is kept**: the stored alignment is carried over to the new words (lyrics-view.ts fixLyricLine, lrc.ts
-  retextLrcLine: respelled words keep their own times, more or fewer words share the line's sung span), so
-  nothing is aligned again; the line's hand-set start and its card's look follow the new words.
-- Line card wording: "the theme's" font / effect, plain effect names; "Text layout" with "Save this
-  layout" / "Use this layout" instead of templates.
-- **Effects made clearly visible** (the user: "some effects don't work"): Cinematic fade settles from 12%
-  larger with its letters drawing together; Blur in pulls focus from 12 px (was 4 px, not seen); Dreamy glow
-  comes out of a real haze and glows. **Spread** now works like Canva's: letters float in from wide apart and
-  drift apart and up as the line leaves (wide only while the line is faint). New **Neon** effect: glowing
-  tube letters in the accent that flicker on and hum (new gallery chip "Glow"). Also new: **Word rise** (each
-  word rises into place as it is sung), **Slide in from left**, **Slide in from right**, **Slide down**, and
-  **Dissolve** (the letters drift up and fade into thin air when the line ends; src/effects/slides.ts). 29 effects.
-- **Strength slider** (0-100 %) right under the effect picker, its own for Verses and Choruses (the typing
-  speed for typewriters), saved as "glide:70"; 50 % is clearly seen on a phone (the old "balanced" made 30%
-  stronger), 100 % is twice that. Replaces the Soft / Balanced / Strong dropdown (old values still work).
-- Gallery: compact name tiles, A to Z (the effect in use first, pinned when the gallery opens), a search
-  box; pointing at an effect plays it in the big viewer. Dissolve and Spread are seen leaving.
-- **Unsaved theme changes are kept** (in the browser, per song) when leaving the editor without Save;
-  the next Edit theme brings them back with a note; Save or Cancel clears them.
-- **Motion**: gallery tiles show the effect's name big; pointing at or picking an effect shows its name
-  moving in that effect over the paused frame in the big viewer; pressing play plays the song with the
-  effect on the real lyrics.
-- Tests: slides-effects.test.ts, effects tests for all 29; retext-lrc.test.ts, lyrics-view.test.ts (fix keeps timing and hand-set start); browser: textboard
-  (Text → Fix), storyboard (effect name over the frame, gone on play), song-stages.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

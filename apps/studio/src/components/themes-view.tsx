@@ -15,6 +15,7 @@ import type { ThemeCard, ThemesPageData } from "@lyric/video/style";
 import { PreviewPlayer } from "@/components/preview-player";
 import { themePreview } from "@/components/shape-tools";
 import { api } from "@/lib/api";
+import { FeatureIcon } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
 
 type Filter = "all" | "used" | "unused";
@@ -78,7 +79,7 @@ export function ThemesView() {
     <div data-themes-page className="flex flex-col gap-4 p-6">
       <style>{fontCss}</style>
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="font-display text-2xl">Themes</h1>
+        <h1 className="font-display flex items-center gap-2 text-2xl"><FeatureIcon feature="theme" className="size-6" /> Themes</h1>
         <p className="text-muted-foreground text-sm">A theme is a song&apos;s whole look: fonts, motion and colours. Click a theme, then <b>Edit theme</b> to change it; the <b>New theme</b> tile starts one from a copy.</p>
       </div>
       <div className="flex flex-wrap gap-2" data-theme-filters>

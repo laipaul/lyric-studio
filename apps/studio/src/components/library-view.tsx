@@ -11,6 +11,7 @@ import { NewSongDialog } from "@/components/new-song-dialog";
 import { cardPlatforms, SongCard } from "@/components/song-card";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
+import { FeatureIcon } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
 
 // The filters each song appears under ("Needs review", "Errors", ...), from its card's chips.
@@ -36,7 +37,7 @@ export function LibraryView({ songs, artists, banner, removed = [] }: { songs: S
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl">Library</h1>
+          <h1 className="flex items-center gap-2 text-3xl"><FeatureIcon feature="song" className="size-6" /> Library</h1>
           <p className="text-muted-foreground text-sm">
             {songs.length} song{songs.length === 1 ? "" : "s"}
           </p>

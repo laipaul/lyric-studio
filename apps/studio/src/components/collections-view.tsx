@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
+import { FeatureIcon } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
@@ -81,7 +82,7 @@ export function CollectionsList() {
     <div className="mx-auto flex max-w-6xl flex-col gap-6 p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-brand text-xl tracking-[0.14em] uppercase">Collections</h1>
+          <h1 className="font-display text-brand flex items-center gap-2 text-xl tracking-[0.14em] uppercase"><FeatureIcon feature="collection" className="size-5" /> Collections</h1>
           <p className="text-muted-foreground text-sm">Clips every song can use (tick them in a song&apos;s Generate tab). Each lives in a folder of your workspace.</p>
         </div>
         <Button onClick={() => setDialogue({ kind: "new" })} data-new-collection-button>
@@ -365,7 +366,7 @@ export function CollectionView({ name }: { name: string }) {
         <>
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h1 className="font-display text-brand text-xl tracking-[0.14em] uppercase">{data.name}</h1>
+              <h1 className="font-display text-brand flex items-center gap-2 text-xl tracking-[0.14em] uppercase"><FeatureIcon feature="collection" className="size-5" /> {data.name}</h1>
               <p className="text-muted-foreground text-xs" data-usable>
                 {data.clips} clip{data.clips === 1 ? "" : "s"}
                 {data.durationMs ? ` · ${minutes(data.durationMs)} of video` : ""} · 9:16 platforms can use {data.usable.vertical} · YouTube (16:9) can use {data.usable.horizontal} · {win(data.folder)}

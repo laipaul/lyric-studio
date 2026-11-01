@@ -13,6 +13,7 @@ import { RowMenu, type RowMenuItem } from "@/components/row-menu";
 import { SetEffect, type EffectPart, type EffectValues } from "@/components/set-effect";
 import { useShapePanel } from "@/components/song-stages";
 
+import { FeatureIcon } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 
@@ -961,7 +962,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
           </p>
           {/* Card text (31 Oct 2026): every card's words for this song in one place; how the cards look is the theme's (Theme → Cards). */}
           <div data-card-text className="bg-card flex flex-col gap-2 rounded-lg border px-3 py-2.5">
-            <h4 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Card text</h4>
+            <h4 className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase"><FeatureIcon feature="lyrics" className="size-3.5" /> Card text</h4>
             <p className="text-muted-foreground -mt-1 text-[11px]">The words on this song&apos;s cards. How the cards look (on or off, style, font, colour) comes from the theme: Theme → Cards.</p>
             <CardTitleRow
               projectId={projectId}

@@ -4,14 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { TasksMenu } from "@/components/tasks-menu";
+import { FeatureIcon, type Feature } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
 
 // Only menu items that lead somewhere real (the Studio editor and the content board come later).
-const NAV = [
-  { href: "/", label: "Library" },
-  { href: "/themes", label: "Themes" },
-  { href: "/collections", label: "Collections" },
-  { href: "/releases", label: "Releases" },
+// Each with its feature icon (lib/feature-icons.tsx): songs, themes, collections, posting.
+const NAV: { href: string; label: string; feature: Feature }[] = [
+  { href: "/", label: "Library", feature: "song" },
+  { href: "/themes", label: "Themes", feature: "theme" },
+  { href: "/collections", label: "Collections", feature: "collection" },
+  { href: "/releases", label: "Releases", feature: "post" },
 ];
 
 // The header: the app's name and icon, navigation, and the Tasks menu (live progress of the runs).
@@ -32,8 +34,9 @@ export function AppHeader() {
             <Link
               key={item.href}
               href={item.href}
-              className={cn("rounded-md px-3 py-1.5 text-sm transition-colors", active ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground")}
+              className={cn("flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors", active ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground")}
             >
+              <FeatureIcon feature={item.feature} className="size-3.5" />
               {item.label}
             </Link>
           );

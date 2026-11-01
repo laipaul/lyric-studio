@@ -4,6 +4,36 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Fix a lyric line's words on its card; effect names in the viewer; stronger effects and Neon ✅ (to verify on the Windows PC)
+- Asked by the user on 31 Oct 2026 ("how do i correct the text here directly?", and "pick an effect and
+  display immediately the effect name on the viewer").
+- **Line card → Text → Fix** (Shape, click a lyric line): the words are fixed in lyrics.txt (the old one
+  kept in .studio\replaced\, Restore in the Lyrics tab), for every platform and the captions. **The timing
+  is kept**: the stored alignment is carried over to the new words (lyrics-view.ts fixLyricLine, lrc.ts
+  retextLrcLine: respelled words keep their own times, more or fewer words share the line's sung span), so
+  nothing is aligned again; the line's hand-set start and its card's look follow the new words.
+- Line card wording: "the theme's" font / effect, plain effect names; "Text layout" with "Save this
+  layout" / "Use this layout" instead of templates.
+- **Effects made clearly visible** (the user: "some effects don't work"): Cinematic fade settles from 12%
+  larger with its letters drawing together; Blur in pulls focus from 12 px (was 4 px, not seen); Dreamy glow
+  comes out of a real haze and glows. **Spread** now works like Canva's: letters float in from wide apart and
+  drift apart and up as the line leaves (wide only while the line is faint). New **Neon** effect: glowing
+  tube letters in the accent that flicker on and hum (new gallery chip "Glow"). Also new: **Word rise** (each
+  word rises into place as it is sung), **Slide in from left**, **Slide in from right**, **Slide down**, and
+  **Dissolve** (the letters drift up and fade into thin air when the line ends; src/effects/slides.ts). 29 effects.
+- **Strength slider** (0-100 %) right under the effect picker, its own for Verses and Choruses (the typing
+  speed for typewriters), saved as "glide:70"; 50 % is clearly seen on a phone (the old "balanced" made 30%
+  stronger), 100 % is twice that. Replaces the Soft / Balanced / Strong dropdown (old values still work).
+- Gallery: compact name tiles, A to Z (the effect in use first, pinned when the gallery opens), a search
+  box; pointing at an effect plays it in the big viewer. Dissolve and Spread are seen leaving.
+- **Unsaved theme changes are kept** (in the browser, per song) when leaving the editor without Save;
+  the next Edit theme brings them back with a note; Save or Cancel clears them.
+- **Motion**: gallery tiles show the effect's name big; pointing at or picking an effect shows its name
+  moving in that effect over the paused frame in the big viewer; pressing play plays the song with the
+  effect on the real lyrics.
+- Tests: slides-effects.test.ts, effects tests for all 29; retext-lrc.test.ts, lyrics-view.test.ts (fix keeps timing and hand-set start); browser: textboard
+  (Text → Fix), storyboard (effect name over the frame, gone on play), song-stages.
+
 ### Themes, step 6: lyric effects gallery, nine new effects, Emphasis word, title styles ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026 ("make all of them", with Canva MotionText / TypeCraft references).
 - **Motion** is compact: one effect picker; it opens a gallery of tiles (each plays the effect on your own
