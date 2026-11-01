@@ -8,7 +8,7 @@ import path from "node:path";
 import { absPath, project as projectTable, safeName, uniqueFileName, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
-import { linkFile, type FileRole } from "./file-links";
+import { FILE_ROLES, FIXED_NAMES, linkFile, readLinks, type FileRole } from "./file-links";
 import { readRecipe, writeRecipe } from "./recipe";
 import { songPathsById, STUDIO_DIR } from "./song-folder";
 
@@ -105,9 +105,40 @@ export function keepReplaced(songRoot: string, file: string, copy = false): stri
   while (existsSync(at(n))) n += 1;
   const target = at(n);
   mkdirSync(path.dirname(target), { recursive: true });
+  const role = replacedRoleOf(songRoot, path.basename(file)); // read before the file moves (its link goes with it)
   if (copy) copyFileSync(file, target);
   else renameSync(file, target);
+  noteReplaced(songRoot, { file: path.basename(target), original: path.basename(file), role, at: new Date().toISOString() });
   return target;
+}
+
+// What a kept file was for (Assets → Replaced files restores it as that again).
+export type ReplacedRole = FileRole | "cover" | "hints";
+export type ReplacedNote = { file: string; original: string; role: ReplacedRole | null; at: string };
+export const replacedIndexFile = (songRoot: string) => path.join(songRoot, STUDIO_DIR, "replaced-index.json");
+
+export function replacedRoleOf(songRoot: string, name: string): ReplacedRole | null {
+  const links = readLinks(songRoot);
+  for (const role of FILE_ROLES) if (links[role] === name) return role;
+  for (const role of FILE_ROLES) if (!links[role] && FIXED_NAMES[role].includes(name)) return role;
+  if (name === "story.txt") return "lyrics";
+  if (/^cover\.(jpe?g|png|webp)$/i.test(name)) return "cover";
+  if (name === "hints.lrc") return "hints";
+  return null;
+}
+
+export function readReplacedIndex(songRoot: string): ReplacedNote[] {
+  try {
+    const raw = JSON.parse(readFileSync(replacedIndexFile(songRoot), "utf8")) as { files?: ReplacedNote[] };
+    return Array.isArray(raw.files) ? raw.files.filter((x) => x && typeof x.file === "string" && path.basename(x.file) === x.file) : [];
+  } catch {
+    return [];
+  }
+}
+
+function noteReplaced(songRoot: string, note: ReplacedNote): void {
+  const files = [...readReplacedIndex(songRoot).filter((x) => x.file !== note.file), note];
+  writeFileSync(replacedIndexFile(songRoot), `${JSON.stringify({ _help: "Files kept in .studio\\replaced\\ and what each one was (Assets → Replaced files).", files }, null, 2)}\n`);
 }
 
 // The song's EP: song.json (song folders), else the remembered one (songs not migrated yet).

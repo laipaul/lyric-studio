@@ -12,7 +12,7 @@ import { isHandTimeLine } from "../hand-times";
 import { HOOK_MARKER, normalizeLyric } from "../lrc";
 import { cachedFileHash, SOURCE_FILE, syncCollection } from "./collection";
 import { keepReplaced, placeRoleFile, storeCover, storeLyricsTxt } from "./project-settings";
-import { isWavFile, moveEntry, songPathsById } from "./song-folder";
+import { isRemovedSong, isWavFile, moveEntry, songPathsById } from "./song-folder";
 
 // A WAV without its extension keeps its name, with ".wav" added (so every program knows what it is).
 const wavName = (name: string) => (path.extname(name) ? name : `${name}.wav`);
@@ -228,6 +228,13 @@ export async function removeSongClip(ws: Workspace, projectId: string, name: str
   return removeClipFrom(ws, paths.clips, name, "this song");
 }
 
+// Assets → Removed → Restore: a clip of this song back from clips\_removed\.
+export function restoreSongClip(ws: Workspace, projectId: string, name: string): string {
+  const paths = songPathsById(ws, projectId);
+  if (!paths.clips) throw new Error("This song has no folder yet.");
+  return restoreClipTo(ws, paths.clips, name);
+}
+
 // A clip of a folder moves to its _removed\ (never deleted).
 export async function removeClipFrom(ws: Workspace, folder: string, name: string, where: string): Promise<string> {
   const paths = { clips: folder };
@@ -298,6 +305,11 @@ export async function replaceAsset(ws: Workspace, projectId: string, kind: Asset
   // (under its own name); timings stay (re-align if they moved). The song file is only ever copied or moved.
   const info = await probeMedia(file).catch(() => null);
   if (!info?.hasAudio) throw new Error(`No audio found in ${name}.`);
+  // Another song's music is never put into this song (1 Nov 2026): two songs with one song file would
+  // be mixed up when videos are made.
+  const hash = await cachedFileHash(ws, file);
+  const owner = ws.db.select().from(projectTable).where(eq(projectTable.audio_hash, hash)).all().find((x) => x.id !== projectId);
+  if (owner) throw new Error(`${name} is the song file of "${owner.title}"${isRemovedSong(owner.folder) ? " (in Deleted songs)" : ""}. Nothing was changed: choose this song's own WAV or MP3.`);
   const target = placeRoleFile(paths.root, "song", paths.audio, file, name);
   ws.db
     .update(projectTable)

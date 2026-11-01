@@ -305,7 +305,12 @@ export function adoptIntoSongFolder(ws: Workspace, projectId: string, songFile?:
   const own = songFile ? unownedSongFolder(ws, songFile) : null;
   if (own) {
     // The folder's own song file stays; the copy createProject made is not needed.
-    if (p.audio_path && existsSync(absPath(ws, p.audio_path)) && path.resolve(absPath(ws, p.audio_path)) !== path.resolve(songFile!)) rmSync(absPath(ws, p.audio_path));
+    // It is kept in the folder's .studio\replaced\ (never deleted, 1 Nov 2026), named after where it was.
+    if (p.audio_path && existsSync(absPath(ws, p.audio_path)) && path.resolve(absPath(ws, p.audio_path)) !== path.resolve(songFile!)) {
+      const spare = path.join(absPath(ws, own.rel), STUDIO_DIR, "replaced", `${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}-copy-${path.basename(p.audio_path)}`);
+      mkdirSync(path.dirname(spare), { recursive: true });
+      moveEntry(absPath(ws, p.audio_path), spare);
+    }
     const folderCover = ["cover.jpg", "cover.jpeg", "cover.png"].find((c) => existsSync(path.join(absPath(ws, own.rel), c)));
     mkdirSync(path.join(absPath(ws, own.rel), "clips"), { recursive: true });
     mkdirSync(path.join(absPath(ws, own.rel), "exports"), { recursive: true });

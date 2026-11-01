@@ -229,6 +229,10 @@ export async function createSong(ws: Workspace, input: NewSongInput): Promise<{ 
   const same = ws.db.select().from(projectTable).where(eq(projectTable.audio_hash, hash)).get();
   if (same && !isRemovedSong(same.folder))
     throw new Error(`This song file is already in your library as "${same.title}". Nothing was changed. For a new song, choose that song's own WAV or MP3; to change "${same.title}", open it (Prepare → Assets).`);
+  // A deleted song with the same music is never brought back silently under a new title (1 Nov 2026,
+  // stability pass): it is said, and Restore in the Library brings it back with its clips and videos.
+  if (same)
+    throw new Error(`This song file belongs to "${same.title}", which is in Deleted songs (bottom of the Library). Nothing was changed. Restore it there to use it again, with its clips and videos.`);
   const sp = await findOrCreateSongProject(ws, input.song);
   const id = sp.project.id;
   const updated: string[] = [];

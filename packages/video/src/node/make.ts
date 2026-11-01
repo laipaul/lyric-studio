@@ -750,7 +750,10 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const pictureSets = options.pictures ? parsePictures(options.pictures) : null;
     const pictures = pictureSets ? await Promise.all(pictureSets.map(async (p, k) => ({ ...p, index: k + 1, collection: await clipsOf(p) }))) : null;
     if (pictures) log(`picture versions: ${pictures.map((p) => `v${p.index} ${p.label}`).join(", ")}; the same textboard in each`);
-    if (recipe.sources.collections === "run" && !options.dryRun && !swap) {
+    // Only a terminal run (pnpm make --collection) remembers its collection for the song. A run from Lyric
+    // Studio never changes the song's own choice behind its back (1 Nov 2026): "Save to song" does that.
+    const studioRun = (options.command ?? "").startsWith("Lyric Studio");
+    if (recipe.sources.collections === "run" && !options.dryRun && !swap && !studioRun) {
       const folder = options.collectionPath ?? collectionFolder(collectionNames[0], 0);
       rememberCollection(ws, project.id, { name: collectionNames[0], ...(folder ? { folder } : {}) });
       // Remembered in song.json (a locked song.json collection never gets here: the run's choice was ignored).

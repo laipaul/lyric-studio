@@ -84,6 +84,7 @@
     "./runs": "./src/node/runs.ts",
     "./run-worker": "./src/node/run-worker.ts",
     "./assets": "./src/node/assets.ts",
+    "./replaced-files": "./src/node/replaced-files.ts",
     "./collections": "./src/node/collections.ts",
     "./migrate": "./src/node/migrate.ts",
     "./recipe": "./src/node/recipe.ts",

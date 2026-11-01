@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import type { AssetKind, SongAssets } from "@lyric/video/assets";
+import type { ReplacedFile } from "@lyric/video/replaced-files";
 
 import { LinksField } from "@/components/song-links";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,16 @@ const win = (rel: string) => rel.split("/").join("\\");
 const ACCEPT: Record<AssetKind, string> = { song: ".wav,.mp3", lyrics: ".txt", cover: ".jpg,.jpeg,.png,.webp", hints: ".lrc", vocals: ".wav", backingVocals: ".wav" };
 const ROLE_NAME: Record<string, string> = { lyrics: "the lyrics", vocals: "the vocal stem", backingVocals: "the backing vocals", notUsed: "not used" };
 const base = (rel: string) => rel.split("/").pop() ?? rel;
+const REPLACED_ROLE: Record<string, string> = { song: "the song file", lyrics: "the lyrics", vocals: "the vocal stem", backingVocals: "the backing vocals", cover: "the cover", hints: "the hints (tapped times)" };
+// What a Replace changes, in plain words, before it happens.
+function replaceWarning(kind: AssetKind, current: string, next: string): string {
+  const kept = `The current one (${current}) is kept under Replaced files at the bottom of this page; Restore brings it back.`;
+  if (kind === "song") return `Replace the song file with ${next}?\n\n${kept}\n\nVideos you already made keep their sound. New videos use ${next}; if the vocals moved in the new mix, check the lyric timing.`;
+  if (kind === "lyrics") return `Replace the lyrics with ${next}?\n\n${kept}\n\nThe words are timed again at the next Make.`;
+  if (kind === "vocals") return `Replace the vocal stem with ${next}?\n\n${kept}\n\nThe lyric timing runs again on the new stem.`;
+  if (kind === "hints") return `Replace the tapped times (${current}) with ${next}?\n\n${kept}`;
+  return `Replace ${current} with ${next}?\n\n${kept}`;
+}
 
 // The song's files: song, vocal stem, backing vocals, lyrics, cover, hints.lrc (each under the user's own
 // file name; the roles are linked in .studio\files.json) and its own clips (drop videos and photos;
@@ -31,8 +42,16 @@ export function AssetsTab({ projectId }: { projectId: string }) {
   const [dragging, setDragging] = useState(false);
   const clipInput = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  const [replaced, setReplaced] = useState<ReplacedFile[]>([]);
+
+  async function loadReplaced() {
+    const r = await api(`/api/songs/${projectId}/replaced`, { cache: "no-store" }).catch(() => null);
+    const d = (await r?.json().catch(() => null)) as { files?: ReplacedFile[] } | null;
+    setReplaced(d?.files ?? []);
+  }
 
   async function reload() {
+    void loadReplaced();
     try {
       const r = await api(`/api/songs/${projectId}/assets`, { cache: "no-store" });
       const d = (await r.json()) as SongAssets & { error?: string };
@@ -53,6 +72,7 @@ export function AssetsTab({ projectId }: { projectId: string }) {
         else setData(d);
       })
       .catch((e: Error) => alive && setError(e.message));
+    void loadReplaced();
     return () => {
       alive = false;
     };
@@ -92,8 +112,12 @@ export function AssetsTab({ projectId }: { projectId: string }) {
     setNotice({ ok: !r.duplicates.length && !r.skipped.length, text: parts.join(" ") || "Nothing added." });
   }
 
-  async function replace(kind: AssetKind, file: File | undefined) {
+  async function replace(kind: AssetKind, file: File | undefined, input?: HTMLInputElement) {
+    if (input) input.value = ""; // the same file can be picked again after Cancel
     if (!file) return;
+    // Say what changes before anything is replaced (1 Nov 2026): the current file is kept, never deleted.
+    const current = currentName(kind);
+    if (current && !window.confirm(replaceWarning(kind, current, file.name))) return;
     const body = new FormData();
     body.set("kind", kind);
     body.set("file", file);
@@ -103,11 +127,52 @@ export function AssetsTab({ projectId }: { projectId: string }) {
       if (r) setNotice({ ok: r.status === "lined-up", text: `${r.message}${r.retimed ? (r.status === "lined-up" ? " The lyric timing runs again on it now (see Tasks): every line follows the stem; your taps (hints.lrc) are kept, and starts you set by hand before the stem are reset once (Undo in the Lyrics tab)." : "") : ""}` });
       return;
     }
-    if (await send(body)) setNotice({ ok: true, text: `${file.name} is now the song's ${kind === "song" ? "song file" : kind === "lyrics" ? (data?.instrumental ? "story.txt" : "lyrics") : kind === "hints" ? "hints.lrc" : kind === "backingVocals" ? "backing vocals (kept for reference, not used for timing)" : "cover"}${kind === "cover" ? "" : " (the previous one is kept in .studio\\replaced\\)"}.` });
+    if (await send(body)) setNotice({ ok: true, text: `${file.name} is now the song's ${kind === "song" ? "song file" : kind === "lyrics" ? (data?.instrumental ? "story.txt" : "lyrics") : kind === "hints" ? "hints.lrc" : kind === "backingVocals" ? "backing vocals (kept for reference, not used for timing)" : "cover"}${current ? ` (the previous one, ${current}, is under Replaced files below)` : ""}.` });
+  }
+
+  // The file in use now for a kind (null: none yet, nothing is replaced).
+  function currentName(kind: AssetKind): string | null {
+    if (!data) return null;
+    if (kind === "song") return data.song?.name ?? null;
+    if (kind === "lyrics") return data.lyrics ? base(data.lyrics.file) : null;
+    if (kind === "vocals") return data.vocals?.name ?? null;
+    if (kind === "backingVocals") return data.backingVocals ? base(data.backingVocals) : null;
+    if (kind === "cover") return data.cover ? base(data.cover) : null;
+    return data.hints ? base(data.hints.file) : null;
+  }
+
+  async function restoreFile(f: ReplacedFile) {
+    const what = REPLACED_ROLE[f.role ?? ""] ?? "the file";
+    const now = f.role ? currentName(f.role === "hints" ? "hints" : f.role) : null;
+    if (!window.confirm(`Make ${f.original} ${what} again?${now ? ` The one in use now (${now}) is kept under Replaced files.` : ""}${f.role === "song" || f.role === "lyrics" || f.role === "vocals" ? " New videos use it; videos already made stay as they are." : ""}`)) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const r = await api(`/api/songs/${projectId}/replaced`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file: f.file }) });
+      const d = (await r.json()) as { error?: string };
+      if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
+      await reload();
+      router.refresh();
+      setNotice({ ok: true, text: `${f.original} is ${what} again.${f.role === "vocals" ? " The lyric timing runs again on it (see Tasks)." : ""}` });
+    } catch (e) {
+      setNotice({ ok: false, text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function restoreClip(name: string) {
+    const body = new FormData();
+    body.set("kind", "restoreClip");
+    body.set("name", name);
+    const r = (await send(body)) as { restored: string } | null;
+    if (r) setNotice({ ok: true, text: `${name} is back in the song's clips${base(r.restored) !== name ? ` as ${base(r.restored)}` : ""}.` });
   }
 
   // "What is this file?": a file put into the song folder by hand gets its role (or "Not used").
   async function assign(name: string, role: string) {
+    const current = role === "lyrics" || role === "vocals" || role === "backingVocals" ? currentName(role) : null;
+    if (current && !window.confirm(`Use ${name} as ${ROLE_NAME[role]} instead of ${current}?\n\n${current} is kept under Replaced files; Restore brings it back.`)) return;
     const body = new FormData();
     body.set("kind", "assign");
     body.set("name", name);
@@ -151,7 +216,7 @@ export function AssetsTab({ projectId }: { projectId: string }) {
       </div>
       <label className={cn("border-input hover:bg-accent cursor-pointer rounded-md border px-3 py-1.5 text-xs", busy && "pointer-events-none opacity-50")}>
         {button}
-        <input type="file" accept={ACCEPT[kind]} className="hidden" data-replace={kind} onChange={(e) => replace(kind, e.target.files?.[0])} />
+        <input type="file" accept={ACCEPT[kind]} className="hidden" data-replace={kind} onChange={(e) => replace(kind, e.target.files?.[0], e.target)} />
       </label>
     </li>
   );
@@ -299,12 +364,45 @@ export function AssetsTab({ projectId }: { projectId: string }) {
           )}
         </div>
         {data.removed.length ? (
-          <details className="text-muted-foreground text-xs">
-            <summary className="cursor-pointer">Removed ({data.removed.length}) · kept in clips\_removed\</summary>
-            <p className="mt-1">{data.removed.join(", ")}</p>
+          <details data-removed-clips className="text-muted-foreground text-xs">
+            <summary className="cursor-pointer">Removed clips ({data.removed.length}) · kept in clips\_removed\</summary>
+            <ul className="mt-1 flex flex-col gap-1">
+              {data.removed.map((name) => (
+                <li key={name} className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate">{name}</span>
+                  <button type="button" data-restore-clip={name} disabled={busy} onClick={() => void restoreClip(name)} className="hover:text-foreground underline-offset-2 hover:underline">
+                    Restore
+                  </button>
+                </li>
+              ))}
+            </ul>
           </details>
         ) : null}
       </section>
+
+      {replaced.length ? (
+        <details data-replaced-files className="bg-card rounded-lg border px-4 py-3 text-sm">
+          <summary className="cursor-pointer font-medium">
+            Replaced files ({replaced.length}) <span className="text-muted-foreground text-xs font-normal">· every file you replaced is kept; Restore brings one back</span>
+          </summary>
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {replaced.map((f) => (
+              <li key={f.file} data-replaced={f.file} className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="min-w-0 flex-1 truncate" title={f.file}>
+                  {f.original} <span className="text-muted-foreground">· {f.role ? `was ${REPLACED_ROLE[f.role]}` : "kept copy"} · replaced {new Date(f.at).toLocaleString()}</span>
+                </span>
+                {f.role ? (
+                  <button type="button" data-restore-replaced={f.file} disabled={busy} onClick={() => void restoreFile(f)} className="border-input hover:bg-accent rounded-md border px-2 py-1">
+                    Restore
+                  </button>
+                ) : (
+                  <span className="text-muted-foreground">in the song folder (.studio\replaced\)</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
       {notice ? (
         <p role="status" className={cn("rounded-md border px-4 py-2 text-sm", notice.ok ? "border-brand/30 bg-brand/10" : "border-amber-400/30 bg-amber-400/10 text-amber-100")}>
           {notice.text}

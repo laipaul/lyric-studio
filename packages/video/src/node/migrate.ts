@@ -14,7 +14,7 @@ import { eq } from "drizzle-orm";
 
 import { processAlive } from "./jobs";
 import { recipeJson, type SongRecipe } from "./recipe";
-import { keepReplaced } from "./project-settings";
+import { keepReplaced, rememberedCollection } from "./project-settings";
 import { COLLECTIONS_DIR, SONGS_DIR, holdsNoFiles, movesSince, resolveMoved, moveEntry, readMoves, relocatePaths, removeEmptyDirs, songBusy, songFolderFor, songPaths, STUDIO_DIR, writeMoves } from "./song-folder";
 
 export const MIGRATIONS_DIR = "migrations"; // WORKSPACE_DIR\migrations\<date>\: backups and journals
@@ -316,6 +316,11 @@ function planRepairs(ws: Workspace, p: Project, folder: string, extra: string[])
   if (!recipeFile || !Object.keys(readRecipeLoose(recipeFile)).length) {
     const found = settingsCandidates(ws, p.id, all).find((c) => c.values);
     if (found) out.push({ ...base, kind: "recipe", file: `${folder}/song.json`, source: found.source, recipe: found.values! });
+  } else if (readRecipeLoose(recipeFile).collections === undefined) {
+    // The collection this song's last terminal run used was only remembered in the database, so Make
+    // used it without the song saying so (1 Nov 2026): it is written into song.json, where Shape shows it.
+    const remembered = rememberedCollection(ws, p.id);
+    if (remembered) out.push({ ...base, kind: "recipe", file: `${folder}/song.json`, source: "the collection its last run used", recipe: { collections: [remembered.name] } as SongRecipe });
   }
   return out;
 }

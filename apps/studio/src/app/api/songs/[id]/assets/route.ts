@@ -3,15 +3,15 @@
 // hints | vocals | backingVocals with one "file" (kept under its own name; the old one is kept in
 // .studio\replaced\; vocals: the vocal stem, checked against the song and the lyric timing queued again
 // on it), or "kind" = assign with "name" and "role" (lyrics | vocals | backingVocals | notUsed): "What is
-// this file?" for a file put into the song folder by hand. DELETE ?name= : the clip moves to
-// clips\_removed\ (never deleted).
+// this file?" for a file put into the song folder by hand, or "kind" = restoreClip with "name" (back from
+// clips\_removed\). DELETE ?name= : the clip moves to clips\_removed\ (never deleted).
 import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { connection } from "next/server";
 
 import { resolveWorkspaceDir, safeName } from "@lyric/db";
-import { assignSongFile, importSongClips, removeSongClip, replaceAsset, songAssets, storeVocalStem, type AssetKind, type AssignRole } from "@lyric/video/assets";
+import { assignSongFile, importSongClips, removeSongClip, replaceAsset, restoreSongClip, songAssets, storeVocalStem, type AssetKind, type AssignRole } from "@lyric/video/assets";
 
 import { withWorkspaceAsync } from "@/lib/workspace";
 
@@ -45,6 +45,10 @@ export async function POST(request: Request, { params }: Params) {
       if (!files.length) return Response.json({ error: "Drop one or more videos or photos." }, { status: 400 });
       const saved = await Promise.all(files.map(save));
       return Response.json(await withWorkspaceAsync((ws) => importSongClips(ws, id, saved)));
+    }
+    if (kind === "restoreClip") {
+      const name = String(form.get("name") ?? "");
+      return Response.json({ restored: await withWorkspaceAsync(async (ws) => restoreSongClip(ws, id, name)) });
     }
     if (kind === "assign") {
       const name = String(form.get("name") ?? "");

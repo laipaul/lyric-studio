@@ -71,10 +71,12 @@ export function checkRunRequest(req: RunRequest, platformNames: readonly string[
   return problems;
 }
 
-// The project's lyrics.txt: the one stored by "+ New song", else the newest copy kept by an alignment.
+// The project's lyrics: a song folder's own lyrics file only (1 Nov 2026: never an older copy picked
+// quietly when it is missing; Make says so instead). Songs not migrated yet: the one stored by
+// "+ New song", else the newest copy kept by an alignment.
 export function projectLyricsTxt(ws: Workspace, projectId: string): string | null {
   const paths = songPathsById(ws, projectId);
-  if (!paths.legacy && existsSync(paths.lyricsTxt)) return paths.lyricsTxt; // the song folder's lyrics.txt
+  if (!paths.legacy) return existsSync(paths.lyricsTxt) ? paths.lyricsTxt : null; // the song folder's lyrics file
   const stored = readProjectSettings(ws, projectId).lyricsTxt;
   if (stored && existsSync(absPath(ws, stored))) return absPath(ws, stored);
   const dir = paths.store;
@@ -96,7 +98,7 @@ export function generateOptions(ws: Workspace, projectId: string, req: RunReques
   const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
   if (!p) throw new Error("Song not found.");
   const lyrics = projectLyricsTxt(ws, projectId);
-  if (!lyrics) throw new Error(`"${p.title}" has no lyrics.txt yet: add it with "+ New song" (choose the same song file; it updates this song).`);
+  if (!lyrics) throw new Error(`"${p.title}" has no lyrics file in its song folder. Add it in Prepare → Assets (Lyrics), or bring an earlier one back from Replaced files there.`);
   return {
     song: projectSong(ws, p),
     lyrics,

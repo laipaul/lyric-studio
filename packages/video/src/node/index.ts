@@ -36,6 +36,7 @@ export * from "./song-folder";
 export * from "./recipe";
 export * from "./migrate";
 export * from "./assets";
+export * from "./replaced-files";
 export * from "./style";
 export * from "./themes";
 export * from "./run-settings";
