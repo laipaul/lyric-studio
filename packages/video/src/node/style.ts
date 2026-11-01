@@ -33,7 +33,7 @@ import {
   type SongRecipe,
 } from "./recipe";
 import { isRemovedSong, sharedCollections, songPathsById } from "./song-folder";
-import { brandThemes, ensureAllThemes, ensureSongTheme, isThemeField, listThemes, loadTheme, removedThemes, setThemeLook, themeCover, themeLayer, type RemovedTheme, type ThemeLook } from "./themes";
+import { brandThemes, ensureAllThemes, ensureSongTheme, isThemeField, listThemes, loadTheme, removedThemes, setThemeLook, themeCover, themeCoverVideo, themeLayer, type RemovedTheme, type ThemeLook } from "./themes";
 import { SHORT_LABELS } from "./exports";
 
 // The characters the font preview checks (French accents).
@@ -412,7 +412,7 @@ export function setBrandTitleFont(ws: Workspace, o: { artist: string; family: st
 // The Themes page (31 Oct 2026): every theme with its songs, the fonts to draw them, a few lyric lines to
 // preview them on (the newest song with lyrics), the songs to use a theme for, and the deleted themes.
 export const THEME_SAMPLE_LINES = ["Your lyric line here", "Your chorus here"] as const;
-export type ThemeCard = StyleTheme & { author: string; licence: string; createdAt: string; moods: string[]; songs: { id: string; title: string }[]; brandDefault: string | null; background?: string | null };
+export type ThemeCard = StyleTheme & { author: string; licence: string; createdAt: string; moods: string[]; songs: { id: string; title: string }[]; brandDefault: string | null; background?: string | null; backgroundVideo?: string | null };
 export type ThemesPageData = { themes: ThemeCard[]; fonts: StyleFont[]; sampleLines: string[]; sampleSong: string | null; songs: { id: string; title: string; theme: string | null }[]; removed: RemovedTheme[] };
 
 export function themesPageData(ws: Workspace): ThemesPageData {
@@ -461,6 +461,8 @@ export async function themesPageWithFrames(ws: Workspace): Promise<ThemesPageDat
   for (const t of data.themes) {
     const cover = themeCover(ws.dir, t.name);
     t.background = cover ? `${path.relative(ws.dir, cover).split(path.sep).join("/")}?v=${Math.round(statSync(cover).mtimeMs)}` : null;
+    const video = themeCoverVideo(ws.dir, t.name);
+    t.backgroundVideo = video ? `${path.relative(ws.dir, video).split(path.sep).join("/")}?v=${Math.round(statSync(video).mtimeMs)}` : null;
   }
   return data;
 }

@@ -70,6 +70,8 @@ async function main() {
     check(slot.includes("Vocal stem") && slot.includes("Add…") && slot.includes("the app separates the vocals itself"), `the Assets tab offers the vocal stem (${slot})`);
     const order = await page.$$eval("[data-asset]", (e: Element[]) => e.map((x) => x.getAttribute("data-asset")));
     check(order.indexOf("vocals") === order.indexOf("song") + 1, `the vocal stem sits next to the song (${order.join(", ")})`);
+    await page.waitForSelector("[data-asset=themeCover]", { timeout: 10_000 }).catch(() => {});
+    check(((await page.textContent("[data-asset=themeCover]")) ?? "").includes("Theme cover"), "Assets: the Theme cover of the song's theme (Add / Replace)");
     // Original file names: files put into the song folder by hand are recognised, the rest asked about once.
     const wsF = openWorkspace(wsDir);
     const folder = songPathsById(wsF, id).root;

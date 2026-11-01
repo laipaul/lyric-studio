@@ -13,10 +13,11 @@
 // with no look of its own follows the artist's default theme (named after the artist, made from brand.json);
 // a song with its own fonts / effects / colour gets a theme named after it (or an identical existing one).
 // Nothing looks different afterwards.
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { project as projectTable, safeName, type Workspace } from "@lyric/db";
+import { ffmpegBin, project as projectTable, safeName, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
 import { brandDirFor, loadBrand } from "./brand";
@@ -372,14 +373,16 @@ export function duplicateTheme(workspaceDir: string, name: string, newName?: str
   const theme = loadTheme(workspaceDir, name);
   const copy = freeThemeName(workspaceDir, newName?.trim() || `${theme.name} copy`);
   writeTheme(workspaceDir, { ...theme, name: copy, description: `Made from ${theme.name}`, createdAt: new Date().toISOString() });
-  const cover = themeCover(workspaceDir, name);
-  if (cover) copyFileSync(cover, path.join(themeFolder(workspaceDir, copy), path.basename(cover)));
+  for (const cover of [themeCover(workspaceDir, name), themeCoverVideo(workspaceDir, name)]) if (cover) copyFileSync(cover, path.join(themeFolder(workspaceDir, copy), path.basename(cover)));
   return copy;
 }
 
-// ---- The Theme cover (1 Nov 2026): the theme's own picture, kept in its folder (portable with it) ----
+// ---- The Theme cover (1 Nov 2026): the theme's own picture or video, kept in its folder (portable with it) ----
+// A picture stays a picture (cover.jpg|png|webp). A video (like Canva) is kept as cover-video.<ext> and its
+// first frame becomes the still cover.jpg, shown wherever the theme stands still; the video loops on hover.
 
 export const THEME_COVER_EXTS = [".jpg", ".jpeg", ".png", ".webp"] as const;
+export const THEME_COVER_VIDEO_EXTS = [".mp4", ".mov", ".m4v", ".webm"] as const;
 
 export function themeCover(workspaceDir: string, name: string): string | null {
   const dir = themeFolder(workspaceDir, name);
@@ -390,26 +393,56 @@ export function themeCover(workspaceDir: string, name: string): string | null {
   return null;
 }
 
-// The cover in use goes to the theme folder's _replaced\ (nothing the user made is deleted).
+export function themeCoverVideo(workspaceDir: string, name: string): string | null {
+  const dir = themeFolder(workspaceDir, name);
+  for (const ext of THEME_COVER_VIDEO_EXTS) {
+    const file = path.join(dir, `cover-video${ext}`);
+    if (existsSync(file)) return file;
+  }
+  return null;
+}
+
+// The cover in use (picture and video) goes to the theme folder's _replaced\ (nothing the user made is deleted).
 function retireCover(workspaceDir: string, name: string): string | null {
-  const cover = themeCover(workspaceDir, name);
-  if (!cover) return null;
+  const files = [themeCover(workspaceDir, name), themeCoverVideo(workspaceDir, name)].filter((f): f is string => !!f);
+  if (!files.length) return null;
   const dir = path.join(themeFolder(workspaceDir, name), "_replaced");
   mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*$/, "").replace("T", "-");
-  const to = path.join(dir, `cover-${stamp}${path.extname(cover)}`);
-  renameSync(cover, to);
-  return to;
+  let first: string | null = null;
+  for (const f of files) {
+    const to = path.join(dir, `${path.basename(f, path.extname(f))}-${stamp}${path.extname(f)}`);
+    renameSync(f, to);
+    first ??= to;
+  }
+  return first;
 }
 
-// Sets the Theme cover from a picture file (copied in; the file itself is left where it is).
+// Sets the Theme cover from a picture or a video file (copied in; the file itself is left where it is).
 export function setThemeCover(workspaceDir: string, name: string, file: string, originalName = file): string {
   loadTheme(workspaceDir, name);
   let ext = path.extname(originalName).toLowerCase();
   if (ext === ".jpeg") ext = ".jpg";
-  if (!(THEME_COVER_EXTS as readonly string[]).includes(ext)) throw new Error("A Theme cover is a picture: JPG, PNG or WebP.");
+  const video = (THEME_COVER_VIDEO_EXTS as readonly string[]).includes(ext);
+  if (!video && !(THEME_COVER_EXTS as readonly string[]).includes(ext)) throw new Error("A Theme cover is a picture (JPG, PNG, WebP) or a video (MP4, MOV, M4V, WebM).");
+  const dir = themeFolder(workspaceDir, name);
+  if (video) {
+    // The still first: a file that is not a readable video changes nothing.
+    const still = path.join(dir, "cover-new.jpg");
+    try {
+      execFileSync(ffmpegBin(), ["-y", "-v", "error", "-i", file, "-frames:v", "1", "-q:v", "3", still], { windowsHide: true, timeout: 60_000 });
+    } catch {
+      rmSync(still, { force: true });
+      throw new Error("This video could not be read: try an MP4 or MOV.");
+    }
+    retireCover(workspaceDir, name);
+    renameSync(still, path.join(dir, "cover.jpg"));
+    const to = path.join(dir, `cover-video${ext}`);
+    copyFileSync(file, to);
+    return to;
+  }
   retireCover(workspaceDir, name);
-  const to = path.join(themeFolder(workspaceDir, name), `cover${ext}`);
+  const to = path.join(dir, `cover${ext}`);
   copyFileSync(file, to);
   return to;
 }

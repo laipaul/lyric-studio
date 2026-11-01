@@ -37,6 +37,10 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   picture is copied into the theme folder (themes\<name>\cover.jpg), so it travels with the theme; the one
   it replaces (or Remove) goes to the theme folder's _replaced\. Duplicate keeps it.
 - **New theme** is also the first tile of the Themes grid (a big +, like Canva's "Create blank").
+- **A video as Theme cover** (like Canva): kept as cover-video.mp4 in the theme folder, its first frame becomes
+  the still cover; it loops behind the words on hover and in the theme's big preview. A picture stays a picture.
+- **Prepare → Assets → Theme cover**: the cover of the song's theme (Add / Replace), shared with the other
+  songs on that theme.
 - Without a cover, theme previews show a neutral backdrop in the theme's own colours, never a song's picture.
 - Every theme preview on the Themes page uses the same neutral words: "Your lyric line here / Your chorus
   here". (Inside a song, Shape → Theme still previews on that song's own clip and lines.)

@@ -9,7 +9,7 @@ import { ChevronDown, Pencil, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import { backingShadow, BOX_STYLE, fallbackBackground, gradeLook, isTextLayout, pictureOf, THEME_MOODS, TILE_LOOP_FRAMES, tileLyrics, vignetteBackground } from "@lyric/video";
+import { backingShadow, BOX_STYLE, fallbackBackground, gradeLook, isTextLayout, pictureOf, THEME_MOODS, TILE_LOOP_FRAMES, tileLyrics, vignetteBackground, type LookPreviewProps } from "@lyric/video";
 import type { ThemeCard, ThemesPageData } from "@lyric/video/style";
 
 import { PreviewPlayer } from "@/components/preview-player";
@@ -184,6 +184,20 @@ export function ThemesView() {
   );
 }
 
+// The theme playing over its cover: a video cover loops under the words (the words drawn on top, transparent);
+// a picture cover (or none) is drawn by the preview itself.
+function CoverPlayer({ theme, input, gradeFilter, durationInFrames }: { theme: ThemeCard; input: LookPreviewProps; gradeFilter?: string; durationInFrames?: number }) {
+  if (!theme.backgroundVideo) return <PreviewPlayer input={input} durationInFrames={durationInFrames} />;
+  return (
+    <div className="absolute inset-0">
+      <video data-cover-video src={`/api/files/${theme.backgroundVideo}`} poster={theme.background ? `/api/files/${theme.background}` : undefined} autoPlay muted loop playsInline className="absolute inset-0 size-full object-cover" style={{ filter: gradeFilter }} />
+      <div className="absolute inset-0">
+        <PreviewPlayer input={{ ...input, background: null, transparent: true }} durationInFrames={durationInFrames} />
+      </div>
+    </div>
+  );
+}
+
 // One tall tile: the theme on two lyric lines over a dark frame in its accent; pointing at it plays it.
 function ThemeTile({ theme, data, onOpen }: { theme: ThemeCard; data: ThemesPageData; onOpen: () => void }) {
   const [playing, setPlaying] = useState(false);
@@ -199,7 +213,7 @@ function ThemeTile({ theme, data, onOpen }: { theme: ThemeCard; data: ThemesPage
       <div className="relative w-full overflow-hidden rounded-lg border bg-black group-hover:border-foreground/40" style={{ aspectRatio: "9 / 16" }}>
         {playing ? (
           // A tight ~3 s loop of one line, moving at once (the chorus line in Big hook).
-          <PreviewPlayer input={{ ...themePreview(v, data.fonts, data.sampleLines, theme.background ?? null), lyrics: tileLyrics(layout === "bighook" ? data.sampleLines[1] || "Your chorus here" : data.sampleLines[0] || "Your lyric line here", layout === "bighook") }} durationInFrames={TILE_LOOP_FRAMES} />
+          <CoverPlayer theme={theme} gradeFilter={grade.filter} input={{ ...themePreview(v, data.fonts, data.sampleLines, theme.background ?? null), lyrics: tileLyrics(layout === "bighook" ? data.sampleLines[1] || "Your chorus here" : data.sampleLines[0] || "Your lyric line here", layout === "bighook") }} durationInFrames={TILE_LOOP_FRAMES} />
         ) : (
           <div data-tile-layout={layout} className={cn("absolute inset-0 flex flex-col items-center gap-2 px-3 text-center", layout === "lower" ? "justify-end pb-[28%]" : "justify-center pb-[12%]")} style={{ background: theme.background ? "#000" : fallbackBackground(pic) }}>
             {theme.background ? (
@@ -256,8 +270,8 @@ function ThemeDetail({ theme, data, act, send, onOpen, onClose }: { theme: Theme
     <div data-theme-detail={theme.name} className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-6" onClick={onClose}>
       <div className="bg-background flex w-full max-w-4xl flex-col gap-5 rounded-xl border p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex gap-5">
-          <div className="w-[300px] shrink-0 overflow-hidden rounded-lg border bg-black" style={{ aspectRatio: "9 / 16" }}>
-            <PreviewPlayer key={theme.name} input={themePreview(v, data.fonts, data.sampleLines, theme.background ?? null)} />
+          <div className="relative w-[300px] shrink-0 overflow-hidden rounded-lg border bg-black" style={{ aspectRatio: "9 / 16" }}>
+            <CoverPlayer key={theme.name} theme={theme} gradeFilter={gradeLook(pictureOf({ ...(v as Record<string, string>) }).grade).filter} input={themePreview(v, data.fonts, data.sampleLines, theme.background ?? null)} />
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             <div className="flex items-start gap-2">
@@ -320,16 +334,19 @@ function ThemeDetail({ theme, data, act, send, onOpen, onClose }: { theme: Theme
               <span className="text-muted-foreground w-20 shrink-0 text-xs">Theme cover</span>
               {theme.background ? (
                 // eslint-disable-next-line @next/next/no-img-element -- the theme folder's picture, served by /api/files
-                <img data-theme-cover alt="Theme cover" src={`/api/files/${theme.background}`} className="h-12 w-[27px] shrink-0 rounded border object-cover" />
+                <span className="relative shrink-0">
+                  <img data-theme-cover alt="Theme cover" src={`/api/files/${theme.background}`} className="h-12 w-[27px] rounded border object-cover" />
+                  {theme.backgroundVideo ? <span data-theme-cover-video className="bg-brand text-brand-foreground absolute -right-1 -bottom-1 rounded px-0.5 text-[8px] leading-tight">▶</span> : null}
+                </span>
               ) : (
-                <span className="text-muted-foreground text-xs">none: a neutral backdrop in the theme&apos;s colours</span>
+                <span className="text-muted-foreground text-xs">none: a neutral backdrop in the theme&apos;s colours (a picture, or a video: its first frame shows, it plays on hover)</span>
               )}
               <label className="bg-muted hover:bg-accent cursor-pointer rounded-md px-2.5 py-1 text-xs">
                 {theme.background ? "Change…" : "Set theme cover…"}
                 <input
                   type="file"
                   data-theme-cover-file
-                  accept="image/jpeg,image/png,image/webp"
+                  accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,.m4v"
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];

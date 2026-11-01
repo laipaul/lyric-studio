@@ -104,6 +104,13 @@ async function main() {
     await page.waitForSelector("[data-theme-cover]", { timeout: 10_000 }).catch(() => {});
     const coverOk = await page.waitForFunction(() => ((document.querySelector("[data-theme-cover]") as HTMLImageElement | null)?.naturalWidth ?? 0) > 0, null, { timeout: 10_000 }).then(() => true).catch(() => false);
     check(coverOk && existsSync(path.join(wsDir, "themes", "Night Drive", "cover.jpg")), "Set theme cover…: the picture is kept in the theme folder and shown");
+    // A video as Theme cover: its first frame is the still cover, the video plays on hover.
+    const coverClip = path.join(root, "mood.mp4");
+    ffmpeg("-f", "lavfi", "-i", "color=c=teal:s=360x640:d=2", "-pix_fmt", "yuv420p", coverClip);
+    await page.setInputFiles("[data-theme-cover-file]", coverClip);
+    await page.waitForSelector("[data-theme-cover-video]", { timeout: 15_000 }).catch(() => {});
+    check(!!(await page.$("[data-theme-cover-video]")) && existsSync(path.join(wsDir, "themes", "Night Drive", "cover-video.mp4")) && existsSync(path.join(wsDir, "themes", "Night Drive", "cover.jpg")), "a video as Theme cover: kept in the theme folder, its first frame the still");
+    check(!!(await page.$("[data-theme-detail] [data-cover-video]")), "…and it plays behind the words in the big preview");
     await page.click("[data-theme-cover-remove]");
     await page.waitForFunction(() => !document.querySelector("[data-theme-cover]"), null, { timeout: 10_000 }).catch(() => {});
     check(!existsSync(path.join(wsDir, "themes", "Night Drive", "cover.jpg")) && existsSync(path.join(wsDir, "themes", "Night Drive", "_replaced")), "Remove: back to the neutral backdrop, the picture kept in _replaced");

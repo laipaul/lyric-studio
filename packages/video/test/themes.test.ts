@@ -1,10 +1,11 @@
 // Themes (31 Oct 2026): a song's look in themes\<name>\theme.json; the recipe order library -> brand ->
 // theme -> song -> run; the move of a song's look into a theme; changes for every song or only this one.
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { openWorkspace, type Workspace } from "@lyric/db";
+import { ffmpegBin, openWorkspace, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -24,6 +25,7 @@ import {
   renameTheme,
   brandThemes,
   setThemeCover,
+  themeCoverVideo,
   setThemeDetails,
   removeThemeCover,
   themeCover,
@@ -200,7 +202,7 @@ describe("songs and themes", () => {
     let page = await themesPageWithFrames(ws);
     expect(page.themes.every((t) => t.background === null)).toBe(true); // no song pictures borrowed
     expect(page.sampleLines).toEqual([...THEME_SAMPLE_LINES]);
-    expect(() => setThemeCover(wsDir, "Life Lyrics", pic, "notes.txt")).toThrow(/JPG, PNG or WebP/);
+    expect(() => setThemeCover(wsDir, "Life Lyrics", pic, "notes.txt")).toThrow(/JPG, PNG, WebP\) or a video/);
     const cover = setThemeCover(wsDir, "Life Lyrics", pic, "my cover.JPEG");
     expect(path.basename(cover)).toBe("cover.jpg");
     expect(existsSync(pic)).toBe(true); // copied, the original stays
@@ -215,6 +217,27 @@ describe("songs and themes", () => {
     removeThemeCover(wsDir, "Life Lyrics");
     expect(themeCover(wsDir, "Life Lyrics")).toBeNull();
     expect(readdirSync(path.join(wsDir, "themes", "Life Lyrics", "_replaced")).length).toBe(2); // nothing deleted
+  });
+
+  it("Theme cover from a video: kept as cover-video, its first frame the still cover; a broken video changes nothing", async () => {
+    const clip = path.join(root, "mood.mp4");
+    execFileSync(ffmpegBin(), ["-y", "-v", "error", "-f", "lavfi", "-i", "color=c=teal:s=180x320:d=1", "-pix_fmt", "yuv420p", clip]);
+    setThemeCover(wsDir, "Life Lyrics", clip, "Mood Clip.MP4");
+    expect(path.basename(themeCoverVideo(wsDir, "Life Lyrics")!)).toBe("cover-video.mp4");
+    expect(path.basename(themeCover(wsDir, "Life Lyrics")!)).toBe("cover.jpg");
+    const t = (await themesPageWithFrames(ws)).themes.find((x) => x.name === "Life Lyrics")!;
+    expect(t.background).toMatch(/cover\.jpg\?v=/);
+    expect(t.backgroundVideo).toMatch(/cover-video\.mp4\?v=/);
+    const broken = path.join(root, "broken.mp4");
+    writeFileSync(broken, "not a video");
+    expect(() => setThemeCover(wsDir, "Life Lyrics", broken, "broken.mp4")).toThrow(/could not be read/);
+    expect(themeCoverVideo(wsDir, "Life Lyrics")).not.toBeNull(); // unchanged
+    const pic = path.join(root, "still.png");
+    writeFileSync(pic, "png bytes");
+    setThemeCover(wsDir, "Life Lyrics", pic); // a picture replaces the video too
+    expect(themeCoverVideo(wsDir, "Life Lyrics")).toBeNull();
+    expect(path.basename(themeCover(wsDir, "Life Lyrics")!)).toBe("cover.png");
+    removeThemeCover(wsDir, "Life Lyrics");
   });
 
   it("moods: ticked on the theme's page, kept in theme.json, checked in plain words", async () => {

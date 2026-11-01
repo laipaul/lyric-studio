@@ -11,7 +11,7 @@ export const SONG_CLIP_FILE = /^songs\/[^/]+\/[^/]+\/clips\/[^/]+\.(mp4|m4v|mov|
 // A shared collection's clips (the Collections page plays them on hover).
 export const COLLECTION_CLIP_FILE = /^(?:collections|clips)\/[^/]+\/[^/]+\.(mp4|m4v|mov|webm|jpe?g|png|webp)$/i;
 // A theme's own picture (Themes page → Theme cover).
-export const THEME_COVER_FILE = /^themes\/[^/]+\/cover\.(jpg|png|webp)$/i;
+export const THEME_COVER_FILE = /^themes\/[^/]+\/(?:cover\.(jpg|png|webp)|cover-video\.(mp4|mov|m4v|webm))$/i;
 export const THUMB_FILE = new RegExp(`^thumbs/${UUID}\\.jpg$`, "i");
 // The song itself (the Lyrics tab's audio preview). Songs keep their own file names: any WAV/MP3 at the top
 // of a song folder may be the song, so those are served only when the database names them as a song
