@@ -70,8 +70,7 @@ async function main() {
     check(slot.includes("Vocal stem") && slot.includes("Add…") && slot.includes("the app separates the vocals itself"), `the Assets tab offers the vocal stem (${slot})`);
     const order = await page.$$eval("[data-asset]", (e: Element[]) => e.map((x) => x.getAttribute("data-asset")));
     check(order.indexOf("vocals") === order.indexOf("song") + 1, `the vocal stem sits next to the song (${order.join(", ")})`);
-    await page.waitForSelector("[data-asset=themeCover]", { timeout: 10_000 }).catch(() => {});
-    check(((await page.textContent("[data-asset=themeCover]")) ?? "").includes("Theme cover"), "Assets: the Theme cover of the song's theme (Add / Replace)");
+    check(!(await page.$("[data-asset=themeCover]")), "Assets are the song's own files: no Theme cover here (it lives in Themes)");
     // Original file names: files put into the song folder by hand are recognised, the rest asked about once.
     const wsF = openWorkspace(wsDir);
     const folder = songPathsById(wsF, id).root;
@@ -182,6 +181,8 @@ async function main() {
     check((await page.$("[data-theme-editors]")) === null, "the editors open with Edit theme");
     check((await page.getAttribute("[data-theme-current] [data-theme-reach]", "data-theme-reach")) === "single" && ((await page.textContent("[data-theme-current] [data-theme-reach]")) ?? "") === "This song only", "the badge: This song only");
     check(!(await page.$("[data-theme-banner]")) && !(await page.$("[data-work-area][data-theme-mode]")), "not editing: no pink frame, no banner");
+    const lookLine = (await page.textContent("[data-look-content]")) ?? "";
+    check(lookLine.includes(`Look:theme ${themeName}`) && lookLine.includes("This song only") && lookLine.includes("Content: this song"), `the Look · Content line at the top of Shape (${lookLine})`);
     await page.click("[data-theme-edit]");
     await page.waitForSelector("[data-theme-banner]");
     const banner = (await page.textContent("[data-theme-banner]")) ?? "";

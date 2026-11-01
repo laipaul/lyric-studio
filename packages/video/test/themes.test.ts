@@ -10,6 +10,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   applyStyleAction,
+  plainSongThemeNames,
+  songLookAbout,
+  writeTheme,
   checkTheme,
   createTheme,
   duplicateTheme,
@@ -95,8 +98,8 @@ describe("songs and themes", () => {
 
   it("the Theme panel offers every song's theme and the brand's default theme from the start", () => {
     const data = styleData(ws, ids["Own Look"]); // the first song opened has its own look
-    expect(data.theme?.name).toBe("Own Look");
-    expect(data.themes.map((t) => t.name)).toEqual(["Life Lyrics", "Own Look"]);
+    expect(data.theme?.name).toBe("Own Look look");
+    expect(data.themes.map((t) => t.name)).toEqual(["Life Lyrics", "Own Look look"]);
     expect(data.themes.find((t) => t.name === "Life Lyrics")!.users.sort()).toEqual(["Plain", "Third"]);
   });
 
@@ -116,17 +119,17 @@ describe("songs and themes", () => {
     const before = styleData(ws, ids.Plain); // (any song: makes sure styleData works with themes)
     expect(before.theme?.name).toBe("Life Lyrics");
     const song = ensureSongTheme(ws, ids["Own Look"], catalog);
-    expect(song.theme).toBe("Own Look");
+    expect(song.theme).toBe("Own Look look");
     expect(song.verseEffect).toBeUndefined();
     expect(song.locked).toEqual(["tempo"]);
     expect(song.perPlatform).toEqual({ youtube: { length: 90 } });
-    const theme = loadTheme(wsDir, "Own Look", catalog);
+    const theme = loadTheme(wsDir, "Own Look look", catalog);
     expect(theme.look.verseEffect).toBe("typewriter");
     expect(theme.perPlatform.youtube?.verseFont).toBe("Cinzel");
     const data = styleData(ws, ids["Own Look"]);
     const yt = data.fields.find((f) => f.field === "verseFont")!.perPlatform!.find((p) => p.platform === "youtube")!;
     expect([yt.value, yt.source]).toEqual(["Cinzel", "theme:youtube"]);
-    expect(data.themes.map((t) => t.name)).toEqual(["Life Lyrics", "Own Look"]);
+    expect(data.themes.map((t) => t.name)).toEqual(["Life Lyrics", "Own Look look"]);
     expect(data.themes.find((t) => t.name === "Life Lyrics")!.users.sort()).toEqual(["Plain", "Third"]);
   });
 
@@ -136,13 +139,13 @@ describe("songs and themes", () => {
     expect(loadTheme(wsDir, "Life Lyrics").look.accentColour).toBe("#112233");
     expect(themeUsers(ws, "Life Lyrics").length).toBe(2);
     const r = setThemeLook(ws, { projectId: ids.Plain, values: { verseEffect: "spread" }, scope: "song", catalog });
-    expect(r).toEqual({ theme: "Plain", copied: true });
-    expect(readRecipe(songPathsById(ws, ids.Plain).recipe!).theme).toBe("Plain");
-    expect(loadTheme(wsDir, "Plain").look.verseEffect).toBe("spread");
-    expect(loadTheme(wsDir, "Plain").look.accentColour).toBe("#112233");
+    expect(r).toEqual({ theme: "Plain look", copied: true });
+    expect(readRecipe(songPathsById(ws, ids.Plain).recipe!).theme).toBe("Plain look");
+    expect(loadTheme(wsDir, "Plain look").look.verseEffect).toBe("spread");
+    expect(loadTheme(wsDir, "Plain look").look.accentColour).toBe("#112233");
     expect(loadTheme(wsDir, "Life Lyrics").look.verseEffect).not.toBe("spread"); // the other song keeps its look
     // A theme only this song uses is changed in place.
-    expect(setThemeLook(ws, { projectId: ids.Plain, values: { verseEffect: "glide" }, scope: "song", catalog })).toEqual({ theme: "Plain", copied: false });
+    expect(setThemeLook(ws, { projectId: ids.Plain, values: { verseEffect: "glide" }, scope: "song", catalog })).toEqual({ theme: "Plain look", copied: false });
   });
 
   it("the Style actions on a theme setting go to the theme; lock and reset are not offered", () => {
@@ -183,13 +186,13 @@ describe("songs and themes", () => {
 
   it("use, duplicate and rename; a missing theme is named", () => {
     const catalog = loadFontCatalog(wsDir);
-    chooseTheme(ws, ids.Third, "Own Look", catalog);
-    expect(readRecipe(songPathsById(ws, ids.Third).recipe!).theme).toBe("Own Look");
-    const copy = duplicateTheme(wsDir, "Own Look");
-    expect(copy).toBe("Own Look copy");
-    expect(renameTheme(ws, "Own Look", "Night Drive")).toBe("Night Drive");
+    chooseTheme(ws, ids.Third, "Own Look look", catalog);
+    expect(readRecipe(songPathsById(ws, ids.Third).recipe!).theme).toBe("Own Look look");
+    const copy = duplicateTheme(wsDir, "Own Look look");
+    expect(copy).toBe("Own Look look copy");
+    expect(renameTheme(ws, "Own Look look", "Night Drive")).toBe("Night Drive");
     expect(themeUsers(ws, "Night Drive").map((u) => u.title).sort()).toEqual(["Own Look", "Third"]);
-    expect(listThemes(wsDir).map((t) => t.name)).toEqual(["Life Lyrics", "Neon", "Neon Night", "Night Drive", "Own Look copy", "Plain"]);
+    expect(listThemes(wsDir).map((t) => t.name)).toEqual(["Life Lyrics", "Neon", "Neon Night", "Night Drive", "Own Look look copy", "Plain look"]);
     const file = songPathsById(ws, ids.Third).recipe!;
     writeFileSync(file, JSON.stringify({ theme: "Gone" }));
     expect(() => styleData(ws, ids.Third)).toThrow(/Theme "Gone" not found/);
@@ -260,5 +263,19 @@ describe("songs and themes", () => {
     expect(listThemes(wsDir).map((t) => t.name)).not.toContain("Life Lyrics");
     renameTheme(ws, "Golden Dusk", "Life Lyrics");
     expect(brandThemes(ws, catalog).has("Life Lyrics")).toBe(true);
+  });
+  it("a theme made from a song has a plain name ('<song> look') and says where it came from; old ones are renamed", () => {
+    const catalog = loadFontCatalog(wsDir);
+    expect(loadTheme(wsDir, "Night Drive").description) // the song "Own Look"'s theme, renamed above
+      .toMatch(/^Made from Own Look's look on \d{1,2} [A-Z][a-z]{2} \d{4}$/);
+    expect(songLookAbout("Hold On", "2026-10-29T10:00:00Z")).toBe("Made from Hold On's look on 29 Oct 2026");
+    // A theme from before 1 Nov 2026, named like its song: renamed, the song follows, About says where it came from.
+    const base = loadTheme(wsDir, "Life Lyrics", catalog);
+    writeTheme(wsDir, { ...base, name: "Third", description: "The look Third had", createdAt: "2026-10-20T09:00:00Z" });
+    chooseTheme(ws, ids.Third, "Third", catalog);
+    expect(plainSongThemeNames(ws)).toEqual([{ from: "Third", to: "Third look" }]);
+    expect(readRecipe(songPathsById(ws, ids.Third).recipe!).theme).toBe("Third look");
+    expect(loadTheme(wsDir, "Third look").description).toBe("Made from Third's look on 20 Oct 2026");
+    expect(plainSongThemeNames(ws)).toEqual([]); // once only; a theme the user named is never touched
   });
 });

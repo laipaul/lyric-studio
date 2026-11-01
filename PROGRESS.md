@@ -24,6 +24,11 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   round the work area and a banner "Editing theme X · Changes here reach: …" with **Done** ("Save and done"
   when something changed; Cancel in the panel still drops the changes). Clicking Theme in the rail while an
   untouched editor is open goes back to the choice.
+- **Plain names**: a theme made from a song's own look is called "<song> look" (About: "Made from <song>'s
+  look on <date>"); older ones named exactly like their song are renamed once, the songs follow (themes.ts
+  plainSongThemeNames, tested). A theme you named yourself is never touched.
+- **Look · Content** line at the top of Shape: "Look: theme X [badge] · Content: this song (words, clips, card
+  text)"; the theme name opens Theme. The theme's page says a theme is only the look, with links to its songs.
 
 ### Themes like Canva: text layouts, moods, livelier tiles ✅ (to verify on the Windows PC)
 - Asked by the user on 1 Nov 2026 ("build all except the Crown").
@@ -61,8 +66,8 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   button at the top right was removed (asked by the user on 1 Nov 2026), the page intro now points at the tile.
 - **A video as Theme cover** (like Canva): kept as cover-video.mp4 in the theme folder, its first frame becomes
   the still cover; it loops behind the words on hover and in the theme's big preview. A picture stays a picture.
-- **Prepare → Assets → Theme cover**: the cover of the song's theme (Add / Replace), shared with the other
-  songs on that theme.
+- The Theme cover is set only in **Themes** (a short-lived Prepare → Assets row was taken out again the same
+  day: Assets are the song's own files).
 - Without a cover, theme previews show a neutral backdrop in the theme's own colours, never a song's picture.
 - Every theme preview on the Themes page uses the same neutral words: "Your lyric line here / Your chorus
   here". (Inside a song, Shape → Theme still previews on that song's own clip and lines.)

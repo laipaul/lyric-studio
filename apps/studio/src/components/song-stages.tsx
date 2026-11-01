@@ -5,6 +5,7 @@ import { createContext, useContext, useState } from "react";
 
 import type { TodoItem } from "@lyric/video/song-stages";
 
+import { ThemeReachBadge } from "@/components/theme-reach-badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
@@ -58,6 +59,10 @@ export const useShapePanel = () => useContext(ShapePanel);
 export type ThemeMode = { name: string; reach: string; shared: boolean; changed: boolean; done: () => void };
 const ThemeModeCtx = createContext<(m: ThemeMode | null) => void>(() => {});
 export const useSetThemeMode = () => useContext(ThemeModeCtx);
+// The song's theme as the Theme panel knows it, for the "Look · Content" line at the top of Shape.
+export type ThemeNow = { name: string; users: string[]; song: string };
+const ThemeNowCtx = createContext<(t: ThemeNow | null) => void>(() => {});
+export const useSetThemeNow = () => useContext(ThemeNowCtx);
 
 // The feature icons (lib/feature-icons.tsx): one icon per step, the same everywhere.
 const STAGE_ICON = { prepare: FEATURE.prepare.icon, shape: FEATURE.shape.icon, make: FEATURE.make.icon, review: FEATURE.review.icon } as const;
@@ -86,6 +91,7 @@ export function SongStages({
   const [tab, setTab] = useState(initialTab);
   const [panel, setPanel] = useState<ShapePanelId | null>(initialPanel ?? null);
   const [themeMode, setThemeMode] = useState<ThemeMode | null>(null);
+  const [themeNow, setThemeNow] = useState<ThemeNow | null>(null);
   // The rail's Theme: always opens on the choice ("This song uses …", Edit theme); an editor with no
   // change yet closes, one with unsaved changes stays (the frame and banner say so).
   const openTheme = () => {
@@ -100,6 +106,7 @@ export function SongStages({
     <GoToTab.Provider value={setTab}>
       <ShapePanel.Provider value={{ panel, setPanel }}>
         <ThemeModeCtx.Provider value={setThemeMode}>
+        <ThemeNowCtx.Provider value={setThemeNow}>
         <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-row gap-0">
           <nav aria-label="Stages" data-stages data-rail className="bg-card/40 sticky top-0 flex max-h-[calc(100vh-3.5rem)] w-[76px] shrink-0 flex-col items-stretch gap-1 overflow-y-auto border-r px-1.5 py-2">
             {STAGES.map((s, i) => {
@@ -174,6 +181,20 @@ export function SongStages({
             <p className="text-muted-foreground text-xs" data-work-status>
               <span className="text-foreground font-medium">{current.name}</span> · <span className={TONE[statuses[stage].tone]}>{statuses[stage].text}</span>
             </p>
+            {stage === "shape" && themeNow && !themeMode ? (
+              // What belongs to whom, in one line (1 Nov 2026): the look comes from the theme, the content is this song's.
+              <p data-look-content className="-mt-3 flex flex-wrap items-center gap-1.5 text-xs">
+                <FeatureIcon feature="theme" className="size-3.5" />
+                <span className="text-muted-foreground">Look:</span>
+                <button type="button" data-look-theme onClick={openTheme} className="text-brand underline-offset-2 hover:underline">
+                  theme {themeNow.name}
+                </button>
+                <ThemeReachBadge users={themeNow.users} thisSong={themeNow.song} />
+                <span className="text-muted-foreground mx-1">·</span>
+                <FeatureIcon feature="song" className="size-3.5" />
+                <span className="text-muted-foreground">Content: this song (words, clips, card text)</span>
+              </p>
+            ) : null}
             {stage === "prepare" ? (
               todo.length ? (
                 <ul className="flex flex-col gap-2 rounded-xl border border-amber-400/25 bg-amber-400/5 p-3" data-todo>
@@ -211,6 +232,7 @@ export function SongStages({
             {children}
           </div>
         </Tabs>
+        </ThemeNowCtx.Provider>
         </ThemeModeCtx.Provider>
       </ShapePanel.Provider>
     </GoToTab.Provider>

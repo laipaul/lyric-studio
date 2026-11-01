@@ -206,6 +206,28 @@ export function freeThemeName(workspaceDir: string, wanted: string): string {
   return name;
 }
 
+// A theme made from a song's own look has a plain name, "<song> look", so it never reads as the song itself
+// (asked by the user on 1 Nov 2026: a theme named like its song was taken for the song), and says where it
+// came from in About.
+export const songLookName = (title: string) => `${title.trim()} look`;
+const day = (iso = new Date().toISOString()) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+export const songLookAbout = (title: string, iso?: string) => `Made from ${title.trim()}'s look on ${day(iso)}`;
+
+// Themes made before 1 Nov 2026 from a song's look carry the song's very name ("The look X had"): they get
+// the plain name and the About line. Renamed like the user's Rename (songs and brand.json follow); a theme
+// the user named or renamed is left alone. Returns the renames done.
+export function plainSongThemeNames(ws: Workspace): { from: string; to: string }[] {
+  const done: { from: string; to: string }[] = [];
+  for (const t of listThemes(ws.dir)) {
+    const m = /^The look (.+) had$/.exec(t.theme.description);
+    if (!m || safeName(m[1]) !== safeName(t.name)) continue;
+    const to = renameTheme(ws, t.name, freeThemeName(ws.dir, songLookName(m[1])));
+    writeTheme(ws.dir, { ...loadTheme(ws.dir, to), description: songLookAbout(m[1], t.theme.createdAt || undefined) });
+    done.push({ from: t.name, to });
+  }
+  return done;
+}
+
 // Makes (or finds) a theme with this look: an existing theme with the very same look is reused.
 export function themeForLook(workspaceDir: string, wanted: string, look: ThemeLook, perPlatform: Record<string, Partial<ThemeLook>>, description = ""): string {
   const existing = readThemeFile(workspaceDir, wanted);
@@ -264,7 +286,7 @@ export function ensureSongTheme(ws: Workspace, projectId: string, catalog: FontC
       const diff = Object.fromEntries(THEME_FIELDS.filter((k) => JSON.stringify(at[k]) !== JSON.stringify(look[k])).map((k) => [k, at[k]]));
       if (Object.keys(diff).length) perPlatform[p] = diff as Partial<ThemeLook>;
     }
-    name = themeForLook(ws.dir, row.title, look, perPlatform, `The look ${row.title} had`);
+    name = themeForLook(ws.dir, songLookName(row.title), look, perPlatform, songLookAbout(row.title));
   }
   const next: SongRecipe = { ...song, theme: name };
   for (const k of THEME_FIELDS) delete next[k];
@@ -306,6 +328,7 @@ export function ensureAllThemes(ws: Workspace, catalog: FontCatalog): void {
       // a broken brand.json is named on the song pages
     }
   }
+  plainSongThemeNames(ws);
 }
 
 // The songs that use a theme (title and id).
@@ -347,7 +370,7 @@ export function setThemeLook(
   let copied = false;
   if (o.scope === "song" && themeUsers(ws, theme.name).some((u) => u.id !== o.projectId)) {
     const row = ws.db.select({ title: projectTable.title }).from(projectTable).where(eq(projectTable.id, o.projectId)).get();
-    theme = { ...theme, name: freeThemeName(ws.dir, row?.title ?? theme.name), description: `Made from ${theme.name}`, createdAt: new Date().toISOString() };
+    theme = { ...theme, name: freeThemeName(ws.dir, row?.title ? songLookName(row.title) : theme.name), description: `Made from ${theme.name} for ${row?.title ?? "this song"} on ${day()}`, createdAt: new Date().toISOString() };
     copied = true;
   }
   const next: Theme = { ...theme, look: { ...theme.look }, perPlatform: { ...theme.perPlatform } };

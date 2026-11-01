@@ -1,11 +1,10 @@
 "use client";
 
-import { AudioLines, FileAudio, FileText, ImageIcon, ListMusic, Palette, Trash2, Upload } from "lucide-react";
+import { AudioLines, FileAudio, FileText, ImageIcon, ListMusic, Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import type { AssetKind, SongAssets } from "@lyric/video/assets";
-import type { ThemesPageData } from "@lyric/video/style";
 
 import { Button } from "@/components/ui/button";
 import { FeatureIcon } from "@/lib/feature-icons";
@@ -196,7 +195,6 @@ export function AssetsTab({ projectId }: { projectId: string }) {
           "Cover",
           data.cover ? win(data.cover.slice(data.folder.length + 1)) : "none (YouTube uses stills or clips)",
         )}
-        <ThemeCoverAsset projectId={projectId} />
         {fileRow(
           "hints",
           <ListMusic className="size-5" />,
@@ -351,79 +349,5 @@ function TaglineField({ projectId }: { projectId: string }) {
       />
       <span className="text-muted-foreground text-xs">{saved === value && value ? "saved · " : ""}shown in the title opening (Shape → This song → Title opening: on)</span>
     </label>
-  );
-}
-
-// Assets → Theme cover (1 Nov 2026): the cover of the theme this song uses (a picture, or a video whose first
-// frame shows). It is kept in the theme's own folder (themes\<name>\), so it is shared by every song on the
-// theme and travels with it; the same as Themes → the theme → Theme cover.
-function ThemeCoverAsset({ projectId }: { projectId: string }) {
-  const [data, setData] = useState<ThemesPageData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    api("/api/themes", { cache: "no-store" })
-      .then((r) => r.json() as Promise<ThemesPageData & { error?: string }>)
-      .then((d) => alive && !d.error && setData(d))
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
-  const theme = data?.themes.find((t) => t.songs.some((x) => x.id === projectId)) ?? null;
-  if (!theme) return null;
-  const send = async (init: RequestInit, query = "") => {
-    setBusy(true);
-    setError(null);
-    try {
-      const r = await api(`/api/themes/cover${query}`, init);
-      const d = (await r.json()) as ThemesPageData & { error?: string };
-      if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
-      setData(d);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  const others = theme.songs.length - 1;
-  return (
-    <li data-asset="themeCover" className="bg-card flex items-center gap-3 rounded-lg border px-3 py-2.5">
-      <span className="text-brand">
-        {theme.background ? (
-          // eslint-disable-next-line @next/next/no-img-element -- the theme folder's picture, served by /api/files
-          <img data-asset-theme-cover src={`/api/files/${theme.background}`} alt="" className="size-10 rounded object-cover" />
-        ) : (
-          <Palette className="size-5" />
-        )}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium">Theme cover</p>
-        <p className="text-muted-foreground truncate text-xs">
-          {theme.background ? (theme.backgroundVideo ? "a video (its first frame shows)" : "a picture") : "none"} · theme {theme.name}
-          {others > 0 ? ` (shared with ${others} other song${others === 1 ? "" : "s"})` : ""}
-        </p>
-        {error ? <p className="mt-1 text-xs text-amber-300">{error}</p> : null}
-      </div>
-      <label className={cn("border-input hover:bg-accent cursor-pointer rounded-md border px-3 py-1.5 text-xs", busy && "pointer-events-none opacity-50")}>
-        {theme.background ? "Replace…" : "Add…"}
-        <input
-          type="file"
-          data-replace="themeCover"
-          accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,.m4v"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (!file) return;
-            const form = new FormData();
-            form.set("name", theme.name);
-            form.set("file", file);
-            void send({ method: "POST", body: form });
-          }}
-        />
-      </label>
-    </li>
   );
 }

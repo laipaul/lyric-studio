@@ -11,7 +11,7 @@ import type { StyleData, StyleField, StyleFont, StyleTheme } from "@lyric/video/
 import { PairingsRow, type DraftFonts } from "@/components/pairings-row";
 import { RowMenu, type RowMenuItem } from "@/components/row-menu";
 import { SetEffect, type EffectPart, type EffectValues } from "@/components/set-effect";
-import { useSetThemeMode, useShapePanel } from "@/components/song-stages";
+import { useSetThemeMode, useSetThemeNow, useShapePanel } from "@/components/song-stages";
 import { ThemeReachBadge } from "@/components/theme-reach-badge";
 
 import { FeatureIcon } from "@/lib/feature-icons";
@@ -107,6 +107,13 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
     setThemeMode({ name: editingTheme.name, reach: r.reach, shared: r.tone === "shared", changed: draft.changed, done: () => doneRef.current() });
   }, [draft, editingTheme, saved?.title, setThemeMode]);
   useEffect(() => () => setThemeMode(null), [setThemeMode]);
+  const setThemeNow = useSetThemeNow();
+  const nowName = saved?.theme?.name ?? null;
+  const nowUsers = saved?.theme?.users.join("\n") ?? "";
+  useEffect(() => {
+    setThemeNow(nowName ? { name: nowName, users: nowUsers ? nowUsers.split("\n") : [], song: saved?.title ?? "" } : null);
+  }, [nowName, nowUsers, saved?.title, setThemeNow]);
+  useEffect(() => () => setThemeNow(null), [setThemeNow]);
   // ?edit=<theme> (the Themes page's "Edit"): the editor opens on that theme, shown on this song.
   const editParam = useSearchParams().get("edit");
   const [error, setError] = useState<string | null>(null);

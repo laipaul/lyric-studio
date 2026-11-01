@@ -33,7 +33,7 @@ import {
   type SongRecipe,
 } from "./recipe";
 import { isRemovedSong, sharedCollections, songPathsById } from "./song-folder";
-import { brandThemes, ensureAllThemes, ensureSongTheme, isThemeField, listThemes, loadTheme, removedThemes, setThemeLook, themeCover, themeCoverVideo, themeLayer, type RemovedTheme, type ThemeLook } from "./themes";
+import { brandThemes, ensureAllThemes, ensureSongTheme, isThemeField, listThemes, loadTheme, plainSongThemeNames, removedThemes, setThemeLook, themeCover, themeCoverVideo, themeLayer, type RemovedTheme, type ThemeLook } from "./themes";
 import { SHORT_LABELS } from "./exports";
 
 // The characters the font preview checks (French accents).
@@ -184,6 +184,7 @@ export function styleFonts(catalog: FontCatalog): StyleFont[] {
 
 export function styleData(ws: Workspace, projectId: string): StyleData {
   const catalog = loadFontCatalog(ws.dir);
+  plainSongThemeNames(ws); // themes named like their song get "<song> look" (themes.ts)
   const { input, song, recipeFile, brandFile } = recipeInputFor(ws, projectId, catalog);
   const platforms = presetsList().map((p) => ({ name: p.name, label: SHORT_LABELS[p.name] ?? p.label, presetLength: presetLengthText(p), presetVariations: p.variations }));
   const withLyrics = new Set(presetsList().filter((p) => p.lyrics).map((p) => p.name)); // Canvas has no lyrics, effects or fonts

@@ -374,7 +374,8 @@ function ThemeDetail({ theme, data, act, send, onOpen, onClose }: { theme: Theme
                   {theme.songs.map((s, i) => (
                     <span key={s.id}>
                       {i ? ", " : ""}
-                      <Link href={`/songs/${s.id}?tab=shape&panel=theme`} className="text-brand underline underline-offset-2">
+                      <Link href={`/songs/${s.id}?tab=shape&panel=theme`} className="text-brand inline-flex items-center gap-1 underline underline-offset-2">
+                        <FeatureIcon feature="song" className="size-3" />
                         {s.title}
                       </Link>
                     </span>
@@ -384,6 +385,9 @@ function ThemeDetail({ theme, data, act, send, onOpen, onClose }: { theme: Theme
                 <span className="text-muted-foreground">Not used by a song yet.</span>
               )}
               {theme.brandDefault !== null ? <span className="text-muted-foreground"> · new songs start on it</span> : null}
+            </p>
+            <p data-theme-detail-scope className="text-muted-foreground -mt-1 text-xs">
+              A theme is only the look: fonts, motion, colours, cards&apos; style. The words, clips and card text belong to each song: open a song above to change them.
             </p>
             {data.songs.length ? (
               <div className="flex flex-wrap items-center gap-2">
