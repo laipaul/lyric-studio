@@ -16,7 +16,7 @@ import path from "node:path";
 import { project as projectTable, safeName, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
-import { loadBrand } from "./brand";
+import { brandDirFor, loadBrand } from "./brand";
 import type { FontCatalog } from "./font-catalog";
 import { findFamily } from "./font-catalog";
 import { checkPerPlatform, type PerPlatform, type PlatformValues } from "./per-platform";
@@ -369,6 +369,19 @@ export function renameTheme(ws: Workspace, from: string, to: string): string {
   for (const u of users) {
     const file = songPathsById(ws, u.id).recipe!;
     writeRecipe(file, { ...readRecipe(file), theme: name });
+  }
+  // An artist's default theme (brand.json "theme", "new songs start on it") keeps being the default under its
+  // new name (1 Nov 2026: renaming "Life Lyrics" seemed to do nothing, the brand still named the old one).
+  const artists = new Set(ws.db.select({ artist: projectTable.artist }).from(projectTable).all().map((r) => r.artist));
+  const files = new Set([path.join(brandDirFor(ws.dir, null), "brand.json"), ...[...artists].map((a) => path.join(brandDirFor(ws.dir, a), "brand.json"))]);
+  for (const file of files) {
+    if (!existsSync(file)) continue;
+    try {
+      const raw = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+      if (raw.theme === from) writeFileSync(file, `${JSON.stringify({ ...raw, theme: name }, null, 2)}\n`);
+    } catch {
+      // a brand.json that is not valid JSON is reported where the brand is read
+    }
   }
   return name;
 }

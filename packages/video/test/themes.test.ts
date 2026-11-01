@@ -22,6 +22,8 @@ import {
   removeTheme,
   removedThemes,
   renameTheme,
+  brandThemes,
+  artistDefaultTheme,
   resolveRecipe,
   restoreTheme,
   saveTheme,
@@ -184,5 +186,16 @@ describe("songs and themes", () => {
     writeFileSync(file, JSON.stringify({ theme: "Gone" }));
     expect(() => styleData(ws, ids.Third)).toThrow(/Theme "Gone" not found/);
     expect(() => chooseTheme(ws, ids.Third, "Nope", catalog)).toThrow(/Theme "Nope" not found/);
+  });
+
+  it("renaming the artist's default theme keeps it the default (brand.json follows)", () => {
+    const catalog = loadFontCatalog(wsDir);
+    expect(brandThemes(ws, catalog).has("Life Lyrics")).toBe(true);
+    expect(renameTheme(ws, "Life Lyrics", "Golden Dusk")).toBe("Golden Dusk");
+    expect(brandThemes(ws, catalog).get("Golden Dusk")).toBe("Life Lyrics");
+    expect(artistDefaultTheme(ws, "Life Lyrics", catalog)).toBe("Golden Dusk"); // no new "Life Lyrics" made
+    expect(listThemes(wsDir).map((t) => t.name)).not.toContain("Life Lyrics");
+    renameTheme(ws, "Golden Dusk", "Life Lyrics");
+    expect(brandThemes(ws, catalog).has("Life Lyrics")).toBe(true);
   });
 });

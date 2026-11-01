@@ -9,6 +9,8 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **Text colour / Accent colour** (Edit theme → Colours): next to the picker, a box to type or paste the colour
   code: #FF2D95, FF2D95, #F29, rgb(255, 45, 149) or 255, 45, 149 (Enter or click away saves it; anything else
   says what to type). src/colour-ref.ts parseColourRef.
+- **Renaming the default theme** ("Life Lyrics", the one new songs start on) now works: brand.json follows the
+  new name, so it stays the default and no new "Life Lyrics" theme comes back.
 - **"Theme" written above the name** in the Themes page's detail view (a theme made from a song carries the song's
   name, which read as the song); its pencil is "Rename the theme"; "Used by the song …"; Edit theme says
   "Editing theme: X".
