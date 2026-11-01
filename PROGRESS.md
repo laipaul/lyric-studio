@@ -36,7 +36,8 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **Themes → a theme → Theme cover**: "Set theme cover…" (JPG, PNG or WebP), "Change…", "Remove". The
   picture is copied into the theme folder (themes\<name>\cover.jpg), so it travels with the theme; the one
   it replaces (or Remove) goes to the theme folder's _replaced\. Duplicate keeps it.
-- **New theme** is also the first tile of the Themes grid (a big +, like Canva's "Create blank").
+- **New theme** is the first tile of the Themes grid (a big +, like Canva's "Create blank"); the old "+ New theme"
+  button at the top right was removed (asked by the user on 1 Nov 2026), the page intro now points at the tile.
 - **A video as Theme cover** (like Canva): kept as cover-video.mp4 in the theme folder, its first frame becomes
   the still cover; it loops behind the words on hover and in the theme's big preview. A picture stays a picture.
 - **Prepare → Assets → Theme cover**: the cover of the song's theme (Add / Replace), shared with the other

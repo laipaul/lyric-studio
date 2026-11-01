@@ -1,6 +1,6 @@
 // Browser test of the Themes page (needs a studio build, FFmpeg and Playwright with Chromium):
 //   npx tsx apps/studio/e2e/themes.e2e.ts
-// The top menu's Themes page: the gallery with its filters, + New theme, a theme's detail view (designer,
+// The top menu's Themes page: the gallery with its filters, the New theme tile, a theme's detail view (designer,
 // songs, Use this theme for the song, Edit on a song, Duplicate, Delete and Restore), and the theme on
 // the Library cards.
 import { execFileSync, spawn } from "node:child_process";

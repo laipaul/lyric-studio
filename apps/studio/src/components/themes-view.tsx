@@ -1,7 +1,7 @@
 "use client";
 
 // The Themes page, Canva style: a gallery of tall tiles (each theme on real lyric lines in its fonts, effect
-// and accent; pointing at a tile plays it), filter chips at the top and "+ New theme". Clicking a tile opens
+// and accent; pointing at a tile plays it), filter chips at the top and the "New theme" tile first in the grid. Clicking a tile opens
 // its detail view: the theme playing large, its name and designer credit, the songs that use it, "Use for a
 // song", "Edit" (opens the theme editor on a song: Shape → Theme), Duplicate, Delete (to themes\_removed\,
 // with Restore) and "More like this".
@@ -79,10 +79,7 @@ export function ThemesView() {
       <style>{fontCss}</style>
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="font-display text-2xl">Themes</h1>
-        <p className="text-muted-foreground text-sm">A theme is a song&apos;s whole look: fonts, motion and colours. Click a theme, then <b>Edit theme</b> to change it; <b>+ New theme</b> starts one from a copy.</p>
-        <button type="button" data-themes-new onClick={() => setCreating({ name: "", from: data.themes[0]?.name ?? "" })} className="bg-brand text-brand-foreground ml-auto flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium">
-          <Plus className="size-4" /> New theme
-        </button>
+        <p className="text-muted-foreground text-sm">A theme is a song&apos;s whole look: fonts, motion and colours. Click a theme, then <b>Edit theme</b> to change it; the <b>New theme</b> tile starts one from a copy.</p>
       </div>
       <div className="flex flex-wrap gap-2" data-theme-filters>
         {(
