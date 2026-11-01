@@ -73,7 +73,7 @@ export function NewSongDialog({ artists, onDone, tile }: { artists: string[]; on
       <DialogContent>
         <DialogHeader>
           <DialogTitle>New song</DialogTitle>
-          <DialogDescription>The song and its lyrics are stored with the project in your workspace. The same song again only updates it.</DialogDescription>
+          <DialogDescription>The song and its lyrics get their own folder in your workspace. A song file that is already in your library is not added again (nothing is changed).</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="flex flex-col gap-4">
           <Field label="Song" hint="WAV or MP3">
