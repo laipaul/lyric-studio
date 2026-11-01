@@ -8,13 +8,16 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Asked by the user on 1 Nov 2026 ("only make tick boxes when the choices are limited and clear"; "rearrange
   this screen, feels messy").
 - **Pickers** (components/search-picker.tsx): the run's Theme ("Change…"), Compare themes ("+ Add a theme to
-  compare", up to 3) and the collections ("+ Add a collection", also per picture version) open a searchable
+  compare", up to 3) and the collections of a picture version ("+ Collection") open a searchable
   list; themes as small cover tiles with mood filters, the song's own and the ones in use first. Chosen ones
   show as chips with ×.
-- **Generate panel in five groups**: 1 What to make (platforms) · 2 Look and pictures (Theme and Clips side by
-  side) · 3 Compare (folded: themes, pictures) · 4 Video details (title, artist, EP, cover) · 5 Advanced
-  (folded; "automatic" instead of "from the recipe") · a footer that stays in view: "Keep these choices for
-  this song", the number of videos and Generate. Plain words (no song.json, recipe, QA, textboard).
+- **Make is production** (the user: "all must be geared towards the platform choices, length, layouts"):
+  1 What to make (platforms) · 2 Output, up front (videos per platform, length, part of the song, shot length,
+  YouTube layout; all "automatic") · one line for the song (title · artist · clips · Look: theme; clips and
+  look link to Shape, they are changed there; title, artist, EP and cover are no longer in Make) · **Try other
+  looks** (folded: theme for this run, Compare themes, Pictures) · **Rarely needed** (folded: clips of the
+  other orientation, time the lyrics again) · a footer that stays in view: "Keep these choices for this
+  song", the number of videos and Generate. Plain words (no song.json, recipe, QA, textboard).
 - **Each video shows its theme** (palette icon and name) on its tile in Videos and in Post (manifest
   settings.theme; VideoInfo.theme).
 

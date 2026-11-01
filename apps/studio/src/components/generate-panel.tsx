@@ -9,6 +9,7 @@ import type { GeneratePanelData } from "@lyric/video/library";
 import type { GeneratePreset } from "@lyric/video/run-settings";
 
 import { PickedChip, SearchPicker } from "@/components/search-picker";
+import { useGoToTab, useShapePanel } from "@/components/song-stages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FeatureIcon } from "@/lib/feature-icons";
@@ -45,7 +46,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
   const videosFor = (name: string) => (pictureSets.length >= 2 && name !== "canvas" ? pictureSets.length : variations ? Number(variations) : (r.variations[name] ?? r.variations["*"] ?? 1));
   const recipeCollections = data.chosen.length || data.songClips ? data.chosen : data.collections.slice(0, 1);
   const runCollections = from?.collections && !locked("collections") ? from.collections.filter((c) => data.collections.includes(c)) : null;
-  const [collections, setCollections] = useState<string[]>(runCollections ?? recipeCollections);
+  const [collections] = useState<string[]>(runCollections ?? recipeCollections); // the song's (or the run's, "Use these settings"); set in Shape
   // A run's video counts: one number when they were the same on every platform and differ from the recipe.
   const runVideos = (() => {
     if (!from || locked("variations")) return "";
@@ -57,6 +58,8 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
   // The theme for this run ("" = the song's own) and Compare themes (2-3: one set of videos per theme).
   const [runTheme, setRunTheme] = useState("");
   const [compareThemes, setCompareThemes] = useState<string[]>([]);
+  const goToTab = useGoToTab();
+  const { setPanel } = useShapePanel();
   // The pickers (the user's rule, 1 Nov 2026: no tick boxes for lists that grow): the song's theme first,
   // then the themes in use, then the rest; collections with the song's own first.
   const themeOf = (name: string) => data.themes.find((t) => t.name === name) ?? { name, songs: 0, cover: null, moods: [], accent: null };
@@ -97,9 +100,8 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
       collection: sameCollections || !collections.length ? undefined : collections.join(","),
       variations: variations ? Number(variations) : recipeCounts ? undefined : 1,
       ...(runTheme && runTheme !== data.theme && compareThemes.length < 2 ? { theme: runTheme } : {}),
-      title: String(f.get("title") ?? ""),
-      artist: String(f.get("artist") ?? ""),
-      ep: changed(String(f.get("ep") ?? ""), data.ep),
+      title: data.title, // the song's own (changed in the header / This song, not here)
+      artist: data.artist,
       section: changed(chosenSection, r.section),
       length: length ? Number(length) : undefined,
       saveToSong,
@@ -181,10 +183,109 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
             </div>
           </fieldset>
           </Group>
-          <Group n={2} title="Look and pictures" hint="The theme gives the look; the clips give the pictures.">
-          <div className="grid gap-6 md:grid-cols-2">
+          <Group n={2} title="Output" hint="All automatic: change one only to override it.">
+          {runSection ? (
+            <div data-run-section className="flex flex-wrap items-center gap-3 text-sm">
+              <span className="font-medium">Section</span>
+              {fromRun ? (
+                <>
+                  <span data-run-section-label>{from!.sectionLabel}</span>
+                  {from!.sectionWasAuto ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      data-switch-auto
+                      onClick={() => {
+                        setSection("auto");
+                        setLength(from!.targetLength ? String(from!.targetLength) : "");
+                      }}
+                    >
+                      Switch to auto{from!.targetLength ? ` · ${from!.targetLength} s` : ""}
+                    </Button>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <span>
+                    {section}
+                    {length ? ` · ${length} s` : ""}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setSection(runSection);
+                      setLength("");
+                    }}
+                  >
+                    Back to {from!.sectionLabel}
+                  </Button>
+                </>
+              )}
+            </div>
+          ) : null}
+            <div className="grid gap-4 md:grid-cols-5">
+              <label className={label}>
+                <span className="font-medium">Videos per platform</span>
+                <Input type="number" min={1} max={24} placeholder="automatic" value={variations} disabled={locked("variations")} onChange={(e) => setVariations(e.target.value)} />
+              </label>
+              <label className={label}>
+                <span className="font-medium">Length (s)</span>
+                <Input type="number" name="length" min={3} max={600} placeholder="automatic" value={length} disabled={locked("length")} onChange={(e) => setLength(e.target.value)} />
+              </label>
+              <label className={label}>
+                <span className="font-medium">Part of the song</span>
+                <Input name="section" value={section} placeholder="automatic, full or 0:11-1:10" disabled={locked("section")} onChange={(e) => setSection(e.target.value)} />
+              </label>
+              <label className={label}>
+                <span className="font-medium">Shot length</span>
+                <select name="shotLength" data-shot-length className={select} value={shotLength} disabled={locked("shotLength")} onChange={(e) => setShotLength(e.target.value)}>
+                  <option value="">automatic ({shotLengthText(r.shotLength)}{Object.entries(r.shotLengths).some(([p, v]) => platforms.includes(p) && v !== r.shotLength) ? `; ${Object.entries(r.shotLengths).filter(([p, v]) => platforms.includes(p) && v !== r.shotLength).map(([p, v]) => `${data.platforms.find((x) => x.name === p)?.label ?? p}: ${shotLengthText(v)}`).join(", ")}` : ""})</option>
+                  {["auto", "1", "2", "4", "8", "story", "rate"].map((v) => (
+                    <option key={v} value={v}>
+                      {shotLengthText(v)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={label}>
+                <span className="font-medium">YouTube layout</span>
+                <select name="layout" className={select} value={layout} disabled={locked("youtubeLayout")} onChange={(e) => setLayout(e.target.value)}>
+                  <option value="">automatic ({r.youtubeLayout})</option>
+                  <option value="cover">cover</option>
+                  <option value="stills">stills</option>
+                  <option value="clips">clips</option>
+                </select>
+              </label>
+            </div>
+          </Group>
+          {/* The song's content and look, in one line (1 Nov 2026, the user: "Make is production"): changed where they live. */}
+          <p data-song-line className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 border-y py-2.5 text-xs">
+            <FeatureIcon feature="song" className="size-3.5" />
+            <span className="text-foreground">{data.title}</span>· {data.artist}
+            {data.ep ? <>· {data.ep}</> : null}
+            <span>·</span>
+            <FeatureIcon feature="clips" className="size-3.5" />
+            <button type="button" data-clips-line data-clips-change onClick={() => (goToTab("shape"), setPanel("make"))} className="hover:text-foreground underline-offset-2 hover:underline" title="The song's clips: Shape → To make (collections), Prepare → Assets (its own clips)">
+              {[data.songClips ? `${data.songClips} clips` : null, ...collections].filter(Boolean).join(" + ") || "no clips yet"}
+            </button>
+            <span>·</span>
+            <FeatureIcon feature="theme" className="size-3.5" />
+            <button type="button" data-look-line onClick={() => (goToTab("shape"), setPanel("theme"))} className="hover:text-foreground underline-offset-2 hover:underline">
+              Look: {data.theme ?? "none"}
+            </button>
+            <span className="ml-auto">Title, clips and look belong to the song: click to change them there.</span>
+          </p>
+          <details data-compare className="rounded-lg border px-4 py-3" open={!!runTheme || compareThemes.length > 0 || pictureSets.length > 0 || undefined}>
+            <summary className="cursor-pointer text-sm">
+              <span className="font-medium">Try other looks (optional)</span>
+              <span className="text-muted-foreground ml-2 text-xs">another theme for this run, or the same video in 2–3 themes or over other clips, to choose the best</span>
+            </summary>
+            <div className="mt-3 flex flex-col gap-4">
             <div className={label}>
-              <span className="font-medium">Theme</span>
+              <span className="font-medium">Theme for this run</span>
               <div className="flex flex-wrap items-center gap-1.5" data-generate-theme={runTheme || data.theme || ""}>
                 {compareThemes.length >= 2 ? (
                   <span className="text-muted-foreground text-xs">Compare themes below picks the themes.</span>
@@ -197,40 +298,6 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
               </div>
               <span className="text-muted-foreground text-xs">{runTheme ? "For this run only: the song keeps its own theme." : "The song's look: fonts, motion and colours (change it in the Look → Theme menu)."}</span>
             </div>
-            <fieldset className={label} data-collections>
-              <legend className="mb-1.5 font-medium">Clips</legend>
-              <p className="text-muted-foreground text-xs">
-                {data.songClips ? `This song's own clips (${data.songClips})` : "No clips of its own yet (Prepare → Assets)"}
-                {data.collections.length ? ", plus:" : ""}
-              </p>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {collections.map((c) => (
-                  <PickedChip key={c} name="collection" id={c} onRemove={locked("collections") ? undefined : () => setCollections((list) => list.filter((x) => x !== c))}>
-                    <FeatureIcon feature="collection" className="size-3" />
-                    {c}
-                  </PickedChip>
-                ))}
-                {data.collections.length ? (
-                  <SearchPicker
-                    name="collections"
-                    items={collectionItems}
-                    selected={collections}
-                    disabled={locked("collections")}
-                    onPick={(c) => setCollections((list) => (list.includes(c) ? list.filter((x) => x !== c) : [...list, c]))}
-                    trigger={<>+ Add a collection</>}
-                    placeholder="Search collections…"
-                  />
-                ) : null}
-              </div>
-            </fieldset>
-          </div>
-          </Group>
-          <details data-compare className="rounded-lg border px-4 py-3" open={compareThemes.length > 0 || pictureSets.length > 0 || undefined}>
-            <summary className="cursor-pointer text-sm">
-              <span className="font-medium">3 · Compare (optional)</span>
-              <span className="text-muted-foreground ml-2 text-xs">the same video in 2–3 themes, or over other clips, to choose the best</span>
-            </summary>
-            <div className="mt-3 flex flex-col gap-4">
           {data.themes.length >= 2 ? (
             <fieldset data-compare-themes className="flex flex-col gap-1.5 text-sm">
               <legend className="font-medium">Themes</legend>
@@ -311,119 +378,17 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
           </fieldset>
             </div>
           </details>
-          <Group n={4} title="Video details" hint="The words on the title card and the cover.">
-          <div className="grid gap-4 md:grid-cols-4">
-            <label className={label}>
-              <span className="font-medium">Title</span>
-              <Input name="title" defaultValue={data.title} />
-            </label>
-            <label className={label}>
-              <span className="font-medium">Artist</span>
-              <Input name="artist" defaultValue={data.artist} list="generate-artists" />
-              <datalist id="generate-artists">
-                {data.artists.map((a) => (
-                  <option key={a} value={a} />
-                ))}
-              </datalist>
-            </label>
-            <label className={label}>
-              <span className="font-medium">EP</span>
-              <Input name="ep" defaultValue={data.ep} placeholder="optional" disabled={locked("ep")} />
-            </label>
-            <label className={label}>
-              <span className="font-medium">New cover</span>
-              <input name="cover" type="file" accept=".jpg,.jpeg,.png,.webp,image/*" className="text-muted-foreground file:bg-secondary file:text-secondary-foreground block w-full text-xs file:mr-3 file:rounded-md file:border-0 file:px-3 file:py-1.5" />
-            </label>
-          </div>
-          </Group>
-          {runSection ? (
-            <div data-run-section className="flex flex-wrap items-center gap-3 text-sm">
-              <span className="font-medium">Section</span>
-              {fromRun ? (
-                <>
-                  <span data-run-section-label>{from!.sectionLabel}</span>
-                  {from!.sectionWasAuto ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      data-switch-auto
-                      onClick={() => {
-                        setSection("auto");
-                        setLength(from!.targetLength ? String(from!.targetLength) : "");
-                      }}
-                    >
-                      Switch to auto{from!.targetLength ? ` · ${from!.targetLength} s` : ""}
-                    </Button>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  <span>
-                    {section}
-                    {length ? ` · ${length} s` : ""}
-                  </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setSection(runSection);
-                      setLength("");
-                    }}
-                  >
-                    Back to {from!.sectionLabel}
-                  </Button>
-                </>
-              )}
-            </div>
-          ) : null}
-          <details data-advanced className="rounded-lg border px-4 py-3 text-sm" open={!!runSection || undefined}>
+          <details data-advanced className="rounded-lg border px-4 py-3 text-sm">
             <summary className="cursor-pointer">
-              <span className="font-medium">5 · Advanced (optional)</span>
-              <span className="text-muted-foreground ml-2 text-xs">the app sets all of these; change one only to override it</span>
+              <span className="font-medium">Rarely needed</span>
             </summary>
-            <div className="mt-4 grid gap-4 md:grid-cols-4">
-              <label className={label}>
-                <span className="font-medium">Videos per platform</span>
-                <Input type="number" min={1} max={24} placeholder="automatic" value={variations} disabled={locked("variations")} onChange={(e) => setVariations(e.target.value)} />
+            <div className="mt-3 flex flex-col gap-2">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="allowFill" className="accent-brand" /> Allow clips of the other orientation (filled to the frame)
               </label>
-              <label className={label}>
-                <span className="font-medium">Target length (s)</span>
-                <Input type="number" name="length" min={3} max={600} placeholder="automatic" value={length} disabled={locked("length")} onChange={(e) => setLength(e.target.value)} />
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="realign" className="accent-brand" /> Time the lyrics again first
               </label>
-              <label className={label}>
-                <span className="font-medium">Section</span>
-                <Input name="section" value={section} placeholder="auto, full or 0:11-1:10" disabled={locked("section")} onChange={(e) => setSection(e.target.value)} />
-              </label>
-              <label className={label}>
-                <span className="font-medium">Shot length</span>
-                <select name="shotLength" data-shot-length className={select} value={shotLength} disabled={locked("shotLength")} onChange={(e) => setShotLength(e.target.value)}>
-                  <option value="">automatic ({shotLengthText(r.shotLength)}{Object.entries(r.shotLengths).some(([p, v]) => platforms.includes(p) && v !== r.shotLength) ? `; ${Object.entries(r.shotLengths).filter(([p, v]) => platforms.includes(p) && v !== r.shotLength).map(([p, v]) => `${data.platforms.find((x) => x.name === p)?.label ?? p}: ${shotLengthText(v)}`).join(", ")}` : ""})</option>
-                  {["auto", "1", "2", "4", "8", "story", "rate"].map((v) => (
-                    <option key={v} value={v}>
-                      {shotLengthText(v)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={label}>
-                <span className="font-medium">YouTube layout</span>
-                <select name="layout" className={select} value={layout} disabled={locked("youtubeLayout")} onChange={(e) => setLayout(e.target.value)}>
-                  <option value="">automatic ({r.youtubeLayout})</option>
-                  <option value="cover">cover</option>
-                  <option value="stills">stills</option>
-                  <option value="clips">clips</option>
-                </select>
-              </label>
-              <div className="flex flex-col justify-end gap-2">
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" name="allowFill" className="accent-brand" /> Allow fill (other orientation)
-                </label>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" name="realign" className="accent-brand" /> Align the lyrics again
-                </label>
-              </div>
             </div>
           </details>
           {notice ? (
