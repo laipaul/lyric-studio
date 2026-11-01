@@ -16,7 +16,7 @@ import { loadPairings } from "./pairings";
 import { renderingPlatforms, SHORT_LABELS, songRuns, type PlatformRun } from "./exports";
 import { keepReplaced, setSongEp, songCollections, songEp, storeCover, storeLyricsTxt } from "./project-settings";
 import { projectLyricsTxt } from "./runs";
-import { SOURCE_FILE } from "./collection";
+import { cachedFileHash, SOURCE_FILE } from "./collection";
 import { readRecipe, resolveRecipe, writeRecipe } from "./recipe";
 import { isRemovedSong, moveEntry, relocatePaths, removeEmptyDirs, REMOVED_SONGS, renameSongFolder, sharedCollections, songBusy, songFolderFor, songPathsById, SONGS_DIR } from "./song-folder";
 import { presetLengthText, recipeInputFor } from "./style";
@@ -222,6 +222,13 @@ export function checkNewSong(input: NewSongInput): string[] {
 export async function createSong(ws: Workspace, input: NewSongInput): Promise<{ id: string; created: boolean; updated: string[] }> {
   const problems = checkNewSong(input);
   if (problems.length) throw new Error(problems.join("\n"));
+  // "+ New song" only ever makes a NEW song (1 Nov 2026). The same music already in the library is said
+  // and nothing is changed: before, that song was updated in place (its title, folder, lyrics and cover),
+  // which turned "The House My Heart Built" into "Here With Me" when its song file was picked by mistake.
+  const hash = await cachedFileHash(ws, input.song);
+  const same = ws.db.select().from(projectTable).where(eq(projectTable.audio_hash, hash)).get();
+  if (same && !isRemovedSong(same.folder))
+    throw new Error(`This song file is already in your library as "${same.title}". Nothing was changed. For a new song, choose that song's own WAV or MP3; to change "${same.title}", open it (Prepare → Assets).`);
   const sp = await findOrCreateSongProject(ws, input.song);
   const id = sp.project.id;
   const updated: string[] = [];

@@ -4,6 +4,14 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Fix: "+ New song" took over an existing song ✅ (to verify on the Windows PC)
+- Found on 1 Nov 2026: "Here With Me" was made with "+ New song", but the song file picked was The House My
+  Heart Built's own WAV. New song found The House by the music's content and UPDATED it: new title (the
+  folder was renamed), lyrics and cover; then the song and vocal were replaced on Assets. The House was gone
+  as a song.
+- Now "+ New song" only ever makes a new song: music already in the library says "This song file is already
+  in your library as …. Nothing was changed." (createSong; library.test.ts).
+
 ### Fix: Review showed another song's videos ✅ (to verify on the Windows PC)
 - Reported by the user on 1 Nov 2026 ("I'm reviewing Here with me, why am I seeing the other song's reels?").
 - Cause: Review lists every video in the song folder's exports\ folder. A song folder made by copying another

@@ -65,18 +65,15 @@ describe("+ New song", () => {
     expect(hint.copy).toMatch(/^hints-[0-9a-f]{12}\.lrc$/); // pnpm make uses it automatically
   });
 
-  it("the same song again (any file name) updates the project instead of making a duplicate", async () => {
+  it("the same song again (any file name) changes nothing: New song never takes over another song", async () => {
     const copy = path.join(inDir, "renamed.wav");
     writeFileSync(copy, readFileSync(path.join(inDir, "Hold On Tight.wav")));
-    const r = await createSong(ws, { song: copy, lyrics: file("lyrics2.txt", "New words\n"), title: "Hold On Tight (Acoustic)", artist: "Pômé" });
-    expect(r.created).toBe(false);
-    expect(r.updated).toEqual(["title", "lyrics"]);
+    await expect(createSong(ws, { song: copy, lyrics: file("lyrics2.txt", "New words\n"), title: "Here With Me", artist: "Pômé" })).rejects.toThrow(/already in your library as "Hold On Tight".*Nothing was changed/);
     expect(ws.db.select().from(project).all()).toHaveLength(1);
-    expect(ws.db.select().from(project).get()!.title).toBe("Hold On Tight (Acoustic)");
-    expect(ws.db.select().from(project).get()!.folder).toBe("songs/Pômé/Hold On Tight (Acoustic)"); // renamed with the title
-    // The replaced lyrics.txt is kept, never deleted.
-    const replaced = readdirSync(path.join(ws.dir, "songs", "Pômé", "Hold On Tight (Acoustic)", ".studio", "replaced"));
-    expect(replaced.some((f) => f.endsWith("-lyrics.txt"))).toBe(true);
+    const p = ws.db.select().from(project).get()!;
+    expect([p.title, p.folder]).toEqual(["Hold On Tight", "songs/Pômé/Hold On Tight"]);
+    expect(readFileSync(path.join(ws.dir, "songs", "Pômé", "Hold On Tight", "lyrics.txt"), "utf8")).toBe("Verse one\n* Hold on to me\n");
+    expect(existsSync(path.join(ws.dir, "songs", "Pômé", "Hold On Tight", ".studio", "replaced"))).toBe(false);
   });
 
   it("artists: Life Lyrics first, then every artist used and every brand folder", async () => {
