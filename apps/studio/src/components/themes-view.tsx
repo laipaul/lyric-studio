@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import { backingShadow, BOX_STYLE, fallbackBackground, gradeLook, isTextLayout, pictureOf, THEME_MOODS, TILE_LOOP_FRAMES, tileLyrics, vignetteBackground, type LookPreviewProps } from "@lyric/video";
 import type { ThemeCard, ThemesPageData } from "@lyric/video/style";
 
+import { CoverPaletteRow } from "@/components/cover-palette-row";
 import { PreviewPlayer } from "@/components/preview-player";
 import { themePreview } from "@/components/shape-tools";
 import { ThemeReachBadge } from "@/components/theme-reach-badge";
@@ -367,6 +368,14 @@ function ThemeDetail({ theme, data, act, send, onOpen, onClose }: { theme: Theme
                 </button>
               ) : null}
             </div>
+            {theme.background ? (
+              <CoverPaletteRow
+                file={theme.background}
+                text={String(theme.look.textColour ?? "#FFFFFF")}
+                accent={String(theme.look.accentColour ?? "")}
+                onUse={(c) => void act({ action: "colours", name: theme.name, ...c }).then((ok) => ok && setNotice(`${theme.name}: lyrics ${c.textColour}, chorus and accent ${c.accentColour} (from the cover).`))}
+              />
+            ) : null}
             <p data-theme-detail-songs className="text-sm">
               {theme.songs.length ? (
                 <>

@@ -622,6 +622,15 @@ export function setThemeDetails(workspaceDir: string, name: string, d: { descrip
   writeTheme(workspaceDir, { ...theme, description: d.description?.trim() ?? theme.description, author: d.author?.trim() ?? theme.author, licence: d.licence?.trim() ?? theme.licence, moods });
 }
 
+// "Use these colours" (colours from the Theme cover, 1 Nov 2026): the lyric text and the accent (the chorus
+// words use the accent) of a theme. Only #RRGGBB colours; the rest of the look stays as it is.
+export function setThemeColours(workspaceDir: string, name: string, c: { textColour?: unknown; accentColour?: unknown }): void {
+  const theme = loadTheme(workspaceDir, name);
+  const ok = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v);
+  if (!ok(c.textColour) && !ok(c.accentColour)) throw new Error("Give a colour as #RRGGBB.");
+  writeTheme(workspaceDir, { ...theme, look: { ...theme.look, ...(ok(c.textColour) ? { textColour: c.textColour.toUpperCase() } : {}), ...(ok(c.accentColour) ? { accentColour: c.accentColour.toUpperCase() } : {}) } });
+}
+
 // The Themes page's "+ New theme": named first, a copy of another theme (no song changes).
 export function newTheme(workspaceDir: string, name: string, from: string): string {
   const clean = mustBeFree(workspaceDir, name);

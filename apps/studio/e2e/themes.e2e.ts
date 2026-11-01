@@ -104,6 +104,14 @@ async function main() {
     await page.waitForSelector("[data-theme-cover]", { timeout: 10_000 }).catch(() => {});
     const coverOk = await page.waitForFunction(() => ((document.querySelector("[data-theme-cover]") as HTMLImageElement | null)?.naturalWidth ?? 0) > 0, null, { timeout: 10_000 }).then(() => true).catch(() => false);
     check(coverOk && existsSync(path.join(wsDir, "themes", "Night Drive", "cover.jpg")), "Set theme cover…: the picture is kept in the theme folder and shown");
+    // Colours from the cover: a suggestion; "Use these colours" sets the lyric and accent colours.
+    await page.waitForSelector("[data-cover-palette] [data-cover-colour]", { timeout: 10_000 }).catch(() => {});
+    const swatches = await page.$$eval("[data-cover-palette] [data-cover-colour]", (e: Element[]) => e.map((x) => x.getAttribute("data-cover-colour")));
+    const accentBefore = loadTheme(wsDir, "Night Drive").look.accentColour;
+    await page.click("[data-use-cover-colours]");
+    await page.waitForFunction(() => document.querySelector("[data-use-cover-colours]")?.textContent === "In use", null, { timeout: 10_000 }).catch(() => {});
+    const after = loadTheme(wsDir, "Night Drive").look;
+    check(swatches.length >= 1 && /^#[0-9A-F]{6}$/.test(String(after.textColour)) && /^#[0-9A-F]{6}$/.test(String(after.accentColour)) && after.accentColour !== accentBefore, `Colours from the cover (${swatches.join(", ")}): Use these colours sets lyrics ${after.textColour} and accent ${after.accentColour}`);
     // A video as Theme cover: its first frame is the still cover, the video plays on hover.
     const coverClip = path.join(root, "mood.mp4");
     ffmpeg("-f", "lavfi", "-i", "color=c=teal:s=360x640:d=2", "-pix_fmt", "yuv420p", coverClip);

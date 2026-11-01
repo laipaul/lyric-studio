@@ -18,6 +18,11 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   looks** (folded: theme for this run, Compare themes, Pictures) · **Rarely needed** (folded: clips of the
   other orientation, time the lyrics again) · a footer that stays in view: "Keep these choices for this
   song", the number of videos and Generate. Plain words (no song.json, recipe, QA, textboard).
+- **Colours from the Theme cover** (Themes → a theme, under Theme cover; and Edit theme → Colours): 3–5 colours
+  from the cover and a suggestion (lyrics in a light colour that reads, the chorus and accent in the liveliest
+  one); **Use these colours** sets them, nothing changes before (@lyric/video cover-palette.ts, tested; API
+  /api/themes colours). In the editor a swatch click still sets just the accent; a theme without a cover uses
+  the song's cover there.
 - **Each video shows its theme** (palette icon and name) on its tile in Videos and in Post (manifest
   settings.theme; VideoInfo.theme).
 

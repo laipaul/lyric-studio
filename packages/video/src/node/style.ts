@@ -90,7 +90,7 @@ export const FIELD_LABELS: Record<RecipeField, string> = {
 
 export type StyleValue = { value: unknown; source: string; own: boolean };
 // A theme as the Theme panel shows it: name, the look (default and per platform), how many songs use it.
-export type StyleTheme = { name: string; description: string; look: ThemeLook; perPlatform: Record<string, Partial<ThemeLook>>; users: string[]; problems: string[]; preview: boolean };
+export type StyleTheme = { name: string; description: string; look: ThemeLook; perPlatform: Record<string, Partial<ThemeLook>>; users: string[]; problems: string[]; preview: boolean; cover?: string | null }; // cover: the Theme cover (workspace-relative, ?v=mtime)
 export type StyleField = StyleValue & {
   field: RecipeField;
   label: string;
@@ -182,6 +182,12 @@ export function styleFonts(catalog: FontCatalog): StyleFont[] {
   });
 }
 
+// A theme's cover as /api/files wants it (workspace-relative, ?v=mtime so a new one shows at once).
+function coverRef(dir: string, name: string): string | null {
+  const cover = themeCover(dir, name);
+  return cover ? `${path.relative(dir, cover).split(path.sep).join("/")}?v=${Math.round(statSync(cover).mtimeMs)}` : null;
+}
+
 export function styleData(ws: Workspace, projectId: string): StyleData {
   const catalog = loadFontCatalog(ws.dir);
   plainSongThemeNames(ws); // themes named like their song get "<song> look" (themes.ts)
@@ -243,7 +249,7 @@ function themesOf(ws: Workspace, current: string | null, catalog: FontCatalog): 
       // a broken song.json is named on that song's page
     }
   }
-  const themes = listThemes(ws.dir, catalog).map((t) => ({ name: t.name, description: t.theme.description, look: t.theme.look, perPlatform: t.theme.perPlatform, users: users.get(t.name) ?? [], problems: t.problems, preview: !!t.preview }));
+  const themes = listThemes(ws.dir, catalog).map((t) => ({ name: t.name, description: t.theme.description, look: t.theme.look, perPlatform: t.theme.perPlatform, users: users.get(t.name) ?? [], problems: t.problems, preview: !!t.preview, cover: coverRef(ws.dir, t.name) }));
   return { theme: themes.find((t) => t.name === current) ?? null, themes };
 }
 

@@ -13,6 +13,7 @@ import { RowMenu, type RowMenuItem } from "@/components/row-menu";
 import { SetEffect, type EffectPart, type EffectValues } from "@/components/set-effect";
 import { useSetThemeMode, useSetThemeNow, useShapePanel } from "@/components/song-stages";
 import { ThemeReachBadge } from "@/components/theme-reach-badge";
+import { CoverPaletteRow } from "@/components/cover-palette-row";
 
 import { FeatureIcon } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
@@ -835,7 +836,22 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
 
               <EditorSection id="colours" title="Colours">
                 {rows(pick(LOOK_FIELDS))}
-                <CoverColours cover={data.cover} current={String(valueOf("accentColour") ?? "")} onPick={(c) => void act({ action: "set", field: "accentColour", value: c })} />
+                {/* The Theme cover's colours (1 Nov 2026); a theme without a cover: the song's cover. */}
+                {editingTheme?.cover || data.cover ? (
+                  <CoverPaletteRow
+                    file={editingTheme?.cover ?? data.cover}
+                    label={editingTheme?.cover ? "From the theme cover" : "From your song's cover"}
+                    text={String(valueOf("textColour") ?? "#FFFFFF")}
+                    accent={String(valueOf("accentColour") ?? "")}
+                    onPickAccent={(c) => void act({ action: "set", field: "accentColour", value: c })}
+                    onUse={(c) => {
+                      void act({ action: "set", field: "textColour", value: c.textColour });
+                      void act({ action: "set", field: "accentColour", value: c.accentColour });
+                    }}
+                  />
+                ) : (
+                  <p className="text-muted-foreground text-xs">Set a Theme cover (Themes → the theme) to get colours from it.</p>
+                )}
               </EditorSection>
 
               <EditorSection id="picture" title="Picture">
@@ -1624,49 +1640,3 @@ function PictureControls({ value, onSet }: { value: (field: string) => unknown; 
   );
 }
 
-function CoverColours({ cover, current, onPick }: { cover: string | null; current: string; onPick: (colour: string) => void }) {
-  const [colours, setColours] = useState<string[]>([]);
-  useEffect(() => {
-    if (!cover) return;
-    let alive = true;
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = canvas.height = 24;
-      const ctx = canvas.getContext("2d");
-      if (!ctx || !alive) return;
-      ctx.drawImage(img, 0, 0, 24, 24);
-      const px = ctx.getImageData(0, 0, 24, 24).data;
-      const buckets = new Map<string, { n: number; r: number; g: number; b: number; s: number }>();
-      for (let i = 0; i < px.length; i += 4) {
-        const [r, g, b] = [px[i], px[i + 1], px[i + 2]];
-        const max = Math.max(r, g, b);
-        const min = Math.min(r, g, b);
-        if (max < 40 || min > 225) continue; // too dark or too pale for lyrics
-        const key = `${r >> 5}-${g >> 5}-${b >> 5}`;
-        const e = buckets.get(key) ?? { n: 0, r: 0, g: 0, b: 0, s: 0 };
-        buckets.set(key, { n: e.n + 1, r: e.r + r, g: e.g + g, b: e.b + b, s: e.s + (max - min) });
-      }
-      const hex = (n: number) => Math.round(n).toString(16).padStart(2, "0");
-      const best = [...buckets.values()]
-        .sort((a, b) => b.n * (1 + b.s / b.n / 128) - a.n * (1 + a.s / a.n / 128))
-        .slice(0, 5)
-        .map((e) => `#${hex(e.r / e.n)}${hex(e.g / e.n)}${hex(e.b / e.n)}`.toUpperCase());
-      setColours(best);
-    };
-    img.src = `/api/files/${cover}`;
-    return () => {
-      alive = false;
-    };
-  }, [cover]);
-  if (!cover) return <p className="text-muted-foreground text-xs">Add a cover (Prepare → Assets) to get colours from it.</p>;
-  if (!colours.length) return null;
-  return (
-    <div data-cover-colours className="flex flex-wrap items-center gap-1.5 text-xs">
-      <span className="text-muted-foreground">From your cover:</span>
-      {colours.map((c) => (
-        <button key={c} type="button" data-cover-colour={c} title={`Use ${c} as the accent`} aria-pressed={c === current.toUpperCase()} onClick={() => onPick(c)} className={cn("size-6 rounded-full border", c === current.toUpperCase() && "ring-brand ring-2")} style={{ background: c }} />
-      ))}
-    </div>
-  );
-}
