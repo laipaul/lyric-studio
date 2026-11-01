@@ -72,6 +72,7 @@ async function main() {
     await page.goto(base);
     await page.click("header a:has-text('Releases')");
     await page.waitForSelector("[data-new-release]");
+    check(!!(await page.$("[data-releases-grid] > li:first-child [data-new-release]")), "New release is the first tile (no button at the top)");
 
     // New release: Pick an EP ticks its two songs and fills the name; add the third by hand.
     await page.click("[data-new-release]");

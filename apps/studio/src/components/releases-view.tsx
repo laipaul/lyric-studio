@@ -55,20 +55,26 @@ export function ReleasesList() {
           <h1 className="text-3xl">Releases</h1>
           <p className="text-muted-foreground text-sm">Songs you put out together (an EP, a batch): what is ready for each platform, and Make all for what is missing.</p>
         </div>
-        <Button onClick={() => setCreating(true)} data-new-release>
-          <Plus /> New release
-        </Button>
       </div>
       {error ? <p className="rounded-md border border-red-400/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p> : null}
       {!data ? (
         <p className="text-muted-foreground text-sm">Loading…</p>
-      ) : !data.releases.length ? (
-        <div className="text-muted-foreground flex h-48 flex-col items-center justify-center gap-2 rounded-xl border border-dashed text-sm">
-          <Disc3 className="text-brand size-7" />
-          No releases yet. Group the songs you want to put out together with “New release”.
-        </div>
       ) : (
-        <ul className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-5">
+        <ul className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-5" data-releases-grid>
+          {/* "New release" as the first tile, like Themes and Collections (1 Nov 2026, asked by the user). */}
+          <li>
+            <button type="button" onClick={() => setCreating(true)} data-new-release className="hover:border-brand/60 hover:text-foreground text-muted-foreground flex size-full min-h-[220px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed transition-colors">
+              <span className="border-brand/50 text-brand flex size-12 items-center justify-center rounded-full border">
+                <Plus className="size-6" />
+              </span>
+              <span className="text-sm font-medium">New release</span>
+              {!data.releases.length ? (
+                <span className="flex items-center gap-1 px-6 text-center text-xs">
+                  <Disc3 className="text-brand size-3.5 shrink-0" /> Group the songs you want to put out together.
+                </span>
+              ) : null}
+            </button>
+          </li>
           {data.releases.map((r) => (
             <li key={r.name} data-release={r.name}>
               <Link href={`/releases/${encodeURIComponent(r.name)}`} className="bg-card hover:border-brand/40 flex flex-col overflow-hidden rounded-xl border transition-colors">

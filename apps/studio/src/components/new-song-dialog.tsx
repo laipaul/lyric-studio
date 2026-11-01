@@ -26,7 +26,7 @@ const fileInput =
 
 // "+ New song": song + lyrics (required; an instrumental: an optional story.txt instead), cover and hints
 // (optional), title, artist, EP.
-export function NewSongDialog({ artists, onDone }: { artists: string[]; onDone: (message: string) => void }) {
+export function NewSongDialog({ artists, onDone, tile }: { artists: string[]; onDone: (message: string) => void; tile?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -55,9 +55,20 @@ export function NewSongDialog({ artists, onDone }: { artists: string[]; onDone: 
   return (
     <Dialog open={open} onOpenChange={(o) => (setOpen(o), setError(null))}>
       <DialogTrigger asChild>
-        <Button>
-          <Plus /> New song
-        </Button>
+        {tile ? (
+          // "New song" as the first tile of the Library, like Themes, Collections and Releases (1 Nov 2026, asked by the user).
+          <button type="button" data-new-song-tile className="hover:border-brand/60 hover:text-foreground text-muted-foreground flex size-full min-h-[320px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed transition-colors">
+            <span className="border-brand/50 text-brand flex size-14 items-center justify-center rounded-full border">
+              <Plus className="size-7" />
+            </span>
+            <span className="text-sm font-medium">New song</span>
+            <span className="px-6 text-center text-xs">The song file and its lyrics</span>
+          </button>
+        ) : (
+          <Button>
+            <Plus /> New song
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

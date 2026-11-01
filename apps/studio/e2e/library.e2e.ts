@@ -80,6 +80,7 @@ async function main() {
     await page.goto(base);
     await page.waitForSelector("[data-song='Love Is A Good Thing']");
     const card = (t: string) => `[data-song='${t}']`;
+    check(!!(await page.$("[data-songs-grid] > [data-new-song-tile]:first-child")) && !(await page.$("main > div > div:first-child button:has-text('New song')")), "New song is the first tile of the Library (no button at the top)");
     const state = (t: string, p: string) => page.getAttribute(`${card(t)} [data-platform=${p}]`, "data-state");
 
     check((await state("Love Is A Good Thing", "reels")) === "review" && (await state("Love Is A Good Thing", "youtube")) === "ready", "Love: Reels amber (to review), YouTube green (approved)");

@@ -1,6 +1,6 @@
 "use client";
 
-import { Music, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -47,7 +47,6 @@ export function LibraryView({ songs, artists, banner, removed = [] }: { songs: S
             <Search className="text-muted-foreground absolute top-2.5 left-2.5 size-4" />
             <Input placeholder="Search songs, artists, EPs" className="pl-8" value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
-          <NewSongDialog artists={artists} onDone={setNotice} />
         </div>
       </div>
 
@@ -87,20 +86,16 @@ export function LibraryView({ songs, artists, banner, removed = [] }: { songs: S
         </p>
       ) : null}
 
-      {songs.length === 0 ? (
-        <div className="text-muted-foreground flex h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed">
-          <Music className="text-brand size-8" />
-          <p className="text-sm">No songs yet. Add your first one with “New song”.</p>
-        </div>
-      ) : shown.length === 0 ? (
+      {songs.length > 0 && shown.length === 0 ? (
         <p className="text-muted-foreground text-sm">{query.trim() ? `No song matches “${query}”` : "No song here"}{filter !== "all" ? ` under “${SONG_FILTERS.find((f) => f.id === filter)?.label}”` : ""}.</p>
-      ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5">
-          {shown.map((s) => (
-            <SongCard key={s.id} song={s} />
-          ))}
-        </div>
-      )}
+      ) : null}
+      {/* "New song" is the first tile (1 Nov 2026), like Themes, Collections and Releases. */}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5" data-songs-grid>
+        <NewSongDialog artists={artists} onDone={setNotice} tile />
+        {shown.map((s) => (
+          <SongCard key={s.id} song={s} />
+        ))}
+      </div>
       {removed.length ? <DeletedSongs removed={removed} /> : null}
     </div>
   );
