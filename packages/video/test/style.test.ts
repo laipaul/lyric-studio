@@ -355,7 +355,7 @@ describe("target length per platform (B3) and effect hints (B6)", () => {
     expect(d.effects.find((e) => e.name === "glide")!.label).toBe("glide · verses");
     expect(d.brandDefaults).toEqual({ verseEffect: "glide", hookEffect: "karaoke-highlight" });
     expect(d.fields.find((f) => f.field === "length")!.perPlatform!.find((p) => p.platform === "reels")).toMatchObject({ value: 45, source: "song:reels" });
-    expect(d.platforms.find((p) => p.name === "reels")!.presetLength).toBe("30 s");
+    expect(d.platforms.find((p) => p.name === "reels")!.presetLength).toBe("90 s");
     const g = generatePanelData(ws, ws.db.select().from(project).where(eq(project.id, id)).get()!);
     expect(g.recipe.lengths).toMatchObject({ reels: 45, tiktok: 20, youtube: null });
     // A default length for every platform still leaves YouTube "whole song" and Canvas "loop".

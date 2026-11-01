@@ -4,6 +4,15 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Reels length: 90 s instead of 30 s ✅ (to verify on the Windows PC)
+- Decided by the user on 1 Nov 2026 ("90 s gives time to hear the core chorus and tell a story without becoming
+  a mini series"; exceptionally up to 2 min when the story is compelling: the "Long story" choice, Theme v2 step 6).
+- presets/platforms.json: Reels length target 90 s (tolerance unchanged, +-15%: 76.5-103.5 s; up to 25% shorter
+  = 67.5 s when no clean end exists in the window). Still hook-first: the "story" start from verse 1 is Theme v2 step 6.
+- A song shorter than the window from its hook simply runs to its end (the musical-ending rule, unchanged).
+- Tests: platform.test.ts (preset and window), style.test.ts (preset length "90 s"), make.test.ts (a song that ends
+  inside the window runs to its end); timing-fixes.test.ts keeps its length-rule cases on a 30 s Reel fixture.
+
 ### Song links: streaming, smart links and social pages per song, picked per post ✅ (to verify on the Windows PC)
 - Asked by the user on 1 Nov 2026 ("when we post per song and platform, we need the link to each platform for
   the song like Spotify, Apple, YT; on the song assets we add these links"; also marketing platforms such as
@@ -99,35 +108,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: text-layout.test.ts (safe zones on every platform, Big hook, the viewer patch, recipe check),
   readability-make.test.ts (the layout in the planned video), themes.test.ts (moods); browser: themes
   (mood tick + filter, hover loop), song-stages (Text layout saved in the theme).
-
-### Bug fix: a new render starts unapproved ✅ (to verify on the Windows PC)
-- Reported by the user on 1 Nov 2026: a newly made YouTube video already showed "Approved".
-- Cause: marks (favourite / approved / discarded) are stored by the video's file path only, so a new render
-  landing on a path that had a mark (resume, rerender, a re-used run folder) inherited it.
-- Fix: a mark older than the video's manifest (created_at) is ignored (`markApplies` in node/exports.ts) by the
-  Videos tab and when marking again; the video starts as "generated".
-- Chips: a platform is green only when its latest run has an approved video (or, when that run kept none,
-  an older run does); a fresh unreviewed render shows "to review" again. The number stays "approved in any run".
-- Tests: library-status.test.ts (new run after an approved one, approve, all discarded), exports.test.ts
-  (stale mark ignored, not carried over).
-
-### Theme cover: each theme has its own picture ✅ (to verify on the Windows PC)
-- Asked by the user on 1 Nov 2026 (themes looked like songs: their previews showed a song's clip or cover and
-  that song's lyric lines).
-- **Themes → a theme → Theme cover**: "Set theme cover…" (JPG, PNG or WebP), "Change…", "Remove". The
-  picture is copied into the theme folder (themes\<name>\cover.jpg), so it travels with the theme; the one
-  it replaces (or Remove) goes to the theme folder's _replaced\. Duplicate keeps it.
-- **New theme** is the first tile of the Themes grid (a big +, like Canva's "Create blank"); the old "+ New theme"
-  button at the top right was removed (asked by the user on 1 Nov 2026), the page intro now points at the tile.
-- **A video as Theme cover** (like Canva): kept as cover-video.mp4 in the theme folder, its first frame becomes
-  the still cover; it loops behind the words on hover and in the theme's big preview. A picture stays a picture.
-- The Theme cover is set only in **Themes** (a short-lived Prepare → Assets row was taken out again the same
-  day: Assets are the song's own files).
-- Without a cover, theme previews show a neutral backdrop in the theme's own colours, never a song's picture.
-- Every theme preview on the Themes page uses the same neutral words: "Your lyric line here / Your chorus
-  here". (Inside a song, Shape → Theme still previews on that song's own clip and lines.)
-- Tests: themes.test.ts (cover set / replace / duplicate / remove, no borrowed pictures, neutral words);
-  browser: themes.e2e.ts (set, shown, Remove).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -272,6 +252,36 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   mix has different timing, use Generate -> advanced -> re-align.
 
 ## Next
+
+**Theme v2 (agreed 1 Nov 2026; lyric sync accepted by the user).** Comes first now; each item is its own step, plan
+first, stop after each. Spec (agreed with the user, kept up to date in chat): "Videomaker — Theme Engine v2
+Specification", https://claude.ai/artifact/Y3MPZSg6dpiocMWKGAVQG5. Principles: a Theme is only look and behaviour,
+declarative (data, never code), deterministic, additive (v1 themes render identically), Craft Rules always win and
+every adjustment is reported. Golden reference: the user's Reel "Here With Me".
+- ✅ **T0. Reels length 90 s** (see Latest steps).
+- **T1. Section tags kept:** Suno's [Verse] / [Chorus] / [Bridge] ... are stored with each line as its section
+  (no longer flagged and removed from lyrics.txt); "* " hooks still work and count as chorus where no tag exists;
+  the Lyrics tab shows the section map and lets the user correct a section.
+- **T2. Theme v2 format, no visible change:** versioned schema (typography, composition, motion, pacing, finish,
+  cards, rules) + an adapter that reads every v1 theme.json; regression frames prove the user's themes render
+  identically.
+- **T3. Rule engine:** Theme defaults -> platform -> section -> repeat (first / nth / last) -> moments (held note,
+  emphasis word, peak) -> song overrides, as property patches; peaks capped per platform (Reels 1-2, Long story 2,
+  YouTube 3).
+- **T4. Craft Rules in one place:** presets/craft-rules.json + one checker; new rules (minimum time on screen,
+  <= 17 characters/s, measured fit + 40-character ceiling, breath-aware line breaks without orphans, no text change
+  on a cut frame, peak limits); the assessment lists "Done for you" adjustments in plain words.
+- **T5. The user's Reel look:** stacked line shape (2-4 short lines chosen per phrase, never padded), line build-up
+  (accumulation) independent of the letter animation, lyric colour "auto" per clip from the Theme palette.
+- **T6. Pacing and story length:** Theme pacing (shot length range, dissolve / double exposure, cut on phrases),
+  the "story" start (verse 1 through at least one full chorus) for Reels, the per-song "Long story" (up to 2 min).
+- **T7. Cards:** Brand Kit slots ({song} {artist} {tagline} {ep}) and the song's {credits} line on title cards.
+- **T8. Theme designer screen:** Themes -> a Theme -> Design (test song + preview, section timeline, the seven
+  groups, Save as new theme); the song page keeps the quick Edit theme.
+- **T9. Golden test:** "Here With Me" as a v2 Theme, regenerated next to the original Reel, plus a Life Lyrics
+  ballad Theme and a Pômé Theme; the acceptance gate before any Reverse Engineer work.
+Publishing (decided 1 Nov 2026): one 9:16 Reel file for Instagram + Facebook + YouTube Shorts (safe zones: the
+strictest of the three); YouTube 16:9 = the whole song; TikTok stays available, not a default.
 **Agreed order (30 Oct 2026, workflow review).** Follow it strictly; each item is its own step, plan first.
 
 1. ✅ **Verification pass (done 30 Oct 2026: quick pass, bug-fix session, second pass; every step verified).** Feature freeze until done: run 2 songs end-to-end on the PC

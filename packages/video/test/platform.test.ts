@@ -38,7 +38,7 @@ describe("presets file", () => {
   it("has the standard preset and the platforms with the approved defaults", () => {
     expect(Object.keys(presets)).toEqual(["standard", "reels", "tiktok", "shorts", "youtube", "canvas"]);
     expect(presets.standard).toMatchObject({ width: 1080, height: 1920, variations: 6, length: { mode: "range", min: 45, max: 60, hardMax: 65 }, fadeOutSeconds: 0.5 });
-    expect(presets.reels).toMatchObject({ variations: 3, anchor: "hook-first", loopEnding: true, length: { seconds: 30, tolerance: 0.15 }, safeZone: { top: 0.14, bottom: 0.35, right: 0.12 } });
+    expect(presets.reels).toMatchObject({ variations: 3, anchor: "hook-first", loopEnding: true, length: { seconds: 90, tolerance: 0.15 }, safeZone: { top: 0.14, bottom: 0.35, right: 0.12 } });
     expect(presets.reels.fadeOutSeconds).toBeGreaterThanOrEqual(0.1);
     expect(presets.reels.fadeOutSeconds).toBeLessThanOrEqual(0.15);
     expect(presets.tiktok).toMatchObject({ variations: 3, length: { seconds: 25 }, safeZone: { top: 0.1, bottom: 0.3, right: 0.15 } });
@@ -47,7 +47,7 @@ describe("presets file", () => {
     expect(presets.canvas).toMatchObject({ width: 1080, height: 1920, lyrics: false, audio: false, available: true });
     expect(presets.tiktok.anchor).toBe("hook-first");
     expect(presets.shorts.anchor).toBe("hook-first");
-    expect(sectionWindow(presets.reels)).toEqual({ minMs: 25_500, maxMs: 34_500, hardMaxMs: 39_000, shortestMs: 22_500, targetMs: 30_000 });
+    expect(sectionWindow(presets.reels)).toEqual({ minMs: 76_500, maxMs: 103_500, hardMaxMs: 117_000, shortestMs: 67_500, targetMs: 90_000 });
   });
 
   it("is respected: edited values come through", () => {

@@ -650,7 +650,7 @@ run's folder (`exports\<date>\reels\v1.mp4 …`) with its own manifests and QA, 
 
 | Platform | Size | Length | Videos | Notes |
 | --- | --- | --- | --- | --- |
-| reels | 1080x1920 | ~30 s, hook-first | 3 | ends on a bar with a 0.12 s fade; the last shot leads into the first (seamless loop) |
+| reels | 1080x1920 | ~90 s, hook-first | 3 | ends on a bar with a 0.12 s fade; the last shot leads into the first (seamless loop) |
 | tiktok | 1080x1920 | ~25 s, hook-first | 3 | taller caption area at the bottom |
 | shorts | 1080x1920 | ~50 s, hook-first | 2 | |
 | youtube | 1920x1080 | the whole song | 1 | cover / stills / clips layouts, end-screen area, thumbnail, publish.txt (see below) |

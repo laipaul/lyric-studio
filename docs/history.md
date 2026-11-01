@@ -4,6 +4,35 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Bug fix: a new render starts unapproved ✅ (to verify on the Windows PC)
+- Reported by the user on 1 Nov 2026: a newly made YouTube video already showed "Approved".
+- Cause: marks (favourite / approved / discarded) are stored by the video's file path only, so a new render
+  landing on a path that had a mark (resume, rerender, a re-used run folder) inherited it.
+- Fix: a mark older than the video's manifest (created_at) is ignored (`markApplies` in node/exports.ts) by the
+  Videos tab and when marking again; the video starts as "generated".
+- Chips: a platform is green only when its latest run has an approved video (or, when that run kept none,
+  an older run does); a fresh unreviewed render shows "to review" again. The number stays "approved in any run".
+- Tests: library-status.test.ts (new run after an approved one, approve, all discarded), exports.test.ts
+  (stale mark ignored, not carried over).
+
+### Theme cover: each theme has its own picture ✅ (to verify on the Windows PC)
+- Asked by the user on 1 Nov 2026 (themes looked like songs: their previews showed a song's clip or cover and
+  that song's lyric lines).
+- **Themes → a theme → Theme cover**: "Set theme cover…" (JPG, PNG or WebP), "Change…", "Remove". The
+  picture is copied into the theme folder (themes\<name>\cover.jpg), so it travels with the theme; the one
+  it replaces (or Remove) goes to the theme folder's _replaced\. Duplicate keeps it.
+- **New theme** is the first tile of the Themes grid (a big +, like Canva's "Create blank"); the old "+ New theme"
+  button at the top right was removed (asked by the user on 1 Nov 2026), the page intro now points at the tile.
+- **A video as Theme cover** (like Canva): kept as cover-video.mp4 in the theme folder, its first frame becomes
+  the still cover; it loops behind the words on hover and in the theme's big preview. A picture stays a picture.
+- The Theme cover is set only in **Themes** (a short-lived Prepare → Assets row was taken out again the same
+  day: Assets are the song's own files).
+- Without a cover, theme previews show a neutral backdrop in the theme's own colours, never a song's picture.
+- Every theme preview on the Themes page uses the same neutral words: "Your lyric line here / Your chorus
+  here". (Inside a song, Shape → Theme still previews on that song's own clip and lines.)
+- Tests: themes.test.ts (cover set / replace / duplicate / remove, no borrowed pictures, neutral words);
+  browser: themes.e2e.ts (set, shown, Remove).
+
 ### Theme editor fixes: colour codes, save bar on top, a clear Box, no typewriter cursor ✅ (to verify on the Windows PC)
 - Asked by the user on 31 Oct 2026.
 - **Text colour / Accent colour** (Edit theme → Colours): next to the picker, a box to type or paste the colour

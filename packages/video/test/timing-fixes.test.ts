@@ -20,7 +20,10 @@ import {
 import { loadPresets } from "../src/node";
 import { grid } from "./helpers";
 
-const presets = loadPresets();
+// These cases test the length RULE on a 30 s Reel (as the preset was when they were written). Since
+// 1 Nov 2026 the Reels preset is 90 s; the rule is the same, so the cases keep their 30 s Reel here.
+const loaded = loadPresets();
+const presets: Record<string, PlatformPreset> = { ...loaded, reels: { ...loaded.reels, length: { mode: "target", seconds: 30, tolerance: 0.15 } } };
 const sungAt = (lines: SectionLine[], t: number) => lines.filter((l) => sungStart(l) < t && t < sungEnd(l)).map((l) => l.text);
 const isBar = (beats: Beat[], t: number) => beats.some((b) => b.is_downbeat && Math.abs(b.time_ms - t) < 1);
 

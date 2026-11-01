@@ -24,7 +24,7 @@
       "aspect": "9:16",
       "layout": "vertical",
       "showNextLine": true,
-      "length": { "mode": "target", "seconds": 30, "tolerance": 0.15 },
+      "length": { "mode": "target", "seconds": 90, "tolerance": 0.15 },
       "anchor": "hook-first",
       "variations": 3,
       "safeZone": { "top": 0.14, "bottom": 0.35, "left": 0, "right": 0.12 },
