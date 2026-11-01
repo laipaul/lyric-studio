@@ -128,6 +128,25 @@ export function ThemesView() {
       ) : null}
 
       <div data-themes-grid className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4">
+        {/* "New theme" as the first tile, like Canva's "Create blank" (1 Nov 2026). */}
+        <button
+          type="button"
+          data-themes-new-tile
+          onClick={() => {
+            setCreating({ name: "", from: data.themes[0]?.name ?? "" });
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          className="group flex min-w-0 flex-col gap-1.5 text-left"
+        >
+          <div className="border-foreground/25 group-hover:border-brand group-hover:bg-brand/5 flex w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed transition-colors" style={{ aspectRatio: "9 / 16" }}>
+            <span className="bg-brand text-brand-foreground flex size-12 items-center justify-center rounded-full">
+              <Plus className="size-6" />
+            </span>
+            <span className="text-sm font-medium">New theme</span>
+          </div>
+          <span className="truncate text-sm font-medium">New theme</span>
+          <span className="text-muted-foreground -mt-1 text-xs">name it, start from any theme</span>
+        </button>
         {shown.map((t) => (
           <ThemeTile key={t.name} theme={t} data={data} onOpen={() => setOpen(t.name)} />
         ))}

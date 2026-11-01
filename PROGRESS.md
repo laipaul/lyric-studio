@@ -10,6 +10,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **Themes → a theme → Theme cover**: "Set theme cover…" (JPG, PNG or WebP), "Change…", "Remove". The
   picture is copied into the theme folder (themes\<name>\cover.jpg), so it travels with the theme; the one
   it replaces (or Remove) goes to the theme folder's _replaced\. Duplicate keeps it.
+- **New theme** is also the first tile of the Themes grid (a big +, like Canva's "Create blank").
 - Without a cover, theme previews show a neutral backdrop in the theme's own colours, never a song's picture.
 - Every theme preview on the Themes page uses the same neutral words: "Your lyric line here / Your chorus
   here". (Inside a song, Shape → Theme still previews on that song's own clip and lines.)

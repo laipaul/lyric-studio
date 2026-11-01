@@ -73,7 +73,8 @@ async function main() {
     check(!!(await page.$("[data-themes-tile='Life Lyrics'] .__remotion-player")), "pointing at a tile plays it");
 
     // + New theme: named first, from another theme.
-    await page.click("[data-themes-new]");
+    check(!!(await page.$("[data-themes-grid] > [data-themes-new-tile]:first-child")), "the first tile is New theme");
+    await page.click("[data-themes-new-tile]");
     await page.fill("[data-themes-new-name]", "Night Drive");
     await page.click("[data-themes-new-create]");
     await page.waitForSelector("[data-theme-detail='Night Drive']");
