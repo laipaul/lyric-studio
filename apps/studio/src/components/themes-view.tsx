@@ -248,9 +248,13 @@ function ThemeDetail({ theme, data, act, onOpen, onClose }: { theme: ThemeCard; 
                   }}
                 />
               ) : (
-                <h2 className="font-display min-w-0 flex-1 text-2xl">{theme.name}</h2>
+                <div className="flex min-w-0 flex-1 flex-col">
+                  {/* "Theme" written above the name (1 Nov 2026): a theme made from a song carries the song's name, so this says it is the look, not the song. */}
+                  <span data-theme-detail-kind className="text-brand text-[11px] font-semibold tracking-[0.18em] uppercase">Theme</span>
+                  <h2 className="font-display min-w-0 text-2xl">{theme.name}</h2>
+                </div>
               )}
-              <button type="button" data-theme-detail-rename aria-label="Rename" title="Rename" onClick={() => setNaming(theme.name)} className="text-muted-foreground hover:text-foreground rounded p-1.5">
+              <button type="button" data-theme-detail-rename aria-label="Rename the theme" title="Rename the theme (your songs keep their names)" onClick={() => setNaming(theme.name)} className="text-muted-foreground hover:text-foreground rounded p-1.5">
                 <Pencil className="size-4" />
               </button>
               <button type="button" aria-label="Close" onClick={onClose} className="text-muted-foreground hover:text-foreground rounded p-1.5">
@@ -271,7 +275,7 @@ function ThemeDetail({ theme, data, act, onOpen, onClose }: { theme: ThemeCard; 
             <p data-theme-detail-songs className="text-sm">
               {theme.songs.length ? (
                 <>
-                  Used by{" "}
+                  Used by {theme.songs.length === 1 ? "the song" : `${theme.songs.length} songs:`}{" "}
                   {theme.songs.map((s, i) => (
                     <span key={s.id}>
                       {i ? ", " : ""}

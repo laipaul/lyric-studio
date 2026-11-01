@@ -683,7 +683,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
             <div data-theme-editors className="flex flex-col gap-4">
               <div className="flex items-center gap-2">
                 <span className="min-w-0 flex-1 truncate text-sm font-medium" data-theme-editing={editingTheme.name}>
-                  Editing: {editingTheme.name}
+                  Editing theme: {editingTheme.name}
                   {editingTheme.name !== saved?.theme?.name ? <span className="text-muted-foreground font-normal"> (shown on this song)</span> : null}
                 </span>
                 {draft.changed ? <span data-theme-unsaved className="text-xs text-amber-300">not saved yet</span> : null}

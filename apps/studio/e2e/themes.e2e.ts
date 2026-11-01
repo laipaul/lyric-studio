@@ -90,6 +90,7 @@ async function main() {
     await page.waitForSelector("[data-theme-detail-notice]");
     check(theme(ids[1]) === "Night Drive" && theme(ids[0]) === "Life Lyrics", "Use this theme for the song: Let Go uses Night Drive, Hold On keeps Life Lyrics");
     check(((await page.textContent("[data-theme-detail-songs]")) ?? "").includes("Let Go"), "…and the detail view lists it");
+    check(((await page.textContent("[data-theme-detail-kind]")) ?? "") === "Theme" && ((await page.getAttribute("[data-theme-detail-rename]", "aria-label")) ?? "") === "Rename the theme", "the detail view says Theme above the name; its pencil renames the theme");
     await page.keyboard.press("Escape");
     await page.click("[data-theme-detail] [aria-label=Close]");
     // Filters.

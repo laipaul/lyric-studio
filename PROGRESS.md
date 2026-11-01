@@ -9,6 +9,9 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **Text colour / Accent colour** (Edit theme → Colours): next to the picker, a box to type or paste the colour
   code: #FF2D95, FF2D95, #F29, rgb(255, 45, 149) or 255, 45, 149 (Enter or click away saves it; anything else
   says what to type). src/colour-ref.ts parseColourRef.
+- **"Theme" written above the name** in the Themes page's detail view (a theme made from a song carries the song's
+  name, which read as the song); its pencil is "Rename the theme"; "Used by the song …"; Edit theme says
+  "Editing theme: X".
 - **This song → Card text**: every card's words for this song in one place: Title (the same as the header's
   pencil), Tagline, Hook card text, End card text. Theme → Cards keeps only the look, with a link "This song →
   Card text".
