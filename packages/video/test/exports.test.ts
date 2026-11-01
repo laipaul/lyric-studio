@@ -277,3 +277,18 @@ describe("a resumed run is no longer interrupted", () => {
     expect(unresolvedJobs([...jobs, { status: "done", seed: 2 }]).map((j) => j.seed)).toEqual([3]); // Resume made v2
   });
 });
+
+describe("only this song's videos", () => {
+  it("hides videos another song made (a song folder copied by hand), keeps ones from the same music", () => {
+    const own = ws.db.insert(project).values({ title: "Here With Me", artist: "Life Lyrics", audio_hash: "abc" }).returning().get().id;
+    const ex = songPathsById(ws, own).exports;
+    video(path.join(ex, "2026-11-01_1000", "reels"), 1, QA_PASS, { project: { id: own, title: "Here With Me" } });
+    video(path.join(ex, "2026-11-01_1000", "reels"), 2, QA_PASS, { project: { id: "someone-else", title: "The House My Heart Built" }, song: { sha256: "zzz" } });
+    video(path.join(ex, "2026-11-01_1000", "reels"), 3, QA_PASS, { project: { id: "old-id", title: "Here With Me" }, song: { sha256: "abc" } });
+    video(path.join(ex, "2026-10-30_1000", "youtube"), 1, QA_PASS, { project: { id: "someone-else", title: "The House My Heart Built" }, song: { sha256: "zzz" } });
+    const runs = songRuns(ws, own);
+    const names = runs.flatMap((r) => r.platforms.flatMap((p) => p.videos.map((v) => `${p.name}/${v.name}`)));
+    expect(names).toEqual(["reels/v1", "reels/v3"]);
+    expect(runs.find((r) => r.folder === "2026-10-30_1000")?.platforms ?? []).toEqual([]);
+  });
+});

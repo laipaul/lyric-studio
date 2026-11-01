@@ -5,7 +5,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { absPath, renderJob, storedPath, variation, videoMark, type VideoMarkStatus, type Workspace } from "@lyric/db";
+import { absPath, project as projectTable, renderJob, storedPath, variation, videoMark, type VideoMarkStatus, type Workspace } from "@lyric/db";
 import { and, eq } from "drizzle-orm";
 
 import { markInterruptedJobs, processAlive } from "./jobs";
@@ -142,6 +142,11 @@ export function songRuns(ws: Workspace, projectId: string, labels: Record<string
     .all();
   const exportsDir = songPathsById(ws, projectId).exports;
   const folders = runFolders(ws, projectId);
+  // Only this song's own videos (1 Nov 2026): a song folder copied by hand from another song brings that
+  // song's exports along. A video belongs here when its manifest names this song, or was made from the same
+  // music (the same song added again gets a new id).
+  const songHash = ws.db.select({ hash: projectTable.audio_hash }).from(projectTable).where(eq(projectTable.id, projectId)).get()?.hash ?? null;
+  const ours = (m: Manifest) => !m.project?.id || m.project.id === projectId || (!!songHash && m.song?.sha256 === songHash);
 
   const inputs = new Map<string, Omit<Parameters<typeof assessVideo>[0], "problems">>();
   const runs = folders.map((folder, k) => {
@@ -171,6 +176,7 @@ export function songRuns(ws: Workspace, projectId: string, labels: Record<string
           missing.push(n);
           continue;
         }
+        if (!ours(m)) continue; // another song's video (see above)
         command ??= m.command ?? null;
         const id = storedPath(ws, path.join(dir, `${n}.manifest.json`));
         const found = marks.get(id);
@@ -206,6 +212,7 @@ export function songRuns(ws: Workspace, projectId: string, labels: Record<string
         inputs.set(id, assessInput(m));
       }
       const open = unresolvedJobs(runJobs(name));
+      if (!videos.length && !missing.length && !runJobs(name).length) continue; // only another song's videos
       platforms.push({
         name,
         label: labels[name] ?? name,
