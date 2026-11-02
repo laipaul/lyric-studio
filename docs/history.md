@@ -4,6 +4,32 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Make: pickers instead of tick boxes, the Generate panel in clear groups, theme on every video ✅ (to verify on the Windows PC)
+- Asked by the user on 1 Nov 2026 ("only make tick boxes when the choices are limited and clear"; "rearrange
+  this screen, feels messy").
+- **Pickers** (components/search-picker.tsx): the run's Theme ("Change…"), Compare themes ("+ Add a theme to
+  compare", up to 3) and the collections of a picture version ("+ Collection") open a searchable
+  list; themes as small cover tiles with mood filters, the song's own and the ones in use first. Chosen ones
+  show as chips with ×.
+- **Make is production** (the user: "all must be geared towards the platform choices, length, layouts"):
+  1 What to make (platforms) · 2 Output, up front (videos per platform, length, part of the song, shot length,
+  YouTube layout; all "automatic") · one line for the song (title · artist · clips · Look: theme; clips and
+  look link to Shape, they are changed there; title, artist, EP and cover are no longer in Make) · **Try other
+  looks** (folded: theme for this run, Compare themes, Pictures) · **Rarely needed** (folded: clips of the
+  other orientation, time the lyrics again) · a footer that stays in view: "Keep these choices for this
+  song", the number of videos and Generate. Plain words (no song.json, recipe, QA, textboard).
+- **Colours from the Theme cover** (Themes → a theme, under Theme cover; and Edit theme → Colours): 3–5 colours
+  from the cover and a suggestion (lyrics in a light colour that reads, the chorus and accent in the liveliest
+  one); **Use these colours** sets them, nothing changes before (@lyric/video cover-palette.ts, tested; API
+  /api/themes colours). In the editor a swatch click still sets just the accent; a theme without a cover uses
+  the song's cover there.
+- **Releases and the Library too**: "New release" and "New song" are the first tile of their grid (the buttons at
+  the top right are gone).
+- **Collections like Themes**: "New collection" is the first tile of the grid (the button at the top right is
+  gone); the page says collections are added to a song in Shape → To make (no more "tick them in Generate").
+- **Each video shows its theme** (palette icon and name) on its tile in Videos and in Post (manifest
+  settings.theme; VideoInfo.theme).
+
 ### Clarity: feature icons, "Shared by N songs" badges, song or theme at a glance ✅ (to verify on the Windows PC)
 - Asked by the user on 1 Nov 2026 ("allocate icons to each core feature so users get to know instantly").
 - One map (apps/studio/src/lib/feature-icons.tsx): **Song** music note, white · **Theme** palette, pink ·

@@ -4,6 +4,18 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Shape: one Analysis chip in the song header, nothing else above the viewer ✅ (to verify on the Windows PC)
+- Asked by the user on 2 Nov 2026 ("still too scattered information, group all these infos into a single tag called
+  Analysis where you explain by section"; "I don't need the buttons Ready to post and Make on the top right, they are
+  redundant"; "that should free the space to make the viewer bigger").
+- The song header has an **Analysis** chip (a dot in the verdict's colour). It opens the Analysis panel on the left:
+  Verdict · This video · Look & content · Length & ending · Clips & warnings (only when there are any) · How to edit.
+- Gone from the page: the stage line, Look · Content line, the video's line, the hint, the verdict badge, Next: Make
+  (Make is in the rail) and the Plan details fold. The viewer starts right under the song header and takes that room:
+  537 px on 1600×950 (424 px this morning).
+- Tests: storyboard.e2e.ts (the chip, nothing else above the viewer, the panel by section, a second click closes it),
+  song-stages.e2e.ts and textboard.e2e.ts updated (Look · Content and the summary read from the panel; the rail's Make).
+
 ### Shape: a bigger viewer, everything else at the top ✅ (to verify on the Windows PC)
 - Asked by the user on 2 Nov 2026 ("how come the video viewer has become smaller … move the titles to the top and make the
   sound wave flatter"; "all these messages at the bottom should be moved to the top, including this Make button. Still leave
@@ -142,32 +154,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   only that platform; clicking again (or "show all") shows every platform.
 - Gone: the All / Reels / … filter chips, the "Try another take" row and the "Review & Post · N to review"
   line. Favourites only and Show discarded stay, small, on the right.
-
-### Make: pickers instead of tick boxes, the Generate panel in clear groups, theme on every video ✅ (to verify on the Windows PC)
-- Asked by the user on 1 Nov 2026 ("only make tick boxes when the choices are limited and clear"; "rearrange
-  this screen, feels messy").
-- **Pickers** (components/search-picker.tsx): the run's Theme ("Change…"), Compare themes ("+ Add a theme to
-  compare", up to 3) and the collections of a picture version ("+ Collection") open a searchable
-  list; themes as small cover tiles with mood filters, the song's own and the ones in use first. Chosen ones
-  show as chips with ×.
-- **Make is production** (the user: "all must be geared towards the platform choices, length, layouts"):
-  1 What to make (platforms) · 2 Output, up front (videos per platform, length, part of the song, shot length,
-  YouTube layout; all "automatic") · one line for the song (title · artist · clips · Look: theme; clips and
-  look link to Shape, they are changed there; title, artist, EP and cover are no longer in Make) · **Try other
-  looks** (folded: theme for this run, Compare themes, Pictures) · **Rarely needed** (folded: clips of the
-  other orientation, time the lyrics again) · a footer that stays in view: "Keep these choices for this
-  song", the number of videos and Generate. Plain words (no song.json, recipe, QA, textboard).
-- **Colours from the Theme cover** (Themes → a theme, under Theme cover; and Edit theme → Colours): 3–5 colours
-  from the cover and a suggestion (lyrics in a light colour that reads, the chorus and accent in the liveliest
-  one); **Use these colours** sets them, nothing changes before (@lyric/video cover-palette.ts, tested; API
-  /api/themes colours). In the editor a swatch click still sets just the accent; a theme without a cover uses
-  the song's cover there.
-- **Releases and the Library too**: "New release" and "New song" are the first tile of their grid (the buttons at
-  the top right are gone).
-- **Collections like Themes**: "New collection" is the first tile of the grid (the button at the top right is
-  gone); the page says collections are added to a song in Shape → To make (no more "tick them in Generate").
-- **Each video shows its theme** (palette icon and name) on its tile in Videos and in Post (manifest
-  settings.theme; VideoInfo.theme).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

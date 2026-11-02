@@ -135,6 +135,8 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
               </li>
             ))}
         </ul>
+        {/* The Shape page puts its Analysis chip and Next: Make here (2 Nov 2026; shape-board.tsx, a portal). */}
+        <div id="song-header-actions" data-song-header-actions className="ml-auto flex items-center gap-2" />
       </div>
       <SongStages key={`${tab}:${search.from ?? ""}`} initialTab={tab} initialPanel={tab === "shape" && SHAPE_PANEL_IDS.includes(search.panel ?? "") ? (search.panel as ShapePanelId) : null} statuses={statuses} todo={todo} counts={{ post: approved.reduce((n, g) => n + g.videos.length, 0) + offered.length }}>
         <TabsContent value="assets">

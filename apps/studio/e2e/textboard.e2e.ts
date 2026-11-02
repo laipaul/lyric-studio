@@ -156,7 +156,7 @@ async function main() {
     await page.uncheck("[data-picture='song']");
     await page.check("[data-picture='city']");
     await page.click("[data-pictures-plan]");
-    await page.waitForSelector("[data-storyboard-picture]", { timeout: 180_000 });
+    await page.waitForSelector("[data-storyboard-picture]", { state: "attached", timeout: 180_000 }); // in the Analysis panel (2 Nov 2026)
     await page.waitForSelector("[data-needs-clip='02_b.mp4']");
     const linesAfter = await page.$$eval("[data-textboard-row] [data-card]", (els: Element[]) => els.map((e) => e.textContent));
     check(JSON.stringify(linesAfter) === JSON.stringify(linesBefore), "the same textboard over the new pictures");

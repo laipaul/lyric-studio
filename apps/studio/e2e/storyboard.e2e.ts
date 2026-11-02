@@ -95,8 +95,10 @@ async function main() {
     check(!!fit9.c && 1000 - (fit9.c.y + fit9.c.height) >= 40, `…and leaves room under the command bar (${Math.round(1000 - ((fit9.c?.y ?? 0) + (fit9.c?.height ?? 0)))} px)`);
     const inBar = await page.$$eval("[data-command-bar] [data-storyboard-source], [data-command-bar] [data-storyboard-platform], [data-command-bar] [data-transport], [data-command-bar] [data-follow-playback]", (e: Element[]) => e.length);
     check(inBar === 4, `the command bar holds Show / Platform, the transport and Follow / Zoom (${inBar} of 4)`);
-    const head = await (await page.$("[data-storyboard-head]"))?.boundingBox();
-    check(!!head && head.y + head.height <= fit9.v!.y && !!(await page.$("[data-storyboard-head] [data-next-make]")) && !!(await page.$("[data-storyboard-head] [data-storyboard-summary]")) && !!(await page.$("[data-storyboard-head] [data-storyboard-hint]")), "the video's line, the hint and Next: Make are above the viewer");
+    // 2 Nov 2026: nothing above the viewer but the song header; its Analysis chip holds the verdict and the facts.
+    const chip = await (await page.$("[data-song-header] [data-analysis-chip]"))?.boundingBox();
+    check(!!chip && chip.y + chip.height <= fit9.v!.y && !(await page.$("[data-next-make]")) && !(await page.$("[data-verdict]:not([data-analysis-chip])")) && !(await page.$("[data-work-status]")), "the Analysis chip in the song header; no verdict badge, Next: Make or stage line on the page");
+    check(!(await page.isVisible("[data-analysis-panel]")), "the analysis stays closed until the chip is clicked");
     await page.setViewportSize({ width: 1366, height: 768 });
     await sleep(400);
     const small = await fits();
@@ -110,7 +112,13 @@ async function main() {
     await openPanel(page, "clips");
     const strip0 = await (await page.waitForSelector("[data-clips-panel] [data-story-strip]")).boundingBox();
     check(!!strip0 && strip0.x + strip0.width <= vb!.x, "the Clips menu opens the clips used in the panel, left of the viewer");
-    check(!(await page.$eval("[data-plan-details]", (d: Element) => (d as HTMLDetailsElement).open)), "the plan's details are folded behind the verdict");
+    await page.click("[data-analysis-chip]");
+    await page.waitForSelector("[data-shape-panel=analysis] [data-analysis-panel]", { state: "visible" });
+    const sections = await page.$$eval("[data-analysis-panel] [data-analysis-section]", (e: Element[]) => e.map((x) => x.getAttribute("data-analysis-section")));
+    check(["Verdict", "This video", "Look & content", "Length & ending", "How to edit"].every((t) => sections.includes(t)) && (await page.isVisible("[data-analysis-panel] [data-storyboard-summary]")), `Analysis: the facts by section (${sections.join(", ")})`);
+    await page.click("[data-analysis-chip]");
+    await page.waitForSelector("[data-shape-panel=analysis]", { state: "detached" }).catch(() => {});
+    check(!(await page.isVisible("[data-analysis-panel]")), "…a second click closes it");
     const waveY = (await (await page.$("[data-waveform]"))!.boundingBox())!.y;
     const linesY = (await (await page.$("[data-textboard-row]"))!.boundingBox())!.y;
     const shotsY = (await (await page.$("[data-shots-row]"))!.boundingBox())!.y;
@@ -361,9 +369,9 @@ async function main() {
     check(((await page.textContent("[data-textboard-titles] [data-text-card=end]").catch(() => "")) ?? "").includes("on Spotify"), "…the plan has it on the timeline (End card: Stream … on Spotify)");
     await page.waitForFunction(() => document.querySelector("[data-viewer]")?.getAttribute("data-patched") === "0", null, { timeout: 60_000 }).catch(() => {});
     check((await page.getAttribute("[data-viewer]", "data-patched")) === "0" && (await page.getAttribute("[data-viewer]", "data-effect")) === "spread", "…and the new plan has it (nothing patched any more)");
-    await page.click("[data-next-make]");
+    await page.click("[data-stage=make]");
     await page.waitForSelector("[data-release-pack]");
-    check(true, '"Next: Make" under the viewer opens Make');
+    check(true, "the rail's Make opens Make");
 
     // The tempo (Automatic, on the left): x2/3 of 120 = 80 BPM in song.json; the video is planned with it.
     await page.goto(`${base}/songs/${sp.project.id}?tab=style`);

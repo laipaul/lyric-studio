@@ -5,7 +5,6 @@ import { createContext, useContext, useState } from "react";
 
 import type { TodoItem } from "@lyric/video/song-stages";
 
-import { ThemeReachBadge } from "@/components/theme-reach-badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
@@ -49,7 +48,7 @@ export const SHAPE_PANELS = [
   // things and the shared look are never confused.
   { id: "theme", label: "Theme", icon: FEATURE.theme.icon, colour: FEATURE.theme.colour },
 ] as const;
-export type ShapePanelId = (typeof SHAPE_PANELS)[number]["id"] | "shot" | "text";
+export type ShapePanelId = (typeof SHAPE_PANELS)[number]["id"] | "shot" | "text" | "analysis"; // analysis: the header's Analysis chip (2 Nov 2026)
 type PanelState = { panel: ShapePanelId | null; setPanel: (p: ShapePanelId | null) => void };
 const ShapePanel = createContext<PanelState>({ panel: null, setPanel: () => {} });
 export const useShapePanel = () => useContext(ShapePanel);
@@ -63,6 +62,9 @@ export const useSetThemeMode = () => useContext(ThemeModeCtx);
 export type ThemeNow = { name: string; users: string[]; song: string };
 const ThemeNowCtx = createContext<(t: ThemeNow | null) => void>(() => {});
 export const useSetThemeNow = () => useContext(ThemeNowCtx);
+// The same theme, read by the Shape page's Analysis panel (its "Look & content" section, 2 Nov 2026), with the way to open it.
+const ThemeLookCtx = createContext<{ themeNow: ThemeNow | null; openTheme: () => void }>({ themeNow: null, openTheme: () => {} });
+export const useThemeLook = () => useContext(ThemeLookCtx);
 
 // The feature icons (lib/feature-icons.tsx): one icon per step, the same everywhere.
 const STAGE_ICON = { prepare: FEATURE.prepare.icon, shape: FEATURE.shape.icon, make: FEATURE.make.icon, review: FEATURE.review.icon } as const;
@@ -107,6 +109,7 @@ export function SongStages({
       <ShapePanel.Provider value={{ panel, setPanel }}>
         <ThemeModeCtx.Provider value={setThemeMode}>
         <ThemeNowCtx.Provider value={setThemeNow}>
+        <ThemeLookCtx.Provider value={{ themeNow, openTheme }}>
         <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-row gap-0">
           <nav aria-label="Stages" data-stages data-rail className="bg-card/40 sticky top-0 flex max-h-[calc(100vh-3.5rem)] w-[76px] shrink-0 flex-col items-stretch gap-1 overflow-y-auto border-r px-1.5 py-2">
             {STAGES.map((s, i) => {
@@ -179,27 +182,12 @@ export function SongStages({
               </div>
             ) : null}
             {/* Review says it per platform in its own overview (1 Nov 2026), so no summary line there. */}
-            {/* The stage's line; on Shape the Look · Content line joins it (one line, so the viewer keeps its room: 2 Nov 2026). */}
-            {stage !== "review" ? (
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+            {/* The stage's line. Not on Review (its own overview says it per platform, 1 Nov 2026) and not on Shape: there the
+                header's Analysis chip holds it, with the Look · Content line (2 Nov 2026). */}
+            {stage !== "review" && stage !== "shape" ? (
               <p className="text-muted-foreground text-xs" data-work-status>
                 <span className="text-foreground font-medium">{current.name}</span> · <span className={TONE[statuses[stage].tone]}>{statuses[stage].text}</span>
               </p>
-            {stage === "shape" && themeNow && !themeMode ? (
-              // What belongs to whom, in one line (1 Nov 2026): the look comes from the theme, the content is this song's.
-              <p data-look-content className="flex flex-wrap items-center gap-1.5 text-xs">
-                <FeatureIcon feature="theme" className="size-3.5" />
-                <span className="text-muted-foreground">Look:</span>
-                <button type="button" data-look-theme onClick={openTheme} className="text-brand underline-offset-2 hover:underline">
-                  theme {themeNow.name}
-                </button>
-                <ThemeReachBadge users={themeNow.users} thisSong={themeNow.song} />
-                <span className="text-muted-foreground mx-1">·</span>
-                <FeatureIcon feature="song" className="size-3.5" />
-                <span className="text-muted-foreground">Content: this song (words, clips, card text)</span>
-              </p>
-            ) : null}
-              </div>
             ) : null}
             {stage === "prepare" ? (
               todo.length ? (
@@ -238,6 +226,7 @@ export function SongStages({
             {children}
           </div>
         </Tabs>
+        </ThemeLookCtx.Provider>
         </ThemeNowCtx.Provider>
         </ThemeModeCtx.Provider>
       </ShapePanel.Provider>

@@ -433,8 +433,8 @@ async function main() {
     await page.setViewportSize({ width: 1280, height: 1000 });
     if (process.env.EDITOR_SHOT) await page.screenshot({ path: process.env.EDITOR_SHOT });
     await page.click("[data-theme-cancel]");
-    // Next: Make.
-    await page.click("[data-next-make]");
+    // Make (the rail; with a plan the page has no Next: Make since 2 Nov 2026).
+    await page.click("[data-stage=make]");
     await page.waitForSelector("[data-release-pack]");
     check((await page.getAttribute("[data-stage=make]", "aria-current")) === "step", '"Next: Make" opens Make');
     ws2.close();

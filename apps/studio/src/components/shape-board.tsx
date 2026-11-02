@@ -13,16 +13,18 @@
 // Pictures: the same textboard over another clip set; an anchor whose clip is missing is a slot.
 import { Player, type PlayerRef } from "@remotion/player";
 import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2, Pencil, RefreshCw, Repeat, Scissors, Star, Type, X } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 
 import { EFFECT_NAMES, effectTitle, followScrollLeft, LyricVideo, patchLook, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
 import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node"; // types only (erased): the data comes from /api/songs/[id]/storyboard
 
-import { AssessmentDetails, VerdictBadge } from "@/components/assessment";
+import { AssessmentDetails, VERDICT_TEXT } from "@/components/assessment";
 import { LookViewer, VIEWER_HEIGHT, VIEWER_MAX, VIEWER_MIN } from "@/components/look-preview";
 import { PreviewPlayer } from "@/components/preview-player";
 import type { ShapeLook } from "@/components/shape-tools";
-import { SHAPE_PANELS, useGoToTab, useShapePanel } from "@/components/song-stages";
+import { SHAPE_PANELS, useGoToTab, useShapePanel, useThemeLook } from "@/components/song-stages";
+import { ThemeReachBadge } from "@/components/theme-reach-badge";
 import { TransportBar } from "@/components/transport-bar";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -46,6 +48,7 @@ type Source = { kind: "plan"; platform: string; video: string } | { kind: "run";
 
 export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { projectId: string; tools: ReactNode; look: ShapeLook | null; replan: number; onPlanned: (replan: number) => void }) {
   const goTo = useGoToTab();
+  const themeLook = useThemeLook();
   const { panel, setPanel } = useShapePanel();
   const [choices, setChoices] = useState<StoryboardChoices | null>(null);
   const [source, setSource] = useState<Source | null>(null);
@@ -371,7 +374,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
         onCanvas={(at) => void edit(at === null ? { action: "canvas", clip: null } : { action: "canvas", clip: editing, at })}
       />
     ) : null;
-  const panelTitle = panel === "shot" ? "Shot" : (SHAPE_PANELS.find((m) => m.id === panel)?.label ?? "");
+  const panelTitle = panel === "shot" ? "Shot" : panel === "analysis" ? "Analysis" : (SHAPE_PANELS.find((m) => m.id === panel)?.label ?? "");
   const closePanel = () => {
     if (panel === "shot") setSelected(null);
     setPanel(null);
@@ -472,6 +475,152 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
       <LookViewer input={look.fallback} caption={look.caption} previewing={look.previewing} height={viewerH} />
     ) : null;
 
+  // The Analysis panel (2 Nov 2026, asked by the user: "group these infos into a single tag called Analysis, explained by
+  // section"): opened by the Analysis chip in the song header. Kept in the page (hidden while another panel is open) so
+  // its facts are always there to read.
+  const verdictTone = view ? view.assessment.verdict : null;
+  const lookSection = (
+    <AnalysisSection title="Look & content">
+      {themeLook.themeNow ? (
+        <p data-look-content className="flex flex-wrap items-center gap-1.5">
+          <span className="text-muted-foreground">Look:</span>
+          <button type="button" data-look-theme onClick={themeLook.openTheme} className="text-brand underline-offset-2 hover:underline">
+            theme {themeLook.themeNow.name}
+          </button>
+          <ThemeReachBadge users={themeLook.themeNow.users} thisSong={themeLook.themeNow.song} />
+          <span className="text-muted-foreground mx-1">·</span>
+          <span className="text-muted-foreground">Content: this song (words, clips, card text)</span>
+        </p>
+      ) : (
+        <p className="text-muted-foreground">Content: this song (words, clips, card text)</p>
+      )}
+    </AnalysisSection>
+  );
+  const analysisBody =
+    view && props ? (
+      <div className="flex flex-col gap-4 text-xs">
+        <AnalysisSection title="Verdict">
+          <div data-storyboard-assessment>
+            <AssessmentDetails a={view.assessment} limit={6} handled={false} />
+          </div>
+          <p className="text-muted-foreground text-[11px]">Predicted from the plan, before rendering.</p>
+        </AnalysisSection>
+        <AnalysisSection title="This video">
+          <p className="text-muted-foreground" data-storyboard-summary>
+            <span className="text-foreground font-medium">
+              {view.platform.label} {view.video}
+            </span>{" "}
+            · {view.source === "plan" ? "planned now" : `run ${view.run}`} · {secs(view.durationMs)} ({clock(view.section.startMs)}–{clock(view.section.endMs)} in the song) · {Math.round(view.bpm)} BPM · {view.shots.length} shots
+            {view.picture ? <span data-storyboard-picture> · pictures: {view.picture.replace(/\+/g, " + ").replace(/^song\b/, "the song's clips")}</span> : null}
+          </p>
+        </AnalysisSection>
+        {lookSection}
+        <AnalysisSection title="Length & ending">
+          <p className="text-muted-foreground">{view.section.reason}</p>
+          {view.decisions.map((d) => (
+            <p key={d} className="text-xs text-sky-200" data-decision>
+              {d}
+              {d.startsWith("Length: you set") ? (
+                <button type="button" data-use-automatic className="text-brand ml-2 underline" disabled={saving} onClick={() => void switchToAutomaticLength(view.platform.name)}>
+                  Use automatic
+                </button>
+              ) : null}
+            </p>
+          ))}
+          {view.loop?.ending ? (
+            <p className="text-xs text-sky-200" data-ending>
+              {view.loop.ending}
+            </p>
+          ) : null}
+          {view.loop && !view.loop.ok ? (
+            <div className="rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs text-amber-100" data-loop-warn>
+              <p className="flex items-start gap-1 font-medium">
+                <AlertTriangle className="mt-0.5 size-3 shrink-0" /> WARN Loop flows: the end does not flow back into the start ({view.loop.problems.join("; ")})
+              </p>
+              {view.loopSuggestions.length ? (
+                <p className="mt-1" data-loop-suggestions>
+                  Target lengths that loop better from this start (Automatic → Target length, on the left, or Make):{" "}
+                  {view.loopSuggestions.map((x) => `${Math.round(x.lengthS)} s (ends ${x.end}${x.line ? ` after ${x.line}` : ""}: ${x.fit})`).join(" · ")}
+                </p>
+              ) : view.source === "plan" ? (
+                <p className="mt-1">No other clean line end within 0.5–1.5x the target loops better from this start: try another section.</p>
+              ) : null}
+            </div>
+          ) : view.loop ? (
+            <p className="text-xs text-emerald-300" data-loop-ok>
+              ↻ Loop flows: the end flows back into the start.
+            </p>
+          ) : null}
+        </AnalysisSection>
+        {view.slots.length || view.anchorsOutside.length || view.anchorWarnings.length || view.notes.length ? (
+          <AnalysisSection title="Clips & warnings">
+            {view.slots.length ? (
+              <p className="rounded-md border border-dashed border-amber-400/60 bg-amber-400/10 p-2 text-amber-100" data-slots>
+                <Anchor className="mr-1 inline size-3" />
+                Needs a clip (drag one from Clips onto the line): {view.slots.map((x) => `line ${x.line} "${x.text}" (was ${x.clip})`).join(" · ")}
+              </p>
+            ) : null}
+          {view.anchorsOutside.length ? (
+            <p className="text-muted-foreground text-xs" data-anchors-outside>
+              <Anchor className="mr-1 inline size-3" />
+              Not in this section: {view.anchorsOutside.map((a) => `line ${a.line} "${a.text}" → ${a.clip}`).join(" · ")}
+            </p>
+          ) : null}
+          {[...view.anchorWarnings, ...view.notes].length ? (
+            <ul className="flex flex-col gap-1 text-xs text-amber-200" data-storyboard-warnings>
+              {[...view.anchorWarnings, ...view.notes].map((w) => (
+                <li key={w} className="flex items-start gap-1">
+                  <AlertTriangle className="mt-0.5 size-3 shrink-0" /> {w}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          </AnalysisSection>
+        ) : null}
+        <AnalysisSection title="How to edit">
+          <p className="text-muted-foreground" data-storyboard-hint>
+            Click a shot to {view.editable ? "edit" : "see"} it · drag a clip from{" "}
+            <button type="button" className="underline underline-offset-2" onClick={() => setPanel("clips")} data-open-clips>
+              Clips
+            </button>{" "}
+            onto a shot or a lyric line · the left menus change the clips, this song, what to make and the look.
+          </p>
+        </AnalysisSection>
+      </div>
+    ) : (
+      <div className="flex flex-col gap-4 text-xs">
+        {lookSection}
+        <p className="text-muted-foreground">No plan yet: the verdict, length and ending come with the first planned video.</p>
+      </div>
+    );
+  // The song header's Analysis chip (a portal into its slot in songs/[id]/page.tsx), with "planning again…".
+  const headerSlot = useSyncExternalStore(noSubscribe, findHeaderSlot, noHeaderSlot);
+  const headerActions = headerSlot
+    ? createPortal(
+        <>
+          {saving || loading ? (
+            <span className="text-brand text-xs" data-replanning>
+              <Loader2 className="mr-1 inline size-3 animate-spin" />
+              planning again…
+            </span>
+          ) : null}
+          <button
+            type="button"
+            data-analysis-chip
+            data-verdict={verdictTone ?? undefined}
+            aria-pressed={panel === "analysis"}
+            onClick={() => setPanel(panel === "analysis" ? null : "analysis")}
+            title={view ? `${VERDICT_TEXT[view.assessment.verdict]}: open the analysis` : "The analysis of the planned video"}
+            className={cn("flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm", panel === "analysis" ? "border-brand text-brand" : "hover:border-foreground/40")}
+          >
+            <span className={cn("size-2 rounded-full", verdictTone === "ready" ? "bg-emerald-400" : verdictTone === "good" ? "bg-amber-300" : verdictTone === "not-ready" ? "bg-red-400" : "bg-muted-foreground")} aria-hidden />
+            Analysis
+          </button>
+        </>,
+        headerSlot,
+      )
+    : null;
+
   // Which video: the plan now (per platform and video) or a past run; Pictures; Plan again.
   const sourceControls = choices?.ready ? (
     <>
@@ -561,6 +710,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
 
   return (
     <div data-storyboard data-shape className="flex min-w-0 items-start gap-4">
+      {headerActions}
       <aside
         data-shape-panel={panel ?? ""}
         data-shape-tools
@@ -573,6 +723,9 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
           </button>
         </div>
         {panelBody}
+        <div hidden={panel !== "analysis"} data-analysis-panel>
+          {analysisBody}
+        </div>
         {tools}
       </aside>
 
@@ -580,44 +733,6 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
         {/* which video, before there is a plan (with a plan these sit in the command bar under the timeline) */}
         {choices?.ready && !(view && props) ? <div className="flex flex-wrap items-center gap-3 text-sm">{sourceControls}</div> : null}
         {error ? <p className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{error}</p> : null}
-
-        {/* the video's lines at the top (2 Nov 2026): which video, its length and section, the verdict and Next; the hint and any clip still needed */}
-        {view && props ? (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1" data-storyboard-head>
-              <p className="text-muted-foreground min-w-0 text-xs" data-storyboard-summary>
-                <span className="text-foreground font-medium">
-                  {view.platform.label} {view.video}
-                </span>{" "}
-                · {view.source === "plan" ? "planned now" : `run ${view.run}`} · {secs(view.durationMs)} ({clock(view.section.startMs)}–{clock(view.section.endMs)} in the song) · {Math.round(view.bpm)} BPM · {view.shots.length} shots
-                {view.picture ? <span data-storyboard-picture> · pictures: {view.picture.replace(/\+/g, " + ").replace(/^song\b/, "the song's clips")}</span> : null}
-                {saving || loading ? (
-                  <span className="text-brand ml-2" data-replanning>
-                    <Loader2 className="mr-1 inline size-3 animate-spin" />
-                    planning again…
-                  </span>
-                ) : null}
-              </p>
-              <p className="text-muted-foreground text-xs" data-storyboard-hint>
-                Click a shot to {view.editable ? "edit" : "see"} it · drag a clip from{" "}
-                <button type="button" className="underline underline-offset-2" onClick={() => setPanel("clips")} data-open-clips>
-                  Clips
-                </button>{" "}
-                onto a shot or a lyric line
-              </p>
-            <div className="ml-auto flex items-center gap-2">
-              <VerdictBadge a={view.assessment} heading="Predicted before rendering" />
-              <Button size="sm" className="h-7" data-next-make onClick={() => goTo("generate")}>
-                Next: Make <ChevronRight />
-              </Button>
-            </div>
-              {view.slots.length ? (
-                <p className="w-full rounded-md border border-dashed border-amber-400/60 bg-amber-400/10 p-2 text-xs text-amber-100" data-slots>
-                  <Anchor className="mr-1 inline size-3" />
-                  Needs a clip (drag one from Clips onto the line): {view.slots.map((x) => `line ${x.line} "${x.text}" (was ${x.clip})`).join(" · ")}
-                </p>
-              ) : null}
-          </div>
-        ) : null}
 
         {/* 1. the viewer */}
         <div ref={viewerBlock} className="flex flex-col items-center gap-2" data-viewer-block>
@@ -797,65 +912,6 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
               </div>
             </div>
             </div>
-            {/* the plan's details, folded (to be slimmed in U2b) */}
-            <details className="group border-t pt-2" data-plan-details>
-              <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-xs">Plan details: the assessment, how the app paced, cut and ended this video</summary>
-              <div className="mt-2 flex flex-col gap-2">
-              <div className="bg-card/60 rounded-lg border p-2" data-storyboard-assessment>
-                <AssessmentDetails a={view.assessment} limit={4} handled={false} />
-              </div>
-              <p className="text-muted-foreground text-xs">{view.section.reason}</p>
-              {view.decisions.map((d) => (
-                <p key={d} className="text-xs text-sky-200" data-decision>
-                  {d}
-                  {d.startsWith("Length: you set") ? (
-                    <button type="button" data-use-automatic className="text-brand ml-2 underline" disabled={saving} onClick={() => void switchToAutomaticLength(view.platform.name)}>
-                      Use automatic
-                    </button>
-                  ) : null}
-                </p>
-              ))}
-              {view.loop?.ending ? (
-                <p className="text-xs text-sky-200" data-ending>
-                  {view.loop.ending}
-                </p>
-              ) : null}
-              {view.loop && !view.loop.ok ? (
-                <div className="rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs text-amber-100" data-loop-warn>
-                  <p className="flex items-start gap-1 font-medium">
-                    <AlertTriangle className="mt-0.5 size-3 shrink-0" /> WARN Loop flows: the end does not flow back into the start ({view.loop.problems.join("; ")})
-                  </p>
-                  {view.loopSuggestions.length ? (
-                    <p className="mt-1" data-loop-suggestions>
-                      Target lengths that loop better from this start (Automatic → Target length, on the left, or Make):{" "}
-                      {view.loopSuggestions.map((x) => `${Math.round(x.lengthS)} s (ends ${x.end}${x.line ? ` after ${x.line}` : ""}: ${x.fit})`).join(" · ")}
-                    </p>
-                  ) : view.source === "plan" ? (
-                    <p className="mt-1">No other clean line end within 0.5–1.5x the target loops better from this start: try another section.</p>
-                  ) : null}
-                </div>
-              ) : view.loop ? (
-                <p className="text-xs text-emerald-300" data-loop-ok>
-                  ↻ Loop flows: the end flows back into the start.
-                </p>
-              ) : null}
-              {view.anchorsOutside.length ? (
-                <p className="text-muted-foreground text-xs" data-anchors-outside>
-                  <Anchor className="mr-1 inline size-3" />
-                  Not in this section: {view.anchorsOutside.map((a) => `line ${a.line} "${a.text}" → ${a.clip}`).join(" · ")}
-                </p>
-              ) : null}
-              {[...view.anchorWarnings, ...view.notes].length ? (
-                <ul className="flex flex-col gap-1 text-xs text-amber-200" data-storyboard-warnings>
-                  {[...view.anchorWarnings, ...view.notes].map((w) => (
-                    <li key={w} className="flex items-start gap-1">
-                      <AlertTriangle className="mt-0.5 size-3 shrink-0" /> {w}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              </div>
-            </details>
           </>
         ) : null}
       </div>
@@ -1412,3 +1468,18 @@ function useViewerHeight(block: RefObject<HTMLDivElement | null>, below: RefObje
   }, [block, below, layout]); // measured again when the rows change (a plan arrives, a panel opens) and on every resize
   return h;
 }
+
+// One section of the Analysis panel: a small heading and its facts.
+function AnalysisSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-1.5" data-analysis-section={title}>
+      <h3 className="text-muted-foreground text-[10px] font-semibold tracking-wider uppercase">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+// The song header's slot for the Analysis chip: found in the page once rendered (none while the server renders).
+const noSubscribe = () => () => {};
+const findHeaderSlot = () => document.getElementById("song-header-actions");
+const noHeaderSlot = () => null;
