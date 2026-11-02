@@ -27,8 +27,8 @@ const presets: Record<string, PlatformPreset> = { ...loaded, reels: { ...loaded.
 const sungAt = (lines: SectionLine[], t: number) => lines.filter((l) => sungStart(l) < t && t < sungEnd(l)).map((l) => l.text);
 const isBar = (beats: Beat[], t: number) => beats.some((b) => b.is_downbeat && Math.abs(b.time_ms - t) < 1);
 
-function sectionFor(name: string, lines: SectionLine[], beats: Beat[], durationMs: number) {
-  const p: PlatformPreset = presets[name];
+function sectionFor(name: string, lines: SectionLine[], beats: Beat[], durationMs: number, preset?: PlatformPreset) {
+  const p: PlatformPreset = preset ?? presets[name];
   const w = sectionWindow(p)!;
   return autoSection(lines, beats, {
     durationMs,
@@ -38,6 +38,7 @@ function sectionFor(name: string, lines: SectionLine[], beats: Beat[], durationM
     shortestMs: w.shortestMs,
     ...(p.length.mode === "target" ? { targetMs: w.targetMs } : {}),
     anchorMode: p.anchor,
+    ...(w.automatic ? { automatic: true } : {}),
   });
 }
 
@@ -157,13 +158,22 @@ describe("hook-first sections", () => {
     isHook: k === 12,
   }));
 
-  it("never starts more than one bar before the hook, even when the line before is still sung", () => {
-    const sung = lines.map((l, k) => (k === 11 ? { ...l, sung_end_ms: 48_400 } : l)); // pre-chorus sung up to the hook
+  it("never starts more than one bar before the hook while a clean bar is in reach", () => {
+    const sung = lines.map((l, k) => (k === 11 ? { ...l, sung_end_ms: 47_000 } : l)); // pre-chorus ends before the bar at 48 s
     const s = sectionFor("reels", sung, beats, 240_000);
     expect(s.start_ms).toBeGreaterThanOrEqual(48_500 - 2150);
     expect(s.start_ms).toBeLessThanOrEqual(48_500);
-    expect(s.cuts).toEqual([{ at: "start", line: 12, text: "Verse line 12", time_ms: s.start_ms }]);
-    expect(s.warnings[0]).toContain('cuts line 12 "Verse line 12" while it is sung');
+    expect(s.cuts).toEqual([]);
+  });
+
+  it("a line sung right into the hook: starts at the bar before that line, not inside it", () => {
+    const sung = lines.map((l, k) => (k === 11 ? { ...l, sung_end_ms: 48_400 } : l)); // pre-chorus sung 44.5-48.4 s, no clean bar before the hook
+    const s = sectionFor("reels", sung, beats, 240_000);
+    expect(s.start_ms).toBe(44_000); // the bar before line 12 (44.5 s)
+    expect(s.cuts.filter((c) => c.at === "start")).toEqual([]);
+    expect(s.endKind).not.toBe("cuts-line");
+    expect(s.reason).toContain('moved back to the bar before line 12 "Verse line 12" so it is not cut');
+    expect(s.warnings.join(" ")).not.toContain("while it is sung");
   });
 
   it("standard keeps its lead-in rule (may start earlier so the pre-chorus is whole)", () => {
@@ -236,3 +246,41 @@ describe("QA: a section that cuts a sung line is WARN, never PASS", () => {
     expect(startsAfterEnd(lines, 6000, 250)).toEqual([]); // sung inside the video: shown
   });
 });
+
+describe("Automatic length (2 Nov 2026): the finished phrase nearest the target, in plain words", () => {
+  const beats = grid(120, 480, 0);
+  // The same song shape as above: clean ends at 24 s and 38 s after the start, nothing in between.
+  const singing: [number, number][] = [[10_500, 33_800], [34_400, 47_800], [48_300, 80_000]];
+  const lines: SectionLine[] = singing.map(([a, b], i) => ({
+    text: i === 0 ? "Hold on to me" : `Line ${i + 1}`,
+    start_ms: a,
+    end_ms: singing[i + 1]?.[0] ?? b + 500,
+    sung_end_ms: b,
+    isHook: i === 0,
+  }));
+  const auto = (seconds: number): PlatformPreset => ({ ...loaded.reels, length: { mode: "target", seconds, tolerance: 0.15, auto: { min: 15, max: 45 } } });
+
+  it("the shipped Reels preset is Automatic: 45 s - 2:00, near 1:30", () => {
+    expect(loaded.reels.length).toEqual({ mode: "target", seconds: 90, tolerance: 0.15, auto: { min: 45, max: 120 } });
+    expect(sectionWindow(loaded.reels)).toMatchObject({ shortestMs: 45_000, hardMaxMs: 120_000, automatic: true });
+  });
+
+  it("picks the nearer of a shorter and a longer finished phrase, and says what it chose (no missed target)", () => {
+    // Target 33 s: 24 s is 9 s away, 38 s only 5 s (just past the +-15% window).
+    const s = sectionFor("reels", lines, beats, 120_000, auto(33));
+    expect(s.end_ms - s.start_ms).toBe(38_000);
+    expect(s.cuts).toEqual([]);
+    expect(s.reason).toContain("automatic length: the finished phrase nearest 33.0 s");
+    expect(s.reason).not.toMatch(/longer than the target|shorter than the target/);
+    expect(s.lengthText).toBe('Length: automatic, 0:38: ends after "Line 2" (the finished phrase nearest 0:33).');
+    expect(s.lengthAdvice).toBeUndefined();
+  });
+
+  it("a typed length that cannot end cleanly near it: one plain line pointing to Automatic", () => {
+    const s = sectionFor("reels", lines, beats, 120_000); // the typed 30 s (no auto)
+    expect(s.end_ms - s.start_ms).toBe(24_000);
+    expect(s.lengthAdvice).toBe(true);
+    expect(s.lengthText).toBe('Length: you set 30 s, but no phrase finishes near it; the video is 0:24 and ends after the chorus line "Hold on to me". Automatic lets the app choose.');
+  });
+});
+

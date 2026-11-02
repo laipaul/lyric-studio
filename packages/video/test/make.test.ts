@@ -734,9 +734,11 @@ describe("platform presets (stand-in renderer)", () => {
         expect(m.props.audio?.fadeOutFrames).toBe(Math.round((ending.kind === "loop" ? preset.fadeOutSeconds : ending.fade_out_s) * 30));
         const length = m.section.end_ms - m.section.start_ms;
         // A song shorter than the platform's window (the 75 s test song on the 90 s Reels preset) runs to its end.
-        if (ending.kind === "song-end" && m.section.reason.includes("the song ends")) expect(length).toBeLessThan(w.minMs);
-        else expect(length).toBeGreaterThanOrEqual(w.minMs);
-        expect(length).toBeLessThanOrEqual(ending.kind === "ring-out" ? w.hardMaxMs : w.maxMs);
+        // Automatic (2 Nov 2026): a finished phrase anywhere in the platform's range, said in plain words.
+        if (ending.kind === "song-end" && m.section.reason.includes("the song ends")) expect(length).toBeLessThan(w.shortestMs);
+        else expect(length).toBeGreaterThanOrEqual(w.automatic ? w.shortestMs : w.minMs);
+        expect(length).toBeLessThanOrEqual(ending.kind === "ring-out" || w.automatic ? w.hardMaxMs : w.maxMs);
+        if (w.automatic) expect((m.settings.length as { text: string }).text).toMatch(/^Length: automatic, \d:\d\d: /);
         expect(readFileSync(v.qaFile, "utf8")).toContain(preset.label);
         // No logo on 9:16 by default (brand.json logo.platforms = ["youtube"]).
         expect(m.props.logo ?? null).toBeNull();

@@ -1,5 +1,5 @@
 {
-  "_help": "Platform presets for pnpm make --platforms. Edit the values; pnpm make checks this file and names any wrong entry. Safe zones are fractions of the frame (0.35 = 35%) covered by the platform's buttons and captions; lyrics stay outside them. lyricsAt: where the lyrics sit inside the usable area (0 = top, 0.5 = middle). length: target = seconds +- tolerance (if no clean line end is in there: up to 25% shorter is preferred, then up to 30% longer), range = min/max/hardMax seconds, full = whole song, loop = min/max seconds. anchor: hook-first = start at most 1 bar before the first hook line; lead-in = one bar before it (earlier if a line is still being sung). endOn: bar = end on a bar start; beat = end on any beat when no bar is clean (bars preferred). showNextLine: the next lyric line waits small underneath (true/false). loops: the platform plays the video in a loop (true for reels, tiktok, shorts): QA \"Loop flows\" and an auto section end that flows back into its start. This file is format only: lyric effects, fonts and colours per platform go in brand.json \"perPlatform\" (or a song's Style tab).",
+  "_help": "Platform presets for pnpm make --platforms. Edit the values; pnpm make checks this file and names any wrong entry. Safe zones are fractions of the frame (0.35 = 35%) covered by the platform's buttons and captions; lyrics stay outside them. lyricsAt: where the lyrics sit inside the usable area (0 = top, 0.5 = middle). length: target = seconds +- tolerance (if no clean line end is in there: up to 25% shorter is preferred, then up to 30% longer; auto = the Automatic length, the default: the app picks the finished phrase nearest seconds anywhere from auto.min to auto.max), range = min/max/hardMax seconds, full = whole song, loop = min/max seconds. anchor: hook-first = start at most 1 bar before the first hook line; lead-in = one bar before it (earlier if a line is still being sung). endOn: bar = end on a bar start; beat = end on any beat when no bar is clean (bars preferred). showNextLine: the next lyric line waits small underneath (true/false). loops: the platform plays the video in a loop (true for reels, tiktok, shorts): QA \"Loop flows\" and an auto section end that flows back into its start. This file is format only: lyric effects, fonts and colours per platform go in brand.json \"perPlatform\" (or a song's Style tab).",
   "platforms": {
     "standard": {
       "label": "Standard (no --platforms)",
@@ -24,7 +24,7 @@
       "aspect": "9:16",
       "layout": "vertical",
       "showNextLine": true,
-      "length": { "mode": "target", "seconds": 90, "tolerance": 0.15 },
+      "length": { "mode": "target", "seconds": 90, "tolerance": 0.15, "auto": { "min": 45, "max": 120 } },
       "anchor": "hook-first",
       "variations": 3,
       "safeZone": { "top": 0.14, "bottom": 0.35, "left": 0, "right": 0.12 },
@@ -42,7 +42,7 @@
       "aspect": "9:16",
       "layout": "vertical",
       "showNextLine": true,
-      "length": { "mode": "target", "seconds": 25, "tolerance": 0.15 },
+      "length": { "mode": "target", "seconds": 25, "tolerance": 0.15, "auto": { "min": 15, "max": 45 } },
       "anchor": "hook-first",
       "endOn": "beat",
       "variations": 3,
@@ -60,7 +60,7 @@
       "aspect": "9:16",
       "layout": "vertical",
       "showNextLine": true,
-      "length": { "mode": "target", "seconds": 50, "tolerance": 0.15 },
+      "length": { "mode": "target", "seconds": 50, "tolerance": 0.15, "auto": { "min": 30, "max": 75 } },
       "anchor": "hook-first",
       "endOn": "beat",
       "variations": 2,

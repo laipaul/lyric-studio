@@ -327,9 +327,9 @@ describe("target length per platform (B3) and effect hints (B6)", () => {
   }, 300_000);
 
   it("a fixed section stays exactly as given; longer than the platform allows -> QA WARN, not trimmed", async () => {
-    const r = await make({ platforms: "tiktok", section: "0:01-0:45" });
+    const r = await make({ platforms: "tiktok", section: "0:01-0:55" });
     const m = readManifest(r.variations[0].manifestFile);
-    expect((m.section.end_ms - m.section.start_ms) / 1000).toBeGreaterThan(40); // not trimmed to 20-25 s
+    expect((m.section.end_ms - m.section.start_ms) / 1000).toBeGreaterThan(50); // not trimmed (TikTok Automatic reaches 45 s)
     const qa = readFileSync(r.variations[0].qaFile, "utf8");
     expect(qa).toMatch(/\[WARN\] Length for the platform/);
     expect(qa).toMatch(/TikTok allows up to \d+ s \(it was not trimmed/);
@@ -355,7 +355,8 @@ describe("target length per platform (B3) and effect hints (B6)", () => {
     expect(d.effects.find((e) => e.name === "glide")!.label).toBe("glide · verses");
     expect(d.brandDefaults).toEqual({ verseEffect: "glide", hookEffect: "karaoke-highlight" });
     expect(d.fields.find((f) => f.field === "length")!.perPlatform!.find((p) => p.platform === "reels")).toMatchObject({ value: 45, source: "song:reels" });
-    expect(d.platforms.find((p) => p.name === "reels")!.presetLength).toBe("90 s");
+    // Automatic (2 Nov 2026): the preset's length is the app's choice within a range, said in plain words.
+    expect(d.platforms.find((p) => p.name === "reels")!).toMatchObject({ presetLength: "automatic (a finished phrase near 1:30, 0:45-2:00)", presetSeconds: 90 });
     const g = generatePanelData(ws, ws.db.select().from(project).where(eq(project.id, id)).get()!);
     expect(g.recipe.lengths).toMatchObject({ reels: 45, tiktok: 20, youtube: null });
     // A default length for every platform still leaves YouTube "whole song" and Canvas "loop".

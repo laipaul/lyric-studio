@@ -47,7 +47,11 @@ describe("presets file", () => {
     expect(presets.canvas).toMatchObject({ width: 1080, height: 1920, lyrics: false, audio: false, available: true });
     expect(presets.tiktok.anchor).toBe("hook-first");
     expect(presets.shorts.anchor).toBe("hook-first");
-    expect(sectionWindow(presets.reels)).toEqual({ minMs: 76_500, maxMs: 103_500, hardMaxMs: 117_000, shortestMs: 67_500, targetMs: 90_000 });
+    // Automatic (2 Nov 2026): the window stays 90 s +-15%; the reach either side is the 45 s - 2:00 range.
+    expect(sectionWindow(presets.reels)).toEqual({ minMs: 76_500, maxMs: 103_500, hardMaxMs: 120_000, shortestMs: 45_000, targetMs: 90_000, automatic: true });
+    expect(presets.reels.length).toMatchObject({ auto: { min: 45, max: 120 } });
+    // A typed length (lengthFor) has no auto: the old 25% shorter / 30% longer reach.
+    expect(sectionWindow({ ...presets.reels, length: { mode: "target", seconds: 90, tolerance: 0.15 } })).toEqual({ minMs: 76_500, maxMs: 103_500, hardMaxMs: 117_000, shortestMs: 67_500, targetMs: 90_000 });
   });
 
   it("is respected: edited values come through", () => {

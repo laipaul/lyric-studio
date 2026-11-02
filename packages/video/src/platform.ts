@@ -14,7 +14,9 @@ export type PlatformPreset = {
   height: number;
   aspect: string; // "9:16" (checked against width/height)
   layout: "vertical" | "youtube" | "canvas";
-  length: { mode: "target"; seconds: number; tolerance: number } | { mode: "range"; min: number; max: number; hardMax: number } | { mode: "full" } | { mode: "loop"; min: number; max: number };
+  // auto: the Automatic length (the default): the app picks the finished phrase nearest the target
+  // anywhere from min to max seconds (a typed length keeps the tight tolerance below).
+  length: { mode: "target"; seconds: number; tolerance: number; auto?: { min: number; max: number } } | { mode: "range"; min: number; max: number; hardMax: number } | { mode: "full" } | { mode: "loop"; min: number; max: number };
   anchor: "lead-in" | "hook-first";
   endOn: "bar" | "beat"; // beat: TikTok/Shorts may end on any beat when no bar is clean (bars preferred) // lead-in: one bar before the first hook (more if a line is still sung); hook-first: at most 1 bar before it
   variations: number;
@@ -92,19 +94,25 @@ export const DEFAULT_LYRIC_AREA = lyricArea(DEFAULT_FORMAT, DEFAULT_SAFE_ZONE);
 // Section length window in ms for a preset. Target presets: aim for target +-tolerance; if no clean
 // line end is in there, prefer one up to 25% shorter (shortest), then up to 30% longer (hardMax).
 // Range presets (standard): min-max, up to hardMax rather than cutting a line.
+// Automatic length (target presets with "auto", 2 Nov 2026): the same tiers, but the shorter and longer
+// reach is the preset's whole automatic range (Reels 45 s - 2:00), and the result is described as the
+// app's choice, never as missing a target.
 export const SHORTER_SHARE = 0.25;
 export const LONGER_SHARE = 0.3;
 
-export function sectionWindow(preset: PlatformPreset): { minMs: number; maxMs: number; hardMaxMs: number; shortestMs: number; targetMs: number } | null {
+export function sectionWindow(preset: PlatformPreset): { minMs: number; maxMs: number; hardMaxMs: number; shortestMs: number; targetMs: number; automatic?: boolean } | null {
   const l = preset.length;
   if (l.mode === "target") {
     const t = l.seconds * 1000;
+    const minMs = Math.round(t * (1 - l.tolerance));
+    const maxMs = Math.round(t * (1 + l.tolerance));
     return {
-      minMs: Math.round(t * (1 - l.tolerance)),
-      maxMs: Math.round(t * (1 + l.tolerance)),
-      hardMaxMs: Math.round(t * (1 + LONGER_SHARE)),
-      shortestMs: Math.round(t * (1 - SHORTER_SHARE)),
+      minMs,
+      maxMs,
+      hardMaxMs: l.auto ? Math.max(maxMs, l.auto.max * 1000) : Math.round(t * (1 + LONGER_SHARE)),
+      shortestMs: l.auto ? Math.min(minMs, l.auto.min * 1000) : Math.round(t * (1 - SHORTER_SHARE)),
       targetMs: t,
+      ...(l.auto ? { automatic: true } : {}),
     };
   }
   if (l.mode === "range") {
@@ -143,6 +151,12 @@ export function parsePresets(json: unknown, file = "presets/platforms.json"): Re
     else if (len.mode === "target") {
       if (!isNum(len.seconds, 3, 600)) errors.push(`${where}: length.seconds must be 3-600`);
       if (!isNum(len.tolerance, 0, 0.5)) errors.push(`${where}: length.tolerance must be 0-0.5 (0.15 = +-15%)`);
+      if (len.auto !== undefined) {
+        const a = len.auto as Record<string, unknown> | null;
+        if (!a || typeof a !== "object" || !isNum(a.min, 3, 600) || !isNum(a.max, 3, 600) || (a.min as number) > (a.max as number)) {
+          errors.push(`${where}: length.auto needs { "min": seconds, "max": seconds } with min <= max`);
+        }
+      }
     } else if (len.mode === "range") {
       if (!isNum(len.min, 3, 600) || !isNum(len.max, 3, 600) || !isNum(len.hardMax, 3, 600) || !((len.min as number) <= (len.max as number) && (len.max as number) <= (len.hardMax as number))) {
         errors.push(`${where}: length range needs min <= max <= hardMax (seconds)`);

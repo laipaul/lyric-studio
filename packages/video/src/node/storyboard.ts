@@ -216,7 +216,7 @@ export async function storyboardRun(ws: Workspace, projectId: string, folder: st
     notes: m.warnings ?? [],
     loop: m.loop && m.loop.checked ? m.loop : null,
     loopSuggestions: [],
-    decisions: [(m.settings.pace as { text?: string } | null | undefined)?.text, (m.settings.transition_plan as { text?: string } | null | undefined)?.text].filter((x): x is string => !!x),
+    decisions: [(m.settings.length as { text?: string } | null | undefined)?.text, (m.settings.pace as { text?: string } | null | undefined)?.text, (m.settings.transition_plan as { text?: string } | null | undefined)?.text].filter((x): x is string => !!x),
     songFile: existsSync(songFile) ? songFile : paths.audio!,
   });
 }

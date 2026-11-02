@@ -67,6 +67,11 @@ async function main() {
     // The bug: type a length, then lock a setting straight away (here the length itself, before it is saved).
     await openPanel(page, "auto");
     await menuItem(page, "length", 'data-per-platform="length"');
+    // Length: Automatic by default (2 Nov 2026), with the range in plain words; "Seconds I choose" shows the box.
+    check((await page.$eval("[data-length-mode='length-reels']", (e: Element) => (e as HTMLSelectElement).value)) === "auto" && !(await page.$("[data-edit='length-reels']")), "Reels length: Automatic by default, no seconds box");
+    const autoHint = await page.$eval("[data-length-mode='length-reels']", (e: Element) => e.parentElement?.textContent ?? "");
+    check(/automatic \(a finished phrase near 1:30, 0:45-2:00\)/.test(autoHint), `the Automatic hint names the range (${autoHint})`);
+    await page.selectOption("[data-length-mode='length-reels']", "seconds");
     await page.fill("[data-edit='length-reels']", "90");
     await menuItem(page, "length", 'data-lock="length"');
     check(!!(await page.$("[data-locked=length]")), "the length's padlock shows at once");

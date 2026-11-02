@@ -178,6 +178,24 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the recipe changed
   }, [replan]);
 
+  // "Use automatic" next to a typed length the app could not end cleanly near: the song's length and this
+  // platform's own go back to Automatic; the page reloads so the tools show it too.
+  async function switchToAutomaticLength(platform: string) {
+    setSaving(true);
+    setError(null);
+    try {
+      for (const body of [{ action: "reset", field: "length" }, { action: "reset", field: "length", platform }]) {
+        const r = await api(`/api/songs/${projectId}/recipe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const d = (await r.json()) as { error?: string };
+        if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
+      }
+      window.location.reload();
+    } catch (e) {
+      setError((e as Error).message);
+      setSaving(false);
+    }
+  }
+
   // One storyboard edit (story order, clip edit, anchor), then the plan again.
   async function edit(body: Record<string, unknown>) {
     if (!source || source.kind !== "plan") return;
@@ -777,6 +795,11 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
               {view.decisions.map((d) => (
                 <p key={d} className="text-xs text-sky-200" data-decision>
                   {d}
+                  {d.startsWith("Length: you set") ? (
+                    <button type="button" data-use-automatic className="text-brand ml-2 underline" disabled={saving} onClick={() => void switchToAutomaticLength(view.platform.name)}>
+                      Use automatic
+                    </button>
+                  ) : null}
                 </p>
               ))}
               {view.loop?.ending ? (

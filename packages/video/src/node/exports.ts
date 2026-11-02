@@ -252,7 +252,7 @@ export function assessInput(m: Manifest): Omit<Parameters<typeof assessVideo>[0]
   const canvas = settings.canvas as { seconds?: number; possible_s?: number; need_clip_s?: number | null } | undefined;
   return {
     shots: (m.props?.shots ?? []).map((s) => ({ start_s: s.start / 30, speed: s.playbackRate, hold: s.holdLastFrame, photo: s.kind === "photo" })),
-    decisions: [text("pace"), text("transition_plan"), text("ending")].filter((x): x is string => !!x),
+    decisions: [text("length"), text("pace"), text("transition_plan"), text("ending")].filter((x): x is string => !!x),
     canvas: canvas?.seconds !== undefined && canvas.possible_s !== undefined ? { seconds: canvas.seconds, possibleS: canvas.possible_s, needClipS: canvas.need_clip_s ?? null } : null,
   };
 }

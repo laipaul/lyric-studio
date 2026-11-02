@@ -103,7 +103,7 @@ export type StyleData = {
   recipeFile: string | null; // workspace-relative song.json
   brandFile: string;
   fields: StyleField[];
-  platforms: { name: string; label: string; presetLength: string; presetVariations: number }[]; // presetLength: "30 s", "45-60 s", "whole song", "loop"
+  platforms: { name: string; label: string; presetLength: string; presetSeconds: number | null; presetVariations: number }[]; // presetLength: "automatic (...)", "30 s", "45-60 s", "whole song", "loop"; presetSeconds: a target preset's seconds
   effects: { name: string; label: string }[]; // label: "glide · verses"
   brandDefaults: { verseEffect: string; hookEffect: string }; // marked "brand default" in the lists
   fonts: StyleFont[];
@@ -124,9 +124,13 @@ function presetsList(): PlatformPreset[] {
   return Object.values(parsePresets(JSON.parse(readFileSync(file, "utf8")), file)).filter((p) => p.available && p.name !== "standard");
 }
 
-// The preset's own length, for "empty = the preset" in the Style tab and Generate.
+const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+
+// The preset's own length, for "empty = the preset" in the Style tab and Generate ("automatic (...)" when
+// the preset has an Automatic range).
 export function presetLengthText(p: Pick<PlatformPreset, "length">): string {
   const l = p.length;
+  if (l.mode === "target" && l.auto) return `automatic (a finished phrase near ${clock(l.seconds)}, ${clock(l.auto.min)}-${clock(l.auto.max)})`;
   return l.mode === "target" ? `${l.seconds} s` : l.mode === "range" ? `${l.min}-${l.max} s` : l.mode === "full" ? "whole song" : "loop";
 }
 
@@ -192,7 +196,7 @@ export function styleData(ws: Workspace, projectId: string): StyleData {
   const catalog = loadFontCatalog(ws.dir);
   plainSongThemeNames(ws); // themes named like their song get "<song> look" (themes.ts)
   const { input, song, recipeFile, brandFile } = recipeInputFor(ws, projectId, catalog);
-  const platforms = presetsList().map((p) => ({ name: p.name, label: SHORT_LABELS[p.name] ?? p.label, presetLength: presetLengthText(p), presetVariations: p.variations }));
+  const platforms = presetsList().map((p) => ({ name: p.name, label: SHORT_LABELS[p.name] ?? p.label, presetLength: presetLengthText(p), presetSeconds: p.length.mode === "target" ? p.length.seconds : null, presetVariations: p.variations }));
   const withLyrics = new Set(presetsList().filter((p) => p.lyrics).map((p) => p.name)); // Canvas has no lyrics, effects or fonts
   const all = resolveRecipe(input);
   const byPlatform = Object.fromEntries(platforms.map((p) => [p.name, resolveRecipe(input, p.name)]));

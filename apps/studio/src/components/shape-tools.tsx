@@ -425,30 +425,8 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
       );
     }
     if (f.field === "length") {
-      const preset = platform ? data.platforms.find((p) => p.name === platform)?.presetLength : "each platform's preset";
-      return (
-        <div className="flex items-center gap-2">
-          <input
-            key={`${key}-${String(value)}`}
-            type="number"
-            min={3}
-            max={600}
-            data-edit={key}
-            className={cn(input, "w-24")}
-            defaultValue={value === null || value === undefined ? "" : String(value)}
-            placeholder="preset"
-           
-            onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-            onBlur={(e) => {
-              const n = e.target.value ? Number(e.target.value) : null;
-              if (n === (value ?? null)) return;
-              if (n === null) act({ action: "reset", field: f.field, platform });
-              else set(n);
-            }}
-          />
-          <Hint text={`s · empty = ${preset}; shapes an "auto" section only`} />
-        </div>
-      );
+      const p = platform ? data.platforms.find((x) => x.name === platform) : undefined;
+      return <LengthField key={`${key}-${String(value)}`} editKey={key} label={`${f.label} ${platform ?? ""}`} value={typeof value === "number" ? value : null} presetText={p ? p.presetLength : "each platform picks a finished phrase within its own range"} suggested={p?.presetSeconds ?? 90} onAuto={() => act({ action: "reset", field: f.field, platform })} onSeconds={(n) => set(n)} />;
     }
     if (f.field === "titleOpening") {
       return (
@@ -1164,6 +1142,52 @@ const RELEASE = ["reels", "tiktok", "shorts", "youtube", "canvas"];
 const TOOL_SECTIONS = ["theme", "song", "make", "auto"] as const;
 
 // A control's explanation: one line (cut with …), the whole text on hover.
+// Length: Automatic (the app picks a finished phrase within the platform's range, the default) or a
+// number of seconds the user types (a target; the app still never cuts a sung line).
+function LengthField({ editKey, label, value, presetText, suggested, onAuto, onSeconds }: { editKey: string; label: string; value: number | null; presetText: string; suggested: number; onAuto: () => void; onSeconds: (n: number) => void }) {
+  const [mode, setMode] = useState<"auto" | "seconds">(value === null ? "auto" : "seconds");
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <select
+        aria-label={label}
+        data-length-mode={editKey}
+        className={select}
+        value={mode}
+        onChange={(e) => {
+          const m = e.target.value as "auto" | "seconds";
+          setMode(m);
+          if (m === "auto" && value !== null) onAuto();
+        }}
+      >
+        <option value="auto">Automatic</option>
+        <option value="seconds">Seconds I choose</option>
+      </select>
+      {mode === "seconds" ? (
+        <input
+          type="number"
+          min={3}
+          max={600}
+          data-edit={editKey}
+          className={cn(input, "w-24")}
+          defaultValue={value ?? ""}
+          placeholder={String(suggested)}
+          autoFocus={value === null}
+          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+          onBlur={(e) => {
+            const n = e.target.value ? Number(e.target.value) : null;
+            if (n === value) return;
+            if (n === null) {
+              setMode("auto");
+              onAuto();
+            } else onSeconds(n);
+          }}
+        />
+      ) : null}
+      <Hint text={mode === "auto" ? `${presetText}; never cuts a sung line` : "s · the app ends on the finished phrase nearest this; never cuts a sung line"} />
+    </div>
+  );
+}
+
 function Hint({ text }: { text: string }) {
   return (
     <span title={text} className="text-muted-foreground min-w-0 max-w-full truncate text-xs">

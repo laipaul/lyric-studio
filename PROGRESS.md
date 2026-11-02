@@ -4,6 +4,23 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Automatic length for Reels, TikTok, Shorts + a clean Reel start ✅ (to verify on the Windows PC)
+- Asked by the user on 2 Nov 2026: a Reel with the 90 s preset came with a remark that 90 s was too
+  short, and there was no way to let the app decide. Also: Familiar Strangers' Reel was "Not ready".
+- **Length: Automatic** (the new default; Shape → Automatic → Length: "Automatic" or "Seconds I choose"):
+  the app ends on the finished phrase nearest the platform's length anywhere in its range (platforms.json
+  length.auto: Reels 0:45-2:00 near 1:30, TikTok 15-45 s near 25 s, Shorts 30-75 s near 50 s; a chorus line
+  first inside +-15%, else the nearer of a shorter or longer finished phrase). The plan and the video say
+  it in plain words ("Length: automatic, 1:48: ends after the chorus line ..."; manifest settings.length),
+  never as a missed target.
+- A typed length is still followed (+-15%, then 25% shorter / 30% longer); when no phrase finishes near
+  it, one plain line says so, with **Use automatic** next to it on the Shape page.
+- **Reel start fix** (Familiar Strangers: "i was never meant to keep." runs straight into the hook, so the
+  start 0.3 s before the hook clipped it): when no bar within one bar of the hook is clean, the start moves
+  back to the bar before that line (at most 2 lines back); the hook comes a little later.
+- Tests: timing-fixes.test.ts (start, Automatic, typed length), platform.test.ts, style.test.ts;
+  e2e style-lock (the Length choice).
+
 ### Song clip order: drag clips into order in Assets ✅ (to verify on the Windows PC)
 - Asked by the user on 2 Nov 2026: upload a batch of clips with any names, then just drag them into order;
   no renaming one by one.
@@ -162,21 +179,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   plainSongThemeNames, tested). A theme you named yourself is never touched.
 - **Look · Content** line at the top of Shape: "Look: theme X [badge] · Content: this song (words, clips, card
   text)"; the theme name opens Theme. The theme's page says a theme is only the look, with links to its songs.
-
-### Themes like Canva: text layouts, moods, livelier tiles ✅ (to verify on the Windows PC)
-- Asked by the user on 1 Nov 2026 ("build all except the Crown").
-- **Text layout** per theme (Edit theme → Text, three small frames): **Centred** (as before), **Lower third**
-  (the lyrics low, the picture open above them), **Big hook** (chorus lines 30 % larger). It goes into the
-  video itself (render, viewer, theme previews alike) and always stays inside each platform's safe zones:
-  Lower third sits at 68 % of the usable area, so even three big lines and the next line clear the TikTok /
-  Reels buttons (tested on every platform). YouTube's cover / stills layouts keep their own placement.
-- **Moods**: tick Romantic, Night, Warm, Minimal, Bright or Moody on a theme's page (kept in theme.json); the
-  mood chips at the top of Themes filter the gallery. No format filter: every theme fits every format.
-- **Tiles**: bigger words, placed like the theme's layout; pointing at a tile plays a tight ~3 s loop of one
-  line (the chorus line with Big hook), starting at once.
-- Tests: text-layout.test.ts (safe zones on every platform, Big hook, the viewer patch, recipe check),
-  readability-make.test.ts (the layout in the planned video), themes.test.ts (moods); browser: themes
-  (mood tick + filter, hover loop), song-stages (Text layout saved in the theme).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

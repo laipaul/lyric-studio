@@ -467,6 +467,8 @@ type SectionChoiceOut = {
   reason: string;
   warnings: string[];
   cuts: SectionCut[]; // sung lines cut at the start or end (QA: WARN)
+  lengthText?: string; // target presets: the length in plain words ("Length: automatic, 1:48: ...")
+  lengthAdvice?: boolean; // a typed length the app could not end cleanly near
 };
 
 function chooseSection(
@@ -484,6 +486,7 @@ function chooseSection(
       leadMs,
       ...(window ? { minMs: window.minMs, maxMs: window.maxMs, hardMaxMs: window.hardMaxMs, shortestMs: window.shortestMs } : {}),
       ...(window && preset!.length.mode === "target" ? { targetMs: window.targetMs } : {}),
+      ...(window?.automatic ? { automatic: true } : {}),
       anchorMode: preset?.anchor ?? "lead-in",
       ...(titleLead ? { titleLead: true } : {}),
       ...(musicStartMs !== undefined ? { musicStartMs } : {}),
@@ -491,7 +494,7 @@ function chooseSection(
       ...(fit ? { loopFit: fit } : {}),
       ...(kept ? { anchorsKept: kept } : {}),
     });
-    return { mode, start_ms: s.start_ms, end_ms: s.end_ms, requested: null, reason: s.reason, warnings: s.warnings, cuts: s.cuts };
+    return { mode, start_ms: s.start_ms, end_ms: s.end_ms, requested: null, reason: s.reason, warnings: s.warnings, cuts: s.cuts, ...(s.lengthText ? { lengthText: s.lengthText } : {}), ...(s.lengthAdvice ? { lengthAdvice: true } : {}) };
   }
   const requested = mode === "full" ? { start_ms: 0, end_ms: durationMs } : parseSection(mode);
   requested.end_ms = Math.min(requested.end_ms, durationMs);
@@ -1572,7 +1575,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
           return {
             spec, props: composed.props, anchors: anchors.length || anchorMissing.length ? { ...(composed.anchors ?? { uses: [], conflicts: [], notes: [] }), missing: anchorMissing } : null,
             loop: loops ? loopResult(composed.props, prepared.clips, { bpm: analysis.bpm, downbeats: downbeatTimes, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers, ending, titleLeadMs: titleLead }) : null,
-            decisions: [pace?.text, composed.transitions?.text, ...(cardNotesBySpec.get(spec.name) ?? [])].filter((x): x is string => !!x),
+            decisions: [chosen.lengthText, pace?.text, composed.transitions?.text, ...(cardNotesBySpec.get(spec.name) ?? [])].filter((x): x is string => !!x),
           };
         }),
         // Loop platforms: target lengths whose end loops well from this start (beat, level, harmony).
@@ -2102,6 +2105,7 @@ function buildManifest(c: {
       pace: c.pace ? { feel: c.pace.feel, words_per_s: c.pace.wordsPerS, verse_bars: c.pace.verseBars, hook_bars: c.pace.hookBars, text: c.pace.text } : null, // automatic pacing
       transition_style: c.options.transitions ?? "auto",
       canvas: c.canvasPlan ? { seconds: c.canvasPlan.seconds, possible_s: c.canvasPlan.possibleS, need_clip_s: c.canvasPlan.needClipS, fallback: c.canvasPlan.fallback, chosen: c.canvasPlan.chosen } : null,
+      length: c.chosen.lengthText ? { text: c.chosen.lengthText, advice: !!c.chosen.lengthAdvice } : null, // the length in plain words (Automatic, or a typed length that moved)
       transition_plan: c.transitionPlan ?? null, // the transition into each shot (cut / dissolve / dip) and why
       readability: c.readability ? { mode: c.readability.mode, backing: c.readability.backing, clips_measured: c.readability.measured, clips_bright: c.readability.bright, text: c.readability.text } : null, // the soft backing behind the lyrics and why
       ending: c.loop && c.loop.checked ? (c.loop.ending ?? null) : null, // Reels / TikTok / Shorts: the ending chosen (tight loop, soft fade, ring-out) and why

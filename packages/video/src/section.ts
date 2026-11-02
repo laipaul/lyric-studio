@@ -8,10 +8,13 @@
 //   Start, "lead-in" (standard): one bar before the anchor line; if the line before it is still being
 //           sung there, the bar before that line (at most 2 lines back).
 //   Start, "hook-first" (Reels, TikTok, Shorts): at most one bar before the hook's first word, so the
-//           hook is heard within ~2.5 s; never earlier.
+//           hook is heard within ~2.5 s; never earlier, unless no bar in reach is clean (a line runs
+//           right into the hook): then the bar before that line appears (at most 2 lines back), the
+//           hook coming later; a clean start beats hitting the hook within 2.5 s.
 //   End:    the first bar after a line's last word, inside the length window (standard: the latest,
 //           45-60 s, up to 65 s rather than cutting; presets: nearest the target +-15%, else the nearest
-//           clean line end up to 25% shorter, else up to 30% longer). Cutting a line is the last resort
+//           clean line end up to 25% shorter, else up to 30% longer; Automatic, the default: the finished
+//           phrase nearest the target anywhere in the platform's range, e.g. Reels 45 s - 2:00). Cutting a line is the last resort
 //           and always gives a warning naming the line.
 //   Loop:   (Reels, TikTok, Shorts loop on the platform) among the clean line ends inside the length
 //           tolerance (chorus lines still first), the one whose last bar flows best into the first bar
@@ -39,6 +42,10 @@ export type AutoSectionOptions = {
   leadMs?: number; // lines appear this much before their stamp (default 250 ms)
   targetMs?: number; // platform presets: prefer the clean end nearest this length (else the latest)
   shortestMs?: number; // presets: a clean end down to this length is preferred over a longer one
+  // Automatic length (the default on Reels, TikTok, Shorts): shortestMs-hardMaxMs is the platform's whole
+  // range, and the end is described as the app's choice ("Length: automatic, 1:48 ..."), never as a
+  // missed target.
+  automatic?: boolean;
   anchorMode?: "lead-in" | "hook-first"; // hook-first: start at most 1 bar before the hook
   // hook-first with the title opening: room for the title before the hook (2 bars, 1 when 2 bars are
   // longer than 5 s); the earliest clean bar in that reach.
@@ -61,6 +68,10 @@ export type SectionChoice = {
   cuts: SectionCut[]; // sung lines cut at the start or the end (empty when both are clean)
   reason: string;
   warnings: string[];
+  // Target presets: the length in plain words ("Length: automatic, 1:48: ends after the chorus line ...");
+  // lengthAdvice: a typed length the app could not end cleanly near (the Shape page offers "Use automatic").
+  lengthText?: string;
+  lengthAdvice?: boolean;
 };
 
 export const SECTION_TARGET = { minMs: 45_000, maxMs: 60_000, hardMaxMs: 65_000 } as const;
@@ -220,7 +231,22 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
     const inReach = downbeats.filter((d) => d <= hookAt && d >= hookAt - leadBars * bar - 150);
     const clean = inReach.filter((d) => isCut(d) < 0);
     start = clean[0] ?? inReach[inReach.length - 1] ?? downbeats.filter((d) => d <= hookAt).pop() ?? 0;
+    // No clean bar in reach: start at the bar before the line that is sung there appears (at most 2
+    // lines back, as the lead-in does). A clean start beats hearing the hook within ~2.5 s. If even
+    // that fails, keep the bar nearest the hook; the cut warning names the line.
+    let candidate = start;
+    let first = -1;
+    for (let steps = 0; !clean.length && steps < 2 && isCut(candidate) >= 0; steps++) {
+      const cut = isCut(candidate);
+      const earlier = downbeats.filter((d) => d <= lines[cut].start_ms - leadMs).pop();
+      if (earlier === undefined || earlier >= candidate) break;
+      first = cut;
+      candidate = earlier;
+    }
+    const movedBack = first >= 0 && isCut(candidate) < 0;
+    if (movedBack) start = candidate;
     startNote = ` (${seconds(hookAt - start)} before the hook)`;
+    if (movedBack) startNote += `; moved back to the bar before line ${first + 1} "${lines[first].text}" so it is not cut`;
   } else {
     const lineStart = lines[anchor.line - 1].start_ms;
     const latest = lineStart - leadMs; // the line must not be on screen before the video starts
@@ -353,7 +379,14 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
       strictPhrases = false; // no finished phrase in reach: any clean line end
       found = ends();
     }
-    const { windowEnd, shorterEnd, longerEnd } = found;
+    const { windowEnd } = found;
+    let { shorterEnd, longerEnd } = found;
+    // Automatic: of a shorter and a longer finished phrase, the one nearer the target (a typed length
+    // keeps preferring the shorter one).
+    if (options.automatic && target && shorterEnd && longerEnd) {
+      if (Math.abs(length(longerEnd) - target) < Math.abs(length(shorterEnd) - target)) shorterEnd = undefined;
+      else longerEnd = undefined;
+    }
     const quietEnd = tier((g) => {
       const pool = g.filter(within(shortestMs, hardMaxMs));
       return pool.length ? (target ? nearest(pool, target) : pool[0]) : undefined;
@@ -366,10 +399,14 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
         : `the first ${windowEnd.unit} after ${describeLine(windowEnd.afterLine)} finishes (no chorus line ends within ${range})`;
     } else if (shorterEnd) {
       [end, endKind] = [shorterEnd.at, "shorter"];
-      endText = `shorter than the target: no clean line end within ${range}; the nearest clean end is the ${shorterEnd.unit} after ${describeLine(shorterEnd.afterLine)}`;
+      endText = options.automatic
+        ? `automatic length: the finished phrase nearest ${seconds(target!)}, the ${shorterEnd.unit} after ${describeLine(shorterEnd.afterLine)}`
+        : `shorter than the target: no clean line end within ${range}; the nearest clean end is the ${shorterEnd.unit} after ${describeLine(shorterEnd.afterLine)}`;
     } else if (longerEnd) {
       [end, endKind] = [longerEnd.at, "extended"];
-      endText = target
+      endText = target && options.automatic
+        ? `automatic length: the finished phrase nearest ${seconds(target)}, the ${longerEnd.unit} after ${describeLine(longerEnd.afterLine)}`
+        : target
         ? `longer than the target: no clean line end within ${range} or up to 25% shorter; the nearest clean end is the ${longerEnd.unit} after ${describeLine(longerEnd.afterLine)}`
         : `no bar within ${range} without cutting a line; extended to the first bar after ${describeLine(longerEnd.afterLine)} finishes`;
     } else if (quietEnd) {
@@ -395,10 +432,35 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
     warnings.push(`The section ${c.at} (${clockText(c.time_ms)}) cuts line ${c.line} "${c.text}" while it is sung; choose a section with --section.`);
   }
 
+  // The length in plain words (target presets): what the app chose, or why a typed length moved.
+  let lengthText: string | undefined;
+  let lengthAdvice = false;
+  if (target) {
+    const clock = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.round((ms % 60_000) / 1000)).padStart(2, "0")}`;
+    const len = clock(end - start);
+    const lineText = (i: number) => `"${lines[i].text.replace(/^\*\s*/, "").trim()}"`;
+    const afterI = lines.reduce((last, _, i) => (ends[i] <= end ? i : last), -1);
+    const ending =
+      endKind === "song-end" ? "the song's own end"
+        : endKind === "cuts-line" ? "inside a sung line (no bar in reach is free of singing)"
+        : endKind === "instrumental" ? "a bar where nothing is sung"
+        : afterI >= 0 ? `ends after ${chorus.has(afterI) ? "the chorus line " : ""}${lineText(afterI)}`
+        : "a clean bar";
+    const moved = endKind === "shorter" || endKind === "extended";
+    if (options.automatic) {
+      lengthText = `Length: automatic, ${len}: ${ending}${moved ? ` (the finished phrase nearest ${clock(target)})` : ""}.`;
+    } else if (moved) {
+      lengthText = `Length: you set ${Math.round(target / 1000)} s, but no phrase finishes near it; the video is ${len} and ${ending}. Automatic lets the app choose.`;
+      lengthAdvice = true;
+    } else {
+      lengthText = `Length: ${len}, near the ${Math.round(target / 1000)} s you set: ${ending}.`;
+    }
+  }
+
   const reason =
     `start ${clockText(start)}: ${anchorText}${startNote}; ` +
     `end ${clockText(end)}: ${endText}; ${seconds(end - start)}${anchorNote}${loopNote}`;
-  return { start_ms: start, end_ms: end, anchor, endKind, reason, warnings, cuts };
+  return { start_ms: start, end_ms: end, anchor, endKind, reason, warnings, cuts, ...(lengthText ? { lengthText } : {}), ...(lengthAdvice ? { lengthAdvice } : {}) };
 }
 
 // Sung lines cut by a section chosen by hand (--section), for the QA check.
