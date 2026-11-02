@@ -10,7 +10,6 @@ import path from "node:path";
 import { absPath, project as projectTable, REPO_ROOT, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
-import { readClipEdits, writeClipEdits } from "./clip-edits";
 import { setVideoMark } from "./exports";
 import type { Manifest } from "./manifest";
 import { readRecipe, resolveRecipe, setField, writeRecipe, type RecipeField } from "./recipe";
@@ -32,7 +31,6 @@ export type ReactionPlan = {
   label: string;
   text: string; // "Next run: …"
   changes: { field: RecipeField; value: unknown }[]; // recipe settings (song.json or brand.json)
-  order?: string[]; // clips.json story order (clip-misfit)
   mark?: boolean; // love: favourite + approved
   scopes: ReactionScope[]; // where it may apply
   none?: string; // nothing to change, and why
@@ -111,16 +109,6 @@ export function planReaction(ws: Workspace, projectId: string, o: { video: strin
       const kept = changes.map((c) => `${c.field} ${String(c.value)}`).join(", ");
       return { ...base, scopes: ["song"], mark: true, changes, text: `Marked favourite and approved${kept ? `; next runs keep this video's choices (${kept})` : "; the song's recipe already makes videos like this one"}.` };
     }
-    case "clip-misfit": {
-      if (!o.clip) throw new Error("Which clip? (choose a shot on the Shape page)");
-      const paths = songPathsById(ws, projectId);
-      const edits = readClipEdits(paths.root);
-      const names = m.clips.map((c) => c.name);
-      const order = edits.order.length ? [...edits.order, ...names.filter((n) => !edits.order.some((x) => x.toLowerCase() === n.toLowerCase())).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))] : [...names].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-      const rest = order.filter((n) => n.toLowerCase() !== o.clip!.toLowerCase());
-      if (rest.length === order.length) throw new Error(`${o.clip} is not one of this video's clips.`);
-      return { ...base, scopes: ["song"], order: [...rest, o.clip], text: `Next run: ${o.clip} moves to the end of the story order, so it comes in later (drag it in the story strip to place it exactly).` };
-    }
   }
 }
 
@@ -152,9 +140,8 @@ export function applyReaction(ws: Workspace, projectId: string, o: { video: stri
       }
     }
     if (plan.changes.length) writeRecipe(paths.recipe, song);
-    if (plan.order) writeClipEdits(paths.root, { ...readClipEdits(paths.root), order: plan.order });
     if (plan.mark) setVideoMark(ws, projectId, o.video, { favourite: true, status: "approved" });
-    applied = plan.changes.length || plan.order ? "this song (song.json)" : "marked";
+    applied = plan.changes.length ? "this song (song.json)" : "marked";
   } else {
     const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
     const artist = p?.artist ?? "Life Lyrics";
@@ -170,6 +157,6 @@ export function applyReaction(ws: Workspace, projectId: string, o: { video: stri
   // The log: what the user said and what changed.
   const dir = path.join(paths.root, STUDIO_DIR);
   mkdirSync(dir, { recursive: true });
-  appendFileSync(path.join(dir, "feedback.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), video: o.video, platform, reaction: o.reaction, clip: o.clip ?? null, scope: o.scope, changes: plan.changes, order: plan.order ?? null, text: plan.text })}\n`);
+  appendFileSync(path.join(dir, "feedback.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), video: o.video, platform, reaction: o.reaction, clip: o.clip ?? null, scope: o.scope, changes: plan.changes, text: plan.text })}\n`);
   return { text: plan.text, applied };
 }

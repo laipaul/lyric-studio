@@ -135,3 +135,25 @@ describe("story order", () => {
     expect(assignClips(plan, clips, 42)).toEqual(assignClips(plan, clips, 42, { order: "shuffle" }));
   });
 });
+
+describe("the user's clip edits stay exact (2 Nov 2026)", () => {
+  const bars = getCutPoints(grid(120, 60), { start_ms: 0, end_ms: 24_000 }, { cutRate: "0.5x" }); // 4 s shots (120 frames)
+  const edited = (extra: Partial<ClipInfo>): ClipInfo[] => [{ id: "a", duration_ms: 20_000, ...extra }];
+  it("a clip that covers the shot at the user's speed plays at exactly that speed, inside in / out", () => {
+    const shots = assignClips(bars, [...edited({ in_ms: 2000, out_ms: 18_000, speed: 0.8 }), { id: "b", duration_ms: 20_000, in_ms: 2000, out_ms: 18_000, speed: 0.8 }], 1, { order: "story" });
+    for (const s of shots) {
+      expect(s.playback_rate).toBe(0.8);
+      expect(s.hold_last_frame).toBe(false);
+      expect(s.clip_start_frame).toBeGreaterThanOrEqual(60);
+      expect(s.clip_start_frame + Math.ceil(s.duration_frames * 0.8)).toBeLessThanOrEqual(540);
+    }
+  });
+  it("a trimmed clip shorter than the shot: the trim is kept (never plays outside in / out); only the speed gives way", () => {
+    const shots = assignClips(bars, edited({ in_ms: 1000, out_ms: 3500 }), 1, { order: "story" }); // 2.5 s usable, 4 s shots
+    for (const s of shots) {
+      expect(s.clip_start_frame).toBe(30);
+      expect(s.playback_rate).toBeLessThan(1);
+      expect(s.clip_start_frame + s.duration_frames * s.playback_rate).toBeLessThanOrEqual(105 + 1e-6);
+    }
+  });
+});

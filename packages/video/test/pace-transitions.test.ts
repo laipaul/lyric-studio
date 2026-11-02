@@ -65,3 +65,20 @@ describe("automatic transitions", () => {
     expect(dipOpacity(120, [{ frame: 100, frames: 16 }])).toBe(0);
   });
 });
+
+describe("pacing prefers normal speed (2 Nov 2026)", () => {
+  const BAR_152 = 1579; // 152 BPM
+  it("Familiar Strangers: calm, 152 BPM, clips of 5.17 s → 3 bars on verses (4.7 s at normal speed), not 4 bars slowed to 0.82x", () => {
+    const p = choosePace({ lines: linesAt(8), barMs: BAR_152, clipMs: [5170, 5170, 5170] });
+    expect(p.verseBars).toBe(3);
+    expect(p.hookBars).toBeLessThanOrEqual(p.verseBars);
+    expect(p.verseBars * BAR_152).toBeLessThanOrEqual(5170);
+  });
+  it("clips long enough (8 s) or photos only: the same result as before the slow-motion penalty", () => {
+    expect(choosePace({ lines: linesAt(8), barMs: BAR_152, clipMs: [8000, 8000] })).toMatchObject({ verseBars: 4, hookBars: 2 });
+    expect(choosePace({ lines: linesAt(8), barMs: BAR_152, clipMs: [] })).toMatchObject({ verseBars: 4, hookBars: 2, clipMs: null });
+  });
+  it("a clip the user slowed counts as longer (its usable length has the speed applied)", () => {
+    expect(choosePace({ lines: linesAt(8), barMs: BAR_152, clipMs: [6500, 6500] }).verseBars).toBe(4); // 5.2 s slowed to 0.8x
+  });
+});

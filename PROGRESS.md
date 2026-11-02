@@ -4,6 +4,27 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Shots: normal speed first, your clip edits kept, no false "held" warning, Omit from the Shot panel ✅ (to verify on the Windows PC)
+- Reported by the user on 2 Nov 2026 (Familiar Strangers Reels: shots 1-4 and 6-9 all "speed 0.82x" and "the clip is
+  too short: its last frame is held for 0.0 s"). Decided: "by default the app should do what it thinks is best; then I
+  cut down parts of each clip and slow down when a scene needs to cover a whole sentence; the creative part should
+  remain once I manipulate the clips"; "I need both options (Omit and Remove) because sometimes I try sequences".
+- Cause: the automatic pacing chose 4-bar shots (6.3 s) for ~5.2 s clips because it allowed clips down to 0.8x, so
+  every clip was stretched to 0.82x and came out one frame short.
+- **Pacing prefers normal speed** (pace.ts SLOW_WEIGHT): a shot longer than the typical clip costs a slow-motion
+  penalty. Familiar Strangers: 3 bars (4.7 s) at full speed instead of 4 bars at 0.82x. A clip you slowed in Edit
+  clip counts as longer, so your slow motion keeps its long shot.
+- **Your edits are kept**: a clip's in / out and speed from Edit clip are played exactly. When a clip you trimmed is
+  shorter than its shot, the Shot panel says so in plain words ("your trimmed clip (2.5 s) is shorter than this
+  4.7 s shot: lengthen it in Edit clip or slow it down there"). Moving the cut to where your clip ends was not done:
+  cuts are fixed before clips are placed (lyric holds, anchors, the loop and dissolves read them); on the backlog.
+- **"held for 0.0 s" gone**: a held last frame is only reported from 0.2 s (HOLD_NOTICE_MS), when it can be seen.
+- **Shot panel: "Omit this clip"** (data-shot-omit) replaces "this clip doesn't fit here" (which moved the clip to the
+  end of your order without asking); the same as the Use / Omit switch: greyed out, keeps its place, Use brings it
+  back. Remove in Assets stays for a clip you have decided against. The clip-misfit reaction is removed.
+- Tests: pace-transitions, shots, storyboard, reactions (video package: 886 pass; make / migrate / render need the
+  network and fail in the cloud before and after); browser tests storyboard, textboard, song-stages pass.
+
 ### Shape: one Analysis chip in the song header, nothing else above the viewer ✅ (to verify on the Windows PC)
 - Asked by the user on 2 Nov 2026 ("still too scattered information, group all these infos into a single tag called
   Analysis where you explain by section"; "I don't need the buttons Ready to post and Make on the top right, they are
@@ -148,16 +169,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   {{facebook}} … (a line whose link is empty disappears). Templates on disk are never changed.
 - Tests: packages/video test/song-links.test.ts; browser: videos-post.e2e.ts (Assets → Post, pick kept).
 
-### Review: one card per platform at the top ✅ (to verify on the Windows PC)
-- Asked by the user on 1 Nov 2026 ("the top titles are confusing; the goal is to see, for a song, what has
-  been built per platform"; the versions below stay as they are: dates, Approve, Post, …).
-- The top of Review → Videos is now one card per platform (the song's own platforms first, then any made):
-  "N versions · M approved · K to check", the latest date, and **Make another** (the former "Try another
-  take"; not for the Canvas). A platform with nothing made yet says so, with **Make**. Clicking a card shows
-  only that platform; clicking again (or "show all") shows every platform.
-- Gone: the All / Reels / … filter chips, the "Try another take" row and the "Review & Post · N to review"
-  line. Favourites only and Show discarded stay, small, on the right.
-
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -174,6 +185,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
 
 ## Backlog (not scheduled yet)
+- **A shot ends where your trimmed clip ends** (2 Nov 2026): when a clip you trimmed in Edit clip is shorter than its shot, move the cut earlier to the last bar (else beat) the clip covers, the next shot starting earlier; needs the cut plan to know the clips (today cuts are fixed first).
 - **Delete a song (cleanup; asked 30 Oct, after the freeze)**: the song card's ⋯ menu -> Delete (asks first), exactly like Collections (the user, 30 Oct):
   like Collections: the folder moves to songs\_removed\<title> (removed <date>), never deleted; its database
   rows hidden; "Removed songs" with Restore; not while it renders.

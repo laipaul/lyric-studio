@@ -8,9 +8,22 @@ import type { LyricVideoProps } from "./props";
 import { RECENT_WINDOW } from "./shots";
 
 export const CHOPPY_RATE = 0.75; // slower than this, a 30 fps clip repeats frames visibly
+export const HOLD_NOTICE_MS = 200; // a held last frame shorter than this cannot be seen: no warning, no hold flag (2 Nov 2026)
 export const BEST_WINDOW_S = 2; // the best moment: the strongest 2 s of a clip
 
-export type StoryClip = { name: string; thumb: string | null; durationMs: number; kind: "video" | "photo"; bestAtS: number | null; bestFrom: "clip editor" | "auto" | null };
+// edit: the user's own in / out or speed (clips.json): usableS = the usable part as played (speed applied), speed = theirs.
+export type StoryClip = { name: string; thumb: string | null; durationMs: number; kind: "video" | "photo"; bestAtS: number | null; bestFrom: "clip editor" | "auto" | null; edit?: { usableS: number; speed: number; trimmed: boolean } };
+
+// The user's own edit of a clip (seconds, as in clips.json), or undefined when it has none. The plan keeps
+// it exactly: a shot never plays outside in / out, and the speed is theirs unless no clip can cover a shot.
+export function clipEdit(durationMs: number, e: { in?: number | null; out?: number | null; speed?: number | null }): StoryClip["edit"] {
+  const trimmed = (e.in ?? 0) > 0 || (e.out !== undefined && e.out !== null && e.out * 1000 < durationMs - 1);
+  const speed = e.speed !== undefined && e.speed !== null && e.speed < 1 ? Math.max(0.5, e.speed) : 1;
+  if (!trimmed && speed === 1) return undefined;
+  const from = Math.max(0, e.in ?? 0) * 1000;
+  const to = e.out !== undefined && e.out !== null ? Math.min(durationMs, e.out * 1000) : durationMs;
+  return { usableS: Math.max(0, to - from) / 1000 / speed, speed, trimmed };
+}
 export type StoryShot = {
   index: number;
   startMs: number; // in the video
@@ -65,9 +78,16 @@ export function storyShots(
     const a = usedAnchors.find((u) => u.shot === i) ?? null;
     // The Reels loop ending: the last shot plays the first clip's frames right before shot 1 (intended).
     const loop = i > 0 && i === shots.length - 1 && ((s.src === shots[0].src && Math.round(s.clipStartFrame + s.duration * s.playbackRate) === shots[0].clipStartFrame) || !!props.loopInto);
+    const heldMs = frameMs(s.duration - shown);
+    const held = shown < s.duration && heldMs >= HOLD_NOTICE_MS; // a frame or two cannot be seen
     const warnings: string[] = [];
     if (s.kind !== "photo" && s.playbackRate < CHOPPY_RATE) warnings.push(`slowed to ${s.playbackRate.toFixed(2)}x: the motion may look choppy (frames repeat)`);
-    if (shown < s.duration) warnings.push(`the clip is too short: its last frame is held for ${s1(frameMs(s.duration - shown))}`);
+    // A clip the user trimmed or slowed: the plan keeps their in / out; when it is shorter than the shot the
+    // planner slows it further (or holds its last frame), so say what creative input fixes it.
+    const edit = clip?.edit;
+    const overridden = !!edit && s.kind !== "photo" && (held || s.playbackRate < edit.speed - 0.005);
+    if (overridden) warnings.push(`your ${edit!.trimmed ? "trimmed" : "slowed"} clip (${s1(edit!.usableS * 1000)}) is shorter than this ${s1(frameMs(s.duration))} shot: lengthen it in Edit clip or slow it down there`);
+    else if (held) warnings.push(`the clip is too short: its last frame is held for ${s1(heldMs)}`);
     for (let back = 1; back <= RECENT_WINDOW && i - back >= 0; back++) {
       if (shots[i - back].src === s.src && !loop) {
         warnings.push(`the same clip as shot ${i - back + 1}, ${s1(frameMs(s.start - shots[i - back].start))} earlier`);
@@ -89,7 +109,7 @@ export function storyShots(
       inS: Math.round(inS * 100) / 100,
       outS: Math.round(outS * 100) / 100,
       speed: s.playbackRate,
-      hold: s.holdLastFrame,
+      hold: s.holdLastFrame && held,
       anchor: a ? { line: a.line, text: a.text } : null,
       dissolve: !!s.dissolve,
       dip: (props.dips ?? []).some((d) => d.frame === s.start),

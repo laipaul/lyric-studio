@@ -9,14 +9,13 @@ export const REACTIONS = {
   "hard-to-read": "lyrics hard to read",
   repetitive: "too repetitive",
   love: "love this one",
-  "clip-misfit": "this clip doesn't fit here",
 } as const;
 export type Reaction = keyof typeof REACTIONS;
 export const LOOP_PLATFORMS = ["reels", "tiktok", "shorts"];
 
-// Which reactions a video offers (ending: loop platforms only; the Canvas has no cuts; "this clip doesn't
-// fit here" is on a shot, in the Storyboard).
+// Which reactions a video offers (ending: loop platforms only; the Canvas has no cuts). "This clip doesn't
+// fit here" is gone (2 Nov 2026): a shot's "Omit this clip" (Shape) does it.
 export function reactionsFor(platform: string): { id: Reaction; label: string }[] {
-  const ids = platform === "canvas" ? (["love"] as Reaction[]) : (Object.keys(REACTIONS) as Reaction[]).filter((r) => r !== "clip-misfit" && (r !== "abrupt-ending" || LOOP_PLATFORMS.includes(platform)));
+  const ids = platform === "canvas" ? (["love"] as Reaction[]) : (Object.keys(REACTIONS) as Reaction[]).filter((r) => r !== "abrupt-ending" || LOOP_PLATFORMS.includes(platform));
   return ids.map((id) => ({ id, label: REACTIONS[id] }));
 }

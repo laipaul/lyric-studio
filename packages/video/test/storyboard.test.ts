@@ -3,7 +3,7 @@
 // clip too close); lines with their anchors; hook sections; the waveform.
 import { describe, expect, it } from "vitest";
 
-import { hookSections, peaks, storyLines, storyShots, type AnchorUse, type ShotProps, type StoryClip } from "../src";
+import { clipEdit, HOLD_NOTICE_MS, hookSections, peaks, storyLines, storyShots, type AnchorUse, type ShotProps, type StoryClip } from "../src";
 
 const shot = (start: number, duration: number, src: string, extra: Partial<ShotProps> = {}): ShotProps => ({
   start, duration, src, clipStartFrame: 0, clipDurationFrames: 300, playbackRate: 1, holdLastFrame: false, ...extra,
@@ -84,5 +84,31 @@ describe("storyboard lines, hooks and waveform", () => {
     const samples = Float32Array.from({ length: 16_000 }, (_, i) => (i < 8000 ? 0.25 : -0.5) * Math.sin(i / 10));
     const w = peaks(samples, 16_000, 0, 1000, 4);
     expect(w.map((v) => Math.round(v * 100) / 100)).toEqual([0.25, 0.25, 0.5, 0.5]);
+  });
+});
+
+describe("held last frame and the user's clip edits (2 Nov 2026)", () => {
+  // 20 clip frames at 1x from frame 0: the clip shows 20 frames (0.67 s).
+  const held = (duration: number, extra: Partial<ShotProps> = {}) => storyShots({ shots: [shot(0, duration, "cache/a.mp4", { clipDurationFrames: 20, holdLastFrame: true, ...extra })], audio: null }, clips, 0, null)[0];
+  it("a hold under 0.2 s is not warned about and not flagged; from 0.2 s it is", () => {
+    expect(HOLD_NOTICE_MS).toBe(200);
+    const tiny = held(20); // exactly covered
+    expect(tiny.warnings).toEqual([]);
+    expect(tiny.hold).toBe(false);
+    const oneFrame = held(21); // one frame short: 33 ms
+    expect(oneFrame.warnings).toEqual([]);
+    expect(oneFrame.hold).toBe(false);
+    const seen = held(26); // 6 frames: 0.2 s
+    expect(seen.hold).toBe(true);
+    expect(seen.warnings).toEqual(["the clip is too short: its last frame is held for 0.2 s"]);
+  });
+  it("a clip the user trimmed that is shorter than its shot: the warning says what creative input fixes it", () => {
+    const edits = new Map([["cache/a.mp4", { ...clip("01_a.mp4"), edit: clipEdit(10_000, { in: 1, out: 3.5 }) }]]);
+    const out = storyShots({ shots: [shot(0, 141, "cache/a.mp4", { clipStartFrame: 30, clipDurationFrames: 300, playbackRate: 0.53 })], audio: null }, edits, 0, null)[0];
+    expect(out.warnings).toContain("your trimmed clip (2.5 s) is shorter than this 4.7 s shot: lengthen it in Edit clip or slow it down there");
+  });
+  it("clipEdit: none for an untouched clip; speed applied to the usable length", () => {
+    expect(clipEdit(10_000, {})).toBeUndefined();
+    expect(clipEdit(10_000, { speed: 0.5 })).toEqual({ usableS: 20, speed: 0.5, trimmed: false });
   });
 });

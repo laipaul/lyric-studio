@@ -1,7 +1,7 @@
 // Reactions (Step C): a keyword on a video says what it would change for the next run, then changes one
 // recipe setting (this song, or every song of the artist); the Videos data carries the assessment and the
 // reactions; "love this one" marks the video; the pace adjustment and readability reach the next plan.
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -9,7 +9,7 @@ import { openWorkspace, seedStylePresets, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { findOrCreateSongProject, makeVideos, readRecipe, songPathsById, songRuns, storyboardPlan, writeRecipe, type RenderOptions } from "../src/node";
-import { applyReaction, planReaction } from "../src/node/reactions";
+import { applyReaction, planReaction, reactionsFor } from "../src/node/reactions";
 import { fakeAlign, ffmpeg, LYRICS, makeClip, makeSong } from "./media-helpers";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-reactions-"));
@@ -85,15 +85,13 @@ describe("reactions", () => {
     expect(brand.perPlatform.youtube?.ending).toBeUndefined();
   });
 
+  it("the old 'clip-misfit' reaction is gone: not offered, and a stale request is refused, not crashed on", () => {
+    expect(reactionsFor("reels").map((r) => r.id)).not.toContain("clip-misfit");
+    expect(() => applyReaction(ws, id, { video, reaction: "clip-misfit" as never, clip: "01_a.mp4", scope: "song" })).toThrow(/Unknown reaction/);
+  });
+
   it("'love this one' marks it favourite and approved", () => {
     applyReaction(ws, id, { video, reaction: "love", scope: "song" });
     expect(songRuns(ws, id)[0].platforms[0].videos[0].mark).toEqual({ favourite: true, status: "approved" });
-  });
-
-  it("'this clip doesn't fit here' moves the clip to the end of the story order", () => {
-    applyReaction(ws, id, { video, reaction: "clip-misfit", clip: "01_a.mp4", scope: "song" });
-    const edits = JSON.parse(readFileSync(path.join(songPathsById(ws, id).root, "clips.json"), "utf8")) as { order: string[] };
-    expect(edits.order.at(-1)).toBe("01_a.mp4");
-    expect(existsSync(song)).toBe(true);
   });
 });

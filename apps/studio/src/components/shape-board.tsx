@@ -388,7 +388,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
             editable={view.editable}
             onEdit={() => setEditing(view.clips.find((c) => c.name === shot.clip)?.name ?? null)}
             onUnanchor={shot.anchor ? () => void edit({ action: "unanchor", line: shot.anchor!.line }) : undefined}
-            onMisfit={view.editable ? () => moveClip(shot.clip, view.clips.length) : undefined}
+            onOmit={view.editable ? () => void edit({ action: "omit", clip: shot.clip, omit: true }) : undefined}
             onClose={closePanel}
           />
         ) : (
@@ -985,7 +985,7 @@ function ShotBlock({
   );
 }
 
-function ShotDetails({ shot: s, editable, onEdit, onUnanchor, onMisfit, onClose }: { shot: StoryShot; editable: boolean; onEdit: () => void; onUnanchor?: () => void; onMisfit?: () => void; onClose: () => void }) {
+function ShotDetails({ shot: s, editable, onEdit, onUnanchor, onOmit, onClose }: { shot: StoryShot; editable: boolean; onEdit: () => void; onUnanchor?: () => void; onOmit?: () => void; onClose: () => void }) {
   return (
     <div className="bg-card border-brand/40 rounded-lg border p-3 text-xs" data-shot-details={s.index + 1}>
       <div className="mb-1 flex items-start gap-2">
@@ -996,16 +996,16 @@ function ShotDetails({ shot: s, editable, onEdit, onUnanchor, onMisfit, onClose 
           <X className="size-4" />
         </button>
       </div>
-      {(editable && s.kind === "video") || onMisfit ? (
+      {(editable && s.kind === "video") || onOmit ? (
         <div className="mb-2 flex flex-wrap gap-2">
           {editable && s.kind === "video" ? (
             <button type="button" data-edit-clip onClick={onEdit} className="hover:bg-accent flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs">
               <Scissors className="size-3" /> Edit clip (in / out, speed, best moment)
             </button>
           ) : null}
-          {onMisfit ? (
-            <button type="button" data-misfit onClick={onMisfit} title="Moves this clip to the end of the story order, so it comes in later; drag it in the clips row to place it exactly" className="hover:bg-accent rounded-md border px-2 py-0.5 text-xs">
-              this clip doesn&apos;t fit here
+          {onOmit ? (
+            <button type="button" data-shot-omit onClick={onOmit} title="Leaves this clip out of the videos (it keeps its place in the story order; Use it again in the clips row) and plans the video again" className="hover:bg-accent rounded-md border px-2 py-0.5 text-xs">
+              Omit this clip
             </button>
           ) : null}
         </div>

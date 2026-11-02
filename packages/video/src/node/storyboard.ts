@@ -16,7 +16,7 @@ import type { LoopResult, LoopSuggestion } from "../loop";
 import { parsePresets } from "../platform";
 import type { LyricVideoProps } from "../props";
 import { clockText } from "../section";
-import { hookSections, peaks, storyLines, storyShots, storyTitleCards, type StoryClip, type StoryLine, type StoryShot } from "../storyboard";
+import { clipEdit, hookSections, peaks, storyLines, storyShots, storyTitleCards, type StoryClip, type StoryLine, type StoryShot } from "../storyboard";
 import { analyzeSong } from "./analysis";
 import { readLoopAudio } from "./audio-check";
 import { bestMoments } from "./best-moment";
@@ -152,7 +152,7 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
   if (!v) throw new Error(`${p.label} has no video ${video}.`);
   notes.push(...p.warnings);
   // The best moments the planner used (the clip editor's, else the strongest 2 s).
-  const clips = new Map<string, StoryClip>(plan.clips.map((c) => [c.path, { name: c.name, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, bestAtS: c.bestMs === null ? null : c.bestMs / 1000, bestFrom: c.bestFrom }]));
+  const clips = new Map<string, StoryClip>(plan.clips.map((c) => [c.path, { name: c.name, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, bestAtS: c.bestMs === null ? null : c.bestMs / 1000, bestFrom: c.bestFrom, edit: clipEdit(c.durationMs, { in: c.inMs === null ? null : c.inMs / 1000, out: c.outMs === null ? null : c.outMs / 1000, speed: c.speed }) }]));
   const startMs = v.props.audio ? frameMs(v.props.audio.startFrame) : plan.section.start_ms;
   // The props' lyric lines with their numbers (the Lyrics tab's), matched by text and time.
   const numbered = v.props.lyrics.map((l) => {
@@ -293,7 +293,7 @@ async function storyClips(
   return new Map(clips.map((c) => {
     const own = editOf(edits, c.name).best;
     const bestAtS = c.kind !== "video" ? null : (own ?? auto.get(c.file) ?? null);
-    return [c.src, { name: c.name, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, bestAtS, bestFrom: bestAtS === null ? null : own !== undefined ? "clip editor" : "auto" }];
+    return [c.src, { name: c.name, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, bestAtS, bestFrom: bestAtS === null ? null : own !== undefined ? "clip editor" : "auto", edit: c.kind === "video" ? clipEdit(c.durationMs, editOf(edits, c.name)) : undefined }];
   }));
 }
 
