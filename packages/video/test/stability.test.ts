@@ -80,7 +80,7 @@ describe("Replaced files: listed with what they were, and Restore", () => {
     // The song back: the v2 file goes to Replaced files; the identical kept copy is not kept twice.
     const song = list.find((f) => f.role === "song")!;
     await restoreReplacedFile(ws, r.id, song.file);
-    expect(path.basename(paths().audio)).toBe("Keep Me.wav");
+    expect(path.basename(paths().audio!)).toBe("Keep Me.wav");
     const after = songReplacedFiles(ws, r.id);
     expect(after.some((f) => f.file === song.file)).toBe(false);
     expect(after.find((f) => f.original === "Keep Me (v2).wav")?.role).toBe("song");

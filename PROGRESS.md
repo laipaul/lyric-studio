@@ -4,6 +4,16 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Song clip order: drag clips into order in Assets ✅ (to verify on the Windows PC)
+- Asked by the user on 2 Nov 2026: upload a batch of clips with any names, then just drag them into order;
+  no renaming one by one.
+- Assets shows the song's clips numbered in the song's clip order (clips.json "order", the same sequence
+  Shape's Clips strip shows and Make uses); drag one onto another to reorder, saved at once.
+- New clips go at the end, sorted by file name among themselves (clips named 01_, 02_ keep that order);
+  "Sort by file name" puts the whole song in file-name order; Remove takes a clip out of the order,
+  Restore puts it back at the end. Collection clips keep their places in the order.
+- Tests: clip-order.test.ts, song-folders.test.ts (Assets order).
+
 ### Stability pass: no quiet choices, nothing replaced without a way back ✅ (to verify on the Windows PC)
 - Asked by the user on 1 Nov 2026 after the evening's bugs (a song taken over, a collection never ticked, a
   Reel cut on a comma): the app must not "help" without saying so.

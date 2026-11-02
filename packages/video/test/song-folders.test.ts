@@ -30,6 +30,8 @@ import {
   resolveMoved,
   resolveRecipe,
   saveToSong,
+  setSongClipOrder,
+  readClipEdits,
   songAssets,
   songFolderFor,
   songPaths,
@@ -325,6 +327,27 @@ describe("the Assets tab", () => {
     expect(a.removed).toEqual(["01_own-2.mp4"]);
     expect(a.clips.map((c) => c.name)).not.toContain("01_own-2.mp4");
     await expect(removeSongClip(ws, projectId(), "../song.wav")).rejects.toThrow(/No clip/);
+  });
+
+  it("the clip order: Assets shows it, drag sets it (clips.json), new clips go at the end by name, Remove takes a clip out", async () => {
+    const names = async () => (await songAssets(ws, projectId())).clips.map((c) => c.name);
+    const now = await names();
+    const reversed = [...now].reverse();
+    expect(setSongClipOrder(ws, projectId(), reversed)).toEqual(reversed);
+    expect(await names()).toEqual(reversed);
+    expect(readClipEdits(folder()).order.filter((n) => now.includes(n))).toEqual(reversed);
+    expect(() => setSongClipOrder(ws, projectId(), ["nope.mp4"])).toThrow(/Not in this song's clips/);
+    const drop = path.join(root, "drop-order");
+    mkdirSync(drop, { recursive: true });
+    makeClip(path.join(drop, "b.mp4"), 2, "red");
+    makeClip(path.join(drop, "a.mp4"), 2, "white");
+    await importSongClips(ws, projectId(), [{ file: path.join(drop, "b.mp4"), name: "zz_b.mp4" }, { file: path.join(drop, "a.mp4"), name: "zz_a.mp4" }]);
+    expect(await names()).toEqual([...reversed, "zz_a.mp4", "zz_b.mp4"]);
+    await removeSongClip(ws, projectId(), "zz_a.mp4");
+    expect(await names()).toEqual([...reversed, "zz_b.mp4"]);
+    expect(readClipEdits(folder()).order).not.toContain("zz_a.mp4");
+    await removeSongClip(ws, projectId(), "zz_b.mp4");
+    setSongClipOrder(ws, projectId(), now); // back as it was for the next tests
   });
 
   it("replacing lyrics, cover or hints keeps the old file in .studio\\replaced\\", async () => {

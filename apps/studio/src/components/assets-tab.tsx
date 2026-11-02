@@ -32,7 +32,8 @@ function replaceWarning(kind: AssetKind, current: string, next: string): string 
 
 // The song's files: song, vocal stem, backing vocals, lyrics, cover, hints.lrc (each under the user's own
 // file name; the roles are linked in .studio\files.json) and its own clips (drop videos and photos;
-// Remove moves a clip to clips\_removed\, nothing is deleted). Files put into the folder by hand that
+// Remove moves a clip to clips\_removed\, nothing is deleted), shown in the song's clip order: drag to
+// reorder (clips.json, the one sequence Shape and Make use; new clips go at the end). Files put into the folder by hand that
 // the app cannot place are asked about once: "What is this file?".
 export function AssetsTab({ projectId }: { projectId: string }) {
   const [data, setData] = useState<SongAssets | null>(null);
@@ -189,6 +190,43 @@ export function AssetsTab({ projectId }: { projectId: string }) {
     setNotice(r.ok ? { ok: true, text: `Opened ${d.folder} in Explorer.` } : { ok: false, text: d.error ?? "Could not open the folder." });
   }
 
+  // Drag and drop: the song's clips in a new order (clips.json). Shape shows and Make uses this sequence.
+  const CLIP_DRAG = "application/x-lyric-song-clip";
+  const [dragClip, setDragClip] = useState<string | null>(null);
+  const [overClip, setOverClip] = useState<string | null>(null);
+  async function saveOrder(names: string[], done: string) {
+    if (!data) return;
+    const before = data;
+    setData({ ...data, clips: names.map((n) => data.clips.find((c) => c.name === n)!) });
+    try {
+      const r = await api(`/api/songs/${projectId}/assets`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ order: names }) });
+      const d = (await r.json()) as { error?: string };
+      if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
+      setNotice({ ok: true, text: done });
+      router.refresh();
+    } catch (e) {
+      setData(before);
+      setNotice({ ok: false, text: `The order was not saved: ${(e as Error).message}` });
+    }
+  }
+  // For clips already named in order (01_..., 02_...): one click puts them in file-name order.
+  function sortByName() {
+    if (!data) return;
+    if (!window.confirm("Put the clips in file-name order? This replaces the order you dragged.")) return;
+    const names = data.clips.map((c) => c.name).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+    void saveOrder(names, "The clips are in file-name order. Shape and Make use this order.");
+  }
+  async function moveClip(name: string, onto: string) {
+    if (!data || name === onto) return;
+    const names = data.clips.map((c) => c.name);
+    const from = names.indexOf(name);
+    const to = names.indexOf(onto);
+    if (from < 0 || to < 0) return;
+    names.splice(from, 1);
+    names.splice(to, 0, name); // takes the place of the clip it was dropped on
+    await saveOrder(names, `${name} is now clip ${to + 1}. Shape and Make use this order.`);
+  }
+
   async function remove(name: string) {
     if (!window.confirm(`Move ${name} to clips\\_removed\\? It is not deleted; you can put it back from that folder.`)) return;
     const r = (await send(null, "DELETE", `?name=${encodeURIComponent(name)}`)) as { movedTo: string } | null;
@@ -316,6 +354,12 @@ export function AssetsTab({ projectId }: { projectId: string }) {
               {data.clips.length} in this song&apos;s clips folder · 9:16 platforms can use {data.usable.vertical} · YouTube (16:9) can use {data.usable.horizontal}
               {" "}· shared collections are chosen in Generate
             </p>
+            {data.clips.length > 1 ? <p data-order-hint className="text-muted-foreground text-xs">
+                Drag the clips into the order you want: Shape starts from it and Make uses it. New clips go at the end, by file name.{" "}
+                <button type="button" data-sort-by-name disabled={busy} onClick={sortByName} className="hover:text-foreground underline underline-offset-2">
+                  Sort by file name
+                </button>
+              </p> : null}
           </div>
           <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => clipInput.current?.click()}>
             <Upload /> Add clips
@@ -325,11 +369,13 @@ export function AssetsTab({ projectId }: { projectId: string }) {
         <div
           data-dropzone
           onDragOver={(e) => {
+            if (!e.dataTransfer.types.includes("Files")) return; // a clip being moved, not files
             e.preventDefault();
             setDragging(true);
           }}
           onDragLeave={() => setDragging(false)}
           onDrop={(e) => {
+            if (!e.dataTransfer.types.includes("Files")) return;
             e.preventDefault();
             setDragging(false);
             addClips(e.dataTransfer.files);
@@ -338,14 +384,45 @@ export function AssetsTab({ projectId }: { projectId: string }) {
         >
           {data.clips.length ? (
             <ul className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
-              {data.clips.map((c) => (
-                <li key={c.name} data-clip={c.name} className="bg-card flex flex-col overflow-hidden rounded-lg border">
+              {data.clips.map((c, i) => (
+                <li
+                  key={c.name}
+                  data-clip={c.name}
+                  data-position={i + 1}
+                  draggable={!busy}
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData(CLIP_DRAG, c.name);
+                    e.dataTransfer.effectAllowed = "move";
+                    setDragClip(c.name);
+                  }}
+                  onDragEnd={() => {
+                    setDragClip(null);
+                    setOverClip(null);
+                  }}
+                  onDragOver={(e) => {
+                    if (!e.dataTransfer.types.includes(CLIP_DRAG)) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    if (overClip !== c.name) setOverClip(c.name);
+                  }}
+                  onDrop={(e) => {
+                    const name = e.dataTransfer.getData(CLIP_DRAG);
+                    if (!name) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDragClip(null);
+                    setOverClip(null);
+                    void moveClip(name, c.name);
+                  }}
+                  className={cn("bg-card flex cursor-grab flex-col overflow-hidden rounded-lg border active:cursor-grabbing", dragClip === c.name && "opacity-40", overClip === c.name && dragClip !== c.name && "border-brand ring-brand ring-2")}
+                >
                   <div className="relative aspect-[9/12] bg-black">
                     {c.thumb ? (
                       // eslint-disable-next-line @next/next/no-img-element -- a local thumbnail served by /api/files
-                      <img src={`/api/files/${c.thumb}`} alt="" className="size-full object-contain" />
+                      <img src={`/api/files/${c.thumb}`} alt="" draggable={false} className="size-full object-contain" />
                     ) : null}
-                    <span className="absolute top-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] tracking-wide uppercase">{c.orientation}</span>
+                    <span data-order-number className="bg-brand text-brand-foreground absolute top-1.5 left-1.5 flex size-6 items-center justify-center rounded-full text-xs font-semibold">{i + 1}</span>
+                    <span className="absolute top-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] tracking-wide uppercase">{c.orientation}</span>
                   </div>
                   <div className="flex flex-col gap-0.5 p-2 text-xs">
                     <p className="truncate font-medium" title={c.name}>

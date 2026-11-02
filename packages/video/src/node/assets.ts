@@ -10,6 +10,7 @@ import { eq } from "drizzle-orm";
 
 import { isHandTimeLine } from "../hand-times";
 import { HOOK_MARKER, normalizeLyric } from "../lrc";
+import { inClipOrder, readClipEdits, saveSongClipOrder } from "./clip-edits";
 import { cachedFileHash, SOURCE_FILE, syncCollection } from "./collection";
 import { keepReplaced, placeRoleFile, storeCover, storeLyricsTxt } from "./project-settings";
 import { isRemovedSong, isWavFile, moveEntry, songPathsById } from "./song-folder";
@@ -92,7 +93,36 @@ export async function songAssets(ws: Workspace, projectId: string, options: { ch
   out.unassigned = recognized.unassigned;
   if (!paths.clips) return out;
   const { hashes: _hashes, ...listed } = await folderClips(ws, paths.clips, songClipsCollection(projectId));
+  // The song's clip order (clips.json): the same sequence Shape shows and Make uses.
+  const order = inClipOrder(readClipEdits(paths.root), listed.clips.map((c) => c.name));
+  listed.clips.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
   return { ...out, ...listed };
+}
+
+// The clip files in a song's clips\ folder.
+function songClipFiles(folder: string): string[] {
+  if (!existsSync(folder)) return [];
+  return readdirSync(folder).filter((f) => SOURCE_FILE.test(f) && statSync(path.join(folder, f)).isFile());
+}
+
+// Assets → drag and drop: the song's own clips in a new order (saved in clips.json; Shape and Make use it).
+export function setSongClipOrder(ws: Workspace, projectId: string, order: unknown): string[] {
+  const paths = songPathsById(ws, projectId);
+  if (!paths.clips) throw new Error("This song has no folder yet.");
+  if (!Array.isArray(order) || !order.every((x) => typeof x === "string" && x.trim())) throw new Error("The clip order must be a list of clip file names.");
+  const files = songClipFiles(paths.clips);
+  const missing = order.filter((n) => !files.some((f) => f.toLowerCase() === n.toLowerCase()));
+  if (missing.length) throw new Error(`Not in this song's clips: ${missing.join(", ")}. Reload the page and try again.`);
+  const edits = saveSongClipOrder(paths.root, files, order);
+  return inClipOrder(edits, files);
+}
+
+// After clips were added, removed or restored: `last` go at the end of the order, `forget` leave it.
+function keepSongClipOrder(songRoot: string, folder: string, change: { last?: readonly string[]; forget?: readonly string[] }): void {
+  const files = songClipFiles(folder);
+  const last = (change.last ?? []).filter((n) => files.includes(n));
+  const before = inClipOrder(readClipEdits(songRoot), files.filter((f) => !last.includes(f)));
+  saveSongClipOrder(songRoot, files, [...before, ...last], { forget: change.forget });
 }
 
 // The clips of a folder (a song's clips\ or a shared collection): synced with the database on the way
@@ -182,7 +212,12 @@ export type ImportResult = { added: string[]; duplicates: { name: string; sameAs
 export async function importSongClips(ws: Workspace, projectId: string, files: readonly { file: string; name: string }[]): Promise<ImportResult> {
   const paths = songPathsById(ws, projectId);
   if (!paths.clips) throw new Error("This song has no folder yet: run the migration first (pnpm songs:migrate).");
-  return importClipsInto(ws, paths.clips, songClipsCollection(projectId), files);
+  const result = await importClipsInto(ws, paths.clips, songClipsCollection(projectId), files);
+  // New clips go at the end of the order, sorted among themselves by file name (clips named "01_...",
+  // "02_..." keep that order; any other names can simply be dragged into place).
+  const byName = [...result.added].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+  if (result.added.length) keepSongClipOrder(paths.root, paths.clips, { last: byName });
+  return result;
 }
 
 // Files copied into a clip folder (a free name when one is taken); content already there is not copied.
@@ -225,14 +260,18 @@ export async function importClipsInto(ws: Workspace, folder: string, collectionN
 export async function removeSongClip(ws: Workspace, projectId: string, name: string): Promise<string> {
   const paths = songPathsById(ws, projectId);
   if (!paths.clips) throw new Error("This song has no folder yet.");
-  return removeClipFrom(ws, paths.clips, name, "this song");
+  const moved = await removeClipFrom(ws, paths.clips, name, "this song");
+  keepSongClipOrder(paths.root, paths.clips, { forget: [name] });
+  return moved;
 }
 
 // Assets → Removed → Restore: a clip of this song back from clips\_removed\.
 export function restoreSongClip(ws: Workspace, projectId: string, name: string): string {
   const paths = songPathsById(ws, projectId);
   if (!paths.clips) throw new Error("This song has no folder yet.");
-  return restoreClipTo(ws, paths.clips, name);
+  const restored = restoreClipTo(ws, paths.clips, name);
+  keepSongClipOrder(paths.root, paths.clips, { last: [path.basename(restored)] }); // back at the end of the order
+  return restored;
 }
 
 // A clip of a folder moves to its _removed\ (never deleted).

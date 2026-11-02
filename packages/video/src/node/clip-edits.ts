@@ -78,3 +78,43 @@ export function rankOf(edits: ClipEdits, name: string): number | undefined {
 export function editOf(edits: ClipEdits, name: string): ClipEdit {
   return Object.entries(edits.clips).find(([n]) => n.toLowerCase() === name.toLowerCase())?.[1] ?? {};
 }
+
+// ---- The song's clip order, one sequence for Assets, Shape and Make (2 Nov 2026) ----
+// clips.json "order" may also hold shared-collection clips (Shape's strip shows both); the Assets tab
+// only moves the song's own clips, inside the places they already hold, so collection clips keep theirs.
+const byFileName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+
+// Names in the song's order: the listed ones first (as listed), then the others by file name.
+export function inClipOrder(edits: ClipEdits, names: readonly string[]): string[] {
+  return [...names].sort((a, b) => (rankOf(edits, a) ?? Infinity) - (rankOf(edits, b) ?? Infinity) || byFileName(a, b));
+}
+
+// The full order with the song's own clips put in `songOrder`: they take the places song clips already
+// hold, in the new sequence; song clips with no place yet go at the end. Other names (collection clips,
+// or a clip removed from the folder) stay where they are.
+export function withSongOrder(edits: ClipEdits, songClips: readonly string[], songOrder: readonly string[]): ClipEdits {
+  const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+  const isSong = (n: string) => songClips.some((c) => same(c, n));
+  const next = songOrder.filter(isSong).filter((n, i, all) => all.findIndex((x) => same(x, n)) === i);
+  for (const c of inClipOrder(edits, songClips)) if (!next.some((n) => same(n, c))) next.push(c); // never drop a clip
+  const queue = [...next];
+  const order: string[] = [];
+  for (const n of edits.order) {
+    if (!isSong(n)) order.push(n);
+    else {
+      const take = queue.shift();
+      if (take) order.push(take);
+    }
+  }
+  order.push(...queue);
+  return { ...edits, order };
+}
+
+// Saves the song clips' order (Assets drag and drop, new clips at the end, Remove / Restore). `forget`:
+// names taken out of the order (a removed clip).
+export function saveSongClipOrder(songRoot: string, songClips: readonly string[], songOrder: readonly string[], options: { forget?: readonly string[] } = {}): ClipEdits {
+  const edits = readClipEdits(songRoot);
+  const forget = (options.forget ?? []).map((f) => f.toLowerCase());
+  const kept = { ...edits, order: edits.order.filter((n) => !forget.includes(n.toLowerCase())) };
+  return writeClipEdits(songRoot, withSongOrder(kept, songClips, songOrder));
+}
