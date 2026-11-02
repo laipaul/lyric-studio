@@ -227,23 +227,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
             ) : null}
             <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
               <span>Story anchors: {data.anchors.list.length} line(s) land on a chosen clip.</span>
-              <label className="flex items-center gap-1">
-                Gaps between them:
-                <select
-                  className="bg-background rounded-md border px-1.5 py-0.5"
-                  value={data.anchors.gapOrder ?? ""}
-                  disabled={busy}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    void saveAnchor(-1, null, v === "story" || v === "shuffle" ? v : null);
-                  }}
-                  data-gap-order
-                >
-                  <option value="">{data.anchors.list.length ? "story order (default with anchors)" : "default (v1 story, the others shuffled)"}</option>
-                  <option value="story">story order in every video (file-name order)</option>
-                  <option value="shuffle">shuffled (v1 story, the others shuffled)</option>
-                </select>
-              </label>
+              <span>The other shots follow the song&apos;s clip order (Assets or Shape) in every video.</span>
               {!data.anchors.clips.length ? <span className="text-amber-200">No clips to choose from: add clips in the Assets tab or choose a collection in Generate.</span> : null}
             </div>
             {!data.checkRan ? <p className="text-muted-foreground text-xs">The vocal-start check runs when a video is made (Generate, or pnpm make); its verdicts show here after the next video.</p> : null}

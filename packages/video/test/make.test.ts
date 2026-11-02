@@ -362,7 +362,7 @@ describe("pnpm make + pnpm rerender (real renders)", () => {
 
   it("the manifest holds clips with hashes, cuts, lyric timings with lead and offset, fonts and settings", () => {
     const m = readManifest(result.variations[1].manifestFile);
-    expect(m.variation).toMatchObject({ name: "v2", order: "shuffle", seed: 2, style: "Bold", cinematic_bars: true });
+    expect(m.variation).toMatchObject({ name: "v2", order: "story", seed: 2, style: "Bold", cinematic_bars: true }); // no shuffle since 2 Nov 2026
     expect(m.section).toMatchObject({ mode: "0:02-0:09" });
     expect(m.cuts.frames).toEqual(m.props.cutFrames);
     expect(m.shots.map((s) => s.start_frame)).toEqual(m.props.shots.map((s) => s.start));
@@ -463,7 +463,7 @@ describe("pnpm make + pnpm rerender (real renders)", () => {
       expect([m1.settings.transitions, m2.settings.transitions]).toEqual(["as-set", "dissolve"]);
       expect(m1.props.shots.some((s) => s.dissolve)).toBe(true);
       expect(logs.some((l) => /anchor line 4 "Verse two here" -> 10_sun\.mp4: at 0:04\.\d \(dissolve\)/.test(l))).toBe(true);
-      expect(logs).toContain("standard: gap order story (the song has anchors): every video in file-name order; they differ by style, cut rate and cut / dissolve");
+      expect(logs).toContain("standard: every video in the song's clip order; they differ by style, cut rate and cut / dissolve");
       const qa = readFileSync(made.variations[0].qaFile, "utf8");
       expect(qa).toMatch(/Story anchors/);
       expect(qa).toContain("not in this section: line 1 (01_sea.mp4)");

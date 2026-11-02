@@ -12,7 +12,12 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - New clips go at the end, sorted by file name among themselves (clips named 01_, 02_ keep that order);
   "Sort by file name" puts the whole song in file-name order; Remove takes a clip out of the order,
   Restore puts it back at the end. Collection clips keep their places in the order.
-- Tests: clip-order.test.ts, song-folders.test.ts (Assets order).
+- Then (user's decision, same day): **no more shuffle**: every video of a run follows the order (they differ
+  by style, pace and cut / dissolve; the Lyrics tab's gap-order choice is gone). **Use / Omit** on each clip,
+  in Assets and Shape → Clips (clips.json "omit"): an omitted clip keeps its place and Make leaves it out;
+  an anchor on it becomes "needs a clip"; every clip omitted says so. Shape's reorder keeps the clips it
+  cannot show (other orientation) in their places, so Assets and Shape stay one sequence.
+- Tests: clip-order.test.ts, song-folders.test.ts (Assets order, Use / Omit, no shuffle).
 
 ### Stability pass: no quiet choices, nothing replaced without a way back ✅ (to verify on the Windows PC)
 - Asked by the user on 1 Nov 2026 after the evening's bugs (a song taken over, a collection never ticked, a

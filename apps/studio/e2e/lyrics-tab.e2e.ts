@@ -147,9 +147,7 @@ async function main() {
     await page.click("[data-line='2'] [data-anchor-remove]");
     await page.waitForFunction(() => !document.querySelector("[data-line='2'] [data-anchor]"));
     check(recipe().anchors?.length === 1, "Remove takes it out of song.json");
-    await page.selectOption("[data-gap-order]", "shuffle");
-    await page.waitForFunction(() => document.querySelector("[role=status]")?.textContent?.includes("Gap order: shuffle"));
-    check(recipe().gapOrder === "shuffle" && recipe().anchors?.length === 1, "the gap order is saved (the anchors kept)");
+    check((await page.locator("[data-gap-order]").count()) === 0, "no shuffle choice: every video follows the song's clip order (2 Nov 2026)");
 
     // lyrics.txt: a label line is flagged, removed (words change: the warning first), then undone.
     await page.fill("[data-lyrics-editor]", "[Chorus]\nThe verse line\n* You had a heart for two\nNext verse\n");

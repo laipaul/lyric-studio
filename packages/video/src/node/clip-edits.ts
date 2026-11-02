@@ -5,13 +5,15 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-export type ClipEdit = { in?: number; out?: number; speed?: number; best?: number; transition?: "cut" | "dissolve" }; // transition: how this clip comes in (absent: the app chooses)
+// transition: how this clip comes in (absent: the app chooses). omit: the user set the clip to Omit (Assets
+// or Shape): it keeps its place in the order but Make does not use it.
+export type ClipEdit = { in?: number; out?: number; speed?: number; best?: number; transition?: "cut" | "dissolve"; omit?: true };
 export type ClipEdits = { order: string[]; clips: Record<string, ClipEdit> };
 export const CLIP_EDITS_FILE = "clips.json";
 
 const HELP =
   'The story order and clip edits of this song (the Storyboard tab writes it). "order": clip file names in the story order ' +
-  "(clips not listed follow in file-name order). \"clips\": per clip \"in\" / \"out\" (the part used, seconds), \"speed\" (0.5-1, slow motion) and " +
+  "(clips not listed follow in file-name order). \"clips\": per clip \"omit\": true (set to Omit: not used by Make), \"in\" / \"out\" (the part used, seconds), \"speed\" (0.5-1, slow motion) and " +
   '"best" (the best moment, seconds; wins over the automatic one) and "transition" ("cut" or "dissolve": how the clip comes in; left out, the app chooses).';
 
 export function checkClipEdits(raw: unknown): { edits: ClipEdits; problems: string[] } {
@@ -40,6 +42,10 @@ export function checkClipEdits(raw: unknown): { edits: ClipEdits; problems: stri
         if (v?.transition !== undefined && v?.transition !== null) {
           if (v.transition === "cut" || v.transition === "dissolve") e.transition = v.transition;
           else problems.push(`clips["${name}"].transition must be "cut" or "dissolve" (leave it out: the app chooses)`);
+        }
+        if (v?.omit !== undefined && v?.omit !== null && v?.omit !== false) {
+          if (v.omit === true) e.omit = true;
+          else problems.push(`clips["${name}"].omit must be true (or left out: the clip is used)`);
         }
         if (e.in !== undefined && e.out !== undefined && e.out <= e.in) problems.push(`clips["${name}"]: out must be after in`);
         else if (Object.keys(e).length) edits.clips[name] = e;
@@ -117,4 +123,19 @@ export function saveSongClipOrder(songRoot: string, songClips: readonly string[]
   const forget = (options.forget ?? []).map((f) => f.toLowerCase());
   const kept = { ...edits, order: edits.order.filter((n) => !forget.includes(n.toLowerCase())) };
   return writeClipEdits(songRoot, withSongOrder(kept, songClips, songOrder));
+}
+
+// Use / Omit (Assets or Shape): an omitted clip keeps its place in the order; Make does not use it.
+export function isOmitted(edits: ClipEdits, name: string): boolean {
+  return editOf(edits, name).omit === true;
+}
+export function setClipOmit(songRoot: string, name: string, omit: boolean): ClipEdits {
+  if (typeof name !== "string" || !name.trim()) throw new Error("Which clip?");
+  const edits = readClipEdits(songRoot);
+  const key = Object.keys(edits.clips).find((n) => n.toLowerCase() === name.toLowerCase()) ?? name;
+  const { omit: _old, ...rest } = edits.clips[key] ?? {};
+  const clips = Object.fromEntries(Object.entries(edits.clips).filter(([n]) => n !== key));
+  const next: ClipEdit = omit ? { ...rest, omit: true } : rest;
+  if (Object.keys(next).length) clips[key] = next;
+  return writeClipEdits(songRoot, { ...edits, clips });
 }

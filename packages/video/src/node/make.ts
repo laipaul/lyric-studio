@@ -40,7 +40,7 @@ import { bestMoments } from "./best-moment";
 import { clipBandLuminances } from "./lyric-band";
 import { isThinFace, lyricBackingFor, type BackingDecision, type Readability } from "../readability";
 import { pictureOf } from "../picture";
-import { editOf, rankOf, readClipEdits } from "./clip-edits";
+import { editOf, isOmitted, rankOf, readClipEdits } from "./clip-edits";
 import { boardForRun, cardFont, cardMeasure, overrideCount, TITLE_SIZE_VERTICAL, titleCards, type RunBoard } from "./textboard";
 import { extraCards, fillCardText } from "../extra-cards";
 import { matchPinClips, parsePins } from "../pins";
@@ -269,6 +269,7 @@ export type PlatformPlan = {
     path: string; name: string; clipId: string; thumb: string | null; durationMs: number; kind: "video" | "photo";
     rank: number | null; inMs: number | null; outMs: number | null; speed: number | null; bestMs: number | null; bestFrom: "clip editor" | "auto" | null;
     transition: "cut" | "dissolve" | null; // how the clip comes in (clips.json), null: the app chooses
+    omit: boolean; // set to Omit (Assets / Shape): listed in the order, never shown
   }[];
   section: { mode: string; start_ms: number; end_ms: number; reason: string };
   analysis: { bpm: number; beats: Beat[]; duration_ms: number };
@@ -1186,7 +1187,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
           barMs: medianBarMs(downbeatTimes, analysis.bpm),
           shift: options.paceShift ?? 0,
           clipMs: prepared.clips
-            .filter((c) => c.kind !== "photo")
+            .filter((c) => c.kind !== "photo" && !isOmitted(edits, c.name))
             .map((c) => {
               const e = editOf(edits, c.name);
               const from = (e.in ?? 0) * 1000;
@@ -1226,6 +1227,14 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     };
   });
 
+  // Use / Omit (Assets or Shape): omitted clips keep their place in the order but are never shown.
+  const usedClips = preparedClips.filter((c) => !isOmitted(edits, c.name));
+  if (usesClips && preparedClips.length && !usedClips.length) {
+    throw new Error(`${preset.name}: every clip is set to Omit. Set at least one clip to Use (Assets or Shape → Clips).`);
+  }
+  const omittedCount = preparedClips.length - usedClips.length;
+  if (omittedCount && position.index === 0) log(`${omittedCount} clip(s) set to Omit: not used`);
+
   const warnings = [
     ...(position.index === 0 ? sh.alignment.warnings : []),
     ...(position.index === 0 ? sh.collection.duplicates.map((d) => `these files have identical content (the same clip twice): ${d.join(", ")}`) : []),
@@ -1235,7 +1244,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   let pins: RenderBase["pins"] = [];
   if (options.pins) {
     const parsed = parsePins(readFileSync(options.pins, "utf8"));
-    const matched = matchPinClips(parsed.rules, preparedClips);
+    const matched = matchPinClips(parsed.rules, usedClips);
     pins = matched.pins;
     warnings.push(...parsed.warnings, ...matched.warnings);
   }
@@ -1289,9 +1298,14 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     const stem = (n: string) => n.toLowerCase().replace(/\.[^.]+$/, "");
     for (const a of sh.anchors) {
       const i = lines[a.line - 1] ? a.line - 1 : -1;
-      const clip = preparedClips.find((c) => c.name.toLowerCase() === a.clip.toLowerCase()) ?? preparedClips.find((c) => stem(c.name) === stem(a.clip));
+      const clip = usedClips.find((c) => c.name.toLowerCase() === a.clip.toLowerCase()) ?? usedClips.find((c) => stem(c.name) === stem(a.clip));
+      const omitted = !clip && preparedClips.some((c) => (c.name.toLowerCase() === a.clip.toLowerCase() || stem(c.name) === stem(a.clip)) && isOmitted(edits, c.name));
       if (i < 0) anchorMissing.push(`the anchor on line ${a.line} (${a.clip}): the song has ${lines.length} sung lines`);
-      else if (!clip) {
+      else if (!clip && omitted) {
+        // The anchored clip is set to Omit: the line needs another clip (or set the clip to Use again).
+        anchorMissing.push(`slot: line ${a.line} "${lines[i].text}" needs a clip (${a.clip} is set to Omit)`);
+        anchorSlots.push({ line: a.line, text: lines[i].text, clip: a.clip });
+      } else if (!clip) {
         // A slot: the line needs a clip (another clip set, or the clip was removed); refill it in the storyboard.
         anchorMissing.push(`slot: line ${a.line} "${lines[i].text}" needs a clip (${a.clip} is not among this video's clips: ${sh.picture?.label ?? "the song's clips and its collections"}, ${prepared.kind} for ${preset.label})`);
         anchorSlots.push({ line: a.line, text: lines[i].text, clip: a.clip });
@@ -1320,7 +1334,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     preset.lyrics && usesClips && !canvas && options.readability !== "strong" && options.readability !== "normal"
       ? clipBandLuminances(
           ws.dir,
-          preparedClips.map((c) => ({ file: absPath(ws, c.path), atS: c.kind === "photo" ? 0 : Math.max(0, Math.min((c.best_ms ?? c.in_ms ?? 1000) / 1000, c.duration_ms / 1000 - 0.1)) })),
+          usedClips.map((c) => ({ file: absPath(ws, c.path), atS: c.kind === "photo" ? 0 : Math.max(0, Math.min((c.best_ms ?? c.in_ms ?? 1000) / 1000, c.duration_ms / 1000 - 0.1)) })),
           readabilityArea,
           format.height,
         )
@@ -1333,7 +1347,10 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     },
   );
   if (preset.lyrics && !canvas) log(`${preset.name}: ${backing.text}`);
-  const story = !canvas && (sh.gapOrder === "story" || (!sh.gapOrder && sh.anchors.length > 0));
+  // Every video follows the song's clip order (Assets / Shape; clips.json), never a shuffle (the user's
+  // decision, 2 Nov 2026): the videos differ by style, cut rate and cut / dissolve. song.json "gapOrder"
+  // is no longer read.
+  const story = !canvas;
   const layout: PlatformLayout = {
     format,
     safeZone: preset.safeZone,
@@ -1345,7 +1362,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   };
   const base: RenderBase = {
     plan,
-    clips: usesClips ? preparedClips : [],
+    clips: usesClips ? usedClips : [],
     audio: preset.audio ? audio : null,
     durationInFrames: plan.end_frame - plan.start_frame,
     lyrics: shown.map((i) => allLyrics[i]),
@@ -1412,7 +1429,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     }
   }
 
-  if (story && !canvas) log(`${preset.name}: gap order story (${sh.gapOrder ? "song.json gapOrder" : "the song has anchors"}): every video in file-name order; they differ by style, cut rate and cut / dissolve`);
+  if (story && !canvas) log(`${preset.name}: every video in the song's clip order; they differ by style, cut rate and cut / dissolve`);
   for (const m of anchorMissing) warnings.push(`${preset.name}: ${m}`);
   // Compare pairings: one video per pairing with the same section, clips, order, cut rate and style, so
   // only the fonts differ (presets/font-pairings.json, or "brand" for the artist's own).
@@ -1577,6 +1594,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
             path: c.path, name: c.name, clipId: c.clip.id, thumb: c.clip.thumb_path, durationMs: c.durationMs, kind: c.kind,
             rank: e.rank ?? null, inMs: e.in_ms ?? null, outMs: e.out_ms ?? null, speed: e.speed ?? null, bestMs: e.best_ms ?? null, bestFrom: e.best_from ?? null,
             transition: editOf(edits, c.name).transition ?? null,
+            omit: isOmitted(edits, c.name),
           };
         }),
         section: { mode: chosen.mode, start_ms: chosen.start_ms, end_ms: chosen.end_ms, reason: chosen.reason },

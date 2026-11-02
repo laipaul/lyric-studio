@@ -30,8 +30,10 @@ import {
   resolveMoved,
   resolveRecipe,
   saveToSong,
+  setSongClipOmit,
   setSongClipOrder,
   readClipEdits,
+  setClipOmit,
   songAssets,
   songFolderFor,
   songPaths,
@@ -349,6 +351,27 @@ describe("the Assets tab", () => {
     await removeSongClip(ws, projectId(), "zz_b.mp4");
     setSongClipOrder(ws, projectId(), now); // back as it was for the next tests
   });
+
+  it("Use / Omit: an omitted clip keeps its place, Make never shows it; every clip omitted says so", async () => {
+    const own = (await songAssets(ws, projectId())).clips.map((c) => c.name);
+    expect(setSongClipOmit(ws, projectId(), own[0], true)).toBe(true);
+    const a = await songAssets(ws, projectId());
+    expect(a.clips.map((c) => [c.name, c.omit])).toEqual(own.map((n, i) => [n, i === 0]));
+    const dry = await run({ dryRun: true, variations: 2 });
+    const plan = dry.platforms[0].plan!;
+    const omitted = plan.clips.find((c) => c.name === own[0])!;
+    expect(omitted.omit).toBe(true);
+    for (const v of plan.videos) expect(v.props.shots.some((s) => s.src === omitted.path)).toBe(false);
+    expect(plan.videos.every((v) => v.spec.order === "story")).toBe(true); // no shuffle: every video follows the order
+    // Every clip omitted (the song's and the collection's): a plain message.
+    const all = plan.clips.map((c) => c.name);
+    const root = folder();
+    for (const n of all) setClipOmit(root, n, true);
+    await expect(run({ dryRun: true })).rejects.toThrow(/every clip is set to Omit/);
+    for (const n of all) setClipOmit(root, n, false);
+    expect(setSongClipOmit(ws, projectId(), own[0], false)).toBe(false);
+    expect(() => setSongClipOmit(ws, projectId(), "nope.mp4", true)).toThrow(/No clip nope.mp4/);
+  }, 300_000);
 
   it("replacing lyrics, cover or hints keeps the old file in .studio\\replaced\\", async () => {
     const txt = path.join(root, "new-lyrics.txt");

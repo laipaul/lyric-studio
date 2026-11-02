@@ -5,14 +5,15 @@
 import type { Workspace } from "@lyric/db";
 
 import { checkAnchors, type AnchorSpec, type AnchorTransition } from "../anchors";
-import { readClipEdits, writeClipEdits, type ClipEdit, type ClipEdits } from "./clip-edits";
+import { readClipEdits, setClipOmit, withSongOrder, writeClipEdits, type ClipEdit, type ClipEdits } from "./clip-edits";
 import { saveAnchors } from "./lyrics-view";
 import { readRecipe, writeRecipe } from "./recipe";
 import { songPathsById } from "./song-folder";
 
 export type StoryboardEdit =
   | { action: "order"; order: string[] } // clip file names, the whole story order
-  | { action: "clip"; clip: string; edit: ClipEdit | null } // null: back to the whole clip, normal speed, the automatic best moment
+  | { action: "clip"; clip: string; edit: ClipEdit | null } // null: back to the whole clip, normal speed, the automatic best moment (Use / Omit is kept)
+  | { action: "omit"; clip: string; omit: boolean } // Use / Omit (the same switch as in Assets)
   | { action: "anchor"; line: number; clip: string; transition?: AnchorTransition }
   | { action: "unanchor"; line: number }
   | { action: "canvas"; clip: string | null; at?: number }; // the clip (and moment) for the Spotify Canvas; null: the app chooses
@@ -28,13 +29,18 @@ export function storyboardEdit(ws: Workspace, projectId: string, e: StoryboardEd
   let anchors = readRecipe(paths.recipe).anchors ?? [];
   if (e.action === "order") {
     if (!Array.isArray(e.order) || !e.order.every((x) => typeof x === "string" && x.trim())) throw new Error("The story order must be a list of clip file names.");
-    edits = writeClipEdits(paths.root, { ...edits, order: e.order });
+    // Only the clips Shape shows move, inside the places they hold; clips this platform cannot use (and
+    // other names in the order) keep theirs, so Assets and Shape stay one sequence.
+    edits = writeClipEdits(paths.root, withSongOrder(edits, e.order, e.order));
   } else if (e.action === "clip") {
     if (typeof e.clip !== "string" || !e.clip.trim()) throw new Error("Which clip?");
+    const omitted = Object.entries(edits.clips).find(([n]) => same(n, e.clip))?.[1]?.omit === true;
     const clips = Object.fromEntries(Object.entries(edits.clips).filter(([n]) => !same(n, e.clip)));
-    const edit = Object.fromEntries(Object.entries(e.edit ?? {}).filter(([, v]) => v !== null && v !== undefined));
+    const edit = Object.fromEntries(Object.entries({ ...(e.edit ?? {}), ...(omitted && e.edit?.omit === undefined ? { omit: true } : {}) }).filter(([, v]) => v !== null && v !== undefined));
     if (Object.keys(edit).length) clips[e.clip] = edit as ClipEdit;
     edits = writeClipEdits(paths.root, { ...edits, clips });
+  } else if (e.action === "omit") {
+    edits = setClipOmit(paths.root, e.clip, e.omit === true);
   } else if (e.action === "anchor") {
     const next = [...anchors.filter((a) => a.line !== e.line), { line: e.line, clip: e.clip, ...(e.transition ? { transition: e.transition } : {}) }];
     const { problems } = checkAnchors(next);

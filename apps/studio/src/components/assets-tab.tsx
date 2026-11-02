@@ -216,6 +216,22 @@ export function AssetsTab({ projectId }: { projectId: string }) {
     const names = data.clips.map((c) => c.name).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
     void saveOrder(names, "The clips are in file-name order. Shape and Make use this order.");
   }
+  // Use / Omit (the same switch as Shape → Clips): an omitted clip keeps its place, Make leaves it out.
+  async function setOmit(name: string, omit: boolean) {
+    if (!data) return;
+    const before = data;
+    setData({ ...data, clips: data.clips.map((c) => (c.name === name ? { ...c, omit } : c)) });
+    try {
+      const r = await api(`/api/songs/${projectId}/assets`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ omit: { name, omit } }) });
+      const d = (await r.json()) as { error?: string };
+      if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
+      setNotice({ ok: true, text: omit ? `${name} is omitted: it keeps its place but the videos leave it out.` : `${name} is used again.` });
+      router.refresh();
+    } catch (e) {
+      setData(before);
+      setNotice({ ok: false, text: `Not saved: ${(e as Error).message}` });
+    }
+  }
   async function moveClip(name: string, onto: string) {
     if (!data || name === onto) return;
     const names = data.clips.map((c) => c.name);
@@ -355,7 +371,7 @@ export function AssetsTab({ projectId }: { projectId: string }) {
               {" "}· shared collections are chosen in Generate
             </p>
             {data.clips.length > 1 ? <p data-order-hint className="text-muted-foreground text-xs">
-                Drag the clips into the order you want: Shape starts from it and Make uses it. New clips go at the end, by file name.{" "}
+                Drag the clips into the order you want: Shape shows the same order and every video follows it. Omit leaves a clip out of the videos (it keeps its place). New clips go at the end, by file name.{" "}
                 <button type="button" data-sort-by-name disabled={busy} onClick={sortByName} className="hover:text-foreground underline underline-offset-2">
                   Sort by file name
                 </button>
@@ -414,12 +430,13 @@ export function AssetsTab({ projectId }: { projectId: string }) {
                     setOverClip(null);
                     void moveClip(name, c.name);
                   }}
-                  className={cn("bg-card flex cursor-grab flex-col overflow-hidden rounded-lg border active:cursor-grabbing", dragClip === c.name && "opacity-40", overClip === c.name && dragClip !== c.name && "border-brand ring-brand ring-2")}
+                  data-omit={c.omit ? "1" : "0"}
+                  className={cn("bg-card flex cursor-grab flex-col overflow-hidden rounded-lg border active:cursor-grabbing", c.omit && "border-dashed", dragClip === c.name && "opacity-40", overClip === c.name && dragClip !== c.name && "border-brand ring-brand ring-2")}
                 >
                   <div className="relative aspect-[9/12] bg-black">
                     {c.thumb ? (
                       // eslint-disable-next-line @next/next/no-img-element -- a local thumbnail served by /api/files
-                      <img src={`/api/files/${c.thumb}`} alt="" draggable={false} className="size-full object-contain" />
+                      <img src={`/api/files/${c.thumb}`} alt="" draggable={false} className={cn("size-full object-contain", c.omit && "opacity-30 grayscale")} />
                     ) : null}
                     <span data-order-number className="bg-brand text-brand-foreground absolute top-1.5 left-1.5 flex size-6 items-center justify-center rounded-full text-xs font-semibold">{i + 1}</span>
                     <span className="absolute top-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] tracking-wide uppercase">{c.orientation}</span>
@@ -432,6 +449,14 @@ export function AssetsTab({ projectId }: { projectId: string }) {
                       {c.kind === "photo" ? "photo" : seconds(c.durationMs)} · {c.width}×{c.height}
                     </p>
                     {c.duplicateOf ? <p className="text-amber-300">same content as {c.duplicateOf}</p> : null}
+                    <div data-use-omit={c.name} role="group" aria-label={`Use or omit ${c.name}`} className="mt-1 flex w-fit overflow-hidden rounded-md border text-[11px]">
+                      <button type="button" data-use={c.name} aria-pressed={!c.omit} disabled={busy} onClick={() => c.omit && void setOmit(c.name, false)} className={cn("px-2 py-0.5", !c.omit ? "bg-brand/20 text-brand" : "hover:bg-accent")}>
+                        Use
+                      </button>
+                      <button type="button" data-omit-button={c.name} aria-pressed={!!c.omit} disabled={busy} onClick={() => !c.omit && void setOmit(c.name, true)} className={cn("border-l px-2 py-0.5", c.omit ? "bg-amber-400/20 text-amber-200" : "hover:bg-accent")}>
+                        Omit
+                      </button>
+                    </div>
                     <button type="button" data-remove={c.name} disabled={busy} onClick={() => remove(c.name)} className="text-muted-foreground hover:text-foreground mt-1 flex w-fit items-center gap-1">
                       <Trash2 className="size-3" /> Remove
                     </button>

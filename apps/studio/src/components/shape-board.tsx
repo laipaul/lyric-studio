@@ -375,7 +375,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
       <div className="flex flex-col gap-3" data-clips-panel>
         {clipEditor}
         {view?.editable && view.clips.length ? (
-          <StoryStrip clips={view.clips} busy={saving || loading} onMove={moveClip} onOpen={setEditing} editing={editing} />
+          <StoryStrip clips={view.clips} busy={saving || loading} onMove={moveClip} onOpen={setEditing} onOmit={(clip, omit) => void edit({ action: "omit", clip, omit })} editing={editing} />
         ) : (
           <p className="text-muted-foreground text-xs">{view && !view.editable ? "A past run: its clips cannot be changed." : "The clips show once the video is planned."}</p>
         )}
@@ -948,12 +948,12 @@ function ShotDetails({ shot: s, editable, onEdit, onUnanchor, onMisfit, onClose 
 // The story order: every clip of the run (the song's own and the collections') in the order story
 // videos use them. Drag a card onto another to put it there (or use the arrows); drag a card onto a
 // lyric line to anchor it on that line; click it to edit it.
-function StoryStrip({ clips, busy, onMove, onOpen, editing }: { clips: StoryboardClip[]; busy: boolean; onMove: (name: string, to: number) => void; onOpen: (name: string) => void; editing: string | null }) {
+function StoryStrip({ clips, busy, onMove, onOpen, onOmit, editing }: { clips: StoryboardClip[]; busy: boolean; onMove: (name: string, to: number) => void; onOpen: (name: string) => void; onOmit: (name: string, omit: boolean) => void; editing: string | null }) {
   const [over, setOver] = useState<number | null>(null);
   return (
     <div data-story-strip>
       <p className="text-muted-foreground mb-2 text-xs">
-        The clips used, in story order{clips.some((c) => c.ranked) ? " (clips.json)" : " (file names)"}: drag one onto another to reorder, onto a shot or a lyric line to put it there; click one to edit it. Each clip plays once before any repeats.
+        The clips in the song&apos;s order (the same order as Assets; every video follows it): drag one onto another to reorder, onto a shot or a lyric line to put it there; click one to edit it; Omit leaves a clip out of the videos. Each clip plays once before any repeats.
       </p>
       <ol className="grid grid-cols-2 gap-2">
         {clips.map((c, i) => (
@@ -961,6 +961,7 @@ function StoryStrip({ clips, busy, onMove, onOpen, editing }: { clips: Storyboar
             key={c.name}
             data-story-clip={c.name}
             data-story-index={i + 1}
+            data-omit={c.omit ? "1" : "0"}
             draggable={!busy}
             onDragStart={(e) => {
               e.dataTransfer.setData("text/x-lyric-clip", c.name);
@@ -978,21 +979,32 @@ function StoryStrip({ clips, busy, onMove, onOpen, editing }: { clips: Storyboar
               const name = e.dataTransfer.getData("text/x-lyric-clip");
               if (name && name !== c.name) onMove(name, i);
             }}
-            className={cn("bg-card relative cursor-grab overflow-hidden rounded-lg border text-[11px]", over === i && "ring-brand ring-2", editing === c.name && "border-brand")}
+            className={cn("bg-card relative cursor-grab overflow-hidden rounded-lg border text-[11px]", over === i && "ring-brand ring-2", editing === c.name && "border-brand", c.omit && "border-dashed")}
           >
             <button type="button" onClick={() => onOpen(c.name)} className="block w-full text-left" title={`${c.name}: click to edit`}>
-              <div className="aspect-video bg-black bg-cover bg-center" style={{ backgroundImage: c.thumb ? `url(/api/files/${c.thumb})` : undefined }} />
-              <div className="p-1">
+              <div className={cn("aspect-video bg-black bg-cover bg-center", c.omit && "opacity-30 grayscale")} style={{ backgroundImage: c.thumb ? `url(/api/files/${c.thumb})` : undefined }} />
+              <div className={cn("p-1", c.omit && "opacity-60")}>
                 <p className="truncate font-medium">
                   {i + 1}. {c.name}
                 </p>
                 <p className="text-muted-foreground">
-                  {c.shots} shot{c.shots === 1 ? "" : "s"}
+                  {c.omit ? "omitted" : `${c.shots} shot${c.shots === 1 ? "" : "s"}`}
                   {c.inS !== null || c.outS !== null ? " · ✂" : ""}
                   {c.speed !== null && c.speed < 1 ? ` · ${c.speed}x` : ""}
                   {c.bestFrom === "clip editor" ? " · ★ yours" : ""}
                 </p>
               </div>
+            </button>
+            <button
+              type="button"
+              data-story-omit={c.name}
+              aria-pressed={c.omit}
+              disabled={busy}
+              onClick={() => onOmit(c.name, !c.omit)}
+              title={c.omit ? "Omitted: not in the videos. Click to use it again." : "Used in the videos. Click to leave it out (it keeps its place)."}
+              className={cn("absolute top-0.5 left-0.5 rounded px-1 py-0.5 text-[10px] font-medium", c.omit ? "bg-amber-400/90 text-black" : "bg-black/60")}
+            >
+              {c.omit ? "Omit" : "Use"}
             </button>
             <div className="absolute top-0.5 right-0.5 flex gap-0.5">
               <button type="button" aria-label={`move ${c.name} earlier`} data-move-earlier={c.name} disabled={busy || i === 0} onClick={() => onMove(c.name, i - 1)} className="rounded bg-black/60 p-0.5 disabled:opacity-30">

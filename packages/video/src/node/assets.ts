@@ -10,7 +10,7 @@ import { eq } from "drizzle-orm";
 
 import { isHandTimeLine } from "../hand-times";
 import { HOOK_MARKER, normalizeLyric } from "../lrc";
-import { inClipOrder, readClipEdits, saveSongClipOrder } from "./clip-edits";
+import { inClipOrder, isOmitted, readClipEdits, saveSongClipOrder, setClipOmit } from "./clip-edits";
 import { cachedFileHash, SOURCE_FILE, syncCollection } from "./collection";
 import { keepReplaced, placeRoleFile, storeCover, storeLyricsTxt } from "./project-settings";
 import { isRemovedSong, isWavFile, moveEntry, songPathsById } from "./song-folder";
@@ -35,6 +35,7 @@ export type ClipAsset = {
   height: number;
   durationMs: number; // 0 for photos
   duplicateOf: string | null; // another clip of this song with the same content
+  omit?: boolean; // a song's clip set to Omit (clips.json): keeps its place in the order, Make does not use it
 };
 
 export type SongAssets = {
@@ -94,8 +95,10 @@ export async function songAssets(ws: Workspace, projectId: string, options: { ch
   if (!paths.clips) return out;
   const { hashes: _hashes, ...listed } = await folderClips(ws, paths.clips, songClipsCollection(projectId));
   // The song's clip order (clips.json): the same sequence Shape shows and Make uses.
-  const order = inClipOrder(readClipEdits(paths.root), listed.clips.map((c) => c.name));
+  const edits = readClipEdits(paths.root);
+  const order = inClipOrder(edits, listed.clips.map((c) => c.name));
   listed.clips.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
+  for (const c of listed.clips) c.omit = isOmitted(edits, c.name);
   return { ...out, ...listed };
 }
 
@@ -115,6 +118,14 @@ export function setSongClipOrder(ws: Workspace, projectId: string, order: unknow
   if (missing.length) throw new Error(`Not in this song's clips: ${missing.join(", ")}. Reload the page and try again.`);
   const edits = saveSongClipOrder(paths.root, files, order);
   return inClipOrder(edits, files);
+}
+
+// Assets → Use / Omit on a clip (the same switch as Shape → Clips): an omitted clip keeps its place.
+export function setSongClipOmit(ws: Workspace, projectId: string, name: unknown, omit: unknown): boolean {
+  const paths = songPathsById(ws, projectId);
+  if (!paths.clips) throw new Error("This song has no folder yet.");
+  if (typeof name !== "string" || !songClipFiles(paths.clips).some((f) => f.toLowerCase() === name.toLowerCase())) throw new Error(`No clip ${String(name)} in this song.`);
+  return isOmitted(setClipOmit(paths.root, name, omit === true), name);
 }
 
 // After clips were added, removed or restored: `last` go at the end of the order, `forget` leave it.

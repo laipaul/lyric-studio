@@ -6,14 +6,14 @@
 // this file?" for a file put into the song folder by hand, or "kind" = restoreClip with "name" (back from
 // clips\_removed\). DELETE ?name= : the clip moves to clips\_removed\ (never deleted).
 // PUT { order: [clip file names] }: the song's clips in a new order (drag and drop; clips.json, the same
-// sequence Shape shows and Make uses).
+// sequence Shape shows and Make uses). PUT { omit: { name, omit } }: Use / Omit on one clip.
 import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { connection } from "next/server";
 
 import { resolveWorkspaceDir, safeName } from "@lyric/db";
-import { assignSongFile, importSongClips, removeSongClip, replaceAsset, restoreSongClip, setSongClipOrder, songAssets, storeVocalStem, type AssetKind, type AssignRole } from "@lyric/video/assets";
+import { assignSongFile, importSongClips, removeSongClip, replaceAsset, restoreSongClip, setSongClipOmit, setSongClipOrder, songAssets, storeVocalStem, type AssetKind, type AssignRole } from "@lyric/video/assets";
 
 import { withWorkspaceAsync } from "@/lib/workspace";
 
@@ -76,7 +76,8 @@ export async function POST(request: Request, { params }: Params) {
 export async function PUT(request: Request, { params }: Params) {
   const { id } = await params;
   try {
-    const body = (await request.json()) as { order?: unknown };
+    const body = (await request.json()) as { order?: unknown; omit?: { name?: unknown; omit?: unknown } };
+    if (body.omit) return Response.json({ omit: await withWorkspaceAsync(async (ws) => setSongClipOmit(ws, id, body.omit!.name, body.omit!.omit)) });
     return Response.json({ order: await withWorkspaceAsync(async (ws) => setSongClipOrder(ws, id, body.order)) });
   } catch (error) {
     return fail(error);

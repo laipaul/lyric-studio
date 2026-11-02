@@ -74,6 +74,7 @@ export type StoryboardClip = {
   durationMs: number;
   kind: "video" | "photo";
   ranked: boolean; // placed by the story order in clips.json (else by its file name)
+  omit: boolean; // set to Omit (Assets / Shape): keeps its place, never shown
   inS: number | null;
   outS: number | null;
   speed: number | null;
@@ -165,7 +166,7 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
   const canvasChoice = paths.recipe && existsSync(paths.recipe) ? (readRecipe(paths.recipe).canvas ?? null) : null;
   const storyboardClips: StoryboardClip[] = storyOrder.map((c) => ({
     canvas: canvasChoice && canvasChoice.clip.toLowerCase() === c.name.toLowerCase() ? { at: canvasChoice.at ?? null } : null,
-    name: c.name, src: c.path, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, ranked: c.rank !== null,
+    name: c.name, src: c.path, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, ranked: c.rank !== null, omit: c.omit === true,
     inS: c.inMs === null ? null : c.inMs / 1000, outS: c.outMs === null ? null : c.outMs / 1000, speed: c.speed, transition: c.transition,
     bestS: c.bestMs === null ? null : c.bestMs / 1000, bestFrom: c.bestFrom, autoBestS: c.kind === "video" ? (auto.get(absPath(ws, c.path)) ?? null) : null,
     shots: v.props.shots.filter((s) => s.src === c.path).length,
