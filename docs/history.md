@@ -4,6 +4,32 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Clarity: feature icons, "Shared by N songs" badges, song or theme at a glance ✅ (to verify on the Windows PC)
+- Asked by the user on 1 Nov 2026 ("allocate icons to each core feature so users get to know instantly").
+- One map (apps/studio/src/lib/feature-icons.tsx): **Song** music note, white · **Theme** palette, pink ·
+  **Clips** film, teal (a **Collection** a stack) · **Lyrics / card text** "T", amber · steps **Prepare** ✓,
+  **Shape** ◇, **Make** clapperboard, **Review** eye, **Post** paper plane · **Automatic** wand.
+- Used in the top menu (Library, Themes, Collections, Releases), the song page's rail and its tabs, the Shape
+  menus, page titles (Library, Themes, Collections, Assets → Clips, This song → Card text) and the Library
+  card's theme line.
+- **Platform marks**: a small plain shape in each platform's colour before its name on the Library cards
+  (Reels pink rounded square, TikTok cyan dot, Shorts red bar, YouTube red play triangle, Canvas green ring,
+  Standard grey square), never the platforms' own logos.
+- **Badges** on every theme (Themes tiles and detail, Shape → Theme): "Shared by N songs" (amber), "This song
+  only" / "Only <song>" (pink), "Not used yet"; hover lists the songs (@lyric/video theme-reach.ts, tested).
+- **Song or theme** (asked by the user on 1 Nov 2026, "we don't know whether we are working on the song or the
+  theme"): the rail has the song's things on top and a separate **Look** group at the bottom with only
+  **Theme**, in pink (reachable from every stage). The Theme panel opens on the choice: "This song uses: X"
+  with its badge, Edit theme, New theme and "Change theme ↓" (the tiles). **Edit theme** puts a pink frame
+  round the work area and a banner "Editing theme X · Changes here reach: …" with **Done** ("Save and done"
+  when something changed; Cancel in the panel still drops the changes). Clicking Theme in the rail while an
+  untouched editor is open goes back to the choice.
+- **Plain names**: a theme made from a song's own look is called "<song> look" (About: "Made from <song>'s
+  look on <date>"); older ones named exactly like their song are renamed once, the songs follow (themes.ts
+  plainSongThemeNames, tested). A theme you named yourself is never touched.
+- **Look · Content** line at the top of Shape: "Look: theme X [badge] · Content: this song (words, clips, card
+  text)"; the theme name opens Theme. The theme's page says a theme is only the look, with links to its songs.
+
 ### Themes like Canva: text layouts, moods, livelier tiles ✅ (to verify on the Windows PC)
 - Asked by the user on 1 Nov 2026 ("build all except the Crown").
 - **Text layout** per theme (Edit theme → Text, three small frames): **Centred** (as before), **Lower third**

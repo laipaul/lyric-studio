@@ -9,13 +9,16 @@ import { Player } from "@remotion/player";
 
 import { LOOK_FPS, LookPreview, lookPreviewDuration, type LookPreviewProps } from "@lyric/video";
 
-// The viewer as tall as the screen allows, leaving room for the header above and, below it, the timeline and the command bar (all on one screen).
-export const VIEWER_HEIGHT = "max(260px, min(calc(100vh - 36rem), 760px))";
+// The viewer's size limits. The Shape page measures the room left on the screen (the viewer fills what the rows above and
+// the timeline and command bar below leave: useViewerHeight in shape-board.tsx); VIEWER_HEIGHT is only the first guess.
+export const VIEWER_MIN = 260;
+export const VIEWER_MAX = 760;
+export const VIEWER_HEIGHT = `max(${VIEWER_MIN}px, min(calc(100vh - 30rem), ${VIEWER_MAX}px))`;
 
-export function LookViewer({ input, caption, previewing }: { input: LookPreviewProps; caption: string; previewing?: string | null }) {
+export function LookViewer({ input, caption, previewing, height }: { input: LookPreviewProps; caption: string; previewing?: string | null; height?: number | null }) {
   return (
     <div data-look-preview data-effect={input.effect.name} data-breathe={input.breathe} data-verse-family={input.verse.family} data-hook-family={input.hook.family} data-hook-face={`${input.hook.family} ${input.hook.weight}${input.hook.italic ? " italic" : ""}`} data-previewing-pair={previewing ?? undefined} data-accent={input.accent} data-grade={input.picture?.grade ?? "natural"} data-text-colour={input.colour} data-backing={input.backing ? "1" : "0"} className="flex flex-col gap-1.5">
-      <div className="mx-auto overflow-hidden rounded-xl border bg-black shadow-lg" style={{ height: VIEWER_HEIGHT, aspectRatio: "9 / 16" }}>
+      <div className="mx-auto overflow-hidden rounded-xl border bg-black shadow-lg" style={{ height: height ?? VIEWER_HEIGHT, aspectRatio: "9 / 16" }} data-viewer-height={height ?? undefined}>
         <Player
           component={LookPreview}
           inputProps={input}

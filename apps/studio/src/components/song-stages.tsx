@@ -179,14 +179,15 @@ export function SongStages({
               </div>
             ) : null}
             {/* Review says it per platform in its own overview (1 Nov 2026), so no summary line there. */}
+            {/* The stage's line; on Shape the Look · Content line joins it (one line, so the viewer keeps its room: 2 Nov 2026). */}
             {stage !== "review" ? (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
               <p className="text-muted-foreground text-xs" data-work-status>
                 <span className="text-foreground font-medium">{current.name}</span> · <span className={TONE[statuses[stage].tone]}>{statuses[stage].text}</span>
               </p>
-            ) : null}
             {stage === "shape" && themeNow && !themeMode ? (
               // What belongs to whom, in one line (1 Nov 2026): the look comes from the theme, the content is this song's.
-              <p data-look-content className="-mt-3 flex flex-wrap items-center gap-1.5 text-xs">
+              <p data-look-content className="flex flex-wrap items-center gap-1.5 text-xs">
                 <FeatureIcon feature="theme" className="size-3.5" />
                 <span className="text-muted-foreground">Look:</span>
                 <button type="button" data-look-theme onClick={openTheme} className="text-brand underline-offset-2 hover:underline">
@@ -197,6 +198,8 @@ export function SongStages({
                 <FeatureIcon feature="song" className="size-3.5" />
                 <span className="text-muted-foreground">Content: this song (words, clips, card text)</span>
               </p>
+            ) : null}
+              </div>
             ) : null}
             {stage === "prepare" ? (
               todo.length ? (

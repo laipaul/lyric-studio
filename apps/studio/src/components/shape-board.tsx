@@ -13,13 +13,13 @@
 // Pictures: the same textboard over another clip set; an anchor whose clip is missing is a slot.
 import { Player, type PlayerRef } from "@remotion/player";
 import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2, Pencil, RefreshCw, Repeat, Scissors, Star, Type, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import { EFFECT_NAMES, effectTitle, followScrollLeft, LyricVideo, patchLook, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
 import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node"; // types only (erased): the data comes from /api/songs/[id]/storyboard
 
 import { AssessmentDetails, VerdictBadge } from "@/components/assessment";
-import { LookViewer, VIEWER_HEIGHT } from "@/components/look-preview";
+import { LookViewer, VIEWER_HEIGHT, VIEWER_MAX, VIEWER_MIN } from "@/components/look-preview";
 import { PreviewPlayer } from "@/components/preview-player";
 import type { ShapeLook } from "@/components/shape-tools";
 import { SHAPE_PANELS, useGoToTab, useShapePanel } from "@/components/song-stages";
@@ -56,6 +56,9 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   const [selected, setSelected] = useState<number | null>(null);
   const [frame, setFrame] = useState(0);
   const player = useRef<PlayerRef>(null);
+  // The viewer fills the screen's height that the rows above it and the timeline and command bar below leave (2 Nov 2026).
+  const viewerBlock = useRef<HTMLDivElement>(null);
+  const belowViewer = useRef<HTMLDivElement>(null);
   // "Follow playback": the timeline scrolls with the playhead while the preview plays (off by default).
   // Scrolling the timeline by hand pauses it until the next play.
   const [follow, setFollow] = useState(false);
@@ -341,6 +344,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   const barFrames = useMemo(() => (view ? view.bars.map((ms) => Math.round((ms * 30) / 1000)) : []), [view]);
   const shot = view && selected !== null ? view.shots[selected] : null;
   const wide = !!props?.format && props.format.width > props.format.height;
+  const viewerH = useViewerHeight(viewerBlock, belowViewer, `${view && props ? "plan" : look ? "look" : "none"}:${wide ? "wide" : "tall"}:${panel ?? ""}:${view?.slots.length ?? 0}`);
   // A clip dropped on a shot: anchored on the lyric line that starts in that shot; a shot without a line
   // starting in it (an intro, a break): the clip takes that shot's place in the story order.
   const dropOnShot = (s: StoryShot, clip: string) => {
@@ -432,8 +436,9 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
 
   const viewer =
     view && props ? (
-      <div className="relative mx-auto max-w-full overflow-hidden rounded-xl border bg-black shadow-lg" style={{ height: VIEWER_HEIGHT, aspectRatio: wide ? "16 / 9" : "9 / 16" }}
+      <div className="relative mx-auto max-w-full overflow-hidden rounded-xl border bg-black shadow-lg" style={{ height: viewerH ?? VIEWER_HEIGHT, aspectRatio: wide ? "16 / 9" : "9 / 16" }}
         data-viewer
+        data-viewer-height={viewerH ?? undefined}
         data-patched={look?.patch && view.source === "plan" ? "1" : "0"}
         data-previewing-pair={look?.previewing ?? undefined}
         data-verse-family={props.style.font}
@@ -464,7 +469,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
         ) : null}
       </div>
     ) : look ? (
-      <LookViewer input={look.fallback} caption={look.caption} previewing={look.previewing} />
+      <LookViewer input={look.fallback} caption={look.caption} previewing={look.previewing} height={viewerH} />
     ) : null;
 
   // Which video: the plan now (per platform and video) or a past run; Pictures; Plan again.
@@ -576,8 +581,46 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
         {choices?.ready && !(view && props) ? <div className="flex flex-wrap items-center gap-3 text-sm">{sourceControls}</div> : null}
         {error ? <p className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{error}</p> : null}
 
+        {/* the video's lines at the top (2 Nov 2026): which video, its length and section, the verdict and Next; the hint and any clip still needed */}
+        {view && props ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1" data-storyboard-head>
+              <p className="text-muted-foreground min-w-0 text-xs" data-storyboard-summary>
+                <span className="text-foreground font-medium">
+                  {view.platform.label} {view.video}
+                </span>{" "}
+                · {view.source === "plan" ? "planned now" : `run ${view.run}`} · {secs(view.durationMs)} ({clock(view.section.startMs)}–{clock(view.section.endMs)} in the song) · {Math.round(view.bpm)} BPM · {view.shots.length} shots
+                {view.picture ? <span data-storyboard-picture> · pictures: {view.picture.replace(/\+/g, " + ").replace(/^song\b/, "the song's clips")}</span> : null}
+                {saving || loading ? (
+                  <span className="text-brand ml-2" data-replanning>
+                    <Loader2 className="mr-1 inline size-3 animate-spin" />
+                    planning again…
+                  </span>
+                ) : null}
+              </p>
+              <p className="text-muted-foreground text-xs" data-storyboard-hint>
+                Click a shot to {view.editable ? "edit" : "see"} it · drag a clip from{" "}
+                <button type="button" className="underline underline-offset-2" onClick={() => setPanel("clips")} data-open-clips>
+                  Clips
+                </button>{" "}
+                onto a shot or a lyric line
+              </p>
+            <div className="ml-auto flex items-center gap-2">
+              <VerdictBadge a={view.assessment} heading="Predicted before rendering" />
+              <Button size="sm" className="h-7" data-next-make onClick={() => goTo("generate")}>
+                Next: Make <ChevronRight />
+              </Button>
+            </div>
+              {view.slots.length ? (
+                <p className="w-full rounded-md border border-dashed border-amber-400/60 bg-amber-400/10 p-2 text-xs text-amber-100" data-slots>
+                  <Anchor className="mr-1 inline size-3" />
+                  Needs a clip (drag one from Clips onto the line): {view.slots.map((x) => `line ${x.line} "${x.text}" (was ${x.clip})`).join(" · ")}
+                </p>
+              ) : null}
+          </div>
+        ) : null}
+
         {/* 1. the viewer */}
-        <div className="flex flex-col items-center gap-2" data-viewer-block>
+        <div ref={viewerBlock} className="flex flex-col items-center gap-2" data-viewer-block>
           {viewer}
           {view ? null : !choices ? (
             <p className="text-muted-foreground text-sm">Loading the plan…</p>
@@ -599,7 +642,8 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
 
         {view && props ? (
           <>
-            {/* 2. the soundtrack (bars, waveform, lyric lines) and 3. the shots */}
+            {/* 2. the soundtrack (bars, waveform, lyric lines) and 3. the shots, then 4. the command bar: measured, the viewer gets the rest */}
+            <div ref={belowViewer} className="flex flex-col gap-3" data-below-viewer>
             <div ref={timeline} onScroll={onTimelineScroll} className="overflow-x-auto rounded-lg border" data-storyboard-timeline>
               <div className="relative" style={{ width: width + 16 }} onClick={(e) => playFrom(((e.clientX - e.currentTarget.getBoundingClientRect().left) / zoom) * 1000)}>
                 <div className="relative h-6 border-b text-[10px]">
@@ -612,7 +656,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                     </div>
                   ))}
                 </div>
-                <svg className="block h-16 w-full border-b" viewBox={`0 0 ${view.waveform.peaks.length} 100`} preserveAspectRatio="none" style={{ width }} data-waveform>
+                <svg className="block h-7 w-full border-b" viewBox={`0 0 ${view.waveform.peaks.length} 100`} preserveAspectRatio="none" style={{ width }} data-waveform>
                   {view.waveform.peaks.map((p, i) => (
                     <rect key={i} x={i} y={50 - p * 48} width={0.8} height={Math.max(1, p * 96)} className="fill-brand/60" />
                   ))}
@@ -639,7 +683,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                     ))}
                   </div>
                 ) : null}
-                <div className="relative h-12 border-b" data-textboard-row>
+                <div className="relative h-10 border-b" data-textboard-row>
                   {view.lines.map((l, i) => (
                     <div
                       key={i}
@@ -683,7 +727,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                     </div>
                   ))}
                 </div>
-                <div className="relative h-24" data-shots-row>
+                <div className="relative h-[68px]" data-shots-row>
                   {!view.shots.length ? (
                     <div className="text-muted-foreground sticky left-2 inline-flex h-full max-w-xl items-center px-3 text-xs" data-no-shots>
                       {view.platform.name === "youtube" ? (
@@ -733,7 +777,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                 <div className="pointer-events-none absolute top-0 bottom-0 w-px bg-white" style={{ left: x(playhead) }} data-playhead />
               </div>
             </div>
-            {/* 4. one command bar under the timeline: which video, the transport, follow / zoom, the verdict, Next */}
+            {/* 4. one command bar under the timeline: which video, the transport, follow / zoom (the verdict and Next are in the top line) */}
             <div className="bg-card/60 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-2 py-1 text-xs" data-command-bar>
               <div className="flex items-center gap-2">{sourceControls}</div>
               <span className="bg-border hidden h-6 w-px sm:block" />
@@ -751,39 +795,8 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                   </button>
                 ))}
               </div>
-              <div className="ml-auto flex items-center gap-2">
-                <VerdictBadge a={view.assessment} heading="Predicted before rendering" />
-                <Button size="sm" className="h-7" data-next-make onClick={() => goTo("generate")}>
-                  Next: Make <ChevronRight />
-                </Button>
-              </div>
             </div>
-            <p className="text-muted-foreground text-xs" data-storyboard-summary>
-              <span className="text-foreground font-medium">
-                {view.platform.label} {view.video}
-              </span>{" "}
-              · {view.source === "plan" ? "planned now" : `run ${view.run}`} · {secs(view.durationMs)} ({clock(view.section.startMs)}–{clock(view.section.endMs)} in the song) · {Math.round(view.bpm)} BPM · {view.shots.length} shots
-              {view.picture ? <span data-storyboard-picture> · pictures: {view.picture.replace(/\+/g, " + ").replace(/^song\b/, "the song's clips")}</span> : null}
-              {saving || loading ? (
-                <span className="text-brand ml-2" data-replanning>
-                  <Loader2 className="mr-1 inline size-3 animate-spin" />
-                  planning again…
-                </span>
-              ) : null}
-            </p>
-            <p className="text-muted-foreground -mt-2 text-xs">
-              Click a shot for its details{view.editable ? " (and to edit its clip)" : ""}. Open{" "}
-              <button type="button" className="underline underline-offset-2" onClick={() => setPanel("clips")} data-open-clips>
-                Clips
-              </button>{" "}
-              and drag a clip onto a shot or a lyric line to put it there.
-            </p>
-            {view.slots.length ? (
-              <p className="rounded-md border border-dashed border-amber-400/60 bg-amber-400/10 p-2 text-xs text-amber-100" data-slots>
-                <Anchor className="mr-1 inline size-3" />
-                Needs a clip (drag one from Clips onto the line): {view.slots.map((x) => `line ${x.line} "${x.text}" (was ${x.clip})`).join(" · ")}
-              </p>
-            ) : null}
+            </div>
             {/* the plan's details, folded (to be slimmed in U2b) */}
             <details className="group border-t pt-2" data-plan-details>
               <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-xs">Plan details: the assessment, how the app paced, cut and ended this video</summary>
@@ -888,7 +901,7 @@ function ShotBlock({
       style={{ left, width: Math.max(6, width - 2), backgroundImage: s.thumb ? `linear-gradient(rgba(0,0,0,.35),rgba(0,0,0,.65)), url(/api/files/${s.thumb})` : undefined, backgroundSize: "cover", backgroundPosition: "center" }}
       title={`${s.clip} · ${secs(s.endMs - s.startMs)}${s.warnings.length ? `\n${s.warnings.join("\n")}` : ""}`}
     >
-      <div className="flex flex-wrap gap-0.5 p-0.5">
+      <div className="absolute top-0 right-0 left-0 flex flex-wrap gap-0.5 p-0.5">
         {s.anchor ? (
           <span className="bg-brand/80 flex items-center rounded px-0.5" data-badge="anchor">
             <Anchor className="size-2.5" />
@@ -1366,4 +1379,36 @@ function TemplateBar({ board, busy, onEdit, onOpen }: { board: TextboardData; bu
       ) : null}
     </div>
   );
+}
+
+// The viewer's height: the screen's height minus what sits above the viewer (the song header, the stage line, the video's
+// lines) and under it (the timeline and the command bar), measured, so a row added later never shrinks it unnoticed
+// (2 Nov 2026: the fixed 36rem reserve had left the viewer at its 260 px minimum). A free margin stays under the command
+// bar, so the transport is never at the very bottom of the screen. Between VIEWER_MIN and VIEWER_MAX; null until measured.
+const BOTTOM_ROOM = 56;
+function useViewerHeight(block: RefObject<HTMLDivElement | null>, below: RefObject<HTMLDivElement | null>, layout: string): number | null {
+  const [h, setH] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = block.current;
+      if (!el) return;
+      // The top of the viewer on the page, not on the screen: scrolling must not change the size.
+      let scroller: HTMLElement | null = el.parentElement;
+      while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+      const top = el.getBoundingClientRect().top + (scroller ? scroller.scrollTop : window.scrollY);
+      const under = below.current ? below.current.getBoundingClientRect().height + 12 : 0; // + the gap between the rows
+      const next = Math.max(VIEWER_MIN, Math.min(VIEWER_MAX, Math.floor(window.innerHeight - top - under - BOTTOM_ROOM)));
+      setH((old) => (old !== null && Math.abs(old - next) < 2 ? old : next));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (below.current) ro.observe(below.current);
+    if (block.current?.parentElement) ro.observe(block.current.parentElement);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [block, below, layout]); // measured again when the rows change (a plan arrives, a panel opens) and on every resize
+  return h;
 }

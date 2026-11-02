@@ -4,6 +4,21 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Shape: a bigger viewer, everything else at the top ✅ (to verify on the Windows PC)
+- Asked by the user on 2 Nov 2026 ("how come the video viewer has become smaller … move the titles to the top and make the
+  sound wave flatter"; "all these messages at the bottom should be moved to the top, including this Make button. Still leave
+  some space at the bottom").
+- Cause: the viewer's height was the screen minus a fixed 36rem; rows added since (Look · Content line, title cards, a
+  command bar on two lines, two lines under it) left it at its 260 px minimum on a laptop screen.
+- Now the viewer fills the height that is left (measured, between 260 and 760 px), with 56 px kept free under the command bar.
+  At the top: the stage line with Look · Content on one line, then the video's line (Reels v1 · length · section · BPM ·
+  shots), the hint, the verdict and **Next: Make**. The command bar holds only which video, the transport, Follow and Zoom.
+  Waveform 64 → 28 px, lyric row 48 → 40 px, shots row 96 → 68 px (badges stay at the top of each shot).
+- Measured in the cloud browser: 1440×1000 viewer 424 → 513 px; 1366×768 from 260 px (command bar off the bottom) to 281 px
+  with 57 px free under the command bar.
+- Tests: storyboard.e2e.ts (viewer fills the free height, room under the command bar, the top line holds summary, hint and
+  Next: Make, 1366×768). Its later playback checks run on a 1440×880 window, since the cloud browser has no graphics card.
+
 ### Automatic length for Reels, TikTok, Shorts + a clean Reel start ✅ (to verify on the Windows PC)
 - Asked by the user on 2 Nov 2026: a Reel with the 90 s preset came with a remark that 90 s was too
   short, and there was no way to let the app decide. Also: Familiar Strangers' Reel was "Not ready".
@@ -153,32 +168,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   gone); the page says collections are added to a song in Shape → To make (no more "tick them in Generate").
 - **Each video shows its theme** (palette icon and name) on its tile in Videos and in Post (manifest
   settings.theme; VideoInfo.theme).
-
-### Clarity: feature icons, "Shared by N songs" badges, song or theme at a glance ✅ (to verify on the Windows PC)
-- Asked by the user on 1 Nov 2026 ("allocate icons to each core feature so users get to know instantly").
-- One map (apps/studio/src/lib/feature-icons.tsx): **Song** music note, white · **Theme** palette, pink ·
-  **Clips** film, teal (a **Collection** a stack) · **Lyrics / card text** "T", amber · steps **Prepare** ✓,
-  **Shape** ◇, **Make** clapperboard, **Review** eye, **Post** paper plane · **Automatic** wand.
-- Used in the top menu (Library, Themes, Collections, Releases), the song page's rail and its tabs, the Shape
-  menus, page titles (Library, Themes, Collections, Assets → Clips, This song → Card text) and the Library
-  card's theme line.
-- **Platform marks**: a small plain shape in each platform's colour before its name on the Library cards
-  (Reels pink rounded square, TikTok cyan dot, Shorts red bar, YouTube red play triangle, Canvas green ring,
-  Standard grey square), never the platforms' own logos.
-- **Badges** on every theme (Themes tiles and detail, Shape → Theme): "Shared by N songs" (amber), "This song
-  only" / "Only <song>" (pink), "Not used yet"; hover lists the songs (@lyric/video theme-reach.ts, tested).
-- **Song or theme** (asked by the user on 1 Nov 2026, "we don't know whether we are working on the song or the
-  theme"): the rail has the song's things on top and a separate **Look** group at the bottom with only
-  **Theme**, in pink (reachable from every stage). The Theme panel opens on the choice: "This song uses: X"
-  with its badge, Edit theme, New theme and "Change theme ↓" (the tiles). **Edit theme** puts a pink frame
-  round the work area and a banner "Editing theme X · Changes here reach: …" with **Done** ("Save and done"
-  when something changed; Cancel in the panel still drops the changes). Clicking Theme in the rail while an
-  untouched editor is open goes back to the choice.
-- **Plain names**: a theme made from a song's own look is called "<song> look" (About: "Made from <song>'s
-  look on <date>"); older ones named exactly like their song are renamed once, the songs follow (themes.ts
-  plainSongThemeNames, tested). A theme you named yourself is never touched.
-- **Look · Content** line at the top of Shape: "Look: theme X [badge] · Content: this song (words, clips, card
-  text)"; the theme name opens Theme. The theme's page says a theme is only the look, with links to its songs.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

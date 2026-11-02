@@ -86,12 +86,25 @@ async function main() {
     // One screen: the viewer, the timeline, then one command bar (which video, the transport, zoom, verdict, Next).
     const fits = async () => {
       const [v, t, c] = await Promise.all(["[data-viewer]", "[data-storyboard-timeline]", "[data-command-bar]"].map(async (sel) => (await page.$(sel))!.boundingBox()));
-      return { ok: !!v && !!t && !!c && v.y + v.height <= t.y && t.y + t.height <= c.y && c.y + c.height <= 1000, v, t, c };
+      return { ok: !!v && !!t && !!c && v.y + v.height <= t.y && t.y + t.height <= c.y && c.y + c.height <= page.viewportSize().height, v, t, c };
     };
     const fit9 = await fits();
     check(fit9.ok, `9:16: viewer, timeline and command bar all on one 1440×1000 screen (${JSON.stringify(fit9.c)})`);
-    const inBar = await page.$$eval("[data-command-bar] [data-storyboard-source], [data-command-bar] [data-storyboard-platform], [data-command-bar] [data-transport], [data-command-bar] [data-follow-playback], [data-command-bar] [data-next-make]", (e: Element[]) => e.length);
-    check(inBar === 5, `the command bar holds Show / Platform, the transport, Follow / Zoom and Next: Make (${inBar} of 5)`);
+    // 2 Nov 2026: the viewer fills the room left (no fixed reserve), with free room kept under the command bar.
+    check(!!fit9.v && fit9.v.height >= 500, `9:16: the viewer fills the screen's free height (${Math.round(fit9.v?.height ?? 0)} px on 1440×1000)`);
+    check(!!fit9.c && 1000 - (fit9.c.y + fit9.c.height) >= 40, `…and leaves room under the command bar (${Math.round(1000 - ((fit9.c?.y ?? 0) + (fit9.c?.height ?? 0)))} px)`);
+    const inBar = await page.$$eval("[data-command-bar] [data-storyboard-source], [data-command-bar] [data-storyboard-platform], [data-command-bar] [data-transport], [data-command-bar] [data-follow-playback]", (e: Element[]) => e.length);
+    check(inBar === 4, `the command bar holds Show / Platform, the transport and Follow / Zoom (${inBar} of 4)`);
+    const head = await (await page.$("[data-storyboard-head]"))?.boundingBox();
+    check(!!head && head.y + head.height <= fit9.v!.y && !!(await page.$("[data-storyboard-head] [data-next-make]")) && !!(await page.$("[data-storyboard-head] [data-storyboard-summary]")) && !!(await page.$("[data-storyboard-head] [data-storyboard-hint]")), "the video's line, the hint and Next: Make are above the viewer");
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await sleep(400);
+    const small = await fits();
+    check(!!small.v && small.v.height >= 275 && !!small.c && 768 - (small.c.y + small.c.height) >= 40, `1366×768: the viewer ${Math.round(small.v?.height ?? 0)} px, room under the command bar ${Math.round(768 - ((small.c?.y ?? 0) + (small.c?.height ?? 0)))} px`);
+    // The rest of this test on a shorter screen: the viewer about its former size, since this cloud browser draws the
+    // video without a graphics card and a much bigger player makes the playback checks below miss their timing.
+    await page.setViewportSize({ width: 1440, height: 880 });
+    await sleep(400);
     check(!(await page.$("[data-viewer-block] [data-transport]")), "nothing between the viewer and the timeline");
     check(!(await page.$("[data-story-strip]")), "the clips are not on the page until the Clips menu opens them");
     await openPanel(page, "clips");
