@@ -91,8 +91,8 @@ async function main() {
     const fit9 = await fits();
     check(fit9.ok, `9:16: viewer, timeline and command bar all on one 1440×1000 screen (${JSON.stringify(fit9.c)})`);
     // 2 Nov 2026: the viewer fills the room left (no fixed reserve), with free room kept under the command bar.
-    check(!!fit9.v && fit9.v.height >= 500, `9:16: the viewer fills the screen's free height (${Math.round(fit9.v?.height ?? 0)} px on 1440×1000)`);
-    check(!!fit9.c && 1000 - (fit9.c.y + fit9.c.height) >= 40, `…and leaves room under the command bar (${Math.round(1000 - ((fit9.c?.y ?? 0) + (fit9.c?.height ?? 0)))} px)`);
+    check(!!fit9.v && fit9.v.height >= 530, `9:16: the viewer fills the screen's free height (${Math.round(fit9.v?.height ?? 0)} px on 1440×1000)`);
+    check(!!fit9.c && 1000 - (fit9.c.y + fit9.c.height) >= 12, `…and leaves room under the command bar (${Math.round(1000 - ((fit9.c?.y ?? 0) + (fit9.c?.height ?? 0)))} px)`);
     const inBar = await page.$$eval("[data-command-bar] [data-storyboard-source], [data-command-bar] [data-storyboard-platform], [data-command-bar] [data-transport], [data-command-bar] [data-follow-playback]", (e: Element[]) => e.length);
     check(inBar === 4, `the command bar holds Show / Platform, the transport and Follow / Zoom (${inBar} of 4)`);
     // 2 Nov 2026: nothing above the viewer but the song header; its Analysis chip holds the verdict and the facts.
@@ -102,10 +102,10 @@ async function main() {
     await page.setViewportSize({ width: 1366, height: 768 });
     await sleep(400);
     const small = await fits();
-    check(!!small.v && small.v.height >= 275 && !!small.c && 768 - (small.c.y + small.c.height) >= 40, `1366×768: the viewer ${Math.round(small.v?.height ?? 0)} px, room under the command bar ${Math.round(768 - ((small.c?.y ?? 0) + (small.c?.height ?? 0)))} px`);
+    check(!!small.v && small.v.height >= 275 && !!small.c && 768 - (small.c.y + small.c.height) >= 12, `1366×768: the viewer ${Math.round(small.v?.height ?? 0)} px, room under the command bar ${Math.round(768 - ((small.c?.y ?? 0) + (small.c?.height ?? 0)))} px`);
     // The rest of this test on a shorter screen: the viewer about its former size, since this cloud browser draws the
     // video without a graphics card and a much bigger player makes the playback checks below miss their timing.
-    await page.setViewportSize({ width: 1440, height: 880 });
+    await page.setViewportSize({ width: 1440, height: 760 });
     await sleep(400);
     check(!(await page.$("[data-viewer-block] [data-transport]")), "nothing between the viewer and the timeline");
     check(!(await page.$("[data-story-strip]")), "the clips are not on the page until the Clips menu opens them");
@@ -253,8 +253,8 @@ async function main() {
       const box = await (await page.$("[data-waveform]")).boundingBox();
       return [box.x + 40, box.y + box.height / 2] as [number, number];
     })()));
-    // Wait (up to 8 s) until the preview has played past a third of the view and the timeline followed.
-    for (let k = 0; k < 16 && (await scrollLeft()) === 0; k++) await sleep(500);
+    // Wait (up to 15 s: the cloud browser plays slowly) until the preview has played past a third of the view and the timeline followed.
+    for (let k = 0; k < 30 && (await scrollLeft()) === 0; k++) await sleep(500);
     const followed = await scrollLeft();
     check(followed > 0, `with Follow playback the timeline scrolls with the playhead (scrolled ${followed} px)`);
     check((await page.evaluate(() => window.localStorage.getItem("lyric-studio:storyboard-follow"))) === "1", "Follow playback is remembered in this browser");

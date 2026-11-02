@@ -13,6 +13,9 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Gone from the page: the stage line, Look · Content line, the video's line, the hint, the verdict badge, Next: Make
   (Make is in the rail) and the Plan details fold. The viewer starts right under the song header and takes that room:
   537 px on 1600×950 (424 px this morning).
+- Same evening: the bottom block (timeline + transport) about 1 cm lower: the free room under the command bar 56 → 18 px
+  ("better try to move the whole bottom block a bit lower about 1 cm"); the viewer grows with it (625 px on 1440×1000,
+  393 px on 1366×768).
 - Tests: storyboard.e2e.ts (the chip, nothing else above the viewer, the panel by section, a second click closes it),
   song-stages.e2e.ts and textboard.e2e.ts updated (Look · Content and the summary read from the panel; the rail's Make).
 
@@ -29,7 +32,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Measured in the cloud browser: 1440×1000 viewer 424 → 513 px; 1366×768 from 260 px (command bar off the bottom) to 281 px
   with 57 px free under the command bar.
 - Tests: storyboard.e2e.ts (viewer fills the free height, room under the command bar, the top line holds summary, hint and
-  Next: Make, 1366×768). Its later playback checks run on a 1440×880 window, since the cloud browser has no graphics card.
+  Next: Make, 1366×768). Its later playback checks run on a 1440×760 window, since the cloud browser has no graphics card.
 
 ### Automatic length for Reels, TikTok, Shorts + a clean Reel start ✅ (to verify on the Windows PC)
 - Asked by the user on 2 Nov 2026: a Reel with the 90 s preset came with a remark that 90 s was too

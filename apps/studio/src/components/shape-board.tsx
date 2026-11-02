@@ -1441,7 +1441,7 @@ function TemplateBar({ board, busy, onEdit, onOpen }: { board: TextboardData; bu
 // lines) and under it (the timeline and the command bar), measured, so a row added later never shrinks it unnoticed
 // (2 Nov 2026: the fixed 36rem reserve had left the viewer at its 260 px minimum). A free margin stays under the command
 // bar, so the transport is never at the very bottom of the screen. Between VIEWER_MIN and VIEWER_MAX; null until measured.
-const BOTTOM_ROOM = 56;
+const BOTTOM_ROOM = 18; // 56 px until 2 Nov 2026 evening: the user asked for the bottom block about 1 cm lower
 function useViewerHeight(block: RefObject<HTMLDivElement | null>, below: RefObject<HTMLDivElement | null>, layout: string): number | null {
   const [h, setH] = useState<number | null>(null);
   useLayoutEffect(() => {
