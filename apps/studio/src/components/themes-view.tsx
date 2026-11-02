@@ -179,7 +179,7 @@ export function ThemesView() {
         </div>
       ) : null}
 
-      {detail ? <ThemeDetail theme={detail} data={data} act={act} send={send} onOpen={setOpen} onClose={() => setOpen(null)} /> : null}
+      {detail ? <ThemeDetail theme={detail} data={data} act={act} send={send} error={error} onOpen={setOpen} onClose={() => setOpen(null)} /> : null}
     </div>
   );
 }
@@ -250,10 +250,25 @@ function ThemeTile({ theme, data, onOpen }: { theme: ThemeCard; data: ThemesPage
 
 // The detail view (like Canva's template page): the theme playing large, name, designer credit, the songs,
 // the main actions and "More like this".
-function ThemeDetail({ theme, data, act, send, onOpen, onClose }: { theme: ThemeCard; data: ThemesPageData; act: (body: Record<string, unknown>) => Promise<boolean>; send: (url: string, init: RequestInit) => Promise<boolean>; onOpen: (name: string) => void; onClose: () => void }) {
+function ThemeDetail({ theme, data, act, send, error, onOpen, onClose }: { theme: ThemeCard; data: ThemesPageData; act: (body: Record<string, unknown>) => Promise<boolean>; send: (url: string, init: RequestInit) => Promise<boolean>; error: string | null; onOpen: (name: string) => void; onClose: () => void }) {
   const [naming, setNaming] = useState<string | null>(null);
   const [song, setSong] = useState<string>(theme.songs[0]?.id ?? data.songs[0]?.id ?? "");
   const [notice, setNotice] = useState<string | null>(null);
+  // "✓ Saved" next to a field once its change is in theme.json (2 Nov 2026, asked by the user: "where's the save button":
+  // this page saves as you go, so it says so); a failed save shows the studio's message in this view.
+  const [saved, setSaved] = useState<{ field: string; at: number } | null>(null);
+  useEffect(() => {
+    if (!saved) return;
+    const t = setTimeout(() => setSaved((x) => (x === saved ? null : x)), 2500);
+    return () => clearTimeout(t);
+  }, [saved]);
+  const saveAs = (field: string, done: Promise<boolean>) => void done.then((ok) => ok && setSaved({ field, at: Date.now() }));
+  const savedMark = (field: string) =>
+    saved?.field === field ? (
+      <span data-theme-saved={field} role="status" className="shrink-0 text-xs text-emerald-300">
+        ✓ Saved
+      </span>
+    ) : null;
   const v = theme.look as Record<string, unknown>;
   const like = data.themes
     .filter((t) => t.name !== theme.name)
@@ -292,7 +307,7 @@ function ThemeDetail({ theme, data, act, send, onOpen, onClose }: { theme: Theme
                   onBlur={() => {
                     const name = naming.trim();
                     setNaming(null);
-                    if (name && name !== theme.name) void act({ action: "rename", from: theme.name, name }).then((ok) => ok && onOpen(name));
+                    if (name && name !== theme.name) void act({ action: "rename", from: theme.name, name }).then((ok) => ok && (onOpen(name), setSaved({ field: "name", at: Date.now() })));
                   }}
                 />
               ) : (
@@ -300,7 +315,10 @@ function ThemeDetail({ theme, data, act, send, onOpen, onClose }: { theme: Theme
                   {/* "Theme" written above the name (1 Nov 2026): a theme made from a song carries the song's name, so this says it is the look, not the song. */}
                   <span data-theme-detail-kind className="text-brand text-[11px] font-semibold tracking-[0.18em] uppercase">Theme</span>
                   <h2 className="font-display min-w-0 text-2xl">{theme.name}</h2>
-                  <ThemeReachBadge users={theme.users} className="self-start" />
+                  <span className="flex items-center gap-2">
+                    <ThemeReachBadge users={theme.users} className="self-start" />
+                    {savedMark("name")}
+                  </span>
                 </div>
               )}
               <button type="button" data-theme-detail-rename aria-label="Rename the theme" title="Rename the theme (your songs keep their names)" onClick={() => setNaming(theme.name)} className="text-muted-foreground hover:text-foreground rounded p-1.5">
@@ -310,27 +328,35 @@ function ThemeDetail({ theme, data, act, send, onOpen, onClose }: { theme: Theme
                 <X className="size-5" />
               </button>
             </div>
+            {error ? (
+              <p data-theme-detail-error role="alert" className="rounded-md border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs text-red-200">
+                Not saved: {error}
+              </p>
+            ) : null}
             <p className="text-muted-foreground text-xs">
               Fits Reels, TikTok, Shorts and YouTube · verses {String(v.verseFont)}, choruses {String(v.hookFont)} · {effectName(v.verseEffect)} / {effectName(v.hookEffect || v.verseEffect)}
             </p>
             <label className="flex items-center gap-2 text-sm">
               <span className="text-muted-foreground w-20 shrink-0 text-xs">Designer</span>
-              <input key={`${theme.name}-author`} data-theme-detail-author className={cn(input, "flex-1")} defaultValue={theme.author} placeholder="you (or the designer's name, for themes you buy or sell)" onBlur={(e) => e.target.value.trim() !== theme.author && void act({ action: "details", name: theme.name, author: e.target.value })} />
+              <input key={`${theme.name}-author`} data-theme-detail-author className={cn(input, "flex-1")} defaultValue={theme.author} placeholder="you (or the designer's name, for themes you buy or sell)" onBlur={(e) => e.target.value.trim() !== theme.author && saveAs("author", act({ action: "details", name: theme.name, author: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} />
+              {savedMark("author")}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <span className="text-muted-foreground w-20 shrink-0 text-xs">About</span>
-              <input key={`${theme.name}-description`} data-theme-detail-description className={cn(input, "flex-1")} defaultValue={theme.description} placeholder="a line about the mood" onBlur={(e) => e.target.value.trim() !== theme.description && void act({ action: "details", name: theme.name, description: e.target.value })} />
+              <input key={`${theme.name}-description`} data-theme-detail-description className={cn(input, "flex-1")} defaultValue={theme.description} placeholder="a line about the mood" onBlur={(e) => e.target.value.trim() !== theme.description && saveAs("description", act({ action: "details", name: theme.name, description: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} />
+              {savedMark("description")}
             </label>
             <div data-theme-detail-moods className="flex flex-wrap items-center gap-1.5 text-sm">
               <span className="text-muted-foreground w-20 shrink-0 text-xs">Mood</span>
               {THEME_MOODS.map((m) => {
                 const on = theme.moods.includes(m);
                 return (
-                  <button key={m} type="button" data-theme-mood={m} aria-pressed={on} onClick={() => void act({ action: "details", name: theme.name, moods: on ? theme.moods.filter((x) => x !== m) : [...theme.moods, m] })} className={cn("rounded-full border px-2.5 py-0.5 text-xs", on ? "border-brand bg-brand/15 text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                  <button key={m} type="button" data-theme-mood={m} aria-pressed={on} onClick={() => saveAs("moods", act({ action: "details", name: theme.name, moods: on ? theme.moods.filter((x) => x !== m) : [...theme.moods, m] }))} className={cn("rounded-full border px-2.5 py-0.5 text-xs", on ? "border-brand bg-brand/15 text-foreground" : "text-muted-foreground hover:text-foreground")}>
                     {m}
                   </button>
                 );
               })}
+              {savedMark("moods")}
             </div>
             {/* Theme cover (1 Nov 2026): the theme's own picture, kept in its folder; without one its previews show a neutral backdrop in its colours (never a song's picture). */}
             <div data-theme-cover-row className="flex items-center gap-2 text-sm">
@@ -358,15 +384,16 @@ function ThemeDetail({ theme, data, act, send, onOpen, onClose }: { theme: Theme
                     const form = new FormData();
                     form.set("name", theme.name);
                     form.set("file", file);
-                    void send("/api/themes/cover", { method: "POST", body: form });
+                    saveAs("cover", send("/api/themes/cover", { method: "POST", body: form }));
                   }}
                 />
               </label>
               {theme.background ? (
-                <button type="button" data-theme-cover-remove onClick={() => void send(`/api/themes/cover?name=${encodeURIComponent(theme.name)}`, { method: "DELETE" })} className="text-muted-foreground text-xs underline underline-offset-2">
+                <button type="button" data-theme-cover-remove onClick={() => saveAs("cover", send(`/api/themes/cover?name=${encodeURIComponent(theme.name)}`, { method: "DELETE" }))} className="text-muted-foreground text-xs underline underline-offset-2">
                   Remove
                 </button>
               ) : null}
+              {savedMark("cover")}
             </div>
             {theme.background ? (
               <CoverPaletteRow

@@ -4,6 +4,13 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Theme page: "✓ Saved" next to each change ✅ (to verify on the Windows PC)
+- Asked by the user on 2 Nov 2026 ("where's the save button" on Themes → a theme). The page saves as you go (Designer
+  and About when you leave the box or press Enter, a Mood on click, the Theme cover when picked or removed, the name on
+  rename); now each shows "✓ Saved" next to it, and a failed save says "Not saved: …" inside the theme's view (it was
+  shown behind it, on the page). Edit theme keeps its Save / Save as new theme / Cancel (it can change several songs).
+- Tests: themes.e2e.ts (✓ Saved after Designer and Mood).
+
 ### Shots: normal speed first, your clip edits kept, no false "held" warning, Omit from the Shot panel ✅ (to verify on the Windows PC)
 - Reported by the user on 2 Nov 2026 (Familiar Strangers Reels: shots 1-4 and 6-9 all "speed 0.82x" and "the clip is
   too short: its last frame is held for 0.0 s"). Decided: "by default the app should do what it thinks is best; then I
@@ -149,25 +156,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - A song shorter than the window from its hook simply runs to its end (the musical-ending rule, unchanged).
 - Tests: platform.test.ts (preset and window), style.test.ts (preset length "90 s"), make.test.ts (a song that ends
   inside the window runs to its end); timing-fixes.test.ts keeps its length-rule cases on a 30 s Reel fixture.
-
-### Song links: streaming, smart links and social pages per song, picked per post ✅ (to verify on the Windows PC)
-- Asked by the user on 1 Nov 2026 ("when we post per song and platform, we need the link to each platform for
-  the song like Spotify, Apple, YT; on the song assets we add these links"; also marketing platforms such as
-  Feature.fm, the artist's own website, Facebook, SoundCloud; "the artist picks the ones they need, or a copy
-  icon when creating the reel").
-- **Assets → Links**: paste a link and the app names its service (Spotify, Apple Music, YouTube Music,
-  Feature.fm, Linkfire, HyperFollow, Instagram, Facebook, …); change it with a searchable picker (Stores ·
-  Smart links & marketing · Artist & social; "Other" with its own name). Copy and remove on each row. Saved
-  at once in song.json "links".
-- **Post panel → Links for this post**: the song's links picked for this post, each with Copy; "Add a link"
-  (picker) and × change the pick, kept per platform (song.json "postLinks"; "Back to the usual ones").
-  The usual ones: YouTube all the links; Reels / TikTok / Shorts the one best link (a smart link, else the
-  website, else Spotify), since their captions are not clickable (bio, link sticker, pinned comment).
-- **Texts**: the YouTube description gets "Listen:" (stores and smart links) and "Follow:" (social pages);
-  the old "Listen on Spotify: … (add the link to the song)" line of existing templates becomes the real links.
-  Caption templates can use {{bestLink}} {{links}} {{listen}} {{follow}} {{spotify}} {{apple}} {{website}}
-  {{facebook}} … (a line whose link is empty disappears). Templates on disk are never changed.
-- Tests: packages/video test/song-links.test.ts; browser: videos-post.e2e.ts (Assets → Post, pick kept).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

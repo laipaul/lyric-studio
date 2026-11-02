@@ -4,6 +4,25 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Song links: streaming, smart links and social pages per song, picked per post ✅ (to verify on the Windows PC)
+- Asked by the user on 1 Nov 2026 ("when we post per song and platform, we need the link to each platform for
+  the song like Spotify, Apple, YT; on the song assets we add these links"; also marketing platforms such as
+  Feature.fm, the artist's own website, Facebook, SoundCloud; "the artist picks the ones they need, or a copy
+  icon when creating the reel").
+- **Assets → Links**: paste a link and the app names its service (Spotify, Apple Music, YouTube Music,
+  Feature.fm, Linkfire, HyperFollow, Instagram, Facebook, …); change it with a searchable picker (Stores ·
+  Smart links & marketing · Artist & social; "Other" with its own name). Copy and remove on each row. Saved
+  at once in song.json "links".
+- **Post panel → Links for this post**: the song's links picked for this post, each with Copy; "Add a link"
+  (picker) and × change the pick, kept per platform (song.json "postLinks"; "Back to the usual ones").
+  The usual ones: YouTube all the links; Reels / TikTok / Shorts the one best link (a smart link, else the
+  website, else Spotify), since their captions are not clickable (bio, link sticker, pinned comment).
+- **Texts**: the YouTube description gets "Listen:" (stores and smart links) and "Follow:" (social pages);
+  the old "Listen on Spotify: … (add the link to the song)" line of existing templates becomes the real links.
+  Caption templates can use {{bestLink}} {{links}} {{listen}} {{follow}} {{spotify}} {{apple}} {{website}}
+  {{facebook}} … (a line whose link is empty disappears). Templates on disk are never changed.
+- Tests: packages/video test/song-links.test.ts; browser: videos-post.e2e.ts (Assets → Post, pick kept).
+
 ### Review: one card per platform at the top ✅ (to verify on the Windows PC)
 - Asked by the user on 1 Nov 2026 ("the top titles are confusing; the goal is to see, for a song, what has
   been built per platform"; the versions below stay as they are: dates, Approve, Post, …).

@@ -84,6 +84,7 @@ async function main() {
     await page.click("[data-theme-detail-description]");
     for (let i = 0; i < 20 && loadTheme(wsDir, "Night Drive").author !== "Paul"; i++) await sleep(150);
     check(loadTheme(wsDir, "Night Drive").author === "Paul", "Designer: saved in theme.json (the credit for themes you buy or sell)");
+    check(!!(await page.waitForSelector("[data-theme-saved=author]", { timeout: 5000 }).catch(() => null)), "…and \"✓ Saved\" shows next to it");
     check(!!(await page.$("[data-theme-detail-like] [data-themes-tile='Life Lyrics']")), "More like this: Life Lyrics");
     // Use this theme for a song.
     await page.selectOption("[data-theme-detail-song]", ids[1]);
@@ -96,6 +97,7 @@ async function main() {
     await page.click("[data-theme-mood=Night]");
     await page.waitForFunction(() => document.querySelector("[data-theme-mood=Night]")?.getAttribute("aria-pressed") === "true", null, { timeout: 5000 }).catch(() => {});
     check(JSON.stringify(loadTheme(wsDir, "Night Drive").moods) === JSON.stringify(["Night"]), "Mood: Night ticked, saved in theme.json");
+    check(!!(await page.waitForSelector("[data-theme-saved=moods]", { timeout: 5000 }).catch(() => null)), "…and \"✓ Saved\" shows next to the moods");
     // Theme cover: none = a neutral backdrop (no song picture); set one, it shows; Remove puts it aside.
     check(!(await page.$("[data-theme-cover]")) && !(await page.$("[data-themes-tile] [data-tile-frame]")), "Theme cover: none yet, and no tile borrows a song's picture");
     const coverPic = path.join(root, "night cover.jpg");
