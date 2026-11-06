@@ -79,7 +79,11 @@ dissolves are not on HyperFrames yet"): never a silently different video. The ma
   and Remotion; zero outside connections. Paul's PC run (`pnpm hf:measure`) confirms or corrects this.
 - **Paul's PC (6 Nov 2026, "Here with Me", 30.4 s, RTX 5060): (b) passes.** Remotion 81.4 s, (b) 34.6 s (42% of
   Remotion's time), (a) 60.2 s; 240 of 240 frames exactly as planned for all three. The LGPL build's NVENC needs a
-  newer driver than the PC's (master build: driver 610+); a release build (n7.1) is tried next.
+  newer driver than the PC's (master build: driver 610+).
+- **Second PC run (LGPL release build n8.1):** Remotion 33.3 s warm (the first run's 81.4 s was a cold start),
+  (b) 38.0 s (114%), (b) + LGPL + NVENC 37.7 s, (a) 58.4 s; 240 of 240 frames for all. The n8.1 LGPL build's NVENC
+  works on driver 591.86, with x264's quality at the same bitrate (SSIM 0.99425 vs 0.99427) in half the encode
+  time. (b)'s time is HyperFrames' frame capture (~34 s); finding and fixing why is the open item of step 1.
 - **FFmpeg in step 1:** an LGPL FFmpeg build with NVENC (the RTX 5060's hardware encoder) is evaluated next to the
   current build: it would solve the GPL question for an installer and may encode faster. Step 1 reports the
   times of both (the final encode, and the clip layer in (a)) and the quality at the same file size.

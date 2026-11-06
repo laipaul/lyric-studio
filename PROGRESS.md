@@ -28,7 +28,12 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **On the user's PC (6 Nov 2026, "Here with Me", Reel section 30.4 s, Core Ultra 9 275HX, RTX 5060): B passes.**
   Remotion 81.4 s, **B 34.6 s (42% of Remotion's time)**, A 60.2 s; frame accuracy 240 of 240 for B, A's picture
   and Remotion. The LGPL FFmpeg (BtbN master) is LGPL with libvpx-vp9 and no libx264, but its NVENC needs NVIDIA
-  driver 610+ (API 13.1; the PC has 591.86, API 13.0): next try a release build (n7.1). The report now prints the
+  driver 610+ (API 13.1; the PC has 591.86, API 13.0).
+- **Second run on the PC (release build n8.1 LGPL):** Remotion 33.3 s (the first run's 81.4 s included a cold
+  start: Remotion's first bundle), B 38.0 s (114% of Remotion), B with LGPL + NVENC 37.7 s, A 58.4 s; 240 of 240
+  frames for all four. NVENC works with n8.1 (driver 591.86); same quality as x264 at 10 Mbit/s (SSIM 0.99425 vs
+  0.99427), encodes in half the time, but encoding is not B's bottleneck: HyperFrames' frame capture is (~34 s).
+  Open: find why the capture takes ~34 s for 30 s of video and fix it (not a reason to fall back to A). The report now prints the
   card's own reason and the FFmpeg version (it was hidden by Windows line endings).
 - `pnpm hf:measure "<song folder>" [--lgpl "<ffmpeg folder>"]` writes a report (times, frame accuracy, NVENC vs
   x264 quality at the same bitrate, the LGPL build's licence line) to `workspace\cache\hf-measure\<song>\<time>\`.
