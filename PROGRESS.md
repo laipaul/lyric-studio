@@ -33,7 +33,15 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   start: Remotion's first bundle), B 38.0 s (114% of Remotion), B with LGPL + NVENC 37.7 s, A 58.4 s; 240 of 240
   frames for all four. NVENC works with n8.1 (driver 591.86); same quality as x264 at 10 Mbit/s (SSIM 0.99425 vs
   0.99427), encodes in half the time, but encoding is not B's bottleneck: HyperFrames' frame capture is (~34 s).
-  Open: find why the capture takes ~34 s for 30 s of video and fix it (not a reason to fall back to A). The report now prints the
+  Open: find why the capture takes ~34 s for 30 s of video and fix it (not a reason to fall back to A).
+- **Cause found (cloud): HyperFrames chooses too few workers** (Chromes drawing side by side): on 4 cores it chose
+  1 after an 11 s calibration (a "contention" rule: about 2.5 cores per worker); on the PC its rules allow at most 6
+  of 24 cores. **Fix:** our renderer chooses (hfWorkers: one per core, at most half the memory at ~1.5 GB each, at
+  least 30 frames each, at most 16; on the PC 10) and passes `--workers`, which also skips the calibration. Cloud:
+  HyperFrames' choice 87.7 s, ours 58.5 s, the same 240 of 240 frames. `pnpm hf:measure` now also times B at
+  several worker counts and with / without Chrome on the GPU, and the report says how HyperFrames drew (workers,
+  capture mode, GPU); the PC's numbers set the final default. Remotion is warmed up first (its first render
+  builds its bundle). Tests: hf-workers. The report now prints the
   card's own reason and the FFmpeg version (it was hidden by Windows line endings).
 - `pnpm hf:measure "<song folder>" [--lgpl "<ffmpeg folder>"]` writes a report (times, frame accuracy, NVENC vs
   x264 quality at the same bitrate, the LGPL build's licence line) to `workspace\cache\hf-measure\<song>\<time>\`.

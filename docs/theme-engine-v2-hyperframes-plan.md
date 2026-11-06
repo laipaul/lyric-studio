@@ -84,6 +84,10 @@ dissolves are not on HyperFrames yet"): never a silently different video. The ma
   (b) 38.0 s (114%), (b) + LGPL + NVENC 37.7 s, (a) 58.4 s; 240 of 240 frames for all. The n8.1 LGPL build's NVENC
   works on driver 591.86, with x264's quality at the same bitrate (SSIM 0.99425 vs 0.99427) in half the encode
   time. (b)'s time is HyperFrames' frame capture (~34 s); finding and fixing why is the open item of step 1.
+- **Cause and fix:** HyperFrames chose too few parallel Chromes ("workers": 1 on 4 cores, at most 6 on 24). Our
+  renderer now chooses them (one per core, bounded by memory, 30 frames each, at most 16): cloud 87.7 s → 58.5 s,
+  frames still exact. `pnpm hf:measure` times several worker counts and Chrome on / off the GPU on Paul's PC to set
+  the default.
 - **FFmpeg in step 1:** an LGPL FFmpeg build with NVENC (the RTX 5060's hardware encoder) is evaluated next to the
   current build: it would solve the GPL question for an installer and may encode faster. Step 1 reports the
   times of both (the final encode, and the clip layer in (a)) and the quality at the same file size.
