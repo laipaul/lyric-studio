@@ -4,7 +4,7 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### Theme Engine v2 on HyperFrames, step 2a: the Reel picture ✅ (to verify on the Windows PC)
+### Theme Engine v2 on HyperFrames, step 2a: the Reel picture ✅ (confirmed on the Windows PC, 6 Nov 2026)
 - **HyperFrames now draws the whole Reel picture as the current renderer does:** clips (offset, speed, held last
   frame), photos with their Ken Burns move (also the looping move), cuts, dissolves, dips, the loop ending (the first
   shot's opening fading in over the last frames; when it cannot play from there, its first frame as a picture made
@@ -18,6 +18,9 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **Bug found and fixed by the check:** HyperFrames reads times to 0.1 ms, so a start written a hair after its frame
   showed some cuts one frame late (3 of 12 cuts). Starts are now written rounded down, clip offsets rounded up;
   a test checks every frame of a minute.
+- **On the user's PC ("Here with Me", 30.4 s, 5 shots, loop ending): the same picture**, mean 0.9904, lowest 0.9876
+  over 912 frames; current renderer 51.6 s, HyperFrames 44.6 s. Still to move over for it: the lyric effects
+  (typewriter / karaoke-highlight): step 2b.
 - **A removed** (the lyric layer over an FFmpeg picture): HyperFrames draws everything in one pass.
 - Still made by the current renderer: anything with lyrics (their look moves over in 2b), the text backings shadow /
   glow / box, title cards, mood, grain, glow, logo, YouTube layouts and the Canvas loop blend; the log says which.
@@ -386,7 +389,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 **Theme Engine v2 on HyperFrames (adopted 6 Nov 2026; plan approved the same day).** The order is the plan
 docs/theme-engine-v2-hyperframes-plan.md, section 6: step 0 ("break." fix, done) → 1 (renderer seam; D1 decided = (b), everything
 in one pass; its speed and frame accuracy checked on the PC, causes fixed, (a) only a temporary fallback; zero network
-calls when rendering; LGPL FFmpeg with NVENC timed; done: B 92% of Remotion's time on the PC) → 2a (picture for Reels, done; to verify on the PC) → 2b (next) →
+calls when rendering; LGPL FFmpeg with NVENC timed; done: B 92% of Remotion's time on the PC) → 2a (picture for Reels, done, confirmed on the PC) → 2b (next) →
 2b (the Reel word-by-word theme's text) → **M1: the Reel word-by-word theme ("Here with Me") usable for real
 releases** → the spec's T1-T4 → 3-8, the ballad and Pômé themes. GSAP / FFmpeg licences non-blocking: a short
 note (docs/licences.md) before step 8. It replaces the T-list below as the order.

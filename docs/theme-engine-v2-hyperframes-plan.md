@@ -184,7 +184,8 @@ Everything else continues behind it. To get there fastest, step 2 is split and c
 its Reels need, built on HyperFrames only (never twice):
 
 - **2a. Picture for Reels** (done 6 Nov 2026: the same picture as the current renderer, frame by frame, checked by
-  `pnpm hf:parity`; the lyrics-only fallback (a) removed): clips (trim, speed, held frame), photos with Ken Burns, dissolves and dips, the same
+  `pnpm hf:parity`; on Paul's PC "Here with Me" mean 0.990, lowest 0.988 over 912 frames; the lyrics-only
+  fallback (a) removed): clips (trim, speed, held frame), photos with Ken Burns, dissolves and dips, the same
   picture opening and closing (Reels loop ending), the song with its fades, the theme's grade, layout and line
   timing (lead, gap hiding, lead-in), the textboard's per-line cards.
 - **2b. The Reel theme's text:** typewriter letter by letter, the stacked line shape (2-4 short lines chosen per
