@@ -1,0 +1,81 @@
+<!doctype html>
+<!--
+  Videomaker theme template for HyperFrames: "Glow reveal".
+  Each word rises in from a soft blur and LANDS (fully visible, glow at its peak) exactly on its sung start,
+  then its glow settles. Lines appear and leave on Videomaker's own display windows (the planner's).
+  No timings are written here: they come from timing.json (our planner's word times), inlined by spike.ts
+  into the <script id="timing"> block, because a HyperFrames composition may not fetch at render time.
+  The same template makes every format: spike.ts fills in the size, the lyric area and the font.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width={{WIDTH}}, height={{HEIGHT}}" />
+    <script src="assets/gsap.min.js"></script>
+    <style>
+      {{FONT_FACES}}
+      :root {
+        --ink: #ffffff;
+        --glow: {{ACCENT}};
+        --font: "{{FONT}}", serif;
+        --size: {{SIZE}}px;
+        --weight: {{WEIGHT}};
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: {{WIDTH}}px; height: {{HEIGHT}}px; overflow: hidden; background: transparent; }
+      #root { position: relative; width: 100%; height: 100%; background: transparent; font-family: var(--font); }
+      /* A line: centred in the platform's lyric area (inside its safe zones, as Videomaker places lyrics). */
+      .line { position: absolute; left: {{AREA_LEFT}}px; width: {{AREA_WIDTH}}px; top: {{AREA_CENTER_Y}}px; transform: translateY(-50%); text-align: center; }
+      .inner {
+        font-size: var(--size);
+        font-weight: var(--weight);
+        font-style: {{FONT_STYLE}};
+        font-synthesis: none;
+        line-height: 1.18;
+        color: var(--ink);
+        text-wrap: balance;
+      }
+      .w { display: inline-block; opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="lyrics" data-start="0" data-duration="{{DURATION}}" data-width="{{WIDTH}}" data-height="{{HEIGHT}}" data-fps="30">
+{{LINES}}
+    </div>
+    <script type="application/json" id="timing">{{TIMING}}</script>
+    <script>
+      // The theme: everything below is a function of the timeline time (HyperFrames seeks it frame by frame).
+      const T = JSON.parse(document.getElementById("timing").textContent);
+      const S = T.style; // { revealS, risePx, blurPx, settleS, glowPx, hookGlowPx, lineFadeS }
+      const shadow = (px, alpha) => `0px 2px 12px rgba(0,0,0,0.55), 0px 0px ${px}px ${rgba(T.accent, alpha)}`;
+      function rgba(hex, a) {
+        const n = parseInt(hex.replace("#", ""), 16);
+        return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+      }
+      const tl = gsap.timeline({ paused: true });
+      T.lines.forEach((line, i) => {
+        const inner = document.getElementById("l" + i).firstElementChild; // .inner
+        // The line comes in at its on-screen start and leaves at its on-screen end (Videomaker's display rules).
+        tl.fromTo(inner, { opacity: 0 }, { opacity: 1, duration: S.lineFadeS, ease: "power1.out" }, line.show);
+        tl.to(inner, { opacity: 0, duration: S.lineFadeS, ease: "power1.in" }, line.hide - S.lineFadeS);
+        const peak = line.hook ? S.hookGlowPx : S.glowPx;
+        line.words.forEach((w, k) => {
+          const el = document.getElementById("l" + i + "w" + k);
+          // The reveal ENDS on the word's sung start (shorter when the line has just appeared).
+          const d = Math.max(1 / 30, Math.min(S.revealS, w.start - line.show));
+          tl.fromTo(
+            el,
+            { opacity: 0, y: S.risePx, filter: `blur(${S.blurPx}px)`, textShadow: shadow(0, 0) },
+            { opacity: 1, y: 0, filter: "blur(0px)", textShadow: shadow(peak, 0.95), duration: d, ease: "power2.out" },
+            w.start - d,
+          );
+          // Then the glow settles to a soft rest.
+          tl.to(el, { textShadow: shadow(peak * 0.45, 0.35), duration: S.settleS, ease: "power1.out" }, w.start);
+        });
+      });
+      window.__timelines = window.__timelines || {};
+      window.__timelines["lyrics"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "hyperframes-spike",
+  "private": true,
+  "description": "Theme Engine v2, step 1: can HyperFrames render Videomaker's lyric layer? Not part of the app.",
+  "type": "module",
+  "dependencies": {
+    "gsap": "3.13.0",
+    "hyperframes": "0.9.19",
+    "puppeteer-core": "24.10.0"
+  }
+}

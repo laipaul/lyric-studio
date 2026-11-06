@@ -4,6 +4,29 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Theme Engine v2, step 1: HyperFrames spike ✅ (in spikes/hyperframes only; to run on the Windows PC with "Here with Me")
+- **What:** can HyperFrames (HTML + GSAP rendered to video, Apache-2.0, npm `hyperframes` 0.9.19) render the
+  lyric layer? `spikes/hyperframes/spike.ts "<song folder>"` runs our normal pipeline as a dry run (stored
+  alignment = the signed-off sync, read only; beat cuts), takes the first chorus (~30 s), writes timing.json (the
+  planner's word times), fills one theme template (`template/theme.html`, "Glow reveal": each word lands with
+  its glow peak exactly on its sung start) for 1920x1080 and 1080x1920, renders each with HyperFrames as a
+  transparent layer, and lays it over the beat-cut clips + the song with FFmpeg; logs the time per step and
+  format, renders the same 9:16 plan with our current renderer for comparison, and checks sync on the rendered
+  pixels. Nothing in apps/ or packages/ changed; not merged into the pipeline.
+- **Node >= 22 required** by HyperFrames (the app needs 20.9+): the README gives the Windows upgrade (Node 22
+  LTS .msi or `winget install OpenJS.NodeJS.LTS`, then `pnpm install` to rebuild the database module).
+  HyperFrames' telemetry is always off in the script (HYPERFRAMES_NO_TELEMETRY=1, DO_NOT_TRACK=1).
+- **Alpha format: transparent WebM (VP9 with alpha)**, so the lyric layer is a true overlay (no clips inside the
+  composition). Chosen over ProRes 4444 (.mov): the same render time, 3.3 MB instead of 161 MB for 31 s, and it
+  plays in a browser (a later preview in the studio). `--format mov` stays available.
+- **Cloud results** (synthetic stand-in song made by our pipeline, 4-core Xeon, no GPU; 31 s chorus): HyperFrames
+  lyric layer 84 s per format, FFmpeg clips + mix 34-56 s; total 120 s (9:16) / 140 s (16:9) vs 133 s for our
+  current renderer on the same 9:16 plan. Sync: all 43 measurable words land on exactly their own frame in both
+  formats; none visible before its reveal. `hyperframes check`: no errors.
+- **Open:** the user's render times on the PC (RTX 5060) for "Here with Me", then the recommendation (adopt /
+  don't adopt). Not in the spike: dissolves, the Reels loop ending, title cards, the other effects; 16:9 uses
+  the vertical clips over a blurred copy of themselves.
+
 ### Theme page: "✓ Saved" next to each change ✅ (to verify on the Windows PC)
 - Asked by the user on 2 Nov 2026 ("where's the save button" on Themes → a theme). The page saves as you go (Designer
   and About when you leave the box or press Enter, a Mood on click, the Theme cover when picked or removed, the name on
