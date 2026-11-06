@@ -15,7 +15,8 @@ PC (RTX 5060, 32 GB): 9:16 in 72.3 s vs 81.3 s with Remotion (11% faster), 16:9 
 **Conclusion: an artefact of the spike's section start, not a sync error.** Reproduced and fixed in step 0 (6 Nov
 2026): on the cloud fixture with a section starting inside a sung line, the old spike reports "dark" at 0.57 s
 exactly -200 ms and "visible before its reveal"; the fixed spike reports 0 ms, timeline and pixels agreeing on
-all 27 words. Paul's re-run of "break." with `--trace` closes it.
+all 27 words. Confirmed on Paul's PC the same day: "Here with Me", 35 of 35 words on their sung frame (0 ms),
+"break." landing and brightest on its sung frame 591 in both formats. Closed.
 
 Why:
 - -200 ms is exactly the edge of the sync check's window (±6 frames = ±200 ms around each word). The check takes
