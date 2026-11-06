@@ -4,7 +4,7 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### Theme Engine v2 on HyperFrames, step 1: renderer seam, (b) checked, zero network ✅ (to verify on the Windows PC)
+### Theme Engine v2 on HyperFrames, step 1: renderer seam, (b) checked, zero network ✅ (B passed on the Windows PC; NVENC open)
 - **D1 decided by the user (6 Nov 2026): (b), HyperFrames draws everything in one pass** (clips, cuts, dissolves,
   dips, lyrics, effects). It is the target architecture; step 1 measures its speed and the clips' frame accuracy as
   a check, not a choice: if it is slow or a clip drifts, the cause is fixed. (a) (lyrics layer over an FFmpeg
@@ -25,6 +25,11 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **Cloud results** (synthetic song, 31.3 s, 12 shots, 4 cores, no GPU): Remotion 147.3 s, **(b) 93.2 s (63% of
   Remotion's time)**, (a) 134.8 s; frame accuracy 240 of 240 for (b), (a)'s picture and Remotion; zero outside
   connections. The LGPL FFmpeg with NVENC could not be fetched in the cloud: it is timed on the PC.
+- **On the user's PC (6 Nov 2026, "Here with Me", Reel section 30.4 s, Core Ultra 9 275HX, RTX 5060): B passes.**
+  Remotion 81.4 s, **B 34.6 s (42% of Remotion's time)**, A 60.2 s; frame accuracy 240 of 240 for B, A's picture
+  and Remotion. The LGPL FFmpeg (BtbN master) is LGPL with libvpx-vp9 and no libx264, but its NVENC needs NVIDIA
+  driver 610+ (API 13.1; the PC has 591.86, API 13.0): next try a release build (n7.1). The report now prints the
+  card's own reason and the FFmpeg version (it was hidden by Windows line endings).
 - `pnpm hf:measure "<song folder>" [--lgpl "<ffmpeg folder>"]` writes a report (times, frame accuracy, NVENC vs
   x264 quality at the same bitrate, the LGPL build's licence line) to `workspace\cache\hf-measure\<song>\<time>\`.
 - Tests: hf-compile, hf-network, textboard-make (fallback with its reason); video package 934 pass.

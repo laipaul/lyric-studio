@@ -60,6 +60,12 @@ const notes: string[] = [];
 const size = (f: string) => (existsSync(f) ? `${(statSync(f).size / 2 ** 20).toFixed(1)} MB` : "—");
 
 // ---- the LGPL FFmpeg
+/** Plain reason from FFmpeg's stderr: the h264_nvenc lines without their "[h264_nvenc @ ...] " prefix, else the last non-empty line. */
+const nvencFailureReason = (stderr: string): string => {
+  const lines = stderr.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const own = lines.filter((l) => /^\[h264_nvenc @ [^\]]*\]/.test(l)).map((l) => l.replace(/^\[[^\]]*\]\s*/, ""));
+  return own.length ? own.join(" ") : (lines[lines.length - 1] ?? "");
+};
 let nvenc = false;
 let lgplLine = "not given (--lgpl)";
 if (lgpl) {
@@ -67,8 +73,10 @@ if (lgpl) {
   const conf = v.match(/configuration:(.*)/)?.[1] ?? "";
   const licence = /--enable-gpl/.test(conf) ? "GPL (not LGPL!)" : /--enable-nonfree/.test(conf) ? "non-free (not redistributable!)" : "LGPL";
   const encoders = execFileSync(lgpl, ["-hide_banner", "-encoders"], { encoding: "utf8" });
-  nvenc = spawnSync(lgpl, ["-hide_banner", "-v", "error", "-f", "lavfi", "-i", "color=s=256x256:d=0.2", "-c:v", "h264_nvenc", "-f", "null", "-"]).status === 0;
-  lgplLine = `${v.split("\n")[0]}; licence ${licence}; h264_nvenc ${/h264_nvenc/.test(encoders) ? (nvenc ? "works" : "listed but the GPU did not accept it") : "missing"}; libvpx-vp9 ${/libvpx-vp9/.test(encoders) ? "yes" : "missing"}; libx264 ${/libx264/.test(encoders) ? "present (then it is not LGPL)" : "absent"}`;
+  const probe = spawnSync(lgpl, ["-hide_banner", "-v", "error", "-f", "lavfi", "-i", "color=s=1280x720:d=0.2", "-c:v", "h264_nvenc", "-f", "null", "-"], { encoding: "utf8" });
+  nvenc = probe.status === 0;
+  const nvencReason = nvenc ? "" : nvencFailureReason(probe.stderr ?? "");
+  lgplLine = `${v.split(/\r?\n/)[0].trim()}; licence ${licence}; h264_nvenc ${/h264_nvenc/.test(encoders) ? (nvenc ? "works" : `listed but the GPU refused it${nvencReason ? `: ${nvencReason}` : ""}`) : "missing"}; libvpx-vp9 ${/libvpx-vp9/.test(encoders) ? "yes" : "missing"}; libx264 ${/libx264/.test(encoders) ? "present (then it is not LGPL)" : "absent"}`;
   log(`LGPL FFmpeg: ${lgplLine}`);
 }
 
