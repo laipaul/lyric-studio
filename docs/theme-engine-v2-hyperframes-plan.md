@@ -134,10 +134,21 @@ Remotion needs a paid company licence for organisations with 4 or more people; a
 pass that risk to its customers. The goal is **no Remotion code in a commercial build**.
 
 What has to go (all in step 8): `remotion`, `@remotion/player`, `@remotion/renderer`, `@remotion/bundler`,
-`@remotion/layout-utils`, `@remotion/cli`, Remotion's own headless Chrome download, and the two small uses of
-Remotion's `Easing` / `interpolate` in pure code (effects/types.ts, youtube.ts): replaced by our own easing
-module, tested to give the same curves. Text measuring already uses the font files directly (fontkit), not
-Remotion.
+`@remotion/layout-utils`, `@remotion/cli`, Remotion's own headless Chrome download, and the small uses of
+Remotion's `Easing` / `interpolate` in pure code. Status (checked 6 Nov 2026, step 2b):
+- **The HyperFrames text layer contains no Remotion code.** Its bundle (checked with esbuild's list of inputs) is
+  our own 34 files plus `react`, `react-dom` and `scheduler` (MIT). The bundler, `esbuild` (MIT, by Evan Wallace),
+  runs on the PC only to build that file and is not part of any video.
+- **Left for step 8, with the replacement:**
+  - LyricScene.tsx and TextCards.tsx still import `useCurrentFrame` / `useVideoConfig` from `remotion` and
+    `measureText` from `@remotion/layout-utils` **by name**, for the current renderer; in the text layer the bundler
+    maps those names to our own files (src/hf/runtime/clock.ts, measure.ts). Step 8: import our clock and measure
+    directly and drop the mapping.
+  - effects/types.ts already uses our own easing (src/easing.ts, done in step 2b); youtube.ts still uses Remotion's
+    `interpolate`: replaced by a small own function when the YouTube layouts move over (step 6).
+  - test/easing.test.ts compares our curves with Remotion's `Easing.bezier`: removed with Remotion (the curves stay
+    pinned by their own values).
+  - Text measuring for QA and the planner already uses the font files directly (fontkit), not Remotion.
 
 **Other licences to clear before a commercial installer** (non-blocking now, decided 6 Nov 2026: a short licence
 note, docs/licences.md, is written before step 8; the LGPL + NVENC FFmpeg build is already evaluated in step 1):

@@ -20,6 +20,16 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   (lowest 0.990): the same words, frame by frame. Zero network still (the test now includes the text layer and a
   Japanese card). A Reel with lyric effects and title cards now has nothing HyperFrames cannot draw.
 - Tests: easing, hf-parity (picture + Reel text), hf-network (text layer), hf-compile, textboard-make.
+- **Licence check (asked by the user, 6 Nov 2026):**
+  1. The text layer's bundle contains **no Remotion package**: our own 34 files + `react`, `react-dom`, `scheduler`
+     (MIT), checked with esbuild's input list. The bundler itself, `esbuild` (MIT, not Remotion), only builds the
+     file on the PC. Still named, for step 8 (in the plan's removal list with the replacement): LyricScene.tsx /
+     TextCards.tsx import `remotion` (frame, settings) and `@remotion/layout-utils` (measureText) by name for the
+     current renderer, mapped to our own clock.ts / measure.ts in the text layer (step 8: import ours directly);
+     youtube.ts's `interpolate` (step 6); test/easing.test.ts compares with Remotion (removed with it).
+  2. **The easing curves are our own implementation** (src/easing.ts): the standard cubic-bezier maths (the curve's
+     polynomial, solved for x with Newton-Raphson steps, bisection as a fallback), written for this project, not
+     copied from Remotion's source; the test only checks the results match Remotion's to 0.00001.
 - Next (part 2, new on HyperFrames only): the stacked line shape with build-up, the bigger final hook,
   docs/theme-rules.md.
 
