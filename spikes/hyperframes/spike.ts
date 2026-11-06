@@ -1,11 +1,13 @@
 // Theme Engine v2, step 1: the HyperFrames spike. Not part of the app (nothing in apps/ or packages/ changes).
 //
 //   pnpm exec tsx spikes/hyperframes/spike.ts "<song folder>" [--seconds 30] [--format webm|mov] [--no-compare]
+//                                            [--section 0:41-1:12] [--trace "word"]
 //
 // 1. Our normal pipeline, unchanged: the song's lyric timing (the stored alignment, the vocal stem, the
 //    hand-set starts and the vocal-start check: the signed-off sync; aligned once with `timeLyrics` only
 //    when nothing is stored) and the planner's beat cuts, as a dry run of the same code Generate renders
-//    with. The section is the first chorus (~30 s).
+//    with. The section is the planner's own Reel section aimed at ~30 s (hook first, never starting inside a
+//    sung line), or a fixed one with --section.
 // 2. timing.json: the planner's word times for that section (our output; nothing hand-written).
 // 3. The theme template (template/theme.html, HTML + GSAP) filled in twice from that one file: 1920x1080
 //    and 1080x1920, rendered by HyperFrames as TRANSPARENT video (WebM VP9 with alpha, or ProRes 4444).
@@ -28,18 +30,25 @@ const ROOT = path.resolve(HERE, "..", "..");
 const IS_WIN = process.platform === "win32";
 const FPS = 30;
 const WINDOW = 6; // sync check: frames around a word's start (0.2 s)
+const norm = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 
 // ---------------------------------------------------------------- arguments and setup
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
-  options: { seconds: { type: "string", default: "30" }, format: { type: "string", default: "webm" }, "no-compare": { type: "boolean", default: false } },
+  options: {
+    seconds: { type: "string", default: "30" },
+    format: { type: "string", default: "webm" },
+    "no-compare": { type: "boolean", default: false },
+    section: { type: "string" }, // a fixed section ("0:41.2-1:12.0") instead of the planner's own choice
+    trace: { type: "string" }, // a word to print frame by frame in the sync check (e.g. "break.")
+  },
 });
 const fail = (m: string): never => {
   console.error(`\nError: ${m}`);
   process.exit(1);
 };
-if (positionals.length !== 1) fail('Usage: pnpm exec tsx spikes/hyperframes/spike.ts "<song folder>" [--seconds 30] [--format webm|mov] [--no-compare]');
+if (positionals.length !== 1) fail('Usage: pnpm exec tsx spikes/hyperframes/spike.ts "<song folder>" [--seconds 30] [--format webm|mov] [--no-compare] [--section 0:41-1:12] [--trace "word"]');
 const seconds = Number(values.seconds);
 if (!(seconds >= 10 && seconds <= 90)) fail("--seconds must be 10-90");
 const format = values.format as "webm" | "mov";
@@ -93,10 +102,10 @@ log(`  output    ${outDir}`);
 
 // ---------------------------------------------------------------- 1. our pipeline: sync + beat cuts
 
-const plan = async (section?: string) => {
+const plan = async (section?: string, length?: number) => {
   const r = await node.makeVideos({
     workspaceDir, song: files.song, lyrics: files.lyrics, ...(files.hints ? { hint: files.hints } : {}), songFolder: songDir,
-    platforms: "reels", dryRun: true, frameCheck: false, ...(section ? { section } : {}), log: () => {},
+    platforms: "reels", dryRun: true, frameCheck: false, ...(section ? { section } : {}), ...(length ? { length } : {}), log: () => {},
   });
   const p = r.platforms[0];
   if (p.error || !p.plan) throw new Error(p.error ?? "no plan");
@@ -121,18 +130,13 @@ const first = await timed("sync", "Our lyric timing and beat analysis (the store
     return plan();
   }
 });
-// The first chorus: from one bar before the first hook line appears, about `seconds` long, ending after
-// the last line that starts inside it has been sung (never in the middle of a sung line).
-const lines = first.lines;
-const hook = lines.find((l) => l.isHook) ?? lines[0];
-if (!hook) fail("The song has no lyric lines.");
-const barMs = (4 * 60_000) / first.analysis.bpm;
-const fromMs = Math.max(0, hook.start_ms - 250 - barMs);
-const inside = lines.filter((l) => l.start_ms >= fromMs && l.start_ms < fromMs + seconds * 1000);
-const lastSung = Math.max(...inside.map((l) => l.sung_end_ms ?? l.end_ms));
-const toMs = Math.min(first.analysis.duration_ms, Math.max(fromMs + seconds * 1000, lastSung + 600));
-const section = `${secs(fromMs)}-${secs(toMs)}`;
-const chorus = await timed("cuts", `Our beat cuts for the first chorus (${section}, ${hook.isHook ? `line ${hook.number} "${hook.text}"` : "no hook marked: from line 1"})`, () => plan(section));
+void first; // the first plan: the lyric timing is stored and cached for the next one
+// The section: the planner's own Reel section aimed at `seconds` (hook first, never starting or ending inside a
+// sung line: it moves back to the bar before a line still being sung), as Generate chooses it. --section
+// forces a fixed section exactly as given (a line may then be on screen already at the first frame).
+const section = values.section ?? "auto";
+const chorus = await timed("cuts", values.section ? `Our beat cuts for the fixed section ${values.section}` : `Our section (the planner's choice for about ${seconds} s, hook first) and its beat cuts`, () => plan(section, values.section ? undefined : seconds));
+log(`  section ${secs(chorus.section.start_ms)} - ${secs(chorus.section.end_ms)}: ${chorus.section.reason}`);
 const video = chorus.videos[0];
 const props = video.props;
 const durationS = props.durationInFrames / FPS;
@@ -154,7 +158,7 @@ const timing = {
   lines: props.lyrics.map((l) => ({
     text: l.text,
     hook: !!l.isHook,
-    show: Math.max(0, l.startFrame) / FPS,
+    show: l.startFrame / FPS, // before 0: already on screen at the first frame (drawn settled)
     hide: Math.min(props.durationInFrames, l.endFrame) / FPS,
     words: (l.words?.length ? l.words : spread(l)).map((w) => ({ text: w.text, start: w.startFrame / FPS, end: w.endFrame / FPS })),
   })),
@@ -197,7 +201,8 @@ function buildComposition(f: Fmt): string {
   const linesHtml = timing.lines
     .map((l, i) => {
       const words = l.words.map((w, k) => `<span class="w" id="l${i}w${k}">${esc(w.text)}</span>`).join(" ");
-      return `      <div id="l${i}" class="line clip${l.hook ? " hook" : ""}" data-start="${l.show.toFixed(3)}" data-duration="${(l.hide - l.show).toFixed(3)}" data-track-index="1"><div class="inner">${words}</div></div>`;
+      const from = Math.max(0, l.show);
+      return `      <div id="l${i}" class="line clip${l.hook ? " hook" : ""}" data-start="${from.toFixed(3)}" data-duration="${(l.hide - from).toFixed(3)}" data-track-index="1"><div class="inner">${words}</div></div>`;
     })
     .join("\n");
   const fill: Record<string, string> = {
@@ -287,29 +292,34 @@ if (!values["no-compare"]) {
   );
 }
 
-// ---------------------------------------------------------------- 6. sync check on the rendered pixels
+// ---------------------------------------------------------------- 6. sync check
 
-type Sync = { words: number; maxMs: number; meanMs: number; late: string[]; early: string[]; worst: string[] } | { error: string };
-const sync: Record<string, Sync> = {};
-for (const f of formats) {
-  // A failing check never loses the videos and the times above.
-  sync[f.key] = await syncCheck(f, results[f.key].composition, results[f.key].overlay).catch((e: Error) => ({ error: e.message.split("\n")[0] }));
-}
+// Two measurements per word that lands inside the segment:
+//   timeline  the theme's own timeline, seeked frame by frame in a browser: the first frame the word is fully
+//             visible (exact; this is what HyperFrames captures);
+//   pixels    the rendered layer's brightness on the word's spot: the brightest frame within 0.2 s of its
+//             start must be that same frame (the render matches the timeline). A brightest frame on the
+//             window's edge means something else lit that spot (the line around it, a line leaving): "not
+//             measurable", never counted as early or late.
+type WordSync = { id: string; text: string; start: number; landMs: number; pixelMs: number | null; agrees: boolean | null; early: boolean };
+type Sync = { words: number; meanMs: number; maxMs: number; late: string[]; early: string[]; worst: string[]; pixelsAgree: number; notMeasurable: string[]; disagree: string[]; trace: string[] } | { error: string };
 
-async function syncCheck(f: Fmt, dir: string, overlay: string) {
-  // Where each word is on screen when it lands: from the composition itself, in a browser.
-  const { boxes, dom } = await wordBoxes(dir);
+async function syncCheck(f: Fmt, dir: string, overlay: string): Promise<Sync> {
+  const words = timing.lines
+    .flatMap((l, i) => l.words.map((wd, k) => ({ id: `l${i}w${k}`, text: wd.text, start: wd.start })))
+    .filter((wd) => wd.start >= 0.3 && wd.start <= durationS - 0.3);
+  const traced = new Set(values.trace ? words.filter((wd) => norm(wd.text) === norm(values.trace!)).map((wd) => wd.id) : []);
+  const reach = (id: string) => (traced.has(id) ? 12 : WINDOW); // a traced word: ±0.4 s
+  const { boxes, opacity } = await timelineFrames(dir, words.map((wd) => ({ id: wd.id, first: Math.max(0, Math.round(wd.start * FPS) - reach(wd.id)), last: Math.round(wd.start * FPS) + reach(wd.id) })));
   const scale = 4; // the alpha plane is read at quarter size
   const w = Math.round(f.width / scale);
   const h = Math.round(f.height / scale);
-  // Words landing inside the segment (a word sung before its first frames cannot be measured).
-  const words = timing.lines.flatMap((l, i) => l.words.map((wd, k) => ({ id: `l${i}w${k}`, text: wd.text, start: wd.start }))).filter((wd) => wd.start >= 0.3 && wd.start <= durationS - 0.3);
   const frames = Math.ceil(durationS * FPS);
   const sums = new Map<string, number[]>();
   const want = new Map<number, string[]>(); // frame -> words to measure
   for (const wd of words) {
     const s = Math.round(wd.start * FPS);
-    for (let fr = Math.max(0, s - WINDOW); fr <= Math.min(frames - 1, s + WINDOW); fr++) want.set(fr, [...(want.get(fr) ?? []), wd.id]);
+    for (let fr = Math.max(0, s - reach(wd.id)); fr <= Math.min(frames - 1, s + reach(wd.id)); fr++) want.set(fr, [...(want.get(fr) ?? []), wd.id]);
     sums.set(wd.id, []);
   }
   const decoder = spawn(process.env.FFMPEG_PATH ?? "ffmpeg", ["-v", "error", ...(format === "webm" ? ["-c:v", "libvpx-vp9"] : []), "-i", overlay, "-vf", `alphaextract,scale=${w}:${h}:flags=area`, "-f", "rawvideo", "-pix_fmt", "gray", "-"], { stdio: ["ignore", "pipe", "inherit"] });
@@ -335,33 +345,55 @@ async function syncCheck(f: Fmt, dir: string, overlay: string) {
       frame++;
     }
   }
-  // Lands = the brightest frame within 0.2 s of its start (the reveal ends there and the glow peaks there;
-  // the previous line has gone by then). Early / late in the theme's own timeline: not visible at all
-  // until its reveal starts, fully visible at its start (dom).
-  const errors = words.map((wd) => {
+  const trace: string[] = [];
+  const results: WordSync[] = words.map((wd) => {
     const s = Math.round(wd.start * FPS);
-    const first = Math.max(0, s - WINDOW);
-    const values = sums.get(wd.id)!;
-    const land = first + values.indexOf(Math.max(...values));
-    const d = dom[wd.id];
-    const early = !!d && d.before > 0.02;
-    const late = !!d && d.at < 0.98;
-    return { ...wd, errMs: Math.round(((land - wd.start * FPS) / FPS) * 1000), early, late };
+    const first = Math.max(0, s - reach(wd.id));
+    const op = opacity[wd.id]; // per frame from `first`
+    const landIdx = op.findIndex((o) => o >= 0.999);
+    const landFrame = landIdx < 0 ? s + reach(wd.id) : first + landIdx;
+    // Visible before its reveal: more than a trace of it before (start - reveal - 1 frame).
+    const revealFrame = Math.ceil((wd.start - timing.style.revealS) * FPS) - 1;
+    const early = op.some((o, k) => first + k < revealFrame && o > 0.02);
+    // Pixels: the brightest frame in ±WINDOW.
+    const px = sums.get(wd.id)!;
+    const winFrom = Math.max(first, s - WINDOW);
+    const win = px.slice(winFrom - first, winFrom - first + 2 * WINDOW + 1);
+    const peakIdx = win.indexOf(Math.max(...win));
+    const onEdge = peakIdx === 0 && winFrom > 0; // lit already when the window opened
+    const pixelFrame = winFrom + peakIdx;
+    if (traced.has(wd.id)) {
+      trace.push(`"${wd.text}" sung at ${wd.start.toFixed(3)} s (frame ${(wd.start * FPS).toFixed(1)}), ${f.key}:`, "  frame   time    timeline opacity   pixel brightness");
+      op.forEach((o, k) => trace.push(`  ${String(first + k).padStart(5)}  ${((first + k) / FPS).toFixed(3)}   ${o.toFixed(3).padStart(6)}            ${(px[k] ?? 0).toFixed(1).padStart(6)}${first + k === landFrame ? "   <- lands (timeline)" : ""}${first + k === pixelFrame && !onEdge ? "   <- brightest (pixels)" : ""}`));
+    }
+    return {
+      ...wd,
+      landMs: Math.round(((landFrame - wd.start * FPS) / FPS) * 1000),
+      pixelMs: onEdge ? null : Math.round(((pixelFrame - wd.start * FPS) / FPS) * 1000),
+      agrees: onEdge ? null : Math.abs(pixelFrame - landFrame) <= 1,
+      early,
+    };
   });
-  const abs = errors.map((e) => Math.abs(e.errMs));
-  const fmt = (e: (typeof errors)[number]) => `"${e.text}" at ${e.start.toFixed(2)} s: ${e.errMs > 0 ? "+" : ""}${e.errMs} ms`;
+  const abs = results.map((r) => Math.abs(r.landMs));
+  const fmt = (r: WordSync) => `"${r.text}" at ${r.start.toFixed(2)} s: ${r.landMs > 0 ? "+" : ""}${r.landMs} ms`;
   return {
-    words: errors.length,
-    maxMs: Math.max(...abs),
-    meanMs: Math.round(abs.reduce((a, b) => a + b, 0) / abs.length),
-    late: errors.filter((e) => e.errMs > 67 || e.late).map(fmt), // more than 2 frames
-    early: errors.filter((e) => e.errMs < -67 || e.early).map(fmt),
-    worst: [...errors].sort((a, b) => Math.abs(b.errMs) - Math.abs(a.errMs)).slice(0, 5).map(fmt),
+    words: results.length,
+    meanMs: Math.round(abs.reduce((a, b) => a + b, 0) / Math.max(1, abs.length)),
+    maxMs: Math.max(0, ...abs),
+    late: results.filter((r) => r.landMs > 67).map(fmt), // more than 2 frames after its start
+    early: results.filter((r) => r.landMs < -67 || r.early).map(fmt),
+    worst: [...results].sort((a, b) => Math.abs(b.landMs) - Math.abs(a.landMs)).slice(0, 5).map(fmt),
+    pixelsAgree: results.filter((r) => r.agrees).length,
+    notMeasurable: results.filter((r) => r.agrees === null).map((r) => `"${r.text}" at ${r.start.toFixed(2)} s`),
+    disagree: results.filter((r) => r.agrees === false).map((r) => `"${r.text}" at ${r.start.toFixed(2)} s: timeline ${r.landMs} ms, pixels ${r.pixelMs} ms`),
+    trace,
   };
 }
 
+// The composition in a browser: each word's place when it lands, and its opacity frame by frame in the
+// theme's own timeline (what HyperFrames captures at that frame).
 type Box = { x: number; y: number; w: number; h: number };
-async function wordBoxes(dir: string): Promise<{ boxes: Record<string, Box>; dom: Record<string, { before: number; at: number }> }> {
+async function timelineFrames(dir: string, spans: { id: string; first: number; last: number }[]): Promise<{ boxes: Record<string, Box>; opacity: Record<string, number[]> }> {
   const puppeteer = (await import("puppeteer-core")).default;
   const browserPath = process.env.HYPERFRAMES_BROWSER_PATH || execFileSync(process.execPath, [hfEntry, "browser", "path"], { env: hfEnv, encoding: "utf8" }).trim().split(/\r?\n/).pop()!;
   // Served over http (fonts do not load from file://).
@@ -380,28 +412,37 @@ async function wordBoxes(dir: string): Promise<{ boxes: Record<string, Box>; dom
     const size = html.match(/width=(\d+), height=(\d+)/)!;
     await page.setViewport({ width: Number(size[1]), height: Number(size[2]) });
     await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: "load" });
-    return await page.evaluate(async (data: { lines: { show: number; words: { start: number }[] }[]; style: { revealS: number } }) => {
-      await document.fonts.ready;
-      const tl = (window as unknown as { __timelines: Record<string, { seek: (t: number) => void }> }).__timelines.lyrics;
-      const boxes: Record<string, { x: number; y: number; w: number; h: number }> = {};
-      const dom: Record<string, { before: number; at: number }> = {};
-      data.lines.forEach((l, i) =>
-        l.words.forEach((wd, k) => {
-          const el = document.getElementById("l" + i + "w" + k)!;
-          tl.seek(Math.max(0, wd.start - data.style.revealS - 1 / 30)); // a frame before its reveal starts
-          const before = Number(getComputedStyle(el).opacity);
-          tl.seek(wd.start); // landed: no offset, full size
+    return await page.evaluate(
+      async (data: { spans: { id: string; first: number; last: number }[]; starts: Record<string, number>; fps: number }) => {
+        await document.fonts.ready;
+        const tl = (window as unknown as { __timelines: Record<string, { seek: (t: number) => void }> }).__timelines.lyrics;
+        const boxes: Record<string, { x: number; y: number; w: number; h: number }> = {};
+        const opacity: Record<string, number[]> = {};
+        for (const sp of data.spans) {
+          const el = document.getElementById(sp.id)!;
+          tl.seek(data.starts[sp.id]); // landed: no offset, full size
           const r = el.getBoundingClientRect();
-          boxes["l" + i + "w" + k] = { x: r.x, y: r.y, w: r.width, h: r.height };
-          dom["l" + i + "w" + k] = { before: wd.start - data.style.revealS - 1 / 30 >= l.show ? before : 0, at: Number(getComputedStyle(el).opacity) };
-        }),
-      );
-      return { boxes, dom };
-    }, timing);
+          boxes[sp.id] = { x: r.x, y: r.y, w: r.width, h: r.height };
+          opacity[sp.id] = [];
+          for (let fr = sp.first; fr <= sp.last; fr++) {
+            tl.seek(fr / data.fps);
+            opacity[sp.id].push(Number(getComputedStyle(el).opacity));
+          }
+        }
+        return { boxes, opacity };
+      },
+      { spans, starts: Object.fromEntries(timing.lines.flatMap((l, i) => l.words.map((wd, k) => [`l${i}w${k}`, wd.start]))), fps: FPS },
+    );
   } finally {
     await browser.close();
     server.close();
   }
+}
+
+const sync: Record<string, Sync> = {};
+for (const f of formats) {
+  // A failing check never loses the videos and the times above.
+  sync[f.key] = await syncCheck(f, results[f.key].composition, results[f.key].overlay).catch((e: Error) => ({ error: e.message.split("\n")[0] }));
 }
 
 // ---------------------------------------------------------------- report
@@ -418,7 +459,7 @@ const report = [
   "",
   `${new Date().toISOString()} · ${machine}`,
   "",
-  `Section: the first chorus, ${secs(chorus.section.start_ms)} - ${secs(chorus.section.end_ms)} (${durationS.toFixed(1)} s), ${props.shots.length} shots, ${timing.lines.length} lines, ${timing.lines.reduce((n, l) => n + l.words.length, 0)} words. Lyric layer: transparent ${format.toUpperCase()} (alpha), laid over the clips by FFmpeg.`,
+  `Section (${values.section ? "fixed, as given" : "the planner's choice"}): ${secs(chorus.section.start_ms)} - ${secs(chorus.section.end_ms)} (${durationS.toFixed(1)} s), ${props.shots.length} shots, ${timing.lines.length} lines, ${timing.lines.reduce((n, l) => n + l.words.length, 0)} words. Lyric layer: transparent ${format.toUpperCase()} (alpha), laid over the clips by FFmpeg.`,
   "",
   "## Render times (seconds)",
   "",
@@ -433,14 +474,16 @@ const report = [
   "",
   `Our lyric timing + beat analysis (cached): ${times.sync.toFixed(1)} s; beat cuts for the chorus: ${times.cuts.toFixed(1)} s.`,
   "",
-  "## Sync check (rendered pixels: the frame where each word lands vs its sung start)",
+  "## Sync check (the frame where each word lands vs its sung start)",
   "",
   ...(["16x9", "9x16"] as const).flatMap((k) => {
     const r = sync[k];
     if ("error" in r) return [`**${k}:** the sync check could not run (${r.error}); watch the video instead.`, ""];
     return [
-      `**${k}:** ${r.words} words, mean ${r.meanMs} ms, worst ${r.maxMs} ms (one frame = 33 ms). Late by more than 2 frames: ${r.late.length ? r.late.join("; ") : "none"}. Visible before its reveal: ${r.early.length ? r.early.join("; ") : "none"}.`,
+      `**${k}:** ${r.words} words landing in the section. Timeline (exact): mean ${r.meanMs} ms, worst ${r.maxMs} ms after the sung start (one frame = 33 ms). Late by more than 2 frames: ${r.late.length ? r.late.join("; ") : "none"}. Early or visible before its reveal: ${r.early.length ? r.early.join("; ") : "none"}.`,
+      `Pixels confirm the timeline for ${r.pixelsAgree} of ${r.words} words${r.disagree.length ? `; differ: ${r.disagree.join("; ")}` : ""}${r.notMeasurable.length ? `; not measurable (the spot was already lit by the line around it): ${r.notMeasurable.join("; ")}` : ""}.`,
       `Largest: ${r.worst.join("; ")}.`,
+      ...(r.trace.length ? ["", "```", ...r.trace, "```"] : []),
       "",
     ];
   }),

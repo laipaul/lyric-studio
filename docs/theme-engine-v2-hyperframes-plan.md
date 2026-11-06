@@ -1,6 +1,7 @@
 # Theme Engine v2 on HyperFrames — plan for review
 
-_Written 6 Nov 2026 after the spike was adopted. A plan only: nothing here is built yet. Each step below is its
+_Written 6 Nov 2026 after the spike was adopted; approved by Paul the same day with four changes (the M1
+milestone, the D1 criteria, the LGPL + NVENC FFmpeg check, licences non-blocking), all in below. Each step below is its
 own session (plan first, Paul tests, stop). It goes with the spec "Videomaker — Theme Engine v2 Specification"
 (Claude Docs, https://claude.ai/artifact/Y3MPZSg6dpiocMWKGAVQG5) and replaces nothing in it: the spec says what
 a Theme is, this plan says how it gets drawn._
@@ -11,7 +12,10 @@ PC (RTX 5060, 32 GB): 9:16 in 72.3 s vs 81.3 s with Remotion (11% faster), 16:9 
 
 ## 1. "break." at 0.77 s, shown 200 ms early
 
-**Conclusion: almost certainly an artefact of the spike's section start, not a sync error.** Confirm it in step 0.
+**Conclusion: an artefact of the spike's section start, not a sync error.** Reproduced and fixed in step 0 (6 Nov
+2026): on the cloud fixture with a section starting inside a sung line, the old spike reports "dark" at 0.57 s
+exactly -200 ms and "visible before its reveal"; the fixed spike reports 0 ms, timeline and pixels agreeing on
+all 27 words. Paul's re-run of "break." with `--trace` closes it.
 
 Why:
 - -200 ms is exactly the edge of the sync check's window (±6 frames = ±200 ms around each word). The check takes
@@ -57,8 +61,13 @@ dissolves are not on HyperFrames yet"): never a silently different video. The ma
   But the Storyboard and Shape previews would have to combine two systems to stay identical to the render.
 - (b) **Everything in one composition** (clips as video elements inside HyperFrames): preview and render are
   the same file by construction (our hard rule), one system to maintain.
-- Recommendation: (b) if it is within ~20% of (a)'s speed on Paul's PC, else (a) with a preview that plays the
-  same two layers. Both are measured on "Here with Me" in step 1.
+- **Decided (Paul, 6 Nov 2026):** (b) only if it is within ~20% of (a)'s speed on Paul's PC **and** the clips are
+  frame-accurate in the browser (a test clip with a frame number burnt into every frame: each rendered frame
+  must show exactly the source frame the plan asks for, also slowed and after a seek); else (a), with a preview
+  that plays the same two layers. Both are measured on "Here with Me" in step 1.
+- **FFmpeg in step 1:** an LGPL FFmpeg build with NVENC (the RTX 5060's hardware encoder) is evaluated next to the
+  current build: it would solve the GPL question for an installer and may encode faster. Step 1 reports the
+  times of both (the final encode, and the clip layer in (a)) and the quality at the same file size.
 
 ### Feature by feature: how each moves
 
@@ -103,7 +112,8 @@ Remotion's `Easing` / `interpolate` in pure code (effects/types.ts, youtube.ts):
 module, tested to give the same curves. Text measuring already uses the font files directly (fontkit), not
 Remotion.
 
-**Other licences to clear before a commercial installer** (a check in step 8, written into a LICENCES.md):
+**Other licences to clear before a commercial installer** (non-blocking now, decided 6 Nov 2026: a short licence
+note, docs/licences.md, is written before step 8; the LGPL + NVENC FFmpeg build is already evaluated in step 1):
 - **GSAP**: free since 2024 including commercial use, under Webflow's standard licence, which has conditions
   (for example about tools that compete with Webflow's visual builders). Needs a careful read for an app where
   users design animations. Fallback if it does not fit: HyperFrames also drives CSS / Web Animations and other
@@ -140,27 +150,51 @@ highlighted word per line, peaks per platform). The code reads the values; the m
    test built from the note's moment (that frame, before and after) so it never comes back.
 4. **Report**: the next render's assessment says what the rule did ("Done for you: …"); the note is marked done.
 
-## 5. Phases, effort, risks
+## 5. First release milestone: the Reel word-by-word theme (decided 6 Nov 2026)
+
+**M1: the Reel word-by-word theme ("Here with Me" style) is usable for real releases right after steps 0-2.**
+Everything else continues behind it. To get there fastest, step 2 is split and carries only what that theme and
+its Reels need, built on HyperFrames only (never twice):
+
+- **2a. Picture for Reels:** clips (trim, speed, held frame), photos with Ken Burns, dissolves and dips, the same
+  picture opening and closing (Reels loop ending), the song with its fades, the theme's grade, layout and line
+  timing (lead, gap hiding, lead-in), the textboard's per-line cards.
+- **2b. The Reel theme's text:** typewriter letter by letter, the stacked line shape (2-4 short lines chosen per
+  phrase, build-up until the phrase ends), the title card (title, "by Life Lyrics", the Japanese tagline with its
+  automatic Noto JP fallback, the credits line), a bigger final hook (the last chorus, its last words larger),
+  colour as set in the theme (the automatic per-clip colour comes later with T5). The first entries of
+  docs/theme-rules.md for exactly these behaviours, with their tests.
+- **M1 gate:** "Here with Me" generated next to the original Reel; Paul would publish it; two more songs made with
+  it; QA and the assessment work on HyperFrames videos. From then on the Reels of real releases use it.
+
+What M1 does not need, and so comes after it: YouTube layouts and Canvas (Remotion keeps making them meanwhile,
+explicitly), the other effects and add-ons, the studio previews on the HyperFrames player (until then the
+Storyboard preview shows the Remotion drawing of the same plan, said on screen), the ballad and Pômé themes,
+the full rule engine.
+
+## 6. Phases, effort, risks
 
 One step = one session (plan, build, test in the cloud, Paul tests on the PC). Rough sizes: S ≈ half a session,
 M ≈ one, L ≈ two.
 
 | Step | What | Size |
 | --- | --- | --- |
-| 0 | Fix and confirm "break." (section start, carried-in lines, sync check); spike re-run on "Here with Me" | S |
-| 1 | Compiler skeleton + renderer seam + fallback; measure D1 (lyrics-only vs everything) on Paul's PC; Paul decides | M |
-| 2 | Picture and basics: clips, photos, fill, dissolves, dips, loop ending, audio, layout, line timing, glide | L |
-| — | Spec T1-T4 (section tags, v2 schema + adapter, rule engine, Craft Rules + theme-rules.md): data only, renderer-free, can go here | 4 × M |
-| 3 | Theme picture: grade, vignette, backing, bars, grain, glow; HyperFrames becomes the default renderer | M |
-| 4 | Textboard cards, title / hook / end cards, the most used effects | L |
+| 0 | Fix and confirm "break." (section start, carried-in lines, sync check, trace); spike re-run on "Here with Me" | S |
+| 1 | Converter skeleton + renderer seam + fallback; measure D1 (speed and frame accuracy) and the LGPL + NVENC FFmpeg on Paul's PC; Paul decides | M |
+| 2a | Picture for Reels (above) | L |
+| 2b | The Reel theme's text (above) + first theme-rules.md entries | L |
+| **M1** | **Reel word-by-word theme for real releases** ("Here with Me" golden test + two songs) | Paul's test pass |
+| — | Spec T1-T4 (section tags, v2 schema + adapter, rule engine, Craft Rules + theme-rules.md): data only, renderer-free | 4 × M |
+| 3 | Theme picture rest (vignette, backing, bars, grain, glow); HyperFrames becomes the default renderer for all Reels | M |
+| 4 | Textboard cards and hook / end cards on all platforms, the most used effects | L |
 | 5 | The other effects and add-ons, each checked against the current renderer | L |
+| — | Ballad and Pômé themes (spec T6-T7) + the notes loop | 2 × M + M |
 | 6 | YouTube layouts, Canvas, thumbnail | M |
 | 7 | Studio previews on `@hyperframes/player`; effects grid | L |
-| — | Three starter themes (spec T5-T7, T9 golden test) + the notes loop | 3 × M + M |
-| 8 | Parity gate, remove Remotion, easing module, rerender of old manifests, licence check, installer notes | M |
+| — | Licence note (docs/licences.md): GSAP terms, FFmpeg build | S |
+| 8 | Parity gate, remove Remotion, easing module, rerender of old manifests, installer notes | M |
 
-About 20 sessions in total, plus Paul's test passes. Order: 0 → 1 → T1-T4 → 2 → 3 → 4 → 5 → three themes → 6 → 7 → 8
-(the themes need 2-5; YouTube / Canvas / previews can follow the themes).
+About 20 sessions in total, plus Paul's test passes; M1 after about 5 (steps 0, 1, 2a, 2b and the test pass).
 
 **Risks**
 - **HyperFrames is young** (0.9.x, releases almost daily, by HeyGen): pin the version, upgrade on purpose with the

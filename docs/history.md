@@ -4,6 +4,12 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Fix: Review showed another song's videos ✅ (to verify on the Windows PC)
+- Reported by the user on 1 Nov 2026 ("I'm reviewing Here with me, why am I seeing the other song's reels?").
+- Cause: Review lists every video in the song folder's exports\ folder. A song folder made by copying another
+  song's folder brings that song's exports along. Now a video shows only when its manifest names this song,
+  or was made from the same music (songRuns; test in exports.test.ts). The other files are not touched.
+
 ### Reels length: 90 s instead of 30 s ✅ (to verify on the Windows PC)
 - Decided by the user on 1 Nov 2026 ("90 s gives time to hear the core chorus and tell a story without becoming
   a mini series"; exceptionally up to 2 min when the story is compelling: the "Long story" choice, Theme v2 step 6).

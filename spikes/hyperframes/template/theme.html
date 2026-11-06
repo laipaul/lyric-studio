@@ -55,14 +55,23 @@
       const tl = gsap.timeline({ paused: true });
       T.lines.forEach((line, i) => {
         const inner = document.getElementById("l" + i).firstElementChild; // .inner
-        // The line comes in at its on-screen start and leaves at its on-screen end (Videomaker's display rules).
-        tl.fromTo(inner, { opacity: 0 }, { opacity: 1, duration: S.lineFadeS, ease: "power1.out" }, line.show);
-        tl.to(inner, { opacity: 0, duration: S.lineFadeS, ease: "power1.in" }, line.hide - S.lineFadeS);
         const peak = line.hook ? S.hookGlowPx : S.glowPx;
+        // A line already on screen at the first frame (it appeared before the section starts) is drawn
+        // settled from frame 0: no fade-in, and the words sung before the start are already there.
+        const from = Math.max(0, line.show);
+        if (line.show < 0) gsap.set(inner, { opacity: 1 });
+        // Otherwise the line comes in at its on-screen start; it leaves at its on-screen end (Videomaker's display rules).
+        else tl.fromTo(inner, { opacity: 0 }, { opacity: 1, duration: S.lineFadeS, ease: "power1.out" }, line.show);
+        tl.to(inner, { opacity: 0, duration: S.lineFadeS, ease: "power1.in" }, line.hide - S.lineFadeS);
         line.words.forEach((w, k) => {
           const el = document.getElementById("l" + i + "w" + k);
-          // The reveal ENDS on the word's sung start (shorter when the line has just appeared).
-          const d = Math.max(1 / 30, Math.min(S.revealS, w.start - line.show));
+          if (w.start <= 0) {
+            // Sung before the first frame: landed and its glow at rest.
+            gsap.set(el, { opacity: 1, y: 0, filter: "blur(0px)", textShadow: shadow(peak * 0.45, 0.35) });
+            return;
+          }
+          // The reveal ENDS on the word's sung start (shorter when the line has just appeared, or the section has just started).
+          const d = Math.max(1 / 30, Math.min(S.revealS, w.start - from));
           tl.fromTo(
             el,
             { opacity: 0, y: S.risePx, filter: `blur(${S.blurPx}px)`, textShadow: shadow(0, 0) },

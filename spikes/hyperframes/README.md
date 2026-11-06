@@ -11,7 +11,8 @@ Videomaker's lyric animation renderer? This folder answers that **without touchi
 1. Runs **our normal pipeline** as a dry run of the same planner Generate uses: the stored alignment
    (vocal stem, hand-set starts, vocal-start check) and the beat cuts. If the song was never aligned for its
    current lyrics.txt, it aligns once with our own lyric timing (needs `pnpm audio:setup --ai`).
-2. Picks the **first chorus** (one bar before the first hook line, ~30 s, never ending inside a sung line).
+2. Takes the **planner's own Reel section aimed at ~30 s** (hook first, never starting or ending inside a sung
+   line), as Generate would choose it; `--section 0:41-1:12` forces a fixed section exactly as given.
 3. Writes **timing.json**: the planner's word times for that section (our output; nothing hand-written).
 4. Fills the **theme template** (`template/theme.html`, HTML + GSAP, style "Glow reveal": each word rises in
    from a soft blur and lands, fully visible with its glow at the peak, exactly on its sung start; then the glow
@@ -20,8 +21,9 @@ Videomaker's lyric animation renderer? This folder answers that **without touchi
 6. FFmpeg builds the beat-cut clips from the plan's shot list, cuts the song to the section (AAC 320 kbps, a
    fade only where the music is cut, nothing else), and lays the lyric layer on top: **clips + lyrics + song**.
 7. For comparison, **our current renderer** (Remotion) renders the same 9:16 plan (skip with `--no-compare`).
-8. A **sync check** on the rendered pixels: the frame where each word lands vs its sung start, plus a check
-   in the template's own timeline that no word is visible before its reveal.
+8. A **sync check**: the frame where each word lands in the theme's own timeline (exact; what HyperFrames
+   captures) vs its sung start, confirmed on the rendered pixels; a word whose spot is already lit by the line
+   around it is "not measurable", never early or late. `--trace "break."` prints one word frame by frame.
 9. Logs the time of every step per format and writes `report.md` into
    `spikes\hyperframes\out\<song>\<time>\` next to the videos.
 
@@ -57,8 +59,9 @@ git pull
 pnpm exec tsx spikes\hyperframes\spike.ts "workspace\songs\Life Lyrics\Here with Me"
 ```
 
-Options: `--seconds 30` (section length), `--format mov` (ProRes 4444 instead of WebM), `--no-compare`
-(skip our current renderer). It takes a few minutes; the last lines print the report and the folder.
+Options: `--seconds 30` (section length the planner aims for), `--section 0:41-1:12` (a fixed section),
+`--trace "word"` (that word frame by frame in the report), `--format mov` (ProRes 4444 instead of WebM),
+`--no-compare` (skip our current renderer). It takes a few minutes; the last lines print the report and the folder.
 
 ## Files
 
