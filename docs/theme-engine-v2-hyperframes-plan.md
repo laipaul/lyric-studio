@@ -88,6 +88,10 @@ dissolves are not on HyperFrames yet"): never a silently different video. The ma
   renderer now chooses them (one per core, bounded by memory, 30 frames each, at most 16): cloud 87.7 s → 58.5 s,
   frames still exact. `pnpm hf:measure` times several worker counts and Chrome on / off the GPU on Paul's PC to set
   the default.
+- **Paul's PC, third run: (b) passes.** Remotion 29.3 s (warm), **(b) 26.8 s (92%)**, (b) + LGPL + NVENC 32.0 s,
+  (a) 46.2 s; 240 of 240 frames for all. Workers: HyperFrames' own 6 → 34.7 s, our 10 → 31.7 s (8-16 all within a
+  second: 10 stays). NVENC brings no gain (drawing, not encoding, is the limit): libx264 stays; the LGPL n8.1 build
+  works with NVENC on driver 591.86 for a future installer. **Step 1 closed (6 Nov 2026).**
 - **FFmpeg in step 1:** an LGPL FFmpeg build with NVENC (the RTX 5060's hardware encoder) is evaluated next to the
   current build: it would solve the GPL question for an installer and may encode faster. Step 1 reports the
   times of both (the final encode, and the clip layer in (a)) and the quality at the same file size.

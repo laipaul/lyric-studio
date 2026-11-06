@@ -4,7 +4,7 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### Theme Engine v2 on HyperFrames, step 1: renderer seam, (b) checked, zero network ✅ (B passed on the Windows PC; NVENC open)
+### Theme Engine v2 on HyperFrames, step 1: renderer seam, (b) checked, zero network ✅ (confirmed on the Windows PC: B 26.8 s vs Remotion 29.3 s, 6 Nov 2026)
 - **D1 decided by the user (6 Nov 2026): (b), HyperFrames draws everything in one pass** (clips, cuts, dissolves,
   dips, lyrics, effects). It is the target architecture; step 1 measures its speed and the clips' frame accuracy as
   a check, not a choice: if it is slow or a clip drifts, the cause is fixed. (a) (lyrics layer over an FFmpeg
@@ -41,7 +41,13 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   HyperFrames' choice 87.7 s, ours 58.5 s, the same 240 of 240 frames. `pnpm hf:measure` now also times B at
   several worker counts and with / without Chrome on the GPU, and the report says how HyperFrames drew (workers,
   capture mode, GPU); the PC's numbers set the final default. Remotion is warmed up first (its first render
-  builds its bundle). Tests: hf-workers. The report now prints the
+  builds its bundle). Tests: hf-workers.
+- **Third run on the PC (6 Nov 2026): B passes. Remotion 29.3 s, B 26.8 s (92% of Remotion)**, B + LGPL + NVENC
+  32.0 s, A 46.2 s; 240 of 240 frames for all four. Workers: HyperFrames' own choice 6 (34.7 s), 2: 52.4 s,
+  4: 43.2 s, 8: 34.1 s, **10 (our choice): 31.7 s**, 12: 32.0 s, 16: 32.7 s: our choice stays the default. Chrome
+  uses the GPU by itself (off: +1.5 s); Windows captures by screenshot. NVENC gives no gain here (the drawing is
+  the bottleneck, not the encode): libx264 stays the default; the LGPL build with NVENC works, for the installer.
+  Step 1 done; (a) is no longer needed and goes when step 2a is in. The report now prints the
   card's own reason and the FFmpeg version (it was hidden by Windows line endings).
 - `pnpm hf:measure "<song folder>" [--lgpl "<ffmpeg folder>"]` writes a report (times, frame accuracy, NVENC vs
   x264 quality at the same bitrate, the LGPL build's licence line) to `workspace\cache\hf-measure\<song>\<time>\`.
@@ -370,7 +376,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 **Theme Engine v2 on HyperFrames (adopted 6 Nov 2026; plan approved the same day).** The order is the plan
 docs/theme-engine-v2-hyperframes-plan.md, section 6: step 0 ("break." fix, done) → 1 (renderer seam; D1 decided = (b), everything
 in one pass; its speed and frame accuracy checked on the PC, causes fixed, (a) only a temporary fallback; zero network
-calls when rendering; LGPL FFmpeg with NVENC timed; now) → 2a (picture for Reels) →
+calls when rendering; LGPL FFmpeg with NVENC timed; done: B 92% of Remotion's time on the PC) → 2a (next) (picture for Reels) →
 2b (the Reel word-by-word theme's text) → **M1: the Reel word-by-word theme ("Here with Me") usable for real
 releases** → the spec's T1-T4 → 3-8, the ballad and Pômé themes. GSAP / FFmpeg licences non-blocking: a short
 note (docs/licences.md) before step 8. It replaces the T-list below as the order.
