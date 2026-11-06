@@ -4,28 +4,29 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### Theme Engine v2, step 1: HyperFrames spike ✅ (in spikes/hyperframes only; to run on the Windows PC with "Here with Me")
-- **What:** can HyperFrames (HTML + GSAP rendered to video, Apache-2.0, npm `hyperframes` 0.9.19) render the
-  lyric layer? `spikes/hyperframes/spike.ts "<song folder>"` runs our normal pipeline as a dry run (stored
-  alignment = the signed-off sync, read only; beat cuts), takes the first chorus (~30 s), writes timing.json (the
-  planner's word times), fills one theme template (`template/theme.html`, "Glow reveal": each word lands with
-  its glow peak exactly on its sung start) for 1920x1080 and 1080x1920, renders each with HyperFrames as a
-  transparent layer, and lays it over the beat-cut clips + the song with FFmpeg; logs the time per step and
-  format, renders the same 9:16 plan with our current renderer for comparison, and checks sync on the rendered
-  pixels. Nothing in apps/ or packages/ changed; not merged into the pipeline.
-- **Node >= 22 required** by HyperFrames (the app needs 20.9+): the README gives the Windows upgrade (Node 22
-  LTS .msi or `winget install OpenJS.NodeJS.LTS`, then `pnpm install` to rebuild the database module).
-  HyperFrames' telemetry is always off in the script (HYPERFRAMES_NO_TELEMETRY=1, DO_NOT_TRACK=1).
-- **Alpha format: transparent WebM (VP9 with alpha)**, so the lyric layer is a true overlay (no clips inside the
-  composition). Chosen over ProRes 4444 (.mov): the same render time, 3.3 MB instead of 161 MB for 31 s, and it
-  plays in a browser (a later preview in the studio). `--format mov` stays available.
-- **Cloud results** (synthetic stand-in song made by our pipeline, 4-core Xeon, no GPU; 31 s chorus): HyperFrames
-  lyric layer 84 s per format, FFmpeg clips + mix 34-56 s; total 120 s (9:16) / 140 s (16:9) vs 133 s for our
-  current renderer on the same 9:16 plan. Sync: all 43 measurable words land on exactly their own frame in both
-  formats; none visible before its reveal. `hyperframes check`: no errors.
-- **Open:** the user's render times on the PC (RTX 5060) for "Here with Me", then the recommendation (adopt /
-  don't adopt). Not in the spike: dissolves, the Reels loop ending, title cards, the other effects; 16:9 uses
-  the vertical clips over a blurred copy of themselves.
+### Theme Engine v2, step 1: HyperFrames spike — ADOPTED ✅ (6 Nov 2026; code in spikes/hyperframes only)
+- **Decision (the user, 6 Nov 2026): HyperFrames is adopted as the lyric renderer.** Results on the user's PC
+  (Windows, RTX 5060, 32 GB), "Here with Me", first chorus: **9:16 72.3 s vs 81.3 s with Remotion** (the same
+  plan), **16:9 89.7 s**, sync mean ~25 ms (under one frame). The user's verdict: "lyrics spot on." One word,
+  "break." at 0.77 s, measured 200 ms early: almost certainly an artefact of the spike's section start (a line
+  carried in at frame 0, measured at the edge of the check's ±200 ms window); confirmed and fixed in step 0 of
+  the plan.
+- **Next: the plan** docs/theme-engine-v2-hyperframes-plan.md (for the user's review): the "break." fix,
+  HyperFrames behind the same plan with Remotion as fallback until parity (feature by feature), Remotion removed
+  before any commercial version (licence), three starter themes driven by docs/theme-rules.md with the user's
+  timestamped notes becoming rules, phases (~20 sessions), effort and risks.
+- **What the spike is:** `spikes/hyperframes/spike.ts "<song folder>"` runs our normal pipeline as a dry run
+  (the stored alignment, read only; beat cuts), takes the first chorus, writes timing.json (the planner's word
+  times), fills one theme template (template/theme.html, "Glow reveal") for 1920x1080 and 1080x1920, renders each
+  with HyperFrames as a transparent layer, lays it over the beat-cut clips + the song with FFmpeg, logs render
+  times per format, renders the same 9:16 plan with Remotion for comparison and checks sync on the pixels.
+  Nothing in apps/ or packages/ changed.
+- **Node >= 22 required** by HyperFrames (the app needs 20.9+); Windows setup in spikes/hyperframes/README.md.
+  HyperFrames' telemetry is always off (HYPERFRAMES_NO_TELEMETRY=1, DO_NOT_TRACK=1).
+- **Alpha format: transparent WebM (VP9 with alpha)**: the same render time as ProRes 4444 (.mov), 3.3 MB instead
+  of 161 MB for 31 s, and it plays in a browser; `--format mov` stays available.
+- Cloud fixture (synthetic song, 4-core Xeon, no GPU): 120 s (9:16) / 140 s (16:9) vs 133 s Remotion; all words
+  landing inside the segment on their own frame.
 
 ### Theme page: "✓ Saved" next to each change ✅ (to verify on the Windows PC)
 - Asked by the user on 2 Nov 2026 ("where's the save button" on Themes → a theme). The page saves as you go (Designer
@@ -171,15 +172,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   song's folder brings that song's exports along. Now a video shows only when its manifest names this song,
   or was made from the same music (songRuns; test in exports.test.ts). The other files are not touched.
 
-### Reels length: 90 s instead of 30 s ✅ (to verify on the Windows PC)
-- Decided by the user on 1 Nov 2026 ("90 s gives time to hear the core chorus and tell a story without becoming
-  a mini series"; exceptionally up to 2 min when the story is compelling: the "Long story" choice, Theme v2 step 6).
-- presets/platforms.json: Reels length target 90 s (tolerance unchanged, +-15%: 76.5-103.5 s; up to 25% shorter
-  = 67.5 s when no clean end exists in the window). Still hook-first: the "story" start from verse 1 is Theme v2 step 6.
-- A song shorter than the window from its hook simply runs to its end (the musical-ending rule, unchanged).
-- Tests: platform.test.ts (preset and window), style.test.ts (preset length "90 s"), make.test.ts (a song that ends
-  inside the window runs to its end); timing-fixes.test.ts keeps its length-rule cases on a 30 s Reel fixture.
-
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -324,6 +316,11 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   mix has different timing, use Generate -> advanced -> re-align.
 
 ## Next
+
+**Theme Engine v2 on HyperFrames (adopted 6 Nov 2026).** The plan docs/theme-engine-v2-hyperframes-plan.md is
+waiting for the user's review; once approved its steps (0, 1, then the spec's T1-T4, 2-8 and the three starter
+themes) replace the T-list below as the order. Nothing of it is built yet.
+
 
 **Theme v2 (agreed 1 Nov 2026; lyric sync accepted by the user).** Comes first now; each item is its own step, plan
 first, stop after each. Spec (agreed with the user, kept up to date in chat): "Videomaker — Theme Engine v2

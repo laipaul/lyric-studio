@@ -4,6 +4,15 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Reels length: 90 s instead of 30 s ✅ (to verify on the Windows PC)
+- Decided by the user on 1 Nov 2026 ("90 s gives time to hear the core chorus and tell a story without becoming
+  a mini series"; exceptionally up to 2 min when the story is compelling: the "Long story" choice, Theme v2 step 6).
+- presets/platforms.json: Reels length target 90 s (tolerance unchanged, +-15%: 76.5-103.5 s; up to 25% shorter
+  = 67.5 s when no clean end exists in the window). Still hook-first: the "story" start from verse 1 is Theme v2 step 6.
+- A song shorter than the window from its hook simply runs to its end (the musical-ending rule, unchanged).
+- Tests: platform.test.ts (preset and window), style.test.ts (preset length "90 s"), make.test.ts (a song that ends
+  inside the window runs to its end); timing-fixes.test.ts keeps its length-rule cases on a 30 s Reel fixture.
+
 ### Song links: streaming, smart links and social pages per song, picked per post ✅ (to verify on the Windows PC)
 - Asked by the user on 1 Nov 2026 ("when we post per song and platform, we need the link to each platform for
   the song like Spotify, Apple, YT; on the song assets we add these links"; also marketing platforms such as
