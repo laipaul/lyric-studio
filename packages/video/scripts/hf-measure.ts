@@ -96,7 +96,7 @@ log(`${title}: ${(props.durationInFrames / 30).toFixed(1)} s, ${props.shots.leng
 
 // ---- render times on the song (Remotion warmed up first: its first render of a session builds its bundle)
 const R = path.join(out, "R-remotion.mp4");
-await timed("Rwarm", "Current renderer (Remotion): warm-up, 1 s", () => renderLyricVideo({ props: { ...props, durationInFrames: 30, audio: null }, media, outFile: path.join(out, "R-warmup.mp4"), log: () => {} }));
+await timed("Rwarm", "Current renderer (Remotion): warm-up, 1 s", () => renderLyricVideo({ props: { ...props, durationInFrames: 30 }, media, outFile: path.join(out, "R-warmup.mp4"), log: () => {} }));
 await timed("R", "Current renderer (Remotion), 9:16", () => renderLyricVideo({ props, media, outFile: R, videoBitrate: bitrate, log: () => {} }));
 const B = path.join(out, "B-hyperframes-x264.mp4");
 await timed("B", "B: HyperFrames everything in one, app FFmpeg (libx264)", () => renderWithHyperframes({ props, media, outFile: B, mode: "all", workDir: path.join(out, "work-B"), encoder: { bitrate }, timings: (stages.B = {}), capture: (caps.B = {}) }));
