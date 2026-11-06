@@ -10,6 +10,7 @@
 import { spawn } from "node:child_process";
 import { copyFileSync, existsSync, linkSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import os from "node:os";
 import path from "node:path";
 
 import { ffmpegBin, REPO_ROOT } from "@lyric/db";
@@ -184,6 +185,36 @@ export async function pictureLayer(props: Props, roots: MediaRoots, out: string,
   await runFfmpeg(e.ffmpeg, [...inputs, "-filter_complex", chains.join(";"), "-map", "[v]", ...videoArgs(e), "-r", String(FPS), "-an", out]);
 }
 
+// ---------------------------------------------------------------- how many frames are drawn at once
+
+// HyperFrames draws a video with several Chromes side by side ("workers"). Left to itself it is very careful (on
+// 4 cores it chose 1 worker: 103 s; with 4: 49 s, the same frames) and spends seconds calibrating first. We
+// choose: one worker per core, no more than half the memory allows (~1.5 GB each, HyperFrames' own figure), at
+// least 30 frames each, at most 16; measured per PC by `pnpm hf:measure`.
+export function hfWorkers(totalFrames: number, machine: { cpus: number; memoryGB: number } = { cpus: os.cpus().length, memoryGB: os.totalmem() / 2 ** 30 }): number {
+  return Math.max(1, Math.min(machine.cpus, Math.floor((machine.memoryGB * 0.5) / 1.5), Math.floor(totalFrames / 30), 16));
+}
+
+// What HyperFrames reports about a render: workers, how frames were captured, whether Chrome had the GPU.
+export type HfCaptureInfo = { workers: number | null; capture: string | null; gpu: string | null; setupS: number | null; captureS: number | null };
+const seconds = (t: string | undefined) => {
+  if (!t) return null;
+  const m = t.match(/(?:(\d+)m\s*)?([\d.]+)s/);
+  return m ? Number(m[1] ?? 0) * 60 + Number(m[2]) : null;
+};
+export function parseHfOutput(out: string): HfCaptureInfo {
+  const text = out.replace(/\r/g, "\n");
+  const workers = [...text.matchAll(/"phase":"worker_resolution"[^\n]*?"workerCount":(\d+)/g)].pop()?.[1];
+  const summary = text.split("\n").reverse().find((l) => / capture · .* gpu · /.test(l)) ?? "";
+  return {
+    workers: workers ? Number(workers) : null,
+    capture: summary.match(/(\S+) capture ·/)?.[1] ?? null,
+    gpu: summary.match(/· (\S+) gpu ·/)?.[1] ?? null,
+    setupS: seconds(summary.match(/setup ((?:\d+m )?[\d.]+s)/)?.[1]),
+    captureS: seconds(summary.match(/· capture ((?:\d+m )?[\d.]+s)/)?.[1]),
+  };
+}
+
 // ---------------------------------------------------------------- the whole render
 
 export type HfRenderOptions = {
@@ -195,6 +226,9 @@ export type HfRenderOptions = {
   encoder?: Partial<Encoder>; // default: the app's FFmpeg, libx264 at the props' bitrate
   log?: (m: string) => void;
   timings?: Record<string, number>; // filled in: seconds per stage
+  workers?: number | "auto"; // default: hfWorkers() for this video ("auto": HyperFrames' own choice)
+  browserGpu?: boolean; // Chrome on the graphics card (true) or not (false); default: HyperFrames decides
+  capture?: Partial<HfCaptureInfo>; // filled in: what HyperFrames reported
 };
 
 export async function renderWithHyperframes(o: HfRenderOptions): Promise<string> {
@@ -215,18 +249,24 @@ export async function renderWithHyperframes(o: HfRenderOptions): Promise<string>
   const audio = path.join(o.workDir, "audio.m4a");
   await timed("audio", () => sectionAudio(o.props, o.media, audio, e.ffmpeg));
   const hasAudio = !!o.props.audio;
+  const workers = o.workers ?? hfWorkers(o.props.durationInFrames);
+  const drawArgs = ["--workers", String(workers), ...(o.browserGpu === true ? ["--browser-gpu"] : o.browserGpu === false ? ["--no-browser-gpu"] : [])];
+  const draw = async (args: string[]) => {
+    const out = await runHyperframes([...args, ...drawArgs], { cwd: project, env });
+    Object.assign(o.capture ?? {}, parseHfOutput(out));
+  };
   if (o.mode === "all") {
     const video = path.join(o.workDir, "hf-all.mp4");
     log(`HyperFrames: rendering ${comp.width}x${comp.height}, everything in one (${e.video === "nvenc" ? "NVENC" : "libx264"})`);
     await timed("hyperframes", () =>
-      runHyperframes(["render", project, "--format", "mp4", "--output", video, "--quiet", ...(e.video === "nvenc" ? ["--gpu"] : []), ...(e.bitrate ? ["--video-bitrate", e.bitrate] : e.crf !== undefined ? ["--crf", String(e.crf)] : [])], { cwd: project, env }),
+      draw(["render", project, "--format", "mp4", "--output", video, ...(e.video === "nvenc" ? ["--gpu"] : []), ...(e.bitrate ? ["--video-bitrate", e.bitrate] : e.crf !== undefined ? ["--crf", String(e.crf)] : [])]),
     );
     await timed("mux", () => runFfmpeg(e.ffmpeg, ["-i", video, ...(hasAudio ? ["-i", audio, "-map", "0:v", "-map", "1:a", "-c:a", "copy"] : ["-map", "0:v"]), "-c:v", "copy", "-movflags", "+faststart", "-shortest", o.outFile]));
   } else {
     const layer = path.join(o.workDir, "hf-lyrics.webm");
     const picture = path.join(o.workDir, "picture.mp4");
     log(`HyperFrames: rendering the lyric layer ${comp.width}x${comp.height} (transparent WebM)`);
-    await timed("hyperframes", () => runHyperframes(["render", project, "--format", "webm", "--output", layer, "--quiet"], { cwd: project, env }));
+    await timed("hyperframes", () => draw(["render", project, "--format", "webm", "--output", layer]));
     await timed("picture", () => pictureLayer(o.props, o.media, picture, { ...e, bitrate: null, video: e.video === "nvenc" ? "nvenc" : "x264" }));
     await timed("mux", () =>
       runFfmpeg(e.ffmpeg, [

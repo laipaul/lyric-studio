@@ -6,19 +6,20 @@
 //   - frame accuracy: a numbered test clip trimmed, slowed, jumping back and running out, through B (each
 //     FFmpeg), A's picture and Remotion: every frame must be the planned source frame;
 //   - the encoders at the same bitrate (10 s): libx264 vs NVENC, SSIM / PSNR against a near-lossless render;
-//   - the LGPL FFmpeg's licence line and encoders.
+//   - the LGPL FFmpeg's licence line and encoders;
+//   - B's drawing at several worker counts and with / without Chrome on the GPU (to set the default per PC).
 // The lyrics are the converter's stand-in look until the lyric effects move over (step 2), so B's picture is the
 // plan's real cut and its words land on the planner's times, but the lyric look is not yet the song's own.
 // Everything goes to WORKSPACE_DIR\cache\hf-measure\<song>\<time>\ with report.md. Nothing goes online.
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
 import { ffmpegBin, resolveWorkspaceDir } from "@lyric/db";
 
-import { checkFrames, frameAccuracyText, frameTestProps, makeNumberedClip, makeVideos, pictureLayer, readFrameNumbers, renderLyricVideo, renderWithHyperframes, songFolderFiles, type FrameAccuracy } from "../src/node";
+import { checkFrames, frameAccuracyText, frameTestProps, hfWorkers, makeNumberedClip, makeVideos, pictureLayer, readFrameNumbers, renderLyricVideo, renderWithHyperframes, songFolderFiles, type FrameAccuracy, type HfCaptureInfo } from "../src/node";
 import { hyperframesGaps, type LyricVideoProps } from "../src";
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: { lgpl: { type: "string" }, seconds: { type: "string", default: "30" } } });
@@ -42,6 +43,7 @@ mkdirSync(out, { recursive: true });
 const log = (m: string) => console.log(m);
 const times: Record<string, number> = {};
 const stages: Record<string, Record<string, number>> = {};
+const caps: Record<string, Partial<HfCaptureInfo>> = {};
 const timed = async <T>(key: string, label: string, f: () => Promise<T>): Promise<T | null> => {
   log(`\n${label}...`);
   const t0 = Date.now();
@@ -92,15 +94,36 @@ const media = plan.media;
 const bitrate = "10M";
 log(`${title}: ${(props.durationInFrames / 30).toFixed(1)} s, ${props.shots.length} shots, ${props.lyrics.length} lines. B cannot draw yet (the stand-in lyric look is used): ${hyperframesGaps(props, "all", { standInLyrics: true }).join(", ") || "nothing missing"}`);
 
-// ---- render times on the song
+// ---- render times on the song (Remotion warmed up first: its first render of a session builds its bundle)
 const R = path.join(out, "R-remotion.mp4");
+await timed("Rwarm", "Current renderer (Remotion): warm-up, 1 s", () => renderLyricVideo({ props: { ...props, durationInFrames: 30, audio: null }, media, outFile: path.join(out, "R-warmup.mp4"), log: () => {} }));
 await timed("R", "Current renderer (Remotion), 9:16", () => renderLyricVideo({ props, media, outFile: R, videoBitrate: bitrate, log: () => {} }));
 const B = path.join(out, "B-hyperframes-x264.mp4");
-await timed("B", "B: HyperFrames everything in one, app FFmpeg (libx264)", () => renderWithHyperframes({ props, media, outFile: B, mode: "all", workDir: path.join(out, "work-B"), encoder: { bitrate }, timings: (stages.B = {}) }));
+await timed("B", "B: HyperFrames everything in one, app FFmpeg (libx264)", () => renderWithHyperframes({ props, media, outFile: B, mode: "all", workDir: path.join(out, "work-B"), encoder: { bitrate }, timings: (stages.B = {}), capture: (caps.B = {}) }));
 const BN = path.join(out, "B-hyperframes-nvenc.mp4");
-if (lgpl && nvenc) await timed("BN", "B: HyperFrames everything in one, LGPL FFmpeg + NVENC", () => renderWithHyperframes({ props, media, outFile: BN, mode: "all", workDir: path.join(out, "work-BN"), encoder: { ffmpeg: lgpl, video: "nvenc", bitrate }, timings: (stages.BN = {}) }));
+if (lgpl && nvenc) await timed("BN", "B: HyperFrames everything in one, LGPL FFmpeg + NVENC", () => renderWithHyperframes({ props, media, outFile: BN, mode: "all", workDir: path.join(out, "work-BN"), encoder: { ffmpeg: lgpl, video: "nvenc", bitrate }, timings: (stages.BN = {}), capture: (caps.BN = {}) }));
 const A = path.join(out, "A-lyrics-over-ffmpeg.mp4");
-await timed("A", "A (temporary fallback): lyric layer + FFmpeg picture (libx264)", () => renderWithHyperframes({ props, media, outFile: A, mode: "lyrics", workDir: path.join(out, "work-A"), encoder: { bitrate }, timings: (stages.A = {}) }));
+await timed("A", "A (temporary fallback): lyric layer + FFmpeg picture (libx264)", () => renderWithHyperframes({ props, media, outFile: A, mode: "lyrics", workDir: path.join(out, "work-A"), encoder: { bitrate }, timings: (stages.A = {}), capture: (caps.A = {}) }));
+
+// ---- B's drawing: worker counts and Chrome on the GPU (each a full render of the plan; only the drawing differs)
+const cpus = os.cpus().length;
+const chosen = hfWorkers(props.durationInFrames);
+const sweep: { label: string; workers: number | "auto"; browserGpu?: boolean }[] = [
+  { label: "HyperFrames' own choice", workers: "auto" },
+  ...[...new Set([2, 4, 8, 12, 16, chosen])].filter((w) => w <= cpus).sort((a, b) => a - b).map((w) => ({ label: `${w} workers${w === chosen ? " (our choice)" : ""}`, workers: w })),
+  { label: `${chosen} workers, Chrome on the GPU`, workers: chosen, browserGpu: true },
+  { label: `${chosen} workers, Chrome without the GPU`, workers: chosen, browserGpu: false },
+];
+const sweepRows: string[] = [];
+for (const [i, run] of sweep.entries()) {
+  const file = path.join(out, `sweep-${i}.mp4`);
+  const st: Record<string, number> = {};
+  const cap: Partial<HfCaptureInfo> = {};
+  const ok = await timed(`sw${i}`, `B drawing: ${run.label}`, () => renderWithHyperframes({ props, media, outFile: file, mode: "all", workDir: path.join(out, `work-sw${i}`), encoder: { bitrate }, timings: st, capture: cap, workers: run.workers, ...(run.browserGpu !== undefined ? { browserGpu: run.browserGpu } : {}) }));
+  sweepRows.push(`| ${run.label} | ${ok === null ? "failed" : `${times[`sw${i}`].toFixed(1)} s`} | ${cap.workers ?? "?"} | ${cap.capture ?? "?"} | ${cap.gpu ?? "?"} | ${cap.setupS ?? "?"} s | ${cap.captureS ?? "?"} s |`);
+  rmSync(path.join(out, `work-sw${i}`), { recursive: true, force: true });
+  rmSync(file, { force: true });
+}
 
 // ---- frame accuracy
 const ft = path.join(out, "frame-test");
@@ -151,7 +174,7 @@ if (lgpl && nvenc) {
 
 // ---- report
 const t = (k: string) => (times[k] !== undefined ? `${times[k].toFixed(1)} s` : "—");
-const st = (k: string) => (stages[k] ? Object.entries(stages[k]).map(([n, v]) => `${n} ${v.toFixed(1)} s`).join(", ") : "");
+const st = (k: string) => (stages[k] ? Object.entries(stages[k]).map(([n, v]) => `${n} ${v.toFixed(1)} s`).join(", ") + (caps[k]?.workers ? ` (${caps[k].workers} workers, ${caps[k].capture} capture, ${caps[k].gpu} GPU)` : "") : "");
 const ratio = times.B && times.R ? ` (${((times.B / times.R) * 100).toFixed(0)}% of Remotion)` : "";
 const accLine = (k: string) => (acc[k] ? frameAccuracyText(acc[k]!) : "not run");
 const machine = `${os.cpus()[0]?.model ?? "?"} x${os.cpus().length}, ${Math.round(os.totalmem() / 2 ** 30)} GB, ${os.platform()} ${os.release()}, Node ${process.versions.node}`;
@@ -170,6 +193,14 @@ const report = [
   `| **B: HyperFrames, everything in one (libx264)** | **${t("B")}**${ratio} | ${size(B)} | ${st("B")} |`,
   `| B: HyperFrames + LGPL FFmpeg + NVENC | ${t("BN")} | ${size(BN)} | ${st("BN")} |`,
   `| A (temporary fallback): lyric layer + FFmpeg picture | ${t("A")} | ${size(A)} | ${st("A")} |`,
+  "",
+  `Remotion was warmed up first (${t("Rwarm")} for 1 s: its first render builds its bundle).`,
+  "",
+  `## B's drawing (${cpus} cores; our choice: ${chosen} workers)`,
+  "",
+  "| Run | Time | Workers | Capture | Chrome GPU | Setup | Drawing |",
+  "| --- | --- | --- | --- | --- | --- | --- |",
+  ...sweepRows,
   "",
   "## Frame accuracy (numbered test clip: trims, 0.5x, 0.75x, a jump back, a held last frame; 240 frames)",
   "",
