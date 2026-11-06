@@ -4,6 +4,25 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Theme Engine v2 on HyperFrames, step 2a: the Reel picture ✅ (to verify on the Windows PC)
+- **HyperFrames now draws the whole Reel picture as the current renderer does:** clips (offset, speed, held last
+  frame), photos with their Ken Burns move (also the looping move), cuts, dissolves, dips, the loop ending (the first
+  shot's opening fading in over the last frames; when it cannot play from there, its first frame as a picture made
+  once by our FFmpeg), the theme's grade and veil, vignette, the readability band, the background where there is no
+  clip (gradient, colour, blurred cover). Lyric lines already follow the textboard (each line's place, size, font),
+  the hook font, the text case and the lead-in after a gap; their look stays the stand-in until 2b.
+- **Picture check:** the same plan drawn by both renderers without the words, compared frame by frame (SSIM). Test
+  hf-parity (clips, a photo with a dissolve, a dip, a held frame, the loop ending, warm grade, vignette, band):
+  mean 0.993, lowest 0.988 = the two encodes' own difference. The cloud song plan: mean 0.9955, lowest 0.9946.
+  `pnpm hf:parity "<song folder>"` does the same for a real song (report.md + the least similar frame side by side).
+- **Bug found and fixed by the check:** HyperFrames reads times to 0.1 ms, so a start written a hair after its frame
+  showed some cuts one frame late (3 of 12 cuts). Starts are now written rounded down, clip offsets rounded up;
+  a test checks every frame of a minute.
+- **A removed** (the lyric layer over an FFmpeg picture): HyperFrames draws everything in one pass.
+- Still made by the current renderer: anything with lyrics (their look moves over in 2b), the text backings shadow /
+  glow / box, title cards, mood, grain, glow, logo, YouTube layouts and the Canvas loop blend; the log says which.
+- Tests: hf-compile (Reel picture, the loop ending, every frame of a minute), hf-parity, hf-network (one pass).
+
 ### Theme Engine v2 on HyperFrames, step 1: renderer seam, (b) checked, zero network ✅ (confirmed on the Windows PC: B 26.8 s vs Remotion 29.3 s, 6 Nov 2026)
 - **D1 decided by the user (6 Nov 2026): (b), HyperFrames draws everything in one pass** (clips, cuts, dissolves,
   dips, lyrics, effects). It is the target architecture; step 1 measures its speed and the clips' frame accuracy as
@@ -219,15 +238,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   then grew it past the margin. Now the render (LyricScene) and QA (qa-check) fit each line to the area
   minus its effect's growth (effects/scene.ts restWidth; test rest-width.test.ts), so it stays inside.
 
-### Fix: Reels ended mid-chorus ✅ (to verify on the Windows PC)
-- Reported by the user on 1 Nov 2026 (Here With Me, 90 s Reel "cut hard"). With Reels at 90 s the window fell
-  inside the second chorus and the section ended after "I feel your warmth, though I can't see," at full level.
-- The automatic end now waits for a finished phrase: never after a line ending in a comma, dash, colon or
-  "and/but/or", and inside a chorus only after its last line (the whole repeated block holding a hook line
-  counts as the chorus). No such end in the window: up to 25% shorter, else up to 30% longer (Here With Me:
-  about 105 s, ending on "you're here with me."). Only when no finished phrase is in reach does any line end
-  count (section.ts; tests in section.test.ts and platform.test.ts).
-
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -376,7 +386,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 **Theme Engine v2 on HyperFrames (adopted 6 Nov 2026; plan approved the same day).** The order is the plan
 docs/theme-engine-v2-hyperframes-plan.md, section 6: step 0 ("break." fix, done) → 1 (renderer seam; D1 decided = (b), everything
 in one pass; its speed and frame accuracy checked on the PC, causes fixed, (a) only a temporary fallback; zero network
-calls when rendering; LGPL FFmpeg with NVENC timed; done: B 92% of Remotion's time on the PC) → 2a (next) (picture for Reels) →
+calls when rendering; LGPL FFmpeg with NVENC timed; done: B 92% of Remotion's time on the PC) → 2a (picture for Reels, done; to verify on the PC) → 2b (next) →
 2b (the Reel word-by-word theme's text) → **M1: the Reel word-by-word theme ("Here with Me") usable for real
 releases** → the spec's T1-T4 → 3-8, the ballad and Pômé themes. GSAP / FFmpeg licences non-blocking: a short
 note (docs/licences.md) before step 8. It replaces the T-list below as the order.

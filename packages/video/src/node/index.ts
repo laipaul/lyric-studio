@@ -10,6 +10,7 @@ export * from "./prepare";
 export * from "./render";
 export * from "./hf-render";
 export * from "./hf-frametest";
+export * from "./hf-parity";
 export * from "./collection";
 export * from "./song-project";
 export * from "./voice-source";

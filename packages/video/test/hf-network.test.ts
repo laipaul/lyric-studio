@@ -1,7 +1,7 @@
 // HyperFrames renders (Theme Engine v2 step 1): ZERO network calls (decided by the user, 6 Nov 2026: fonts only
 // from our own files, never a download, not even as a fallback), and every frame exactly the source frame the
 // plan asks for (decision D1). The check script renders a numbered test clip trimmed, slowed, jumping back and
-// running out, with a lyric line in a bundled font, in both modes, while strace records every connection of
+// running out, with a lyric line in a bundled font, while strace records every connection of
 // every process (Node, Chrome, FFmpeg): any connection that is not to this machine fails the test.
 // Needs strace (Linux), FFmpeg and a browser for HyperFrames (HYPERFRAMES_BROWSER_PATH or `pnpm hf:setup`).
 import { execFileSync, spawnSync } from "node:child_process";
@@ -57,13 +57,13 @@ describe.skipIf(!hasStrace || !hasBrowser)("a HyperFrames render", () => {
     const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/proxy/i.test(k)));
     const r = spawnSync("strace", ["-f", "-qq", "-e", "trace=connect", "-o", trace, process.execPath, tsx, path.join(REPO_ROOT, "packages/video/scripts/hf-check.ts"), work], { encoding: "utf8", env, timeout: 600_000 });
     expect(r.status, r.stderr.slice(-2000)).toBe(0);
-    const result = JSON.parse(r.stdout.trim().split("\n").pop()!) as Record<"all" | "lyrics", { accuracy: { accurate: boolean; exact: number; frames: number; off: unknown[] } }>;
+    const result = JSON.parse(r.stdout.trim().split("\n").pop()!) as { accuracy: { accurate: boolean; exact: number; frames: number; off: unknown[] } };
     const log = readFileSync(trace, "utf8");
     // The trace really saw the render (HyperFrames talks to its own browser on this machine).
     expect(log.match(/inet_addr\("127\./g)?.length ?? 0).toBeGreaterThan(0);
     const outside = outsideConnections(log);
     expect(outside, `network calls during the render:\n${outside.join("\n")}`).toEqual([]);
-    for (const mode of ["all", "lyrics"] as const) expect(result[mode].accuracy, `${mode}: ${JSON.stringify(result[mode].accuracy.off.slice(0, 5))}`).toMatchObject({ accurate: true, exact: 240 });
+    expect(result.accuracy, JSON.stringify(result.accuracy.off.slice(0, 5))).toMatchObject({ accurate: true, exact: 240 });
     // The composition loads only our own font file (by our own family name) and no stylesheet or file from the web.
     const html = readFileSync(path.join(work, "work-all", "hf-all", "index.html"), "utf8");
     expect(html).not.toMatch(/https?:\/\//);

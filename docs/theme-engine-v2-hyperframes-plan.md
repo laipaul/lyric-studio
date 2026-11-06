@@ -183,7 +183,8 @@ highlighted word per line, peaks per platform). The code reads the values; the m
 Everything else continues behind it. To get there fastest, step 2 is split and carries only what that theme and
 its Reels need, built on HyperFrames only (never twice):
 
-- **2a. Picture for Reels:** clips (trim, speed, held frame), photos with Ken Burns, dissolves and dips, the same
+- **2a. Picture for Reels** (done 6 Nov 2026: the same picture as the current renderer, frame by frame, checked by
+  `pnpm hf:parity`; the lyrics-only fallback (a) removed): clips (trim, speed, held frame), photos with Ken Burns, dissolves and dips, the same
   picture opening and closing (Reels loop ending), the song with its fades, the theme's grade, layout and line
   timing (lead, gap hiding, lead-in), the textboard's per-line cards.
 - **2b. The Reel theme's text:** typewriter letter by letter, the stacked line shape (2-4 short lines chosen per

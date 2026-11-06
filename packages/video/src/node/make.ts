@@ -186,7 +186,6 @@ export type MakeOptions = {
   // Theme Engine v2 step 1: "hyperframes" renders with HyperFrames when its converter can draw everything the
   // video needs, else with the current renderer (said in the log and the manifest). Default "remotion".
   engine?: "remotion" | "hyperframes";
-  hfMode?: "all" | "lyrics"; // HyperFrames: everything in one composition (default) or the lyric layer over an FFmpeg picture
   thumbnailRenderer?: typeof renderThumbnail; // tests: a stand-in for renderThumbnail
   coverRenderer?: typeof renderCover; // tests: a stand-in for renderCover (with a stand-in video renderer and none: no cover)
   platform?: NodeJS.Platform;
@@ -1728,13 +1727,13 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     updateJob(jobId, { status: "rendering", started_at: new Date(), progress: 0 });
     let lastSaved = 0;
     // The renderer: HyperFrames only when its converter can draw everything this video uses.
-    const gaps = options.engine === "hyperframes" ? hyperframesGaps(props, options.hfMode ?? "all") : [];
+    const gaps = options.engine === "hyperframes" ? hyperframesGaps(props) : [];
     const useHf = options.engine === "hyperframes" && !gaps.length && !options.renderer;
     if (options.engine === "hyperframes" && gaps.length) log(`${preset.name} ${spec.name}: made with the current renderer: HyperFrames cannot draw ${gaps.join(", ")} yet`);
     rendererUsed.set(spec.name, { asked: options.engine ?? "remotion", used: useHf ? "hyperframes" : "remotion", gaps });
     const hfWork = path.join(exportDir, `.hf-${spec.name}`);
     const render = useHf
-      ? (o: RenderOptions) => renderWithHyperframes({ props: o.props, media: o.media, outFile: o.outFile, mode: options.hfMode ?? "all", workDir: hfWork, encoder: { bitrate: preset.videoBitrate }, log }).finally(() => rmSync(hfWork, { recursive: true, force: true }))
+      ? (o: RenderOptions) => renderWithHyperframes({ props: o.props, media: o.media, outFile: o.outFile, workDir: hfWork, encoder: { bitrate: preset.videoBitrate }, log }).finally(() => rmSync(hfWork, { recursive: true, force: true }))
       : (options.renderer ?? renderLyricVideo);
     const attempt = (settings: Pick<RenderLimit, "concurrency" | "videoCacheBytes">) =>
       render({

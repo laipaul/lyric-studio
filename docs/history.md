@@ -4,6 +4,15 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Fix: Reels ended mid-chorus ✅ (to verify on the Windows PC)
+- Reported by the user on 1 Nov 2026 (Here With Me, 90 s Reel "cut hard"). With Reels at 90 s the window fell
+  inside the second chorus and the section ended after "I feel your warmth, though I can't see," at full level.
+- The automatic end now waits for a finished phrase: never after a line ending in a comma, dash, colon or
+  "and/but/or", and inside a chorus only after its last line (the whole repeated block holding a hook line
+  counts as the chorus). No such end in the window: up to 25% shorter, else up to 30% longer (Here With Me:
+  about 105 s, ending on "you're here with me."). Only when no finished phrase is in reach does any line end
+  count (section.ts; tests in section.test.ts and platform.test.ts).
+
 ### Fix: "+ New song" took over an existing song ✅ (to verify on the Windows PC)
 - Found on 1 Nov 2026: "Here With Me" was made with "+ New song", but the song file picked was The House My
   Heart Built's own WAV. New song found The House by the music's content and UPDATED it: new title (the

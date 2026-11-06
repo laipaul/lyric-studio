@@ -2,9 +2,9 @@
 // Theme Engine v2 on HyperFrames, step 1: the check of the target architecture (decision D1, 6 Nov 2026: B,
 // HyperFrames draws everything in one pass). On the song's own ~30 s Reel plan (the planner's dry run, read only):
 //   - render time: our current renderer (Remotion); B with the app's FFmpeg (libx264); B with an LGPL FFmpeg
-//     and NVENC (--lgpl); A (the lyric layer over an FFmpeg picture: the temporary fallback, for reference);
+//     and NVENC (--lgpl);
 //   - frame accuracy: a numbered test clip trimmed, slowed, jumping back and running out, through B (each
-//     FFmpeg), A's picture and Remotion: every frame must be the planned source frame;
+//     FFmpeg) and Remotion: every frame must be the planned source frame;
 //   - the encoders at the same bitrate (10 s): libx264 vs NVENC, SSIM / PSNR against a near-lossless render;
 //   - the LGPL FFmpeg's licence line and encoders;
 //   - B's drawing at several worker counts and with / without Chrome on the GPU (to set the default per PC).
@@ -19,7 +19,7 @@ import { parseArgs } from "node:util";
 
 import { ffmpegBin, resolveWorkspaceDir } from "@lyric/db";
 
-import { checkFrames, frameAccuracyText, frameTestProps, hfWorkers, makeNumberedClip, makeVideos, pictureLayer, readFrameNumbers, renderLyricVideo, renderWithHyperframes, songFolderFiles, type FrameAccuracy, type HfCaptureInfo } from "../src/node";
+import { checkFrames, frameAccuracyText, frameTestProps, hfWorkers, makeNumberedClip, makeVideos, readFrameNumbers, renderLyricVideo, renderWithHyperframes, songFolderFiles, type FrameAccuracy, type HfCaptureInfo } from "../src/node";
 import { hyperframesGaps, type LyricVideoProps } from "../src";
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: { lgpl: { type: "string" }, seconds: { type: "string", default: "30" } } });
@@ -92,18 +92,16 @@ const plan = planned.platforms[0]?.plan ?? fail(planned.platforms[0]?.error ?? "
 const props = plan.videos[0].props;
 const media = plan.media;
 const bitrate = "10M";
-log(`${title}: ${(props.durationInFrames / 30).toFixed(1)} s, ${props.shots.length} shots, ${props.lyrics.length} lines. B cannot draw yet (the stand-in lyric look is used): ${hyperframesGaps(props, "all", { standInLyrics: true }).join(", ") || "nothing missing"}`);
+log(`${title}: ${(props.durationInFrames / 30).toFixed(1)} s, ${props.shots.length} shots, ${props.lyrics.length} lines. B cannot draw yet (the stand-in lyric look is used): ${hyperframesGaps(props, { standInLyrics: true }).join(", ") || "nothing missing"}`);
 
 // ---- render times on the song (Remotion warmed up first: its first render of a session builds its bundle)
 const R = path.join(out, "R-remotion.mp4");
 await timed("Rwarm", "Current renderer (Remotion): warm-up, 1 s", () => renderLyricVideo({ props: { ...props, durationInFrames: 30 }, media, outFile: path.join(out, "R-warmup.mp4"), log: () => {} }));
 await timed("R", "Current renderer (Remotion), 9:16", () => renderLyricVideo({ props, media, outFile: R, videoBitrate: bitrate, log: () => {} }));
 const B = path.join(out, "B-hyperframes-x264.mp4");
-await timed("B", "B: HyperFrames everything in one, app FFmpeg (libx264)", () => renderWithHyperframes({ props, media, outFile: B, mode: "all", workDir: path.join(out, "work-B"), encoder: { bitrate }, timings: (stages.B = {}), capture: (caps.B = {}) }));
+await timed("B", "B: HyperFrames everything in one, app FFmpeg (libx264)", () => renderWithHyperframes({ props, media, outFile: B, workDir: path.join(out, "work-B"), encoder: { bitrate }, timings: (stages.B = {}), capture: (caps.B = {}) }));
 const BN = path.join(out, "B-hyperframes-nvenc.mp4");
-if (lgpl && nvenc) await timed("BN", "B: HyperFrames everything in one, LGPL FFmpeg + NVENC", () => renderWithHyperframes({ props, media, outFile: BN, mode: "all", workDir: path.join(out, "work-BN"), encoder: { ffmpeg: lgpl, video: "nvenc", bitrate }, timings: (stages.BN = {}), capture: (caps.BN = {}) }));
-const A = path.join(out, "A-lyrics-over-ffmpeg.mp4");
-await timed("A", "A (temporary fallback): lyric layer + FFmpeg picture (libx264)", () => renderWithHyperframes({ props, media, outFile: A, mode: "lyrics", workDir: path.join(out, "work-A"), encoder: { bitrate }, timings: (stages.A = {}), capture: (caps.A = {}) }));
+if (lgpl && nvenc) await timed("BN", "B: HyperFrames everything in one, LGPL FFmpeg + NVENC", () => renderWithHyperframes({ props, media, outFile: BN, workDir: path.join(out, "work-BN"), encoder: { ffmpeg: lgpl, video: "nvenc", bitrate }, timings: (stages.BN = {}), capture: (caps.BN = {}) }));
 
 // ---- B's drawing: worker counts and Chrome on the GPU (each a full render of the plan; only the drawing differs)
 const cpus = os.cpus().length;
@@ -119,7 +117,7 @@ for (const [i, run] of sweep.entries()) {
   const file = path.join(out, `sweep-${i}.mp4`);
   const st: Record<string, number> = {};
   const cap: Partial<HfCaptureInfo> = {};
-  const ok = await timed(`sw${i}`, `B drawing: ${run.label}`, () => renderWithHyperframes({ props, media, outFile: file, mode: "all", workDir: path.join(out, `work-sw${i}`), encoder: { bitrate }, timings: st, capture: cap, workers: run.workers, ...(run.browserGpu !== undefined ? { browserGpu: run.browserGpu } : {}) }));
+  const ok = await timed(`sw${i}`, `B drawing: ${run.label}`, () => renderWithHyperframes({ props, media, outFile: file, workDir: path.join(out, `work-sw${i}`), encoder: { bitrate }, timings: st, capture: cap, workers: run.workers, ...(run.browserGpu !== undefined ? { browserGpu: run.browserGpu } : {}) }));
   sweepRows.push(`| ${run.label} | ${ok === null ? "failed" : `${times[`sw${i}`].toFixed(1)} s`} | ${cap.workers ?? "?"} | ${cap.capture ?? "?"} | ${cap.gpu ?? "?"} | ${cap.setupS ?? "?"} s | ${cap.captureS ?? "?"} s |`);
   rmSync(path.join(out, `work-sw${i}`), { recursive: true, force: true });
   rmSync(file, { force: true });
@@ -137,9 +135,8 @@ const accuracy = async (key: string, label: string, render: (file: string) => Pr
   acc[key] = ok === null ? null : checkFrames(await readFrameNumbers(file, appFfmpeg));
   if (acc[key]) log(`  ${frameAccuracyText(acc[key]!)}`);
 };
-await accuracy("B", "B (app FFmpeg)", (f) => renderWithHyperframes({ props: tp, media: tmedia, outFile: f, mode: "all", workDir: path.join(ft, "work-B") }));
-if (lgpl && nvenc) await accuracy("BN", "B (LGPL FFmpeg + NVENC)", (f) => renderWithHyperframes({ props: tp, media: tmedia, outFile: f, mode: "all", workDir: path.join(ft, "work-BN"), encoder: { ffmpeg: lgpl, video: "nvenc" } }));
-await accuracy("A", "A's FFmpeg picture", (f) => pictureLayer(tp, tmedia, f, { ffmpeg: appFfmpeg, video: "x264" }));
+await accuracy("B", "B (app FFmpeg)", (f) => renderWithHyperframes({ props: tp, media: tmedia, outFile: f, workDir: path.join(ft, "work-B") }));
+if (lgpl && nvenc) await accuracy("BN", "B (LGPL FFmpeg + NVENC)", (f) => renderWithHyperframes({ props: tp, media: tmedia, outFile: f, workDir: path.join(ft, "work-BN"), encoder: { ffmpeg: lgpl, video: "nvenc" } }));
 await accuracy("R", "current renderer (Remotion)", (f) => renderLyricVideo({ props: tp, media: tmedia, outFile: f, log: () => {} }));
 
 // ---- encoders at the same bitrate (10 s of the song's plan)
@@ -156,7 +153,7 @@ if (lgpl && nvenc) {
   };
   const ref = path.join(out, "q-reference.mp4");
   const okRef = await timed("qref", "Quality: a near-lossless 10 s reference (B, CRF 2)", async () => {
-    await renderWithHyperframes({ props: short, media, outFile: ref, mode: "all", workDir: path.join(out, "work-q"), encoder: { crf: 2 } });
+    await renderWithHyperframes({ props: short, media, outFile: ref, workDir: path.join(out, "work-q"), encoder: { crf: 2 } });
     return true;
   });
   if (okRef) {
@@ -192,7 +189,6 @@ const report = [
   `| Current renderer (Remotion) | ${t("R")} | ${size(R)} | |`,
   `| **B: HyperFrames, everything in one (libx264)** | **${t("B")}**${ratio} | ${size(B)} | ${st("B")} |`,
   `| B: HyperFrames + LGPL FFmpeg + NVENC | ${t("BN")} | ${size(BN)} | ${st("BN")} |`,
-  `| A (temporary fallback): lyric layer + FFmpeg picture | ${t("A")} | ${size(A)} | ${st("A")} |`,
   "",
   `Remotion was warmed up first (${t("Rwarm")} for 1 s: its first render builds its bundle).`,
   "",
@@ -206,7 +202,6 @@ const report = [
   "",
   `- **B (app FFmpeg): ${accLine("B")}**`,
   `- B (LGPL FFmpeg + NVENC): ${accLine("BN")}`,
-  `- A's FFmpeg picture: ${accLine("A")}`,
   `- Current renderer (Remotion): ${accLine("R")}`,
   "",
   "## LGPL FFmpeg",
@@ -215,7 +210,7 @@ const report = [
   ...(quality.length ? ["", "Encoders at the same bitrate (10 s of the plan, against a near-lossless render; SSIM 1 = identical):", "", "| Encoder | Bitrate | Size | SSIM | PSNR | Encode time |", "| --- | --- | --- | --- | --- | --- |", ...quality] : []),
   "",
   ...(notes.length ? ["## Notes", "", ...notes.map((n) => `- ${n}`), ""] : []),
-  "Lyrics in B and A are the converter's stand-in look (the song's own effects move over in step 2).",
+  "Lyrics in B are the converter's stand-in look (the song's own effects move over in step 2b).",
   "",
 ].join("\n");
 writeFileSync(path.join(out, "report.md"), report);
