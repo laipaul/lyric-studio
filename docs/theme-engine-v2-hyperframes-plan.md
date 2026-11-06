@@ -1,7 +1,8 @@
 # Theme Engine v2 on HyperFrames — plan for review
 
 _Written 6 Nov 2026 after the spike was adopted; approved by Paul the same day with four changes (the M1
-milestone, the D1 criteria, the LGPL + NVENC FFmpeg check, licences non-blocking), all in below. Each step below is its
+milestone, the D1 criteria, the LGPL + NVENC FFmpeg check, licences non-blocking), all in below; then D1 decided
+as (b), everything in one pass, and renders must make zero network calls. Each step below is its
 own session (plan first, Paul tests, stop). It goes with the spec "Videomaker — Theme Engine v2 Specification"
 (Claude Docs, https://claude.ai/artifact/Y3MPZSg6dpiocMWKGAVQG5) and replaces nothing in it: the spec says what
 a Theme is, this plan says how it gets drawn._
@@ -56,16 +57,26 @@ then HyperFrames). The compiler knows which props features it supports. If a vid
 yet, that video is rendered by Remotion and the plan says so in plain words ("rendered with the current renderer:
 dissolves are not on HyperFrames yet"): never a silently different video. The manifest records the renderer.
 
-**Decision D1 (measured in step 1, Paul decides): what HyperFrames draws.**
-- (a) **Lyrics only** (as the spike): HyperFrames draws the transparent text layer, FFmpeg builds the picture
-  (clips, dissolves, dips, grade, Ken Burns) and lays the text over it. Fast, uses the GPU for the final encode.
-  But the Storyboard and Shape previews would have to combine two systems to stay identical to the render.
-- (b) **Everything in one composition** (clips as video elements inside HyperFrames): preview and render are
-  the same file by construction (our hard rule), one system to maintain.
-- **Decided (Paul, 6 Nov 2026):** (b) only if it is within ~20% of (a)'s speed on Paul's PC **and** the clips are
-  frame-accurate in the browser (a test clip with a frame number burnt into every frame: each rendered frame
-  must show exactly the source frame the plan asks for, also slowed and after a seek); else (a), with a preview
-  that plays the same two layers. Both are measured on "Here with Me" in step 1.
+**Decision D1 (decided by Paul, 6 Nov 2026): (b) — HyperFrames draws everything in one pass.**
+- **(b) is the target architecture:** clips, cuts, dissolves, dips, lyrics and effects are one HyperFrames
+  composition (clips as video elements), so preview and render are the same file by construction (our hard rule)
+  and there is one system to maintain.
+- **Step 1 measures (b) as a check, not a choice:** its speed next to Remotion and the clips' frame accuracy in the
+  browser (a test clip with its frame number in every frame: each rendered frame must show exactly the source frame
+  the plan asks for, also trimmed, slowed, after a jump back and when a clip runs out and holds its last frame). If
+  (b) is slow or a clip drifts, the cause is found and fixed; it is never a reason to switch to (a).
+- **(a) lyrics only** (the spike: HyperFrames draws the transparent text layer, FFmpeg builds the picture and lays
+  the text over it) stays only as a **temporary fallback** (`hfMode: "lyrics"`) until (b) passes on Paul's PC;
+  then it is removed.
+- **Zero network calls when rendering (Paul, 6 Nov 2026):** a render never goes online. Fonts come only from our
+  own font files (as `@font-face` under a private name, `vm <family>`, with no generic fallback, so HyperFrames
+  never fetches Google Fonts, not even as a fallback); GSAP and the clips are copied into the render folder; telemetry,
+  update checks and auto-installs are off. HyperFrames' headless Chrome is downloaded once by `pnpm hf:setup` (the
+  only online moment) into the project's `.cache\hyperframes`. A test (`hf-network.test.ts`) renders under a
+  connection trace and fails on any connection off this machine.
+- **Cloud results of step 1 (synthetic song, 31.3 s, 12 shots, 4-core Xeon, no GPU):** Remotion 147.3 s, (b) 93.2 s
+  (63% of Remotion's time), (a) 134.8 s; frame accuracy 240 of 240 frames exactly as planned for (b), (a)'s picture
+  and Remotion; zero outside connections. Paul's PC run (`pnpm hf:measure`) confirms or corrects this.
 - **FFmpeg in step 1:** an LGPL FFmpeg build with NVENC (the RTX 5060's hardware encoder) is evaluated next to the
   current build: it would solve the GPL question for an installer and may encode faster. Step 1 reports the
   times of both (the final encode, and the clip layer in (a)) and the quality at the same file size.
@@ -181,7 +192,7 @@ M ≈ one, L ≈ two.
 | Step | What | Size |
 | --- | --- | --- |
 | 0 | Fix and confirm "break." (section start, carried-in lines, sync check, trace); spike re-run on "Here with Me" | S |
-| 1 | Converter skeleton + renderer seam + fallback; measure D1 (speed and frame accuracy) and the LGPL + NVENC FFmpeg on Paul's PC; Paul decides | M |
+| 1 | Converter skeleton + renderer seam + fallback; check (b)'s speed and frame accuracy and the LGPL + NVENC FFmpeg on Paul's PC; zero-network test | M |
 | 2a | Picture for Reels (above) | L |
 | 2b | The Reel theme's text (above) + first theme-rules.md entries | L |
 | **M1** | **Reel word-by-word theme for real releases** ("Here with Me" golden test + two songs) | Paul's test pass |
@@ -205,6 +216,8 @@ About 20 sessions in total, plus Paul's test passes; M1 after about 5 (steps 0, 
 - **Two renderers at once** (steps 1-8): double maintenance and the "preview = render" rule. Mitigation:
   Remotion frozen, the fallback is explicit per video, the parity gate is fixed in advance.
 - **Determinism**: pin the Chrome version HyperFrames uses; fonts already come as exact files.
+- **Network**: a render must never go online (fonts, scripts, telemetry); the zero-network test runs with every
+  HyperFrames upgrade.
 - **Licences**: GSAP terms and the FFmpeg build must be cleared before a commercial version (section 3).
 - **Windows**: Node 22 is now required (done on Paul's PC); a one-off installer later bundles Node, Chrome and
   FFmpeg (spike README).

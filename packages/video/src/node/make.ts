@@ -3,7 +3,7 @@
 // (stored, never rewritten) -> section -> collection import -> cuts -> N variations rendered in
 // parallel -> QA -> manifest.
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -76,6 +76,8 @@ import { cardBlocks, fitCardBlocks, gridCrop } from "../text-cards";
 import { loadStyles, lyricLineNumbers, parseSection, snapToDownbeat, songMedia, type StyleFaces } from "./prepare";
 import { detectBadFrames, measureLyrics } from "./qa-check";
 import { getBundle, renderCover, renderLyricVideo, renderThumbnail, type RenderOptions } from "./render";
+import { renderWithHyperframes } from "./hf-render";
+import { hyperframesGaps } from "../hf/compile";
 import { voiceRecord } from "./voice-source";
 import { applyHandSet, applyVocalGuard, ensureAlignment, findOrCreateSongProject, matchReport, type Alignment, type AlignRunner, type VoiceMapRunner, type FirstWordsRunner } from "./song-project";
 import { COVER_TEXT_SCALE } from "../youtube-layout";
@@ -181,6 +183,10 @@ export type MakeOptions = {
   voiceMap?: VoiceMapRunner; // tests: a stand-in for the voice map of the vocal track
   firstWords?: FirstWordsRunner; // tests: a stand-in for the recognised-words pass
   renderer?: (options: RenderOptions) => Promise<string>; // tests: a stand-in for renderLyricVideo
+  // Theme Engine v2 step 1: "hyperframes" renders with HyperFrames when its converter can draw everything the
+  // video needs, else with the current renderer (said in the log and the manifest). Default "remotion".
+  engine?: "remotion" | "hyperframes";
+  hfMode?: "all" | "lyrics"; // HyperFrames: everything in one composition (default) or the lyric layer over an FFmpeg picture
   thumbnailRenderer?: typeof renderThumbnail; // tests: a stand-in for renderThumbnail
   coverRenderer?: typeof renderCover; // tests: a stand-in for renderCover (with a stand-in video renderer and none: no cover)
   platform?: NodeJS.Platform;
@@ -1647,6 +1653,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   });
   const states: RenderState[] = specs.map((s) => ({ platform: preset.name, name: s.name, status: "queued", progress: 0 }));
   const report = () => options.onRenderProgress?.(states.map((s) => ({ ...s })));
+  const rendererUsed = new Map<string, NonNullable<Manifest["renderer"]>>();
   const results: VariationResult[] = allSpecs
     .filter((spec) => !specs.includes(spec))
     .map((spec) => {
@@ -1720,7 +1727,15 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     report();
     updateJob(jobId, { status: "rendering", started_at: new Date(), progress: 0 });
     let lastSaved = 0;
-    const render = options.renderer ?? renderLyricVideo;
+    // The renderer: HyperFrames only when its converter can draw everything this video uses.
+    const gaps = options.engine === "hyperframes" ? hyperframesGaps(props, options.hfMode ?? "all") : [];
+    const useHf = options.engine === "hyperframes" && !gaps.length && !options.renderer;
+    if (options.engine === "hyperframes" && gaps.length) log(`${preset.name} ${spec.name}: made with the current renderer: HyperFrames cannot draw ${gaps.join(", ")} yet`);
+    rendererUsed.set(spec.name, { asked: options.engine ?? "remotion", used: useHf ? "hyperframes" : "remotion", gaps });
+    const hfWork = path.join(exportDir, `.hf-${spec.name}`);
+    const render = useHf
+      ? (o: RenderOptions) => renderWithHyperframes({ props: o.props, media: o.media, outFile: o.outFile, mode: options.hfMode ?? "all", workDir: hfWork, encoder: { bitrate: preset.videoBitrate }, log }).finally(() => rmSync(hfWork, { recursive: true, force: true }))
+      : (options.renderer ?? renderLyricVideo);
     const attempt = (settings: Pick<RenderLimit, "concurrency" | "videoCacheBytes">) =>
       render({
         props,
@@ -1740,7 +1755,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         },
       });
     try {
-      if (!options.renderer) await getBundle(log); // built once, shared by the parallel renders
+      if (!options.renderer && !useHf) await getBundle(log); // built once, shared by the parallel renders
       try {
         await attempt(limit);
       } catch (first) {
@@ -1782,7 +1797,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         buildManifest({
           ws, tool: sh.tool, spec, props, media, project, songHash: sh.sp.songHash, songFile: sh.sp.songFile, analysis, chosen, alignment, reports, numbers, audioPlan: audioP, pace, transitionPlan: composedBySpec.get(spec.name)?.transitions ?? null, canvasPlan: canvas, readability: preset.lyrics && !canvas ? backing : null,
           visible, lines, leadMs, lyricsOffsetMs, options, collection: sh.collection, collectionNames: sh.collectionNames, clips: prepared.clips, file, qa, now: sh.now, warnings, preset,
-          brand: sh.brand.brand, anchors: anchorsOut, gapOrder: story ? "story" : null,
+          brand: sh.brand.brand, anchors: anchorsOut, gapOrder: story ? "story" : null, renderer: rendererUsed.get(spec.name) ?? null,
           textboard: preset.lyrics && !canvas
             ? {
                 file: sh.textboard.stored ? "textboard.json" : null, hash: sh.textboard.hash, template: sh.textboard.board.template,
@@ -2055,6 +2070,7 @@ function buildManifest(c: {
   anchors?: (AnchorReport & { missing: string[] }) | null;
   gapOrder?: GapOrder | null;
   textboard?: Manifest["textboard"];
+  renderer?: Manifest["renderer"];
 }): Manifest {
   const { props, spec, ws } = c;
   const startFrame = props.audio?.startFrame ?? Math.round((c.chosen.start_ms * VIDEO.fps) / 1000);
@@ -2183,6 +2199,7 @@ function buildManifest(c: {
     loop: c.loop ?? null,
     anchors: c.anchors ? { used: c.anchors.uses, conflicts: c.anchors.conflicts, notes: c.anchors.notes, missing: c.anchors.missing } : null,
     textboard: c.textboard ?? null,
+    renderer: c.renderer ?? null,
     picture: c.spec.picture ?? null,
     warnings: c.warnings,
   };

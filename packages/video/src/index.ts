@@ -34,6 +34,7 @@ export * from "./loop";
 export * from "./anchors";
 export * from "./storyboard";
 export * from "./textboard";
+export * from "./hf/compile";
 export * from "./text-cards";
 export * from "./extra-cards";
 export * from "./story";

@@ -48,6 +48,8 @@
     "@remotion/renderer": "4.0.538",
     "drizzle-orm": "^0.45.4",
     "fontkit": "^2.0.4",
+    "gsap": "3.13.0",
+    "hyperframes": "0.9.19",
     "remotion": "4.0.538"
   },
   "peerDependencies": {

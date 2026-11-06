@@ -36,3 +36,7 @@ services/audio/models/
 # Lyric Studio launcher log and the desktop shortcut icon (made from your logo)
 /logs/
 /Lyric Studio.ico
+
+# HyperFrames: its Chrome and cache (pnpm hf:setup)
+.cache/
+tools/ffmpeg-lgpl/

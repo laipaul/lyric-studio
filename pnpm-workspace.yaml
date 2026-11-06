@@ -10,6 +10,9 @@ allowBuilds:
   "@remotion/compositor-linux-x64-gnu": true
   "@remotion/compositor-win32-x64-msvc": true
 
+minimumReleaseAgeExclude:
+  - hyperframes@0.9.19
+
 # Same list for pnpm 10.
 onlyBuiltDependencies:
   - esbuild

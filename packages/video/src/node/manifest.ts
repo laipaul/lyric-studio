@@ -93,6 +93,9 @@ export type Manifest = {
   // The textboard (the song's textboard.json; null: the brand's defaults) and its template. Absent in
   // older manifests.
   textboard?: { file: string | null; hash: string | null; template: string | null; changes: number; cards: number } | null;
+  // Which renderer made it (Theme Engine v2 step 1): asked, used, and what HyperFrames could not draw yet.
+  // Absent in older manifests (the current renderer).
+  renderer?: { asked: "remotion" | "hyperframes"; used: "remotion" | "hyperframes"; gaps: string[] } | null;
   // Picture versions (--pictures): which clip set this video used.
   picture?: { index: number; label: string; songClips: boolean; collections: string[] } | null;
   warnings: string[];

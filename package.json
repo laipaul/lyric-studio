@@ -11,6 +11,8 @@
     "audio:setup": "node services/audio/scripts/setup.mjs",
     "analyze": "node services/audio/scripts/analyze.mjs",
     "tempo:check": "node services/audio/scripts/tempo-check.mjs",
+    "hf:setup": "tsx packages/video/scripts/hf-setup.ts",
+    "hf:measure": "tsx packages/video/scripts/hf-measure.ts",
     "tap": "node services/audio/scripts/tap.mjs",
     "align": "node services/audio/scripts/align.mjs",
     "lrc:shift": "tsx packages/video/scripts/lrc-shift.ts",

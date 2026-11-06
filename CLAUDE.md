@@ -30,6 +30,7 @@ Payments, credits, user accounts, login, multi-user, cloud hosting, cloud render
 - Nothing the user made is ever deleted: removed things move to `_removed\` (clips, collections) or `.studio\replaced\` (replaced files), always with a Restore.
 - Principle: a musical ending beats an exact length. Never trade a clean line / phrase ending for hitting a target duration; the tolerance exists for that. Every length or trimming feature (auto sections, target lengths, loops, EP films, future trims) must follow this.
 - Preview and render must use the exact same composition and props.
+- Rendering makes ZERO network calls: fonts only from our own font files (never Google Fonts, not even as a fallback), scripts and media copied locally, telemetry off (test: packages/video/test/hf-network.test.ts). Theme Engine v2 renders with HyperFrames, everything in one pass: docs/theme-engine-v2-hyperframes-plan.md.
 - Shuffle is DETERMINISTIC: same seed + same inputs = same clip sequence. Use a seeded PRNG (e.g. mulberry32). Avoid the same clip twice in a row, and avoid the last 3 clips when the pool allows.
 
 ## Tech stack (do not change without asking)

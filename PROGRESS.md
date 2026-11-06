@@ -4,6 +4,31 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Theme Engine v2 on HyperFrames, step 1: renderer seam, (b) checked, zero network ✅ (to verify on the Windows PC)
+- **D1 decided by the user (6 Nov 2026): (b), HyperFrames draws everything in one pass** (clips, cuts, dissolves,
+  dips, lyrics, effects). It is the target architecture; step 1 measures its speed and the clips' frame accuracy as
+  a check, not a choice: if it is slow or a clip drifts, the cause is fixed. (a) (lyrics layer over an FFmpeg
+  picture) stays only as a temporary fallback until (b) passes on the PC.
+- **Zero network calls when rendering (the user, 6 Nov 2026):** fonts only from our own font files (`@font-face`
+  under a private name `vm <family>`, no generic fallback, so no Google Fonts fetch even as a fallback); GSAP and
+  the clips copied into the render folder; telemetry, update checks and auto-installs off. Chrome for HyperFrames
+  is downloaded once by `pnpm hf:setup` into `.cache\hyperframes` (the only online moment). Test:
+  hf-network.test.ts renders under a connection trace and fails on any connection off this machine.
+- **Built (packages/video):** the converter `src/hf/compile.ts` (the same props as Remotion → HTML + GSAP: shots as
+  video elements with trim, speed and held last frame, dissolves, dips, the stand-in "Glow reveal" lyrics, fonts),
+  which also lists what it cannot draw yet; `src/node/hf-render.ts` (render, the song section with its fades by our
+  FFmpeg, nothing else done to the music); `pnpm make ... --engine hyperframes` uses it when a video has nothing
+  HyperFrames cannot draw yet, otherwise Remotion makes it and the log says why in plain words; the manifest records
+  the renderer. Remotion stays the default.
+- **Frame accuracy:** a test clip with its frame number in every frame, played trimmed, slowed (0.5x, 0.75x),
+  jumping back and running out (last frame held): every rendered frame must show exactly the planned source frame.
+- **Cloud results** (synthetic song, 31.3 s, 12 shots, 4 cores, no GPU): Remotion 147.3 s, **(b) 93.2 s (63% of
+  Remotion's time)**, (a) 134.8 s; frame accuracy 240 of 240 for (b), (a)'s picture and Remotion; zero outside
+  connections. The LGPL FFmpeg with NVENC could not be fetched in the cloud: it is timed on the PC.
+- `pnpm hf:measure "<song folder>" [--lgpl "<ffmpeg folder>"]` writes a report (times, frame accuracy, NVENC vs
+  x264 quality at the same bitrate, the LGPL build's licence line) to `workspace\cache\hf-measure\<song>\<time>\`.
+- Tests: hf-compile, hf-network, textboard-make (fallback with its reason); video package 934 pass.
+
 ### Theme Engine v2 on HyperFrames, step 0: "break." fixed in the spike ✅ (confirmed on the Windows PC, 6 Nov 2026)
 - **Confirmed by the user on "Here with Me"** (the planner's own section, both formats): 35 of 35 words land on
   exactly their sung frame (timeline mean and worst 0 ms), the pixels confirm all 35; "break." (sung at 19.700 s,
@@ -179,14 +204,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   about 105 s, ending on "you're here with me."). Only when no finished phrase is in reach does any line end
   count (section.ts; tests in section.test.ts and platform.test.ts).
 
-### Fix: "+ New song" took over an existing song ✅ (to verify on the Windows PC)
-- Found on 1 Nov 2026: "Here With Me" was made with "+ New song", but the song file picked was The House My
-  Heart Built's own WAV. New song found The House by the music's content and UPDATED it: new title (the
-  folder was renamed), lyrics and cover; then the song and vocal were replaced on Assets. The House was gone
-  as a song.
-- Now "+ New song" only ever makes a new song: music already in the library says "This song file is already
-  in your library as …. Nothing was changed." (createSong; library.test.ts).
-
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -333,8 +350,9 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 ## Next
 
 **Theme Engine v2 on HyperFrames (adopted 6 Nov 2026; plan approved the same day).** The order is the plan
-docs/theme-engine-v2-hyperframes-plan.md, section 6: step 0 ("break." fix, now) → 1 (renderer seam; measure D1 =
-speed within ~20% AND frame-accurate clips in the browser; LGPL FFmpeg with NVENC timed) → 2a (picture for Reels) →
+docs/theme-engine-v2-hyperframes-plan.md, section 6: step 0 ("break." fix, done) → 1 (renderer seam; D1 decided = (b), everything
+in one pass; its speed and frame accuracy checked on the PC, causes fixed, (a) only a temporary fallback; zero network
+calls when rendering; LGPL FFmpeg with NVENC timed; now) → 2a (picture for Reels) →
 2b (the Reel word-by-word theme's text) → **M1: the Reel word-by-word theme ("Here with Me") usable for real
 releases** → the spec's T1-T4 → 3-8, the ballad and Pômé themes. GSAP / FFmpeg licences non-blocking: a short
 note (docs/licences.md) before step 8. It replaces the T-list below as the order.
