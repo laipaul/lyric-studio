@@ -7,6 +7,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { VIDEO } from "../config";
+import { DEFAULT_LYRIC_AREA } from "../platform";
 import type { LyricVideoProps } from "../props";
 
 type Props = Omit<LyricVideoProps, "mediaBaseUrl">;
@@ -29,14 +30,29 @@ export type Parity = { frames: number; mean: number; min: number; worst: { frame
 export const PARITY_FRAME_MIN = 0.95;
 export const PARITY_MEAN_MIN = 0.98;
 export const parityPasses = (p: Parity) => p.mean >= PARITY_MEAN_MIN && p.min >= PARITY_FRAME_MIN;
+// The words' area alone: more of it is fine detail (letters), so the encodes alone differ more (~0.02).
+export const WORDS_FRAME_MIN = 0.94;
+export const WORDS_MEAN_MIN = 0.97;
+export const wordsPass = (p: Parity) => p.mean >= WORDS_MEAN_MIN && p.min >= WORDS_FRAME_MIN;
+// The band the lyrics move in (the lyric area with room for big hooks and waiting lines), inside the frame.
+export function wordsCrop(props: Props): Crop {
+  const area = props.lyricArea ?? DEFAULT_LYRIC_AREA;
+  const height = props.format?.height ?? VIDEO.height;
+  const half = Math.max(260, (area.bottom - area.top) / 2);
+  const y = Math.max(0, Math.round(area.centerY - half));
+  const h = Math.min(height - y, Math.round(half * 2)) & ~1;
+  return { x: 0, y, w: props.format?.width ?? VIDEO.width, h };
+}
 
 // SSIM of every frame of `a` against the same frame of `b`.
-export async function compareVideos(a: string, b: string, ffmpeg: string, workDir: string): Promise<Parity> {
+// crop: only that part of the frame (the words' area: a text difference shows there, not in the whole frame).
+export type Crop = { x: number; y: number; w: number; h: number };
+export async function compareVideos(a: string, b: string, ffmpeg: string, workDir: string, crop?: Crop): Promise<Parity> {
   mkdirSync(workDir, { recursive: true });
   const stats = path.join(workDir, "ssim.txt");
   // FFmpeg's filter options use ':' and '\'; the stats file is given relative to the work folder (no drive letter).
   await new Promise<void>((ok, bad) => {
-    const child = spawn(ffmpeg, ["-v", "error", "-i", a, "-i", b, "-lavfi", "[0:v][1:v]ssim=stats_file=ssim.txt", "-f", "null", "-"], { cwd: workDir, stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
+    const child = spawn(ffmpeg, ["-v", "error", "-i", a, "-i", b, "-lavfi", crop ? `[0:v]crop=${crop.w}:${crop.h}:${crop.x}:${crop.y}[a];[1:v]crop=${crop.w}:${crop.h}:${crop.x}:${crop.y}[b];[a][b]ssim=stats_file=ssim.txt` : "[0:v][1:v]ssim=stats_file=ssim.txt", "-f", "null", "-"], { cwd: workDir, stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
     let err = "";
     child.stderr.on("data", (d) => (err += d));
     child.on("error", bad);
@@ -56,5 +72,5 @@ export async function compareVideos(a: string, b: string, ffmpeg: string, workDi
 }
 
 const t = (frame: number) => `${Math.floor(frame / VIDEO.fps / 60)}:${((frame / VIDEO.fps) % 60).toFixed(2).padStart(5, "0")}`;
-export const parityText = (p: Parity) =>
-  `${parityPasses(p) ? "the same picture" : "DIFFERENT"}: mean similarity ${p.mean.toFixed(4)}, lowest ${p.min.toFixed(4)} over ${p.frames} frames (lowest at ${p.worst.map((w) => `${t(w.frame)} ${w.ssim.toFixed(3)}`).join(", ")})`;
+export const parityText = (p: Parity, words = false) =>
+  `${(words ? wordsPass(p) : parityPasses(p)) ? (words ? "the same words" : "the same picture") : "DIFFERENT"}: mean similarity ${p.mean.toFixed(4)}, lowest ${p.min.toFixed(4)} over ${p.frames} frames (lowest at ${p.worst.map((w) => `${t(w.frame)} ${w.ssim.toFixed(3)}`).join(", ")})`;

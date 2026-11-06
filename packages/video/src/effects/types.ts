@@ -1,7 +1,7 @@
 // Lyric effects: how lyric lines (and their words) come in, stay and go. Each effect is a module
-// registered in ./index.ts. Everything is a pure function of the frame number (Remotion's
-// interpolate / Easing, no timers), so preview, render and tests give identical results.
-import { Easing } from "remotion";
+// registered in ./index.ts. Everything is a pure function of the frame number (no timers), so preview, render
+// and tests give identical results; nothing here needs Remotion (the HyperFrames text layer runs it too).
+import { cubicBezier } from "../easing";
 
 import type { EasingName, EffectChoice, Intensity } from "./names";
 
@@ -19,9 +19,9 @@ export const choiceAmount = (c: { intensity: Intensity; strength?: number }) => 
 export const intensityStrength = (i: Intensity) => Math.round((AMOUNT[i] / AMOUNT.balanced) * 50);
 
 export const EASINGS: Record<EasingName, (t: number) => number> = {
-  "ease-in-out": Easing.bezier(0.42, 0, 0.58, 1), // CSS ease-in-out
-  "ease-out": Easing.bezier(0, 0, 0.58, 1),
-  "ease-in": Easing.bezier(0.42, 0, 1, 1),
+  "ease-in-out": cubicBezier(0.42, 0, 0.58, 1), // CSS ease-in-out
+  "ease-out": cubicBezier(0, 0, 0.58, 1),
+  "ease-in": cubicBezier(0.42, 0, 1, 1),
   linear: (t) => t,
 };
 

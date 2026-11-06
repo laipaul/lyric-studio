@@ -10,6 +10,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import { copyFileSync, existsSync, linkSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
 
@@ -98,6 +99,30 @@ function hyperframesEnv0(): NodeJS.ProcessEnv {
 const media = (roots: MediaRoots) => ({ ...roots, fontDirs: roots.fontDirs ?? bundledFontDirs() });
 
 // Writes the composition into `dir` with its files (hard links where the drive allows, else copies).
+// The text layer's script: the shared text code (LyricScene, TextCards and the effects) with React, bundled here
+// on this PC (esbuild, nothing fetched); "remotion" is the page's own clock, measuring as the current renderer.
+let textLayerJs: string | null = null;
+export async function textLayerScript(): Promise<string> {
+  if (textLayerJs) return textLayerJs;
+  const { build } = await import("esbuild");
+  const runtime = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "hf", "runtime");
+  const r = await build({
+    entryPoints: [path.join(runtime, "text-layer.tsx")],
+    bundle: true,
+    write: false,
+    format: "iife",
+    platform: "browser",
+    target: "chrome120",
+    minify: true,
+    jsx: "automatic",
+    alias: { remotion: path.join(runtime, "clock.ts"), "@remotion/layout-utils": path.join(runtime, "measure.ts") },
+    define: { "process.env.NODE_ENV": '"production"' },
+    logLevel: "silent",
+  });
+  textLayerJs = r.outputFiles[0].text;
+  return textLayerJs;
+}
+
 export function writeHyperframesProject(comp: HfComposition, dir: string, roots: MediaRoots, ffmpeg = ffmpegBin()): void {
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(path.join(dir, "assets"), { recursive: true });
@@ -208,6 +233,7 @@ export async function renderWithHyperframes(o: HfRenderOptions): Promise<string>
   const comp = compileHyperframes(o.props);
   const project = path.join(o.workDir, "hf-all");
   writeHyperframesProject(comp, project, o.media, e.ffmpeg);
+  if (comp.textLayer) writeFileSync(path.join(project, "assets", "text-layer.js"), await textLayerScript());
   const audio = path.join(o.workDir, "audio.m4a");
   await timed("audio", () => sectionAudio(o.props, o.media, audio, e.ffmpeg));
   const hasAudio = !!o.props.audio;

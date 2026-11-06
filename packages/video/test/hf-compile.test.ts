@@ -47,9 +47,11 @@ describe("what the converter can draw", () => {
       shots: [{ ...base().shots[0], kind: "photo", fit: "fill" }],
       grain: true,
     });
-    expect(hyperframesGaps(props)).toEqual(["the lyric effects (glide / karaoke-highlight)", "a clip shown whole over a blurred copy", "the logo", "film grain"]);
-    // The measurement's stand-in lyric look: the lyric effects are not counted.
-    expect(hyperframesGaps(props, { standInLyrics: true })).not.toContain("the lyric effects (glide / karaoke-highlight)");
+    expect(hyperframesGaps(props)).toEqual(["a clip shown whole over a blurred copy", "the logo", "film grain"]);
+    // Lines without lyric effects (manifests from before Step 5j): their old look is not drawn.
+    const old = { ...props, lyricEffects: null };
+    expect(hyperframesGaps(old)).toContain("the lyric animation");
+    expect(hyperframesGaps(old, { standInLyrics: true })).not.toContain("the lyric animation");
   });
 });
 

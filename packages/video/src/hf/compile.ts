@@ -26,7 +26,8 @@ import type { LyricVideoProps, ShotProps } from "../props";
 // src: as in the props (workspace-relative or _fonts/...); dest: in the composition. frame: not the file but
 // that one frame of it as a picture (written once by our FFmpeg when the project is written).
 export type HfAsset = { src: string; dest: string; frame?: number };
-export type HfComposition = { html: string; assets: HfAsset[]; durationS: number; width: number; height: number };
+// textLayer: the page runs the shared text code (assets/text-layer.js, bundled by src/node/hf-render.ts).
+export type HfComposition = { html: string; assets: HfAsset[]; durationS: number; width: number; height: number; textLayer: boolean };
 type Props = Omit<LyricVideoProps, "mediaBaseUrl">;
 
 const FPS = VIDEO.fps;
@@ -45,16 +46,14 @@ const secs = (frames: number) => Number((frames / FPS).toFixed(6)); // the timel
 export function hyperframesGaps(props: Props, o: { standInLyrics?: boolean } = {}): string[] {
   const gaps: string[] = [];
   const add = (g: string) => !gaps.includes(g) && gaps.push(g);
-  if (props.lyrics.length && !o.standInLyrics) {
-    const fx = props.lyricEffects;
-    add(fx ? `the lyric effects (${fx.verse.name}${fx.hook.name !== fx.verse.name ? ` / ${fx.hook.name}` : ""})` : "the lyric animation");
-  }
+  // The lyrics and cards are drawn by the shared text code (LyricScene, TextCards) when the video has lyric
+  // effects (every video since Step 5j); the old fade / pop look of older manifests is not drawn.
+  if (props.lyrics.length && !props.lyricEffects && !o.standInLyrics) add("the lyric animation");
   if (props.layout && props.layout !== "vertical") add(`the YouTube ${props.layout} layout`);
   for (const s of props.shots) {
     if (s.fit === "fill") add("a clip shown whole over a blurred copy");
     if (s.loopBlend) add("the Canvas loop blend");
   }
-  if (props.textCards?.some((c) => !c.off)) add("title cards");
   if (props.titleOverlay) add("the title overlay");
   if (props.logo) add("the logo");
   if (props.mood?.length) add("section mood");
@@ -62,8 +61,6 @@ export function hyperframesGaps(props: Props, o: { standInLyrics?: boolean } = {
   if (props.glow) add("the beat glow");
   if (props.cinematicBars) add("cinematic bars");
   if (props.endScreen) add("the end-screen area");
-  const b = props.picture?.backing;
-  if (props.lyrics.length && !o.standInLyrics && (b === "shadow" || b === "glow" || b === "box")) add(`the text backing (${b})`);
   if (!props.shots.length) add("a video without clips");
   return gaps;
 }
@@ -200,8 +197,11 @@ export function compileHyperframes(props: Props, o: { gsapSrc?: string } = {}): 
     body.push(`      <div id="band" style="position:absolute;left:0;right:0;top:${top}px;height:${bottom - top}px;background:linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.42) 35%, rgba(0,0,0,0.42) 65%, rgba(0,0,0,0) 100%);z-index:${z++}"></div>`);
   }
 
-  // ---- the lyrics (stand-in look)
-  const timing = hfTiming(props);
+  // ---- the text: the shared text code (lyric effects, title / hook / end cards) on its own layer; the stand-in
+  // look only for lines without lyric effects (the measurement scripts' old plans)
+  const textLayer = !!props.lyricEffects || !!props.textCards?.some((c) => !c.off);
+  if (textLayer) body.push(`      <div id="text" style="${full}z-index:${z + 2}"></div>`);
+  const timing = props.lyricEffects ? [] : hfTiming(props);
   const verse = props.style;
   // Each line's font: its textboard card's, else the hook font on hook lines, else the style's.
   const fontOf = (i: number) => {
@@ -212,7 +212,7 @@ export function compileHyperframes(props: Props, o: { gsapSrc?: string } = {}): 
   };
   const families = new Set([verse.font, ...props.lyrics.map((_, i) => fontOf(i).family)]);
   const faces = props.fonts
-    .filter((f: FontFileRef) => families.has(f.family))
+    .filter((f: FontFileRef) => textLayer || families.has(f.family))
     .map((f: FontFileRef) => `@font-face { font-family: "${fontAlias(f.family)}"; src: url("${asset(f.src, "fonts")}") format("woff2"); font-weight: ${f.weight}; font-style: ${f.style};${f.unicodeRange ? ` unicode-range: ${f.unicodeRange};` : ""} }`);
   timing.forEach((l, i) => {
     const words = l.words.map((w, k) => `<span class="w" id="l${i}w${k}">${esc(w.text)}</span>`).join(" ");
@@ -231,6 +231,19 @@ export function compileHyperframes(props: Props, o: { gsapSrc?: string } = {}): 
     body.push(`      <div id="l${i}" class="line clip${l.hook ? " hook" : ""}" data-start="${floor4(from)}" data-duration="${Number((floor4(l.hide) - floor4(from)).toFixed(4))}" data-track-index="2" style="${own}z-index:${z + 1}"><div class="inner"${innerOwn ? ` style="${innerOwn}"` : ""}>${words}</div></div>`);
   });
   const accent = props.lyricEffects?.accent ?? "#E8A3B5";
+  // The text layer's props: every family under our own name (only our files are ever drawn), no picture data.
+  const fa = fontAlias;
+  const textProps = textLayer
+    ? JSON.stringify({
+        ...props,
+        shots: [],
+        dips: [],
+        style: { ...props.style, font: fa(props.style.font) },
+        hookFont: props.hookFont ? { ...props.hookFont, font: fa(props.hookFont.font) } : null,
+        lyrics: props.lyrics.map((l) => (l.card?.font ? { ...l, card: { ...l.card, font: { ...l.card.font, family: fa(l.card.font.family) } } } : l)),
+        textCards: props.textCards?.map((c) => ({ ...c, font: fa(c.font), ...(c.fallbackFont ? { fallbackFont: fa(c.fallbackFont) } : {}) })),
+      }).replace(/</g, "\\u003c")
+    : null;
   const data = JSON.stringify({ accent, style: STAND_IN_STYLE, lines: timing }).replace(/</g, "\\u003c");
 
   const html = `<!doctype html>
@@ -254,8 +267,10 @@ export function compileHyperframes(props: Props, o: { gsapSrc?: string } = {}): 
     <div id="root" data-composition-id="main" data-start="0" data-duration="${durationS}" data-width="${width}" data-height="${height}" data-fps="${FPS}">
 ${body.join("\n")}
     </div>
-    <script type="application/json" id="lyric-data">${data}</script>
+    <script type="application/json" id="lyric-data">${data}</script>${textProps ? `\n    <script type="application/json" id="text-props">${textProps}</script>\n    <script src="assets/text-layer.js"></script>` : ""}
     <script>
+      // Built once the text layer has its fonts (HyperFrames waits until the timeline is registered).
+      (window.__vmText ? window.__vmText.ready : Promise.resolve()).then(() => {
       const tl = gsap.timeline({ paused: true });
       // The current renderer's photo moves (src/photo.ts kenBurnsAt, src/canvas.ts photoLoopProgress).
       const burns = (t) => 0.5 - Math.cos(Math.PI * Math.min(1, Math.max(0, t))) / 2;
@@ -281,12 +296,19 @@ ${script.map((l) => `      ${l}`).join("\n")}
           tl.to(el, { textShadow: shadow(peak * 0.45, 0.35), duration: S.settleS, ease: "power1.out" }, w.start);
         });
       });
+      // The text layer: drawn by the shared text code on every frame the timeline shows.
+      if (window.__vmText) {
+        const clock = { f: 0 };
+        tl.to(clock, { f: ${props.durationInFrames}, duration: ${durationS}, ease: "none", onUpdate: () => window.__vmText.draw(Math.round(clock.f)) }, 0);
+        window.__vmText.draw(0);
+      }
       window.__timelines = window.__timelines || {};
       window.__timelines["main"] = tl;
       tl.seek(0);
+      });
     </script>
   </body>
 </html>
 `;
-  return { html, assets, durationS, width, height };
+  return { html, assets, durationS, width, height, textLayer };
 }

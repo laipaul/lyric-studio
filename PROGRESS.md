@@ -4,6 +4,25 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Theme Engine v2 on HyperFrames, step 2b part 1: the lyrics and cards on HyperFrames, the same code ✅ (to verify on the Windows PC)
+- **HyperFrames now draws the words with the same code as the current renderer:** the lyric scene (LyricScene.tsx)
+  and the title / byline / tagline / hook / end cards (TextCards.tsx, moved out of LyricVideo.tsx) run inside the
+  HyperFrames page as a text layer, React and our text code bundled locally (esbuild) at render time, a page clock
+  in place of Remotion's, driven frame by frame by the GSAP timeline (seekable, deterministic). So every lyric
+  effect (typewriter, karaoke highlight, glide, ...), the text backings, emphasis, big hook, the waiting next line
+  and the title cards with the Japanese fallback font look exactly as before. The timeline is registered once
+  every font face is loaded (HyperFrames waits for it).
+- **Off Remotion for the effects:** our own easing curves (src/easing.ts, test: the same as Remotion's to 1e-5)
+  and text measuring done the same way (a span's width), so lines wrap at the same word.
+- **Check:** `pnpm hf:parity` now compares the whole video, words and cards included, plus the lyric area alone.
+  Cloud test song (glide / karaoke-highlight): whole 0.9929 (lowest 0.9908), words the same. New test (typewriter
+  verses, karaoke hook, typed title with byline, Japanese tagline): whole 0.9915, lyric area 0.9921, cards 0.9916
+  (lowest 0.990): the same words, frame by frame. Zero network still (the test now includes the text layer and a
+  Japanese card). A Reel with lyric effects and title cards now has nothing HyperFrames cannot draw.
+- Tests: easing, hf-parity (picture + Reel text), hf-network (text layer), hf-compile, textboard-make.
+- Next (part 2, new on HyperFrames only): the stacked line shape with build-up, the bigger final hook,
+  docs/theme-rules.md.
+
 ### Theme Engine v2 on HyperFrames, step 2a: the Reel picture ✅ (confirmed on the Windows PC, 6 Nov 2026)
 - **HyperFrames now draws the whole Reel picture as the current renderer does:** clips (offset, speed, held last
   frame), photos with their Ken Burns move (also the looping move), cuts, dissolves, dips, the loop ending (the first
@@ -235,12 +254,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   run is skipped with a note and the run goes on with the other clips (make.ts; readability-make.test.ts);
   with no clips at all it says "No clips yet …: add clips in Prepare → Assets, or choose a collection".
 
-### Fix: lines a few px past the safe margin ("Not ready") ✅ (to verify on the Windows PC)
-- Reported by the user on 1 Nov 2026 (Here With Me YouTube: hook lines 33 px, line 15 7 px past the right 4%).
-- Cause: a line was fitted to the lyric area at rest; its effect (chorus lift, breathe, word scale, drift)
-  then grew it past the margin. Now the render (LyricScene) and QA (qa-check) fit each line to the area
-  minus its effect's growth (effects/scene.ts restWidth; test rest-width.test.ts), so it stays inside.
-
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -389,7 +402,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 **Theme Engine v2 on HyperFrames (adopted 6 Nov 2026; plan approved the same day).** The order is the plan
 docs/theme-engine-v2-hyperframes-plan.md, section 6: step 0 ("break." fix, done) → 1 (renderer seam; D1 decided = (b), everything
 in one pass; its speed and frame accuracy checked on the PC, causes fixed, (a) only a temporary fallback; zero network
-calls when rendering; LGPL FFmpeg with NVENC timed; done: B 92% of Remotion's time on the PC) → 2a (picture for Reels, done, confirmed on the PC) → 2b (next) →
+calls when rendering; LGPL FFmpeg with NVENC timed; done: B 92% of Remotion's time on the PC) → 2a (picture for Reels, done, confirmed on the PC) → 2b (part 1 done: the lyrics and cards with the same code; part 2 next: stacked lines, bigger final hook, theme-rules.md) →
 2b (the Reel word-by-word theme's text) → **M1: the Reel word-by-word theme ("Here with Me") usable for real
 releases** → the spec's T1-T4 → 3-8, the ballad and Pômé themes. GSAP / FFmpeg licences non-blocking: a short
 note (docs/licences.md) before step 8. It replaces the T-list below as the order.

@@ -1,7 +1,7 @@
 // HyperFrames renders (Theme Engine v2 step 1): ZERO network calls (decided by the user, 6 Nov 2026: fonts only
 // from our own files, never a download, not even as a fallback), and every frame exactly the source frame the
 // plan asks for (decision D1). The check script renders a numbered test clip trimmed, slowed, jumping back and
-// running out, with a lyric line in a bundled font, while strace records every connection of
+// running out, with a lyric line with the Reel's effects (the text layer) and a Japanese title card in bundled fonts, while strace records every connection of
 // every process (Node, Chrome, FFmpeg): any connection that is not to this machine fails the test.
 // Needs strace (Linux), FFmpeg and a browser for HyperFrames (HYPERFRAMES_BROWSER_PATH or `pnpm hf:setup`).
 import { execFileSync, spawnSync } from "node:child_process";
@@ -68,7 +68,12 @@ describe.skipIf(!hasStrace || !hasBrowser)("a HyperFrames render", () => {
     const html = readFileSync(path.join(work, "work-all", "hf-all", "index.html"), "utf8");
     expect(html).not.toMatch(/https?:\/\//);
     expect(html).toContain('font-family: "vm Cormorant Garamond"');
-    expect(readdirSync(path.join(work, "work-all", "hf-all", "assets", "fonts"))).toEqual(["cormorant-garamond-latin-400-normal.woff2"]);
+    const fonts = readdirSync(path.join(work, "work-all", "hf-all", "assets", "fonts"));
+    expect(fonts).toContain("cormorant-garamond-latin-400-normal.woff2");
+    expect(fonts.every((f) => f.startsWith("cormorant-garamond-latin-400-normal") || f.startsWith("noto-sans-jp-"))).toBe(true);
+    // The text layer (React and our text code) is a local file, never fetched.
+    expect(html).toContain('<script src="assets/text-layer.js"></script>');
+    expect(html).toContain('"vm Noto Sans JP"');
     rmSync(work, { recursive: true, force: true });
   }, 700_000);
 });

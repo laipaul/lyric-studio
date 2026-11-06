@@ -188,7 +188,8 @@ its Reels need, built on HyperFrames only (never twice):
   fallback (a) removed): clips (trim, speed, held frame), photos with Ken Burns, dissolves and dips, the same
   picture opening and closing (Reels loop ending), the song with its fades, the theme's grade, layout and line
   timing (lead, gap hiding, lead-in), the textboard's per-line cards.
-- **2b. The Reel theme's text:** typewriter letter by letter, the stacked line shape (2-4 short lines chosen per
+- **2b. The Reel theme's text** (part 1 done 6 Nov 2026: the lyrics and cards drawn by the same code as the
+  current renderer, in a text layer inside the HyperFrames page; checked frame by frame by `pnpm hf:parity`): typewriter letter by letter, the stacked line shape (2-4 short lines chosen per
   phrase, build-up until the phrase ends), the title card (title, "by Life Lyrics", the Japanese tagline with its
   automatic Noto JP fallback, the credits line), a bigger final hook (the last chorus, its last words larger),
   colour as set in the theme (the automatic per-clip colour comes later with T5). The first entries of

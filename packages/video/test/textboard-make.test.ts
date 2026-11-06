@@ -71,13 +71,13 @@ describe("the textboard in the planner", () => {
     expect(dry.platforms[0].plan!.videos[0].props).toEqual(m.props);
   }, 300_000);
 
-  it("--engine hyperframes: a video the converter cannot draw yet is made by the current renderer, said in the log and the manifest", async () => {
+  it("--engine hyperframes: a Reel with lyric effects and title cards has nothing HyperFrames cannot draw (step 2b); the manifest says what was asked", async () => {
     const logs: string[] = [];
+    // (This test's renderer is a quick stand-in, so the video itself is made by it; the plan is what is checked.)
     const r = await make({ engine: "hyperframes", log: (m: string) => logs.push(m) });
     const m = readManifest(r.platforms[0].variations[0].manifestFile);
-    expect(m.renderer).toMatchObject({ asked: "hyperframes", used: "remotion" });
-    expect(m.renderer!.gaps).toContain("the lyric effects (glide / karaoke-highlight)");
-    expect(logs.some((l) => /reels v1: made with the current renderer: HyperFrames cannot draw the lyric effects/.test(l))).toBe(true);
+    expect(m.renderer).toMatchObject({ asked: "hyperframes", gaps: [] });
+    expect(logs.some((l) => /HyperFrames cannot draw/.test(l))).toBe(false);
     expect(readManifest(r.platforms[0].variations[0].manifestFile).props.lyrics.length).toBeGreaterThan(0);
   }, 300_000);
 
