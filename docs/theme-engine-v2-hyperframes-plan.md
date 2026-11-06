@@ -77,6 +77,9 @@ dissolves are not on HyperFrames yet"): never a silently different video. The ma
 - **Cloud results of step 1 (synthetic song, 31.3 s, 12 shots, 4-core Xeon, no GPU):** Remotion 147.3 s, (b) 93.2 s
   (63% of Remotion's time), (a) 134.8 s; frame accuracy 240 of 240 frames exactly as planned for (b), (a)'s picture
   and Remotion; zero outside connections. Paul's PC run (`pnpm hf:measure`) confirms or corrects this.
+- **Paul's PC (6 Nov 2026, "Here with Me", 30.4 s, RTX 5060): (b) passes.** Remotion 81.4 s, (b) 34.6 s (42% of
+  Remotion's time), (a) 60.2 s; 240 of 240 frames exactly as planned for all three. The LGPL build's NVENC needs a
+  newer driver than the PC's (master build: driver 610+); a release build (n7.1) is tried next.
 - **FFmpeg in step 1:** an LGPL FFmpeg build with NVENC (the RTX 5060's hardware encoder) is evaluated next to the
   current build: it would solve the GPL question for an installer and may encode faster. Step 1 reports the
   times of both (the final encode, and the clip layer in (a)) and the quality at the same file size.
