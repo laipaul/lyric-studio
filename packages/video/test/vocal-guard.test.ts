@@ -441,6 +441,40 @@ describe("vocal-start check: a stamp in silence with every signal later", () => 
     expect([l5.wordsMs, l5.voiceMs, l5.result]).toEqual([null, 38_100, "flagged for review"]);
   });
 
+  // Line 9 of Let My Love Carry You: stamp 1:03.4, voice 1:05.8, words 1:04.8; the line before (0:58.6) holds
+  // its last note past the stamp (about -25 dB), which is not this line's voice.
+  describe("the previous line's held note", () => {
+    const LRC9 = [
+      "[00:02.00]<00:02.00>One <00:02.50>two <00:03.00>",
+      "[00:08.00]<00:08.00>Two <00:08.50>more <00:09.00>",
+      "[00:15.00]<00:15.00>Three <00:15.50>more <00:16.00>",
+      "[00:28.00]<00:28.00>Four <00:28.50>more <00:29.00>",
+      "[00:58.60]<00:58.60>Till <00:59.00>the <00:59.40>break <00:60.00>of <00:60.40>day <00:61.00>",
+      "[01:03.40]<01:03.40>Let <01:03.50>my <01:03.80>love <01:04.00>",
+      "[01:08.00]<01:08.00>Next <01:08.50>line <01:09.00>",
+      "[01:12.00]",
+    ].join("\n");
+    const song9 = parseLrc(LRC9, 80_000);
+    const base: [number, number, number][] = [[2_000, 3_500, SUNG], [8_000, 9_500, SUNG], [15_000, 16_500, SUNG], [28_000, 30_000, SUNG]];
+    const asr9 = new Map([[5, asrAt(64_800, "Let my love")]]);
+    it("a held last note under the stamp is not voice of the line: moved to the words", () => {
+      const v = levels([...base, [58_500, 60_500, SUNG], [60_500, 63_500, -25], [65_800, 67_500, -20], [68_000, 70_000, SUNG]], 80_000);
+      const c = checkVocalStart(song9, v, { asr: asr9, all: true });
+      const l9 = c.lines.find((x) => x.index === 5)!;
+      expect(c.thresholdDb).toBe(-30.5);
+      expect([l9.stampLevelDb, l9.ownLevelDb, l9.voiceMs, l9.wordsMs, l9.targetMs, l9.result]).toEqual([-25, -100, 65_800, 64_800, 64_800, "moved"]);
+      expect(c.moves.find((m) => m.index === 5)).toEqual({ index: 5, fromMs: 63_400, toMs: 64_800, reason: "stamp in silence; voice, words all later" });
+    });
+    it("this line's own voice already sounding at the stamp: never moved by the rule", () => {
+      const v = levels([...base, [58_500, 60_500, SUNG], [60_500, 63_000, -25], [63_300, 64_500, -20], [65_800, 67_500, -20], [68_000, 70_000, SUNG]], 80_000);
+      const c = checkVocalStart(song9, v, { asr: asr9, all: true });
+      const l9 = c.lines.find((x) => x.index === 5)!;
+      expect(l9.ownLevelDb).toBeGreaterThanOrEqual(c.thresholdDb);
+      expect(l9.why).not.toContain("stamp in silence");
+      expect(c.moves.some((m) => m.index === 5 && m.reason)).toBe(false);
+    });
+  });
+
   it("a hand-set start is never touched", () => {
     const c = checkVocalStart(song, levels(spans()), { asr, skip: new Set([4]) });
     const l5 = c.lines.find((x) => x.index === 4)!;

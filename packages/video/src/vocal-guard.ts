@@ -17,7 +17,8 @@
 // estimate moves to the recognised words; and a first word of LONG_WORD_MS or more with voice and words
 // both later than the stamp and within PAIR_NEAR_MS of each other moves to the recognised words (not on
 // the last line: a held note); and, where no rule above fired, a stamp in silence on the vocal track
-// (the loudest level in the 2 s after it under the voice level) with every other signal (voice, words, word
+// (no voice of the line itself from the stamp to the earliest later signal: the loudest level there, without the
+// previous line's own singing such as its held last note, is at or under the voice level) with every other signal (voice, words, word
 // durations) later by at least the lead-in (reviewMs), at least two of them (never one alone), moves to the
 // recognised words when they are within WORDS_NEAR_MS of the voice or of the word-duration estimate, else to
 // the earliest of those signals: they all say the stamp is wrong, even where they differ among themselves.
@@ -62,6 +63,7 @@ export type LineCheck = {
   firstWordMs: number | null; // how long the first word lasts (to the second word's start)
   loudestBeforeDb: number | null; // the loudest sound between the voice before and this voice (bleed, breaths)
   stampLevelDb: number | null; // the vocal track's loudest level in the 2 s after the stamp (why the voice was or was not heard there)
+  ownLevelDb: number | null; // the loudest level from the stamp to the earliest later signal, without the previous line's own singing (null: nothing left = silent for this line)
   targetMs: number; // where the line starts now
   agree: string[]; // the signals that agreed on targetMs
   why: string;
@@ -230,6 +232,23 @@ export function matchFirstWords(lineText: string, words: readonly AsrWord[]): { 
   return null;
 }
 
+// The previous line's own singing: the voice stretch its last word starts in (a held last note included).
+const isPrevSinging = ([start, end]: VoiceStretch, prevLast: number | null) => prevLast !== null && start <= prevLast && end > prevLast;
+const prevLastOf = (prev: TimedLine | undefined) => (prev ? (prev.words?.at(-1)?.start_ms ?? prev.start_ms) : null);
+
+// The loudest level of THIS line's voice in [fromMs, toMs): frames of the previous line's own singing do not
+// count. null: no frame is left (everything there is the previous line's held note: silent for this line).
+function ownLevel(v: VoiceLevels, stretches: readonly VoiceStretch[], prevLast: number | null, fromMs: number, toMs: number): number | null {
+  const theirs = stretches.filter((st) => isPrevSinging(st, prevLast));
+  let max: number | null = null;
+  for (let k = Math.max(0, Math.floor(fromMs / v.hopMs)); k < Math.min(v.db.length, Math.ceil(toMs / v.hopMs)); k++) {
+    const t = k * v.hopMs;
+    if (theirs.some(([start, end]) => t >= start && t < end)) continue;
+    max = max === null ? v.db[k] : Math.max(max, v.db[k]);
+  }
+  return max;
+}
+
 type Signals = { i: number; voice: number | null; duration: number; firstWordMs: number | null; loud: number | null };
 
 // The lines to check (line 1, after an instrumental gap, a stretched first word) with their voice and
@@ -244,8 +263,8 @@ function signalsFor(lines: readonly TimedLine[], v: VoiceLevels, levelDb: number
     // singing), else the next voice after it.
     // The previous line's own singing (the stretch its last word starts in) never counts for this line,
     // even when it ends just before this stamp (an early stamp right after the previous line).
-    const prevLast = prev ? (prev.words?.at(-1)?.start_ms ?? prev.start_ms) : null;
-    const mine = stretches.filter(([start, end]) => prevLast === null || !(start <= prevLast && end > prevLast));
+    const prevLast = prevLastOf(prev);
+    const mine = stretches.filter((st) => !isPrevSinging(st, prevLast));
     // The stretch the line is in: one going on at the stamp, else one starting within the pre-roll, else
     // one ending within it. (In that order since L1a: on a wet stem a phrase's reverb tail can end just
     // before the next line's stamp, and that phrase is not the next line's voice.)
@@ -315,7 +334,7 @@ export function checkVocalStart(
     const stampLevelDb = quantile([...slice(v, l.start_ms, l.start_ms + 2_000)], 1);
     const base = { index: s.i, stampMs: l.start_ms, voiceMs: s.voice, wordsMs: heard?.ms ?? null, wordsText: heard?.text ?? null, durationMs: s.duration, firstWordMs: s.firstWordMs, loudestBeforeDb: s.loud, stampLevelDb };
     if (skip.has(s.i)) {
-      checks.push({ ...base, targetMs: l.start_ms, agree: [], why: "placed by hand", result: "set by hand" });
+      checks.push({ ...base, ownLevelDb: null, targetMs: l.start_ms, agree: [], why: "placed by hand", result: "set by hand" });
       continue;
     }
     const stretched = s.firstWordMs !== null && s.firstWordMs >= STRETCHED_WORD_MS;
@@ -338,7 +357,10 @@ export function checkVocalStart(
     let reason: string | undefined;
     // The stamp is in silence on the vocal track, and every other signal is at least the lead-in later (two or more).
     const later = cands.filter((c) => c.name !== "stamp");
-    const silentStamp = stampLevelDb !== null && stampLevelDb < thresholdDb && later.length >= 2 && later.every((c) => c.ms - l.start_ms >= reviewMs);
+    // "Silence" = no voice of this line itself from the stamp to the earliest later signal (the previous line's held note does not count).
+    const ownLevelDb = ownLevel(v, stretches, prevLastOf(prev), l.start_ms, Math.max(l.start_ms + v.hopMs, later.length ? Math.min(...later.map((c) => c.ms)) : l.start_ms + 2_000));
+    const silentStamp = (ownLevelDb === null || ownLevelDb <= thresholdDb) && later.length >= 2 && later.every((c) => c.ms - l.start_ms >= reviewMs);
+    const full = { ...base, ownLevelDb };
     if (s.firstWordMs !== null && s.firstWordMs >= LONG_FIRST_WORD_MS && heard && Math.abs(heard.ms - s.duration) <= WORDS_NEAR_MS) {
       // A first word of seconds (stretched back into the music) and the recognised words near its estimate.
       const voiceToo = s.voice !== null && Math.abs(s.voice - heard.ms) <= AGREE_MS;
@@ -384,19 +406,19 @@ export function checkVocalStart(
           : "no two signals agree";
     }
     if (flag) {
-      checks.push({ ...base, targetMs: l.start_ms, agree, why, result: "flagged for review" });
+      checks.push({ ...full, targetMs: l.start_ms, agree, why, result: "flagged for review" });
     } else if (Math.abs(target - l.start_ms) <= MOVE_MS) {
-      checks.push({ ...base, targetMs: l.start_ms, agree, why, result: "in time" });
+      checks.push({ ...full, targetMs: l.start_ms, agree, why, result: "in time" });
     } else if (target > l.start_ms && s.i > 0 && target <= prevEnd && target < nextStart - NEXT_MARGIN_MS && target > (prev.words?.at(-1)?.start_ms ?? prev.start_ms) + MOVE_MS) {
       // Two signals agree it starts later, inside the previous line: that line's last note was held too
       // long (its end is too late), so it ends where this one starts.
       moves.push({ index: s.i, fromMs: l.start_ms, toMs: target, shortensPrevious: true, ...(reason ? { reason } : {}) });
-      checks.push({ ...base, targetMs: target, agree, why: `${why}; line ${s.i} now ends there (its end was too long)`, result: "moved" });
+      checks.push({ ...full, targetMs: target, agree, why: `${why}; line ${s.i} now ends there (its end was too long)`, result: "moved" });
     } else if (target >= nextStart - NEXT_MARGIN_MS || (s.i > 0 && target <= prevEnd)) {
-      checks.push({ ...base, targetMs: l.start_ms, agree, why: `${why}, but ${target >= nextStart - NEXT_MARGIN_MS ? "that is past the next line" : "that is inside the previous line"}`, result: "flagged for review" });
+      checks.push({ ...full, targetMs: l.start_ms, agree, why: `${why}, but ${target >= nextStart - NEXT_MARGIN_MS ? "that is past the next line" : "that is inside the previous line"}`, result: "flagged for review" });
     } else {
       moves.push({ index: s.i, fromMs: l.start_ms, toMs: target, ...(reason ? { reason } : {}) });
-      checks.push({ ...base, targetMs: target, agree, why, result: "moved" });
+      checks.push({ ...full, targetMs: target, agree, why, result: "moved" });
     }
   }
   return { levelDb, thresholdDb, lines: checks, moves, stretches };

@@ -4,6 +4,21 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Bug fix: a held note from the line before no longer hides a stamp in silence ✅ (to verify on the Windows PC)
+- Reported on "Let My Love Carry You", line 9: stamp 1:03.4, voice 1:05.8, recognised words 1:04.8 "Let my love",
+  first word 0.1 s: only "flagged for review" (no second signal within 0.3 s). Line 8 (0:58.6, "Till the break of day")
+  holds its last note past the stamp, so the vocal track read up to -25.5 dB there, over the voice level -30.5 dB,
+  and the stamp-in-silence rule did not fire. Ear check: Reel 0:03 / 0:30 are 27 s apart, which matches the
+  words at 0:37.2 / 1:04.8 (line 5 / line 9), so the line starts at about 1:04.8.
+- Fix (vocal-guard.ts): the silence test now means "no voice of this line at the stamp": the level is measured
+  only from the stamp to the earliest later signal (not a fixed 2 s), and frames of the previous line's own singing
+  (the voice stretch its last word starts in, the same definition `signalsFor` uses) are left out; nothing left
+  counts as silent. New `LineCheck.ownLevelDb`; `stampLevelDb` (the printout) is unchanged. Everything else of the
+  rule is unchanged (two or more signals, each >= 1 s later, target choice, hand-set lines, safety checks).
+- Line 9 -> 1:04.8. Log: `guard: line 9 moved from 1:03.4 to 1:04.8 (stamp in silence; voice, words all later)`.
+- Tests: vocal-guard.test.ts (line 9 with these numbers; the line's own voice already sounding at the stamp is
+  never moved; line 5 -> 0:37.2, last line -> 3:22.1 and hand-set unchanged). Docs: docs/lyrics.md.
+
 ### Bug fix: Generate kept a collection unticked in Shape ✅ (to verify on the Windows PC)
 - Reported: "wedding" unticked in Shape → To make (song.json "collections": []), yet Make still showed
   "6 clips + wedding" and the run added the wedding clips again.
@@ -255,21 +270,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   back to the bar before that line (at most 2 lines back); the hook comes a little later.
 - Tests: timing-fixes.test.ts (start, Automatic, typed length), platform.test.ts, style.test.ts;
   e2e style-lock (the Length choice).
-
-### Song clip order: drag clips into order in Assets ✅ (to verify on the Windows PC)
-- Asked by the user on 2 Nov 2026: upload a batch of clips with any names, then just drag them into order;
-  no renaming one by one.
-- Assets shows the song's clips numbered in the song's clip order (clips.json "order", the same sequence
-  Shape's Clips strip shows and Make uses); drag one onto another to reorder, saved at once.
-- New clips go at the end, sorted by file name among themselves (clips named 01_, 02_ keep that order);
-  "Sort by file name" puts the whole song in file-name order; Remove takes a clip out of the order,
-  Restore puts it back at the end. Collection clips keep their places in the order.
-- Then (user's decision, same day): **no more shuffle**: every video of a run follows the order (they differ
-  by style, pace and cut / dissolve; the Lyrics tab's gap-order choice is gone). **Use / Omit** on each clip,
-  in Assets and Shape → Clips (clips.json "omit"): an omitted clip keeps its place and Make leaves it out;
-  an anchor on it becomes "needs a clip"; every clip omitted says so. Shape's reorder keeps the clips it
-  cannot show (other orientation) in their places, so Assets and Shape stay one sequence.
-- Tests: clip-order.test.ts, song-folders.test.ts (Assets order, Use / Omit, no shuffle).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
