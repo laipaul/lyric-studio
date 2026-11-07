@@ -1,7 +1,7 @@
 // The Storyboard's "Follow playback": where the timeline scrolls so the playhead stays in view while the
 // preview plays. Pure, so the studio and the tests share it.
 
-export const FOLLOW_AT = 1 / 3; // the playhead is kept about a third from the timeline's left edge
+export const FOLLOW_AT = 1 / 2; // the playhead stays in the middle of the timeline (continuous scroll, as Pro Tools / Logic / Final Cut; 7 Nov 2026, asked by the user)
 
 // The scroll position (px) that keeps the playhead `playheadX` (px inside the content) at FOLLOW_AT of the
 // visible width, clamped to the content; null when the timeline is already there (less than 1 px off) or

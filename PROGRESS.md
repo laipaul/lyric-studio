@@ -4,6 +4,14 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Shape timeline: Follow keeps the playhead in the middle ✅ (to verify on the Windows PC)
+- Asked by the user (7 Nov 2026): for checking lyric sync, the playhead should stay in one place while the
+  timeline slides under it, as in Pro Tools ("continuous scroll"), Logic and Final Cut (not a page jump as in
+  Premiere / Resolve / Ableton). Follow now keeps it in the middle (was a third from the left); it moves off the
+  middle only near the video's start and end, where there is nothing left to scroll. Scrolling by hand still
+  stops it until the next play.
+- Tests: follow.test.ts (the middle); storyboard.e2e.ts unchanged in substance.
+
 ### Lyrics tab: where the Reel starts and each line's time in it ✅ (to verify on the Windows PC)
 - Asked by the user (7 Nov 2026), with the timeline clock: the Lyrics tab shows song times, the Reel counts
   from its own start, and nothing linked the two.
@@ -254,21 +262,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   back. Remove in Assets stays for a clip you have decided against. The clip-misfit reaction is removed.
 - Tests: pace-transitions, shots, storyboard, reactions (video package: 886 pass; make / migrate / render need the
   network and fail in the cloud before and after); browser tests storyboard, textboard, song-stages pass.
-
-### Shape: one Analysis chip in the song header, nothing else above the viewer ✅ (to verify on the Windows PC)
-- Asked by the user on 2 Nov 2026 ("still too scattered information, group all these infos into a single tag called
-  Analysis where you explain by section"; "I don't need the buttons Ready to post and Make on the top right, they are
-  redundant"; "that should free the space to make the viewer bigger").
-- The song header has an **Analysis** chip (a dot in the verdict's colour). It opens the Analysis panel on the left:
-  Verdict · This video · Look & content · Length & ending · Clips & warnings (only when there are any) · How to edit.
-- Gone from the page: the stage line, Look · Content line, the video's line, the hint, the verdict badge, Next: Make
-  (Make is in the rail) and the Plan details fold. The viewer starts right under the song header and takes that room:
-  537 px on 1600×950 (424 px this morning).
-- Same evening: the bottom block (timeline + transport) about 1 cm lower: the free room under the command bar 56 → 18 px
-  ("better try to move the whole bottom block a bit lower about 1 cm"); the viewer grows with it (625 px on 1440×1000,
-  393 px on 1366×768).
-- Tests: storyboard.e2e.ts (the chip, nothing else above the viewer, the panel by section, a second click closes it),
-  song-stages.e2e.ts and textboard.e2e.ts updated (Look · Content and the summary read from the panel; the rail's Make).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

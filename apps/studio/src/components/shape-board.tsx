@@ -300,7 +300,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
       // not remembered (private window): the toggle still works for this visit
     }
   };
-  // While following and playing: keep the playhead a third from the timeline's left edge.
+  // While following and playing: keep the playhead in the middle of the timeline.
   useEffect(() => {
     const el = timeline.current;
     if (!follow || !playing || heldByUser.current || !el) return;

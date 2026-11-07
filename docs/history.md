@@ -4,6 +4,21 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Shape: one Analysis chip in the song header, nothing else above the viewer ✅ (to verify on the Windows PC)
+- Asked by the user on 2 Nov 2026 ("still too scattered information, group all these infos into a single tag called
+  Analysis where you explain by section"; "I don't need the buttons Ready to post and Make on the top right, they are
+  redundant"; "that should free the space to make the viewer bigger").
+- The song header has an **Analysis** chip (a dot in the verdict's colour). It opens the Analysis panel on the left:
+  Verdict · This video · Look & content · Length & ending · Clips & warnings (only when there are any) · How to edit.
+- Gone from the page: the stage line, Look · Content line, the video's line, the hint, the verdict badge, Next: Make
+  (Make is in the rail) and the Plan details fold. The viewer starts right under the song header and takes that room:
+  537 px on 1600×950 (424 px this morning).
+- Same evening: the bottom block (timeline + transport) about 1 cm lower: the free room under the command bar 56 → 18 px
+  ("better try to move the whole bottom block a bit lower about 1 cm"); the viewer grows with it (625 px on 1440×1000,
+  393 px on 1366×768).
+- Tests: storyboard.e2e.ts (the chip, nothing else above the viewer, the panel by section, a second click closes it),
+  song-stages.e2e.ts and textboard.e2e.ts updated (Look · Content and the summary read from the panel; the rail's Make).
+
 ### Shape: a bigger viewer, everything else at the top ✅ (to verify on the Windows PC)
 - Asked by the user on 2 Nov 2026 ("how come the video viewer has become smaller … move the titles to the top and make the
   sound wave flatter"; "all these messages at the bottom should be moved to the top, including this Make button. Still leave
