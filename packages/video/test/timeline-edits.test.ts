@@ -99,6 +99,41 @@ describe("the planner uses the edits (the same composition Shape previews and Ma
     expect(edited[2].src).toBe("cache/05_e.mp4");
     expect(edited[2].clipStartFrame).toBe(90); // 3 s into 05_e.mp4
   });
+
+  it("a slip on a Reel's first clip survives the loop ending (it plays the frames before the slip instead)", () => {
+    const reel = (timeline?: RenderBase["timeline"]): RenderBase => ({
+      ...base(timeline), platform: { format: { width: 1080, height: 1920 }, safeZone: { top: 0, bottom: 0, left: 0, right: 0 }, lyricsAt: 0.45, textScale: 1, loopEnding: true } as unknown as RenderBase["platform"],
+    });
+    const first = composeProps(reel(), { seed: 1, style: "simple", order: "story" }).props.shots;
+    const lastOf = (shots: typeof first) => shots[shots.length - 1];
+    expect(lastOf(first).src).toBe(first[0].src); // the loop shot continues into shot 1
+    // Without a slip the loop ending makes room before shot 1 by moving its start.
+    expect(first[0].clipStartFrame).toBe(lastOf(first).clipStartFrame + lastOf(first).duration);
+    expect(first[0].clipStartFrame).not.toBe(15);
+    const atS = (plan2.start_frame * 1000) / 30 / 1000;
+    const slipped = composeProps(reel({ cuts: [], slips: [{ at: atS, clip: first[0].src.replace("cache/", ""), in: 0.5 }] }), { seed: 1, style: "simple", order: "story" }).props.shots;
+    expect(slipped[0].clipStartFrame).toBe(15); // the slip, not moved by the loop
+    // 15 frames are not enough for the last shot: an ordinary last shot (not the first clip again).
+    expect(lastOf(slipped).duration).toBeGreaterThan(0);
+    expect(lastOf(slipped).clipStartFrame).toBeGreaterThanOrEqual(0);
+    expect(lastOf(slipped).src).not.toBe(slipped[0].src);
+  });
+
+  it("a slip on a Reel's last clip plays from the slip (it is not turned into the loop shot)", () => {
+    const reel: RenderBase = {
+      ...base(), platform: { format: { width: 1080, height: 1920 }, safeZone: { top: 0, bottom: 0, left: 0, right: 0 }, lyricsAt: 0.45, textScale: 1, loopEnding: true } as unknown as RenderBase["platform"],
+    };
+    const auto = composeProps(reel, { seed: 1, style: "simple", order: "story" }).props.shots;
+    const last = auto[auto.length - 1];
+    expect(last.src).toBe(auto[0].src); // without a slip the last shot is the loop shot
+    expect(last.clipStartFrame + last.duration).toBe(auto[0].clipStartFrame);
+    const other = names.find((n) => `cache/${n}` !== auto[0].src && `cache/${n}` !== auto[auto.length - 2].src)!;
+    const atS = (plan2.start_frame + last.start) / 30;
+    const slipped = composeProps({ ...reel, timeline: { cuts: [], slips: [{ at: atS, clip: other, in: 2 }] } }, { seed: 1, style: "simple", order: "story" }).props.shots;
+    const l2 = slipped[slipped.length - 1];
+    expect(l2.src).toBe(`cache/${other}`);
+    expect(l2.clipStartFrame).toBe(60); // 2 s into the clip
+  });
 });
 
 describe("clips.json keeps the timeline edits", () => {

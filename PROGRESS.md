@@ -5,6 +5,7 @@
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
 ### Shape timeline: pro edits with the mouse, part 1 (roll, slip, snapping, Undo) ✅ (to verify on the Windows PC)
+- Fixed (7 Nov 2026, reported by the user): a slip on a Reel's first clip was undone by the loop ending (it moved the first clip's start to make room for the seamless loop); a first shot with a start set by hand (slip or anchor) now keeps it, and the loop uses the frames before it when there are enough, else an ordinary last shot. A slip on the last clip likewise plays from the slip as an ordinary last shot (it is not turned into the loop shot).
 - Asked by the user (7 Nov 2026): edit like the pros (Premiere, Resolve, Final Cut), directly on the timeline,
   not by typing seconds in the Clip editor.
 - **Roll:** drag the line between two shots: the cut moves, one shot gets longer and the other shorter,

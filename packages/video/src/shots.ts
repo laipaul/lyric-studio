@@ -83,15 +83,19 @@ export function assignClips(plan: CutPlan, clipsIn: readonly ClipInfo[], seed: n
   const shots: Shot[] = [];
 
   const lastIndex = bounds.length - 2;
-  const loop = !!options.loopEnding && lastIndex >= 2 && !pins.has(lastIndex) && clips.length > 1;
+  const loop = !!options.loopEnding && lastIndex >= 2 && !pins.has(lastIndex) && !options.clipStarts?.has(lastIndex) && clips.length > 1; // a last shot with a start set by hand is an ordinary last shot
   // The loop shot can continue into shot 1 only if the first clip has the frames for it (else the last
   // shot gets another clip: the same clip restarting at the loop would be visible).
   let canLoop: boolean | undefined;
+  const firstFixed = !!options.clipStarts?.has(0);
   const loopPossible = () => {
     const first = shots[0];
     const clip = clipById.get(first.clip_id)!;
     const lastLength = bounds[lastIndex + 1] - bounds[lastIndex];
-    return !!clip.still || (first.playback_rate === 1 && (first.clip_start_frame >= lastLength || framesOf(clip) >= lastLength + first.duration_frames));
+    if (clip.still) return true;
+    // A first shot with a start set by hand (slip, anchor) keeps it: only the frames before it can be used.
+    if (firstFixed) return first.playback_rate === 1 && first.clip_start_frame - inOf(clip) >= lastLength;
+    return first.playback_rate === 1 && (first.clip_start_frame >= lastLength || framesOf(clip) >= lastLength + first.duration_frames);
   };
   for (let i = 0; i < bounds.length - 1; i++) {
     const length = bounds[i + 1] - bounds[i];
@@ -150,7 +154,7 @@ export function assignClips(plan: CutPlan, clipsIn: readonly ClipInfo[], seed: n
         clipStart = 0;
       } else if (first.playback_rate === 1 && first.clip_start_frame - inF >= length) {
         clipStart = first.clip_start_frame - length;
-      } else if (first.playback_rate === 1 && outF - inF >= length + first.duration_frames) {
+      } else if (!firstFixed && first.playback_rate === 1 && outF - inF >= length + first.duration_frames) {
         first.clip_start_frame = inF + length; // make room before shot 1
         clipStart = inF;
       } else {
