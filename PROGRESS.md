@@ -4,6 +4,23 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Shape timeline: trim the first and last clip, the clip in the viewer while editing ✅ (to verify on the Windows PC)
+- Asked by the user (7 Nov 2026): "I can't trim the first clip from the left-hand side and the last clip from the
+  right-hand side", and "when I select the clip I expect to see it in the viewer".
+- **Outer edges:** the first clip's left edge and the last clip's right edge have a handle (data-trim-handle).
+  Drag the left edge right: the first clip starts later in its footage; drag the right edge left: the last clip
+  ends sooner. The video keeps its music and length (the shot keeps its place; saved as a slip). When the clip
+  has no more footage that way the readout says so ("no more footage after this in the clip").
+- **The clip in the viewer:** clicking a clip on the timeline puts the playhead on its first frame; while a cut,
+  slip or trim is dragged the big viewer shows that exact frame of the clip ("1.40 s of the clip"); after the
+  edit the viewer stands on the edit point (Space plays from there).
+- **Fixed on the way (older bug):** after some re-plans the viewer was mounted again but the playhead kept
+  listening to the old one, so the playhead, the time and Follow froze while the video itself moved. The
+  timeline now follows the viewer that is on screen. A click that ends a drag no longer swallows the next
+  real click.
+- Tests: storyboard.e2e.ts (trim readout and the viewer frame while dragging, the last clip's handle, clicking a
+  clip moves the playhead to it): run in the cloud session, all 108 checks pass.
+
 ### Shape timeline: pro edits with the mouse, part 1 (roll, slip, snapping, Undo) ✅ (to verify on the Windows PC)
 - Fixed (7 Nov 2026, reported by the user): a slip on a Reel's first clip was undone by the loop ending (it moved the first clip's start to make room for the seamless loop); a first shot with a start set by hand (slip or anchor) now keeps it, and the loop uses the frames before it when there are enough, else an ordinary last shot. A slip on the last clip likewise plays from the slip as an ordinary last shot (it is not turned into the loop shot).
 - Asked by the user (7 Nov 2026): edit like the pros (Premiere, Resolve, Final Cut), directly on the timeline,
@@ -259,30 +276,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   measurable", never early or late); `--trace "word"` prints a word frame by frame.
 - Cloud fixture after the fix: the same mid-line section: "dark" 0 ms, 27 of 27 words confirmed by the pixels;
   the planner's section (0:07.8-0:39.1): 42 words, every one on its own frame, pixels agree, in both formats.
-
-### Theme Engine v2, step 1: HyperFrames spike — ADOPTED ✅ (6 Nov 2026; code in spikes/hyperframes only)
-- **Decision (the user, 6 Nov 2026): HyperFrames is adopted as the lyric renderer.** Results on the user's PC
-  (Windows, RTX 5060, 32 GB), "Here with Me", first chorus: **9:16 72.3 s vs 81.3 s with Remotion** (the same
-  plan), **16:9 89.7 s**, sync mean ~25 ms (under one frame). The user's verdict: "lyrics spot on." One word,
-  "break." at 0.77 s, measured 200 ms early: almost certainly an artefact of the spike's section start (a line
-  carried in at frame 0, measured at the edge of the check's ±200 ms window); confirmed and fixed in step 0 of
-  the plan.
-- **Next: the plan** docs/theme-engine-v2-hyperframes-plan.md (for the user's review): the "break." fix,
-  HyperFrames behind the same plan with Remotion as fallback until parity (feature by feature), Remotion removed
-  before any commercial version (licence), three starter themes driven by docs/theme-rules.md with the user's
-  timestamped notes becoming rules, phases (~20 sessions), effort and risks.
-- **What the spike is:** `spikes/hyperframes/spike.ts "<song folder>"` runs our normal pipeline as a dry run
-  (the stored alignment, read only; beat cuts), takes the first chorus, writes timing.json (the planner's word
-  times), fills one theme template (template/theme.html, "Glow reveal") for 1920x1080 and 1080x1920, renders each
-  with HyperFrames as a transparent layer, lays it over the beat-cut clips + the song with FFmpeg, logs render
-  times per format, renders the same 9:16 plan with Remotion for comparison and checks sync on the pixels.
-  Nothing in apps/ or packages/ changed.
-- **Node >= 22 required** by HyperFrames (the app needs 20.9+); Windows setup in spikes/hyperframes/README.md.
-  HyperFrames' telemetry is always off (HYPERFRAMES_NO_TELEMETRY=1, DO_NOT_TRACK=1).
-- **Alpha format: transparent WebM (VP9 with alpha)**: the same render time as ProRes 4444 (.mov), 3.3 MB instead
-  of 161 MB for 31 s, and it plays in a browser; `--format mov` stays available.
-- Cloud fixture (synthetic song, 4-core Xeon, no GPU): 120 s (9:16) / 140 s (16:9) vs 133 s Remotion; all words
-  landing inside the segment on their own frame.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

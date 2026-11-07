@@ -14,11 +14,11 @@
 import { Player, type PlayerRef } from "@remotion/player";
 import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2, MoveHorizontal, Pencil, Redo2, RefreshCw, Repeat, RotateCcw, Scissors, Star, Type, Undo2, X } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 
 import { clockTenths, type TimelineEdits, EFFECT_NAMES, effectTitle, followScrollLeft, LyricVideo, playheadLabel, songTimeMs, timeTicks, patchLook, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
 import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node";
-import { useTimelineEditing } from "./timeline-editing"; // types only (erased): the data comes from /api/songs/[id]/storyboard
+import { useTimelineEditing, ViewerFrame } from "./timeline-editing"; // types only (erased): the data comes from /api/songs/[id]/storyboard
 
 import { AssessmentDetails, VERDICT_TEXT } from "@/components/assessment";
 import { LookViewer, VIEWER_HEIGHT, VIEWER_MAX, VIEWER_MIN } from "@/components/look-preview";
@@ -60,6 +60,13 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   const [selected, setSelected] = useState<number | null>(null);
   const [frame, setFrame] = useState(0);
   const player = useRef<PlayerRef>(null);
+  // The Player instance now: the viewer is mounted again after some re-plans, and the playhead must follow the
+  // new one (before 7 Nov 2026 it kept listening to the old one: the playhead and the time froze).
+  const [playerInstance, setPlayerInstance] = useState<PlayerRef | null>(null);
+  const playerRef = useCallback((p: PlayerRef | null) => {
+    player.current = p;
+    setPlayerInstance(p);
+  }, []);
   // The viewer fills the screen's height that the rows above it and the timeline and command bar below leave (2 Nov 2026).
   const viewerBlock = useRef<HTMLDivElement>(null);
   const belowViewer = useRef<HTMLDivElement>(null);
@@ -282,8 +289,9 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
 
   // The preview follows the playhead.
   useEffect(() => {
-    const p = player.current;
+    const p = playerInstance;
     if (!p) return;
+    const sync = setTimeout(() => setFrame(p.getCurrentFrame()), 0); // a new viewer: where it stands now
     const update = (e: { detail: { frame: number } }) => setFrame(e.detail.frame);
     const onPlay = () => {
       heldByUser.current = false;
@@ -295,12 +303,13 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
     p.addEventListener("pause", onStop);
     p.addEventListener("ended", onStop);
     return () => {
+      clearTimeout(sync);
       p.removeEventListener("frameupdate", update);
       p.removeEventListener("play", onPlay);
       p.removeEventListener("pause", onStop);
       p.removeEventListener("ended", onStop);
     };
-  }, [view]);
+  }, [playerInstance]);
 
   useEffect(() => setFollow(readFollow()), []);
   const toggleFollow = () => {
@@ -372,7 +381,17 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   const x = (ms: number) => (ms / 1000) * zoom;
   const playhead = (frame * 1000) / 30;
   // Roll (drag a cut) and slip (drag inside a shot), Undo / Redo: components/timeline-editing.tsx.
-  const tl = useTimelineEditing({ view, zoom, mediaUrl: `/api/songs/${projectId}/storyboard/media`, post: edit });
+  // After an edit the viewer shows the edit point (Space plays from there).
+  const showAt = useCallback((videoMs: number) => player.current?.seekTo(Math.max(0, Math.round((videoMs * 30) / 1000))), []);
+  const tl = useTimelineEditing({ view, zoom, mediaUrl: `/api/songs/${projectId}/storyboard/media`, post: edit, onEdited: showAt });
+  // A clip picked on the timeline is shown in the viewer: its first frame (after the Shot panel has opened,
+  // which resizes the viewer).
+  const pickedStartMs = view && selected !== null ? (view.shots[selected]?.startMs ?? null) : null;
+  useEffect(() => {
+    if (pickedStartMs === null) return;
+    const t = setTimeout(() => showAt(pickedStartMs), 50);
+    return () => clearTimeout(t);
+  }, [selected, pickedStartMs, showAt]);
   // The timeline clock: the time in the video and in the song (as the Lyrics tab and check-start show it).
   const [hoverMs, setHoverMs] = useState<number | null>(null);
   const ticks = useMemo(() => (view ? timeTicks(view.durationMs, zoom) : []), [view, zoom]);
@@ -491,7 +510,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
         data-text-colour={props.colour}
       >
         <Player
-          ref={player}
+          ref={playerRef}
           component={LyricVideo}
           inputProps={props}
           durationInFrames={props.durationInFrames}
@@ -503,6 +522,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
           loop={loop}
           style={{ width: "100%", height: "100%" }}
         />
+        <ViewerFrame frame={tl.viewerFrame} />
         {demo ? (
           <div data-effect-demo={demo.input.effect.name} data-demo-veil={cardOnScreen ? "card" : undefined} className="pointer-events-none absolute inset-0" style={{ background: cardOnScreen ? "rgba(10,10,12,0.86)" : "rgba(0,0,0,0.35)" }}>
             <PreviewPlayer input={demo.input} />

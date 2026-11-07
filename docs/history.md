@@ -4,6 +4,30 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Theme Engine v2, step 1: HyperFrames spike — ADOPTED ✅ (6 Nov 2026; code in spikes/hyperframes only)
+- **Decision (the user, 6 Nov 2026): HyperFrames is adopted as the lyric renderer.** Results on the user's PC
+  (Windows, RTX 5060, 32 GB), "Here with Me", first chorus: **9:16 72.3 s vs 81.3 s with Remotion** (the same
+  plan), **16:9 89.7 s**, sync mean ~25 ms (under one frame). The user's verdict: "lyrics spot on." One word,
+  "break." at 0.77 s, measured 200 ms early: almost certainly an artefact of the spike's section start (a line
+  carried in at frame 0, measured at the edge of the check's ±200 ms window); confirmed and fixed in step 0 of
+  the plan.
+- **Next: the plan** docs/theme-engine-v2-hyperframes-plan.md (for the user's review): the "break." fix,
+  HyperFrames behind the same plan with Remotion as fallback until parity (feature by feature), Remotion removed
+  before any commercial version (licence), three starter themes driven by docs/theme-rules.md with the user's
+  timestamped notes becoming rules, phases (~20 sessions), effort and risks.
+- **What the spike is:** `spikes/hyperframes/spike.ts "<song folder>"` runs our normal pipeline as a dry run
+  (the stored alignment, read only; beat cuts), takes the first chorus, writes timing.json (the planner's word
+  times), fills one theme template (template/theme.html, "Glow reveal") for 1920x1080 and 1080x1920, renders each
+  with HyperFrames as a transparent layer, lays it over the beat-cut clips + the song with FFmpeg, logs render
+  times per format, renders the same 9:16 plan with Remotion for comparison and checks sync on the pixels.
+  Nothing in apps/ or packages/ changed.
+- **Node >= 22 required** by HyperFrames (the app needs 20.9+); Windows setup in spikes/hyperframes/README.md.
+  HyperFrames' telemetry is always off (HYPERFRAMES_NO_TELEMETRY=1, DO_NOT_TRACK=1).
+- **Alpha format: transparent WebM (VP9 with alpha)**: the same render time as ProRes 4444 (.mov), 3.3 MB instead
+  of 161 MB for 31 s, and it plays in a browser; `--format mov` stays available.
+- Cloud fixture (synthetic song, 4-core Xeon, no GPU): 120 s (9:16) / 140 s (16:9) vs 133 s Remotion; all words
+  landing inside the segment on their own frame.
+
 ### Theme page: "✓ Saved" next to each change ✅ (to verify on the Windows PC)
 - Asked by the user on 2 Nov 2026 ("where's the save button" on Themes → a theme). The page saves as you go (Designer
   and About when you leave the box or press Enter, a Mood on click, the Theme cover when picked or removed, the name on

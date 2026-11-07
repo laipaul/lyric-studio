@@ -370,6 +370,30 @@ async function main() {
     await page.keyboard.press("Control+Shift+z");
     await replanned();
     check(!!(await page.$("[data-shot='3'][data-slipped]")), "Ctrl+Shift+Z redoes it");
+    // Trim the first clip from its outer left edge: it starts later in its footage; the big viewer shows that
+    // frame while dragging; afterwards the viewer stands on the edit.
+    const firstIn = () => (clipsJson().slips ?? []) as { at: number; in: number }[];
+    const t0 = (await (await page.$("[data-trim-handle='start']"))!.boundingBox())!;
+    const slipsBefore = JSON.stringify(clipsJson().slips ?? []);
+    await page.mouse.move(t0.x + t0.width / 2, t0.y + t0.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(t0.x + t0.width / 2 + 24, t0.y + t0.height / 2, { steps: 5 });
+    const trimText = ((await page.textContent("[data-edit-readout]").catch(() => "")) ?? "").trim();
+    check(trimText.startsWith("trim start") && /starts at \d+\.\d\d s of the clip/.test(trimText), `dragging the first clip's left edge trims its start (${trimText})`);
+    check(await page.isVisible("[data-viewer-edit-frame]"), "the big viewer shows the clip's frame while dragging");
+    await page.mouse.up();
+    await replanned();
+    // This Reel's first clip (04_d.mp4) is 1 s long, shorter than its shot: there is no footage to trim, and the readout says so.
+    const noMore = trimText.includes("no more footage");
+    check(noMore ? JSON.stringify(clipsJson().slips ?? []) === slipsBefore : firstIn().length >= 1, `the trim is kept, or the readout says the clip has no more footage (${trimText} · ${JSON.stringify(clipsJson().slips)})`);
+    check(!(await page.isVisible("[data-viewer-edit-frame]")), "the viewer is back to the video after the drag");
+    check(!!(await page.$("[data-trim-handle='end']")), "the last clip has a handle on its outer right edge");
+    // Clicking a shot shows it in the viewer: the playhead goes to its first frame.
+    await page.click("[data-shot='3']");
+    await sleep(800);
+    const shot3Left = Number((await page.getAttribute("[data-shot='3']", "style"))?.match(/left: ([\d.]+)px/)?.[1] ?? -1);
+    const playLeft = Number((await page.getAttribute("[data-playhead]", "style"))?.match(/left: ([\d.]+)px/)?.[1] ?? -2);
+    check(Math.abs(shot3Left - playLeft) < 3, `clicking a clip shows it in the viewer (playhead ${playLeft} px, shot ${shot3Left} px)`);
     // "Automatic cuts and clip start" on shot 2 puts its moved cut back.
     await page.click("[data-shot='2']");
     await page.waitForSelector("[data-timeline-reset]");
