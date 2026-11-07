@@ -4,6 +4,23 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Bug fix: vocal-start check moves a line whose stamp is in silence when every signal is later ✅ (to verify on the Windows PC)
+- Reported on "Let My Love Carry You": line 5 (stamp 0:34.8, vocal track -35 dB there, under the voice level
+  -30.5 dB; voice 0:38.1, recognised words 0:37.2, word durations 0:37.7) and line 31, the last line (stamp
+  3:19.4, words 3:25.1, durations 3:22.1) were only "flagged for review": no two signals were within 0.3 s.
+- New rule (vocal-guard.ts, after the existing move rules): the stamp is in silence (`stampLevelDb` under
+  `thresholdDb`), every other signal is at least the lead-in (1 s) later, and there are at least two of them
+  -> the line moves, to the recognised words when they are within 1.0 s of the voice or the word-duration
+  estimate, else to the earliest signal. The held-note protection (hook / last line) applies only when the
+  stamp is not in silence; a stamp with voice at it, and hand-set starts, are never moved by it; the safety
+  checks (next line, previous line) still apply.
+- Line 5 -> 0:37.2; line 31 -> 3:22.1. Log: `guard: line 5 moved from 0:34.8 to 0:37.2 (stamp in silence; voice,
+  words, word durations all later)` (`GuardMove.reason`).
+- Tests: vocal-guard.test.ts (line 5 with the exact numbers, last line, voice at the stamp, one signal alone,
+  hand-set). Two older tests now follow the new rule, as intended: "A Heart For Two" line 40 (last line, stamp in
+  silence, words + durations later) moves to the words instead of being flagged, and a short first word with voice
+  and words both > 1 s after a silent stamp moves to the words. Docs: docs/lyrics.md.
+
 ### Theme Engine v2 on HyperFrames, step 2b part 1: the lyrics and cards on HyperFrames, the same code ✅ (to verify on the Windows PC)
 - **HyperFrames now draws the words with the same code as the current renderer:** the lyric scene (LyricScene.tsx)
   and the title / byline / tagline / hook / end cards (TextCards.tsx, moved out of LyricVideo.tsx) run inside the
@@ -254,15 +271,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: stability.test.ts; new browser test e2e/new-song-every-platform.e2e.ts (New song through the
   Library, same file refused, clips, Replace lyrics + Restore, Make Reels/TikTok/Shorts/YouTube/Canvas by
   the real worker; each video's size, audio and song checked). Its one stand-in is the lyric aligner.
-
-### Fix: a new song's run failed on an empty collection it never chose ✅ (to verify on the Windows PC)
-- Reported by the user on 1 Nov 2026 (Familiar Strangers, 11 own clips: "No videos or photos in
-  collections\Flowers").
-- Cause: Make's panel, for a song with no collection and (at page load) no clips yet, silently picked the
-  first shared collection (an empty "Flowers") and kept it after the clips were added.
-- Now Make never picks a collection for the user (generate-panel.tsx); an empty or missing collection in a
-  run is skipped with a note and the run goes on with the other clips (make.ts; readability-make.test.ts);
-  with no clips at all it says "No clips yet …: add clips in Prepare → Assets, or choose a collection".
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

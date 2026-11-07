@@ -16,10 +16,15 @@
 // word of LONG_FIRST_WORD_MS or more with the recognised words within WORDS_NEAR_MS of the word-duration
 // estimate moves to the recognised words; and a first word of LONG_WORD_MS or more with voice and words
 // both later than the stamp and within PAIR_NEAR_MS of each other moves to the recognised words (not on
-// the last line: a held note). A signal that disagrees with the stamp without a second one
-// keeps the stamp and flags the line for review (the Lyrics tab); a stretched first word on a hook or the
-// last line may be a held note: flagged, never moved on that alone. Never onto the next line or into the
-// previous one. Pure, so the tests check exactly what pnpm make does.
+// the last line: a held note); and, where no rule above fired, a stamp in silence on the vocal track
+// (the loudest level in the 2 s after it under the voice level) with every other signal (voice, words, word
+// durations) later by at least the lead-in (reviewMs), at least two of them (never one alone), moves to the
+// recognised words when they are within WORDS_NEAR_MS of the voice or of the word-duration estimate, else to
+// the earliest of those signals: they all say the stamp is wrong, even where they differ among themselves.
+// A signal that disagrees with the stamp without a second one keeps the stamp and flags the line for review
+// (the Lyrics tab); a stretched first word on a hook or the last line may be a held note: flagged, never
+// moved on that alone (only when the stamp is NOT in silence; in silence the rule above may move them).
+// Never onto the next line or into the previous one. Pure, so the tests check exactly what pnpm make does.
 import { normalizeLyric, type TimedLine } from "./lrc";
 
 export const EARLY_MS = 1000; // a stretched first word: its singing starts at least this much after the stamp
@@ -44,7 +49,8 @@ const MISSED_WORD_MS = 250; // the recognised words start at the second lyric wo
 export type VoiceLevels = { hopMs: number; db: readonly number[] }; // the voice map (version 2)
 export type VoiceStretch = readonly [number, number]; // ms: sustained voice
 // shortensPrevious: a later start inside the previous line (its last note held too long): that line ends here.
-export type GuardMove = { index: number; fromMs: number; toMs: number; shortensPrevious?: boolean };
+// reason: set by the stamp-in-silence rule, for the log: "(<reason>)" instead of "(vocals start)".
+export type GuardMove = { index: number; fromMs: number; toMs: number; shortensPrevious?: boolean; reason?: string };
 export type AsrWord = { text: string; start_ms: number; end_ms: number; prob: number };
 export type LineCheck = {
   index: number;
@@ -329,6 +335,10 @@ export function checkVocalStart(
     let agree: string[] = [];
     let why: string;
     let flag = false;
+    let reason: string | undefined;
+    // The stamp is in silence on the vocal track, and every other signal is at least the lead-in later (two or more).
+    const later = cands.filter((c) => c.name !== "stamp");
+    const silentStamp = stampLevelDb !== null && stampLevelDb < thresholdDb && later.length >= 2 && later.every((c) => c.ms - l.start_ms >= reviewMs);
     if (s.firstWordMs !== null && s.firstWordMs >= LONG_FIRST_WORD_MS && heard && Math.abs(heard.ms - s.duration) <= WORDS_NEAR_MS) {
       // A first word of seconds (stretched back into the music) and the recognised words near its estimate.
       const voiceToo = s.voice !== null && Math.abs(s.voice - heard.ms) <= AGREE_MS;
@@ -349,6 +359,16 @@ export function checkVocalStart(
       // singing-level energy of a stretched first word, then the recognised word (rougher times).
       target = (best.find((c) => c.name === "stamp") ?? best.find((c) => c.name === "voice") ?? best.find((c) => c.name === "word durations") ?? best[0]).ms;
       why = `${agree.join(", ")} agree`;
+    } else if (silentStamp) {
+      // The stamp is in silence and every signal is later: they all say the stamp is wrong, even if they differ.
+      const voiceMs = later.find((c) => c.name === "voice")?.ms;
+      const durMs = later.find((c) => c.name === "word durations")?.ms;
+      const nearWords = heard && ((voiceMs !== undefined && Math.abs(voiceMs - heard.ms) <= WORDS_NEAR_MS) || (durMs !== undefined && Math.abs(durMs - heard.ms) <= WORDS_NEAR_MS));
+      target = nearWords ? heard!.ms : Math.min(...later.map((c) => c.ms));
+      agree = later.map((c) => c.name);
+      const signals = agree.join(", ");
+      reason = `stamp in silence; ${signals} all later`;
+      why = `stamp in silence; ${signals} all later (moved to ${nearWords ? "the recognised words" : "the earliest"})`;
     } else {
       // No two signals agree: the stamp stays. A signal that disagrees with it is flagged for review.
       const others = cands.filter((c) => c.name !== "stamp" && Math.abs(c.ms - l.start_ms) > AGREE_MS);
@@ -370,12 +390,12 @@ export function checkVocalStart(
     } else if (target > l.start_ms && s.i > 0 && target <= prevEnd && target < nextStart - NEXT_MARGIN_MS && target > (prev.words?.at(-1)?.start_ms ?? prev.start_ms) + MOVE_MS) {
       // Two signals agree it starts later, inside the previous line: that line's last note was held too
       // long (its end is too late), so it ends where this one starts.
-      moves.push({ index: s.i, fromMs: l.start_ms, toMs: target, shortensPrevious: true });
+      moves.push({ index: s.i, fromMs: l.start_ms, toMs: target, shortensPrevious: true, ...(reason ? { reason } : {}) });
       checks.push({ ...base, targetMs: target, agree, why: `${why}; line ${s.i} now ends there (its end was too long)`, result: "moved" });
     } else if (target >= nextStart - NEXT_MARGIN_MS || (s.i > 0 && target <= prevEnd)) {
       checks.push({ ...base, targetMs: l.start_ms, agree, why: `${why}, but ${target >= nextStart - NEXT_MARGIN_MS ? "that is past the next line" : "that is inside the previous line"}`, result: "flagged for review" });
     } else {
-      moves.push({ index: s.i, fromMs: l.start_ms, toMs: target });
+      moves.push({ index: s.i, fromMs: l.start_ms, toMs: target, ...(reason ? { reason } : {}) });
       checks.push({ ...base, targetMs: target, agree, why, result: "moved" });
     }
   }

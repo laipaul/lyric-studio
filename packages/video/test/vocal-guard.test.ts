@@ -283,17 +283,17 @@ describe("vocal-start check (pure)", () => {
       expect([of(3).stampMs, of(3).voiceMs, of(3).wordsMs, of(3).targetMs, of(3).result]).toEqual([151_500, 153_800, 153_300, 153_300, "moved"]);
     });
 
-    it("line 40 (the last line, a held note?) stays flagged; a line set by hand keeps priority", () => {
-      expect([of(5).targetMs, of(5).result]).toEqual([172_000, "flagged for review"]);
+    it("line 40 (the last line): its stamp is in silence and words + word durations are later, so it moves to the words (held-note protection only when the stamp has voice); a line set by hand keeps priority", () => {
+      expect([of(5).targetMs, of(5).result]).toEqual([175_500, "moved"]);
       const hand = checkVocalStart(song, v, { asr, skip: new Set([1]) });
       expect(hand.lines.find((x) => x.index === 1)!.result).toBe("set by hand");
-      expect(hand.moves.map((m) => m.index)).toEqual([3]);
+      expect(hand.moves.map((m) => m.index)).toEqual([3, 5]); // the hand-set line (index 1) is never moved
     });
 
-    it("the 0.3 s rule stays for other lines: a short first word with voice and words 0.5 s apart is flagged", () => {
+    it("a short first word with voice and words 0.4 s apart, both over 1 s after a stamp in silence: moved to the words", () => {
       const short = song.map((l, i) => (i === 1 ? { ...l, words: l.words!.map((w, k) => (k === 1 ? { ...w, start_ms: 72_000 } : w)) } : l)); // first word 0.6 s
       const r = checkVocalStart(short, v, { asr, all: true }).lines.find((x) => x.index === 1)!;
-      expect(r.result).toBe("flagged for review");
+      expect([r.targetMs, r.result]).toEqual([73_500, "moved"]);
     });
   });
 
@@ -375,6 +375,80 @@ describe("vocal-start check (pure)", () => {
 // decide the same on a clean stem: they do, after two changes the tests showed were needed (the reverb
 // tail filling a short pause joined two phrases, and a tail ending just before a stamp counted as that
 // line's voice): see splitAtAttacks and the stretch a line is in (src/vocal-guard.ts).
+describe("vocal-start check: a stamp in silence with every signal later", () => {
+  // Let My Love Carry You, line 5: stamp 0:34.8 in silence (-35 dB, under the voice level -30.5 dB), the
+  // voice at 0:38.1, the recognised words at 0:37.2, the first word lasting 3.3 s (durations 0:37.7).
+  const SUNG = -15.5;
+  const LRC5 = [
+    "[00:02.00]<00:02.00>One <00:02.50>two <00:03.00>",
+    "[00:08.00]<00:08.00>Two <00:08.50>more <00:09.00>",
+    "[00:15.00]<00:15.00>Three <00:15.50>more <00:16.00>",
+    "[00:28.00]<00:28.00>Four <00:28.50>more <00:29.00>",
+    "[00:34.80]<00:34.80>Let <00:38.10>my <00:38.40>love <00:40.00>",
+    "[00:41.00]<00:41.00>Next <00:41.50>line <00:42.00>",
+    "[00:45.00]",
+  ].join("\n");
+  const song = parseLrc(LRC5, 60_000);
+  const spans = (extra: [number, number, number][] = []): [number, number, number][] => [
+    [2_000, 3_500, SUNG], [8_000, 9_500, SUNG], [15_000, 16_500, SUNG], [28_000, 30_000, SUNG],
+    [30_000, 37_500, -35], // bleed on the vocal stem: under the voice level
+    [38_100, 40_000, -22], // the voice: over the threshold, under the singing-level energy of a stretched word
+    [41_000, 43_000, SUNG],
+    ...extra,
+  ];
+  const asr = new Map([[4, asrAt(37_200, "Let my love")]]);
+
+  it("line 5: all signals later by over the lead-in: moved to the recognised words, with the reason", () => {
+    const c = checkVocalStart(song, levels(spans()), { asr });
+    expect(c.thresholdDb).toBe(-30.5);
+    const l5 = c.lines.find((x) => x.index === 4)!;
+    expect([l5.stampMs, l5.stampLevelDb, l5.voiceMs, l5.wordsMs, l5.durationMs, l5.targetMs, l5.result]).toEqual([34_800, -35, 38_100, 37_200, 37_700, 37_200, "moved"]);
+    expect(l5.agree).toEqual(["voice", "words", "word durations"]);
+    expect(l5.why).toBe("stamp in silence; voice, words, word durations all later (moved to the recognised words)");
+    expect(c.moves.find((m) => m.index === 4)).toEqual({ index: 4, fromMs: 34_800, toMs: 37_200, reason: "stamp in silence; voice, words, word durations all later" });
+  });
+
+  it("the last line: words and durations 3 s apart and no voice: moved to the earliest (the durations)", () => {
+    const last = parseLrc(
+      [
+        "[00:02.00]<00:02.00>One <00:02.50>two <00:03.00>",
+        "[00:08.00]<00:08.00>Two <00:08.50>more <00:09.00>",
+        "[00:15.00]<00:15.00>Three <00:15.50>more <00:16.00>",
+        "[03:19.40]<03:19.40>Held <03:22.50>note <03:23.50>",
+        "[03:30.00]",
+      ].join("\n"),
+      240_000,
+    );
+    const v = levels([[2_000, 3_500, SUNG], [8_000, 9_500, SUNG], [15_000, 16_500, SUNG], [190_000, 230_000, -35]], 240_000);
+    const c = checkVocalStart(last, v, { asr: new Map([[3, asrAt(205_100, "Held note")]]) });
+    const l = c.lines.find((x) => x.index === 3)!;
+    expect([l.voiceMs, l.wordsMs, l.durationMs, l.targetMs, l.result, l.agree]).toEqual([null, 205_100, 202_100, 202_100, "moved", ["words", "word durations"]]);
+    expect(c.moves).toEqual([{ index: 3, fromMs: 199_400, toMs: 202_100, reason: "stamp in silence; words, word durations all later" }]);
+  });
+
+  it("voice at the stamp: this rule never moves it (flagged as before)", () => {
+    const c = checkVocalStart(song, levels(spans([[34_900, 35_100, -28]])), { asr }); // too short to be voice, but over the voice level
+    const l5 = c.lines.find((x) => x.index === 4)!;
+    expect(l5.stampLevelDb).toBe(-28);
+    expect([l5.result, l5.targetMs]).toEqual(["flagged for review", 34_800]);
+    expect(c.moves.some((m) => m.index === 4)).toBe(false);
+  });
+
+  it("one later signal alone never moves it", () => {
+    // A normal first word (no word-duration signal) and no recognised words: only the voice is later.
+    const short = song.map((l, i) => (i === 4 ? { ...l, words: l.words!.map((w, k) => (k === 1 ? { ...w, start_ms: 35_400 } : w)) } : l));
+    const l5 = checkVocalStart(short, levels(spans()), { all: true }).lines.find((x) => x.index === 4)!;
+    expect([l5.wordsMs, l5.voiceMs, l5.result]).toEqual([null, 38_100, "flagged for review"]);
+  });
+
+  it("a hand-set start is never touched", () => {
+    const c = checkVocalStart(song, levels(spans()), { asr, skip: new Set([4]) });
+    const l5 = c.lines.find((x) => x.index === 4)!;
+    expect([l5.result, l5.targetMs]).toEqual(["set by hand", 34_800]);
+    expect(c.moves.some((m) => m.index === 4)).toBe(false);
+  });
+});
+
 describe("vocal-start check on a clean vocal stem (Suno)", () => {
   const lines = parseLrc(LRC, 60_000);
   // A reverb tail: from the singing level down 40 dB per second (wet stems keep the room).

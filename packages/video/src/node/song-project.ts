@@ -247,7 +247,7 @@ export async function applyVocalGuard(
     alignment.warnings.push(`Vocal-start check: line ${list} flagged for review (the signals do not agree; kept where the alignment has them).`);
   }
   for (const m of check.moves) {
-    log(`guard: line ${m.index + 1} moved from ${clockText(m.fromMs)} to ${clockText(m.toMs)} (vocals start)${m.shortensPrevious ? `; line ${m.index} now ends there (its last note was held too long)` : ""}`);
+    log(`guard: line ${m.index + 1} moved from ${clockText(m.fromMs)} to ${clockText(m.toMs)} (${m.reason ?? "vocals start"})${m.shortensPrevious ? `; line ${m.index} now ends there (its last note was held too long)` : ""}`);
   }
   const guard: VocalGuard = {
     moves: check.moves.map((m) => ({ number: m.index + 1, text: lines[m.index].text, from_ms: m.fromMs, to_ms: m.toMs, ...(m.shortensPrevious ? { shortens_previous: true } : {}) })),
