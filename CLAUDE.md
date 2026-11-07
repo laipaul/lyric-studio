@@ -68,7 +68,7 @@ Payments, credits, user accounts, login, multi-user, cloud hosting, cloud render
 - Keep `PROGRESS.md` updated: steps done, what works, known issues.
 - Workflow: Claude builds and tests in a cloud session and commits and pushes every step directly to the `main` branch of GitHub `laipaul/videomaker`, so I only ever need `git pull`. I pull and run on Windows in Cursor's terminal (PowerShell). After each step, give me the exact Windows commands to pull and run it.
 - My project lives at `D:\videomaker`. Always start Windows commands with `cd D:\videomaker`.
-- My clip collection is "wedding": always use `--collection wedding` in my Windows commands (never "beach").
+- My clip collection is "wedding" (never "beach"). Add `--collection wedding` to my Windows commands ONLY when the song has no clips of its own, or when I ask for it: a terminal run with `--collection` adds the shared clips to the song's own clips AND saves the collection into the song's song.json, so every later run mixes them in too.
 - Follow the steps strictly in the order I give. Never merge steps and never pull UI work forward.
 - Phase 1 (Steps 2–5) has no UI. It ends when a beat-synced MP4 renders from the command line.
 - After finishing a step, stop and wait for my next message. Do not start the next step on your own.
