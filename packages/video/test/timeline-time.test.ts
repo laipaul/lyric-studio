@@ -1,7 +1,7 @@
 // The Shape page's timeline clock: ruler labels, the playhead bubble and the song time.
 import { describe, expect, it } from "vitest";
 
-import { clockTenths, clockTick, playheadLabel, songTimeMs, timeTicks } from "../src";
+import { clockTenths, clockTick, linesInVideo, playheadLabel, songTimeMs, timeTicks } from "../src";
 
 describe("timeline clock", () => {
   it("reads minutes, seconds and tenths, never ahead of the frame", () => {
@@ -26,5 +26,20 @@ describe("timeline clock", () => {
     expect(at(160).slice(0, 4)).toEqual(["0:00", "0:00.5", "0:01", "0:01.5"]);
     expect(timeTicks(10_000, 80).map((t) => t.ms).slice(0, 3)).toEqual([0, 500, 1000]);
     expect(timeTicks(78_000, 80).at(-1)).toEqual({ ms: 78_000, label: "1:18" });
+  });
+});
+
+describe("the Lyrics tab's part of the song", () => {
+  it("maps each line number the planned video shows to its time in the video; the first one starts the Reel", () => {
+    const { at, first } = linesInVideo([
+      { number: null, startMs: 0 }, // a title card line without a number
+      { number: 5, startMs: 3_000 },
+      { number: 6, startMs: 9_500 },
+      { number: 9, startMs: 30_600 },
+    ]);
+    expect(first).toBe(5);
+    expect(at.get(9)).toBe(30_600);
+    expect(at.has(4)).toBe(false); // before the Reel: not in it
+    expect(linesInVideo([])).toEqual({ at: new Map(), first: null });
   });
 });

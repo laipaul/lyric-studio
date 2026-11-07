@@ -4,6 +4,21 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Lyrics tab: where the Reel starts and each line's time in it ✅ (to verify on the Windows PC)
+- Asked by the user (7 Nov 2026), with the timeline clock: the Lyrics tab shows song times, the Reel counts
+  from its own start, and nothing linked the two.
+- **A band above the lines:** "Part of the song in [Reels] [TikTok] [Shorts]: 0:34.2 – 1:52.0 of the song
+  (78 s, from line 5). Time in the video = time in the song − 0:34.2." The planner's reason is its tooltip.
+  Only the song's short-form platforms are offered (YouTube is the whole song, Canvas has no lyrics).
+- **Per line:** "in the Reels 0:03.0" under "On screen" (when it is readable in the video, the same clock as
+  the Shape page's timeline), "not in the Reels" for the others, which are dimmed; the first line in the
+  Reel says "The Reels video starts here: at 0:34.2 in the song; this line is readable 0:03.0 into the video".
+- **Always the next video:** it is the same plan the Shape page shows (the planner's dry run for v1), asked
+  when the tab opens and again after Save / Reset all (a start set by hand can move the Reel's start).
+- Tests: timeline-time.test.ts (linesInVideo: which lines a planned video shows and when); lyrics-tab.e2e.ts
+  (the band is offered; run in the cloud session: 33 checks pass; the thumbnail check now waits for the image,
+  which raced with the planning).
+
 ### Shape timeline: a clock on the playhead and the song's time ✅ (to verify on the Windows PC)
 - Asked by the user (7 Nov 2026): follow where the song is while the preview plays, and compare it with the
   Lyrics tab and `pnpm lyrics:check-start`, which use song times (the Reel counts from its own start).
@@ -254,21 +269,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   393 px on 1366×768).
 - Tests: storyboard.e2e.ts (the chip, nothing else above the viewer, the panel by section, a second click closes it),
   song-stages.e2e.ts and textboard.e2e.ts updated (Look · Content and the summary read from the panel; the rail's Make).
-
-### Shape: a bigger viewer, everything else at the top ✅ (to verify on the Windows PC)
-- Asked by the user on 2 Nov 2026 ("how come the video viewer has become smaller … move the titles to the top and make the
-  sound wave flatter"; "all these messages at the bottom should be moved to the top, including this Make button. Still leave
-  some space at the bottom").
-- Cause: the viewer's height was the screen minus a fixed 36rem; rows added since (Look · Content line, title cards, a
-  command bar on two lines, two lines under it) left it at its 260 px minimum on a laptop screen.
-- Now the viewer fills the height that is left (measured, between 260 and 760 px), with 56 px kept free under the command bar.
-  At the top: the stage line with Look · Content on one line, then the video's line (Reels v1 · length · section · BPM ·
-  shots), the hint, the verdict and **Next: Make**. The command bar holds only which video, the transport, Follow and Zoom.
-  Waveform 64 → 28 px, lyric row 48 → 40 px, shots row 96 → 68 px (badges stay at the top of each shot).
-- Measured in the cloud browser: 1440×1000 viewer 424 → 513 px; 1366×768 from 260 px (command bar off the bottom) to 281 px
-  with 57 px free under the command bar.
-- Tests: storyboard.e2e.ts (viewer fills the free height, room under the command bar, the top line holds summary, hint and
-  Next: Make, 1366×768). Its later playback checks run on a 1440×760 window, since the cloud browser has no graphics card.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

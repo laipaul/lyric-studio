@@ -3,6 +3,7 @@
 import { AlertTriangle, Clapperboard, Ear, Pause, Play, RotateCcw, Save, Star, Undo2, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
+import { clockTenths, linesInVideo } from "@lyric/video";
 import type { AnchorClip, LyricsLine, LyricsView } from "@lyric/video/lyrics-view";
 
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,18 @@ const wordsOf = (text: string) =>
 
 type Pending = Map<number, number | null>; // line number -> new start (null = back to the alignment / check)
 
+// The part of the song a short-form video uses (7 Nov 2026): the same plan the Shape page shows (the planner's
+// dry run for v1), so it always matches the next video. YouTube (the whole song) and Canvas are left out.
+type PartPlatform = { name: string; label: string };
+type PartPlan = {
+  platform: string;
+  section: { startMs: number; endMs: number; reason: string };
+  songStartMs: number;
+  durationMs: number;
+  lines: { number: number | null; startMs: number }[];
+};
+const PART_PLATFORMS = new Set(["reels", "tiktok", "shorts"]);
+
 // The Lyrics tab: every line with its time stamp, where it starts now, what the viewer sees, confidence
 // and the vocal-start check's verdict (flagged lines highlighted). Nudge a line (−0.5 / −0.1 / +0.1 /
 // +0.5 s), listen (▶ 3 s from just before it), Save: hand-set lines go into hints.lrc and the next make
@@ -44,6 +57,47 @@ export function LyricsTab({ projectId }: { projectId: string }) {
   const [picking, setPicking] = useState<number | null>(null); // the line whose "lands on" picker is open
   const audio = useRef<HTMLAudioElement>(null);
   const stopAt = useRef<number | null>(null);
+  // Which part of the song the Reel (TikTok, Shorts) uses: planned like the Shape page, after the lines load.
+  const [partPlatforms, setPartPlatforms] = useState<PartPlatform[] | null>(null);
+  const [partOf, setPartOf] = useState<string | null>(null);
+  const [partRound, setPartRound] = useState(0); // planned again after a save (a start set by hand can move the Reel)
+  // The last plan received, with the request it answers ("reels:0"): loading while it answers another one.
+  const [partResult, setPartResult] = useState<{ key: string; plan: PartPlan | null; error: string | null } | null>(null);
+  const partKey = partOf ? `${partOf}:${partRound}` : null;
+  useEffect(() => {
+    let alive = true;
+    api(`/api/songs/${projectId}/storyboard`, { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ platforms?: PartPlatform[]; ready?: boolean; error?: string }>)
+      .then((d) => {
+        if (!alive) return;
+        const list = d.ready ? (d.platforms ?? []).filter((p) => PART_PLATFORMS.has(p.name)) : [];
+        setPartPlatforms(list);
+        setPartOf((now) => now ?? list[0]?.name ?? null);
+      })
+      .catch(() => alive && setPartPlatforms([]));
+    return () => {
+      alive = false;
+    };
+  }, [projectId]);
+  useEffect(() => {
+    if (!partOf || !partKey) return;
+    let alive = true;
+    api(`/api/songs/${projectId}/storyboard?platform=${encodeURIComponent(partOf)}&video=v1`, { cache: "no-store" })
+      .then((r) => r.json() as Promise<PartPlan & { platform: { name: string }; error?: string }>)
+      .then((d) => {
+        if (!alive) return;
+        if (d.error) return setPartResult({ key: partKey, plan: null, error: d.error });
+        setPartResult({ key: partKey, plan: { platform: partOf, section: d.section, songStartMs: d.songStartMs ?? d.section.startMs, durationMs: d.durationMs, lines: d.lines }, error: null });
+      })
+      .catch((e: Error) => alive && setPartResult({ key: partKey, plan: null, error: e.message }));
+    return () => {
+      alive = false;
+    };
+  }, [projectId, partOf, partKey]);
+  const partState = { loading: !!partKey && partResult?.key !== partKey, error: partResult?.key === partKey ? partResult.error : null };
+  const part = partResult?.key === partKey ? partResult.plan : null;
+  const inPart = useMemo(() => (part && part.platform === partOf ? linesInVideo(part.lines) : null), [part, partOf]);
+  const partLabel = partPlatforms?.find((p) => p.name === partOf)?.label ?? "Reels";
 
   async function load() {
     try {
@@ -124,6 +178,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
   }
 
   async function save(from: Pending = pending) {
+    setPartRound((n) => n + 1);
     const changes = [...from.entries()].map(([number, ms]) => ({ number, ms }));
     const result = await post({ action: "times", changes });
     if (!result) return;
@@ -135,6 +190,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
 
   // Every hand-set start back to the timing (the vocal stem's when it is used), Undo of a reset, or closing its notice.
   async function resetAll(action: "reset-all" | "undo-reset" | "dismiss-reset") {
+    setPartRound((n) => n + 1);
     const result = await post({ action });
     if (!result) return;
     setPending(new Map());
@@ -230,6 +286,29 @@ export function LyricsTab({ projectId }: { projectId: string }) {
               <span>The other shots follow the song&apos;s clip order (Assets or Shape) in every video.</span>
               {!data.anchors.clips.length ? <span className="text-amber-200">No clips to choose from: add clips in the Assets tab or choose a collection in Generate.</span> : null}
             </div>
+            {partPlatforms?.length ? (
+              <div className="bg-card/60 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs" data-reel-part title={part?.section.reason ?? undefined}>
+                <span className="text-muted-foreground">Part of the song in</span>
+                {partPlatforms.map((p) => (
+                  <button key={p.name} type="button" onClick={() => setPartOf(p.name)} className={cn("rounded border px-1.5", partOf === p.name ? "border-brand text-brand" : "text-muted-foreground hover:text-foreground")} data-reel-part-platform={p.name}>
+                    {p.label}
+                  </button>
+                ))}
+                <span className="tabular-nums" data-reel-part-range>
+                  {partState.loading
+                    ? `planning where the ${partLabel} video starts…`
+                    : partState.error
+                      ? <span className="text-amber-200">{partState.error}</span>
+                      : part && part.platform === partOf
+                        ? <>
+                            <span className="text-foreground">{clockTenths(part.songStartMs)} – {clockTenths(part.songStartMs + part.durationMs)}</span> of the song ({Math.round(part.durationMs / 1000)} s
+                            {inPart?.first !== null && inPart?.first !== undefined ? `, from line ${inPart.first}` : ""}). Time in the video = time in the song − {clockTenths(part.songStartMs)}.
+                          </>
+                        : null}
+                </span>
+                <span className="text-muted-foreground">The next {partLabel} video, as planned now (Shape shows the same plan).</span>
+              </div>
+            ) : null}
             {!data.checkRan ? <p className="text-muted-foreground text-xs">The vocal-start check runs when a video is made (Generate, or pnpm make); its verdicts show here after the next video.</p> : null}
             <div className="max-h-[calc(100vh-12rem)] overflow-auto rounded-xl border" data-lines-scroll>
               <table className="w-full min-w-[960px] text-left text-sm">
@@ -259,7 +338,8 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                         data-line={l.number}
                         data-flagged={l.flagged && !l.checkedByEar ? "true" : undefined}
                         data-checked-by-ear={l.checkedByEar ? "true" : undefined}
-                        className={cn("border-b align-top last:border-b-0", l.flagged && !l.checkedByEar && "bg-amber-400/5", changed && "bg-brand/5")}
+                        data-in-reel={inPart ? (inPart.at.has(l.number) ? "true" : "false") : undefined}
+                        className={cn("border-b align-top last:border-b-0", l.flagged && !l.checkedByEar && "bg-amber-400/5", changed && "bg-brand/5", inPart && !inPart.at.has(l.number) && "opacity-55", inPart?.first === l.number && "border-t-brand border-t-2")}
                       >
                         <td className="text-muted-foreground px-3 py-2 tabular-nums">{l.number}</td>
                         <td className="px-3 py-2">
@@ -267,6 +347,11 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                             {l.isHook ? <Star className="text-brand size-3.5 shrink-0" aria-label="hook" /> : null}
                             <span>{l.text}</span>
                           </div>
+                          {inPart?.first === l.number ? (
+                            <p className="text-brand mt-1 text-xs" data-reel-starts-here>
+                              The {partLabel} video starts here: at {clockTenths(part!.songStartMs)} in the song; this line is readable {clockTenths(Math.max(0, inPart.at.get(l.number)!))} into the video
+                            </p>
+                          ) : null}
                           {l.flagged ? (
                             <p className="mt-1 flex items-start gap-1 text-xs text-amber-200" data-flag-reason>
                               <AlertTriangle className="mt-0.5 size-3 shrink-0" /> <span title={l.flagged} data-flag-why>{l.flagReason ?? "Flagged for review. Listen with ▶."}</span>
@@ -304,6 +389,15 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                           {l.screen.fadeInMs !== null ? <div>fades in {clock(l.screen.fadeInMs + delta)}</div> : null}
                           <div className="text-foreground">readable {clock(l.screen.readableMs + delta)}</div>
                           <div>leaves {clock(l.screen.leaveMs + (changed ? delta : 0))}</div>
+                          {inPart ? (
+                            inPart.at.has(l.number) ? (
+                              <div className="text-brand mt-0.5" data-reel-time title={`Readable at this time in the ${partLabel} video (the Shape page's clock)`}>
+                                in the {partLabel} {clockTenths(inPart.at.get(l.number)!)}
+                              </div>
+                            ) : (
+                              <div className="mt-0.5" data-reel-time="none">not in the {partLabel}</div>
+                            )
+                          ) : null}
                         </td>
                         <td className={cn("px-3 py-2 tabular-nums", l.lowConfidence && "text-amber-300")}>{l.confidence === null ? "–" : l.confidence.toFixed(2)}</td>
                         <td className="px-3 py-2">

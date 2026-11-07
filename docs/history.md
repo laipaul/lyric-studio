@@ -4,6 +4,21 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Shape: a bigger viewer, everything else at the top ✅ (to verify on the Windows PC)
+- Asked by the user on 2 Nov 2026 ("how come the video viewer has become smaller … move the titles to the top and make the
+  sound wave flatter"; "all these messages at the bottom should be moved to the top, including this Make button. Still leave
+  some space at the bottom").
+- Cause: the viewer's height was the screen minus a fixed 36rem; rows added since (Look · Content line, title cards, a
+  command bar on two lines, two lines under it) left it at its 260 px minimum on a laptop screen.
+- Now the viewer fills the height that is left (measured, between 260 and 760 px), with 56 px kept free under the command bar.
+  At the top: the stage line with Look · Content on one line, then the video's line (Reels v1 · length · section · BPM ·
+  shots), the hint, the verdict and **Next: Make**. The command bar holds only which video, the transport, Follow and Zoom.
+  Waveform 64 → 28 px, lyric row 48 → 40 px, shots row 96 → 68 px (badges stay at the top of each shot).
+- Measured in the cloud browser: 1440×1000 viewer 424 → 513 px; 1366×768 from 260 px (command bar off the bottom) to 281 px
+  with 57 px free under the command bar.
+- Tests: storyboard.e2e.ts (viewer fills the free height, room under the command bar, the top line holds summary, hint and
+  Next: Make, 1366×768). Its later playback checks run on a 1440×760 window, since the cloud browser has no graphics card.
+
 ### Automatic length for Reels, TikTok, Shorts + a clean Reel start ✅ (to verify on the Windows PC)
 - Asked by the user on 2 Nov 2026: a Reel with the 90 s preset came with a remark that 90 s was too
   short, and there was no way to let the app decide. Also: Familiar Strangers' Reel was "Not ready".

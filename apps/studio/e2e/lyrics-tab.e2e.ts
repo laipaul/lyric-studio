@@ -85,6 +85,9 @@ async function main() {
     check(((await page.getAttribute("[data-line='2'] [data-flag-why]", "title")) ?? "").includes("only words 1:10.1"), "the technical reason in the tooltip");
     check((await page.locator("[data-line='2'] [data-use-likely]").count()) === 0, "one signal only: no one-click \"Use\" time");
     check((await page.evaluate("getComputedStyle(document.querySelector('[data-lines-scroll] th')).position")) === "sticky", "column headers are sticky");
+    // The part of the song the Reel uses (7 Nov 2026): a band with the platform chips, planned like the Shape page.
+    await page.waitForSelector("[data-reel-part-platform='reels']", { timeout: 30_000 }).catch(() => {});
+    check((await page.locator("[data-reel-part-platform='reels']").count()) === 1, "the part of the song the Reels video uses is offered above the lines");
     check((await page.evaluate("(() => { const b = document.querySelector('[data-anchor-pick]'); return b.scrollWidth <= b.clientWidth; })()")) === true, "\"Choose a clip\" is not cut off");
     check(((await page.textContent("[data-line='2'] [data-screen]")) ?? "").includes("readable 1:08.27"), "what the viewer sees: readable 1:08.27 (0.25 s before the stamp)");
 
@@ -130,6 +133,8 @@ async function main() {
     await page.waitForSelector("[data-line='3'] [data-anchor-pick]");
     await page.click("[data-line='3'] [data-anchor-pick]");
     await page.waitForSelector("[data-anchor-picker] [data-anchor-clip='02_rings.mp4'] img");
+    // The thumbnail is made on first request (FFmpeg); the tab also plans the Reel's part of the song meanwhile.
+    await page.waitForFunction(() => { const img = document.querySelector("[data-anchor-picker] [data-anchor-clip='02_rings.mp4'] img") as HTMLImageElement | null; return !!img && img.complete && img.naturalWidth > 0; }, null, { timeout: 15_000 }).catch(() => {});
     check(await page.$eval("[data-anchor-picker] [data-anchor-clip='02_rings.mp4'] img", (img: HTMLImageElement) => img.complete && img.naturalWidth > 0), "the picker shows the clips' thumbnails");
     await page.click("[data-anchor-clip='02_rings.mp4']");
     await page.selectOption("[data-anchor-transition]", "dissolve");

@@ -38,3 +38,12 @@ export function timeTicks(durationMs: number, pxPerSecond: number): TimeTick[] {
 export function playheadLabel(videoMs: number, sectionStartMs: number): { video: string; song: string | null } {
   return { video: clockTenths(videoMs), song: sectionStartMs > 0 ? clockTenths(songTimeMs(videoMs, sectionStartMs)) : null };
 }
+
+// The Lyrics tab's "part of the song" (7 Nov 2026): which lines a planned video shows and when, from that
+// video's own plan (the storyboard's lines carry the Lyrics tab's numbers). `first`: the first line it shows.
+export function linesInVideo(lines: readonly { number: number | null; startMs: number }[]): { at: Map<number, number>; first: number | null } {
+  const at = new Map<number, number>();
+  for (const l of lines) if (l.number !== null && !at.has(l.number)) at.set(l.number, l.startMs);
+  const first = at.size ? Math.min(...at.keys()) : null;
+  return { at, first };
+}
