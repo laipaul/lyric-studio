@@ -1,7 +1,8 @@
 // Vocal-start check (pnpm make): the first sung word of a song, and the first word after every long
 // instrumental, must be placed right (within ~0.3 s) with no manual fix. The aligner sometimes pulls
 // such a line into the music before it. Applied to the stored alignment, never re-aligning. For line 1,
-// lines after an instrumental gap, lines whose first word is stretched and every hook line (an early
+// lines after an instrumental gap, lines whose first word is stretched, lines whose own voice starts at least
+// EARLY_MS after the stamp and every hook line (an early
 // karaoke highlight is very visible; with `all`: every line), these signals:
 //   stamp           the aligner's own line start (WhisperX);
 //   voice           the onset of sustained voice on the vocal track: at most VOICE_BELOW_SINGING_DB under
@@ -20,8 +21,9 @@
 // (no voice of the line itself from the stamp to the earliest later signal: the loudest level there, without the
 // previous line's own singing such as its held last note, is at or under the voice level) with every other signal (voice, words, word
 // durations) later by at least the lead-in (reviewMs), at least two of them (never one alone), moves to the
-// recognised words when they are within WORDS_NEAR_MS of the voice or of the word-duration estimate, else to
-// the earliest of those signals: they all say the stamp is wrong, even where they differ among themselves.
+// voice onset when there is one (it is closest to the ear; the recognised words can be 1-2 s early), else to
+// the recognised words when they are within WORDS_NEAR_MS of the word-duration estimate, else to the earliest
+// of those signals: they all say the stamp is wrong, even where they differ among themselves.
 // A signal that disagrees with the stamp without a second one keeps the stamp and flags the line for review
 // (the Lyrics tab); a stretched first word on a hook or the last line may be a held note: flagged, never
 // moved on that alone (only when the stamp is NOT in silence; in silence the rule above may move them).
@@ -283,7 +285,9 @@ function signalsFor(lines: readonly TimedLine[], v: VoiceLevels, levelDb: number
     const stretched = firstWordMs !== null && firstWordMs >= STRETCHED_WORD_MS;
     const longWord = firstWordMs !== null && firstWordMs >= LONG_WORD_MS;
     // Inside a verse and not a hook: not checked unless `all` (QA still sees early_ms).
-    if (!all && i > 0 && !voiceGap && !alignGap && !longWord && !l.isHook) return;
+    // A line whose own voice starts at least the lead-in after its stamp is always checked.
+    const lateVoice = voice !== null && voice - l.start_ms >= EARLY_MS;
+    if (!all && i > 0 && !voiceGap && !alignGap && !longWord && !l.isHook && !lateVoice) return;
     let duration = l.start_ms;
     if (stretched) {
       const second = words[1].start_ms;
@@ -386,11 +390,13 @@ export function checkVocalStart(
       const voiceMs = later.find((c) => c.name === "voice")?.ms;
       const durMs = later.find((c) => c.name === "word durations")?.ms;
       const nearWords = heard && ((voiceMs !== undefined && Math.abs(voiceMs - heard.ms) <= WORDS_NEAR_MS) || (durMs !== undefined && Math.abs(durMs - heard.ms) <= WORDS_NEAR_MS));
-      target = nearWords ? heard!.ms : Math.min(...later.map((c) => c.ms));
+      // The voice onset (measured on the vocal track) is closest to the ear; the recognised words can be 1-2 s early.
+      const toVoice = voiceMs !== undefined;
+      target = toVoice ? voiceMs : nearWords ? heard!.ms : Math.min(...later.map((c) => c.ms));
       agree = later.map((c) => c.name);
       const signals = agree.join(", ");
       reason = `stamp in silence; ${signals} all later`;
-      why = `stamp in silence; ${signals} all later (moved to ${nearWords ? "the recognised words" : "the earliest"})`;
+      why = `stamp in silence; ${signals} all later (moved to ${toVoice ? "the voice onset" : nearWords ? "the recognised words" : "the earliest"})`;
     } else {
       // No two signals agree: the stamp stays. A signal that disagrees with it is flagged for review.
       const others = cands.filter((c) => c.name !== "stamp" && Math.abs(c.ms - l.start_ms) > AGREE_MS);

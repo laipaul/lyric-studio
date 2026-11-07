@@ -4,6 +4,24 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Bug fix: lines whose voice starts late are always checked; a stamp in silence moves to the voice onset ✅ (to verify on the Windows PC)
+- Found on Let My Love Carry You, checked by ear in the Reel (starts at song 0:36.1). Line 9: stamp 1:03.4, voice 1:05.8,
+  words 1:04.8, first word 0.1 s: in pnpm make / the plan it was not checked (mid-verse, not a hook; only
+  `lyrics:check-start --all` moved it) and showed at 1:03.1; the user hears it at song ~1:06.1. Line 5: stamp 0:34.8,
+  voice 0:38.1, words 0:37.2, durations 0:37.7; the user hears ~0:39.1. The voice onset (measured on the vocal stem)
+  is closest to the ear; the recognised words were 1-2 s early.
+- **Always checked**: a line whose own voice starts at least 1 s (EARLY_MS) after its stamp is checked in pnpm make,
+  the plan, the Lyrics tab's record and the speech-recognition windows (signalsFor), not only with `--all`. A line
+  with no voice onset (sung on without a pause) stays unchecked.
+- **Stamp in silence moves to the voice onset** when there is one (else the recognised words when within 1 s of the
+  word-duration estimate, else the earliest). Line 5 -> 0:38.1 (was 0:37.2), line 9 -> 1:05.8 (was 1:03.1 unchecked),
+  the last line (no voice) still 3:22.1.
+- Tests: vocal-guard.test.ts (38 pass): line 5 38 100, line 9 65 800 without `all`, asrWindows includes line 9, a line
+  with voice at its stamp still unchecked, hand-set untouched. Changed old expectations: the Heart For Two 'plain'
+  case now checks line 2 (voice 1.5 s late) by default; a short-first-word case now moves to the voice 73 900 (was
+  the words 73 500).
+
+
 ### Shape timeline: Follow keeps the playhead in the middle ✅ (to verify on the Windows PC)
 - Asked by the user (7 Nov 2026): for checking lyric sync, the playhead should stay in one place while the
   timeline slides under it, as in Pro Tools ("continuous scroll"), Logic and Final Cut (not a page jump as in
@@ -244,27 +262,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   rename); now each shows "✓ Saved" next to it, and a failed save says "Not saved: …" inside the theme's view (it was
   shown behind it, on the page). Edit theme keeps its Save / Save as new theme / Cancel (it can change several songs).
 - Tests: themes.e2e.ts (✓ Saved after Designer and Mood).
-
-### Shots: normal speed first, your clip edits kept, no false "held" warning, Omit from the Shot panel ✅ (to verify on the Windows PC)
-- Reported by the user on 2 Nov 2026 (Familiar Strangers Reels: shots 1-4 and 6-9 all "speed 0.82x" and "the clip is
-  too short: its last frame is held for 0.0 s"). Decided: "by default the app should do what it thinks is best; then I
-  cut down parts of each clip and slow down when a scene needs to cover a whole sentence; the creative part should
-  remain once I manipulate the clips"; "I need both options (Omit and Remove) because sometimes I try sequences".
-- Cause: the automatic pacing chose 4-bar shots (6.3 s) for ~5.2 s clips because it allowed clips down to 0.8x, so
-  every clip was stretched to 0.82x and came out one frame short.
-- **Pacing prefers normal speed** (pace.ts SLOW_WEIGHT): a shot longer than the typical clip costs a slow-motion
-  penalty. Familiar Strangers: 3 bars (4.7 s) at full speed instead of 4 bars at 0.82x. A clip you slowed in Edit
-  clip counts as longer, so your slow motion keeps its long shot.
-- **Your edits are kept**: a clip's in / out and speed from Edit clip are played exactly. When a clip you trimmed is
-  shorter than its shot, the Shot panel says so in plain words ("your trimmed clip (2.5 s) is shorter than this
-  4.7 s shot: lengthen it in Edit clip or slow it down there"). Moving the cut to where your clip ends was not done:
-  cuts are fixed before clips are placed (lyric holds, anchors, the loop and dissolves read them); on the backlog.
-- **"held for 0.0 s" gone**: a held last frame is only reported from 0.2 s (HOLD_NOTICE_MS), when it can be seen.
-- **Shot panel: "Omit this clip"** (data-shot-omit) replaces "this clip doesn't fit here" (which moved the clip to the
-  end of your order without asking); the same as the Use / Omit switch: greyed out, keeps its place, Use brings it
-  back. Remove in Assets stays for a clip you have decided against. The clip-misfit reaction is removed.
-- Tests: pace-transitions, shots, storyboard, reactions (video package: 886 pass; make / migrate / render need the
-  network and fail in the cloud before and after); browser tests storyboard, textboard, song-stages pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

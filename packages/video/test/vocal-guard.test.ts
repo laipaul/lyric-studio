@@ -234,9 +234,10 @@ describe("vocal-start check (pure)", () => {
       [1, 65_000, 65_000, null, 65_000, 65_000, "in time", "stamp + voice"],
       [2, 68_500, 70_000, 70_050, 68_500, 70_000, "moved", "voice + words"],
     ]);
-    // Not a hook: not checked by default; --all checks every line.
+    // Not a hook: checked by default only where the line's own voice starts 1 s or more after its stamp (line 2:
+    // stamp 68.5, voice 70.0); --all checks every line.
     const plain = song.map((l) => ({ ...l, isHook: false }));
-    expect(checkVocalStart(plain, v, { asr }).lines.map((l) => l.index)).toEqual([0]);
+    expect(checkVocalStart(plain, v, { asr }).lines.map((l) => l.index)).toEqual([0, 1]);
     expect(checkVocalStart(plain, v, { asr, all: true }).lines.map((l) => [l.index, l.result])).toEqual([
       [0, "in time"],
       [1, "moved"],
@@ -290,10 +291,10 @@ describe("vocal-start check (pure)", () => {
       expect(hand.moves.map((m) => m.index)).toEqual([3, 5]); // the hand-set line (index 1) is never moved
     });
 
-    it("a short first word with voice and words 0.4 s apart, both over 1 s after a stamp in silence: moved to the words", () => {
+    it("a short first word with voice and words 0.4 s apart, both over 1 s after a stamp in silence: moved to the voice onset", () => {
       const short = song.map((l, i) => (i === 1 ? { ...l, words: l.words!.map((w, k) => (k === 1 ? { ...w, start_ms: 72_000 } : w)) } : l)); // first word 0.6 s
       const r = checkVocalStart(short, v, { asr, all: true }).lines.find((x) => x.index === 1)!;
-      expect([r.targetMs, r.result]).toEqual([73_500, "moved"]);
+      expect([r.targetMs, r.result]).toEqual([73_900, "moved"]); // the voice onset (the words are at 73.5)
     });
   });
 
@@ -398,14 +399,14 @@ describe("vocal-start check: a stamp in silence with every signal later", () => 
   ];
   const asr = new Map([[4, asrAt(37_200, "Let my love")]]);
 
-  it("line 5: all signals later by over the lead-in: moved to the recognised words, with the reason", () => {
+  it("line 5: all signals later by over the lead-in: moved to the voice onset, with the reason", () => {
     const c = checkVocalStart(song, levels(spans()), { asr });
     expect(c.thresholdDb).toBe(-30.5);
     const l5 = c.lines.find((x) => x.index === 4)!;
-    expect([l5.stampMs, l5.stampLevelDb, l5.voiceMs, l5.wordsMs, l5.durationMs, l5.targetMs, l5.result]).toEqual([34_800, -35, 38_100, 37_200, 37_700, 37_200, "moved"]);
+    expect([l5.stampMs, l5.stampLevelDb, l5.voiceMs, l5.wordsMs, l5.durationMs, l5.targetMs, l5.result]).toEqual([34_800, -35, 38_100, 37_200, 37_700, 38_100, "moved"]);
     expect(l5.agree).toEqual(["voice", "words", "word durations"]);
-    expect(l5.why).toBe("stamp in silence; voice, words, word durations all later (moved to the recognised words)");
-    expect(c.moves.find((m) => m.index === 4)).toEqual({ index: 4, fromMs: 34_800, toMs: 37_200, reason: "stamp in silence; voice, words, word durations all later" });
+    expect(l5.why).toBe("stamp in silence; voice, words, word durations all later (moved to the voice onset)");
+    expect(c.moves.find((m) => m.index === 4)).toEqual({ index: 4, fromMs: 34_800, toMs: 38_100, reason: "stamp in silence; voice, words, word durations all later" });
   });
 
   it("the last line: words and durations 3 s apart and no voice: moved to the earliest (the durations)", () => {
@@ -457,13 +458,19 @@ describe("vocal-start check: a stamp in silence with every signal later", () => 
     const song9 = parseLrc(LRC9, 80_000);
     const base: [number, number, number][] = [[2_000, 3_500, SUNG], [8_000, 9_500, SUNG], [15_000, 16_500, SUNG], [28_000, 30_000, SUNG]];
     const asr9 = new Map([[5, asrAt(64_800, "Let my love")]]);
-    it("a held last note under the stamp is not voice of the line: moved to the words", () => {
+    it("a held last note under the stamp is not voice of the line: moved to the voice onset (also without `all`)", () => {
       const v = levels([...base, [58_500, 60_500, SUNG], [60_500, 63_500, -25], [65_800, 67_500, -20], [68_000, 70_000, SUNG]], 80_000);
-      const c = checkVocalStart(song9, v, { asr: asr9, all: true });
+      expect(asrWindows(song9, v).map((w) => w[0])).toContain(6);
+      const c = checkVocalStart(song9, v, { asr: asr9 });
       const l9 = c.lines.find((x) => x.index === 5)!;
       expect(c.thresholdDb).toBe(-30.5);
-      expect([l9.stampLevelDb, l9.ownLevelDb, l9.voiceMs, l9.wordsMs, l9.targetMs, l9.result]).toEqual([-25, -100, 65_800, 64_800, 64_800, "moved"]);
-      expect(c.moves.find((m) => m.index === 5)).toEqual({ index: 5, fromMs: 63_400, toMs: 64_800, reason: "stamp in silence; voice, words all later" });
+      expect([l9.stampLevelDb, l9.ownLevelDb, l9.voiceMs, l9.wordsMs, l9.targetMs, l9.result]).toEqual([-25, -100, 65_800, 64_800, 65_800, "moved"]);
+      expect(c.moves.find((m) => m.index === 5)).toEqual({ index: 5, fromMs: 63_400, toMs: 65_800, reason: "stamp in silence; voice, words all later" });
+    });
+    it("a line whose voice is at its stamp is not checked without `all`", () => {
+      const v = levels([...base, [58_500, 60_500, SUNG], [60_500, 63_000, -25], [63_300, 64_500, -20], [65_800, 67_500, -20], [68_000, 70_000, SUNG]], 80_000);
+      expect(checkVocalStart(song9, v, { asr: asr9 }).lines.some((x) => x.index === 5)).toBe(false);
+      expect(asrWindows(song9, v).some((w) => w[0] === 6)).toBe(false);
     });
     it("this line's own voice already sounding at the stamp: never moved by the rule", () => {
       const v = levels([...base, [58_500, 60_500, SUNG], [60_500, 63_000, -25], [63_300, 64_500, -20], [65_800, 67_500, -20], [68_000, 70_000, SUNG]], 80_000);
