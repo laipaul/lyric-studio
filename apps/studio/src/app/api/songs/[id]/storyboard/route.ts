@@ -3,10 +3,11 @@
 // code Generate renders with; &clips=song+wedding: over another clip set, the same textboard);
 // ?run=<folder>&platform=reels&video=v1: a past run's video (its manifest).
 // POST (stage 2): one edit: { action: "order", order } | { action: "clip", clip, edit } | { action:
-// "anchor", line, clip, transition? } | { action: "unanchor", line }; the tab then plans again.
+// "anchor", line, clip, transition? } | { action: "unanchor", line } | omit | canvas | the timeline's roll / slip /
+// timeline-reset / timeline (Undo, Redo); the tab then plans again.
 import { connection } from "next/server";
 
-import { storyboardEdit, type StoryboardEdit } from "@lyric/video/storyboard-edit";
+import { STORYBOARD_ACTIONS, storyboardEdit, type StoryboardEdit } from "@lyric/video/storyboard-edit";
 
 import { storyboardJson } from "@/lib/storyboard";
 import { withWorkspace } from "@/lib/workspace";
@@ -33,7 +34,8 @@ export async function GET(request: Request, { params }: Params) {
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
   const body = (await request.json().catch(() => null)) as StoryboardEdit | null;
-  if (!body || !["order", "clip", "anchor", "unanchor"].includes(body.action)) return Response.json({ error: "Bad request" }, { status: 400 });
+  // Every storyboard edit (Omit and Canvas were missing here before 7 Nov 2026, so Shape's "Omit this clip" was refused).
+  if (!body || !(STORYBOARD_ACTIONS as readonly string[]).includes(body.action)) return Response.json({ error: "Bad request" }, { status: 400 });
   try {
     return Response.json(withWorkspace((ws) => storyboardEdit(ws, id, body)));
   } catch (error) {

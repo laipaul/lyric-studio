@@ -5,16 +5,21 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import type { CutMove, Slip } from "../timeline-edits";
+
 // transition: how this clip comes in (absent: the app chooses). omit: the user set the clip to Omit (Assets
 // or Shape): it keeps its place in the order but Make does not use it.
 export type ClipEdit = { in?: number; out?: number; speed?: number; best?: number; transition?: "cut" | "dissolve"; omit?: true };
-export type ClipEdits = { order: string[]; clips: Record<string, ClipEdit> };
+// cuts / slips: the Shape timeline's roll and slip edits, on the song's timeline (src/timeline-edits.ts).
+export type ClipEdits = { order: string[]; clips: Record<string, ClipEdit>; cuts?: CutMove[]; slips?: Slip[] };
 export const CLIP_EDITS_FILE = "clips.json";
 
 const HELP =
   'The story order and clip edits of this song (the Storyboard tab writes it). "order": clip file names in the story order ' +
   "(clips not listed follow in file-name order). \"clips\": per clip \"omit\": true (set to Omit: not used by Make), \"in\" / \"out\" (the part used, seconds), \"speed\" (0.5-1, slow motion) and " +
-  '"best" (the best moment, seconds; wins over the automatic one) and "transition" ("cut" or "dissolve": how the clip comes in; left out, the app chooses).';
+  '"best" (the best moment, seconds; wins over the automatic one) and "transition" ("cut" or "dissolve": how the clip comes in; left out, the app chooses). ' +
+  '"cuts": cuts moved on the Shape timeline (song seconds: the planned cut at "from" goes to "to", on the beat unless "free"). ' +
+  '"slips": shots that play another part of their clip ("at": the shot\'s start in the song, "clip", "in": seconds into the clip).';
 
 export function checkClipEdits(raw: unknown): { edits: ClipEdits; problems: string[] } {
   const problems: string[] = [];
@@ -51,6 +56,16 @@ export function checkClipEdits(raw: unknown): { edits: ClipEdits; problems: stri
         else if (Object.keys(e).length) edits.clips[name] = e;
       }
     }
+  }
+  if (r.cuts !== undefined) {
+    const ok = Array.isArray(r.cuts) && r.cuts.every((c) => c && typeof c === "object" && typeof c.from === "number" && typeof c.to === "number" && c.from >= 0 && c.to >= 0 && (c.free === undefined || c.free === true));
+    if (ok) edits.cuts = (r.cuts as CutMove[]).map((c) => ({ from: Math.round(c.from * 100) / 100, to: Math.round(c.to * 100) / 100, ...(c.free ? { free: true as const } : {}) }));
+    else problems.push('cuts must be a list like [{ "from": 47.8, "to": 48.3 }] (song seconds)');
+  }
+  if (r.slips !== undefined) {
+    const ok = Array.isArray(r.slips) && r.slips.every((x) => x && typeof x === "object" && typeof x.at === "number" && typeof x.clip === "string" && x.clip.trim() && typeof x.in === "number" && x.at >= 0 && x.in >= 0);
+    if (ok) edits.slips = (r.slips as Slip[]).map((x) => ({ at: Math.round(x.at * 100) / 100, clip: x.clip, in: Math.round(x.in * 100) / 100 }));
+    else problems.push('slips must be a list like [{ "at": 48.3, "clip": "06_rings.mp4", "in": 1.4 }]');
   }
   return { edits, problems };
 }

@@ -321,6 +321,64 @@ async function main() {
     const shots03 = await page.$$eval("[data-shot]", (els: Element[]) => els.filter((e) => (e.textContent ?? "").includes("03_c.mp4")).map((e) => !!e.querySelector("[data-badge=speed]")));
     const card03 = (await page.textContent("[data-story-clip='03_c.mp4']")) ?? "";
     check(card03.includes("0.8x") && card03.includes("★ yours") && shots03.every(Boolean), `and the plan uses it: the card (${card03}), its shots slowed (${shots03.length})`);
+
+    // The pro edits on the timeline (7 Nov 2026), on this 3-shot Reel. Roll: drag the line between shots 1
+    // and 2 one beat later (2x zoom = 80 px a second, a beat at 120 BPM = 40 px): only that cut moves, kept in
+    // clips.json; shot 3 does not move.
+    if (await page.isVisible("[data-shape-panel]")) await page.click("[data-panel-close]").catch(() => {});
+    const shotBox = async (n: number) => (await (await page.$(`[data-shot='${n}']`))!.boundingBox())!;
+    const before1 = await shotBox(1);
+    const before3 = await shotBox(3);
+    const h = (await (await page.$("[data-cut-handle='1']"))!.boundingBox())!;
+    await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(h.x + h.width / 2 + 20, h.y + h.height / 2, { steps: 4 });
+    await page.mouse.move(h.x + h.width / 2 + 42, h.y + h.height / 2, { steps: 4 });
+    const readout = ((await page.textContent("[data-edit-readout]").catch(() => "")) ?? "").trim();
+    check(/\+0\.\d\d s · shot 1: .* · shot 2: .* on the beat/.test(readout), `dragging a cut shows the change and both shots' lengths (${readout})`);
+    await page.mouse.up();
+    await replanned();
+    const cuts = (clipsJson().cuts ?? []) as { from: number; to: number }[];
+    check(cuts.length === 1 && cuts[0].to - cuts[0].from > 0.4 && cuts[0].to - cuts[0].from < 0.6, `the cut moved one beat later, kept in clips.json (${JSON.stringify(cuts)})`);
+    const after1 = await shotBox(1);
+    const after3 = await shotBox(3);
+    check(after1.width - before1.width > 30 && Math.abs(after3.x - before3.x) < 2, `shot 1 got longer and shot 3 did not move (${Math.round(after1.width - before1.width)} px, ${Math.round(after3.x - before3.x)} px)`);
+    check(!!(await page.$("[data-cut-handle='1'][data-cut-moved]")), "the moved cut is marked");
+    // Slip: drag inside shot 3 (towards the side its clip has room for): same place and length, another part
+    // of its clip, marked ⇆; the drag does not select the shot.
+    const text3 = (await page.textContent("[data-shot='3']")) ?? "";
+    const m3 = text3.match(/(\d+\.\d) s · (\d+\.\d)–(\d+\.\d) s/);
+    const in3 = m3 ? Number(m3[2]) : 0;
+    const dir = in3 > 0.3 ? 1 : -1; // right: earlier frames come in
+    const s3 = await shotBox(3);
+    await page.mouse.move(s3.x + s3.width / 2, s3.y + s3.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(s3.x + s3.width / 2 + dir * 40, s3.y + s3.height / 2, { steps: 6 });
+    const slipText = ((await page.textContent("[data-edit-readout]").catch(() => "")) ?? "").trim();
+    check(slipText.startsWith("slip"), `dragging inside a shot slips it (${slipText})`);
+    await page.mouse.up();
+    await replanned();
+    const slipped3 = !!(await page.$("[data-shot='3'][data-slipped]"));
+    check(slipped3, `the slipped shot is marked ⇆ (clips.json slips ${JSON.stringify(clipsJson().slips)}; it played from ${in3} s)`);
+    const s3b = await shotBox(3);
+    check(Math.abs(s3b.x - s3.x) < 2 && Math.abs(s3b.width - s3.width) < 2, "a slip keeps the shot's place and length");
+    check(!(await page.isVisible("[data-shot-details]")), "a drag does not select the shot");
+    // Undo (Ctrl+Z) takes the slip back, the cut move stays; Redo brings the slip again.
+    await page.keyboard.press("Control+z");
+    await replanned();
+    check(!(await page.$("[data-shot='3'][data-slipped]")) && (clipsJson().cuts ?? []).length === 1, `Ctrl+Z undoes the slip, the cut move stays (${JSON.stringify(clipsJson().slips)})`);
+    await page.keyboard.press("Control+Shift+z");
+    await replanned();
+    check(!!(await page.$("[data-shot='3'][data-slipped]")), "Ctrl+Shift+Z redoes it");
+    // "Automatic cuts and clip start" on shot 2 puts its moved cut back.
+    await page.click("[data-shot='2']");
+    await page.waitForSelector("[data-timeline-reset]");
+    await page.click("[data-timeline-reset]");
+    await replanned();
+    check((clipsJson().cuts ?? []).length === 0, `"Automatic cuts and clip start" on shot 2 puts its cut back (${JSON.stringify(clipsJson().cuts)})`);
+    await page.click("[data-panel-close]").catch(() => {});
+    writeFileSync(path.join(paths.root, "clips.json"), JSON.stringify({ ...clipsJson(), cuts: [], slips: [] }));
+    await openPanel(page, "clips"); // the next checks drag from the clips strip
     // Drag a clip onto a lyric line: an anchor.
     await page.dragAndDrop("[data-story-clip='04_d.mp4']", "[data-story-line='3']");
     await replanned();

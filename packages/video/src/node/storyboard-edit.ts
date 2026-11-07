@@ -5,6 +5,7 @@
 import type { Workspace } from "@lyric/db";
 
 import { checkAnchors, type AnchorSpec, type AnchorTransition } from "../anchors";
+import { mergeTimeline, resetShot, type CutMove, type Slip, type TimelineEdits } from "../timeline-edits";
 import { readClipEdits, setClipOmit, withSongOrder, writeClipEdits, type ClipEdit, type ClipEdits } from "./clip-edits";
 import { saveAnchors } from "./lyrics-view";
 import { readRecipe, writeRecipe } from "./recipe";
@@ -16,9 +17,17 @@ export type StoryboardEdit =
   | { action: "omit"; clip: string; omit: boolean } // Use / Omit (the same switch as in Assets)
   | { action: "anchor"; line: number; clip: string; transition?: AnchorTransition }
   | { action: "unanchor"; line: number }
-  | { action: "canvas"; clip: string | null; at?: number }; // the clip (and moment) for the Spotify Canvas; null: the app chooses
+  | { action: "canvas"; clip: string | null; at?: number } // the clip (and moment) for the Spotify Canvas; null: the app chooses
+  // The Shape timeline (src/timeline-edits.ts, song time): a roll (a cut moved, with the slips that keep the
+  // frames around it), a slip, "↺ automatic" on a shot, or a whole timeline back (Undo / Redo).
+  | { action: "roll"; move: CutMove; slips?: Slip[] }
+  | { action: "slip"; slip: Slip }
+  | { action: "timeline-reset"; startMs: number; endMs: number }
+  | { action: "timeline"; timeline: TimelineEdits };
+export const STORYBOARD_ACTIONS = ["order", "clip", "omit", "anchor", "unanchor", "canvas", "roll", "slip", "timeline-reset", "timeline"] as const;
 
-export type StoryboardEditResult = { edits: ClipEdits; anchors: AnchorSpec[] };
+// before / after: the timeline edits around a timeline action, for Undo / Redo.
+export type StoryboardEditResult = { edits: ClipEdits; anchors: AnchorSpec[]; before?: TimelineEdits; after?: TimelineEdits };
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
@@ -52,6 +61,15 @@ export function storyboardEdit(ws: Workspace, projectId: string, e: StoryboardEd
     writeRecipe(paths.recipe, next);
   } else if (e.action === "unanchor") {
     anchors = saveAnchors(ws, projectId, anchors.filter((a) => a.line !== e.line));
+  } else if (e.action === "roll" || e.action === "slip" || e.action === "timeline-reset" || e.action === "timeline") {
+    const before: TimelineEdits = { cuts: edits.cuts ?? [], slips: edits.slips ?? [] };
+    const after =
+      e.action === "roll" ? mergeTimeline(before, { move: e.move, slips: e.slips ?? [] })
+      : e.action === "slip" ? mergeTimeline(before, { slips: [e.slip] })
+      : e.action === "timeline-reset" ? resetShot(before, e.startMs, e.endMs)
+      : { cuts: e.timeline?.cuts ?? [], slips: e.timeline?.slips ?? [] };
+    edits = writeClipEdits(paths.root, { ...edits, cuts: after.cuts, slips: after.slips });
+    return { edits, anchors, before, after: { cuts: edits.cuts ?? [], slips: edits.slips ?? [] } };
   } else {
     throw new Error("Unknown storyboard edit.");
   }

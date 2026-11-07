@@ -4,6 +4,33 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Shape timeline: pro edits with the mouse, part 1 (roll, slip, snapping, Undo) ✅ (to verify on the Windows PC)
+- Asked by the user (7 Nov 2026): edit like the pros (Premiere, Resolve, Final Cut), directly on the timeline,
+  not by typing seconds in the Clip editor.
+- **Roll:** drag the line between two shots: the cut moves, one shot gets longer and the other shorter,
+  nothing else moves (the music is fixed, so a ripple would push every later cut off its place). It snaps to
+  the beat; hold **Alt** for exactly where you let go. The left shot keeps its first frame, the right shot keeps
+  its last frame (it starts earlier or later in its clip), as a roll edit does.
+- **Slip:** drag inside a shot sideways: it keeps its place and length, another part of its clip plays in it
+  (right = earlier frames, as in Premiere), never past the clip's usable part. A plain click still selects.
+- **While dragging:** a readout ("+0.50 s · shot 1: 2.5 s · shot 2: 3.4 s · on the beat" / "slip · clip: from
+  0.60 s (was 1.10 s)") and the clip's frame at the edge in a small preview. Moved cuts are drawn in the brand
+  colour, slipped shots carry ⇆.
+- **Undo / Redo:** Ctrl+Z, Ctrl+Shift+Z (or Ctrl+Y), and two buttons in the bar under the timeline. A shot's panel
+  has **Automatic cuts and clip start** to drop the moves at its edges and its slip.
+- **Kept with the song, on the song's timeline:** clips.json "cuts" ([{ from, to, free? }], song seconds) and
+  "slips" ([{ at, clip, in }]), so every video covering that moment (Reels, TikTok, Shorts, YouTube) gets them.
+  The planner applies them after the story anchors: a cut moved by hand is final, also an anchor's; a slip on an
+  anchored shot counts when it is the anchor's clip. An edit whose cut is not in a plan (another section) is
+  left aside. (src/timeline-edits.ts, compose.ts; components/timeline-editing.tsx.)
+- **Fixed on the way:** Shape's "Omit this clip" and "Use for Canvas" were refused by the storyboard route
+  ("Bad request": it only accepted 4 of its 6 edits); it now takes every storyboard edit.
+- Tests: timeline-edits.test.ts (snapping, roll, slip, merge, reset, the planner moving only that cut and
+  playing the slipped clip from its moment, clips.json); storyboard.e2e.ts (drag a cut one beat: readout,
+  clips.json, shot 1 longer and shot 3 unmoved, marked; slip shot 3: readout, ⇆, same place and length, no
+  selection; Ctrl+Z / Ctrl+Shift+Z; reset): run in the cloud session, all 102 checks pass.
+- Part 2 (next): keyboard trims ([ / ] to the playhead, , / . one frame, Shift one beat) and the two-up preview.
+
 ### Bug fix: lines whose voice starts late are always checked; a stamp in silence moves to the voice onset ✅ (to verify on the Windows PC)
 - Found on Let My Love Carry You, checked by ear in the Reel (starts at song 0:36.1). Line 9: stamp 1:03.4, voice 1:05.8,
   words 1:04.8, first word 0.1 s: in pnpm make / the plan it was not checked (mid-verse, not a hook; only
@@ -255,13 +282,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   of 161 MB for 31 s, and it plays in a browser; `--format mov` stays available.
 - Cloud fixture (synthetic song, 4-core Xeon, no GPU): 120 s (9:16) / 140 s (16:9) vs 133 s Remotion; all words
   landing inside the segment on their own frame.
-
-### Theme page: "✓ Saved" next to each change ✅ (to verify on the Windows PC)
-- Asked by the user on 2 Nov 2026 ("where's the save button" on Themes → a theme). The page saves as you go (Designer
-  and About when you leave the box or press Enter, a Mood on click, the Theme cover when picked or removed, the name on
-  rename); now each shows "✓ Saved" next to it, and a failed save says "Not saved: …" inside the theme's view (it was
-  shown behind it, on the page). Edit theme keeps its Save / Save as new theme / Cancel (it can change several songs).
-- Tests: themes.e2e.ts (✓ Saved after Designer and Mood).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

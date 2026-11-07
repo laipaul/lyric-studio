@@ -1382,6 +1382,8 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     platform: layout,
     beats: analysis.beats,
     ...(anchors.length ? { anchors } : {}),
+    // The Shape timeline's rolls and slips (clips.json, song time): the same in every video covering that moment.
+    ...(usesClips && !canvas && (edits.cuts?.length || edits.slips?.length) ? { timeline: { cuts: edits.cuts ?? [], slips: edits.slips ?? [] } } : {}),
     ...(backing.backing && preset.lyrics ? { lyricBacking: true } : {}),
     // Loop platforms: the last frames blend into the first shot's opening when the last shot cannot
     // continue into it (about the ending's fade, 0.4-1 s).

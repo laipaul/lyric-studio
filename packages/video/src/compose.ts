@@ -14,6 +14,7 @@ import { mulberry32 } from "./prng";
 import type { LyricEffectsProps, LyricLineProps, LyricVideoProps, StyleProps } from "./props";
 import type { PictureProps } from "./picture";
 import { assignClips, BEST_WINDOW_MS, type ClipOrder } from "./shots";
+import { applyCutMoves, slipFor, type TimelineEdits } from "./timeline-edits";
 import { withCard, type CardStyle } from "./textboard";
 import { planTransitions, type TransitionKind, type TransitionStyle } from "./transitions";
 import type { Feel } from "./pace";
@@ -76,6 +77,8 @@ export type RenderBase = {
   // Story anchors (song.json): `lyric` indexes `lyrics`; placed on `beats` (downbeat offset applied).
   anchors?: ResolvedAnchor[];
   beats?: Beat[];
+  // The Shape timeline's roll and slip edits (clips.json "cuts" / "slips", song time; src/timeline-edits.ts).
+  timeline?: TimelineEdits;
   // The textboard (src/textboard.ts): each lyric line's card (same order as `lyrics`), with the look it
   // sets (position, size, hold, effect) and its font resolved to a file the props load.
   cards?: ({ id: string; style: CardStyle; font?: { family: string; weight: number; italic?: boolean } } | null)[];
@@ -205,6 +208,8 @@ export function composeProps(
       ? planAnchors(plan, base.beats, base.anchors, lyricFrames(base, choices.leadMs ?? DEFAULT_LEAD_MS, choices.lyricsOffsetMs ?? 0, true, choices.effects?.gap))
       : null;
   if (anchorPlan) plan = anchorPlan.plan;
+  // The user's rolls last: a cut moved by hand is final, also an anchor's (the cuts the user saw are matched).
+  if (base.timeline?.cuts.length && base.beats?.length) plan = applyCutMoves(plan, base.beats, base.timeline.cuts).plan;
   const bounds = [0, ...plan.cuts.map((c) => c.frame - plan.start_frame), base.durationInFrames];
   const { byShot, warnings } = pinsToShots(base.pins, allLines, bounds);
   const notes: string[] = [];
@@ -225,6 +230,17 @@ export function composeProps(
       inMs = Math.max(from, Math.min(clip.best_ms + BEST_WINDOW_MS / 2 - needMs / 2, (clip.out_ms ?? clip.duration_ms) - needMs));
     }
     clipStarts.set(shot, Math.round((inMs * VIDEO.fps) / 1000));
+  }
+
+  // The user's slips: that shot plays that clip from that moment (on an anchored shot only with the anchor's own clip).
+  for (const [i, start] of bounds.slice(0, -1).entries()) {
+    if (!base.timeline?.slips.length) continue;
+    const slip = slipFor(base.timeline.slips, ((plan.start_frame + start) * 1000) / VIDEO.fps);
+    const clip = slip && base.clips.find((c) => c.name.toLowerCase() === slip.clip.toLowerCase() && c.kind !== "photo");
+    if (!slip || !clip) continue;
+    if (anchorPlan?.shots.has(i) && anchorPlan.shots.get(i)!.clipId !== clip.id) continue;
+    byShot.set(i, clip.id);
+    clipStarts.set(i, Math.round((slip.in * 1000 * VIDEO.fps) / 1000));
   }
 
   const byId = new Map(base.clips.map((c) => [c.id, c]));

@@ -12,12 +12,13 @@
 // effect with a live preview (saved in textboard.json), save the design as a template or apply one.
 // Pictures: the same textboard over another clip set; an anchor whose clip is missing is a slot.
 import { Player, type PlayerRef } from "@remotion/player";
-import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2, Pencil, RefreshCw, Repeat, Scissors, Star, Type, X } from "lucide-react";
+import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2, MoveHorizontal, Pencil, Redo2, RefreshCw, Repeat, RotateCcw, Scissors, Star, Type, Undo2, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 
-import { clockTenths, EFFECT_NAMES, effectTitle, followScrollLeft, LyricVideo, playheadLabel, songTimeMs, timeTicks, patchLook, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
-import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node"; // types only (erased): the data comes from /api/songs/[id]/storyboard
+import { clockTenths, type TimelineEdits, EFFECT_NAMES, effectTitle, followScrollLeft, LyricVideo, playheadLabel, songTimeMs, timeTicks, patchLook, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
+import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node";
+import { useTimelineEditing } from "./timeline-editing"; // types only (erased): the data comes from /api/songs/[id]/storyboard
 
 import { AssessmentDetails, VERDICT_TEXT } from "@/components/assessment";
 import { LookViewer, VIEWER_HEIGHT, VIEWER_MAX, VIEWER_MIN } from "@/components/look-preview";
@@ -214,16 +215,18 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
 
   // One storyboard edit (story order, clip edit, anchor), then the plan again.
   async function edit(body: Record<string, unknown>) {
-    if (!source || source.kind !== "plan") return;
+    if (!source || source.kind !== "plan") return null;
     setSaving(true);
     setError(null);
     try {
       const r = await api(`/api/songs/${projectId}/storyboard`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const d = (await r.json()) as { error?: string };
+      const d = (await r.json()) as { error?: string; before?: TimelineEdits; after?: TimelineEdits };
       if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
       await show(source, true);
+      return d;
     } catch (e) {
       setError((e as Error).message);
+      return null;
     } finally {
       setSaving(false);
     }
@@ -368,6 +371,8 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   const width = view ? Math.ceil((view.durationMs / 1000) * zoom) : 0;
   const x = (ms: number) => (ms / 1000) * zoom;
   const playhead = (frame * 1000) / 30;
+  // Roll (drag a cut) and slip (drag inside a shot), Undo / Redo: components/timeline-editing.tsx.
+  const tl = useTimelineEditing({ view, zoom, mediaUrl: `/api/songs/${projectId}/storyboard/media`, post: edit });
   // The timeline clock: the time in the video and in the song (as the Lyrics tab and check-start show it).
   const [hoverMs, setHoverMs] = useState<number | null>(null);
   const ticks = useMemo(() => (view ? timeTicks(view.durationMs, zoom) : []), [view, zoom]);
@@ -421,6 +426,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
             onEdit={() => setEditing(view.clips.find((c) => c.name === shot.clip)?.name ?? null)}
             onUnanchor={shot.anchor ? () => void edit({ action: "unanchor", line: shot.anchor!.line }) : undefined}
             onOmit={view.editable ? () => void edit({ action: "omit", clip: shot.clip, omit: true }) : undefined}
+            onResetTimeline={view.editable && tl.edited(shot) ? () => void tl.save(tl.resetBody(shot)) : undefined}
             onClose={closePanel}
           />
         ) : (
@@ -889,7 +895,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                     </div>
                   ))}
                 </div>
-                <div className="relative h-[68px]" data-shots-row>
+                <div className="relative h-[68px] select-none" data-shots-row onClickCapture={tl.onRowClickCapture}>
                   {!view.shots.length ? (
                     <div className="text-muted-foreground sticky left-2 inline-flex h-full max-w-xl items-center px-3 text-xs" data-no-shots>
                       {view.platform.name === "youtube" ? (
@@ -912,6 +918,9 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                       left={x(s.startMs)}
                       width={x(s.endMs - s.startMs)}
                       selected={selected === s.index}
+                      slipped={tl.slipped(s)}
+                      slippable={view.editable && s.kind === "video"}
+                      onPointerDown={(e) => tl.onShotPointerDown(s, e)}
                       onSelect={() => {
                         setSelected(s.index);
                         setPanel("shot");
@@ -935,6 +944,8 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                       }}
                     />
                   ))}
+                  {tl.handles}
+                  {tl.overlay}
                 </div>
                 {hoverMs !== null && Math.abs(x(hoverMs) - x(playhead)) > 4 ? (
                   <div className="pointer-events-none absolute top-0 bottom-0 w-px bg-white/30" style={{ left: x(hoverMs) }} data-hover-line>
@@ -958,6 +969,16 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
               <TransportBar player={player} frame={frame} playing={playing} songStartMs={songStart} durationInFrames={props.durationInFrames} barFrames={barFrames} rate={rate} onRate={setRate} loop={loop} onLoop={setLoop} />
               <span className="bg-border hidden h-6 w-px sm:block" />
               <div className="flex items-center gap-1 text-xs">
+                {view.editable ? (
+                  <span className="mr-2 flex items-center gap-1" data-timeline-undo>
+                    <button type="button" disabled={!tl.canUndo || saving} onClick={() => void tl.undo()} className="rounded border px-1 disabled:opacity-40" title="Undo the last cut move or slip (Ctrl+Z)" aria-label="Undo">
+                      <Undo2 className="size-3.5" />
+                    </button>
+                    <button type="button" disabled={!tl.canRedo || saving} onClick={() => void tl.redo()} className="rounded border px-1 disabled:opacity-40" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
+                      <Redo2 className="size-3.5" />
+                    </button>
+                  </span>
+                ) : null}
                 <label className="mr-2 flex cursor-pointer items-center gap-1.5" title="While the video plays, the timeline scrolls with the playhead. Scroll by hand to stop it until the next play.">
                   <input type="checkbox" checked={follow} onChange={toggleFollow} className="accent-brand" data-follow-playback />
                   Follow
@@ -983,6 +1004,9 @@ function ShotBlock({
   left,
   width,
   selected,
+  slipped,
+  slippable,
+  onPointerDown,
   onSelect,
   dropTarget,
   onDragOver,
@@ -993,6 +1017,9 @@ function ShotBlock({
   left: number;
   width: number;
   selected: boolean;
+  slipped?: boolean; // the user chose which part of the clip plays here (slip)
+  slippable?: boolean;
+  onPointerDown?: (e: React.PointerEvent) => void;
   onSelect: () => void;
   dropTarget: boolean;
   onDragOver?: (e: React.DragEvent) => void;
@@ -1003,6 +1030,8 @@ function ShotBlock({
     <button
       type="button"
       data-shot={s.index + 1}
+      data-slipped={slipped || undefined}
+      onPointerDown={onPointerDown}
       data-drop-target={dropTarget || undefined}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -1014,7 +1043,7 @@ function ShotBlock({
       }}
       className={cn("absolute top-1 bottom-1 overflow-hidden rounded border text-left text-[10px] text-white", s.warnings.length ? "border-amber-400" : "border-white/20", (selected || dropTarget) && "ring-brand ring-2")}
       style={{ left, width: Math.max(6, width - 2), backgroundImage: s.thumb ? `linear-gradient(rgba(0,0,0,.35),rgba(0,0,0,.65)), url(/api/files/${s.thumb})` : undefined, backgroundSize: "cover", backgroundPosition: "center" }}
-      title={`${s.clip} · ${secs(s.endMs - s.startMs)}${s.warnings.length ? `\n${s.warnings.join("\n")}` : ""}`}
+      title={`${s.clip} · ${secs(s.endMs - s.startMs)}${slippable ? "\nDrag sideways to slip: another part of the clip in the same shot. Drag the line between two shots to move the cut." : ""}${s.warnings.length ? `\n${s.warnings.join("\n")}` : ""}`}
     >
       <div className="absolute top-0 right-0 left-0 flex flex-wrap gap-0.5 p-0.5">
         {s.anchor ? (
@@ -1026,6 +1055,7 @@ function ShotBlock({
         {s.best ? <Star className="size-3 text-yellow-300" data-badge="best" aria-label="best moment" /> : null}
         {s.dissolve ? <Blend className="size-3 text-sky-300" data-badge="dissolve" aria-label="dissolve" /> : null}
         {s.dip ? <span className="size-2.5 rounded-full border border-white/70 bg-black" data-badge="dip" aria-label="dip to black" title="dip to black" /> : null}
+        {slipped ? <MoveHorizontal className="text-brand size-3" data-badge="slip" aria-label="slipped by you" /> : null}
         {s.loop ? <Repeat className="size-3 text-emerald-300" data-badge="loop" aria-label="loop ending" /> : null}
         {s.speed < 1 ? (
           <span className="flex items-center rounded bg-black/60 px-0.5" data-badge="speed">
@@ -1044,7 +1074,7 @@ function ShotBlock({
   );
 }
 
-function ShotDetails({ shot: s, editable, onEdit, onUnanchor, onOmit, onClose }: { shot: StoryShot; editable: boolean; onEdit: () => void; onUnanchor?: () => void; onOmit?: () => void; onClose: () => void }) {
+function ShotDetails({ shot: s, editable, onEdit, onUnanchor, onOmit, onResetTimeline, onClose }: { shot: StoryShot; editable: boolean; onEdit: () => void; onUnanchor?: () => void; onOmit?: () => void; onResetTimeline?: () => void; onClose: () => void }) {
   return (
     <div className="bg-card border-brand/40 rounded-lg border p-3 text-xs" data-shot-details={s.index + 1}>
       <div className="mb-1 flex items-start gap-2">
@@ -1055,8 +1085,13 @@ function ShotDetails({ shot: s, editable, onEdit, onUnanchor, onOmit, onClose }:
           <X className="size-4" />
         </button>
       </div>
-      {(editable && s.kind === "video") || onOmit ? (
+      {(editable && s.kind === "video") || onOmit || onResetTimeline ? (
         <div className="mb-2 flex flex-wrap gap-2">
+          {onResetTimeline ? (
+            <button type="button" data-timeline-reset onClick={onResetTimeline} className="hover:bg-accent text-brand border-brand/50 flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs" title="Your moved cuts at this shot's edges and the part of the clip you slipped go back to the app's choice">
+              <RotateCcw className="size-3" /> Automatic cuts and clip start
+            </button>
+          ) : null}
           {editable && s.kind === "video" ? (
             <button type="button" data-edit-clip onClick={onEdit} className="hover:bg-accent flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs">
               <Scissors className="size-3" /> Edit clip (in / out, speed, best moment)

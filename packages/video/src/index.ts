@@ -26,6 +26,7 @@ export * from "./Thumbnail";
 export * from "./canvas";
 export * from "./follow";
 export * from "./timeline-time";
+export * from "./timeline-edits";
 export * from "./transport";
 export * from "./ending";
 export * from "./pace";

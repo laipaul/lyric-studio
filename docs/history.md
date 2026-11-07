@@ -4,6 +4,13 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Theme page: "✓ Saved" next to each change ✅ (to verify on the Windows PC)
+- Asked by the user on 2 Nov 2026 ("where's the save button" on Themes → a theme). The page saves as you go (Designer
+  and About when you leave the box or press Enter, a Mood on click, the Theme cover when picked or removed, the name on
+  rename); now each shows "✓ Saved" next to it, and a failed save says "Not saved: …" inside the theme's view (it was
+  shown behind it, on the page). Edit theme keeps its Save / Save as new theme / Cancel (it can change several songs).
+- Tests: themes.e2e.ts (✓ Saved after Designer and Mood).
+
 ### Shots: normal speed first, your clip edits kept, no false "held" warning, Omit from the Shot panel ✅ (to verify on the Windows PC)
 - Reported by the user on 2 Nov 2026 (Familiar Strangers Reels: shots 1-4 and 6-9 all "speed 0.82x" and "the clip is
   too short: its last frame is held for 0.0 s"). Decided: "by default the app should do what it thinks is best; then I

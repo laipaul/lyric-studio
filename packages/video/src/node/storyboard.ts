@@ -17,6 +17,7 @@ import { parsePresets } from "../platform";
 import type { LyricVideoProps } from "../props";
 import { clockText } from "../section";
 import { clipEdit, hookSections, peaks, storyLines, storyShots, storyTitleCards, type StoryClip, type StoryLine, type StoryShot } from "../storyboard";
+import type { TimelineEdits } from "../timeline-edits";
 import { analyzeSong } from "./analysis";
 import { readLoopAudio } from "./audio-check";
 import { bestMoments } from "./best-moment";
@@ -40,6 +41,7 @@ export type StoryboardView = {
   settings: string; // "Simple, story, 1x, dissolve as set" etc.
   section: { mode: string; startMs: number; endMs: number; reason: string };
   songStartMs: number; // where the video's audio starts in the song: a moment in the video is this + its time
+  timeline: TimelineEdits; // the song's rolls and slips (clips.json), song time: the Shape timeline marks them
   durationMs: number;
   bpm: number;
   bars: number[]; // downbeats, in the video (ms)
@@ -172,7 +174,7 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
     bestS: c.bestMs === null ? null : c.bestMs / 1000, bestFrom: c.bestFrom, autoBestS: c.kind === "video" ? (auto.get(absPath(ws, c.path)) ?? null) : null,
     shots: v.props.shots.filter((s) => s.src === c.path).length,
   }));
-  return view(ws, {
+  return withTimeline(ws, projectId, await view(ws, {
     editable: !paths.legacy, storyboardClips, slots: plan.slots, picture: clipSet ?? null,
     source: "plan", run: null, platform: { name: p.name, label: p.label }, video: v.spec.name, videos: plan.videos.map((x) => x.spec.name),
     settings: settingsText(v.spec),
@@ -180,7 +182,7 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
     props: v.props, startMs, bpm: plan.analysis.bpm, beats: plan.analysis.beats, clips, numbered, anchors: v.anchors, anchorsOutside: plan.anchorsOutside, notes,
     loop: v.loop, loopSuggestions: plan.loopSuggestions ?? [], decisions: v.decisions,
     songFile: paths.audio,
-  });
+  }));
 }
 
 // A past run's video: its manifest (exactly what was rendered).
@@ -204,7 +206,7 @@ export async function storyboardRun(ws: Workspace, projectId: string, folder: st
   const startMs = m.props.audio ? frameMs(m.props.audio.startFrame) : m.section.start_ms;
   const videos = ["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8"].filter((n) => existsSync(path.join(dir, `${n}.manifest.json`)));
   const used = m.anchors?.used ?? [];
-  return view(ws, {
+  return withTimeline(ws, projectId, await view(ws, {
     editable: false, storyboardClips: [], slots: [], picture: m.picture?.label ?? null,
     source: "run", run: folder, platform: { name: platform, label: SHORT_LABELS[platform] ?? m.platform?.preset.label ?? platform }, video, videos,
     settings: `${m.variation.style}, ${m.variation.order}${(m.settings.cut_rate as string) ? `, ${m.settings.cut_rate}` : ""}${m.settings.transitions ? `, ${m.settings.transitions}` : ""}`,
@@ -219,13 +221,19 @@ export async function storyboardRun(ws: Workspace, projectId: string, folder: st
     loopSuggestions: [],
     decisions: [(m.settings.length as { text?: string } | null | undefined)?.text, (m.settings.pace as { text?: string } | null | undefined)?.text, (m.settings.transition_plan as { text?: string } | null | undefined)?.text].filter((x): x is string => !!x),
     songFile: existsSync(songFile) ? songFile : paths.audio!,
-  });
+  }));
 }
 
 const frameMs = (f: number) => Math.round((f * 1000) / VIDEO.fps);
 
 function settingsText(spec: { style: string; order: string; rate?: string; transitions?: string; pairing?: { name: string } }): string {
   return [spec.style === "simple" ? "Simple" : "Bold", spec.order, spec.rate, spec.transitions ? `anchors ${spec.transitions === "as-set" ? "as set" : `all ${spec.transitions}`}` : null, spec.pairing ? `fonts ${spec.pairing.name}` : null].filter(Boolean).join(", ");
+}
+
+// The song's rolls and slips with the view (they live on the song's timeline, in clips.json).
+function withTimeline(ws: Workspace, projectId: string, v: Omit<StoryboardView, "timeline">): StoryboardView {
+  const edits = readClipEdits(songPathsById(ws, projectId).root);
+  return { ...v, timeline: { cuts: edits.cuts ?? [], slips: edits.slips ?? [] } };
 }
 
 async function view(
@@ -238,7 +246,7 @@ async function view(
     loop: LoopResult | null; loopSuggestions: LoopSuggestion[]; decisions: string[]; editable: boolean; storyboardClips: StoryboardClip[];
     slots: StoryboardView["slots"]; picture: string | null;
   },
-): Promise<StoryboardView> {
+): Promise<Omit<StoryboardView, "timeline">> {
   const durationMs = frameMs(c.props.durationInFrames);
   const inVideo = (t: number) => t - c.startMs;
   const beats = c.beats.filter((b) => inVideo(b.time_ms) >= 0 && inVideo(b.time_ms) <= durationMs);
