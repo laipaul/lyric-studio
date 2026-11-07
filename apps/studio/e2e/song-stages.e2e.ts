@@ -127,6 +127,22 @@ async function main() {
     await page.waitForSelector("[data-generate]", { state: "visible" });
     check(JSON.stringify(await chosen()) === JSON.stringify(["reels", "tiktok", "youtube"]), "Make -> Prepare -> Make keeps the ticked platforms");
 
+    // The hidden Generate panel follows the song's collections: untick "wedding" in Shape → To make and the
+    // clips line in Make no longer names it (it used to keep the first value and send it with the run).
+    check(((await page.textContent("[data-clips-line]")) ?? "").includes("wedding"), "Make: the clips line names the song's collection");
+    await page.click("[data-stage=shape]");
+    await openPanel(page, "make");
+    await page.uncheck("input[data-edit$='-wedding']");
+    await page.waitForFunction(() => !document.querySelector("input[data-edit$='-wedding']:checked"));
+    await sleep(800);
+    await page.click("[data-stage=make]");
+    await page.waitForSelector("[data-generate]", { state: "visible" });
+    check(!((await page.textContent("[data-clips-line]")) ?? "").includes("wedding"), `Make after unticking it in Shape: the clips line no longer names it (${await page.textContent("[data-clips-line]")})`);
+    await page.click("[data-stage=shape]");
+    await openPanel(page, "make");
+    await page.check("input[data-edit$='-wedding']");
+    await sleep(800);
+
     // Part 2. Two runs of Reels (v1 ready, v2 with a point) and one discarded video: Make counts every kept
     // video; Post offers the ready one; "Try another take" queues take 3; Style shows only what differs.
     const exportsDir = songPathsById(ws2, id).exports;

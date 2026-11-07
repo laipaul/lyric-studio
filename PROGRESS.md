@@ -4,6 +4,21 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Bug fix: Generate kept a collection unticked in Shape ✅ (to verify on the Windows PC)
+- Reported: "wedding" unticked in Shape → To make (song.json "collections": []), yet Make still showed
+  "6 clips + wedding" and the run added the wedding clips again.
+- Cause: the Generate panel stays mounted while hidden and read the song's collections once
+  (`useState(runCollections ?? data.chosen)`, never updated), so on submit it differed from the song's
+  choice and sent `collection: "wedding"`. The same pattern held for the section: it started from the
+  recipe's section and kept it, so a section changed in Shape → Automatic was sent back as an override.
+- Fix (generate-panel.tsx): the collections are derived (`runCollections ?? data.chosen`), so they follow
+  the song's current choice; a run opened with "Use these settings" keeps the run's. The section keeps only
+  the user's edit as state (`sectionEdit`), otherwise it follows the recipe (or the run's). The theme for
+  the run was already fine (starts empty = the song's own). Platforms, videos, length etc. are the user's
+  edits in the panel and are unchanged.
+- Test: e2e/song-stages.e2e.ts unticks "wedding" in Shape → To make, goes to Make without reloading and
+  checks the clips line no longer names it (browser test, runs in the cloud check / on a machine with Playwright).
+
 ### Bug fix: vocal-start check moves a line whose stamp is in silence when every signal is later ✅ (to verify on the Windows PC)
 - Reported on "Let My Love Carry You": line 5 (stamp 0:34.8, vocal track -35 dB there, under the voice level
   -30.5 dB; voice 0:38.1, recognised words 0:37.2, word durations 0:37.7) and line 31, the last line (stamp
@@ -255,22 +270,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   an anchor on it becomes "needs a clip"; every clip omitted says so. Shape's reorder keeps the clips it
   cannot show (other orientation) in their places, so Assets and Shape stay one sequence.
 - Tests: clip-order.test.ts, song-folders.test.ts (Assets order, Use / Omit, no shuffle).
-
-### Stability pass: no quiet choices, nothing replaced without a way back ✅ (to verify on the Windows PC)
-- Asked by the user on 1 Nov 2026 after the evening's bugs (a song taken over, a collection never ticked, a
-  Reel cut on a comma): the app must not "help" without saying so.
-- Two more takeover guards: "+ New song" with a deleted song's file says so (Restore it in Deleted songs)
-  instead of quietly bringing it back under the new title; Replace song refuses another song's file.
-- Nothing deleted: the spare copy of a song file adopted into a hand-made song folder now goes to
-  .studio\replaced\ (was deleted).
-- No quiet picks: a run from Lyric Studio never changes the song's collections (only "Keep these choices
-  for this song" does); a collection only remembered from an old terminal run is written into song.json by
-  the Library's Tidy, so Shape shows it; a missing lyrics file is said in plain words (no older copy used).
-- Assets: every Replace asks first (which file is in use, that it is kept); **Replaced files** lists every
-  kept file with what it was, and Restore makes it that again; removed clips have Restore too.
-- Tests: stability.test.ts; new browser test e2e/new-song-every-platform.e2e.ts (New song through the
-  Library, same file refused, clips, Replace lyrics + Restore, Make Reels/TikTok/Shorts/YouTube/Canvas by
-  the real worker; each video's size, audio and song checked). Its one stand-in is the lyric aligner.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

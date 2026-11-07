@@ -48,7 +48,8 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
   // song without clips yet got the first collection, an empty "Flowers", kept after its clips arrived).
   const recipeCollections = data.chosen;
   const runCollections = from?.collections && !locked("collections") ? from.collections.filter((c) => data.collections.includes(c)) : null;
-  const [collections] = useState<string[]>(runCollections ?? recipeCollections); // the song's (or the run's, "Use these settings"); set in Shape
+  // Derived, not state: the panel stays mounted while hidden, so it must follow a change made in Shape → To make.
+  const collections: string[] = runCollections ?? recipeCollections; // the song's current choice (or the run's, "Use these settings")
   // A run's video counts: one number when they were the same on every platform and differ from the recipe.
   const runVideos = (() => {
     if (!from || locked("variations")) return "";
@@ -78,7 +79,9 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
   const collectionItems = [...data.collections].sort((a, b) => Number(data.chosen.includes(b)) - Number(data.chosen.includes(a)) || a.localeCompare(b)).map((c) => ({ id: c, label: c, note: data.chosen.includes(c) ? "this song's" : undefined }));
   // Section and target length: the run's exact times ("0:34–1:06 (from that run)") until switched back to auto.
   const runSection = from?.section && !locked("section") ? from.section : null;
-  const [section, setSection] = useState(runSection ?? r.section);
+  // Only the user's edit is state; otherwise it follows the song's current section (changed in Shape → Automatic).
+  const [sectionEdit, setSection] = useState<string | null>(null);
+  const section = sectionEdit ?? runSection ?? r.section;
   const [length, setLength] = useState("");
   const [layout, setLayout] = useState(from?.layout && !locked("youtubeLayout") && from.layout !== r.youtubeLayout ? from.layout : "");
   const [shotLength, setShotLength] = useState(""); // "" = from the recipe (per platform where it differs)
