@@ -4,6 +4,22 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Shape timeline: a clock on the playhead and the song's time ✅ (to verify on the Windows PC)
+- Asked by the user (7 Nov 2026): follow where the song is while the preview plays, and compare it with the
+  Lyrics tab and `pnpm lyrics:check-start`, which use song times (the Reel counts from its own start).
+- **Time ruler** above the bars: minutes:seconds in the video (a label every 2 s at 1x, every second at 2x,
+  every half second at 4x, a small tick in between). The bar row keeps its numbers (they are bars, not seconds;
+  its tooltip now says so, each bar with its time).
+- **Playhead bubble:** the playhead carries its time, e.g. `0:28.4 · song 1:02.6`, moving while it plays and
+  when it is dragged or clicked. **Hover** anywhere on the timeline shows that moment's time the same way.
+- **Counter** under the viewer: tenths (`0:28.4 / 1:18`) and `· song 1:02.6` next to it.
+- **Lyric blocks:** the tooltip gives the line's time on screen in the video and in the song.
+- Song time = where the video's audio starts in the song (the storyboard's new `songStartMs`) + the time in
+  the video; a whole-song video shows one clock.
+- Tests: timeline-time.test.ts (labels, tenths, song time with the Let My Love Carry You numbers: Reel 0:30 =
+  line 9 at 1:04.8); storyboard.e2e.ts extended (ruler, bubble, hover, bubble = counter) but not run in the
+  cloud session (the audio analysis's Python crashes there); studio typecheck and production build pass.
+
 ### Bug fix: a held note from the line before no longer hides a stamp in silence ✅ (to verify on the Windows PC)
 - Reported on "Let My Love Carry You", line 9: stamp 1:03.4, voice 1:05.8, recognised words 1:04.8 "Let my love",
   first word 0.1 s: only "flagged for review" (no second signal within 0.3 s). Line 8 (0:58.6, "Till the break of day")
@@ -253,23 +269,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   with 57 px free under the command bar.
 - Tests: storyboard.e2e.ts (viewer fills the free height, room under the command bar, the top line holds summary, hint and
   Next: Make, 1366×768). Its later playback checks run on a 1440×760 window, since the cloud browser has no graphics card.
-
-### Automatic length for Reels, TikTok, Shorts + a clean Reel start ✅ (to verify on the Windows PC)
-- Asked by the user on 2 Nov 2026: a Reel with the 90 s preset came with a remark that 90 s was too
-  short, and there was no way to let the app decide. Also: Familiar Strangers' Reel was "Not ready".
-- **Length: Automatic** (the new default; Shape → Automatic → Length: "Automatic" or "Seconds I choose"):
-  the app ends on the finished phrase nearest the platform's length anywhere in its range (platforms.json
-  length.auto: Reels 0:45-2:00 near 1:30, TikTok 15-45 s near 25 s, Shorts 30-75 s near 50 s; a chorus line
-  first inside +-15%, else the nearer of a shorter or longer finished phrase). The plan and the video say
-  it in plain words ("Length: automatic, 1:48: ends after the chorus line ..."; manifest settings.length),
-  never as a missed target.
-- A typed length is still followed (+-15%, then 25% shorter / 30% longer); when no phrase finishes near
-  it, one plain line says so, with **Use automatic** next to it on the Shape page.
-- **Reel start fix** (Familiar Strangers: "i was never meant to keep." runs straight into the hook, so the
-  start 0.3 s before the hook clipped it): when no bar within one bar of the hook is clean, the start moves
-  back to the bar before that line (at most 2 lines back); the hook comes a little later.
-- Tests: timing-fixes.test.ts (start, Automatic, typed length), platform.test.ts, style.test.ts;
-  e2e style-lock (the Length choice).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

@@ -39,6 +39,7 @@ export type StoryboardView = {
   videos: string[]; // the platform's videos in this plan / run
   settings: string; // "Simple, story, 1x, dissolve as set" etc.
   section: { mode: string; startMs: number; endMs: number; reason: string };
+  songStartMs: number; // where the video's audio starts in the song: a moment in the video is this + its time
   durationMs: number;
   bpm: number;
   bars: number[]; // downbeats, in the video (ms)
@@ -248,6 +249,7 @@ async function view(
   const buckets = Math.max(1, Math.round(durationMs / WAVE_BUCKET_MS));
   return {
     source: c.source, run: c.run, platform: c.platform, video: c.video, videos: c.videos, settings: c.settings, section: c.section,
+    songStartMs: c.startMs,
     durationMs, bpm: c.bpm,
     bars: beats.filter((b) => b.is_downbeat).map((b) => inVideo(b.time_ms)),
     beats: beats.map((b) => inVideo(b.time_ms)),

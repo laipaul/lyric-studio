@@ -16,7 +16,7 @@ import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2
 import { createPortal } from "react-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 
-import { EFFECT_NAMES, effectTitle, followScrollLeft, LyricVideo, patchLook, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
+import { clockTenths, EFFECT_NAMES, effectTitle, followScrollLeft, LyricVideo, playheadLabel, songTimeMs, timeTicks, patchLook, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
 import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node"; // types only (erased): the data comes from /api/songs/[id]/storyboard
 
 import { AssessmentDetails, VERDICT_TEXT } from "@/components/assessment";
@@ -344,6 +344,14 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   const width = view ? Math.ceil((view.durationMs / 1000) * zoom) : 0;
   const x = (ms: number) => (ms / 1000) * zoom;
   const playhead = (frame * 1000) / 30;
+  // The timeline clock: the time in the video and in the song (as the Lyrics tab and check-start show it).
+  const [hoverMs, setHoverMs] = useState<number | null>(null);
+  const ticks = useMemo(() => (view ? timeTicks(view.durationMs, zoom) : []), [view, zoom]);
+  const songStart = view?.songStartMs ?? 0;
+  const both = (ms: number) => {
+    const t = playheadLabel(ms, songStart);
+    return t.song ? `${t.video} · song ${t.song}` : t.video;
+  };
   const barFrames = useMemo(() => (view ? view.bars.map((ms) => Math.round((ms * 30) / 1000)) : []), [view]);
   const shot = view && selected !== null ? view.shots[selected] : null;
   const wide = !!props?.format && props.format.width > props.format.height;
@@ -760,13 +768,27 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
             {/* 2. the soundtrack (bars, waveform, lyric lines) and 3. the shots, then 4. the command bar: measured, the viewer gets the rest */}
             <div ref={belowViewer} className="flex flex-col gap-3" data-below-viewer>
             <div ref={timeline} onScroll={onTimelineScroll} className="overflow-x-auto rounded-lg border" data-storyboard-timeline>
-              <div className="relative" style={{ width: width + 16 }} onClick={(e) => playFrom(((e.clientX - e.currentTarget.getBoundingClientRect().left) / zoom) * 1000)}>
-                <div className="relative h-6 border-b text-[10px]">
+              <div
+                className="relative"
+                style={{ width: width + 16 }}
+                onClick={(e) => playFrom(((e.clientX - e.currentTarget.getBoundingClientRect().left) / zoom) * 1000)}
+                onMouseMove={(e) => setHoverMs(Math.min(view.durationMs, Math.max(0, ((e.clientX - e.currentTarget.getBoundingClientRect().left) / zoom) * 1000)))}
+                onMouseLeave={() => setHoverMs(null)}
+              >
+                {/* 1. the time ruler: minutes:seconds in the video (hover or the playhead bubble adds the song's time) */}
+                <div className="relative h-5 border-b text-[10px]" data-time-ruler title={songStart > 0 ? `Time in the video. Song time = video time + ${clockTenths(songStart)} (where this video starts in the song).` : "Time in the video (= time in the song)."}>
+                  {ticks.map((t) => (
+                    <div key={t.ms} className={cn("absolute bottom-0 border-l", t.label ? "h-full border-white/30" : "h-1.5 border-white/15")} style={{ left: x(t.ms) }} data-time-tick={t.label ?? undefined}>
+                      {t.label ? <span className="text-muted-foreground absolute top-0.5 left-1 tabular-nums">{t.label}</span> : null}
+                    </div>
+                  ))}
+                </div>
+                <div className="relative h-6 border-b text-[10px]" title="bars (the beat grid the cuts follow)">
                   {view.hooks.map((h, i) => (
                     <div key={i} className="bg-brand/15 absolute top-0 bottom-0" style={{ left: x(h.startMs), width: x(h.endMs - h.startMs) }} title="hook (chorus)" data-hook-section />
                   ))}
                   {view.bars.map((b, i) => (
-                    <div key={b} className="text-muted-foreground absolute top-0 h-full border-l border-white/20 pl-0.5" style={{ left: x(b) }} data-bar>
+                    <div key={b} className="text-muted-foreground absolute top-0 h-full border-l border-white/20 pl-0.5" style={{ left: x(b) }} title={`bar ${i + 1} · ${both(b)}`} data-bar>
                       {i + 1}
                     </div>
                   ))}
@@ -833,7 +855,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                         (dropLine !== null && dropLine === l.number) || (cardId !== null && cardId === l.card) ? "ring-brand ring-2" : "",
                       )}
                       style={{ left: x(l.startMs), width: Math.max(4, x(l.endMs - l.startMs) - 2) }}
-                      title={`${l.number ? `line ${l.number}: ` : ""}${l.text} (${clock(l.startMs)}–${clock(l.endMs)})${l.anchor ? ` · ⚓ ${l.anchor}` : ""}${l.slot ? ` · needs a clip (was ${l.slot})` : ""}${l.changed ? " · its own look" : ""}`}
+                      title={`${l.number ? `line ${l.number}: ` : ""}${l.text}\non screen ${clockTenths(l.startMs)}–${clockTenths(l.endMs)} in the video${songStart > 0 ? ` · ${clockTenths(songTimeMs(l.startMs, songStart))}–${clockTenths(songTimeMs(l.endMs, songStart))} in the song` : ""}${l.anchor ? ` · ⚓ ${l.anchor}` : ""}${l.slot ? ` · needs a clip (was ${l.slot})` : ""}${l.changed ? " · its own look" : ""}`}
                     >
                       {l.anchor ? <Anchor className="text-brand mr-0.5 inline size-3" aria-label="anchored" /> : null}
                       {l.slot ? <Anchor className="mr-0.5 inline size-3 text-amber-300" aria-label="slot" /> : null}
@@ -889,14 +911,25 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                     />
                   ))}
                 </div>
-                <div className="pointer-events-none absolute top-0 bottom-0 w-px bg-white" style={{ left: x(playhead) }} data-playhead />
+                {hoverMs !== null && Math.abs(x(hoverMs) - x(playhead)) > 4 ? (
+                  <div className="pointer-events-none absolute top-0 bottom-0 w-px bg-white/30" style={{ left: x(hoverMs) }} data-hover-line>
+                    <span className="bg-background/90 text-muted-foreground absolute top-0 left-1 rounded border px-1 text-[10px] whitespace-nowrap tabular-nums" data-hover-time>
+                      {both(hoverMs)}
+                    </span>
+                  </div>
+                ) : null}
+                <div className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-white" style={{ left: x(playhead) }} data-playhead>
+                  <span className={cn("absolute top-0 rounded bg-white px-1 text-[10px] font-medium whitespace-nowrap text-black tabular-nums", x(playhead) > width - 140 ? "right-1" : "left-1")} data-playhead-time>
+                    {both(playhead)}
+                  </span>
+                </div>
               </div>
             </div>
             {/* 4. one command bar under the timeline: which video, the transport, follow / zoom (the verdict and Next are in the top line) */}
             <div className="bg-card/60 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-2 py-1 text-xs" data-command-bar>
               <div className="flex items-center gap-2">{sourceControls}</div>
               <span className="bg-border hidden h-6 w-px sm:block" />
-              <TransportBar player={player} frame={frame} playing={playing} durationInFrames={props.durationInFrames} barFrames={barFrames} rate={rate} onRate={setRate} loop={loop} onLoop={setLoop} />
+              <TransportBar player={player} frame={frame} playing={playing} songStartMs={songStart} durationInFrames={props.durationInFrames} barFrames={barFrames} rate={rate} onRate={setRate} loop={loop} onLoop={setLoop} />
               <span className="bg-border hidden h-6 w-px sm:block" />
               <div className="flex items-center gap-1 text-xs">
                 <label className="mr-2 flex cursor-pointer items-center gap-1.5" title="While the video plays, the timeline scrolls with the playhead. Scroll by hand to stop it until the next play.">

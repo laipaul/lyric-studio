@@ -127,6 +127,16 @@ async function main() {
     check(summary.includes("Reels v1") && summary.includes("planned now") && summary.includes("120 BPM"), `the summary (${summary})`);
     check(!existsSync(paths.exports) || readdirSync(paths.exports).length === 0, "nothing was rendered or written (no run folder)");
     check((await page.$$("[data-bar]")).length >= 3, "bars on the ruler");
+    // The timeline clock (7 Nov 2026): a minutes:seconds ruler, the playhead's time, the song's time on hover.
+    const tickLabels = await page.$$eval("[data-time-tick]", (els: Element[]) => els.map((e) => e.getAttribute("data-time-tick")));
+    check(tickLabels[0] === "0:00" && tickLabels.length >= 3 && tickLabels.every((t) => /^\d+:\d\d(\.\d)?$/.test(t ?? "")), `the time ruler in minutes:seconds (${tickLabels.slice(0, 4).join(", ")})`);
+    const bubble = ((await page.textContent("[data-playhead-time]")) ?? "").trim();
+    check(/^\d+:\d\d\.\d( · song \d+:\d\d\.\d)?$/.test(bubble), `the playhead shows its time (${bubble})`);
+    const wave = (await (await page.$("[data-waveform]"))!.boundingBox())!;
+    await page.mouse.move(wave.x + 200, wave.y + wave.height / 2);
+    const hover = ((await page.textContent("[data-hover-time]").catch(() => "")) ?? "").trim();
+    check(/^\d+:\d\d\.\d( · song \d+:\d\d\.\d)?$/.test(hover), `hovering the timeline shows that moment's time (${hover})`);
+    await page.mouse.move(0, 0);
     check((await page.$$("[data-waveform] rect")).length > 100, "the waveform");
     check((await page.$$("[data-hook-section]")).length >= 1, "hook sections shaded");
     check(!!(await page.$("[data-story-line='4'][data-anchored='02_b.mp4']")), "line 4 carries its anchor (⚓ 02_b.mp4)");
@@ -159,7 +169,7 @@ async function main() {
     check(!!(await page.$("[data-shot-details] [data-shot-omit]")), "a shot's details offer Omit this clip (the same switch as the clips row)");
     // The transport bar under the viewer: start, back / forward one bar, play / pause, stop, end; keys too.
     check((await page.$$("[data-transport-button]")).length === 9, "the transport bar: start, back, play, stop, forward, end, loop, mute, full screen");
-    check(!!(await page.$("[data-transport-speed]")) && !!(await page.$("[data-transport-volume]")) && /^\d+:\d\d \/ \d+:\d\d$/.test(((await page.textContent("[data-transport-time]")) ?? "").trim()), `…a speed choice, a volume slider and the time (${await page.textContent("[data-transport-time]")})`);
+    check(!!(await page.$("[data-transport-speed]")) && !!(await page.$("[data-transport-volume]")) && /^\d+:\d\d\.\d \/ \d+:\d\d$/.test(((await page.textContent("[data-transport-time]")) ?? "").trim()), `…a speed choice, a volume slider and the time (${await page.textContent("[data-transport-time]")})`);
     const tFrame = async () => Number(await page.getAttribute("[data-transport]", "data-frame"));
     const tWait = (f: number) => page.waitForFunction((n: number) => Number(document.querySelector("[data-transport]")?.getAttribute("data-frame")) === n, f, { timeout: 5000 }).catch(() => {});
     const tLast = Number(await page.getAttribute("[data-transport]", "data-last"));
@@ -237,6 +247,9 @@ async function main() {
     await sleep(1500);
     const left = Number((await page.getAttribute("[data-playhead]", "style"))?.match(/left: ([\d.]+)px/)?.[1] ?? 0);
     check(left > 100, `the preview plays from the clicked point (playhead at ${left} px)`);
+    const bubbleNow = ((await page.textContent("[data-playhead-time]")) ?? "").trim();
+    const counterNow = ((await page.textContent("[data-transport-time]")) ?? "").trim().split(" ")[0];
+    check(bubbleNow.startsWith(counterNow.slice(0, -2)), `the playhead's time follows the counter (${bubbleNow} / ${counterNow})`);
     // Follow playback: off by default; on, the timeline scrolls with the playhead (zoom 4x so it overflows).
     const scrollLeft = () => page.$eval("[data-storyboard-timeline]", (el: Element) => (el as HTMLElement).scrollLeft);
     check(!(await page.isChecked("[data-follow-playback]")), "Follow playback is off by default");

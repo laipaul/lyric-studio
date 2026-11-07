@@ -4,6 +4,23 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Automatic length for Reels, TikTok, Shorts + a clean Reel start ✅ (to verify on the Windows PC)
+- Asked by the user on 2 Nov 2026: a Reel with the 90 s preset came with a remark that 90 s was too
+  short, and there was no way to let the app decide. Also: Familiar Strangers' Reel was "Not ready".
+- **Length: Automatic** (the new default; Shape → Automatic → Length: "Automatic" or "Seconds I choose"):
+  the app ends on the finished phrase nearest the platform's length anywhere in its range (platforms.json
+  length.auto: Reels 0:45-2:00 near 1:30, TikTok 15-45 s near 25 s, Shorts 30-75 s near 50 s; a chorus line
+  first inside +-15%, else the nearer of a shorter or longer finished phrase). The plan and the video say
+  it in plain words ("Length: automatic, 1:48: ends after the chorus line ..."; manifest settings.length),
+  never as a missed target.
+- A typed length is still followed (+-15%, then 25% shorter / 30% longer); when no phrase finishes near
+  it, one plain line says so, with **Use automatic** next to it on the Shape page.
+- **Reel start fix** (Familiar Strangers: "i was never meant to keep." runs straight into the hook, so the
+  start 0.3 s before the hook clipped it): when no bar within one bar of the hook is clean, the start moves
+  back to the bar before that line (at most 2 lines back); the hook comes a little later.
+- Tests: timing-fixes.test.ts (start, Automatic, typed length), platform.test.ts, style.test.ts;
+  e2e style-lock (the Length choice).
+
 ### Song clip order: drag clips into order in Assets ✅ (to verify on the Windows PC)
 - Asked by the user on 2 Nov 2026: upload a batch of clips with any names, then just drag them into order;
   no renaming one by one.

@@ -10,7 +10,7 @@ import type { PlayerRef } from "@remotion/player";
 import { FastForward, Maximize, Pause, Play, Repeat, Rewind, SkipBack, SkipForward, Square, Volume1, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useState, type ReactNode, type RefObject } from "react";
 
-import { stepFrame, stepToBar } from "@lyric/video";
+import { clockTenths, songTimeMs, stepFrame, stepToBar } from "@lyric/video";
 
 const FPS = 30;
 const clock = (frame: number) => {
@@ -20,7 +20,7 @@ const clock = (frame: number) => {
 
 export const SPEEDS = [1, 0.75, 0.5, 0.25] as const;
 
-export function TransportBar({ player, frame, playing, durationInFrames, barFrames, rate, onRate, loop, onLoop }: { player: RefObject<PlayerRef | null>; frame: number; playing: boolean; durationInFrames: number; barFrames: number[]; rate: number; onRate: (r: number) => void; loop: boolean; onLoop: (l: boolean) => void }) {
+export function TransportBar({ player, frame, playing, songStartMs = 0, durationInFrames, barFrames, rate, onRate, loop, onLoop }: { player: RefObject<PlayerRef | null>; frame: number; playing: boolean; songStartMs?: number; durationInFrames: number; barFrames: number[]; rate: number; onRate: (r: number) => void; loop: boolean; onLoop: (l: boolean) => void }) {
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const changeVolume = (v: number) => {
@@ -112,8 +112,13 @@ export function TransportBar({ player, frame, playing, durationInFrames, barFram
         <SkipForward className="size-4" />
       </Btn>
       <span data-transport-time className="ml-2 font-mono text-xs tabular-nums" title="Where the playhead is / the video's length">
-        {clock(frame)} <span className="text-muted-foreground">/ {clock(durationInFrames)}</span>
+        {clockTenths((frame * 1000) / FPS)} <span className="text-muted-foreground">/ {clock(durationInFrames)}</span>
       </span>
+      {songStartMs > 0 ? (
+        <span data-transport-song-time className="text-muted-foreground font-mono text-xs tabular-nums" title="The same moment in the song, as the Lyrics tab and pnpm lyrics:check-start show it">
+          · song {clockTenths(songTimeMs((frame * 1000) / FPS, songStartMs))}
+        </span>
+      ) : null}
       <label className="text-muted-foreground ml-2 flex items-center gap-1 text-xs" title="Play slower to check the lyrics (the preview only)">
         Speed
         <select data-transport-speed value={String(rate)} onChange={(e) => onRate(Number(e.target.value))} className={`bg-background rounded border px-1 py-0.5 text-xs ${rate !== 1 ? "text-brand border-brand/60" : ""}`}>
