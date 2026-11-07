@@ -85,6 +85,16 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   const timeline = useRef<HTMLDivElement>(null);
   const autoScroll = useRef(false); // the next scroll event is ours, not the user's
   const heldByUser = useRef(false);
+  // Follow: half a view of empty space before 0:00 and after the end, so the playhead sits in the middle from
+  // the very first frame to the last (as Pro Tools / Logic), never travelling to the middle first (7 Nov 2026).
+  const [timelineW, setTimelineW] = useState(0);
+  useEffect(() => {
+    const el = timeline.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setTimelineW(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [view]); // the timeline exists once a plan is shown
   const [editing, setEditing] = useState<string | null>(null); // the clip in the clip editor
   const [saving, setSaving] = useState(false);
   const [dropLine, setDropLine] = useState<number | null>(null);
@@ -300,15 +310,29 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
       // not remembered (private window): the toggle still works for this visit
     }
   };
+  const followPad = follow ? Math.round(timelineW / 2) : 0;
+  const frameRef = useRef(frame);
+  useEffect(() => {
+    frameRef.current = frame;
+  }, [frame]);
   // While following and playing: keep the playhead in the middle of the timeline.
   useEffect(() => {
     const el = timeline.current;
     if (!follow || !playing || heldByUser.current || !el) return;
-    const target = followScrollLeft({ scrollLeft: el.scrollLeft, viewWidth: el.clientWidth, contentWidth: el.scrollWidth, playheadX: (frame / 30) * zoom });
+    const target = followScrollLeft({ scrollLeft: el.scrollLeft, viewWidth: el.clientWidth, contentWidth: el.scrollWidth, playheadX: followPad + (frame / 30) * zoom });
     if (target === null) return;
     autoScroll.current = true;
     el.scrollLeft = target;
-  }, [follow, playing, frame, zoom]);
+  }, [follow, playing, frame, zoom, followPad]);
+  // Follow switched on (or the zoom changed): the playhead goes to the middle at once, also while paused.
+  useEffect(() => {
+    const el = timeline.current;
+    if (!follow || !el || !followPad) return;
+    const target = followScrollLeft({ scrollLeft: el.scrollLeft, viewWidth: el.clientWidth, contentWidth: el.scrollWidth, playheadX: followPad + (frameRef.current / 30) * zoom });
+    if (target === null) return;
+    autoScroll.current = true;
+    el.scrollLeft = target;
+  }, [follow, zoom, followPad]);
   const onTimelineScroll = () => {
     if (autoScroll.current) autoScroll.current = false;
     else if (playing) heldByUser.current = true; // the user scrolled: stop following until the next play
@@ -768,6 +792,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
             {/* 2. the soundtrack (bars, waveform, lyric lines) and 3. the shots, then 4. the command bar: measured, the viewer gets the rest */}
             <div ref={belowViewer} className="flex flex-col gap-3" data-below-viewer>
             <div ref={timeline} onScroll={onTimelineScroll} className="overflow-x-auto rounded-lg border" data-storyboard-timeline>
+              <div style={{ width: width + 16 + 2 * followPad, paddingLeft: followPad, paddingRight: followPad }} data-follow-pad={followPad || undefined}>
               <div
                 className="relative"
                 style={{ width: width + 16 }}
@@ -923,6 +948,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                     {both(playhead)}
                   </span>
                 </div>
+              </div>
               </div>
             </div>
             {/* 4. one command bar under the timeline: which video, the transport, follow / zoom (the verdict and Next are in the top line) */}

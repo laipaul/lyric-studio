@@ -16,6 +16,13 @@ describe("follow playback", () => {
   it("jumps back when playback starts again earlier", () => {
     expect(followScrollLeft({ ...view, scrollLeft: 5000, playheadX: 100 })).toBe(0);
   });
+  it("with half a view of space before 0:00 and after the end (the studio's Follow), the playhead is in the middle from the first frame to the last", () => {
+    const pad = view.viewWidth / 2;
+    const padded = { viewWidth: view.viewWidth, contentWidth: view.contentWidth + 2 * pad };
+    expect(followScrollLeft({ ...padded, scrollLeft: 0, playheadX: pad + 0 })).toBeNull(); // at 0:00: already in the middle
+    expect(followScrollLeft({ ...padded, scrollLeft: 0, playheadX: pad + 300 })).toBe(300); // scrolls at once, no travel to the middle
+    expect(followScrollLeft({ ...padded, scrollLeft: 0, playheadX: pad + view.contentWidth })).toBe(view.contentWidth); // the very end, still in the middle
+  });
   it("nothing to do when the whole timeline fits or is already in place", () => {
     expect(followScrollLeft({ viewWidth: 900, contentWidth: 800, scrollLeft: 0, playheadX: 700 })).toBeNull();
     expect(followScrollLeft({ ...view, scrollLeft: 1550.4, playheadX: 2000 })).toBeNull();
