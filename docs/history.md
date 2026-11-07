@@ -4,6 +4,27 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Theme Engine v2 on HyperFrames, step 0: "break." fixed in the spike ✅ (confirmed on the Windows PC, 6 Nov 2026)
+- **Confirmed by the user on "Here with Me"** (the planner's own section, both formats): 35 of 35 words land on
+  exactly their sung frame (timeline mean and worst 0 ms), the pixels confirm all 35; "break." (sung at 19.700 s,
+  frame 591) lands on frame 591 in the timeline and is brightest on frame 591 in the pixels, 16:9 and 9:16.
+- Plan approved (6 Nov 2026) with four changes, all in docs/theme-engine-v2-hyperframes-plan.md: the first release
+  milestone M1 (the Reel word-by-word theme for real releases right after steps 0-2, step 2 split into 2a picture
+  and 2b the theme's text), D1 = everything in one only if within ~20% of lyrics-only speed AND clips frame-accurate
+  in the browser, an LGPL FFmpeg with NVENC timed in step 1, GSAP / FFmpeg licences non-blocking (a note before
+  step 8).
+- **Cause found:** the spike chose its own section start (one bar before the hook, as a fixed section), so a line
+  could already be sung when the segment starts; the sync check then found the word's spot already lit when its
+  ±200 ms window opened and reported exactly -200 ms. Reproduced on the cloud fixture (a section starting inside
+  "Whisper my name in the dark": the old spike gives "dark" -200 ms, flagged early).
+- **Fixed (spikes/hyperframes only):** the section is now the planner's own Reel section aimed at ~30 s (never
+  starting inside a sung line; `--section` forces a fixed one); a line already on screen at frame 0 is drawn
+  settled (words sung before the start shown, no fade-in); the sync check takes each word's landing frame from
+  the theme's own timeline (exact) and uses the pixels to confirm it (a spot lit by something else = "not
+  measurable", never early or late); `--trace "word"` prints a word frame by frame.
+- Cloud fixture after the fix: the same mid-line section: "dark" 0 ms, 27 of 27 words confirmed by the pixels;
+  the planner's section (0:07.8-0:39.1): 42 words, every one on its own frame, pixels agree, in both formats.
+
 ### Theme Engine v2, step 1: HyperFrames spike — ADOPTED ✅ (6 Nov 2026; code in spikes/hyperframes only)
 - **Decision (the user, 6 Nov 2026): HyperFrames is adopted as the lyric renderer.** Results on the user's PC
   (Windows, RTX 5060, 32 GB), "Here with Me", first chorus: **9:16 72.3 s vs 81.3 s with Remotion** (the same

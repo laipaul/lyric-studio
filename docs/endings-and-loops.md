@@ -17,3 +17,4 @@ ending in a comma, dash, colon or "and/but/or", and inside a chorus only after i
 every occurrence of the most repeated block that holds a hook line, not only the marked line). The length
 tiers stay: in the window, else up to 25% shorter, else up to 30% longer. Only when no finished phrase is in
 reach at all does any clean line end count.
+- **Soundtrack window (7 Nov 2026):** on the Shape page the user can drag the part of the song a video uses on the whole song: the start snaps to a bar, the end to the first bar after a sung line (src/section-window.ts cleanEnds / snapWindow), else a bar; saved as that platform's fixed section in song.json (perPlatform "section"), "Automatic" sets it back to auto. A fixed section is used exactly as given (start snapped to the nearest bar), as with "Part of the song".

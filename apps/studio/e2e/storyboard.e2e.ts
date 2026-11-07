@@ -402,6 +402,24 @@ async function main() {
     check((clipsJson().cuts ?? []).length === 0, `"Automatic cuts and clip start" on shot 2 puts its cut back (${JSON.stringify(clipsJson().cuts)})`);
     await page.click("[data-panel-close]").catch(() => {});
     writeFileSync(path.join(paths.root, "clips.json"), JSON.stringify({ ...clipsJson(), cuts: [], slips: [] }));
+    // The soundtrack window (7 Nov 2026): the whole song with the Reel as a window; dragging its end edge sets this
+    // platform's part of the song in song.json (on a bar / after a sung line); "Automatic" gives it back to the app.
+    check(!!(await page.$("[data-soundtrack-track]")) && /Reels: 0:\d\d\.\d – 0:\d\d\.\d/.test((await page.textContent("[data-soundtrack-range]")) ?? ""), `the whole song is shown with the Reel as a window (${await page.textContent("[data-soundtrack-range]")})`);
+    const endEdge = (await (await page.$("[data-soundtrack-edge='end']"))!.boundingBox())!;
+    await page.mouse.move(endEdge.x + endEdge.width / 2, endEdge.y + endEdge.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(endEdge.x + endEdge.width / 2 - 60, endEdge.y + endEdge.height / 2, { steps: 5 });
+    await page.mouse.move(endEdge.x + endEdge.width / 2 - 120, endEdge.y + endEdge.height / 2, { steps: 5 });
+    const dragRange = ((await page.textContent("[data-soundtrack-range]")) ?? "").trim();
+    check(/ends after a sung line|on the bar/.test(dragRange), `dragging the window's end shows where it lands (${dragRange})`);
+    await page.mouse.up();
+    await replanned();
+    const sectionNow = (JSON.parse(readFileSync(paths.recipe!, "utf8")).perPlatform?.reels?.section ?? "") as string;
+    check(/^\d+:\d\d\.\d\d-\d+:\d\d\.\d\d$/.test(sectionNow), `this platform's part of the song is kept in song.json (${sectionNow})`);
+    check(((await page.textContent("[data-soundtrack-range]")) ?? "").includes("chosen by you"), "the window says it was chosen by you");
+    await page.click("[data-soundtrack-auto]");
+    await replanned();
+    check((JSON.parse(readFileSync(paths.recipe!, "utf8")).perPlatform?.reels?.section ?? "auto") === "auto", "Automatic gives the part of the song back to the app");
     await openPanel(page, "clips"); // the next checks drag from the clips strip
     // Drag a clip onto a lyric line: an anchor.
     await page.dragAndDrop("[data-story-clip='04_d.mp4']", "[data-story-line='3']");

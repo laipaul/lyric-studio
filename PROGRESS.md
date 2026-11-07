@@ -4,6 +4,26 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Shape: the whole song as the soundtrack, the video as a window on it ✅ (to verify on the Windows PC)
+- Asked by the user (7 Nov 2026): keep the whole song untouched in the background and pick which part the video
+  uses, like trimming the music in Canva, without resizing the song for every Reel or YouTube video.
+- **Soundtrack track** above the timeline: the WHOLE song's waveform with its sung lines (choruses in the brand
+  colour) and the video as a window; outside it dimmed; a white line where the preview is in the song.
+- **Drag the window** to move it (same length), **its edges** to set where the video starts and ends. The start
+  snaps to a bar, the end to the first bar after a sung line (a clean end) within 1.5 s, else to a bar; Alt: exactly
+  there; never under 3 s. While dragging: "0:02.2 – 0:08.2 · 6.0 s · line 2 · ends after a sung line", and a warning
+  when the window would cut a line while it is sung.
+- **Saved per platform** in song.json perPlatform "section" (the same as Make → "Part of the song", and what the
+  Lyrics tab band shows), so the Reel, TikTok, Shorts and YouTube each keep their own part; **Automatic** gives it
+  back to the app. The song file is never changed: each video takes its part of it, with fades only where the music
+  is cut. Your cut moves and slips live on the song's timeline, so they stay at the same musical moments when the
+  window moves.
+- Kept compact (one 28 px row) so the viewer keeps its size (543 px on 1440×1000, 311 px on 1366×768).
+- Tests: section-window.test.ts (clean ends, snapping, minimum, song.json text, lines cut); storyboard.e2e.ts (the
+  window is shown, dragging its end saves this platform's part in song.json, "chosen by you", Automatic): run in
+  the cloud session, all 113 checks pass.
+- Next (asked with it): drag a clip onto another shot to swap them on the timeline.
+
 ### Shape timeline: trim the first and last clip, the clip in the viewer while editing ✅ (to verify on the Windows PC)
 - Asked by the user (7 Nov 2026): "I can't trim the first clip from the left-hand side and the last clip from the
   right-hand side", and "when I select the clip I expect to see it in the viewer".
@@ -255,27 +275,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - `pnpm hf:measure "<song folder>" [--lgpl "<ffmpeg folder>"]` writes a report (times, frame accuracy, NVENC vs
   x264 quality at the same bitrate, the LGPL build's licence line) to `workspace\cache\hf-measure\<song>\<time>\`.
 - Tests: hf-compile, hf-network, textboard-make (fallback with its reason); video package 934 pass.
-
-### Theme Engine v2 on HyperFrames, step 0: "break." fixed in the spike ✅ (confirmed on the Windows PC, 6 Nov 2026)
-- **Confirmed by the user on "Here with Me"** (the planner's own section, both formats): 35 of 35 words land on
-  exactly their sung frame (timeline mean and worst 0 ms), the pixels confirm all 35; "break." (sung at 19.700 s,
-  frame 591) lands on frame 591 in the timeline and is brightest on frame 591 in the pixels, 16:9 and 9:16.
-- Plan approved (6 Nov 2026) with four changes, all in docs/theme-engine-v2-hyperframes-plan.md: the first release
-  milestone M1 (the Reel word-by-word theme for real releases right after steps 0-2, step 2 split into 2a picture
-  and 2b the theme's text), D1 = everything in one only if within ~20% of lyrics-only speed AND clips frame-accurate
-  in the browser, an LGPL FFmpeg with NVENC timed in step 1, GSAP / FFmpeg licences non-blocking (a note before
-  step 8).
-- **Cause found:** the spike chose its own section start (one bar before the hook, as a fixed section), so a line
-  could already be sung when the segment starts; the sync check then found the word's spot already lit when its
-  ±200 ms window opened and reported exactly -200 ms. Reproduced on the cloud fixture (a section starting inside
-  "Whisper my name in the dark": the old spike gives "dark" -200 ms, flagged early).
-- **Fixed (spikes/hyperframes only):** the section is now the planner's own Reel section aimed at ~30 s (never
-  starting inside a sung line; `--section` forces a fixed one); a line already on screen at frame 0 is drawn
-  settled (words sung before the start shown, no fade-in); the sync check takes each word's landing frame from
-  the theme's own timeline (exact) and uses the pixels to confirm it (a spot lit by something else = "not
-  measurable", never early or late); `--trace "word"` prints a word frame by frame.
-- Cloud fixture after the fix: the same mid-line section: "dark" 0 ms, 27 of 27 words confirmed by the pixels;
-  the planner's section (0:07.8-0:39.1): 42 words, every one on its own frame, pixels agree, in both formats.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

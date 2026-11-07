@@ -18,6 +18,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 
 import { clockTenths, type TimelineEdits, EFFECT_NAMES, effectTitle, followScrollLeft, LyricVideo, playheadLabel, songTimeMs, timeTicks, patchLook, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
 import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node";
+import { SoundtrackWindow } from "./soundtrack-window";
 import { useTimelineEditing, ViewerFrame } from "./timeline-editing"; // types only (erased): the data comes from /api/songs/[id]/storyboard
 
 import { AssessmentDetails, VERDICT_TEXT } from "@/components/assessment";
@@ -221,6 +222,23 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   }
 
   // One storyboard edit (story order, clip edit, anchor), then the plan again.
+  // The soundtrack window: this platform's part of the song (song.json perPlatform "section"), then plan again.
+  async function setSection(section: string) {
+    if (!source || source.kind !== "plan" || !view) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const r = await api(`/api/songs/${projectId}/recipe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "set", field: "section", platform: view.platform.name, value: section }) });
+      const d = (await r.json()) as { error?: string };
+      if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
+      await show(source, true);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function edit(body: Record<string, unknown>) {
     if (!source || source.kind !== "plan") return null;
     setSaving(true);
@@ -817,6 +835,18 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
           <>
             {/* 2. the soundtrack (bars, waveform, lyric lines) and 3. the shots, then 4. the command bar: measured, the viewer gets the rest */}
             <div ref={belowViewer} className="flex flex-col gap-3" data-below-viewer>
+            {view.song ? (
+              <SoundtrackWindow
+                song={view.song}
+                window={{ startMs: view.songStartMs, endMs: view.songStartMs + view.durationMs }}
+                playheadSongMs={view.songStartMs + playhead}
+                platformLabel={view.platform.label}
+                editable={view.editable && source?.kind === "plan"}
+                busy={saving || loading}
+                onSet={(section) => void setSection(section)}
+                onAutomatic={() => void setSection("auto")}
+              />
+            ) : null}
             <div ref={timeline} onScroll={onTimelineScroll} className="overflow-x-auto rounded-lg border" data-storyboard-timeline>
               <div style={{ width: width + 16 + 2 * followPad, paddingLeft: followPad, paddingRight: followPad }} data-follow-pad={followPad || undefined}>
               <div

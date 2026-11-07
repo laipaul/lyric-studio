@@ -18,6 +18,7 @@ import type { LyricVideoProps } from "../props";
 import { clockText } from "../section";
 import { clipEdit, hookSections, peaks, storyLines, storyShots, storyTitleCards, type StoryClip, type StoryLine, type StoryShot } from "../storyboard";
 import type { TimelineEdits } from "../timeline-edits";
+import { cleanEnds } from "../section-window";
 import { analyzeSong } from "./analysis";
 import { readLoopAudio } from "./audio-check";
 import { bestMoments } from "./best-moment";
@@ -42,6 +43,8 @@ export type StoryboardView = {
   section: { mode: string; startMs: number; endMs: number; reason: string };
   songStartMs: number; // where the video's audio starts in the song: a moment in the video is this + its time
   timeline: TimelineEdits; // the song's rolls and slips (clips.json), song time: the Shape timeline marks them
+  // The whole song as the soundtrack track, with this video as a window on it (plans only; null for a past run).
+  song: SongOverview | null;
   durationMs: number;
   bpm: number;
   bars: number[]; // downbeats, in the video (ms)
@@ -68,6 +71,19 @@ export type StoryboardView = {
   slots: { line: number; text: string; clip: string }[]; // lines that need a clip (picture swap)
   picture: string | null; // the clip set planned ("city"; null: the recipe's)
   props: Omit<LyricVideoProps, "mediaBaseUrl">; // for the preview (served by the storyboard's media route)
+};
+
+// The whole song for the soundtrack window (src/section-window.ts): song times.
+export type SongOverview = {
+  durationMs: number;
+  bucketMs: number;
+  peaks: number[];
+  downbeats: number[];
+  lines: { number: number; text: string; isHook: boolean; startMs: number; sungEndMs: number | null }[];
+  cleanEnds: number[]; // the first bar after each line is sung
+  own: boolean; // this platform's section was chosen for the song (song.json), not the app's automatic one
+  locked: boolean; // the section is locked in song.json
+  automatic: { startMs: number; endMs: number } | null; // where the app would put it (only when own)
 };
 
 export type StoryboardClip = {
@@ -174,6 +190,7 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
     bestS: c.bestMs === null ? null : c.bestMs / 1000, bestFrom: c.bestFrom, autoBestS: c.kind === "video" ? (auto.get(absPath(ws, c.path)) ?? null) : null,
     shots: v.props.shots.filter((s) => s.src === c.path).length,
   }));
+  const overview = await songOverview(ws, projectId, p.name, paths.audio, plan.analysis, plan.lines);
   return withTimeline(ws, projectId, await view(ws, {
     editable: !paths.legacy, storyboardClips, slots: plan.slots, picture: clipSet ?? null,
     source: "plan", run: null, platform: { name: p.name, label: p.label }, video: v.spec.name, videos: plan.videos.map((x) => x.spec.name),
@@ -182,7 +199,7 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
     props: v.props, startMs, bpm: plan.analysis.bpm, beats: plan.analysis.beats, clips, numbered, anchors: v.anchors, anchorsOutside: plan.anchorsOutside, notes,
     loop: v.loop, loopSuggestions: plan.loopSuggestions ?? [], decisions: v.decisions,
     songFile: paths.audio,
-  }));
+  }), overview);
 }
 
 // A past run's video: its manifest (exactly what was rendered).
@@ -231,9 +248,39 @@ function settingsText(spec: { style: string; order: string; rate?: string; trans
 }
 
 // The song's rolls and slips with the view (they live on the song's timeline, in clips.json).
-function withTimeline(ws: Workspace, projectId: string, v: Omit<StoryboardView, "timeline">): StoryboardView {
+function withTimeline(ws: Workspace, projectId: string, v: Omit<StoryboardView, "timeline" | "song">, song: SongOverview | null = null): StoryboardView {
   const edits = readClipEdits(songPathsById(ws, projectId).root);
-  return { ...v, timeline: { cuts: edits.cuts ?? [], slips: edits.slips ?? [] } };
+  return { ...v, timeline: { cuts: edits.cuts ?? [], slips: edits.slips ?? [] }, song };
+}
+
+// The whole song for the soundtrack window: its waveform, bars, lines and clean ends, and whose the section is.
+async function songOverview(
+  ws: Workspace,
+  projectId: string,
+  platform: string,
+  songFile: string,
+  analysis: { duration_ms: number; beats: { time_ms: number; is_downbeat: boolean }[] },
+  lines: { number: number; text: string; isHook: boolean; start_ms: number; sung_end_ms: number | null }[],
+): Promise<SongOverview> {
+  const durationMs = analysis.duration_ms;
+  const buckets = Math.max(1, Math.min(1500, Math.round(durationMs / 200)));
+  const wave = await songPeaks(ws, songFile);
+  const downbeats = analysis.beats.filter((b) => b.is_downbeat).map((b) => b.time_ms);
+  const songLines = lines.map((l) => ({ number: l.number, text: l.text, isHook: l.isHook, startMs: l.start_ms, sungEndMs: l.sung_end_ms }));
+  const r = resolveRecipe(recipeInputFor(ws, projectId).input, platform);
+  const source = r.sources.section ?? "library";
+  const own = (source.startsWith("song") || source === "run") && r.values.section !== "auto";
+  return {
+    durationMs,
+    bucketMs: durationMs / buckets,
+    peaks: wave ? peaks(wave.samples, wave.rate, 0, durationMs, buckets) : [],
+    downbeats,
+    lines: songLines,
+    cleanEnds: cleanEnds(songLines, downbeats),
+    own,
+    locked: r.locked.includes("section"),
+    automatic: null,
+  };
 }
 
 async function view(
@@ -246,7 +293,7 @@ async function view(
     loop: LoopResult | null; loopSuggestions: LoopSuggestion[]; decisions: string[]; editable: boolean; storyboardClips: StoryboardClip[];
     slots: StoryboardView["slots"]; picture: string | null;
   },
-): Promise<Omit<StoryboardView, "timeline">> {
+): Promise<Omit<StoryboardView, "timeline" | "song">> {
   const durationMs = frameMs(c.props.durationInFrames);
   const inVideo = (t: number) => t - c.startMs;
   const beats = c.beats.filter((b) => inVideo(b.time_ms) >= 0 && inVideo(b.time_ms) <= durationMs);
