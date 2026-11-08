@@ -219,10 +219,37 @@ describe("title opening: the first lyric comes within 2.5 s", () => {
 
   it("the line sits on the title: it is shown alone for the lead-in and a note names the creative fix", () => {
     const first = lay(300, null).cards.find((c) => c.id === "title")!;
-    const onTitle = { left: 0, right: 1080, top: (first.centerY ?? first.top ?? 500) - 100, bottom: (first.centerY ?? first.top ?? 500) + 300 };
+    const onTitle = { left: 0, right: 1080, top: 280, bottom: (first.centerY ?? first.top ?? 500) + 300 }; // from the top of the safe area: no room above
     const out = lay(15, onTitle);
     expect(end(out, "title")).toBe(15);
     expect(out.notes.some((n) => n.startsWith("No room for the title before the first line") && n.includes("2 bars earlier") && n.includes("Automatic"))).toBe(true);
+  });
+
+  it("the line sits on the title with room above it: the title moves up above the line and stays 2.5 s, no note", () => {
+    const line = { left: 100, right: 980, top: 600, bottom: 900 }; // two lines on the upper third's place
+    const before = lay(300, null).cards.find((c) => c.id === "title")!;
+    const out = lay(15, line);
+    expect(out.notes).toEqual([]);
+    for (const id of ["title", "byline"]) expect(end(out, id)).toBeGreaterThanOrEqual(75);
+    const blocks = cardBlocks(out.cards, format, cardMeasure(catalog, out.cards));
+    const tb = blocks.find((b) => b.ids.includes("title"))!;
+    expect(tb.box.bottom).toBeLessThan(line.top);
+    expect(tb.box.top).toBeGreaterThanOrEqual(format.height * safeZone.top - 1);
+    expect(out.cards.find((c) => c.id === "title")!.top).toBeLessThan((before.centerY ?? 640) - 20);
+    expect(end(out, "tagline")).toBeGreaterThanOrEqual(75);
+    // QA: the moved block is clear of the first line.
+    const qa = runQa({ props: { shots: [], lyrics: [], cinematicBars: false, durationInFrames: 900 }, shotClips: [], poolSize: 0, frames: { black: [], frozen: [] }, lyrics: [{ number: 1, text: "x", confidence: null, lines: 2, box: line }], titleCards: { blocks, firstLyricFrame: 15, missing: [], grid: null } } as never);
+    expect(qa.checks.find((c) => c.name === "Title cards clear of the first lyric")?.ok).toBe(true);
+  });
+
+  it("the line sits on the tagline: the tagline moves down below it", () => {
+    const line = { left: 100, right: 980, top: 1090, bottom: 1130 };
+    const out = lay(15, line);
+    expect(out.notes).toEqual([]);
+    expect(end(out, "tagline")).toBeGreaterThanOrEqual(75);
+    const tag = cardBlocks(out.cards, format, cardMeasure(catalog, out.cards)).find((b) => b.ids.includes("tagline"))!;
+    expect(tag.box.top).toBeGreaterThan(line.bottom);
+    expect(tag.box.bottom).toBeLessThanOrEqual(format.height * (1 - safeZone.bottom));
   });
 
   it("a lead-in of 2.5 s or more is unchanged (gone as the line fades in)", () => {

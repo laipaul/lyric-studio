@@ -34,7 +34,7 @@ import {
   type Textboard,
   type TextTemplate,
 } from "../textboard";
-import { cardBlocks, fitCardBlocks, type CardMeasure } from "../card-layout";
+import { CARD_MIN_SCALE, cardBlocks, fitCardBlocks, gridCrop, type CardMeasure } from "../card-layout";
 import { fontFileRefs, forText, loadFontCatalog, resolveFace, resolveFont, type FontCatalog } from "./font-catalog";
 import { faceMeasure } from "./measure";
 import { loadBrand } from "./brand";
@@ -350,12 +350,56 @@ export function titleCards(
     const lyric = open.lyricBox ?? null;
     const blocks = cardBlocks(fitted, o.format, measure as never);
     const keep = new Set<string>();
+    // Where a touching block can go instead, inside the platform's safe area (and the profile grid's 3:4 crop
+    // when the block fits there): the title moves up above the line, the tagline down below it, shrinking
+    // by up to 25% when needed (as fitCardBlocks does), clear of the line and of the other block.
+    const safe = o.fit?.safeZone;
+    const grid = o.format.height > o.format.width ? gridCrop(o.format) : null;
+    const gap = Math.round(o.format.height * 0.012);
+    const overlaps = (a: { left: number; top: number; right: number; bottom: number }, b: { left: number; top: number; right: number; bottom: number }, m = 0) =>
+      a.left < b.right + m && a.right > b.left - m && a.top < b.bottom + m && a.bottom > b.top - m;
+    const moved = new Map<string, Partial<TextCardProps>>();
+    const placed = blocks.map((b) => ({ ids: b.ids, box: b.box }));
+    const relocate = (b: (typeof blocks)[number], dir: "up" | "down") => {
+      if (!lyric || !safe) return false;
+      const safeTop = o.format.height * safe.top;
+      const safeBottom = o.format.height * (1 - safe.bottom);
+      const parts = fitted.filter((c) => b.ids.includes(c.id));
+      for (let scale = 1; scale >= CARD_MIN_SCALE - 1e-9; scale -= 0.05) {
+        const sized = parts.map((c) => ({ ...c, size: Math.max(1, Math.round(c.size * scale)), centerY: undefined, top: 0 }));
+        const probe = cardBlocks(sized, o.format, measure as never)[0];
+        const h = probe.box.bottom - probe.box.top;
+        const gridFits = grid && Math.min(safeBottom, grid.bottom) - Math.max(safeTop, grid.top) >= h;
+        const lo = Math.ceil(gridFits ? Math.max(safeTop, grid!.top) : safeTop);
+        const hi = Math.floor((gridFits ? Math.min(safeBottom, grid!.bottom) : safeBottom) - h);
+        const top = dir === "up" ? Math.round(lyric.top - gap - h) : Math.round(lyric.bottom + gap);
+        if (top < lo || top > hi) continue;
+        const box = { left: probe.box.left, right: probe.box.right, top, bottom: top + h };
+        if (overlaps(box, lyric, gap) || placed.some((p) => p.ids !== b.ids && overlaps(box, p.box, gap))) continue;
+        const rootId = b.ids[0];
+        parts.forEach((c) => {
+          const size = Math.max(1, Math.round(c.size * scale));
+          moved.set(c.id, c.id === rootId ? { size, top, centerY: undefined } : { size });
+        });
+        const at = placed.find((p) => p.ids === b.ids)!;
+        at.box = box;
+        return true;
+      }
+      return false;
+    };
     for (const b of blocks) {
-      const touches = !lyric || (b.box.left < lyric.right && b.box.right > lyric.left && b.box.top < lyric.bottom && b.box.bottom > lyric.top);
-      if (!touches) b.ids.forEach((id) => keep.add(id));
-      else notes.push(`No room for the ${b.ids.includes("title") ? "title" : "tagline"} before the first line: start the Reel's part of the song about 2 bars earlier (drag the pink window's start on the song track) or let the app choose it (Automatic).`);
+      const touches = !lyric || overlaps(b.box, lyric);
+      const isTitle = b.ids.includes("title");
+      if (!touches || relocate(b, isTitle ? "up" : "down")) b.ids.forEach((id) => keep.add(id));
+      else notes.push(`No room for the ${isTitle ? "title" : "tagline"} before the first line: start the Reel's part of the song about 2 bars earlier (drag the pink window's start on the song track) or let the app choose it (Automatic).`);
     }
-    const cards2 = fitted.map((c) => (keep.has(c.id) ? { ...c, endFrame: Math.max(c.endFrame, minFrame) } : c));
+    const cards2 = fitted.map((c) => {
+      if (!keep.has(c.id)) return c;
+      const m = moved.get(c.id);
+      const base = m ? ({ ...c, ...m } as TextCardProps) : c;
+      if (m && "centerY" in m) delete (base as { centerY?: number }).centerY;
+      return { ...base, endFrame: Math.max(c.endFrame, minFrame) };
+    });
     return { cards: cards2, fonts, warnings, notes };
   }
   return { cards: fitted, fonts, warnings, notes };

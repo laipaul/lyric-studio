@@ -4,6 +4,13 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Bug fix: the Reel's title moves up instead of flashing when the first line starts at once ✅ (to verify on the Windows PC)
+- Seen (Let My Love Carry You, Reel 1080x1920, Title opening on, part of the song starting on the first sung line, on screen from ~0:00.6): the tagline stayed 2.5 s, but the title and byline "Life Lyrics" (upper third, centred ~y 640) touch the first lyric line's box (two lines, centred ~y 758), so they showed only the 0.6 s lead-in and a note asked to move the song part: "too short".
+- Cause: the last fix only chose between "stay 2.5 s" and "shorten to the lead-in" for the block on its default place. Where the block sits is the app's job, not the user's: other places in the safe area were never tried.
+- Fix (automatic, no setting; src/node/textboard.ts titleCards): a block that touches the first line's box (same measuring as the last fix) is first moved inside the platform's safe area (and the profile grid's 3:4 crop when it fits): the title + byline UP above the line, the tagline DOWN below it, with a margin and clear of the other block; if that does not fit it shrinks step by step by up to 25% (CARD_MIN_SCALE, as fitCardBlocks). A clear place = the block stays its full 2.5 s, no note, QA "Title cards clear of the first lyric" passes. Only with no clear place: the lead-in only + the plain-words note, as before. Same props for Shape and render. YouTube and the auto section with a full lead-in are unchanged.
+- Tests: test/title-opening.test.ts 18 (2 new: title moves above the line and lasts 2.5 s with QA ok, tagline moves below the line; the "line on the title" test now has the line from the top of the safe area = no room = lead-in + note); the 6 files (title-opening, textboard, qa, storyboard, extra-cards, textboard-make) 55 pass; tsc clean (packages/video, apps/studio).
+- To check: `cd D:\videomaker`, `git pull`, Shape → Reels, play from 0:00: the title and byline stay about 2.5 s near the top, the first lyric line below them.
+
 ### Review: no line across the video in the browser's player ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - Found by the user (8 Nov 2026): a thin horizontal line across the Reel in Review (not in Shape). The MP4 itself is
   clean (checked by the user in Media Player): it is the top edge of the dark band Chrome / Edge draw behind their own
@@ -182,26 +189,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   storyboard.e2e.ts (scrolled away + paused: ⏮, ⏭ and Home bring the playhead into view with Follow off, a small jump
   does not scroll; Follow on: ⏮ and ⏭ put it in the middle within 4 px): run in the cloud session, all 121 checks
   pass; follow.test.ts 10 pass.
-
-### Shape: the whole song as the soundtrack, the video as a window on it ✅ (confirmed on the Windows PC, 8 Nov 2026, in its new place on the song track)
-- Asked by the user (7 Nov 2026): keep the whole song untouched in the background and pick which part the video
-  uses, like trimming the music in Canva, without resizing the song for every Reel or YouTube video.
-- **Soundtrack track** above the timeline: the WHOLE song's waveform with its sung lines (choruses in the brand
-  colour) and the video as a window; outside it dimmed; a white line where the preview is in the song.
-- **Drag the window** to move it (same length), **its edges** to set where the video starts and ends. The start
-  snaps to a bar, the end to the first bar after a sung line (a clean end) within 1.5 s, else to a bar; Alt: exactly
-  there; never under 3 s. While dragging: "0:02.2 – 0:08.2 · 6.0 s · line 2 · ends after a sung line", and a warning
-  when the window would cut a line while it is sung.
-- **Saved per platform** in song.json perPlatform "section" (the same as Make → "Part of the song", and what the
-  Lyrics tab band shows), so the Reel, TikTok, Shorts and YouTube each keep their own part; **Automatic** gives it
-  back to the app. The song file is never changed: each video takes its part of it, with fades only where the music
-  is cut. Your cut moves and slips live on the song's timeline, so they stay at the same musical moments when the
-  window moves.
-- Kept compact (one 28 px row) so the viewer keeps its size (543 px on 1440×1000, 311 px on 1366×768).
-- Tests: section-window.test.ts (clean ends, snapping, minimum, song.json text, lines cut); storyboard.e2e.ts (the
-  window is shown, dragging its end saves this platform's part in song.json, "chosen by you", Automatic): run in
-  the cloud session, all 113 checks pass.
-- Next (asked with it): drag a clip onto another shot to swap them on the timeline (done 8 Nov 2026: lift and swap).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

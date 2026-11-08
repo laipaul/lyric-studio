@@ -4,6 +4,26 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Shape: the whole song as the soundtrack, the video as a window on it ✅ (confirmed on the Windows PC, 8 Nov 2026, in its new place on the song track)
+- Asked by the user (7 Nov 2026): keep the whole song untouched in the background and pick which part the video
+  uses, like trimming the music in Canva, without resizing the song for every Reel or YouTube video.
+- **Soundtrack track** above the timeline: the WHOLE song's waveform with its sung lines (choruses in the brand
+  colour) and the video as a window; outside it dimmed; a white line where the preview is in the song.
+- **Drag the window** to move it (same length), **its edges** to set where the video starts and ends. The start
+  snaps to a bar, the end to the first bar after a sung line (a clean end) within 1.5 s, else to a bar; Alt: exactly
+  there; never under 3 s. While dragging: "0:02.2 – 0:08.2 · 6.0 s · line 2 · ends after a sung line", and a warning
+  when the window would cut a line while it is sung.
+- **Saved per platform** in song.json perPlatform "section" (the same as Make → "Part of the song", and what the
+  Lyrics tab band shows), so the Reel, TikTok, Shorts and YouTube each keep their own part; **Automatic** gives it
+  back to the app. The song file is never changed: each video takes its part of it, with fades only where the music
+  is cut. Your cut moves and slips live on the song's timeline, so they stay at the same musical moments when the
+  window moves.
+- Kept compact (one 28 px row) so the viewer keeps its size (543 px on 1440×1000, 311 px on 1366×768).
+- Tests: section-window.test.ts (clean ends, snapping, minimum, song.json text, lines cut); storyboard.e2e.ts (the
+  window is shown, dragging its end saves this platform's part in song.json, "chosen by you", Automatic): run in
+  the cloud session, all 113 checks pass.
+- Next (asked with it): drag a clip onto another shot to swap them on the timeline (done 8 Nov 2026: lift and swap).
+
 ### Shape timeline: trim the first and last clip, the clip in the viewer while editing ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - Asked by the user (7 Nov 2026): "I can't trim the first clip from the left-hand side and the last clip from the
   right-hand side", and "when I select the clip I expect to see it in the viewer".
