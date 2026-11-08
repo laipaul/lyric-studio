@@ -893,20 +893,20 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                 onMouseMove={(e) => setHoverMs(Math.min(view.durationMs, Math.max(0, ((e.clientX - e.currentTarget.getBoundingClientRect().left) / zoom) * 1000)))}
                 onMouseLeave={() => setHoverMs(null)}
               >
-                {/* 1. the time ruler: minutes:seconds in the video (hover or the playhead bubble adds the song's time) */}
-                <div className="relative h-4 border-b text-[10px] leading-none" data-time-ruler title={songStart > 0 ? `Time in the video. Song time = video time + ${clockTenths(songStart)} (where this video starts in the song).` : "Time in the video (= time in the song)."}>
+                {/* 1. the ruler (one line since 8 Nov 2026, asked by the user): minutes:seconds in the video at the top
+                    (hover or the playhead bubble adds the song's time), the bars (the beat grid the cuts follow) as small pink
+                    numbers on their own ticks at the bottom, the hook sections (choruses) shaded behind */}
+                <div className="relative h-5 border-b text-[10px] leading-none" data-time-ruler title={`Time in the video${songStart > 0 ? ` (song time = video time + ${clockTenths(songStart)}, where this video starts in the song)` : " (= time in the song)"}; pink numbers: the bars (the beat grid the cuts follow).`}>
+                  {view.hooks.map((h, i) => (
+                    <div key={`h${i}`} className="bg-brand/15 absolute top-0 bottom-0" style={{ left: x(h.startMs), width: x(h.endMs - h.startMs) }} title="hook (chorus)" data-hook-section />
+                  ))}
                   {ticks.map((t) => (
-                    <div key={t.ms} className={cn("absolute bottom-0 border-l", t.label ? "h-full border-white/30" : "h-1.5 border-white/15")} style={{ left: x(t.ms) }} data-time-tick={t.label ?? undefined}>
-                      {t.label ? <span className="text-muted-foreground absolute top-0.5 left-1 tabular-nums">{t.label}</span> : null}
+                    <div key={t.ms} className={cn("absolute top-0 border-l", t.label ? "h-2.5 border-white/30" : "h-1 border-white/15")} style={{ left: x(t.ms) }} data-time-tick={t.label ?? undefined}>
+                      {t.label ? <span className="text-muted-foreground absolute top-0 left-1 tabular-nums">{t.label}</span> : null}
                     </div>
                   ))}
-                </div>
-                <div className="relative h-4 border-b text-[10px] leading-none" title="bars (the beat grid the cuts follow)">
-                  {view.hooks.map((h, i) => (
-                    <div key={i} className="bg-brand/15 absolute top-0 bottom-0" style={{ left: x(h.startMs), width: x(h.endMs - h.startMs) }} title="hook (chorus)" data-hook-section />
-                  ))}
                   {view.bars.map((b, i) => (
-                    <div key={b} className="text-muted-foreground absolute top-0 h-full border-l border-white/20 pl-0.5" style={{ left: x(b) }} title={`bar ${i + 1} · ${both(b)}`} data-bar>
+                    <div key={`b${b}`} className="text-brand/90 absolute bottom-0 h-2 border-l border-brand/60 pl-0.5 text-[9px] leading-none" style={{ left: x(b) }} title={`bar ${i + 1} · ${both(b)}`} data-bar>
                       {i + 1}
                     </div>
                   ))}

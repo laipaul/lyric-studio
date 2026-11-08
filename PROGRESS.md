@@ -16,10 +16,12 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **The clips row is 96 px** (was 68): each clip shows its picture as a film strip in its own shape (repeated along
   the shot, as editors do), no longer cropped and darkened; the name and times sit on a thin dark band at the bottom,
   the badges at the top.
-- **Thinner rows above it**, so the timeline keeps its height and the viewer its size: the time ruler and the bars
-  16 px each (were 20 and 24), the song track 24 px (28), title cards 20 px (24), lyric lines 32 px (40).
-- Tests: storyboard.e2e.ts unchanged (the viewer 341 px on 1366×768, 18 px under the command bar): run in the cloud
-  session, all 147 checks pass.
+- **Thinner rows above it**, so the timeline keeps its height and the viewer grows a little: the time ruler and the
+  bars on ONE 20 px line (asked by the user: "times and bars together"; were 20 + 24 px): the times at the top, each
+  bar a small pink number on its own tick at the bottom, the choruses shaded behind; the song track 24 px (28), title
+  cards 20 px (24), lyric lines 32 px (40).
+- Tests: storyboard.e2e.ts unchanged (the viewer 353 px on 1366×768, was 341; 18 px under the command bar): run in the
+  cloud session, all 147 checks pass.
 
 ### Shape timeline: lift a clip onto another to swap them ✅ (to verify on the Windows PC)
 - Asked by the user (7 Nov 2026, with the soundtrack window): "drag a clip onto another shot to swap them on the
