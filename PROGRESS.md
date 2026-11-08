@@ -56,7 +56,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Fixed: the story order decides which clip plays in a shot; a slip applies only when the order still puts the slip's clip there (anchored shots as before), otherwise it is left aside. compose.ts plans once without slips, keeps those that still match, plans again.
 - Tests: new test/clip-order-prepare.test.ts (2: order after an upload and a Prepare reorder, Shape's own re-save; a slip then a Prepare reorder, which failed before the fix); test/timeline-edits.test.ts (2 tests adjusted to the rule, +1 check); video package 944 passed (3 files need the network: migrate / make / one more, remotion.media is not reachable here); studio typecheck clean. No studio code changed.
 
-### Shape: faster swaps (and every edit): the planner stays running ✅ (to verify on the Windows PC)
+### Shape: faster swaps (and every edit): the planner stays running ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - Asked by the user (8 Nov 2026): "make it swap faster" (after "worked, a bit slow but ok").
 - **Why it was slow:** every edit started a new planner process: Node and tsx starting up (about 1.5 s in the cloud,
   usually more on Windows) and the whole song decoded again for the waveform, before any planning.
