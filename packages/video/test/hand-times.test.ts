@@ -73,6 +73,27 @@ describe("hand-set lines in hints.lrc", () => {
     expect(r.lines[0]).toEqual(TAIL[0]);
   });
 
+  // Bug (8 Nov 2026): Hold on set 7 s later than its stamp, past its own old end: the end stayed at 3:18.26, before the new
+  // start, so the line had no time on screen and vanished from the video.
+  it("a line set by hand later than its own old end moves as a whole and keeps its length (never dropped)", () => {
+    const r = applyHandTimes(TAIL, [
+      { number: 2, ms: 202_360, text: "Hold on" },
+      { number: 3, ms: 204_240, text: "Floating through" },
+    ]);
+    const hold = r.lines[1];
+    expect(hold.start_ms).toBe(202_360);
+    expect(hold.end_ms).toBeGreaterThan(hold.start_ms + 1500);
+    expect(hold.end_ms).toBeLessThanOrEqual(204_240);
+    expect(hold.sung_end_ms).toBeGreaterThan(hold.start_ms);
+    expect(hold.words!.map((w) => w.start_ms)).toEqual([202_360, 202_900]); // squeezed before Floating
+    expect(r.lines[2].start_ms).toBe(204_240);
+    expect(r.lines[0]).toEqual(TAIL[0]);
+    // Also when the next line is pushed (not set by hand).
+    const p = applyHandTimes(TAIL, [{ number: 2, ms: 202_360, text: "Hold on" }]);
+    expect(p.lines[1].end_ms).toBeGreaterThan(p.lines[1].start_ms + 1500);
+    expect(p.lines[1].end_ms).toBeLessThanOrEqual(p.lines[2].start_ms);
+  });
+
   it("both set by hand: each is checked against the other's FINAL start, both are kept", () => {
     const r = applyHandTimes(TAIL, [
       { number: 2, ms: 202_000, text: "Hold on" },

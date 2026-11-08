@@ -4,6 +4,23 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Bug fix: lines whose voice starts late are always checked; a stamp in silence moves to the voice onset ✅ (to verify on the Windows PC)
+- Found on Let My Love Carry You, checked by ear in the Reel (starts at song 0:36.1). Line 9: stamp 1:03.4, voice 1:05.8,
+  words 1:04.8, first word 0.1 s: in pnpm make / the plan it was not checked (mid-verse, not a hook; only
+  `lyrics:check-start --all` moved it) and showed at 1:03.1; the user hears it at song ~1:06.1. Line 5: stamp 0:34.8,
+  voice 0:38.1, words 0:37.2, durations 0:37.7; the user hears ~0:39.1. The voice onset (measured on the vocal stem)
+  is closest to the ear; the recognised words were 1-2 s early.
+- **Always checked**: a line whose own voice starts at least 1 s (EARLY_MS) after its stamp is checked in pnpm make,
+  the plan, the Lyrics tab's record and the speech-recognition windows (signalsFor), not only with `--all`. A line
+  with no voice onset (sung on without a pause) stays unchecked.
+- **Stamp in silence moves to the voice onset** when there is one (else the recognised words when within 1 s of the
+  word-duration estimate, else the earliest). Line 5 -> 0:38.1 (was 0:37.2), line 9 -> 1:05.8 (was 1:03.1 unchecked),
+  the last line (no voice) still 3:22.1.
+- Tests: vocal-guard.test.ts (38 pass): line 5 38 100, line 9 65 800 without `all`, asrWindows includes line 9, a line
+  with voice at its stamp still unchecked, hand-set untouched. Changed old expectations: the Heart For Two 'plain'
+  case now checks line 2 (voice 1.5 s late) by default; a short-first-word case now moves to the voice 73 900 (was
+  the words 73 500).
+
 ### Shape timeline: Follow keeps the playhead in the middle ✅ (to verify on the Windows PC)
 - Asked by the user (7 Nov 2026): for checking lyric sync, the playhead should stay in one place while the
   timeline slides under it, as in Pro Tools ("continuous scroll"), Logic and Final Cut (not a page jump as in

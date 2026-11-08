@@ -156,10 +156,15 @@ export function shiftLine(line: TimedLine, toMs: number, nextStartMs: number | n
   const sungEnd = line.sung_end_ms !== undefined ? line.sung_end_ms + delta : undefined;
   const scale = sungEnd !== undefined && sungEnd > limit && limit > toMs ? (limit - toMs) / (sungEnd - toMs) : 1;
   const at = (ms: number) => Math.round(toMs + (ms + delta - toMs) * scale);
+  // The end moves with the start (a hand-set start later than the line's old end must not leave the end before
+  // the start: zero time on screen), capped before the next line, never before the line's own sung end.
+  const movedEnd = line.end_ms + delta;
+  const endCap = nextStartMs === null ? movedEnd : Math.min(movedEnd, nextStartMs);
+  const newSungEnd = line.sung_end_ms !== undefined ? at(line.sung_end_ms) : toMs + 1;
   return {
     ...line,
     start_ms: toMs,
-    end_ms: Math.max(line.end_ms + (nextStartMs === null ? delta : 0), toMs + 1),
+    end_ms: Math.max(endCap, newSungEnd, toMs + 1),
     ...(line.words ? { words: line.words.map((w) => ({ ...w, start_ms: at(w.start_ms) })) } : {}),
     ...(line.sung_end_ms !== undefined ? { sung_end_ms: at(line.sung_end_ms) } : {}),
   };
