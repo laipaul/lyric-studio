@@ -394,20 +394,54 @@ async function main() {
     const before1 = await shotBox(1);
     const before3 = await shotBox(3);
     const h = (await (await page.$("[data-cut-handle='1']"))!.boundingBox())!;
-    await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2);
+    check(h.width >= 16, `the cut handle's grab zone is at least 16 px wide (${h.width} px)`);
+    // Press 6 px beside the line (not on it): still the cut, a roll and not a slip.
+    const gx = h.x + h.width / 2 + 6;
+    await page.mouse.move(gx, h.y + h.height / 2);
     await page.mouse.down();
-    await page.mouse.move(h.x + h.width / 2 + 20, h.y + h.height / 2, { steps: 4 });
-    await page.mouse.move(h.x + h.width / 2 + 42, h.y + h.height / 2, { steps: 4 });
+    await page.mouse.move(gx + 20, h.y + h.height / 2, { steps: 4 });
+    await page.mouse.move(gx + 42, h.y + h.height / 2, { steps: 4 });
     const readout = ((await page.textContent("[data-edit-readout]").catch(() => "")) ?? "").trim();
-    check(/\+0\.\d\d s · shot 1: .* · shot 2: .* on the beat/.test(readout), `dragging a cut shows the change and both shots' lengths (${readout})`);
+    check(/\+0\.\d\d s · shot 1: .* · shot 2: .* on the beat/.test(readout), `pressing 6 px beside the line grabs the cut; dragging it shows the change and both shots' lengths (${readout})`);
+    await page.mouse.up();
+    // Right after the release, before the plan is made again, the handle stays where it was dropped, marked as saving.
+    const dropped = (await (await page.$("[data-cut-handle='1']"))!.boundingBox())!;
+    check(!!(await page.$("[data-cut-handle='1'][data-pending]")) && !!(await page.$("[data-edit-saving]")), "after the release the cut is marked as saving");
+    check(dropped.x - h.x > 30, `and it stays at the dropped place, not back (${Math.round(dropped.x - h.x)} px from the start)`);
+    // Meanwhile no second edit starts on the timeline: pressing the handle again does nothing.
+    await page.mouse.move(dropped.x + dropped.width / 2, dropped.y + dropped.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(dropped.x + dropped.width / 2 + 30, dropped.y + dropped.height / 2, { steps: 3 });
+    check(!(await page.$("[data-edit-readout]")), "while the edit is saved a second drag does not start");
     await page.mouse.up();
     await replanned();
+    check(!(await page.$("[data-cut-handle][data-pending]")) && !(await page.$("[data-edit-saving]")), "the saving mark is gone once the plan is made again");
+    const settled = (await (await page.$("[data-cut-handle='1']"))!.boundingBox())!;
+    check(Math.abs(settled.x - dropped.x) < 8, `the handle ends up where it was dropped (${Math.round(settled.x - dropped.x)} px off)`);
     const cuts = (clipsJson().cuts ?? []) as { from: number; to: number }[];
     check(cuts.length === 1 && cuts[0].to - cuts[0].from > 0.4 && cuts[0].to - cuts[0].from < 0.6, `the cut moved one beat later, kept in clips.json (${JSON.stringify(cuts)})`);
     const after1 = await shotBox(1);
     const after3 = await shotBox(3);
     check(after1.width - before1.width > 30 && Math.abs(after3.x - before3.x) < 2, `shot 1 got longer and shot 3 did not move (${Math.round(after1.width - before1.width)} px, ${Math.round(after3.x - before3.x)} px)`);
     check(!!(await page.$("[data-cut-handle='1'][data-cut-moved]")), "the moved cut is marked");
+    // A quick drag (two mouse steps, released at once) is not lost; Ctrl+Z then takes it back.
+    {
+      const s2 = await shotBox(2);
+      const s3q = await shotBox(3);
+      const dirQ = s3q.width > s2.width ? 1 : -1; // towards the longer neighbour's far side: room for half a second
+      const hq = (await (await page.$("[data-cut-handle='2']"))!.boundingBox())!;
+      const qx = hq.x + hq.width / 2;
+      await page.mouse.move(qx, hq.y + hq.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(qx + dirQ * 22, hq.y + hq.height / 2, { steps: 1 });
+      await page.mouse.move(qx + dirQ * 45, hq.y + hq.height / 2, { steps: 1 });
+      await page.mouse.up();
+      await replanned();
+      check((clipsJson().cuts ?? []).length === 2, `a quick drag (two steps, released at once) is saved (${JSON.stringify(clipsJson().cuts)})`);
+      await page.keyboard.press("Control+z");
+      await replanned();
+      check((clipsJson().cuts ?? []).length === 1, "Ctrl+Z takes the quick drag back, the first cut move stays");
+    }
     // Slip: drag inside shot 3 (towards the side its clip has room for): same place and length, another part
     // of its clip, marked ⇆; the drag does not select the shot.
     const text3 = (await page.textContent("[data-shot='3']")) ?? "";

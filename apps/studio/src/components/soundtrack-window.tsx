@@ -14,6 +14,8 @@ import { useEffect, useRef, useState } from "react";
 import { clockTenths, linesCut, sectionText, snapWindow } from "@lyric/video";
 import type { SongOverview } from "@lyric/video/node"; // types only
 
+import { trackPointer } from "./pointer-track";
+
 export type SongWindowDrag = { startMs: number; endMs: number; clean: boolean };
 type Drag = { mode: "move" | "start" | "end"; startX: number; moved: boolean; from: { startMs: number; endMs: number }; now: SongWindowDrag };
 
@@ -59,64 +61,71 @@ export function SongWindow({
   const [drag, setDrag] = useState<Drag | null>(null);
   const dragRef = useRef<Drag | null>(null);
   const justDragged = useRef(false);
+  const stopTracking = useRef<(() => void) | null>(null);
   const w = { startMs: songStartMs, endMs: songStartMs + durationMs };
   const shown = drag?.moved ? drag.now : { ...w, clean: false };
   const canDrag = editable && !song.locked && !busy;
   const x = (songMs: number) => ((songMs - songStartMs) / 1000) * zoom; // px from the video's start
   const pxPerMs = zoom / 1000;
 
+  // The listeners start inside the pointerdown (trackPointer), so a quick move or release is never lost; they
+  // call this render's move / finish through `latest`.
+  const move = (e: PointerEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    if (!d.moved && Math.abs(e.clientX - d.startX) < 3) return; // a click, not a drag (yet)
+    const delta = (e.clientX - d.startX) / pxPerMs;
+    const raw =
+      d.mode === "move"
+        ? { startMs: d.from.startMs + delta, endMs: d.from.endMs + delta }
+        : d.mode === "start"
+          ? { startMs: Math.max(0, Math.min(d.from.startMs + delta, d.from.endMs - 3000)), endMs: d.from.endMs }
+          : { startMs: d.from.startMs, endMs: Math.min(song.durationMs, Math.max(d.from.endMs + delta, d.from.startMs + 3000)) };
+    // Moving keeps the length: never past the song's start or end.
+    if (d.mode === "move") {
+      const len = d.from.endMs - d.from.startMs;
+      raw.startMs = Math.min(Math.max(0, raw.startMs), song.durationMs - len);
+      raw.endMs = raw.startMs + len;
+    }
+    const snapped = snapWindow(raw, song, e.altKey);
+    const now = d.mode === "start" ? { ...snapped, endMs: d.from.endMs } : d.mode === "end" ? { ...snapped, startMs: d.from.startMs } : snapped;
+    const next = { ...d, moved: true, now };
+    dragRef.current = next;
+    setDrag(next);
+    onDrag(now);
+  };
+  const finish = (cancelled: boolean) => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    stopTracking.current = null;
+    setDrag(null);
+    onDrag(null);
+    if (!d?.moved) return;
+    justDragged.current = true; // the click that ends the drag does not move the playhead
+    setTimeout(() => (justDragged.current = false), 0);
+    if (cancelled) return; // pointercancel / the window lost focus: nothing is saved
+    if (Math.abs(d.now.startMs - d.from.startMs) < 20 && Math.abs(d.now.endMs - d.from.endMs) < 20) return;
+    onSet(sectionText(d.now.startMs, d.now.endMs));
+  };
+  const latest = useRef<{ move: (e: PointerEvent) => void; finish: (cancelled: boolean) => void } | null>(null);
   useEffect(() => {
-    if (!drag) return;
-    dragRef.current = drag;
-    const move = (e: PointerEvent) => {
-      const d = dragRef.current;
-      if (!d) return;
-      if (!d.moved && Math.abs(e.clientX - d.startX) < 3) return; // a click, not a drag (yet)
-      const delta = (e.clientX - d.startX) / pxPerMs;
-      const raw =
-        d.mode === "move"
-          ? { startMs: d.from.startMs + delta, endMs: d.from.endMs + delta }
-          : d.mode === "start"
-            ? { startMs: Math.max(0, Math.min(d.from.startMs + delta, d.from.endMs - 3000)), endMs: d.from.endMs }
-            : { startMs: d.from.startMs, endMs: Math.min(song.durationMs, Math.max(d.from.endMs + delta, d.from.startMs + 3000)) };
-      // Moving keeps the length: never past the song's start or end.
-      if (d.mode === "move") {
-        const len = d.from.endMs - d.from.startMs;
-        raw.startMs = Math.min(Math.max(0, raw.startMs), song.durationMs - len);
-        raw.endMs = raw.startMs + len;
-      }
-      const snapped = snapWindow(raw, song, e.altKey);
-      const now = d.mode === "start" ? { ...snapped, endMs: d.from.endMs } : d.mode === "end" ? { ...snapped, startMs: d.from.startMs } : snapped;
-      const next = { ...d, moved: true, now };
-      dragRef.current = next;
-      setDrag(next);
-      onDrag(now);
-    };
-    const up = () => {
-      const d = dragRef.current;
-      dragRef.current = null;
-      setDrag(null);
-      onDrag(null);
-      if (!d?.moved) return;
-      justDragged.current = true; // the click that ends the drag does not move the playhead
-      setTimeout(() => (justDragged.current = false), 0);
-      if (Math.abs(d.now.startMs - d.from.startMs) < 20 && Math.abs(d.now.endMs - d.from.endMs) < 20) return;
-      onSet(sectionText(d.now.startMs, d.now.endMs));
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up, { once: true });
-    return () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the drag's own state is in dragRef
-  }, [drag === null]);
+    latest.current = { move, finish };
+  });
+  useEffect(() => () => stopTracking.current?.(), []);
 
-  const begin = (mode: Drag["mode"]) => (e: React.PointerEvent) => {
+  const begin = (mode: Drag["mode"], e: React.PointerEvent) => {
     if (!canDrag || e.button !== 0) return;
     e.stopPropagation();
     if (mode !== "move") e.preventDefault();
-    setDrag({ mode, startX: e.clientX, moved: false, from: w, now: { ...w, clean: false } }); // dragRef follows in the effect
+    stopTracking.current?.();
+    const d: Drag = { mode, startX: e.clientX, moved: false, from: w, now: { ...w, clean: false } };
+    dragRef.current = d;
+    setDrag(d);
+    stopTracking.current = trackPointer(
+      (ev) => latest.current?.move(ev),
+      (_ev, cancelled) => latest.current?.finish(cancelled),
+      mode === "move" ? "grabbing" : "ew-resize",
+    );
   };
   const swallow = (e: React.MouseEvent) => {
     if (justDragged.current) e.stopPropagation();
@@ -134,15 +143,15 @@ export function SongWindow({
       <div
         className={`border-brand absolute inset-y-0 z-10 rounded-sm border-2 ${canDrag ? "cursor-grab active:cursor-grabbing" : ""}`}
         style={{ left: x(shown.startMs), width: Math.max(4, x(shown.endMs) - x(shown.startMs)) }}
-        onPointerDown={begin("move")}
+        onPointerDown={(e) => begin("move", e)}
         onClick={swallow}
         data-soundtrack-window
         title={canDrag ? `The part of the song this video uses (${clockTenths(shown.startMs)} – ${clockTenths(shown.endMs)}). Drag it to move it, its edges to trim (snaps to bars and sung lines; Alt: free). A click plays from there.` : undefined}
       >
-        <div className={`absolute inset-y-0 -left-1.5 w-3 ${canDrag ? "cursor-ew-resize" : ""}`} onPointerDown={begin("start")} onClick={swallow} data-soundtrack-edge="start" title="Drag: where the video starts in the song (snaps to a bar)">
+        <div className={`absolute inset-y-0 -left-1.5 w-3 ${canDrag ? "cursor-ew-resize" : ""}`} onPointerDown={(e) => begin("start", e)} onClick={swallow} data-soundtrack-edge="start" title="Drag: where the video starts in the song (snaps to a bar)">
           <div className="bg-brand mx-auto h-full w-1 rounded" />
         </div>
-        <div className={`absolute inset-y-0 -right-1.5 w-3 ${canDrag ? "cursor-ew-resize" : ""}`} onPointerDown={begin("end")} onClick={swallow} data-soundtrack-edge="end" title="Drag: where the video ends in the song (snaps to the bar after a sung line)">
+        <div className={`absolute inset-y-0 -right-1.5 w-3 ${canDrag ? "cursor-ew-resize" : ""}`} onPointerDown={(e) => begin("end", e)} onClick={swallow} data-soundtrack-edge="end" title="Drag: where the video ends in the song (snaps to the bar after a sung line)">
           <div className="bg-brand mx-auto h-full w-1 rounded" />
         </div>
       </div>

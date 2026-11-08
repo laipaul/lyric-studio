@@ -4,6 +4,35 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Theme Engine v2 on HyperFrames, step 2b part 1: the lyrics and cards on HyperFrames, the same code ✅ (to verify on the Windows PC)
+- **HyperFrames now draws the words with the same code as the current renderer:** the lyric scene (LyricScene.tsx)
+  and the title / byline / tagline / hook / end cards (TextCards.tsx, moved out of LyricVideo.tsx) run inside the
+  HyperFrames page as a text layer, React and our text code bundled locally (esbuild) at render time, a page clock
+  in place of Remotion's, driven frame by frame by the GSAP timeline (seekable, deterministic). So every lyric
+  effect (typewriter, karaoke highlight, glide, ...), the text backings, emphasis, big hook, the waiting next line
+  and the title cards with the Japanese fallback font look exactly as before. The timeline is registered once
+  every font face is loaded (HyperFrames waits for it).
+- **Off Remotion for the effects:** our own easing curves (src/easing.ts, test: the same as Remotion's to 1e-5)
+  and text measuring done the same way (a span's width), so lines wrap at the same word.
+- **Check:** `pnpm hf:parity` now compares the whole video, words and cards included, plus the lyric area alone.
+  Cloud test song (glide / karaoke-highlight): whole 0.9929 (lowest 0.9908), words the same. New test (typewriter
+  verses, karaoke hook, typed title with byline, Japanese tagline): whole 0.9915, lyric area 0.9921, cards 0.9916
+  (lowest 0.990): the same words, frame by frame. Zero network still (the test now includes the text layer and a
+  Japanese card). A Reel with lyric effects and title cards now has nothing HyperFrames cannot draw.
+- Tests: easing, hf-parity (picture + Reel text), hf-network (text layer), hf-compile, textboard-make.
+- **Licence check (asked by the user, 6 Nov 2026):**
+  1. The text layer's bundle contains **no Remotion package**: our own 34 files + `react`, `react-dom`, `scheduler`
+     (MIT), checked with esbuild's input list. The bundler itself, `esbuild` (MIT, not Remotion), only builds the
+     file on the PC. Still named, for step 8 (in the plan's removal list with the replacement): LyricScene.tsx /
+     TextCards.tsx import `remotion` (frame, settings) and `@remotion/layout-utils` (measureText) by name for the
+     current renderer, mapped to our own clock.ts / measure.ts in the text layer (step 8: import ours directly);
+     youtube.ts's `interpolate` (step 6); test/easing.test.ts compares with Remotion (removed with it).
+  2. **The easing curves are our own implementation** (src/easing.ts): the standard cubic-bezier maths (the curve's
+     polynomial, solved for x with Newton-Raphson steps, bisection as a fallback), written for this project, not
+     copied from Remotion's source; the test only checks the results match Remotion's to 0.00001.
+- Next (part 2, new on HyperFrames only): the stacked line shape with build-up, the bigger final hook,
+  docs/theme-rules.md.
+
 ### Theme Engine v2 on HyperFrames, step 2a: the Reel picture ✅ (confirmed on the Windows PC, 6 Nov 2026)
 - **HyperFrames now draws the whole Reel picture as the current renderer does:** clips (offset, speed, held last
   frame), photos with their Ken Burns move (also the looping move), cuts, dissolves, dips, the loop ending (the first

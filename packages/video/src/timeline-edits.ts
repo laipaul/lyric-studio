@@ -126,3 +126,24 @@ export function resetShot(t: TimelineEdits, startMs: number, endMs: number): Tim
     slips: t.slips.filter((s) => !near(s.at, startMs)),
   };
 }
+
+// Where a dragged cut snaps while the mouse is still down (the studio's roll handle). `beatsMs` are the video's beat
+// times, `fromMs` the cut's own place. Nearest beat as before, with two additions so a small drag is not lost:
+// less than a quarter beat from where it started stays exactly there (the readout says +0.00 s), and once past a
+// quarter beat it goes to the next beat in the drag direction, never back to the beat it came from.
+// Alt (free): the frame under the pointer.
+export function snapRollMs(rawMs: number, fromMs: number, beatsMs: readonly number[], free: boolean, fps = 30): number {
+  const frame = 1000 / fps;
+  if (free || !beatsMs.length) return Math.round(rawMs / frame) * frame;
+  const b = [...beatsMs].sort((x, y) => x - y);
+  const nearestIdx = (ms: number) => b.reduce((best, t, i) => (Math.abs(t - ms) < Math.abs(b[best] - ms) ? i : best), 0);
+  const dir = rawMs >= fromMs ? 1 : -1;
+  const origin = nearestIdx(fromMs);
+  const next = b[origin + dir];
+  const toward = (rawMs - fromMs) * dir;
+  if (next === undefined) return b[nearestIdx(rawMs)];
+  const period = Math.abs(next - b[origin]);
+  if (toward < period / 4) return fromMs;
+  const near = nearestIdx(rawMs);
+  return (near - origin) * dir <= 0 ? next : b[near];
+}

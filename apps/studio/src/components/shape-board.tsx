@@ -438,7 +438,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   // Roll (drag a cut) and slip (drag inside a shot), Undo / Redo: components/timeline-editing.tsx.
   // After an edit the viewer shows the edit point (Space plays from there).
   const showAt = useCallback((videoMs: number) => player.current?.seekTo(Math.max(0, Math.round((videoMs * 30) / 1000))), []);
-  const tl = useTimelineEditing({ view, zoom, mediaUrl: `/api/songs/${projectId}/storyboard/media`, post: edit, onEdited: showAt });
+  const tl = useTimelineEditing({ view, zoom, mediaUrl: `/api/songs/${projectId}/storyboard/media`, post: edit, onEdited: showAt, busy: saving || loading });
   // A clip picked on the timeline is shown in the viewer: its first frame (after the Shot panel has opened,
   // which resizes the viewer).
   const pickedStartMs = view && selected !== null ? (view.shots[selected]?.startMs ?? null) : null;
@@ -1022,6 +1022,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                       width={x(s.endMs - s.startMs)}
                       selected={selected === s.index}
                       slipped={tl.slipped(s)}
+                      pending={tl.pendingShot(s.index)}
                       slippable={view.editable && s.kind === "video"}
                       onPointerDown={(e) => tl.onShotPointerDown(s, e)}
                       onSelect={() => {
@@ -1047,7 +1048,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                       }}
                     />
                   ))}
-                  {view.shots.map((s) => (x(s.endMs - s.startMs) >= 44 || selected === s.index ? clipMenu(s, "icon", { left: x(s.endMs) - 22, top: 6 }) : null))}
+                  {view.shots.map((s) => (x(s.endMs - s.startMs) >= 48 || selected === s.index ? clipMenu(s, "icon", { left: x(s.endMs) - 28, top: 6 }) : null))}
                   {tl.handles}
                   {tl.overlay}
                 </div>
@@ -1115,6 +1116,7 @@ function ShotBlock({
   width,
   selected,
   slipped,
+  pending,
   slippable,
   onPointerDown,
   onSelect,
@@ -1128,6 +1130,7 @@ function ShotBlock({
   width: number;
   selected: boolean;
   slipped?: boolean; // the user chose which part of the clip plays here (slip)
+  pending?: boolean; // an edit of this shot is being saved and planned
   slippable?: boolean;
   onPointerDown?: (e: React.PointerEvent) => void;
   onSelect: () => void;
@@ -1141,6 +1144,7 @@ function ShotBlock({
       type="button"
       data-shot={s.index + 1}
       data-slipped={slipped || undefined}
+      data-pending={pending || undefined}
       onPointerDown={onPointerDown}
       data-drop-target={dropTarget || undefined}
       onDragOver={onDragOver}

@@ -1,7 +1,7 @@
 // The Shape timeline's pro edits: roll (move a cut), slip (another part of the clip in the same shot).
 import { describe, expect, it } from "vitest";
 
-import { applyCutMoves, composeProps, cutAtMs, getCutPoints, mergeTimeline, resetShot, rollEdit, slipEdit, slipFor, type CutPlan, type EditShot, type RenderBase } from "../src";
+import { applyCutMoves, composeProps, cutAtMs, getCutPoints, mergeTimeline, resetShot, rollEdit, slipEdit, slipFor, snapRollMs, type CutPlan, type EditShot, type RenderBase } from "../src";
 import { cutPointAt } from "../src/cuts";
 import { grid } from "./helpers";
 
@@ -145,5 +145,27 @@ describe("clips.json keeps the timeline edits", () => {
     expect(ok.edits.slips).toEqual([{ at: 48.33, clip: "06_rings.mp4", in: 1.4 }]);
     expect(checkClipEdits({ cuts: [{ from: "x" }] }).problems[0]).toContain("cuts must be a list");
     expect(checkClipEdits({ slips: [{ at: 1 }] }).problems[0]).toContain("slips must be a list");
+  });
+});
+
+describe("snapRollMs: the cut snaps while dragging", () => {
+  const bt = beats.map((b) => b.time_ms);
+  const from = 15_000 - 66; // a planned cut two frames before the beat at 15 s
+  it("less than a quarter beat stays where the cut was", () => {
+    expect(snapRollMs(from + 100, from, bt, false)).toBe(from);
+    expect(snapRollMs(from - 100, from, bt, false)).toBe(from);
+    expect(snapRollMs(from, from, bt, false)).toBe(from);
+  });
+  it("past a quarter beat it goes to the next beat in the drag direction, not back", () => {
+    expect(snapRollMs(from + 140, from, bt, false)).toBe(15_500);
+    expect(snapRollMs(from - 140, from, bt, false)).toBe(14_500);
+  });
+  it("further away it is the nearest beat", () => {
+    expect(snapRollMs(from + 1_040, from, bt, false)).toBe(16_000);
+    expect(snapRollMs(from - 1_020, from, bt, false)).toBe(14_000);
+  });
+  it("Alt: the frame under the pointer; without beats too", () => {
+    expect(snapRollMs(15_180, from, bt, true)).toBeCloseTo(15_166.7, 0);
+    expect(snapRollMs(15_180, from, [], false)).toBeCloseTo(15_166.7, 0);
   });
 });

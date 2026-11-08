@@ -21,11 +21,14 @@ import {
   MATCH_MS,
   rollEdit,
   slipEdit,
+  snapRollMs,
   type EditShot,
   type StoryShot,
   type TimelineEdits,
 } from "@lyric/video";
 import type { StoryboardView } from "@lyric/video/node"; // types only
+
+import { trackPointer } from "./pointer-track";
 
 export type TimelinePost = (
   body: Record<string, unknown>,
@@ -55,6 +58,12 @@ type Drag =
       deltaMs: number;
     };
 
+// After the mouse is released the edit stays where it was dropped, marked "saving", until the plan is made again.
+type Pending =
+  | { kind: "roll"; cut: number; atMs: number }
+  | { kind: "trim"; edge: "start" | "end"; shot: number; deltaMs: number }
+  | { kind: "slip"; shot: number };
+
 const MIN_MS = 400; // a roll never makes a shot shorter than this (as the planner)
 const SLIP_THRESHOLD_PX = 4; // a smaller movement is a click (select the shot)
 
@@ -69,14 +78,19 @@ export function useTimelineEditing({
   mediaUrl,
   post,
   onEdited,
+  busy = false,
 }: {
   view: StoryboardView | null;
   zoom: number;
   mediaUrl: string;
   post: TimelinePost;
   onEdited?: (videoMs: number) => void;
+  busy?: boolean; // the board is saving / planning something else: no new edit starts
 }) {
   const [drag, setDrag] = useState<Drag | null>(null);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const pendingRef = useRef(false);
+  const stopTracking = useRef<(() => void) | null>(null);
   const dragRef = useRef<Drag | null>(null);
   const justDragged = useRef(false);
   const [undo, setUndo] = useState<TimelineEdits[]>([]);
@@ -101,15 +115,6 @@ export function useTimelineEditing({
       clipOutS: c?.outS ?? (c ? c.durationMs / 1000 : s.outS),
     };
   };
-  // The beat nearest a video time (view.beats are video times); free: the frame there.
-  const snap = (ms: number, free: boolean) => {
-    if (free || !view?.beats.length)
-      return Math.round(ms / (1000 / 30)) * (1000 / 30);
-    return view.beats.reduce(
-      (a, b) => (Math.abs(b - ms) < Math.abs(a - ms) ? b : a),
-      view.beats[0],
-    );
-  };
   const rollTarget = (
     d: Extract<Drag, { kind: "roll" }>,
     clientX: number,
@@ -118,101 +123,104 @@ export function useTimelineEditing({
     const raw = d.fromMs + ((clientX - d.startX) / zoom) * 1000;
     const lo = shots[d.cut - 1].startMs + MIN_MS;
     const hi = shots[d.cut].endMs - MIN_MS;
-    return Math.min(hi, Math.max(lo, snap(raw, free)));
+    return Math.min(hi, Math.max(lo, snapRollMs(raw, d.fromMs, view?.beats ?? [], free)));
   };
 
+  // Saves one edit and plans again. `shown` keeps the edit where it was dropped until the new plan is there (or
+  // the save failed: then it goes back and the board shows the error); no second edit starts meanwhile.
   const save = useCallback(
-    async (body: Record<string, unknown>, showAtMs?: number) => {
-      const r = await post(body);
-      if (r?.before) {
-        setUndo((u) => [...u.slice(-49), r.before!]);
-        setRedo([]);
+    async (body: Record<string, unknown>, showAtMs?: number, shown?: Pending) => {
+      if (shown) {
+        pendingRef.current = true;
+        setPending(shown);
       }
-      if (r && showAtMs !== undefined) onEdited?.(showAtMs);
+      try {
+        const r = await post(body);
+        if (r?.before) {
+          setUndo((u) => [...u.slice(-49), r.before!]);
+          setRedo([]);
+        }
+        if (r && showAtMs !== undefined) onEdited?.(showAtMs);
+      } finally {
+        if (shown) {
+          pendingRef.current = false;
+          setPending(null);
+        }
+      }
     },
     [post, onEdited],
   );
 
-  // Mouse moves and the release, wherever the pointer goes while dragging.
+  // Mouse moves and the release, wherever the pointer goes while dragging. The listeners start inside the
+  // pointerdown (trackPointer), they call the latest move / finish of the render through `latest`.
+  const move = (e: PointerEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    if (d.kind === "roll" ? !shots[d.cut - 1] || !shots[d.cut] : !shots[d.shot]) return; // the plan changed under the drag
+    let next: Drag;
+    if (d.kind === "roll")
+      next = { ...d, atMs: rollTarget(d, e.clientX, e.altKey), free: e.altKey };
+    else if (d.kind === "trim")
+      next = { ...d, deltaMs: ((e.clientX - d.startX) / zoom) * 1000 };
+    else {
+      const dx = e.clientX - d.startX;
+      next = { ...d, active: d.active || Math.abs(dx) >= SLIP_THRESHOLD_PX, deltaMs: (dx / zoom) * 1000 };
+    }
+    dragRef.current = next;
+    setDrag(next);
+  };
+  const finish = (cancelled: boolean) => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    stopTracking.current = null;
+    setDrag(null);
+    // The click that ends a drag (if the browser sends one) comes before this timer; later clicks are real.
+    setTimeout(() => (justDragged.current = false), 0);
+    if (!d || cancelled) return; // pointercancel / the window lost focus: nothing is saved
+    if (d.kind === "roll") {
+      justDragged.current = true;
+      if (Math.abs(d.atMs - d.fromMs) < 20 || !shots[d.cut - 1] || !shots[d.cut]) return;
+      const left = editShot(shots[d.cut - 1]);
+      const right = editShot(shots[d.cut]);
+      const { move, slips } = rollEdit(left, right, shots[d.cut].songMs, view!.songStartMs + d.atMs, d.free);
+      void save({ action: "roll", move, slips }, d.atMs, { kind: "roll", cut: d.cut, atMs: d.atMs });
+    } else if (d.kind === "trim") {
+      justDragged.current = true;
+      const s = shots[d.shot];
+      if (!s) return;
+      const slip = slipEdit(editShot(s), -d.deltaMs); // the start edge to the right = the clip starts later
+      if (Math.abs(slip.in - s.inS) >= 0.03)
+        void save({ action: "slip", slip }, d.edge === "start" ? s.startMs : Math.max(s.startMs, s.endMs - 1000), { kind: "trim", edge: d.edge, shot: d.shot, deltaMs: d.deltaMs });
+    } else if (d.active) {
+      justDragged.current = true;
+      const s = shots[d.shot];
+      if (!s) return;
+      const slip = slipEdit(editShot(s), d.deltaMs);
+      if (Math.abs(slip.in - s.inS) >= 0.03) void save({ action: "slip", slip }, s.startMs, { kind: "slip", shot: d.shot });
+    }
+  };
+  const latest = useRef<{ move: (e: PointerEvent) => void; finish: (cancelled: boolean) => void } | null>(null);
   useEffect(() => {
-    if (!drag) return;
-    if (!dragRef.current) dragRef.current = drag; // a drag started by state only (the outer-edge trims)
-    const move = (e: PointerEvent) => {
-      const d = dragRef.current;
-      if (!d) return;
-      let next: Drag;
-      if (d.kind === "roll")
-        next = {
-          ...d,
-          atMs: rollTarget(d, e.clientX, e.altKey),
-          free: e.altKey,
-        };
-      else if (d.kind === "trim")
-        next = { ...d, deltaMs: ((e.clientX - d.startX) / zoom) * 1000 };
-      else {
-        const dx = e.clientX - d.startX;
-        next = {
-          ...d,
-          active: d.active || Math.abs(dx) >= SLIP_THRESHOLD_PX,
-          deltaMs: (dx / zoom) * 1000,
-        };
-      }
-      dragRef.current = next;
-      setDrag(next);
-    };
-    const up = () => {
-      const d = dragRef.current;
-      dragRef.current = null;
-      setDrag(null);
-      // The click that ends a drag (if the browser sends one) comes before this timer; later clicks are real.
-      setTimeout(() => (justDragged.current = false), 0);
-      if (!d) return;
-      if (d.kind === "roll") {
-        justDragged.current = true;
-        if (Math.abs(d.atMs - d.fromMs) < 20) return;
-        const left = editShot(shots[d.cut - 1]);
-        const right = editShot(shots[d.cut]);
-        const songStart = view!.songStartMs;
-        const { move, slips } = rollEdit(
-          left,
-          right,
-          shots[d.cut].songMs,
-          songStart + d.atMs,
-          d.free,
-        );
-        void save({ action: "roll", move, slips }, d.atMs);
-      } else if (d.kind === "trim") {
-        justDragged.current = true;
-        const s = shots[d.shot];
-        const slip = slipEdit(editShot(s), -d.deltaMs); // the start edge to the right = the clip starts later
-        if (Math.abs(slip.in - s.inS) >= 0.03)
-          void save(
-            { action: "slip", slip },
-            d.edge === "start"
-              ? s.startMs
-              : Math.max(s.startMs, s.endMs - 1000),
-          );
-      } else if (d.active) {
-        justDragged.current = true;
-        const s = shots[d.shot];
-        const slip = slipEdit(editShot(s), d.deltaMs);
-        if (Math.abs(slip.in - s.inS) >= 0.03)
-          void save({ action: "slip", slip }, s.startMs);
-      }
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up, { once: true });
-    return () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the drag's own state is in dragRef
-  }, [drag === null]);
+    latest.current = { move, finish };
+  });
+  useEffect(() => () => stopTracking.current?.(), []);
+  // Starts a drag at once (state and listeners), unless another edit is still being saved or planned.
+  const begin = useCallback((d: Drag) => {
+    stopTracking.current?.();
+    dragRef.current = d;
+    setDrag(d);
+    stopTracking.current = trackPointer(
+      (e) => latest.current?.move(e),
+      (_e, cancelled) => latest.current?.finish(cancelled),
+      d.kind === "slip" ? undefined : d.kind === "roll" ? "col-resize" : "ew-resize",
+    );
+  }, []);
+  const locked = busy || pending !== null;
 
   // Undo / Redo (Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y), not while typing in a field.
   const undoOne = useCallback(async () => {
     const prev = undo.at(-1);
-    if (!prev) return;
+    if (!prev || pendingRef.current) return;
     const r = await post({ action: "timeline", timeline: prev });
     if (!r) return;
     setUndo((u) => u.slice(0, -1));
@@ -220,7 +228,7 @@ export function useTimelineEditing({
   }, [undo, post]);
   const redoOne = useCallback(async () => {
     const next = redo.at(-1);
-    if (!next) return;
+    if (!next || pendingRef.current) return;
     const r = await post({ action: "timeline", timeline: next });
     if (!r) return;
     setRedo((x) => x.slice(0, -1));
@@ -268,16 +276,8 @@ export function useTimelineEditing({
 
   // A shot pressed: a slip once it moves (video shots of a plan only); otherwise a click selects it.
   const onShotPointerDown = (s: StoryShot, e: React.PointerEvent) => {
-    if (!editable || e.button !== 0 || s.kind !== "video") return;
-    const d: Drag = {
-      kind: "slip",
-      shot: s.index,
-      startX: e.clientX,
-      deltaMs: 0,
-      active: false,
-    };
-    dragRef.current = d;
-    setDrag(d);
+    if (!editable || locked || e.button !== 0 || s.kind !== "video") return;
+    begin({ kind: "slip", shot: s.index, startX: e.clientX, deltaMs: 0, active: false });
   };
   // After a drag, the click that follows does not select the shot or play from there.
   const onRowClickCapture = (e: React.MouseEvent) => {
@@ -287,48 +287,46 @@ export function useTimelineEditing({
     e.preventDefault();
   };
 
-  // The handles on the cuts (between two shots), and what the drag shows.
+  // The handles on the cuts (between two shots): an 18 px wide grab zone around the line, a faint line always
+  // visible; and what the drag shows. After the drop the handle stays where it was dropped (data-pending).
   const handles: ReactNode = editable
     ? shots.slice(1).map((s) => {
         const i = s.index;
         const active = drag?.kind === "roll" && drag.cut === i;
+        const held = pending?.kind === "roll" && pending.cut === i;
         const at = active
           ? (drag as Extract<Drag, { kind: "roll" }>).atMs
-          : s.startMs;
+          : held
+            ? pending.atMs
+            : s.startMs;
         return (
           <div
             key={`cut-${i}`}
             data-cut-handle={i}
             data-cut-moved={movedCut(i) || undefined}
+            data-pending={held || undefined}
             title={`Drag to move this cut (the shots on either side get longer / shorter; it snaps to the beat, Alt: free)${movedCut(i) ? " · moved by you" : ""}`}
             onPointerDown={(e) => {
               if (e.button !== 0) return;
               e.stopPropagation();
               e.preventDefault();
-              const d: Drag = {
-                kind: "roll",
-                cut: i,
-                startX: e.clientX,
-                fromMs: s.startMs,
-                atMs: s.startMs,
-                free: e.altKey,
-              };
-              dragRef.current = d;
-              setDrag(d);
+              if (!editable || locked) return;
+              begin({ kind: "roll", cut: i, startX: e.clientX, fromMs: s.startMs, atMs: s.startMs, free: e.altKey });
             }}
             onClick={(e) => e.stopPropagation()}
-            className="group absolute top-0 bottom-0 z-20 flex w-3 -translate-x-1/2 cursor-col-resize justify-center"
+            className={`group absolute top-0 bottom-0 z-40 flex w-[18px] -translate-x-1/2 touch-none justify-center select-none ${locked && !active ? "cursor-progress" : "cursor-col-resize"}`}
             style={{ left: x(at) }}
           >
             <div
-              className={`h-full w-0.5 rounded ${active ? "bg-brand" : movedCut(i) ? "bg-brand/80" : "bg-transparent group-hover:bg-white/70"}`}
+              className={`h-full w-0.5 rounded ${active || held ? "bg-brand" : movedCut(i) ? "bg-brand/80" : "bg-white/30 group-hover:bg-white/80"}`}
             />
           </div>
         );
       })
     : null;
 
-  // The outer edges: the first shot's start and the last shot's end (video shots of a plan).
+  // The outer edges: the first shot's start and the last shot's end (video shots of a plan). A 16 px grab zone
+  // that reaches 10 px into the shot and 6 px outside it.
   const first = shots[0];
   const last = shots.at(-1);
   const edgeHandles: ReactNode = !editable
@@ -337,14 +335,19 @@ export function useTimelineEditing({
         const s = edge === "start" ? first : last;
         if (!s || s.kind !== "video") return null;
         const active = drag?.kind === "trim" && drag.edge === edge;
+        const held = pending?.kind === "trim" && pending.edge === edge;
         const offset = active
           ? (drag as Extract<Drag, { kind: "trim" }>).deltaMs
-          : 0;
+          : held
+            ? pending.deltaMs
+            : 0;
         const at = (edge === "start" ? s.startMs : s.endMs) + offset;
+        const into = edge === "start" ? 6 : 10; // px of the zone before the edge line
         return (
           <div
             key={`edge-${edge}`}
             data-trim-handle={edge}
+            data-pending={held || undefined}
             title={
               edge === "start"
                 ? "Drag right: the first clip starts later in its footage (the video keeps its music and length)"
@@ -354,14 +357,17 @@ export function useTimelineEditing({
               if (e.button !== 0) return;
               e.stopPropagation();
               e.preventDefault();
-              setDrag({ kind: "trim", edge, shot: s.index, startX: e.clientX, deltaMs: 0 }); // dragRef follows in the effect below
+              if (!editable || locked) return;
+              // eslint-disable-next-line react-hooks/refs -- only runs when the pointer is pressed, not while rendering
+              begin({ kind: "trim", edge, shot: s.index, startX: e.clientX, deltaMs: 0 });
             }}
             onClick={(e) => e.stopPropagation()}
-            className={`group absolute top-0 bottom-0 z-20 flex w-3 cursor-ew-resize justify-center ${edge === "start" ? "" : "-translate-x-full"}`}
-            style={{ left: x(at) }}
+            className={`group absolute top-0 bottom-0 z-40 w-4 touch-none select-none ${locked && !active ? "cursor-progress" : "cursor-ew-resize"}`}
+            style={{ left: x(at) - into }}
           >
             <div
-              className={`h-full w-1 rounded ${active ? "bg-brand" : "bg-transparent group-hover:bg-white/70"}`}
+              className={`absolute top-0 h-full w-1 rounded ${active || held ? "bg-brand" : "bg-white/30 group-hover:bg-white/80"}`}
+              style={{ left: into - 2 }}
             />
           </div>
         );
@@ -457,6 +463,25 @@ export function useTimelineEditing({
     );
   }
 
+  // After the drop, until the new plan is there: a small "saving" mark at the edit.
+  if (!drag && pending) {
+    const markAt =
+      pending.kind === "roll"
+        ? x(pending.atMs)
+        : pending.kind === "trim"
+          ? x(pending.edge === "start" ? (shots[pending.shot]?.startMs ?? 0) : (shots[pending.shot]?.endMs ?? 0)) + (pending.edge === "start" ? 40 : -40)
+          : x(shots[pending.shot]?.startMs ?? 0) + 40;
+    overlay = (
+      <span
+        className="bg-background/95 text-muted-foreground pointer-events-none absolute bottom-full z-30 mb-1 -translate-x-1/2 animate-pulse rounded border px-1.5 py-0.5 text-[11px] whitespace-nowrap shadow"
+        style={{ left: markAt }}
+        data-edit-saving
+      >
+        saving…
+      </span>
+    );
+  }
+
   const resetBody = (s: StoryShot) => ({
     action: "timeline-reset",
     startMs: s.songMs,
@@ -469,6 +494,8 @@ export function useTimelineEditing({
     onShotPointerDown,
     onRowClickCapture,
     slipped,
+    pendingShot: (i: number) =>
+      pending?.kind === "roll" ? i === pending.cut - 1 || i === pending.cut : pending ? i === pending.shot : false,
     edited,
     resetBody,
     save,

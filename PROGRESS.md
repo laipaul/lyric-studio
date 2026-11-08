@@ -4,6 +4,31 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Bug fix: trimming on the timeline needed several tries ✅ (to verify on the Windows PC)
+- **What the user found** (real song "Let My Love Carry You", Windows): "The trim of the clip doesn't work
+  effortlessly. I have to try several times."
+- **Causes (found in the code, fixed):**
+  1. The grab zones were too small: the line between two shots was a 12 px zone, invisible until hovered, so a press
+     a few px inside the shot started a slip instead of moving the cut. Now an 18 px zone centred on the cut
+     (the outer trims 16 px: 10 px into the shot, 6 outside), a faint line always visible (stronger on hover),
+     above the shots and the ⋯ menus (the menu moved 6 px left to give them room).
+  2. After the release the edit jumped back to its old place until the new plan arrived (seconds on a real song), so
+     it looked as if nothing happened and the user tried again. Now the cut / trim handle stays where it was dropped
+     (data-pending, a "saving…" mark, data-edit-saving) until the plan is there; a failed save puts it back and the
+     error shows as before. While it saves (or any other plan runs) no second drag, Undo or Redo starts.
+  3. The mouse listeners were added in an effect after the render, so a quick move or release right after the press
+     could be lost (a stuck drag). Now they start inside the pointerdown (components/pointer-track.ts), also end on
+     pointercancel and when the window loses focus (nothing is saved then), and stop text selection while
+     dragging. The same for the soundtrack window's drag.
+  4. A roll snapped to the nearest beat, so a drag under half a beat went back to the start and did nothing. Now
+     under a quarter beat the cut stays exactly (readout +0.00 s), past it goes to the next beat in the drag
+     direction (snapRollMs in packages/video/src/timeline-edits.ts); Alt stays free; the minimum shot length is kept.
+- **Rejected:** the shots' native drag-and-drop (ShotBlock is only a drop target, not draggable) and the click after
+  a drag (already swallowed by onRowClickCapture).
+- Tests: timeline-edits 16 (4 new, snapRollMs; with follow + storyboard 34 pass); storyboard e2e 137 checks pass (8 new:
+  grab zone 18 px, a press 6 px beside the cut grabs it, the handle stays dropped and marked saving, no second drag
+  meanwhile, it ends where dropped, a quick two-step drag is saved and Ctrl+Z takes it back).
+
 ### Shape: no Clip editor box; the song window on the timeline's song track; a ⋯ menu on each clip ✅ (to verify on the Windows PC)
 - Asked by the user (8 Nov 2026): "remove this clip editor box and focus on a simple trim directly on the clip
   itself"; "I wanted the rectangle on the song track itself, not a new one"; the clip's other settings "in a small
@@ -219,35 +244,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   hand-set). Two older tests now follow the new rule, as intended: "A Heart For Two" line 40 (last line, stamp in
   silence, words + durations later) moves to the words instead of being flagged, and a short first word with voice
   and words both > 1 s after a silent stamp moves to the words. Docs: docs/lyrics.md.
-
-### Theme Engine v2 on HyperFrames, step 2b part 1: the lyrics and cards on HyperFrames, the same code ✅ (to verify on the Windows PC)
-- **HyperFrames now draws the words with the same code as the current renderer:** the lyric scene (LyricScene.tsx)
-  and the title / byline / tagline / hook / end cards (TextCards.tsx, moved out of LyricVideo.tsx) run inside the
-  HyperFrames page as a text layer, React and our text code bundled locally (esbuild) at render time, a page clock
-  in place of Remotion's, driven frame by frame by the GSAP timeline (seekable, deterministic). So every lyric
-  effect (typewriter, karaoke highlight, glide, ...), the text backings, emphasis, big hook, the waiting next line
-  and the title cards with the Japanese fallback font look exactly as before. The timeline is registered once
-  every font face is loaded (HyperFrames waits for it).
-- **Off Remotion for the effects:** our own easing curves (src/easing.ts, test: the same as Remotion's to 1e-5)
-  and text measuring done the same way (a span's width), so lines wrap at the same word.
-- **Check:** `pnpm hf:parity` now compares the whole video, words and cards included, plus the lyric area alone.
-  Cloud test song (glide / karaoke-highlight): whole 0.9929 (lowest 0.9908), words the same. New test (typewriter
-  verses, karaoke hook, typed title with byline, Japanese tagline): whole 0.9915, lyric area 0.9921, cards 0.9916
-  (lowest 0.990): the same words, frame by frame. Zero network still (the test now includes the text layer and a
-  Japanese card). A Reel with lyric effects and title cards now has nothing HyperFrames cannot draw.
-- Tests: easing, hf-parity (picture + Reel text), hf-network (text layer), hf-compile, textboard-make.
-- **Licence check (asked by the user, 6 Nov 2026):**
-  1. The text layer's bundle contains **no Remotion package**: our own 34 files + `react`, `react-dom`, `scheduler`
-     (MIT), checked with esbuild's input list. The bundler itself, `esbuild` (MIT, not Remotion), only builds the
-     file on the PC. Still named, for step 8 (in the plan's removal list with the replacement): LyricScene.tsx /
-     TextCards.tsx import `remotion` (frame, settings) and `@remotion/layout-utils` (measureText) by name for the
-     current renderer, mapped to our own clock.ts / measure.ts in the text layer (step 8: import ours directly);
-     youtube.ts's `interpolate` (step 6); test/easing.test.ts compares with Remotion (removed with it).
-  2. **The easing curves are our own implementation** (src/easing.ts): the standard cubic-bezier maths (the curve's
-     polynomial, solved for x with Newton-Raphson steps, bisection as a fallback), written for this project, not
-     copied from Remotion's source; the test only checks the results match Remotion's to 0.00001.
-- Next (part 2, new on HyperFrames only): the stacked line shape with build-up, the bigger final hook,
-  docs/theme-rules.md.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
