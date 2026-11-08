@@ -4,6 +4,23 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Shape timeline: trim the first and last clip, the clip in the viewer while editing ✅ (confirmed on the Windows PC, 8 Nov 2026)
+- Asked by the user (7 Nov 2026): "I can't trim the first clip from the left-hand side and the last clip from the
+  right-hand side", and "when I select the clip I expect to see it in the viewer".
+- **Outer edges:** the first clip's left edge and the last clip's right edge have a handle (data-trim-handle).
+  Drag the left edge right: the first clip starts later in its footage; drag the right edge left: the last clip
+  ends sooner. The video keeps its music and length (the shot keeps its place; saved as a slip). When the clip
+  has no more footage that way the readout says so ("no more footage after this in the clip").
+- **The clip in the viewer:** clicking a clip on the timeline puts the playhead on its first frame; while a cut,
+  slip or trim is dragged the big viewer shows that exact frame of the clip ("1.40 s of the clip"); after the
+  edit the viewer stands on the edit point (Space plays from there).
+- **Fixed on the way (older bug):** after some re-plans the viewer was mounted again but the playhead kept
+  listening to the old one, so the playhead, the time and Follow froze while the video itself moved. The
+  timeline now follows the viewer that is on screen. A click that ends a drag no longer swallows the next
+  real click.
+- Tests: storyboard.e2e.ts (trim readout and the viewer frame while dragging, the last clip's handle, clicking a
+  clip moves the playhead to it): run in the cloud session, all 108 checks pass.
+
 ### Shape timeline: pro edits with the mouse, part 1 (roll, slip, snapping, Undo) ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - Fixed (7 Nov 2026, reported by the user): a slip on a Reel's first clip was undone by the loop ending (it moved the first clip's start to make room for the seamless loop); a first shot with a start set by hand (slip or anchor) now keeps it, and the loop uses the frames before it when there are enough, else an ordinary last shot. A slip on the last clip likewise plays from the slip as an ordinary last shot (it is not turned into the loop shot).
 - Asked by the user (7 Nov 2026): edit like the pros (Premiere, Resolve, Final Cut), directly on the timeline,

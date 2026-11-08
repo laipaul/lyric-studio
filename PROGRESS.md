@@ -4,6 +4,13 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Review: no line across the video in the browser's player ✅ (to verify on the Windows PC)
+- Found by the user (8 Nov 2026): a thin horizontal line across the Reel in Review (not in Shape). The MP4 itself is
+  clean (checked by the user in Media Player): it is the top edge of the dark band Chrome / Edge draw behind their own
+  video controls (▶ / time / volume).
+- The app's pages now draw a soft fade there instead (no edge): a small style in app/layout.tsx (the CSS build drops
+  these browser-specific rules from globals.css, so it is a plain <style> tag). Review, Post and Compare players.
+
 ### Bug fix: the Reel's title did not show when the part of the song starts on a sung line ✅ (to verify on the Windows PC)
 - Seen (Let My Love Carry You, Reel; Shape → Reels 0:36.1-1:41.3 chosen on the song track, Title opening on): "the title is not showing", "the tagline is not showing". Line 5 ("Let my love carry you through the night") is sung at the very start of that part.
 - Cause: the title opening showed title, byline and tagline only until the first lyric line fades in (make.ts passed `untilFrame` = that line's enter frame). The automatic section leaves up to 2 bars (titleLead); a part chosen by hand on a sung line leaves none, so the cards got a few frames or none, silently. Shape's plan uses the same make.ts dry run, so it showed the same.
@@ -195,24 +202,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   window is shown, dragging its end saves this platform's part in song.json, "chosen by you", Automatic): run in
   the cloud session, all 113 checks pass.
 - Next (asked with it): drag a clip onto another shot to swap them on the timeline (done 8 Nov 2026: lift and swap).
-
-### Shape timeline: trim the first and last clip, the clip in the viewer while editing ✅ (confirmed on the Windows PC, 8 Nov 2026)
-- Asked by the user (7 Nov 2026): "I can't trim the first clip from the left-hand side and the last clip from the
-  right-hand side", and "when I select the clip I expect to see it in the viewer".
-- **Outer edges:** the first clip's left edge and the last clip's right edge have a handle (data-trim-handle).
-  Drag the left edge right: the first clip starts later in its footage; drag the right edge left: the last clip
-  ends sooner. The video keeps its music and length (the shot keeps its place; saved as a slip). When the clip
-  has no more footage that way the readout says so ("no more footage after this in the clip").
-- **The clip in the viewer:** clicking a clip on the timeline puts the playhead on its first frame; while a cut,
-  slip or trim is dragged the big viewer shows that exact frame of the clip ("1.40 s of the clip"); after the
-  edit the viewer stands on the edit point (Space plays from there).
-- **Fixed on the way (older bug):** after some re-plans the viewer was mounted again but the playhead kept
-  listening to the old one, so the playhead, the time and Follow froze while the video itself moved. The
-  timeline now follows the viewer that is on screen. A click that ends a drag no longer swallows the next
-  real click.
-- Tests: storyboard.e2e.ts (trim readout and the viewer frame while dragging, the last clip's handle, clicking a
-  clip moves the playhead to it): run in the cloud session, all 108 checks pass.
-
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
