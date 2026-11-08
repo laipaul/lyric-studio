@@ -1029,7 +1029,9 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                         setSelected(s.index);
                         setPanel("shot");
                       }}
-                      dropTarget={dropShot === s.index}
+                      dropTarget={dropShot === s.index || tl.liftOver === s.index}
+                      lifted={tl.liftFrom === s.index}
+                      editable={view.editable && source?.kind === "plan"}
                       onDragOver={
                         view.editable
                           ? (e) => {
@@ -1118,6 +1120,8 @@ function ShotBlock({
   slipped,
   pending,
   slippable,
+  lifted,
+  editable,
   onPointerDown,
   onSelect,
   dropTarget,
@@ -1132,6 +1136,8 @@ function ShotBlock({
   slipped?: boolean; // the user chose which part of the clip plays here (slip)
   pending?: boolean; // an edit of this shot is being saved and planned
   slippable?: boolean;
+  lifted?: boolean; // picked up to be dropped on another shot (a swap)
+  editable?: boolean;
   onPointerDown?: (e: React.PointerEvent) => void;
   onSelect: () => void;
   dropTarget: boolean;
@@ -1145,6 +1151,7 @@ function ShotBlock({
       data-shot={s.index + 1}
       data-slipped={slipped || undefined}
       data-pending={pending || undefined}
+      data-lifted={lifted || undefined}
       onPointerDown={onPointerDown}
       data-drop-target={dropTarget || undefined}
       onDragOver={onDragOver}
@@ -1155,9 +1162,9 @@ function ShotBlock({
         e.stopPropagation();
         onSelect();
       }}
-      className={cn("absolute top-1 bottom-1 overflow-hidden rounded border text-left text-[10px] text-white", s.warnings.length ? "border-amber-400" : "border-white/20", (selected || dropTarget) && "ring-brand ring-2")}
+      className={cn("absolute top-1 bottom-1 overflow-hidden rounded border text-left text-[10px] text-white", s.warnings.length ? "border-amber-400" : "border-white/20", (selected || dropTarget) && "ring-brand ring-2", lifted && "border-brand border-dashed opacity-40")}
       style={{ left, width: Math.max(6, width - 2), backgroundImage: s.thumb ? `linear-gradient(rgba(0,0,0,.35),rgba(0,0,0,.65)), url(/api/files/${s.thumb})` : undefined, backgroundSize: "cover", backgroundPosition: "center" }}
-      title={`${s.clip} · ${secs(s.endMs - s.startMs)}${slippable ? "\nDrag sideways to slip: another part of the clip in the same shot. Drag the line between two shots to move the cut." : ""}${s.warnings.length ? `\n${s.warnings.join("\n")}` : ""}`}
+      title={`${s.clip} · ${secs(s.endMs - s.startMs)}${slippable ? "\nDrag sideways to slip: another part of the clip in the same shot. Drag the line between two shots to move the cut." : ""}${editable ? "\nDrag it up to lift it, then onto another clip to swap the two." : ""}${s.warnings.length ? `\n${s.warnings.join("\n")}` : ""}`}
     >
       <div className="absolute top-0 right-0 left-0 flex flex-wrap gap-0.5 p-0.5 pr-6">
         {s.anchor ? (

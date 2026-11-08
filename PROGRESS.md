@@ -4,6 +4,23 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Shape timeline: lift a clip onto another to swap them ✅ (to verify on the Windows PC)
+- Asked by the user (7 Nov 2026, with the soundtrack window): "drag a clip onto another shot to swap them on the
+  timeline"; the gesture chosen by the user (8 Nov 2026): **lift it up** (a sideways drag stays a slip).
+- **Lift:** drag a clip upwards first (about half a centimetre): it lifts (dimmed on the row, a small card of it follows
+  the pointer). Move it over another clip (pink ring, "swap 1 · a.mp4 ↔ 2 · b.mp4") and let go: the two clips swap
+  places; the cuts stay where they are (the music is fixed); the viewer stands on the moved clip. Esc, or letting go
+  anywhere else, puts it back.
+- **Saved in the story order** (clips.json "order", the same order as Assets and the Clips panel), so every video gets
+  it; a lyric line anchored on one of the two clips is anchored on the other afterwards (song.json anchors follow their
+  clips). Ctrl+Z / Undo swaps them back (the anchor too), Redo again.
+- **The Reel's loop ending** (the last shot, ↻, replays the first clip so the Reel loops seamlessly) cannot be lifted or
+  swapped; over it the readout says so. Swapping the first clip changes it too.
+- Tests: timeline-edits.test.ts (swapInStory: the order, anchors follow, twice = back); storyboard-edit.test.ts (the
+  swap re-plans with the same cuts, Generate renders the same shots, swapping again gives it back); storyboard.e2e.ts
+  (lift shot 1, no drop on the loop ending, swap with shot 2, cuts unmoved, clips.json order, the anchor followed, Esc,
+  Ctrl+Z): run in the cloud session, all 147 browser checks and 31 unit tests pass.
+
 ### Bug fix: trimming on the timeline needed several tries ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - **What the user found** (real song "Let My Love Carry You", Windows): "The trim of the clip doesn't work
   effortlessly. I have to try several times."
@@ -73,7 +90,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   does not scroll; Follow on: ⏮ and ⏭ put it in the middle within 4 px): run in the cloud session, all 121 checks
   pass; follow.test.ts 10 pass.
 
-### Shape: the whole song as the soundtrack, the video as a window on it ✅ (to verify on the Windows PC)
+### Shape: the whole song as the soundtrack, the video as a window on it ✅ (confirmed on the Windows PC, 8 Nov 2026, in its new place on the song track)
 - Asked by the user (7 Nov 2026): keep the whole song untouched in the background and pick which part the video
   uses, like trimming the music in Canva, without resizing the song for every Reel or YouTube video.
 - **Soundtrack track** above the timeline: the WHOLE song's waveform with its sung lines (choruses in the brand
@@ -91,7 +108,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: section-window.test.ts (clean ends, snapping, minimum, song.json text, lines cut); storyboard.e2e.ts (the
   window is shown, dragging its end saves this platform's part in song.json, "chosen by you", Automatic): run in
   the cloud session, all 113 checks pass.
-- Next (asked with it): drag a clip onto another shot to swap them on the timeline.
+- Next (asked with it): drag a clip onto another shot to swap them on the timeline (done 8 Nov 2026: lift and swap).
 
 ### Shape timeline: trim the first and last clip, the clip in the viewer while editing ✅ (to verify on the Windows PC)
 - Asked by the user (7 Nov 2026): "I can't trim the first clip from the left-hand side and the last clip from the
@@ -227,23 +244,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   edits in the panel and are unchanged.
 - Test: e2e/song-stages.e2e.ts unticks "wedding" in Shape → To make, goes to Make without reloading and
   checks the clips line no longer names it (browser test, runs in the cloud check / on a machine with Playwright).
-
-### Bug fix: vocal-start check moves a line whose stamp is in silence when every signal is later ✅ (to verify on the Windows PC)
-- Reported on "Let My Love Carry You": line 5 (stamp 0:34.8, vocal track -35 dB there, under the voice level
-  -30.5 dB; voice 0:38.1, recognised words 0:37.2, word durations 0:37.7) and line 31, the last line (stamp
-  3:19.4, words 3:25.1, durations 3:22.1) were only "flagged for review": no two signals were within 0.3 s.
-- New rule (vocal-guard.ts, after the existing move rules): the stamp is in silence (`stampLevelDb` under
-  `thresholdDb`), every other signal is at least the lead-in (1 s) later, and there are at least two of them
-  -> the line moves, to the recognised words when they are within 1.0 s of the voice or the word-duration
-  estimate, else to the earliest signal. The held-note protection (hook / last line) applies only when the
-  stamp is not in silence; a stamp with voice at it, and hand-set starts, are never moved by it; the safety
-  checks (next line, previous line) still apply.
-- Line 5 -> 0:37.2; line 31 -> 3:22.1. Log: `guard: line 5 moved from 0:34.8 to 0:37.2 (stamp in silence; voice,
-  words, word durations all later)` (`GuardMove.reason`).
-- Tests: vocal-guard.test.ts (line 5 with the exact numbers, last line, voice at the stamp, one signal alone,
-  hand-set). Two older tests now follow the new rule, as intended: "A Heart For Two" line 40 (last line, stamp in
-  silence, words + durations later) moves to the words instead of being flagged, and a short first word with voice
-  and words both > 1 s after a silent stamp moves to the words. Docs: docs/lyrics.md.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

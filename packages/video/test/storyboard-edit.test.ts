@@ -105,4 +105,20 @@ describe("storyboard stage 2", () => {
     expect(readRecipe(songPathsById(ws, id).recipe!).anchors).toBeUndefined();
     expect(existsSync(song)).toBe(true);
   }, 300_000);
+
+  it("lift a clip onto another shot: the two swap places, the cuts stay; doing it again gives it back", async () => {
+    const before = await storyboardPlan(ws, id, "reels", "v1");
+    const [first, , third] = before.shots;
+    expect(first.clip).not.toBe(third.clip);
+    const order = before.clips.map((c) => c.name);
+    storyboardEdit(ws, id, { action: "swap", a: first.clip, b: third.clip, order });
+    const after = await storyboardPlan(ws, id, "reels", "v1");
+    expect(after.shots[0].clip).toBe(third.clip);
+    expect(after.shots[2].clip).toBe(first.clip);
+    expect(after.shots.map((s) => [s.startMs, s.endMs])).toEqual(before.shots.map((s) => [s.startMs, s.endMs])); // the music is fixed
+    expect((await rendered()).shots).toEqual(after.props.shots);
+    storyboardEdit(ws, id, { action: "swap", a: first.clip, b: third.clip, order: after.clips.map((c) => c.name) });
+    expect((await storyboardPlan(ws, id, "reels", "v1")).shots.map((s) => s.clip)).toEqual(before.shots.map((s) => s.clip));
+    expect(() => storyboardEdit(ws, id, { action: "swap", a: first.clip, b: first.clip, order })).toThrow(/Which two clips/);
+  }, 300_000);
 });

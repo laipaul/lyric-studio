@@ -1,7 +1,7 @@
 // The Shape timeline's pro edits: roll (move a cut), slip (another part of the clip in the same shot).
 import { describe, expect, it } from "vitest";
 
-import { applyCutMoves, composeProps, cutAtMs, getCutPoints, mergeTimeline, resetShot, rollEdit, slipEdit, slipFor, snapRollMs, type CutPlan, type EditShot, type RenderBase } from "../src";
+import { applyCutMoves, composeProps, cutAtMs, getCutPoints, mergeTimeline, resetShot, rollEdit, slipEdit, slipFor, snapRollMs, swapInStory, type CutPlan, type EditShot, type RenderBase } from "../src";
 import { cutPointAt } from "../src/cuts";
 import { grid } from "./helpers";
 
@@ -167,5 +167,21 @@ describe("snapRollMs: the cut snaps while dragging", () => {
   it("Alt: the frame under the pointer; without beats too", () => {
     expect(snapRollMs(15_180, from, bt, true)).toBeCloseTo(15_166.7, 0);
     expect(snapRollMs(15_180, from, [], false)).toBeCloseTo(15_166.7, 0);
+  });
+});
+
+describe("swapInStory: a clip lifted onto another shot", () => {
+  it("the two clips trade places in the story order; the others keep theirs", () => {
+    expect(swapInStory(["a.mp4", "b.mp4", "c.mp4", "d.mp4"], [], "b.mp4", "D.MP4").order).toEqual(["a.mp4", "d.mp4", "c.mp4", "b.mp4"]);
+  });
+  it("anchors follow their clips (the line keeps its other settings)", () => {
+    const anchors = [{ line: 2, clip: "b.mp4", transition: "dissolve" as const }, { line: 5, clip: "c.mp4" }, { line: 7, clip: "a.mp4" }];
+    expect(swapInStory(["a.mp4", "b.mp4", "c.mp4"], anchors, "a.mp4", "b.mp4").anchors).toEqual([{ line: 2, clip: "a.mp4", transition: "dissolve" }, { line: 5, clip: "c.mp4" }, { line: 7, clip: "b.mp4" }]);
+  });
+  it("swapping twice gives everything back (Undo)", () => {
+    const order = ["a.mp4", "b.mp4", "c.mp4"];
+    const anchors = [{ line: 1, clip: "c.mp4" }];
+    const once = swapInStory(order, anchors, "a.mp4", "c.mp4");
+    expect(swapInStory(once.order, once.anchors, "a.mp4", "c.mp4")).toEqual({ order, anchors });
   });
 });

@@ -5,7 +5,7 @@
 import type { Workspace } from "@lyric/db";
 
 import { checkAnchors, type AnchorSpec, type AnchorTransition } from "../anchors";
-import { mergeTimeline, resetShot, type CutMove, type Slip, type TimelineEdits } from "../timeline-edits";
+import { mergeTimeline, resetShot, swapInStory, type CutMove, type Slip, type TimelineEdits } from "../timeline-edits";
 import { readClipEdits, setClipOmit, withSongOrder, writeClipEdits, type ClipEdit, type ClipEdits } from "./clip-edits";
 import { saveAnchors } from "./lyrics-view";
 import { readRecipe, writeRecipe } from "./recipe";
@@ -13,6 +13,7 @@ import { songPathsById } from "./song-folder";
 
 export type StoryboardEdit =
   | { action: "order"; order: string[] } // clip file names, the whole story order
+  | { action: "swap"; a: string; b: string; order: string[] } // a clip lifted onto another shot: the two swap places (order: the story order now); anchors follow their clips
   | { action: "clip"; clip: string; edit: ClipEdit | null } // null: back to the whole clip, normal speed, the automatic best moment (Use / Omit is kept)
   | { action: "omit"; clip: string; omit: boolean } // Use / Omit (the same switch as in Assets)
   | { action: "anchor"; line: number; clip: string; transition?: AnchorTransition }
@@ -24,7 +25,7 @@ export type StoryboardEdit =
   | { action: "slip"; slip: Slip }
   | { action: "timeline-reset"; startMs: number; endMs: number }
   | { action: "timeline"; timeline: TimelineEdits };
-export const STORYBOARD_ACTIONS = ["order", "clip", "omit", "anchor", "unanchor", "canvas", "roll", "slip", "timeline-reset", "timeline"] as const;
+export const STORYBOARD_ACTIONS = ["order", "swap", "clip", "omit", "anchor", "unanchor", "canvas", "roll", "slip", "timeline-reset", "timeline"] as const;
 
 // before / after: the timeline edits around a timeline action, for Undo / Redo.
 export type StoryboardEditResult = { edits: ClipEdits; anchors: AnchorSpec[]; before?: TimelineEdits; after?: TimelineEdits };
@@ -41,6 +42,14 @@ export function storyboardEdit(ws: Workspace, projectId: string, e: StoryboardEd
     // Only the clips Shape shows move, inside the places they hold; clips this platform cannot use (and
     // other names in the order) keep theirs, so Assets and Shape stay one sequence.
     edits = writeClipEdits(paths.root, withSongOrder(edits, e.order, e.order));
+  } else if (e.action === "swap") {
+    const named = (x: unknown) => typeof x === "string" && x.trim() !== "";
+    if (!named(e.a) || !named(e.b) || same(e.a, e.b)) throw new Error("Which two clips?");
+    if (!Array.isArray(e.order) || !e.order.every(named)) throw new Error("The story order must be a list of clip file names.");
+    if (!e.order.some((n) => same(n, e.a)) || !e.order.some((n) => same(n, e.b))) throw new Error("Both clips must be in the story order.");
+    const swapped = swapInStory(e.order, anchors, e.a, e.b);
+    edits = writeClipEdits(paths.root, withSongOrder(edits, swapped.order, swapped.order));
+    if (anchors.some((x) => same(x.clip, e.a) || same(x.clip, e.b))) anchors = saveAnchors(ws, projectId, swapped.anchors);
   } else if (e.action === "clip") {
     if (typeof e.clip !== "string" || !e.clip.trim()) throw new Error("Which clip?");
     const omitted = Object.entries(edits.clips).find(([n]) => same(n, e.clip))?.[1]?.omit === true;

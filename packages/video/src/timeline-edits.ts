@@ -147,3 +147,18 @@ export function snapRollMs(rawMs: number, fromMs: number, beatsMs: readonly numb
   const near = nearestIdx(rawMs);
   return (near - origin) * dir <= 0 ? next : b[near];
 }
+
+// A clip lifted on the Shape timeline and dropped onto another shot (8 Nov 2026): the two clips swap places in the
+// story order, so A plays where B played and B where A played; the cuts stay where they are (the music is fixed).
+// Anchors follow their clips: a lyric line anchored on A is anchored on B, and the other way round. Doing it twice
+// gives everything back (Undo is the same swap). Names compare without case; anything else is unchanged.
+export function swapInStory<A extends { clip: string }>(order: readonly string[], anchors: readonly A[], a: string, b: string): { order: string[]; anchors: A[] } {
+  const is = (x: string, y: string) => x.toLowerCase() === y.toLowerCase();
+  const spelt = (n: string) => order.find((x) => is(x, n)) ?? n; // the names as the order spells them
+  const [sa, sb] = [spelt(a), spelt(b)];
+  const other = (n: string) => (is(n, a) ? sb : is(n, b) ? sa : n);
+  return {
+    order: order.map(other),
+    anchors: anchors.map((x) => (is(x.clip, a) || is(x.clip, b) ? { ...x, clip: other(x.clip) } : x)),
+  };
+}

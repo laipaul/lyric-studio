@@ -5,7 +5,9 @@
 //         shot gets longer and the other shorter, nothing else moves (the music is fixed);
 //   slip  drag inside a shot: it keeps its place and length, another part of its clip plays in it;
 //   trim  drag the outer edge of the first shot (its start) or of the last shot (its end): the clip starts
-//         later / ends sooner in its own footage; the video keeps its music, so the shot keeps its place.
+//         later / ends sooner in its own footage; the video keeps its music, so the shot keeps its place;
+//   lift  (8 Nov 2026, asked by the user) drag a shot upwards first to lift it, then over another shot and let
+//         go: the two clips swap places (story order, anchors follow; the cuts stay); Esc or a drop elsewhere cancels.
 // While dragging: a readout (+0.5 s · the two shots' lengths / the clip's new start) and the clip's frame at
 // the edge in a small preview. Saved on the song's timeline (clips.json "cuts" / "slips", see
 // packages/video/src/timeline-edits.ts) and planned again; Ctrl+Z / Ctrl+Shift+Z undo and redo.
@@ -47,8 +49,19 @@ type Drag =
       kind: "slip";
       shot: number;
       startX: number;
+      startY: number;
+      rowLeft: number; // the shots row's left edge on screen (to find the shot under the pointer once lifted)
+      canSlip: boolean; // video shots only; any shot can be lifted
       deltaMs: number;
       active: boolean;
+    }
+  | {
+      kind: "lift";
+      shot: number;
+      x: number; // the pointer now (client)
+      y: number;
+      rowLeft: number;
+      over: number | null; // the shot under the pointer (its index)
     }
   | {
       kind: "trim";
@@ -62,10 +75,15 @@ type Drag =
 type Pending =
   | { kind: "roll"; cut: number; atMs: number }
   | { kind: "trim"; edge: "start" | "end"; shot: number; deltaMs: number }
-  | { kind: "slip"; shot: number };
+  | { kind: "slip"; shot: number }
+  | { kind: "swap"; shot: number; over: number };
+
+// Undo / Redo: a timeline state (cuts and slips) or a swap (the same swap again takes it back).
+type UndoStep = { kind: "timeline"; edits: TimelineEdits } | { kind: "swap"; a: string; b: string };
 
 const MIN_MS = 400; // a roll never makes a shot shorter than this (as the planner)
 const SLIP_THRESHOLD_PX = 4; // a smaller movement is a click (select the shot)
+const LIFT_PX = 18; // dragged this far upwards (more up than sideways) before a slip starts: the shot is lifted
 
 const s1 = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 const signed = (ms: number) =>
@@ -93,8 +111,8 @@ export function useTimelineEditing({
   const stopTracking = useRef<(() => void) | null>(null);
   const dragRef = useRef<Drag | null>(null);
   const justDragged = useRef(false);
-  const [undo, setUndo] = useState<TimelineEdits[]>([]);
-  const [redo, setRedo] = useState<TimelineEdits[]>([]);
+  const [undo, setUndo] = useState<UndoStep[]>([]);
+  const [redo, setRedo] = useState<UndoStep[]>([]);
   const editable = !!view?.editable;
   const shots = view?.shots ?? [];
   const x = (ms: number) => (ms / 1000) * zoom;
@@ -129,15 +147,16 @@ export function useTimelineEditing({
   // Saves one edit and plans again. `shown` keeps the edit where it was dropped until the new plan is there (or
   // the save failed: then it goes back and the board shows the error); no second edit starts meanwhile.
   const save = useCallback(
-    async (body: Record<string, unknown>, showAtMs?: number, shown?: Pending) => {
+    async (body: Record<string, unknown>, showAtMs?: number, shown?: Pending, step?: UndoStep) => {
       if (shown) {
         pendingRef.current = true;
         setPending(shown);
       }
       try {
         const r = await post(body);
-        if (r?.before) {
-          setUndo((u) => [...u.slice(-49), r.before!]);
+        const undoStep: UndoStep | null = step && r ? step : r?.before ? { kind: "timeline", edits: r.before } : null;
+        if (undoStep) {
+          setUndo((u) => [...u.slice(-49), undoStep]);
           setRedo([]);
         }
         if (r && showAtMs !== undefined) onEdited?.(showAtMs);
@@ -151,6 +170,14 @@ export function useTimelineEditing({
     [post, onEdited],
   );
 
+  // Two shots can swap when they show different clips and neither is a Reel's loop ending (it always replays the
+  // first clip, so the video loops seamlessly: swapping the first clip changes it too).
+  const swappable = (a: StoryShot, b: StoryShot) => a.index !== b.index && !a.loop && !b.loop && a.clip.toLowerCase() !== b.clip.toLowerCase();
+  // The shot under the pointer (by its place along the row; the pointer may be above the row while lifted).
+  const shotAt = (clientX: number, rowLeft: number): number | null => {
+    const ms = ((clientX - rowLeft) / zoom) * 1000;
+    return shots.find((s) => ms >= s.startMs && ms < s.endMs)?.index ?? null;
+  };
   // Mouse moves and the release, wherever the pointer goes while dragging. The listeners start inside the
   // pointerdown (trackPointer), they call the latest move / finish of the render through `latest`.
   const move = (e: PointerEvent) => {
@@ -162,9 +189,14 @@ export function useTimelineEditing({
       next = { ...d, atMs: rollTarget(d, e.clientX, e.altKey), free: e.altKey };
     else if (d.kind === "trim")
       next = { ...d, deltaMs: ((e.clientX - d.startX) / zoom) * 1000 };
+    else if (d.kind === "lift") next = { ...d, x: e.clientX, y: e.clientY, over: shotAt(e.clientX, d.rowLeft) };
     else {
       const dx = e.clientX - d.startX;
-      next = { ...d, active: d.active || Math.abs(dx) >= SLIP_THRESHOLD_PX, deltaMs: (dx / zoom) * 1000 };
+      const dy = e.clientY - d.startY;
+      // Upwards first (before any slip): the shot is lifted, to be dropped on another one (a swap).
+      if (!d.active && -dy >= LIFT_PX && -dy > Math.abs(dx) && !shots[d.shot].loop) next = { kind: "lift", shot: d.shot, x: e.clientX, y: e.clientY, rowLeft: d.rowLeft, over: shotAt(e.clientX, d.rowLeft) };
+      else if (!d.canSlip) next = d;
+      else next = { ...d, active: d.active || Math.abs(dx) >= SLIP_THRESHOLD_PX, deltaMs: (dx / zoom) * 1000 };
     }
     dragRef.current = next;
     setDrag(next);
@@ -191,6 +223,13 @@ export function useTimelineEditing({
       const slip = slipEdit(editShot(s), -d.deltaMs); // the start edge to the right = the clip starts later
       if (Math.abs(slip.in - s.inS) >= 0.03)
         void save({ action: "slip", slip }, d.edge === "start" ? s.startMs : Math.max(s.startMs, s.endMs - 1000), { kind: "trim", edge: d.edge, shot: d.shot, deltaMs: d.deltaMs });
+    } else if (d.kind === "lift") {
+      justDragged.current = true;
+      const from = shots[d.shot];
+      const to = d.over !== null ? shots[d.over] : undefined;
+      if (!from || !to || !swappable(from, to)) return; // dropped elsewhere: nothing changes
+      const order = (view?.clips ?? []).map((c) => c.name);
+      void save({ action: "swap", a: from.clip, b: to.clip, order }, to.startMs, { kind: "swap", shot: from.index, over: to.index }, { kind: "swap", a: from.clip, b: to.clip });
     } else if (d.active) {
       justDragged.current = true;
       const s = shots[d.shot];
@@ -212,28 +251,57 @@ export function useTimelineEditing({
     stopTracking.current = trackPointer(
       (e) => latest.current?.move(e),
       (_e, cancelled) => latest.current?.finish(cancelled),
-      d.kind === "slip" ? undefined : d.kind === "roll" ? "col-resize" : "ew-resize",
+      d.kind === "slip" || d.kind === "lift" ? undefined : d.kind === "roll" ? "col-resize" : "ew-resize",
     );
   }, []);
   const locked = busy || pending !== null;
+  // Esc while a shot is lifted: put it back (nothing changes).
+  const lifting = drag?.kind === "lift";
+  useEffect(() => {
+    if (!lifting) return;
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      stopTracking.current?.();
+      latest.current?.finish(true);
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [lifting]);
 
   // Undo / Redo (Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y), not while typing in a field.
+  // A step done again: a timeline state is posted (its "before" is the step back), a swap is swapped again.
+  const orderRef = useRef<string[]>([]); // the story order now (a swap sends it)
+  useEffect(() => {
+    orderRef.current = (view?.clips ?? []).map((c) => c.name);
+  }, [view]);
+  const apply = useCallback(
+    async (step: UndoStep): Promise<UndoStep | null> => {
+      if (step.kind === "swap") {
+        const r = await post({ action: "swap", a: step.a, b: step.b, order: orderRef.current });
+        return r ? step : null;
+      }
+      const r = await post({ action: "timeline", timeline: step.edits });
+      return r?.before ? { kind: "timeline", edits: r.before } : null;
+    },
+    [post],
+  );
   const undoOne = useCallback(async () => {
     const prev = undo.at(-1);
     if (!prev || pendingRef.current) return;
-    const r = await post({ action: "timeline", timeline: prev });
-    if (!r) return;
+    const back = await apply(prev);
+    if (!back) return;
     setUndo((u) => u.slice(0, -1));
-    if (r.before) setRedo((x) => [...x, r.before!]);
-  }, [undo, post]);
+    setRedo((x) => [...x, back]);
+  }, [undo, apply]);
   const redoOne = useCallback(async () => {
     const next = redo.at(-1);
     if (!next || pendingRef.current) return;
-    const r = await post({ action: "timeline", timeline: next });
-    if (!r) return;
+    const back = await apply(next);
+    if (!back) return;
     setRedo((x) => x.slice(0, -1));
-    if (r.before) setUndo((u) => [...u, r.before!]);
-  }, [redo, post]);
+    setUndo((u) => [...u, back]);
+  }, [redo, apply]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -274,10 +342,13 @@ export function useTimelineEditing({
     movedCut(s.index) ||
     (s.index + 1 < shots.length && movedCut(s.index + 1));
 
-  // A shot pressed: a slip once it moves (video shots of a plan only); otherwise a click selects it.
+  // A shot pressed: a slip once it moves sideways (video shots of a plan only), lifted (to swap) once it moves
+  // upwards first; otherwise a click selects it.
   const onShotPointerDown = (s: StoryShot, e: React.PointerEvent) => {
-    if (!editable || locked || e.button !== 0 || s.kind !== "video") return;
-    begin({ kind: "slip", shot: s.index, startX: e.clientX, deltaMs: 0, active: false });
+    if (!editable || locked || e.button !== 0) return;
+    const row = (e.currentTarget as HTMLElement).closest("[data-shots-row]");
+    const rowLeft = row ? row.getBoundingClientRect().left : e.clientX - x(s.startMs);
+    begin({ kind: "slip", shot: s.index, startX: e.clientX, startY: e.clientY, rowLeft, canSlip: s.kind === "video", deltaMs: 0, active: false });
   };
   // After a drag, the click that follows does not select the shot or play from there.
   const onRowClickCapture = (e: React.MouseEvent) => {
@@ -463,6 +534,38 @@ export function useTimelineEditing({
     );
   }
 
+  if (drag?.kind === "lift") {
+    const from = shots[drag.shot];
+    const to = drag.over !== null ? shots[drag.over] : undefined;
+    const same = !!to && !!from && !swappable(from, to);
+    if (from)
+      overlay = (
+        <>
+          {/* the lifted clip follows the pointer */}
+          <div
+            className="border-brand pointer-events-none fixed z-50 flex h-10 w-28 -translate-x-1/2 -translate-y-full items-end overflow-hidden rounded border-2 bg-black/80 bg-cover bg-center px-1 text-[10px] text-white shadow-xl"
+            style={{ left: drag.x, top: drag.y - 6, backgroundImage: from.thumb ? `linear-gradient(rgba(0,0,0,.2),rgba(0,0,0,.7)), url(/api/files/${from.thumb})` : undefined }}
+            data-lift-ghost
+          >
+            <span className="truncate">{from.clip}</span>
+          </div>
+          <EditBubble left={x(to && !same ? (to.startMs + to.endMs) / 2 : (from.startMs + from.endMs) / 2)} mediaSrc={null} atS={null} thumb={null}>
+            {to && !same ? (
+              <>
+                <span className="text-brand font-medium">swap</span> {from.index + 1} · {from.clip} ↔ {to.index + 1} · {to.clip}
+              </>
+            ) : same && to?.loop ? (
+              <span className="text-amber-300" data-lift-loop>the last shot is the loop ending: it always replays the first clip</span>
+            ) : same ? (
+              <span className="text-muted-foreground">the same clip: drop it on another one to swap them</span>
+            ) : (
+              <span className="text-muted-foreground">drop it on another clip to swap them (Esc: put it back)</span>
+            )}
+          </EditBubble>
+        </>
+      );
+  }
+
   // After the drop, until the new plan is there: a small "saving" mark at the edit.
   if (!drag && pending) {
     const markAt =
@@ -470,7 +573,9 @@ export function useTimelineEditing({
         ? x(pending.atMs)
         : pending.kind === "trim"
           ? x(pending.edge === "start" ? (shots[pending.shot]?.startMs ?? 0) : (shots[pending.shot]?.endMs ?? 0)) + (pending.edge === "start" ? 40 : -40)
-          : x(shots[pending.shot]?.startMs ?? 0) + 40;
+          : pending.kind === "swap"
+            ? x(((shots[pending.over]?.startMs ?? 0) + (shots[pending.over]?.endMs ?? 0)) / 2)
+            : x(shots[pending.shot]?.startMs ?? 0) + 40;
     overlay = (
       <span
         className="bg-background/95 text-muted-foreground pointer-events-none absolute bottom-full z-30 mb-1 -translate-x-1/2 animate-pulse rounded border px-1.5 py-0.5 text-[11px] whitespace-nowrap shadow"
@@ -495,7 +600,9 @@ export function useTimelineEditing({
     onRowClickCapture,
     slipped,
     pendingShot: (i: number) =>
-      pending?.kind === "roll" ? i === pending.cut - 1 || i === pending.cut : pending ? i === pending.shot : false,
+      pending?.kind === "roll" ? i === pending.cut - 1 || i === pending.cut : pending?.kind === "swap" ? i === pending.shot || i === pending.over : pending ? i === pending.shot : false,
+    liftFrom: drag?.kind === "lift" ? drag.shot : null, // the lifted shot (dimmed on the row)
+    liftOver: drag?.kind === "lift" && drag.over !== null && shots[drag.over] && shots[drag.shot] && swappable(shots[drag.shot], shots[drag.over]) ? drag.over : null, // where it would land (ringed)
     edited,
     resetBody,
     save,

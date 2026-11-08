@@ -500,6 +500,49 @@ async function main() {
     check((clipsJson().cuts ?? []).length === 0, `"Automatic cuts and clip start" on shot 2 puts its cut back (${JSON.stringify(clipsJson().cuts)})`);
     await page.click("[data-panel-close]").catch(() => {});
     writeFileSync(path.join(paths.root, "clips.json"), JSON.stringify({ ...clipsJson(), cuts: [], slips: [] }));
+    // Lift a clip onto another (8 Nov 2026): drag shot 1 upwards to lift it, then over shot 2 and let go: the two clips
+    // swap places (story order in clips.json; shot 2's lyric anchor follows its clip), the cuts stay; shot 3 is the Reel's
+    // loop ending (it replays the first clip) and takes no drop; Esc puts a lifted clip back; Ctrl+Z swaps them back.
+    const clipOfShot = async (n: number) => ((await page.textContent(`[data-shot='${n}']`)) ?? "").match(/\d+ · (\S+\.mp4)/)?.[1] ?? "";
+    const [c1, c2] = [await clipOfShot(1), await clipOfShot(2)];
+    const [b1, b2, b3] = [await shotBox(1), await shotBox(2), await shotBox(3)];
+    await page.mouse.move(b1.x + b1.width / 2, b1.y + b1.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(b1.x + b1.width / 2 + 2, b1.y + b1.height / 2 - 30, { steps: 4 });
+    check(!!(await page.$("[data-shot='1'][data-lifted]")) && (await page.isVisible("[data-lift-ghost]")), "dragging a clip upwards lifts it (the clip follows the pointer)");
+    await page.mouse.move(b3.x + b3.width / 2, b3.y - 20, { steps: 8 });
+    check(!!(await page.$("[data-lift-loop]")) && !(await page.$("[data-shot='3'][data-drop-target]")), "over the loop ending it says that shot replays the first clip (no drop there)");
+    await page.mouse.move(b2.x + b2.width / 2, b2.y - 20, { steps: 8 });
+    const liftText = ((await page.textContent("[data-edit-readout]").catch(() => "")) ?? "").trim();
+    check(liftText.includes(`swap 1 · ${c1} ↔ 2 · ${c2}`) && !!(await page.$("[data-shot='2'][data-drop-target]")), `over shot 2 it says what will swap, shot 2 ringed (${liftText})`);
+    await page.mouse.up();
+    await replanned();
+    check((await clipOfShot(1)) === c2 && (await clipOfShot(2)) === c1, `the two clips swapped places (shot 1: ${await clipOfShot(1)}, shot 2: ${await clipOfShot(2)})`);
+    const [a1, a2] = [await shotBox(1), await shotBox(2)];
+    check(Math.abs(a1.x - b1.x) < 2 && Math.abs(a1.width - b1.width) < 2 && Math.abs(a2.x - b2.x) < 2, "the cuts stay where they were (the music is fixed)");
+    const orderNow = (clipsJson().order ?? []) as string[];
+    check(orderNow.indexOf(c2) < orderNow.indexOf(c1), `the swap is kept in clips.json's story order (${orderNow.join(", ")})`);
+    const anchorsNow = (JSON.parse(readFileSync(paths.recipe!, "utf8")).anchors ?? []) as { line: number; clip: string }[];
+    check(anchorsNow.some((a) => a.line === 4 && a.clip === c1), `the lyric line anchored on ${c2} now anchors ${c1} (${JSON.stringify(anchorsNow)})`);
+    check(!(clipsJson().slips ?? []).length, "a lift is not a slip");
+    // Esc while lifted: nothing changes.
+    await page.mouse.move(b2.x + b2.width / 2, b2.y + b2.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(b2.x + b2.width / 2, b2.y + b2.height / 2 - 30, { steps: 4 });
+    await page.mouse.move(b1.x + b1.width / 2, b1.y - 20, { steps: 4 });
+    await page.keyboard.press("Escape");
+    await page.mouse.up();
+    await sleep(500);
+    check(!(await page.$("[data-lifted]")) && !(await page.$("[data-edit-saving]")) && JSON.stringify(clipsJson().order) === JSON.stringify(orderNow), "Esc puts a lifted clip back (nothing changes)");
+    // Ctrl+Z: swapped back.
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press("Control+z");
+    await replanned();
+    const anchorsBack = (JSON.parse(readFileSync(paths.recipe!, "utf8")).anchors ?? []) as { line: number; clip: string }[];
+    check((await clipOfShot(1)) === c1 && (await clipOfShot(2)) === c2 && anchorsBack.some((a) => a.line === 4 && a.clip === c2), "Ctrl+Z swaps them back (and the anchor)");
+    await page.click("[data-shot='3']"); // the viewer back where the checks below expect it (shot 3's first frame)
+    await sleep(800);
+    await page.click("[data-panel-close]").catch(() => {});
     // The soundtrack window (7 Nov 2026; on the timeline's own song track since 8 Nov 2026): the whole song with the
     // Reel as a pink window, the song before and after it dimmed; dragging its end edge sets this platform's part of the
     // song in song.json (on a bar / after a sung line); "Automatic" (in the command bar) gives it back to the app.
