@@ -4,7 +4,7 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### Review: no line across the video in the browser's player ✅ (to verify on the Windows PC)
+### Review: no line across the video in the browser's player ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - Found by the user (8 Nov 2026): a thin horizontal line across the Reel in Review (not in Shape). The MP4 itself is
   clean (checked by the user in Media Player): it is the top edge of the dark band Chrome / Edge draw behind their own
   video controls (▶ / time / volume).
