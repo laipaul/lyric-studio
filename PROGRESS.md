@@ -4,13 +4,13 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### Bug fix: a line set by hand later disappeared from the video ✅ (to verify on the Windows PC)
+### Bug fix: a line set by hand later disappeared from the video ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - Seen (Let My Love Carry You, YouTube): "Hold on..." set by hand to 3:22.36 (stamp 3:14.76) was gone from Shape and the video; the Lyrics tab showed readable 3:22.10 and leaves 3:22.10 (zero time on screen).
 - Cause: applying a hand-set start moved the start, the word tags and the sung end, but not the line's own end (end_ms, the next line's old stamp 3:18.26) when a next line existed. A start set later than that end left the end before the start, so the line was shown for no time.
 - Fix: src/hand-times.ts shiftLine moves the end with the start, caps it before the next line's final start and never puts it before the line's sung end (squeezed before the next line, as before). Words and sung end were already moved as a whole.
 - Tests: hand-times.test.ts (9 pass; new one failed before): a line set 7 s later than its old end keeps its length and ends before the next line, also when the next line is set by hand or pushed. Run with lyrics-view, vocal-guard, storyboard and lrc tests: 80 pass; tsc ok in packages/video and apps/studio.
 
-### Bug fix: a hand-set lyric start was not saved after a line was removed ✅ (to verify on the Windows PC)
+### Bug fix: a hand-set lyric start was not saved after a line was removed ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - The user found (song "Let My Love Carry You"): they removed the line "Mmmm..." from the lyrics. The Lyrics tab then showed
   28 "You'll find your way to me" 3:12.98; 29 "Hold on..." stamp 3:14.76 (about the old "Mmmm" stamp), conf 0.52;
   30 "Floating through the night" stamp 3:18.26 (the old "Hold on" stamp), set by hand 3:25.06. Nudging "Hold on..." to
