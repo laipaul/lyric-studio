@@ -4,6 +4,21 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Bug fix: Generate kept a collection unticked in Shape ✅ (to verify on the Windows PC)
+- Reported: "wedding" unticked in Shape → To make (song.json "collections": []), yet Make still showed
+  "6 clips + wedding" and the run added the wedding clips again.
+- Cause: the Generate panel stays mounted while hidden and read the song's collections once
+  (`useState(runCollections ?? data.chosen)`, never updated), so on submit it differed from the song's
+  choice and sent `collection: "wedding"`. The same pattern held for the section: it started from the
+  recipe's section and kept it, so a section changed in Shape → Automatic was sent back as an override.
+- Fix (generate-panel.tsx): the collections are derived (`runCollections ?? data.chosen`), so they follow
+  the song's current choice; a run opened with "Use these settings" keeps the run's. The section keeps only
+  the user's edit as state (`sectionEdit`), otherwise it follows the recipe (or the run's). The theme for
+  the run was already fine (starts empty = the song's own). Platforms, videos, length etc. are the user's
+  edits in the panel and are unchanged.
+- Test: e2e/song-stages.e2e.ts unticks "wedding" in Shape → To make, goes to Make without reloading and
+  checks the clips line no longer names it (browser test, runs in the cloud check / on a machine with Playwright).
+
 ### Bug fix: vocal-start check moves a line whose stamp is in silence when every signal is later ✅ (to verify on the Windows PC)
 - Reported on "Let My Love Carry You": line 5 (stamp 0:34.8, vocal track -35 dB there, under the voice level
   -30.5 dB; voice 0:38.1, recognised words 0:37.2, word durations 0:37.7) and line 31, the last line (stamp

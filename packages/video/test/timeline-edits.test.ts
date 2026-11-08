@@ -92,12 +92,15 @@ describe("the planner uses the edits (the same composition Shape previews and Ma
     const auto = composeProps(base(), { seed: 1, style: "simple", order: "story" }).props.shots;
     const cut2 = songMs(auto[2].start); // the third shot starts on the bar at 14.5 s
     expect(cut2).toBe(14_433);
-    const edited = composeProps(base({ cuts: [{ from: cut2 / 1000, to: 15.5 }], slips: [{ at: 15.5, clip: "05_e.mp4", in: 3 }] }), { seed: 1, style: "simple", order: "story" }).props.shots;
+    const edited = composeProps(base({ cuts: [{ from: cut2 / 1000, to: 15.5 }], slips: [{ at: 15.5, clip: "03_c.mp4", in: 3 }] }), { seed: 1, style: "simple", order: "story" }).props.shots;
     expect(songMs(edited[2].start)).toBe(15_433); // the beat at 15.5 s, two frames early
     expect(edited[1].start).toBe(auto[1].start); // the cut before it did not move
     expect(edited[3].start).toBe(auto[3].start); // nor the one after
-    expect(edited[2].src).toBe("cache/05_e.mp4");
-    expect(edited[2].clipStartFrame).toBe(90); // 3 s into 05_e.mp4
+    expect(edited[2].src).toBe("cache/03_c.mp4"); // the story order puts 03_c there; the slip plays it from 3 s
+    expect(edited[2].clipStartFrame).toBe(90); // 3 s into 03_c.mp4
+    // A slip never decides which clip plays: slipped clip not the one the order puts there = left aside.
+    const aside = composeProps(base({ cuts: [], slips: [{ at: songMs(auto[2].start) / 1000, clip: "05_e.mp4", in: 3 }] }), { seed: 1, style: "simple", order: "story" }).props.shots;
+    expect(aside.map((x) => [x.src, x.clipStartFrame])).toEqual(auto.map((x) => [x.src, x.clipStartFrame]));
   });
 
   it("a slip on a Reel's first clip survives the loop ending (it plays the frames before the slip instead)", () => {
@@ -127,12 +130,12 @@ describe("the planner uses the edits (the same composition Shape previews and Ma
     const last = auto[auto.length - 1];
     expect(last.src).toBe(auto[0].src); // without a slip the last shot is the loop shot
     expect(last.clipStartFrame + last.duration).toBe(auto[0].clipStartFrame);
-    const other = names.find((n) => `cache/${n}` !== auto[0].src && `cache/${n}` !== auto[auto.length - 2].src)!;
+    const other = last.src.replace("cache/", ""); // a slip names the clip its shot plays (here the loop shot's)
     const atS = (plan2.start_frame + last.start) / 30;
     const slipped = composeProps({ ...reel, timeline: { cuts: [], slips: [{ at: atS, clip: other, in: 2 }] } }, { seed: 1, style: "simple", order: "story" }).props.shots;
     const l2 = slipped[slipped.length - 1];
-    expect(l2.src).toBe(`cache/${other}`);
-    expect(l2.clipStartFrame).toBe(60); // 2 s into the clip
+    expect(l2.src).toBe(last.src);
+    expect(l2.clipStartFrame).toBe(60); // 2 s into the clip, not the loop shot's start
   });
 });
 

@@ -232,20 +232,23 @@ export function composeProps(
     clipStarts.set(shot, Math.round((inMs * VIDEO.fps) / 1000));
   }
 
-  // The user's slips: that shot plays that clip from that moment (on an anchored shot only with the anchor's own clip).
-  for (const [i, start] of bounds.slice(0, -1).entries()) {
-    if (!base.timeline?.slips.length) continue;
-    const slip = slipFor(base.timeline.slips, ((plan.start_frame + start) * 1000) / VIDEO.fps);
-    const clip = slip && base.clips.find((c) => c.name.toLowerCase() === slip.clip.toLowerCase() && c.kind !== "photo");
-    if (!slip || !clip) continue;
-    if (anchorPlan?.shots.has(i) && anchorPlan.shots.get(i)!.clipId !== clip.id) continue;
-    byShot.set(i, clip.id);
-    clipStarts.set(i, Math.round((slip.in * 1000 * VIDEO.fps) / 1000));
+  // The user's slips: that shot plays another part of its clip. The story order decides which clip plays
+  // in a shot, so a slip counts only while the order still puts the slip's clip there (the order changed in
+  // Prepare or Shape: the slip is left aside). On an anchored shot only with the anchor's own clip.
+  const slips: { shot: number; clipId: string; inMs: number }[] = [];
+  if (base.timeline?.slips.length) {
+    for (const [i, start] of bounds.slice(0, -1).entries()) {
+      const slip = slipFor(base.timeline.slips, ((plan.start_frame + start) * 1000) / VIDEO.fps);
+      const clip = slip && base.clips.find((c) => c.name.toLowerCase() === slip.clip.toLowerCase() && c.kind !== "photo");
+      if (!slip || !clip) continue;
+      if (anchorPlan?.shots.has(i) && anchorPlan.shots.get(i)!.clipId !== clip.id) continue;
+      slips.push({ shot: i, clipId: clip.id, inMs: slip.in * 1000 });
+    }
   }
 
   const byId = new Map(base.clips.map((c) => [c.id, c]));
   // No clips (YouTube cover / stills layouts): no shots; the background comes from other props.
-  const assigned = !base.clips.length ? [] : assignClips(
+  const assignWith = (pins: typeof byShot, starts: typeof clipStarts) => assignClips(
     plan,
     base.clips.map((c) => ({
       id: c.id, name: c.name, duration_ms: c.duration_ms, still: c.kind === "photo",
@@ -253,8 +256,21 @@ export function composeProps(
       ...(c.speed !== undefined ? { speed: c.speed } : {}), ...(c.best_ms !== undefined ? { best_ms: c.best_ms } : {}),
     })),
     choices.seed,
-    { order: choices.order ?? "story", pins: byShot, loopEnding: platform.loopEnding, clipStarts, anchored: new Set(anchorPlan?.shots.keys() ?? []) },
+    { order: choices.order ?? "story", pins, loopEnding: platform.loopEnding, clipStarts: starts, anchored: new Set(anchorPlan?.shots.keys() ?? []) },
   );
+  let assigned = !base.clips.length ? [] : assignWith(byShot, clipStarts);
+  if (slips.length && assigned.length) {
+    const kept = slips.filter((x) => assigned[x.shot]?.clip_id === x.clipId);
+    if (kept.length) {
+      const pins = new Map(byShot);
+      const starts = new Map(clipStarts);
+      for (const x of kept) {
+        pins.set(x.shot, x.clipId);
+        starts.set(x.shot, Math.round((x.inMs * VIDEO.fps) / 1000));
+      }
+      assigned = assignWith(pins, starts);
+    }
+  }
   // Photo moves are seeded per shot, so they do not depend on the other clips.
   const motionFor = (index: number) => kenBurns(mulberry32((choices.seed * 7919 + index * 104_729 + 17) >>> 0));
   const shots = assigned.map((s, index) => {
