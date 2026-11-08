@@ -4,6 +4,21 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Bug fix: a held note from the line before no longer hides a stamp in silence ✅ (to verify on the Windows PC)
+- Reported on "Let My Love Carry You", line 9: stamp 1:03.4, voice 1:05.8, recognised words 1:04.8 "Let my love",
+  first word 0.1 s: only "flagged for review" (no second signal within 0.3 s). Line 8 (0:58.6, "Till the break of day")
+  holds its last note past the stamp, so the vocal track read up to -25.5 dB there, over the voice level -30.5 dB,
+  and the stamp-in-silence rule did not fire. Ear check: Reel 0:03 / 0:30 are 27 s apart, which matches the
+  words at 0:37.2 / 1:04.8 (line 5 / line 9), so the line starts at about 1:04.8.
+- Fix (vocal-guard.ts): the silence test now means "no voice of this line at the stamp": the level is measured
+  only from the stamp to the earliest later signal (not a fixed 2 s), and frames of the previous line's own singing
+  (the voice stretch its last word starts in, the same definition `signalsFor` uses) are left out; nothing left
+  counts as silent. New `LineCheck.ownLevelDb`; `stampLevelDb` (the printout) is unchanged. Everything else of the
+  rule is unchanged (two or more signals, each >= 1 s later, target choice, hand-set lines, safety checks).
+- Line 9 -> 1:04.8. Log: `guard: line 9 moved from 1:03.4 to 1:04.8 (stamp in silence; voice, words all later)`.
+- Tests: vocal-guard.test.ts (line 9 with these numbers; the line's own voice already sounding at the stamp is
+  never moved; line 5 -> 0:37.2, last line -> 3:22.1 and hand-set unchanged). Docs: docs/lyrics.md.
+
 ### Bug fix: Generate kept a collection unticked in Shape ✅ (to verify on the Windows PC)
 - Reported: "wedding" unticked in Shape → To make (song.json "collections": []), yet Make still showed
   "6 clips + wedding" and the run added the wedding clips again.

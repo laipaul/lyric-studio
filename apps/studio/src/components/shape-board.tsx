@@ -894,14 +894,14 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                 onMouseLeave={() => setHoverMs(null)}
               >
                 {/* 1. the time ruler: minutes:seconds in the video (hover or the playhead bubble adds the song's time) */}
-                <div className="relative h-5 border-b text-[10px]" data-time-ruler title={songStart > 0 ? `Time in the video. Song time = video time + ${clockTenths(songStart)} (where this video starts in the song).` : "Time in the video (= time in the song)."}>
+                <div className="relative h-4 border-b text-[10px] leading-none" data-time-ruler title={songStart > 0 ? `Time in the video. Song time = video time + ${clockTenths(songStart)} (where this video starts in the song).` : "Time in the video (= time in the song)."}>
                   {ticks.map((t) => (
                     <div key={t.ms} className={cn("absolute bottom-0 border-l", t.label ? "h-full border-white/30" : "h-1.5 border-white/15")} style={{ left: x(t.ms) }} data-time-tick={t.label ?? undefined}>
                       {t.label ? <span className="text-muted-foreground absolute top-0.5 left-1 tabular-nums">{t.label}</span> : null}
                     </div>
                   ))}
                 </div>
-                <div className="relative h-6 border-b text-[10px]" title="bars (the beat grid the cuts follow)">
+                <div className="relative h-4 border-b text-[10px] leading-none" title="bars (the beat grid the cuts follow)">
                   {view.hooks.map((h, i) => (
                     <div key={i} className="bg-brand/15 absolute top-0 bottom-0" style={{ left: x(h.startMs), width: x(h.endMs - h.startMs) }} title="hook (chorus)" data-hook-section />
                   ))}
@@ -912,9 +912,9 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                   ))}
                 </div>
                 {/* the song track: the whole song (8 Nov 2026), this video's part as the pink window on it */}
-                <div className="relative h-7 border-b" data-song-track data-soundtrack-track>
+                <div className="relative h-6 border-b" data-song-track data-soundtrack-track>
                   {view.song ? <SongTrackBehind song={view.song} songStartMs={view.songStartMs} zoom={zoom} /> : null}
-                  <svg className="relative block h-7" viewBox={`0 0 ${view.waveform.peaks.length} 100`} preserveAspectRatio="none" style={{ width }} data-waveform>
+                  <svg className="relative block h-6" viewBox={`0 0 ${view.waveform.peaks.length} 100`} preserveAspectRatio="none" style={{ width }} data-waveform>
                     {view.waveform.peaks.map((p, i) => (
                       <rect key={i} x={i} y={50 - p * 48} width={0.8} height={Math.max(1, p * 96)} className="fill-brand/60" />
                     ))}
@@ -933,7 +933,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                   ) : null}
                 </div>
                 {view.titleCards.length ? (
-                  <div className="relative h-6 border-b" data-textboard-titles>
+                  <div className="relative h-5 border-b" data-textboard-titles>
                     {view.titleCards.map((c) => (
                       <button
                         type="button"
@@ -945,7 +945,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                           else if (view.editable) openCard(c.id);
                         }}
                         className={cn("bg-brand/20 absolute overflow-hidden rounded border px-1 text-left text-[10px]", cardId === c.id && "ring-brand ring-2")}
-                        style={{ left: x(c.startMs), width: Math.max(8, x(c.endMs - c.startMs) - 2), top: 2, height: 18 }}
+                        style={{ left: x(c.startMs), width: Math.max(8, x(c.endMs - c.startMs) - 2), top: 2, height: 15 }}
                         title={`${CARD_TYPE_LABELS[c.type] ?? c.type}: ${c.text}${c.type === "hook" || c.type === "end" ? " (the theme's card: Edit theme → Cards)" : ""}`}
                       >
                         <Type className="mr-0.5 inline size-2.5" />
@@ -954,7 +954,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                     ))}
                   </div>
                 ) : null}
-                <div className="relative h-10 border-b" data-textboard-row>
+                <div className="relative h-8 border-b" data-textboard-row>
                   {view.lines.map((l, i) => (
                     <div
                       key={i}
@@ -998,7 +998,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                     </div>
                   ))}
                 </div>
-                <div className="relative h-[68px] select-none" data-shots-row onClickCapture={tl.onRowClickCapture}>
+                <div className="relative h-24 select-none" data-shots-row onClickCapture={tl.onRowClickCapture}>
                   {!view.shots.length ? (
                     <div className="text-muted-foreground sticky left-2 inline-flex h-full max-w-xl items-center px-3 text-xs" data-no-shots>
                       {view.platform.name === "youtube" ? (
@@ -1163,10 +1163,10 @@ function ShotBlock({
         onSelect();
       }}
       className={cn("absolute top-1 bottom-1 overflow-hidden rounded border text-left text-[10px] text-white", s.warnings.length ? "border-amber-400" : "border-white/20", (selected || dropTarget) && "ring-brand ring-2", lifted && "border-brand border-dashed opacity-40")}
-      style={{ left, width: Math.max(6, width - 2), backgroundImage: s.thumb ? `linear-gradient(rgba(0,0,0,.35),rgba(0,0,0,.65)), url(/api/files/${s.thumb})` : undefined, backgroundSize: "cover", backgroundPosition: "center" }}
+      style={{ left, width: Math.max(6, width - 2), backgroundColor: "#000", backgroundImage: s.thumb ? `url(/api/files/${s.thumb})` : undefined, backgroundSize: "auto 100%", backgroundRepeat: "repeat-x", backgroundPosition: "left center" }}
       title={`${s.clip} · ${secs(s.endMs - s.startMs)}${slippable ? "\nDrag sideways to slip: another part of the clip in the same shot. Drag the line between two shots to move the cut." : ""}${editable ? "\nDrag it up to lift it, then onto another clip to swap the two." : ""}${s.warnings.length ? `\n${s.warnings.join("\n")}` : ""}`}
     >
-      <div className="absolute top-0 right-0 left-0 flex flex-wrap gap-0.5 p-0.5 pr-6">
+      <div className="absolute top-0 right-0 left-0 flex flex-wrap gap-0.5 p-0.5 pr-6 drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">
         {s.anchor ? (
           <span className="bg-brand/80 flex items-center rounded px-0.5" data-badge="anchor">
             <Anchor className="size-2.5" />
@@ -1186,10 +1186,10 @@ function ShotBlock({
         ) : null}
         {s.warnings.length ? <AlertTriangle className="size-3 text-amber-300" data-badge="warning" /> : null}
       </div>
-      <div className="absolute right-0.5 bottom-0.5 left-0.5 truncate">
+      <div className="absolute inset-x-0 bottom-0 truncate bg-black/70 px-1 py-px leading-tight" data-shot-label>
         {s.index + 1} · {s.clip}
         <br />
-        {secs(s.endMs - s.startMs)} · {s.inS.toFixed(1)}–{s.outS.toFixed(1)} s
+        <span className="text-white/75">{secs(s.endMs - s.startMs)} · {s.inS.toFixed(1)}–{s.outS.toFixed(1)} s</span>
       </div>
     </button>
   );

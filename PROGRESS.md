@@ -10,6 +10,17 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Fixed: the story order decides which clip plays in a shot; a slip applies only when the order still puts the slip's clip there (anchored shots as before), otherwise it is left aside. compose.ts plans once without slips, keeps those that still match, plans again.
 - Tests: new test/clip-order-prepare.test.ts (2: order after an upload and a Prepare reorder, Shape's own re-save; a slip then a Prepare reorder, which failed before the fix); test/timeline-edits.test.ts (2 tests adjusted to the rule, +1 check); video package 944 passed (3 files need the network: migrate / make / one more, remotion.media is not reachable here); studio typecheck clean. No studio code changed.
 
+### Shape timeline: a taller clip strip, thinner rows above it ✅ (to verify on the Windows PC)
+- Asked by the user (8 Nov 2026): "the video strip is too squashed and I can barely see the video; maybe make the
+  timeline thinner to save space".
+- **The clips row is 96 px** (was 68): each clip shows its picture as a film strip in its own shape (repeated along
+  the shot, as editors do), no longer cropped and darkened; the name and times sit on a thin dark band at the bottom,
+  the badges at the top.
+- **Thinner rows above it**, so the timeline keeps its height and the viewer its size: the time ruler and the bars
+  16 px each (were 20 and 24), the song track 24 px (28), title cards 20 px (24), lyric lines 32 px (40).
+- Tests: storyboard.e2e.ts unchanged (the viewer 341 px on 1366×768, 18 px under the command bar): run in the cloud
+  session, all 147 checks pass.
+
 ### Shape timeline: lift a clip onto another to swap them ✅ (to verify on the Windows PC)
 - Asked by the user (7 Nov 2026, with the soundtrack window): "drag a clip onto another shot to swap them on the
   timeline"; the gesture chosen by the user (8 Nov 2026): **lift it up** (a sideways drag stays a slip).
@@ -220,21 +231,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: timeline-time.test.ts (labels, tenths, song time with the Let My Love Carry You numbers: Reel 0:30 =
   line 9 at 1:04.8); storyboard.e2e.ts extended (ruler, bubble, hover, bubble = counter) but not run in the
   cloud session (the audio analysis's Python crashes there); studio typecheck and production build pass.
-
-### Bug fix: a held note from the line before no longer hides a stamp in silence ✅ (to verify on the Windows PC)
-- Reported on "Let My Love Carry You", line 9: stamp 1:03.4, voice 1:05.8, recognised words 1:04.8 "Let my love",
-  first word 0.1 s: only "flagged for review" (no second signal within 0.3 s). Line 8 (0:58.6, "Till the break of day")
-  holds its last note past the stamp, so the vocal track read up to -25.5 dB there, over the voice level -30.5 dB,
-  and the stamp-in-silence rule did not fire. Ear check: Reel 0:03 / 0:30 are 27 s apart, which matches the
-  words at 0:37.2 / 1:04.8 (line 5 / line 9), so the line starts at about 1:04.8.
-- Fix (vocal-guard.ts): the silence test now means "no voice of this line at the stamp": the level is measured
-  only from the stamp to the earliest later signal (not a fixed 2 s), and frames of the previous line's own singing
-  (the voice stretch its last word starts in, the same definition `signalsFor` uses) are left out; nothing left
-  counts as silent. New `LineCheck.ownLevelDb`; `stampLevelDb` (the printout) is unchanged. Everything else of the
-  rule is unchanged (two or more signals, each >= 1 s later, target choice, hand-set lines, safety checks).
-- Line 9 -> 1:04.8. Log: `guard: line 9 moved from 1:03.4 to 1:04.8 (stamp in silence; voice, words all later)`.
-- Tests: vocal-guard.test.ts (line 9 with these numbers; the line's own voice already sounding at the stamp is
-  never moved; line 5 -> 0:37.2, last line -> 3:22.1 and hand-set unchanged). Docs: docs/lyrics.md.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
