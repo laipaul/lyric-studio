@@ -206,7 +206,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: storyboard.e2e.ts (trim readout and the viewer frame while dragging, the last clip's handle, clicking a
   clip moves the playhead to it): run in the cloud session, all 108 checks pass.
 
-### Shape timeline: pro edits with the mouse, part 1 (roll, slip, snapping, Undo) ✅ (to verify on the Windows PC)
+### Shape timeline: pro edits with the mouse, part 1 (roll, slip, snapping, Undo) ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - Fixed (7 Nov 2026, reported by the user): a slip on a Reel's first clip was undone by the loop ending (it moved the first clip's start to make room for the seamless loop); a first shot with a start set by hand (slip or anchor) now keeps it, and the loop uses the frames before it when there are enough, else an ordinary last shot. A slip on the last clip likewise plays from the slip as an ordinary last shot (it is not turned into the loop shot).
 - Asked by the user (7 Nov 2026): edit like the pros (Premiere, Resolve, Final Cut), directly on the timeline,
   not by typing seconds in the Clip editor.
