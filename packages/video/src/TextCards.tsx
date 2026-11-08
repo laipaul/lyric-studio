@@ -7,6 +7,7 @@ import { ascendLetter } from "./effects/ascend";
 import { inkMask } from "./effects/ink";
 import { REST, type LineLook } from "./effects/types";
 import { titleStyleCss, warpLetter } from "./picture";
+import { CARD_LINE_HEIGHT } from "./card-layout";
 import type { Format } from "./platform";
 import type { LyricVideoProps, TextCardProps } from "./props";
 import { textCardLook } from "./text-cards";
@@ -138,6 +139,9 @@ export function TextCards({ cards, format, picture }: { cards: TextCardProps[]; 
               top: root.top ?? root.centerY ?? "50%",
               transform: [root.top === undefined ? "translateY(-50%)" : "", moved ? `translate(${look.x.toFixed(2)}px, ${look.y.toFixed(2)}px) scale(${look.scale.toFixed(4)})` : ""].filter(Boolean).join(" ") || undefined,
               textAlign: "center",
+              // The planner (card-layout.ts cardBlocks) measures every row at this height; "normal" is the font's own
+              // (Cinzel ~1.42), which drew the block ~25% taller than planned and onto the first lyric line.
+              lineHeight: CARD_LINE_HEIGHT,
               fontFamily: `"${root.font}"${root.fallbackFont ? `, "${root.fallbackFont}"` : ""}, serif`,
               fontWeight: root.weight,
               ...(root.italic ? { fontStyle: "italic" as const } : {}),

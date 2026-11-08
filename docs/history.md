@@ -4,6 +4,33 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Shape: no Clip editor box; the song window on the timeline's song track; a ⋯ menu on each clip ✅ (confirmed on the Windows PC, 8 Nov 2026)
+- Asked by the user (8 Nov 2026): "remove this clip editor box and focus on a simple trim directly on the clip
+  itself"; "I wanted the rectangle on the song track itself, not a new one"; the clip's other settings "in a small
+  menu".
+- **No Clip editor box:** the Shot panel and the Clips panel no longer open it (no clip player, no In / Out / Speed /
+  Best moment fields, no "Save and plan again"). Trimming is done on the clips on the timeline: drag the line between
+  two clips (the cut), drag inside a clip (another part of it), the first and last clip also by their outer edges (as
+  before). The Shot panel says so in one line. A clip clicked in the Clips panel is selected on the timeline and shown
+  in the viewer.
+- **⋯ on each clip** (top right of the clip on the timeline, and "Clip settings" in the Shot panel): Speed (1x-0.5x),
+  Comes in with (automatic / a cut / a dissolve), Best moment (here, at the playhead / automatic), Spotify Canvas (this
+  clip from here / let the app choose), Whole clip, automatic, Omit this clip. Each choice is saved at once (clips.json,
+  the Canvas in song.json) and the video is planned again; one choice keeps the clip's other settings.
+- **The song window on the song track:** the separate "Soundtrack" strip above the timeline is gone. The timeline's
+  waveform row is now the whole song at the timeline's zoom: the song before and after this video lies left of 0:00
+  and after the end, dimmed, and the video is the pink window on it. Drag its edges to set where the video starts and
+  ends (snaps as before: a bar, the bar after a sung line; Alt free; at least 3 s), drag the window to move it; a
+  click in it still plays from there. The readout ("Song Reels: 0:36.1 – 1:54.7 · 78.7 s · line 5 · chosen by you")
+  and **Automatic** are in the command bar. The timeline opens on the video's start (the song before it is a scroll to
+  the left), and every playhead jump still scrolls to the playhead. The whole song's waveform is now as detailed as the
+  video's (50 ms).
+- Tests: storyboard.e2e.ts (no Clip editor; ⋯ → Speed 0.8x, Best moment here, Comes in with a dissolve keep each
+  other; Whole clip, automatic drops them; the window on the song track with the song before it dimmed; dragging its end
+  saves this platform's part in song.json; Automatic): run in the cloud session, all 129 checks pass. Found on the way:
+  the old Clip editor check used 03_c, which has no shot in that test Reel, so "its shots slowed" was never really
+  checked; the new checks use 01_a (shot 3).
+
 ### Bug fix: a jump while paused leaves the playhead off-screen ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - Found by the user on "Let My Love Carry You" (Reel 1:18, Follow on, preview paused, timeline scrolled by hand to
   1:10-1:18): ⏮ "Go to the start" moved the preview to 0:00.0 (the counter showed it) but the timeline stayed where

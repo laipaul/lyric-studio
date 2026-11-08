@@ -4,6 +4,14 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Bug fix: the Reel's title still touched the first lyric — now checked on the drawn preview ✅ (to verify on the Windows PC)
+- Seen again after the last fix (Let My Love Carry You, Shape → Reels 1080x1920, Title opening on, tagline set, first line on screen from 0:00.6, at 0:02.7): title "LET MY LOVE / CARRY YOU" at ~y 430-560 (not moved), byline at ~625-645 and the first lyric (hook font, two rows) at ~640-770: byline and lyric collided.
+- Ground truth first: new browser test `apps/studio/e2e/title-opening.e2e.ts` (Playwright; a song whose Reels part starts exactly on a sung line, titleOpening on, tagline, script hook font Kaushan Script). It seeks Shape's player to 1.5 / 2.1 / 2.7 / 3.3 / 3.9 s and reads the boxes of the drawn `[data-text-card]` rows and `[data-lyric]` text inside the player's frame, in composition pixels (player scale read from the 1080x1920 frame). It failed on the old code (hook effect "ascend": title top 345 size 84 planned; drawn title 345-597, byline 618-675, lyric 626-792 = byline 49 px into the lyric, at every sample 1.5-3.9 s; "floating": byline 585-633 vs lyric 633-799, touching). After the fix: ascend title 345-547, byline 568-613, lyric 626-792 (13 px clear); floating title 354-524, byline 542-581, lyric 633-799 (52 px clear); default effect 272-464 / 484-527 vs 626 (99 px); Big hook 271-453 / 472-513 vs 602. Cards still on screen at 3.9 s in every case.
+- Real cause: NOT the lyric box (the planner's box top, ~635, matched the drawn 626-636 within 10 px) and not a stale prop in the preview (Shape and render use the plan's props; patchLook only touches hook / end cards and the look, and a saved theme re-plans). The title BLOCK was drawn taller than planned: the planner (card-layout.ts cardBlocks, fitCardBlocks, relocate in titleCards) counts every card row as 1.2 x size (CARD_LINE_HEIGHT), but the composition (TextCards.tsx) left `line-height: normal`, which is the font's own: ~1.42 for the title font Cinzel. A two-row title at 84 px was drawn 252 px tall (planned 202), the byline row 1.42 instead of 1.2: the block's bottom was ~60 px lower than planned, so a block placed to end 23 px above the line ended inside it (and a block judged "clear" was not).
+- Fix: TextCards.tsx draws every card block with `lineHeight: CARD_LINE_HEIGHT` (imported from card-layout.ts: one number for the planner, QA, the cover and the drawing; preview, render and the HyperFrames text layer share TextCards, so the manifest props and the preview props are the same and need no other change). YouTube's title now has the same 1.2 rows (one row: a few px less height).
+- Tests: title-opening.e2e.ts (4 scenarios x 5 moments = 20 checks, added to `pnpm test:e2e`); packages/video: the 9 files (title-opening, title-opening-make, textboard, qa, readability, text-layout, storyboard, extra-cards, textboard-make) 71 pass; tsc clean (packages/video, apps/studio typecheck); pnpm build ok; storyboard.e2e.ts all checks pass.
+- To check: `cd D:\videomaker`, `git pull`, restart, Shape → Reels, Title opening on, play from 0:00: title and byline sit clear above the first lyric line (a visible gap), the tagline below; the rows of a two-line title are a little tighter than before.
+
 ### Bug fix: the Reel's moved title collided with the first lyric; title cards overlapped on the timeline ✅ (to verify on the Windows PC)
 - Seen (Let My Love Carry You, Shape → Reels 1080x1920, Title opening on, first line on screen from 0:00.6): after the last fix the title moved up (y ~470-630) and the byline "Life Lyrics" sat at ~636, but the first lyric ("Let my love carry yo...", hook font, word by word) was drawn at ~650-700: byline and lyric touched. On the timeline the title, byline and tagline cards (same start) were drawn on top of each other: an unreadable jumble.
 - Causes: (1) the title was moved clear of a box that was smaller than what the composition draws: only line 1, measured with `nextLine: false` and without the glyphs' reach beyond the CSS row (script fonts), and only until 2.5 s, although later lines come in while the title is still on screen. The box is now the union of every line drawn in the title window (the first line, and any line entering before the cards end), with the waiting next line under it, and the glyphs' ink. It comes from `measureLyrics` (qa-check.ts), the very function QA uses, via the new `titleWindowBox`, which reads the plan's own lyric area (text layout: Centred / Lower third / Big hook), the line's card place and size, the effect reach and the hook scale; Remotion's LyricScene uses the same inputs. Evidence: Reels area centre 710 (not the 758 of the old tests); with the effect reach the box for that line starts at ~590 (Big hook ~528), not ~673 (the bare row). (I could not reproduce the exact pixels of the screenshot without the user's song: the missing reach, next line and ink are what the code was ignoring.) (2) The title-cards row gave every card `top: 2` in one 20 px lane.
@@ -153,32 +161,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   grab zone 18 px, a press 6 px beside the cut grabs it, the handle stays dropped and marked saving, no second drag
   meanwhile, it ends where dropped, a quick two-step drag is saved and Ctrl+Z takes it back).
 
-### Shape: no Clip editor box; the song window on the timeline's song track; a ⋯ menu on each clip ✅ (confirmed on the Windows PC, 8 Nov 2026)
-- Asked by the user (8 Nov 2026): "remove this clip editor box and focus on a simple trim directly on the clip
-  itself"; "I wanted the rectangle on the song track itself, not a new one"; the clip's other settings "in a small
-  menu".
-- **No Clip editor box:** the Shot panel and the Clips panel no longer open it (no clip player, no In / Out / Speed /
-  Best moment fields, no "Save and plan again"). Trimming is done on the clips on the timeline: drag the line between
-  two clips (the cut), drag inside a clip (another part of it), the first and last clip also by their outer edges (as
-  before). The Shot panel says so in one line. A clip clicked in the Clips panel is selected on the timeline and shown
-  in the viewer.
-- **⋯ on each clip** (top right of the clip on the timeline, and "Clip settings" in the Shot panel): Speed (1x-0.5x),
-  Comes in with (automatic / a cut / a dissolve), Best moment (here, at the playhead / automatic), Spotify Canvas (this
-  clip from here / let the app choose), Whole clip, automatic, Omit this clip. Each choice is saved at once (clips.json,
-  the Canvas in song.json) and the video is planned again; one choice keeps the clip's other settings.
-- **The song window on the song track:** the separate "Soundtrack" strip above the timeline is gone. The timeline's
-  waveform row is now the whole song at the timeline's zoom: the song before and after this video lies left of 0:00
-  and after the end, dimmed, and the video is the pink window on it. Drag its edges to set where the video starts and
-  ends (snaps as before: a bar, the bar after a sung line; Alt free; at least 3 s), drag the window to move it; a
-  click in it still plays from there. The readout ("Song Reels: 0:36.1 – 1:54.7 · 78.7 s · line 5 · chosen by you")
-  and **Automatic** are in the command bar. The timeline opens on the video's start (the song before it is a scroll to
-  the left), and every playhead jump still scrolls to the playhead. The whole song's waveform is now as detailed as the
-  video's (50 ms).
-- Tests: storyboard.e2e.ts (no Clip editor; ⋯ → Speed 0.8x, Best moment here, Comes in with a dissolve keep each
-  other; Whole clip, automatic drops them; the window on the song track with the song before it dimmed; dragging its end
-  saves this platform's part in song.json; Automatic): run in the cloud session, all 129 checks pass. Found on the way:
-  the old Clip editor check used 03_c, which has no shot in that test Reel, so "its shots slowed" was never really
-  checked; the new checks use 01_a (shot 3).
+
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
