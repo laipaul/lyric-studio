@@ -124,11 +124,9 @@ export function lrcTag(ms: number): string {
   const cs = Math.max(0, Math.round(ms / 10));
   return `${pad2(Math.floor(cs / 6000))}:${((cs % 6000) / 100).toFixed(2).padStart(5, "0")}`;
 }
-export function retextLrcLine(content: string, number: number, text: string): string {
-  const words = text.trim().split(/\s+/).filter(Boolean);
-  if (!words.length) throw new Error("The line's new text is empty.");
-  const rows = content.split(/(?<=\n)/);
-  const sung = rows
+// The sung lines of an LRC (one stamp and words), in time order: what "line N" means for the Lyrics tab.
+function sungRows(rows: readonly string[]) {
+  return rows
     .map((raw, index) => {
       const times = [...raw.matchAll(STAMP)];
       const body = raw.replace(STAMP, "").trim();
@@ -136,6 +134,36 @@ export function retextLrcLine(content: string, number: number, text: string): st
     })
     .filter((r) => r.times === 1 && r.body.replace(HOOK_MARKER, "").replace(WORD_TAG, "").trim())
     .sort((a, b) => a.ms - b.ms || a.index - b.index);
+}
+
+// Lines taken out of an LRC (1-based numbers as in the Lyrics tab): their rows go, and the stamp-only row that
+// ends such a line right after it (its end marker; not after the last line: that one ends the line before). Every other row stays exactly as it was, so every other
+// line keeps its own timing. null when the LRC does not have `expected` sung lines (it does not match the text).
+export function dropLrcLines(content: string, drop: ReadonlySet<number>, expected: number): string | null {
+  const rows = content.split(/(?<=\n)/);
+  const sung = sungRows(rows);
+  if (sung.length !== expected) return null;
+  const sungAt = new Set(sung.map((r) => r.index));
+  const marks = rows
+    .map((raw, index) => ({ index, stamps: [...raw.matchAll(STAMP)], body: raw.replace(STAMP, "").trim() }))
+    .filter((r) => !sungAt.has(r.index) && r.stamps.length === 1 && !r.body)
+    .map((r) => ({ index: r.index, ms: tagMs(r.stamps[0][1], r.stamps[0][2]) }))
+    .sort((x, y) => x.ms - y.ms);
+  const gone = new Set<number>();
+  sung.forEach((r, k) => {
+    if (!drop.has(k + 1)) return;
+    gone.add(r.index);
+    const end = marks.find((m) => m.ms > r.ms);
+    if (end && sung[k + 1] && end.ms <= sung[k + 1].ms) gone.add(end.index); // the last line's end marker stays: it ends the line before
+  });
+  return rows.filter((_, i) => !gone.has(i)).join("");
+}
+
+export function retextLrcLine(content: string, number: number, text: string): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) throw new Error("The line's new text is empty.");
+  const rows = content.split(/(?<=\n)/);
+  const sung = sungRows(rows);
   const row = sung[number - 1];
   if (!row) throw new Error(`There is no line ${number} in the timing.`);
   const raw = rows[row.index];

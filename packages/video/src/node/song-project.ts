@@ -18,9 +18,9 @@ import path from "node:path";
 import { REPO_ROOT, absPath, createProject, project as projectTable, type Project, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
-import { HOOK_MARKER, normalizeLyric, parseLrc, type TimedLine } from "../lrc";
+import { HOOK_MARKER, dropLrcLines, normalizeLyric, parseLrc, type TimedLine } from "../lrc";
 import { clockText } from "../section";
-import { applyHandTimes, parseHandTimes, stripHandTimes } from "../hand-times";
+import { applyHandTimes, parseHandTimes, stripHandTimes, type HandPush, type HandSkip } from "../hand-times";
 import { applyGuard, asrWindows, checkVocalStart, earlyMs, type AsrWord, type LineCheck, type VoiceLevels } from "../vocal-guard";
 import { parseStory, planStory } from "../story";
 import type { Beat } from "../beats";
@@ -102,19 +102,22 @@ export type Alignment = {
 // The hand-set starts of hints.lrc (the Lyrics tab) on the alignment: those lines start exactly there,
 // and the vocal-start check leaves them alone (skip). The stored alignment itself is never changed.
 // Hand-set starts made before the song had a vocal stem are reset once the timing is on the stem (hand-reset.ts).
-export function applyHandSet(alignment: Alignment, hintsFile: string | undefined, log: (m: string) => void = () => {}): { alignment: Alignment; skip: Set<number> } {
+export function applyHandSet(alignment: Alignment, hintsFile: string | undefined, log: (m: string) => void = () => {}): { alignment: Alignment; skip: Set<number>; skipped: HandSkip[]; pushed: HandPush[] } {
   if (hintsFile && alignment.source !== "given") resetHandTimesMadeBeforeStem(hintsFile, alignment.voice, log);
   const times = hintsFile && existsSync(hintsFile) ? parseHandTimes(readFileSync(hintsFile, "utf8")) : [];
-  if (!times.length || alignment.source === "given") return { alignment, skip: new Set() };
+  if (!times.length || alignment.source === "given") return { alignment, skip: new Set(), skipped: [], pushed: [] };
   const r = applyHandTimes(alignment.lines, times);
   for (const p of r.problems) {
     log(`lyrics: ${p}`);
     alignment.warnings.push(p.charAt(0).toUpperCase() + p.slice(1));
   }
+  for (const p of r.pushed) log(`lyrics: line ${p.index + 1} now starts at ${clockText(p.toMs)} (was ${clockText(p.fromMs)}): it would have started before line ${p.because}, which is set by hand`);
   for (const a of r.applied) log(`lyrics: line ${a.index + 1} set by hand: starts at ${clockText(a.toMs)} (was ${clockText(a.fromMs)}; Lyrics tab, hints.lrc)`);
   return {
     alignment: { ...alignment, lines: r.lines, handTimes: r.applied.map((a) => ({ number: a.index + 1, text: r.lines[a.index].text, from_ms: a.fromMs, to_ms: a.toMs })) },
     skip: new Set(r.applied.map((a) => a.index)),
+    skipped: r.skipped,
+    pushed: r.pushed,
   };
 }
 
@@ -379,6 +382,11 @@ export async function ensureAlignment(
       source = "stored";
       log(`lyrics: using the stored alignment ${name} (--realign to align again)`);
     } else {
+      const carried = options.realign ? null : carryOverRemovedLines(dir, txtContent.toString("utf8"), hint?.hash ?? "", lang, voiceKey(voice), options.now ?? new Date(), log);
+      if (carried) {
+        name = carried;
+        source = "stored";
+      } else {
       name = `aligned-${key}-${stamp(options.now ?? new Date())}.lrc`;
       for (let n = 2; existsSync(path.join(dir, name)); n++) name = `aligned-${key}-${stamp(options.now ?? new Date())}-${n}.lrc`;
       // The aligner writes into temporary files; the alignment is stored only when it has finished and
@@ -407,6 +415,7 @@ export async function ensureAlignment(
         rmSync(tmpReport, { force: true });
       }
       source = "aligned";
+      }
     }
   }
 
@@ -503,6 +512,78 @@ const formatStamp = (ms: number) => {
 // so alignments stored before the Suno stem keep their key).
 export function alignKey(words: string, hintHash: string, lang: string, vocalKey = ""): string {
   return sha256(`v${ALIGN_STORE_VERSION}|${sha256(words)}|${hintHash}|${lang}${vocalKey ? `|${vocalKey}` : ""}`).slice(0, 12);
+}
+
+// Lines taken out of the lyrics must not shift the others: when the stored alignment of the earlier words (same
+// hints, language and voice; its lyrics-<hash>.txt copy is next to it) has exactly the current lines plus some
+// more, and the current ones fit in ONE way, the new alignment is the old one without those lines (each
+// remaining line keeps its OWN timing, confidence and vocal-start check). Several ways (a repeated line
+// removed) or any added / changed words: null, and the song is aligned again (hand-set starts kept by text).
+function carryOverRemovedLines(dir: string, lyricsText: string, hintHash: string, lang: string, vocalKey: string, now: Date, log: (m: string) => void): string | null {
+  const sung = (t: string) => wordsOfLyrics(t).split("\n").filter((l) => l.trim());
+  const now_ = sung(lyricsText);
+  if (!now_.length) return null;
+  const copies = readdirSync(dir)
+    .filter((f) => /^lyrics-[0-9a-f]{12}\.txt$/.test(f))
+    .sort((a, b) => statSync(path.join(dir, b)).mtimeMs - statSync(path.join(dir, a)).mtimeMs);
+  for (const c of copies) {
+    const text = readFileSync(path.join(dir, c), "utf8");
+    const before = sung(text);
+    if (before.length <= now_.length) continue;
+    const oldKey = alignKey(wordsOfLyrics(text), hintHash, lang, vocalKey);
+    const lrcName = readdirSync(dir)
+      .filter((f) => f.startsWith(`aligned-${oldKey}-`) && f.endsWith(".lrc") && existsSync(path.join(dir, f.replace(/\.lrc$/, ".report.json"))))
+      .sort()
+      .pop();
+    if (!lrcName) continue;
+    // In how many ways do the current lines fit into the earlier ones, in order (same words, case and punctuation ignored)?
+    const a = now_.map(normalizeLyric);
+    const b = before.map(normalizeLyric);
+    const ways: number[][] = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
+    for (let j = 0; j <= b.length; j++) ways[0][j] = 1;
+    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) ways[i][j] = Math.min(2, ways[i][j - 1] + (a[i - 1] === b[j - 1] ? ways[i - 1][j - 1] : 0));
+    if (ways[a.length][b.length] !== 1) continue;
+    const keep = new Set<number>();
+    for (let i = a.length, j = b.length; i > 0 && j > 0; j--) {
+      if (a[i - 1] === b[j - 1] && ways[i - 1][j - 1] >= 1) {
+        keep.add(j);
+        i--;
+      }
+    }
+    const drop = new Set(b.map((_, k) => k + 1).filter((n) => !keep.has(n)));
+    if (keep.size !== a.length) continue;
+    const content = readFileSync(path.join(dir, lrcName), "utf8");
+    const lrc = dropLrcLines(content, drop, b.length);
+    if (lrc === null) continue;
+    let report: AlignReport;
+    try {
+      report = JSON.parse(readFileSync(path.join(dir, lrcName.replace(/\.lrc$/, ".report.json")), "utf8")) as AlignReport;
+    } catch {
+      continue;
+    }
+    if (report.lines.length !== b.length) continue;
+    const renumber = new Map<number, number>();
+    [...keep].sort((x, y) => x - y).forEach((n, k) => renumber.set(n, k + 1));
+    const key = alignKey(wordsOfLyrics(lyricsText), hintHash, lang, vocalKey);
+    const name = `aligned-${key}-${stamp(now)}.lrc`;
+    writeFileAtomic(path.join(dir, name.replace(/\.lrc$/, ".report.json")), `${JSON.stringify({ ...report, lines: report.lines.filter((_, k) => keep.has(k + 1)).map((r, k) => ({ ...r, number: k + 1 })) }, null, 2)}\n`);
+    writeFileAtomic(path.join(dir, name), lrc);
+    // The vocal-start check's record: per line number, renumbered.
+    const guardFile = path.join(dir, `guard-${sha256(content).slice(0, 12)}.json`);
+    if (existsSync(guardFile)) {
+      try {
+        const g = JSON.parse(readFileSync(guardFile, "utf8")) as { moves?: { number: number }[]; earlyMs?: unknown[]; check?: { lines?: { number: number }[] } };
+        const re = <T extends { number: number }>(rows: T[] | undefined) => rows?.filter((r) => keep.has(r.number)).map((r) => ({ ...r, number: renumber.get(r.number)! }));
+        const next = { ...g, ...(g.moves ? { moves: re(g.moves) } : {}), ...(g.earlyMs ? { earlyMs: g.earlyMs.filter((_, k) => keep.has(k + 1)) } : {}), ...(g.check?.lines ? { check: { ...g.check, lines: re(g.check.lines) } } : {}) };
+        writeFileAtomic(path.join(dir, `guard-${sha256(lrc).slice(0, 12)}.json`), JSON.stringify(next));
+      } catch {
+        // an unreadable record: the next make checks again
+      }
+    }
+    log(`lyrics: removed line(s) ${[...drop].join(", ")} from the stored alignment; every other line keeps its own timing (no new alignment)`);
+    return name;
+  }
+  return null;
 }
 
 export function whyNotStored(dir: string, lyricsText: string, hintHash: string, lang: string, vocalKey = ""): string[] {

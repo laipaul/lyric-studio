@@ -8,7 +8,7 @@
 // { action: "anchors", anchors: [{ line, clip, clipIn?, transition? }], gapOrder? }: story anchors in song.json.
 import { connection } from "next/server";
 
-import { lyricsView, resetHandTimes, restoreLyrics, saveAnchors, saveHandTimes, saveLyricsText, fixLyricLine, setCheckedByEar } from "@lyric/video/lyrics-view";
+import { lyricsView, resetHandTimes, restoreLyrics, saveAnchors, saveHandTimesChecked, saveLyricsText, fixLyricLine, setCheckedByEar } from "@lyric/video/lyrics-view";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
@@ -34,7 +34,7 @@ export async function POST(request: Request, { params }: Params) {
       await withWorkspaceAsync((ws) => setCheckedByEar(ws, id, Number(body.number), body.checked === true));
       return Response.json({ ok: true });
     }
-    if (body.action === "times") return Response.json({ handSet: await withWorkspaceAsync((ws) => saveHandTimes(ws, id, body.changes ?? [])) });
+    if (body.action === "times") return Response.json(await withWorkspaceAsync((ws) => saveHandTimesChecked(ws, id, body.changes ?? [])));
     if (body.action === "reset-all" || body.action === "undo-reset" || body.action === "dismiss-reset") {
       const action = body.action === "reset-all" ? "all" : body.action === "undo-reset" ? "undo" : "dismiss";
       return Response.json({ count: await withWorkspaceAsync((ws) => resetHandTimes(ws, id, action)) });

@@ -4,6 +4,39 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Bug fix: a hand-set lyric start was not saved after a line was removed ✅ (to verify on the Windows PC)
+- The user found (song "Let My Love Carry You"): they removed the line "Mmmm..." from the lyrics. The Lyrics tab then showed
+  28 "You'll find your way to me" 3:12.98; 29 "Hold on..." stamp 3:14.76 (about the old "Mmmm" stamp), conf 0.52;
+  30 "Floating through the night" stamp 3:18.26 (the old "Hold on" stamp), set by hand 3:25.06. Nudging "Hold on..." to
+  3:22 and Save said "Saved to hints.lrc (4 line(s) set by hand)", but "Hold on..." went back to 3:14.76 (also when
+  "Floating" was first set back to automatic). The user hears Hold on at about 3:22 and Floating at about 3:25.
+- Causes (three, as in the brief): (A) applyHandTimes skipped a hand-set start that was after the NEXT line's stored stamp
+  (Floating 3:18.26), with a message only in the log; the neighbours were compared by their stored stamps, not their
+  final ones. (B) hints.lrc "!" lines are keyed by line number + text: after a removal the old numbers pointed at other
+  lines ("4 line(s)" counted stale entries); an entry whose text no longer sat at its number was ignored, never followed
+  its line, never cleaned, and the count included them. (C) Nothing reconciled the stored alignment with a lyrics change by
+  line: any change of words = a new key = aligned again (several minutes; the stamps the user saw were the new
+  alignment's guesses, which on a hummed or low-confidence line sat at the neighbours' old places). A removal now keeps the
+  other lines' own timing without aligning (the cause of the exact old stamps could not be reproduced here: the aligner is not run).
+- Fixed (automatic, no setting): hand-set starts are resolved by text (src/hand-times.ts resolveHandTimes: the number
+  when the text still matches, else the same text on exactly one line; entries of lines that are gone go; an older entry never
+  overrides the current one) and checked as a set against the neighbours' FINAL starts. The user's start wins: a following
+  line not set by hand that would start before (or within 0.3 s after) a hand-set line is pushed behind its sung end
+  (+0.1 s), and so on down the song; the Lyrics tab says "Moved after line N, which you set by hand". Two hand-set
+  starts out of order: Save refuses, naming both lines. A start that is still not used is said so on the line and in the
+  Save message. Save cleans stale entries (the old hints.lrc is kept in .studio\replaced\). Removing lines from the
+  lyrics (src/node/song-project.ts carryOverRemovedLines, src/lrc.ts dropLrcLines): when the current lines fit into the
+  earlier aligned lyrics in exactly one way, the new alignment is the old one without those rows (timing, confidence,
+  vocal-start check records renumbered); several ways (a repeated line), added or changed words = aligned again.
+  Docs: docs/lyrics.md (hand-set starts, removed lines).
+- Tests: hand-times.test.ts +3 (5 -> 8 tests; the order case Hold on 3:22 with Floating at 3:18.26, both hand-set, out of
+  order, by text and stale entries); lyrics-view.test.ts +3 (12 tests: removal keeps each line's own timing, adding or an
+  ambiguous removal aligns again, hand-set follow-by-text + push + refusal); all 6 related files 82 passed; video typecheck,
+  studio typecheck + build clean; lyrics-tab.e2e.ts all browser checks passed.
+- To check on the PC: `cd D:\videomaker`, `git pull`, restart. Open the Lyrics tab: "Hold on..." and "Floating through the night" show their own
+  times. Set "Hold on..." to 3:22 and Save: it stays (set by hand), "Floating..." (automatic) moves behind it with the note
+  "Moved after line N"; set "Floating..." to 3:25 and Save: both kept.
+
 ### Bug fix: hummed lines ("Mmmm...") at the end of the YouTube video came too early ✅ (to verify on the Windows PC)
 - The user found (song "Let My Love Carry You", YouTube = whole song): the last lines are early. Lyrics tab (line, stored stamp, now, confidence): 28 "You'll find your way to me" 3:12.98, conf 0.66; 29 "Mmmm..." 3:15.00 -> 3:15.00, conf 0.74, leaves 3:18.00, but the hum is heard from about 3:18, about 3 s early; 30 "Hold on..." 3:18.26, conf 0.23 (flagged, "Checked by ear"), probably early too; 31 "Floating through the night" 3:19.44, set by hand to 3:22.04.
 - Cause: a line of only a hum has no words for the forced aligner (and speech recognition cannot hear it), so the aligner puts it at a guess in the gap after the previous line (the round 3:15.00). The vocal-start check only looked at line 1, gaps, stretched first words, hooks and lines with a late voice: a hum in the middle was never chosen (`signalsFor`, src/vocal-guard.ts), and when chosen, a move needs two signals while a hum has only the voice. The line after it kept its low-confidence stamp in front of the hum.
@@ -211,18 +244,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   with voice at its stamp still unchecked, hand-set untouched. Changed old expectations: the Heart For Two 'plain'
   case now checks line 2 (voice 1.5 s late) by default; a short-first-word case now moves to the voice 73 900 (was
   the words 73 500).
-
-
-### Shape timeline: Follow keeps the playhead in the middle ✅ (to verify on the Windows PC)
-- Asked by the user (7 Nov 2026): for checking lyric sync, the playhead should stay in one place while the
-  timeline slides under it, as in Pro Tools ("continuous scroll"), Logic and Final Cut (not a page jump as in
-  Premiere / Resolve / Ableton). Follow now keeps it in the middle (was a third from the left). Scrolling by hand still
-  stops it until the next play.
-- Then (asked by the user: "we miss the beginning while the playhead goes to the middle"): with Follow on, the
-  timeline gets half a view of empty space before 0:00 and after the end (as Pro Tools / Logic), so the
-  playhead is in the middle from the first frame to the last, also when Follow is ticked while paused.
-- Tests: follow.test.ts (the middle; with the half-view space: in the middle at 0:00 and at the end);
-  storyboard.e2e.ts unchanged in substance.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

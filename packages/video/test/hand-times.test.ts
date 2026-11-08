@@ -50,9 +50,57 @@ describe("hand-set lines in hints.lrc", () => {
     expect(bad.applied).toEqual([]);
     expect(bad.problems).toEqual([
       'hand-set line 2 "Other words": line 2 is now "You had a heart"; ignored (set it again in the Lyrics tab)',
-      'hand-set line 3 "Next" at 01:00.00: not between its neighbours; ignored',
       'hand-set line 9 "Gone": there is no line 9 any more; ignored',
+      'hand-set line 3 "Next" at 01:00.00: not between its neighbours; ignored',
     ]);
+  });
+
+  // Bug (8 Nov 2026, "Let My Love Carry You"): lines 28-31 with "Mmmm..." removed. Hold on was nudged to 3:22 but the next
+  // line's automatic stamp is 3:18.26, so it was silently dropped as "passing its neighbour".
+  const TAIL = parseLrc(
+    "[03:12.98]<03:12.98>You'll <03:13.50>find <03:14.00>\n[03:14.76]<03:14.76>Hold <03:15.50>on <03:17.27>\n[03:18.26]<03:18.26>Floating <03:19.00>through <03:20.00>\n[03:21.00]\n",
+    230_000,
+  );
+
+  it("a hand-set start after the next line's automatic stamp wins; the next line is pushed behind it (and shown as moved)", () => {
+    const r = applyHandTimes(TAIL, [{ number: 2, ms: 202_000, text: "Hold on" }]);
+    expect(r.skipped).toEqual([]);
+    expect(r.applied).toEqual([{ index: 1, fromMs: 194_760, toMs: 202_000 }]);
+    expect(r.lines[1].start_ms).toBe(202_000);
+    expect(r.pushed).toEqual([{ index: 2, fromMs: 198_260, toMs: 204_610, because: 2 }]);
+    expect(r.lines[2].start_ms).toBe(204_610); // behind Hold on's sung end (3:24.51) + 0.1 s
+    expect(r.lines[2].start_ms).toBeGreaterThan(r.lines[1].sung_end_ms!);
+    expect(r.lines[0]).toEqual(TAIL[0]);
+  });
+
+  it("both set by hand: each is checked against the other's FINAL start, both are kept", () => {
+    const r = applyHandTimes(TAIL, [
+      { number: 2, ms: 202_000, text: "Hold on" },
+      { number: 3, ms: 205_060, text: "Floating through" },
+    ]);
+    expect(r.skipped).toEqual([]);
+    expect(r.pushed).toEqual([]);
+    expect(r.lines.map((l) => l.start_ms)).toEqual([192_980, 202_000, 205_060]);
+    // Hold on set after Floating's hand-set start: the clash is named, in plain words.
+    const bad = applyHandTimes(TAIL, [
+      { number: 2, ms: 210_000, text: "Hold on" },
+      { number: 3, ms: 205_060, text: "Floating through" },
+    ]);
+    expect(bad.skipped[0]).toMatchObject({ line: 2, with: 3 });
+    expect(bad.skipped[0].why).toMatch(/not before line 3, which you set to 03:25\.06/);
+  });
+
+  it("follow their line by text when the numbers shifted; stale entries never override the current one", () => {
+    // "Mmmm..." was line 2 and has been removed: the old entries for #3 Hold on and #4 Floating are now lines 2 and 3.
+    const r = applyHandTimes(TAIL, [
+      { number: 2, ms: 190_000, text: "Mmmm..." },
+      { number: 3, ms: 202_000, text: "Hold on" },
+      { number: 4, ms: 202_040, text: "Floating through" },
+      { number: 3, ms: 205_060, text: "Floating through" },
+    ]);
+    expect(r.lines.map((l) => l.start_ms).slice(1)).toEqual([202_000, 205_060]);
+    expect(r.stale).toEqual([{ number: 4, ms: 202_040, text: "Floating through" }]);
+    expect(r.problems.some((p) => /"Mmmm\.\.\."/.test(p))).toBe(true);
   });
 
   it("are not counted as taps by the Assets tab's hints check", () => {

@@ -11,11 +11,12 @@ import path from "node:path";
 import { absPath, beat as beatTable, project as projectTable, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
+import { clockText } from "../section";
 import { anchorProblems, checkAnchors, type AnchorSpec, type GapOrder } from "../anchors";
 import { applyDownbeatOffset } from "../beats";
 import { lyricFrames, rawLyric, type RenderBase } from "../compose";
 import { VIDEO } from "../config";
-import { parseHandTimes, withHandTimes } from "../hand-times";
+import { applyHandTimes, parseHandTimes, resolveHandTimes, withHandTimes } from "../hand-times";
 import { HOOK_MARKER, normalizeLyric, retextLrcLine, type TimedLine } from "../lrc";
 import { STRETCHED_WORD_MS, applyGuard, flagReason, likelyStart, type GuardMove } from "../vocal-guard";
 import { CHECKED_BY_EAR_FILE, checkedByEar, type EarCheck } from "../checked-by-ear";
@@ -48,6 +49,8 @@ export type LyricsLine = {
   sungEndMs: number | null;
   checkedByEar: string | null; // when the user checked it by ear (still the same alignment, words and start)
   checkLapsed: boolean; // checked by ear before, but the alignment, words or start changed since
+  handPushed: { fromMs: number; because: number } | null; // not set by hand, but moved behind the hand-set line `because`
+  handSkipped: { ms: number; why: string } | null; // a start set by hand for this line that is NOT used, and why (plain words)
 };
 
 export type LabelFlag = { line: number; text: string; why: string }; // a line of lyrics.txt (1-based)
@@ -216,6 +219,8 @@ export async function lyricsView(ws: Workspace, projectId: string): Promise<Lyri
       const check = guard?.check?.lines.find((c) => c.number === i + 1) ?? null;
       const flagged = !hand.skip.has(i) && check?.result === "flagged for review" ? check.why : null;
       const flaggedCheck = flagged !== null && check ? { stampMs: check.stamp_ms, voiceMs: check.voice_ms, wordsMs: check.words_ms, durationMs: check.duration_ms } : null;
+      const pushedHere = hand.pushed.find((k) => k.index === i);
+      const skippedHere = hand.skipped.find((k) => k.line === i + 1);
       const heldNote = !!check && check.first_word_ms !== null && check.first_word_ms >= STRETCHED_WORD_MS && (l.isHook || i === lines.length - 1);
       const likely = flaggedCheck ? likelyStart(flaggedCheck) : null;
       const confidence = reports[i]?.confidence ?? null;
@@ -236,6 +241,8 @@ export async function lyricsView(ws: Workspace, projectId: string): Promise<Lyri
         sungEndMs: l.sung_end_ms ?? null,
         checkedByEar: valid.has(i) ? (ear.find((c) => c.number === i + 1)?.at ?? null) : null,
         checkLapsed: !valid.has(i) && ear.some((c) => c.number === i + 1),
+        handPushed: pushedHere ? { fromMs: pushedHere.fromMs, because: pushedHere.because } : null,
+        handSkipped: skippedHere ? { ms: skippedHere.ms, why: skippedHere.why } : null,
       };
     });
   // What the anchors will clash on (the same rules as pnpm make; per platform more can follow).
@@ -285,15 +292,30 @@ export async function setCheckedByEar(ws: Workspace, projectId: string, number: 
 // The Lyrics tab's Save: hand-set starts for these lines (null = back to the alignment / check) in hints.lrc.
 // The old hints.lrc is kept in .studio\replaced\. Returns how many lines are set by hand now.
 export async function saveHandTimes(ws: Workspace, projectId: string, changes: readonly { number: number; ms: number | null }[]): Promise<number> {
+  return (await saveHandTimesChecked(ws, projectId, changes)).handSet;
+}
+
+// The same, and what the Lyrics tab says after a Save: the hand-set starts that are not used (which line and why,
+// in plain words) and the old entries of lines that are gone. Old entries are kept by their line's text when the
+// numbers shifted (a line was removed or added in the lyrics), entries of lines that no longer exist go, and an
+// entry of an older numbering never overrides the current one.
+export async function saveHandTimesChecked(
+  ws: Workspace,
+  projectId: string,
+  changes: readonly { number: number; ms: number | null }[],
+): Promise<{ handSet: number; skipped: { line: number; text: string; why: string }[]; dropped: string[] }> {
   const paths = songPathsById(ws, projectId);
   if (paths.legacy || !paths.hints) throw new Error("This song has no folder yet: run the migration first (pnpm songs:migrate).");
   const stored = await storedAlignment(ws, projectId);
   if (!stored) throw new Error("This song has no stored alignment yet: make a video first.");
   resetHandTimesMadeBeforeStem(paths.hints, stored.alignment.voice);
   const current = existsSync(paths.hints) ? readFileSync(paths.hints, "utf8") : "";
-  const times = new Map(parseHandTimes(current).map((t) => [t.number, t]));
+  const lines = stored.alignment.lines;
+  const old = resolveHandTimes(lines, parseHandTimes(current));
+  const dropped = [...old.problems.map((p) => p.replace(/^hand-set /, "The hand-set start of ").replace(/; ignored.*$/, "") + " was removed"), ...old.stale.map((t) => `An older hand-set start of "${t.text}" (line ${t.number}) was replaced by the current one`)];
+  const times = new Map(old.resolved.map((t) => [t.number, { number: t.number, ms: t.ms, text: lines[t.index].text }]));
   for (const c of changes) {
-    const line = stored.alignment.lines[c.number - 1];
+    const line = lines[c.number - 1];
     if (!line) throw new Error(`There is no line ${c.number}.`);
     if (c.ms === null) times.delete(c.number);
     else {
@@ -302,11 +324,20 @@ export async function saveHandTimes(ws: Workspace, projectId: string, changes: r
     }
   }
   const next = withHandTimes(current, [...times.values()]);
-  if (next === current) return times.size;
+  const check = applyHandTimes(lines, [...times.values()]);
+  const touched = new Set(changes.filter((c) => c.ms !== null).map((c) => c.number));
+  for (const k of check.skipped) {
+    if (k.with === undefined || (!touched.has(k.line) && !touched.has(k.with))) continue;
+    const [first, second] = k.with > k.line ? [k.line, k.with] : [k.with, k.line];
+    const at = (n: number) => times.get(n)?.ms ?? 0;
+    throw new Error(`Line ${first} "${lines[first - 1].text}" (${clockText(at(first))}) and line ${second} "${lines[second - 1].text}" (${clockText(at(second))}) are both set by hand and out of order: line ${first} must start before line ${second}. Move one of them.`);
+  }
+  const skipped = check.skipped.map((k) => ({ line: k.line, text: k.text, why: k.why }));
+  if (next === current) return { handSet: times.size, skipped, dropped: [] };
   if (existsSync(paths.hints)) keepReplaced(paths.root, paths.hints, true);
   writeFileSync(paths.hints, next);
   noteHandTimesSaved(paths.hints, stored.alignment.voice); // made on this voice (the stem's starts stay)
-  return times.size;
+  return { handSet: times.size, skipped, dropped };
 }
 
 // "Reset all lines to the vocal stem's timing" (or the app's timing without a stem): every hand-set start

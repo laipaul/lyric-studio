@@ -184,7 +184,10 @@ export function LyricsTab({ projectId }: { projectId: string }) {
     if (!result) return;
     setPending(new Map());
     setHistory([]);
-    setNotice({ ok: true, text: `Saved to hints.lrc (${result.handSet} line(s) set by hand). The next video uses them; the stored alignment is kept. Make the video again to see it.` });
+    const skipped = (result.skipped ?? []) as { line: number; text: string; why: string }[];
+    const dropped = (result.dropped ?? []) as string[];
+    const extra = `${skipped.map((k) => ` Line ${k.line} "${k.text}" is NOT used: ${k.why}.`).join("")}${dropped.map((d) => ` ${d}.`).join("")}`;
+    setNotice({ ok: !skipped.length, text: `Saved to hints.lrc (${result.handSet} line(s) set by hand). The next video uses them; the stored alignment is kept. Make the video again to see it.${extra}` });
     await load();
   }
 
@@ -355,6 +358,16 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                           {l.flagged ? (
                             <p className="mt-1 flex items-start gap-1 text-xs text-amber-200" data-flag-reason>
                               <AlertTriangle className="mt-0.5 size-3 shrink-0" /> <span title={l.flagged} data-flag-why>{l.flagReason ?? "Flagged for review. Listen with ▶."}</span>
+                            </p>
+                          ) : null}
+                          {l.handPushed ? (
+                            <p className="text-muted-foreground mt-1 text-xs" data-hand-pushed>
+                              Moved after line {l.handPushed.because}, which you set by hand: it started at {clockTenths(l.handPushed.fromMs)}, before that line.
+                            </p>
+                          ) : null}
+                          {l.handSkipped ? (
+                            <p className="mt-1 flex items-start gap-1 text-xs text-amber-200" data-hand-skipped>
+                              <AlertTriangle className="mt-0.5 size-3 shrink-0" /> <span>The start you set ({clockTenths(l.handSkipped.ms)}) is not used: {l.handSkipped.why}.</span>
                             </p>
                           ) : null}
                           {l.source === "vocal-start check" && l.check ? <p className="text-muted-foreground mt-1 text-xs">Moved by the vocal-start check: {l.check.why}</p> : null}

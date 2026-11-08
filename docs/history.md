@@ -4,6 +4,17 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Shape timeline: Follow keeps the playhead in the middle ✅ (to verify on the Windows PC)
+- Asked by the user (7 Nov 2026): for checking lyric sync, the playhead should stay in one place while the
+  timeline slides under it, as in Pro Tools ("continuous scroll"), Logic and Final Cut (not a page jump as in
+  Premiere / Resolve / Ableton). Follow now keeps it in the middle (was a third from the left). Scrolling by hand still
+  stops it until the next play.
+- Then (asked by the user: "we miss the beginning while the playhead goes to the middle"): with Follow on, the
+  timeline gets half a view of empty space before 0:00 and after the end (as Pro Tools / Logic), so the
+  playhead is in the middle from the first frame to the last, also when Follow is ticked while paused.
+- Tests: follow.test.ts (the middle; with the half-view space: in the middle at 0:00 and at the end);
+  storyboard.e2e.ts unchanged in substance.
+
 ### Lyrics tab: where the Reel starts and each line's time in it ✅ (to verify on the Windows PC)
 - Asked by the user (7 Nov 2026), with the timeline clock: the Lyrics tab shows song times, the Reel counts
   from its own start, and nothing linked the two.

@@ -209,3 +209,102 @@ describe("the Lyrics tab", () => {
     await saveHandTimes(ws, id, [{ number: 3, ms: null }]);
   });
 });
+
+// Bug (8 Nov 2026, "Let My Love Carry You"): the line "Mmmm..." was removed from the lyrics. The others got their
+// neighbours' timing, and a hand-set start for "Hold on..." (3:22) was dropped, as the next line's stamp was earlier.
+describe("a line removed from the lyrics", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "lyric-removed-"));
+  let ws: Workspace;
+  let calls = 0;
+  let songs = 0;
+  const TEXT = "You'll find your way\nMmmm...\nHold on...\nFloating through the night\nThe end\n";
+  const STARTS = [10_000, 20_000, 30_000, 40_000, 55_000];
+  const CONF = [0.9, 0.74, 0.23, 0.8, 0.9];
+  const lrcFor = (names: string[], at: number[]) => `${names.map((t, i) => `[${String(Math.floor(at[i] / 60_000)).padStart(2, "0")}:${((at[i] % 60_000) / 1000).toFixed(2).padStart(5, "0")}]<00:00.00>${t.split(" ").join(" <00:00.00>")} `).join("\n")}\n[01:10.00]\n`;
+  async function newSong(name: string, text: string, names: string[], at: number[], conf: number[]) {
+    const dir = path.join(root, "in", name);
+    mkdirSync(dir, { recursive: true });
+    const song = path.join(dir, `${name}.wav`);
+    execFileSync(ffmpegBin(), ["-y", "-v", "error", "-f", "lavfi", "-i", `sine=frequency=${330 + 40 * ++songs}:duration=2`, song]);
+    writeFileSync(path.join(dir, "lyrics.txt"), text);
+    const id = (await createSong(ws, { song, lyrics: path.join(dir, "lyrics.txt") })).id;
+    const p = ws.db.select().from(project).where(eq(project.id, id)).get()!;
+    const paths = songPathsById(ws, id);
+    const sp = { project: p, songFile: absPath(ws, p.audio_path!), songHash: p.audio_hash!, created: false };
+    const exact: AlignRunner = async (a) => {
+      calls++;
+      writeFileSync(a.out, lrcFor(names, at));
+      writeFileSync(a.report, JSON.stringify({ model: "fake", lang: "en", low_confidence: 0.5, lines: names.map((t, i) => ({ number: i + 1, text: t, is_hook: false, start_ms: at[i], end_ms: at[i] + 5_000, confidence: conf[i] })) }));
+    };
+    await ensureAlignment(ws, sp, { lyricsTxt: paths.lyricsTxt, durationMs: 100_000, align: exact });
+    return id;
+  }
+  const NAMES = ["You'll find your way", "Mmmm...", "Hold on...", "Floating through the night", "The end"];
+
+  beforeAll(() => {
+    ws = openWorkspace(path.join(root, "workspace"));
+  });
+  afterAll(() => {
+    ws?.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("C: every other line keeps its OWN timing and confidence; nothing is aligned again; adding a line aligns again", async () => {
+    const id = await newSong("removed", TEXT, NAMES, STARTS, CONF);
+    const before = calls;
+    saveLyricsText(ws, id, TEXT.replace("Mmmm...\n", ""));
+    const v = await lyricsView(ws, id);
+    expect(calls).toBe(before);
+    expect(v.lines!.map((l) => [l.text, l.alignedMs, l.confidence])).toEqual([
+      ["You'll find your way", 10_000, 0.9],
+      ["Hold on...", 30_000, 0.23],
+      ["Floating through the night", 40_000, 0.8],
+      ["The end", 55_000, 0.9],
+    ]);
+    // Taking away the first and the last line as well.
+    saveLyricsText(ws, id, "Hold on...\nFloating through the night\n");
+    expect((await lyricsView(ws, id)).lines!.map((l) => l.alignedMs)).toEqual([30_000, 40_000]);
+    // A line added is not guessed: the next make aligns again.
+    saveLyricsText(ws, id, "Hold on...\nA new line\nFloating through the night\n");
+    expect((await lyricsView(ws, id)).lines).toBeNull();
+  });
+
+  it("C: a removed line that could be either of two identical lines is not guessed (aligned again)", async () => {
+    const id = await newSong("twice", "Hold on\nHold on\nFloating\n", ["Hold on", "Hold on", "Floating"], [10_000, 20_000, 30_000], [0.9, 0.8, 0.7]);
+    saveLyricsText(ws, id, "Hold on\nFloating\n");
+    expect((await lyricsView(ws, id)).lines).toBeNull();
+    saveLyricsText(ws, id, "Floating\nHold on\n"); // order changed: not a removal either
+    expect((await lyricsView(ws, id)).lines).toBeNull();
+  });
+
+  it("A + B: a hand-set start follows its line by text; Hold on 3:22-style (after the next stamp) is kept and the next line is pushed", async () => {
+    const id = await newSong("handset", TEXT, NAMES, STARTS, CONF);
+    const paths = songPathsById(ws, id);
+    await saveHandTimes(ws, id, [{ number: 4, ms: 45_000 }, { number: 3, ms: 31_000 }]); // old numbering: Floating, Hold on
+    saveLyricsText(ws, id, TEXT.replace("Mmmm...\n", ""));
+    let v = await lyricsView(ws, id);
+    // The entries followed their lines (Hold on 31 s, Floating 45 s) although the numbers shifted.
+    expect(v.lines!.map((l) => [l.text, l.startMs, l.source])).toEqual([
+      ["You'll find your way", 10_000, "alignment"],
+      ["Hold on...", 31_000, "hand"],
+      ["Floating through the night", 45_000, "hand"],
+      ["The end", 55_000, "alignment"],
+    ]);
+    // Saving "Hold on..." (now line 2) at 43 s, after its next line's stamp (40 s); Floating back to automatic.
+    expect(await saveHandTimes(ws, id, [{ number: 2, ms: 43_000 }, { number: 3, ms: null }])).toBe(1);
+    expect(readFileSync(paths.hints!, "utf8")).toBe("[00:43.00]! #2 Hold on...\n"); // no stale #3 / #4 entries left
+    v = await lyricsView(ws, id);
+    expect(v.lines![1]).toMatchObject({ startMs: 43_000, source: "hand", handSkipped: null });
+    expect(v.lines![2].source).toBe("alignment");
+    expect(v.lines![2].startMs).toBeGreaterThan(43_000); // pushed behind Hold on, never before it
+    expect(v.lines![2].handPushed).toEqual({ fromMs: 40_000, because: 2 });
+    expect(v.lines![3].startMs).toBeGreaterThan(v.lines![2].startMs);
+    // Now Floating by hand too, later: both kept, nothing pushed.
+    await saveHandTimes(ws, id, [{ number: 3, ms: 50_000 }]);
+    v = await lyricsView(ws, id);
+    expect(v.lines!.map((l) => [l.startMs, l.source, l.handPushed])).toEqual([[10_000, "alignment", null], [43_000, "hand", null], [50_000, "hand", null], [55_000, "alignment", null]]);
+    // Two hand-set starts out of order: the save refuses and names both lines.
+    await expect(saveHandTimes(ws, id, [{ number: 3, ms: 42_000 }])).rejects.toThrow(/Line 2 "Hold on\.\.\." \(.*\) and line 3 "Floating through the night" \(.*\) are both set by hand and out of order/);
+    expect(readFileSync(paths.hints!, "utf8")).toBe("[00:43.00]! #2 Hold on...\n[00:50.00]! #3 Floating through the night\n");
+  });
+});
