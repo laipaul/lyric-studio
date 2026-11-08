@@ -4,6 +4,55 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Theme Engine v2 on HyperFrames, step 1: renderer seam, (b) checked, zero network ✅ (confirmed on the Windows PC: B 26.8 s vs Remotion 29.3 s, 6 Nov 2026)
+- **D1 decided by the user (6 Nov 2026): (b), HyperFrames draws everything in one pass** (clips, cuts, dissolves,
+  dips, lyrics, effects). It is the target architecture; step 1 measures its speed and the clips' frame accuracy as
+  a check, not a choice: if it is slow or a clip drifts, the cause is fixed. (a) (lyrics layer over an FFmpeg
+  picture) stays only as a temporary fallback until (b) passes on the PC.
+- **Zero network calls when rendering (the user, 6 Nov 2026):** fonts only from our own font files (`@font-face`
+  under a private name `vm <family>`, no generic fallback, so no Google Fonts fetch even as a fallback); GSAP and
+  the clips copied into the render folder; telemetry, update checks and auto-installs off. Chrome for HyperFrames
+  is downloaded once by `pnpm hf:setup` into `.cache\hyperframes` (the only online moment). Test:
+  hf-network.test.ts renders under a connection trace and fails on any connection off this machine.
+- **Built (packages/video):** the converter `src/hf/compile.ts` (the same props as Remotion → HTML + GSAP: shots as
+  video elements with trim, speed and held last frame, dissolves, dips, the stand-in "Glow reveal" lyrics, fonts),
+  which also lists what it cannot draw yet; `src/node/hf-render.ts` (render, the song section with its fades by our
+  FFmpeg, nothing else done to the music); `pnpm make ... --engine hyperframes` uses it when a video has nothing
+  HyperFrames cannot draw yet, otherwise Remotion makes it and the log says why in plain words; the manifest records
+  the renderer. Remotion stays the default.
+- **Frame accuracy:** a test clip with its frame number in every frame, played trimmed, slowed (0.5x, 0.75x),
+  jumping back and running out (last frame held): every rendered frame must show exactly the planned source frame.
+- **Cloud results** (synthetic song, 31.3 s, 12 shots, 4 cores, no GPU): Remotion 147.3 s, **(b) 93.2 s (63% of
+  Remotion's time)**, (a) 134.8 s; frame accuracy 240 of 240 for (b), (a)'s picture and Remotion; zero outside
+  connections. The LGPL FFmpeg with NVENC could not be fetched in the cloud: it is timed on the PC.
+- **On the user's PC (6 Nov 2026, "Here with Me", Reel section 30.4 s, Core Ultra 9 275HX, RTX 5060): B passes.**
+  Remotion 81.4 s, **B 34.6 s (42% of Remotion's time)**, A 60.2 s; frame accuracy 240 of 240 for B, A's picture
+  and Remotion. The LGPL FFmpeg (BtbN master) is LGPL with libvpx-vp9 and no libx264, but its NVENC needs NVIDIA
+  driver 610+ (API 13.1; the PC has 591.86, API 13.0).
+- **Second run on the PC (release build n8.1 LGPL):** Remotion 33.3 s (the first run's 81.4 s included a cold
+  start: Remotion's first bundle), B 38.0 s (114% of Remotion), B with LGPL + NVENC 37.7 s, A 58.4 s; 240 of 240
+  frames for all four. NVENC works with n8.1 (driver 591.86); same quality as x264 at 10 Mbit/s (SSIM 0.99425 vs
+  0.99427), encodes in half the time, but encoding is not B's bottleneck: HyperFrames' frame capture is (~34 s).
+  Open: find why the capture takes ~34 s for 30 s of video and fix it (not a reason to fall back to A).
+- **Cause found (cloud): HyperFrames chooses too few workers** (Chromes drawing side by side): on 4 cores it chose
+  1 after an 11 s calibration (a "contention" rule: about 2.5 cores per worker); on the PC its rules allow at most 6
+  of 24 cores. **Fix:** our renderer chooses (hfWorkers: one per core, at most half the memory at ~1.5 GB each, at
+  least 30 frames each, at most 16; on the PC 10) and passes `--workers`, which also skips the calibration. Cloud:
+  HyperFrames' choice 87.7 s, ours 58.5 s, the same 240 of 240 frames. `pnpm hf:measure` now also times B at
+  several worker counts and with / without Chrome on the GPU, and the report says how HyperFrames drew (workers,
+  capture mode, GPU); the PC's numbers set the final default. Remotion is warmed up first (its first render
+  builds its bundle). Tests: hf-workers.
+- **Third run on the PC (6 Nov 2026): B passes. Remotion 29.3 s, B 26.8 s (92% of Remotion)**, B + LGPL + NVENC
+  32.0 s, A 46.2 s; 240 of 240 frames for all four. Workers: HyperFrames' own choice 6 (34.7 s), 2: 52.4 s,
+  4: 43.2 s, 8: 34.1 s, **10 (our choice): 31.7 s**, 12: 32.0 s, 16: 32.7 s: our choice stays the default. Chrome
+  uses the GPU by itself (off: +1.5 s); Windows captures by screenshot. NVENC gives no gain here (the drawing is
+  the bottleneck, not the encode): libx264 stays the default; the LGPL build with NVENC works, for the installer.
+  Step 1 done; (a) is no longer needed and goes when step 2a is in. The report now prints the
+  card's own reason and the FFmpeg version (it was hidden by Windows line endings).
+- `pnpm hf:measure "<song folder>" [--lgpl "<ffmpeg folder>"]` writes a report (times, frame accuracy, NVENC vs
+  x264 quality at the same bitrate, the LGPL build's licence line) to `workspace\cache\hf-measure\<song>\<time>\`.
+- Tests: hf-compile, hf-network, textboard-make (fallback with its reason); video package 934 pass.
+
 ### Theme Engine v2 on HyperFrames, step 0: "break." fixed in the spike ✅ (confirmed on the Windows PC, 6 Nov 2026)
 - **Confirmed by the user on "Here with Me"** (the planner's own section, both formats): 35 of 35 words land on
   exactly their sung frame (timeline mean and worst 0 ms), the pixels confirm all 35; "break." (sung at 19.700 s,

@@ -16,7 +16,7 @@ import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 
-import { clockTenths, type TimelineEdits, EFFECT_NAMES, effectTitle, followScrollLeft, LyricVideo, playheadLabel, songTimeMs, timeTicks, patchLook, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
+import { clockTenths, type TimelineEdits, EFFECT_NAMES, effectTitle, followScrollLeft, LyricVideo, playheadLabel, revealScrollLeft, songTimeMs, timeTicks, patchLook, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
 import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node";
 import { SoundtrackWindow } from "./soundtrack-window";
 import { useTimelineEditing, ViewerFrame } from "./timeline-editing"; // types only (erased): the data comes from /api/songs/[id]/storyboard
@@ -363,6 +363,35 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
     autoScroll.current = true;
     el.scrollLeft = target;
   }, [follow, zoom, followPad]);
+  // A JUMP of the playhead (start, end, Stop, Home / End, a bar or frame step, a click on the ruler, a lyric or a
+  // clip, Undo / Redo, play from the end): the timeline scrolls so the playhead is in view, paused or playing
+  // (8 Nov 2026; before, a jump while paused left the playhead off-screen). Detected centrally from the
+  // Player's "seeked" event, so no jump site is missed. Follow on: the playhead goes to the middle, and a jump
+  // is an explicit request, so it ends a hand-scroll hold (following resumes if the preview is playing).
+  // Follow off: only brought into view (a small margin), no scroll when it already is. Playback's own frame
+  // advances never fire "seeked".
+  const jumpView = useRef({ follow, followPad, zoom });
+  useEffect(() => {
+    jumpView.current = { follow, followPad, zoom };
+  }, [follow, followPad, zoom]);
+  useEffect(() => {
+    const p = playerInstance;
+    if (!p) return;
+    const onSeeked = (e: { detail: { frame: number } }) => {
+      const el = timeline.current;
+      if (!el) return;
+      const j = jumpView.current;
+      const playheadX = j.followPad + (e.detail.frame / 30) * j.zoom;
+      const o = { scrollLeft: el.scrollLeft, viewWidth: el.clientWidth, contentWidth: el.scrollWidth, playheadX };
+      if (j.follow) heldByUser.current = false;
+      const target = j.follow ? followScrollLeft(o) : revealScrollLeft(o);
+      if (target === null) return;
+      autoScroll.current = true;
+      el.scrollLeft = target;
+    };
+    p.addEventListener("seeked", onSeeked);
+    return () => p.removeEventListener("seeked", onSeeked);
+  }, [playerInstance]);
   const onTimelineScroll = () => {
     if (autoScroll.current) autoScroll.current = false;
     else if (playing) heldByUser.current = true; // the user scrolled: stop following until the next play

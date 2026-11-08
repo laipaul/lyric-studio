@@ -273,6 +273,47 @@ async function main() {
     check(followed > 0, `with Follow playback the timeline scrolls with the playhead (scrolled ${followed} px)`);
     check((await page.evaluate(() => window.localStorage.getItem("lyric-studio:storyboard-follow"))) === "1", "Follow playback is remembered in this browser");
     await page.uncheck("[data-follow-playback]");
+    // A jump of the playhead scrolls the timeline to it, also while paused (8 Nov 2026: ⏮ with the timeline scrolled
+    // away moved the counter to 0:00 but left the playhead off-screen). Still at 4x so the timeline overflows.
+    if ((await page.getAttribute("[data-transport]", "data-playing")) === "1") await page.click("[data-transport-button=play]");
+    await page.waitForSelector("[data-transport][data-playing='0']");
+    const endOfTimeline = () => page.$eval("[data-storyboard-timeline]", (el: Element) => ((el as HTMLElement).scrollLeft = (el as HTMLElement).scrollWidth));
+    const playheadInView = async () => {
+      const t = (await (await page.$("[data-storyboard-timeline]"))!.boundingBox())!;
+      const h = (await (await page.$("[data-playhead]"))!.boundingBox())!;
+      return { inside: h.x >= t.x - 1 && h.x <= t.x + t.width + 1, offset: h.x - (t.x + t.width / 2) };
+    };
+    await endOfTimeline();
+    await sleep(200);
+    check(!(await playheadInView()).inside, "(setup) the timeline is scrolled away from the playhead");
+    await page.click("[data-transport-button=start]");
+    await sleep(300);
+    check((await page.textContent("[data-transport-time]"))!.trim().startsWith("0:00.0"), "⏮ moves the preview to 0:00.0 while paused");
+    check((await playheadInView()).inside, "Follow off: ⏮ while paused scrolls the timeline so the playhead is in view");
+    const scrollAfterStart = await scrollLeft();
+    await page.click("[data-transport-button=forward]"); // a small jump with the playhead already in view: no scroll
+    await sleep(300);
+    check((await playheadInView()).inside && (await scrollLeft()) === scrollAfterStart, `Follow off: a small jump inside the view does not scroll (${scrollAfterStart} px)`);
+    await page.click("[data-transport-button=end]");
+    await sleep(300);
+    check((await playheadInView()).inside, "Follow off: ⏭ while paused brings the playhead at the end into view");
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur()); // keys are ignored while a button has focus
+    await page.keyboard.press("Home");
+    await sleep(300);
+    check((await playheadInView()).inside && (await scrollLeft()) === scrollAfterStart, "Follow off: the Home key brings the playhead back into view");
+    await page.check("[data-follow-playback]");
+    await endOfTimeline();
+    await sleep(200);
+    await page.click("[data-transport-button=start]");
+    await sleep(300);
+    const mid = await playheadInView();
+    check(mid.inside && Math.abs(mid.offset) <= 4, `Follow on: ⏮ while paused puts the playhead in the middle of the timeline (${mid.offset.toFixed(1)} px off)`);
+    await page.click("[data-transport-button=end]");
+    await sleep(300);
+    const midEnd = await playheadInView();
+    check(midEnd.inside && Math.abs(midEnd.offset) <= 4, `Follow on: ⏭ puts the playhead in the middle (${midEnd.offset.toFixed(1)} px off)`);
+    await page.uncheck("[data-follow-playback]");
+    await page.click("[data-transport-button=start]");
     await page.click("button:has-text('2x')"); // back to the zoom the rest of this test expects
     await page.$eval("[data-storyboard-timeline]", (el: Element) => ((el as HTMLElement).scrollLeft = 0));
     // The preview plays the end (the loop blend into the first shot) and the dips without an error.
