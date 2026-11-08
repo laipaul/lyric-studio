@@ -9,7 +9,7 @@ import path from "node:path";
 import { openWorkspace, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { applyGuard, asrWindows, flagReason, likelyStart, checkVocalStart, earlyMs, matchFirstWords, moveLineStart, parseLrc, singingLevel, voiceStretches, type AsrWord, type TimedLine, type VoiceLevels } from "../src";
+import { isNonLexical, applyGuard, asrWindows, flagReason, likelyStart, checkVocalStart, earlyMs, matchFirstWords, moveLineStart, parseLrc, singingLevel, voiceStretches, type AsrWord, type TimedLine, type VoiceLevels } from "../src";
 import { applyVocalGuard, ensureAlignment, findOrCreateSongProject, type AlignRunner, type FirstWordsRunner, type VoiceMapRunner } from "../src/node";
 import { makeSong } from "./media-helpers";
 
@@ -689,5 +689,92 @@ describe("a flagged line: its likely start and the reason in plain words", () =>
     expect(flagReason(c({}))).toBe("The app could not hear where this line starts. Listen with ▶.");
     expect(flagReason(c({ durationMs: 63_000 }), true)).toBe("The first word may be a long held note. Listen with ▶.");
     expect(flagReason(c({ durationMs: 63_000 }), false)).toBe("The singing may start about 3 s later than shown. Listen with ▶.");
+  });
+});
+
+// "Let My Love Carry You": the last lines. "Mmmm..." is stamped 3 s before the hum is sung (the aligner can only
+// guess where a hum is), the line after it ("Hold on...", low confidence) in front of the hum.
+describe("a hummed line (\"Mmmm...\") is placed on the voice onset", () => {
+  it("recognises non-lexical lines, conservatively", () => {
+    for (const t of ["Mmmm...", "mm-hmm", "Ooh, ooh", "La la la", "Oh oh oh", "Hmm", "Woah", "Yeah yeah", "Aah", "Na na na", "(Mmm)", "Ahh!"]) expect(isNonLexical(t), t).toBe(true);
+    for (const t of ["Hold on...", "Oh my love", "Yeah I know", "", "...", "Mamma", "O Lord", "Mé", "Ooh baby", "Na na na na na hey"]) expect(isNonLexical(t), t).toBe(false);
+  });
+
+  const LRC2 = [
+    "[00:02.00]<00:02.00>You'll <00:02.30>find <00:02.60>your <00:02.90>way <00:03.20>to <00:03.50>me <00:04.00>",
+    "[00:05.00]<00:05.00>Mmmm... <00:08.00>",
+    "[00:08.26]<00:08.26>Hold <00:08.80>on <00:09.50>",
+    "[00:12.04]<00:12.04>Floating <00:12.50>through <00:13.00>the <00:13.30>night <00:14.00>",
+    "[00:16.00]<00:16.00>Last <00:16.40>line <00:17.00>",
+  ].join("\n");
+  const timed = () => parseLrc(LRC2, 20_000);
+  // The hum is sung 8.0-8.9 s, "Hold on" 9.6-10.6 s, "Floating..." 12.0-14 s, "Last line" 16-17 s.
+  const voice = levels([[2_000, 4_000, SINGING], [8_000, 8_900, -16], [9_600, 10_600, SINGING], [12_000, 14_000, SINGING], [16_000, 17_000, SINGING]], 20_000);
+  const confidence = new Map([[1, 0.74], [2, 0.23], [3, 0.51]]);
+
+  it("the hum moves to the voice onset; the low-confidence line after it goes behind the hum", () => {
+    const lines = timed();
+    const c = checkVocalStart(lines, voice, { confidence });
+    expect(c.lines.map((x) => [x.index + 1, x.kind, x.stampMs, x.targetMs, x.result])).toEqual([
+      [1, undefined, 2_000, 2_000, "in time"],
+      [2, "hum", 5_000, 8_000, "moved"],
+      [3, "after hum", 8_260, 9_600, "moved"],
+    ]);
+    expect(c.lines[1].why).toContain("voice onset");
+    const fixed = applyGuard(lines, c.moves);
+    expect(fixed[1].start_ms).toBe(8_000);
+    expect(fixed[2].start_ms).toBe(9_600);
+    expect(fixed[1].end_ms).toBeLessThanOrEqual(9_600); // the hum ends before the line after it
+    expect(fixed[3]).toEqual(lines[3]); // an ordinary line is unchanged
+    expect(fixed[4]).toEqual(lines[4]);
+  });
+
+  it("the hum is never placed before the previous line's sung end", () => {
+    const lines = timed();
+    const early = levels([[2_000, 4_000, SINGING], [3_000, 4_300, SINGING], [9_600, 10_600, SINGING], [12_000, 14_000, SINGING]], 20_000);
+    const c = checkVocalStart(lines, early, { confidence: new Map() });
+    const hum = c.lines.find((x) => x.index === 1)!;
+    expect(hum.targetMs === lines[1].start_ms || hum.targetMs >= 4_000).toBe(true);
+  });
+
+  it("no voice after the previous line: the stamp stays and the record says so", () => {
+    const lines = timed();
+    const none = levels([[2_000, 4_000, SINGING]], 20_000);
+    const c = checkVocalStart(lines, none, { confidence: new Map() });
+    const hum = c.lines.find((x) => x.index === 1)!;
+    expect([hum.result, hum.targetMs]).toEqual(["kept", 5_000]);
+    expect(hum.why).toContain("no voice found");
+    expect(c.moves).toEqual([]);
+  });
+
+  it("a line set by hand is never moved (the hum or the line after it)", () => {
+    const lines = timed();
+    const hand = checkVocalStart(lines, voice, { confidence, skip: new Set([1]) });
+    expect(hand.lines.find((x) => x.index === 1)!.result).toBe("set by hand");
+    expect(hand.moves.some((m) => m.index === 1)).toBe(false);
+    const handAfter = checkVocalStart(lines, voice, { confidence, skip: new Set([2]) });
+    expect(handAfter.lines.find((x) => x.index === 2)!.result).toBe("set by hand");
+    expect(handAfter.moves.map((m) => m.index)).toEqual([1]);
+  });
+
+  it("a line after the hum with good confidence is not touched, and an ordinary song has no extra checks", () => {
+    const lines = timed();
+    const c = checkVocalStart(lines, voice, { confidence: new Map([[2, 0.9]]) });
+    expect(c.lines.some((x) => x.kind === "after hum")).toBe(false); // "Hold on" is only checked by the usual rules
+    // The hum's window for speech recognition is left out (it cannot hear a hum).
+    expect(asrWindows(lines, voice, false, confidence).map((w) => w[0])).toEqual([1, 3]);
+  });
+
+  it("the hum's voice at the next line's stamp: the hum moves and the line after it follows behind", () => {
+    const lines = timed();
+    // The hum is heard only from 8.5 s, after the next line's stamp (8.26): the next line has low confidence.
+    const late = levels([[2_000, 4_000, SINGING], [8_500, 9_100, -16], [9_800, 10_600, SINGING], [12_000, 14_000, SINGING]], 20_000);
+    const c = checkVocalStart(lines, late, { confidence });
+    expect(c.lines.map((x) => [x.index + 1, x.targetMs, x.result]).slice(1)).toEqual([[2, 8_500, "moved"], [3, 9_800, "moved"]]);
+    // Without anything found for the next line, the hum goes back to where the aligner had it.
+    const lone = levels([[2_000, 4_000, SINGING], [8_500, 9_100, -16], [12_000, 14_000, SINGING]], 20_000);
+    const k = checkVocalStart(lines, lone, { confidence });
+    expect(k.moves).toEqual([]);
+    expect(k.lines.slice(1).map((x) => x.result)).toEqual(["kept", "kept"]);
   });
 });

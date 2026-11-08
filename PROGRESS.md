@@ -4,6 +4,13 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Bug fix: hummed lines ("Mmmm...") at the end of the YouTube video came too early ✅ (to verify on the Windows PC)
+- The user found (song "Let My Love Carry You", YouTube = whole song): the last lines are early. Lyrics tab (line, stored stamp, now, confidence): 28 "You'll find your way to me" 3:12.98, conf 0.66; 29 "Mmmm..." 3:15.00 -> 3:15.00, conf 0.74, leaves 3:18.00, but the hum is heard from about 3:18, about 3 s early; 30 "Hold on..." 3:18.26, conf 0.23 (flagged, "Checked by ear"), probably early too; 31 "Floating through the night" 3:19.44, set by hand to 3:22.04.
+- Cause: a line of only a hum has no words for the forced aligner (and speech recognition cannot hear it), so the aligner puts it at a guess in the gap after the previous line (the round 3:15.00). The vocal-start check only looked at line 1, gaps, stretched first words, hooks and lines with a late voice: a hum in the middle was never chosen (`signalsFor`, src/vocal-guard.ts), and when chosen, a move needs two signals while a hum has only the voice. The line after it kept its low-confidence stamp in front of the hum.
+- Fixed (automatic, no setting): `isNonLexical` (Mmmm, mm-hmm, Hmm, Ooh, Oh oh oh, Ah, La la, Na na, Woah, Yeah yeah; any punctuation / repeats / case; one other word makes it a normal line) -> such a line is always checked and starts at the voice onset on the vocal stem after the previous line's sung end (never earlier, never the recognised words, no recognition window for it). No voice found = the stamp stays and the record says so. A low-confidence line (< 0.5) directly after a moved hum, whose stamp is before or within 0.5 s after the hum's new start, is checked too and moves behind the hum (voice onset after it, else the recognised words); if nothing is found for it, the hum goes back to its stamp rather than pass it. Hand-set starts ("!" in hints.lrc) are never moved. The guard's record marks the lines (kind "hum" / "after hum"); applyGuard applies the moves last line first so the hum is not squeezed by the line that is about to move. Docs: docs/lyrics.md "Hummed lines".
+- Tests: vocal-guard.test.ts +7 (recognition list; hum moves to the onset and the next line goes behind it, an ordinary line unchanged; never before the previous sung end; no voice = kept with the reason; hand-set hum / hand-set next line untouched; good-confidence next line and no recognition window; hum heard after the next line's stamp, and the hum goes back when the next line cannot be placed): 45 passed; vocal-start / lyrics group 98 passed; studio typecheck clean. No studio code changed.
+- To check on the PC: `cd D:\videomaker`, `git pull`, `pnpm lyrics:check-start "workspace\songs\Life Lyrics\Let My Love Carry You" --all` (lines 29 and 30 should say "a hum ... moved to the voice onset" / "after a hum"), then `pnpm make` or Shape, and the Lyrics tab: the hum should start where you hear it (about 3:18); your hand-set start for line 31 (3:22.04) stays.
+
 ### Bug fix: the clip order in Shape after adding clips in Prepare ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - The user found: "The order of the clips is not respected in Shape once I add new clips during Prepare." Song "Let My Love Carry You" (Reel): after reordering in Prepare, Shape's shots 1-2 were the clips that sat there before the reorder (order #2 and #9, the second with a slip badge); from shot 3 the order was followed.
 - Cause: the Shape timeline's slips (and the outer trims, saved as slips) are stored by song time + clip name, and the planner (compose.ts) forced that clip into the shot, over the story order. After a reorder in Assets or Shape (also lift and swap), the old slip kept pulling its old clip into its old shot. clips.json "order" itself was saved correctly (checked: upload, drag and drop, Shape order / swap, Remove / Restore all keep the order).
@@ -216,21 +223,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   playhead is in the middle from the first frame to the last, also when Follow is ticked while paused.
 - Tests: follow.test.ts (the middle; with the half-view space: in the middle at 0:00 and at the end);
   storyboard.e2e.ts unchanged in substance.
-
-### Lyrics tab: where the Reel starts and each line's time in it ✅ (to verify on the Windows PC)
-- Asked by the user (7 Nov 2026), with the timeline clock: the Lyrics tab shows song times, the Reel counts
-  from its own start, and nothing linked the two.
-- **A band above the lines:** "Part of the song in [Reels] [TikTok] [Shorts]: 0:34.2 – 1:52.0 of the song
-  (78 s, from line 5). Time in the video = time in the song − 0:34.2." The planner's reason is its tooltip.
-  Only the song's short-form platforms are offered (YouTube is the whole song, Canvas has no lyrics).
-- **Per line:** "in the Reels 0:03.0" under "On screen" (when it is readable in the video, the same clock as
-  the Shape page's timeline), "not in the Reels" for the others, which are dimmed; the first line in the
-  Reel says "The Reels video starts here: at 0:34.2 in the song; this line is readable 0:03.0 into the video".
-- **Always the next video:** it is the same plan the Shape page shows (the planner's dry run for v1), asked
-  when the tab opens and again after Save / Reset all (a start set by hand can move the Reel's start).
-- Tests: timeline-time.test.ts (linesInVideo: which lines a planned video shows and when); lyrics-tab.e2e.ts
-  (the band is offered; run in the cloud session: 33 checks pass; the thumbnail check now waits for the image,
-  which raced with the planning).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

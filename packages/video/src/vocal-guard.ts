@@ -49,6 +49,19 @@ const PRE_ROLL_MS = 200; // voice this close before a line's start counts as the
 const NEXT_MARGIN_MS = 100;
 const MISSED_WORD_MS = 250; // the recognised words start at the second lyric word: the first one this much earlier
 
+export const LOW_CONFIDENCE_LINE = 0.5; // the aligner's confidence under which a line is flagged (same as qa.ts LOW_CONFIDENCE)
+export const AFTER_HUM_MS = 500; // a low-confidence line after a moved hum is checked when its stamp is before or within this after the hum's new start
+const HUM_PAST_NEXT_MS = 3000; // a hum may move past a following low-confidence line by at most this much
+
+// A line that is only non-lexical vocalisation ("Mmmm...", "mm-hmm", "Ooh, ooh", "La la la", "Oh oh oh", "Hmm",
+// "Woah", "Yeah yeah"): speech recognition cannot hear it and the forced aligner only guesses where it is.
+// Conservative: every word of the line must be one of these sounds; anything else ("Oh my love") is lyrics.
+const NON_LEXICAL_TOKEN = /^(?:m+h?m*|hm+|o+h+|o{2,}|a+h+|la|na|da|wh?o+a+h*|wo{2,}h*|ye+a+h*|yeh|yea)$/;
+export function isNonLexical(text: string): boolean {
+  const tokens = text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  return tokens.length > 0 && tokens.every((t) => NON_LEXICAL_TOKEN.test(t));
+}
+
 export type VoiceLevels = { hopMs: number; db: readonly number[] }; // the voice map (version 2)
 export type VoiceStretch = readonly [number, number]; // ms: sustained voice
 // shortensPrevious: a later start inside the previous line (its last note held too long): that line ends here.
@@ -70,6 +83,7 @@ export type LineCheck = {
   agree: string[]; // the signals that agreed on targetMs
   why: string;
   result: "moved" | "in time" | "kept" | "flagged for review" | "set by hand";
+  kind?: "hum" | "after hum"; // hum: a line of non-lexical vocalisation (start = the voice onset); after hum: the low-confidence line after a moved hum
 };
 // The signals of a check that point at a start of their own: voice, words, and the word durations
 // (only when the first word is stretched, i.e. they differ from the stamp).
@@ -251,11 +265,11 @@ function ownLevel(v: VoiceLevels, stretches: readonly VoiceStretch[], prevLast: 
   return max;
 }
 
-type Signals = { i: number; voice: number | null; duration: number; firstWordMs: number | null; loud: number | null };
+type Signals = { i: number; voice: number | null; duration: number; firstWordMs: number | null; loud: number | null; afterHumOnly?: boolean };
 
 // The lines to check (line 1, after an instrumental gap, a stretched first word) with their voice and
 // word-duration signals.
-function signalsFor(lines: readonly TimedLine[], v: VoiceLevels, levelDb: number, stretches: readonly VoiceStretch[], all = false): Signals[] {
+function signalsFor(lines: readonly TimedLine[], v: VoiceLevels, levelDb: number, stretches: readonly VoiceStretch[], all = false, confidence?: ReadonlyMap<number, number>): Signals[] {
   const sung = voiceStretches(v, levelDb - WORD_LEVEL_DB, 200); // singing-level energy (for stretched first words)
   const out: Signals[] = [];
   lines.forEach((l, i) => {
@@ -287,7 +301,12 @@ function signalsFor(lines: readonly TimedLine[], v: VoiceLevels, levelDb: number
     // Inside a verse and not a hook: not checked unless `all` (QA still sees early_ms).
     // A line whose own voice starts at least the lead-in after its stamp is always checked.
     const lateVoice = voice !== null && voice - l.start_ms >= EARLY_MS;
-    if (!all && i > 0 && !voiceGap && !alignGap && !longWord && !l.isHook && !lateVoice) return;
+    // A line of only a hum / "Ooh" is always checked, and so is a low-confidence line right after one (it may
+    // have to move behind the hum).
+    const hum = isNonLexical(l.text);
+    const afterHum = !!prev && isNonLexical(prev.text) && (confidence?.get(i) ?? 1) < LOW_CONFIDENCE_LINE;
+    const usual = all || i === 0 || voiceGap || alignGap || longWord || l.isHook || lateVoice;
+    if (!usual && !hum && !afterHum) return;
     let duration = l.start_ms;
     if (stretched) {
       const second = words[1].start_ms;
@@ -295,16 +314,17 @@ function signalsFor(lines: readonly TimedLine[], v: VoiceLevels, levelDb: number
       duration = near ? near[0] : Math.max(l.start_ms, second - WORD_BEFORE_MS);
     }
     const loud = voice === null ? null : quantile([...slice(v, Math.max(before ?? 0, 0), Math.max(voice, l.start_ms))], 1);
-    out.push({ i, voice, duration, firstWordMs, loud });
+    out.push({ i, voice, duration, firstWordMs, loud, ...(!usual && !hum ? { afterHumOnly: true } : {}) });
   });
   return out;
 }
 
 // The windows for the recognised-words pass: around each checked line's signals (line number, from, to).
-export function asrWindows(lines: readonly TimedLine[], v: VoiceLevels, all = false): [number, number, number][] {
+export function asrWindows(lines: readonly TimedLine[], v: VoiceLevels, all = false, confidence?: ReadonlyMap<number, number>): [number, number, number][] {
   const levelDb = singingLevel(lines, v);
   const stretches = voiceStretches(v, levelDb - VOICE_BELOW_SINGING_DB);
-  return signalsFor(lines, v, levelDb, stretches, all).map((s) => {
+  // A hum is not recognised by speech recognition: no window for it.
+  return signalsFor(lines, v, levelDb, stretches, all, confidence).filter((s) => !isNonLexical(lines[s.i].text)).map((s) => {
     const l = lines[s.i];
     const prev = lines[s.i - 1];
     const points = [l.start_ms, s.duration, ...(s.voice !== null ? [s.voice] : [])];
@@ -319,7 +339,8 @@ export function checkVocalStart(
   v: VoiceLevels,
   // reviewMs: a disagreement smaller than this (the brand's lead-in, motion.gapLeadInS) is not visible: not flagged.
   // all: check every line (pnpm lyrics:check-start --all), not only line 1, gaps, stretched words and hooks.
-  options: { skip?: ReadonlySet<number>; asr?: ReadonlyMap<number, readonly AsrWord[]>; reviewMs?: number; all?: boolean } = {},
+    // confidence: the aligner's confidence per line index (a low one after a moved hum is checked too).
+  options: { skip?: ReadonlySet<number>; asr?: ReadonlyMap<number, readonly AsrWord[]>; reviewMs?: number; all?: boolean; confidence?: ReadonlyMap<number, number> } = {},
 ): VocalCheck {
   const reviewMs = options.reviewMs ?? 1000;
   const skip = options.skip ?? new Set<number>();
@@ -328,7 +349,10 @@ export function checkVocalStart(
   const stretches = voiceStretches(v, thresholdDb);
   const checks: LineCheck[] = [];
   const moves: GuardMove[] = [];
-  for (const s of signalsFor(lines, v, levelDb, stretches, options.all)) {
+  // Moved hums: their new start and the end of the voice they are in (a line after a hum goes behind it).
+  const humMoved = new Map<number, { startMs: number; endMs: number }>();
+  const at0 = (ms: number) => `${Math.floor(ms / 60_000)}:${((ms % 60_000) / 1000).toFixed(1).padStart(4, "0")}`;
+  for (const s of signalsFor(lines, v, levelDb, stretches, options.all, options.confidence)) {
     const l = lines[s.i];
     const prev = lines[s.i - 1];
     const prevEnd = prev ? (prev.sung_end_ms ?? prev.end_ms) : 0;
@@ -341,6 +365,60 @@ export function checkVocalStart(
       checks.push({ ...base, ownLevelDb: null, targetMs: l.start_ms, agree: [], why: "placed by hand", result: "set by hand" });
       continue;
     }
+    if (isNonLexical(l.text)) {
+      // A hum / "Ooh": speech recognition cannot hear it and the aligner only guesses (usually right after the
+      // previous line). Its start is the voice onset on the vocal track after the previous line's sung end.
+      const movedPrev = humMoved.get(s.i - 1);
+      const from = Math.max(prevEnd, movedPrev?.endMs ?? 0);
+      const own = stretches.filter((st) => !isPrevSinging(st, prevLastOf(prev)));
+      const found = own.find(([start, end]) => end - Math.max(start, from) >= MIN_VOICE_MS);
+      const humBase = { ...base, voiceMs: found ? Math.max(found[0], from) : null, wordsMs: null, wordsText: null, durationMs: null, firstWordMs: null, kind: "hum" as const };
+      const nextLow = (options.confidence?.get(s.i + 1) ?? 1) < LOW_CONFIDENCE_LINE && !skip.has(s.i + 1) && lines[s.i + 1] !== undefined;
+      const limit = nextLow ? Math.min(nextStart + HUM_PAST_NEXT_MS, (lines[s.i + 2]?.start_ms ?? Infinity) - NEXT_MARGIN_MS) : nextStart - NEXT_MARGIN_MS;
+      const onset = humBase.voiceMs;
+      if (onset === null) {
+        checks.push({ ...humBase, ownLevelDb: null, targetMs: l.start_ms, agree: [], why: "a hum (no words to recognise): no voice found after the previous line, so the aligner's stamp is kept", result: "kept" });
+      } else if (onset >= limit) {
+        checks.push({ ...humBase, ownLevelDb: null, targetMs: l.start_ms, agree: [], why: `a hum (no words to recognise): the voice found after the previous line (${at0(onset)}) is at the next line, so the aligner's stamp is kept`, result: "kept" });
+      } else if (Math.abs(onset - l.start_ms) <= MOVE_MS) {
+        checks.push({ ...humBase, ownLevelDb: null, targetMs: l.start_ms, agree: ["voice"], why: "a hum (no words to recognise): the voice starts where the aligner put it", result: "in time" });
+      } else {
+        moves.push({ index: s.i, fromMs: l.start_ms, toMs: onset, reason: "a hum: the voice onset" });
+        humMoved.set(s.i, { startMs: onset, endMs: found![1] });
+        checks.push({ ...humBase, ownLevelDb: null, targetMs: onset, agree: ["voice"], why: `a hum (no words to recognise): moved to the voice onset after the previous line (${at0(onset)})`, result: "moved" });
+      }
+      continue;
+    }
+    const hum = humMoved.get(s.i - 1);
+    if (hum && prev && isNonLexical(prev.text) && (options.confidence?.get(s.i) ?? 1) < LOW_CONFIDENCE_LINE) {
+      // The low-confidence line after a moved hum: it must not stay in front of (or inside) the hum.
+      if (l.start_ms < hum.startMs + AFTER_HUM_MS) {
+        const next = nextStart - NEXT_MARGIN_MS;
+        const voiceAfter = stretches.find(([start]) => start >= hum.endMs)?.[0] ?? null;
+        const wordsAfter = heard && heard.ms > hum.startMs ? heard.ms : null;
+        // The measured voice onset after the hum; the recognised words only when the voice is not found or is far after them (the next line's).
+        const target = voiceAfter !== null && (wordsAfter === null || voiceAfter <= wordsAfter + WORDS_NEAR_MS) ? voiceAfter : wordsAfter;
+        const afterBase = { ...base, voiceMs: voiceAfter, wordsMs: heard?.ms ?? null, wordsText: heard?.text ?? null, kind: "after hum" as const };
+        if (target !== null && target < next && target > hum.startMs) {
+          const agree = [target === voiceAfter ? "voice" : "words"];
+          moves.push({ index: s.i, fromMs: l.start_ms, toMs: target, reason: "after a hum: the voice onset after it" });
+          checks.push({ ...afterBase, ownLevelDb: null, targetMs: target, agree, why: `low confidence and in front of the hum before it (line ${s.i}, moved to ${at0(hum.startMs)}): moved to the ${agree[0] === "voice" ? "voice onset" : "recognised words"} after the hum (${at0(target)})`, result: "moved" });
+        } else {
+          // Nothing found after the hum: the line stays; a hum that would now pass it goes back where the aligner had it.
+          const humMove = moves.findIndex((m) => m.index === s.i - 1);
+          const prevCheck = checks.findIndex((c) => c.index === s.i - 1);
+          const collides = humMove >= 0 && moves[humMove].toMs >= l.start_ms - NEXT_MARGIN_MS;
+          if (collides) {
+            checks[prevCheck] = { ...checks[prevCheck], targetMs: checks[prevCheck].stampMs, agree: [], why: "a hum (no words to recognise): its voice onset is past the next line and no start was found for that line, so the aligner's stamp is kept", result: "kept" };
+            moves.splice(humMove, 1);
+            humMoved.delete(s.i - 1);
+          }
+          checks.push({ ...afterBase, ownLevelDb: null, targetMs: l.start_ms, agree: [], why: "low confidence, right after a hum: no voice or recognised words found after the hum, so the aligner's stamp is kept", result: "kept" });
+        }
+        continue;
+      }
+    }
+    if (s.afterHumOnly) continue; // in the check only for the case above
     const stretched = s.firstWordMs !== null && s.firstWordMs >= STRETCHED_WORD_MS;
     const heldNote = stretched && (l.isHook || s.i === lines.length - 1); // a long first word may be sung long
     const at = (ms: number) => `${Math.floor(ms / 60_000)}:${((ms % 60_000) / 1000).toFixed(1).padStart(4, "0")}`;
@@ -459,7 +537,8 @@ export function moveLineStart(line: TimedLine, toMs: number, nextStartMs: number
 
 export function applyGuard(lines: readonly TimedLine[], moves: readonly GuardMove[]): TimedLine[] {
   const out = [...lines];
-  for (const m of moves) {
+  // Last line first: a line after a hum moves behind it before the hum is squeezed to end before that line.
+  for (const m of [...moves].sort((a, b) => b.index - a.index)) {
     out[m.index] = moveLineStart(out[m.index], m.toMs, out[m.index + 1]?.start_ms ?? null);
     const prev = out[m.index - 1];
     if (m.shortensPrevious && prev) out[m.index - 1] = { ...prev, end_ms: Math.min(prev.end_ms, m.toMs), ...(prev.sung_end_ms !== undefined ? { sung_end_ms: Math.min(prev.sung_end_ms, m.toMs - 50) } : {}) };
