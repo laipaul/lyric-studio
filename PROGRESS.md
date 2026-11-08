@@ -4,6 +4,13 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Bug fix: the Reel's moved title collided with the first lyric; title cards overlapped on the timeline ✅ (to verify on the Windows PC)
+- Seen (Let My Love Carry You, Shape → Reels 1080x1920, Title opening on, first line on screen from 0:00.6): after the last fix the title moved up (y ~470-630) and the byline "Life Lyrics" sat at ~636, but the first lyric ("Let my love carry yo...", hook font, word by word) was drawn at ~650-700: byline and lyric touched. On the timeline the title, byline and tagline cards (same start) were drawn on top of each other: an unreadable jumble.
+- Causes: (1) the title was moved clear of a box that was smaller than what the composition draws: only line 1, measured with `nextLine: false` and without the glyphs' reach beyond the CSS row (script fonts), and only until 2.5 s, although later lines come in while the title is still on screen. The box is now the union of every line drawn in the title window (the first line, and any line entering before the cards end), with the waiting next line under it, and the glyphs' ink. It comes from `measureLyrics` (qa-check.ts), the very function QA uses, via the new `titleWindowBox`, which reads the plan's own lyric area (text layout: Centred / Lower third / Big hook), the line's card place and size, the effect reach and the hook scale; Remotion's LyricScene uses the same inputs. Evidence: Reels area centre 710 (not the 758 of the old tests); with the effect reach the box for that line starts at ~590 (Big hook ~528), not ~673 (the bare row). (I could not reproduce the exact pixels of the screenshot without the user's song: the missing reach, next line and ink are what the code was ignoring.) (2) The title-cards row gave every card `top: 2` in one 20 px lane.
+- Fix: make.ts `firstLyricBox` (exported) = `titleWindowBox` (qa-check.ts) over the cards' window; measure.ts `inkOverflow` (glyph reach beyond the line box) is now in every measured lyric box (QA too). The title opening now stays on screen at least 4 s (TITLE_MIN_S 4, was 2.5; asked by the user): clear blocks keep their place that long, also with the auto section's 2-bar lead-in (~3.8 s at 125 BPM); touching blocks are moved (title + byline up, tagline down, shrinking up to 25%), else the lead-in + the note. Shape timeline: cards that overlap in time go in thin lanes (14 px each, titleCardLanes in shape-board.tsx; data-lanes / data-lane; one lane = the row as before, 20 px; three lanes ~47 px); data-text-card and the clicks are unchanged.
+- Tests: title-opening.test.ts 22 (the 2.5 s tests are now 4 s = 120 frames; new: Centred / Lower third / Big hook: the title block and tagline are clear of the real box; script-font ink; the old bare box let the byline reach into the drawn line, the real one does not); the 6 files (title-opening, textboard, qa, storyboard, extra-cards, textboard-make) 60 pass; tsc clean (packages/video, apps/studio); eslint on shape-board.tsx: the same 4 old errors; pnpm build ok; storyboard.e2e.ts 149 checks pass (new: no two cards on the title-cards row overlap on screen; the e2e song has only the End card there, so the lane logic itself is checked by the build/typecheck and by eye).
+- To check: `cd D:\videomaker`, `git pull`, Shape → Reels, Title opening on, play from 0:00: title, byline and tagline stay at least 4 s, clear of the first lyric line (above it, or the tagline below); on the timeline the three cards sit in separate thin lanes.
+
 ### Bug fix: the Reel's title moves up instead of flashing when the first line starts at once ✅ (to verify on the Windows PC)
 - Seen (Let My Love Carry You, Reel 1080x1920, Title opening on, part of the song starting on the first sung line, on screen from ~0:00.6): the tagline stayed 2.5 s, but the title and byline "Life Lyrics" (upper third, centred ~y 640) touch the first lyric line's box (two lines, centred ~y 758), so they showed only the 0.6 s lead-in and a note asked to move the song part: "too short".
 - Cause: the last fix only chose between "stay 2.5 s" and "shorten to the lead-in" for the block on its default place. Where the block sits is the app's job, not the user's: other places in the safe area were never tried.
@@ -172,23 +179,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   saves this platform's part in song.json; Automatic): run in the cloud session, all 129 checks pass. Found on the way:
   the old Clip editor check used 03_c, which has no shot in that test Reel, so "its shots slowed" was never really
   checked; the new checks use 01_a (shot 3).
-
-### Bug fix: a jump while paused leaves the playhead off-screen ✅ (confirmed on the Windows PC, 8 Nov 2026)
-- Found by the user on "Let My Love Carry You" (Reel 1:18, Follow on, preview paused, timeline scrolled by hand to
-  1:10-1:18): ⏮ "Go to the start" moved the preview to 0:00.0 (the counter showed it) but the timeline stayed where
-  it was, so the playhead was off-screen and the button looked broken. It only worked when the first clip was selected.
-- **Fixed for every jump**, not just ⏮: ⏭, Stop, Home / End, back / forward one bar or frame, a click on the ruler, a
-  lyric line or a clip, Undo / Redo, and play from the end now scroll the timeline to the playhead, paused or
-  playing. One place does it: the page listens to the Player's "seeked" event (fired by every seek and by nothing
-  in ordinary playback), so no jump can be missed.
-- **Follow on:** the playhead goes to the middle (as before for playing). A jump is an explicit request, so it also
-  ends a hand-scroll hold: if the preview is playing, Follow carries on from the new place. **Follow off:** the
-  playhead is only brought into view with a small margin (40 px); if it is already visible the timeline does not move.
-  Ordinary playback is unchanged (Follow off still never scrolls by itself while playing).
-- Tests: follow.test.ts (new revealScrollLeft: visible = no scroll, left / right of the view, margin, clamped, fits);
-  storyboard.e2e.ts (scrolled away + paused: ⏮, ⏭ and Home bring the playhead into view with Follow off, a small jump
-  does not scroll; Follow on: ⏮ and ⏭ put it in the middle within 4 px): run in the cloud session, all 121 checks
-  pass; follow.test.ts 10 pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

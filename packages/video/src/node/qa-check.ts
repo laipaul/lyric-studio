@@ -9,7 +9,7 @@ import { parseFrameDetect, lyricBox, type QaLyric, type TimeRange } from "../qa"
 import type { LyricArea } from "../platform";
 import type { LyricEffectsProps, LyricLineProps, TextCase } from "../props";
 import type { FontFaceInfo } from "./font-catalog";
-import { faceMeasure, layoutWithFace } from "./measure";
+import { faceMeasure, inkOverflow, layoutWithFace } from "./measure";
 import { lineScale } from "../text-layout";
 
 export const POP_MAX_SCALE = 1.02; // the pop animation's spring overshoots the final size slightly
@@ -43,9 +43,9 @@ export function measureLyrics(
     const layout = layoutWithFace(l.text, face, fonts.textCase, Math.round(fonts.textSize * lineScale(l, fonts.effects?.hookScale)), fitted);
     const measure = faceMeasure(face);
     const widest = Math.max(...layout.lines.map((line) => measure(line, layout.fontSize)));
-    return { l, layout, widest };
+    return { l, layout, widest, face };
   });
-  return measured.map(({ l, layout, widest }, k) => {
+  return measured.map(({ l, layout, widest, face }, k) => {
     const area = areaOf(l);
     let box = lyricBox(layout.lines.length, layout.fontSize, widest, fonts.animation === "pop" && !fonts.effects ? POP_MAX_SCALE : 1, area);
     if (fonts.effects) {
@@ -70,6 +70,9 @@ export function measureLyrics(
         };
       }
     }
+    // The glyphs' own reach beyond the line box (script fonts): what is drawn, not just where the rows sit.
+    const ink = inkOverflow(face, layout.lines, layout.fontSize, (area ?? fonts.area)?.lineHeight ?? 1.15);
+    box = { ...box, top: box.top - ink.up, bottom: box.bottom + ink.down };
     return {
       number: l.number,
       text: l.text,
@@ -92,4 +95,21 @@ export function detectBadFrames(file: string, durationSeconds: number): Promise<
       (error, _out, stderr) => (error ? reject(new Error(`ffmpeg frame check failed: ${stderr.trim() || error.message}`)) : resolve(parseFrameDetect(stderr, durationSeconds))),
     ),
   );
+}
+
+// Where the lyric lines of the title opening's window are drawn (the first line, and any further line that
+// comes in before `untilFrame`), as ONE box: the composition's own place for each line (lyric area, text
+// layout, the line's card place and size, effect reach, the waiting next line, the glyphs' ink), measured by
+// measureLyrics, the same function QA uses, so the plan, the check and the picture cannot disagree.
+export function titleWindowBox(
+  lyrics: readonly LyricLineProps[],
+  untilFrame: number,
+  fonts: Omit<Parameters<typeof measureLyrics>[1], "nextLine">,
+  nextLine: boolean,
+): { left: number; top: number; right: number; bottom: number } | null {
+  const shown = lyrics.filter((l, i) => i === 0 || (l.enterFrame ?? l.startFrame) < untilFrame);
+  if (!shown.length) return null;
+  const upTo = lyrics.indexOf(shown[shown.length - 1]);
+  const boxes = measureLyrics(lyrics.slice(0, upTo + 1).map((l, i) => ({ ...l, number: i + 1, confidence: null })), { ...fonts, nextLine }).map((m) => m.box);
+  return boxes.reduce((a, b) => ({ left: Math.min(a.left, b.left), top: Math.min(a.top, b.top), right: Math.max(a.right, b.right), bottom: Math.max(a.bottom, b.bottom) }));
 }

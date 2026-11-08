@@ -4,6 +4,23 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Bug fix: a jump while paused leaves the playhead off-screen ✅ (confirmed on the Windows PC, 8 Nov 2026)
+- Found by the user on "Let My Love Carry You" (Reel 1:18, Follow on, preview paused, timeline scrolled by hand to
+  1:10-1:18): ⏮ "Go to the start" moved the preview to 0:00.0 (the counter showed it) but the timeline stayed where
+  it was, so the playhead was off-screen and the button looked broken. It only worked when the first clip was selected.
+- **Fixed for every jump**, not just ⏮: ⏭, Stop, Home / End, back / forward one bar or frame, a click on the ruler, a
+  lyric line or a clip, Undo / Redo, and play from the end now scroll the timeline to the playhead, paused or
+  playing. One place does it: the page listens to the Player's "seeked" event (fired by every seek and by nothing
+  in ordinary playback), so no jump can be missed.
+- **Follow on:** the playhead goes to the middle (as before for playing). A jump is an explicit request, so it also
+  ends a hand-scroll hold: if the preview is playing, Follow carries on from the new place. **Follow off:** the
+  playhead is only brought into view with a small margin (40 px); if it is already visible the timeline does not move.
+  Ordinary playback is unchanged (Follow off still never scrolls by itself while playing).
+- Tests: follow.test.ts (new revealScrollLeft: visible = no scroll, left / right of the view, margin, clamped, fits);
+  storyboard.e2e.ts (scrolled away + paused: ⏮, ⏭ and Home bring the playhead into view with Follow off, a small jump
+  does not scroll; Follow on: ⏮ and ⏭ put it in the middle within 4 px): run in the cloud session, all 121 checks
+  pass; follow.test.ts 10 pass.
+
 ### Shape: the whole song as the soundtrack, the video as a window on it ✅ (confirmed on the Windows PC, 8 Nov 2026, in its new place on the song track)
 - Asked by the user (7 Nov 2026): keep the whole song untouched in the background and pick which part the video
   uses, like trimming the music in Canva, without resizing the song for every Reel or YouTube video.

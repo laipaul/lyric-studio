@@ -3,8 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { assessVideo, autoSection, cardBlocks, fitCardBlocks, gridCrop, runQa, type SectionLine, type TextCardProps } from "../src";
-import { cardMeasure, checkRecipe, loadFontCatalog, titleCards } from "../src/node";
+import { areaForLayout, assessVideo, autoSection, BIG_HOOK_SCALE, cardBlocks, fitCardBlocks, gridCrop, lyricArea, lyricBox, runQa, type SectionLine, type TextCardProps } from "../src";
+import { cardMeasure, checkRecipe, loadFontCatalog, resolveFace, titleCards } from "../src/node";
+import { layoutWithFace } from "../src/node/measure";
+import { titleWindowBox } from "../src/node/qa-check";
 import type { Textboard } from "../src/textboard";
 import { grid } from "./helpers";
 
@@ -192,7 +194,7 @@ describe("title opening: the cards fit the safe area by themselves", () => {
 
 // ---------------------------------------------------------------- a part of the song that starts on a sung line
 
-describe("title opening: the first lyric comes within 2.5 s", () => {
+describe("title opening: the first lyric comes within 4 s", () => {
   const catalog = loadFontCatalog(mkdtempSync(path.join(os.tmpdir(), "lyric-title-short-")));
   const format = { width: 1080, height: 1920 };
   const safeZone = { top: 0.14, bottom: 0.35, left: 0, right: 0.12 };
@@ -210,11 +212,11 @@ describe("title opening: the first lyric comes within 2.5 s", () => {
     });
   const end = (o: ReturnType<typeof lay>, id: string) => o.cards.find((c) => c.id === id)!.endFrame;
 
-  it("the first line 0.5 s in, in the middle of the frame: title, byline and tagline stay 2.5 s (clear of the line)", () => {
+  it("the first line 0.5 s in, in the middle of the frame: title, byline and tagline stay 4 s (clear of the line)", () => {
     const line = { left: 100, right: 900, top: 880, bottom: 1000 }; // between the title block and the tagline
     const out = lay(15, line);
     expect(out.notes).toEqual([]);
-    for (const id of ["title", "byline", "tagline"]) expect(end(out, id)).toBeGreaterThanOrEqual(75);
+    for (const id of ["title", "byline", "tagline"]) expect(end(out, id)).toBeGreaterThanOrEqual(120);
   });
 
   it("the line sits on the title: it is shown alone for the lead-in and a note names the creative fix", () => {
@@ -225,18 +227,18 @@ describe("title opening: the first lyric comes within 2.5 s", () => {
     expect(out.notes.some((n) => n.startsWith("No room for the title before the first line") && n.includes("2 bars earlier") && n.includes("Automatic"))).toBe(true);
   });
 
-  it("the line sits on the title with room above it: the title moves up above the line and stays 2.5 s, no note", () => {
+  it("the line sits on the title with room above it: the title moves up above the line and stays 4 s, no note", () => {
     const line = { left: 100, right: 980, top: 600, bottom: 900 }; // two lines on the upper third's place
     const before = lay(300, null).cards.find((c) => c.id === "title")!;
     const out = lay(15, line);
     expect(out.notes).toEqual([]);
-    for (const id of ["title", "byline"]) expect(end(out, id)).toBeGreaterThanOrEqual(75);
+    for (const id of ["title", "byline"]) expect(end(out, id)).toBeGreaterThanOrEqual(120);
     const blocks = cardBlocks(out.cards, format, cardMeasure(catalog, out.cards));
     const tb = blocks.find((b) => b.ids.includes("title"))!;
     expect(tb.box.bottom).toBeLessThan(line.top);
     expect(tb.box.top).toBeGreaterThanOrEqual(format.height * safeZone.top - 1);
     expect(out.cards.find((c) => c.id === "title")!.top).toBeLessThan((before.centerY ?? 640) - 20);
-    expect(end(out, "tagline")).toBeGreaterThanOrEqual(75);
+    expect(end(out, "tagline")).toBeGreaterThanOrEqual(120);
     // QA: the moved block is clear of the first line.
     const qa = runQa({ props: { shots: [], lyrics: [], cinematicBars: false, durationInFrames: 900 }, shotClips: [], poolSize: 0, frames: { black: [], frozen: [] }, lyrics: [{ number: 1, text: "x", confidence: null, lines: 2, box: line }], titleCards: { blocks, firstLyricFrame: 15, missing: [], grid: null } } as never);
     expect(qa.checks.find((c) => c.name === "Title cards clear of the first lyric")?.ok).toBe(true);
@@ -246,25 +248,91 @@ describe("title opening: the first lyric comes within 2.5 s", () => {
     const line = { left: 100, right: 980, top: 1090, bottom: 1130 };
     const out = lay(15, line);
     expect(out.notes).toEqual([]);
-    expect(end(out, "tagline")).toBeGreaterThanOrEqual(75);
+    expect(end(out, "tagline")).toBeGreaterThanOrEqual(120);
     const tag = cardBlocks(out.cards, format, cardMeasure(catalog, out.cards)).find((b) => b.ids.includes("tagline"))!;
     expect(tag.box.top).toBeGreaterThan(line.bottom);
     expect(tag.box.bottom).toBeLessThanOrEqual(format.height * (1 - safeZone.bottom));
   });
 
-  it("a lead-in of 2.5 s or more is unchanged (gone as the line fades in)", () => {
-    const out = lay(100, { left: 0, right: 1080, top: 0, bottom: 1920 });
+  it("a lead-in of 4 s or more is unchanged (gone as the line fades in)", () => {
+    const out = lay(130, { left: 0, right: 1080, top: 0, bottom: 1920 });
     expect(out.notes).toEqual([]);
-    expect(end(out, "title")).toBe(100);
+    expect(end(out, "title")).toBe(130);
   });
 
   it("QA: a block clear of the first line may stay past its start", () => {
     const base = { props: { shots: [], lyrics: [], cinematicBars: false, durationInFrames: 240 }, shotClips: [], poolSize: 0, frames: { black: [], frozen: [] } };
-    const blocks = [{ ids: ["title"], text: "T", box: { left: 200, right: 880, top: 300, bottom: 420 }, endFrame: 75 }];
+    const blocks = [{ ids: ["title"], text: "T", box: { left: 200, right: 880, top: 300, bottom: 420 }, endFrame: 120 }];
     const lyric = (top: number) => [{ number: 1, text: "x", confidence: null, lines: 1, box: { left: 100, right: 980, top, bottom: top + 100 } }];
     const clear = runQa({ ...base, lyrics: lyric(700), titleCards: { blocks, firstLyricFrame: 15, missing: [], grid: null } } as never);
     expect(clear.checks.find((c) => c.name === "Title cards clear of the first lyric")?.ok).toBe(true);
     const hit = runQa({ ...base, lyrics: lyric(350), titleCards: { blocks, firstLyricFrame: 15, missing: [], grid: null } } as never);
     expect(hit.checks.find((c) => c.name === "Title cards clear of the first lyric")?.ok).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------- the box of the first line is where the composition draws it
+
+describe("title opening: the first lyric's box is the composition's own", () => {
+  const catalog = loadFontCatalog(mkdtempSync(path.join(os.tmpdir(), "lyric-title-box-")));
+  const format = { width: 1080, height: 1920 };
+  const safeZone = { top: 0.14, bottom: 0.35, left: 0, right: 0.12 };
+  const base = lyricArea(format, safeZone as never, 0.45); // Reels: centre 710
+  const board = { version: 1, roles: {}, cards: [
+    { id: "title", type: "title", text: "Let My Love Carry You", overrides: {} },
+    { id: "byline", type: "byline", text: "Life Lyrics", overrides: {} },
+    { id: "tagline", type: "tagline", text: "Flower arrangements by Noriko", overrides: {} },
+  ] } as unknown as Textboard;
+  const main = resolveFace(catalog, "Inter", 600, "normal");
+  const hook = resolveFace(catalog, "Great Vibes", 400, "normal");
+  const line = { text: "Let my love carry you through the night", startFrame: 18, endFrame: 200, isHook: true, enterFrame: 10 } as never;
+  const fx = (layout: string) => ({ verse: { name: "glide", intensity: "balanced" }, hook: { name: "karaoke-highlight", intensity: "balanced" }, accent: "#E8A3B5", ...(layout === "bighook" ? { hookScale: BIG_HOOK_SCALE } : {}) }) as never;
+
+  for (const layout of ["centre", "lower", "bighook"] as const) {
+    it(`${layout}: the title block (title + byline) and the tagline are clear of the line as the composition draws it`, () => {
+      const area = areaForLayout(base, layout, 0.45);
+      const box = titleWindowBox([line], 120, { main, hook, textCase: "none", textSize: 64, animation: "fade", area, effects: fx(layout) }, true)!;
+      // The composition centres the line on area.centerY: its box must surround that place, effect reach and ink included.
+      expect(box.top).toBeLessThan(area.centerY);
+      expect(box.bottom).toBeGreaterThan(area.centerY);
+      const out = titleCards(board, {
+        format, area, fps: 30, durationInFrames: 900, youtube: null,
+        titleFont: { family: "Cinzel", weight: 600, letterSpacing: 0.18 }, accent: "#E8A3B5", textScale: 1,
+        fontFor: () => null, opening: { untilFrame: 10, lyricBox: box }, fit: { safeZone, catalog },
+      } as never);
+      const blocks = cardBlocks(out.cards, format, cardMeasure(catalog, out.cards));
+      const hit = (b: { box: { left: number; top: number; right: number; bottom: number } }) => b.box.left < box.right && b.box.right > box.left && b.box.top < box.bottom && b.box.bottom > box.top;
+      if (out.notes.length) {
+        // No clear place: shown alone for the lead-in, never over the line for 4 s.
+        for (const id of ["title", "byline"]) expect(out.cards.find((c) => c.id === id)!.endFrame).toBeLessThanOrEqual(10);
+      } else {
+        expect(blocks.some(hit)).toBe(false);
+        expect(out.cards.find((c) => c.id === "title")!.endFrame).toBeGreaterThanOrEqual(120);
+      }
+    });
+  }
+
+  it("a script hook font's ink (descenders) beyond its line box is part of the box", () => {
+    const script = resolveFace(catalog, "Kaushan Script", 400, "normal");
+    const withInk = titleWindowBox([line], 0, { main, hook: script, textCase: "none", textSize: 64, animation: "fade", area: base }, false)!;
+    const rows = layoutWithFace("Let my love carry you through the night", script, "none", 64, base);
+    const plain = lyricBox(rows.lines.length, rows.fontSize, 700, 1, base);
+    expect(withInk.bottom).toBeGreaterThan(plain.bottom); // the glyphs reach below the CSS row
+  });
+
+  it("the real failure: the title moved above the line box only, its byline still sat on the drawn line (effect reach)", () => {
+    // Without the effect's reach (glide / karaoke grow and lift the line) the box starts at 673; with it, at about 590.
+    const bare = titleWindowBox([line], 0, { main, hook, textCase: "none", textSize: 64, animation: "fade", area: base }, false)!;
+    const real = titleWindowBox([line], 0, { main, hook, textCase: "none", textSize: 64, animation: "fade", area: base, effects: fx("centre") }, true)!;
+    expect(real.top).toBeLessThan(bare.top - 40);
+    const place = (lyricBoxIn: typeof real) =>
+      titleCards(board, {
+        format, area: base, fps: 30, durationInFrames: 900, youtube: null,
+        titleFont: { family: "Cinzel", weight: 600, letterSpacing: 0.18 }, accent: "#E8A3B5", textScale: 1,
+        fontFor: () => null, opening: { untilFrame: 10, lyricBox: lyricBoxIn }, fit: { safeZone, catalog },
+      } as never);
+    const bottomOf = (o: ReturnType<typeof place>) => cardBlocks(o.cards, format, cardMeasure(catalog, o.cards)).find((b) => b.ids.includes("title"))!.box.bottom;
+    expect(bottomOf(place(real))).toBeLessThanOrEqual(real.top);
+    expect(bottomOf(place(bare))).toBeGreaterThan(real.top); // the old box let the byline reach into the drawn line
   });
 });

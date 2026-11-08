@@ -1,5 +1,5 @@
 // The title opening in pnpm make (Step D): song.json titleOpening "on" + tagline -> the Reel opens with
-// title + byline in the upper third and the tagline in the lower third, gone before the first lyric line;
+// title + byline in the upper third and the tagline in the lower third, gone before the first lyric line (or kept 4 s clear of it);
 // QA checks them; every Reel gets a cover with the same cards (no lyrics, no audio).
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -58,11 +58,13 @@ describe("the title opening", () => {
     expect(cards.find((c) => c.type === "tagline")!.text).toBe("A song for the road");
     const first = m.props.lyrics[0];
     const firstFrame = first.enterFrame ?? first.startFrame;
-    for (const c of cards) expect(c.endFrame).toBeLessThanOrEqual(firstFrame + 1);
+    // Gone before the first lyric line, or (a short lead-in, 8 Nov 2026) kept at least 4 s in a place clear of it.
+    for (const c of cards) if (c.endFrame > firstFrame + 1) expect(c.endFrame - (c.startFrame ?? 0)).toBeGreaterThanOrEqual(120);
     const title = cards.find((c) => c.type === "title")!;
     const tagline = cards.find((c) => c.type === "tagline")!;
-    expect(title.centerY!).toBeLessThan(1920 / 2);
-    expect(tagline.centerY!).toBeGreaterThan(1920 / 2);
+    const y = (c: { centerY?: number; top?: number }) => c.centerY ?? c.top!; // a moved block is placed by its top
+    expect(y(title)).toBeLessThan(1920 / 2);
+    expect(y(tagline)).toBeGreaterThan(1920 / 2);
     // QA lists the title-card checks.
     const qa = readFileSync(v.manifestFile.replace(/\.manifest\.json$/, ".qa.txt"), "utf8");
     expect(qa).toContain("Title cards clear of the first lyric");

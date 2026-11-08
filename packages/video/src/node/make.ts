@@ -41,7 +41,7 @@ import { clipBandLuminances } from "./lyric-band";
 import { isThinFace, lyricBackingFor, type BackingDecision, type Readability } from "../readability";
 import { pictureOf } from "../picture";
 import { editOf, isOmitted, rankOf, readClipEdits } from "./clip-edits";
-import { boardForRun, cardFont, cardMeasure, overrideCount, TITLE_SIZE_VERTICAL, titleCards, type RunBoard } from "./textboard";
+import { boardForRun, cardFont, cardMeasure, overrideCount, TITLE_MIN_S, TITLE_SIZE_VERTICAL, titleCards, type RunBoard } from "./textboard";
 import { extraCards, fillCardText } from "../extra-cards";
 import { matchPinClips, parsePins } from "../pins";
 import type { LyricEffectsProps, LyricLineProps, LyricVideoProps } from "../props";
@@ -74,7 +74,7 @@ import { resolveMediaPath, type MediaRoots } from "./media";
 import { tooLongLines } from "./measure";
 import { cardBlocks, fitCardBlocks, gridCrop } from "../text-cards";
 import { loadStyles, lyricLineNumbers, parseSection, snapToDownbeat, songMedia, type StyleFaces } from "./prepare";
-import { detectBadFrames, measureLyrics } from "./qa-check";
+import { detectBadFrames, measureLyrics, titleWindowBox } from "./qa-check";
 import { getBundle, renderCover, renderLyricVideo, renderThumbnail, type RenderOptions } from "./render";
 import { renderWithHyperframes } from "./hf-render";
 import { hyperframesGaps } from "../hf/compile";
@@ -973,17 +973,16 @@ function pictureFields(v: RecipeValues): NonNullable<MakeOptions["picture"]> {
   return { textColour: v.textColour, grade: v.grade, vignette: v.vignette, textBacking: v.textBacking, fallback: v.fallback, fallbackColour: v.fallbackColour, gradeCanvas: v.gradeCanvas, titleStyle: v.titleStyle, titleWarp: v.titleWarp, hookCard: v.hookCard, hookCardStyle: v.hookCardStyle, endCard: v.endCard, endCardStyle: v.endCardStyle, hookText: v.hookText, endText: v.endText };
 }
 
-// Where the first lyric line sits on the frame (measured as QA does), for the title opening's overlap check.
-function firstLyricBox(props: { lyrics: LyricLineProps[]; textSize: number; lyricArea?: LyricArea; lyricEffects?: LyricEffectsProps | null; nextLine?: boolean; nextLineScale?: number }, style: StyleFaces["simple"], catalog: FontCatalog) {
-  const first = props.lyrics[0];
-  if (!first) return null;
+// Where the title opening's first lyric line(s) are drawn, for the overlap check: the same measuring as QA
+// (qa-check.ts titleWindowBox), with the plan's real props (area, text layout, effects, cards, next line).
+export function firstLyricBox(props: { lyrics: LyricLineProps[]; textSize: number; lyricArea?: LyricArea; lyricEffects?: LyricEffectsProps | null; nextLine?: boolean; nextLineScale?: number }, style: StyleFaces["simple"], catalog: FontCatalog, untilFrame = 0) {
+  if (!props.lyrics[0]) return null;
   try {
-    const m = measureLyrics([{ ...first, number: 1, confidence: null }] as never, {
+    return titleWindowBox(props.lyrics, untilFrame, {
       main: style.main, hook: style.hook, textCase: style.entry.style.textCase, textSize: props.textSize, animation: style.entry.style.animation, area: props.lyricArea,
-      effects: props.lyricEffects ?? null, nextLine: false, nextScale: props.nextLineScale ?? 0.55,
+      effects: props.lyricEffects ?? null, nextScale: props.nextLineScale ?? 0.55,
       cardFace: (f: { family: string; weight: number; italic?: boolean }) => resolveFace(catalog, f.family, f.weight, f.italic ? "italic" : "normal"),
-    });
-    return m[0]?.box ?? null;
+    }, props.nextLine ?? false);
   } catch {
     return null;
   }
@@ -1553,7 +1552,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
           titleFont: sh.brand.brand.titleFont, accent: sh.brand.brand.accentColour, textScale: preset.textScale,
           fontFor: (style, b, text, role) => cardFont(sh.catalog, style, b, text, role),
           // The title opening: gone as the first lyric line fades in.
-          opening: titleOpeningOn ? { untilFrame: rest.lyrics[0] ? (rest.lyrics[0].enterFrame ?? rest.lyrics[0].startFrame) : Math.min(rest.durationInFrames, Math.round(TITLE_ALONE_S * VIDEO.fps)), lyricBox: firstLyricBox(rest, stylesOf(spec)[spec.style], sh.catalog) } : null,
+          opening: titleOpeningOn ? { untilFrame: rest.lyrics[0] ? (rest.lyrics[0].enterFrame ?? rest.lyrics[0].startFrame) : Math.min(rest.durationInFrames, Math.round(TITLE_ALONE_S * VIDEO.fps)), lyricBox: firstLyricBox(rest, stylesOf(spec)[spec.style], sh.catalog, Math.round(TITLE_MIN_S * VIDEO.fps)) } : null,
           fallbackFor: (face, text) => titleFallback(sh.catalog, face, text),
           fit: { safeZone: preset.safeZone, catalog: sh.catalog },
         });

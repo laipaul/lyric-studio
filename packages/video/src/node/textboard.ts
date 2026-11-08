@@ -247,7 +247,7 @@ export function cardMeasure(catalog: FontCatalog, cards: readonly Pick<TextCardP
 
 export const TITLE_SIZE_VERTICAL = 84; // px at 1080x1920 (x the platform's text scale)
 export const TITLE_HOLD_VERTICAL_S = 4;
-export const TITLE_MIN_S = 2.5; // the title opening is on screen at least this long (unless it would sit on the first lyric line)
+export const TITLE_MIN_S = 4;  // the title opening is on screen at least this long (unless it would sit on the first lyric line)
 
 // The title, byline and tagline cards of one video. Defaults: YouTube shows title + artist as before
 // (`youtube`, the layout's title), the vertical platforms none (a card shows when the board says

@@ -634,6 +634,10 @@ async function main() {
     check(loadTheme(wsDir, readRecipe(paths.recipe!).theme!).look.endCard === "on", "…the End card too");
     await page.waitForSelector("[data-textboard-titles] [data-text-card=end]", { timeout: 60_000 }).catch(() => {});
     check(((await page.textContent("[data-textboard-titles] [data-text-card=end]").catch(() => "")) ?? "").includes("on Spotify"), "…the plan has it on the timeline (End card: Stream … on Spotify)");
+    // Cards on screen together (title / byline / tagline) are in lanes: no two cards' boxes overlap.
+    const rects = await page.$$eval("[data-textboard-titles] [data-text-card]", (els) => els.map((e) => { const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom }; }));
+    const overlapping = rects.filter((a, i) => rects.some((b, k) => k > i && a.l < b.r - 0.5 && a.r > b.l + 0.5 && a.t < b.b - 0.5 && a.b > b.t + 0.5)).length;
+    check(overlapping === 0, `…no two cards on the title-cards row overlap on screen (${rects.length} cards)`);
     await page.waitForFunction(() => document.querySelector("[data-viewer]")?.getAttribute("data-patched") === "0", null, { timeout: 60_000 }).catch(() => {});
     check((await page.getAttribute("[data-viewer]", "data-patched")) === "0" && (await page.getAttribute("[data-viewer]", "data-effect")) === "spread", "…and the new plan has it (nothing patched any more)");
     await page.click("[data-stage=make]");

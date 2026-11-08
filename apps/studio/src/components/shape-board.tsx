@@ -435,6 +435,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   const width = view ? Math.ceil((view.durationMs / 1000) * zoom) : 0;
   const x = (ms: number) => (ms / 1000) * zoom;
   const playhead = (frame * 1000) / 30;
+  const titleLanes = titleCardLanes(view?.titleCards ?? [], x);
   // Roll (drag a cut) and slip (drag inside a shot), Undo / Redo: components/timeline-editing.tsx.
   // After an edit the viewer shows the edit point (Space plays from there).
   const showAt = useCallback((videoMs: number) => player.current?.seekTo(Math.max(0, Math.round((videoMs * 30) / 1000))), []);
@@ -935,8 +936,8 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                   ) : null}
                 </div>
                 {view.titleCards.length ? (
-                  <div className="relative h-5 border-b" data-textboard-titles>
-                    {view.titleCards.map((c) => (
+                  <div className="relative border-b" data-textboard-titles data-lanes={titleLanes.count} style={{ height: titleLanes.count > 1 ? titleLanes.count * TITLE_LANE_PX + 5 : 20 }}>
+                    {view.titleCards.map((c, ci) => (
                       <button
                         type="button"
                         key={c.id}
@@ -947,7 +948,8 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                           else if (view.editable) openCard(c.id);
                         }}
                         className={cn("bg-brand/20 absolute overflow-hidden rounded border px-1 text-left text-[10px]", cardId === c.id && "ring-brand ring-2")}
-                        style={{ left: x(c.startMs), width: Math.max(8, x(c.endMs - c.startMs) - 2), top: 2, height: 15 }}
+                        data-lane={titleLanes.lane[ci]}
+                        style={{ left: x(c.startMs), width: Math.max(8, x(c.endMs - c.startMs) - 2), top: titleLanes.count > 1 ? 2 + titleLanes.lane[ci] * TITLE_LANE_PX : 2, height: titleLanes.count > 1 ? TITLE_LANE_PX - 1 : 15, lineHeight: titleLanes.count > 1 ? `${TITLE_LANE_PX - 3}px` : undefined }}
                         title={`${CARD_TYPE_LABELS[c.type] ?? c.type}: ${c.text}${c.type === "hook" || c.type === "end" ? " (the theme's card: Edit theme → Cards)" : ""}`}
                       >
                         <Type className="mr-0.5 inline size-2.5" />
@@ -1332,6 +1334,24 @@ function StoryStrip({ clips, busy, onMove, onOpen, onOmit, current }: { clips: S
   );
 }
 
+// Title cards that are on screen together (title, byline, tagline start at the same moment) go in their own thin lanes,
+// so their labels stay readable; the row grows with the lanes (one lane = the row as before).
+const TITLE_LANE_PX = 14;
+function titleCardLanes(cards: readonly { startMs: number; endMs: number }[], x: (ms: number) => number): { lane: number[]; count: number } {
+  const ends: number[] = []; // the right edge (px) each lane is used up to
+  const lane = cards.map(() => 0);
+  cards
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => a.c.startMs - b.c.startMs || a.i - b.i)
+    .forEach(({ c, i }) => {
+      const left = x(c.startMs);
+      let k = ends.findIndex((e) => e <= left + 0.5);
+      if (k < 0) k = ends.length;
+      ends[k] = left + Math.max(8, x(c.endMs - c.startMs) - 2) + 2;
+      lane[i] = k;
+    });
+  return { lane, count: Math.max(1, ends.length) };
+}
 const CARD_TYPE_LABELS: Record<string, string> = { title: "title", byline: "byline", tagline: "tagline", hook: "Hook card", end: "End card" };
 const POSITION_LABELS: Record<string, string> = { lyrics: "the lyric spot", "with-title": "under the title", top: "top", upper: "upper", centre: "centre", lower: "lower", "upper-third": "upper third (title opening)", "lower-third": "lower third (title opening)" };
 

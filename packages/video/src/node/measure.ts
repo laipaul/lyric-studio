@@ -42,6 +42,41 @@ export function faceMeasure(face: FontFaceInfo): MeasureFn {
   };
 }
 
+// How far a laid-out line's glyphs reach beyond its CSS line box (lineHeight x fontSize), above the first row and
+// below the last one: script and display fonts draw swashes and descenders outside it. The composition draws the
+// ink, so every "where is the line" check must include it (the line box alone is where the text is not).
+export function inkOverflow(face: FontFaceInfo, lines: readonly string[], fontSize: number, lineHeight: number): { up: number; down: number } {
+  if (!lines.length || !face.files.length) return { up: 0, down: 0 };
+  try {
+    const fonts = face.files.map((f) => open(f.path));
+    const reach = (text: string) => {
+      let maxY = 0;
+      let minY = 0;
+      for (const char of text) {
+        const font = fonts.find((f) => f.hasGlyphForCodePoint(char.codePointAt(0)!)) ?? fonts[0];
+        const g = font.glyphForCodePoint(char.codePointAt(0)!);
+        const k = fontSize / font.unitsPerEm;
+        if (g.bbox && Number.isFinite(g.bbox.maxY)) {
+          maxY = Math.max(maxY, g.bbox.maxY * k);
+          minY = Math.min(minY, g.bbox.minY * k);
+        }
+      }
+      return { maxY, minY };
+    };
+    const f0 = fonts[0];
+    const k0 = fontSize / f0.unitsPerEm;
+    const ascent = f0.ascent * k0;
+    const descent = -f0.descent * k0;
+    const row = fontSize * lineHeight;
+    const baseline = (row - (ascent + descent)) / 2 + ascent; // from the row's top
+    const first = reach(lines[0]);
+    const last = reach(lines[lines.length - 1]);
+    return { up: Math.max(0, first.maxY - baseline), down: Math.max(0, -last.minY - (row - baseline)) };
+  } catch {
+    return { up: 0, down: 0 };
+  }
+}
+
 export function layoutWithFace(text: string, face: FontFaceInfo, textCase: TextCase, textSize: number, area: LyricArea = DEFAULT_LYRIC_AREA): LyricLayout {
   return layoutLyric(applyTextCase(text, textCase), textSize, area.right - area.left, faceMeasure(face), area.minScale);
 }
