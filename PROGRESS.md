@@ -23,7 +23,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: storyboard.e2e.ts unchanged (the viewer 353 px on 1366×768, was 341; 18 px under the command bar): run in the
   cloud session, all 147 checks pass.
 
-### Shape timeline: lift a clip onto another to swap them ✅ (to verify on the Windows PC)
+### Shape timeline: lift a clip onto another to swap them ✅ (confirmed on the Windows PC, 8 Nov 2026: works, "a bit slow")
 - Asked by the user (7 Nov 2026, with the soundtrack window): "drag a clip onto another shot to swap them on the
   timeline"; the gesture chosen by the user (8 Nov 2026): **lift it up** (a sideways drag stays a slip).
 - **Lift:** drag a clip upwards first (about half a centimetre): it lifts (dimmed on the row, a small card of it follows
@@ -311,6 +311,10 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   reactivity; it saves versioned, data-only presets to the effects library. Not scheduled yet.
 
 ## Known issues
+- **A swap (and every timeline edit) takes a few seconds to show** (the user, 8 Nov 2026: "worked, a bit slow but ok"):
+  after the drop the whole video is planned again (the planner runs in a child process) before the new shots appear;
+  until then the edit stays where it was dropped, marked "saving…". To speed up later: swap the two shots at once in
+  the viewer and the timeline (the plan follows), and / or keep the planner process warm between edits.
 - **Next bug-fix round (noted 30 Oct):** (1) the song page header chips still use the old colours (green "Standard 0",
   orange "Reels !"): show the Library card's chips (grey —, amber to review, green approved, red failed / stopped,
   Standard only when made); (2) old Tasks entries say "2 PASS" (messages written before the wording fix) and two
