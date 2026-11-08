@@ -29,7 +29,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   grab zone 18 px, a press 6 px beside the cut grabs it, the handle stays dropped and marked saving, no second drag
   meanwhile, it ends where dropped, a quick two-step drag is saved and Ctrl+Z takes it back).
 
-### Shape: no Clip editor box; the song window on the timeline's song track; a ⋯ menu on each clip ✅ (to verify on the Windows PC)
+### Shape: no Clip editor box; the song window on the timeline's song track; a ⋯ menu on each clip ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - Asked by the user (8 Nov 2026): "remove this clip editor box and focus on a simple trim directly on the clip
   itself"; "I wanted the rectangle on the song track itself, not a new one"; the clip's other settings "in a small
   menu".
@@ -56,7 +56,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   the old Clip editor check used 03_c, which has no shot in that test Reel, so "its shots slowed" was never really
   checked; the new checks use 01_a (shot 3).
 
-### Bug fix: a jump while paused leaves the playhead off-screen ✅ (to verify on the Windows PC)
+### Bug fix: a jump while paused leaves the playhead off-screen ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - Found by the user on "Let My Love Carry You" (Reel 1:18, Follow on, preview paused, timeline scrolled by hand to
   1:10-1:18): ⏮ "Go to the start" moved the preview to 0:00.0 (the counter showed it) but the timeline stayed where
   it was, so the playhead was off-screen and the button looked broken. It only worked when the first clip was selected.
