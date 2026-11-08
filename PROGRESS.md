@@ -4,6 +4,33 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Shape: no Clip editor box; the song window on the timeline's song track; a ⋯ menu on each clip ✅ (to verify on the Windows PC)
+- Asked by the user (8 Nov 2026): "remove this clip editor box and focus on a simple trim directly on the clip
+  itself"; "I wanted the rectangle on the song track itself, not a new one"; the clip's other settings "in a small
+  menu".
+- **No Clip editor box:** the Shot panel and the Clips panel no longer open it (no clip player, no In / Out / Speed /
+  Best moment fields, no "Save and plan again"). Trimming is done on the clips on the timeline: drag the line between
+  two clips (the cut), drag inside a clip (another part of it), the first and last clip also by their outer edges (as
+  before). The Shot panel says so in one line. A clip clicked in the Clips panel is selected on the timeline and shown
+  in the viewer.
+- **⋯ on each clip** (top right of the clip on the timeline, and "Clip settings" in the Shot panel): Speed (1x-0.5x),
+  Comes in with (automatic / a cut / a dissolve), Best moment (here, at the playhead / automatic), Spotify Canvas (this
+  clip from here / let the app choose), Whole clip, automatic, Omit this clip. Each choice is saved at once (clips.json,
+  the Canvas in song.json) and the video is planned again; one choice keeps the clip's other settings.
+- **The song window on the song track:** the separate "Soundtrack" strip above the timeline is gone. The timeline's
+  waveform row is now the whole song at the timeline's zoom: the song before and after this video lies left of 0:00
+  and after the end, dimmed, and the video is the pink window on it. Drag its edges to set where the video starts and
+  ends (snaps as before: a bar, the bar after a sung line; Alt free; at least 3 s), drag the window to move it; a
+  click in it still plays from there. The readout ("Song Reels: 0:36.1 – 1:54.7 · 78.7 s · line 5 · chosen by you")
+  and **Automatic** are in the command bar. The timeline opens on the video's start (the song before it is a scroll to
+  the left), and every playhead jump still scrolls to the playhead. The whole song's waveform is now as detailed as the
+  video's (50 ms).
+- Tests: storyboard.e2e.ts (no Clip editor; ⋯ → Speed 0.8x, Best moment here, Comes in with a dissolve keep each
+  other; Whole clip, automatic drops them; the window on the song track with the song before it dimmed; dragging its end
+  saves this platform's part in song.json; Automatic): run in the cloud session, all 129 checks pass. Found on the way:
+  the old Clip editor check used 03_c, which has no shot in that test Reel, so "its shots slowed" was never really
+  checked; the new checks use 01_a (shot 3).
+
 ### Bug fix: a jump while paused leaves the playhead off-screen ✅ (to verify on the Windows PC)
 - Found by the user on "Let My Love Carry You" (Reel 1:18, Follow on, preview paused, timeline scrolled by hand to
   1:10-1:18): ⏮ "Go to the start" moved the preview to 0:00.0 (the counter showed it) but the timeline stayed where
@@ -221,28 +248,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
      copied from Remotion's source; the test only checks the results match Remotion's to 0.00001.
 - Next (part 2, new on HyperFrames only): the stacked line shape with build-up, the bigger final hook,
   docs/theme-rules.md.
-
-### Theme Engine v2 on HyperFrames, step 2a: the Reel picture ✅ (confirmed on the Windows PC, 6 Nov 2026)
-- **HyperFrames now draws the whole Reel picture as the current renderer does:** clips (offset, speed, held last
-  frame), photos with their Ken Burns move (also the looping move), cuts, dissolves, dips, the loop ending (the first
-  shot's opening fading in over the last frames; when it cannot play from there, its first frame as a picture made
-  once by our FFmpeg), the theme's grade and veil, vignette, the readability band, the background where there is no
-  clip (gradient, colour, blurred cover). Lyric lines already follow the textboard (each line's place, size, font),
-  the hook font, the text case and the lead-in after a gap; their look stays the stand-in until 2b.
-- **Picture check:** the same plan drawn by both renderers without the words, compared frame by frame (SSIM). Test
-  hf-parity (clips, a photo with a dissolve, a dip, a held frame, the loop ending, warm grade, vignette, band):
-  mean 0.993, lowest 0.988 = the two encodes' own difference. The cloud song plan: mean 0.9955, lowest 0.9946.
-  `pnpm hf:parity "<song folder>"` does the same for a real song (report.md + the least similar frame side by side).
-- **Bug found and fixed by the check:** HyperFrames reads times to 0.1 ms, so a start written a hair after its frame
-  showed some cuts one frame late (3 of 12 cuts). Starts are now written rounded down, clip offsets rounded up;
-  a test checks every frame of a minute.
-- **On the user's PC ("Here with Me", 30.4 s, 5 shots, loop ending): the same picture**, mean 0.9904, lowest 0.9876
-  over 912 frames; current renderer 51.6 s, HyperFrames 44.6 s. Still to move over for it: the lyric effects
-  (typewriter / karaoke-highlight): step 2b.
-- **A removed** (the lyric layer over an FFmpeg picture): HyperFrames draws everything in one pass.
-- Still made by the current renderer: anything with lyrics (their look moves over in 2b), the text backings shadow /
-  glow / box, title cards, mood, grain, glow, logo, YouTube layouts and the Canvas loop blend; the log says which.
-- Tests: hf-compile (Reel picture, the loop ending, every frame of a minute), hf-parity, hf-network (one pass).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

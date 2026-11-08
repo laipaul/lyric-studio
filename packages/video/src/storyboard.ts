@@ -86,7 +86,7 @@ export function storyShots(
     // planner slows it further (or holds its last frame), so say what creative input fixes it.
     const edit = clip?.edit;
     const overridden = !!edit && s.kind !== "photo" && (held || s.playbackRate < edit.speed - 0.005);
-    if (overridden) warnings.push(`your ${edit!.trimmed ? "trimmed" : "slowed"} clip (${s1(edit!.usableS * 1000)}) is shorter than this ${s1(frameMs(s.duration))} shot: lengthen it in Edit clip or slow it down there`);
+    if (overridden) warnings.push(`your ${edit!.trimmed ? "trimmed" : "slowed"} clip (${s1(edit!.usableS * 1000)}) is shorter than this ${s1(frameMs(s.duration))} shot: lengthen it with the clip's ⋯ → Whole clip, automatic, or slow it down with ⋯ → Speed`);
     else if (held) warnings.push(`the clip is too short: its last frame is held for ${s1(heldMs)}`);
     for (let back = 1; back <= RECENT_WINDOW && i - back >= 0; back++) {
       if (shots[i - back].src === s.src && !loop) {

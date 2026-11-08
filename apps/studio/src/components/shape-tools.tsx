@@ -501,7 +501,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
               </option>
             ))}
           </select>
-          <Hint text="a clip's own choice (Storyboard → clip editor) always wins" />
+          <Hint text="a clip's own choice (the clip's ⋯ on the Shape timeline) always wins" />
         </div>
       );
     }

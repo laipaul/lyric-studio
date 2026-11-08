@@ -253,7 +253,7 @@ function withTimeline(ws: Workspace, projectId: string, v: Omit<StoryboardView, 
   return { ...v, timeline: { cuts: edits.cuts ?? [], slips: edits.slips ?? [] }, song };
 }
 
-// The whole song for the soundtrack window: its waveform, bars, lines and clean ends, and whose the section is.
+// The whole song for the timeline's song track: its waveform, bars, lines and clean ends, and whose the section is.
 async function songOverview(
   ws: Workspace,
   projectId: string,
@@ -263,7 +263,7 @@ async function songOverview(
   lines: { number: number; text: string; isHook: boolean; start_ms: number; sung_end_ms: number | null }[],
 ): Promise<SongOverview> {
   const durationMs = analysis.duration_ms;
-  const buckets = Math.max(1, Math.min(1500, Math.round(durationMs / 200)));
+  const buckets = Math.max(1, Math.min(12_000, Math.round(durationMs / WAVE_BUCKET_MS))); // the timeline's resolution: the song track draws it at the timeline's zoom
   const wave = await songPeaks(ws, songFile);
   const downbeats = analysis.beats.filter((b) => b.is_downbeat).map((b) => b.time_ms);
   const songLines = lines.map((l) => ({ number: l.number, text: l.text, isHook: l.isHook, startMs: l.start_ms, sungEndMs: l.sung_end_ms }));

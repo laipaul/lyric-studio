@@ -4,6 +4,28 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Theme Engine v2 on HyperFrames, step 2a: the Reel picture ✅ (confirmed on the Windows PC, 6 Nov 2026)
+- **HyperFrames now draws the whole Reel picture as the current renderer does:** clips (offset, speed, held last
+  frame), photos with their Ken Burns move (also the looping move), cuts, dissolves, dips, the loop ending (the first
+  shot's opening fading in over the last frames; when it cannot play from there, its first frame as a picture made
+  once by our FFmpeg), the theme's grade and veil, vignette, the readability band, the background where there is no
+  clip (gradient, colour, blurred cover). Lyric lines already follow the textboard (each line's place, size, font),
+  the hook font, the text case and the lead-in after a gap; their look stays the stand-in until 2b.
+- **Picture check:** the same plan drawn by both renderers without the words, compared frame by frame (SSIM). Test
+  hf-parity (clips, a photo with a dissolve, a dip, a held frame, the loop ending, warm grade, vignette, band):
+  mean 0.993, lowest 0.988 = the two encodes' own difference. The cloud song plan: mean 0.9955, lowest 0.9946.
+  `pnpm hf:parity "<song folder>"` does the same for a real song (report.md + the least similar frame side by side).
+- **Bug found and fixed by the check:** HyperFrames reads times to 0.1 ms, so a start written a hair after its frame
+  showed some cuts one frame late (3 of 12 cuts). Starts are now written rounded down, clip offsets rounded up;
+  a test checks every frame of a minute.
+- **On the user's PC ("Here with Me", 30.4 s, 5 shots, loop ending): the same picture**, mean 0.9904, lowest 0.9876
+  over 912 frames; current renderer 51.6 s, HyperFrames 44.6 s. Still to move over for it: the lyric effects
+  (typewriter / karaoke-highlight): step 2b.
+- **A removed** (the lyric layer over an FFmpeg picture): HyperFrames draws everything in one pass.
+- Still made by the current renderer: anything with lyrics (their look moves over in 2b), the text backings shadow /
+  glow / box, title cards, mood, grain, glow, logo, YouTube layouts and the Canvas loop blend; the log says which.
+- Tests: hf-compile (Reel picture, the loop ending, every frame of a minute), hf-parity, hf-network (one pass).
+
 ### Theme Engine v2 on HyperFrames, step 1: renderer seam, (b) checked, zero network ✅ (confirmed on the Windows PC: B 26.8 s vs Remotion 29.3 s, 6 Nov 2026)
 - **D1 decided by the user (6 Nov 2026): (b), HyperFrames draws everything in one pass** (clips, cuts, dissolves,
   dips, lyrics, effects). It is the target architecture; step 1 measures its speed and the clips' frame accuracy as

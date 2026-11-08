@@ -105,7 +105,7 @@ describe("held last frame and the user's clip edits (2 Nov 2026)", () => {
   it("a clip the user trimmed that is shorter than its shot: the warning says what creative input fixes it", () => {
     const edits = new Map([["cache/a.mp4", { ...clip("01_a.mp4"), edit: clipEdit(10_000, { in: 1, out: 3.5 }) }]]);
     const out = storyShots({ shots: [shot(0, 141, "cache/a.mp4", { clipStartFrame: 30, clipDurationFrames: 300, playbackRate: 0.53 })], audio: null }, edits, 0, null)[0];
-    expect(out.warnings).toContain("your trimmed clip (2.5 s) is shorter than this 4.7 s shot: lengthen it in Edit clip or slow it down there");
+    expect(out.warnings).toContain("your trimmed clip (2.5 s) is shorter than this 4.7 s shot: lengthen it with the clip's ⋯ → Whole clip, automatic, or slow it down with ⋯ → Speed");
   });
   it("clipEdit: none for an untouched clip; speed applied to the usable length", () => {
     expect(clipEdit(10_000, {})).toBeUndefined();

@@ -4,7 +4,7 @@
 // line 4 on 02_b.mp4 (dissolve) inside the section, line 6 outside it. The plan (a dry run: nothing is
 // rendered or written) shows bars, the waveform, the lines with ⚓, the shots with badges and warnings,
 // the anchor left outside; clicking the timeline plays the preview from there. Stage 2: moving a clip in
-// the story strip re-plans and is kept in clips.json, the clip editor's best moment and speed re-plan,
+// the story strip re-plans and is kept in clips.json, the clip's ⋯ menu (speed, best moment, transition, whole clip) re-plans,
 // dragging a clip onto a lyric line anchors it (song.json); the Style tab's tempo (x2/3) re-plans.
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -321,7 +321,7 @@ async function main() {
     await page.mouse.click(...(await (async () => {
       const box = await (await page.$("[data-storyboard-timeline]")).boundingBox();
       const wave = await (await page.$("[data-waveform]")).boundingBox();
-      return [box.x + box.width - 30, wave.y + wave.height / 2] as [number, number];
+      return [Math.min(box.x + box.width - 30, wave.x + wave.width - 30), wave.y + wave.height / 2] as [number, number];
     })()));
     await sleep(2000);
     check(!pageErrors.length, `the preview plays the ending without errors${pageErrors.length ? ` (${pageErrors.join("; ")})` : ""}`);
@@ -351,17 +351,40 @@ async function main() {
     await page.dragAndDrop("[data-story-clip='04_d.mp4']", "[data-story-clip='02_b.mp4']");
     await replanned();
     check((await strip())[0] === "04_d.mp4", `dragged to the front (${(await strip()).join(", ")})`);
-    // The clip editor: a best moment and slow motion for 03_c.
-    await page.click("[data-story-clip='03_c.mp4'] button");
-    await page.waitForSelector("[data-clip-editor='03_c.mp4']");
-    await page.fill("[data-clip-best]", "1.5");
-    await page.selectOption("[data-clip-speed]", "0.8");
-    await page.click("[data-clip-save]");
+    // No Clip editor box (8 Nov 2026): a clip clicked in the strip is selected on the timeline; its ⋯ menu there holds
+    // the speed, how it comes in, its best moment and the Canvas. On 01_a (shot 3 of this Reel; 03_c has no shot here).
+    await page.click("[data-story-clip='01_a.mp4'] button");
+    await sleep(300);
+    check(!(await page.$("[data-clip-editor]")) && !(await page.$("[data-clip-video]")), "no Clip editor box: clicking a clip in the strip opens no editor");
+    const menuA = "[data-clip-menu='01_a.mp4'][data-clip-menu-shot]";
+    // Open the clip's ⋯, a submenu, and pick an item (by keyboard: a mouse jump across the menu would close the submenu).
+    const pick = async (sub: string, item: string) => {
+      await page.click(menuA);
+      await page.hover(`[data-clip-menu-sub=${sub}]`);
+      await page.waitForSelector(item);
+      await page.$eval(item, (el: Element) => (el as HTMLElement).focus());
+      await page.keyboard.press("Enter");
+    };
+    await page.waitForSelector(menuA);
+    await pick("speed", "[data-clip-speed='0.8']");
     await replanned();
-    check(JSON.stringify(clipsJson().clips["03_c.mp4"]) === JSON.stringify({ speed: 0.8, best: 1.5 }), `the clip editor saved its best moment and speed (${JSON.stringify(clipsJson().clips)})`);
-    const shots03 = await page.$$eval("[data-shot]", (els: Element[]) => els.filter((e) => (e.textContent ?? "").includes("03_c.mp4")).map((e) => !!e.querySelector("[data-badge=speed]")));
-    const card03 = (await page.textContent("[data-story-clip='03_c.mp4']")) ?? "";
-    check(card03.includes("0.8x") && card03.includes("★ yours") && shots03.every(Boolean), `and the plan uses it: the card (${card03}), its shots slowed (${shots03.length})`);
+    check(JSON.stringify(clipsJson().clips["01_a.mp4"]) === JSON.stringify({ speed: 0.8 }), `the clip's ⋯ → Speed 0.8x is saved (${JSON.stringify(clipsJson().clips)})`);
+    await pick("best", "[data-clip-best='here']");
+    await replanned();
+    const ownA = clipsJson().clips["01_a.mp4"] ?? {};
+    check(ownA.speed === 0.8 && typeof ownA.best === "number", `…and ⋯ → Best moment → Here keeps the speed (${JSON.stringify(ownA)})`);
+    const shotsA = await page.$$eval("[data-shot]", (els: Element[]) => els.filter((e) => (e.textContent ?? "").includes("01_a.mp4")).map((e) => !!e.querySelector("[data-badge=speed]")));
+    const cardA = (await page.textContent("[data-story-clip='01_a.mp4']")) ?? "";
+    check(cardA.includes("0.8x") && cardA.includes("★ yours") && shotsA.length > 0 && shotsA.every(Boolean), `and the plan uses it: the card (${cardA}), its shots slowed (${shotsA.length})`);
+    await pick("transition", "[data-clip-transition='dissolve']");
+    await replanned();
+    check(clipsJson().clips["01_a.mp4"]?.transition === "dissolve" && clipsJson().clips["01_a.mp4"]?.speed === 0.8, `⋯ → Comes in with → A dissolve keeps the rest (${JSON.stringify(clipsJson().clips["01_a.mp4"])})`);
+    await page.click(menuA);
+    await page.click("[data-clip-reset]");
+    await replanned();
+    check(!clipsJson().clips["01_a.mp4"], `⋯ → Whole clip, automatic drops the clip's own settings (${JSON.stringify(clipsJson().clips)})`);
+    const slowA = await page.$$eval("[data-shot]", (els: Element[]) => els.filter((e) => (e.textContent ?? "").includes("01_a.mp4") && e.querySelector("[data-badge=speed]")).length);
+    check(slowA === 0, "and its shots play at normal speed again");
 
     // The pro edits on the timeline (7 Nov 2026), on this 3-shot Reel. Roll: drag the line between shots 1
     // and 2 one beat later (2x zoom = 80 px a second, a beat at 120 BPM = 40 px): only that cut moves, kept in
@@ -443,14 +466,22 @@ async function main() {
     check((clipsJson().cuts ?? []).length === 0, `"Automatic cuts and clip start" on shot 2 puts its cut back (${JSON.stringify(clipsJson().cuts)})`);
     await page.click("[data-panel-close]").catch(() => {});
     writeFileSync(path.join(paths.root, "clips.json"), JSON.stringify({ ...clipsJson(), cuts: [], slips: [] }));
-    // The soundtrack window (7 Nov 2026): the whole song with the Reel as a window; dragging its end edge sets this
-    // platform's part of the song in song.json (on a bar / after a sung line); "Automatic" gives it back to the app.
-    check(!!(await page.$("[data-soundtrack-track]")) && /Reels: 0:\d\d\.\d – 0:\d\d\.\d/.test((await page.textContent("[data-soundtrack-range]")) ?? ""), `the whole song is shown with the Reel as a window (${await page.textContent("[data-soundtrack-range]")})`);
+    // The soundtrack window (7 Nov 2026; on the timeline's own song track since 8 Nov 2026): the whole song with the
+    // Reel as a pink window, the song before and after it dimmed; dragging its end edge sets this platform's part of the
+    // song in song.json (on a bar / after a sung line); "Automatic" (in the command bar) gives it back to the app.
+    check(!!(await page.$("[data-song-track] [data-soundtrack-window]")) && !!(await page.$("[data-song-track] [data-waveform]")), "the pink window is on the timeline's song track, with the video's waveform");
+    check((await page.$$("[data-soundtrack]")).length === 1 && !!(await page.$("[data-command-bar] [data-soundtrack-range]")), "no separate soundtrack strip: the part of the song is read out in the command bar");
+    const pre = Number((await page.getAttribute("[data-song-pre]", "data-song-pre")) ?? 0);
+    const dimBefore = (await (await page.$("[data-song-dim=before]"))!.boundingBox())!;
+    check(pre > 100 && Math.abs(dimBefore.width - pre) < 3, `the song before the Reel (0:00-0:02) is on the song track, dimmed (${pre} px, dim ${Math.round(dimBefore.width)} px)`);
+    check(/Reels: 0:\d\d\.\d – 0:\d\d\.\d/.test((await page.textContent("[data-soundtrack-range]")) ?? ""), `the whole song is shown with the Reel as a window (${await page.textContent("[data-soundtrack-range]")})`);
+    await page.$eval("[data-soundtrack-edge='end']", (el: Element) => el.scrollIntoView({ inline: "center", block: "nearest" }));
+    await sleep(200);
     const endEdge = (await (await page.$("[data-soundtrack-edge='end']"))!.boundingBox())!;
     await page.mouse.move(endEdge.x + endEdge.width / 2, endEdge.y + endEdge.height / 2);
     await page.mouse.down();
     await page.mouse.move(endEdge.x + endEdge.width / 2 - 60, endEdge.y + endEdge.height / 2, { steps: 5 });
-    await page.mouse.move(endEdge.x + endEdge.width / 2 - 120, endEdge.y + endEdge.height / 2, { steps: 5 });
+    await page.mouse.move(endEdge.x + endEdge.width / 2 - 200, endEdge.y + endEdge.height / 2, { steps: 5 });
     const dragRange = ((await page.textContent("[data-soundtrack-range]")) ?? "").trim();
     check(/ends after a sung line|on the bar/.test(dragRange), `dragging the window's end shows where it lands (${dragRange})`);
     await page.mouse.up();
