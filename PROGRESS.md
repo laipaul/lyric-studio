@@ -4,7 +4,7 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### Bug fix: trimming on the timeline needed several tries ✅ (to verify on the Windows PC)
+### Bug fix: trimming on the timeline needed several tries ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - **What the user found** (real song "Let My Love Carry You", Windows): "The trim of the clip doesn't work
   effortlessly. I have to try several times."
 - **Causes (found in the code, fixed):**
