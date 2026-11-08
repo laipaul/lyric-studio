@@ -189,7 +189,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   the cloud session, all 113 checks pass.
 - Next (asked with it): drag a clip onto another shot to swap them on the timeline (done 8 Nov 2026: lift and swap).
 
-### Shape timeline: trim the first and last clip, the clip in the viewer while editing ✅ (to verify on the Windows PC)
+### Shape timeline: trim the first and last clip, the clip in the viewer while editing ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - Asked by the user (7 Nov 2026): "I can't trim the first clip from the left-hand side and the last clip from the
   right-hand side", and "when I select the clip I expect to see it in the viewer".
 - **Outer edges:** the first clip's left edge and the last clip's right edge have a handle (data-trim-handle).
