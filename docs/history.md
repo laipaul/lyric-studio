@@ -4,6 +4,34 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Shape timeline: pro edits with the mouse, part 1 (roll, slip, snapping, Undo) ✅ (confirmed on the Windows PC, 8 Nov 2026)
+- Fixed (7 Nov 2026, reported by the user): a slip on a Reel's first clip was undone by the loop ending (it moved the first clip's start to make room for the seamless loop); a first shot with a start set by hand (slip or anchor) now keeps it, and the loop uses the frames before it when there are enough, else an ordinary last shot. A slip on the last clip likewise plays from the slip as an ordinary last shot (it is not turned into the loop shot).
+- Asked by the user (7 Nov 2026): edit like the pros (Premiere, Resolve, Final Cut), directly on the timeline,
+  not by typing seconds in the Clip editor.
+- **Roll:** drag the line between two shots: the cut moves, one shot gets longer and the other shorter,
+  nothing else moves (the music is fixed, so a ripple would push every later cut off its place). It snaps to
+  the beat; hold **Alt** for exactly where you let go. The left shot keeps its first frame, the right shot keeps
+  its last frame (it starts earlier or later in its clip), as a roll edit does.
+- **Slip:** drag inside a shot sideways: it keeps its place and length, another part of its clip plays in it
+  (right = earlier frames, as in Premiere), never past the clip's usable part. A plain click still selects.
+- **While dragging:** a readout ("+0.50 s · shot 1: 2.5 s · shot 2: 3.4 s · on the beat" / "slip · clip: from
+  0.60 s (was 1.10 s)") and the clip's frame at the edge in a small preview. Moved cuts are drawn in the brand
+  colour, slipped shots carry ⇆.
+- **Undo / Redo:** Ctrl+Z, Ctrl+Shift+Z (or Ctrl+Y), and two buttons in the bar under the timeline. A shot's panel
+  has **Automatic cuts and clip start** to drop the moves at its edges and its slip.
+- **Kept with the song, on the song's timeline:** clips.json "cuts" ([{ from, to, free? }], song seconds) and
+  "slips" ([{ at, clip, in }]), so every video covering that moment (Reels, TikTok, Shorts, YouTube) gets them.
+  The planner applies them after the story anchors: a cut moved by hand is final, also an anchor's; a slip on an
+  anchored shot counts when it is the anchor's clip. An edit whose cut is not in a plan (another section) is
+  left aside. (src/timeline-edits.ts, compose.ts; components/timeline-editing.tsx.)
+- **Fixed on the way:** Shape's "Omit this clip" and "Use for Canvas" were refused by the storyboard route
+  ("Bad request": it only accepted 4 of its 6 edits); it now takes every storyboard edit.
+- Tests: timeline-edits.test.ts (snapping, roll, slip, merge, reset, the planner moving only that cut and
+  playing the slipped clip from its moment, clips.json); storyboard.e2e.ts (drag a cut one beat: readout,
+  clips.json, shot 1 longer and shot 3 unmoved, marked; slip shot 3: readout, ⇆, same place and length, no
+  selection; Ctrl+Z / Ctrl+Shift+Z; reset): run in the cloud session, all 102 checks pass.
+- Part 2 (next): keyboard trims ([ / ] to the playhead, , / . one frame, Shift one beat) and the two-up preview.
+
 ### Bug fix: lines whose voice starts late are always checked; a stamp in silence moves to the voice onset ✅ (to verify on the Windows PC)
 - Found on Let My Love Carry You, checked by ear in the Reel (starts at song 0:36.1). Line 9: stamp 1:03.4, voice 1:05.8,
   words 1:04.8, first word 0.1 s: in pnpm make / the plan it was not checked (mid-verse, not a hook; only

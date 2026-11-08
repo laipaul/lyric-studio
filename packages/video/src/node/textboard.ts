@@ -34,7 +34,7 @@ import {
   type Textboard,
   type TextTemplate,
 } from "../textboard";
-import { fitCardBlocks, type CardMeasure } from "../card-layout";
+import { cardBlocks, fitCardBlocks, type CardMeasure } from "../card-layout";
 import { fontFileRefs, forText, loadFontCatalog, resolveFace, resolveFont, type FontCatalog } from "./font-catalog";
 import { faceMeasure } from "./measure";
 import { loadBrand } from "./brand";
@@ -247,6 +247,7 @@ export function cardMeasure(catalog: FontCatalog, cards: readonly Pick<TextCardP
 
 export const TITLE_SIZE_VERTICAL = 84; // px at 1080x1920 (x the platform's text scale)
 export const TITLE_HOLD_VERTICAL_S = 4;
+export const TITLE_MIN_S = 2.5; // the title opening is on screen at least this long (unless it would sit on the first lyric line)
 
 // The title, byline and tagline cards of one video. Defaults: YouTube shows title + artist as before
 // (`youtube`, the layout's title), the vertical platforms none (a card shows when the board says
@@ -266,14 +267,16 @@ export function titleCards(
     // The title opening (Reels, TikTok, Shorts, recipe titleOpening "on"): title + byline in the frame's
     // upper third, the tagline (when the song has one) in the lower third, all gone by `untilFrame` (when
     // the first lyric line fades in: they never overlap it).
-    opening?: { untilFrame: number } | null;
+    // `lyricBox`: where the first lyric line sits. A card block that does not touch it stays until TITLE_MIN_S
+    // even when the line comes sooner; one that does is gone as the line fades in (and a note says what to do).
+    opening?: { untilFrame: number; lyricBox?: { left: number; top: number; right: number; bottom: number } | null } | null;
     // The platform's safe area (and the font catalog to measure in): the cards are laid out to fit inside it
     // by themselves (src/text-cards.ts fitCardBlocks: wrap on 2 lines, then shrink by up to 25%, then move).
     fit?: { safeZone: SafeZone; catalog: FontCatalog } | null;
     // Characters the card's font lacks: a fallback family (e.g. Noto Sans JP) and its files.
     fallbackFor?: (face: Face, text: string) => { family: string; refs: FontFileRef[] } | null;
   },
-): { cards: TextCardProps[]; fonts: FontFileRef[]; warnings: string[] } {
+): { cards: TextCardProps[]; fonts: FontFileRef[]; warnings: string[]; notes: string[] } {
   const y = o.youtube;
   const baseSize = y?.size ?? Math.round(TITLE_SIZE_VERTICAL * o.textScale);
   const open = !y && o.opening ? o.opening : null;
@@ -337,5 +340,23 @@ export function titleCards(
   const cards = out.map((c) => (c.stackOn === undefined ? (({ stackOn: _s, ...rest }) => rest)(c) : c));
   // The vertical platforms' cards (not YouTube's title): fitted into the safe area, as QA measures them.
   const fitted = o.fit && !y ? fitCardBlocks(cards, { format: o.format, safeZone: o.fit.safeZone, measure: cardMeasure(o.fit.catalog, cards) }) : cards;
-  return { cards: fitted, fonts, warnings };
+  // The title opening with a first lyric line sooner than TITLE_MIN_S: a block clear of that line's box stays
+  // on screen for TITLE_MIN_S; one that touches it (or whose line is unknown) is shown alone until the line
+  // fades in, and the note names the creative fix. The music and the lyric timing are never touched.
+  const notes: string[] = [];
+  const minFrame = Math.min(o.durationInFrames, Math.round(TITLE_MIN_S * o.fps));
+  if (open && open.untilFrame < minFrame && fitted.length) {
+    const measure = o.fit ? cardMeasure(o.fit.catalog, fitted) : (c: { text: string; size: number }) => c.text.length * c.size * 0.6;
+    const lyric = open.lyricBox ?? null;
+    const blocks = cardBlocks(fitted, o.format, measure as never);
+    const keep = new Set<string>();
+    for (const b of blocks) {
+      const touches = !lyric || (b.box.left < lyric.right && b.box.right > lyric.left && b.box.top < lyric.bottom && b.box.bottom > lyric.top);
+      if (!touches) b.ids.forEach((id) => keep.add(id));
+      else notes.push(`No room for the ${b.ids.includes("title") ? "title" : "tagline"} before the first line: start the Reel's part of the song about 2 bars earlier (drag the pink window's start on the song track) or let the app choose it (Automatic).`);
+    }
+    const cards2 = fitted.map((c) => (keep.has(c.id) ? { ...c, endFrame: Math.max(c.endFrame, minFrame) } : c));
+    return { cards: cards2, fonts, warnings, notes };
+  }
+  return { cards: fitted, fonts, warnings, notes };
 }

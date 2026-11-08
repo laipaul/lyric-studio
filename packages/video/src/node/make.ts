@@ -44,7 +44,7 @@ import { editOf, isOmitted, rankOf, readClipEdits } from "./clip-edits";
 import { boardForRun, cardFont, cardMeasure, overrideCount, TITLE_SIZE_VERTICAL, titleCards, type RunBoard } from "./textboard";
 import { extraCards, fillCardText } from "../extra-cards";
 import { matchPinClips, parsePins } from "../pins";
-import type { LyricEffectsProps, LyricVideoProps } from "../props";
+import type { LyricEffectsProps, LyricLineProps, LyricVideoProps } from "../props";
 import { formatQa, LOW_CONFIDENCE, qaReasons, runQa, type QaInput, type QaReport } from "../qa";
 import { autoSection, clockText, titleLeadMs, finishedBeforeStart, SECTION_TARGET, sectionCuts, startsAfterEnd, sungEnd, sungStart, type SectionCut, type SectionLine } from "../section";
 import { loopFit, loopFlows, loopSuggestions, type LoopAudio, type LoopResult, type LoopSuggestion } from "../loop";
@@ -973,6 +973,22 @@ function pictureFields(v: RecipeValues): NonNullable<MakeOptions["picture"]> {
   return { textColour: v.textColour, grade: v.grade, vignette: v.vignette, textBacking: v.textBacking, fallback: v.fallback, fallbackColour: v.fallbackColour, gradeCanvas: v.gradeCanvas, titleStyle: v.titleStyle, titleWarp: v.titleWarp, hookCard: v.hookCard, hookCardStyle: v.hookCardStyle, endCard: v.endCard, endCardStyle: v.endCardStyle, hookText: v.hookText, endText: v.endText };
 }
 
+// Where the first lyric line sits on the frame (measured as QA does), for the title opening's overlap check.
+function firstLyricBox(props: { lyrics: LyricLineProps[]; textSize: number; lyricArea?: LyricArea; lyricEffects?: LyricEffectsProps | null; nextLine?: boolean; nextLineScale?: number }, style: StyleFaces["simple"], catalog: FontCatalog) {
+  const first = props.lyrics[0];
+  if (!first) return null;
+  try {
+    const m = measureLyrics([{ ...first, number: 1, confidence: null }] as never, {
+      main: style.main, hook: style.hook, textCase: style.entry.style.textCase, textSize: props.textSize, animation: style.entry.style.animation, area: props.lyricArea,
+      effects: props.lyricEffects ?? null, nextLine: false, nextScale: props.nextLineScale ?? 0.55,
+      cardFace: (f: { family: string; weight: number; italic?: boolean }) => resolveFace(catalog, f.family, f.weight, f.italic ? "italic" : "normal"),
+    });
+    return m[0]?.box ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // The Reel cover's props: the video's frame with the title opening's cards (title, byline, tagline) on it
 // for the whole video, no lyrics, no sound. Null when the song has no title to show.
 export function coverProps(props: Omit<LyricVideoProps, "mediaBaseUrl">, sh: Pick<Shared, "textboard" | "brand" | "catalog">, preset: PlatformPreset, format: { width: number; height: number }): Omit<LyricVideoProps, "mediaBaseUrl"> | null {
@@ -1537,11 +1553,16 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
           titleFont: sh.brand.brand.titleFont, accent: sh.brand.brand.accentColour, textScale: preset.textScale,
           fontFor: (style, b, text, role) => cardFont(sh.catalog, style, b, text, role),
           // The title opening: gone as the first lyric line fades in.
-          opening: titleOpeningOn ? { untilFrame: rest.lyrics[0] ? (rest.lyrics[0].enterFrame ?? rest.lyrics[0].startFrame) : Math.min(rest.durationInFrames, Math.round(TITLE_ALONE_S * VIDEO.fps)) } : null,
+          opening: titleOpeningOn ? { untilFrame: rest.lyrics[0] ? (rest.lyrics[0].enterFrame ?? rest.lyrics[0].startFrame) : Math.min(rest.durationInFrames, Math.round(TITLE_ALONE_S * VIDEO.fps)), lyricBox: firstLyricBox(rest, stylesOf(spec)[spec.style], sh.catalog) } : null,
           fallbackFor: (face, text) => titleFallback(sh.catalog, face, text),
           fit: { safeZone: preset.safeZone, catalog: sh.catalog },
         });
         for (const w of tc.warnings) if (!warnings.includes(`${preset.name}: textboard: ${w}`)) warnings.push(`${preset.name}: textboard: ${w}`);
+        // A title opening with no room before the first line: shown alone, and the note names the creative fix.
+        for (const n of tc.notes) {
+          cardNotes.push(n);
+          if (!warnings.includes(`${preset.name}: ${n}`)) warnings.push(`${preset.name}: ${n}`);
+        }
         // The theme's hook and end cards (Reels, TikTok, Shorts): always planned, drawn only when on.
         if (loops && options.picture) {
           const pic = options.picture;

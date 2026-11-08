@@ -4,6 +4,13 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Bug fix: the Reel's title did not show when the part of the song starts on a sung line ✅ (to verify on the Windows PC)
+- Seen (Let My Love Carry You, Reel; Shape → Reels 0:36.1-1:41.3 chosen on the song track, Title opening on): "the title is not showing", "the tagline is not showing". Line 5 ("Let my love carry you through the night") is sung at the very start of that part.
+- Cause: the title opening showed title, byline and tagline only until the first lyric line fades in (make.ts passed `untilFrame` = that line's enter frame). The automatic section leaves up to 2 bars (titleLead); a part chosen by hand on a sung line leaves none, so the cards got a few frames or none, silently. Shape's plan uses the same make.ts dry run, so it showed the same.
+- Fix (automatic, no new setting; src/node/textboard.ts titleCards, make.ts): with a lead-in shorter than TITLE_MIN_S (2.5 s) every card block (title + byline; the tagline) is checked against the first lyric line's box (measured as QA does). A block that does not touch the line stays on screen for 2.5 s, also while the line is shown. A block that would touch it is shown alone until the line fades in (the music and the lyric timing are never touched) and a plain note in the plan's decisions and the warnings says: "No room for the title (tagline) before the first line: start the Reel's part of the song about 2 bars earlier (drag the pink window's start on the song track) or let the app choose it (Automatic)." QA "Title cards clear of the first lyric" now only fails for a block that touches the line. The automatic section is unchanged.
+- Tests: test/title-opening.test.ts 4 new (16 in the file), with test/storyboard.test.ts 24 pass; tsc clean (packages/video, apps/studio).
+- To check: `cd D:\videomaker`, `git pull`, Shape → Reels, window at 0:36.1, Title opening on: the title and byline stay about 2.5 s, or the plan says "No room for the title before the first line..." and the part starts about 2 bars earlier (or Automatic).
+
 ### Bug fix: a line set by hand later disappeared from the video ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - Seen (Let My Love Carry You, YouTube): "Hold on..." set by hand to 3:22.36 (stamp 3:14.76) was gone from Shape and the video; the Lyrics tab showed readable 3:22.10 and leaves 3:22.10 (zero time on screen).
 - Cause: applying a hand-set start moved the start, the word tags and the sung end, but not the line's own end (end_ms, the next line's old stamp 3:18.26) when a next line existed. A start set later than that end left the end before the start, so the line was shown for no time.
@@ -206,33 +213,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: storyboard.e2e.ts (trim readout and the viewer frame while dragging, the last clip's handle, clicking a
   clip moves the playhead to it): run in the cloud session, all 108 checks pass.
 
-### Shape timeline: pro edits with the mouse, part 1 (roll, slip, snapping, Undo) ✅ (confirmed on the Windows PC, 8 Nov 2026)
-- Fixed (7 Nov 2026, reported by the user): a slip on a Reel's first clip was undone by the loop ending (it moved the first clip's start to make room for the seamless loop); a first shot with a start set by hand (slip or anchor) now keeps it, and the loop uses the frames before it when there are enough, else an ordinary last shot. A slip on the last clip likewise plays from the slip as an ordinary last shot (it is not turned into the loop shot).
-- Asked by the user (7 Nov 2026): edit like the pros (Premiere, Resolve, Final Cut), directly on the timeline,
-  not by typing seconds in the Clip editor.
-- **Roll:** drag the line between two shots: the cut moves, one shot gets longer and the other shorter,
-  nothing else moves (the music is fixed, so a ripple would push every later cut off its place). It snaps to
-  the beat; hold **Alt** for exactly where you let go. The left shot keeps its first frame, the right shot keeps
-  its last frame (it starts earlier or later in its clip), as a roll edit does.
-- **Slip:** drag inside a shot sideways: it keeps its place and length, another part of its clip plays in it
-  (right = earlier frames, as in Premiere), never past the clip's usable part. A plain click still selects.
-- **While dragging:** a readout ("+0.50 s · shot 1: 2.5 s · shot 2: 3.4 s · on the beat" / "slip · clip: from
-  0.60 s (was 1.10 s)") and the clip's frame at the edge in a small preview. Moved cuts are drawn in the brand
-  colour, slipped shots carry ⇆.
-- **Undo / Redo:** Ctrl+Z, Ctrl+Shift+Z (or Ctrl+Y), and two buttons in the bar under the timeline. A shot's panel
-  has **Automatic cuts and clip start** to drop the moves at its edges and its slip.
-- **Kept with the song, on the song's timeline:** clips.json "cuts" ([{ from, to, free? }], song seconds) and
-  "slips" ([{ at, clip, in }]), so every video covering that moment (Reels, TikTok, Shorts, YouTube) gets them.
-  The planner applies them after the story anchors: a cut moved by hand is final, also an anchor's; a slip on an
-  anchored shot counts when it is the anchor's clip. An edit whose cut is not in a plan (another section) is
-  left aside. (src/timeline-edits.ts, compose.ts; components/timeline-editing.tsx.)
-- **Fixed on the way:** Shape's "Omit this clip" and "Use for Canvas" were refused by the storyboard route
-  ("Bad request": it only accepted 4 of its 6 edits); it now takes every storyboard edit.
-- Tests: timeline-edits.test.ts (snapping, roll, slip, merge, reset, the planner moving only that cut and
-  playing the slipped clip from its moment, clips.json); storyboard.e2e.ts (drag a cut one beat: readout,
-  clips.json, shot 1 longer and shot 3 unmoved, marked; slip shot 3: readout, ⇆, same place and length, no
-  selection; Ctrl+Z / Ctrl+Shift+Z; reset): run in the cloud session, all 102 checks pass.
-- Part 2 (next): keyboard trims ([ / ] to the playhead, , / . one frame, Shift one beat) and the two-up preview.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

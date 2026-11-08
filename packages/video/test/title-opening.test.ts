@@ -189,3 +189,55 @@ describe("title opening: the cards fit the safe area by themselves", () => {
     expect(qa.checks.length).toBeGreaterThan(0);
   });
 });
+
+// ---------------------------------------------------------------- a part of the song that starts on a sung line
+
+describe("title opening: the first lyric comes within 2.5 s", () => {
+  const catalog = loadFontCatalog(mkdtempSync(path.join(os.tmpdir(), "lyric-title-short-")));
+  const format = { width: 1080, height: 1920 };
+  const safeZone = { top: 0.14, bottom: 0.35, left: 0, right: 0.12 };
+  const area = { top: 269, bottom: 1248, centerY: 758 };
+  const board = { version: 1, roles: {}, cards: [
+    { id: "title", type: "title", text: "Let My Love Carry You", overrides: {} },
+    { id: "byline", type: "byline", text: "Life Lyrics", overrides: {} },
+    { id: "tagline", type: "tagline", text: "Let My Love Carry You by Life Lyrics", overrides: {} },
+  ] } as unknown as Textboard;
+  const lay = (untilFrame: number, lyricBox: { left: number; top: number; right: number; bottom: number } | null) =>
+    titleCards(board, {
+      format, area, fps: 30, durationInFrames: 900, youtube: null,
+      titleFont: { family: "Cinzel", weight: 600, letterSpacing: 0.18 }, accent: "#E8A3B5", textScale: 1,
+      fontFor: () => null, opening: { untilFrame, lyricBox }, fit: { safeZone, catalog },
+    });
+  const end = (o: ReturnType<typeof lay>, id: string) => o.cards.find((c) => c.id === id)!.endFrame;
+
+  it("the first line 0.5 s in, in the middle of the frame: title, byline and tagline stay 2.5 s (clear of the line)", () => {
+    const line = { left: 100, right: 900, top: 880, bottom: 1000 }; // between the title block and the tagline
+    const out = lay(15, line);
+    expect(out.notes).toEqual([]);
+    for (const id of ["title", "byline", "tagline"]) expect(end(out, id)).toBeGreaterThanOrEqual(75);
+  });
+
+  it("the line sits on the title: it is shown alone for the lead-in and a note names the creative fix", () => {
+    const first = lay(300, null).cards.find((c) => c.id === "title")!;
+    const onTitle = { left: 0, right: 1080, top: (first.centerY ?? first.top ?? 500) - 100, bottom: (first.centerY ?? first.top ?? 500) + 300 };
+    const out = lay(15, onTitle);
+    expect(end(out, "title")).toBe(15);
+    expect(out.notes.some((n) => n.startsWith("No room for the title before the first line") && n.includes("2 bars earlier") && n.includes("Automatic"))).toBe(true);
+  });
+
+  it("a lead-in of 2.5 s or more is unchanged (gone as the line fades in)", () => {
+    const out = lay(100, { left: 0, right: 1080, top: 0, bottom: 1920 });
+    expect(out.notes).toEqual([]);
+    expect(end(out, "title")).toBe(100);
+  });
+
+  it("QA: a block clear of the first line may stay past its start", () => {
+    const base = { props: { shots: [], lyrics: [], cinematicBars: false, durationInFrames: 240 }, shotClips: [], poolSize: 0, frames: { black: [], frozen: [] } };
+    const blocks = [{ ids: ["title"], text: "T", box: { left: 200, right: 880, top: 300, bottom: 420 }, endFrame: 75 }];
+    const lyric = (top: number) => [{ number: 1, text: "x", confidence: null, lines: 1, box: { left: 100, right: 980, top, bottom: top + 100 } }];
+    const clear = runQa({ ...base, lyrics: lyric(700), titleCards: { blocks, firstLyricFrame: 15, missing: [], grid: null } } as never);
+    expect(clear.checks.find((c) => c.name === "Title cards clear of the first lyric")?.ok).toBe(true);
+    const hit = runQa({ ...base, lyrics: lyric(350), titleCards: { blocks, firstLyricFrame: 15, missing: [], grid: null } } as never);
+    expect(hit.checks.find((c) => c.name === "Title cards clear of the first lyric")?.ok).toBe(false);
+  });
+});
