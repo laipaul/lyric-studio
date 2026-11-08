@@ -601,6 +601,13 @@ export function useTimelineEditing({
     slipped,
     pendingShot: (i: number) =>
       pending?.kind === "roll" ? i === pending.cut - 1 || i === pending.cut : pending?.kind === "swap" ? i === pending.shot || i === pending.over : pending ? i === pending.shot : false,
+    // What a shot shows on the row: right after a swap is dropped, the two shots already show each other's clip
+    // (name and picture) while the plan is made again (8 Nov 2026, asked by the user: "make it swap faster").
+    shown: (s: StoryShot): StoryShot => {
+      if (pending?.kind !== "swap" || (s.index !== pending.shot && s.index !== pending.over)) return s;
+      const other = shots[s.index === pending.shot ? pending.over : pending.shot];
+      return other ? { ...s, clip: other.clip, thumb: other.thumb, kind: other.kind } : s;
+    },
     liftFrom: drag?.kind === "lift" ? drag.shot : null, // the lifted shot (dimmed on the row)
     liftOver: drag?.kind === "lift" && drag.over !== null && shots[drag.over] && shots[drag.shot] && swappable(shots[drag.shot], shots[drag.over]) ? drag.over : null, // where it would land (ringed)
     edited,

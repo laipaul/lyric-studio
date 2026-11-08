@@ -515,8 +515,12 @@ async function main() {
     await page.mouse.move(b2.x + b2.width / 2, b2.y - 20, { steps: 8 });
     const liftText = ((await page.textContent("[data-edit-readout]").catch(() => "")) ?? "").trim();
     check(liftText.includes(`swap 1 · ${c1} ↔ 2 · ${c2}`) && !!(await page.$("[data-shot='2'][data-drop-target]")), `over shot 2 it says what will swap, shot 2 ringed (${liftText})`);
+    const dropAt = Date.now();
     await page.mouse.up();
+    // At once (before the plan is made again): the two shots already show each other's clip.
+    check((await clipOfShot(1)) === c2 && (await clipOfShot(2)) === c1, `right after the drop the two shots show each other's clip (shot 1: ${await clipOfShot(1)})`);
     await replanned();
+    console.log(`     (the swap's new plan was there ${((Date.now() - dropAt) / 1000).toFixed(1)} s after the drop)`);
     check((await clipOfShot(1)) === c2 && (await clipOfShot(2)) === c1, `the two clips swapped places (shot 1: ${await clipOfShot(1)}, shot 2: ${await clipOfShot(2)})`);
     const [a1, a2] = [await shotBox(1), await shotBox(2)];
     check(Math.abs(a1.x - b1.x) < 2 && Math.abs(a1.width - b1.width) < 2 && Math.abs(a2.x - b2.x) < 2, "the cuts stay where they were (the music is fixed)");

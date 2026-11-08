@@ -4,6 +4,22 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Shape timeline: a clock on the playhead and the song's time ✅ (to verify on the Windows PC)
+- Asked by the user (7 Nov 2026): follow where the song is while the preview plays, and compare it with the
+  Lyrics tab and `pnpm lyrics:check-start`, which use song times (the Reel counts from its own start).
+- **Time ruler** above the bars: minutes:seconds in the video (a label every 2 s at 1x, every second at 2x,
+  every half second at 4x, a small tick in between). The bar row keeps its numbers (they are bars, not seconds;
+  its tooltip now says so, each bar with its time).
+- **Playhead bubble:** the playhead carries its time, e.g. `0:28.4 · song 1:02.6`, moving while it plays and
+  when it is dragged or clicked. **Hover** anywhere on the timeline shows that moment's time the same way.
+- **Counter** under the viewer: tenths (`0:28.4 / 1:18`) and `· song 1:02.6` next to it.
+- **Lyric blocks:** the tooltip gives the line's time on screen in the video and in the song.
+- Song time = where the video's audio starts in the song (the storyboard's new `songStartMs`) + the time in
+  the video; a whole-song video shows one clock.
+- Tests: timeline-time.test.ts (labels, tenths, song time with the Let My Love Carry You numbers: Reel 0:30 =
+  line 9 at 1:04.8); storyboard.e2e.ts extended (ruler, bubble, hover, bubble = counter) but not run in the
+  cloud session (the audio analysis's Python crashes there); studio typecheck and production build pass.
+
 ### Bug fix: a held note from the line before no longer hides a stamp in silence ✅ (to verify on the Windows PC)
 - Reported on "Let My Love Carry You", line 9: stamp 1:03.4, voice 1:05.8, recognised words 1:04.8 "Let my love",
   first word 0.1 s: only "flagged for review" (no second signal within 0.3 s). Line 8 (0:58.6, "Till the break of day")

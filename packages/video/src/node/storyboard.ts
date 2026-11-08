@@ -334,7 +334,11 @@ async function view(
 const decoded = new Map<string, Promise<{ rate: number; samples: Float32Array } | null>>();
 async function songPeaks(_ws: Workspace, songFile: string) {
   const key = `${songFile}|${existsSync(songFile) ? statSync(songFile).mtimeMs : 0}`;
-  if (!decoded.has(key)) decoded.set(key, readLoopAudio(songFile));
+  if (!decoded.has(key)) {
+    // The studio keeps one planner running: keep only the last few songs decoded (a song is about 15 MB here).
+    while (decoded.size >= 3) decoded.delete(decoded.keys().next().value!);
+    decoded.set(key, readLoopAudio(songFile));
+  }
   return decoded.get(key)!;
 }
 

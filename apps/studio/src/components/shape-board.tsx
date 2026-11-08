@@ -441,12 +441,14 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   const tl = useTimelineEditing({ view, zoom, mediaUrl: `/api/songs/${projectId}/storyboard/media`, post: edit, onEdited: showAt, busy: saving || loading });
   // A clip picked on the timeline is shown in the viewer: its first frame (after the Shot panel has opened,
   // which resizes the viewer).
+  // `picks` counts the clicks, so clicking the clip that is already selected shows it again (8 Nov 2026).
+  const [picks, setPicks] = useState(0);
   const pickedStartMs = view && selected !== null ? (view.shots[selected]?.startMs ?? null) : null;
   useEffect(() => {
     if (pickedStartMs === null) return;
     const t = setTimeout(() => showAt(pickedStartMs), 50);
     return () => clearTimeout(t);
-  }, [selected, pickedStartMs, showAt]);
+  }, [selected, picks, pickedStartMs, showAt]);
   // The timeline clock: the time in the video and in the song (as the Lyrics tab and check-start show it).
   const [hoverMs, setHoverMs] = useState<number | null>(null);
   const ticks = useMemo(() => (view ? timeTicks(view.durationMs, zoom) : []), [view, zoom]);
@@ -1017,7 +1019,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                   {view.shots.map((s) => (
                     <ShotBlock
                       key={s.index}
-                      shot={s}
+                      shot={tl.shown(s)}
                       left={x(s.startMs)}
                       width={x(s.endMs - s.startMs)}
                       selected={selected === s.index}
@@ -1027,6 +1029,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                       onPointerDown={(e) => tl.onShotPointerDown(s, e)}
                       onSelect={() => {
                         setSelected(s.index);
+                        setPicks((n) => n + 1);
                         setPanel("shot");
                       }}
                       dropTarget={dropShot === s.index || tl.liftOver === s.index}

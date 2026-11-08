@@ -10,6 +10,20 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Fixed: the story order decides which clip plays in a shot; a slip applies only when the order still puts the slip's clip there (anchored shots as before), otherwise it is left aside. compose.ts plans once without slips, keeps those that still match, plans again.
 - Tests: new test/clip-order-prepare.test.ts (2: order after an upload and a Prepare reorder, Shape's own re-save; a slip then a Prepare reorder, which failed before the fix); test/timeline-edits.test.ts (2 tests adjusted to the rule, +1 check); video package 944 passed (3 files need the network: migrate / make / one more, remotion.media is not reachable here); studio typecheck clean. No studio code changed.
 
+### Shape: faster swaps (and every edit): the planner stays running ✅ (to verify on the Windows PC)
+- Asked by the user (8 Nov 2026): "make it swap faster" (after "worked, a bit slow but ok").
+- **Why it was slow:** every edit started a new planner process: Node and tsx starting up (about 1.5 s in the cloud,
+  usually more on Windows) and the whole song decoded again for the waveform, before any planning.
+- **Now one planner stays running** while the studio runs and answers every request (the decoded song stays in
+  memory, the last 3 songs). It is started again when it stopped or when its code changed (a git pull while the
+  studio runs); a request it cannot answer falls back to the old one-off process.
+- **The swap shows at once:** right after the drop the two shots already show each other's clip on the timeline;
+  the viewer follows when the new plan is there.
+- **Fixed on the way (older bug):** clicking the clip that was already selected did not show it in the viewer again.
+- Measured in the browser test: the swap's new plan 0.9-1.4 s after the drop (was 2.9 s with the one-off planner).
+- Tests: storyboard.e2e.ts (+1: the two shots show each other's clip right after the drop): run in the cloud
+  session, all 148 checks pass (also with LYRIC_PLANNER=oneoff, the fallback).
+
 ### Shape timeline: a taller clip strip, thinner rows above it ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - Asked by the user (8 Nov 2026): "the video strip is too squashed and I can barely see the video; maybe make the
   timeline thinner to save space".
@@ -218,22 +232,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   (the band is offered; run in the cloud session: 33 checks pass; the thumbnail check now waits for the image,
   which raced with the planning).
 
-### Shape timeline: a clock on the playhead and the song's time ✅ (to verify on the Windows PC)
-- Asked by the user (7 Nov 2026): follow where the song is while the preview plays, and compare it with the
-  Lyrics tab and `pnpm lyrics:check-start`, which use song times (the Reel counts from its own start).
-- **Time ruler** above the bars: minutes:seconds in the video (a label every 2 s at 1x, every second at 2x,
-  every half second at 4x, a small tick in between). The bar row keeps its numbers (they are bars, not seconds;
-  its tooltip now says so, each bar with its time).
-- **Playhead bubble:** the playhead carries its time, e.g. `0:28.4 · song 1:02.6`, moving while it plays and
-  when it is dragged or clicked. **Hover** anywhere on the timeline shows that moment's time the same way.
-- **Counter** under the viewer: tenths (`0:28.4 / 1:18`) and `· song 1:02.6` next to it.
-- **Lyric blocks:** the tooltip gives the line's time on screen in the video and in the song.
-- Song time = where the video's audio starts in the song (the storyboard's new `songStartMs`) + the time in
-  the video; a whole-song video shows one clock.
-- Tests: timeline-time.test.ts (labels, tenths, song time with the Let My Love Carry You numbers: Reel 0:30 =
-  line 9 at 1:04.8); storyboard.e2e.ts extended (ruler, bubble, hover, bubble = counter) but not run in the
-  cloud session (the audio analysis's Python crashes there); studio typecheck and production build pass.
-
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -311,10 +309,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   reactivity; it saves versioned, data-only presets to the effects library. Not scheduled yet.
 
 ## Known issues
-- **A swap (and every timeline edit) takes a few seconds to show** (the user, 8 Nov 2026: "worked, a bit slow but ok"):
-  after the drop the whole video is planned again (the planner runs in a child process) before the new shots appear;
-  until then the edit stays where it was dropped, marked "saving…". To speed up later: swap the two shots at once in
-  the viewer and the timeline (the plan follows), and / or keep the planner process warm between edits.
 - **Next bug-fix round (noted 30 Oct):** (1) the song page header chips still use the old colours (green "Standard 0",
   orange "Reels !"): show the Library card's chips (grey —, amber to review, green approved, red failed / stopped,
   Standard only when made); (2) old Tasks entries say "2 PASS" (messages written before the wording fix) and two
