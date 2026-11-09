@@ -33,6 +33,7 @@ import { composeProps, DEFAULT_LEAD_MS, lyricFrames, rawLyric, type PlatformLayo
 import { choiceText, parseEffectChoice, type EffectChoice } from "../effects";
 import { cleanLrc } from "../lrc";
 import { areaForLayout, BIG_HOOK_SCALE, type TextLayout } from "../text-layout";
+import { finalHookScales, type FinalHook, type LineBuild, type LineShape } from "../line-shape";
 import { choosePlatforms, lyricArea, parsePresets, sectionWindow, STANDARD, type LyricArea, type PlatformPreset } from "../platform";
 import { VIDEO } from "../config";
 import { getCutPoints, type CutRate, type Energy, type ShotLength } from "../cuts";
@@ -151,6 +152,9 @@ export type MakeOptions = {
   shine?: "off" | "on"; // one soft light sweep across each chorus line, on a downbeat
   emphasis?: "off" | "on"; // the key word of each line in the hook font, bigger, in the accent
   textLayout?: TextLayout; // the theme's text layout: centre | lower (the lower third) | bighook (chorus lines larger)
+  lineShape?: LineShape; // the theme's line shape (src/line-shape.ts): subtitle | stacked
+  lineBuild?: LineBuild; // replace | build (each row appears as it is sung)
+  finalHook?: FinalHook; // on: the video's last chorus larger, its last line larger still
   titleOpening?: "off" | "on"; // Reels / TikTok / Shorts: title, byline and tagline before the first hook
   // The theme's picture (src/picture.ts; recipe textColour, grade, vignette, textBacking, fallback,
   // fallbackColour, gradeCanvas). Absent (pnpm make without a song.json): the videos as before.
@@ -902,6 +906,12 @@ export function loopsSeamlessly(shots: readonly LyricVideoProps["shots"][number]
 }
 
 // "standard" goes straight into the run's folder, every platform into its own subfolder.
+// The final hook's sizes on the lines (a textboard card's own size still wins: lineScale).
+export function withFinalHook(lyrics: readonly LyricLineProps[]): LyricLineProps[] {
+  const scales = finalHookScales(lyrics);
+  return lyrics.map((l, i) => (scales.has(i) ? { ...l, scale: scales.get(i)! } : l));
+}
+
 export function platformDir(rootDir: string, name: string): string {
   return name === STANDARD ? rootDir : path.join(rootDir, name);
 }
@@ -955,7 +965,7 @@ function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: Pl
   const length = lengthFor(base, r.values.length, sh.analysis.duration_ms);
   if (length.note) sh.log(`${base.name}: ${length.note}`);
   const section = r.values.section === "auto" && length.wholeSong ? "full" : r.values.section;
-  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined, shotLength: r.values.shotLength ?? undefined, ending: r.values.ending, transitions: r.values.transitions, paceShift: r.values.paceShift, readability: r.values.readability, breathe: r.values.breathe, heldGlow: r.values.heldGlow, chorusLift: r.values.chorusLift, shine: r.values.shine, emphasis: r.values.emphasis, textLayout: r.values.textLayout, titleOpening: r.values.titleOpening, ...(sh.options.picture ? { picture: pictureFields(r.values) } : {}) };
+  const options: MakeOptions = { ...choice, lineEffect: pick("verseEffect"), hookEffect: pick("hookEffect"), font, fontHook, section, length: r.values.length ?? undefined, shotLength: r.values.shotLength ?? undefined, ending: r.values.ending, transitions: r.values.transitions, paceShift: r.values.paceShift, readability: r.values.readability, breathe: r.values.breathe, heldGlow: r.values.heldGlow, chorusLift: r.values.chorusLift, shine: r.values.shine, emphasis: r.values.emphasis, textLayout: r.values.textLayout, lineShape: r.values.lineShape, lineBuild: r.values.lineBuild, finalHook: r.values.finalHook, titleOpening: r.values.titleOpening, ...(sh.options.picture ? { picture: pictureFields(r.values) } : {}) };
   const own = PLATFORM_FIELDS.filter((k) => r.sources[k].includes(":"));
   if (own.length) sh.log(`${preset.name}: recipe ${own.map((k) => `${k} ${recipeText(r.values[k])} (${r.sources[k]})`).join(", ")}`);
   const out: Shared = {
@@ -1304,6 +1314,8 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     ...(options.shine === "on" ? { shine: true, downbeats: barFrames } : {}),
     ...(options.emphasis === "on" ? { emphasis: true } : {}),
     ...(options.textLayout === "bighook" ? { hookScale: BIG_HOOK_SCALE } : {}),
+    ...(options.lineShape === "stacked" ? { lineShape: "stacked" as const } : {}),
+    ...(options.lineBuild === "build" ? { lineBuild: "build" as const } : {}),
   };
   // A line whose singing is over but which is still on screen at the start (it lingers until the
   // next stamp) is not shown, so the video never opens on the tail of the previous line.
@@ -1448,7 +1460,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     const s = styles[style];
     const area = ytLayout ? lyricAreaFor(ytLayout, preset) : areaForLayout(lyricArea(format, preset.safeZone, preset.lyricsAt), options.textLayout, preset.lyricsAt);
     const textSize = Math.round(s.entry.textSize * preset.textScale * (ytLayout === "cover" ? COVER_TEXT_SCALE : 1));
-    for (const l of tooLongLines(visible.map((i) => lines[i]), { main: s.main, hook: s.hook, textCase: s.entry.style.textCase, textSize, area })) {
+    for (const l of tooLongLines(visible.map((i) => lines[i]), { main: s.main, hook: s.hook, textCase: s.entry.style.textCase, textSize, area, ...(options.lineShape === "stacked" ? { lineShape: "stacked" as const } : {}) })) {
       const n = numbers[lines.indexOf(l)] || lines.indexOf(l) + 1;
       warnings.push(`Line ${n} is too long for phone screens (${s.entry.style.name}); split it in ${path.basename(alignment.lyricsTxt)}: "${l.text}"`);
     }
@@ -1519,6 +1531,8 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         warnings.push(...composed.anchors.conflicts.map((c) => `${preset.name}: anchors: ${c}`));
       }
       composed.props = { ...composed.props, nextLine: preset.showNextLine };
+      // The theme's final hook: the video's last chorus larger, its last line larger still (src/line-shape.ts).
+      if (options.finalHook === "on" && composed.props.lyricEffects && composed.props.lyrics.length) composed.props = { ...composed.props, lyrics: withFinalHook(composed.props.lyrics) };
       warnings.push(...composed.warnings.map((w) => `${spec.name}: ${w}`));
       if (ytLayout) {
         const title = sh.brand.brand.titleFont;

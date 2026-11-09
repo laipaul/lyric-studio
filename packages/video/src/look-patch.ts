@@ -8,6 +8,7 @@ import type { FontFileRef } from "./font-files";
 import type { LyricVideoProps } from "./props";
 import type { PictureProps, TitleStyle } from "./picture";
 import { areaForLayout, BIG_HOOK_SCALE, type TextLayout } from "./text-layout";
+import { finalHookScales, type FinalHook, type LineBuild, type LineShape } from "./line-shape";
 
 export type PatchFace = { family: string; weight: number; italic: boolean; files: FontFileRef[] };
 export type LookPatch = {
@@ -25,6 +26,9 @@ export type LookPatch = {
   picture?: Omit<PictureProps, "coverSrc">; // the theme's grade, vignette, behind the words, background without a clip
   cards?: { hook: boolean; hookStyle: TitleStyle; end: boolean; endStyle: TitleStyle }; // the theme's hook / end card on or off and their style
   textLayout?: TextLayout; // the theme's text layout (src/text-layout.ts): the lyric area's height, Big hook's size
+  lineShape?: LineShape; // the theme's line shape, line build and final hook (src/line-shape.ts)
+  lineBuild?: LineBuild;
+  finalHook?: FinalHook;
 };
 
 const INTENSITY: readonly Intensity[] = ["subtle", "balanced", "expressive"];
@@ -97,7 +101,23 @@ export function patchLook(props: LyricVideoProps, patch: LookPatch | null, barFr
       if (patch.textLayout === "bighook") e.hookScale = BIG_HOOK_SCALE;
       else delete e.hookScale;
     }
+    if (patch.lineShape) {
+      if (patch.lineShape === "stacked") e.lineShape = "stacked";
+      else delete e.lineShape;
+    }
+    if (patch.lineBuild) {
+      if (patch.lineBuild === "build") e.lineBuild = "build";
+      else delete e.lineBuild;
+    }
     next = { ...next, lyricEffects: e };
+    if (patch.finalHook) {
+      // The final hook as the planner sets it: the last chorus of the video, its last line larger still.
+      const scales = patch.finalHook === "on" ? finalHookScales(next.lyrics) : new Map<number, number>();
+      next.lyrics = next.lyrics.map((l, i) => {
+        const { scale: _s, ...rest } = l;
+        return scales.has(i) ? { ...rest, scale: scales.get(i)! } : rest;
+      });
+    }
   }
   return next;
 }

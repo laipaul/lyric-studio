@@ -11,6 +11,8 @@ import type { LyricEffectsProps, LyricLineProps, TextCase } from "../props";
 import type { FontFaceInfo } from "./font-catalog";
 import { faceMeasure, inkOverflow, layoutWithFace } from "./measure";
 import { lineScale } from "../text-layout";
+import { breathsOf } from "../line-shape";
+import { applyTextCase } from "../lyrics";
 
 export const POP_MAX_SCALE = 1.02; // the pop animation's spring overshoots the final size slightly
 
@@ -40,7 +42,9 @@ export function measureLyrics(
     const a = areaOf(l);
     const fx = fonts.effects;
     const fitted = fx && a ? { ...a, right: a.left + restWidth(a.right - a.left, effectExtents(l.card?.effect ?? (l.isHook ? fx.hook : fx.verse), fx.verse, 30, fx.breathe, !!fx.chorusLift && !!l.isHook)) } : a;
-    const layout = layoutWithFace(l.text, face, fonts.textCase, Math.round(fonts.textSize * lineScale(l, fonts.effects?.hookScale)), fitted);
+    // The same rows as the render: the theme's stacked shape with the line's breaths (src/line-shape.ts).
+    const shape = fx?.lineShape === "stacked" ? { shape: "stacked" as const, breaths: breathsOf(l.words, applyTextCase(l.text, fonts.textCase).trim().split(/\s+/).length, 30) } : undefined;
+    const layout = layoutWithFace(l.text, face, fonts.textCase, Math.round(fonts.textSize * lineScale(l, fonts.effects?.hookScale)), fitted, shape);
     const measure = faceMeasure(face);
     const widest = Math.max(...layout.lines.map((line) => measure(line, layout.fontSize)));
     return { l, layout, widest, face };

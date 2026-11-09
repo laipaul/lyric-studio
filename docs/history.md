@@ -4,6 +4,31 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Bug fix: trimming on the timeline needed several tries ✅ (confirmed on the Windows PC, 8 Nov 2026)
+- **What the user found** (real song "Let My Love Carry You", Windows): "The trim of the clip doesn't work
+  effortlessly. I have to try several times."
+- **Causes (found in the code, fixed):**
+  1. The grab zones were too small: the line between two shots was a 12 px zone, invisible until hovered, so a press
+     a few px inside the shot started a slip instead of moving the cut. Now an 18 px zone centred on the cut
+     (the outer trims 16 px: 10 px into the shot, 6 outside), a faint line always visible (stronger on hover),
+     above the shots and the ⋯ menus (the menu moved 6 px left to give them room).
+  2. After the release the edit jumped back to its old place until the new plan arrived (seconds on a real song), so
+     it looked as if nothing happened and the user tried again. Now the cut / trim handle stays where it was dropped
+     (data-pending, a "saving…" mark, data-edit-saving) until the plan is there; a failed save puts it back and the
+     error shows as before. While it saves (or any other plan runs) no second drag, Undo or Redo starts.
+  3. The mouse listeners were added in an effect after the render, so a quick move or release right after the press
+     could be lost (a stuck drag). Now they start inside the pointerdown (components/pointer-track.ts), also end on
+     pointercancel and when the window loses focus (nothing is saved then), and stop text selection while
+     dragging. The same for the soundtrack window's drag.
+  4. A roll snapped to the nearest beat, so a drag under half a beat went back to the start and did nothing. Now
+     under a quarter beat the cut stays exactly (readout +0.00 s), past it goes to the next beat in the drag
+     direction (snapRollMs in packages/video/src/timeline-edits.ts); Alt stays free; the minimum shot length is kept.
+- **Rejected:** the shots' native drag-and-drop (ShotBlock is only a drop target, not draggable) and the click after
+  a drag (already swallowed by onRowClickCapture).
+- Tests: timeline-edits 16 (4 new, snapRollMs; with follow + storyboard 34 pass); storyboard e2e 137 checks pass (8 new:
+  grab zone 18 px, a press 6 px beside the cut grabs it, the handle stays dropped and marked saving, no second drag
+  meanwhile, it ends where dropped, a quick two-step drag is saved and Ctrl+Z takes it back).
+
 ### Shape: no Clip editor box; the song window on the timeline's song track; a ⋯ menu on each clip ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - Asked by the user (8 Nov 2026): "remove this clip editor box and focus on a simple trim directly on the clip
   itself"; "I wanted the rectangle on the song track itself, not a new one"; the clip's other settings "in a small

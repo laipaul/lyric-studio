@@ -1,4 +1,5 @@
 // Lyric timing and layout (pure functions, used by the composition and tests).
+import { stackLyric, type LineShape } from "./line-shape";
 import type { LyricLineProps, TextCase } from "./props";
 
 // The line on screen at `frame` (startFrame <= frame < endFrame), or null.
@@ -29,7 +30,7 @@ export function applyTextCase(text: string, textCase: TextCase): string {
 export type MeasureFn = (text: string, fontSize: number) => number;
 
 export type LyricLayout = {
-  lines: string[]; // 1-2 lines normally, 3 only as a last resort
+  lines: string[]; // the printed rows: 1-2 normally, 3 only as a last resort (stacked shape: up to 4 short rows)
   fontSize: number;
   tooLong: boolean; // needed 3 lines: the lyric line should be split in the lyrics file
 };
@@ -59,14 +60,20 @@ function balancedSplit(words: string[], count: number, width: (line: string) => 
 //   3. two balanced lines, font shrunk by up to (1 - minScale) (25%);
 //   4. last resort: three balanced lines at the smallest size, shrunk further only if needed to stay
 //      inside the lyric area. Never more than three lines. `tooLong` marks case 4.
+// The theme's stacked line shape (src/line-shape.ts) uses its own rows instead: 2-4 short rows.
 export function layoutLyric(
   text: string,
   fontSize: number,
   maxWidth: number,
   measure: MeasureFn,
   minScale = 0.75,
+  shape?: { shape?: LineShape; breaths?: readonly boolean[] },
 ): LyricLayout {
   const clean = text.trim().replace(/\s+/g, " ");
+  if (shape?.shape === "stacked") {
+    const s = stackLyric(clean, fontSize, maxWidth, measure, minScale, shape.breaths);
+    return { lines: s.rows, fontSize: s.fontSize, tooLong: s.tooLong };
+  }
   const words = clean.split(" ");
   const at = (size: number) => (line: string) => measure(line, size);
   const fitSize = (widest: number, size: number) => Math.floor(size * Math.min(1, maxWidth / widest) * 10) / 10;

@@ -15,6 +15,7 @@ import { applyTextCase, layoutLyric, type LyricLayout } from "./lyrics";
 import type { LyricArea } from "./platform";
 import { backingShadow, BOX_STYLE, type TextBacking } from "./picture";
 import { lineScale } from "./text-layout";
+import { breathsOf, buildRows } from "./line-shape";
 import type { LyricEffectsProps, LyricLineProps, StyleProps } from "./props";
 
 type Font = { family: string; weight: number; italic?: boolean };
@@ -81,12 +82,13 @@ export function LyricScene(props: {
               restWidth(area.right - area.left, effectExtents(l.card?.effect ?? (l.isHook ? effects.hook : effects.verse), effects.verse, 30, effects.breathe, !!effects.chorusLift && !!l.isHook)),
               (t, size) => measureText({ text: t, fontFamily: font.family, fontWeight: font.weight, fontSize: size, ...(font.italic ? { additionalStyles: { fontStyle: "italic" } } : {}) }).width,
               area.minScale,
+              effects.lineShape === "stacked" ? { shape: "stacked", breaths: breathsOf(l.words, applyTextCase(l.text, style.textCase).trim().split(/\s+/).length, fps) } : undefined,
             );
           })
         : null,
     // areaFor depends only on the props it closes over (lyric area / end screen)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ready, lyrics, style, props.hookFont, textSize, effects.hookScale, effects.hook, effects.verse, effects.breathe, effects.chorusLift],
+    [ready, lyrics, style, props.hookFont, textSize, effects.hookScale, effects.hook, effects.verse, effects.breathe, effects.chorusLift, effects.lineShape, fps],
   );
   const timeline = useMemo(
     () =>
@@ -159,6 +161,10 @@ export function LyricScene(props: {
         // Emphasis word: the line's key word in the hook font, a touch bigger, in the accent colour.
         const allWords = layout.lines.join(" ").split(" ");
         const emph = effects.emphasis && item.role !== "next" ? emphasisWord(allWords, line.words?.length === allWords.length ? line.words : null) : -1;
+        // Build up (theme lineBuild "build"): each row appears as its first word is sung and stays.
+        const rowShown = effects.lineBuild === "build" && item.role !== "next" && layout.lines.length > 1
+          ? buildRows(layout.lines.map((r) => r.split(" ").length), wordTimings(timeline, item.index).map((wt) => wt.startFrame), frame, Math.max(0, (line.stampFrame ?? line.startFrame) - line.startFrame))
+          : null;
         const hookFace = props.hookFont ? { fontFamily: `"${props.hookFont.font}", sans-serif`, fontWeight: props.hookFont.weight, fontStyle: props.hookFont.italic ? "italic" : "normal" } : {};
         const emphStyle: CSSProperties = { ...hookFace, color: effects.accent };
         return (
@@ -190,7 +196,7 @@ export function LyricScene(props: {
             {kinetic ?? (
             <div style={look.slice ? { clipPath: "inset(0 0 50% 0)", transform: `translateX(${look.slice.toFixed(1)}px)` } : undefined}>
             {layout.lines.map((text, r) => (
-              <div key={r} style={{ whiteSpace: "nowrap", ...(props.backing === "box" && item.role !== "next" ? BOX_ROW : {}), ...(look.reveal !== undefined ? rowMask(layout.lines, r, look.reveal) : {}) }}>
+              <div key={r} data-row={r} style={{ whiteSpace: "nowrap", ...(props.backing === "box" && item.role !== "next" ? BOX_ROW : {}), ...(look.reveal !== undefined ? rowMask(layout.lines, r, look.reveal) : {}), ...(rowShown && rowShown[r] < 1 ? { opacity: rowShown[r], transform: `translateY(${((1 - rowShown[r]) * 0.18).toFixed(4)}em)` } : {}) }}>
                 {item.words
                   ? text.split(" ").map((word, k) => {
                       const isEm = w === emph;
@@ -251,7 +257,7 @@ export function LyricScene(props: {
               // Slice: the bottom half, pushed the other way.
               <div aria-hidden data-slice style={{ position: "absolute", inset: 0, clipPath: "inset(50% 0 0 0)", transform: `translateX(${(-look.slice).toFixed(1)}px)` }}>
                 {layout.lines.map((text, r) => (
-                  <div key={r} style={{ whiteSpace: "nowrap" }}>
+                  <div key={r} style={{ whiteSpace: "nowrap", ...(rowShown && rowShown[r] < 1 ? { opacity: rowShown[r] } : {}) }}>
                     {text}
                   </div>
                 ))}
@@ -273,7 +279,7 @@ export function LyricScene(props: {
                 }}
               >
                 {layout.lines.map((text, r) => (
-                  <div key={r} style={{ whiteSpace: "nowrap" }}>
+                  <div key={r} style={{ whiteSpace: "nowrap", ...(rowShown && rowShown[r] < 1 ? { opacity: rowShown[r] } : {}) }}>
                     {text}
                   </div>
                 ))}

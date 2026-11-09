@@ -4,6 +4,7 @@ import * as fontkit from "fontkit";
 
 import { DEFAULT_LYRIC_AREA, type LyricArea } from "../platform";
 import { applyTextCase, layoutLyric, type LyricLayout, type MeasureFn } from "../lyrics";
+import type { LineShape } from "../line-shape";
 import type { TextCase } from "../props";
 import type { FontFaceInfo } from "./font-catalog";
 
@@ -77,17 +78,18 @@ export function inkOverflow(face: FontFaceInfo, lines: readonly string[], fontSi
   }
 }
 
-export function layoutWithFace(text: string, face: FontFaceInfo, textCase: TextCase, textSize: number, area: LyricArea = DEFAULT_LYRIC_AREA): LyricLayout {
-  return layoutLyric(applyTextCase(text, textCase), textSize, area.right - area.left, faceMeasure(face), area.minScale);
+// shape: the theme's stacked line shape (src/line-shape.ts), with the line's breaths when known.
+export function layoutWithFace(text: string, face: FontFaceInfo, textCase: TextCase, textSize: number, area: LyricArea = DEFAULT_LYRIC_AREA, shape?: { shape?: LineShape; breaths?: readonly boolean[] }): LyricLayout {
+  return layoutLyric(applyTextCase(text, textCase), textSize, area.right - area.left, faceMeasure(face), area.minScale, shape);
 }
 
-export type LyricFonts = { main: FontFaceInfo; hook?: FontFaceInfo | null; textCase: TextCase; textSize: number; area?: LyricArea };
+export type LyricFonts = { main: FontFaceInfo; hook?: FontFaceInfo | null; textCase: TextCase; textSize: number; area?: LyricArea; lineShape?: LineShape };
 
 // Lines that need the 3-line last resort (hook lines measured with the hook font).
 export function tooLongLines<T extends { text: string; isHook?: boolean }>(lines: readonly T[], fonts: LyricFonts): T[] {
   return lines.filter((l) => {
     const face = l.isHook && fonts.hook ? fonts.hook : fonts.main;
-    return layoutWithFace(l.text.replace(/^\*\s+/, ""), face, fonts.textCase, fonts.textSize, fonts.area).tooLong;
+    return layoutWithFace(l.text.replace(/^\*\s+/, ""), face, fonts.textCase, fonts.textSize, fonts.area, fonts.lineShape ? { shape: fonts.lineShape } : undefined).tooLong;
   });
 }
 

@@ -55,4 +55,5 @@ export * from "./colour-ref";
 export * from "./theme-reach";
 export * from "./cover-palette";
 export * from "./text-layout";
+export * from "./line-shape";
 export * from "./theme-moods";

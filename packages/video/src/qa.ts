@@ -6,6 +6,7 @@ import { cinematicBarHeight, DEFAULT_FORMAT, DEFAULT_LYRIC_AREA, DEFAULT_SAFE_ZO
 import type { AnchorReport } from "./compose";
 import type { LoopResult } from "./loop";
 import { MAX_LINES } from "./lyrics";
+import { STACK_MAX_ROWS } from "./line-shape";
 import type { LyricVideoProps } from "./props";
 import { RECENT_WINDOW } from "./shots";
 import { logoCornerProblem } from "./youtube";
@@ -29,7 +30,7 @@ export type QaLyric = {
 };
 
 export type QaInput = {
-  props: Pick<LyricVideoProps, "shots" | "lyrics" | "cinematicBars" | "durationInFrames" | "format" | "safeZone" | "logo">;
+  props: Pick<LyricVideoProps, "shots" | "lyrics" | "cinematicBars" | "durationInFrames" | "format" | "safeZone" | "logo" | "lyricEffects">;
   shotClips: string[]; // clip file name of each shot
   poolSize: number; // clips in the collection
   lyrics: QaLyric[]; // lines visible in this variation
@@ -187,11 +188,13 @@ export function runQa(input: QaInput): QaReport {
   }
 
   // 4. Lyric lines shown on more than 2 lines.
-  const tall = input.lyrics.filter((l) => l.lines > MAX_LINES);
+  // The theme's stacked line shape (src/line-shape.ts) is made of up to 4 short rows by design.
+  const rowLimit = props.lyricEffects?.lineShape === "stacked" ? STACK_MAX_ROWS : MAX_LINES;
+  const tall = input.lyrics.filter((l) => l.lines > rowLimit);
   checks.push({
     name: "Lyric lines over 2 lines",
     ok: tall.length === 0,
-    details: tall.map((l) => `line ${l.number} "${l.text}" needs ${l.lines} lines; split it in lyrics.txt`),
+    details: tall.map((l) => `line ${l.number} "${l.text}" needs ${l.lines} ${rowLimit === MAX_LINES ? "lines" : "rows"}; split it in lyrics.txt`),
   });
 
   // 5. Shots shorter than 0.8 s.

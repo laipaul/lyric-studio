@@ -4,6 +4,31 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Theme Engine v2 on HyperFrames, step 2b part 2: stacked lines, build up, bigger final chorus, theme-rules.md ✅ (to verify on the Windows PC)
+- **Three new theme choices** in Shape → Theme → Text, under Text layout (theme.json `lineShape`, `lineBuild`,
+  `finalHook`; src/line-shape.ts; the viewer shows each click at once, Save keeps it):
+  - **Line shape: Stacked** (Subtitle = as before): each lyric line in short rows of 1-3 words, 2-4 rows,
+    never padded (a one- or two-word line stays on one row). Breaks where the singer breathes (a pause of
+    0.15 s between aligned words), never one word alone on the last row, never right after a small word
+    ("the", "my", "to", "le", "la", "mon", "l'" ...): e.g. "Hold me close / until the light",
+    "Je t'attends / sous la pluie / ce soir". Rows fit the width; only a row that cannot fit shrinks the size.
+  - **Lines appear: Build up** (Whole line = as before): the first row comes with the line, each next row
+    appears as its first word comes on screen (0.2 s fade, a slight rise into its place) and stays until the
+    whole line leaves. Independent of the letter animation (the typewriter still types as sung).
+  - **Bigger final chorus: On**: the video's last chorus 1.3x, its last line 1.5x (a card's own size still
+    wins; the usual fitting keeps it inside the safe area).
+- **Same drawing everywhere:** the rows and build-up are in the shared text code, so the Shape preview, the
+  current renderer and HyperFrames draw exactly the same. Checked by a new `hf-parity` case with all three on
+  (typewriter verses, karaoke hook): whole 0.9915 (lowest 0.9910), words 0.9921, cards 0.9916 = the same
+  picture, frame by frame. QA allows up to 4 rows for the stacked shape (subtitles: still 2).
+- **docs/theme-rules.md** started: LIN-01 .. LIN-06 (the rules above), each with its value, why, the test and
+  where it came from.
+- Tests: line-shape (rows, breaths, orphans, small words, fitting, build-up timing, final chorus, the viewer
+  patch, QA), hf-parity (stacked case); the whole video suite passes (1025 tests).
+- **To check on the PC:** Shape → Theme → Edit theme → Text: Line shape Stacked, Lines appear Build up,
+  Bigger final chorus On; the viewer shows short stacked rows building up and the last chorus larger. Then
+  make the Reel with `--engine hyperframes` (below) and compare.
+
 ### Bug fix: the Reel's title still touched the first lyric — now checked on the drawn preview ✅ (confirmed on the Windows PC in Shape, 8 Nov 2026)
 - Seen again after the last fix (Let My Love Carry You, Shape → Reels 1080x1920, Title opening on, tagline set, first line on screen from 0:00.6, at 0:02.7): title "LET MY LOVE / CARRY YOU" at ~y 430-560 (not moved), byline at ~625-645 and the first lyric (hook font, two rows) at ~640-770: byline and lyric collided.
 - Ground truth first: new browser test `apps/studio/e2e/title-opening.e2e.ts` (Playwright; a song whose Reels part starts exactly on a sung line, titleOpening on, tagline, script hook font Kaushan Script). It seeks Shape's player to 1.5 / 2.1 / 2.7 / 3.3 / 3.9 s and reads the boxes of the drawn `[data-text-card]` rows and `[data-lyric]` text inside the player's frame, in composition pixels (player scale read from the 1080x1920 frame). It failed on the old code (hook effect "ascend": title top 345 size 84 planned; drawn title 345-597, byline 618-675, lyric 626-792 = byline 49 px into the lyric, at every sample 1.5-3.9 s; "floating": byline 585-633 vs lyric 633-799, touching). After the fix: ascend title 345-547, byline 568-613, lyric 626-792 (13 px clear); floating title 354-524, byline 542-581, lyric 633-799 (52 px clear); default effect 272-464 / 484-527 vs 626 (99 px); Big hook 271-453 / 472-513 vs 602. Cards still on screen at 3.9 s in every case.
@@ -135,33 +160,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   swap re-plans with the same cuts, Generate renders the same shots, swapping again gives it back); storyboard.e2e.ts
   (lift shot 1, no drop on the loop ending, swap with shot 2, cuts unmoved, clips.json order, the anchor followed, Esc,
   Ctrl+Z): run in the cloud session, all 147 browser checks and 31 unit tests pass.
-
-### Bug fix: trimming on the timeline needed several tries ✅ (confirmed on the Windows PC, 8 Nov 2026)
-- **What the user found** (real song "Let My Love Carry You", Windows): "The trim of the clip doesn't work
-  effortlessly. I have to try several times."
-- **Causes (found in the code, fixed):**
-  1. The grab zones were too small: the line between two shots was a 12 px zone, invisible until hovered, so a press
-     a few px inside the shot started a slip instead of moving the cut. Now an 18 px zone centred on the cut
-     (the outer trims 16 px: 10 px into the shot, 6 outside), a faint line always visible (stronger on hover),
-     above the shots and the ⋯ menus (the menu moved 6 px left to give them room).
-  2. After the release the edit jumped back to its old place until the new plan arrived (seconds on a real song), so
-     it looked as if nothing happened and the user tried again. Now the cut / trim handle stays where it was dropped
-     (data-pending, a "saving…" mark, data-edit-saving) until the plan is there; a failed save puts it back and the
-     error shows as before. While it saves (or any other plan runs) no second drag, Undo or Redo starts.
-  3. The mouse listeners were added in an effect after the render, so a quick move or release right after the press
-     could be lost (a stuck drag). Now they start inside the pointerdown (components/pointer-track.ts), also end on
-     pointercancel and when the window loses focus (nothing is saved then), and stop text selection while
-     dragging. The same for the soundtrack window's drag.
-  4. A roll snapped to the nearest beat, so a drag under half a beat went back to the start and did nothing. Now
-     under a quarter beat the cut stays exactly (readout +0.00 s), past it goes to the next beat in the drag
-     direction (snapRollMs in packages/video/src/timeline-edits.ts); Alt stays free; the minimum shot length is kept.
-- **Rejected:** the shots' native drag-and-drop (ShotBlock is only a drop target, not draggable) and the click after
-  a drag (already swallowed by onRowClickCapture).
-- Tests: timeline-edits 16 (4 new, snapRollMs; with follow + storyboard 34 pass); storyboard e2e 137 checks pass (8 new:
-  grab zone 18 px, a press 6 px beside the cut grabs it, the handle stays dropped and marked saving, no second drag
-  meanwhile, it ends where dropped, a quick two-step drag is saved and Ctrl+Z takes it back).
-
-
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -395,7 +393,7 @@ Theme v2: 2b part 2 (as planned) → **2d → 2e-1 → 2e-2 → 2c** → **M1 ga
 **Theme Engine v2 on HyperFrames (adopted 6 Nov 2026; plan approved the same day).** The order is the plan
 docs/theme-engine-v2-hyperframes-plan.md, section 6: step 0 ("break." fix, done) → 1 (renderer seam; D1 decided = (b), everything
 in one pass; its speed and frame accuracy checked on the PC, causes fixed, (a) only a temporary fallback; zero network
-calls when rendering; LGPL FFmpeg with NVENC timed; done: B 92% of Remotion's time on the PC) → 2a (picture for Reels, done, confirmed on the PC) → 2b (part 1 done: the lyrics and cards with the same code; part 2 next: stacked lines, bigger final hook, theme-rules.md) →
+calls when rendering; LGPL FFmpeg with NVENC timed; done: B 92% of Remotion's time on the PC) → 2a (picture for Reels, done, confirmed on the PC) → 2b (part 1 done: the lyrics and cards with the same code; part 2 done 9 Nov 2026, to verify: stacked lines, build up, bigger final hook, theme-rules.md) →
 2b (the Reel word-by-word theme's text) → the storyboard steps 2d → 2e-1 → 2e-2 → 2c (above) → **M1: the Reel word-by-word theme ("Here with Me") usable for real
 releases** → the storyboard steps 2f → 2g → 2h → 2i → the spec's T1-T4 → 3-8, the ballad and Pômé themes. GSAP / FFmpeg licences non-blocking: a short
 note (docs/licences.md) before step 8. It replaces the T-list below as the order.

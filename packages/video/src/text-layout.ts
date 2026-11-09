@@ -28,7 +28,8 @@ export function areaForLayout(area: LyricArea, layout: TextLayout | undefined, l
   return { ...area, centerY: Math.round(area.top + (area.bottom - area.top) * at) };
 }
 
-// A line's size factor: a textboard card's own scale wins; else Big hook's on chorus lines.
-export function lineScale(l: { isHook?: boolean; card?: { scale?: number } | null }, hookScale = 1): number {
-  return l.card?.scale ?? (l.isHook ? hookScale : 1);
+// A line's size factor: a textboard card's own scale wins; then the final hook's (line.scale); else Big
+// hook's on chorus lines.
+export function lineScale(l: { isHook?: boolean; scale?: number; card?: { scale?: number } | null }, hookScale = 1): number {
+  return l.card?.scale ?? l.scale ?? (l.isHook ? hookScale : 1);
 }

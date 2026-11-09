@@ -43,6 +43,7 @@ export type LyricLineProps = {
   sungEndFrame?: number;
   words?: { text: string; startFrame: number; endFrame: number }[];
   enterFrame?: number; // after a long instrumental gap: it fades in from here (brand motion.gapLeadInS)
+  scale?: number; // the theme's final hook (src/line-shape.ts finalHookScales): x the text size; a card's own scale wins
   // The line's textboard card (src/textboard.ts): its id, and the look it sets for this line only.
   card?: {
     id: string;
@@ -102,6 +103,8 @@ export type LyricEffectsProps = {
   emphasis?: boolean; // the key word of each line in the hook font, bigger, in the accent (src/effects/accents.ts emphasisWord)
   downbeats?: number[];
   hookScale?: number; // the theme's text layout "Big hook": chorus lines this much larger (src/text-layout.ts)
+  lineShape?: "stacked"; // the theme's line shape (src/line-shape.ts): short rows of 1-3 words; absent: subtitle
+  lineBuild?: "build"; // each row appears as it is sung and stays until the line leaves; absent: the whole line
 };
 
 export type StillProps = { src: string; startFrame: number; endFrame: number; fadeFrames: number; motion?: KenBurns; section: string };
