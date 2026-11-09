@@ -308,12 +308,96 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 
 ## Next
 
+**Storyboard architecture (agreed with the user, 9 Nov 2026; part of Theme v2, not a new phase).** Order inside
+Theme v2: 2b part 2 (as planned) → **2d → 2e-1 → 2e-2 → 2c** → **M1 gate** (rendered from the storyboard) →
+**2f → 2g → 2h → 2i** → T1-T4 and steps 3-8 as planned. Each step: plan first, the user tests on the PC, stop.
+- **What it is.** The storyboard = Prepare (the user's inputs, song level) + Shape's plan (what the app decides,
+  per video). Nothing is built next to them: Shape's plan (StoryboardView / StoryShot, a dry run of makeVideos)
+  is saved as one versioned file per video, `<song folder>\storyboards\<platform>-<n>.json` (schemaVersion 1),
+  plus `<platform>-<n>.previous.json` (one step back). Each run's manifest keeps a copy of the storyboard it
+  rendered. Relative names only, no absolute paths (keeps a future one-off installer possible).
+- **Contents (v1).** inputs (fingerprints of the Song / Vocals / Lyrics slots, the alignment used, clips.json);
+  output (platform, 9:16 / 16:9, range full or startMs-endMs with its reason, theme name + version); analysis
+  (bpm, beats, downbeats, sections: hook / verse from "* " until T1, then the Suno tags); text items with stable
+  ids (kind lyric | story | card; lyric ids = textboard's `line-<n>` matched by words; cards e.g. card-cover);
+  shots with stable ids (sh-NN: clip + clip fingerprint, trim in/out, startMs/endMs, transitionIn, motion
+  ("theme" | "freeze"), effects, carries = a text item id, locked, assessment notes); the predicted assessment;
+  history (generatedAt, app commit, previous, last change summary). All times are integer song milliseconds
+  (audio = master clock; video time = song time - range.startMs); frames use the planner's own rounding
+  (round trip tested frame-exact). Later, without changing v1: kind "ep" with segments (EP film + note cards),
+  `<platform>-<n>.suggest.json` for AI Suggest (refers to shot ids, accepted shot by shot as locked edits).
+  Not in v1: history beyond `.previous`, field-level provenance (an "Explain" view can compute it later).
+- **Song level stays song level:** slots (`.studio\files.json`, v2), lyric timing (alignment + hints.lrc
+  nudges, signed off; a storyboard shows it but never holds its own copy, `timing: "stem" | "hand" | "story"`),
+  clip order + clip trims (clips.json, mechanism unchanged), card looks (textboard.json), theme and song.json
+  settings with their locks.
+- **Per video (D3):** moved cuts, slips, freeze, swaps, carries: this video only. The existing clips.json cuts /
+  slips are imported once into each storyboard as locked fields; anchors become a locked `carries`.
+- **One render path:** storyboard → LyricVideoProps (the contract, one pure compile) → HyperFrames for preview
+  (Shape viewer, low res / fps, same composition) and export. Make never plans again at render time (today it
+  does: the bypass this removes). **Remotion is frozen as is** (no adapter: it reads the same props), used only
+  for what hyperframesGaps() lists (YouTube layouts, Canvas, logo…) until step 6, the reason said on the video;
+  plus a one-click "Render with Remotion" escape hatch on studio Reels until the M1 gate passes.
+- **Three layers:** global quality rules (platforms.json safe zones incl. Instagram's UI areas, Craft Rules,
+  export specs) adjust and report ("Done for you") only app-generated values and only WARN on locked ones (D7);
+  Theme (look and behaviour, referenced by name only); storyboard (per-video decisions; locked values always
+  beat the Theme). The Reverse Engineer writes only themes\<name>\theme.json + analysis.json, never storyboards.
+- **Locks and regeneration.** A change made in Shape locks that field automatically; ↺ Automatic unlocks.
+  Regeneration rewrites only unlocked fields (locked ones are fixed points, like anchors today); shot ids kept
+  by same clip + most overlap (the 200 ms matching of timeline-edits.ts), line ids by the textboard matcher;
+  the old file becomes .previous (atomic write), "Back to previous version" swaps them; input fingerprint
+  changes are reported, never regenerated silently; every regeneration shows a plain change summary ("12
+  lyric timings moved, 2 locked shots kept, clip 07 missing"). Conflicts (locked wins, flagged in the
+  assessment): (A) a new Theme's shot lengths: locked shots keep start / end / clip, only the gaps re-cut, a
+  note when a gap can't meet the theme's range; (B) re-sync moves a line a locked shot carries: the text follows
+  the sync (hand-set lines never move), a locked shot stays and gets "no longer carries line N" (a locked
+  `carries` alone: the shot follows the line); (C) clip deleted: its shots marked missing, render blocked with
+  Restore / re-plan; replaced (same name, new fingerprint): fitting trims kept with a note, a locked trim past
+  the new end blocks that shot; new clip: end of the order as today, "not used until you regenerate".
+- **Slots and input gate (Prepare).** Three slots (Song, Vocals, Lyrics) pre-filled by a simple guess (file
+  type, "vocal" in the name, most recent file), confirmed or replaced by dragging / picking, saved in
+  `.studio\files.json` v2 (confirmed, fingerprints, measured offset). Lyric sync waits for all three (Vocals
+  optional for instrumentals; Lyrics holds the story, no longer the fixed name story.txt). The existing stem
+  line-up (cross-correlation, mix-time copy, ±1% speed) stays the offset mechanism; the offset is shown in plain
+  words ("the vocal file starts 1.2 s later than your trimmed song, aligned automatically"). Blocking: an empty
+  slot; a stem that does not line up (no more silent Demucs fallback, D2) or that has no voice in it (a Suno
+  instrumental stem lines up with the mix too); missing / unreadable media; invalid timing; lyrics that don't
+  match the vocal = more than half of the sung lines below the aligner's existing "check this line" confidence
+  (0.5), checked against the user's four timed songs in 2c (D9). Explicit opt-in on a blocked Vocals slot:
+  "Use the app's own vocal separation for this song" (Demucs; never automatic, never silent; recorded in
+  files.json and shown on the slot). Advisory only (notes on the shot): low resolution, aspect mismatch, heavy
+  crop, softness, clip too short for its section. Old songs keep their stored timings and the fixed-name fallback.
+- **Approval view (Shape).** A numbered shot list as the default view: per shot a HyperFrames thumbnail with
+  its lyric / card, the time, the text it carries, 🔒 per locked choice, the notes; actions reorder, trim,
+  freeze, swap, lock / unlock, Regenerate, Back to previous version. The timeline stays under "Advanced timeline".
+- **Tests.** Golden: the manifest of the user's approved "Here with Me" Reel (copied by the user to
+  packages/video/test/golden/here-with-me-reels.manifest.json) → storyboard → props gives identical lyric and
+  cut frames. Slots: pre-fill, manual replacement, trimmed mix vs untrimmed stem offset, a stem from another
+  song, an instrumental stem (synthetic Suno-named files in the cloud; the user's two full Suno stem sets in
+  workspace\test-suno\ on the PC, names to be sent by the user). Regeneration keeps locked fields and ids; the
+  change summary matches a computed diff; ms ↔ frames round trip.
+- **Steps:**
+  - **2d Save the plan:** storyboards written for every planned video, today's edits imported; any moved cut or
+    slip that cannot be matched to a shot is listed for the user by song and shot (never dropped silently); no
+    visible change otherwise; golden timing test.
+  - **2e-1 Make reads the storyboard, still on Remotion:** Make, release pack and preview compile from the
+    file; output identical to today (checked against the golden manifest and a re-render).
+  - **2e-2 Studio Reels on HyperFrames:** fallback with the reason for what it can't draw; one-click "Render
+    with Remotion" until M1.
+  - **2c Slots and the blocking gate** (above), incl. the opt-in separation button and the D9 threshold.
+  - **M1 gate** as in the plan, now rendered from the storyboard.
+  - **2f Locks:** Shape's roll / slip / trim / freeze / swap / carries write into the storyboard and lock.
+  - **2g Safe regeneration:** merge, conflict notes, change summary, Back to previous version.
+  - **2h Per-shot assessment:** the advisory checks on each shot; blocking items in Prepare's to-do list.
+  - **2i Approval view:** the numbered shot list; the Shape viewer on the HyperFrames composition (the Shape
+    part of plan step 7).
+
 **Theme Engine v2 on HyperFrames (adopted 6 Nov 2026; plan approved the same day).** The order is the plan
 docs/theme-engine-v2-hyperframes-plan.md, section 6: step 0 ("break." fix, done) → 1 (renderer seam; D1 decided = (b), everything
 in one pass; its speed and frame accuracy checked on the PC, causes fixed, (a) only a temporary fallback; zero network
 calls when rendering; LGPL FFmpeg with NVENC timed; done: B 92% of Remotion's time on the PC) → 2a (picture for Reels, done, confirmed on the PC) → 2b (part 1 done: the lyrics and cards with the same code; part 2 next: stacked lines, bigger final hook, theme-rules.md) →
-2b (the Reel word-by-word theme's text) → **M1: the Reel word-by-word theme ("Here with Me") usable for real
-releases** → the spec's T1-T4 → 3-8, the ballad and Pômé themes. GSAP / FFmpeg licences non-blocking: a short
+2b (the Reel word-by-word theme's text) → the storyboard steps 2d → 2e-1 → 2e-2 → 2c (above) → **M1: the Reel word-by-word theme ("Here with Me") usable for real
+releases** → the storyboard steps 2f → 2g → 2h → 2i → the spec's T1-T4 → 3-8, the ballad and Pômé themes. GSAP / FFmpeg licences non-blocking: a short
 note (docs/licences.md) before step 8. It replaces the T-list below as the order.
 
 
