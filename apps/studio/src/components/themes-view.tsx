@@ -7,7 +7,7 @@
 // with Restore) and "More like this".
 import { ChevronDown, Pencil, Plus, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { backingShadow, BOX_STYLE, fallbackBackground, gradeLook, isTextLayout, pictureOf, THEME_MOODS, TILE_LOOP_FRAMES, tileLyrics, vignetteBackground, type LookPreviewProps } from "@lyric/video";
 import type { ThemeCard, ThemesPageData } from "@lyric/video/style";
@@ -186,7 +186,7 @@ export function ThemesView() {
 
 // The theme playing over its cover: a video cover loops under the words (the words drawn on top, transparent);
 // a picture cover (or none) is drawn by the preview itself.
-function CoverPlayer({ theme, input, gradeFilter, durationInFrames }: { theme: ThemeCard; input: LookPreviewProps; gradeFilter?: string; durationInFrames?: number }) {
+function CoverPlayer({ theme, input, gradeFilter, durationInFrames }: { theme: Pick<ThemeCard, "background" | "backgroundVideo">; input: LookPreviewProps; gradeFilter?: string; durationInFrames?: number }) {
   if (!theme.backgroundVideo) return <PreviewPlayer input={input} durationInFrames={durationInFrames} />;
   return (
     <div className="absolute inset-0">
@@ -198,8 +198,11 @@ function CoverPlayer({ theme, input, gradeFilter, durationInFrames }: { theme: T
   );
 }
 
-// One tall tile: the theme on two lyric lines over a dark frame in its accent; pointing at it plays it.
-function ThemeTile({ theme, data, onOpen }: { theme: ThemeCard; data: ThemesPageData; onOpen: () => void }) {
+// One tall tile: the theme on two lyric lines over a dark frame in its accent; pointing at it plays it. Also
+// Shape's theme picker (Look → Change): there with the song's own lines, a "Selected" / "Previewing" label in
+// place of the credit line, and its own data attributes.
+type TileTheme = Pick<ThemeCard, "name" | "look" | "users"> & Partial<Pick<ThemeCard, "author" | "brandDefault" | "background" | "backgroundVideo">>;
+export function ThemeTile({ theme, data, onOpen, label, pressed, attrs }: { theme: TileTheme; data: Pick<ThemesPageData, "fonts" | "sampleLines">; onOpen: () => void; label?: ReactNode; pressed?: boolean; attrs?: Record<string, string> }) {
   const [playing, setPlaying] = useState(false);
   const v = theme.look as Record<string, unknown>;
   const accent = String(v.accentColour ?? "#E8A3B5");
@@ -209,8 +212,8 @@ function ThemeTile({ theme, data, onOpen }: { theme: ThemeCard; data: ThemesPage
   const layout = isTextLayout(v.textLayout) ? v.textLayout : "centre";
   const fam = (role: "verse" | "hook") => ({ fontFamily: `"${String(v[`${role}Font`])} preview", serif`, fontWeight: Number(v[`${role}Weight`] ?? 400), fontStyle: v[`${role}Italic`] === true ? "italic" : "normal" });
   return (
-    <button type="button" data-themes-tile={theme.name} onClick={onOpen} onMouseEnter={() => setPlaying(true)} onMouseLeave={() => setPlaying(false)} onFocus={() => setPlaying(true)} onBlur={() => setPlaying(false)} className="group flex min-w-0 flex-col gap-1.5 text-left">
-      <div className="relative w-full overflow-hidden rounded-lg border bg-black group-hover:border-foreground/40" style={{ aspectRatio: "9 / 16" }}>
+    <button type="button" {...(attrs ?? { "data-themes-tile": theme.name })} aria-pressed={pressed} onClick={onOpen} onMouseEnter={() => setPlaying(true)} onMouseLeave={() => setPlaying(false)} onFocus={() => setPlaying(true)} onBlur={() => setPlaying(false)} className="group flex min-w-0 flex-col gap-1.5 text-left">
+      <div className={cn("relative w-full overflow-hidden rounded-lg border bg-black group-hover:border-foreground/40", pressed && "border-brand ring-brand ring-1")} style={{ aspectRatio: "9 / 16" }}>
         {playing ? (
           // A tight ~3 s loop of one line, moving at once (the chorus line in Big hook).
           <CoverPlayer theme={theme} gradeFilter={grade.filter} input={{ ...themePreview(v, data.fonts, data.sampleLines, theme.background ?? null), lyrics: tileLyrics(layout === "bighook" ? data.sampleLines[1] || "Your chorus here" : data.sampleLines[0] || "Your lyric line here", layout === "bighook") }} durationInFrames={TILE_LOOP_FRAMES} />
@@ -238,12 +241,16 @@ function ThemeTile({ theme, data, onOpen }: { theme: ThemeCard; data: ThemesPage
       </div>
       <span className="flex min-w-0 items-center gap-1.5">
         <span className="truncate text-sm font-medium">{theme.name}</span>
-        <ThemeReachBadge users={theme.users} />
+        {label === undefined ? <ThemeReachBadge users={theme.users} /> : null}
       </span>
-      <span className="text-muted-foreground -mt-1 truncate text-[11px]">
-        {theme.author ? `by ${theme.author}` : ""}
-        {theme.brandDefault !== null ? " · new songs start on it" : ""}
-      </span>
+      {label === undefined ? (
+        <span className="text-muted-foreground -mt-1 truncate text-[11px]">
+          {theme.author ? `by ${theme.author}` : ""}
+          {theme.brandDefault !== null && theme.brandDefault !== undefined ? " · new songs start on it" : ""}
+        </span>
+      ) : (
+        label
+      )}
     </button>
   );
 }

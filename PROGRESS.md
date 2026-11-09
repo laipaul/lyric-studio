@@ -4,6 +4,37 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Shape: change a video's theme from the Look bar (preview, then Apply) ✅ (to verify on the Windows PC)
+- **Principle (in CLAUDE.md):** "Shape = work on this video. Theme = manage reusable looks."
+- **Look bar** at the top of Shape's panel (every panel except Theme): the song's theme name, ONE mark
+  "Customized for this song" (only for a look made for this song: "<song> look" or "Made from X for <song>",
+  used by no other song) and **Change**. No Edit / New theme, no second badge there.
+- **Change** opens a searchable theme picker (name, fonts, effects): the Themes page's tall tiles, the whole card
+  clickable, the song's own first lines, the song's theme marked "✓ Selected". A click only **previews** the theme
+  in the viewer (the planned video, or the stand-in preview); nothing is saved, the storyboard is untouched.
+  **Apply** uses it for the song and closes the picker; **Cancel** (or Esc, or another panel) puts the look back.
+- **Storyboard safety (what was built: the simple note + Cancel, not 2g's summary):** a theme holds no pacing
+  field (shot length, transitions, pace shift, ending, section and length are the song's own), so applying one
+  re-paces nothing. Tested on a real song folder (test/theme-apply.test.ts): a moved cut and a slip, then a theme
+  with every text and card choice changed (stacked lines, build up, big hook, bigger final chorus, hook and end
+  cards, other effects, colours, grade): every shot (id, clip, start, end, trim, speed, transition, locks, anchor),
+  every lyric time, the range, beats and sections come back identical; only the storyboard's theme name changes.
+  The note above Apply says so. Leaving a look customized for this song asks first ("Use X" / "Keep Y"); that look
+  stays a theme, nothing is deleted.
+- **The Theme panel (rail → Look → Theme) manages themes only:** "Use for this song" on its tiles and "Change
+  theme ↓" are removed (they switched the theme at once, without preview or Cancel); Edit theme, New theme,
+  Rename, Duplicate, Delete, Restore stay. The Themes page (header) keeps "Use this theme for the song".
+- **Panel width:** 320-400 px (28% of the window: ~358 px at 1280, ~382 px at 1366, 400 px from 1430), was 340.
+- **Note:** the theme belongs to the song, so Apply changes the look of every video of the song (all platforms).
+- Tests: theme-apply (2); song-stages.e2e.ts new checks (Look bar place and contents, picker, Selected, search,
+  preview without saving, Cancel, Apply; the Theme panel has no Use for this song) all pass; storyboard.e2e.ts and
+  themes.e2e.ts all pass; storyboard-save, storyboard-file, storyboard, storyboard-edit, themes, style pass; tsc
+  clean; pnpm build ok. **Older, not from this step:** song-stages.e2e.ts "This song: Card text first …" fails
+  before and after it (the This song panel also lists Line shape, Lines appear, Bigger final chorus since 2b part 2).
+- **To check on the PC:** Shape → open This song (or Clips, Automatic …): the Look bar on top; Change → click a
+  theme: the viewer shows it, the song.json still has the old one; Cancel: back; Change → a theme → Apply: the
+  Look bar shows the new name and the video is planned again with the same shots and cuts.
+
 ### Theme v2 storyboard, step 2d: the plan of every video saved as its storyboard file ✅ (to verify on the Windows PC)
 - **The plan you see in Shape is now a file:** `<song folder>\storyboards\<platform>-<n>.json` (e.g.
   `storyboards\reels-1.json`), written whenever Shape plans that video with the song's own clips. The agreed
@@ -154,19 +185,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Measured in the browser test: the swap's new plan 0.9-1.4 s after the drop (was 2.9 s with the one-off planner).
 - Tests: storyboard.e2e.ts (+1: the two shots show each other's clip right after the drop): run in the cloud
   session, all 148 checks pass (also with LYRIC_PLANNER=oneoff, the fallback).
-
-### Shape timeline: a taller clip strip, thinner rows above it ✅ (confirmed on the Windows PC, 8 Nov 2026)
-- Asked by the user (8 Nov 2026): "the video strip is too squashed and I can barely see the video; maybe make the
-  timeline thinner to save space".
-- **The clips row is 96 px** (was 68): each clip shows its picture as a film strip in its own shape (repeated along
-  the shot, as editors do), no longer cropped and darkened; the name and times sit on a thin dark band at the bottom,
-  the badges at the top.
-- **Thinner rows above it**, so the timeline keeps its height and the viewer grows a little: the time ruler and the
-  bars on ONE 20 px line (asked by the user: "times and bars together"; were 20 + 24 px): the times at the top, each
-  bar a small pink number on its own tick at the bottom, the choruses shaded behind; the song track 24 px (28), title
-  cards 20 px (24), lyric lines 32 px (40).
-- Tests: storyboard.e2e.ts unchanged (the viewer 353 px on 1366×768, was 341; 18 px under the command bar): run in the
-  cloud session, all 147 checks pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

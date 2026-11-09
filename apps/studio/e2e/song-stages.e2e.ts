@@ -423,8 +423,37 @@ async function main() {
     await page.waitForSelector("[data-theme-editing='Night Drive']");
     check(readRecipe(recipe).theme === "Night Drive" && loadTheme(wsDir, "Night Drive").look.verseEffect === "typewriter:30", "+ New theme: named first, from the chosen theme, the song uses it, the editor opens");
     await page.click("[data-theme-cancel]");
-    // A tile: Use for this song; its ⋯: Delete (an unused theme) and Restore.
-    check(!!(await page.$(`[data-theme-use="${shared}"]`)) && !(await page.$("[data-theme-use='Night Drive']")), "the other tiles offer 'Use for this song'");
+    // The Theme panel manages themes only: no "Use for this song" on its tiles (before 2e-1).
+    check(!(await page.$("[data-theme-use]")) && !(await page.$("[data-theme-change]")) && (await page.$$("[data-theme-tile]")).length > 1, "the Theme panel's tiles do not switch the song's theme");
+    check(!(await page.$("[data-look-bar]")), "no Look bar on the Theme panel (it shows the same theme itself)");
+    // Shape's Look bar (any other panel): the song's theme, Change opens the picker; a click only previews.
+    await openPanel(page, "song");
+    await page.waitForSelector("[data-look-bar='Night Drive']");
+    const bar = await page.$eval("[data-look-bar]", (e: Element) => ({ y: e.getBoundingClientRect().top, tools: document.querySelector("[data-shape-tools]")!.getBoundingClientRect().top, mark: !!e.querySelector("[data-look-customized]") }));
+    check(bar.y - bar.tools < 80 && !bar.mark, `the Look bar at the top of the panel, Night Drive not marked customized (${JSON.stringify(bar)})`);
+    check(!(await page.$("[data-look-bar] [data-theme-edit], [data-look-bar] [data-theme-new], [data-look-bar] [data-theme-reach]")), "the Look bar: no Edit / New theme, no second badge");
+    await page.click("[data-look-change]");
+    await page.waitForSelector("[data-theme-picker]");
+    const picks = await page.$$eval("[data-theme-pick]", (e: Element[]) => e.map((x) => x.getAttribute("data-theme-pick")));
+    check(picks.includes("Night Drive") && picks.includes(shared) && picks.includes("Hold On Glow"), `the picker lists every theme (${picks.join(", ")})`);
+    check((await page.getAttribute("[data-theme-pick='Night Drive'] [data-theme-pick-state]", "data-theme-pick-state")) === "selected" && (await page.isDisabled("[data-theme-apply]")), "the current theme is Selected; Apply waits for a choice");
+    await page.fill("[data-theme-picker-search]", "glow");
+    check(JSON.stringify(await page.$$eval("[data-theme-pick]", (e: Element[]) => e.map((x) => x.getAttribute("data-theme-pick")))) === JSON.stringify(["Hold On Glow"]), "search filters the themes");
+    await page.click("[data-theme-pick='Hold On Glow']");
+    await page.waitForSelector("[data-theme-pick='Hold On Glow'] [data-theme-pick-state=previewing]");
+    check(((await page.textContent("[data-look-preview-caption]")) ?? "").includes("Previewing the theme Hold On Glow") && readRecipe(recipe).theme === "Night Drive", "a click previews the theme in the viewer; nothing is saved");
+    check(((await page.textContent("[data-theme-apply-note]")) ?? "").includes("lyric timing stay exactly as they are"), "the note says what Apply keeps");
+    if (process.env.PICKER_SHOT) await page.screenshot({ path: process.env.PICKER_SHOT });
+    await page.click("[data-theme-picker-cancel]");
+    await page.waitForSelector("[data-theme-picker]", { state: "detached" });
+    check(!((await page.textContent("[data-look-preview-caption]")) ?? "").includes("Previewing") && readRecipe(recipe).theme === "Night Drive", "Cancel: the current look is back, nothing saved");
+    await page.click("[data-look-change]");
+    await page.click(`[data-theme-pick="${shared}"]`);
+    await page.click("[data-theme-apply]");
+    await page.waitForSelector(`[data-look-bar="${shared}"]`);
+    check(readRecipe(recipe).theme === shared && !(await page.$("[data-theme-picker]")), "Apply: the song uses the theme, the picker closes");
+    await openPanel(page, "theme");
+    // A tile's ⋯: Delete (an unused theme) and Restore.
     await page.click("[data-row-menu='theme-Hold On Glow']");
     await page.click("[role=menuitem][data-theme-delete='Hold On Glow']");
     await page.waitForSelector("[data-removed-themes]");

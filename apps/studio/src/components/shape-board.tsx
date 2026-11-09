@@ -842,7 +842,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
       <aside
         data-shape-panel={panel ?? ""}
         data-shape-tools
-        className={cn("bg-card/40 sticky top-0 flex max-h-[calc(100vh-8rem)] w-[340px] shrink-0 flex-col gap-3 overflow-x-hidden overflow-y-auto rounded-lg border p-3 [&_input]:max-w-full [&_select]:max-w-full", !panel && "hidden")}
+        className={cn("bg-card/40 sticky top-0 flex max-h-[calc(100vh-8rem)] w-[clamp(320px,28vw,400px)] shrink-0 flex-col gap-3 overflow-x-hidden overflow-y-auto rounded-lg border p-3 [&_input]:max-w-full [&_select]:max-w-full", !panel && "hidden")}
       >
         <div className="flex items-center gap-2">
           <h2 className="flex-1 text-base font-semibold">{panelTitle}</h2>
@@ -850,6 +850,8 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
             <X className="size-4" />
           </button>
         </div>
+        {/* the Look bar (ShapeTools draws it here): the song's theme and Change, whatever panel is open */}
+        <div data-look-bar-slot className="empty:hidden" />
         {panelBody}
         <div hidden={panel !== "analysis"} data-analysis-panel>
           {analysisBody}

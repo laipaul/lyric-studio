@@ -1,8 +1,9 @@
 "use client";
 
-import { Check, ChevronDown, Lock, Plus } from "lucide-react";
+import { Check, ChevronDown, Lock, Plus, Search } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import { isFinalHook, isLineBuild, isLineShape, LINE_BUILD_HINTS, LINE_BUILD_LABELS, LINE_BUILDS, LINE_SHAPE_HINTS, LINE_SHAPE_LABELS, LINE_SHAPES, type FinalHook, type LineBuild, type LineShape } from "@lyric/video";
 import { BACKING_LABELS, effectTitle, themeReach, isTextLayout, parseColourRef, TEXT_LAYOUT_HINTS, TEXT_LAYOUT_LABELS, TEXT_LAYOUTS, type TextLayout, FALLBACK_LABELS, GRADE_LABELS, patchChoice, pictureOf, TITLE_STYLE_LABELS, TITLE_WARP_LABELS, titleStyleCss, VIGNETTE_LABELS, warpLetter, type TitleStyle, type TitleWarp, previewBacking, previewFace, previewLyrics, type LookPatch, type LookPreviewProps, type PatchFace, type Readability } from "@lyric/video";
@@ -14,6 +15,7 @@ import { RowMenu, type RowMenuItem } from "@/components/row-menu";
 import { SetEffect, type EffectPart, type EffectValues } from "@/components/set-effect";
 import { useSetThemeMode, useSetThemeNow, useShapePanel } from "@/components/song-stages";
 import { ThemeReachBadge } from "@/components/theme-reach-badge";
+import { ThemeTile } from "@/components/themes-view";
 import { CoverPaletteRow } from "@/components/cover-palette-row";
 
 import { FeatureIcon } from "@/lib/feature-icons";
@@ -133,6 +135,16 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
   const [creating, setCreating] = useState<{ name: string; from: string } | null>(null); // "+ New theme": name first, then where to start
   const [savingAs, setSavingAs] = useState<string | null>(null); // "Save as new theme": the name being typed
   const [showRemoved, setShowRemoved] = useState(false);
+  // Look → Change (before 2e-1): the temporary theme picker. trying: the theme clicked, previewed in the viewer only
+  // (nothing saved, the storyboard untouched) until Apply; Cancel puts the current look back. leaving: the question
+  // asked before leaving a look customized for this song.
+  const [picker, setPicker] = useState<{ query: string; trying: string | null; leaving: boolean } | null>(null);
+  // Another panel (or none): the picker closes, the viewer shows the current look again.
+  const [pickerPanel, setPickerPanel] = useState(panel);
+  if (pickerPanel !== panel) {
+    setPickerPanel(panel);
+    if (picker) setPicker(null);
+  }
   const [pairView, setPairView] = useState<PairingsView | null>(null);
   // Changes are saved one after the other, in the order they were made: leaving a field (which saves
   // it) and choosing a menu item right after must both count; nothing is disabled while saving.
@@ -266,9 +278,11 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
   useEffect(() => {
     if (!data) return;
     // A gallery tile under the pointer: the big viewer plays that effect on the song (nothing is set).
-    const base = hoverTheme ? withTheme(data, hoverTheme) : data;
+    const tryingTheme = picker?.trying ? (data.themes.find((t) => t.name === picker.trying) ?? null) : null;
+    const previewed = hoverTheme ?? tryingTheme;
+    const base = previewed ? withTheme(data, previewed) : data;
     const shown = hoverEffect ? { ...base, fields: base.fields.map((f) => (f.field === hoverEffect.field ? { ...f, value: hoverEffect.value, own: true, perPlatform: null } : f)) } : base;
-    const look = lookOf(shown, { dirty: dirty || !!hoverTheme || !!hoverEffect || !!draft?.changed, hovered, pairView, part, trying: hoverTheme?.name ?? null });
+    const look = lookOf(shown, { dirty: dirty || !!previewed || !!hoverEffect || !!draft?.changed, hovered, pairView, part, trying: previewed?.name ?? null });
     // The effect pointed at (or just picked): its plain name, moving in it, over the viewer's frame.
     const demoOf = hoverEffect ?? pickedEffect;
     const demoName = demoOf?.value.split(":")[0];
@@ -276,7 +290,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
       ? { key: `${demoOf.field}:${demoOf.value}:${hoverEffect ? `hover${hoverEffect.at}` : pickedEffect!.at}`, input: { ...look.fallback, background: null, backing: false, picture: null, transparent: true, lyrics: previewLyrics([effectTitle(demoName)]), textSize: 140, area: null, effect: patchChoice(demoOf.value, undefined) } }
       : null;
     onLook({ ...look, demo, ...(demo && hoverEffect ? { fallback: { ...look.fallback, lyrics: previewLyrics([effectTitle(demoName!)]), textSize: 110 } } : {}) });
-  }, [data, dirty, draft?.changed, hovered, hoverTheme, hoverEffect, pickedEffect, pairView, part, onLook]);
+  }, [data, dirty, draft?.changed, hovered, hoverTheme, picker?.trying, hoverEffect, pickedEffect, pairView, part, onLook]);
 
   if (error && !data) return <p className="text-sm text-red-300">{error}</p>;
   if (!data) return <p className="text-muted-foreground text-sm">Loading the song&apos;s recipe…</p>;
@@ -673,8 +687,112 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
   const makeLine = `${shownPlatforms.map((p) => `${p.label} ${counts[p.name] ?? p.presetVariations}`).join(" · ")}${chosen.length ? "" : " (none ticked: all five)"} · clips: the song's own${collections.length ? ` + ${collections.join(" + ")}` : ""}`;
   const effectValues = effectValuesOf(data);
 
+  // The Look bar (before 2e-1, "Shape = work on this video. Theme = manage reusable looks."): the song's theme, one
+  // mark when that look was made for this song, and Change (the picker). Not on the Theme panel, which shows the same
+  // theme with its management actions.
+  const current = data.theme;
+  const customized = current ? madeForSong(current, data.title) : false;
+  const tryingTheme = picker?.trying ? (data.themes.find((t) => t.name === picker.trying) ?? null) : null;
+  const q = picker?.query.trim().toLowerCase() ?? "";
+  const found = picker ? data.themes.filter((t) => !q || [t.name, t.description, t.look.verseFont, t.look.hookFont, String(t.look.verseEffect).split(":")[0], String(t.look.hookEffect).split(":")[0]].some((x) => String(x ?? "").toLowerCase().includes(q))) : [];
+  const apply = (name: string) => void themeAction({ action: "use", name }).then((ok) => ok && setPicker(null));
+  const lookBar =
+    current && panel && panel !== "theme" ? (
+      <div data-look-bar={current.name} className="flex flex-col gap-2">
+        <div className="bg-card flex items-center gap-2 rounded-lg border px-3 py-2">
+          <FeatureIcon feature="theme" className="size-4 shrink-0" />
+          <span className="min-w-0 flex-1">
+            <span className="text-muted-foreground block text-[10px] font-semibold tracking-wide uppercase">Look</span>
+            <span data-look-theme-name className="block truncate text-sm font-medium" title={current.name}>
+              {current.name}
+            </span>
+            {customized ? (
+              <span data-look-customized className="text-brand block text-[11px]">
+                Customized for this song
+              </span>
+            ) : null}
+          </span>
+          <button
+            type="button"
+            data-look-change
+            aria-expanded={!!picker}
+            disabled={!!draft?.changed}
+            title={draft?.changed ? "The theme editor has unsaved changes: save or cancel them first (Theme)." : "Choose another theme for this song's videos"}
+            onClick={() => setPicker(picker ? null : { query: "", trying: null, leaving: false })}
+            className="bg-brand/15 text-brand shrink-0 rounded-md px-3 py-1 text-xs font-medium disabled:opacity-50"
+          >
+            Change
+          </button>
+        </div>
+        {picker ? (
+          <div data-theme-picker className="bg-card flex flex-col gap-2 rounded-lg border p-2">
+            <label className="relative">
+              <Search className="text-muted-foreground absolute top-2 left-2 size-4" aria-hidden />
+              <input autoFocus data-theme-picker-search aria-label="Search themes" placeholder="Search themes, fonts, effects" className={cn(input, "w-full pl-8")} value={picker.query} onChange={(e) => setPicker({ ...picker, query: e.target.value })} onKeyDown={(e) => e.key === "Escape" && setPicker(null)} />
+            </label>
+            <div className="grid max-h-[min(60vh,34rem)] grid-cols-2 gap-2 overflow-y-auto pr-0.5">
+              {found.map((t) => {
+                const isCurrent = t.name === current.name;
+                const isTrying = t.name === picker.trying;
+                return (
+                  <ThemeTile
+                    key={t.name}
+                    theme={{ ...t, background: t.cover ?? null }}
+                    data={data}
+                    pressed={isTrying || (!picker.trying && isCurrent)}
+                    attrs={{ "data-theme-pick": t.name }}
+                    onOpen={() => setPicker({ ...picker, trying: isCurrent ? null : t.name, leaving: false })}
+                    label={
+                      <span className={cn("-mt-1 text-[11px]", isCurrent ? "text-brand" : isTrying ? "text-amber-200" : "text-muted-foreground")} data-theme-pick-state={isCurrent ? "selected" : isTrying ? "previewing" : undefined}>
+                        {isCurrent ? "✓ Selected" : isTrying ? "Previewing" : `${String(t.look.verseEffect).split(":")[0]} · ${String(t.look.hookEffect || t.look.verseEffect).split(":")[0]}`}
+                      </span>
+                    }
+                  />
+                );
+              })}
+              {found.length ? null : <p className="text-muted-foreground col-span-2 p-2 text-xs">No theme matches “{picker.query}”.</p>}
+            </div>
+            {tryingTheme ? (
+              <p data-theme-apply-note className="text-muted-foreground text-[11px] leading-snug">
+                Only the look changes (fonts, effects, colours, cards, text layout), for every video of this song. Every shot, your moved cuts, trims and anchors and the lyric timing stay exactly as they are.
+              </p>
+            ) : null}
+            {picker.leaving && tryingTheme ? (
+              <div data-theme-apply-ask className="flex flex-col gap-2 rounded-md border border-amber-300/40 bg-amber-300/10 px-2.5 py-2 text-xs text-amber-100">
+                <p>
+                  <b>{current.name}</b> was customized for this song. Use <b>{tryingTheme.name}</b> instead? Your customized look is kept as a theme (you can choose it again), but this song stops using it.
+                </p>
+                <div className="flex gap-2">
+                  <button type="button" data-theme-apply-confirm onClick={() => apply(tryingTheme.name)} className="bg-brand text-brand-foreground rounded-md px-3 py-1 font-medium">
+                    Use {tryingTheme.name}
+                  </button>
+                  <button type="button" data-theme-apply-keep onClick={() => setPicker({ ...picker, trying: null, leaving: false })} className="underline underline-offset-2">
+                    Keep {current.name}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button type="button" data-theme-apply disabled={!tryingTheme} onClick={() => tryingTheme && (customized ? setPicker({ ...picker, leaving: true }) : apply(tryingTheme.name))} className="bg-brand text-brand-foreground rounded-md px-3 py-1 text-xs font-medium disabled:opacity-50">
+                  Apply
+                </button>
+                <button type="button" data-theme-picker-cancel onClick={() => setPicker(null)} className="text-muted-foreground text-xs underline underline-offset-2">
+                  Cancel
+                </button>
+                <span className="text-muted-foreground ml-auto truncate text-[11px]">{tryingTheme ? "Previewing in the viewer, not saved" : "Click a theme to preview it"}</span>
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
+    ) : null;
+
+  // The Look bar sits at the top of Shape's panel (whatever is open in it), above this column: drawn there by a portal
+  // (only in the browser: the recipe, and so this, loads after the page is up).
+  const lookSlot = typeof document === "undefined" ? null : document.querySelector("[data-look-bar-slot]");
   return (
     <div data-style data-section={section ?? ""} className={cn("flex flex-col gap-4", !section && "hidden")}>
+      {lookSlot && lookBar ? createPortal(lookBar, lookSlot) : null}
       <style>{fontCss}</style>
       <p
         data-saving={saving}
@@ -859,9 +977,6 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                     <button type="button" data-theme-new onClick={() => setCreating({ name: "", from: data.theme?.name ?? "" })} className="bg-muted flex items-center gap-1 rounded-md px-3 py-1 text-xs">
                       <Plus className="size-3.5" /> New theme
                     </button>
-                    <button type="button" data-theme-change onClick={() => document.querySelector("[data-theme-tiles]")?.scrollIntoView({ behavior: "smooth", block: "start" })} className="text-muted-foreground ml-auto text-xs underline underline-offset-2">
-                      Change theme ↓
-                    </button>
                   </div>
                 </div>
               ) : null}
@@ -892,7 +1007,8 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                 </div>
               ) : null}
 
-              <h4 className="text-muted-foreground -mb-1 text-xs font-semibold tracking-wide uppercase">Change theme</h4>
+              {/* Managing the themes only (before 2e-1): which theme this song uses is changed in Shape's Look bar (Change). */}
+              <h4 className="text-muted-foreground -mb-1 text-xs font-semibold tracking-wide uppercase">All themes</h4>
               <div data-theme-tiles className="flex flex-col gap-2">
                 {data.themes.map((t) => {
                   const current = t.name === data.theme?.name;
@@ -935,11 +1051,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned }: { projectId:
                           <span className="text-brand flex shrink-0 items-center gap-0.5 text-[11px]">
                             <Check className="size-3.5" aria-label="this song's theme" /> this song
                           </span>
-                        ) : (
-                          <button type="button" data-theme-use={t.name} onClick={() => (setHoverTheme(null), void themeAction({ action: "use", name: t.name }))} className="bg-brand/15 text-brand shrink-0 rounded px-2 py-0.5 text-[11px] font-medium">
-                            Use for this song
-                          </button>
-                        )}
+                        ) : null}
                         <RowMenu
                           label={t.name}
                           menuId={`theme-${t.name}`}
@@ -1042,6 +1154,15 @@ export function themePreview(look: Record<string, unknown>, fonts: StyleFont[], 
 
 // The look the viewer shows: the recipe's (or the pairing pointed at), patched into the planned video
 // while a change is not planned yet; and the stand-in preview.
+// A look made for this one song: "<song> look" (a song-only change on a shared theme makes that copy, themes.ts
+// setThemeLook) or "Made from X for <song>", and no other song uses it. The Look bar's one mark.
+function madeForSong(t: StyleTheme, title: string | null | undefined): boolean {
+  if (!title || t.users.length !== 1 || t.users[0] !== title) return false;
+  const name = t.name.trim().toLowerCase();
+  const own = `${title.trim().toLowerCase()} look`;
+  return name === own || /^ \(?\d+\)?$/.test(name.slice(own.length)) && name.startsWith(own) || t.description.includes(` for ${title} `);
+}
+
 // The song's Style data as if it used another theme (the theme tile under the pointer).
 function withTheme(data: StyleData, theme: StyleTheme): StyleData {
   const look = theme.look as Record<string, unknown>;
@@ -1091,7 +1212,7 @@ function lookOf(data: StyleData, s: { dirty: boolean; hovered: PairingCard | nul
     ...(textLayout !== "centre" ? { textLayout } : {}),
     backing: previewBacking((value("readability") as Readability | undefined) ?? "auto", s.pairView?.bandLuminance ?? null, { colour, accent, verse, hook }),
   };
-  const caption = s.trying ? `Trying the theme ${s.trying}: click it to use it for this song.` : s.hovered ? `Trying ${s.hovered.name}: click it in the list to use it.` : "Your song's first lines with your theme (no planned video yet).";
+  const caption = s.trying ? `Previewing the theme ${s.trying} (not saved): Look → Change → Apply uses it for this song.` : s.hovered ? `Trying ${s.hovered.name}: click it in the list to use it.` : "Your song's first lines with your theme (no planned video yet).";
   return { patch, fallback, caption, previewing: s.hovered?.id ?? null };
 }
 

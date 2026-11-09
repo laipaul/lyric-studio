@@ -7,6 +7,7 @@ Output: several beat-synced lyric videos as MP4, ready for Instagram Reels, TikT
 
 Screens: **Library** (start page), **Song page** (tabs Assets, Lyrics, Style, Storyboard, Generate, Videos, Post), **Collections**, header **Tasks** menu; planned: Content board / Releases, Studio editor. Details: `docs/screens.md`.
 - Every visible menu item must lead somewhere real (the Studio editor is not in the menu until it has content).
+- Principle (9 Nov 2026): "Shape = work on this video. Theme = manage reusable looks." A video's theme is changed directly in Shape (Look bar → Change); editing and creating themes belong in the Theme area. A theme is a reusable set of rules, not a replacement storyboard: applying one never touches lyric timing or the user's locked edits.
 
 ## Guiding principle — who does what (decided by the user, 29 Oct 2026)
 - **The user does the creative part**: provides the clips, puts them in order, shortens a clip when needed
