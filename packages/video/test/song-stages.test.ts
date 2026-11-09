@@ -32,7 +32,7 @@ describe("Prepare to-do list", () => {
   it("names what is missing, in plain words, with where to fix it", async () => {
     const todo = await songTodo(ws, id);
     expect(todo.map((t) => t.id)).toEqual(["clips", "vocals", "cover", "labels"]);
-    expect(todo.find((t) => t.id === "clips")).toMatchObject({ tab: "assets", blocking: true });
+    expect(todo.find((t) => t.id === "clips")).toMatchObject({ tab: "clips", blocking: true }); // N1: Prepare → Clips
     // L1a: the vocal stem is suggested, never a blocker.
     expect(todo.find((t) => t.id === "vocals")).toMatchObject({ text: "Add the vocal stem for better lyric timing.", tab: "assets", blocking: false });
     expect(todo.find((t) => t.id === "cover")).toMatchObject({ tab: "assets", blocking: false });

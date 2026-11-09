@@ -121,7 +121,8 @@ async function main() {
     const chips = await page.$$eval("[data-platform-choice]", (e: Element[]) => e.filter((x) => x.className.includes("bg-brand")).map((x) => x.getAttribute("data-platform-choice")));
     check(JSON.stringify(chips) === JSON.stringify(["reels"]), `the platforms of that run (got ${(chips as string[]).join(", ")})`);
     await page.click("[data-switch-auto]");
-    check((await page.inputValue("input[name=section]")) === "auto" && (await page.inputValue("input[name=length]")) === "32", 'one click back to "auto · 32 s"');
+    // N1: no editable section / length in Make any more; the run's values are shown read-only.
+    check(((await page.textContent("[data-run-section]")) ?? "").includes("auto · 32 s") && !(await page.$("input[name=section]")), 'one click back to "auto · 32 s" (shown, not an input)');
 
     // The pro assessment on each tile, and a reaction: what it changes, then song.json.
     await page.goto(`${base}/songs/${sp.project.id}?tab=videos`);
@@ -189,12 +190,12 @@ async function main() {
     check((await page.$$("[data-post-video]")).length === 1, "Post lists the approved video only (v1, not v2)");
     await page.waitForSelector("[data-post-panel] [data-section]");
     check(((await page.textContent("[data-post-panel]")) ?? "").includes("Caption"), "with its caption to copy");
-    // Song links: none yet = a pointer to Assets; added on Assets (the service recognised from the link),
+    // Song links: none yet = a pointer to Prepare → Details; added there (N1; was Assets) (the service recognised from the link),
     // the Reel's post shows the best one (the smart link) with a copy button; "Add a link" picks another,
     // kept per platform in song.json postLinks.
     await page.waitForSelector("[data-post-links-none]");
-    check(true, "Post: no links yet, with a pointer to Assets");
-    await page.goto(`${base}/songs/${sp.project.id}?tab=assets`);
+    check(((await page.textContent("[data-post-links-none]")) ?? "").includes("Prepare → Details"), "Post: no links yet, with a pointer to Prepare → Details");
+    await page.goto(`${base}/songs/${sp.project.id}?tab=details`);
     await page.waitForSelector("[data-links] [data-link-new]");
     for (const url of ["https://open.spotify.com/track/abc", "https://ffm.to/posttest", "https://www.facebook.com/lifelyrics"]) {
       await page.fill("[data-link-new]", url);

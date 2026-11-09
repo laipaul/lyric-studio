@@ -111,7 +111,14 @@ async function main() {
     check(!(await page.$("[data-story-strip]")), "the clips are not on the page until the Clips menu opens them");
     await openPanel(page, "clips");
     const strip0 = await (await page.waitForSelector("[data-clips-panel] [data-story-strip]")).boundingBox();
-    check(!!strip0 && strip0.x + strip0.width <= vb!.x, "the Clips menu opens the clips used in the panel, left of the viewer");
+    check(!!strip0 && strip0.x + strip0.width <= vb!.x, "Shots opens the clips used in the panel, left of the viewer");
+    // N1: a panel shows only what applies to the video shown (a Reel: title opening, no YouTube layout).
+    await openPanel(page, "look");
+    const lookRows = await page.$$eval("[data-style-block=look] [data-field]", (e: Element[]) => e.filter((x) => !x.closest("[data-other-videos]")).map((x) => x.getAttribute("data-field")));
+    check(JSON.stringify(lookRows) === JSON.stringify(["titleOpening", "readability"]), `Look on a Reel: title opening and readability (${lookRows.join(", ")})`);
+    check(!!(await page.$("[data-style-block=look] [data-other-videos] [data-field=youtubeLayout]")), "…the YouTube layout folded under Only for other videos (still reachable)");
+    await openPanel(page, "part");
+    check(!!(await page.$("[data-style-block=part] [data-field=ending]")), "Part & ending on a Reel: the ending is there");
     await page.click("[data-analysis-chip]");
     await page.waitForSelector("[data-shape-panel=analysis] [data-analysis-panel]", { state: "visible" });
     const sections = await page.$$eval("[data-analysis-panel] [data-analysis-section]", (e: Element[]) => e.map((x) => x.getAttribute("data-analysis-section")));
@@ -644,9 +651,9 @@ async function main() {
     await page.waitForSelector("[data-release-pack]");
     check(true, "the rail's Make opens Make");
 
-    // The tempo (Automatic, on the left): x2/3 of 120 = 80 BPM in song.json; the video is planned with it.
+    // The tempo (Prepare → Lyrics & timing since N1): x2/3 of 120 = 80 BPM in song.json; Shape plans the video with it.
     await page.goto(`${base}/songs/${sp.project.id}?tab=style`);
-    await unfoldStyle(page); // the tempo follows the analysis: in the folded Automatic block
+    await unfoldStyle(page); // the tempo: Prepare → Lyrics & timing
     await page.waitForSelector("[data-tempo-check]");
     if (!(await page.$("[data-tempo-ratio='×2/3']"))) {
       // No video made yet: the detected tempo comes from the tempo check.
@@ -659,11 +666,12 @@ async function main() {
     await page.click("[data-tempo-ratio='×2/3']");
     await page.waitForSelector("[data-saving=saved]");
     check(JSON.parse(readFileSync(paths.recipe!, "utf8")).tempo === 80, "x2/3 sets the tempo to 80 BPM in song.json");
+    await page.click("[data-stage=shape]");
     await page.waitForFunction(() => / 8\d BPM| 7[6-9] BPM/.test(document.querySelector("[data-storyboard-summary]")?.textContent ?? ""), null, { timeout: 180_000 }).catch(() => {});
     const summary80 = (await page.textContent("[data-storyboard-summary]")) ?? "";
     const bpm80 = Number(summary80.match(/(\d+) BPM/)?.[1]);
     // The beats are tracked again around 80 (on this 120 BPM click track they settle near it).
-    check(Math.abs(bpm80 - 80) <= 4, `planned again on the same page with the tempo (${summary80})`);
+    check(Math.abs(bpm80 - 80) <= 4, `Shape plans the video with the tempo set in Prepare (${summary80})`);
     await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "storyboard-stage2.png") });
     // 16:9 (YouTube): the same editor, the wide viewer smaller in height so it all still fits on one screen.
     ffmpeg("-f", "lavfi", "-i", "color=c=0x553344:s=600x600:d=1", "-frames:v", "1", path.join(paths.root, "cover.jpg")); // YouTube's cover layout needs a cover
@@ -678,7 +686,8 @@ async function main() {
     check(!!vw && vw.width > vw.height * 1.7 && wideFit.ok, `16:9: the wide viewer (${Math.round(vw?.width ?? 0)}×${Math.round(vw?.height ?? 0)}), timeline and command bar on one screen`);
     check(((await page.textContent("[data-no-shots]").catch(() => null)) ?? "").includes("cover art"), "YouTube cover layout: the empty shots lane says why (your cover art, not clips)");
     await page.click("[data-open-song]");
-    check(!!(await page.waitForSelector("[data-shape-panel=song] [data-field=youtubeLayout]", { timeout: 5000 }).catch(() => null)), "…and its This song link opens the YouTube layout setting");
+    check(!!(await page.waitForSelector("[data-shape-panel=look] [data-field=youtubeLayout]", { timeout: 5000 }).catch(() => null)), "…and its Look link opens the YouTube layout setting (shown on a YouTube video)");
+    check(!!(await page.$("[data-shape-panel=look] [data-other-videos] [data-field=titleOpening]")), "…a YouTube video's Look folds the title opening under Only for other videos");
     await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "storyboard-youtube.png") });
     check(existsSync(songFile), "the song file is untouched");
     await browser.close();

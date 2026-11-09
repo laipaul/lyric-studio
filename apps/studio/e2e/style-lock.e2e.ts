@@ -59,13 +59,13 @@ async function main() {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     await page.goto(`${base}/songs/${sp.project.id}`);
     await openTab(page, "Style");
-    // Polish: wide "videos per platform" inputs with the preset's number; the empty-platforms note.
+    // Polish (Make → Videos since N1): wide "videos per platform" inputs with the preset's number; the empty-platforms note.
     await openPanel(page, "make");
     check((await page.getAttribute("[data-field=variations] input", "placeholder")) === "3 (preset)", 'videos per platform placeholder "3 (preset)" (Reels)');
     check(!!(await page.$("[data-platforms-empty]")), "empty platforms: the note says Generate starts with Reels + YouTube");
 
     // The bug: type a length, then lock a setting straight away (here the length itself, before it is saved).
-    await openPanel(page, "auto");
+    await openPanel(page, "part");
     await menuItem(page, "length", 'data-per-platform="length"');
     // Length: Automatic by default (2 Nov 2026), with the range in plain words; "Seconds I choose" shows the box.
     check((await page.$eval("[data-length-mode='length-reels']", (e: Element) => (e as HTMLSelectElement).value)) === "auto" && !(await page.$("[data-edit='length-reels']")), "Reels length: Automatic by default, no seconds box");
@@ -90,8 +90,8 @@ async function main() {
     check(!!song.theme && loadTheme(wsDir, song.theme).perPlatform.youtube?.verseEffect === "cinematic-fade" && !song.perPlatform?.youtube, `the song's YouTube effect is now in its theme (${song.theme})`);
     const recipe = JSON.parse(readFileSync(paths.recipe!, "utf8")) as { locked?: string[]; perPlatform?: { reels?: { length?: number } } };
     check(recipe.perPlatform?.reels?.length === 90, "song.json holds the Reels length typed just before (90)");
-    // Ending (Reels, TikTok, Shorts): auto by default, the song may ask for one.
-    await openPanel(page, "auto");
+    // Ending (Reels, TikTok, Shorts): auto by default, the song may ask for one (Shape → Part & ending).
+    await openPanel(page, "part");
     check((await page.$eval("[data-edit='ending-default']", (e: Element) => (e as HTMLSelectElement).value)) === "auto", "Ending: auto by default (the app chooses)");
     await page.selectOption("[data-edit='ending-default']", "fade");
     await page.waitForSelector("[data-saving=saved]");
@@ -101,8 +101,8 @@ async function main() {
     await page.waitForSelector("[data-saving=saved]");
     await sleep(300);
     check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { ending?: string }).ending === undefined, "back to auto: the song's own ending setting is gone");
-    // Title opening (Step D): off by default; on = title, artist and tagline before the first hook.
-    await openPanel(page, "song");
+    // Title opening (Step D): off by default; on = title, artist and tagline before the first hook (Shape → Look).
+    await openPanel(page, "look");
     check((await page.$eval("[data-edit='titleOpening-default']", (e: Element) => (e as HTMLSelectElement).value)) === "off", "Title opening: off by default");
     await page.selectOption("[data-edit='titleOpening-default']", "on");
     await page.waitForSelector("[data-saving=saved]");
@@ -112,31 +112,31 @@ async function main() {
     await page.waitForSelector("[data-saving=saved]");
     await sleep(300);
     check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { titleOpening?: string }).titleOpening === undefined, "back to off: the song's own title opening setting is gone");
-    // The tagline lives on the Assets tab (song.json "tagline").
-    await openTab(page, "Assets");
-    await page.waitForSelector("[data-tagline-input]");
-    await page.fill("[data-tagline-input]", "A song for the road");
-    await page.press("[data-tagline-input]", "Enter");
+    // The tagline lives in Prepare → Details (song.json "tagline"; N1: one place, no longer also in Assets).
+    await openPanel(page, "details");
+    check(!(await page.$("[data-tagline-input]")), "no second tagline field");
+    await page.fill("[data-edit='tagline-default']", "A song for the road");
+    await page.press("[data-edit='tagline-default']", "Enter");
     await sleep(800);
-    check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { tagline?: string }).tagline === "A song for the road", 'Assets: the tagline is saved in song.json');
-    await page.fill("[data-tagline-input]", "");
-    await page.press("[data-tagline-input]", "Enter");
+    check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { tagline?: string }).tagline === "A song for the road", "Details: the tagline is saved in song.json");
+    await page.fill("[data-edit='tagline-default']", "");
+    await page.press("[data-edit='tagline-default']", "Enter");
     await sleep(800);
-    check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { tagline?: string }).tagline === undefined, "Assets: an empty tagline removes it");
+    check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { tagline?: string }).tagline === undefined, "Details: an empty tagline removes it");
     await openTab(page, "Style");
-    await openPanel(page, "auto");
+    await openPanel(page, "part");
     await page.waitForSelector("[data-edit='ending-default']");
 
     await openTab(page, "Generate");
     await page.waitForSelector("[data-song-line]");
     check(((await page.textContent("[data-look-line]")) ?? "").startsWith("Look: "), "Make: the song's look in the song line");
-    await page.click("[data-compare] summary"); // Try other looks: the theme for this run
+    await page.click("[data-make-tab=looks]"); // Try other looks (its own tab since N1): the theme for this run
     check((await page.$$("[aria-label='Verse effect'], [aria-label='Hook effect']")).length === 0, "Generate: no font or effect lists any more (the theme holds them)");
     check(((await page.textContent("[data-generate-theme] [data-theme-chip]")) ?? "").includes("(this song's)"), "Generate: the song's theme is chosen");
     check((await page.$$("[data-generate] input[type=checkbox][data-collection-choice], [data-generate] input[type=checkbox][data-theme-option]")).length === 0, "Generate: no tick boxes for themes or collections (pickers with chips)");
     const groups = await page.$$eval("[data-generate-group]", (e: Element[]) => e.map((x) => x.getAttribute("data-generate-group")));
-    check(JSON.stringify(groups) === JSON.stringify(["1", "2"]) && !!(await page.$("[data-generate-group='2'] [data-shot-length]")) && !!(await page.$("[data-song-line]")) && !(await page.$("[data-generate] input[name=title]")) && !!(await page.$("[data-generate] details[data-compare]")) && !!(await page.$("[data-generate-footer] [data-save-to-song]")), `Make is production: platforms, output up front, the song in one line, other looks folded, footer (${groups.join(", ")})`);
-    check(!!(await page.$("[data-clips-line]")) && !(await page.$("[data-picker-open=collections]")), "Make: the clips are the song's, one line with a link to Shape (no picker here)");
+    check(JSON.stringify(groups) === JSON.stringify(["1", "2"]) && !(await page.$("[data-generate] [data-shot-length], [data-generate] input[name=section], [data-generate] input[name=length], [data-generate] select[name=layout]")) && !!(await page.$("[data-output-planned]")) && !!(await page.$("[data-song-line]")) && !(await page.$("[data-generate] input[name=title]")) && !!(await page.$("[data-generate] [data-compare]")) && !(await page.$("[data-generate-footer] [data-save-to-song]")) && !(await page.$("[data-generate] input[name=realign]")), `N1: Make makes what Shape planned: no part of the song, length, shot length, layout or re-time here, no "keep these choices" (${groups.join(", ")})`);
+    check(!!(await page.$("[data-clips-line]")) && !(await page.$("[data-picker-open=collections]")), "Make: the clips are the song's, one line with a link to Prepare → Clips (no picker here)");
     if (process.env.GENERATE_SHOT) await page.screenshot({ path: process.env.GENERATE_SHOT, fullPage: true });
     const chips = await page.$$eval("[data-platform-choice]", (e: Element[]) => e.filter((x) => x.className.includes("bg-brand")).map((x) => x.getAttribute("data-platform-choice")));
     check(JSON.stringify(chips) === JSON.stringify(["reels", "youtube"]), `Generate starts with Reels + YouTube (got ${(chips as string[]).join(", ")})`);

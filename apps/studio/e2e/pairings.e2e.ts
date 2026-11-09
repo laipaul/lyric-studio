@@ -76,8 +76,8 @@ async function main() {
       await page.click(`[data-pairing=${id}]`);
       await page.waitForSelector("[data-pairing-list]", { state: "detached" });
     };
-    await page.waitForSelector("[data-rail-item=theme]");
-    await openPanel(page, "effects"); // the Theme panel, Edit theme (the pairing dropdown sits on top)
+    await page.waitForSelector("[data-stages]");
+    await openPanel(page, "effects"); // Shape → Look → Edit theme (the pairing dropdown sits on top)
     await page.waitForSelector("[data-pairing-select]");
     await page.waitForFunction(() => document.querySelector("[data-pairing-current]")?.textContent?.length);
     check((await page.$$("[data-pairing-grid], [data-pairings] img, [data-pairings] canvas")).length === 0, "no card grid and no card thumbnails: just the dropdown");

@@ -178,17 +178,22 @@ export function enqueueRun(ws: Workspace, projectId: string, options: RunOptions
 
 // A lyric-timing run for the song (after vocals.wav was added or replaced), unless one is already waiting.
 export const LYRIC_TIMING_LABEL = "Lyric timing · vocal stem";
-export function enqueueLyricTiming(ws: Workspace, projectId: string): MakeRun {
+// options.realign ("Time the lyrics again", Prepare → Lyrics & timing / a stale word fix in Shape): align anew, not
+// from the stored alignment (hand-set starts and taps in hints.lrc are applied after, as always).
+export function enqueueLyricTiming(ws: Workspace, projectId: string, o: { realign?: boolean } = {}): MakeRun {
   const waiting = ws.db
     .select()
     .from(makeRun)
     .where(and(eq(makeRun.project_id, projectId), eq(makeRun.status, "queued")))
     .all()
     .find((r) => (r.options_json as RunOptions | null)?.lyricsOnly);
-  if (waiting) return waiting;
+  if (waiting) {
+    if (!o.realign || (waiting.options_json as RunOptions).realign) return waiting;
+    return ws.db.update(makeRun).set({ options_json: { ...(waiting.options_json as RunOptions), realign: true, command: "Lyric Studio: time the lyrics again" } as Record<string, unknown> }).where(eq(makeRun.id, waiting.id)).returning().get()!;
+  }
   const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
   if (!p) throw new Error("Song not found.");
-  const options: RunOptions = { song: projectSong(ws, p), lyrics: songPathsById(ws, projectId).lyricsTxt, lyricsOnly: true, projectId, command: "Lyric Studio: lyric timing (vocal stem)" };
+  const options: RunOptions = { song: projectSong(ws, p), lyrics: songPathsById(ws, projectId).lyricsTxt, lyricsOnly: true, projectId, command: o.realign ? "Lyric Studio: time the lyrics again" : "Lyric Studio: lyric timing (vocal stem)", ...(o.realign ? { realign: true } : {}) };
   return ws.db.insert(makeRun).values({ project_id: projectId, options_json: options as Record<string, unknown>, label: LYRIC_TIMING_LABEL }).returning().get();
 }
 

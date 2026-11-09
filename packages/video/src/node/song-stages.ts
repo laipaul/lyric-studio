@@ -19,7 +19,7 @@ export const RELEASE_PLATFORMS = ["reels", "tiktok", "shorts", "youtube", "canva
 export type TodoItem = {
   id: string;
   text: string; // plain words: what is needed
-  tab: "assets" | "lyrics" | "generate"; // where to do it
+  tab: "assets" | "lyrics" | "clips" | "generate"; // where to do it (assets = Prepare → Files; clips = Prepare → Clips, N1)
   action: string; // the button
   blocking: boolean; // no video can be made without it
 };
@@ -34,7 +34,7 @@ export async function songTodo(ws: Workspace, projectId: string): Promise<TodoIt
   const assets = await songAssets(ws, projectId).catch(() => null);
   const collections = songCollections(ws, projectId);
   if (assets && !assets.clips.length && !collections.length)
-    todo.push({ id: "clips", text: "Add your clips: drop them in Assets, or add a collection in Shape → To make (e.g. wedding).", tab: "assets", action: "Add clips", blocking: true });
+    todo.push({ id: "clips", text: "Add your clips: drop them in Clips, or add a collection there (e.g. wedding).", tab: "clips", action: "Add clips", blocking: true });
   // The vocal stem: a suggestion, never a blocker (without it the app separates the vocals itself).
   if (assets && !paths.instrumental && !paths.legacy) {
     if (!assets.vocals) todo.push({ id: "vocals", text: "Add the vocal stem for better lyric timing.", tab: "assets", action: "Add the vocal stem", blocking: false });

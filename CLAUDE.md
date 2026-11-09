@@ -5,7 +5,7 @@ A personal, single-user, LOCAL lyric-video studio for the artist "Life Lyrics".
 Input: one song (WAV/MP3) + lyrics + a pool of video clips.
 Output: several beat-synced lyric videos as MP4, ready for Instagram Reels, TikTok, YouTube Shorts (9:16, 1080x1920), YouTube (16:9) and Spotify Canvas. Size, length, variations, safe zones, text scale and bitrate come per platform from `presets/platforms.json` (editable); without --platforms the "standard" preset applies.
 
-Screens: **Library** (start page), **Song page** (tabs Assets, Lyrics, Style, Storyboard, Generate, Videos, Post), **Collections**, header **Tasks** menu; planned: Content board / Releases, Studio editor. Details: `docs/screens.md`.
+Screens: **Library** (start page), **Song page** (four numbered stages, each with its tabs: 1 Prepare = Files, Lyrics & timing, Details, Clips; 2 Shape = Look, Part & ending, Pace, Shots; 3 Make = Videos, Try other looks, Options; 4 Review = Videos, Post), **Collections**, header **Tasks** menu; planned: Content board / Releases, Studio editor. Details: `docs/screens.md`.
 - Every visible menu item must lead somewhere real (the Studio editor is not in the menu until it has content).
 - Principle (9 Nov 2026): "Shape = work on this video. Theme = manage reusable looks." A video's theme is changed directly in Shape (Look bar → Change); editing and creating themes belong in the Theme area. A theme is a reusable set of rules, not a replacement storyboard: applying one never touches lyric timing or the user's locked edits.
 

@@ -20,9 +20,15 @@ import { StatusBadge } from "@/components/status-badge";
 import { ShapePage } from "@/components/shape-page";
 import { SongTitle } from "@/components/song-title";
 import { SongView, type RunView } from "@/components/song-view";
-import { ReleasePack, SongStages, type ShapePanelId, type StageId, type StageStatus } from "@/components/song-stages";
+import { InMakePart, ReleasePack, SongStages, type MakePart, type ShapePanelId, type StageId, type StageStatus } from "@/components/song-stages";
+import { SongSettings } from "@/components/shape-tools";
+import { LinksField } from "@/components/song-links";
 
-const SHAPE_PANEL_IDS = ["theme", "clips", "song", "make", "auto"]; // the Shape rail's menus (SHAPE_PANELS in song-stages.tsx, a client module)
+// ?panel= (Shape's tabs; SHAPE_PANELS in song-stages.tsx, a client module) and the panels from before N1: where
+// their content is now (a panel that moved to another stage opens that stage's tab).
+const SHAPE_PANEL_IDS = ["look", "part", "pace", "shots", "theme"];
+const OLD_PANELS: Record<string, { tab: string; panel?: ShapePanelId }> = { clips: { tab: "shape", panel: "shots" }, shot: { tab: "shape", panel: "shots" }, auto: { tab: "shape", panel: "part" }, song: { tab: "details" }, make: { tab: "generate" } };
+const MAKE_PARTS = ["videos", "looks", "options"];
 import { TabsContent } from "@/components/ui/tabs";
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
@@ -33,9 +39,9 @@ import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 // Videos (exports grid, marks, compare, each run's settings next to the recipe) and Post (the approved
 // videos with their captions and files). ?tab= opens a tab. The tabs are grouped in four stages
 // (Prepare -> Shape -> Make -> Review & Post) with the Prepare to-do list and "Make release pack".
-const TABS = ["assets", "lyrics", "shape", "generate", "videos", "post"];
+const TABS = ["assets", "lyrics", "details", "clips", "shape", "generate", "videos", "post"];
 const OLD_TABS: Record<string, string> = { style: "shape", storyboard: "shape" }; // links from before Style and Storyboard became one Shape page
-type Search = Promise<{ tab?: string; from?: string; panel?: string; edit?: string }>; // panel: a Shape panel to open (theme, clips, …); edit: a theme to open in the Theme editor
+type Search = Promise<{ tab?: string; from?: string; panel?: string; edit?: string; part?: string }>; // panel: a Shape panel to open (theme, clips, …); edit: a theme to open in the Theme editor
 
 export default function SongPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Search }) {
   return (
@@ -83,7 +89,9 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
   const blocking = todo.find((t) => t.blocking) ?? null;
   // Where the page opens: ?tab=; a song with videos: Review; before the first video: what still needs doing
   // (Prepare), else Make. (Prepare's status stays visible in the stage bar either way.)
-  const asked = search.tab ? (OLD_TABS[search.tab] ?? search.tab) : undefined;
+  const old = search.panel ? OLD_PANELS[search.panel] : undefined;
+  const asked = old && (!search.tab || OLD_TABS[search.tab] === "shape" || search.tab === "shape") ? old.tab : search.tab ? (OLD_TABS[search.tab] ?? search.tab) : undefined;
+  const askedPanel: ShapePanelId | null = old?.panel ?? (SHAPE_PANEL_IDS.includes(search.panel ?? "") ? (search.panel as ShapePanelId) : null);
   const tab = asked && TABS.includes(asked) ? asked : runs.length ? "videos" : todo.length ? (blocking ?? todo[0]).tab : "generate";
 
   // Each stage's status line.
@@ -138,12 +146,27 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
         {/* The Shape page puts its Analysis chip and Next: Make here (2 Nov 2026; shape-board.tsx, a portal). */}
         <div id="song-header-actions" data-song-header-actions className="ml-auto flex items-center gap-2" />
       </div>
-      <SongStages key={`${tab}:${search.from ?? ""}`} initialTab={tab} initialPanel={tab === "shape" && SHAPE_PANEL_IDS.includes(search.panel ?? "") ? (search.panel as ShapePanelId) : null} statuses={statuses} todo={todo} counts={{ post: approved.reduce((n, g) => n + g.videos.length, 0) + offered.length }}>
+      <SongStages key={`${search.tab ?? ""}:${search.panel ?? ""}:${search.part ?? ""}:${search.from ?? ""}`} initialTab={tab} initialPanel={tab === "shape" ? askedPanel : null} initialPart={MAKE_PARTS.includes(search.part ?? "") ? (search.part as MakePart) : undefined} statuses={statuses} todo={todo} counts={{ post: approved.reduce((n, g) => n + g.videos.length, 0) + offered.length }}>
         <TabsContent value="assets">
-          <AssetsTab projectId={song.id} />
+          <AssetsTab projectId={song.id} part="files" />
         </TabsContent>
         <TabsContent value="lyrics">
-          <LyricsTab projectId={song.id} />
+          <div className="flex flex-col gap-4">
+            <SongSettings projectId={song.id} only="timing" />
+            <LyricsTab projectId={song.id} />
+          </div>
+        </TabsContent>
+        <TabsContent value="details">
+          <div className="flex max-w-3xl flex-col gap-4">
+            <SongSettings projectId={song.id} only="details" />
+            <LinksField projectId={song.id} />
+          </div>
+        </TabsContent>
+        <TabsContent value="clips">
+          <div className="flex flex-col gap-4">
+            <AssetsTab projectId={song.id} part="clips" />
+            <SongSettings projectId={song.id} only="collections" />
+          </div>
         </TabsContent>
         <TabsContent value="shape">
           <ShapePage projectId={song.id} />
@@ -151,6 +174,7 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
         {/* Kept mounted (hidden when inactive) so what was chosen here (platforms, collections, effects...) survives a trip to another stage. */}
         <TabsContent value="generate" forceMount className="data-[state=inactive]:hidden">
           <div className="flex flex-col gap-4">
+            <InMakePart part="videos">
             {!preset ? (
               <ReleasePack
                 projectId={song.id}
@@ -160,8 +184,12 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
                 blocked={blocking ? `First: ${blocking.text}` : null}
               />
             ) : null}
+            </InMakePart>
             {presetError ? <p className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{presetError}</p> : null}
-            {!preset ? <p className="text-muted-foreground text-xs">Or choose yourself: platforms, length, part of the song, layouts; try other looks:</p> : null}
+            <InMakePart part="videos">
+              {!preset ? <SongSettings projectId={song.id} only="make" /> : null}
+              {!preset ? <p className="text-muted-foreground text-xs">Or choose the platforms for one run (other looks: the Try other looks tab):</p> : null}
+            </InMakePart>
             <GeneratePanel key={preset?.folder ?? "recipe"} projectId={song.id} data={panel} open={!!preset} preset={preset} />
           </div>
         </TabsContent>

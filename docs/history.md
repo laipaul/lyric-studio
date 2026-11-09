@@ -4,6 +4,13 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Review: no line across the video in the browser's player ✅ (confirmed on the Windows PC, 8 Nov 2026)
+- Found by the user (8 Nov 2026): a thin horizontal line across the Reel in Review (not in Shape). The MP4 itself is
+  clean (checked by the user in Media Player): it is the top edge of the dark band Chrome / Edge draw behind their own
+  video controls (▶ / time / volume).
+- The app's pages now draw a soft fade there instead (no edge): a small style in app/layout.tsx (the CSS build drops
+  these browser-specific rules from globals.css, so it is a plain <style> tag). Review, Post and Compare players.
+
 ### Shape timeline: a taller clip strip, thinner rows above it ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - Asked by the user (8 Nov 2026): "the video strip is too squashed and I can barely see the video; maybe make the
   timeline thinner to save space".

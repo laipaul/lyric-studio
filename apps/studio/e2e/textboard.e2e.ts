@@ -109,7 +109,7 @@ async function main() {
     await page.waitForSelector("[data-textboard-notice]", { timeout: 60_000 });
     await replanned();
     check(readFileSync(paths.lyricsTxt, "utf8").split("\n")[2] === "Through the long night", "Text → Fix: the line's words are fixed in lyrics.txt");
-    check(((await page.textContent("[data-textboard-notice]")) ?? "").includes("its timing is kept"), "…its timing is kept (no new alignment)");
+    check(((await page.textContent("[data-textboard-notice]")) ?? "").includes("The lyric timing is still valid") && !(await page.$("[data-stale-timing]")), "…its timing is kept (no new alignment), and the note says the timing is still valid");
     const fixed = board().cards.find((c: { id: string }) => c.id === "line-3");
     check(fixed?.text === "Through the long night" && JSON.stringify(fixed?.overrides) === JSON.stringify({ position: "upper", size: 1.5 }), `…the card keeps its look (${JSON.stringify(fixed)})`);
     await page.waitForSelector("[data-lyric='Through the long night']", { timeout: 30_000 }).catch(() => {});

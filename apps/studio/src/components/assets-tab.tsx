@@ -7,7 +7,6 @@ import { useEffect, useRef, useState } from "react";
 import type { AssetKind, SongAssets } from "@lyric/video/assets";
 import type { ReplacedFile } from "@lyric/video/replaced-files";
 
-import { LinksField } from "@/components/song-links";
 import { Button } from "@/components/ui/button";
 import { FeatureIcon } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
@@ -35,7 +34,9 @@ function replaceWarning(kind: AssetKind, current: string, next: string): string 
 // Remove moves a clip to clips\_removed\, nothing is deleted), shown in the song's clip order: drag to
 // reorder (clips.json, the one sequence Shape and Make use; new clips go at the end). Files put into the folder by hand that
 // the app cannot place are asked about once: "What is this file?".
-export function AssetsTab({ projectId }: { projectId: string }) {
+// N1: Prepare → Files (part "files": the song's files, slots, replaced files) and Prepare → Clips (part "clips": the
+// song's own clips, their order, Use / Omit, removed clips). The tagline and links are in Prepare → Details.
+export function AssetsTab({ projectId, part = "files" }: { projectId: string; part?: "files" | "clips" }) {
   const [data, setData] = useState<SongAssets | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
@@ -279,15 +280,15 @@ export function AssetsTab({ projectId }: { projectId: string }) {
   );
 
   return (
-    <div data-assets className="flex flex-col gap-6">
+    <div data-assets={part} className="flex flex-col gap-6">
+      {part === "files" ? (
+      <>
       <p className="text-muted-foreground text-xs">
         Song folder:{" "}
         <button type="button" data-open-folder title="Open in Explorer" onClick={openFolder} className="text-foreground hover:text-brand underline decoration-dotted underline-offset-2">
           {data.folderPath ?? win(data.folder)}
         </button>
       </p>
-      <TaglineField projectId={projectId} />
-      <LinksField projectId={projectId} />
       <ul className="grid gap-3 md:grid-cols-2">
         {fileRow("song", <FileAudio className="size-5" />, "Song", data.song ? `${data.song.name}${data.song.durationMs ? ` · ${clock(data.song.durationMs)}` : ""}${data.song.bpm ? ` · ${Math.round(data.song.bpm)} BPM` : ""}` : "missing")}
         {data.instrumental
@@ -362,13 +363,16 @@ export function AssetsTab({ projectId }: { projectId: string }) {
         </section>
       ) : null}
 
+      </>
+      ) : null}
+      {part === "clips" ? (
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 className="font-display flex items-center gap-2 text-base tracking-[0.12em] uppercase"><FeatureIcon feature="clips" /> Clips</h2>
             <p data-usable className="text-muted-foreground text-xs">
               {data.clips.length} in this song&apos;s clips folder · 9:16 platforms can use {data.usable.vertical} · YouTube (16:9) can use {data.usable.horizontal}
-              {" "}· shared collections are chosen in Generate
+              {" "}· shared collections: below
             </p>
             {data.clips.length > 1 ? <p data-order-hint className="text-muted-foreground text-xs">
                 Drag the clips into the order you want: Shape shows the same order and every video follows it. Omit leaves a clip out of the videos (it keeps its place). New clips go at the end, by file name.{" "}
@@ -484,8 +488,9 @@ export function AssetsTab({ projectId }: { projectId: string }) {
           </details>
         ) : null}
       </section>
+      ) : null}
 
-      {replaced.length ? (
+      {part === "files" && replaced.length ? (
         <details data-replaced-files className="bg-card rounded-lg border px-4 py-3 text-sm">
           <summary className="cursor-pointer font-medium">
             Replaced files ({replaced.length}) <span className="text-muted-foreground text-xs font-normal">· every file you replaced is kept; Restore brings one back</span>
@@ -517,42 +522,3 @@ export function AssetsTab({ projectId }: { projectId: string }) {
   );
 }
 
-// The song's tagline (song.json "tagline"): a short line under the title in the title opening (Style tab:
-// Title opening on). Empty: none. Never taken from the EP.
-function TaglineField({ projectId }: { projectId: string }) {
-  const [value, setValue] = useState<string | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
-  useEffect(() => {
-    api(`/api/songs/${projectId}/recipe`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d: { fields?: { field: string; value: unknown }[] }) => {
-        const v = String(d.fields?.find((f) => f.field === "tagline")?.value ?? "");
-        setValue(v);
-        setSaved(v);
-      })
-      .catch(() => setValue(""));
-  }, [projectId]);
-  const save = async () => {
-    if (value === null || value === saved) return;
-    const body = value.trim() ? { action: "set", field: "tagline", value: value.trim() } : { action: "reset", field: "tagline" };
-    const r = await api(`/api/songs/${projectId}/recipe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    if (r.ok) setSaved(value.trim());
-  };
-  if (value === null) return null;
-  return (
-    <label className="bg-card flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 text-sm" data-tagline>
-      <span className="font-medium">Tagline</span>
-      <input
-        data-tagline-input
-        className="bg-input/30 border-input h-8 min-w-60 flex-1 rounded-md border px-2 text-sm"
-        value={value}
-        maxLength={120}
-        placeholder="a short line under the title (empty: none)"
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={() => void save()}
-        onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-      />
-      <span className="text-muted-foreground text-xs">{saved === value && value ? "saved · " : ""}shown in the title opening (Shape → This song → Title opening: on)</span>
-    </label>
-  );
-}

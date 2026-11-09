@@ -14,6 +14,7 @@ import {
   claimNextRun,
   commandArgs,
   createSong,
+  enqueueLyricTiming,
   enqueueRun,
   executeRun,
   generateOptions,
@@ -265,5 +266,19 @@ describe("why the aligner failed", () => {
       "lyrics: aligning\nThe AI packages for pnpm align are not installed (or are out of date).\nInstall them once with:  pnpm audio:setup --ai",
     );
     expect(alignFailure([])).toBe("no message");
+  });
+});
+
+// N1: "Time the lyrics again" (Prepare → Lyrics & timing, and a stale word fix in Shape) queues a lyric timing job that
+// aligns anew; a plain one already waiting is turned into it, never a second job.
+describe("Time the lyrics again", () => {
+  it("queues one lyric timing job with realign", () => {
+    const plain = enqueueLyricTiming(ws, projectId);
+    expect((plain.options_json as { lyricsOnly?: boolean; realign?: boolean }).realign).toBeUndefined();
+    const again = enqueueLyricTiming(ws, projectId, { realign: true });
+    expect(again.id).toBe(plain.id);
+    expect(again.options_json).toMatchObject({ lyricsOnly: true, realign: true, command: "Lyric Studio: time the lyrics again" });
+    expect(enqueueLyricTiming(ws, projectId).id).toBe(plain.id); // asked again: the same waiting job
+    ws.db.delete(makeRun).where(eq(makeRun.id, plain.id)).run();
   });
 });

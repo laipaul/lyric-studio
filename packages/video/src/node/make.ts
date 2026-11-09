@@ -685,7 +685,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       leadMs,
       align: options.dryRun
         ? async () => {
-            throw new Error("This song has no stored alignment for its current lyrics.txt yet: make a video first (Generate), then its storyboard shows here.");
+            throw new Error("This song has no lyric timing for its current lyrics yet: Prepare → Lyrics & timing → Time the lyrics again (or make a video), then its storyboard shows here.");
           }
         : options.align,
     });

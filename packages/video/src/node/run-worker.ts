@@ -118,7 +118,8 @@ async function executeLyricTiming(ws: Workspace, run: MakeRun, extra: Partial<Ma
   const set = (values: Partial<MakeRun>) => ws.db.update(makeRun).set(values).where(eq(makeRun.id, run.id)).returning().get()!;
   try {
     set({ current: "lyric timing: aligning on the vocal stem…" });
-    const timing = await timeLyrics(ws, run.project_id, { log: extra.log, align: extra.align, voiceMap: extra.voiceMap, firstWords: extra.firstWords });
+    const realign = (run.options_json as { realign?: boolean } | null)?.realign === true; // "Time the lyrics again"
+    const timing = await timeLyrics(ws, run.project_id, { log: extra.log, align: extra.align, voiceMap: extra.voiceMap, firstWords: extra.firstWords, realign });
     return set({ status: "done", progress: 1, current: null, message: timing.summary, finished_at: new Date() });
   } catch (error) {
     return set({ status: "failed", current: null, message: (error as Error).message.split("\n").slice(0, 6).join("\n"), finished_at: new Date() });

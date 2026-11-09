@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronRight, ListChecks, Package } from "lucide-react";
+import { Check, ChevronRight, Package } from "lucide-react";
 import { createContext, useContext, useState } from "react";
 
 import type { TodoItem } from "@lyric/video/song-stages";
@@ -13,8 +13,12 @@ import { cn } from "@/lib/utils";
 
 // The four stages of a song (Prepare -> Shape -> Make -> Review & Post) over the existing tabs: a stage
 // shows only its own tabs; the Prepare stage lists what still needs the user's ears or eyes.
+// N1 (9 Nov 2026): every setting lives in the stage where it is looked for; the rail holds the four stages only
+// (numbered) and each stage's sections are tabs inside it. Prepare = what the user provides (files, lyrics and
+// timing with the tempo, the song's details and card texts, clips and collections); Shape = how the video is
+// planned and looks; Make = what gets produced.
 export const STAGES = [
-  { id: "prepare", name: "Prepare", tabs: ["assets", "lyrics"] },
+  { id: "prepare", name: "Prepare", tabs: ["assets", "lyrics", "details", "clips"] },
   { id: "shape", name: "Shape", tabs: ["shape"] },
   { id: "make", name: "Make", tabs: ["generate"] },
   { id: "review", name: "Review & Post", tabs: ["videos", "post"] },
@@ -22,7 +26,7 @@ export const STAGES = [
 export type StageId = (typeof STAGES)[number]["id"];
 export type StageStatus = { text: string; tone: "done" | "todo" | "blocked" | "muted" | "busy" };
 
-const TAB_LABEL: Record<string, string> = { assets: "Assets", lyrics: "Lyrics", shape: "Shape", generate: "Generate", videos: "Videos", post: "Post" };
+const TAB_LABEL: Record<string, string> = { assets: "Files", lyrics: "Lyrics & timing", details: "Details", clips: "Clips", shape: "Shape", generate: "Make", videos: "Videos", post: "Post" };
 const stageOf = (tab: string): StageId => STAGES.find((s) => (s.tabs as readonly string[]).includes(tab))?.id ?? "prepare";
 const TONE: Record<StageStatus["tone"], string> = {
   done: "text-emerald-300",
@@ -36,22 +40,37 @@ const TONE: Record<StageStatus["tone"], string> = {
 const GoToTab = createContext<(tab: string) => void>(() => {});
 export const useGoToTab = () => useContext(GoToTab);
 
-// The Shape page's menus in the left rail (Canva style): each opens one panel beside the rail; a second
-// click closes it. Theme holds the whole look (fonts, effects, colour: a song points to its theme, 31 Oct
-// 2026). "shot" opens by clicking a shot on the timeline, "text" by clicking a text card (no rail icons).
+// Shape's tabs (N1): each opens one panel beside the viewer; a second click closes it (the editor takes the whole
+// width). Look = the Look bar (theme, Change) and this song's look settings; Part & ending = which part of the song
+// and how it ends; Pace = shot length, transitions, pace; Shots = the clips of the video and the shot clicked on the
+// timeline. Not tabs: "text" (a lyric line or card clicked), "analysis" (the header's chip) and "theme" (the theme
+// editor, opened from Look → Edit theme or the Themes page; it moves to Themes with or after 2i).
 export const SHAPE_PANELS = [
-  { id: "clips", label: "Clips", icon: FEATURE.clips.icon, colour: FEATURE.clips.colour },
-  { id: "song", label: "This song", icon: FEATURE.song.icon, colour: FEATURE.song.colour },
-  { id: "make", label: "To make", icon: ListChecks, colour: "" },
-  { id: "auto", label: "Automatic", icon: FEATURE.auto.icon, colour: FEATURE.auto.colour },
-  // The Look group (1 Nov 2026): Theme sits apart at the bottom of the rail, in pink, so the song's own
-  // things and the shared look are never confused.
-  { id: "theme", label: "Theme", icon: FEATURE.theme.icon, colour: FEATURE.theme.colour },
+  { id: "look", label: "Look", icon: FEATURE.theme.icon, colour: FEATURE.theme.colour },
+  { id: "part", label: "Part & ending", icon: FEATURE.auto.icon, colour: FEATURE.auto.colour },
+  { id: "pace", label: "Pace", icon: FEATURE.auto.icon, colour: FEATURE.auto.colour },
+  { id: "shots", label: "Shots", icon: FEATURE.clips.icon, colour: FEATURE.clips.colour },
 ] as const;
-export type ShapePanelId = (typeof SHAPE_PANELS)[number]["id"] | "shot" | "text" | "analysis"; // analysis: the header's Analysis chip (2 Nov 2026)
+export type ShapePanelId = (typeof SHAPE_PANELS)[number]["id"] | "theme" | "text" | "analysis"; // analysis: the header's Analysis chip (2 Nov 2026)
+// Old panel names (links from before N1) -> where that content is now.
+export const OLD_SHAPE_PANELS: Record<string, ShapePanelId> = { clips: "shots", shot: "shots", auto: "part" };
 type PanelState = { panel: ShapePanelId | null; setPanel: (p: ShapePanelId | null) => void };
 const ShapePanel = createContext<PanelState>({ panel: null, setPanel: () => {} });
 export const useShapePanel = () => useContext(ShapePanel);
+// Make's tabs (N1): one form, three parts. Videos = the release pack, the song's platforms and Generate; Try other
+// looks = another theme for one run, compare themes, picture versions; Options = the rarely needed ones.
+export const MAKE_PARTS = [
+  { id: "videos", label: "Videos" },
+  { id: "looks", label: "Try other looks" },
+  { id: "options", label: "Options" },
+] as const;
+export type MakePart = (typeof MAKE_PARTS)[number]["id"];
+const MakePartCtx = createContext<{ part: MakePart; setPart: (p: MakePart) => void }>({ part: "videos", setPart: () => {} });
+export const useMakePart = () => useContext(MakePartCtx);
+// The video Shape shows (its platform), so a panel shows only the settings that apply to it (N1): title opening and
+// ending for Reels / TikTok / Shorts, YouTube layout for YouTube. null: no video chosen yet (everything shows).
+const VideoCtx = createContext<{ platform: string | null; setPlatform: (p: string | null) => void }>({ platform: null, setPlatform: () => {} });
+export const useShapeVideo = () => useContext(VideoCtx);
 
 // Theme editing mode (1 Nov 2026): while a theme is being edited the song page wears a pink frame and a
 // banner "Editing theme X · changes reach …" with Done. The Theme panel (shape-tools) reports it here.
@@ -68,7 +87,7 @@ export const useThemeLook = () => useContext(ThemeLookCtx);
 
 // The feature icons (lib/feature-icons.tsx): one icon per step, the same everywhere.
 const STAGE_ICON = { prepare: FEATURE.prepare.icon, shape: FEATURE.shape.icon, make: FEATURE.make.icon, review: FEATURE.review.icon } as const;
-const TAB_ICON: Record<string, Feature> = { assets: "song", lyrics: "lyrics", shape: "shape", generate: "make", videos: "review", post: "post" };
+const TAB_ICON: Record<string, Feature> = { assets: "song", lyrics: "lyrics", details: "song", clips: "clips", shape: "shape", generate: "make", videos: "review", post: "post" };
 const DOT: Record<StageStatus["tone"], string> = { done: "bg-emerald-400", todo: "bg-amber-300", blocked: "bg-red-400", muted: "bg-transparent", busy: "bg-brand animate-pulse" };
 
 // The song page as a Canva-style workspace: a narrow icon rail on the left with the four stages (a dot
@@ -78,6 +97,7 @@ const DOT: Record<StageStatus["tone"], string> = { done: "bg-emerald-400", todo:
 export function SongStages({
   initialTab,
   initialPanel,
+  initialPart,
   statuses,
   todo,
   counts,
@@ -85,6 +105,7 @@ export function SongStages({
 }: {
   initialTab: string;
   initialPanel?: ShapePanelId | null; // ?panel= (e.g. the Themes page's Edit opens Shape → Theme)
+  initialPart?: MakePart; // Make's tab (?part=)
   statuses: Record<StageId, StageStatus>;
   todo: TodoItem[];
   counts: Partial<Record<string, number>>; // a number next to a tab (Post: approved videos)
@@ -92,21 +113,22 @@ export function SongStages({
 }) {
   const [tab, setTab] = useState(initialTab);
   const [panel, setPanel] = useState<ShapePanelId | null>(initialPanel ?? null);
+  const [part, setPart] = useState<MakePart>(initialPart ?? "videos");
+  const [platform, setPlatform] = useState<string | null>(null);
   const [themeMode, setThemeMode] = useState<ThemeMode | null>(null);
   const [themeNow, setThemeNow] = useState<ThemeNow | null>(null);
-  // The rail's Theme: always opens on the choice ("This song uses …", Edit theme); an editor with no
-  // change yet closes, one with unsaved changes stays (the frame and banner say so).
+  // "theme X" (Analysis): Shape → Look, where the song's theme is shown and changed.
   const openTheme = () => {
-    if (panel === "theme" && stage === "shape") return setPanel(null);
-    if (themeMode && !themeMode.changed) themeMode.done();
     setTab("shape");
-    setPanel("theme");
+    setPanel("look");
   };
   const stage = stageOf(tab);
   const current = STAGES.find((s) => s.id === stage)!;
   return (
     <GoToTab.Provider value={setTab}>
       <ShapePanel.Provider value={{ panel, setPanel }}>
+        <MakePartCtx.Provider value={{ part, setPart }}>
+        <VideoCtx.Provider value={{ platform, setPlatform }}>
         <ThemeModeCtx.Provider value={setThemeMode}>
         <ThemeNowCtx.Provider value={setThemeNow}>
         <ThemeLookCtx.Provider value={{ themeNow, openTheme }}>
@@ -124,6 +146,7 @@ export function SongStages({
                     onClick={() => setTab(s.tabs[0])}
                     className={cn("relative flex flex-col items-center gap-1 rounded-lg px-1 py-2 text-[11px] leading-tight", stage === s.id ? "bg-brand/15 text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground")}
                   >
+                    <span data-stage-number className="text-muted-foreground absolute top-1 left-1.5 text-[10px] font-semibold tabular-nums">{i + 1}</span>
                     <Icon className="size-5" />
                     {s.id === "review" ? "Review" : s.name}
                     <span className={cn("absolute top-1.5 right-2 size-2 rounded-full", DOT[statuses[s.id].tone])} aria-hidden />
@@ -131,40 +154,9 @@ export function SongStages({
                       {statuses[s.id].text}
                     </span>
                   </button>
-                  {s.id === "shape" && stage === "shape" ? (
-                    <div className="mb-1 flex flex-col gap-0.5 border-y py-1" data-shape-menus>
-                      {SHAPE_PANELS.filter((m) => m.id !== "theme").map((m) => (
-                        <button
-                          key={m.id}
-                          type="button"
-                          data-rail-item={m.id}
-                          aria-pressed={panel === m.id}
-                          onClick={() => setPanel(panel === m.id ? null : m.id)}
-                          className={cn("flex flex-col items-center gap-0.5 rounded-md px-1 py-1.5 text-[10px] leading-tight", panel === m.id ? "bg-brand/25 text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground")}
-                        >
-                          <m.icon aria-hidden data-feature-icon={m.id} className={cn("size-4", m.colour)} />
-                          {m.label}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
                 </div>
               );
             })}
-            <div data-rail-group="look" className="mt-1 flex flex-col gap-0.5 border-t pt-1.5">
-              <span className="text-muted-foreground text-center text-[9px] font-semibold tracking-[0.16em] uppercase">Look</span>
-              <button
-                type="button"
-                data-rail-item="theme"
-                aria-pressed={panel === "theme" && stage === "shape"}
-                onClick={openTheme}
-                title="The song's look: its theme (shared with other songs that use it)"
-                className={cn("text-brand flex flex-col items-center gap-0.5 rounded-md px-1 py-1.5 text-[10px] leading-tight", panel === "theme" && stage === "shape" ? "bg-brand/25" : "hover:bg-brand/10")}
-              >
-                <FeatureIcon feature="theme" />
-                Theme
-              </button>
-            </div>
           </nav>
 
           <div className={cn("flex min-w-0 flex-1 flex-col gap-4 px-4 py-3", stage !== "shape" && "max-w-7xl", themeMode && "ring-brand rounded-lg ring-2 ring-inset")} data-work-area data-theme-mode={themeMode ? themeMode.name : undefined}>
@@ -212,7 +204,33 @@ export function SongStages({
               )
             ) : null}
 
-            {current.tabs.length > 1 ? (
+            {stage === "shape" ? (
+              <div role="tablist" aria-label="Shape" data-shape-tabs className="bg-muted text-muted-foreground inline-flex h-9 w-fit items-center rounded-lg p-[3px]">
+                {SHAPE_PANELS.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    role="tab"
+                    data-shape-tab={m.id}
+                    aria-selected={panel === m.id}
+                    title={panel === m.id ? "Close the panel (the editor takes the whole width)" : undefined}
+                    onClick={() => setPanel(panel === m.id ? null : m.id)}
+                    className={cn("inline-flex h-full items-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap", panel === m.id ? "bg-background text-foreground shadow-sm" : "hover:text-foreground")}
+                  >
+                    <m.icon aria-hidden className={cn("size-3.5", m.colour)} />
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            ) : stage === "make" ? (
+              <div role="tablist" aria-label="Make" data-make-tabs className="bg-muted text-muted-foreground inline-flex h-9 w-fit items-center rounded-lg p-[3px]">
+                {MAKE_PARTS.map((m) => (
+                  <button key={m.id} type="button" role="tab" data-make-tab={m.id} aria-selected={part === m.id} onClick={() => setPart(m.id)} className={cn("inline-flex h-full items-center rounded-md px-3 text-sm font-medium whitespace-nowrap", part === m.id ? "bg-background text-foreground shadow-sm" : "hover:text-foreground")}>
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            ) : current.tabs.length > 1 ? (
               <TabsList>
                 {current.tabs.map((t) => (
                   <TabsTrigger key={t} value={t} className="gap-1.5">
@@ -229,9 +247,17 @@ export function SongStages({
         </ThemeLookCtx.Provider>
         </ThemeNowCtx.Provider>
         </ThemeModeCtx.Provider>
+        </VideoCtx.Provider>
+        </MakePartCtx.Provider>
       </ShapePanel.Provider>
     </GoToTab.Provider>
   );
+}
+
+// Make's content that belongs to one of its tabs (the release pack and the song's platforms: Videos).
+export function InMakePart({ part, children }: { part: MakePart; children: React.ReactNode }) {
+  const now = useMakePart().part;
+  return <div hidden={now !== part} className="flex flex-col gap-4" data-make-part={part}>{children}</div>;
 }
 
 // "Make release pack": one video per platform for the song's platforms, from its recipe and clips.
@@ -277,7 +303,7 @@ export function ReleasePack({
           </h2>
           <p className="text-muted-foreground text-sm" data-release-platforms>
             One video for each of {platforms.map((p) => p.label).join(" · ")}
-            {fromRecipe ? " (this song's platforms)" : " (set the song's own platforms in Shape → What to make)"}, with {clipsNote}. The app makes every technical choice;
+            {fromRecipe ? " (this song's platforms)" : " (set the song's own platforms below, in What to make)"}, with {clipsNote}. The app makes every technical choice;
             you review the result.
           </p>
         </div>

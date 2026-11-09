@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { makeRun, openWorkspace } from "@lyric/db";
-import { createSong, loadTheme, readRecipe, songPathsById, writeRecipe } from "@lyric/video/node";
+import { createSong, createTheme, loadFontCatalog, loadTheme, readRecipe, songPathsById, writeRecipe } from "@lyric/video/node";
 import { openPanel, saveTheme } from "./stage-tabs";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-stages-"));
@@ -62,7 +62,7 @@ async function main() {
     const items = await page.$$eval("[data-todo-item]", (e: Element[]) => e.map((x) => x.getAttribute("data-todo-item")));
     check(JSON.stringify(items) === JSON.stringify(["clips", "vocals", "cover", "labels"]), `to-do: clips, vocal stem (a suggestion), cover, labels (${items.join(", ")})`);
     const tabs = async () => page.$$eval("[role=tab]", (e: Element[]) => e.map((x) => x.textContent?.trim()));
-    check(JSON.stringify(await tabs()) === JSON.stringify(["Assets", "Lyrics"]), "Prepare shows only Assets and Lyrics");
+    check(JSON.stringify(await tabs()) === JSON.stringify(["Files", "Lyrics & timing", "Details", "Clips"]), `Prepare's tabs: Files, Lyrics & timing, Details, Clips (${(await tabs()).join(", ")})`);
     // L1a: the Assets tab has the vocal stem slot next to the song (none yet: "Add…").
     await page.click("[data-todo-item=vocals] button");
     await page.waitForSelector("[data-asset=vocals]");
@@ -91,11 +91,12 @@ async function main() {
 
     // Shape and Review show their own tabs; Make has the release pack.
     await page.click("[data-stage=shape]");
-    check(JSON.stringify(await tabs()) === JSON.stringify([]), "Shape is one page (no tabs)");
+    check(JSON.stringify(await tabs()) === JSON.stringify(["Look", "Part & ending", "Pace", "Shots"]), `Shape's tabs: Look, Part & ending, Pace, Shots (${(await tabs()).join(", ")})`);
     await page.click("[data-stage=review]");
     check(JSON.stringify(await tabs()) === JSON.stringify(["Videos", "Post"]), "Review & Post shows Videos and Post");
     await page.click("[data-stage=make]");
     await page.waitForSelector("[data-release-pack]");
+    check(JSON.stringify(await tabs()) === JSON.stringify(["Videos", "Try other looks", "Options"]), `Make's tabs: Videos, Try other looks, Options (${(await tabs()).join(", ")})`);
     check(((await page.textContent("[data-release-platforms]")) ?? "").includes("Reels · TikTok · Shorts · YouTube · Canvas"), "release pack: every platform when the song has none of its own");
     check(await page.isDisabled("[data-make-release]"), "release pack waits for the clips (blocking to-do)");
 
@@ -127,19 +128,17 @@ async function main() {
     await page.waitForSelector("[data-generate]", { state: "visible" });
     check(JSON.stringify(await chosen()) === JSON.stringify(["reels", "tiktok", "youtube"]), "Make -> Prepare -> Make keeps the ticked platforms");
 
-    // The hidden Generate panel follows the song's collections: untick "wedding" in Shape → To make and the
+    // The hidden Generate panel follows the song's collections: untick "wedding" in Prepare → Clips and the
     // clips line in Make no longer names it (it used to keep the first value and send it with the run).
     check(((await page.textContent("[data-clips-line]")) ?? "").includes("wedding"), "Make: the clips line names the song's collection");
-    await page.click("[data-stage=shape]");
-    await openPanel(page, "make");
+    await openPanel(page, "collections");
     await page.uncheck("input[data-edit$='-wedding']");
     await page.waitForFunction(() => !document.querySelector("input[data-edit$='-wedding']:checked"));
     await sleep(800);
     await page.click("[data-stage=make]");
     await page.waitForSelector("[data-generate]", { state: "visible" });
-    check(!((await page.textContent("[data-clips-line]")) ?? "").includes("wedding"), `Make after unticking it in Shape: the clips line no longer names it (${await page.textContent("[data-clips-line]")})`);
-    await page.click("[data-stage=shape]");
-    await openPanel(page, "make");
+    check(!((await page.textContent("[data-clips-line]")) ?? "").includes("wedding"), `Make after unticking it in Prepare → Clips: the clips line no longer names it (${await page.textContent("[data-clips-line]")})`);
+    await openPanel(page, "collections");
     await page.check("input[data-edit$='-wedding']");
     await sleep(800);
 
@@ -176,70 +175,78 @@ async function main() {
     // and, on Shape, its menus; each menu opens one panel beside the rail; the editor fills the rest.
     writeRecipe(recipe, { ...readRecipe(recipe), tempo: 96, ending: "fade", locked: ["tempo"] });
     await page.click("[data-stage=shape]");
-    await page.waitForSelector("[data-shape-menus]");
-    check((await page.$$("[role=tab]")).length === 0, "Shape is one page: no Style / Storyboard tabs");
+    await page.waitForSelector("[data-shape-tabs]");
     check(((await page.textContent("[data-song-header] h1")) ?? "").length > 0, "the slim header keeps the song title");
     const railBox = await (await page.$("[data-rail]"))!.boundingBox();
     const stageIds = await page.$$eval("[data-rail] [data-stage]", (e: Element[]) => e.map((x) => x.getAttribute("data-stage")));
     check(JSON.stringify(stageIds) === JSON.stringify(["prepare", "shape", "make", "review"]) && !!railBox && railBox.x < 5 && railBox.width < 100, `the stages sit in the rail on the left (${stageIds.join(", ")})`);
-    const menus = await page.$$eval("[data-rail-item]", (e: Element[]) => e.map((x) => x.getAttribute("data-rail-item")));
-    check(JSON.stringify(menus) === JSON.stringify(["clips", "song", "make", "auto", "theme"]) && !!(await page.$("[data-rail-group=look] [data-rail-item=theme]")), `Shape's menus in the rail, Theme apart in the Look group (${menus.join(", ")})`);
+    const numbers = await page.$$eval("[data-rail] [data-stage-number]", (e: Element[]) => e.map((x) => x.textContent));
+    check(JSON.stringify(numbers) === JSON.stringify(["1", "2", "3", "4"]) && (await page.$$("[data-rail-item]")).length === 0 && !(await page.$("[data-rail-group]")), `N1: the rail holds the four stages only, numbered 1-4 (${numbers.join(", ")})`);
     check(!(await page.isVisible("[data-shape-tools]")), "no panel open: the editor takes the whole width");
     const viewerBox = await (await page.waitForSelector("[data-viewer], [data-look-preview]")).boundingBox();
     check(!!viewerBox && viewerBox.y < 300, `the viewer at the top of the editor (${JSON.stringify(viewerBox)})`);
     check(!!(await page.$("[data-next-make]")), '"Next: Make" under the viewer');
     const inBlock = async (b: string) => page.$$eval(`[data-style-block=${b}] [data-field]`, (e: Element[]) => e.map((x) => x.getAttribute("data-field")));
-    await openPanel(page, "theme");
-    // The Theme panel: the song's theme (a new song: the artist's default theme) and a tile per theme.
-    const themeName = (await page.getAttribute("[data-theme-current]", "data-theme-current")) ?? "";
-    check(themeName.length > 0 && (await page.getAttribute(`[data-theme-tile="${themeName}"]`, "aria-pressed")) === "true", `the song's theme, its tile chosen (${themeName})`);
-    check(((await page.textContent("[data-theme-users]")) ?? "") === "Used by this song only", "used by this song only");
-    check((await page.$("[data-theme-editors]")) === null, "the editors open with Edit theme");
-    check((await page.getAttribute("[data-theme-current] [data-theme-reach]", "data-theme-reach")) === "single" && ((await page.textContent("[data-theme-current] [data-theme-reach]")) ?? "") === "This song only", "the badge: This song only");
+    const visibleBlocks = () => page.$$eval("[data-style-block]", (e: Element[]) => e.filter((x) => (x as HTMLElement).offsetParent !== null).map((x) => x.getAttribute("data-style-block")));
+    // Look: the Look bar (the song's theme, Change) and this song's look settings; no theme library in Shape (N1).
+    await openPanel(page, "look");
+    const themeName = (await page.getAttribute("[data-look-bar]", "data-look-bar")) ?? "";
+    check(themeName.length > 0, `Look: the Look bar names the song's theme (${themeName})`);
+    const lookMain = await page.$$eval("[data-style-block=look] [data-field]", (e: Element[]) => e.filter((x) => !x.closest("[data-other-videos]")).map((x) => x.getAttribute("data-field")));
+    check(JSON.stringify(lookMain) === JSON.stringify(["titleOpening", "readability"]) && !!(await page.$("[data-style-block=look] [data-other-videos] [data-field=youtubeLayout]")), `Look for the Reel chosen: title opening and readability; the YouTube layout folded under Only for other videos (${lookMain.join(", ")})`);
+    check(!(await page.$("[data-theme-tile]")) && !(await page.$("[data-theme-new]")) && !(await page.$("[data-removed-themes]")), "no theme library in Shape: it is on the Themes page");
     check(!(await page.$("[data-theme-banner]")) && !(await page.$("[data-work-area][data-theme-mode]")), "not editing: no pink frame, no banner");
     const lookLine = (await page.textContent("[data-look-content]")) ?? "";
-    check(lookLine.includes(`Look:theme ${themeName}`) && lookLine.includes("This song only") && lookLine.includes("Content: this song"), `the Look · Content line at the top of Shape (${lookLine})`);
-    await page.click("[data-theme-edit]");
+    check(lookLine.includes(`Look:theme ${themeName}`) && lookLine.includes("This song only") && lookLine.includes("Content: this song"), `the Look · Content line (Analysis) (${lookLine})`);
+    await page.click("[data-look-edit-theme]");
     await page.waitForSelector("[data-theme-banner]");
     const banner = (await page.textContent("[data-theme-banner]")) ?? "";
-    check(banner.includes(`Editing theme ${themeName}`) && banner.includes("Changes here reach: this song only") && (await page.getAttribute("[data-work-area]", "data-theme-mode")) === themeName, `Edit theme: the pink frame and the banner (${banner})`);
+    check(banner.includes(`Editing theme ${themeName}`) && banner.includes("Changes here reach: this song only") && (await page.getAttribute("[data-work-area]", "data-theme-mode")) === themeName, `Look → Edit theme: the pink frame and the banner (${banner})`);
     await page.click("[data-theme-done]");
     await page.waitForSelector("[data-theme-banner]", { state: "detached" });
-    check((await page.$("[data-theme-editors]")) === null, "Done (no changes): the editor closes, back to the choice");
+    check((await page.$("[data-theme-editors]")) === null && (await page.getAttribute("[data-theme-current]", "data-theme-current")) === themeName, "Done (no changes): the editor closes on the song's theme");
+    check(((await page.textContent("[data-theme-users]")) ?? "") === "Used by this song only" && ((await page.textContent("[data-theme-current] [data-theme-reach]")) ?? "") === "This song only", "used by this song only, with its badge");
+    check(!!(await page.$("[data-theme-current] [data-themes-link]")), "new, rename, delete: a link to the Themes page");
     await openPanel(page, "colour");
     const toolsBox = await (await page.$("[data-shape-tools]"))!.boundingBox();
     const viewerAfter = await (await page.$("[data-viewer], [data-look-preview]"))!.boundingBox();
-    check(!!toolsBox && !!viewerAfter && toolsBox.x + toolsBox.width <= viewerAfter.x + 1, `the panel opens beside the rail, left of the viewer (${JSON.stringify(toolsBox)} / ${JSON.stringify(viewerAfter)})`);
+    check(!!toolsBox && !!viewerAfter && toolsBox.x + toolsBox.width <= viewerAfter.x + 1, `the panel opens left of the viewer (${JSON.stringify(toolsBox)} / ${JSON.stringify(viewerAfter)})`);
     check((await inBlock("theme")).includes("accentColour"), `Edit theme: the accent colour row (${(await inBlock("theme")).join(", ")})`);
-    await page.click("[data-rail-item=theme]");
-    check(!(await page.isVisible("[data-shape-tools]")), "a second click on the menu closes its panel");
-    await openPanel(page, "song");
-    const songLine = (await page.textContent("[data-compact-summary=song]")) ?? "";
-    check(songLine === "Tagline: none · EP: none · YouTube: cover · Title opening: off", `This song's line (${songLine})`);
-    check(JSON.stringify(await inBlock("song")) === JSON.stringify(["tagline", "hookText", "endText", "ep", "youtubeLayout", "titleOpening"]), `This song: Card text (tagline, hook and end card texts) first, then EP, YouTube layout, title opening (${(await inBlock("song")).join(", ")})`);
+    await page.click("[data-theme-cancel]");
+    await page.click("[data-shape-tab=look]");
+    await page.waitForSelector("[data-shape-panel=look]");
+    await page.click("[data-shape-tab=look]");
+    check(!(await page.isVisible("[data-shape-tools]")), "a second click on the tab closes its panel");
+    // The song's own settings left Shape (N1): Details, Clips and Lyrics & timing in Prepare, What to make in Make.
+    await openPanel(page, "details");
+    check(JSON.stringify(await inBlock("details")) === JSON.stringify(["tagline", "hookText", "endText", "ep"]) && !!(await page.$("[data-style-block=details] [data-card-title]")), `Prepare → Details: title, tagline, hook and end card texts, EP (${(await inBlock("details")).join(", ")})`);
+    check(!(await page.$("[data-field=lineShape]")) && !(await page.$("[data-field=lineBuild]")) && !(await page.$("[data-field=finalHook]")), "the theme's line shape rows are not repeated outside the theme editor");
     await openPanel(page, "make");
     const makeLine = (await page.textContent("[data-compact-summary=make]")) ?? "";
     check(makeLine.startsWith("Reels 3 · YouTube 1") && makeLine.includes("clips: the song's own"), `What to make's line (${makeLine})`);
-    check(JSON.stringify(await inBlock("make")) === JSON.stringify(["platforms", "variations", "collections"]), `What to make: platforms, videos per platform, collections (${(await inBlock("make")).join(", ")})`);
-    check((await page.$$("[data-style-block]")).length === 1, "one panel at a time");
+    check(JSON.stringify(await inBlock("make")) === JSON.stringify(["platforms", "variations"]), `Make → Videos: platforms, videos per platform (${(await inBlock("make")).join(", ")})`);
+    await openPanel(page, "collections");
+    check(JSON.stringify(await inBlock("collections")) === JSON.stringify(["collections"]), "Prepare → Clips: the collections");
+    await openPanel(page, "tempo");
+    check(!!(await page.$("[data-field=tempo] [data-tempo-check]")) && !!(await page.$("[data-retime-button]")), "Prepare → Lyrics & timing: the tempo tools and Time the lyrics again");
+    check(!!(await page.$("[data-locked=tempo]")) && ((await page.textContent("[data-field=tempo] [data-source]")) ?? "") === "Set by me" && !(await page.$("[data-back-auto=tempo]")), "a locked value keeps its value and shows Set by me (no ↺ while locked)");
+    // Part & ending and Pace: "auto" or "Set by me" in place, ↺ back to auto; no Automatic section any more.
+    await openPanel(page, "part");
+    check(JSON.stringify(await visibleBlocks()) === JSON.stringify(["part"]), `one panel at a time (${(await visibleBlocks()).join(", ")})`);
+    check(JSON.stringify(await inBlock("part")) === JSON.stringify(["section", "length", "ending"]), `Part & ending: section, target length, ending (${(await inBlock("part")).join(", ")})`);
+    check((await page.textContent("[data-auto-summary]")) === "1 set by me: Ending; the rest automatic", `its summary line (${await page.textContent("[data-auto-summary]")})`);
+    check(((await page.textContent("[data-field=ending] [data-source]")) ?? "") === "Set by me" && ((await page.textContent("[data-field=section] [data-source]")) ?? "") === "auto", "Set by me / auto in place");
+    await page.click("[data-back-auto=ending]");
+    await page.waitForFunction(() => document.querySelector("[data-field=ending] [data-source]")?.textContent === "auto");
+    await sleep(500);
+    check(readRecipe(recipe).ending === undefined, "↺ auto: the app chooses the ending again (song.json has none)");
     await page.click("[data-panel-close]");
     check(!(await page.isVisible("[data-shape-tools]")), "the panel's × closes it");
-    if (process.env.STYLE_SHOT) {
-      await openPanel(page, "theme");
-      if (await page.$("[data-theme-cancel]")) await page.click("[data-theme-cancel]");
-      await page.waitForSelector("[data-theme-tiles]");
-      await sleep(1500);
-      await page.screenshot({ path: process.env.STYLE_SHOT });
-    }
-    await openPanel(page, "auto");
-    check((await page.textContent("[data-auto-summary]")) === "2 set by you: Tempo, Ending", `Automatic's summary line (${await page.textContent("[data-auto-summary]")})`);
-    check(JSON.stringify(await inBlock("auto")) === JSON.stringify(["shotLength", "tempo", "section", "length", "ending", "transitions", "paceShift", "readability"]), `Automatic with its eight rows (${(await inBlock("auto")).join(", ")})`);
-    check(!!(await page.$("[data-field=tempo] [data-tempo-check]")), "the tempo tools are there");
-    // Calm rows: only the "This song" badge; other sources in the label's tooltip; lock, reset, per platform in the ⋯ menu.
-    const badges = await page.$$eval("[data-field] [data-source]", (e: Element[]) => [...new Set(e.map((x) => x.textContent))]);
-    check(JSON.stringify(badges) === JSON.stringify(["This song"]), `only "This song" badges (${badges.join(", ")})`);
+    await openPanel(page, "pace");
+    check(JSON.stringify(await inBlock("pace")) === JSON.stringify(["shotLength", "transitions", "paceShift"]), `Pace: shot length, transitions, pace (${(await inBlock("pace")).join(", ")})`);
+    check((await page.textContent("[data-auto-summary]")) === "All automatic: the app handles these", "Pace: all automatic");
     check(((await page.getAttribute("[data-field=transitions] [data-source-hint]", "title")) ?? "").startsWith("From: "), "other sources: a tooltip on the label");
-    check(!!(await page.$("[data-locked=tempo]")) && !(await page.$("[data-locked=shotLength]")), "a locked setting shows its padlock, the others none");
+    check(!(await page.$("[data-locked=shotLength]")), "an unlocked setting shows no padlock");
     check(!(await page.$("[data-field=shotLength] [data-lock]")) && !(await page.$("[data-field=shotLength] [data-per-platform]")), "no lock or 'per platform' buttons in the row");
     await page.click("[data-row-menu=shotLength]");
     const menuItems = await page.$$eval("[role=menuitem]", (e: Element[]) => e.map((x) => x.textContent));
@@ -403,10 +410,9 @@ async function main() {
     writeRecipe(songPathsById(ws2, otherId).recipe!, { theme: shared });
     await page.reload();
     await page.click("[data-stage=shape]");
-    await page.waitForSelector("[data-shape-menus]");
-    await openPanel(page, "theme");
-    check(((await page.textContent("[data-theme-users]")) ?? "").startsWith("Used by 2 songs"), `a shared theme says so (${await page.textContent("[data-theme-users]")})`);
+    await page.waitForSelector("[data-shape-tabs]");
     await openPanel(page, "effects");
+    check(((await page.textContent("[data-theme-banner]")) ?? "").includes("2 songs"), `a shared theme says so (${await page.textContent("[data-theme-banner]")})`);
     check(((await page.textContent("[data-theme-save]")) ?? "") === "Save (changes 2 songs)", "Save names the songs it changes");
     await page.check("[data-try-addon=heldGlow]");
     await page.click("[data-theme-save-as]");
@@ -415,19 +421,15 @@ async function main() {
     await page.waitForSelector("[data-theme-current='Hold On Glow']");
     check(readRecipe(recipe).theme === "Hold On Glow" && loadTheme(wsDir, "Hold On Glow").look.heldGlow === "on", "Save as new theme: this song uses the new theme, with Held-note glow");
     check(loadTheme(wsDir, shared).look.heldGlow !== "on" && readRecipe(songPathsById(ws2, otherId).recipe!).theme === shared, "…the other song keeps its theme as it was");
-    // + New theme: named first, started from another theme, opens in the editor.
-    await page.click("[data-theme-new]");
-    await page.fill("[data-new-theme-name]", "Night Drive");
-    await page.selectOption("[data-new-theme-from]", shared);
-    await page.click("[data-new-theme-create]");
-    await page.waitForSelector("[data-theme-editing='Night Drive']");
-    check(readRecipe(recipe).theme === "Night Drive" && loadTheme(wsDir, "Night Drive").look.verseEffect === "typewriter:30", "+ New theme: named first, from the chosen theme, the song uses it, the editor opens");
-    await page.click("[data-theme-cancel]");
-    // The Theme panel manages themes only: no "Use for this song" on its tiles (before 2e-1).
-    check(!(await page.$("[data-theme-use]")) && !(await page.$("[data-theme-change]")) && (await page.$$("[data-theme-tile]")).length > 1, "the Theme panel's tiles do not switch the song's theme");
-    check(!(await page.$("[data-look-bar]")), "no Look bar on the Theme panel (it shows the same theme itself)");
+    // New theme, rename, delete and restore: the Themes page only (N1; themes.e2e.ts). Here the song moves to a new
+    // theme "Night Drive" made from the shared one, as the Themes page's New theme does.
+    check(!(await page.$("[data-theme-new]")) && !(await page.$("[data-theme-tile]")) && !(await page.$("[data-theme-use]")), "Shape has no theme library: no New theme, tiles or Use for this song");
+    createTheme(ws2, { projectId: id, name: "Night Drive", from: shared, catalog: loadFontCatalog(wsDir) });
+    await page.reload();
+    await page.click("[data-stage=shape]");
+    await page.waitForSelector("[data-shape-tabs]");
     // Shape's Look bar (any other panel): the song's theme, Change opens the picker; a click only previews.
-    await openPanel(page, "song");
+    await openPanel(page, "part");
     await page.waitForSelector("[data-look-bar='Night Drive']");
     const bar = await page.$eval("[data-look-bar]", (e: Element) => ({ y: e.getBoundingClientRect().top, tools: document.querySelector("[data-shape-tools]")!.getBoundingClientRect().top, mark: !!e.querySelector("[data-look-customized]") }));
     check(bar.y - bar.tools < 80 && !bar.mark, `the Look bar at the top of the panel, Night Drive not marked customized (${JSON.stringify(bar)})`);
@@ -452,16 +454,6 @@ async function main() {
     await page.click("[data-theme-apply]");
     await page.waitForSelector(`[data-look-bar="${shared}"]`);
     check(readRecipe(recipe).theme === shared && !(await page.$("[data-theme-picker]")), "Apply: the song uses the theme, the picker closes");
-    await openPanel(page, "theme");
-    // A tile's ⋯: Delete (an unused theme) and Restore.
-    await page.click("[data-row-menu='theme-Hold On Glow']");
-    await page.click("[role=menuitem][data-theme-delete='Hold On Glow']");
-    await page.waitForSelector("[data-removed-themes]");
-    check(!(await page.$("[data-theme-tile='Hold On Glow']")) && existsSync(path.join(wsDir, "themes", "_removed")), "Delete: the theme moves to themes\\_removed\\");
-    await page.click("[data-removed-themes] button[aria-expanded]");
-    await page.click("[data-theme-restore='Hold On Glow']");
-    await page.waitForSelector("[data-theme-tile='Hold On Glow']");
-    check(true, "Restore: it is back");
     // Shape -> Make -> Shape: it is all saved, so it is all still there.
     await page.click("[data-stage=make]");
     await page.waitForFunction(() => !document.querySelector("[data-effect-preview]"));

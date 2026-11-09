@@ -56,9 +56,12 @@ async function main() {
 
     await page.goto(`${base}/songs/${ids[0]}`);
     await page.waitForSelector("[data-song-title]");
+    // N1: the header's pencil opens Prepare → Details, the one place the title is changed.
     await page.click("[data-song-title-edit]");
-    await page.fill("[data-song-title-input]", "Hold On Tight");
-    await page.press("[data-song-title-input]", "Enter");
+    await page.waitForSelector("[data-style-block=details] [data-card-title]");
+    check(!(await page.$("[data-song-title-input]")), "the header has no title editor of its own (one place: Details)");
+    await page.fill("[data-card-title]", "Hold On Tight");
+    await page.press("[data-card-title]", "Enter");
     await page.waitForFunction(() => document.querySelector("[data-song-title]")?.textContent === "Hold On Tight");
     for (let i = 0; i < 20 && !existsSync(path.join(wsDir, "songs", "Life Lyrics", "Hold On Tight")); i++) await sleep(150);
     check(existsSync(path.join(wsDir, "songs", "Life Lyrics", "Hold On Tight", "Hold On.wav")) && !existsSync(path.join(wsDir, "songs", "Life Lyrics", "Hold On")), "a new title: the song folder follows (songs\\Life Lyrics\\Hold On Tight)");

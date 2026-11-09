@@ -177,7 +177,7 @@ describe("the Lyrics tab", () => {
     expect(saveLyricsText(ws, id, `${LYRICS}One more line\n`)).toEqual({ changed: true, realign: true });
     const v = await lyricsView(ws, id);
     expect(v.lines).toBeNull(); // the words changed: no stored alignment for them until the next make
-    expect(v.why).toMatch(/make a video first/);
+    expect(v.why).toMatch(/Time the lyrics again \(above\) or make a video/); // N1: never re-timed silently
     const earlier = v.replaced.find((r) => r.lines === 4)!;
     expect(restoreLyrics(ws, id, earlier.file)).toEqual({ changed: true, realign: true });
     expect((await lyricsView(ws, id)).lines).not.toBeNull(); // back to words that were aligned

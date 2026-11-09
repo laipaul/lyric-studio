@@ -168,7 +168,7 @@ async function main() {
     await page.goto(`${base}/songs/${ids[0]}`);
     await page.waitForSelector("[data-stages]");
     await openTab(page, "Generate");
-    await page.click("[data-compare] summary"); // Compare is folded until used
+    await page.click("[data-make-tab=looks]"); // Make → Try other looks (N1)
     await page.waitForSelector("[data-compare-themes]");
     await page.click("[data-picker-open=compare-themes]");
     await page.fill("[data-picker=compare-themes] [data-picker-search]", "night");

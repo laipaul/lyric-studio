@@ -4,6 +4,44 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Navigation N1: four numbered stages, tabs inside them, every setting in one place ✅ (to verify on the Windows PC)
+- **The rail holds the four stages only, numbered 1-4** (Prepare, Shape, Make, Review); Shape's menus and the Look
+  group are gone from it. Each stage's sections are tabs at the top of its work area:
+  - **1 Prepare:** Files (the song's files; was Assets) · Lyrics & timing (the tempo with the tap test and the tempo
+    check, **Time the lyrics again**, then the lyrics) · Details (title, tagline, hook and end card texts, EP, the
+    song's links) · Clips (the song's own clips, their order, Use / Omit, removed clips, **clips from collections**).
+  - **2 Shape:** Look (the Look bar, then this song's title opening, lyric readability, YouTube layout; "Edit theme",
+    "All themes ↗") · Part & ending (section, target length, ending) · Pace (shot length, transitions, pace) · Shots
+    (the clip strip and the shot clicked on the timeline). A second click on a tab closes its panel.
+  - **3 Make:** Videos (release pack, What to make = the song's platforms and videos per platform, Generate) · Try
+    other looks · Options (rarely needed). One form: what is chosen stays across the tabs.
+  - **4 Review:** Videos · Post (unchanged).
+- **Removed duplicates (one place each):** Make's per-run part of the song, length, shot length, YouTube layout and
+  videos per platform (a run makes what Shape planned; "Use these settings" from a past run still re-makes that
+  run's part and layout, shown read-only, and "Also keep that run's settings for this song" stays for that case);
+  "Keep these choices for this song"; "Time the lyrics again first" (now its own action in Prepare); the tagline
+  field in Assets (Details); the header's title editor (the pencil opens Details); Shape's theme library (tiles, New
+  theme, rename, duplicate, delete, restore: the Themes page has them all); the theme's Line shape / Lines appear /
+  Bigger final chorus rows that leaked into "This song" (they did nothing there).
+- **"Automatic" is no longer a section:** every setting the app chooses shows **auto** or **Set by me** in place, with
+  **↺ auto** to give it back to the app; a locked value keeps its value and shows "Set by me" (no ↺ while locked).
+- **Only what applies to the video shown:** a Reel shows the title opening and ending, a YouTube video the YouTube
+  layout; the others are folded under "Only for other videos: …" (still one click away). No video planned yet: all.
+- **Word fixes in Shape:** the note says whether the lyric timing is still valid; when it is stale, "Time the lyrics
+  again" queues it (never silently). **Swaps** say "changes the song's clip order: every video of this song" (2f
+  makes them this video's only). Analysis "theme X" opens Look.
+- **Old links keep working:** ?tab=assets (Files), ?panel=clips / shot (Shots), auto (Part & ending), song (Details),
+  make (Make), theme (the theme editor, ?edit= from the Themes page); the Prepare to-do "Add clips" opens Clips.
+- **Reachability check:** every control reachable before N1 is reachable after it (listed in the summary to the user);
+  only the per-run overrides in Make were removed on purpose (decided).
+- Tests (browser tests updated to the new places through stage-tabs.ts): song-stages, style-lock, storyboard,
+  textboard, themes, lyrics-tab, song-title, collections, library, releases, videos-post, title-opening all pass.
+  pairings: one old check fails before and after N1 (the stand-in viewer is 428 px wide, the check expects 300-380;
+  it fills the free height since 2 Nov). new-song-every-platform not run here (a real render worker). Unit: runs
+  (new: Time the lyrics again), lyrics-view, song-stages pass; the whole suite 994 pass, only make / migrate / render
+  fail here because Remotion cannot reach remotion.media from the cloud session (real renders; unrelated). tsc
+  clean; pnpm build ok; eslint: only the old findings.
+
 ### Shape: change a video's theme from the Look bar (preview, then Apply) ✅ (to verify on the Windows PC)
 - **Principle (in CLAUDE.md):** "Shape = work on this video. Theme = manage reusable looks."
 - **Look bar** at the top of Shape's panel (every panel except Theme): the song's theme name, ONE mark
@@ -105,13 +143,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Fix (automatic, no setting; src/node/textboard.ts titleCards): a block that touches the first line's box (same measuring as the last fix) is first moved inside the platform's safe area (and the profile grid's 3:4 crop when it fits): the title + byline UP above the line, the tagline DOWN below it, with a margin and clear of the other block; if that does not fit it shrinks step by step by up to 25% (CARD_MIN_SCALE, as fitCardBlocks). A clear place = the block stays its full 2.5 s, no note, QA "Title cards clear of the first lyric" passes. Only with no clear place: the lead-in only + the plain-words note, as before. Same props for Shape and render. YouTube and the auto section with a full lead-in are unchanged.
 - Tests: test/title-opening.test.ts 18 (2 new: title moves above the line and lasts 2.5 s with QA ok, tagline moves below the line; the "line on the title" test now has the line from the top of the safe area = no room = lead-in + note); the 6 files (title-opening, textboard, qa, storyboard, extra-cards, textboard-make) 55 pass; tsc clean (packages/video, apps/studio).
 - To check: `cd D:\videomaker`, `git pull`, Shape → Reels, play from 0:00: the title and byline stay about 2.5 s near the top, the first lyric line below them.
-
-### Review: no line across the video in the browser's player ✅ (confirmed on the Windows PC, 8 Nov 2026)
-- Found by the user (8 Nov 2026): a thin horizontal line across the Reel in Review (not in Shape). The MP4 itself is
-  clean (checked by the user in Media Player): it is the top edge of the dark band Chrome / Edge draw behind their own
-  video controls (▶ / time / volume).
-- The app's pages now draw a soft fade there instead (no edge): a small style in app/layout.tsx (the CSS build drops
-  these browser-specific rules from globals.css, so it is a plain <style> tag). Review, Post and Compare players.
 
 ### Bug fix: the Reel's title did not show when the part of the song starts on a sung line ✅ (confirmed on the Windows PC in Shape, 8 Nov 2026)
 - Seen (Let My Love Carry You, Reel; Shape → Reels 0:36.1-1:41.3 chosen on the song track, Title opening on): "the title is not showing", "the tagline is not showing". Line 5 ("Let my love carry you through the night") is sung at the very start of that part.
@@ -330,6 +361,33 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   mix has different timing, use Generate -> advanced -> re-align.
 
 ## Next
+
+**Navigation and the order from here (agreed with the user, 9 Nov 2026).** Rule: every setting lives in the stage
+where the user looks for it, in ONE place. Order: **N1** (navigation, done, to verify) → story notes on clip cards
+(asked after N1) → **2e-1 → 2e-2 → O1 → 2c → M1 gate → 2f → 2g → 2h → 2i**; the theme editor moves to the Themes page
+with or after 2i (§3.2). Decisions on the N1 proposal:
+- **O1 (song-level look overrides, §3.1):** a small song.json layer between the theme and the storyboard for a fixed
+  list (line shape, lines appear, bigger final chorus to start), edited in Shape → Look; the theme editor keeps the
+  defaults; "Customized for this song" = the song has overrides. O1 also PROPOSES how to clean up the existing
+  "<song> look" theme copies (fold them back into their base theme + song overrides, or keep them): proposal first,
+  nothing deleted without the user's OK. Until O1, "Save as new theme" stays as it is.
+- **Swaps (§3.4):** from 2f a swap in Shape changes this video only and says "this video only; song order unchanged";
+  Prepare → Clips owns the song's order (then also for the collections' clips, which only Shape's strip orders today).
+  Until 2f a swap changes the song's order and says so.
+- **Word fixes in Shape (§3.5):** say whether the lyric timing is now stale and offer "Time the lyrics again"; never
+  re-time silently. Done in N1 for Shape and Prepare; left for 2c: Make still times changed words again before it
+  renders (announced in Tasks), the 2c gate decides whether stale timing blocks Make instead.
+- **Locked values (§3.7):** keep their value and show "Set by me" (done in N1); they become storyboard locks in 2f.
+- §3.3 (Shape's video list offers every platform, Make chooses what is rendered), §3.6 (readability = when, the
+  theme's backing = what it looks like), §3.8 (brand settings later, a small Brand page under Themes): as proposed.
+- **Try other looks and storyboards (plan for 2e-1).** Today a try (another theme for one run, compare themes,
+  picture versions) is planned by Make at render time, without a storyboard the user has seen. In 2e-1 each try gets
+  its own storyboard, made from the video's storyboard with only the theme or the picture set changed (same lyric
+  timing, range, locks): `storyboards\<platform>-<n>~<try>.json` (e.g. `reels-1~theme-night-drive.json`,
+  `reels-1~pictures-2.json`). Make renders from it, the run's manifest keeps a copy, and Shape's video list shows it
+  ("Reels v1 · try: Night Drive") to open, check and compare. A try never replaces the video's own storyboard:
+  "Use this look" goes through the Look bar's Apply (theme) and the clips through Prepare. Picture versions change
+  the clips, so their shots differ; a locked shot whose clip is not in the set is marked "needs a clip" (as today).
 
 **Storyboard architecture (agreed with the user, 9 Nov 2026; part of Theme v2, not a new phase).** Order inside
 Theme v2: 2b part 2 (as planned) → **2d → 2e-1 → 2e-2 → 2c** → **M1 gate** (rendered from the storyboard) →

@@ -5,8 +5,13 @@
 // { action: "ear", number, checked }: "checked by ear" on a line (clears its timing warnings in QA);
 // { action: "reset-all" | "undo-reset" | "dismiss-reset" }: every hand-set start back to the (stem's)
 // timing, Undo of a reset, or closing its notice;
-// { action: "anchors", anchors: [{ line, clip, clipIn?, transition? }], gapOrder? }: story anchors in song.json.
+// { action: "anchors", anchors: [{ line, clip, clipIn?, transition? }], gapOrder? }: story anchors in song.json;
+// { action: "retime" }: "Time the lyrics again" (N1): a lyric timing job that aligns anew, queued for the worker.
+import { existsSync } from "node:fs";
 import { connection } from "next/server";
+
+import { enqueueLyricTiming } from "@lyric/video/runs";
+import { songPathsById } from "@lyric/video/song-folder";
 
 import { lyricsView, resetHandTimes, restoreLyrics, saveAnchors, saveHandTimesChecked, saveLyricsText, fixLyricLine, setCheckedByEar } from "@lyric/video/lyrics-view";
 
@@ -29,6 +34,15 @@ export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
   try {
     const body = (await request.json()) as { action?: string; changes?: { number: number; ms: number | null }[]; text?: string; file?: string; number?: number; checked?: boolean; anchors?: unknown; gapOrder?: "story" | "shuffle" | null };
+    if (body.action === "retime") {
+      const run = withWorkspace((ws) => {
+        const paths = songPathsById(ws, id);
+        if (paths.instrumental) throw new Error("This song is an instrumental: nothing is sung, so there is no lyric timing.");
+        if (!paths.lyricsTxt || !existsSync(paths.lyricsTxt)) throw new Error("This song has no lyrics yet (Lyrics & timing).");
+        return enqueueLyricTiming(ws, id, { realign: true });
+      });
+      return Response.json({ queued: run.id });
+    }
     if (body.action === "anchors") return Response.json({ anchors: withWorkspace((ws) => saveAnchors(ws, id, body.anchors ?? [], body.gapOrder)) });
     if (body.action === "ear") {
       await withWorkspaceAsync((ws) => setCheckedByEar(ws, id, Number(body.number), body.checked === true));

@@ -207,7 +207,7 @@ export async function lyricsView(ws: Workspace, projectId: string): Promise<Lyri
   const choice = await anchorClips(ws, projectId);
   const anchors: AnchorsView = { list: recipe.anchors ?? [], gapOrder: recipe.gapOrder ?? null, clips: choice.clips, collections: choice.collections, problems: [] };
   const current = await currentLines(ws, projectId);
-  if (!current) return { ...base, anchors, lines: null, why: "This song has no stored alignment for its current lyrics.txt yet: make a video first (Generate), then its lines appear here.", checkRan: false };
+  if (!current) return { ...base, anchors, lines: null, why: "This song has no stored alignment for its current lyrics.txt yet: Time the lyrics again (above) or make a video, then its lines appear here.", checkRan: false };
   const { alignment, hand, guard, moves, lines, ear } = current;
   base.voice = alignment.voice?.kind ?? "demucs";
   base.handReset = paths.hints ? (readHandRecord(paths.hints)?.reset ?? null) : null;

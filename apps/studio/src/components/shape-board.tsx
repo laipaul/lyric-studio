@@ -26,7 +26,7 @@ import { AssessmentDetails, VERDICT_TEXT } from "@/components/assessment";
 import { LookViewer, VIEWER_HEIGHT, VIEWER_MAX, VIEWER_MIN } from "@/components/look-preview";
 import { PreviewPlayer } from "@/components/preview-player";
 import type { ShapeLook } from "@/components/shape-tools";
-import { SHAPE_PANELS, useGoToTab, useShapePanel, useThemeLook } from "@/components/song-stages";
+import { SHAPE_PANELS, useGoToTab, useShapePanel, useShapeVideo, useThemeLook } from "@/components/song-stages";
 import { ThemeReachBadge } from "@/components/theme-reach-badge";
 import { TransportBar } from "@/components/transport-bar";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,11 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   const { panel, setPanel } = useShapePanel();
   const [choices, setChoices] = useState<StoryboardChoices | null>(null);
   const [source, setSource] = useState<Source | null>(null);
+  const { setPlatform } = useShapeVideo();
+  useEffect(() => {
+    setPlatform(source?.platform ?? null);
+    return () => setPlatform(null);
+  }, [source?.platform, setPlatform]);
   const [view, setView] = useState<StoryboardView | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,6 +118,14 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   const [cardId, setCardId] = useState<string | null>(null); // the card in the card editor
   const [draft, setDraft] = useState<CardOverrides>({}); // its overrides while editing (live preview)
   const [notice, setNotice] = useState<string | null>(null);
+  // A word fix that left the lyric timing stale (§3.5, N1): said plainly, with "Time the lyrics again" (never silently).
+  const [stale, setStale] = useState<{ line: number; queued: string | null } | null>(null);
+  async function timeAgain(line: number) {
+    const r = await api(`/api/songs/${projectId}/lyrics`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "retime" }) });
+    const d = (await r.json().catch(() => ({}))) as { error?: string };
+    setStale({ line, queued: !r.ok || d.error ? (d.error ?? `The studio answered ${r.status}`) : "Queued: the lyrics are timed again on the vocal (follow it in Tasks); the video is planned again when it is done." });
+    if (r.ok && !d.error) window.dispatchEvent(new Event("lyric-tasks-changed"));
+  }
   const [pictures, setPictures] = useState<{ songClips: boolean; collections: string[] } | null>(null); // the clip set planned
 
   useEffect(() => {
@@ -267,7 +280,8 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
       if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
       const b = (await (await api(`/api/songs/${projectId}/textboard`, { cache: "no-store" })).json()) as TextboardData & { error?: string };
       if (!b.error) setBoard(b);
-      setNotice(!d.changed ? "Nothing changed." : d.timingKept ? `Line ${number} fixed in the lyrics (every platform and the captions); its timing is kept. The old lyrics are in the Lyrics tab's earlier versions.` : `Line ${number} fixed in the lyrics; the song's timing is made again on the next video.`);
+      setNotice(!d.changed ? "Nothing changed." : d.timingKept ? `Line ${number} fixed in the lyrics (every platform and the captions). The lyric timing is still valid: the line keeps its start and end. The old lyrics are in the Lyrics tab's earlier versions.` : `Line ${number} fixed in the lyrics (every platform and the captions).`);
+      setStale(d.changed && !d.timingKept ? { line: number, queued: null } : null);
       if (source) await show(source, true);
     } catch (e) {
       setError((e as Error).message);
@@ -502,13 +516,14 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
     setSelected(s.index);
     showAt(s.startMs);
   };
-  const panelTitle = panel === "shot" ? "Shot" : panel === "analysis" ? "Analysis" : (SHAPE_PANELS.find((m) => m.id === panel)?.label ?? "");
+  const panelTitle = panel === "analysis" ? "Analysis" : panel === "theme" ? "Theme" : panel === "text" ? "Text" : (SHAPE_PANELS.find((m) => m.id === panel)?.label ?? "");
   const closePanel = () => {
-    if (panel === "shot") setSelected(null);
+    if (panel === "shots") setSelected(null);
     setPanel(null);
   };
   const panelBody =
-    panel === "shot" ? (
+    panel === "shots" ? (
+      <div className="flex flex-col gap-4" data-shots-panel>
       <div data-selection className="flex flex-col gap-2">
         {view && shot ? (
           <ShotDetails
@@ -524,13 +539,13 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
           <p className="text-muted-foreground text-xs">Click a shot on the timeline.</p>
         )}
       </div>
-    ) : panel === "clips" ? (
       <div className="flex flex-col gap-3" data-clips-panel>
         {view?.editable && view.clips.length ? (
           <StoryStrip clips={view.clips} busy={saving || loading} onMove={moveClip} onOpen={openClip} onOmit={(clip, omit) => void edit({ action: "omit", clip, omit })} current={shot?.clip ?? null} />
         ) : (
           <p className="text-muted-foreground text-xs">{view && !view.editable ? "A past run: its clips cannot be changed." : "The clips show once the video is planned."}</p>
         )}
+      </div>
       </div>
     ) : panel === "text" ? (
       <div className="flex flex-col gap-3" data-text-panel>
@@ -560,6 +575,21 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
           <p className="text-xs text-emerald-300" role="status" data-textboard-notice>
             {notice}
           </p>
+        ) : null}
+        {stale ? (
+          <div data-stale-timing={stale.line} className="flex flex-col gap-1.5 rounded-md border border-amber-300/40 bg-amber-300/10 px-2.5 py-2 text-xs text-amber-100">
+            <p>
+              The lyric timing is now <b>stale</b>: it was made for the old words of line {stale.line}. Time the lyrics again to fix it. Until then Shape
+              cannot plan this video with the new words (it never times them itself); a video you make would time them again first (Tasks shows it).
+            </p>
+            {stale.queued ? (
+              <p data-stale-queued>{stale.queued}</p>
+            ) : (
+              <button type="button" data-stale-retime onClick={() => void timeAgain(stale.line)} className="bg-brand text-brand-foreground self-start rounded-md px-3 py-1 font-medium">
+                Time the lyrics again
+              </button>
+            )}
+          </div>
         ) : null}
       </div>
     ) : null;
@@ -708,10 +738,10 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
         <AnalysisSection title="How to edit">
           <p className="text-muted-foreground" data-storyboard-hint>
             Click a shot to {view.editable ? "edit" : "see"} it · drag a clip from{" "}
-            <button type="button" className="underline underline-offset-2" onClick={() => setPanel("clips")} data-open-clips>
-              Clips
+            <button type="button" className="underline underline-offset-2" onClick={() => setPanel("shots")} data-open-clips>
+              Shots
             </button>{" "}
-            onto a shot or a lyric line · the left menus change the clips, this song, what to make and the look.
+            onto a shot or a lyric line · Shape&apos;s tabs (Look, Part &amp; ending, Pace, Shots) change how the video is planned and looks; the clips, words and tempo are in Prepare, the platforms in Make.
           </p>
         </AnalysisSection>
       </div>
@@ -1010,8 +1040,8 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                       {view.platform.name === "youtube" ? (
                         <span>
                           No clip shots: this YouTube video shows your cover art for the whole song (the cover layout). To build it from your clips instead, open{" "}
-                          <button type="button" className="text-foreground underline underline-offset-2" onClick={(e) => { e.stopPropagation(); setPanel("song"); }} data-open-song>
-                            This song
+                          <button type="button" className="text-foreground underline underline-offset-2" onClick={(e) => { e.stopPropagation(); setPanel("look"); }} data-open-song>
+                            Look
                           </button>{" "}
                           and set the YouTube layout to clips.
                         </span>
@@ -1034,7 +1064,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                       onSelect={() => {
                         setSelected(s.index);
                         setPicks((n) => n + 1);
-                        setPanel("shot");
+                        setPanel("shots");
                       }}
                       dropTarget={dropShot === s.index || tl.liftOver === s.index}
                       lifted={tl.liftFrom === s.index}

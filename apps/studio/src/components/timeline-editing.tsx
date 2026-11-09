@@ -553,6 +553,10 @@ export function useTimelineEditing({
             {to && !same ? (
               <>
                 <span className="text-brand font-medium">swap</span> {from.index + 1} · {from.clip} ↔ {to.index + 1} · {to.clip}
+                {/* N1: said plainly until 2f makes a swap in Shape this video's only (then: "this video only; song order unchanged"). */}
+                <span className="text-muted-foreground block" data-swap-scope>
+                  changes the song&apos;s clip order: every video of this song
+                </span>
               </>
             ) : same && to?.loop ? (
               <span className="text-amber-300" data-lift-loop>the last shot is the loop ending: it always replays the first clip</span>
