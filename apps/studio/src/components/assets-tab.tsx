@@ -194,6 +194,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
   // Drag and drop: the song's clips in a new order (clips.json). Shape shows and Make uses this sequence.
   const CLIP_DRAG = "application/x-lyric-song-clip";
   const [dragClip, setDragClip] = useState<string | null>(null);
+  const [noteOpen, setNoteOpen] = useState<string | null>(null); // the clip whose story note is being written (its card does not drag meanwhile)
   const [overClip, setOverClip] = useState<string | null>(null);
   async function saveOrder(names: string[], done: string) {
     if (!data) return;
@@ -409,7 +410,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                   key={c.name}
                   data-clip={c.name}
                   data-position={i + 1}
-                  draggable={!busy}
+                  draggable={!busy && noteOpen !== c.name}
                   onDragStart={(e) => {
                     e.dataTransfer.setData(CLIP_DRAG, c.name);
                     e.dataTransfer.effectAllowed = "move";
@@ -464,6 +465,14 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                     <button type="button" data-remove={c.name} disabled={busy} onClick={() => remove(c.name)} className="text-muted-foreground hover:text-foreground mt-1 flex w-fit items-center gap-1">
                       <Trash2 className="size-3" /> Remove
                     </button>
+                    <ClipNoteField
+                      projectId={projectId}
+                      clip={c.name}
+                      note={c.note ?? null}
+                      editing={noteOpen === c.name}
+                      onEditing={(on) => setNoteOpen(on ? c.name : null)}
+                      onSaved={(note) => setData((d) => (d ? { ...d, clips: d.clips.map((x) => (x.hash === c.hash ? { ...x, note } : x)) } : d))}
+                    />
                   </div>
                 </li>
               ))}
@@ -522,3 +531,85 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
   );
 }
 
+// A clip's story note (Prepare → Clips, 9 Nov 2026): the clip's role in the story line, for the user only (the app never
+// reads it; it is not shown in Shape). One line ending in "…" when longer; a click opens a small box on the card that
+// saves as you type (no Save button); clicking outside or Esc closes it again; clearing the text deletes the note.
+function ClipNoteField({ projectId, clip, note, editing, onEditing, onSaved }: { projectId: string; clip: string; note: string | null; editing: boolean; onEditing: (on: boolean) => void; onSaved: (note: string | null) => void }) {
+  const [text, setText] = useState(note ?? "");
+  const [failed, setFailed] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const sent = useRef(note ?? ""); // what the studio has
+  const latest = useRef(text);
+  async function save(value: string) {
+    clearTimeout(timer.current);
+    if (value === sent.current) return;
+    const before = sent.current;
+    sent.current = value;
+    try {
+      const r = await api(`/api/songs/${projectId}/assets`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note: { name: clip, text: value } }) });
+      const d = (await r.json()) as { note?: string | null; error?: string };
+      if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
+      setFailed(null);
+      onSaved(d.note ?? null);
+    } catch (e) {
+      sent.current = before;
+      setFailed(`Note not saved: ${(e as Error).message}`);
+    }
+  }
+  // Leaving the page (another tab) while typing: what was typed is still saved.
+  useEffect(() => () => void (latest.current !== sent.current && save(latest.current)), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const open = () => {
+    setText(note ?? "");
+    latest.current = note ?? "";
+    onEditing(true);
+  };
+  if (!editing)
+    return (
+      <div className="mt-1 min-w-0">
+        {note ? (
+          <button type="button" data-clip-note={clip} onClick={open} title={note} className="text-foreground/80 hover:text-foreground block w-full truncate text-left text-[11px] italic">
+            {note.replace(/\s+/g, " ")}
+          </button>
+        ) : (
+          <button type="button" data-clip-note-add={clip} onClick={open} className="text-muted-foreground/60 hover:text-muted-foreground text-[11px]">
+            + Add a note
+          </button>
+        )}
+        {failed ? <p className="text-[10px] text-red-300">{failed}</p> : null}
+      </div>
+    );
+  return (
+    <div className="mt-1 min-w-0">
+      <textarea
+        autoFocus
+        data-clip-note-input={clip}
+        aria-label={`Story note for ${clip}`}
+        rows={3}
+        maxLength={2000}
+        draggable={false}
+        onDragStart={(e) => e.preventDefault()}
+        placeholder="Its role in the story (for you only)"
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          latest.current = e.target.value;
+          clearTimeout(timer.current);
+          const v = e.target.value;
+          timer.current = setTimeout(() => void save(v), 500);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            (e.target as HTMLTextAreaElement).blur();
+          }
+        }}
+        onBlur={() => {
+          void save(latest.current);
+          onEditing(false);
+        }}
+        className="bg-input/30 border-input w-full resize-y rounded-md border px-1.5 py-1 text-[11px] leading-snug"
+      />
+      {failed ? <p className="text-[10px] text-red-300">{failed}</p> : null}
+    </div>
+  );
+}

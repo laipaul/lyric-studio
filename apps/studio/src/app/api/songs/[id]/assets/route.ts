@@ -6,14 +6,15 @@
 // this file?" for a file put into the song folder by hand, or "kind" = restoreClip with "name" (back from
 // clips\_removed\). DELETE ?name= : the clip moves to clips\_removed\ (never deleted).
 // PUT { order: [clip file names] }: the song's clips in a new order (drag and drop; clips.json, the same
-// sequence Shape shows and Make uses). PUT { omit: { name, omit } }: Use / Omit on one clip.
+// sequence Shape shows and Make uses). PUT { omit: { name, omit } }: Use / Omit on one clip. PUT { note: { name, text } }:
+// a clip's story note (Prepare → Clips; empty text deletes it; only shown, never used by the app).
 import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { connection } from "next/server";
 
 import { resolveWorkspaceDir, safeName } from "@lyric/db";
-import { assignSongFile, importSongClips, removeSongClip, replaceAsset, restoreSongClip, setSongClipOmit, setSongClipOrder, songAssets, storeVocalStem, type AssetKind, type AssignRole } from "@lyric/video/assets";
+import { assignSongFile, importSongClips, removeSongClip, replaceAsset, restoreSongClip, setSongClipNote, setSongClipOmit, setSongClipOrder, songAssets, storeVocalStem, type AssetKind, type AssignRole } from "@lyric/video/assets";
 
 import { withWorkspaceAsync } from "@/lib/workspace";
 
@@ -76,7 +77,8 @@ export async function POST(request: Request, { params }: Params) {
 export async function PUT(request: Request, { params }: Params) {
   const { id } = await params;
   try {
-    const body = (await request.json()) as { order?: unknown; omit?: { name?: unknown; omit?: unknown } };
+    const body = (await request.json()) as { order?: unknown; omit?: { name?: unknown; omit?: unknown }; note?: { name?: unknown; text?: unknown } };
+    if (body.note) return Response.json({ note: await withWorkspaceAsync((ws) => setSongClipNote(ws, id, body.note!.name, body.note!.text)) });
     if (body.omit) return Response.json({ omit: await withWorkspaceAsync(async (ws) => setSongClipOmit(ws, id, body.omit!.name, body.omit!.omit)) });
     return Response.json({ order: await withWorkspaceAsync(async (ws) => setSongClipOrder(ws, id, body.order)) });
   } catch (error) {

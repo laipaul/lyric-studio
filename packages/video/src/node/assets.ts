@@ -9,6 +9,7 @@ import { absPath, clip as clipTable, PHOTO_EXTENSION, probeMedia, project as pro
 import { eq } from "drizzle-orm";
 
 import { isHandTimeLine } from "../hand-times";
+import { notesForClips, readClipNotes, setClipNote } from "./clip-notes";
 import { HOOK_MARKER, normalizeLyric } from "../lrc";
 import { inClipOrder, isOmitted, readClipEdits, saveSongClipOrder, setClipOmit } from "./clip-edits";
 import { cachedFileHash, SOURCE_FILE, syncCollection } from "./collection";
@@ -35,6 +36,8 @@ export type ClipAsset = {
   height: number;
   durationMs: number; // 0 for photos
   duplicateOf: string | null; // another clip of this song with the same content
+  hash: string; // the content's fingerprint (story notes are keyed by it)
+  note?: string | null; // the user's story note on this clip (Prepare → Clips; clip-notes.ts): shown, never used by the app
   omit?: boolean; // a song's clip set to Omit (clips.json): keeps its place in the order, Make does not use it
 };
 
@@ -99,7 +102,19 @@ export async function songAssets(ws: Workspace, projectId: string, options: { ch
   const order = inClipOrder(edits, listed.clips.map((c) => c.name));
   listed.clips.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
   for (const c of listed.clips) c.omit = isOmitted(edits, c.name);
+  // The user's story notes (Prepare → Clips): only shown there, never read by the planner or Make.
+  const notes = notesForClips(readClipNotes(paths.root), listed.clips);
+  for (const c of listed.clips) c.note = notes.get(c.name) ?? null;
   return { ...out, ...listed };
+}
+
+// Prepare → Clips: a clip's story note saved (empty text deletes it). Keyed by the clip's content (clip-notes.ts).
+export async function setSongClipNote(ws: Workspace, projectId: string, name: unknown, text: unknown): Promise<string | null> {
+  const paths = songPathsById(ws, projectId);
+  if (!paths.clips) throw new Error("This song has no folder yet: run the migration first (pnpm songs:migrate).");
+  const clip = (await folderClips(ws, paths.clips, songClipsCollection(projectId))).clips.find((c) => c.name === String(name ?? ""));
+  if (!clip) throw new Error(`There is no clip "${String(name ?? "")}" in this song.`);
+  return setClipNote(paths.root, { hash: clip.hash, clip: clip.name, text: String(text ?? "") })?.text ?? null;
 }
 
 // The clip files in a song's clips\ folder.
@@ -162,6 +177,7 @@ export async function folderClips(ws: Workspace, folder: string, collectionName:
       height: s.clip.height,
       durationMs: photo ? 0 : s.clip.duration_ms,
       duplicateOf,
+      hash: s.hash,
     });
     if (duplicateOf) continue;
     out.hashes.push(s.hash);

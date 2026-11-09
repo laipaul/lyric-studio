@@ -2,6 +2,7 @@
 export * from "./analysis";
 export * from "./best-moment";
 export * from "./clip-edits";
+export * from "./clip-notes";
 export * from "./clips";
 export * from "./font-catalog";
 export * from "./measure";

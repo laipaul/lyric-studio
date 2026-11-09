@@ -4,6 +4,13 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Bug fix: the Reel's title did not show when the part of the song starts on a sung line ✅ (confirmed on the Windows PC in Shape, 8 Nov 2026)
+- Seen (Let My Love Carry You, Reel; Shape → Reels 0:36.1-1:41.3 chosen on the song track, Title opening on): "the title is not showing", "the tagline is not showing". Line 5 ("Let my love carry you through the night") is sung at the very start of that part.
+- Cause: the title opening showed title, byline and tagline only until the first lyric line fades in (make.ts passed `untilFrame` = that line's enter frame). The automatic section leaves up to 2 bars (titleLead); a part chosen by hand on a sung line leaves none, so the cards got a few frames or none, silently. Shape's plan uses the same make.ts dry run, so it showed the same.
+- Fix (automatic, no new setting; src/node/textboard.ts titleCards, make.ts): with a lead-in shorter than TITLE_MIN_S (2.5 s) every card block (title + byline; the tagline) is checked against the first lyric line's box (measured as QA does). A block that does not touch the line stays on screen for 2.5 s, also while the line is shown. A block that would touch it is shown alone until the line fades in (the music and the lyric timing are never touched) and a plain note in the plan's decisions and the warnings says: "No room for the title (tagline) before the first line: start the Reel's part of the song about 2 bars earlier (drag the pink window's start on the song track) or let the app choose it (Automatic)." QA "Title cards clear of the first lyric" now only fails for a block that touches the line. The automatic section is unchanged.
+- Tests: test/title-opening.test.ts 4 new (16 in the file), with test/storyboard.test.ts 24 pass; tsc clean (packages/video, apps/studio).
+- To check: `cd D:\videomaker`, `git pull`, Shape → Reels, window at 0:36.1, Title opening on: the title and byline stay about 2.5 s, or the plan says "No room for the title before the first line..." and the part starts about 2 bars earlier (or Automatic).
+
 ### Review: no line across the video in the browser's player ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - Found by the user (8 Nov 2026): a thin horizontal line across the Reel in Review (not in Shape). The MP4 itself is
   clean (checked by the user in Media Player): it is the top edge of the dark band Chrome / Edge draw behind their own

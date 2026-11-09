@@ -4,6 +4,25 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Prepare → Clips: story notes on the clip cards ✅ (to verify on the Windows PC)
+- **Each clip card has a short note at the bottom** for the clip's role in the story line. An empty card shows a faint
+  "+ Add a note"; a click opens a small box on the card that **saves as you type** (no Save button); Esc or clicking
+  outside closes it to **one line ending in "…"**; a click shows the whole note again; clearing the text deletes it.
+  The card does not drag while its box is open, and dragging a card (also by its note line) never opens the box.
+- **Kept per clip for this song, keyed by the clip's content** (`.studio\clip-notes.json`): the note follows the clip
+  when it is reordered, renamed (the file itself), omitted / used again, removed and restored, and survives every
+  regeneration (notes are not in clips.json or the storyboards). A clip replaced by another file under the same name
+  finds its note by the name. Two clips with exactly the same content share one note.
+- **For you only:** shown in Prepare → Clips only, never in Shape (shot panel, timeline, the future shot list); the app
+  never reads them for planning, Make, storyboards, the assessment or anything else (a test checks that only the
+  clips list reads the file).
+- Tests: clip-notes.test.ts (5: save / delete, rename and reorder, replaced file, long notes, nothing else reads them);
+  clip-notes.e2e.ts (14 checks: + Add a note, no drag while writing, saved as you type, no Save, Esc to one line with
+  "…", click to expand, click outside, drag without editing and reorder, Omit, renamed file + reload, not in Shape,
+  clear = deleted), added to `pnpm test:e2e`; tsc clean; pnpm build ok.
+- **To check on the PC:** Prepare → Clips: "+ Add a note" on a card, type, click elsewhere: one line with "…"; drag the
+  card to another place, Omit and Use it, reload: the note is still there; open Shape: no note anywhere.
+
 ### Navigation N1: four numbered stages, tabs inside them, every setting in one place ✅ (to verify on the Windows PC)
 - **The rail holds the four stages only, numbered 1-4** (Prepare, Shape, Make, Review); Shape's menus and the Look
   group are gone from it. Each stage's sections are tabs at the top of its work area:
@@ -143,13 +162,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Fix (automatic, no setting; src/node/textboard.ts titleCards): a block that touches the first line's box (same measuring as the last fix) is first moved inside the platform's safe area (and the profile grid's 3:4 crop when it fits): the title + byline UP above the line, the tagline DOWN below it, with a margin and clear of the other block; if that does not fit it shrinks step by step by up to 25% (CARD_MIN_SCALE, as fitCardBlocks). A clear place = the block stays its full 2.5 s, no note, QA "Title cards clear of the first lyric" passes. Only with no clear place: the lead-in only + the plain-words note, as before. Same props for Shape and render. YouTube and the auto section with a full lead-in are unchanged.
 - Tests: test/title-opening.test.ts 18 (2 new: title moves above the line and lasts 2.5 s with QA ok, tagline moves below the line; the "line on the title" test now has the line from the top of the safe area = no room = lead-in + note); the 6 files (title-opening, textboard, qa, storyboard, extra-cards, textboard-make) 55 pass; tsc clean (packages/video, apps/studio).
 - To check: `cd D:\videomaker`, `git pull`, Shape → Reels, play from 0:00: the title and byline stay about 2.5 s near the top, the first lyric line below them.
-
-### Bug fix: the Reel's title did not show when the part of the song starts on a sung line ✅ (confirmed on the Windows PC in Shape, 8 Nov 2026)
-- Seen (Let My Love Carry You, Reel; Shape → Reels 0:36.1-1:41.3 chosen on the song track, Title opening on): "the title is not showing", "the tagline is not showing". Line 5 ("Let my love carry you through the night") is sung at the very start of that part.
-- Cause: the title opening showed title, byline and tagline only until the first lyric line fades in (make.ts passed `untilFrame` = that line's enter frame). The automatic section leaves up to 2 bars (titleLead); a part chosen by hand on a sung line leaves none, so the cards got a few frames or none, silently. Shape's plan uses the same make.ts dry run, so it showed the same.
-- Fix (automatic, no new setting; src/node/textboard.ts titleCards, make.ts): with a lead-in shorter than TITLE_MIN_S (2.5 s) every card block (title + byline; the tagline) is checked against the first lyric line's box (measured as QA does). A block that does not touch the line stays on screen for 2.5 s, also while the line is shown. A block that would touch it is shown alone until the line fades in (the music and the lyric timing are never touched) and a plain note in the plan's decisions and the warnings says: "No room for the title (tagline) before the first line: start the Reel's part of the song about 2 bars earlier (drag the pink window's start on the song track) or let the app choose it (Automatic)." QA "Title cards clear of the first lyric" now only fails for a block that touches the line. The automatic section is unchanged.
-- Tests: test/title-opening.test.ts 4 new (16 in the file), with test/storyboard.test.ts 24 pass; tsc clean (packages/video, apps/studio).
-- To check: `cd D:\videomaker`, `git pull`, Shape → Reels, window at 0:36.1, Title opening on: the title and byline stay about 2.5 s, or the plan says "No room for the title before the first line..." and the part starts about 2 bars earlier (or Automatic).
 
 ### Bug fix: a line set by hand later disappeared from the video ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - Seen (Let My Love Carry You, YouTube): "Hold on..." set by hand to 3:22.36 (stamp 3:14.76) was gone from Shape and the video; the Lyrics tab showed readable 3:22.10 and leaves 3:22.10 (zero time on screen).
@@ -364,7 +376,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 
 **Navigation and the order from here (agreed with the user, 9 Nov 2026).** Rule: every setting lives in the stage
 where the user looks for it, in ONE place. Order: **N1** (navigation, done, to verify) → story notes on clip cards
-(asked after N1) → **2e-1 → 2e-2 → O1 → 2c → M1 gate → 2f → 2g → 2h → 2i**; the theme editor moves to the Themes page
+(done, to verify) → **2e-1 → 2e-2 → O1 → 2c → M1 gate → 2f → 2g → 2h → 2i**; the theme editor moves to the Themes page
 with or after 2i (§3.2). Decisions on the N1 proposal:
 - **O1 (song-level look overrides, §3.1):** a small song.json layer between the theme and the storyboard for a fixed
   list (line shape, lines appear, bigger final chorus to start), edited in Shape → Look; the theme editor keeps the
