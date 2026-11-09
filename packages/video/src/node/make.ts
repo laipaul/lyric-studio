@@ -284,6 +284,8 @@ export type PlatformPlan = {
   analysis: { bpm: number; beats: Beat[]; duration_ms: number };
   lines: { number: number; text: string; isHook: boolean; start_ms: number; end_ms: number; sung_end_ms: number | null }[]; // every line, by the Lyrics tab's number
   anchorsOutside: { line: number; text: string; clip: string }[];
+  // The lyric timing used (song level): the stored timing's file name, and the lines with a hand-set start.
+  alignment: { file: string; handSet: number[] };
 };
 
 export type PlatformResult = {
@@ -1647,6 +1649,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         slots: anchorSlots,
         // As the planner reports them (the same for every video of the platform).
         anchorsOutside: (composedBySpec.get(specs[0]?.name ?? "")?.anchors?.uses ?? []).filter((u) => !u.used && u.why === "outside this section").map((u) => ({ line: u.line, text: u.text, clip: u.clip })),
+        alignment: { file: path.basename(sh.alignment.lrcFile), handSet: (sh.alignment.handTimes ?? []).map((h) => h.number) },
       },
     };
   }

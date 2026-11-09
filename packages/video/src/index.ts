@@ -57,3 +57,4 @@ export * from "./cover-palette";
 export * from "./text-layout";
 export * from "./line-shape";
 export * from "./theme-moods";
+export * from "./storyboard-file";

@@ -50,3 +50,5 @@ export * from "./lyric-band";
 export * from "./storyboard";
 export * from "./storyboard-edit";
 export * from "./textboard";
+export * from "./storyboard-file";
+export * from "./storyboards-report";

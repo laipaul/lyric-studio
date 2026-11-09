@@ -4,6 +4,30 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Theme v2 storyboard, step 2d: the plan of every video saved as its storyboard file ✅ (to verify on the Windows PC)
+- **The plan you see in Shape is now a file:** `<song folder>\storyboards\<platform>-<n>.json` (e.g.
+  `storyboards\reels-1.json`), written whenever Shape plans that video with the song's own clips. The agreed
+  format, version 1: the inputs (song, vocal stem and lyrics files with their fingerprints, the lyric timing
+  used, clips.json), the output (platform, 9:16 / 16:9, the part of the song and why, the theme), the beats
+  and sections, the text items (line-N, card-title ...), the shots (sh-01 ...: clip, trim, speed, start / end,
+  transition in, the line it carries, its warnings), the predicted verdict. All times in song milliseconds;
+  they give back every frame of the plan exactly (tested on every frame of an hour).
+- **Your edits are imported as locks** (the field is your choice): a moved cut locks the shots on both sides,
+  a slip the shot's trim, a story anchor the line the shot carries. **Never dropped:** a moved cut or slip that
+  no shot of the video matches is listed in the file and in Shape's Analysis notes ("Moved cut not used: the
+  cut you moved from 0:50.0 to 0:50.4 is not at any cut of this video now (nearest: shot 3 at 0:48.8). It is
+  kept in clips.json."). Shot ids stay when the plan is made again (same clip, most overlap).
+- **`pnpm storyboards`**: plans every video of every song (each platform of its recipe), writes their
+  storyboards and lists, by song and shot, every moved cut or slip that no video uses any more. Changes none of
+  the song's own files.
+- **Nothing else changes:** Make still plans as before (it reads the storyboard from step 2e-1); videos are
+  the same.
+- **Golden test ready:** test/storyboard-file.test.ts compares the storyboard of the approved "Here with Me"
+  Reel with that video's frames; it runs as soon as its manifest is at
+  `packages\video\test\golden\here-with-me-reels.manifest.json` (skipped until then).
+- Tests: storyboard-file (format, frames back, locks, unmatched edits, ids, the report), storyboard-save (a real
+  song folder: Shape's plan writes the file, locks, notes, ids, pnpm storyboards); the whole video suite passes.
+
 ### Theme Engine v2 on HyperFrames, step 2b part 2: stacked lines, build up, bigger final chorus, theme-rules.md ✅ (to verify on the Windows PC)
 - **Three new theme choices** in Shape → Theme → Text, under Text layout (theme.json `lineShape`, `lineBuild`,
   `finalHook`; src/line-shape.ts; the viewer shows each click at once, Save keeps it):
@@ -143,23 +167,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   cards 20 px (24), lyric lines 32 px (40).
 - Tests: storyboard.e2e.ts unchanged (the viewer 353 px on 1366×768, was 341; 18 px under the command bar): run in the
   cloud session, all 147 checks pass.
-
-### Shape timeline: lift a clip onto another to swap them ✅ (confirmed on the Windows PC, 8 Nov 2026: works, "a bit slow")
-- Asked by the user (7 Nov 2026, with the soundtrack window): "drag a clip onto another shot to swap them on the
-  timeline"; the gesture chosen by the user (8 Nov 2026): **lift it up** (a sideways drag stays a slip).
-- **Lift:** drag a clip upwards first (about half a centimetre): it lifts (dimmed on the row, a small card of it follows
-  the pointer). Move it over another clip (pink ring, "swap 1 · a.mp4 ↔ 2 · b.mp4") and let go: the two clips swap
-  places; the cuts stay where they are (the music is fixed); the viewer stands on the moved clip. Esc, or letting go
-  anywhere else, puts it back.
-- **Saved in the story order** (clips.json "order", the same order as Assets and the Clips panel), so every video gets
-  it; a lyric line anchored on one of the two clips is anchored on the other afterwards (song.json anchors follow their
-  clips). Ctrl+Z / Undo swaps them back (the anchor too), Redo again.
-- **The Reel's loop ending** (the last shot, ↻, replays the first clip so the Reel loops seamlessly) cannot be lifted or
-  swapped; over it the readout says so. Swapping the first clip changes it too.
-- Tests: timeline-edits.test.ts (swapInStory: the order, anchors follow, twice = back); storyboard-edit.test.ts (the
-  swap re-plans with the same cuts, Generate renders the same shots, swapping again gives it back); storyboard.e2e.ts
-  (lift shot 1, no drop on the loop ending, swap with shot 2, cuts unmoved, clips.json order, the anchor followed, Esc,
-  Ctrl+Z): run in the cloud session, all 147 browser checks and 31 unit tests pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -394,7 +401,7 @@ Theme v2: 2b part 2 (as planned) → **2d → 2e-1 → 2e-2 → 2c** → **M1 ga
 docs/theme-engine-v2-hyperframes-plan.md, section 6: step 0 ("break." fix, done) → 1 (renderer seam; D1 decided = (b), everything
 in one pass; its speed and frame accuracy checked on the PC, causes fixed, (a) only a temporary fallback; zero network
 calls when rendering; LGPL FFmpeg with NVENC timed; done: B 92% of Remotion's time on the PC) → 2a (picture for Reels, done, confirmed on the PC) → 2b (part 1 done: the lyrics and cards with the same code; part 2 done 9 Nov 2026, to verify: stacked lines, build up, bigger final hook, theme-rules.md) →
-2b (the Reel word-by-word theme's text) → the storyboard steps 2d → 2e-1 → 2e-2 → 2c (above) → **M1: the Reel word-by-word theme ("Here with Me") usable for real
+2b (the Reel word-by-word theme's text) → the storyboard steps 2d (done 9 Nov 2026, to verify) → 2e-1 → 2e-2 → 2c (above) → **M1: the Reel word-by-word theme ("Here with Me") usable for real
 releases** → the storyboard steps 2f → 2g → 2h → 2i → the spec's T1-T4 → 3-8, the ballad and Pômé themes. GSAP / FFmpeg licences non-blocking: a short
 note (docs/licences.md) before step 8. It replaces the T-list below as the order.
 

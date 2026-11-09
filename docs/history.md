@@ -4,6 +4,23 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Shape timeline: lift a clip onto another to swap them ✅ (confirmed on the Windows PC, 8 Nov 2026: works, "a bit slow")
+- Asked by the user (7 Nov 2026, with the soundtrack window): "drag a clip onto another shot to swap them on the
+  timeline"; the gesture chosen by the user (8 Nov 2026): **lift it up** (a sideways drag stays a slip).
+- **Lift:** drag a clip upwards first (about half a centimetre): it lifts (dimmed on the row, a small card of it follows
+  the pointer). Move it over another clip (pink ring, "swap 1 · a.mp4 ↔ 2 · b.mp4") and let go: the two clips swap
+  places; the cuts stay where they are (the music is fixed); the viewer stands on the moved clip. Esc, or letting go
+  anywhere else, puts it back.
+- **Saved in the story order** (clips.json "order", the same order as Assets and the Clips panel), so every video gets
+  it; a lyric line anchored on one of the two clips is anchored on the other afterwards (song.json anchors follow their
+  clips). Ctrl+Z / Undo swaps them back (the anchor too), Redo again.
+- **The Reel's loop ending** (the last shot, ↻, replays the first clip so the Reel loops seamlessly) cannot be lifted or
+  swapped; over it the readout says so. Swapping the first clip changes it too.
+- Tests: timeline-edits.test.ts (swapInStory: the order, anchors follow, twice = back); storyboard-edit.test.ts (the
+  swap re-plans with the same cuts, Generate renders the same shots, swapping again gives it back); storyboard.e2e.ts
+  (lift shot 1, no drop on the loop ending, swap with shot 2, cuts unmoved, clips.json order, the anchor followed, Esc,
+  Ctrl+Z): run in the cloud session, all 147 browser checks and 31 unit tests pass.
+
 ### Bug fix: trimming on the timeline needed several tries ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - **What the user found** (real song "Let My Love Carry You", Windows): "The trim of the clip doesn't work
   effortlessly. I have to try several times."

@@ -32,6 +32,7 @@ import { SOURCE_FILE } from "./collection";
 import { songCollections } from "./project-settings";
 import { readMoves, sharedCollections, songPathsById } from "./song-folder";
 import { recipeInputFor } from "./style";
+import { saveStoryboardOfPlan } from "./storyboard-file";
 
 export type StoryboardView = {
   source: "plan" | "run";
@@ -191,7 +192,7 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
     shots: v.props.shots.filter((s) => s.src === c.path).length,
   }));
   const overview = await songOverview(ws, projectId, p.name, paths.audio, plan.analysis, plan.lines);
-  return withTimeline(ws, projectId, await view(ws, {
+  const shown = withTimeline(ws, projectId, await view(ws, {
     editable: !paths.legacy, storyboardClips, slots: plan.slots, picture: clipSet ?? null,
     source: "plan", run: null, platform: { name: p.name, label: p.label }, video: v.spec.name, videos: plan.videos.map((x) => x.spec.name),
     settings: settingsText(v.spec),
@@ -200,6 +201,13 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
     loop: v.loop, loopSuggestions: plan.loopSuggestions ?? [], decisions: v.decisions,
     songFile: paths.audio,
   }), overview);
+  // Theme v2 step 2d: the plan of this video with the song's own clips is saved as its storyboard file
+  // (storyboards\<platform>-<n>.json); the moved cuts and slips no shot matches are named in the notes.
+  if (!clipSet && !paths.legacy) {
+    const saved = await saveStoryboardOfPlan(ws, projectId, plan, p.name, v, shown, numbered.map((n) => n.number));
+    shown.notes = [...shown.notes, ...saved.unmatched];
+  }
+  return shown;
 }
 
 // A past run's video: its manifest (exactly what was rendered).
