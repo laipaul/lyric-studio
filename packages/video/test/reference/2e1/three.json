@@ -1,0 +1,682 @@
+{
+ "song": "Ref Three",
+ "platforms": "shorts,youtube",
+ "captured": "before 2e-1 (Make planned at render time)",
+ "videos": [
+  {
+   "video": "shorts/v1",
+   "props": {
+    "audio": {
+     "src": "songs/Life Lyrics/Ref Three/Ref Three.wav",
+     "startFrame": 68,
+     "fadeInFrames": 9,
+     "fadeOutFrames": 0
+    },
+    "durationInFrames": 412,
+    "cutFrames": [
+     118
+    ],
+    "shots": [
+     {
+      "start": 0,
+      "duration": 118,
+      "src": "cache/normalised/c3fd0bda8b01786687b01d7b-v1.mp4",
+      "clipStartFrame": 62,
+      "clipDurationFrames": 180,
+      "playbackRate": 1,
+      "holdLastFrame": false,
+      "tail": 0
+     },
+     {
+      "start": 118,
+      "duration": 294,
+      "src": "cache/normalised/e244ad5cec81689a1f20431a-v1.mp4",
+      "clipStartFrame": 0,
+      "clipDurationFrames": 210,
+      "playbackRate": 0.7142,
+      "holdLastFrame": false,
+      "dissolve": {
+       "before": 30,
+       "after": 0
+      }
+     }
+    ],
+    "lyrics": [
+     {
+      "text": "Hold on to me",
+      "startFrame": 0,
+      "endFrame": 45,
+      "isHook": true,
+      "stampFrame": 7,
+      "sungEndFrame": 40,
+      "words": [
+       {
+        "text": "Hold",
+        "startFrame": 7,
+        "endFrame": 16
+       },
+       {
+        "text": "on",
+        "startFrame": 16,
+        "endFrame": 25
+       },
+       {
+        "text": "to",
+        "startFrame": 25,
+        "endFrame": 34
+       },
+       {
+        "text": "me",
+        "startFrame": 34,
+        "endFrame": 40
+       }
+      ],
+      "card": {
+       "id": "line-2"
+      }
+     },
+     {
+      "text": "Through the night",
+      "startFrame": 45,
+      "endFrame": 90,
+      "isHook": false,
+      "stampFrame": 52,
+      "sungEndFrame": 85,
+      "words": [
+       {
+        "text": "Through",
+        "startFrame": 52,
+        "endFrame": 61
+       },
+       {
+        "text": "the",
+        "startFrame": 61,
+        "endFrame": 70
+       },
+       {
+        "text": "night",
+        "startFrame": 70,
+        "endFrame": 85
+       }
+      ],
+      "card": {
+       "id": "line-3"
+      }
+     },
+     {
+      "text": "Verse two here",
+      "startFrame": 90,
+      "endFrame": 135,
+      "isHook": false,
+      "stampFrame": 97,
+      "sungEndFrame": 130,
+      "words": [
+       {
+        "text": "Verse",
+        "startFrame": 97,
+        "endFrame": 106
+       },
+       {
+        "text": "two",
+        "startFrame": 106,
+        "endFrame": 115
+       },
+       {
+        "text": "here",
+        "startFrame": 115,
+        "endFrame": 130
+       }
+      ],
+      "card": {
+       "id": "line-4"
+      }
+     },
+     {
+      "text": "Hold on to me",
+      "startFrame": 135,
+      "endFrame": 180,
+      "isHook": true,
+      "stampFrame": 142,
+      "sungEndFrame": 175,
+      "words": [
+       {
+        "text": "Hold",
+        "startFrame": 142,
+        "endFrame": 151
+       },
+       {
+        "text": "on",
+        "startFrame": 151,
+        "endFrame": 160
+       },
+       {
+        "text": "to",
+        "startFrame": 160,
+        "endFrame": 169
+       },
+       {
+        "text": "me",
+        "startFrame": 169,
+        "endFrame": 175
+       }
+      ],
+      "card": {
+       "id": "line-5"
+      }
+     }
+    ],
+    "style": {
+     "name": "Simple",
+     "font": "Cormorant Garamond",
+     "weight": 600,
+     "textCase": "none",
+     "effect": "none",
+     "animation": "fade"
+    },
+    "hookFont": {
+     "font": "Kaushan Script",
+     "weight": 400
+    },
+    "fonts": [
+     {
+      "family": "Cormorant Garamond",
+      "weight": 600,
+      "style": "normal",
+      "src": "_fonts/cormorant-garamond-latin-600-normal.woff2",
+      "unicodeRange": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+     },
+     {
+      "family": "Cormorant Garamond",
+      "weight": 600,
+      "style": "normal",
+      "src": "_fonts/cormorant-garamond-latin-ext-600-normal.woff2",
+      "unicodeRange": "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF"
+     },
+     {
+      "family": "Kaushan Script",
+      "weight": 400,
+      "style": "normal",
+      "src": "_fonts/kaushan-script-latin-400-normal.woff2",
+      "unicodeRange": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+     },
+     {
+      "family": "Kaushan Script",
+      "weight": 400,
+      "style": "normal",
+      "src": "_fonts/kaushan-script-latin-ext-400-normal.woff2",
+      "unicodeRange": "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF"
+     },
+     {
+      "family": "Cinzel",
+      "weight": 700,
+      "style": "normal",
+      "src": "_fonts/cinzel-latin-700-normal.woff2",
+      "unicodeRange": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+     },
+     {
+      "family": "Cinzel",
+      "weight": 700,
+      "style": "normal",
+      "src": "_fonts/cinzel-latin-ext-700-normal.woff2",
+      "unicodeRange": "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF"
+     }
+    ],
+    "textSize": 64,
+    "colour": "#FFFFFF",
+    "cinematicBars": false,
+    "format": {
+     "width": 1080,
+     "height": 1920
+    },
+    "safeZone": {
+     "top": 0.12,
+     "bottom": 0.25,
+     "left": 0,
+     "right": 0.15
+    },
+    "lyricArea": {
+     "left": 64,
+     "right": 886,
+     "top": 230,
+     "bottom": 1440,
+     "centerY": 775,
+     "minScale": 0.75,
+     "lineHeight": 1.15
+    },
+    "lyricsAt": 0.45,
+    "textLayout": "bighook",
+    "lyricEffects": {
+     "verse": {
+      "name": "glide",
+      "intensity": "balanced"
+     },
+     "hook": {
+      "name": "karaoke-highlight",
+      "intensity": "balanced"
+     },
+     "accent": "#E8A3B5",
+     "gap": {
+      "hideMs": 3000,
+      "leadInMs": 1000
+     },
+     "hookScale": 1.3,
+     "lineShape": "stacked"
+    },
+    "lyricBacking": true,
+    "picture": {
+     "grade": "natural",
+     "vignette": "off",
+     "backing": "none",
+     "fallback": "gradient",
+     "fallbackColour": "#101014",
+     "accent": "#E8A3B5"
+    },
+    "loopInto": {
+     "frames": 12
+    },
+    "nextLine": true,
+    "textCards": [
+     {
+      "id": "end",
+      "type": "end",
+      "text": "Stream Ref Three on Spotify",
+      "font": "Cinzel",
+      "weight": 700,
+      "size": 50,
+      "colour": "#FFFFFF",
+      "letterSpacing": 0.04,
+      "upper": false,
+      "effect": null,
+      "cardStyle": "label",
+      "startFrame": 307,
+      "endFrame": 472,
+      "left": 162,
+      "right": 918,
+      "lines": [
+       "Stream Ref",
+       "Three on Spotify"
+      ],
+      "centerY": 775
+     }
+    ]
+   }
+  },
+  {
+   "video": "youtube/v1",
+   "props": {
+    "audio": {
+     "src": "songs/Life Lyrics/Ref Three/Ref Three.wav",
+     "startFrame": 0,
+     "fadeInFrames": 0,
+     "fadeOutFrames": 0
+    },
+    "durationInFrames": 480,
+    "cutFrames": [
+     246
+    ],
+    "shots": [
+     {
+      "start": 0,
+      "duration": 246,
+      "src": "cache/normalised/7265e21a5917fee2b57bcaa5-cover1920x1080-v1.mp4",
+      "clipStartFrame": 0,
+      "clipDurationFrames": 210,
+      "playbackRate": 0.8536,
+      "holdLastFrame": false,
+      "tail": 0
+     },
+     {
+      "start": 246,
+      "duration": 234,
+      "src": "cache/normalised/95d12ee22c3055481c2caef8-cover1920x1080-v1.mp4",
+      "clipStartFrame": 6,
+      "clipDurationFrames": 240,
+      "playbackRate": 1,
+      "holdLastFrame": false,
+      "dissolve": {
+       "before": 30,
+       "after": 0
+      }
+     }
+    ],
+    "lyrics": [
+     {
+      "text": "Verse one here",
+      "startFrame": 23,
+      "endFrame": 68,
+      "isHook": false,
+      "stampFrame": 30,
+      "sungEndFrame": 63,
+      "words": [
+       {
+        "text": "Verse",
+        "startFrame": 30,
+        "endFrame": 39
+       },
+       {
+        "text": "one",
+        "startFrame": 39,
+        "endFrame": 48
+       },
+       {
+        "text": "here",
+        "startFrame": 48,
+        "endFrame": 63
+       }
+      ],
+      "card": {
+       "id": "line-1"
+      }
+     },
+     {
+      "text": "Hold on to me",
+      "startFrame": 68,
+      "endFrame": 113,
+      "isHook": true,
+      "stampFrame": 75,
+      "sungEndFrame": 108,
+      "words": [
+       {
+        "text": "Hold",
+        "startFrame": 75,
+        "endFrame": 84
+       },
+       {
+        "text": "on",
+        "startFrame": 84,
+        "endFrame": 93
+       },
+       {
+        "text": "to",
+        "startFrame": 93,
+        "endFrame": 102
+       },
+       {
+        "text": "me",
+        "startFrame": 102,
+        "endFrame": 108
+       }
+      ],
+      "card": {
+       "id": "line-2"
+      }
+     },
+     {
+      "text": "Through the night",
+      "startFrame": 113,
+      "endFrame": 158,
+      "isHook": false,
+      "stampFrame": 120,
+      "sungEndFrame": 153,
+      "words": [
+       {
+        "text": "Through",
+        "startFrame": 120,
+        "endFrame": 129
+       },
+       {
+        "text": "the",
+        "startFrame": 129,
+        "endFrame": 138
+       },
+       {
+        "text": "night",
+        "startFrame": 138,
+        "endFrame": 153
+       }
+      ],
+      "card": {
+       "id": "line-3"
+      }
+     },
+     {
+      "text": "Verse two here",
+      "startFrame": 158,
+      "endFrame": 203,
+      "isHook": false,
+      "stampFrame": 165,
+      "sungEndFrame": 198,
+      "words": [
+       {
+        "text": "Verse",
+        "startFrame": 165,
+        "endFrame": 174
+       },
+       {
+        "text": "two",
+        "startFrame": 174,
+        "endFrame": 183
+       },
+       {
+        "text": "here",
+        "startFrame": 183,
+        "endFrame": 198
+       }
+      ],
+      "card": {
+       "id": "line-4"
+      }
+     },
+     {
+      "text": "Hold on to me",
+      "startFrame": 203,
+      "endFrame": 248,
+      "isHook": true,
+      "stampFrame": 210,
+      "sungEndFrame": 243,
+      "words": [
+       {
+        "text": "Hold",
+        "startFrame": 210,
+        "endFrame": 219
+       },
+       {
+        "text": "on",
+        "startFrame": 219,
+        "endFrame": 228
+       },
+       {
+        "text": "to",
+        "startFrame": 228,
+        "endFrame": 237
+       },
+       {
+        "text": "me",
+        "startFrame": 237,
+        "endFrame": 243
+       }
+      ],
+      "card": {
+       "id": "line-5"
+      }
+     }
+    ],
+    "style": {
+     "name": "Simple",
+     "font": "Cormorant Garamond",
+     "weight": 600,
+     "textCase": "none",
+     "effect": "none",
+     "animation": "fade"
+    },
+    "hookFont": {
+     "font": "Kaushan Script",
+     "weight": 400
+    },
+    "fonts": [
+     {
+      "family": "Cormorant Garamond",
+      "weight": 600,
+      "style": "normal",
+      "src": "_fonts/cormorant-garamond-latin-600-normal.woff2",
+      "unicodeRange": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+     },
+     {
+      "family": "Cormorant Garamond",
+      "weight": 600,
+      "style": "normal",
+      "src": "_fonts/cormorant-garamond-latin-ext-600-normal.woff2",
+      "unicodeRange": "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF"
+     },
+     {
+      "family": "Kaushan Script",
+      "weight": 400,
+      "style": "normal",
+      "src": "_fonts/kaushan-script-latin-400-normal.woff2",
+      "unicodeRange": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+     },
+     {
+      "family": "Kaushan Script",
+      "weight": 400,
+      "style": "normal",
+      "src": "_fonts/kaushan-script-latin-ext-400-normal.woff2",
+      "unicodeRange": "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF"
+     },
+     {
+      "family": "Cinzel",
+      "weight": 700,
+      "style": "normal",
+      "src": "_fonts/cinzel-latin-700-normal.woff2",
+      "unicodeRange": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+     },
+     {
+      "family": "Cinzel",
+      "weight": 700,
+      "style": "normal",
+      "src": "_fonts/cinzel-latin-ext-700-normal.woff2",
+      "unicodeRange": "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF"
+     }
+    ],
+    "textSize": 64,
+    "colour": "#FFFFFF",
+    "cinematicBars": false,
+    "format": {
+     "width": 1920,
+     "height": 1080
+    },
+    "safeZone": {
+     "top": 0.06,
+     "bottom": 0.1,
+     "left": 0.04,
+     "right": 0.04
+    },
+    "lyricArea": {
+     "left": 191,
+     "right": 1786,
+     "top": 65,
+     "bottom": 972,
+     "centerY": 473,
+     "minScale": 0.75,
+     "lineHeight": 1.15
+    },
+    "lyricsAt": 0.45,
+    "lyricEffects": {
+     "verse": {
+      "name": "glide",
+      "intensity": "balanced"
+     },
+     "hook": {
+      "name": "karaoke-highlight",
+      "intensity": "balanced"
+     },
+     "accent": "#E8A3B5",
+     "gap": {
+      "hideMs": 3000,
+      "leadInMs": 1000
+     },
+     "hookScale": 1.3,
+     "lineShape": "stacked"
+    },
+    "lyricBacking": true,
+    "picture": {
+     "grade": "natural",
+     "vignette": "off",
+     "backing": "none",
+     "fallback": "gradient",
+     "fallbackColour": "#101014",
+     "accent": "#E8A3B5"
+    },
+    "nextLine": true,
+    "layout": "clips",
+    "cover": null,
+    "mood": [
+     {
+      "startFrame": -1000000,
+      "kind": "verse"
+     },
+     {
+      "startFrame": 68,
+      "kind": "hook"
+     },
+     {
+      "startFrame": 128,
+      "kind": "verse"
+     },
+     {
+      "startFrame": 188,
+      "kind": "hook"
+     },
+     {
+      "startFrame": 248,
+      "kind": "neutral"
+     }
+    ],
+    "logo": null,
+    "endScreen": {
+     "fromFrame": 270,
+     "seconds": 7,
+     "lyricArea": {
+      "left": 191,
+      "right": 1786,
+      "top": 151,
+      "bottom": 346,
+      "centerY": 249,
+      "minScale": 0.75,
+      "lineHeight": 1.15
+     },
+     "clear": {
+      "left": 960,
+      "top": 378,
+      "right": 1920,
+      "bottom": 1080
+     }
+    },
+    "grain": false,
+    "glow": null,
+    "textCards": [
+     {
+      "id": "title",
+      "type": "title",
+      "text": "Ref Three",
+      "font": "Cinzel",
+      "weight": 700,
+      "size": 64,
+      "colour": "#E8A3B5",
+      "letterSpacing": 0.18,
+      "upper": true,
+      "startFrame": 0,
+      "endFrame": 120,
+      "effect": null,
+      "top": 76
+     },
+     {
+      "id": "byline",
+      "type": "byline",
+      "text": "Life Lyrics",
+      "font": "Cinzel",
+      "weight": 700,
+      "size": 29,
+      "colour": "#ffffff",
+      "opacity": 0.85,
+      "letterSpacing": 0.18,
+      "upper": false,
+      "startFrame": 0,
+      "endFrame": 120,
+      "effect": null,
+      "stackOn": "title"
+     }
+    ]
+   }
+  }
+ ]
+}
