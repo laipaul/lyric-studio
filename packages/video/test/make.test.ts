@@ -347,7 +347,7 @@ describe("pnpm make + pnpm rerender (real renders)", () => {
   });
 
   it("writes v1.mp4/v2.mp4 with a manifest and a QA report each, and records the jobs", () => {
-    expect(readdirSync(result.exportDir).sort()).toEqual(["song.lrc", "v1.manifest.json", "v1.mp4", "v1.qa.txt", "v1.srt", "v2.manifest.json", "v2.mp4", "v2.qa.txt", "v2.srt"]);
+    expect(readdirSync(result.exportDir).sort()).toEqual(["song.lrc", "v1.manifest.json", "v1.mp4", "v1.qa.txt", "v1.shotplan.json", "v1.srt", "v2.manifest.json", "v2.mp4", "v2.qa.txt", "v2.shotplan.json", "v2.srt"]); // 2e-1: the shot plan each was made from
     // Clean synced lyrics for lyric services: no word tags, no hook markers.
     const lrc = readFileSync(result.lrcFile, "utf8");
     expect(lrc).toContain("[ti:song]");
@@ -824,7 +824,7 @@ describe("platform presets (stand-in renderer)", () => {
     });
     const yt = r.platforms[0];
     expect(yt.exportDir).toBe(path.join(r.exportDir, "youtube"));
-    expect(readdirSync(yt.exportDir).sort()).toEqual(["publish.txt", "thumbnail.jpg", "v1.manifest.json", "v1.mp4", "v1.qa.txt", "v1.srt"]);
+    expect(readdirSync(yt.exportDir).sort()).toEqual(["publish.txt", "thumbnail.jpg", "v1.manifest.json", "v1.mp4", "v1.qa.txt", "v1.shotplan.json", "v1.srt"]); // 2e-1: the shot plan it was made from
     const m = readManifest(yt.variations[0].manifestFile);
     expect(m.props.layout).toBe("cover");
     expect(m.props.format).toEqual({ width: 1920, height: 1080 });
@@ -883,7 +883,7 @@ describe("platform presets (stand-in renderer)", () => {
     const c = r.platforms[0];
     expect([c.name, c.error]).toEqual(["canvas", null]);
     expect(c.exportDir).toBe(path.join(r.exportDir, "canvas"));
-    expect(readdirSync(c.exportDir).sort()).toEqual(["v1.manifest.json", "v1.mp4", "v1.qa.txt"]); // one usable clip: one loop, no .srt
+    expect(readdirSync(c.exportDir).sort()).toEqual(["v1.manifest.json", "v1.mp4", "v1.qa.txt", "v1.shotplan.json"]); // one usable clip: one loop, no .srt; 2e-1: its shot plan
     const m = readManifest(c.variations[0].manifestFile);
     expect(m.props.format).toEqual({ width: 1080, height: 1920 });
     expect(m.props.durationInFrames).toBe(240); // 4 bars at 120 BPM = 8.00 s

@@ -47,7 +47,8 @@ const readFollow = () => {
 };
 const select = "bg-input/30 border-input h-7 rounded-md border px-1.5 text-xs";
 
-type Source = { kind: "plan"; platform: string; video: string } | { kind: "run"; run: string; platform: string; video: string };
+// try: a Try other looks video (2e-1), opened from its own shot plan ("reels-1~theme-night-drive").
+type Source = { kind: "plan"; platform: string; video: string; try?: string } | { kind: "run"; run: string; platform: string; video: string };
 
 export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { projectId: string; tools: ReactNode; look: ShapeLook | null; replan: number; onPlanned: (replan: number) => void }) {
   const goTo = useGoToTab();
@@ -181,8 +182,8 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
       setCardId(null);
     }
     try {
-      const swap = s.kind === "plan" ? clipSet(set) : null;
-      const q = new URLSearchParams({ platform: s.platform, video: s.video, ...(s.kind === "run" ? { run: s.run } : {}), ...(swap ? { clips: swap } : {}) });
+      const swap = s.kind === "plan" && !s.try ? clipSet(set) : null;
+      const q = new URLSearchParams({ platform: s.platform, video: s.video, ...(s.kind === "run" ? { run: s.run } : {}), ...(s.kind === "plan" && s.try ? { try: s.try } : {}), ...(swap ? { clips: swap } : {}) });
       const r = await api(`/api/songs/${projectId}/storyboard?${q}`, { cache: "no-store" });
       const d = (await r.json()) as StoryboardView & { error?: string };
       if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
@@ -818,7 +819,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
             </label>
             <label className="flex items-center gap-1.5">
               <span className="text-muted-foreground sr-only text-xs">Platform</span>
-              <select className={select} data-storyboard-platform value={source?.platform ?? ""} onChange={(e) => source && setSource({ ...source, platform: e.target.value, video: platforms.find((p) => p.name === e.target.value)?.videos[0] ?? "v1" })}>
+              <select className={select} data-storyboard-platform value={source?.platform ?? ""} onChange={(e) => source && setSource({ ...source, platform: e.target.value, video: platforms.find((p) => p.name === e.target.value)?.videos[0] ?? "v1", ...(source.kind === "plan" ? { try: undefined } : {}) })}>
                 {platforms.map((p) => (
                   <option key={p.name} value={p.name}>
                     {p.label}
@@ -828,15 +829,32 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
             </label>
             <label className="flex items-center gap-1.5">
               <span className="text-muted-foreground sr-only text-xs">Video</span>
-              <select className={select} data-storyboard-video value={source?.video ?? "v1"} onChange={(e) => source && setSource({ ...source, video: e.target.value })}>
+              <select
+                className={select}
+                data-storyboard-video
+                value={source?.kind === "plan" && source.try ? `try:${source.try}` : (source?.video ?? "v1")}
+                onChange={(e) => {
+                  if (!source) return;
+                  const t = e.target.value.startsWith("try:") ? (choices?.tries ?? []).find((x) => `try:${x.id}` === e.target.value) : undefined;
+                  setSource(t && source.kind === "plan" ? { ...source, video: t.video, try: t.id } : source.kind === "plan" ? { kind: "plan", platform: source.platform, video: e.target.value } : { ...source, video: e.target.value });
+                }}
+              >
                 {videos.map((v) => (
                   <option key={v} value={v}>
                     {v}
                   </option>
                 ))}
+                {/* 2e-1: Try other looks videos, each from its own shot plan */}
+                {source?.kind === "plan"
+                  ? (choices?.tries ?? []).filter((t) => t.platform === source.platform).map((t) => (
+                      <option key={t.id} value={`try:${t.id}`} data-storyboard-try={t.id}>
+                        {t.video} · try: {t.label}
+                      </option>
+                    ))
+                  : null}
               </select>
             </label>
-            {source?.kind === "plan" && pictures ? (
+            {source?.kind === "plan" && !source.try && pictures ? (
               <details className="relative" data-pictures>
                 <summary className={cn(select, "flex cursor-pointer items-center")}>Pictures: {clipSet(pictures) ? clipSet(pictures)!.replace(/\+/g, " + ").replace(/^song/, "the song's clips") : "as the recipe"}</summary>
                 <div className="bg-popover absolute bottom-full z-10 mb-1 flex w-64 flex-col gap-1 rounded-md border p-2 text-xs shadow-lg">

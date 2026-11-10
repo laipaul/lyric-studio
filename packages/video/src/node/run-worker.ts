@@ -50,7 +50,9 @@ export function runSummary(result: MakeResult, stopped: boolean): string {
   if (stopped) parts.push("stopped: Resume makes the rest");
   const failures = failureSummary({ ...result, platforms: result.platforms.filter((p) => p.error !== "stopped before it started") });
   if (failures) parts.push(...failures.filter((l) => !l.startsWith("The other") && !l.startsWith("Render only") && !l.startsWith("No video")));
-  return parts.join(". ");
+  // 2e-1: a shot plan saved again before making (the song, its clips or settings changed) is never silent.
+  const plans = result.platforms.flatMap((p) => p.shotPlanNotes ?? []);
+  return [parts.join(". "), ...plans].join("\n");
 }
 
 export async function executeRun(ws: Workspace, run: MakeRun, make: (o: MakeOptions) => Promise<MakeResult> = makeVideos, extra: Partial<MakeOptions> = {}): Promise<MakeRun> {

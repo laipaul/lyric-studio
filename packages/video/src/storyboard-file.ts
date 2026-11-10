@@ -1,6 +1,9 @@
 // The storyboard file (Theme v2 step 2d, agreed 9 Nov 2026; PROGRESS.md "Storyboard architecture"): Shape's
 // plan of one video saved as `<song folder>\storyboards\<platform>-<n>.json`, so the plan the user sees is a
-// thing on disk. Step 2d only writes it (nothing reads it yet: Make reads it from step 2e-1).
+// thing on disk. Step 2d writes it; from step 2e-1 Make, the release pack and Shape's viewer compile every video's
+// props from it (compileShotPlan): the shots (with the exact render detail the planner chose for each one), the
+// part of the song, its audio fades and the lyric timing come from the file; the look (theme, fonts, cards) from
+// the song as it is now. On screen it is the "shot plan"; the file and code names stay "storyboard".
 // All times are integer SONG milliseconds (the song is the master clock; video time = song time - range.startMs).
 // Frames come back with the planner's own rounding: frame = round(ms x fps / 1000) (storyboardTiming; tested to
 // give every frame of the plan back exactly).
@@ -9,6 +12,7 @@
 // startMs / endMs), slips (clips.json "slips": the shot's trim) and story anchors (song.json: the shot carries
 // the line). An edit that no shot of this video matches is listed in `edits.unmatched`, never dropped silently.
 // Pure, browser-safe.
+import type { LyricLineProps, LyricVideoProps, ShotProps } from "./props";
 import { MATCH_MS, type CutMove, type Slip } from "./timeline-edits";
 
 export const STORYBOARD_SCHEMA = 1;
@@ -30,6 +34,12 @@ export type SbTextItem = {
   timing?: "aligned" | "hand" | "story"; // where the time comes from (song level: the stored timing, a hand-set start, the story timing)
   locked: string[];
 };
+// How the renderer draws a shot, exactly as the planner chose it (2e-1): where playback starts in the clip, its
+// length there, the photo's slow move, the dissolve into it, the loop blend... The app's detail, never the user's.
+export type SbShotRender = Omit<ShotProps, "start" | "duration">;
+// A "Try other looks" video (2e-1): the same video in another theme, with other fonts or over other clips. Its own
+// shot plan, `<platform>-<n>~<try>.json`, never the video's own.
+export type SbTry = { kind: "theme" | "fonts" | "pictures"; label: string; theme?: string; pairing?: string; clipSet?: string };
 export type SbShot = {
   id: string; // "sh-07": stable while the same clip covers about the same moment
   clip: string; // the clip's file name (clips.json, anchors and Assets use it)
@@ -44,13 +54,21 @@ export type SbShot = {
   carries: string | null; // the text item the shot is meant to carry (a story anchor)
   locked: string[];
   assessment: { level: "warn" | "note"; text: string }[];
+  render?: SbShotRender; // 2e-1; a file without it is completed the next time the video is planned
 };
 export type SbUnmatched = { kind: "cut" | "slip"; atMs: number; detail: string; nearestShot: string | null };
 export type StoryboardFile = {
   schemaVersion: typeof STORYBOARD_SCHEMA;
   id: string; // "reels-1"
   song: { title: string; artist: string; instrumental: boolean };
-  inputs: { song: SbSlot | null; vocals: SbSlot | null; lyrics: SbSlot | null; alignment: string | null; clips: { file: "clips.json"; sha256: string | null } };
+  inputs: {
+    song: SbSlot | null; vocals: SbSlot | null; lyrics: SbSlot | null; alignment: string | null; clips: { file: "clips.json"; sha256: string | null };
+    // 2e-1: the clip files this video could use (name and content) and a fingerprint of everything the plan was made
+    // from (these inputs, the clips, the song's settings for this video). Same fingerprint, same plan: Make renders
+    // the file as it is, even when a newer app would plan it differently.
+    media?: { name: string; sha256: string }[];
+    planKey?: string;
+  };
   output: {
     platform: string;
     format: string; // "9:16" | "16:9" | ...
@@ -58,6 +76,8 @@ export type StoryboardFile = {
     fps: number;
     range: { mode: string; startMs: number; endMs: number; reason: string; locked: string[] };
     theme: { name: string | null; version: number | null };
+    audio?: { fadeInFrames: number; fadeOutFrames: number } | null; // 2e-1: the fades where the music is cut (null: no sound)
+    try?: SbTry | null; // 2e-1: a Try other looks video
   };
   analysis: { bpm: number; beatsMs: number[]; downbeatsMs: number[]; sections: { id: string; kind: "verse" | "chorus"; n: number; startMs: number; endMs: number }[] };
   text: SbTextItem[];
@@ -90,6 +110,11 @@ export type PlanForStoryboard = {
   cards: readonly { id: string; type: string; text: string; startFrame: number; endFrame: number }[]; // props.textCards on screen
   timeline: { cuts: readonly CutMove[]; slips: readonly Slip[] };
   assessment: StoryboardFile["assessment"];
+  render?: readonly ShotProps[]; // 2e-1: the props' shots in full (the render detail of each), same order as `shots`
+  audio?: StoryboardFile["output"]["audio"];
+  media?: StoryboardFile["inputs"]["media"];
+  planKey?: string;
+  try?: SbTry | null;
   previous: StoryboardFile | null; // the file written before: its shot ids are kept
   now: string;
   app: string | null;
@@ -209,6 +234,7 @@ export function buildStoryboard(p: PlanForStoryboard): StoryboardFile {
       carries: info.anchorLine !== null ? `line-${info.anchorLine}` : null,
       locked: info.anchorLine !== null ? ["carries"] : [],
       assessment: info.warnings.map((w) => ({ level: "warn" as const, text: `shot ${i + 1}: ${w}` })),
+      ...(p.render?.[i] ? { render: renderOf(p.render[i]) } : {}),
     };
   });
 
@@ -247,7 +273,7 @@ export function buildStoryboard(p: PlanForStoryboard): StoryboardFile {
     schemaVersion: STORYBOARD_SCHEMA,
     id: p.id,
     song: p.song,
-    inputs: p.inputs,
+    inputs: { ...p.inputs, ...(p.media ? { media: p.media } : {}), ...(p.planKey ? { planKey: p.planKey } : {}) },
     output: {
       platform: p.platform,
       format: ratio(p.size.width, p.size.height),
@@ -255,6 +281,8 @@ export function buildStoryboard(p: PlanForStoryboard): StoryboardFile {
       fps,
       range: { mode: p.section.mode, startMs, endMs, reason: p.section.reason, locked: p.section.locked ? ["startMs", "endMs"] : [] },
       theme: p.theme,
+      ...(p.audio !== undefined ? { audio: p.audio } : {}),
+      ...(p.try ? { try: p.try } : {}),
     },
     analysis: {
       bpm: p.bpm,
@@ -292,6 +320,89 @@ export function storyboardTiming(sb: StoryboardFile) {
       })),
     cards: sb.text.filter((t) => t.kind === "card").map((t) => ({ id: t.id.replace(/^card-/, ""), startFrame: v(t.startMs), endFrame: v(t.endMs) })),
   };
+}
+
+const renderOf = (s: ShotProps): SbShotRender => {
+  const { start: _s, duration: _d, ...rest } = s;
+  return JSON.parse(JSON.stringify(rest)) as SbShotRender; // plain data (no undefined keys)
+};
+
+// Can a shot plan be rendered as it is? It must hold the render detail of every shot (files from before 2e-1 do not).
+export const shotPlanComplete = (sb: StoryboardFile) => sb.shots.every((s) => !!s.render) && sb.output.audio !== undefined;
+
+// The video's props from its shot plan (2e-1): the one compile Make, the release pack and Shape's viewer use. `look`
+// is the props the planner composed now (the theme, fonts, cards, effects: everything the plan does not hold); the
+// shot plan sets the part of the song, the shots, the cuts, the audio fades and the lyric timing. Returns null when the
+// plan cannot be applied to these props (another number of lyric lines: the song's lyrics changed).
+export function compileShotPlan(sb: StoryboardFile, look: Omit<LyricVideoProps, "mediaBaseUrl">): Omit<LyricVideoProps, "mediaBaseUrl"> | null {
+  if (!shotPlanComplete(sb)) return null;
+  const t = storyboardTiming(sb);
+  const lines = sb.text.filter((x) => x.kind !== "card");
+  if (lines.length !== look.lyrics.length || t.lyrics.length !== look.lyrics.length) return null;
+  const shots: ShotProps[] = sb.shots.map((s, i) => ({ start: t.shots[i].start, duration: t.shots[i].duration, ...(s.render as SbShotRender) }));
+  const lyrics: LyricLineProps[] = look.lyrics.map((l, k) => {
+    const f = t.lyrics[k];
+    const out: LyricLineProps = { ...l, startFrame: f.startFrame, endFrame: f.endFrame };
+    for (const key of ["stampFrame", "sungEndFrame", "enterFrame"] as const) {
+      if (f[key] !== undefined) out[key] = f[key];
+      else delete out[key];
+    }
+    return out;
+  });
+  const audio = look.audio && sb.output.audio ? { ...look.audio, startFrame: t.songStartFrame, fadeInFrames: sb.output.audio.fadeInFrames, fadeOutFrames: sb.output.audio.fadeOutFrames } : look.audio;
+  return {
+    ...look,
+    durationInFrames: t.durationInFrames,
+    audio,
+    shots,
+    ...(look.cutFrames ? { cutFrames: shots.slice(1).map((s) => s.start) } : {}),
+    lyrics,
+  };
+}
+
+// What a shot plan decides (for comparing two plans of the same video): the part of the song, every shot with its
+// render detail, the audio fades and the lyric timing. Not the ids, the dates, the notes or the assessment.
+// `older`: leave out what a shot plan from before 2e-1 does not hold (the render detail, the fades).
+export function planDecisions(sb: StoryboardFile, older = false) {
+  return {
+    range: [sb.output.range.startMs, sb.output.range.endMs],
+    audio: older ? null : (sb.output.audio ?? null),
+    shots: sb.shots.map((s) => [s.clip, s.kind, s.trim.inS, s.trim.outS, s.speed, s.startMs, s.endMs, s.transitionIn.type, s.carries, older ? null : (s.render ?? null)]),
+    lyrics: sb.text.filter((x) => x.kind !== "card").map((x) => [x.id, x.text, x.startMs, x.endMs, x.stampMs ?? null, x.sungEndMs ?? null, x.enterMs ?? null]),
+  };
+}
+// The same plan? A shot plan from before 2e-1 (`a` without the render detail) is compared on what it holds.
+export const sameDecisions = (a: StoryboardFile, b: StoryboardFile) => {
+  const older = !shotPlanComplete(a);
+  return JSON.stringify(planDecisions(a, older)) === JSON.stringify(planDecisions(b, older));
+};
+
+// What changed between two plans of a video, in plain words ("the part of the song: 0:12.0-0:40.0 -> 0:10.0-0:38.0",
+// "3 of 7 cuts moved", "other clips on 2 shots", "the lyric timing of 4 lines").
+export function planChanges(before: StoryboardFile, after: StoryboardFile): string[] {
+  const out: string[] = [];
+  const a = before.output.range;
+  const b = after.output.range;
+  if (a.startMs !== b.startMs || a.endMs !== b.endMs) out.push(`the part of the song: ${clock(a.startMs)}-${clock(a.endMs)} -> ${clock(b.startMs)}-${clock(b.endMs)}`);
+  if (before.shots.length !== after.shots.length) out.push(`${before.shots.length} shots -> ${after.shots.length}`);
+  else {
+    const moved = after.shots.filter((s, i) => i > 0 && s.startMs !== before.shots[i].startMs).length;
+    if (moved) out.push(`${moved} of ${after.shots.length - 1} cuts moved`);
+    const clips = after.shots.filter((s, i) => s.clip !== before.shots[i].clip).length;
+    if (clips) out.push(`other clips on ${clips} shot${clips === 1 ? "" : "s"}`);
+    const both = shotPlanComplete(before) && shotPlanComplete(after);
+    const detail = after.shots.filter((s, i) => s.clip === before.shots[i].clip && JSON.stringify([s.trim, s.speed, s.transitionIn, both ? (s.render ?? null) : null]) !== JSON.stringify([before.shots[i].trim, before.shots[i].speed, before.shots[i].transitionIn, both ? (before.shots[i].render ?? null) : null])).length;
+    if (detail) out.push(`trims, speeds or transitions of ${detail} shot${detail === 1 ? "" : "s"}`);
+  }
+  const la = before.text.filter((x) => x.kind !== "card");
+  const lb = after.text.filter((x) => x.kind !== "card");
+  if (la.length !== lb.length || la.some((x, i) => x.text !== lb[i].text)) out.push("the lyric lines");
+  else {
+    const timed = lb.filter((x, i) => JSON.stringify([x.startMs, x.endMs, x.stampMs, x.sungEndMs, x.enterMs]) !== JSON.stringify([la[i].startMs, la[i].endMs, la[i].stampMs, la[i].sungEndMs, la[i].enterMs])).length;
+    if (timed) out.push(`the lyric timing of ${timed} line${timed === 1 ? "" : "s"}`);
+  }
+  if (before.output.audio !== undefined && after.output.audio !== undefined && JSON.stringify(before.output.audio) !== JSON.stringify(after.output.audio)) out.push("the audio fades");
+  return out;
 }
 
 // The unmatched edits in plain words, one line each (Shape's notes, the pnpm storyboards report).

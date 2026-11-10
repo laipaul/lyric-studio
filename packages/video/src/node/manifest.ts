@@ -98,6 +98,11 @@ export type Manifest = {
   renderer?: { asked: "remotion" | "hyperframes"; used: "remotion" | "hyperframes"; gaps: string[] } | null;
   // Picture versions (--pictures): which clip set this video used.
   picture?: { index: number; label: string; songClips: boolean; collections: string[] } | null;
+  // 2e-1: the shot plan this video was made from (storyboards\<id>.json; a copy sits next to the video as
+  // <name>.shotplan.json) and what Make did with it: "same" (as Shape last showed it), "new" (there was none: saved
+  // first), "replanned" (the song, its clips or settings changed: saved again first), "kept" (the app would plan it
+  // differently now; the saved plan was made as it is). Absent in older manifests.
+  shot_plan?: { id: string; file: string; copy: string; status: "new" | "same" | "kept" | "replanned"; note: string | null } | null;
   warnings: string[];
 };
 

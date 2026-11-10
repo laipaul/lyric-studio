@@ -4,6 +4,7 @@
 //   tsx packages/video/scripts/storyboard.ts <project id> <platform> [video]      a plan (dry run)
 //   tsx packages/video/scripts/storyboard.ts <project id> <platform> <video> <run folder>   a past run
 //   tsx packages/video/scripts/storyboard.ts <project id> <platform> <video> --clips song+wedding   a plan over other clips
+//   tsx packages/video/scripts/storyboard.ts <project id> <platform> <video> --try reels-1~theme-night-drive   a Try other looks video (2e-1)
 //   tsx packages/video/scripts/storyboard.ts --serve      stays running (8 Nov 2026): one request per stdin line,
 //       {"n": 1, "args": ["<project id>", "reels", "v1"]}, one answer per stdout line, {"n": 1, "out": {...}}.
 //       The studio keeps one such planner warm, so an edit does not pay Node / tsx starting up and the song being
@@ -17,11 +18,12 @@ import { storyboardChoices, storyboardPlan, storyboardRun } from "../src/node/st
 async function storyboard(args: string[]): Promise<unknown> {
   const [id, platform, video = "v1", fourth, fifth] = args;
   const clipSet = fourth === "--clips" ? fifth : undefined;
-  const run = fourth === "--clips" ? undefined : fourth;
+  const tryId = fourth === "--try" ? fifth : undefined;
+  const run = fourth === "--clips" || fourth === "--try" ? undefined : fourth;
   const ws = openWorkspace(resolveWorkspaceDir());
   try {
     if (!id) throw new Error("usage: storyboard.ts <project id> [platform] [video] [run folder]");
-    return !platform ? storyboardChoices(ws, id) : run ? await storyboardRun(ws, id, run, platform, video) : await storyboardPlan(ws, id, platform, video, clipSet);
+    return !platform ? storyboardChoices(ws, id) : run ? await storyboardRun(ws, id, run, platform, video) : await storyboardPlan(ws, id, platform, video, clipSet, tryId);
   } catch (error) {
     return { error: (error as Error).message };
   } finally {

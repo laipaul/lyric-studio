@@ -170,7 +170,7 @@ describe("a song's folder in pnpm make", () => {
     projectId = p.id;
     expect(p.folder).toBe("songs/Life Lyrics/Hold On");
     folder = path.join(wsDir, "songs", "Life Lyrics", "Hold On");
-    expect(readdirSync(folder).sort()).toEqual([".studio", "Hold On.wav", "clips", "exports", "song.json"]); // the song keeps its own name
+    expect(readdirSync(folder).sort()).toEqual([".studio", "Hold On.wav", "clips", "exports", "song.json", "storyboards"]); // the song keeps its own name; 2e-1: Make saves the shot plans
     expect(path.dirname(r.exportDir)).toBe(path.join(folder, "exports"));
     expect(readRecipe(path.join(folder, "song.json")).collections).toEqual(["wedding"]);
     expect(existsSync(path.join(wsDir, "projects", p.id))).toBe(false);

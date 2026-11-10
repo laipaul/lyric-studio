@@ -1,6 +1,7 @@
 // The song page's Storyboard (stage 1, read-only). GET: what it can show (a plan per platform, past
 // runs); ?platform=reels&video=v1: that video's plan without rendering (the planner's dry run, the same
-// code Generate renders with; &clips=song+wedding: over another clip set, the same textboard);
+// code Generate renders with; &clips=song+wedding: over another clip set, the same textboard; &try=reels-1~theme-x:
+// a Try other looks video, from its own shot plan, 2e-1);
 // ?run=<folder>&platform=reels&video=v1: a past run's video (its manifest).
 // POST (stage 2): one edit: { action: "order", order } | { action: "clip", clip, edit } | { action:
 // "anchor", line, clip, transition? } | { action: "unanchor", line } | omit | canvas | the timeline's roll / slip /
@@ -22,8 +23,9 @@ export async function GET(request: Request, { params }: Params) {
   const video = q.get("video") ?? "v1";
   const run = q.get("run");
   const clips = q.get("clips"); // the picture swap: "song+wedding", "city"
+  const tryId = q.get("try"); // a Try other looks video's shot plan
   try {
-    const data = (await storyboardJson([id, ...(platform ? [platform, video, ...(run ? [run] : clips ? ["--clips", clips] : [])] : [])])) as { error?: string };
+    const data = (await storyboardJson([id, ...(platform ? [platform, video, ...(run ? [run] : tryId ? ["--try", tryId] : clips ? ["--clips", clips] : [])] : [])])) as { error?: string };
     if (data.error) return Response.json({ error: data.error }, { status: 400 });
     return Response.json(data, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

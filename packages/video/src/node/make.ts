@@ -3,6 +3,7 @@
 // (stored, never rewritten) -> section -> collection import -> cuts -> N variations rendered in
 // parallel -> QA -> manifest.
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -46,6 +47,7 @@ import { boardForRun, cardFont, cardMeasure, overrideCount, TITLE_MIN_S, TITLE_S
 import { extraCards, fillCardText } from "../extra-cards";
 import { matchPinClips, parsePins } from "../pins";
 import type { LyricEffectsProps, LyricLineProps, LyricVideoProps } from "../props";
+import type { SbTry } from "../storyboard-file";
 import { formatQa, LOW_CONFIDENCE, qaReasons, runQa, type QaInput, type QaReport } from "../qa";
 import { autoSection, clockText, titleLeadMs, finishedBeforeStart, SECTION_TARGET, sectionCuts, startsAfterEnd, sungEnd, sungStart, type SectionCut, type SectionLine } from "../section";
 import { loopFit, loopFlows, loopSuggestions, type LoopAudio, type LoopResult, type LoopSuggestion } from "../loop";
@@ -267,6 +269,10 @@ export type VideoPlan = {
   anchors: (AnchorReport & { missing: string[] }) | null;
   loop: LoopResult | null; // loop platforms: does the wrap-around flow (as QA "Loop flows" checks it)
   decisions: string[]; // the app's technical choices in plain words (pacing, transitions)
+  // 2e-1: a fingerprint of everything this video's plan is made from (the song, its lyric timing, the clips and their
+  // edits, the song's settings for this platform, the variation), and the Try other looks it is (else null).
+  planKey: string;
+  try: SbTry | null;
 };
 export type PlatformPlan = {
   videos: VideoPlan[];
@@ -281,6 +287,7 @@ export type PlatformPlan = {
     omit: boolean; // set to Omit (Assets / Shape): listed in the order, never shown
   }[];
   section: { mode: string; start_ms: number; end_ms: number; reason: string };
+  clipFiles: { name: string; sha256: string }[]; // 2e-1: the clip files this platform could use (name, content)
   analysis: { bpm: number; beats: Beat[]; duration_ms: number };
   lines: { number: number; text: string; isHook: boolean; start_ms: number; end_ms: number; sung_end_ms: number | null }[]; // every line, by the Lyrics tab's number
   anchorsOutside: { line: number; text: string; clip: string }[];
@@ -298,6 +305,7 @@ export type PlatformResult = {
   variations: VariationResult[];
   warnings: string[];
   error: string | null; // the platform could not be made at all (e.g. no suitable sources)
+  shotPlanNotes?: string[]; // 2e-1: shot plans saved again or kept, in plain words
 };
 
 export type MakeResult = {
@@ -313,6 +321,12 @@ export type MakeResult = {
 
 // The end of the summary when something failed: every failed video (platform + variation) and every
 // platform that could not be made at all, with what to do. null when everything is finished.
+// Options that do not change a video's plan (where files are, how the run is made, what the run is called) or that
+// the variation itself carries (its spec): left out of the plan fingerprint (2e-1).
+const PLAN_KEY_SKIP = new Set(["now", "runId", "command", "workspaceDir", "song", "lyrics", "songFolder", "dryRun", "frameCheck", "parallel", "resume", "resumeFolder", "engine", "platform", "platforms", "variations", "take", "pictures", "pairings", "collection", "collectionPath", "title", "artist", "ep", "cover", "hint", "presetsFile", "lyricsOnly", "projectId", "theme", "realign", "leadMs", "lyricsOffsetMs", "align", "voiceMap", "firstWords", "renderer", "thumbnailRenderer", "coverRenderer", "log", "shouldStop", "onRenderProgress", "onReady", "onRetry"]);
+const withShotPlan = (m: Manifest, shotPlan: Manifest["shot_plan"]): Manifest => (shotPlan ? { ...m, shot_plan: shotPlan } : m);
+export type ShotPlanUsed = { id: string; file: string; status: "new" | "same" | "kept" | "replanned"; note: string | null; props: Omit<LyricVideoProps, "mediaBaseUrl"> };
+
 export function failureSummary(result: Pick<MakeResult, "platforms" | "variations">): string[] | null {
   const videos = result.variations.filter((v) => v.error);
   const platforms = result.platforms.filter((p) => p.error);
@@ -808,6 +822,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       youtubeLinks: pickedLinks(songRecipe.links ?? [], songRecipe.postLinks, "youtube"),
       gapOrder: songRecipe.gapOrder ?? null,
       textboard,
+      runTheme: options.theme?.trim() && options.theme.trim() !== songRecipe.theme ? options.theme.trim() : null,
     };
     const results: PlatformResult[] = [];
     for (const [index, name] of chosenPlatforms.names.entries()) {
@@ -896,6 +911,7 @@ type Shared = {
   gapOrder: GapOrder | null; // song.json (null: story with anchors, else v1 story and the others shuffled)
   textboard: RunBoard; // the song's text layer (textboard.json, else the brand's defaults)
   picture?: PictureSet & { index: number }; // picture versions: this video's clip set
+  runTheme: string | null; // --theme / Try other looks: a theme other than the song's for this run
 };
 
 // The last shot shows the frames right before the first one (or the same photo, ending where its move starts).
@@ -1608,19 +1624,30 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       return [spec.name, composed] as const;
     }),
   );
-  if (options.dryRun) {
-    // The storyboard: the plan, exactly as the render would get it.
-    return {
-      name: preset.name, label: preset.label, exportDir, section: { start_ms: chosen.start_ms, end_ms: chosen.end_ms, reason: chosen.reason }, limit, variations: [], warnings, error: null,
-      plan: {
+  // 2e-1: what each video's plan is made from (its fingerprint) and which Try other looks it is.
+  const keyOptions = Object.fromEntries(Object.entries(options).filter(([k, v]) => !PLAN_KEY_SKIP.has(k) && v !== undefined && v !== false && typeof v !== "function"));
+  const keyBase = { v: 1, options: keyOptions, preset, song: sh.sp.project.audio_hash ?? null, lrc: alignment.lrcHash, leadMs, lyricsOffsetMs, edits, clips: prepared.clips.map((c) => [c.name, c.hash]), anchors: sh.anchors, canvas: sh.canvasChoice, board: sh.textboard.board, picture: sh.picture ?? null };
+  const planKeyOf = (spec: VariationSpec) => createHash("sha256").update(JSON.stringify({ ...keyBase, spec })).digest("hex");
+  const tryOf = (spec: VariationSpec): SbTry | null =>
+    sh.picture
+      ? { kind: "pictures", label: sh.picture.label, clipSet: [...(sh.picture.songClips ? ["song"] : []), ...sh.picture.collections].join("+") }
+      : spec.pairing
+      ? { kind: "fonts", label: spec.pairing.name, pairing: spec.pairing.id }
+      : sh.runTheme
+      ? { kind: "theme", label: sh.runTheme, theme: sh.runTheme }
+      : null;
+  const platformPlan = (): PlatformPlan => ({
         videos: specs.map((spec) => {
           const composed = composedBySpec.get(spec.name)!;
           return {
             spec, props: composed.props, anchors: anchors.length || anchorMissing.length ? { ...(composed.anchors ?? { uses: [], conflicts: [], notes: [] }), missing: anchorMissing } : null,
             loop: loops ? loopResult(composed.props, prepared.clips, { bpm: analysis.bpm, downbeats: downbeatTimes, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers, ending, titleLeadMs: titleLead }) : null,
             decisions: [chosen.lengthText, pace?.text, composed.transitions?.text, ...(cardNotesBySpec.get(spec.name) ?? [])].filter((x): x is string => !!x),
+            planKey: planKeyOf(spec),
+            try: tryOf(spec),
           };
         }),
+        clipFiles: prepared.clips.map((c) => ({ name: c.name, sha256: c.hash })),
         // Loop platforms: target lengths whose end loops well from this start (beat, level, harmony).
         loopSuggestions: loops
           ? loopSuggestions({
@@ -1650,8 +1677,29 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         // As the planner reports them (the same for every video of the platform).
         anchorsOutside: (composedBySpec.get(specs[0]?.name ?? "")?.anchors?.uses ?? []).filter((u) => !u.used && u.why === "outside this section").map((u) => ({ line: u.line, text: u.text, clip: u.clip })),
         alignment: { file: path.basename(sh.alignment.lrcFile), handSet: (sh.alignment.handTimes ?? []).map((h) => h.number) },
-      },
-    };
+  });
+  if (options.dryRun) {
+    // The storyboard: the plan, exactly as the render would get it.
+    return { name: preset.name, label: preset.label, exportDir, section: { start_ms: chosen.start_ms, end_ms: chosen.end_ms, reason: chosen.reason }, limit, variations: [], warnings, error: null, plan: platformPlan() };
+  }
+  // 2e-1: every video is made from its shot plan (storyboards\<platform>-<n>.json, a Try other looks video its own
+  // <platform>-<n>~<try>.json): the plan is settled first (saved when there is none, or when the song, its clips or
+  // settings changed since: said in the log and in the run's notes; kept as it is when only the app would plan it
+  // differently now), then the props are compiled from it, the same way Shape's viewer gets them.
+  const shotPlans = new Map<string, ShotPlanUsed>();
+  if (!songPathsById(ws, project.id).legacy) {
+    const { shotPlanForMake } = await import("./storyboard");
+    const pp = platformPlan();
+    for (const v of pp.videos) {
+      const used = await shotPlanForMake(ws, project.id, { name: preset.name, label: preset.label, warnings }, pp, v);
+      if (!used) continue;
+      composedBySpec.get(v.spec.name)!.props = used.props;
+      shotPlans.set(v.spec.name, used);
+      if (used.note) {
+        log(`${preset.name} ${v.spec.name}: ${used.note}`);
+        notes.push(`${preset.label} ${v.spec.name}: ${used.note}`);
+      }
+    }
   }
   options.onReady?.({
     platform: { name: preset.name, label: preset.label, index: position.index, count: position.count, folder: exportDir },
@@ -1830,9 +1878,13 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       result.qa = qa;
       result.qaSummary = qa.status === "PASS" ? "PASS" : `WARN (${qaReasons(qa)})`;
       writeFileSync(result.qaFile, formatQa(qa, qaTitle(spec, project.title, chosen, preset)));
+      // 2e-1: the shot plan it was made from, next to the video (what the manifest's props were compiled from).
+      const sp = shotPlans.get(spec.name) ?? null;
+      const shotPlanCopy = path.join(exportDir, `${spec.name}.shotplan.json`);
+      if (sp && existsSync(sp.file)) writeFileSync(shotPlanCopy, readFileSync(sp.file));
       writeManifest(
         result.manifestFile,
-        buildManifest({
+        withShotPlan(buildManifest({
           ws, tool: sh.tool, spec, props, media, project, songHash: sh.sp.songHash, songFile: sh.sp.songFile, analysis, chosen, alignment, reports, numbers, audioPlan: audioP, pace, transitionPlan: composedBySpec.get(spec.name)?.transitions ?? null, canvasPlan: canvas, readability: preset.lyrics && !canvas ? backing : null,
           visible, lines, leadMs, lyricsOffsetMs, options, collection: sh.collection, collectionNames: sh.collectionNames, clips: prepared.clips, file, qa, now: sh.now, warnings, preset,
           brand: sh.brand.brand, anchors: anchorsOut, gapOrder: story ? "story" : null, renderer: rendererUsed.get(spec.name) ?? null,
@@ -1842,7 +1894,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
                 changes: overrideCount(sh.textboard.board), cards: sh.textboard.board.cards.length,
               }
             : null, loop: loops ? (loop ? { checked: true, ...loop } : null) : { checked: false, why: canvas ? "a Spotify Canvas has its own loop checks" : `${preset.label} does not loop` },
-        }),
+        }), sp ? { id: sp.id, file: path.relative(ws.dir, sp.file).split(path.sep).join("/"), copy: path.basename(shotPlanCopy), status: sp.status, note: sp.note } : null),
       );
       // Captions for every video; YouTube also gets a thumbnail and a publishing pack.
       if (preset.lyrics && props.lyrics.length) writeSrt(result.srtFile, props); // (a Canvas, an instrumental without a story: no captions)
@@ -1910,6 +1962,9 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     variations: results.sort((a, b) => a.index - b.index),
     warnings,
     error: null,
+    // 2e-1: the shot plans that were saved again (something changed) or made as saved (the app would plan them
+    // differently now): the run's message in Tasks names them. A first shot plan is only in the log and the manifest.
+    shotPlanNotes: [...shotPlans.entries()].filter(([, u]) => u.note && (u.status === "replanned" || u.status === "kept")).map(([name, u]) => `${preset.label} ${name}: ${u.note}`),
   };
 }
 

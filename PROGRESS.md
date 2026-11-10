@@ -4,6 +4,46 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Theme v2 storyboard, step 2e-1: Make, the release pack and Shape's viewer make every video from its shot plan ✅ (to verify on the Windows PC)
+- **Reference first (asked by the user, in place of the golden manifest):** before any change, three songs were made with
+  the old code and a renderer that only records what it is given: Ref One (Reels v1 + v2 and a YouTube clips video, title
+  opening, hook and end cards), Ref Two (Reels, TikTok, YouTube cover layout, a photo, a moved cut and a slip), Ref Three
+  (Shorts and YouTube, story shot length, flowing transitions, stacked lines, big hook): 8 videos, saved in
+  `packages\video\test\reference\2e1\` (captured twice: identical; its own commit, 078d8d0). **After 2e-1 the same
+  songs give identical props, frame for frame: the same cuts (shot starts, lengths, clips, where each clip starts,
+  speeds, dissolves), the same lyric timing and every other prop** (test/make-reference.test.ts).
+- **The shot plan is now complete for rendering:** each shot also holds what the renderer draws (where playback
+  starts in the clip, its length there, a photo's move, the dissolve, a loop blend) and the plan holds the audio fades,
+  the clip files it could use and a fingerprint of everything it is made from (the song, its lyric timing, the clips and
+  clips.json, the song's settings for that platform, the variation).
+- **One compile (shot plan -> props)** for Make, the release pack and Shape's viewer: the shots, cuts, part of the song,
+  fades and lyric timing come from the file; the look (theme, fonts, cards, effects) from the song as it is now.
+- **Make settles each video's shot plan before making it:** none yet: saved first; the same plan: made as saved; the
+  song, lyrics, clips or settings changed: planned and saved again first, the old plan kept as `<id>.previous.json`,
+  and what changed is said in the run's message in Tasks (e.g. "Instagram Reels v1: shot plan saved again before
+  making it: the part of the song: 0:02.3-0:16.0 -> 0:02.3-0:18.0; 4 shots -> 5 …"). **Nothing it is made from changed
+  but the app would now plan it differently: the SAVED plan is made** (the file wins; said in Tasks and in Shape). Each
+  run keeps a copy next to the video (`v1.shotplan.json`) and the manifest says which plan and what happened.
+- **Try other looks:** each try has its own shot plan, never the video's own: another theme for a run or Compare
+  themes `reels-1~theme-night-drive.json`, picture versions `reels-1~pictures-city.json` / `~pictures-song`, font
+  pairings `reels-1~fonts-elegant.json`. Shape's video picker lists them ("v1 · try: theme Night Drive") and opens one
+  with its theme, fonts or clips.
+- **What 2e-1 does not do yet:** the file wins only as a whole plan; Shape's edits still go to clips.json (2f writes them
+  into the plan and locks them); a changed input re-plans the whole video, the old plan kept one step back (2g merges and
+  keeps locked shots, with "Back to previous version"). The look always follows the song now (a try keeps its own theme).
+- Tests: make-reference (3 songs, 8 videos: identical); shot-plan-make (7: no plan -> saved first, Shape and Make agree,
+  the saved plan wins, settings changed -> saved again + .previous + said in Tasks, theme / picture / font tries, Shape
+  opens a try, the compile refuses a plan that no longer fits, older plans completed quietly); storyboard.e2e.ts (+3: the
+  try in Shape's list, opened with its theme, the own plan untouched). Updated for the new files: make (YouTube, Canvas
+  and the real-render list now include v1.shotplan.json; the real-render one runs on the PC only), song-folders
+  (storyboards\). Run here: the whole unit suite 1008 pass (only make / migrate / render's real renders fail: Remotion
+  cannot reach remotion.media from the cloud, as before); browser: storyboard, song-stages, style-lock, videos-post,
+  themes, textboard, title-opening all pass; tsc clean; pnpm build ok.
+- **To check on the PC:** open a song in Shape (its shot plans are completed quietly), Make → Make release pack: the
+  videos look exactly as before; each run folder has `v1.shotplan.json` next to `v1.mp4`. Change the part of the song in
+  Shape → Part & ending for a platform you did not open, Make it: Tasks says the shot plan was saved again and what
+  changed. Make → Try other looks → another theme: Shape's video picker lists "v1 · try: theme …".
+
 ### Prepare reorganised: Audio · Lyrics & timing · Details · Storyboard; the planned video is the "shot plan" ✅ (to verify on the Windows PC)
 - **One kind of input per tab** (Files vs Clips was unclear):
   - **Audio** (was Files): the song folder, the song, the vocal stem, backing vocals (and audio files to place).
@@ -250,39 +290,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Fix: src/hand-times.ts shiftLine moves the end with the start, caps it before the next line's final start and never puts it before the line's sung end (squeezed before the next line, as before). Words and sung end were already moved as a whole.
 - Tests: hand-times.test.ts (9 pass; new one failed before): a line set 7 s later than its old end keeps its length and ends before the next line, also when the next line is set by hand or pushed. Run with lyrics-view, vocal-guard, storyboard and lrc tests: 80 pass; tsc ok in packages/video and apps/studio.
 
-### Bug fix: a hand-set lyric start was not saved after a line was removed ✅ (confirmed on the Windows PC, 8 Nov 2026)
-- The user found (song "Let My Love Carry You"): they removed the line "Mmmm..." from the lyrics. The Lyrics tab then showed
-  28 "You'll find your way to me" 3:12.98; 29 "Hold on..." stamp 3:14.76 (about the old "Mmmm" stamp), conf 0.52;
-  30 "Floating through the night" stamp 3:18.26 (the old "Hold on" stamp), set by hand 3:25.06. Nudging "Hold on..." to
-  3:22 and Save said "Saved to hints.lrc (4 line(s) set by hand)", but "Hold on..." went back to 3:14.76 (also when
-  "Floating" was first set back to automatic). The user hears Hold on at about 3:22 and Floating at about 3:25.
-- Causes (three, as in the brief): (A) applyHandTimes skipped a hand-set start that was after the NEXT line's stored stamp
-  (Floating 3:18.26), with a message only in the log; the neighbours were compared by their stored stamps, not their
-  final ones. (B) hints.lrc "!" lines are keyed by line number + text: after a removal the old numbers pointed at other
-  lines ("4 line(s)" counted stale entries); an entry whose text no longer sat at its number was ignored, never followed
-  its line, never cleaned, and the count included them. (C) Nothing reconciled the stored alignment with a lyrics change by
-  line: any change of words = a new key = aligned again (several minutes; the stamps the user saw were the new
-  alignment's guesses, which on a hummed or low-confidence line sat at the neighbours' old places). A removal now keeps the
-  other lines' own timing without aligning (the cause of the exact old stamps could not be reproduced here: the aligner is not run).
-- Fixed (automatic, no setting): hand-set starts are resolved by text (src/hand-times.ts resolveHandTimes: the number
-  when the text still matches, else the same text on exactly one line; entries of lines that are gone go; an older entry never
-  overrides the current one) and checked as a set against the neighbours' FINAL starts. The user's start wins: a following
-  line not set by hand that would start before (or within 0.3 s after) a hand-set line is pushed behind its sung end
-  (+0.1 s), and so on down the song; the Lyrics tab says "Moved after line N, which you set by hand". Two hand-set
-  starts out of order: Save refuses, naming both lines. A start that is still not used is said so on the line and in the
-  Save message. Save cleans stale entries (the old hints.lrc is kept in .studio\replaced\). Removing lines from the
-  lyrics (src/node/song-project.ts carryOverRemovedLines, src/lrc.ts dropLrcLines): when the current lines fit into the
-  earlier aligned lyrics in exactly one way, the new alignment is the old one without those rows (timing, confidence,
-  vocal-start check records renumbered); several ways (a repeated line), added or changed words = aligned again.
-  Docs: docs/lyrics.md (hand-set starts, removed lines).
-- Tests: hand-times.test.ts +3 (5 -> 8 tests; the order case Hold on 3:22 with Floating at 3:18.26, both hand-set, out of
-  order, by text and stale entries); lyrics-view.test.ts +3 (12 tests: removal keeps each line's own timing, adding or an
-  ambiguous removal aligns again, hand-set follow-by-text + push + refusal); all 6 related files 82 passed; video typecheck,
-  studio typecheck + build clean; lyrics-tab.e2e.ts all browser checks passed.
-- To check on the PC: `cd D:\videomaker`, `git pull`, restart. Open the Lyrics tab: "Hold on..." and "Floating through the night" show their own
-  times. Set "Hold on..." to 3:22 and Save: it stays (set by hand), "Floating..." (automatic) moves behind it with the note
-  "Moved after line N"; set "Floating..." to 3:25 and Save: both kept.
-
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -430,7 +437,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 
 **Navigation and the order from here (agreed with the user, 9 Nov 2026).** Rule: every setting lives in the stage
 where the user looks for it, in ONE place. Order: **N1** (navigation, done, to verify; N1 polish: the four stages behave the same way, done, to verify) → story notes on clip cards
-(done, to verify) → **2e-1 → 2e-2 → O1 → 2c → M1 gate → 2f → 2g → 2h → 2i**; the theme editor moves to the Themes page
+(done, to verify) → **2e-1** (done, to verify) → **2e-2 → O1 → 2c → M1 gate → 2f → 2g → 2h → 2i**; the theme editor moves to the Themes page
 with or after 2i (§3.2). Decisions on the N1 proposal:
 - **O1 (song-level look overrides, §3.1):** a small song.json layer between the theme and the storyboard for a fixed
   list (line shape, lines appear, bigger final chorus to start), edited in Shape → Look; the theme editor keeps the

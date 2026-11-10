@@ -12,7 +12,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { absPath, openWorkspace, project } from "@lyric/db";
-import { ensureAlignment, findOrCreateSongProject, loadTheme, readRecipe, songPathsById, type AlignRunner } from "@lyric/video/node";
+import { createTheme, ensureAlignment, findOrCreateSongProject, loadFontCatalog, loadTheme, readRecipe, songPathsById, type AlignRunner } from "@lyric/video/node";
 import { eq } from "drizzle-orm";
 import { collapsePanel, openPanel, saveTheme, unfoldStyle } from "./stage-tabs";
 
@@ -683,6 +683,32 @@ async function main() {
     // The beats are tracked again around 80 (on this 120 BPM click track they settle near it).
     check(Math.abs(bpm80 - 80) <= 4, `Shape plans the video with the tempo set in Prepare (${summary80})`);
     await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "storyboard-stage2.png") });
+    // 2e-1: a Try other looks video (as Make saves it: storyboards\reels-1~theme-<name>.json) is in Shape's video list
+    // and opens from its own shot plan, planned with its theme; the video's own shot plan stays as it was.
+    {
+      const own = path.join(paths.root, "storyboards", "reels-1.json");
+      const sb = JSON.parse(readFileSync(own, "utf8"));
+      const wsT = openWorkspace(wsDir);
+      const songTheme = readRecipe(paths.recipe!).theme!;
+      createTheme(wsT, { projectId: sp.project.id, name: "E2E Try", from: songTheme, catalog: loadFontCatalog(wsDir) });
+      writeFileSync(paths.recipe!, JSON.stringify({ ...JSON.parse(readFileSync(paths.recipe!, "utf8")), theme: songTheme }));
+      wsT.close();
+      const tryFile = path.join(paths.root, "storyboards", "reels-1~theme-e2e-try.json");
+      writeFileSync(tryFile, JSON.stringify({ ...sb, id: "reels-1~theme-e2e-try", output: { ...sb.output, try: { kind: "theme", label: "E2E Try", theme: "E2E Try" }, theme: { name: "E2E Try", version: null } } }));
+      const ownBefore = JSON.parse(readFileSync(own, "utf8")).shots;
+      await page.reload();
+      await page.waitForSelector("[data-storyboard-try='reels-1~theme-e2e-try']", { state: "attached", timeout: 180_000 });
+      check(((await page.textContent("[data-storyboard-try='reels-1~theme-e2e-try']")) ?? "").includes("v1 · try: theme E2E Try"), "Shape's video list names the try");
+      await page.selectOption("[data-storyboard-video]", "try:reels-1~theme-e2e-try");
+      await page.waitForFunction(() => !document.querySelector("[data-storyboard-show] .animate-spin"), null, { timeout: 180_000 }).catch(() => {});
+      await sleep(1500);
+      await page.waitForFunction(() => !document.querySelector("[data-storyboard-show] .animate-spin"), null, { timeout: 180_000 }).catch(() => {});
+      const tried = JSON.parse(readFileSync(tryFile, "utf8"));
+      check((await page.$eval("[data-storyboard-video]", (e: Element) => (e as HTMLSelectElement).value)) === "try:reels-1~theme-e2e-try" && !!(await page.$("[data-shot='1']")) && tried.output.try?.theme === "E2E Try" && tried.output.theme.name === "E2E Try", "the try opens in Shape from its own shot plan, with its theme");
+      check(JSON.stringify(JSON.parse(readFileSync(own, "utf8")).shots) === JSON.stringify(ownBefore), "…the video's own shot plan stays as it was");
+      await page.selectOption("[data-storyboard-video]", "v1");
+      await sleep(500);
+    }
     // 16:9 (YouTube): the same editor, the wide viewer smaller in height so it all still fits on one screen.
     ffmpeg("-f", "lavfi", "-i", "color=c=0x553344:s=600x600:d=1", "-frames:v", "1", path.join(paths.root, "cover.jpg")); // YouTube's cover layout needs a cover
     writeFileSync(paths.recipe!, JSON.stringify({ ...JSON.parse(readFileSync(paths.recipe!, "utf8")), platforms: ["reels", "youtube"] }));

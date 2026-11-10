@@ -24,7 +24,7 @@ import { readLoopAudio } from "./audio-check";
 import { bestMoments } from "./best-moment";
 import { editOf, readClipEdits } from "./clip-edits";
 import { SHORT_LABELS, songRuns } from "./exports";
-import { makeVideos } from "./make";
+import { makeVideos, type MakeOptions, type PlatformPlan, type ShotPlanUsed, type VideoPlan } from "./make";
 import type { Manifest } from "./manifest";
 import { resolveMoved } from "./media";
 import { readRecipe, resolveRecipe } from "./recipe";
@@ -32,7 +32,8 @@ import { SOURCE_FILE } from "./collection";
 import { songCollections } from "./project-settings";
 import { readMoves, sharedCollections, songPathsById } from "./song-folder";
 import { recipeInputFor } from "./style";
-import { saveStoryboardOfPlan } from "./storyboard-file";
+import { previousFile, readStoryboard, saveStoryboardOfPlan, storyboardFile } from "./storyboard-file";
+import { compileShotPlan, STORYBOARD_DIR, type SbTry } from "../storyboard-file";
 
 export type StoryboardView = {
   source: "plan" | "run";
@@ -114,6 +115,8 @@ export type StoryboardChoices = {
   // Picture swap: the clip sets the plan can use (the song's own clips and the shared collections),
   // and the recipe's own set.
   pictures: { songClips: boolean; collections: string[]; recipe: { songClips: boolean; collections: string[] } };
+  // 2e-1: the Try other looks videos that have a shot plan (made, or being made): opened in Shape like a video.
+  tries: { id: string; platform: string; video: string; label: string }[];
 };
 
 const WAVE_BUCKET_MS = 50;
@@ -144,22 +147,41 @@ export function storyboardChoices(ws: Workspace, projectId: string): StoryboardC
   return {
     platforms, runs, ready, why: ready ? null : "This song needs its song file (Prepare → Audio) and lyrics.txt (Prepare → Lyrics & timing) first.",
     pictures: { songClips: hasOwn, collections: sharedCollections(ws), recipe: { songClips: hasOwn, collections: songCollections(ws, projectId) } },
+    tries: shotPlanTries(paths.root),
   };
 }
 
+// The Try other looks shot plans of a song (storyboards\<platform>-<n>~<kind>-<name>.json), newest first.
+function shotPlanTries(songRoot: string): StoryboardChoices["tries"] {
+  const dir = path.join(songRoot, STORYBOARD_DIR);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((f) => /^[a-z]+-\d+~[a-z]+-[\w-]+\.json$/.test(f))
+    .map((f) => ({ f, sb: readStoryboard(path.join(dir, f)), at: statSync(path.join(dir, f)).mtimeMs }))
+    .filter((x): x is { f: string; sb: NonNullable<typeof x.sb>; at: number } => !!x.sb?.output.try)
+    .sort((a, b) => b.at - a.at)
+    .map(({ sb }) => {
+      const [, n] = /^[a-z]+-(\d+)~/.exec(sb.id) ?? [];
+      const t = sb.output.try!;
+      return { id: sb.id, platform: sb.output.platform, video: `v${n ?? 1}`, label: `${t.kind === "theme" ? "theme" : t.kind === "fonts" ? "fonts" : "pictures"} ${t.label}` };
+    });
+}
+
 // The plan of one video, without rendering: the same planner Generate uses (makeVideos, dry run).
-// clipSet: the picture swap ("song+wedding", "city"): the same textboard over other clips, this plan only.
-export async function storyboardPlan(ws: Workspace, projectId: string, platform: string, video = "v1", clipSet?: string): Promise<StoryboardView> {
+// clipSet: the picture swap ("song+wedding", "city"): the same textboard over other clips, this plan only (not saved).
+// tryId: a Try other looks video's shot plan ("reels-1~theme-night-drive"): planned with that try's theme, fonts or clips.
+export async function storyboardPlan(ws: Workspace, projectId: string, platform: string, video = "v1", clipSet?: string, tryId?: string): Promise<StoryboardView> {
   const paths = songPathsById(ws, projectId);
   if (!paths.audio || !existsSync(paths.audio)) throw new Error("This song has no song file yet (Prepare → Audio).");
-  const notes: string[] = [];
+  const t = tryId ? tryOf(paths.root, tryId) : null;
   const result = await makeVideos({
     workspaceDir: ws.dir,
     song: paths.audio,
     lyrics: paths.lyricsTxt,
     ...(paths.hints && existsSync(paths.hints) ? { hint: paths.hints } : {}),
     platforms: platform,
-    ...(clipSet ? { clipSet } : {}),
+    ...(clipSet && !t ? { clipSet } : {}),
+    ...(t ? tryOptions(t) : {}),
     dryRun: true,
     frameCheck: false,
     log: () => {},
@@ -168,9 +190,56 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
   if (p?.error) throw new Error(p.error);
   const plan = p?.plan;
   if (!plan) throw new Error(`No plan for ${platform}.`);
-  const v = plan.videos.find((x) => x.spec.name === video) ?? plan.videos[0];
+  const v = (t && t.kind !== "theme" ? plan.videos[0] : plan.videos.find((x) => x.spec.name === video)) ?? plan.videos[0];
   if (!v) throw new Error(`${p.label} has no video ${video}.`);
-  notes.push(...p.warnings);
+  const { shown, numbers } = await planView(ws, projectId, p, plan, v, (clipSet && !t ? clipSet : null) ?? (t?.clipSet ?? null));
+  // Theme v2 step 2d / 2e-1: the plan of this video (with the song's own clips, or a try's) is settled as its shot plan
+  // file and the viewer shows the props compiled from it, as Make makes them. A picture swap is this plan only.
+  if ((clipSet && !t) || paths.legacy) return shown;
+  return (await settledView(ws, projectId, p, plan, v, shown, numbers)).view;
+}
+
+// Make (2e-1): a video's shot plan settled before it is made, and its props compiled from it.
+export async function shotPlanForMake(ws: Workspace, projectId: string, p: { name: string; label: string; warnings: string[] }, plan: PlatformPlan, v: VideoPlan): Promise<ShotPlanUsed | null> {
+  const { shown, numbers } = await planView(ws, projectId, p, plan, v, v.try?.clipSet ?? null);
+  const r = await settledView(ws, projectId, p, plan, v, shown, numbers);
+  const id = r.saved.storyboard.id;
+  const note =
+    r.saved.status === "new" ? "no shot plan yet: saved before making it" :
+    r.saved.status === "replanned" ? `shot plan saved again before making it: ${r.saved.changes.join("; ") || "it changed"} (the song, its clips or its settings changed since it was last planned; the old one is kept as ${path.basename(previousFile(r.saved.file))})` :
+    r.saved.status === "kept" ? `made from its saved shot plan as it is; the app would now plan it differently (${r.saved.changes.join("; ")}), but nothing it is made from changed` :
+    null;
+  return { id, file: r.saved.file, status: r.saved.status, note, props: r.view.props };
+}
+
+async function settledView(ws: Workspace, projectId: string, p: { name: string; label: string; warnings: string[] }, plan: PlatformPlan, v: VideoPlan, shown: StoryboardView, numbers: (number | null)[]) {
+  const saved = await saveStoryboardOfPlan(ws, projectId, plan, p.name, v, shown, numbers);
+  const compiled = compileShotPlan(saved.storyboard, v.props);
+  let out = shown;
+  if (saved.status === "kept" && compiled) {
+    // The saved plan differs from the app's plan now: the view shows the saved one (what Make makes).
+    out = (await planView(ws, projectId, p, plan, { ...v, props: compiled }, v.try?.clipSet ?? null)).shown;
+    out.notes = [...out.notes, `This is your saved shot plan: the app would now plan it differently (${saved.changes.join("; ")}). Make makes it as saved.`];
+  } else if (compiled) out = { ...shown, props: compiled };
+  if (saved.status === "replanned") out.notes = [...out.notes, `The shot plan changed since it was last saved: ${saved.changes.join("; ")}. The previous one is kept as ${path.basename(previousFile(saved.file))}.`];
+  out.notes = [...out.notes, ...saved.unmatched];
+  return { view: out, saved };
+}
+
+// A Try other looks video's settings, read from its shot plan file.
+function tryOf(songRoot: string, tryId: string): SbTry {
+  if (!/^[a-z]+-\d+~[a-z]+-[\w-]+$/.test(tryId)) throw new Error(`No try ${tryId}.`);
+  const t = readStoryboard(storyboardFile(songRoot, tryId))?.output.try;
+  if (!t) throw new Error(`The shot plan of ${tryId} is not there (any more).`);
+  return t;
+}
+const tryOptions = (t: SbTry): Partial<MakeOptions> => (t.kind === "theme" && t.theme ? { theme: t.theme } : t.kind === "fonts" && t.pairing ? { pairings: t.pairing } : t.kind === "pictures" && t.clipSet ? { pictures: t.clipSet } : {});
+
+// Shape's view of one planned video: its shots, lines, notes, assessment (and the props it plays).
+async function planView(ws: Workspace, projectId: string, p: { name: string; label: string; warnings: string[] }, plan: PlatformPlan, v: VideoPlan, picture: string | null): Promise<{ shown: StoryboardView; numbers: (number | null)[] }> {
+  const paths = songPathsById(ws, projectId);
+  if (!paths.audio) throw new Error("This song has no song file yet (Prepare → Audio).");
+  const notes: string[] = [...p.warnings];
   // The best moments the planner used (the clip editor's, else the strongest 2 s).
   const clips = new Map<string, StoryClip>(plan.clips.map((c) => [c.path, { name: c.name, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, bestAtS: c.bestMs === null ? null : c.bestMs / 1000, bestFrom: c.bestFrom, edit: clipEdit(c.durationMs, { in: c.inMs === null ? null : c.inMs / 1000, out: c.outMs === null ? null : c.outMs / 1000, speed: c.speed }) }]));
   const startMs = v.props.audio ? frameMs(v.props.audio.startFrame) : plan.section.start_ms;
@@ -193,7 +262,7 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
   }));
   const overview = await songOverview(ws, projectId, p.name, paths.audio, plan.analysis, plan.lines);
   const shown = withTimeline(ws, projectId, await view(ws, {
-    editable: !paths.legacy, storyboardClips, slots: plan.slots, picture: clipSet ?? null,
+    editable: !paths.legacy, storyboardClips, slots: plan.slots, picture,
     source: "plan", run: null, platform: { name: p.name, label: p.label }, video: v.spec.name, videos: plan.videos.map((x) => x.spec.name),
     settings: settingsText(v.spec),
     section: { mode: plan.section.mode, startMs: plan.section.start_ms, endMs: plan.section.end_ms, reason: plan.section.reason },
@@ -201,13 +270,7 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
     loop: v.loop, loopSuggestions: plan.loopSuggestions ?? [], decisions: v.decisions,
     songFile: paths.audio,
   }), overview);
-  // Theme v2 step 2d: the plan of this video with the song's own clips is saved as its storyboard file
-  // (storyboards\<platform>-<n>.json); the moved cuts and slips no shot matches are named in the notes.
-  if (!clipSet && !paths.legacy) {
-    const saved = await saveStoryboardOfPlan(ws, projectId, plan, p.name, v, shown, numbered.map((n) => n.number));
-    shown.notes = [...shown.notes, ...saved.unmatched];
-  }
-  return shown;
+  return { shown, numbers: numbered.map((n) => n.number) };
 }
 
 // A past run's video: its manifest (exactly what was rendered).
