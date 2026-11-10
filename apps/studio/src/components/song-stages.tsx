@@ -121,6 +121,22 @@ const TAB_ICON: Record<string, { icon: LucideIcon; colour: string }> = {
   videos: { icon: Eye, colour: "" },
   post: { icon: Send, colour: "" },
 };
+// The selected stage and tab, the same in all four stages (10 Nov 2026): the app's pink accent (as on the play button),
+// never green or yellow (those mean ready / needs attention). Tabs: a pink underline and bold text; the others grey.
+// Contrast on the dark theme: pink on the page 9.7:1, on the rail's pink tint 7.3:1; dimmed stage labels 4.9:1.
+const TAB_LIST = "border-border flex h-9 w-fit items-stretch gap-1 border-b";
+const TAB = "-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 text-sm whitespace-nowrap transition-colors";
+const TAB_ON = "border-brand text-foreground font-semibold";
+const TAB_OFF = "text-muted-foreground hover:text-foreground border-transparent font-medium";
+// shadcn's TabsTrigger (Prepare, Review) brought to the same look: no pill, no shadow, the underline instead.
+const TRIGGER = cn(
+  TAB,
+  "h-auto flex-none rounded-none border-0 border-b-2 border-transparent bg-transparent py-0 shadow-none",
+  "text-muted-foreground hover:text-foreground dark:text-muted-foreground font-medium",
+  "data-[state=active]:border-brand data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:shadow-none",
+  "dark:data-[state=active]:border-brand dark:data-[state=active]:text-foreground dark:data-[state=active]:bg-transparent",
+);
+
 // The stages whose settings are saved as they change: said once, in the stage line (not in every panel).
 const SAVED_AT_ONCE: readonly StageId[] = ["prepare", "shape", "make"];
 const DOT: Record<StageStatus["tone"], string> = { done: "bg-emerald-400", todo: "bg-amber-300", blocked: "bg-red-400", muted: "bg-transparent", busy: "bg-brand animate-pulse" };
@@ -216,10 +232,15 @@ export function SongStages({
                     aria-current={stage === s.id ? "step" : undefined}
                     title={`${i + 1}. ${s.name}: ${(s.id === "shape" && shapeStatus ? shapeStatus : statuses[s.id]).text}`}
                     onClick={() => openStage(s)}
-                    className={cn("relative flex flex-col items-center gap-1 rounded-lg px-1 py-2 text-[11px] leading-tight", stage === s.id ? "bg-brand/15 text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground")}
+                    className={cn(
+                      "relative flex flex-col items-center gap-1 rounded-lg px-1 py-2 text-[11px] leading-tight",
+                      stage === s.id
+                        ? "bg-brand/15 text-brand font-semibold before:bg-brand before:absolute before:inset-y-1.5 before:-left-1.5 before:w-1 before:rounded-r"
+                        : "text-muted-foreground/80 hover:bg-accent hover:text-foreground",
+                    )}
                   >
                     <span data-stage-number className="text-muted-foreground absolute top-1 left-1.5 text-[10px] font-semibold tabular-nums">{i + 1}</span>
-                    <Icon className="size-5" />
+                    <Icon className={cn("size-5", stage === s.id && "text-brand")} />
                     {s.name}
                     <span className={cn("absolute top-1.5 right-2 size-2 rounded-full", DOT[statuses[s.id].tone])} aria-hidden />
                     <span data-stage-status className="sr-only">
@@ -236,7 +257,7 @@ export function SongStages({
                 on the same row, "<Stage> · <status>" and once per stage that every change is saved at once. */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2" data-stage-header>
             {stage === "shape" ? (
-              <div role="tablist" aria-label="Shape" data-shape-tabs className="bg-muted text-muted-foreground inline-flex h-9 w-fit items-center rounded-lg p-[3px]">
+              <div role="tablist" aria-label="Shape" data-shape-tabs className={TAB_LIST}>
                 {SHAPE_PANELS.map((m) => (
                   <button
                     key={m.id}
@@ -245,7 +266,7 @@ export function SongStages({
                     data-shape-tab={m.id}
                     aria-selected={shapeTab === m.id}
                     onClick={() => setPanel(m.id)}
-                    className={cn("inline-flex h-full items-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap", shapeTab === m.id ? "bg-background text-foreground shadow-sm" : "hover:text-foreground")}
+                    className={cn(TAB, shapeTab === m.id ? TAB_ON : TAB_OFF)}
                   >
                     <m.icon aria-hidden className={cn("size-3.5", m.colour)} />
                     {m.label}
@@ -253,20 +274,20 @@ export function SongStages({
                 ))}
               </div>
             ) : stage === "make" ? (
-              <div role="tablist" aria-label="Make" data-make-tabs className="bg-muted text-muted-foreground inline-flex h-9 w-fit items-center rounded-lg p-[3px]">
+              <div role="tablist" aria-label="Make" data-make-tabs className={TAB_LIST}>
                 {MAKE_PARTS.map((m) => (
-                  <button key={m.id} type="button" role="tab" data-make-tab={m.id} aria-selected={part === m.id} onClick={() => setPart(m.id)} className={cn("inline-flex h-full items-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap", part === m.id ? "bg-background text-foreground shadow-sm" : "hover:text-foreground")}>
+                  <button key={m.id} type="button" role="tab" data-make-tab={m.id} aria-selected={part === m.id} onClick={() => setPart(m.id)} className={cn(TAB, part === m.id ? TAB_ON : TAB_OFF)}>
                     <m.icon aria-hidden className="size-3.5" />
                     {m.label}
                   </button>
                 ))}
               </div>
             ) : (
-              <TabsList>
+              <TabsList className={cn(TAB_LIST, "bg-transparent rounded-none p-0 justify-start")}>
                 {current.tabs.map((t) => {
                   const { icon: Icon, colour } = TAB_ICON[t];
                   return (
-                    <TabsTrigger key={t} value={t} className="gap-1.5" data-stage-tab={t}>
+                    <TabsTrigger key={t} value={t} className={TRIGGER} data-stage-tab={t}>
                       <Icon aria-hidden className={cn("size-3.5", colour)} />
                       {TAB_LABEL[t]}
                       {counts[t] ? <span className="text-muted-foreground ml-1.5 tabular-nums">{counts[t]}</span> : null}
@@ -276,8 +297,9 @@ export function SongStages({
               </TabsList>
             )}
               <p className="text-muted-foreground ml-auto flex flex-col items-end text-right text-xs" data-work-status={stage}>
-                <span>
-                  <span className="text-foreground font-medium">{current.name}</span> · <span className={TONE[status.tone]}>{status.text}</span>
+                {/* The stage line is the page's title: a size up from the rest (10 Nov 2026). */}
+                <span className="text-sm leading-5">
+                  <span className="text-foreground text-base leading-5 font-semibold">{current.name}</span> · <span className={TONE[status.tone]}>{status.text}</span>
                 </span>
                 {SAVED_AT_ONCE.includes(stage) ? <span data-saved-at-once>Every change is saved for this song at once.</span> : null}
               </p>

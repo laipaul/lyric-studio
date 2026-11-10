@@ -4,6 +4,23 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Song page: the selected stage and tab are unmistakable (pink) ✅ (to verify on the Windows PC)
+- **The app's pink accent** (as on the play button) marks what is selected, in all four stages; never green or yellow
+  (those keep meaning ready / needs attention, as the stage dots do).
+- **Rail:** the selected stage has a pink bar on its left edge, a pink icon, a bold pink label and a light pink tint;
+  the other stages are slightly dimmer.
+- **Tabs:** the selected tab has a pink underline and bold text; the others stay grey (no more grey "pill").
+- **The stage line** ("Prepare · Ready") is a size up, as the page title.
+- **Contrast on the dark theme** (WCAG AA needs 4.5:1): pink on the page 9.7:1, pink on the rail's tint 7.3:1, the
+  dimmed stage labels 4.9:1.
+- Layout and colours only: nothing moved, nothing new.
+- Tests: song-stages.e2e.ts (+12: in each stage the rail's selected stage is pink and bold with a 4 px pink bar and the
+  others are not; exactly one tab with a pink underline and bold text, the others grey; the stage name 16 px).
+  Run in the cloud session: song-stages 158, storyboard 156 (the viewer 532 px: the bigger stage name keeps a 20 px
+  line so the header stays as tall as the tabs), style-lock 29, videos-post 64, lyrics-tab 33, title-opening 40,
+  textboard 19, collections 16, library 22, releases 16, themes 35, song-title 7, clip-notes 14: all pass. pairings:
+  only its old check (428 px), as before. tsc clean; pnpm build ok.
+
 ### Navigation N1 polish: the four stages behave the same way ✅ (to verify on the Windows PC)
 - **One header on every stage:** the stage's tabs on the left and, on the same row at the right, "<Stage> · <status>"
   (Shape and Review had no such line; on one row so Shape's viewer keeps its height). Shape says which video it shows ("Shape · Reels v1 planned", "… planning…", or the past run shown).
@@ -240,12 +257,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Fixed (automatic, no setting): `isNonLexical` (Mmmm, mm-hmm, Hmm, Ooh, Oh oh oh, Ah, La la, Na na, Woah, Yeah yeah; any punctuation / repeats / case; one other word makes it a normal line) -> such a line is always checked and starts at the voice onset on the vocal stem after the previous line's sung end (never earlier, never the recognised words, no recognition window for it). No voice found = the stamp stays and the record says so. A low-confidence line (< 0.5) directly after a moved hum, whose stamp is before or within 0.5 s after the hum's new start, is checked too and moves behind the hum (voice onset after it, else the recognised words); if nothing is found for it, the hum goes back to its stamp rather than pass it. Hand-set starts ("!" in hints.lrc) are never moved. The guard's record marks the lines (kind "hum" / "after hum"); applyGuard applies the moves last line first so the hum is not squeezed by the line that is about to move. Docs: docs/lyrics.md "Hummed lines".
 - Tests: vocal-guard.test.ts +7 (recognition list; hum moves to the onset and the next line goes behind it, an ordinary line unchanged; never before the previous sung end; no voice = kept with the reason; hand-set hum / hand-set next line untouched; good-confidence next line and no recognition window; hum heard after the next line's stamp, and the hum goes back when the next line cannot be placed): 45 passed; vocal-start / lyrics group 98 passed; studio typecheck clean. No studio code changed.
 - To check on the PC: `cd D:\videomaker`, `git pull`, `pnpm lyrics:check-start "workspace\songs\Life Lyrics\Let My Love Carry You" --all` (lines 29 and 30 should say "a hum ... moved to the voice onset" / "after a hum"), then `pnpm make` or Shape, and the Lyrics tab: the hum should start where you hear it (about 3:18); your hand-set start for line 31 (3:22.04) stays.
-
-### Bug fix: the clip order in Shape after adding clips in Prepare ✅ (confirmed on the Windows PC, 8 Nov 2026)
-- The user found: "The order of the clips is not respected in Shape once I add new clips during Prepare." Song "Let My Love Carry You" (Reel): after reordering in Prepare, Shape's shots 1-2 were the clips that sat there before the reorder (order #2 and #9, the second with a slip badge); from shot 3 the order was followed.
-- Cause: the Shape timeline's slips (and the outer trims, saved as slips) are stored by song time + clip name, and the planner (compose.ts) forced that clip into the shot, over the story order. After a reorder in Assets or Shape (also lift and swap), the old slip kept pulling its old clip into its old shot. clips.json "order" itself was saved correctly (checked: upload, drag and drop, Shape order / swap, Remove / Restore all keep the order).
-- Fixed: the story order decides which clip plays in a shot; a slip applies only when the order still puts the slip's clip there (anchored shots as before), otherwise it is left aside. compose.ts plans once without slips, keeps those that still match, plans again.
-- Tests: new test/clip-order-prepare.test.ts (2: order after an upload and a Prepare reorder, Shape's own re-save; a slip then a Prepare reorder, which failed before the fix); test/timeline-edits.test.ts (2 tests adjusted to the rule, +1 check); video package 944 passed (3 files need the network: migrate / make / one more, remotion.media is not reachable here); studio typecheck clean. No studio code changed.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

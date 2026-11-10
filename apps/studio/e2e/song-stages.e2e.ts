@@ -235,6 +235,42 @@ async function main() {
     const icons = await page.$$eval("[role=tab] svg", (e: Element[]) => e.map((x) => x.getAttribute("class")?.match(/lucide-[a-z0-9-]+/)?.[0] ?? ""));
     check(new Set(icons).size === icons.length && icons.length === 4, `Prepare's tabs: four distinct icons (${icons.join(", ")})`);
     check(((await page.textContent("[data-work-status=prepare]")) ?? "").startsWith("Prepare · "), `Prepare's stage line (${await page.textContent("[data-work-status=prepare]")})`);
+    // The selected stage and tab in the app's pink (as the play button), the same in all four stages (10 Nov 2026).
+    const PINK = "rgb(232, 163, 181)";
+    // (A string, not a function: the test runner's compiler adds helpers the page does not have.)
+    const selection = async (sid: string) =>
+      page.evaluate(`(() => {
+        const css = (el) => (el ? getComputedStyle(el) : null);
+        const rail = document.querySelector("[data-stage=${sid}]");
+        const other = document.querySelector("[data-rail] [data-stage]:not([data-stage=${sid}])");
+        const bar = rail ? getComputedStyle(rail, "::before") : null;
+        const tabs = [...document.querySelectorAll("[data-stage-header] [role=tab]")];
+        const on = tabs.filter((t) => t.getAttribute("aria-selected") === "true");
+        const off = tabs.filter((t) => t.getAttribute("aria-selected") !== "true");
+        return {
+          railColour: css(rail)?.color, railWeight: css(rail)?.fontWeight, icon: css(rail?.querySelector("svg") ?? null)?.color, bar: bar?.backgroundColor, barWidth: bar?.width,
+          otherColour: css(other)?.color,
+          on: on.length, onLine: css(on[0] ?? null)?.borderBottomColor, onWeight: css(on[0] ?? null)?.fontWeight,
+          offLines: off.map((t) => getComputedStyle(t).borderBottomColor), offColours: off.map((t) => getComputedStyle(t).color),
+          title: css(document.querySelector("[data-work-status] .text-base"))?.fontSize,
+        };
+      })()`);
+    for (const sid of ["prepare", "shape", "make", "review"]) {
+      await page.click(`[data-stage=${sid}]`);
+      await sleep(300);
+      const x = await selection(sid);
+      check(
+        x.railColour === PINK && Number(x.railWeight) >= 600 && x.icon === PINK && x.bar === PINK && x.barWidth === "4px" && x.otherColour !== PINK,
+        `${sid}: the rail's selected stage is pink, bold, with a pink bar; the others not (${JSON.stringify({ ...x, offLines: undefined, offColours: undefined })})`,
+      );
+      check(
+        x.on === 1 && x.onLine === PINK && Number(x.onWeight) >= 600 && x.offLines.every((c: string) => c !== PINK) && x.offColours.every((c: string) => c !== PINK),
+        `${sid}: one tab with a pink underline and bold text, the others grey (${x.onLine}, ${x.onWeight}; others ${x.offColours.join(" ")})`,
+      );
+      check(x.title === "16px", `${sid}: the stage line a size up, as the page title (${x.title})`);
+      if (process.env.SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, `stage-${sid}.png`) });
+    }
+    await page.click("[data-stage=prepare]");
     await page.click("[data-stage=make]");
     check(((await page.textContent("[data-work-status=make]")) ?? "").startsWith("Make · "), `Make's stage line (${await page.textContent("[data-work-status=make]")})`);
     const makeIcons = await page.$$eval("[data-make-tab] svg", (e: Element[]) => e.map((x) => x.getAttribute("class")?.match(/lucide-[a-z0-9-]+/)?.[0] ?? ""));
