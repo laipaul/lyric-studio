@@ -33,9 +33,14 @@ function replaceWarning(kind: AssetKind, current: string, next: string): string 
 // Remove moves a clip to clips\_removed\, nothing is deleted), shown in the song's clip order: drag to
 // reorder (clips.json, the one sequence Shape and Make use; new clips go at the end). Files put into the folder by hand that
 // the app cannot place are asked about once: "What is this file?".
-// N1: Prepare → Files (part "files": the song's files, slots, replaced files) and Prepare → Clips (part "clips": the
-// song's own clips, their order, Use / Omit, removed clips). The tagline and links are in Prepare → Details.
-export function AssetsTab({ projectId, part = "files" }: { projectId: string; part?: "files" | "clips" }) {
+// N1: one part per Prepare tab (Prepare reorganised 10 Nov 2026: one kind of input per tab). "audio" = Prepare → Audio
+// (the song folder, song, vocal stem, backing vocals, audio files to place, their replaced files); "lyrics" = Prepare →
+// Lyrics & timing (the lyrics file and hints.lrc, text files to place); "cover" = Prepare → Details (the cover);
+// "clips" = Prepare → Storyboard (the song's own clips and photos, their story order, notes, Use / Omit, removed clips).
+// Each part lists only its own replaced files. The tagline and links are in Prepare → Details.
+export type AssetsPart = "audio" | "lyrics" | "cover" | "clips";
+const PART_KINDS: Record<Exclude<AssetsPart, "clips">, readonly string[]> = { audio: ["song", "vocals", "backingVocals"], lyrics: ["lyrics", "hints"], cover: ["cover"] };
+export function AssetsTab({ projectId, part = "audio" }: { projectId: string; part?: AssetsPart }) {
   const [data, setData] = useState<SongAssets | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
@@ -260,6 +265,12 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
     );
   }
 
+  // What this part shows: its own file kinds, the files to place of its own sort (text in Lyrics, audio in Audio) and
+  // its own replaced files (a kept copy without a role: under Audio, with the song folder).
+  const kinds = part === "clips" ? [] : PART_KINDS[part];
+  const has = (kind: string) => kinds.includes(kind);
+  const unassigned = data.unassigned.filter((f) => (part === "lyrics" ? f.kind === "text" : part === "audio" ? f.kind !== "text" : false));
+  const ownReplaced = replaced.filter((f) => (f.role ? kinds.includes(f.role) : part === "audio"));
   const fileRow = (kind: AssetKind, icon: React.ReactNode, title: string, value: React.ReactNode, warning?: React.ReactNode, button = "Replace…") => (
     <li data-asset={kind} className={cn("bg-card flex items-center gap-3 rounded-lg border px-4 py-3", warning && "border-amber-400/40")}>
       <span className="text-brand">{icon}</span>
@@ -281,17 +292,19 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
 
   return (
     <div data-assets={part} className="flex flex-col gap-6">
-      {part === "files" ? (
+      {part !== "clips" ? (
       <>
+      {part === "audio" ? (
       <p className="text-muted-foreground text-xs">
         Song folder:{" "}
         <button type="button" data-open-folder title="Open in Explorer" onClick={openFolder} className="text-foreground hover:text-brand underline decoration-dotted underline-offset-2">
           {data.folderPath ?? win(data.folder)}
         </button>
       </p>
+      ) : null}
       <ul className="grid gap-3 md:grid-cols-2">
-        {fileRow("song", <FileAudio className="size-5" />, "Song", data.song ? `${data.song.name}${data.song.durationMs ? ` · ${clock(data.song.durationMs)}` : ""}${data.song.bpm ? ` · ${Math.round(data.song.bpm)} BPM` : ""}` : "missing")}
-        {data.instrumental
+        {!has("song") ? null : fileRow("song", <FileAudio className="size-5" />, "Song", data.song ? `${data.song.name}${data.song.durationMs ? ` · ${clock(data.song.durationMs)}` : ""}${data.song.bpm ? ` · ${Math.round(data.song.bpm)} BPM` : ""}` : "missing")}
+        {data.instrumental || !has("vocals")
           ? null
           : fileRow(
               "vocals",
@@ -303,13 +316,13 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
               data.vocals?.status === "rejected" ? data.vocals.message : undefined,
               data.vocals ? "Replace…" : "Add…",
             )}
-        {data.instrumental
+        {data.instrumental || !has("backingVocals")
           ? null
           : fileRow("backingVocals", <AudioLines className="size-5" />, "Backing vocals", data.backingVocals ? `${base(data.backingVocals)} · kept with the song, not used for timing` : "none (optional)", undefined, data.backingVocals ? "Replace…" : "Add…")}
-        {data.instrumental
+        {!has("lyrics") ? null : data.instrumental
           ? fileRow("lyrics", <FileText className="size-5" />, "Story (instrumental)", data.lyrics?.lines ? `story.txt · ${data.lyrics.lines} sentence${data.lyrics.lines === 1 ? "" : "s"}, timed by the app` : "no story: music only (Replace adds a story.txt)")
           : fileRow("lyrics", <FileText className="size-5" />, "Lyrics", data.lyrics ? `${base(data.lyrics.file)} · ${data.lyrics.lines} lines` : "no lyrics yet (a .txt, any name)")}
-        {fileRow(
+        {!has("cover") ? null : fileRow(
           "cover",
           data.cover ? (
             // eslint-disable-next-line @next/next/no-img-element -- a local file served by /api/files
@@ -320,7 +333,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
           "Cover",
           data.cover ? win(data.cover.slice(data.folder.length + 1)) : "none (YouTube uses stills or clips)",
         )}
-        {fileRow(
+        {!has("hints") ? null : fileRow(
           "hints",
           <ListMusic className="size-5" />,
           "Hints (tapped times)",
@@ -333,12 +346,12 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
         )}
       </ul>
 
-      {data.unassigned.length ? (
+      {unassigned.length ? (
         <section data-unassigned className="flex flex-col gap-2 rounded-lg border border-amber-400/40 bg-amber-400/5 p-4">
           <h2 className="text-sm font-medium">What is this file?</h2>
           <p className="text-muted-foreground text-xs">Found in the song folder. Tell the app once; the file keeps its name and place.</p>
           <ul className="flex flex-col gap-2">
-            {data.unassigned.map((f) => {
+            {unassigned.map((f) => {
               const roles = f.kind === "text" ? ["lyrics", "notUsed"] : ["vocals", "backingVocals", "notUsed"];
               const label: Record<string, string> = { lyrics: data.lyrics ? "Lyrics (replaces the current ones)" : "Lyrics", vocals: data.vocals ? "Vocal stem (replaces the current one)" : "Vocal stem", backingVocals: data.backingVocals ? "Backing vocals (replaces the current ones)" : "Backing vocals", notUsed: "Not used" };
               return (
@@ -369,6 +382,8 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
+            {/* The Storyboard tab's one line (10 Nov 2026): what this tab is for. */}
+            <p data-story-line className="text-sm">Your story line: drag to set the order.</p>
             <p data-usable className="text-muted-foreground text-xs">
               {data.clips.length} in this song&apos;s clips folder · 9:16 platforms can use {data.usable.vertical} · YouTube (16:9) can use {data.usable.horizontal}
               {" "}· shared collections: below
@@ -381,7 +396,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
               </p> : null}
           </div>
           <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => clipInput.current?.click()}>
-            <Upload /> Add clips
+            <Upload /> Add clips &amp; photos
           </Button>
           <input ref={clipInput} type="file" multiple accept="video/*,.mp4,.mov,.m4v,.webm,.mkv,.jpg,.jpeg,.png,.webp" className="hidden" data-clip-input onChange={(e) => e.target.files && addClips(e.target.files)} />
         </div>
@@ -476,7 +491,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
               ))}
             </ul>
           ) : (
-            <p className="text-muted-foreground py-8 text-center text-sm">Drop videos and photos here (or “Add clips”). They are copied into this song&apos;s clips folder.</p>
+            <p className="text-muted-foreground py-8 text-center text-sm">Drop videos and photos here (or “Add clips &amp; photos”). They are copied into this song&apos;s clips folder.</p>
           )}
         </div>
         {data.removed.length ? (
@@ -497,13 +512,13 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
       </section>
       ) : null}
 
-      {part === "files" && replaced.length ? (
+      {part !== "clips" && ownReplaced.length ? (
         <details data-replaced-files className="bg-card rounded-lg border px-4 py-3 text-sm">
           <summary className="cursor-pointer font-medium">
-            Replaced files ({replaced.length}) <span className="text-muted-foreground text-xs font-normal">· every file you replaced is kept; Restore brings one back</span>
+            Replaced files ({ownReplaced.length}) <span className="text-muted-foreground text-xs font-normal">· every file you replaced is kept; Restore brings one back</span>
           </summary>
           <ul className="mt-2 flex flex-col gap-1.5">
-            {replaced.map((f) => (
+            {ownReplaced.map((f) => (
               <li key={f.file} data-replaced={f.file} className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="min-w-0 flex-1 truncate" title={f.file}>
                   {f.original} <span className="text-muted-foreground">· {f.role ? `was ${REPLACED_ROLE[f.role]}` : "kept copy"} · replaced {new Date(f.at).toLocaleString()}</span>

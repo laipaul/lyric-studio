@@ -35,7 +35,7 @@ describe("Prepare to-do list", () => {
     expect(todo.find((t) => t.id === "clips")).toMatchObject({ tab: "clips", blocking: true }); // N1: Prepare → Clips
     // L1a: the vocal stem is suggested, never a blocker.
     expect(todo.find((t) => t.id === "vocals")).toMatchObject({ text: "Add the vocal stem for better lyric timing.", tab: "assets", blocking: false });
-    expect(todo.find((t) => t.id === "cover")).toMatchObject({ tab: "assets", blocking: false });
+    expect(todo.find((t) => t.id === "cover")).toMatchObject({ tab: "details", blocking: false });
     expect(todo.find((t) => t.id === "labels")?.text).toMatch(/1 line in the lyrics looks like a label \(e\.g\. “Chorus:”\)/);
   });
 
@@ -52,7 +52,7 @@ describe("Prepare to-do list", () => {
 
   it("no lyrics.txt blocks making videos", async () => {
     rmSync(songPathsById(ws, id).lyricsTxt);
-    expect((await songTodo(ws, id))[0]).toMatchObject({ id: "lyrics", blocking: true, tab: "assets" });
+    expect((await songTodo(ws, id))[0]).toMatchObject({ id: "lyrics", blocking: true, tab: "lyrics" });
   });
 });
 

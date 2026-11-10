@@ -113,7 +113,7 @@ function oneOff(args: string[]): Promise<unknown> {
         // The JSON is the last line (the planner may print notes before it).
         resolve(JSON.parse(out.trim().split("\n").pop() ?? ""));
       } catch {
-        reject(new Error(`The storyboard could not be planned:\n${(err || out).slice(-2000)}`));
+        reject(new Error(`The shot plan could not be made:\n${(err || out).slice(-2000)}`));
       }
     });
   });

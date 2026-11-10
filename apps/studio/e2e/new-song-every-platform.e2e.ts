@@ -120,14 +120,14 @@ async function main() {
     // 3. Assets: clips, Replace lyrics (warned, kept), Restore.
     await page.goto(`${base}/songs/${id}`);
     await page.click("[data-stage=prepare]");
-    await page.click("[role=tab]:has-text('Clips')"); // N1: Prepare → Clips
+    await page.click("[data-stage-tab=clips]"); // Prepare → Storyboard
     await page.waitForSelector("[data-assets=clips]");
     await page.setInputFiles("[data-clip-input]", [...readdirSync(inDir).filter((f) => f.endsWith(".mp4")).map((f) => path.join(inDir, f))]);
     await page.waitForFunction(() => document.querySelectorAll("[data-clip]").length === 9, null, { timeout: 120_000 });
     check(true, "Assets: 9 clips added to the song's own clips");
     dialogs.length = 0;
-    await page.click("[role=tab]:has-text('Files')"); // the song's files: Prepare → Files
-    await page.waitForSelector("[data-assets=files]");
+    await page.click("[data-stage-tab=lyrics]"); // the lyrics file: Prepare → Lyrics & timing (10 Nov 2026)
+    await page.waitForSelector("[data-assets=lyrics]");
     await page.setInputFiles("[data-replace=lyrics]", path.join(inDir, "Every Platform lyrics v2.txt"));
     await page.waitForSelector("[data-replaced-files]", { timeout: 30_000 });
     check(dialogs.some((d) => /Replace the lyrics with Every Platform lyrics v2\.txt\?/.test(d) && /kept under Replaced files/.test(d)), "Replace lyrics warns first and says the old ones are kept");

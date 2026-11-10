@@ -209,11 +209,14 @@ line or chorus, never cutting a sung line). Longer than the song = the whole son
 **Fonts**: the bundled fonts and your own (`workspace\fonts`), each with a preview line with French accents;
 a font without é è ç à ô is marked with ⚠.
 
-### Assets (song page)
+### Prepare (song page)
 
-The **Assets** tab shows the song folder's files: the song, `lyrics.txt`, the cover and `hints.lrc`,
-each with **Replace…**, and the song's own clips. Drop videos and photos on the clips area (or **Add
-clips**): they are copied into `clips\`, a clip with the same content as one already there is not added
+Prepare has one kind of input per tab: **Audio** (the song folder, the song, the vocal stem and backing
+vocals) · **Lyrics & timing** (the tempo, Time the lyrics again, the lyrics file and `hints.lrc`, then the
+lyrics) · **Details** (title, tagline, card texts, EP, the cover, the song's links) · **Storyboard** (your
+story line: your clips and photos in story order, their notes, Use / Omit, shared collections). Each file
+has **Replace…**; the file it replaces is kept under Replaced files in the same tab. In Storyboard, drop
+videos and photos (or **Add clips & photos**): they are copied into `clips\`, a clip with the same content as one already there is not added
 again (you are told which), and each tile shows the thumbnail, orientation, length and size. **Remove**
 moves a clip to `clips\_removed\`. The counts show how many clips 9:16 platforms and YouTube (16:9) can use.
 
@@ -306,14 +309,14 @@ Each video's QA report checks it ("Audio matches the song": length, level within
 of the song). The fade lengths are `fadeInSeconds` / `fadeOutSeconds` per platform in
 `presets\platforms.json`.
 
-## Storyboard
+## Shot plan (Shape)
 
-Song page → **Storyboard**: see a video's cut plan before rendering it (exactly what Generate would make)
+Song page → **Shape**: see a video's **shot plan** before rendering it (exactly what Make would make)
 or a past run's: the bars and waveform, the lyric lines, and every shot with its clip, length, in/out,
 speed, ⚓ anchor, ★ best moment and warnings. Click the timeline to play the preview from there.
 
 Editing (in "The plan now"; every change is saved for this song and planned again, and Generate renders
-exactly what the storyboard shows):
+exactly what the shot plan shows):
 
 - **Story order**: the strip under the timeline lists every clip of the song (its own and its
   collections') in the order story videos use them. Drag a clip onto another to put it there, or use the
@@ -330,7 +333,7 @@ exactly what the storyboard shows):
 
 ## Textboard (the text layer)
 
-Storyboard → the **Textboard** row shows every text card: the title, byline (artist) and tagline above,
+Shape → the **Textboard** row shows every text card: the title, byline (artist) and tagline above,
 then one card per lyric line. Click a card to change its place (always inside the platform's safe area),
 size, hold and effect; lyric cards change in the preview at once, "Save and plan again" keeps it in the
 song folder's `textboard.json`, "Reset this card" undoes it. The title / byline / tagline buttons open
@@ -367,7 +370,7 @@ It prints the detected tempo, the likeliest other tempi with their ratio ("x2/3 
 first downbeats. Then set the real one in the Style tab → **Tempo (BPM)**: type it, or use ½, ×2, ×2/3,
 ×3/2, or the **Tap test** (play the song, tap once per beat; the BPM appears after 4 taps), or "Check the
 tempo" (the same list as tempo:check, click one). Saved in song.json (`"tempo": 92`); the beats are tracked
-again around it, and the storyboard and Generate use it. Command line: `--tempo 92`.
+again around it, and the shot plan and Make use it. Command line: `--tempo 92`.
 
 ## Fonts and pairings
 

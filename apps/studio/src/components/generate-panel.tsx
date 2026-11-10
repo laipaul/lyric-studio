@@ -258,7 +258,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
             {data.ep ? <>· {data.ep}</> : null}
             <span>·</span>
             <FeatureIcon feature="clips" className="size-3.5" />
-            <button type="button" data-clips-line data-clips-change onClick={() => goToTab("clips")} className="hover:text-foreground underline-offset-2 hover:underline" title="The song's clips and collections: Prepare → Clips">
+            <button type="button" data-clips-line data-clips-change onClick={() => goToTab("clips")} className="hover:text-foreground underline-offset-2 hover:underline" title="The song's clips and collections: Prepare → Storyboard">
               {[data.songClips ? `${data.songClips} clips` : null, ...collections].filter(Boolean).join(" + ") || "no clips yet"}
             </button>
             <span>·</span>

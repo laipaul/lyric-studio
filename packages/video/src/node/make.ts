@@ -648,7 +648,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     const songClips = paths.clips && existsSync(paths.clips) && readdirSync(paths.clips).some((f) => SOURCE_FILE.test(f)) ? paths.clips : null;
     if (!collectionNames.length && !songClips) {
       throw new Error(
-        `No clips yet for "${sp.project.title}": add clips in Prepare → Assets, or choose a collection in Make` +
+        `No clips yet for "${sp.project.title}": add clips and photos in Prepare → Storyboard, or choose a collection there` +
           ` (command line: --collection <name>, the folder WORKSPACE_DIR\\collections\\<name>; after that it is remembered).`,
       );
     }
@@ -685,7 +685,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       leadMs,
       align: options.dryRun
         ? async () => {
-            throw new Error("This song has no lyric timing for its current lyrics yet: Prepare → Lyrics & timing → Time the lyrics again (or make a video), then its storyboard shows here.");
+            throw new Error("This song has no lyric timing for its current lyrics yet: Prepare → Lyrics & timing → Time the lyrics again (or make a video), then its shot plan shows here.");
           }
         : options.align,
     });
@@ -750,7 +750,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       if (!syncs.length) {
         throw new Error(
           skipped.length
-            ? `No clips to use: the collection${skipped.length > 1 ? "s" : ""} ${skipped.join(", ")} ${skipped.length > 1 ? "are" : "is"} empty and the song has no clips of its own. Add clips in Prepare → Assets, or choose another collection in Make.`
+            ? `No clips to use: the collection${skipped.length > 1 ? "s" : ""} ${skipped.join(", ")} ${skipped.length > 1 ? "are" : "is"} empty and the song has no clips of its own. Add clips in Prepare → Storyboard, or choose another collection there.`
             : "This clip set has no clips: the song has no clips of its own.",
         );
       }

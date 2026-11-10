@@ -15,7 +15,7 @@ export type ClipEdits = { order: string[]; clips: Record<string, ClipEdit>; cuts
 export const CLIP_EDITS_FILE = "clips.json";
 
 const HELP =
-  'The story order and clip edits of this song (the Storyboard tab writes it). "order": clip file names in the story order ' +
+  'The story order and clip edits of this song (Prepare → Storyboard writes the order, Shape the clip edits). "order": clip file names in the story order ' +
   "(clips not listed follow in file-name order). \"clips\": per clip \"omit\": true (set to Omit: not used by Make), \"in\" / \"out\" (the part used, seconds), \"speed\" (0.5-1, slow motion) and " +
   '"best" (the best moment, seconds; wins over the automatic one) and "transition" ("cut" or "dissolve": how the clip comes in; left out, the app chooses). ' +
   '"cuts": cuts moved on the Shape timeline (song seconds: the planned cut at "from" goes to "to", on the beat unless "free"). ' +

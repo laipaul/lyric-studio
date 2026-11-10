@@ -136,7 +136,7 @@ async function main() {
     check((await page.$$("[data-generate] input[type=checkbox][data-collection-choice], [data-generate] input[type=checkbox][data-theme-option]")).length === 0, "Generate: no tick boxes for themes or collections (pickers with chips)");
     const groups = await page.$$eval("[data-generate-group]", (e: Element[]) => e.map((x) => x.getAttribute("data-generate-group")));
     check(JSON.stringify(groups) === JSON.stringify(["1", "2"]) && !(await page.$("[data-generate] [data-shot-length], [data-generate] input[name=section], [data-generate] input[name=length], [data-generate] select[name=layout]")) && !!(await page.$("[data-output-planned]")) && !!(await page.$("[data-song-line]")) && !(await page.$("[data-generate] input[name=title]")) && !!(await page.$("[data-generate] [data-compare]")) && !(await page.$("[data-generate-footer] [data-save-to-song]")) && !(await page.$("[data-generate] input[name=realign]")), `N1: Make makes what Shape planned: no part of the song, length, shot length, layout or re-time here, no "keep these choices" (${groups.join(", ")})`);
-    check(!!(await page.$("[data-clips-line]")) && !(await page.$("[data-picker-open=collections]")), "Make: the clips are the song's, one line with a link to Prepare → Clips (no picker here)");
+    check(!!(await page.$("[data-clips-line]")) && !(await page.$("[data-picker-open=collections]")), "Make: the clips are the song's, one line with a link to Prepare → Storyboard (no picker here)");
     if (process.env.GENERATE_SHOT) await page.screenshot({ path: process.env.GENERATE_SHOT, fullPage: true });
     const chips = await page.$$eval("[data-platform-choice]", (e: Element[]) => e.filter((x) => x.className.includes("bg-brand")).map((x) => x.getAttribute("data-platform-choice")));
     check(JSON.stringify(chips) === JSON.stringify(["reels", "youtube"]), `Generate starts with Reels + YouTube (got ${(chips as string[]).join(", ")})`);
@@ -164,9 +164,9 @@ async function main() {
     check(!!addedPaths && readFileSync(addedPaths.lyricsTxt, "utf8").includes("Tea with the monk") && addedPaths.lyricsTxt.endsWith("story.txt"), "its story is saved as story.txt");
     if (added) {
       await page.goto(`${base}/songs/${added.id}`);
-      await openTab(page, "Assets");
+      await openTab(page, "Lyrics"); // the story file sits with the lyrics since 10 Nov 2026
       await page.waitForSelector("text=Story (instrumental)");
-      check(((await page.textContent("body")) ?? "").includes("story.txt · 2 sentences, timed by the app"), "Assets: the story row says story.txt · 2 sentences");
+      check(((await page.textContent("body")) ?? "").includes("story.txt · 2 sentences, timed by the app"), "Lyrics & timing: the story row says story.txt · 2 sentences");
     }
     await browser.close();
   } finally {

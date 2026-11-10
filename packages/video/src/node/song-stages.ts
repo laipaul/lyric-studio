@@ -19,7 +19,7 @@ export const RELEASE_PLATFORMS = ["reels", "tiktok", "shorts", "youtube", "canva
 export type TodoItem = {
   id: string;
   text: string; // plain words: what is needed
-  tab: "assets" | "lyrics" | "clips" | "generate"; // where to do it (assets = Prepare → Files; clips = Prepare → Clips, N1)
+  tab: "assets" | "lyrics" | "details" | "clips" | "generate"; // where to do it (assets = Prepare → Audio; lyrics = Lyrics & timing (also the lyrics file); details = Details (also the cover); clips = Prepare → Storyboard)
   action: string; // the button
   blocking: boolean; // no video can be made without it
 };
@@ -29,18 +29,18 @@ export async function songTodo(ws: Workspace, projectId: string): Promise<TodoIt
   if (!p) throw new Error("Song not found.");
   const paths = songPathsById(ws, projectId);
   const todo: TodoItem[] = [];
-  if (!paths.instrumental && !existsSync(paths.lyricsTxt)) todo.push({ id: "lyrics", text: "Add the lyrics (lyrics.txt).", tab: "assets", action: "Add lyrics", blocking: true });
+  if (!paths.instrumental && !existsSync(paths.lyricsTxt)) todo.push({ id: "lyrics", text: "Add the lyrics (lyrics.txt).", tab: "lyrics", action: "Add lyrics", blocking: true });
 
   const assets = await songAssets(ws, projectId).catch(() => null);
   const collections = songCollections(ws, projectId);
   if (assets && !assets.clips.length && !collections.length)
-    todo.push({ id: "clips", text: "Add your clips: drop them in Clips, or add a collection there (e.g. wedding).", tab: "clips", action: "Add clips", blocking: true });
+    todo.push({ id: "clips", text: "Add your clips and photos: drop them in Storyboard, or add a collection there (e.g. wedding).", tab: "clips", action: "Add clips & photos", blocking: true });
   // The vocal stem: a suggestion, never a blocker (without it the app separates the vocals itself).
   if (assets && !paths.instrumental && !paths.legacy) {
     if (!assets.vocals) todo.push({ id: "vocals", text: "Add the vocal stem for better lyric timing.", tab: "assets", action: "Add the vocal stem", blocking: false });
     else if (assets.vocals.status === "rejected") todo.push({ id: "vocals", text: assets.vocals.message, tab: "assets", action: "Replace the vocal stem", blocking: false });
   }
-  if (assets && !assets.cover) todo.push({ id: "cover", text: "Add a cover picture (used for YouTube, the Library and your thumbnails).", tab: "assets", action: "Add a cover", blocking: false });
+  if (assets && !assets.cover) todo.push({ id: "cover", text: "Add a cover picture (used for YouTube, the Library and your thumbnails).", tab: "details", action: "Add a cover", blocking: false });
 
   const view = await lyricsView(ws, projectId).catch(() => null);
   if (view) {

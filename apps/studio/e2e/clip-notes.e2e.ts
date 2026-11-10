@@ -115,7 +115,7 @@ async function main() {
 
     // Clearing the text deletes the note.
     await page.click("[data-stage=prepare]");
-    await page.click("[role=tab]:has-text('Clips')");
+    await page.click("[data-stage-tab=clips]"); // Prepare → Storyboard
     await page.click("[data-clip-note='sea at dawn.mp4']");
     await page.fill("[data-clip-note-input='sea at dawn.mp4']", "");
     await page.press("[data-clip-note-input='sea at dawn.mp4']", "Escape");

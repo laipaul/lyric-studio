@@ -78,7 +78,7 @@ export function planReaction(ws: Workspace, projectId: string, o: { video: strin
       return shiftBy(-1, "");
     case "repetitive": {
       const p = shiftBy(1, ": fewer shots, so each clip comes back less often; adding clips to the song helps most");
-      return p.none ? { ...p, none: `${p.none}; add more clips to the song (Assets tab)` } : p;
+      return p.none ? { ...p, none: `${p.none}; add more clips or photos to the song (Prepare → Storyboard)` } : p;
     }
     case "fewer-dissolves":
       return now.transitions === "crisp"

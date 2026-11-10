@@ -40,7 +40,7 @@ import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 // videos with their captions and files). ?tab= opens a tab. The tabs are grouped in four stages
 // (Prepare -> Shape -> Make -> Review & Post) with the Prepare to-do list and "Make release pack".
 const TABS = ["assets", "lyrics", "details", "clips", "shape", "generate", "videos", "post"];
-const OLD_TABS: Record<string, string> = { style: "shape", storyboard: "shape" }; // links from before Style and Storyboard became one Shape page
+const OLD_TABS: Record<string, string> = { style: "shape", storyboard: "shape", audio: "assets", files: "assets" }; // links from before Style and Storyboard became one Shape page (?tab=storyboard: still Shape; Prepare's Storyboard tab is ?tab=clips); audio / files: Prepare → Audio
 type Search = Promise<{ tab?: string; from?: string; panel?: string; edit?: string; part?: string }>; // panel: a Shape panel to open (theme, clips, …); edit: a theme to open in the Theme editor
 
 export default function SongPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Search }) {
@@ -147,18 +147,22 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
         <div id="song-header-actions" data-song-header-actions className="ml-auto flex items-center gap-2" />
       </div>
       <SongStages key={`${search.tab ?? ""}:${search.panel ?? ""}:${search.part ?? ""}:${search.from ?? ""}`} initialTab={tab} initialPanel={tab === "shape" ? askedPanel : null} initialPart={MAKE_PARTS.includes(search.part ?? "") ? (search.part as MakePart) : undefined} statuses={statuses} todo={todo} counts={{ post: approved.reduce((n, g) => n + g.videos.length, 0) + offered.length }}>
+        {/* Prepare (10 Nov 2026): one kind of input per tab. Audio = the song folder, song, vocal stem, backing vocals; the
+            lyrics file and hints are in Lyrics & timing, the cover in Details; Storyboard = the clips and photos in story order. */}
         <TabsContent value="assets">
-          <AssetsTab projectId={song.id} part="files" />
+          <AssetsTab projectId={song.id} part="audio" />
         </TabsContent>
         <TabsContent value="lyrics">
           <div className="flex flex-col gap-4">
             <SongSettings projectId={song.id} only="timing" />
+            <AssetsTab projectId={song.id} part="lyrics" />
             <LyricsTab projectId={song.id} />
           </div>
         </TabsContent>
         <TabsContent value="details">
           <div className="flex max-w-3xl flex-col gap-4">
             <SongSettings projectId={song.id} only="details" />
+            <AssetsTab projectId={song.id} part="cover" />
             <LinksField projectId={song.id} />
           </div>
         </TabsContent>

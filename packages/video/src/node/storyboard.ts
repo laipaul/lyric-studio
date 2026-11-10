@@ -142,7 +142,7 @@ export function storyboardChoices(ws: Workspace, projectId: string): StoryboardC
   const ready = !!paths.audio && existsSync(paths.audio) && existsSync(paths.lyricsTxt);
   const hasOwn = !!paths.clips && existsSync(paths.clips) && readdirSync(paths.clips).some((f) => SOURCE_FILE.test(f));
   return {
-    platforms, runs, ready, why: ready ? null : "This song needs its song file and lyrics.txt (Assets tab) first.",
+    platforms, runs, ready, why: ready ? null : "This song needs its song file (Prepare → Audio) and lyrics.txt (Prepare → Lyrics & timing) first.",
     pictures: { songClips: hasOwn, collections: sharedCollections(ws), recipe: { songClips: hasOwn, collections: songCollections(ws, projectId) } },
   };
 }
@@ -151,7 +151,7 @@ export function storyboardChoices(ws: Workspace, projectId: string): StoryboardC
 // clipSet: the picture swap ("song+wedding", "city"): the same textboard over other clips, this plan only.
 export async function storyboardPlan(ws: Workspace, projectId: string, platform: string, video = "v1", clipSet?: string): Promise<StoryboardView> {
   const paths = songPathsById(ws, projectId);
-  if (!paths.audio || !existsSync(paths.audio)) throw new Error("This song has no song file yet (Assets tab).");
+  if (!paths.audio || !existsSync(paths.audio)) throw new Error("This song has no song file yet (Prepare → Audio).");
   const notes: string[] = [];
   const result = await makeVideos({
     workspaceDir: ws.dir,

@@ -364,7 +364,7 @@ export async function replaceAsset(ws: Workspace, projectId: string, kind: Asset
   if (kind === "hints") {
     if (existsSync(paths.hints!)) keepReplaced(paths.root, paths.hints!);
     copyFileSync(file, paths.hints!);
-    storeProjectHint(ws, projectId, paths.hints!, `${name} (from the Assets tab)`);
+    storeProjectHint(ws, projectId, paths.hints!, `${name} (from Prepare → Lyrics & timing)`);
     return rel(ws, paths.hints!);
   }
   // A new mix or master of the same song, under its own name: the old file is kept in .studio\replaced\

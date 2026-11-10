@@ -15,7 +15,7 @@ export const CLIP_NOTES_FILE = "clip-notes.json";
 export const CLIP_NOTE_MAX = 2000; // characters
 export type ClipNote = { text: string; clip: string; updatedAt: string }; // clip: the file name when last written
 type NotesFile = { about: string; notes: Record<string, ClipNote> };
-const ABOUT = "Story notes on this song's clips (Prepare → Clips), for you only: the app never reads them for anything. Keyed by each clip's content, so they follow a renamed or moved clip.";
+const ABOUT = "Story notes on this song's clips (Prepare → Storyboard), for you only: the app never reads them for anything. Keyed by each clip's content, so they follow a renamed or moved clip.";
 
 const fileOf = (songRoot: string) => path.join(songRoot, STUDIO_DIR, CLIP_NOTES_FILE);
 

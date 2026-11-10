@@ -4,6 +4,38 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Prepare reorganised: Audio · Lyrics & timing · Details · Storyboard; the planned video is the "shot plan" ✅ (to verify on the Windows PC)
+- **One kind of input per tab** (Files vs Clips was unclear):
+  - **Audio** (was Files): the song folder, the song, the vocal stem, backing vocals (and audio files to place).
+  - **Lyrics & timing**: the tempo and Time the lyrics again, then **the lyrics file and hints (tapped times)** (moved
+    here from Files, with "What is this file?" for text files), then the lyrics.
+  - **Details**: title, tagline, card texts, EP, **the cover** (moved here from Files), the song's links.
+  - **Storyboard** (was Clips): "Your story line: drag to set the order.", your clips and photos in story order with their
+    notes, Use / Omit, **Add clips & photos** (photos were already accepted: .jpg, .png, .webp; now the button says so),
+    removed clips, shared collections.
+  - Each tab lists only its own replaced files. Prepare's to-do buttons go to the new places (cover → Details, lyrics →
+    Lyrics & timing, clips → Storyboard, vocal stem → Audio).
+- **Old links still work:** ?tab=assets / files / audio → Audio, ?tab=clips → Storyboard, ?panel=song → Details;
+  ?tab=storyboard (from before 31 Oct) still opens Shape.
+- **Naming rule (added to CLAUDE.md):** on screen "Storyboard" means only your story line (Prepare → Storyboard). The
+  app's planned video is the **shot plan** everywhere you read it: Shape's hints ("Shape → Analysis says which"), "The
+  shot plan could not be made", "…then its shot plan shows here", pnpm storyboards' report ("shot plans: reels-1"), the
+  README ("Shot plan (Shape)"). File and code names stay (storyboards\*.json, pnpm storyboards). Messages that pointed to
+  old tab names now say Prepare → Audio / Lyrics & timing / Details / Storyboard (no clips yet, no lyrics file, title
+  too long, more clips needed, the help text in clips.json and textboard.json, Collections).
+- Layout and labels: no setting changed, nothing new besides the moved rows.
+- Tests: song-stages.e2e.ts (+13: the tab names, Audio shows only song / stem / backing vocals, Lyrics & timing the
+  lyrics file and hints and the text file to place, the cover to-do opens Details, Storyboard's line and Add clips &
+  photos with photos accepted, five old links, ?tab=storyboard still Shape, Shape never says "storyboard"); stage-tabs.ts
+  opens Prepare's tabs by id; style-lock, clip-notes and new-song-every-platform follow the moves; unit: song-stages
+  (to-do targets), stability and make (messages), storyboard-save ("shot plans:").
+  Run in the cloud session: song-stages 171, storyboard 156, style-lock 29, videos-post 64, lyrics-tab 33,
+  title-opening 40, textboard 19, collections 16, library 22, releases 16, themes 35, song-title 7, clip-notes 14: all
+  pass; pairings: only its old 428 px check, as before. Unit (packages/video): 1001 pass; only make / migrate / render
+  fail here (real renders: Remotion cannot reach remotion.media from the cloud), as before; the "No clips yet" message
+  check sits in make's real-render test, so it runs on the PC only. new-song-every-platform not run here (a real render
+  worker). tsc clean; pnpm build ok.
+
 ### Song page: the selected stage and tab are unmistakable (pink) ✅ (to verify on the Windows PC)
 - **The app's pink accent** (as on the play button) marks what is selected, in all four stages; never green or yellow
   (those keep meaning ready / needs attention, as the stage dots do).
@@ -250,13 +282,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - To check on the PC: `cd D:\videomaker`, `git pull`, restart. Open the Lyrics tab: "Hold on..." and "Floating through the night" show their own
   times. Set "Hold on..." to 3:22 and Save: it stays (set by hand), "Floating..." (automatic) moves behind it with the note
   "Moved after line N"; set "Floating..." to 3:25 and Save: both kept.
-
-### Bug fix: hummed lines ("Mmmm...") at the end of the YouTube video came too early ✅ (confirmed on the Windows PC, 8 Nov 2026)
-- The user found (song "Let My Love Carry You", YouTube = whole song): the last lines are early. Lyrics tab (line, stored stamp, now, confidence): 28 "You'll find your way to me" 3:12.98, conf 0.66; 29 "Mmmm..." 3:15.00 -> 3:15.00, conf 0.74, leaves 3:18.00, but the hum is heard from about 3:18, about 3 s early; 30 "Hold on..." 3:18.26, conf 0.23 (flagged, "Checked by ear"), probably early too; 31 "Floating through the night" 3:19.44, set by hand to 3:22.04.
-- Cause: a line of only a hum has no words for the forced aligner (and speech recognition cannot hear it), so the aligner puts it at a guess in the gap after the previous line (the round 3:15.00). The vocal-start check only looked at line 1, gaps, stretched first words, hooks and lines with a late voice: a hum in the middle was never chosen (`signalsFor`, src/vocal-guard.ts), and when chosen, a move needs two signals while a hum has only the voice. The line after it kept its low-confidence stamp in front of the hum.
-- Fixed (automatic, no setting): `isNonLexical` (Mmmm, mm-hmm, Hmm, Ooh, Oh oh oh, Ah, La la, Na na, Woah, Yeah yeah; any punctuation / repeats / case; one other word makes it a normal line) -> such a line is always checked and starts at the voice onset on the vocal stem after the previous line's sung end (never earlier, never the recognised words, no recognition window for it). No voice found = the stamp stays and the record says so. A low-confidence line (< 0.5) directly after a moved hum, whose stamp is before or within 0.5 s after the hum's new start, is checked too and moves behind the hum (voice onset after it, else the recognised words); if nothing is found for it, the hum goes back to its stamp rather than pass it. Hand-set starts ("!" in hints.lrc) are never moved. The guard's record marks the lines (kind "hum" / "after hum"); applyGuard applies the moves last line first so the hum is not squeezed by the line that is about to move. Docs: docs/lyrics.md "Hummed lines".
-- Tests: vocal-guard.test.ts +7 (recognition list; hum moves to the onset and the next line goes behind it, an ordinary line unchanged; never before the previous sung end; no voice = kept with the reason; hand-set hum / hand-set next line untouched; good-confidence next line and no recognition window; hum heard after the next line's stamp, and the hum goes back when the next line cannot be placed): 45 passed; vocal-start / lyrics group 98 passed; studio typecheck clean. No studio code changed.
-- To check on the PC: `cd D:\videomaker`, `git pull`, `pnpm lyrics:check-start "workspace\songs\Life Lyrics\Let My Love Carry You" --all` (lines 29 and 30 should say "a hum ... moved to the voice onset" / "after a hum"), then `pnpm make` or Shape, and the Lyrics tab: the hum should start where you hear it (about 3:18); your hand-set start for line 31 (3:22.04) stays.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

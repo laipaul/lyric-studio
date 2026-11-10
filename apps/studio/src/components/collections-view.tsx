@@ -75,7 +75,7 @@ export function CollectionsList() {
   const restore = (r: RemovedCollection) =>
     act(async () => {
       const d = await call<{ name: string }>("/api/collections", { method: "POST", ...json({ restore: r.folder }) });
-      return `“${d.name}” is back. Add it to a song in Prepare → Clips to use it.`;
+      return `“${d.name}” is back. Add it to a song in Prepare → Storyboard to use it.`;
     });
 
   return (
@@ -83,7 +83,7 @@ export function CollectionsList() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-brand flex items-center gap-2 text-xl tracking-[0.14em] uppercase"><FeatureIcon feature="collection" className="size-5" /> Collections</h1>
-          <p className="text-muted-foreground text-sm">Clips every song can use: add a collection to a song in Prepare → Clips. Each lives in a folder of your workspace.</p>
+          <p className="text-muted-foreground text-sm">Clips every song can use: add a collection to a song in Prepare → Storyboard. Each lives in a folder of your workspace.</p>
         </div>
       </div>
       {error && !dialogue ? <p className="rounded-md border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-sm text-amber-100">{error}</p> : null}
@@ -390,7 +390,7 @@ export function CollectionView({ name }: { name: string }) {
                     ))}
                   </>
                 ) : (
-                  "Not used by a song yet: add it to a song in Prepare → Clips."
+                  "Not used by a song yet: add it to a song in Prepare → Storyboard."
                 )}
               </p>
             </div>

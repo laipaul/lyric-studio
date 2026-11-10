@@ -581,7 +581,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
               </option>
             ))}
           </select>
-          <Hint text="auto = the app listens to the end of the section and chooses; the Storyboard header says which and why" />
+          <Hint text="auto = the app listens to the end of the section and chooses; Shape → Analysis says which and why" />
         </div>
       );
     }
@@ -595,7 +595,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
               </option>
             ))}
           </select>
-          <Hint text="auto = the app picks whole-bar shots from the song's feel and your clips' length (the Storyboard header says which); story = 2 bars on hooks, 4 on verses" />
+          <Hint text="auto = the app picks whole-bar shots from the song's feel and your clips' length (Shape → Analysis says which); story = 2 bars on hooks, 4 on verses" />
         </div>
       );
     }

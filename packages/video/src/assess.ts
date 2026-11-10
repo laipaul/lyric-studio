@@ -97,7 +97,7 @@ function pointsFor(p: Problem): AssessPoint[] {
     case "Loop flows":
       return p.details.map((d) =>
         /both show (\S+)/.test(d)
-          ? minor("loop-picture", `The loop is visible: ${/both show (\S+)/.exec(d)![1]} opens and closes the video.`, "Move that clip in the story order (Storyboard).")
+          ? minor("loop-picture", `The loop is visible: ${/both show (\S+)/.exec(d)![1]} opens and closes the video.`, "Move that clip in the story order (Prepare → Storyboard).")
           : minor(`loop:${d.split(/[ :(]/)[0]}`, `The jump back to the start may be noticeable (${d.split(":")[0]}).`, "Try one of the target lengths the Shape page suggests."),
       );
     case "Seamless loop":
@@ -107,7 +107,7 @@ function pointsFor(p: Problem): AssessPoint[] {
     case "Title cards inside the safe zone":
       return [major("title-safe", `The title opening reaches under the platform's buttons (${(p.details[0] ?? "").split('" ')[0].replace(/^"/, "")}).`, "A shorter title or tagline for the video (Assets tab): the app already wraps and shrinks them to fit, and these still do not.")];
     case "Title cards inside the profile grid (3:4)":
-      return [minor("title-grid", "Part of the title opening would be cut off on your profile grid (the cover shows 3:4).", "A shorter title or tagline for the video (Assets tab).")];
+      return [minor("title-grid", "Part of the title opening would be cut off on your profile grid (the cover shows 3:4).", "A shorter title or tagline for the video (Prepare → Details).")];
     case "Title cards clear of the first lyric":
       return [minor("title-overlap", "The title is still on screen when the first lyric line appears.", "Shorten the title's hold in the card editor (Shape → the title card), or reset that card.")];
     case "Title characters":

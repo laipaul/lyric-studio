@@ -62,14 +62,26 @@ async function main() {
     const items = await page.$$eval("[data-todo-item]", (e: Element[]) => e.map((x) => x.getAttribute("data-todo-item")));
     check(JSON.stringify(items) === JSON.stringify(["clips", "vocals", "cover", "labels"]), `to-do: clips, vocal stem (a suggestion), cover, labels (${items.join(", ")})`);
     const tabs = async () => page.$$eval("[role=tab]", (e: Element[]) => e.map((x) => x.textContent?.trim()));
-    check(JSON.stringify(await tabs()) === JSON.stringify(["Files", "Lyrics & timing", "Details", "Clips"]), `Prepare's tabs: Files, Lyrics & timing, Details, Clips (${(await tabs()).join(", ")})`);
+    check(JSON.stringify(await tabs()) === JSON.stringify(["Audio", "Lyrics & timing", "Details", "Storyboard"]), `Prepare's tabs: Audio, Lyrics & timing, Details, Storyboard (${(await tabs()).join(", ")})`);
+    // Prepare reorganised (10 Nov 2026): one kind of input per tab.
+    await page.click("[data-todo-item=clips] button");
+    await page.waitForSelector("[data-assets=clips] [data-story-line]");
+    check((await page.getAttribute("[role=tab][data-state=active]", "data-stage-tab")) === "clips" && ((await page.textContent("[data-story-line]")) ?? "") === "Your story line: drag to set the order.", "the clips to-do opens Storyboard, with its story line");
+    check(((await page.textContent("[data-assets=clips] button:has(svg.lucide-upload)")) ?? "").trim() === "Add clips & photos" && ((await page.getAttribute("[data-clip-input]", "accept")) ?? "").includes(".jpg"), "Storyboard: Add clips & photos (photos accepted)");
+    await page.click("[data-todo-item=cover] button");
+    await page.waitForSelector("[data-assets=cover] [data-asset=cover]");
+    check((await page.getAttribute("[role=tab][data-state=active]", "data-stage-tab")) === "details", "the cover to-do opens Details, where the cover is");
+    await page.click("[data-stage-tab=lyrics]");
+    await page.waitForSelector("[data-assets=lyrics] [data-asset=lyrics]");
+    const lyricsRows = await page.$$eval("[data-assets=lyrics] [data-asset]", (e: Element[]) => e.map((x) => x.getAttribute("data-asset")));
+    check(JSON.stringify(lyricsRows) === JSON.stringify(["lyrics", "hints"]), `Lyrics & timing: the lyrics file and hints (${lyricsRows.join(", ")})`);
     // L1a: the Assets tab has the vocal stem slot next to the song (none yet: "Add…").
     await page.click("[data-todo-item=vocals] button");
     await page.waitForSelector("[data-asset=vocals]");
     const slot = (await page.textContent("[data-asset=vocals]")) ?? "";
     check(slot.includes("Vocal stem") && slot.includes("Add…") && slot.includes("the app separates the vocals itself"), `the Assets tab offers the vocal stem (${slot})`);
-    const order = await page.$$eval("[data-asset]", (e: Element[]) => e.map((x) => x.getAttribute("data-asset")));
-    check(order.indexOf("vocals") === order.indexOf("song") + 1, `the vocal stem sits next to the song (${order.join(", ")})`);
+    const order = await page.$$eval("[data-assets=audio] [data-asset]", (e: Element[]) => e.map((x) => x.getAttribute("data-asset")));
+    check(JSON.stringify(order) === JSON.stringify(["song", "vocals", "backingVocals"]) && (await page.getAttribute("[role=tab][data-state=active]", "data-stage-tab")) === "assets", `Audio: the song, the vocal stem next to it, backing vocals; nothing else (${order.join(", ")})`);
     check(!(await page.$("[data-asset=themeCover]")), "Assets are the song's own files: no Theme cover here (it lives in Themes)");
     // Original file names: files put into the song folder by hand are recognised, the rest asked about once.
     const wsF = openWorkspace(wsDir);
@@ -80,14 +92,29 @@ async function main() {
     writeFileSync(path.join(folder, "notes.txt"), "call the label\n");
     await page.reload();
     await page.click("[data-todo-item=vocals] button");
-    await page.waitForSelector("[data-unassigned-file='notes.txt']");
+    await page.waitForSelector("[data-asset=backingVocals]");
     check(((await page.textContent("[data-asset=backingVocals]")) ?? "").includes("Hold On (Backing Vocals).wav"), "a backing-vocals file dropped by hand is recognised by its name");
+    check(!(await page.$("[data-unassigned-file='notes.txt']")), "a text file to place is not asked about in Audio…");
+    await page.click("[data-stage-tab=lyrics]");
+    await page.waitForSelector("[data-assets=lyrics] [data-unassigned-file='notes.txt']");
+    check(true, "…but in Lyrics & timing, with the lyrics file");
     check(!(await page.$("[data-unassigned-file='Hold On (Backing Vocals).wav']")), "…and not asked about");
     await page.click("[data-unassigned-file='notes.txt'] [data-assign=notUsed]");
     await page.waitForFunction(() => !document.querySelector("[data-unassigned]"));
     check(true, "\"What is this file?\" → Not used: not asked again");
     await page.click("[data-todo-item=labels] button");
     check((await page.getAttribute("[role=tab][data-state=active]", "id"))?.endsWith("lyrics") ?? false, "the label item's button opens the Lyrics tab");
+    // Old links still lead to the right place (10 Nov 2026): the tab ids stay; ?tab=storyboard is still the Shape page.
+    for (const [q, want] of [["tab=assets", "assets"], ["tab=files", "assets"], ["tab=audio", "assets"], ["tab=clips", "clips"], ["panel=song", "details"]] as const) {
+      await page.goto(`${base}/songs/${id}?${q}`);
+      await page.waitForSelector("[data-stages]");
+      check((await page.getAttribute("[role=tab][data-state=active]", "data-stage-tab")) === want, `?${q} opens Prepare → ${want}`);
+    }
+    await page.goto(`${base}/songs/${id}?tab=storyboard`);
+    await page.waitForSelector("[data-shape-tabs]");
+    check((await page.getAttribute("[data-stage=shape]", "aria-current")) === "step", "?tab=storyboard (an old link) still opens Shape");
+    const shapeText = await page.$eval("[data-work-area]", (e: Element) => (e as HTMLElement).innerText);
+    check(!/storyboard/i.test(shapeText), "Shape never says 'storyboard' on screen (the planned video is the shot plan)");
 
     // Shape and Review show their own tabs; Make has the release pack.
     await page.click("[data-stage=shape]");

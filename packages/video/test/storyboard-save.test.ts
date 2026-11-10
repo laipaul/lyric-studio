@@ -105,6 +105,7 @@ describe("storyboard file of a planned video", () => {
     expect(songs[0].unused).toEqual([expect.stringMatching(/^moved cut 0:59\.5 -> 1:00\.0: outside every planned video's part of the song \(reels 1 0:0\d\.\d-0:1\d\.\d\); kept in clips\.json$/)]);
     const report = storyboardsReport(songs);
     expect(report).toContain("Save Test (");
+    expect(report).toContain("  shot plans: reels-1"); // on screen: "shot plan" (the file stays storyboards\\reels-1.json)
     expect(report).toContain("1 moved cut(s) / slip(s) not used by any video: listed above.");
     writeClipEdits(songRoot, edits);
   }, 300_000);

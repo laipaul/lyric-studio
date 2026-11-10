@@ -69,7 +69,7 @@ export function storyboardsReport(songs: readonly SongStoryboards[]): string {
       lines.push(`  skipped: ${s.skipped}`);
       continue;
     }
-    lines.push(`  storyboards: ${s.written.length ? s.written.join(", ") : "none"}`);
+    lines.push(`  shot plans: ${s.written.length ? s.written.join(", ") : "none"}`);
     for (const f of s.failed) lines.push(`  ${f.video}: could not be planned: ${f.error}`);
     if (s.unused.length) {
       lines.push("  your moved cuts / slips that no video uses now (kept in clips.json, nothing deleted):");

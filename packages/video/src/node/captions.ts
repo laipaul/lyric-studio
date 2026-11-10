@@ -43,7 +43,7 @@ Full song on Spotify (link in bio).
 DEFAULTS.standard = DEFAULTS.reels;
 
 const HELP = `Placeholders: {{song}} {{artist}} {{ep}} {{epLine}} {{hook}} {{songTag}} {{artistTag}} {{year}};
-links picked for the post (the song's Assets tab, Post panel): {{bestLink}} {{links}} {{listen}} {{socials}} {{follow}}
+links picked for the post (Prepare → Details, Post panel): {{bestLink}} {{links}} {{listen}} {{socials}} {{follow}}
 {{smartlink}} {{spotify}} {{apple}} {{youtube}} {{website}} {{instagram}} {{tiktok}} {{facebook}} ... (a line whose link is empty disappears).
 {{epLine}} is 'From the EP "<name>"' (its line disappears without an EP); write your own line with {{ep}}
 for another language, e.g. Extrait de l'EP « {{ep}} ». {{hook}} is the first hook line of the lyrics.`;

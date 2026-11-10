@@ -45,7 +45,7 @@ export const TEXTBOARD_FILE = "textboard.json";
 export const TEMPLATES_DIR = "templates";
 
 const HELP =
-  "The text layer of this song (the Storyboard tab writes it): every card (title, byline, tagline, each lyric line) in order, and per card " +
+  "The text layer of this song (Shape writes it): every card (title, byline, tagline, each lyric line) in order, and per card " +
   'only what differs from the brand and the recipe ("overrides": position lyrics | with-title | top | upper | centre | lower, size 0.5-2, ' +
   'hold seconds, effect "name[:intensity]", font, weight, italic; title / byline / tagline also text and show). "roles": rules per kind of ' +
   'card (title, byline, tagline, verse, hook), e.g. { "hook": { "size": 1.2 } }. Timing always comes from the lyric alignment.';
@@ -119,7 +119,7 @@ export function saveTemplate(workspaceDir: string, artist: string, name: string,
   const dir = templatesDir(workspaceDir, artist);
   mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${clean}.json`);
-  writeFileSync(file, `${JSON.stringify({ _help: "A text template (Storyboard → Save as template): the textboard's design without the words.", ...template }, null, 2)}\n`);
+  writeFileSync(file, `${JSON.stringify({ _help: "A text template (Shape → Save as template): the textboard's design without the words.", ...template }, null, 2)}\n`);
   return { file, left };
 }
 

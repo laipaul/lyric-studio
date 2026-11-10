@@ -80,7 +80,7 @@ export function storyboardEdit(ws: Workspace, projectId: string, e: StoryboardEd
     edits = writeClipEdits(paths.root, { ...edits, cuts: after.cuts, slips: after.slips });
     return { edits, anchors, before, after: { cuts: edits.cuts ?? [], slips: edits.slips ?? [] } };
   } else {
-    throw new Error("Unknown storyboard edit.");
+    throw new Error("Unknown shot plan edit.");
   }
   return { edits, anchors };
 }

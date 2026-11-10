@@ -1075,7 +1075,7 @@ describe("platform presets (stand-in renderer)", () => {
     // A project that never had one: a clear message.
     const fresh = path.join(root, "fresh-song.wav");
     makeSong(fresh, 14);
-    await expect(run({ song: fresh, platforms: "tiktok", variations: 1, collection: undefined })).rejects.toThrow(/No clips yet for "fresh-song": add clips in Prepare → Assets/);
+    await expect(run({ song: fresh, platforms: "tiktok", variations: 1, collection: undefined })).rejects.toThrow(/No clips yet for "fresh-song": add clips and photos in Prepare → Storyboard/);
   });
 
   it("--artist is stored with the project and picks that artist's brand folder; --ep is remembered", async () => {

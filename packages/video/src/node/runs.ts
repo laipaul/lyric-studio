@@ -98,7 +98,7 @@ export function generateOptions(ws: Workspace, projectId: string, req: RunReques
   const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
   if (!p) throw new Error("Song not found.");
   const lyrics = projectLyricsTxt(ws, projectId);
-  if (!lyrics) throw new Error(`"${p.title}" has no lyrics file in its song folder. Add it in Prepare → Assets (Lyrics), or bring an earlier one back from Replaced files there.`);
+  if (!lyrics) throw new Error(`"${p.title}" has no lyrics file in its song folder. Add it in Prepare → Lyrics & timing (Lyrics), or bring an earlier one back from Replaced files there.`);
   return {
     song: projectSong(ws, p),
     lyrics,

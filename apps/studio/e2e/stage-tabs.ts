@@ -1,8 +1,10 @@
 // The song page (N1): a rail with the four stages only (Prepare, Shape, Make, Review), numbered; each stage's sections
 // are tabs inside it. Prepare: Files · Lyrics & timing · Details · Clips; Shape: Look · Part & ending · Pace · Shots (each
 // opens one panel); Make: Videos · Try other looks · Options (one form); Review: Videos · Post.
-const STAGE_OF: Record<string, string> = { Assets: "prepare", Files: "prepare", Lyrics: "prepare", Details: "prepare", Clips: "prepare", Style: "shape", Storyboard: "shape", Shape: "shape", Generate: "make", Make: "make", Videos: "review", Post: "review" };
-const TAB_TEXT: Record<string, string> = { Assets: "Files", Files: "Files", Lyrics: "Lyrics & timing", Details: "Details", Clips: "Clips", Videos: "Videos", Post: "Post" };
+const STAGE_OF: Record<string, string> = { Assets: "prepare", Files: "prepare", Audio: "prepare", Lyrics: "prepare", Details: "prepare", Clips: "prepare", Style: "shape", Storyboard: "shape", Shape: "shape", Generate: "make", Make: "make", Videos: "review", Post: "review" };
+// Prepare (10 Nov 2026): Audio · Lyrics & timing · Details · Storyboard; the tab ids stay (assets, lyrics, details, clips).
+// "Storyboard" here still means the Shape page (older tests); Prepare's Storyboard tab is "Clips".
+const TAB_ID: Record<string, string> = { Assets: "assets", Files: "assets", Audio: "assets", Lyrics: "lyrics", Details: "details", Clips: "clips", Videos: "videos", Post: "post" };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function openTab(page: any, tab: string): Promise<void> {
@@ -17,7 +19,7 @@ export async function openTab(page: any, tab: string): Promise<void> {
     await page.waitForSelector("[data-shape]");
     return;
   }
-  await page.click(`[role=tab]:has-text('${TAB_TEXT[tab]}')`);
+  await page.click(`[data-stage-tab=${TAB_ID[tab]}]`);
 }
 
 // Opens where a setting lives now (N1). Shape's tabs: look, part, pace, shots (old names: clips -> shots, auto -> part,
