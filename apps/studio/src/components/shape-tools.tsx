@@ -685,7 +685,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
             )
           ) : f.own ? (
             <span data-source className="border-brand/40 text-brand rounded-full border px-2 py-0.5 text-xs">
-              {sourceLabel(f.source, data.platforms)}
+              {f.field === "collections" && f.source === "song" ? "Mixed into this song" : sourceLabel(f.source, data.platforms)}
             </span>
           ) : null}
           {f.locked ? <Lock className="text-brand size-3.5" aria-label="locked" data-locked={f.field} /> : null}
@@ -757,7 +757,6 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
         <div className="bg-card flex items-center gap-2 rounded-lg border px-3 py-2">
           <FeatureIcon feature="theme" className="size-4 shrink-0" />
           <span className="min-w-0 flex-1">
-            <span className="text-muted-foreground block text-[10px] font-semibold tracking-wide uppercase">Look</span>
             <span data-look-theme-name className="block truncate text-sm font-medium" title={current.name}>
               {current.name}
             </span>
@@ -851,11 +850,11 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
       <style>{fontCss}</style>
       <p
         data-saving={saving}
-        className="text-muted-foreground -mb-2 h-4 truncate text-xs"
+        className={cn("text-muted-foreground -mb-2 h-4 truncate text-xs", saving === "idle" && section !== "theme" && "hidden")}
         aria-live="polite"
         title={`This song's recipe (${data.recipeFile?.split("/").pop()}). A setting comes from the library defaults, the artist's brand (${data.brandFile.split("/").join("\\")}), the song's theme (fonts, effects, colour) or this song; a change here is saved at once. A locked setting keeps this song's value: a brand change does not reach it and Make cannot change it for one run.`}
       >
-        {saving === "saving" ? "Saving…" : saving === "saved" ? (section === "theme" ? "✓ Saved in the theme" : "✓ Saved for this song") : section === "theme" ? "The song's look comes from its theme." : "Every change is saved for this song at once."}
+        {saving === "saving" ? "Saving…" : saving === "saved" ? (section === "theme" ? "✓ Saved in the theme" : "✓ Saved") : section === "theme" ? "The song's look comes from its theme." : ""}
       </p>
       {error ? <p className="rounded-md border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-200">{error}</p> : null}
 

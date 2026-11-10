@@ -14,7 +14,7 @@ import path from "node:path";
 import { absPath, openWorkspace, project } from "@lyric/db";
 import { ensureAlignment, findOrCreateSongProject, loadTheme, readRecipe, songPathsById, type AlignRunner } from "@lyric/video/node";
 import { eq } from "drizzle-orm";
-import { openPanel, saveTheme, unfoldStyle } from "./stage-tabs";
+import { collapsePanel, openPanel, saveTheme, unfoldStyle } from "./stage-tabs";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-storyboard-"));
 const wsDir = path.join(root, "workspace");
@@ -81,6 +81,14 @@ async function main() {
     check((await page.inputValue("[data-storyboard-platform]")) === "reels", "the plan for Reels (the recipe's platform) is offered");
     await page.waitForSelector("[data-shot='1']", { timeout: 180_000 }); // planned on opening, no Show button to press
     check(!!(await page.$("[data-viewer] .__remotion-player, [data-viewer] video, [data-viewer] div")), "the viewer plays the planned video");
+    // N1 polish: Look is selected and its panel shows from the start; viewer, timeline and command bar still fit on one
+    // screen beside it. The full-width checks below measure with the panel collapsed (its edge button).
+    const withPanel = await Promise.all(["[data-shape-tools]", "[data-viewer]", "[data-storyboard-timeline]", "[data-command-bar]"].map(async (sel) => (await page.$(sel))?.boundingBox()));
+    const [pb, pv, pt, pc] = withPanel;
+    check(!!pb && !!pv && !!pt && !!pc && pb.x + pb.width <= pv.x && pv.y + pv.height <= pt.y && pc.y + pc.height <= 1000, `the panel shown beside the viewer: viewer, timeline and command bar still on one 1440×1000 screen (viewer ${Math.round(pv?.height ?? 0)} px)`);
+    await collapsePanel(page);
+    await sleep(400);
+    check((await page.getAttribute("[data-shape-tab=look]", "aria-selected")) === "true", "collapsed: Look stays selected");
     const [vb, tl] = await Promise.all(["[data-viewer]", "[data-storyboard-timeline]"].map(async (sel) => (await page.$(sel))!.boundingBox()));
     check(!!vb && !!tl && vb.y + vb.height <= tl.y && tl.width > 900, `top to bottom: the viewer, then the soundtrack and shots across the editor (${JSON.stringify(tl)})`);
     // One screen: the viewer, the timeline, then one command bar (which video, the transport, zoom, verdict, Next).
@@ -97,7 +105,9 @@ async function main() {
     check(inBar === 4, `the command bar holds Show / Platform, the transport and Follow / Zoom (${inBar} of 4)`);
     // 2 Nov 2026: nothing above the viewer but the song header; its Analysis chip holds the verdict and the facts.
     const chip = await (await page.$("[data-song-header] [data-analysis-chip]"))?.boundingBox();
-    check(!!chip && chip.y + chip.height <= fit9.v!.y && !(await page.$("[data-next-make]")) && !(await page.$("[data-verdict]:not([data-analysis-chip])")) && !(await page.$("[data-work-status]")), "the Analysis chip in the song header; no verdict badge, Next: Make or stage line on the page");
+    check(!!chip && chip.y + chip.height <= fit9.v!.y && !(await page.$("[data-next-make]")) && !(await page.$("[data-verdict]:not([data-analysis-chip])")), "the Analysis chip in the song header; no verdict badge or Next: Make on the page");
+    const shapeLine = (await page.textContent("[data-work-status=shape]")) ?? "";
+    check(/^Shape · Reels v\d+ planned/.test(shapeLine) && shapeLine.includes("Every change is saved for this song at once."), `N1 polish: the same stage line as every stage (${shapeLine})`);
     check(!(await page.isVisible("[data-analysis-panel]")), "the analysis stays closed until the chip is clicked");
     await page.setViewportSize({ width: 1366, height: 768 });
     await sleep(400);
@@ -396,7 +406,7 @@ async function main() {
     // The pro edits on the timeline (7 Nov 2026), on this 3-shot Reel. Roll: drag the line between shots 1
     // and 2 one beat later (2x zoom = 80 px a second, a beat at 120 BPM = 40 px): only that cut moves, kept in
     // clips.json; shot 3 does not move.
-    if (await page.isVisible("[data-shape-panel]")) await page.click("[data-panel-close]").catch(() => {});
+    if (await page.isVisible("[data-shape-panel]")) await collapsePanel(page).catch(() => {});
     const shotBox = async (n: number) => (await (await page.$(`[data-shot='${n}']`))!.boundingBox())!;
     const before1 = await shotBox(1);
     const before3 = await shotBox(3);
@@ -505,7 +515,7 @@ async function main() {
     await page.click("[data-timeline-reset]");
     await replanned();
     check((clipsJson().cuts ?? []).length === 0, `"Automatic cuts and clip start" on shot 2 puts its cut back (${JSON.stringify(clipsJson().cuts)})`);
-    await page.click("[data-panel-close]").catch(() => {});
+    await collapsePanel(page).catch(() => {});
     writeFileSync(path.join(paths.root, "clips.json"), JSON.stringify({ ...clipsJson(), cuts: [], slips: [] }));
     // Lift a clip onto another (8 Nov 2026): drag shot 1 upwards to lift it, then over shot 2 and let go: the two clips
     // swap places (story order in clips.json; shot 2's lyric anchor follows its clip), the cuts stay; shot 3 is the Reel's
@@ -553,7 +563,7 @@ async function main() {
     check((await clipOfShot(1)) === c1 && (await clipOfShot(2)) === c2 && anchorsBack.some((a) => a.line === 4 && a.clip === c2), "Ctrl+Z swaps them back (and the anchor)");
     await page.click("[data-shot='3']"); // the viewer back where the checks below expect it (shot 3's first frame)
     await sleep(800);
-    await page.click("[data-panel-close]").catch(() => {});
+    await collapsePanel(page).catch(() => {});
     // The soundtrack window (7 Nov 2026; on the timeline's own song track since 8 Nov 2026): the whole song with the
     // Reel as a pink window, the song before and after it dimmed; dragging its end edge sets this platform's part of the
     // song in song.json (on a bar / after a sung line); "Automatic" (in the command bar) gives it back to the app.
@@ -681,6 +691,8 @@ async function main() {
     await page.selectOption("[data-storyboard-platform]", "youtube");
     await page.waitForFunction(() => /YouTube/.test(document.querySelector("[data-storyboard-summary]")?.textContent ?? ""), null, { timeout: 180_000 }).catch(() => {});
     await page.waitForSelector("[data-replanning]", { state: "detached", timeout: 180_000 }).catch(() => null);
+    await collapsePanel(page); // measured at full width, as before N1 polish (the panel shows again after the reload)
+    await sleep(400);
     const vw = await (await page.waitForSelector("[data-viewer]", { timeout: 60_000 })).boundingBox();
     const wideFit = await fits();
     check(!!vw && vw.width > vw.height * 1.7 && wideFit.ok, `16:9: the wide viewer (${Math.round(vw?.width ?? 0)}×${Math.round(vw?.height ?? 0)}), timeline and command bar on one screen`);

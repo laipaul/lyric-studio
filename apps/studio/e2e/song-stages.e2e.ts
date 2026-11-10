@@ -10,7 +10,7 @@ import path from "node:path";
 
 import { makeRun, openWorkspace } from "@lyric/db";
 import { createSong, createTheme, loadFontCatalog, loadTheme, readRecipe, songPathsById, writeRecipe } from "@lyric/video/node";
-import { openPanel, saveTheme } from "./stage-tabs";
+import { collapsePanel, openPanel, saveTheme } from "./stage-tabs";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-stages-"));
 const wsDir = path.join(root, "workspace");
@@ -93,7 +93,7 @@ async function main() {
     await page.click("[data-stage=shape]");
     check(JSON.stringify(await tabs()) === JSON.stringify(["Look", "Part & ending", "Pace", "Shots"]), `Shape's tabs: Look, Part & ending, Pace, Shots (${(await tabs()).join(", ")})`);
     await page.click("[data-stage=review]");
-    check(JSON.stringify(await tabs()) === JSON.stringify(["Videos", "Post"]), "Review & Post shows Videos and Post");
+    check(JSON.stringify(await tabs()) === JSON.stringify(["Videos", "Post"]), "Review shows Videos and Post");
     await page.click("[data-stage=make]");
     await page.waitForSelector("[data-release-pack]");
     check(JSON.stringify(await tabs()) === JSON.stringify(["Videos", "Try other looks", "Options"]), `Make's tabs: Videos, Try other looks, Options (${(await tabs()).join(", ")})`);
@@ -156,7 +156,7 @@ async function main() {
     await page.goto(`${base}/songs/${id}`);
     await page.waitForSelector("[data-stages]");
     check(((await page.textContent("[data-stage=make] [data-stage-status]")) ?? "").includes("2 videos made"), "Make counts every kept video of the song, all runs (2)");
-    check((await page.getAttribute("[data-stage=review]", "aria-current")) === "step", "with videos: opens on Review & Post");
+    check((await page.getAttribute("[data-stage=review]", "aria-current")) === "step", "with videos: opens on Review");
     await page.click("[role=tab]:has-text('Post')");
     await page.waitForSelector("[data-ready-to-approve]");
     const offered = await page.$$eval("[data-offered]", (e: Element[]) => e.map((x) => x.getAttribute("data-offered")));
@@ -182,7 +182,8 @@ async function main() {
     check(JSON.stringify(stageIds) === JSON.stringify(["prepare", "shape", "make", "review"]) && !!railBox && railBox.x < 5 && railBox.width < 100, `the stages sit in the rail on the left (${stageIds.join(", ")})`);
     const numbers = await page.$$eval("[data-rail] [data-stage-number]", (e: Element[]) => e.map((x) => x.textContent));
     check(JSON.stringify(numbers) === JSON.stringify(["1", "2", "3", "4"]) && (await page.$$("[data-rail-item]")).length === 0 && !(await page.$("[data-rail-group]")), `N1: the rail holds the four stages only, numbered 1-4 (${numbers.join(", ")})`);
-    check(!(await page.isVisible("[data-shape-tools]")), "no panel open: the editor takes the whole width");
+    check((await page.isVisible("[data-shape-tools]")) && (await page.getAttribute("[data-shape-tab=look]", "aria-selected")) === "true", "N1 polish: one tab always selected (Look, the first) and its panel shows");
+    check(!(await page.$("[data-shape-panel=look] h2")), "no title repeating the tab's name in the panel");
     const viewerBox = await (await page.waitForSelector("[data-viewer], [data-look-preview]")).boundingBox();
     check(!!viewerBox && viewerBox.y < 300, `the viewer at the top of the editor (${JSON.stringify(viewerBox)})`);
     check(!!(await page.$("[data-next-make]")), '"Next: Make" under the viewer');
@@ -216,7 +217,9 @@ async function main() {
     await page.click("[data-shape-tab=look]");
     await page.waitForSelector("[data-shape-panel=look]");
     await page.click("[data-shape-tab=look]");
-    check(!(await page.isVisible("[data-shape-tools]")), "a second click on the tab closes its panel");
+    check(await page.isVisible("[data-shape-tools]"), "a second click on the tab keeps its panel (never no tab)");
+    const lookBarText = (await page.textContent("[data-look-bar]")) ?? "";
+    check(!/^Look/.test(lookBarText.trim()), `the Look bar has no "Look" label above the theme name (${lookBarText})`);
     // The song's own settings left Shape (N1): Details, Clips and Lyrics & timing in Prepare, What to make in Make.
     await openPanel(page, "details");
     check(JSON.stringify(await inBlock("details")) === JSON.stringify(["tagline", "hookText", "endText", "ep"]) && !!(await page.$("[data-style-block=details] [data-card-title]")), `Prepare → Details: title, tagline, hook and end card texts, EP (${(await inBlock("details")).join(", ")})`);
@@ -227,6 +230,23 @@ async function main() {
     check(JSON.stringify(await inBlock("make")) === JSON.stringify(["platforms", "variations"]), `Make → Videos: platforms, videos per platform (${(await inBlock("make")).join(", ")})`);
     await openPanel(page, "collections");
     check(JSON.stringify(await inBlock("collections")) === JSON.stringify(["collections"]), "Prepare → Clips: the collections");
+    check(((await page.textContent("[data-field=collections] [data-source]")) ?? "") === "Mixed into this song", `the song's collections: "Mixed into this song" (${await page.textContent("[data-field=collections] [data-source]")})`);
+    // N1 polish: the same stage line on every stage, one distinct icon per tab, and each stage opens on its last tab.
+    const icons = await page.$$eval("[role=tab] svg", (e: Element[]) => e.map((x) => x.getAttribute("class")?.match(/lucide-[a-z0-9-]+/)?.[0] ?? ""));
+    check(new Set(icons).size === icons.length && icons.length === 4, `Prepare's tabs: four distinct icons (${icons.join(", ")})`);
+    check(((await page.textContent("[data-work-status=prepare]")) ?? "").startsWith("Prepare · "), `Prepare's stage line (${await page.textContent("[data-work-status=prepare]")})`);
+    await page.click("[data-stage=make]");
+    check(((await page.textContent("[data-work-status=make]")) ?? "").startsWith("Make · "), `Make's stage line (${await page.textContent("[data-work-status=make]")})`);
+    const makeIcons = await page.$$eval("[data-make-tab] svg", (e: Element[]) => e.map((x) => x.getAttribute("class")?.match(/lucide-[a-z0-9-]+/)?.[0] ?? ""));
+    check(new Set(makeIcons).size === 3, `Make's tabs: three distinct icons (${makeIcons.join(", ")})`);
+    await page.click("[data-stage=review]");
+    check(((await page.textContent("[data-work-status=review]")) ?? "").startsWith("Review · ") && !(await page.$("[data-saved-at-once]")), `Review's stage line (${await page.textContent("[data-work-status=review]")})`);
+    await page.click("[data-stage=shape]");
+    const shapeIcons = await page.$$eval("[data-shape-tab] svg", (e: Element[]) => e.map((x) => x.getAttribute("class")?.match(/lucide-[a-z0-9-]+/)?.[0] ?? ""));
+    check(new Set(shapeIcons).size === 4, `Shape's tabs: four distinct icons (${shapeIcons.join(", ")})`);
+    check((await page.getAttribute("[data-shape-tab=pace]", "aria-selected")) === "true" || (await page.getAttribute("[data-shape-tab=part]", "aria-selected")) === "true" || (await page.getAttribute("[data-shape-tab=look]", "aria-selected")) === "true", "Shape opens on its last tab");
+    await page.click("[data-stage=prepare]");
+    check((await page.getAttribute("[role=tab][data-state=active]", "data-stage-tab")) === "clips", "back to Prepare: its last tab (Clips) is selected");
     await openPanel(page, "tempo");
     check(!!(await page.$("[data-field=tempo] [data-tempo-check]")) && !!(await page.$("[data-retime-button]")), "Prepare → Lyrics & timing: the tempo tools and Time the lyrics again");
     check(!!(await page.$("[data-locked=tempo]")) && ((await page.textContent("[data-field=tempo] [data-source]")) ?? "") === "Set by me" && !(await page.$("[data-back-auto=tempo]")), "a locked value keeps its value and shows Set by me (no ↺ while locked)");
@@ -240,8 +260,13 @@ async function main() {
     await page.waitForFunction(() => document.querySelector("[data-field=ending] [data-source]")?.textContent === "auto");
     await sleep(500);
     check(readRecipe(recipe).ending === undefined, "↺ auto: the app chooses the ending again (song.json has none)");
-    await page.click("[data-panel-close]");
-    check(!(await page.isVisible("[data-shape-tools]")), "the panel's × closes it");
+    check(!(await page.$("[data-panel-close]")), "a tab's panel has no × (it can only be collapsed)");
+    await collapsePanel(page);
+    check(!(await page.isVisible("[data-shape-tools]")) && (await page.getAttribute("[data-shape-tab=part]", "aria-selected")) === "true", "collapsed from its edge: the tab stays selected");
+    await page.click("[data-panel-expand]");
+    await page.waitForSelector("[data-shape-panel=part]");
+    check(await page.isVisible("[data-shape-tools]"), "the edge button shows the panel again");
+    check((await page.$$("[data-saved-at-once]")).length === 1 && !((await page.textContent("[data-shape-tools]")) ?? "").includes("Every change is saved"), "'Every change is saved for this song at once' once, in the stage line, not in the panel");
     await openPanel(page, "pace");
     check(JSON.stringify(await inBlock("pace")) === JSON.stringify(["shotLength", "transitions", "paceShift"]), `Pace: shot length, transitions, pace (${(await inBlock("pace")).join(", ")})`);
     check((await page.textContent("[data-auto-summary]")) === "All automatic: the app handles these", "Pace: all automatic");
@@ -448,7 +473,8 @@ async function main() {
     if (process.env.PICKER_SHOT) await page.screenshot({ path: process.env.PICKER_SHOT });
     await page.click("[data-theme-picker-cancel]");
     await page.waitForSelector("[data-theme-picker]", { state: "detached" });
-    check(!((await page.textContent("[data-look-preview-caption]")) ?? "").includes("Previewing") && readRecipe(recipe).theme === "Night Drive", "Cancel: the current look is back, nothing saved");
+    await page.waitForFunction(() => !(document.querySelector("[data-look-preview-caption]")?.textContent ?? "").includes("Previewing"), null, { timeout: 3000 }).catch(() => {}); // the viewer follows a render later
+    check(!((await page.textContent("[data-look-preview-caption]")) ?? "").includes("Previewing") && readRecipe(recipe).theme === "Night Drive", `Cancel: the current look is back, nothing saved (${await page.textContent("[data-look-preview-caption]")}; ${readRecipe(recipe).theme})`);
     await page.click("[data-look-change]");
     await page.click(`[data-theme-pick="${shared}"]`);
     await page.click("[data-theme-apply]");

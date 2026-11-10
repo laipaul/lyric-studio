@@ -4,6 +4,20 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Shape: faster swaps (and every edit): the planner stays running ✅ (confirmed on the Windows PC, 8 Nov 2026)
+- Asked by the user (8 Nov 2026): "make it swap faster" (after "worked, a bit slow but ok").
+- **Why it was slow:** every edit started a new planner process: Node and tsx starting up (about 1.5 s in the cloud,
+  usually more on Windows) and the whole song decoded again for the waveform, before any planning.
+- **Now one planner stays running** while the studio runs and answers every request (the decoded song stays in
+  memory, the last 3 songs). It is started again when it stopped or when its code changed (a git pull while the
+  studio runs); a request it cannot answer falls back to the old one-off process.
+- **The swap shows at once:** right after the drop the two shots already show each other's clip on the timeline;
+  the viewer follows when the new plan is there.
+- **Fixed on the way (older bug):** clicking the clip that was already selected did not show it in the viewer again.
+- Measured in the browser test: the swap's new plan 0.9-1.4 s after the drop (was 2.9 s with the one-off planner).
+- Tests: storyboard.e2e.ts (+1: the two shots show each other's clip right after the drop): run in the cloud
+  session, all 148 checks pass (also with LYRIC_PLANNER=oneoff, the fallback).
+
 ### Bug fix: the Reel's title did not show when the part of the song starts on a sung line ✅ (confirmed on the Windows PC in Shape, 8 Nov 2026)
 - Seen (Let My Love Carry You, Reel; Shape → Reels 0:36.1-1:41.3 chosen on the song track, Title opening on): "the title is not showing", "the tagline is not showing". Line 5 ("Let my love carry you through the night") is sung at the very start of that part.
 - Cause: the title opening showed title, byline and tagline only until the first lyric line fades in (make.ts passed `untilFrame` = that line's enter frame). The automatic section leaves up to 2 bars (titleLead); a part chosen by hand on a sung line leaves none, so the cards got a few frames or none, silently. Shape's plan uses the same make.ts dry run, so it showed the same.

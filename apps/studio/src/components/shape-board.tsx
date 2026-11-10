@@ -26,7 +26,7 @@ import { AssessmentDetails, VERDICT_TEXT } from "@/components/assessment";
 import { LookViewer, VIEWER_HEIGHT, VIEWER_MAX, VIEWER_MIN } from "@/components/look-preview";
 import { PreviewPlayer } from "@/components/preview-player";
 import type { ShapeLook } from "@/components/shape-tools";
-import { SHAPE_PANELS, useGoToTab, useShapePanel, useShapeVideo, useThemeLook } from "@/components/song-stages";
+import { useGoToTab, useSetShapeStatus, useShapePanel, useShapeVideo, useThemeLook } from "@/components/song-stages";
 import { ThemeReachBadge } from "@/components/theme-reach-badge";
 import { TransportBar } from "@/components/transport-bar";
 import { Button } from "@/components/ui/button";
@@ -52,7 +52,7 @@ type Source = { kind: "plan"; platform: string; video: string } | { kind: "run";
 export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { projectId: string; tools: ReactNode; look: ShapeLook | null; replan: number; onPlanned: (replan: number) => void }) {
   const goTo = useGoToTab();
   const themeLook = useThemeLook();
-  const { panel, setPanel } = useShapePanel();
+  const { panel, setPanel, collapsed, setCollapsed } = useShapePanel();
   const [choices, setChoices] = useState<StoryboardChoices | null>(null);
   const [source, setSource] = useState<Source | null>(null);
   const { setPlatform } = useShapeVideo();
@@ -446,6 +446,15 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   const run = source?.kind === "run" ? choices?.runs.find((r) => r.folder === source.run) : null;
   const platforms = !choices ? [] : source?.kind === "run" ? (run?.platforms ?? []) : choices.platforms;
   const videos = platforms.find((p) => p.name === source?.platform)?.videos ?? [];
+  // The stage line (N1 polish): "Shape · Reels v1 planned", "Shape · planning again…" or the past run shown.
+  const setShapeStatus = useSetShapeStatus();
+  const platformLabel = platforms.find((p) => p.name === source?.platform)?.label ?? source?.platform ?? "";
+  const shapeStatus = !source ? null : saving || loading ? { text: `${platformLabel} ${source.video}: planning…`, tone: "busy" as const } : !view ? null : source.kind === "run" ? { text: `${platformLabel} ${source.video} of the run ${source.run.replace("_", " ").replace(/(\d{2})(\d{2})$/, "$1:$2")}`, tone: "muted" as const } : { text: `${platformLabel} ${source.video} planned`, tone: "done" as const };
+  const shapeStatusKey = shapeStatus ? `${shapeStatus.tone}:${shapeStatus.text}` : "";
+  useEffect(() => {
+    setShapeStatus(shapeStatus);
+  }, [shapeStatusKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => setShapeStatus(null), [setShapeStatus]);
   const width = view ? Math.ceil((view.durationMs / 1000) * zoom) : 0;
   const x = (ms: number) => (ms / 1000) * zoom;
   const playhead = (frame * 1000) / 30;
@@ -475,7 +484,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   const barFrames = useMemo(() => (view ? view.bars.map((ms) => Math.round((ms * 30) / 1000)) : []), [view]);
   const shot = view && selected !== null ? view.shots[selected] : null;
   const wide = !!props?.format && props.format.width > props.format.height;
-  const viewerH = useViewerHeight(viewerBlock, belowViewer, `${view && props ? "plan" : look ? "look" : "none"}:${wide ? "wide" : "tall"}:${panel ?? ""}:${view?.slots.length ?? 0}`);
+  const viewerH = useViewerHeight(viewerBlock, belowViewer, `${view && props ? "plan" : look ? "look" : "none"}:${wide ? "wide" : "tall"}:${collapsed ? "" : panel}:${view?.slots.length ?? 0}`);
   // A clip dropped on a shot: anchored on the lyric line that starts in that shot; a shot without a line
   // starting in it (an intro, a break): the clip takes that shot's place in the story order.
   const dropOnShot = (s: StoryShot, clip: string) => {
@@ -516,7 +525,9 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
     setSelected(s.index);
     showAt(s.startMs);
   };
-  const panelTitle = panel === "analysis" ? "Analysis" : panel === "theme" ? "Theme" : panel === "text" ? "Text" : (SHAPE_PANELS.find((m) => m.id === panel)?.label ?? "");
+  // A tab's panel has no title of its own: the selected tab is its title (N1 polish). Text, Theme and Analysis open in
+  // the same panel for a moment, with a title and × back to the tab.
+  const panelTitle = panel === "analysis" ? "Analysis" : panel === "theme" ? "Theme" : panel === "text" ? "Text" : null;
   const closePanel = () => {
     if (panel === "shots") setSelected(null);
     setPanel(null);
@@ -869,17 +880,27 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   return (
     <div data-storyboard data-shape className="flex min-w-0 items-start gap-4">
       {headerActions}
+      {/* The panel beside the viewer (N1 polish): always the selected tab's content; it can only be collapsed (the button
+          on its edge), and the tab stays selected while it is. */}
+      {collapsed ? (
+        <button type="button" data-panel-expand onClick={() => setCollapsed(false)} title="Show the panel" aria-label="show the panel" className="bg-card/40 text-muted-foreground hover:text-foreground sticky top-0 flex h-24 w-5 shrink-0 items-center justify-center rounded-md border">
+          <ChevronRight className="size-4" />
+        </button>
+      ) : null}
+      <div className={cn("sticky top-0 flex shrink-0 items-start", collapsed && "hidden")}>
       <aside
-        data-shape-panel={panel ?? ""}
+        data-shape-panel={collapsed ? "" : panel}
         data-shape-tools
-        className={cn("bg-card/40 sticky top-0 flex max-h-[calc(100vh-8rem)] w-[clamp(320px,28vw,400px)] shrink-0 flex-col gap-3 overflow-x-hidden overflow-y-auto rounded-lg border p-3 [&_input]:max-w-full [&_select]:max-w-full", !panel && "hidden")}
+        className="bg-card/40 flex max-h-[calc(100vh-8rem)] w-[clamp(320px,28vw,400px)] shrink-0 flex-col gap-3 overflow-x-hidden overflow-y-auto rounded-l-lg border p-3 [&_input]:max-w-full [&_select]:max-w-full"
       >
-        <div className="flex items-center gap-2">
-          <h2 className="flex-1 text-base font-semibold">{panelTitle}</h2>
-          <button type="button" data-panel-close onClick={closePanel} aria-label="close the panel" className="text-muted-foreground hover:text-foreground rounded p-1">
-            <X className="size-4" />
-          </button>
-        </div>
+        {panelTitle ? (
+          <div className="flex items-center gap-2">
+            <h2 className="flex-1 text-base font-semibold">{panelTitle}</h2>
+            <button type="button" data-panel-close onClick={closePanel} aria-label="back to the tab" title="Back to the tab" className="text-muted-foreground hover:text-foreground rounded p-1">
+              <X className="size-4" />
+            </button>
+          </div>
+        ) : null}
         {/* the Look bar (ShapeTools draws it here): the song's theme and Change, whatever panel is open */}
         <div data-look-bar-slot className="empty:hidden" />
         {panelBody}
@@ -888,6 +909,10 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
         </div>
         {tools}
       </aside>
+      <button type="button" data-panel-collapse onClick={() => setCollapsed(true)} title="Collapse the panel (the viewer gets the width)" aria-label="collapse the panel" className="bg-card/40 text-muted-foreground hover:text-foreground -ml-px flex h-24 w-5 shrink-0 items-center justify-center rounded-r-md border">
+        <ChevronLeft className="size-4" />
+      </button>
+      </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-3">
         {/* which video, before there is a plan (with a plan these sit in the command bar under the timeline) */}

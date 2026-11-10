@@ -52,7 +52,7 @@ export async function openPanel(page: any, id: string): Promise<void> {
   if (!(await page.$("[data-stage=shape][aria-current=step]"))) await page.click("[data-stage=shape]");
   const tab = look ? "look" : SHAPE_TAB[id];
   if (look && (await page.$("[data-theme-editors]"))) return void (id === "fonts" && (await unfoldFonts(page)));
-  if (!(await page.$(`[data-shape-tab=${tab}][aria-selected=true]`))) await page.click(`[data-shape-tab=${tab}]`);
+  if (!(await page.$(`[data-shape-panel=${tab}]`))) await page.click(`[data-shape-tab=${tab}]`); // the tab stays selected under Theme / Text / Analysis: a click goes back to it
   await page.waitForSelector(`[data-shape-panel=${tab}]`);
   if (tab !== "shots") await page.waitForSelector(`[data-style-block=${tab}]`); // the song's settings loaded (Shape remounts after another stage)
   if (!look) return;
@@ -64,6 +64,15 @@ export async function openPanel(page: any, id: string): Promise<void> {
 async function unfoldFonts(page: any): Promise<void> {
   const toggle = await page.waitForSelector("[data-fine-tune]");
   if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+}
+
+// Shape's panel (N1 polish): a tab is always selected and its panel always shows; it can only be collapsed (the button
+// on its edge), so the viewer takes the width. Text / Theme / Analysis first go back to the tab (their ×).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function collapsePanel(page: any): Promise<void> {
+  if (await page.isVisible("[data-panel-close]")) await page.click("[data-panel-close]");
+  if (await page.isVisible("[data-panel-collapse]")) await page.click("[data-panel-collapse]");
+  await page.waitForSelector("[data-panel-expand]");
 }
 
 // The theme editor's "Save": the draft goes into the song's theme; the editor closes.

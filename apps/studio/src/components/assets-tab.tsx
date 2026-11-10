@@ -8,7 +8,6 @@ import type { AssetKind, SongAssets } from "@lyric/video/assets";
 import type { ReplacedFile } from "@lyric/video/replaced-files";
 
 import { Button } from "@/components/ui/button";
-import { FeatureIcon } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 
@@ -370,7 +369,6 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
-            <h2 className="font-display flex items-center gap-2 text-base tracking-[0.12em] uppercase"><FeatureIcon feature="clips" /> Clips</h2>
             <p data-usable className="text-muted-foreground text-xs">
               {data.clips.length} in this song&apos;s clips folder · 9:16 platforms can use {data.usable.vertical} · YouTube (16:9) can use {data.usable.horizontal}
               {" "}· shared collections: below

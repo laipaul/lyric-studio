@@ -1,17 +1,17 @@
 "use client";
 
-import { Check, ChevronRight, Package } from "lucide-react";
-import { createContext, useContext, useState } from "react";
+import { ChevronRight, Clapperboard, Eye, FolderOpen, Gauge, Info, Palette, Send, SlidersHorizontal, Scissors, SwatchBook, Type, Film, Package, type LucideIcon } from "lucide-react";
+import { createContext, useContext, useEffect, useState } from "react";
 
 import type { TodoItem } from "@lyric/video/song-stages";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
-import { FEATURE, FeatureIcon, type Feature } from "@/lib/feature-icons";
+import { FEATURE, FeatureIcon } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
 
-// The four stages of a song (Prepare -> Shape -> Make -> Review & Post) over the existing tabs: a stage
+// The four stages of a song (Prepare -> Shape -> Make -> Review) over the existing tabs: a stage
 // shows only its own tabs; the Prepare stage lists what still needs the user's ears or eyes.
 // N1 (9 Nov 2026): every setting lives in the stage where it is looked for; the rail holds the four stages only
 // (numbered) and each stage's sections are tabs inside it. Prepare = what the user provides (files, lyrics and
@@ -21,7 +21,7 @@ export const STAGES = [
   { id: "prepare", name: "Prepare", tabs: ["assets", "lyrics", "details", "clips"] },
   { id: "shape", name: "Shape", tabs: ["shape"] },
   { id: "make", name: "Make", tabs: ["generate"] },
-  { id: "review", name: "Review & Post", tabs: ["videos", "post"] },
+  { id: "review", name: "Review", tabs: ["videos", "post"] },
 ] as const;
 export type StageId = (typeof STAGES)[number]["id"];
 export type StageStatus = { text: string; tone: "done" | "todo" | "blocked" | "muted" | "busy" };
@@ -46,23 +46,28 @@ export const useGoToTab = () => useContext(GoToTab);
 // timeline. Not tabs: "text" (a lyric line or card clicked), "analysis" (the header's chip) and "theme" (the theme
 // editor, opened from Look → Edit theme or the Themes page; it moves to Themes with or after 2i).
 export const SHAPE_PANELS = [
-  { id: "look", label: "Look", icon: FEATURE.theme.icon, colour: FEATURE.theme.colour },
-  { id: "part", label: "Part & ending", icon: FEATURE.auto.icon, colour: FEATURE.auto.colour },
-  { id: "pace", label: "Pace", icon: FEATURE.auto.icon, colour: FEATURE.auto.colour },
-  { id: "shots", label: "Shots", icon: FEATURE.clips.icon, colour: FEATURE.clips.colour },
+  { id: "look", label: "Look", icon: Palette, colour: FEATURE.theme.colour },
+  { id: "part", label: "Part & ending", icon: Scissors, colour: "" },
+  { id: "pace", label: "Pace", icon: Gauge, colour: "" },
+  { id: "shots", label: "Shots", icon: Film, colour: FEATURE.clips.colour },
 ] as const;
+export type ShapeTabId = (typeof SHAPE_PANELS)[number]["id"];
+const isShapeTab = (p: string | null | undefined): p is ShapeTabId => SHAPE_PANELS.some((m) => m.id === p);
 export type ShapePanelId = (typeof SHAPE_PANELS)[number]["id"] | "theme" | "text" | "analysis"; // analysis: the header's Analysis chip (2 Nov 2026)
 // Old panel names (links from before N1) -> where that content is now.
 export const OLD_SHAPE_PANELS: Record<string, ShapePanelId> = { clips: "shots", shot: "shots", auto: "part" };
-type PanelState = { panel: ShapePanelId | null; setPanel: (p: ShapePanelId | null) => void };
-const ShapePanel = createContext<PanelState>({ panel: null, setPanel: () => {} });
+// N1 polish (10 Nov 2026): one Shape tab is always selected and its panel always shows beside the viewer; the panel can
+// only be collapsed (the button on its edge), never closed to "no tab". panel = what the panel shows: the tab, or for a
+// moment Text (a lyric line or card clicked), Theme (the theme editor) or Analysis; setPanel(null) goes back to the tab.
+type PanelState = { panel: ShapePanelId; setPanel: (p: ShapePanelId | null) => void; tab: ShapeTabId; collapsed: boolean; setCollapsed: (c: boolean) => void };
+const ShapePanel = createContext<PanelState>({ panel: "look", setPanel: () => {}, tab: "look", collapsed: false, setCollapsed: () => {} });
 export const useShapePanel = () => useContext(ShapePanel);
 // Make's tabs (N1): one form, three parts. Videos = the release pack, the song's platforms and Generate; Try other
 // looks = another theme for one run, compare themes, picture versions; Options = the rarely needed ones.
 export const MAKE_PARTS = [
-  { id: "videos", label: "Videos" },
-  { id: "looks", label: "Try other looks" },
-  { id: "options", label: "Options" },
+  { id: "videos", label: "Videos", icon: Clapperboard },
+  { id: "looks", label: "Try other looks", icon: SwatchBook },
+  { id: "options", label: "Options", icon: SlidersHorizontal },
 ] as const;
 export type MakePart = (typeof MAKE_PARTS)[number]["id"];
 const MakePartCtx = createContext<{ part: MakePart; setPart: (p: MakePart) => void }>({ part: "videos", setPart: () => {} });
@@ -84,10 +89,40 @@ export const useSetThemeNow = () => useContext(ThemeNowCtx);
 // The same theme, read by the Shape page's Analysis panel (its "Look & content" section, 2 Nov 2026), with the way to open it.
 const ThemeLookCtx = createContext<{ themeNow: ThemeNow | null; openTheme: () => void }>({ themeNow: null, openTheme: () => {} });
 export const useThemeLook = () => useContext(ThemeLookCtx);
+// Shape's status for the stage line ("Shape · Reels v1 planned"), reported by the Shape board; null: the page's own.
+const ShapeStatusCtx = createContext<(s: StageStatus | null) => void>(() => {});
+export const useSetShapeStatus = () => useContext(ShapeStatusCtx);
+
+// The last tab of each stage, remembered in this browser (N1 polish): a stage opens on it, else on its first tab.
+const LAST_TAB_KEY = (stage: StageId) => `lyric-studio:last-tab:${stage}`;
+function lastTab(stage: StageId): string | null {
+  try {
+    return window.localStorage.getItem(LAST_TAB_KEY(stage));
+  } catch {
+    return null; // no browser storage: the first tab
+  }
+}
+function rememberTab(stage: StageId, tab: string) {
+  try {
+    window.localStorage.setItem(LAST_TAB_KEY(stage), tab);
+  } catch {
+    // not remembered
+  }
+}
 
 // The feature icons (lib/feature-icons.tsx): one icon per step, the same everywhere.
 const STAGE_ICON = { prepare: FEATURE.prepare.icon, shape: FEATURE.shape.icon, make: FEATURE.make.icon, review: FEATURE.review.icon } as const;
-const TAB_ICON: Record<string, Feature> = { assets: "song", lyrics: "lyrics", details: "song", clips: "clips", shape: "shape", generate: "make", videos: "review", post: "post" };
+// One distinct icon per tab (N1 polish): Files and Details no longer share the song's note.
+const TAB_ICON: Record<string, { icon: LucideIcon; colour: string }> = {
+  assets: { icon: FolderOpen, colour: "" },
+  lyrics: { icon: Type, colour: FEATURE.lyrics.colour },
+  details: { icon: Info, colour: "" },
+  clips: { icon: Film, colour: FEATURE.clips.colour },
+  videos: { icon: Eye, colour: "" },
+  post: { icon: Send, colour: "" },
+};
+// The stages whose settings are saved as they change: said once, in the stage line (not in every panel).
+const SAVED_AT_ONCE: readonly StageId[] = ["prepare", "shape", "make"];
 const DOT: Record<StageStatus["tone"], string> = { done: "bg-emerald-400", todo: "bg-amber-300", blocked: "bg-red-400", muted: "bg-transparent", busy: "bg-brand animate-pulse" };
 
 // The song page as a Canva-style workspace: a narrow icon rail on the left with the four stages (a dot
@@ -111,27 +146,64 @@ export function SongStages({
   counts: Partial<Record<string, number>>; // a number next to a tab (Post: approved videos)
   children: React.ReactNode; // the TabsContent of every tab
 }) {
-  const [tab, setTab] = useState(initialTab);
-  const [panel, setPanel] = useState<ShapePanelId | null>(initialPanel ?? null);
-  const [part, setPart] = useState<MakePart>(initialPart ?? "videos");
+  const [tab, setTabState] = useState(initialTab);
+  // Shape: the tab (always one), what its panel shows for a moment (Text, Theme, Analysis) and whether it is collapsed.
+  const [shapeTab, setShapeTab] = useState<ShapeTabId>(isShapeTab(initialPanel) ? initialPanel : "look");
+  const [overlay, setOverlay] = useState<ShapePanelId | null>(initialPanel && !isShapeTab(initialPanel) ? initialPanel : null);
+  const [collapsed, setCollapsed] = useState(false);
+  const [part, setPartState] = useState<MakePart>(initialPart ?? "videos");
   const [platform, setPlatform] = useState<string | null>(null);
   const [themeMode, setThemeMode] = useState<ThemeMode | null>(null);
   const [themeNow, setThemeNow] = useState<ThemeNow | null>(null);
-  // "theme X" (Analysis): Shape → Look, where the song's theme is shown and changed.
-  const openTheme = () => {
-    setTab("shape");
-    setPanel("look");
-  };
+  const [shapeStatus, setShapeStatus] = useState<StageStatus | null>(null);
   const stage = stageOf(tab);
   const current = STAGES.find((s) => s.id === stage)!;
+  // Remember the tab chosen in each stage (Shape: its tab; Make: its part).
+  const setTab = (t: string) => {
+    setTabState(t);
+    if (stageOf(t) !== "shape" && stageOf(t) !== "make") rememberTab(stageOf(t), t);
+  };
+  const setPart = (p: MakePart) => {
+    setPartState(p);
+    rememberTab("make", p);
+  };
+  const setPanel = (p: ShapePanelId | null) => {
+    setCollapsed(false);
+    if (p === null) return setOverlay(null); // back to the tab
+    if (isShapeTab(p)) {
+      setShapeTab(p);
+      setOverlay(null);
+      rememberTab("shape", p);
+    } else setOverlay(p);
+  };
+  const panel: ShapePanelId = overlay ?? shapeTab;
+  // A stage opened without a tab in the link: its last tab (read after the first paint: browser storage only).
+  useEffect(() => {
+    const shapeLast = lastTab("shape");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- browser storage is read after hydration on purpose
+    if (!initialPanel && isShapeTab(shapeLast)) setShapeTab(shapeLast);
+    const makeLast = lastTab("make");
+    if (!initialPart && MAKE_PARTS.some((m) => m.id === makeLast)) setPartState(makeLast as MakePart);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const openStage = (s: (typeof STAGES)[number]) => {
+    const last = lastTab(s.id);
+    setTabState(last && (s.tabs as readonly string[]).includes(last) ? last : s.tabs[0]);
+  };
+  // "theme X" (Analysis): Shape → Look, where the song's theme is shown and changed.
+  const openTheme = () => {
+    setTabState("shape");
+    setPanel("look");
+  };
+  const status = stage === "shape" && shapeStatus ? shapeStatus : statuses[stage];
   return (
     <GoToTab.Provider value={setTab}>
-      <ShapePanel.Provider value={{ panel, setPanel }}>
+      <ShapePanel.Provider value={{ panel, setPanel, tab: shapeTab, collapsed, setCollapsed }}>
         <MakePartCtx.Provider value={{ part, setPart }}>
         <VideoCtx.Provider value={{ platform, setPlatform }}>
         <ThemeModeCtx.Provider value={setThemeMode}>
         <ThemeNowCtx.Provider value={setThemeNow}>
         <ThemeLookCtx.Provider value={{ themeNow, openTheme }}>
+        <ShapeStatusCtx.Provider value={setShapeStatus}>
         <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-row gap-0">
           <nav aria-label="Stages" data-stages data-rail className="bg-card/40 sticky top-0 flex max-h-[calc(100vh-3.5rem)] w-[76px] shrink-0 flex-col items-stretch gap-1 overflow-y-auto border-r px-1.5 py-2">
             {STAGES.map((s, i) => {
@@ -142,13 +214,13 @@ export function SongStages({
                     type="button"
                     data-stage={s.id}
                     aria-current={stage === s.id ? "step" : undefined}
-                    title={`${i + 1}. ${s.name}: ${statuses[s.id].text}`}
-                    onClick={() => setTab(s.tabs[0])}
+                    title={`${i + 1}. ${s.name}: ${(s.id === "shape" && shapeStatus ? shapeStatus : statuses[s.id]).text}`}
+                    onClick={() => openStage(s)}
                     className={cn("relative flex flex-col items-center gap-1 rounded-lg px-1 py-2 text-[11px] leading-tight", stage === s.id ? "bg-brand/15 text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground")}
                   >
                     <span data-stage-number className="text-muted-foreground absolute top-1 left-1.5 text-[10px] font-semibold tabular-nums">{i + 1}</span>
                     <Icon className="size-5" />
-                    {s.id === "review" ? "Review" : s.name}
+                    {s.name}
                     <span className={cn("absolute top-1.5 right-2 size-2 rounded-full", DOT[statuses[s.id].tone])} aria-hidden />
                     <span data-stage-status className="sr-only">
                       {statuses[s.id].text}
@@ -160,6 +232,57 @@ export function SongStages({
           </nav>
 
           <div className={cn("flex min-w-0 flex-1 flex-col gap-4 px-4 py-3", stage !== "shape" && "max-w-7xl", themeMode && "ring-brand rounded-lg ring-2 ring-inset")} data-work-area data-theme-mode={themeMode ? themeMode.name : undefined}>
+            {/* The same header on every stage (N1 polish): the stage's tabs (one always selected, each with its own icon) and,
+                on the same row, "<Stage> · <status>" and once per stage that every change is saved at once. */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2" data-stage-header>
+            {stage === "shape" ? (
+              <div role="tablist" aria-label="Shape" data-shape-tabs className="bg-muted text-muted-foreground inline-flex h-9 w-fit items-center rounded-lg p-[3px]">
+                {SHAPE_PANELS.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    role="tab"
+                    data-shape-tab={m.id}
+                    aria-selected={shapeTab === m.id}
+                    onClick={() => setPanel(m.id)}
+                    className={cn("inline-flex h-full items-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap", shapeTab === m.id ? "bg-background text-foreground shadow-sm" : "hover:text-foreground")}
+                  >
+                    <m.icon aria-hidden className={cn("size-3.5", m.colour)} />
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            ) : stage === "make" ? (
+              <div role="tablist" aria-label="Make" data-make-tabs className="bg-muted text-muted-foreground inline-flex h-9 w-fit items-center rounded-lg p-[3px]">
+                {MAKE_PARTS.map((m) => (
+                  <button key={m.id} type="button" role="tab" data-make-tab={m.id} aria-selected={part === m.id} onClick={() => setPart(m.id)} className={cn("inline-flex h-full items-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap", part === m.id ? "bg-background text-foreground shadow-sm" : "hover:text-foreground")}>
+                    <m.icon aria-hidden className="size-3.5" />
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <TabsList>
+                {current.tabs.map((t) => {
+                  const { icon: Icon, colour } = TAB_ICON[t];
+                  return (
+                    <TabsTrigger key={t} value={t} className="gap-1.5" data-stage-tab={t}>
+                      <Icon aria-hidden className={cn("size-3.5", colour)} />
+                      {TAB_LABEL[t]}
+                      {counts[t] ? <span className="text-muted-foreground ml-1.5 tabular-nums">{counts[t]}</span> : null}
+                    </TabsTrigger>
+                  );
+                })}
+              </TabsList>
+            )}
+              <p className="text-muted-foreground ml-auto flex flex-col items-end text-right text-xs" data-work-status={stage}>
+                <span>
+                  <span className="text-foreground font-medium">{current.name}</span> · <span className={TONE[status.tone]}>{status.text}</span>
+                </span>
+                {SAVED_AT_ONCE.includes(stage) ? <span data-saved-at-once>Every change is saved for this song at once.</span> : null}
+              </p>
+            </div>
+            {/* A banner only when something needs the user's attention: the theme being edited, Prepare's to-do list. */}
             {themeMode ? (
               <div data-theme-banner className="border-brand/50 bg-brand/15 sticky top-0 z-30 -mx-1 flex flex-wrap items-center gap-3 rounded-md border px-3 py-2 text-sm backdrop-blur">
                 <FeatureIcon feature="theme" />
@@ -173,77 +296,23 @@ export function SongStages({
                 </button>
               </div>
             ) : null}
-            {/* Review says it per platform in its own overview (1 Nov 2026), so no summary line there. */}
-            {/* The stage's line. Not on Review (its own overview says it per platform, 1 Nov 2026) and not on Shape: there the
-                header's Analysis chip holds it, with the Look · Content line (2 Nov 2026). */}
-            {stage !== "review" && stage !== "shape" ? (
-              <p className="text-muted-foreground text-xs" data-work-status>
-                <span className="text-foreground font-medium">{current.name}</span> · <span className={TONE[statuses[stage].tone]}>{statuses[stage].text}</span>
-              </p>
-            ) : null}
-            {stage === "prepare" ? (
-              todo.length ? (
-                <ul className="flex flex-col gap-2 rounded-xl border border-amber-400/25 bg-amber-400/5 p-3" data-todo>
-                  {todo.map((t) => (
-                    <li key={t.id} data-todo-item={t.id} className="flex flex-wrap items-center justify-between gap-3 text-sm">
-                      <span className={cn(t.blocking ? "text-red-200" : "")}>{t.text}</span>
-                      <Button size="sm" variant="outline" onClick={() => setTab(t.tab)}>
-                        {t.action} <ChevronRight />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="flex items-center gap-2 rounded-xl border border-emerald-400/25 bg-emerald-400/5 px-4 py-3 text-sm" data-todo-done>
-                  <Check className="size-4 text-emerald-300" /> Nothing to prepare: shape the video (optional) or go straight to
-                  <button type="button" className="underline underline-offset-2" onClick={() => setTab("generate")}>
-                    Make
-                  </button>
-                  .
-                </p>
-              )
+            {stage === "prepare" && todo.length ? (
+              <ul className="flex flex-col gap-2 rounded-xl border border-amber-400/25 bg-amber-400/5 p-3" data-todo>
+                {todo.map((t) => (
+                  <li key={t.id} data-todo-item={t.id} className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                    <span className={cn(t.blocking ? "text-red-200" : "")}>{t.text}</span>
+                    <Button size="sm" variant="outline" onClick={() => setTab(t.tab)}>
+                      {t.action} <ChevronRight />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
             ) : null}
 
-            {stage === "shape" ? (
-              <div role="tablist" aria-label="Shape" data-shape-tabs className="bg-muted text-muted-foreground inline-flex h-9 w-fit items-center rounded-lg p-[3px]">
-                {SHAPE_PANELS.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    role="tab"
-                    data-shape-tab={m.id}
-                    aria-selected={panel === m.id}
-                    title={panel === m.id ? "Close the panel (the editor takes the whole width)" : undefined}
-                    onClick={() => setPanel(panel === m.id ? null : m.id)}
-                    className={cn("inline-flex h-full items-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap", panel === m.id ? "bg-background text-foreground shadow-sm" : "hover:text-foreground")}
-                  >
-                    <m.icon aria-hidden className={cn("size-3.5", m.colour)} />
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-            ) : stage === "make" ? (
-              <div role="tablist" aria-label="Make" data-make-tabs className="bg-muted text-muted-foreground inline-flex h-9 w-fit items-center rounded-lg p-[3px]">
-                {MAKE_PARTS.map((m) => (
-                  <button key={m.id} type="button" role="tab" data-make-tab={m.id} aria-selected={part === m.id} onClick={() => setPart(m.id)} className={cn("inline-flex h-full items-center rounded-md px-3 text-sm font-medium whitespace-nowrap", part === m.id ? "bg-background text-foreground shadow-sm" : "hover:text-foreground")}>
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-            ) : current.tabs.length > 1 ? (
-              <TabsList>
-                {current.tabs.map((t) => (
-                  <TabsTrigger key={t} value={t} className="gap-1.5">
-                    <FeatureIcon feature={TAB_ICON[t]} className="size-3.5" />
-                    {TAB_LABEL[t]}
-                    {counts[t] ? <span className="text-muted-foreground ml-1.5 tabular-nums">{counts[t]}</span> : null}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            ) : null}
             {children}
           </div>
         </Tabs>
+        </ShapeStatusCtx.Provider>
         </ThemeLookCtx.Provider>
         </ThemeNowCtx.Provider>
         </ThemeModeCtx.Provider>
@@ -286,7 +355,7 @@ export function ReleasePack({
       const res = await api("/api/runs", { method: "POST", body });
       const result = (await res.json()) as { error?: string; label?: string };
       if (!res.ok || result.error) throw new Error(result.error ?? `The studio answered ${res.status}`);
-      setNotice({ ok: true, text: `Queued: ${result.label}. Follow it in Tasks (top right); the videos appear under Review & Post.` });
+      setNotice({ ok: true, text: `Queued: ${result.label}. Follow it in Tasks (top right); the videos appear under Review.` });
       window.dispatchEvent(new Event("lyric-tasks-changed"));
     } catch (e) {
       setNotice({ ok: false, text: (e as Error).message });

@@ -270,10 +270,7 @@ export function GeneratePanel({ projectId, data, open: initiallyOpen, preset }: 
           </p>
           </div>
           <div data-compare hidden={part !== "looks"} className="rounded-lg border px-4 py-3">
-            <p className="text-sm">
-              <span className="font-medium">Try other looks (optional)</span>
-              <span className="text-muted-foreground ml-2 text-xs">another theme for this run, or the same video in 2–3 themes or over other clips, to choose the best</span>
-            </p>
+            <p className="text-muted-foreground text-xs">Optional: another theme for this run, or the same video in 2–3 themes or over other clips, to choose the best.</p>
             <div className="mt-3 flex flex-col gap-4">
             <div className={label}>
               <span className="font-medium">Theme for this run</span>
