@@ -167,16 +167,39 @@ export function loadBrand(
 }
 
 // The artist's tag settings without loading the whole brand (fonts): brand.json "tags" (else the artist's name) and
-// "tagStarters" (else the default starter set). A brand.json that cannot be read gives the defaults.
-export function brandTagSettings(workspaceDir: string, artist: string): { tags: string[]; starters: string[]; file: string; set: boolean } {
-  const file = path.join(brandDirFor(workspaceDir, artist), "brand.json");
-  let raw: { tags?: unknown; tagStarters?: unknown } = {};
+// "tagStarters" (else the default starter set). An artist without a brand.json of her own keeps them in
+// brand\<artist>\tags.json (a brand.json of her own would change her videos' look; tags.json only holds tags).
+// A file that cannot be read gives the defaults.
+function tagFile(workspaceDir: string, artist: string): string {
+  const dir = brandDirFor(workspaceDir, artist);
+  const ownArtist = artist.trim() && artist.trim() !== DEFAULT_ARTIST;
+  if (ownArtist && dir === brandDir(workspaceDir)) return path.join(brandDir(workspaceDir), safeName(artist.trim()), "tags.json");
+  return path.join(dir, "brand.json");
+}
+function readJson(file: string): Record<string, unknown> {
   try {
-    raw = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as typeof raw) : {};
+    return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>) : {};
   } catch {
-    raw = {};
+    return {};
   }
+}
+export function brandTagSettings(workspaceDir: string, artist: string): { tags: string[]; starters: string[]; file: string; set: boolean } {
+  const file = tagFile(workspaceDir, artist);
+  const raw = readJson(file);
   const own = Array.isArray(raw.tags) ? cleanTags(raw.tags) : null;
   const starters = Array.isArray(raw.tagStarters) ? cleanTags(raw.tagStarters) : DEFAULT_TAG_STARTERS;
   return { tags: own ?? [normaliseTag(artist)].filter(Boolean), starters, file, set: own !== null };
+}
+
+// Song Details → Tags → Edit brand tags: the artist's brand tags and starter set, saved for every song of the
+// artist (cleaned). Everything else in brand.json stays as it is.
+export function setBrandTagSettings(workspaceDir: string, artist: string, change: { tags?: unknown; starters?: unknown }): { tags: string[]; starters: string[]; file: string; set: boolean } {
+  const file = tagFile(workspaceDir, artist);
+  const raw = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>) : {};
+  const next = { ...raw };
+  if (change.tags !== undefined) next.tags = cleanTags(change.tags);
+  if (change.starters !== undefined) next.tagStarters = cleanTags(change.starters);
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, `${JSON.stringify(next, null, 2)}\n`);
+  return brandTagSettings(workspaceDir, artist);
 }

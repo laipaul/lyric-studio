@@ -120,6 +120,18 @@ async function main() {
     await page.click("[data-tag-remove=piano]");
     await page.waitForSelector("[data-tag-list] [data-tag=piano]", { state: "detached" });
     check(!(await page.$("[data-tag-remove=lifelyrics]")), "a brand tag cannot be taken off one song (it is the artist's)");
+    // Edit brand tags (inline, the same chips): saved for every song of the artist, not in this song's song.json.
+    await page.click("[data-brand-edit]");
+    await page.fill("[data-chip-new=brand]", "Life Lyrics Studio");
+    await page.press("[data-chip-new=brand]", "Enter");
+    await page.waitForSelector("[data-tag-list] [data-tag=lifelyricsstudio][data-tag-brand]");
+    await page.fill("[data-chip-new=starters]", "Dream Pop");
+    await page.press("[data-chip-new=starters]", "Enter");
+    await page.waitForSelector("[data-tag-suggestion=dreampop]");
+    const brandFile = JSON.parse(readFileSync(path.join(wsDir, "brand", "brand.json"), "utf8")) as { tags?: string[]; tagStarters?: string[] };
+    check(JSON.stringify(brandFile.tags) === JSON.stringify(["lifelyrics", "lifelyricsstudio"]) && !!brandFile.tagStarters?.includes("dreampop") && !(tagsNow() ?? []).includes("lifelyricsstudio"), `brand tags and the starter set saved for the artist (brand.json), not in the song (${JSON.stringify(brandFile)})`);
+    await page.click("[data-brand-done]");
+    await page.waitForSelector("[data-brand-editor]", { state: "detached" });
     if (process.env.TAGS_SHOT) await (await page.$("[data-tags]"))!.screenshot({ path: process.env.TAGS_SHOT });
     await browser.close();
   } finally {

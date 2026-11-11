@@ -8,7 +8,7 @@ import path from "node:path";
 
 import { checkLinks, detectService, normaliseUrl, type SongLink } from "../song-links";
 import { cleanTags, rankedTags, suggestTags, TAG_LIMITS, TAG_PLATFORM_LABEL, tagsFor, type RankedTag, type TagSuggestion } from "../song-tags";
-import { brandTagSettings } from "./brand";
+import { brandTagSettings, setBrandTagSettings } from "./brand";
 import { songEp } from "./project-settings";
 import { keepReplaced } from "./project-settings";
 import { readRecipe, writeRecipe } from "./recipe";
@@ -151,4 +151,11 @@ export function setSongTags(ws: Workspace, projectId: string, raw: unknown): str
   const { tags: _old, ...rest } = readRecipe(file);
   writeRecipe(file, tags.length ? { ...rest, tags } : rest);
   return tags;
+}
+
+// Edit brand tags (Song Details → Tags): the song's artist's brand tags and starter set, for every song of the artist.
+export function setSongBrandTags(ws: Workspace, projectId: string, change: { tags?: unknown; starters?: unknown }): void {
+  const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
+  if (!p) throw new Error("Song not found.");
+  setBrandTagSettings(ws.dir, p.artist, change);
 }

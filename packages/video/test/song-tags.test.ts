@@ -7,7 +7,8 @@ import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { cleanTags, lyricsLanguage, normaliseTag, rankedTags, suggestTags, tagsFor, withSongTagsText, youtubeTagsField } from "../src/song-tags";
-import { brandTagSettings } from "../src/node/brand";
+import { brandDirFor, brandTagSettings, setBrandTagSettings } from "../src/node/brand";
+import { readFileSync } from "node:fs";
 import { postingPack } from "../src/node/captions";
 import { readRecipe, writeRecipe } from "../src/node/recipe";
 import { publishText } from "../src/node/youtube";
@@ -61,6 +62,19 @@ describe("the song's tags", () => {
     expect(brandTagSettings(ws, "Life Lyrics")).toMatchObject({ tags: ["lifelyrics", "lifelyricsstudio"], starters: ["emotionalpop"], set: true });
     writeFileSync(path.join(ws, "brand", "Pômé", "brand.json"), JSON.stringify({ tags: ["pome", "chanson"] }));
     expect(brandTagSettings(ws, "Pômé").tags).toEqual(["pome", "chanson"]); // her own
+  });
+
+  it("Edit brand tags: saved per artist; Life Lyrics in brand.json (the rest kept), an artist without her own brand.json in tags.json", () => {
+    const ws = path.join(dir, "ws-edit");
+    mkdirSync(path.join(ws, "brand"), { recursive: true });
+    writeFileSync(path.join(ws, "brand", "brand.json"), JSON.stringify({ accentColour: "#E8A3B5", tags: ["lifelyrics"] }));
+    expect(setBrandTagSettings(ws, "Life Lyrics", { tags: ["lifelyrics", "Life Lyrics Studio"], starters: ["Dream Pop"] })).toMatchObject({ tags: ["lifelyrics", "lifelyricsstudio"], starters: ["dreampop"] });
+    expect(JSON.parse(readFileSync(path.join(ws, "brand", "brand.json"), "utf8")).accentColour).toBe("#E8A3B5"); // the rest of brand.json kept
+    // Pômé without a brand.json of her own: her own tags.json; her videos still use the default brand (look unchanged).
+    expect(setBrandTagSettings(ws, "Pômé", { tags: ["pome", "chanson"] }).file).toBe(path.join(ws, "brand", "Pômé", "tags.json"));
+    expect(brandDirFor(ws, "Pômé")).toBe(path.join(ws, "brand"));
+    expect(brandTagSettings(ws, "Pômé").tags).toEqual(["pome", "chanson"]);
+    expect(brandTagSettings(ws, "Life Lyrics").tags).toEqual(["lifelyrics", "lifelyricsstudio"]); // not mixed
   });
 
   it("the Post panel: captions get the platform's top tags, YouTube its Tags box and 3 hashtags in the description", () => {

@@ -2,7 +2,7 @@
 // song.json "tags" (an empty list: back to the template's tags, the suggestion).
 import { connection } from "next/server";
 
-import { setSongTags, songTags } from "@lyric/video/song-links-node";
+import { setSongBrandTags, setSongTags, songTags } from "@lyric/video/song-links-node";
 
 import { withWorkspace } from "@/lib/workspace";
 
@@ -20,11 +20,13 @@ export async function GET(_request: Request, { params }: Params) {
 
 export async function PUT(request: Request, { params }: Params) {
   const { id } = await params;
-  const body = (await request.json().catch(() => null)) as { tags?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as { tags?: unknown; brand?: { tags?: unknown; starters?: unknown } } | null;
   try {
     return Response.json(
       withWorkspace((ws) => {
-        setSongTags(ws, id, body?.tags ?? []);
+        // { brand: { tags?, starters? } }: the artist's brand tags / starter set (Edit brand tags), for all their songs.
+        if (body?.brand) setSongBrandTags(ws, id, body.brand);
+        else setSongTags(ws, id, body?.tags ?? []);
         return songTags(ws, id);
       }),
     );

@@ -22,9 +22,12 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   Post panel, publish.txt, song.json); exports, library, song-links, style still pass. Browser: song-links (the brand
   chip, suggestions without generic tags, add / clean / drag / reload, Instagram's top 5, YouTube's 3), videos-post,
   song-stages.
+- **Edit brand tags** (a link next to the brand chip): the brand tags and the starter set as chips, saved for every
+  song of the artist (Life Lyrics: brand\brand.json, the rest of it kept; Pômé: her own brand.json if she has one,
+  else brand\Pômé\tags.json, so her videos' look never changes). Test: song-tags (+1), song-links (browser).
 - **To check on the PC:** Here With Me → Prepare → Song Details → Tags: #lifelyrics "from your brand"; click
   #herewithme and #quietheartbreaks; add "emotional pop"; drag one first; Review → Post: Reels shows those top 5.
-  For #lifelyricsstudio on every song: add "tags": ["lifelyrics", "lifelyricsstudio"] to workspace\brand\brand.json.
+  Edit brand tags → add "lifelyricsstudio": it shows on every Life Lyrics song; a Pômé song shows her own set.
 
 ### Shape: two tabs, Settings | Shots ✅ (to verify on the Windows PC)
 - **Settings** is one scrolling panel. It starts with a **"Set by me"** line: what you changed (e.g. `Target length
