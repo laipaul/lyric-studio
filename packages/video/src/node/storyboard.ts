@@ -32,7 +32,7 @@ import { SOURCE_FILE } from "./collection";
 import { songCollections } from "./project-settings";
 import { readMoves, sharedCollections, songPathsById } from "./song-folder";
 import { recipeInputFor } from "./style";
-import { previousFile, readStoryboard, saveStoryboardOfPlan, storyboardFile } from "./storyboard-file";
+import { peekShotPlan, previousFile, readStoryboard, saveStoryboardOfPlan, storyboardFile, storyboardOfPlan } from "./storyboard-file";
 import { compileShotPlan, STORYBOARD_DIR, type SbTry } from "../storyboard-file";
 
 export type StoryboardView = {
@@ -216,6 +216,15 @@ export async function shotPlanForMake(ws: Workspace, projectId: string, p: { nam
   return { id, file: r.saved.file, status: r.saved.status, note, props: r.view.props, try: v.try };
 }
 
+// The props Make would render for this planned video (its shot plan as it would be settled, nothing saved): what a new
+// video would be compared with the ones already made.
+export async function propsMakeWouldRender(ws: Workspace, projectId: string, p: { name: string; label: string; warnings: string[] }, plan: PlatformPlan, v: VideoPlan): Promise<VideoPlan["props"]> {
+  const { shown, numbers } = await planView(ws, projectId, p, plan, v, v.try?.clipSet ?? null);
+  const { file, storyboard } = await storyboardOfPlan(ws, projectId, plan, p.name, v, shown, numbers);
+  const use = peekShotPlan(file, storyboard);
+  return compileShotPlan(use, v.props) ?? v.props;
+}
+
 async function settledView(ws: Workspace, projectId: string, p: { name: string; label: string; warnings: string[] }, plan: PlatformPlan, v: VideoPlan, shown: StoryboardView, numbers: (number | null)[]) {
   const saved = await saveStoryboardOfPlan(ws, projectId, plan, p.name, v, shown, numbers);
   const compiled = compileShotPlan(saved.storyboard, v.props);
@@ -282,7 +291,11 @@ export async function storyboardRun(ws: Workspace, projectId: string, folder: st
   const paths = songPathsById(ws, projectId);
   if (!/^\d{4}-\d{2}-\d{2}_\d{4}(-\d+)?$/.test(folder)) throw new Error(`No run ${folder}.`);
   const dir = platform === "standard" ? path.join(paths.exports, folder) : path.join(paths.exports, folder, platform);
-  const file = path.join(dir, `${video}.manifest.json`);
+  // The picker lists the videos by the names the studio shows (the song-wide versions, "v3"); the files are named by the
+  // run ("v1.mp4" in every run). An old link that names the file itself still works.
+  const shown = songRuns(ws, projectId).find((r) => r.folder === folder)?.platforms.find((p) => p.name === platform)?.videos ?? [];
+  const stem = shown.find((v) => v.name === video)?.file ?? video;
+  const file = path.join(dir, `${stem}.manifest.json`);
   if (!existsSync(file)) throw new Error(`No ${video} for ${platform} in the run ${folder}.`);
   const m = JSON.parse(readFileSync(file, "utf8")) as Manifest;
   const moves = readMoves(ws.dir);
@@ -296,11 +309,11 @@ export async function storyboardRun(ws: Workspace, projectId: string, folder: st
     m.clips.map((c) => ({ src: c.normalised, name: c.name, thumb: thumbOf(c.file), durationMs: 0, kind: /\.(jpe?g|png|webp)$/i.test(c.name) ? ("photo" as const) : ("video" as const), file: absPath(ws, resolveMoved(moves, c.normalised)) })),
   );
   const startMs = m.props.audio ? frameMs(m.props.audio.startFrame) : m.section.start_ms;
-  const videos = ["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8"].filter((n) => existsSync(path.join(dir, `${n}.manifest.json`)));
+  const videos = shown.filter((v) => existsSync(path.join(dir, `${v.file}.manifest.json`))).map((v) => v.name);
   const used = m.anchors?.used ?? [];
   return withTimeline(ws, projectId, await view(ws, {
     editable: false, storyboardClips: [], slots: [], picture: m.picture?.label ?? null,
-    source: "run", run: folder, platform: { name: platform, label: SHORT_LABELS[platform] ?? m.platform?.preset.label ?? platform }, video, videos,
+    source: "run", run: folder, platform: { name: platform, label: SHORT_LABELS[platform] ?? m.platform?.preset.label ?? platform }, video: shown.find((v) => v.file === stem)?.name ?? video, videos,
     settings: `${m.variation.style}, ${m.variation.order}${(m.settings.cut_rate as string) ? `, ${m.settings.cut_rate}` : ""}${m.settings.transitions ? `, ${m.settings.transitions}` : ""}`,
     section: { mode: m.section.mode, startMs: m.section.start_ms, endMs: m.section.end_ms, reason: m.section.reason },
     props: m.props, startMs, bpm: m.analysis.bpm, beats: analysis.beats, clips,

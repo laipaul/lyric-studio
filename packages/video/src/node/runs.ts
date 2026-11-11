@@ -26,6 +26,7 @@ export type RunRequest = {
   // platform has none yet (the baseline).
   compare?: boolean;
   take?: number; // "Try another take": only video vN of the platform (one platform per take)
+  force?: boolean; // "Make anyway": skip the check that a new video would be identical to one the song already has
   lineEffect?: string;
   hookEffect?: string;
   title?: string;

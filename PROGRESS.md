@@ -4,6 +4,28 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Bug fix: song-wide version numbers per platform; a Make run that would duplicate a video warns first ✅ (to verify on the Windows PC)
+- **The bug:** every new Reels video was called "v1". The name was the file's number inside its run folder
+  (exports\<run>\reels\v1.mp4), and every Make run starts again at v1.mp4.
+- **Now** (src/node/versions.ts): a video is called v1, v2, v3... per platform for the whole song, in the order the videos
+  were made, never reused (a discarded or deleted video keeps its number). Review, Shape's video picker for past runs,
+  Post, the player, Compare, the Library and the file names all show this name. The files on disk are not renamed
+  (the number in the file name is only the take's variation). The numbers are kept in `<song folder>\.studio\versions.json`,
+  written the first time a song's videos are read (existing videos: creation order). Approved / posted / favourite marks
+  stay on the file, so nothing changed state. A try (Compare looks) is not a version: "Try · Midnight Highway", "based on
+  v3" (the newest own video made before it).
+- **`pnpm versions "<song title>"`** prints what each existing video is called now:
+  `exports\2025-11-10_1505\reels\v1.mp4 -> v1 (approved, ★)`.
+- **"Make another"** sends the next variation number not used by any file of that platform (so takes keep varying);
+  the video that comes out is simply the next version. Its refusal message uses the new names too.
+- **A Make run that would duplicate a video asks first:** before queuing, POST /api/runs plans the run in the planner
+  process (`--dup-check`, take-check.ts `duplicateProblem`) and compares it with the platform's videos that are not
+  discarded (their manifests' props). If one would be identical: 409 "Reels v4 would be identical to Reels v3 (made 11 Nov
+  15:05): change a setting in Shape first, or press Make anyway." and nothing is queued; Make shows it with a **Make anyway**
+  button (data-make-anyway; the request is sent again with force). A check that cannot run lets the run through.
+- Tests: new versions (8), take-variation (+3, messages use the new names), exports, library (names), video-names; browser:
+  videos-post, song-stages, storyboard pass.
+
 ### Review: the app's quality verdict on every card; "Ready to post" only once approved ✅ (to verify on the Windows PC)
 - Before approval a card's badge says the app's verdict in words: Excellent / Good / Could be better (its details:
   "Excellent: nothing a viewer would notice", "Good — 2 to improve", "Could be better — fix 1 first"). "Ready to
@@ -199,41 +221,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **To check on the PC:** Prepare shows Assets · Lyrics Sync · Texts · Storyboard. Assets lists Song, Vocal stem,
   Lyrics, Backing vocals, Cover. Lyrics Sync starts with the tempo and Time the lyrics again. Texts has the title and
   links. An old bookmark ?tab=audio still opens Assets.
-
-### Make stage simplified: Make and Compare looks, one counts rule everywhere ✅ (to verify on the Windows PC)
-- **Two tabs, each with its own button and count:**
-  - **Make:** one row of platform chips, each with its versions (Canvas: loops), pre-filled from the song and saved to
-    it at once (0 = not made; a song with nothing chosen yet: every platform once). **One of each (N)** replaces the
-    release pack (one video for every platform that is on); **Make N videos** makes them all; ▶ on a chip makes only
-    that platform. "Allow clips of the other orientation" is folded under Advanced. The Options tab is gone.
-  - **Compare looks:** its own platform chips (Reels by default), 1-3 other themes OR 2-4 picture sets; one video per
-    platform per look, each with its own shot plan; the song's own v1 is the baseline, made too where a platform has
-    none yet. **Make comparison (N videos)**. No separate "Theme for this run" (one other theme = a comparison).
-- **One counts rule everywhere (the bug found):** before, "Videos per platform" showed the presets' numbers (Reels 3,
-  TikTok 3, Shorts 2) that the studio never used: with nothing set Generate made 1 per platform; with one platform set
-  the others silently took the preset's number while the chips and the total said 1; the release pack always made 1;
-  Shape listed v1-v3 of videos never made. Now (recipe.ts videoCount / studioCounts): the song's own count, else 1 in
-  the studio (the chips, the button totals, One of each, Shape's video list); the presets' numbers only for pnpm make
-  without a count. The studio sends each platform's count with every run.
-- **Platforms and counts live in one place only:** Make's chips (the ticks in "What to make", Generate's run chips and
-  the release pack are gone).
-- **Review labels a try** on its card ("try: theme Night Drive", "try: pictures city"): Compare looks videos are
-  never mistaken for versions; older runs made with another theme or picture set are labelled too.
-- **"Use these settings"** (a past run) pre-fills the chips from that run (not saved) under a "From the run of …"
-  banner, with its part of the song and "Also keep that run's settings for this song".
-- **Both buttons wait with the reason** while something blocks ("First: add your clips…", no lyrics, no platform on).
-- Every video still comes from its shot plan; tries keep their own (2e-1). Font pairings stay command-line only.
-- Tests: video-counts (5: the rule, the studio's platforms, run counts, and a real song where Make, Shape's video
-  list and pnpm make agree, with and without the song's counts); shot-plan-make (+ the try label); runs, exports,
-  library, run-settings, style, storyboard-save, make-reference still pass. Browser: song-stages (Make: the tabs, the
-  chips at 1 each with Canvas loops, the totals, both buttons blocked with the reason, the song's platforms, + saved
-  to song.json, One of each / Make 3 videos / ▶ queue the right counts, the chips survive a trip, Compare looks: Reels
-  only, blocked until a theme, the baseline note), themes (Compare looks: the song's theme not offered, one other
-  theme = 2 videos with the baseline, the two runs), videos-post (the run's chips and banner), style-lock (no preset
-  numbers, Advanced folded), storyboard; new-song-every-platform follows (not run here: a real render worker).
-- **To check on the PC:** Make: the chips show your platforms at 1 each (Canvas "1 loop"); press + on Reels: "Make N
-  videos" grows; reload: still there (Shape lists v1-v2 of Reels). One of each makes one per platform. Compare looks:
-  add one theme: "Make comparison (2 videos)" when no Reel exists yet; in Review the try has its "try: theme …" label.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

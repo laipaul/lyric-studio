@@ -61,7 +61,7 @@ const unit = (name: string, n: number) => (name === "canvas" ? `${n} loop${n ===
 function useQueue(projectId: string) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [notice, setNotice] = useState<{ ok: boolean; text: string; again?: Record<string, unknown> } | null>(null);
   async function queue(request: Record<string, unknown>) {
     setBusy(true);
     setNotice(null);
@@ -70,7 +70,12 @@ function useQueue(projectId: string) {
     body.set("request", JSON.stringify(request));
     try {
       const res = await api("/api/runs", { method: "POST", body });
-      const result = (await res.json()) as { error?: string; label?: string; saved?: { saved: string[]; kept: string[] } | null };
+      const result = (await res.json()) as { error?: string; label?: string; duplicate?: boolean; saved?: { saved: string[]; kept: string[] } | null };
+      if (result.duplicate && result.error) {
+        // The video would be identical to one the song has: nothing was queued; "Make anyway" sends the same run with force.
+        setNotice({ ok: false, text: result.error, again: { ...request, force: true } });
+        return;
+      }
       if (!res.ok || result.error) throw new Error(result.error ?? `The studio answered ${res.status}`);
       const saved = result.saved ? ` ${result.saved.saved.length ? `Kept for the song: ${result.saved.saved.join(", ")}.` : ""}${result.saved.kept.length ? ` Locked, kept as they are: ${result.saved.kept.join(", ")}.` : ""}` : "";
       setNotice({ ok: true, text: `Queued: ${result.label}. Follow it in Tasks (top right); the videos appear in Review.${saved}` });
@@ -85,11 +90,16 @@ function useQueue(projectId: string) {
   return { busy, notice, queue };
 }
 
-function Notice({ notice }: { notice: { ok: boolean; text: string } | null }) {
+function Notice({ notice, busy, onAgain }: { notice: { ok: boolean; text: string; again?: Record<string, unknown> } | null; busy?: boolean; onAgain?: (request: Record<string, unknown>) => void }) {
   return notice ? (
-    <p role="status" data-make-notice className={cn("rounded-md border p-3 text-sm whitespace-pre-line", notice.ok ? "border-brand/30 bg-brand/10" : "border-red-400/30 bg-red-400/10 text-red-200")}>
-      {notice.text}
-    </p>
+    <div role="status" data-make-notice className={cn("flex flex-wrap items-center gap-3 rounded-md border p-3 text-sm whitespace-pre-line", notice.ok ? "border-brand/30 bg-brand/10" : notice.again ? "border-amber-400/30 bg-amber-400/10 text-amber-200" : "border-red-400/30 bg-red-400/10 text-red-200")}>
+      <p className="min-w-0 flex-1">{notice.text}</p>
+      {notice.again && onAgain ? (
+        <Button type="button" size="sm" variant="secondary" disabled={busy} data-make-anyway onClick={() => onAgain(notice.again!)}>
+          Make anyway
+        </Button>
+      ) : null}
+    </div>
   ) : null;
 }
 
@@ -296,7 +306,7 @@ function MakeVideos({ projectId, data, choices, preset, why }: { projectId: stri
         </div>
       </details>
 
-      <Notice notice={notice} />
+      <Notice notice={notice} busy={busy} onAgain={(r) => void queue(r)} />
       <div data-make-footer className="flex flex-wrap items-center gap-3 border-t pt-4">
         {reason ? (
           <span className="text-sm text-amber-200" data-make-blocked>

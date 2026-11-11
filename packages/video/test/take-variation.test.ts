@@ -7,8 +7,8 @@ import path from "node:path";
 import { openWorkspace, seedStylePresets, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { findOrCreateSongProject, makeVideos, planTake, planVariations, songPathsById, type RenderOptions } from "../src/node";
-import { existingTakes, takeProblem } from "../src/node/take-check";
+import { findOrCreateSongProject, makeVideos, planTake, planVariations, setVideoMark, songPathsById, songRuns, type RenderOptions } from "../src/node";
+import { duplicateProblem, existingTakes, takeProblem } from "../src/node/take-check";
 import { fakeAlign, ffmpeg, LYRICS, makeClip, makeSong } from "./media-helpers";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-take-"));
@@ -98,11 +98,12 @@ describe("a take that would be identical", () => {
     const [v1, v3] = await dry(plain, "reels", [1, 3]);
     expect(JSON.stringify(v3.props)).toBe(JSON.stringify(v1.props)); // one short clip: nothing to vary in take 3
     const problem = await takeProblem(ws, plain, "reels", 3);
-    expect(problem).toMatch(/^Take 3 would be identical to v1: change a setting in Shape first \(e\.g\. .*another clip/);
+    // Named by the song-wide version names shown on screen: the take would be the next video (v4), the repeat is v1.
+    expect(problem).toMatch(/^Reels v4 would be identical to Reels v1 \(made \d{1,2} \w{3} \d\d:\d\d\): change a setting in Shape first \(e\.g\. .*another clip/);
   }, 300_000);
 
-  it("a take 2 that differs (bold style, cinematic bars) is not refused", async () => {
-    await expect(takeProblem(ws, plain, "reels", 2)).resolves.toBeNull();
+  it("a take that was made already (same variation, same settings) is a repeat of that video, not a new picture", async () => {
+    await expect(takeProblem(ws, plain, "reels", 2)).resolves.toMatch(/^Reels v4 would be identical to Reels v2 /);
   }, 300_000);
 });
 
@@ -118,8 +119,29 @@ describe("YouTube cover layout (no clips on screen)", () => {
 
   it("a take that repeats an earlier one is refused", async () => {
     expect(existingTakes(ws, cover, "youtube")).toEqual([1]);
-    await expect(takeProblem(ws, cover, "youtube", 7)).resolves.toBe(
-      "Take 7 would be identical to v1: change a setting in Shape first (e.g. choose another look (Shape → Look bar → Change) or another cover picture).",
+    await expect(takeProblem(ws, cover, "youtube", 7)).resolves.toMatch(
+      /^YouTube v2 would be identical to YouTube v1 \(made \d{1,2} \w{3} \d\d:\d\d\): change a setting in Shape first \(e\.g\. choose another look \(Shape → Look bar → Change\) or another cover picture\)\.$/,
     );
+  }, 300_000);
+});
+
+describe("a normal Make run for a platform that already has videos", () => {
+  it("is held back when its video would be identical to one the song has (v1 again with the same settings)", async () => {
+    const problem = await duplicateProblem(ws, plain, { platforms: ["reels"], counts: { reels: 1 } });
+    expect(problem).toMatch(/^Reels v4 would be identical to Reels v1 \(made \d{1,2} \w{3} \d\d:\d\d\): change a setting in Shape first, or press Make anyway\.$/);
+  }, 300_000);
+
+  it("Make anyway (force), a take, a Compare looks run and a platform with no videos are not checked", async () => {
+    await expect(duplicateProblem(ws, plain, { platforms: ["reels"], counts: { reels: 1 }, force: true })).resolves.toBeNull();
+    await expect(duplicateProblem(ws, plain, { platforms: ["reels"], take: 4 })).resolves.toBeNull();
+    await expect(duplicateProblem(ws, plain, { platforms: ["reels"], compare: true, themes: ["Night Drive"] })).resolves.toBeNull();
+    await expect(duplicateProblem(ws, plain, { platforms: ["tiktok"], counts: { tiktok: 1 } })).resolves.toBeNull();
+  }, 300_000);
+
+  it("a change that makes another picture lets it through; a discarded video is not a duplicate", async () => {
+    // The song's v1..v3 were made with the default effects: another verse effect is another video.
+    await expect(duplicateProblem(ws, plain, { platforms: ["reels"], counts: { reels: 1 }, lineEffect: "typewriter" })).resolves.toBeNull();
+    for (const v of songRuns(ws, plain).flatMap((r) => r.platforms.flatMap((p) => p.videos))) setVideoMark(ws, plain, v.id, { status: "discarded" });
+    await expect(duplicateProblem(ws, plain, { platforms: ["reels"], counts: { reels: 1 } })).resolves.toBeNull();
   }, 300_000);
 });

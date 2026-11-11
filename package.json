@@ -25,6 +25,7 @@
     "effects:preview": "tsx packages/video/scripts/effects-preview.ts",
     "songs:migrate": "tsx packages/video/scripts/songs-migrate.ts",
     "storyboards": "tsx packages/video/scripts/storyboards.ts",
+    "versions": "tsx packages/video/scripts/versions.ts",
     "brand:set": "tsx packages/video/scripts/brand-set.ts",
     "lyrics:check-start": "tsx packages/video/scripts/check-start.ts",
     "lyrics:compare-voice": "tsx packages/video/scripts/compare-voice.ts",

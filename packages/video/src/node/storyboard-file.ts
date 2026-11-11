@@ -139,6 +139,14 @@ export function settleShotPlan(file: string, fresh: StoryboardFile): Settled {
   return { storyboard: fresh, status: "replanned", changes: planChanges(saved, fresh) };
 }
 
+// The shot plan settleShotPlan would use, without saving anything: the "Make would make this" look-ahead (a duplicate
+// check before a run is queued must leave no trace).
+export function peekShotPlan(file: string, fresh: StoryboardFile): StoryboardFile {
+  const saved = readStoryboard(file);
+  if (!saved || sameDecisions(saved, fresh)) return fresh;
+  return saved.inputs.planKey && saved.inputs.planKey === fresh.inputs.planKey && shotPlanComplete(saved) ? saved : fresh;
+}
+
 // The plan Shape shows for one video -> its shot plan file, settled (above). Returns the file, the shot plan used, what
 // happened and the edits no shot matches, in plain words (Shape adds them to its notes).
 export async function saveStoryboardOfPlan(

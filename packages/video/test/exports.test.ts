@@ -288,7 +288,8 @@ describe("only this song's videos", () => {
     video(path.join(ex, "2026-10-30_1000", "youtube"), 1, QA_PASS, { project: { id: "someone-else", title: "The House My Heart Built" }, song: { sha256: "zzz" } });
     const runs = songRuns(ws, own);
     const names = runs.flatMap((r) => r.platforms.flatMap((p) => p.videos.map((v) => `${p.name}/${v.name}`)));
-    expect(names).toEqual(["reels/v1", "reels/v3"]);
+    expect(names).toEqual(["reels/v1", "reels/v2"]); // song-wide names: the file v3 is the song's second reels video
+    expect(runs.flatMap((r) => r.platforms.flatMap((p) => p.videos.map((v) => v.file)))).toEqual(["v1", "v3"]);
     expect(runs.find((r) => r.folder === "2026-10-30_1000")?.platforms ?? []).toEqual([]);
   });
 });

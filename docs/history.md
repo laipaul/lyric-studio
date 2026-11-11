@@ -4,6 +4,41 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Make stage simplified: Make and Compare looks, one counts rule everywhere ✅ (to verify on the Windows PC)
+- **Two tabs, each with its own button and count:**
+  - **Make:** one row of platform chips, each with its versions (Canvas: loops), pre-filled from the song and saved to
+    it at once (0 = not made; a song with nothing chosen yet: every platform once). **One of each (N)** replaces the
+    release pack (one video for every platform that is on); **Make N videos** makes them all; ▶ on a chip makes only
+    that platform. "Allow clips of the other orientation" is folded under Advanced. The Options tab is gone.
+  - **Compare looks:** its own platform chips (Reels by default), 1-3 other themes OR 2-4 picture sets; one video per
+    platform per look, each with its own shot plan; the song's own v1 is the baseline, made too where a platform has
+    none yet. **Make comparison (N videos)**. No separate "Theme for this run" (one other theme = a comparison).
+- **One counts rule everywhere (the bug found):** before, "Videos per platform" showed the presets' numbers (Reels 3,
+  TikTok 3, Shorts 2) that the studio never used: with nothing set Generate made 1 per platform; with one platform set
+  the others silently took the preset's number while the chips and the total said 1; the release pack always made 1;
+  Shape listed v1-v3 of videos never made. Now (recipe.ts videoCount / studioCounts): the song's own count, else 1 in
+  the studio (the chips, the button totals, One of each, Shape's video list); the presets' numbers only for pnpm make
+  without a count. The studio sends each platform's count with every run.
+- **Platforms and counts live in one place only:** Make's chips (the ticks in "What to make", Generate's run chips and
+  the release pack are gone).
+- **Review labels a try** on its card ("try: theme Night Drive", "try: pictures city"): Compare looks videos are
+  never mistaken for versions; older runs made with another theme or picture set are labelled too.
+- **"Use these settings"** (a past run) pre-fills the chips from that run (not saved) under a "From the run of …"
+  banner, with its part of the song and "Also keep that run's settings for this song".
+- **Both buttons wait with the reason** while something blocks ("First: add your clips…", no lyrics, no platform on).
+- Every video still comes from its shot plan; tries keep their own (2e-1). Font pairings stay command-line only.
+- Tests: video-counts (5: the rule, the studio's platforms, run counts, and a real song where Make, Shape's video
+  list and pnpm make agree, with and without the song's counts); shot-plan-make (+ the try label); runs, exports,
+  library, run-settings, style, storyboard-save, make-reference still pass. Browser: song-stages (Make: the tabs, the
+  chips at 1 each with Canvas loops, the totals, both buttons blocked with the reason, the song's platforms, + saved
+  to song.json, One of each / Make 3 videos / ▶ queue the right counts, the chips survive a trip, Compare looks: Reels
+  only, blocked until a theme, the baseline note), themes (Compare looks: the song's theme not offered, one other
+  theme = 2 videos with the baseline, the two runs), videos-post (the run's chips and banner), style-lock (no preset
+  numbers, Advanced folded), storyboard; new-song-every-platform follows (not run here: a real render worker).
+- **To check on the PC:** Make: the chips show your platforms at 1 each (Canvas "1 loop"); press + on Reels: "Make N
+  videos" grows; reload: still there (Shape lists v1-v2 of Reels). One of each makes one per platform. Compare looks:
+  add one theme: "Make comparison (2 videos)" when no Reel exists yet; in Review the try has its "try: theme …" label.
+
 ### Review: platform tabs, the same layout as the other stages ✅ (to verify on the Windows PC)
 - **Tabs:** one per platform that has videos (or one being made), with its count (Reels 2 · TikTok 6 · YouTube 1), then
   **Post**; the same pink-underline tabs as Prepare, Shape and Make, and "Review · <status>" in the same place. The

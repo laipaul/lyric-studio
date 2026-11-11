@@ -111,7 +111,7 @@ describe("song cards", () => {
     const card = listSongs(ws)[0];
     const by = Object.fromEntries(card.platforms.map((p) => [p.name, p]));
     expect(card.platforms.map((p) => p.label)).toEqual(["Standard", "Reels", "TikTok", "Shorts", "YouTube", "Canvas"]);
-    expect(by.reels).toMatchObject({ videos: 2, status: "WARN", runs: 2, details: ["v2: Clips repeated within 3 shots"] });
+    expect(by.reels).toMatchObject({ videos: 2, status: "WARN", runs: 2, details: ["v3: Clips repeated within 3 shots"] });
     expect(by.standard).toMatchObject({ videos: 1, status: "FAILED", details: ["v2 not finished"] });
     expect(by.youtube).toMatchObject({ videos: 1, status: "PASS" });
     expect(by.tiktok).toMatchObject({ videos: 0, status: "Rendering" });

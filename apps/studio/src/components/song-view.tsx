@@ -233,13 +233,15 @@ export function SongView({
   );
 }
 
-// The next take of each platform: one more than the highest vN made for it in any run.
+// The next take of each platform: the next variation number nobody used yet (one more than the highest file number vN,
+// v1.mp4, made for it in any run: the numbers in the file names, not the song-wide names shown on screen). The video
+// that comes out gets the next song-wide version name whatever its variation is.
 export function nextTakes(runs: readonly RunView[]): { name: string; label: string; take: number }[] {
   const out = new Map<string, { name: string; label: string; take: number }>();
   for (const r of runs)
     for (const p of r.platforms) {
       if (p.name === "canvas") continue; // the Canvas is one chosen loop, not takes
-      const highest = Math.max(0, ...[...p.videos.map((v) => v.name), ...p.missing].map((n) => Number(/^v(\d+)$/.exec(n)?.[1] ?? 0)));
+      const highest = Math.max(0, ...[...p.videos.map((v) => `v${v.index}`), ...p.missing].map((n) => Number(/^v(\d+)$/.exec(n)?.[1] ?? 0)));
       const prev = out.get(p.name);
       out.set(p.name, { name: p.name, label: p.label, take: Math.max(prev?.take ?? 1, highest + 1) });
     }

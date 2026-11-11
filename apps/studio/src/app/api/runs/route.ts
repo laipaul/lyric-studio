@@ -43,6 +43,13 @@ export async function POST(request: Request) {
         if (answer?.problem) return Response.json({ error: answer.problem }, { status: 400 });
       }
     }
+    // A normal Make run for a platform that already has videos: a video that would be identical to one of them (same
+    // settings, same plan) is not queued without asking (409 + duplicate: true; the request with force: true is "Make
+    // anyway"). Planned in the planner process too (--dup-check); a check that cannot run lets the run through.
+    if (!req.force && !req.take && !req.compare && !req.themes?.length && !req.pictures?.length && !req.pairings?.length && !req.theme) {
+      const answer = (await storyboardJson([projectId, "-", "--dup-check", JSON.stringify(req)]).catch(() => null)) as { problem?: string | null } | null;
+      if (answer?.problem) return Response.json({ error: answer.problem, duplicate: true }, { status: 409 });
+    }
     const { run, saved } = withWorkspace((ws) => {
       if (coverFile) storeCover(ws, projectId, coverFile);
       const options = generateOptions(ws, projectId, req);

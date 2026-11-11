@@ -7,9 +7,10 @@ export function tryName(tryLabel: string): string {
   return `Try · ${theme ? theme[1] : tryLabel}`;
 }
 
-export function videoTitle(v: { label: string; name: string; try?: string | null }, withPlatform = false): { title: string; basedOn: string | null } {
+// `name`: the song-wide version ("v3", exports.ts VideoInfo.name); a try's `basedOn` is the version it is based on.
+export function videoTitle(v: { label: string; name: string; try?: string | null; basedOn?: string | null }, withPlatform = false): { title: string; basedOn: string | null } {
   if (!v.try) return { title: `${v.label} ${v.name}`, basedOn: null };
-  return { title: withPlatform ? `${v.label} · ${tryName(v.try)}` : tryName(v.try), basedOn: `based on ${v.name}` };
+  return { title: withPlatform ? `${v.label} · ${tryName(v.try)}` : tryName(v.try), basedOn: `based on ${v.basedOn ?? v.name}` };
 }
 
 // The file name part ("Reels" for v1, "Reels v2", "Reels - Try Midnight Highway"): a try's files never take the name

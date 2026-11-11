@@ -12,6 +12,8 @@ import { markInterruptedJobs, processAlive } from "./jobs";
 import { songPathsById } from "./song-folder";
 import type { Manifest } from "./manifest";
 import { assessVideo, strongest, type Assessment } from "../assess";
+import { tryName } from "../video-names";
+import { assignVersions, versionKey } from "./versions";
 import { reactionsFor, type Reaction } from "../reactions-list";
 
 export const RUN_FOLDER = /^(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(-\d+)?$/;
@@ -44,8 +46,10 @@ export type VideoInfo = {
   run: string; // run folder name
   platform: string;
   label: string;
-  name: string; // "v1"
-  index: number;
+  name: string; // the name shown everywhere: the song-wide version of the platform ("v3", in the order the videos were made, never reused); a try: "Try · Midnight Highway"
+  file: string; // the file's name inside its run folder ("v1" = v1.mp4, the variation of THAT run: every run restarts at v1); anything that needs the file uses this
+  index: number; // the number in the file name (the variation)
+  basedOn: string | null; // a try: the version of the song's own video it is based on ("v3")
   mp4: string; // workspace-relative
   srt: string | null;
   thumbnail: string | null; // YouTube
@@ -202,8 +206,10 @@ export function songRuns(ws: Workspace, projectId: string, labels: Record<string
           run: folder,
           platform: name,
           label: labels[name] ?? name,
-          name: n,
+          name: n, // the song-wide version, set below once every video of the song is read
+          file: n,
           index: Number(n.slice(1)),
+          basedOn: null,
           mp4: rel(`${n}.mp4`)!,
           srt: rel(`${n}.srt`),
           thumbnail: name === "youtube" ? rel("thumbnail.jpg") : null,
@@ -240,6 +246,7 @@ export function songRuns(ws: Workspace, projectId: string, labels: Record<string
     }
     return { folder, time: since?.toISOString() ?? null, command, resumeCommand: resumeCommandFor(command), platforms };
   });
+  nameVersions(ws, projectId, runs);
   // The pro assessment, learning from the approved videos: a minor point approved twice no longer counts.
   const all = runs.flatMap((r) => r.platforms.flatMap((p) => p.videos));
   const assess = (v: VideoInfo, acceptedCodes?: Record<string, number>) => assessVideo({ problems: v.qa.problems, ...inputs.get(v.id), ...(acceptedCodes ? { acceptedCodes } : {}) });
@@ -248,6 +255,30 @@ export function songRuns(ws: Workspace, projectId: string, labels: Record<string
   for (const v of all) v.assessment = assess(v, acceptedCodes);
   for (const r of runs) for (const p of r.platforms) p.strongest = strongest(p.videos.filter((v) => v.mark.status !== "discarded"));
   return runs;
+}
+
+// Version names (versions.ts): every own video gets its song-wide number per platform; a try (Compare looks) is not a
+// version: it is named after what it tries ("Try · Midnight Highway", numbered "2" when the same try exists twice in a run for the
+// platform) and says which version it is based on: the song's own video of the same run and file name, else the newest own
+// video made before it, else the variation it was made from.
+function nameVersions(ws: Workspace, projectId: string, runs: readonly RunInfo[]): void {
+  const songRoot = songPathsById(ws, projectId).root;
+  const own = runs.flatMap((r) => r.platforms.flatMap((p) => p.videos.filter((v) => !v.try)));
+  const numbers = assignVersions(songRoot, own.map((v) => ({ run: v.run, platform: v.platform, stem: v.file, createdAt: v.createdAt })));
+  for (const v of own) v.name = `v${numbers.get(versionKey(v.run, v.platform, v.file)) ?? v.index}`;
+  const taken = new Map<string, number>();
+  for (const r of runs)
+    for (const p of r.platforms)
+      for (const v of p.videos.filter((x) => x.try)) {
+        const same = p.videos.find((x) => !x.try && x.file === v.file);
+        const before = own.filter((x) => x.platform === v.platform && x.createdAt <= v.createdAt).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+        v.basedOn = (same ?? before)?.name ?? `v${v.index}`;
+        const base = tryName(v.try!);
+        const k = `${r.folder}/${v.platform}/${base}`;
+        const n = (taken.get(k) ?? 0) + 1;
+        taken.set(k, n);
+        v.name = n > 1 ? `${base} ${n}` : base;
+      }
 }
 
 // The verdict of one video just made (its qa.txt + manifest, as the Videos tab reads them); null when they cannot be read.
