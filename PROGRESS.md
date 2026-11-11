@@ -4,6 +4,18 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Look → Title cards made obvious: a row per card, click the card in the viewer ✅ (to verify on the Windows PC)
+- **One row per card** (Title, Byline, Tagline): its text, its look in one line (font · colour and transparency ·
+  place · capitals, as the video draws it) and **Edit ›**. The editor opens under the row; the row is highlighted.
+- **In the viewer:** a title card under the pointer is outlined; a click opens its row in Look (it does not play /
+  pause). A title card's **T bar on the timeline** does the same.
+- **The viewer jumps** to the middle of the card's time on screen when you pick it, so it is fully visible.
+- **The text is read-only here**, with "change in Song Details" (the words live in Prepare → Song Details only).
+- Tests (browser): textboard (rows with their look, the editor under the highlighted row, read-only text with the
+  link, the viewer fully showing the card, hover outline, click in the viewer, the T bar), song-stages, storyboard.
+- **To check on the PC:** Shape → Settings → Look → Title cards: three rows; Edit › on Tagline opens under it and the
+  viewer shows the tagline; hover the title in the viewer: outlined; click it: its row opens.
+
 ### Title cards: edited in Shape → Settings → Look, saved as changed; a quieter tagline; no crowding ✅ (to verify on the Windows PC)
 - **Look → Title cards:** Title · Byline · Tagline chips under Title opening; the chosen card's editor opens right
   there (Shown, Place, Size, Hold, Font, Effect, and new **Colour, Transparency, Capitals**). The same editor as a
@@ -185,32 +197,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: packages/video/test/song-links-server.test.ts (4), apps/studio/e2e/song-links.e2e.ts (in `pnpm test:e2e`). Docs: docs/screens.md (Song links).
 - **To check on the PC:** `cd D:\videomaker` · `git pull` · `pnpm dev`. Song → Prepare → Song Details → Links: paste a Spotify link, then an Apple Music link: two rows, each named by its service. ✎ on a row opens only that row; Remove shows "Removed … Undo".
 - **Lost link:** look in `D:\videomaker\workspace\songs\<Here With Me folder>\.studio\replaced\` for `*-song.json` copies (made from now on only; older changes kept none).
-
-### Storyboard: shared-collection clips in your story line ✅ (to verify on the Windows PC)
-- **How it worked before:** a ticked collection mixed in ALL its clips. They joined one pool with your own clips;
-  v1 (story order) played them after your story line, by file name (unless you had moved one in Shape → Shots);
-  v2+ shuffled the whole pool (seeded). None of them showed in the story line.
-- **Now:** "Add clips & photos" is a menu: **From my computer** / **From a collection…**. The picker shows each
-  collection's thumbnails; choose single clips (several at once). They become cards in your story line with a small
-  collection badge: drag, Use / Omit, notes, like your own clips. **Remove from this song** never touches the collection.
-- **"Let the app pick from the whole collection"** (in the picker): one card "Flowers · app picks · N clips",
-  placeable like a clip; that collection's other clips play at its place.
-- **The checkboxes are gone.** Shape → Shots no longer orders clips (one place: Prepare → Storyboard); dropping a
-  clip on a lyric line or shot still places it.
-- **Existing songs migrate without changing their videos:** a ticked collection becomes one "app picks" card at the
-  end of the story line (exactly where its clips played before); clips you had placed in Shape become picked clips
-  at their place. Saved the first time the Storyboard opens. Test: the planned video before and after is identical.
-- Make, Shape and the shot plans use only what the story line holds: picked clips, or a whole collection for a card.
-  Compare looks → Other pictures still compares whole collections. Renaming a collection follows into the story line.
-- Tests: story-line (6: cards and picks, the migration with an identical plan, remove / add / reorder, a card in the
-  middle, the collection keeps its clips, rename follows); clip-order, clip-order-prepare, collections,
-  storyboard-edit, storyboard, make-reference, shot-plan-make still pass. Browser: song-stages (no checkboxes; the
-  ticked collection is a card at the end; Remove from this song; the menu; the picker's thumbnails; one clip added
-  with its badge, Omit / Use; clips already in the line disabled; the app's pick card; the card dragged to the
-  front), storyboard (Shape: no arrows, plans the story line's order), clip-notes, collections, style-lock, textboard.
-- **To check on the PC:** open "Here With Me" → Prepare → Storyboard: your old collection (if any) is one card at
-  the end. Add clips & photos → From a collection… → Flowers: pick two clips → they appear at the end with a
-  "Flowers" badge; drag one between your own clips; Shape shows the same order.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

@@ -175,13 +175,12 @@ async function main() {
     // Song Details -> "Tagline look..." (11 Nov 2026): Shape opens on Settings -> Look with the tagline's editor; colour,
     // transparency and capitals; saved as changed (textboard.json).
     const recipeNow = JSON.parse(readFileSync(paths.recipe!, "utf8"));
-    writeFileSync(paths.recipe!, JSON.stringify({ ...recipeNow, tagline: "Art: @noriko_imazeki", titleOpening: "on" }));
+    writeFileSync(paths.recipe!, JSON.stringify({ ...recipeNow, tagline: "Art: @noriko_imazeki", titleOpening: "on", section: "0:00-0:10" })); // a 2 s lead-in: the cards have time on screen
     await page.goto(`${base}/songs/${sp.project.id}?tab=details`);
     await page.waitForSelector("[data-tagline-look]");
     await page.click("[data-tagline-look]");
     await page.waitForSelector("[data-title-cards] [data-card-editor='tagline']", { timeout: 180_000 }).catch(async () => { await page.screenshot({ path: process.env.TB_SHOT ?? path.join(root, "textboard-look.png") }); throw new Error("no tagline editor in Look"); });
     check((await page.getAttribute("[data-shape-tab=settings]", "aria-selected")) === "true" && (await page.getAttribute("[data-settings-toggle=look]", "aria-expanded")) === "true", "Tagline look... opens Shape -> Settings -> Look with the tagline's editor");
-    check((await page.$$("[data-title-cards] [data-title-card-chip]")).length >= 2, "Look lists the title cards as chips");
     await page.fill("[data-title-cards] [data-card-colour]", "#336699");
     await page.fill("[data-title-cards] [data-card-opacity]", "0.6");
     await page.selectOption("[data-title-cards] [data-card-upper]", "true");
@@ -189,6 +188,42 @@ async function main() {
     for (let i = 0; i < 60 && tagOverrides().upper !== true; i++) await sleep(250);
     const own = tagOverrides();
     check(own.colour === "#336699" && own.opacity === 0.6 && own.upper === true, `the tagline's colour, transparency and capitals are saved as changed (${JSON.stringify(own)})`);
+    // Look -> Title cards made obvious (11 Nov 2026): one row per card (text + its look in one line + Edit), the editor
+    // under the row; the text read-only here; the viewer shows the card fully; hover / click in the viewer and on the
+    // timeline open it.
+    const rows = await page.$$eval("[data-title-card-row]", (e: Element[]) => e.map((x) => x.getAttribute("data-title-card-row")));
+    check(rows.includes("title") && rows.includes("tagline"), `one row per title card (${rows.join(", ")})`);
+    const summary = (await page.textContent("[data-title-card-row='tagline'] [data-title-card-summary]")) ?? "";
+    check(/ · .*% · .* · (CAPITALS|as written)/.test(summary), `each row says its look: font · colour/transparency · place · capitals (${summary})`);
+    check(!!(await page.$("[data-title-card-row='tagline'][data-open='1'] [data-card-editor='tagline']")) && !(await page.$("[data-card-editor='tagline'] input[data-card-text]")) && !!(await page.$("[data-card-editor='tagline'] [data-card-text-link]")), "the open card's editor sits under its highlighted row; its text is read-only with a link to Song Details");
+    // The viewer checks on the title: this song's part starts on its first sung line, so with the title opening the cards
+    // have no time on screen; without it the title shows its own 3 s (set above).
+    writeFileSync(paths.recipe!, JSON.stringify({ ...JSON.parse(readFileSync(paths.recipe!, "utf8")), titleOpening: "off" }));
+    await page.reload();
+    await openPanel(page, "look");
+    await page.waitForSelector("[data-title-card-edit='title']", { timeout: 180_000 });
+    await page.click("[data-title-card-edit='title']");
+    await page.waitForSelector("[data-title-card-row='title'][data-open='1'] [data-card-editor='title']");
+    await page.waitForSelector("[data-viewer] [data-text-card='title']", { timeout: 30_000 });
+    await sleep(400);
+    const shown = await page.$eval("[data-viewer] [data-text-card='title']", (e: Element) => {
+      let o = 1;
+      for (let el: Element | null = e; el && !el.matches("[data-viewer]"); el = el.parentElement) o *= Number(getComputedStyle(el).opacity || 1);
+      return o;
+    });
+    check(shown > 0.95, `Edit: the viewer goes to a moment where the card is fully visible (opacity ${shown.toFixed(2)})`);
+    await page.hover("[data-viewer] [data-text-card='title']");
+    await sleep(200);
+    check(!!(await page.$("[data-viewer] [data-card-hover='1']")), "hovering a title card in the viewer outlines it");
+    await page.click("[data-title-card-edit='title']"); // close it
+    await page.click("[data-viewer] [data-text-card='title']");
+    await page.waitForSelector("[data-title-card-row='title'][data-open='1']");
+    check(true, "a click on the card in the viewer opens its settings in Look");
+    await page.click("[data-title-card-edit='title']"); // close it again
+    await page.waitForSelector("[data-title-card-row='title'][data-open='0']");
+    await page.click("[data-textboard-titles] [data-text-card='title']");
+    await page.waitForSelector("[data-title-card-row='title'][data-open='1'] [data-card-editor='title']");
+    check((await page.getAttribute("[data-shape-tab=settings]", "aria-selected")) === "true", "the title's T bar on the timeline opens it in Look too");
     await browser.close();
   } finally {
     server.kill();

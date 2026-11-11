@@ -319,6 +319,24 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   const pickTitleCard = (id: string | null) => {
     setCardId(id);
     setDraft(id ? (board?.cards.find((c) => c.id === id)?.overrides ?? {}) : {});
+    if (id) showTitleCard(id);
+  };
+  // The viewer goes to the middle of the card's time on screen: past its fade in, before its fade out (11 Nov 2026).
+  const showTitleCard = (id: string) => {
+    const pc = view?.props.textCards?.find((c) => c.id === id && !c.off);
+    if (!pc) return;
+    const start = pc.startFrame ?? 0;
+    const end = Number.isFinite(pc.endFrame) ? pc.endFrame : start + 60;
+    const at = Math.max(0, Math.round((start + end) / 2));
+    heldByUser.current = true;
+    player.current?.pause();
+    player.current?.seekTo(at);
+    setFrame(at);
+  };
+  // A title card clicked in the viewer or on the timeline: Settings → Look with its editor.
+  const openTitleCard = (id: string) => {
+    setPanel("look");
+    pickTitleCard(id);
   };
   // Song Details → "Tagline look…": Shape opens on Settings → Look with that card's editor (one ask, kept for the visit).
   useEffect(() => {
@@ -336,6 +354,51 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   // The same request while Shape is already on the page (Song Details' link switches the stage without a reload).
   const boardRef = useRef(board);
   boardRef.current = board;
+  const showRef = useRef<(id: string) => void>(() => {});
+  showRef.current = (id: string) => showTitleCard(id);
+  const openTitleRef = useRef<(id: string) => void>(() => {});
+  openTitleRef.current = (id: string) => openTitleCard(id);
+  // The viewer (11 Nov 2026): a title card under the pointer is outlined; a click on it opens its settings in Look (and
+  // does not play / pause the video). Read from the drawn composition (data-text-card), so it is exactly the card seen.
+  useEffect(() => {
+    const block = viewerBlock.current;
+    if (!block) return;
+    const cardAt = (t: EventTarget | null) => {
+      const el = (t as Element | null)?.closest?.("[data-text-card]") as HTMLElement | null;
+      return el && TITLE_CARD_IDS.has(el.getAttribute("data-text-card") ?? "") && !el.closest("[data-textboard-titles]") ? el : null;
+    };
+    let lit: HTMLElement | null = null;
+    const over = (e: Event) => {
+      const el = cardAt(e.target);
+      if (el === lit) return;
+      if (lit) {
+        lit.style.outline = "";
+        lit.style.cursor = "";
+        lit.removeAttribute("data-card-hover");
+      }
+      lit = el;
+      if (el) {
+        el.style.outline = "3px dashed rgba(232, 163, 181, 0.95)";
+        el.style.outlineOffset = "6px";
+        el.style.cursor = "pointer";
+        el.setAttribute("data-card-hover", "1");
+      }
+    };
+    const click = (e: Event) => {
+      const el = cardAt(e.target);
+      if (!el) return;
+      e.preventDefault();
+      e.stopPropagation(); // not the player's click (play / pause)
+      openTitleRef.current(el.getAttribute("data-text-card")!);
+    };
+    block.addEventListener("mouseover", over);
+    block.addEventListener("click", click, true);
+    return () => {
+      block.removeEventListener("mouseover", over);
+      block.removeEventListener("click", click, true);
+      if (lit) lit.style.outline = "";
+    };
+  }, [view?.editable]);
   useEffect(() => {
     const open = (e: Event) => {
       const id = (e as CustomEvent<string>).detail;
@@ -348,6 +411,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
       }
       setCardId(id);
       setDraft(b.cards.find((c) => c.id === id)?.overrides ?? {});
+      showRef.current(id);
     };
     window.addEventListener("lyric-open-title-card", open);
     return () => window.removeEventListener("lyric-open-title-card", open);
@@ -586,42 +650,58 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
         <p className="text-sm font-medium">
           Title cards <span className="text-muted-foreground text-[11px] font-normal">· how the title, byline and tagline look in this song (the words: Prepare → Song Details)</span>
         </p>
-        <div className="flex flex-wrap gap-1.5">
-          {titleCardList.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              data-title-card-chip={c.id}
-              aria-pressed={cardId === c.id && panel !== "text"}
-              onClick={() => pickTitleCard(cardId === c.id ? null : c.id)}
-              title={c.text}
-              className={cn("rounded-full border px-3 py-0.5 text-xs", cardId === c.id && panel !== "text" ? "border-brand bg-brand/15 text-brand" : "hover:bg-accent")}
-            >
-              {c.type[0].toUpperCase() + c.type.slice(1)}
-            </button>
-          ))}
-          {!titleCardList.some((c) => c.type === "tagline") ? <span className="text-muted-foreground self-center text-[11px]">no tagline yet (Song Details)</span> : null}
-        </div>
-        {card && card.type !== "lyric" && panel !== "text" ? (
-          <CardEditor
-            key={`look-${card.id}`}
-            card={card}
-            role={board.roles[card.type as "title"] ?? {}}
-            draft={draft}
-            setDraft={setDraft}
-            busy={saving}
-            onSave={() => void editText({ action: "card", id: card.id, overrides: draft })}
-            onReset={() => {
-              setDraft({});
-              void editText({ action: "card", id: card.id, overrides: null });
-            }}
-            onClose={() => pickTitleCard(null)}
-            onFixLine={(n, t) => void fixLine(n, t)}
-            fonts={board.fonts ?? []}
-            titleFont={board.titleFont ?? ""}
-            artist={board.artist ?? "Life Lyrics"}
-          />
-        ) : null}
+        <ul className="flex flex-col gap-1.5">
+          {titleCardList.map((c) => {
+            const open = cardId === c.id && panel !== "text";
+            return (
+              <li key={c.id} data-title-card-row={c.id} data-open={open ? "1" : "0"} className={cn("rounded-md border px-2.5 py-2", open ? "border-brand bg-brand/10" : "hover:bg-accent/40")}>
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm" title={c.overrides.text ?? c.text}>
+                      <span className="text-muted-foreground mr-1.5 text-[11px] uppercase">{c.type}</span>
+                      {(c.overrides.text ?? c.text) || <span className="text-muted-foreground italic">empty</span>}
+                    </p>
+                    <p data-title-card-summary className="text-muted-foreground truncate text-[11px]">
+                      {titleCardSummary(c, view?.props.textCards?.find((p) => p.id === c.id && !p.off) ?? null, board.roles[c.type as "title"] ?? {})}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    data-title-card-edit={c.id}
+                    aria-expanded={open}
+                    onClick={() => pickTitleCard(open ? null : c.id)}
+                    className={cn("shrink-0 rounded-md border px-2 py-0.5 text-xs", open ? "border-brand text-brand" : "hover:bg-accent")}
+                  >
+                    {open ? "Close" : "Edit ›"}
+                  </button>
+                </div>
+                {open && card && card.id === c.id ? (
+                  <div className="mt-2">
+                    <CardEditor
+                      key={`look-${card.id}`}
+                      card={card}
+                      role={board.roles[card.type as "title"] ?? {}}
+                      draft={draft}
+                      setDraft={setDraft}
+                      busy={saving}
+                      onSave={() => void editText({ action: "card", id: card.id, overrides: draft })}
+                      onReset={() => {
+                        setDraft({});
+                        void editText({ action: "card", id: card.id, overrides: null });
+                      }}
+                      onClose={() => pickTitleCard(null)}
+                      onFixLine={(n, t) => void fixLine(n, t)}
+                      fonts={board.fonts ?? []}
+                      titleFont={board.titleFont ?? ""}
+                      artist={board.artist ?? "Life Lyrics"}
+                    />
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+          {!titleCardList.some((c) => c.type === "tagline") ? <li className="text-muted-foreground text-[11px]">no tagline yet (Prepare → Song Details)</li> : null}
+        </ul>
       </div>
     ) : null;
   const panelBody =
@@ -1112,6 +1192,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                         onClick={(e) => {
                           e.stopPropagation();
                           if (c.type === "hook" || c.type === "end") setPanel("theme"); // the theme's card: Edit theme → Cards
+                          else if (view.editable && TITLE_CARD_IDS.has(c.id)) openTitleCard(c.id); // Settings → Look (11 Nov 2026)
                           else if (view.editable) openCard(c.id);
                         }}
                         className={cn("bg-brand/20 absolute overflow-hidden rounded border px-1 text-left text-[10px]", cardId === c.id && "ring-brand ring-2")}
@@ -1522,6 +1603,7 @@ function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClos
   onReset: () => void;
   onClose: () => void;
 }) {
+  const goToTab = useGoToTab();
   const set = <K extends keyof CardOverrides>(k: K, v: CardOverrides[K] | undefined) => {
     const next = { ...draft };
     if (v === undefined || v === "") delete next[k];
@@ -1578,10 +1660,16 @@ function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClos
         ) : null}
         {!lyric ? (
           <>
-            <label className="flex items-center gap-2">
+            {/* 11 Nov 2026: the words are changed in one place, Prepare → Song Details (read-only here). */}
+            <div className="flex items-center gap-2" data-card-text-readonly>
               <span className="w-20">Text</span>
-              <input data-card-text className={cn(field, "flex-1")} value={draft.text ?? ""} placeholder={card.text || "(empty)"} onChange={(e) => set("text", e.target.value)} />
-            </label>
+              <span className="text-foreground min-w-0 flex-1 truncate" title={draft.text ?? card.text}>
+                {(draft.text ?? card.text) || "(empty)"}
+              </span>
+              <button type="button" data-card-text-link onClick={() => goToTab("details")} className="text-muted-foreground hover:text-foreground shrink-0 underline underline-offset-2">
+                change in Song Details
+              </button>
+            </div>
             <label className="flex items-center gap-2">
               <span className="w-20">Shown</span>
               <select data-card-show className={field} value={draft.show === undefined ? "" : String(draft.show)} onChange={(e) => set("show", e.target.value === "" ? undefined : e.target.value === "true")}>
@@ -1808,4 +1896,15 @@ function useTitleCardsSlot(): Element | null {
     return () => watch.disconnect();
   }, []);
   return slot;
+}
+
+const TITLE_CARD_IDS = new Set(["title", "byline", "tagline"]);
+const TITLE_DEFAULT_PLACE: Record<string, string> = { title: "upper third", byline: "under the title", tagline: "under the title" };
+// A title card's look in one line (Settings → Look → Title cards): font · colour / transparency · place · capitals, as
+// the planned video draws it (or "not shown in this video").
+function titleCardSummary(c: TextCard, drawn: { font: string; colour: string; opacity?: number; upper: boolean } | null, role: CardStyle): string {
+  if (!drawn) return "not shown in this video";
+  const position = c.overrides.position ?? role.position;
+  const place = position ? (POSITION_LABELS[position] ?? position) : (TITLE_DEFAULT_PLACE[c.type] ?? "as the platform");
+  return [drawn.font, `${drawn.colour.toUpperCase()} ${Math.round((drawn.opacity ?? 1) * 100)}%`, place, drawn.upper ? "CAPITALS" : "as written"].join(" · ");
 }

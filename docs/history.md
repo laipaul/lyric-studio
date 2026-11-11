@@ -4,6 +4,32 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Storyboard: shared-collection clips in your story line ✅ (to verify on the Windows PC)
+- **How it worked before:** a ticked collection mixed in ALL its clips. They joined one pool with your own clips;
+  v1 (story order) played them after your story line, by file name (unless you had moved one in Shape → Shots);
+  v2+ shuffled the whole pool (seeded). None of them showed in the story line.
+- **Now:** "Add clips & photos" is a menu: **From my computer** / **From a collection…**. The picker shows each
+  collection's thumbnails; choose single clips (several at once). They become cards in your story line with a small
+  collection badge: drag, Use / Omit, notes, like your own clips. **Remove from this song** never touches the collection.
+- **"Let the app pick from the whole collection"** (in the picker): one card "Flowers · app picks · N clips",
+  placeable like a clip; that collection's other clips play at its place.
+- **The checkboxes are gone.** Shape → Shots no longer orders clips (one place: Prepare → Storyboard); dropping a
+  clip on a lyric line or shot still places it.
+- **Existing songs migrate without changing their videos:** a ticked collection becomes one "app picks" card at the
+  end of the story line (exactly where its clips played before); clips you had placed in Shape become picked clips
+  at their place. Saved the first time the Storyboard opens. Test: the planned video before and after is identical.
+- Make, Shape and the shot plans use only what the story line holds: picked clips, or a whole collection for a card.
+  Compare looks → Other pictures still compares whole collections. Renaming a collection follows into the story line.
+- Tests: story-line (6: cards and picks, the migration with an identical plan, remove / add / reorder, a card in the
+  middle, the collection keeps its clips, rename follows); clip-order, clip-order-prepare, collections,
+  storyboard-edit, storyboard, make-reference, shot-plan-make still pass. Browser: song-stages (no checkboxes; the
+  ticked collection is a card at the end; Remove from this song; the menu; the picker's thumbnails; one clip added
+  with its badge, Omit / Use; clips already in the line disabled; the app's pick card; the card dragged to the
+  front), storyboard (Shape: no arrows, plans the story line's order), clip-notes, collections, style-lock, textboard.
+- **To check on the PC:** open "Here With Me" → Prepare → Storyboard: your old collection (if any) is one card at
+  the end. Add clips & photos → From a collection… → Flowers: pick two clips → they appear at the end with a
+  "Flowers" badge; drag one between your own clips; Shape shows the same order.
+
 ### Prepare fixes: Song Details, hints in Assets, one Replaced files list, "Set by me" ✅ (to verify on the Windows PC)
 - **Song Details** (was Texts): the tab and every pointer ("Prepare → Song Details"). Old links ?tab=texts and
   ?tab=details keep opening it.
