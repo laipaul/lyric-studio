@@ -211,8 +211,9 @@ async function main() {
     await page.goto(`${base}/songs/${sp.project.id}?tab=details`);
     await page.waitForSelector("[data-links] [data-link-new]");
     for (const url of ["https://open.spotify.com/track/abc", "https://ffm.to/posttest", "https://www.facebook.com/lifelyrics"]) {
+    // Each link is added with one PATCH (one change at a time, 11 Nov 2026 bug fix).
       await page.fill("[data-link-new]", url);
-      await Promise.all([page.waitForResponse((r: { url(): string; request(): { method(): string } }) => r.url().includes("/links") && r.request().method() === "PUT"), page.press("[data-link-new]", "Enter")]);
+      await Promise.all([page.waitForResponse((r: { url(): string; request(): { method(): string } }) => r.url().includes("/links") && r.request().method() === "PATCH"), page.press("[data-link-new]", "Enter")]);
     }
     await page.waitForSelector("[data-link-row=facebook]");
     const savedLinks = (JSON.parse(readFileSync(paths.recipe!, "utf8")) as { links?: { service: string }[] }).links ?? [];

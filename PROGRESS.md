@@ -4,6 +4,13 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Bug fix: adding a song link never replaces another; service from the URL; edit and Undo ✅ (to verify on the Windows PC)
+- Bug: Prepare → Song Details → Links: adding an Apple Music link to a song that had a Spotify link left only Apple Music. Cause: the page held its own copy of the list and saved the WHOLE list with every action (add, change a service, edit an address, remove), and a row's service and address were always-open fields that saved on their own. A save made from a stale or half-updated copy (two quick actions, or editing the Spotify row's picker / address instead of adding) wrote that copy over the file. The server and song.json were fine (tested).
+- Fix: the page now sends ONE change at a time (add / update / remove / restore) to PATCH /api/songs/[id]/links; the server applies it to the list in song.json as it is now (`changeSongLinks`), so no change can drop a link it is not about. The service is recognised from the pasted address; rows show service + address with ✎ (editor of that row only, Save / Cancel); removing offers Undo (back at the old place, with its Post picks). Every change of the links first keeps the previous song.json in `.studio\replaced\<date>-song.json`.
+- Tests: packages/video/test/song-links-server.test.ts (4), apps/studio/e2e/song-links.e2e.ts (in `pnpm test:e2e`). Docs: docs/screens.md (Song links).
+- **To check on the PC:** `cd D:\videomaker` · `git pull` · `pnpm dev`. Song → Prepare → Song Details → Links: paste a Spotify link, then an Apple Music link: two rows, each named by its service. ✎ on a row opens only that row; Remove shows "Removed … Undo".
+- **Lost link:** look in `D:\videomaker\workspace\songs\<Here With Me folder>\.studio\replaced\` for `*-song.json` copies (made from now on only; older changes kept none).
+
 ### Storyboard: shared-collection clips in your story line ✅ (to verify on the Windows PC)
 - **How it worked before:** a ticked collection mixed in ALL its clips. They joined one pool with your own clips;
   v1 (story order) played them after your story line, by file name (unless you had moved one in Shape → Shots);
@@ -343,30 +350,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **To check on the PC:** Shape → open This song (or Clips, Automatic …): the Look bar on top; Change → click a
   theme: the viewer shows it, the song.json still has the old one; Cancel: back; Change → a theme → Apply: the
   Look bar shows the new name and the video is planned again with the same shots and cuts.
-
-### Theme v2 storyboard, step 2d: the plan of every video saved as its storyboard file ✅ (to verify on the Windows PC)
-- **The plan you see in Shape is now a file:** `<song folder>\storyboards\<platform>-<n>.json` (e.g.
-  `storyboards\reels-1.json`), written whenever Shape plans that video with the song's own clips. The agreed
-  format, version 1: the inputs (song, vocal stem and lyrics files with their fingerprints, the lyric timing
-  used, clips.json), the output (platform, 9:16 / 16:9, the part of the song and why, the theme), the beats
-  and sections, the text items (line-N, card-title ...), the shots (sh-01 ...: clip, trim, speed, start / end,
-  transition in, the line it carries, its warnings), the predicted verdict. All times in song milliseconds;
-  they give back every frame of the plan exactly (tested on every frame of an hour).
-- **Your edits are imported as locks** (the field is your choice): a moved cut locks the shots on both sides,
-  a slip the shot's trim, a story anchor the line the shot carries. **Never dropped:** a moved cut or slip that
-  no shot of the video matches is listed in the file and in Shape's Analysis notes ("Moved cut not used: the
-  cut you moved from 0:50.0 to 0:50.4 is not at any cut of this video now (nearest: shot 3 at 0:48.8). It is
-  kept in clips.json."). Shot ids stay when the plan is made again (same clip, most overlap).
-- **`pnpm storyboards`**: plans every video of every song (each platform of its recipe), writes their
-  storyboards and lists, by song and shot, every moved cut or slip that no video uses any more. Changes none of
-  the song's own files.
-- **Nothing else changes:** Make still plans as before (it reads the storyboard from step 2e-1); videos are
-  the same.
-- **Golden test ready:** test/storyboard-file.test.ts compares the storyboard of the approved "Here with Me"
-  Reel with that video's frames; it runs as soon as its manifest is at
-  `packages\video\test\golden\here-with-me-reels.manifest.json` (skipped until then).
-- Tests: storyboard-file (format, frames back, locks, unmatched edits, ids, the report), storyboard-save (a real
-  song folder: Shape's plan writes the file, locks, notes, ids, pnpm storyboards); the whole video suite passes.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

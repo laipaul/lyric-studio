@@ -4,6 +4,30 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Theme v2 storyboard, step 2d: the plan of every video saved as its storyboard file ✅ (to verify on the Windows PC)
+- **The plan you see in Shape is now a file:** `<song folder>\storyboards\<platform>-<n>.json` (e.g.
+  `storyboards\reels-1.json`), written whenever Shape plans that video with the song's own clips. The agreed
+  format, version 1: the inputs (song, vocal stem and lyrics files with their fingerprints, the lyric timing
+  used, clips.json), the output (platform, 9:16 / 16:9, the part of the song and why, the theme), the beats
+  and sections, the text items (line-N, card-title ...), the shots (sh-01 ...: clip, trim, speed, start / end,
+  transition in, the line it carries, its warnings), the predicted verdict. All times in song milliseconds;
+  they give back every frame of the plan exactly (tested on every frame of an hour).
+- **Your edits are imported as locks** (the field is your choice): a moved cut locks the shots on both sides,
+  a slip the shot's trim, a story anchor the line the shot carries. **Never dropped:** a moved cut or slip that
+  no shot of the video matches is listed in the file and in Shape's Analysis notes ("Moved cut not used: the
+  cut you moved from 0:50.0 to 0:50.4 is not at any cut of this video now (nearest: shot 3 at 0:48.8). It is
+  kept in clips.json."). Shot ids stay when the plan is made again (same clip, most overlap).
+- **`pnpm storyboards`**: plans every video of every song (each platform of its recipe), writes their
+  storyboards and lists, by song and shot, every moved cut or slip that no video uses any more. Changes none of
+  the song's own files.
+- **Nothing else changes:** Make still plans as before (it reads the storyboard from step 2e-1); videos are
+  the same.
+- **Golden test ready:** test/storyboard-file.test.ts compares the storyboard of the approved "Here with Me"
+  Reel with that video's frames; it runs as soon as its manifest is at
+  `packages\video\test\golden\here-with-me-reels.manifest.json` (skipped until then).
+- Tests: storyboard-file (format, frames back, locks, unmatched edits, ids, the report), storyboard-save (a real
+  song folder: Shape's plan writes the file, locks, notes, ids, pnpm storyboards); the whole video suite passes.
+
 ### Theme Engine v2 on HyperFrames, step 2b part 2: stacked lines, build up, bigger final chorus, theme-rules.md ✅ (to verify on the Windows PC)
 - **Three new theme choices** in Shape → Theme → Text, under Text layout (theme.json `lineShape`, `lineBuild`,
   `finalHook`; src/line-shape.ts; the viewer shows each click at once, Save keeps it):
