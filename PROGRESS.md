@@ -11,6 +11,8 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   - **▸ Look**: theme + Change · title opening · lyric readability (open at the start)
   - **▸ Part & ending**: section · target length · ending
   - **▸ Pace**: shot length · transitions · pace adjustment
+- **One section open at a time** (your first test: Look's rows looked like Part & ending's): opening one folds the
+  others; the open one has a tinted header and a pink edge down its settings.
 - **Shots** is unchanged. Old links (?panel=look / part / pace) and "Look: …" in Make open Settings with that
   section unfolded and scrolled to; a tab remembered from before opens Settings.
 - Nothing about how a video is made changed (layout and labels only).

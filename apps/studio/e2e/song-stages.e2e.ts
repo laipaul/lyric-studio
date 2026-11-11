@@ -406,7 +406,8 @@ async function main() {
     check(!!(await page.$("[data-locked=tempo]")) && ((await page.textContent("[data-field=tempo] [data-source]")) ?? "") === "Set by me" && !(await page.$("[data-back-auto=tempo]")), "a locked value keeps its value and shows Set by me (no ↺ while locked)");
     // Part & ending and Pace: "auto" or "Set by me" in place, ↺ back to auto; no Automatic section any more.
     await openPanel(page, "part");
-    check((await visibleBlocks()).includes("part") && (await page.getAttribute("[data-settings-toggle=part]", "aria-expanded")) === "true", `Part & ending unfolds inside Settings (${(await visibleBlocks()).join(", ")})`);
+    check(JSON.stringify(await visibleBlocks()) === JSON.stringify(["part"]) && (await page.getAttribute("[data-settings-toggle=part]", "aria-expanded")) === "true" && (await page.getAttribute("[data-settings-toggle=look]", "aria-expanded")) === "false", `Part & ending unfolds inside Settings; one section open at a time (Look folds) (${(await visibleBlocks()).join(", ")})`);
+    if (process.env.SETTINGS_SHOT) await page.screenshot({ path: process.env.SETTINGS_SHOT });
     check(JSON.stringify(await inBlock("part")) === JSON.stringify(["section", "length", "ending"]), `Part & ending: section, target length, ending (${(await inBlock("part")).join(", ")})`);
     check(((await page.textContent("[data-set-by-me]")) ?? "").startsWith("Set by me:") && ((await page.textContent("[data-set-by-me]")) ?? "").includes("Ending") && ((await page.textContent("[data-settings-toggle=part]")) ?? "").includes("1 set by me"), `the "Set by me" line names it, the section says 1 set by me (${await page.textContent("[data-set-by-me]")})`);
     check(((await page.textContent("[data-field=ending] [data-source]")) ?? "") === "Set by me" && ((await page.textContent("[data-field=section] [data-source]")) ?? "") === "auto", "Set by me / auto in place");
@@ -607,8 +608,8 @@ async function main() {
     await page.reload();
     await page.click("[data-stage=shape]");
     await page.waitForSelector("[data-shape-tabs]");
-    // Shape's Look bar (any other panel): the song's theme, Change opens the picker; a click only previews.
-    await openPanel(page, "part");
+    // Shape's Look bar (Settings → Look; one section open at a time): the song's theme, Change opens the picker; a click only previews.
+    await openPanel(page, "look");
     await page.waitForSelector("[data-look-bar='Night Drive']");
     // Settings (11 Nov 2026): the Look bar opens the Look section, the first in the panel.
     const bar = await page.$eval("[data-look-bar]", (e: Element) => ({ inLook: !!e.closest("[data-settings-section=look]"), first: e.closest("[data-settings-section]") === document.querySelector("[data-settings-section]"), mark: !!e.querySelector("[data-look-customized]") }));

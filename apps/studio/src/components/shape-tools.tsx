@@ -72,7 +72,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
   useEffect(() => {
     if (!focus) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- a section asked for from elsewhere opens once per ask
-    setUnfolded((u) => ({ ...u, [focus.section]: true }));
+    setUnfolded({ look: false, part: false, pace: false, [focus.section]: true }); // one section open at a time
     const t = window.setTimeout(() => document.querySelector(`[data-settings-section=${focus.section}]`)?.scrollIntoView({ block: "start", behavior: "smooth" }), 50);
     return () => window.clearTimeout(t);
   }, [focus]);
@@ -1062,13 +1062,15 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
             const mine = applies(pick(fields)).filter(setByMe).length;
             const open = unfolded[id];
             return (
-              <section key={id} data-settings-section={id} className="scroll-mt-2 rounded-lg border">
+              // One section open at a time (11 Nov 2026: Look's rows were mistaken for Part & ending's): the open one has a
+              // tinted header and a pink edge down its settings; the folded ones are plain rows.
+              <section key={id} data-settings-section={id} data-open={open ? "1" : "0"} className={cn("scroll-mt-2 overflow-hidden rounded-lg border", open ? "border-brand/50" : "border-border/60")}>
                 <button
                   type="button"
                   data-settings-toggle={id}
                   aria-expanded={open}
-                  onClick={() => setUnfolded((u) => ({ ...u, [id]: !u[id] }))}
-                  className="hover:bg-accent/40 flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left"
+                  onClick={() => setUnfolded((u) => ({ look: false, part: false, pace: false, [id]: !u[id] }))}
+                  className={cn("flex w-full items-start gap-2 px-3 py-2 text-left", open ? "bg-brand/15 border-brand/40 border-b" : "hover:bg-accent/40")}
                 >
                   <ChevronRight className={cn("mt-0.5 size-4 shrink-0 transition-transform", open && "rotate-90")} />
                   <span className="min-w-0 flex-1">
@@ -1077,7 +1079,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
                   </span>
                   {mine ? <span className="border-brand/40 text-brand shrink-0 rounded-full border px-2 py-0.5 text-[10px]">{mine} set by me</span> : null}
                 </button>
-                <div hidden={!open} className="flex flex-col gap-3 px-3 pb-3">
+                <div hidden={!open} className="border-brand/60 mt-3 mr-3 mb-3 ml-3 flex flex-col gap-3 border-l-2 pl-3">
                   {id === "look" ? (
                     <>
                       {lookBar}
