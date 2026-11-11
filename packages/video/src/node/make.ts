@@ -42,7 +42,7 @@ import { bestMoments } from "./best-moment";
 import { clipBandLuminances } from "./lyric-band";
 import { isThinFace, lyricBackingFor, type BackingDecision, type Readability } from "../readability";
 import { pictureOf } from "../picture";
-import { editOf, isOmitted, rankOf, readClipEdits } from "./clip-edits";
+import { editOf, expandCards, isOmitted, rankOf, readClipEdits, storyPick } from "./clip-edits";
 import { boardForRun, cardFont, cardMeasure, overrideCount, TITLE_MIN_S, TITLE_SIZE_VERTICAL, titleCards, type RunBoard } from "./textboard";
 import { extraCards, fillCardText } from "../extra-cards";
 import { matchPinClips, parsePins } from "../pins";
@@ -749,15 +749,31 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     for (const o of textboard.orphans) log(`textboard: card ${o.id} "${o.text}" no longer matches a lyric line (its changes are not used; the words changed in lyrics.txt)`);
 
     // A clip set: the song's own clips (when it has them) and shared collections, merged.
-    const clipsOf = async (set: { songClips: boolean; collections: string[] }) => {
+    // story: the song's own set (not a picture swap or comparison): a shared collection gives only the clips the
+    // story line picked from it (Prepare → Storyboard, 11 Nov 2026), or all of them for a "collection:<name>" card (and
+    // for a song from before the picker); `cards` names each card's clips, so they get the card's place in the order.
+    const storyEdits = readClipEdits(paths.root);
+    const clipsOf = async (set: { songClips: boolean; collections: string[] }, story = false) => {
       const syncs: CollectionSync[] = [];
+      const cards: Record<string, string[]> = {};
       if (set.songClips && songClips) syncs.push(await syncCollection(ws, { name: `song:${project.id}`, folder: songClips, log, prepare: false }));
       // An empty or missing shared collection is skipped with a note (1 Nov 2026: an empty "Flowers"
       // ticked for a song with its own clips failed the whole run); only no clips at all is an error.
       const skipped: string[] = [];
       for (const [i, name] of set.collections.entries()) {
         try {
-          syncs.push(await syncCollection(ws, { name, folder: collectionFolder(name, i), log, prepare: false }));
+          const sync = await syncCollection(ws, { name, folder: collectionFolder(name, i), log, prepare: false });
+          const pick = story ? storyPick(storyEdits, name) : null;
+          if (pick) {
+            const keep = new Set(pick.map((n) => n.toLowerCase()));
+            sync.sources = sync.sources.filter((src) => keep.has(src.name.toLowerCase()));
+            log(`collection ${name}: ${sync.sources.length} clip(s) picked in the story line`);
+            if (!sync.sources.length) {
+              skipped.push(name);
+              continue;
+            }
+          } else if (story) cards[name] = sync.sources.map((src) => src.name);
+          syncs.push(sync);
         } catch (error) {
           if (!/^(No videos or photos|Collection folder not found)/.test((error as Error).message)) throw error;
           skipped.push(name);
@@ -772,11 +788,11 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
         );
       }
       if (set.songClips && songClips) syncs[0] = { ...syncs[0], collection: { ...syncs[0].collection, name: "song clips" } };
-      return mergeCollections(syncs);
+      return { ...mergeCollections(syncs), ...(Object.keys(cards).length ? { cards } : {}) };
     };
     const swap = options.clipSet ? parsePictures(options.clipSet)[0] : null;
     if (swap) log(`clips: ${swap.label} (this run only)`);
-    const collection = await clipsOf(swap ?? { songClips: true, collections: collectionNames });
+    const collection = await clipsOf(swap ?? { songClips: true, collections: collectionNames }, !swap);
     const runCollections = swap ? swap.collections : collectionNames;
     if (options.pictures && (options.resume || options.pairings)) throw new Error("--pictures cannot be combined with --resume or --pairings.");
     const pictureSets = options.pictures ? parsePictures(options.pictures) : null;
@@ -901,7 +917,7 @@ type Shared = {
   numbers: number[];
   sectionLines: SectionLine[];
   instrumental: boolean; // no sung lyrics: the lines (if any) are the story, timed by the app
-  collection: CollectionSync & { folders: string[] };
+  collection: CollectionSync & { folders: string[]; cards?: Record<string, string[]> }; // cards: the story line's whole-collection cards (clip names)
   collectionNames: string[]; // the shared collections of the run (the song's own clips come on top)
   collectionRemembered: boolean; // --collection not given: the one this project used last time
   tool: Manifest["tool"];
@@ -1226,6 +1242,8 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
 
   // The clip editor's story order and edits (clips.json).
   const edits = readClipEdits(songPathsById(ws, project.id).root);
+  // A whole-collection card's clips take its place in the story order (those without a place of their own).
+  const storyOrder = sh.collection.cards ? expandCards(edits, sh.collection.cards) : edits;
   // Shot length (recipe "shotLength", per platform): "auto" (the default) = automatic pacing from the
   // song's feel and the clips' usable length (src/pace.ts); bars per shot; "story" (shorter on the hooks,
   // as the viewer sees them); "rate" = the cut rate (--rate). A --rate given on the command line with an
@@ -1270,7 +1288,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     const e = editOf(edits, c.name);
     const auto = best.get(absPath(ws, c.path)) ?? null;
     const bestS = e.best ?? auto;
-    const rank = rankOf(edits, c.name);
+    const rank = rankOf(storyOrder, c.name);
     return {
       id: c.clip.id, name: c.name, duration_ms: c.durationMs, path: c.path, durationFrames: c.durationFrames, kind: c.kind, fit: c.fit,
       ...(rank !== undefined ? { rank } : {}),

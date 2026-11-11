@@ -53,7 +53,7 @@ describe("clip story notes", () => {
     rmSync(broken, { recursive: true, force: true });
   });
 
-  it("is never read by the app for anything but the clips list: only assets.ts uses it", () => {
+  it("is never read by the app for anything but the clips list: only assets.ts and the story line use it", () => {
     const src = path.join(__dirname, "..", "src");
     const users: string[] = [];
     const walk = (dir: string) => {
@@ -64,7 +64,8 @@ describe("clip story notes", () => {
       }
     };
     walk(src);
-    expect(users.sort()).toEqual(["node/assets.ts", "node/clip-notes.ts", "node/index.ts"]);
+    // story-line.ts: the story line's collection clips show their notes too (Prepare → Storyboard, 11 Nov 2026).
+    expect(users.sort()).toEqual(["node/assets.ts", "node/clip-notes.ts", "node/index.ts", "node/story-line.ts"]);
     expect(existsSync(path.join(src, "node", "clip-notes.ts"))).toBe(true);
   });
 });

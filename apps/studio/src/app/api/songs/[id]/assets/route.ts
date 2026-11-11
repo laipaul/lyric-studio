@@ -8,6 +8,9 @@
 // PUT { order: [clip file names] }: the song's clips in a new order (drag and drop; clips.json, the same
 // sequence Shape shows and Make uses). PUT { omit: { name, omit } }: Use / Omit on one clip. PUT { note: { name, text } }:
 // a clip's story note (Prepare → Clips; empty text deletes it; only shown, never used by the app).
+// The story line (11 Nov 2026): GET also returns "story" (the song's own clips, clips picked from a shared collection
+// and "the app picks" cards, in order). PUT { story: [keys] }: the whole line in a new order. PUT { add: { collection,
+// clips, whole } }: "From a collection…". DELETE ?story=<key>: a collection clip or card out of this song only.
 import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -15,6 +18,8 @@ import { connection } from "next/server";
 
 import { resolveWorkspaceDir, safeName } from "@lyric/db";
 import { assignSongFile, importSongClips, removeSongClip, replaceAsset, restoreSongClip, setSongClipNote, setSongClipOmit, setSongClipOrder, songAssets, storeVocalStem, type AssetKind, type AssignRole } from "@lyric/video/assets";
+
+import { addFromCollection, isPickedClip, removeFromStory, setPickedClipNote, setPickedClipOmit, setStoryOrder, songStory } from "@lyric/video/story-line";
 
 import { withWorkspaceAsync } from "@/lib/workspace";
 
@@ -25,7 +30,12 @@ export async function GET(_request: Request, { params }: Params) {
   await connection();
   const { id } = await params;
   try {
-    return Response.json(await withWorkspaceAsync((ws) => songAssets(ws, id)));
+    return Response.json(
+      await withWorkspaceAsync(async (ws) => {
+        const assets = await songAssets(ws, id);
+        return { ...assets, story: assets.folder ? (await songStory(ws, id, assets.clips)).items : [] };
+      }),
+    );
   } catch (error) {
     return fail(error);
   }
@@ -77,9 +87,24 @@ export async function POST(request: Request, { params }: Params) {
 export async function PUT(request: Request, { params }: Params) {
   const { id } = await params;
   try {
-    const body = (await request.json()) as { order?: unknown; omit?: { name?: unknown; omit?: unknown }; note?: { name?: unknown; text?: unknown } };
-    if (body.note) return Response.json({ note: await withWorkspaceAsync((ws) => setSongClipNote(ws, id, body.note!.name, body.note!.text)) });
-    if (body.omit) return Response.json({ omit: await withWorkspaceAsync(async (ws) => setSongClipOmit(ws, id, body.omit!.name, body.omit!.omit)) });
+    const body = (await request.json()) as {
+      order?: unknown;
+      story?: unknown;
+      add?: { collection?: unknown; clips?: unknown; whole?: unknown };
+      omit?: { name?: unknown; omit?: unknown };
+      note?: { name?: unknown; text?: unknown };
+    };
+    const picked = (ws: Parameters<typeof isPickedClip>[0], name: unknown) => typeof name === "string" && !!isPickedClip(ws, id, name);
+    if (body.note)
+      return Response.json({
+        note: await withWorkspaceAsync((ws) => (picked(ws, body.note!.name) ? setPickedClipNote(ws, id, String(body.note!.name), String(body.note!.text ?? "")) : setSongClipNote(ws, id, body.note!.name, body.note!.text))),
+      });
+    if (body.omit)
+      return Response.json({
+        omit: await withWorkspaceAsync(async (ws) => (picked(ws, body.omit!.name) ? setPickedClipOmit(ws, id, String(body.omit!.name), body.omit!.omit === true) : setSongClipOmit(ws, id, body.omit!.name, body.omit!.omit))),
+      });
+    if (body.add) return Response.json({ added: await withWorkspaceAsync((ws) => addFromCollection(ws, id, body.add!.collection, body.add!.clips, body.add!.whole)) });
+    if (body.story !== undefined) return Response.json({ story: await withWorkspaceAsync((ws) => setStoryOrder(ws, id, body.story)) });
     return Response.json({ order: await withWorkspaceAsync(async (ws) => setSongClipOrder(ws, id, body.order)) });
   } catch (error) {
     return fail(error);
@@ -88,8 +113,10 @@ export async function PUT(request: Request, { params }: Params) {
 
 export async function DELETE(request: Request, { params }: Params) {
   const { id } = await params;
-  const name = new URL(request.url).searchParams.get("name") ?? "";
+  const search = new URL(request.url).searchParams;
+  const name = search.get("name") ?? "";
   try {
+    if (search.has("story")) return Response.json({ removedFrom: await withWorkspaceAsync((ws) => removeFromStory(ws, id, search.get("story"))) });
     return Response.json({ movedTo: await withWorkspaceAsync((ws) => removeSongClip(ws, id, name)) });
   } catch (error) {
     return fail(error);

@@ -8,6 +8,7 @@ import path from "node:path";
 import { absPath, collection as collectionTable, collectionDir, makeRun, project as projectTable, safeName, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
+import { cardKey, CLIP_EDITS_FILE, readClipEdits, writeClipEdits } from "./clip-edits";
 import { folderClips, importClipsInto, removeClipFrom, restoreClipTo, type ClipAsset, type ImportResult } from "./assets";
 import { rememberCollection, rememberedCollection, updateProjectSettings } from "./project-settings";
 import { readRecipe, writeRecipe } from "./recipe";
@@ -132,6 +133,24 @@ function renameInSongs(ws: Workspace, from: string, to: string | null, folderTo:
       }
     } catch {
       // a song.json that cannot be read is left alone (the Style tab reports it)
+    }
+    // The story line (clips.json): picked clips and the "app picks" card follow the new name (removed: they go).
+    try {
+      const paths = songPathsById(ws, p.id);
+      if (!paths.legacy && existsSync(path.join(paths.root, CLIP_EDITS_FILE))) {
+        const edits = readClipEdits(paths.root);
+        if (edits.picked?.[from] || edits.order.includes(cardKey(from))) {
+          const picked = { ...(edits.picked ?? {}) };
+          const names = picked[from] ?? [];
+          delete picked[from];
+          if (to && names.length) picked[to] = names;
+          const order = edits.order.flatMap((e) => (e === cardKey(from) ? (to ? [cardKey(to)] : []) : !to && names.includes(e) ? [] : [e]));
+          const { picked: _p, ...rest } = edits;
+          writeClipEdits(paths.root, { ...rest, order, ...(Object.keys(picked).length ? { picked } : {}) });
+        }
+      }
+    } catch {
+      // a clips.json that cannot be read is left alone (Shape reports it)
     }
     const remembered = rememberedCollection(ws, p.id);
     if (remembered?.name === from) {

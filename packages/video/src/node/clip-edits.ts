@@ -11,7 +11,13 @@ import type { CutMove, Slip } from "../timeline-edits";
 // or Shape): it keeps its place in the order but Make does not use it.
 export type ClipEdit = { in?: number; out?: number; speed?: number; best?: number; transition?: "cut" | "dissolve"; omit?: true };
 // cuts / slips: the Shape timeline's roll and slip edits, on the song's timeline (src/timeline-edits.ts).
-export type ClipEdits = { order: string[]; clips: Record<string, ClipEdit>; cuts?: CutMove[]; slips?: Slip[] };
+// picked (11 Nov 2026): clips of a shared collection chosen one by one into the story line ({ "Flowers": ["03_rose.mp4"] });
+// "order" names them like the song's own clips, and holds "collection:Flowers" for a whole collection the app picks
+// from (one card in the story line: that collection's clips without a place of their own play there).
+export type ClipEdits = { order: string[]; clips: Record<string, ClipEdit>; cuts?: CutMove[]; slips?: Slip[]; picked?: Record<string, string[]> };
+export const CARD_PREFIX = "collection:";
+export const cardKey = (collection: string) => `${CARD_PREFIX}${collection}`;
+export const cardOf = (entry: string): string | null => (entry.startsWith(CARD_PREFIX) ? entry.slice(CARD_PREFIX.length) : null);
 export const CLIP_EDITS_FILE = "clips.json";
 
 const HELP =
@@ -19,7 +25,9 @@ const HELP =
   "(clips not listed follow in file-name order). \"clips\": per clip \"omit\": true (set to Omit: not used by Make), \"in\" / \"out\" (the part used, seconds), \"speed\" (0.5-1, slow motion) and " +
   '"best" (the best moment, seconds; wins over the automatic one) and "transition" ("cut" or "dissolve": how the clip comes in; left out, the app chooses). ' +
   '"cuts": cuts moved on the Shape timeline (song seconds: the planned cut at "from" goes to "to", on the beat unless "free"). ' +
-  '"slips": shots that play another part of their clip ("at": the shot\'s start in the song, "clip", "in": seconds into the clip).';
+  '"slips": shots that play another part of their clip ("at": the shot\'s start in the song, "clip", "in": seconds into the clip). ' +
+  '"picked": clips of a shared collection put into the story line one by one ({ "Flowers": ["03_rose.mp4"] }); in "order", ' +
+  '"collection:Flowers" is a whole collection the app picks from (its other clips play at that place).';
 
 export function checkClipEdits(raw: unknown): { edits: ClipEdits; problems: string[] } {
   const problems: string[] = [];
@@ -66,6 +74,13 @@ export function checkClipEdits(raw: unknown): { edits: ClipEdits; problems: stri
     const ok = Array.isArray(r.slips) && r.slips.every((x) => x && typeof x === "object" && typeof x.at === "number" && typeof x.clip === "string" && x.clip.trim() && typeof x.in === "number" && x.at >= 0 && x.in >= 0);
     if (ok) edits.slips = (r.slips as Slip[]).map((x) => ({ at: Math.round(x.at * 100) / 100, clip: x.clip, in: Math.round(x.in * 100) / 100 }));
     else problems.push('slips must be a list like [{ "at": 48.3, "clip": "06_rings.mp4", "in": 1.4 }]');
+  }
+  if (r.picked !== undefined) {
+    const ok = !!r.picked && typeof r.picked === "object" && !Array.isArray(r.picked) && Object.values(r.picked as Record<string, unknown>).every((v) => Array.isArray(v) && v.every((x) => typeof x === "string" && x.trim()));
+    if (ok) {
+      const picked = Object.fromEntries(Object.entries(r.picked as Record<string, string[]>).filter(([k, v]) => k.trim() && v.length).map(([k, v]) => [k, [...new Set(v)]]));
+      if (Object.keys(picked).length) edits.picked = picked;
+    } else problems.push('picked must be like { "Flowers": ["03_rose.mp4"] } (collection name: clip file names)');
   }
   return { edits, problems };
 }
@@ -153,4 +168,29 @@ export function setClipOmit(songRoot: string, name: string, omit: boolean): Clip
   const next: ClipEdit = omit ? { ...rest, omit: true } : rest;
   if (Object.keys(next).length) clips[key] = next;
   return writeClipEdits(songRoot, { ...edits, clips });
+}
+
+// ---- Shared-collection clips in the story line (Prepare → Storyboard, 11 Nov 2026) ----
+// Which clips of a shared collection the song's story line uses: the picked ones, or null = all of them (a
+// "collection:<name>" card, or a song from before the picker: the whole collection, as before).
+export function storyPick(edits: ClipEdits, collection: string): string[] | null {
+  if (edits.order.includes(cardKey(collection))) return null;
+  const picked = edits.picked?.[collection];
+  return picked?.length ? picked : null;
+}
+
+// The story order with each card replaced by its collection's clips that have no place of their own (by file
+// name), so every clip has its rank. `clipsOf`: each collection's clip names.
+export function expandCards(edits: ClipEdits, clipsOf: Readonly<Record<string, readonly string[]>>): ClipEdits {
+  if (!edits.order.some((e) => cardOf(e) !== null)) return edits;
+  const listed = new Set(edits.order.filter((e) => cardOf(e) === null).map((n) => n.toLowerCase()));
+  const seen = new Set<string>();
+  const order = edits.order.flatMap((e) => {
+    const c = cardOf(e);
+    if (c === null) return [e];
+    const names = [...(clipsOf[c] ?? [])].filter((n) => !listed.has(n.toLowerCase()) && !seen.has(n.toLowerCase())).sort(byFileName);
+    for (const n of names) seen.add(n.toLowerCase());
+    return names;
+  });
+  return { ...edits, order };
 }

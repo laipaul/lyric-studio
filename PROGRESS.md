@@ -4,6 +4,32 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Storyboard: shared-collection clips in your story line ✅ (to verify on the Windows PC)
+- **How it worked before:** a ticked collection mixed in ALL its clips. They joined one pool with your own clips;
+  v1 (story order) played them after your story line, by file name (unless you had moved one in Shape → Shots);
+  v2+ shuffled the whole pool (seeded). None of them showed in the story line.
+- **Now:** "Add clips & photos" is a menu: **From my computer** / **From a collection…**. The picker shows each
+  collection's thumbnails; choose single clips (several at once). They become cards in your story line with a small
+  collection badge: drag, Use / Omit, notes, like your own clips. **Remove from this song** never touches the collection.
+- **"Let the app pick from the whole collection"** (in the picker): one card "Flowers · app picks · N clips",
+  placeable like a clip; that collection's other clips play at its place.
+- **The checkboxes are gone.** Shape → Shots no longer orders clips (one place: Prepare → Storyboard); dropping a
+  clip on a lyric line or shot still places it.
+- **Existing songs migrate without changing their videos:** a ticked collection becomes one "app picks" card at the
+  end of the story line (exactly where its clips played before); clips you had placed in Shape become picked clips
+  at their place. Saved the first time the Storyboard opens. Test: the planned video before and after is identical.
+- Make, Shape and the shot plans use only what the story line holds: picked clips, or a whole collection for a card.
+  Compare looks → Other pictures still compares whole collections. Renaming a collection follows into the story line.
+- Tests: story-line (6: cards and picks, the migration with an identical plan, remove / add / reorder, a card in the
+  middle, the collection keeps its clips, rename follows); clip-order, clip-order-prepare, collections,
+  storyboard-edit, storyboard, make-reference, shot-plan-make still pass. Browser: song-stages (no checkboxes; the
+  ticked collection is a card at the end; Remove from this song; the menu; the picker's thumbnails; one clip added
+  with its badge, Omit / Use; clips already in the line disabled; the app's pick card; the card dragged to the
+  front), storyboard (Shape: no arrows, plans the story line's order), clip-notes, collections, style-lock, textboard.
+- **To check on the PC:** open "Here With Me" → Prepare → Storyboard: your old collection (if any) is one card at
+  the end. Add clips & photos → From a collection… → Flowers: pick two clips → they appear at the end with a
+  "Flowers" badge; drag one between your own clips; Shape shows the same order.
+
 ### Prepare fixes: Song Details, hints in Assets, one Replaced files list, "Set by me" ✅ (to verify on the Windows PC)
 - **Song Details** (was Texts): the tab and every pointer ("Prepare → Song Details"). Old links ?tab=texts and
   ?tab=details keep opening it.
@@ -341,31 +367,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   `packages\video\test\golden\here-with-me-reels.manifest.json` (skipped until then).
 - Tests: storyboard-file (format, frames back, locks, unmatched edits, ids, the report), storyboard-save (a real
   song folder: Shape's plan writes the file, locks, notes, ids, pnpm storyboards); the whole video suite passes.
-
-### Theme Engine v2 on HyperFrames, step 2b part 2: stacked lines, build up, bigger final chorus, theme-rules.md ✅ (to verify on the Windows PC)
-- **Three new theme choices** in Shape → Theme → Text, under Text layout (theme.json `lineShape`, `lineBuild`,
-  `finalHook`; src/line-shape.ts; the viewer shows each click at once, Save keeps it):
-  - **Line shape: Stacked** (Subtitle = as before): each lyric line in short rows of 1-3 words, 2-4 rows,
-    never padded (a one- or two-word line stays on one row). Breaks where the singer breathes (a pause of
-    0.15 s between aligned words), never one word alone on the last row, never right after a small word
-    ("the", "my", "to", "le", "la", "mon", "l'" ...): e.g. "Hold me close / until the light",
-    "Je t'attends / sous la pluie / ce soir". Rows fit the width; only a row that cannot fit shrinks the size.
-  - **Lines appear: Build up** (Whole line = as before): the first row comes with the line, each next row
-    appears as its first word comes on screen (0.2 s fade, a slight rise into its place) and stays until the
-    whole line leaves. Independent of the letter animation (the typewriter still types as sung).
-  - **Bigger final chorus: On**: the video's last chorus 1.3x, its last line 1.5x (a card's own size still
-    wins; the usual fitting keeps it inside the safe area).
-- **Same drawing everywhere:** the rows and build-up are in the shared text code, so the Shape preview, the
-  current renderer and HyperFrames draw exactly the same. Checked by a new `hf-parity` case with all three on
-  (typewriter verses, karaoke hook): whole 0.9915 (lowest 0.9910), words 0.9921, cards 0.9916 = the same
-  picture, frame by frame. QA allows up to 4 rows for the stacked shape (subtitles: still 2).
-- **docs/theme-rules.md** started: LIN-01 .. LIN-06 (the rules above), each with its value, why, the test and
-  where it came from.
-- Tests: line-shape (rows, breaths, orphans, small words, fitting, build-up timing, final chorus, the viewer
-  patch, QA), hf-parity (stacked case); the whole video suite passes (1025 tests).
-- **To check on the PC:** Shape → Theme → Edit theme → Text: Line shape Stacked, Lines appear Build up,
-  Bigger final chorus On; the viewer shows short stacked rows building up and the last chorus larger. Then
-  make the Reel with `--engine hyperframes` (below) and compare.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

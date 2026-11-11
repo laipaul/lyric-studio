@@ -4,6 +4,31 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Theme Engine v2 on HyperFrames, step 2b part 2: stacked lines, build up, bigger final chorus, theme-rules.md ✅ (to verify on the Windows PC)
+- **Three new theme choices** in Shape → Theme → Text, under Text layout (theme.json `lineShape`, `lineBuild`,
+  `finalHook`; src/line-shape.ts; the viewer shows each click at once, Save keeps it):
+  - **Line shape: Stacked** (Subtitle = as before): each lyric line in short rows of 1-3 words, 2-4 rows,
+    never padded (a one- or two-word line stays on one row). Breaks where the singer breathes (a pause of
+    0.15 s between aligned words), never one word alone on the last row, never right after a small word
+    ("the", "my", "to", "le", "la", "mon", "l'" ...): e.g. "Hold me close / until the light",
+    "Je t'attends / sous la pluie / ce soir". Rows fit the width; only a row that cannot fit shrinks the size.
+  - **Lines appear: Build up** (Whole line = as before): the first row comes with the line, each next row
+    appears as its first word comes on screen (0.2 s fade, a slight rise into its place) and stays until the
+    whole line leaves. Independent of the letter animation (the typewriter still types as sung).
+  - **Bigger final chorus: On**: the video's last chorus 1.3x, its last line 1.5x (a card's own size still
+    wins; the usual fitting keeps it inside the safe area).
+- **Same drawing everywhere:** the rows and build-up are in the shared text code, so the Shape preview, the
+  current renderer and HyperFrames draw exactly the same. Checked by a new `hf-parity` case with all three on
+  (typewriter verses, karaoke hook): whole 0.9915 (lowest 0.9910), words 0.9921, cards 0.9916 = the same
+  picture, frame by frame. QA allows up to 4 rows for the stacked shape (subtitles: still 2).
+- **docs/theme-rules.md** started: LIN-01 .. LIN-06 (the rules above), each with its value, why, the test and
+  where it came from.
+- Tests: line-shape (rows, breaths, orphans, small words, fitting, build-up timing, final chorus, the viewer
+  patch, QA), hf-parity (stacked case); the whole video suite passes (1025 tests).
+- **To check on the PC:** Shape → Theme → Edit theme → Text: Line shape Stacked, Lines appear Build up,
+  Bigger final chorus On; the viewer shows short stacked rows building up and the last chorus larger. Then
+  make the Reel with `--engine hyperframes` (below) and compare.
+
 ### Bug fix: the Reel's title still touched the first lyric — now checked on the drawn preview ✅ (confirmed on the Windows PC in Shape, 8 Nov 2026)
 - Seen again after the last fix (Let My Love Carry You, Shape → Reels 1080x1920, Title opening on, tagline set, first line on screen from 0:00.6, at 0:02.7): title "LET MY LOVE / CARRY YOU" at ~y 430-560 (not moved), byline at ~625-645 and the first lyric (hook font, two rows) at ~640-770: byline and lyric collided.
 - Ground truth first: new browser test `apps/studio/e2e/title-opening.e2e.ts` (Playwright; a song whose Reels part starts exactly on a sung line, titleOpening on, tagline, script hook font Kaushan Script). It seeks Shape's player to 1.5 / 2.1 / 2.7 / 3.3 / 3.9 s and reads the boxes of the drawn `[data-text-card]` rows and `[data-lyric]` text inside the player's frame, in composition pixels (player scale read from the 1080x1920 frame). It failed on the old code (hook effect "ascend": title top 345 size 84 planned; drawn title 345-597, byline 618-675, lyric 626-792 = byline 49 px into the lyric, at every sample 1.5-3.9 s; "floating": byline 585-633 vs lyric 633-799, touching). After the fix: ascend title 345-547, byline 568-613, lyric 626-792 (13 px clear); floating title 354-524, byline 542-581, lyric 633-799 (52 px clear); default effect 272-464 / 484-527 vs 626 (99 px); Big hook 271-453 / 472-513 vs 602. Cards still on screen at 3.9 s in every case.

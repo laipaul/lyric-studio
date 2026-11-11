@@ -4,7 +4,7 @@
 // to-do list (buttons open the right tab), "Make release pack" (one video per platform of the song's own
 // platforms, queued for the worker) and the page opening on the stage that needs attention.
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -191,20 +191,59 @@ async function main() {
     check(!(await page.isVisible("[data-make-videos]")), "Make's button is not on this tab");
     await page.click("[data-make-tab=videos]");
 
-    // The hidden Generate panel follows the song's collections: untick "wedding" in Prepare → Clips and the
-    // clips line in Make no longer names it (it used to keep the first value and send it with the run).
+    // Shared collections live in the story line (Prepare → Storyboard, 11 Nov 2026): no checkboxes; the song's ticked
+    // "wedding" (from before) is one "app picks" card at the end of its line. Removing it takes it off the song (Make's
+    // clips line no longer names it; the collection keeps its clips); "From a collection…" picks single clips.
     check(((await page.textContent("[data-clips-line]")) ?? "").includes("wedding"), "Make: the clips line names the song's collection");
+    for (const [n, colour] of [["w1.mp4", "red"], ["w2.mp4", "blue"]] as const) ffmpeg("-f", "lavfi", "-i", `color=c=${colour}:s=216x384:r=30:d=2`, "-pix_fmt", "yuv420p", path.join(wsDir, "collections", "wedding", n));
     await openPanel(page, "collections");
-    await page.uncheck("input[data-edit$='-wedding']");
-    await page.waitForFunction(() => !document.querySelector("input[data-edit$='-wedding']:checked"));
-    await sleep(800);
+    await page.waitForSelector("[data-story-card=wedding]");
+    check(!(await page.$("[data-style-block=collections]")) && !(await page.$("input[data-edit$='-wedding']")), "Storyboard: no collection checkboxes");
+    check(((await page.textContent("[data-story-card=wedding] [data-card-count]")) ?? "").trim() === "wedding · app picks · 2 clips", `the ticked collection is one card: "wedding · app picks · 2 clips" (${await page.textContent("[data-story-card=wedding] [data-card-count]")})`);
+    const lineKeys = async () => page.$$eval("[data-clip], [data-story-card]", (e: Element[]) => e.map((x) => x.getAttribute("data-clip") ?? `card:${x.getAttribute("data-story-card")}`));
+    check((await lineKeys()).at(-1) === "card:wedding", `…at the end of the story line (${(await lineKeys()).join(", ")})`);
+    page.once("dialog", (d: { accept: () => Promise<void> }) => void d.accept());
+    await page.click("[data-remove-story='collection:wedding']");
+    await page.waitForSelector("[data-story-card=wedding]", { state: "detached" });
+    check(JSON.stringify(readRecipe(recipe).collections) === "[]" && readdirSync(path.join(wsDir, "collections", "wedding")).filter((f) => f.endsWith(".mp4")).length === 2, "Remove from this song: off the song (song.json), the collection keeps its clips");
     await page.click("[data-stage=make]");
     await page.click("[data-make-tab=videos]");
     await page.waitForSelector("[data-generate]", { state: "visible" });
-    check(!((await page.textContent("[data-clips-line]")) ?? "").includes("wedding"), `Make after unticking it in Prepare → Clips: the clips line no longer names it (${await page.textContent("[data-clips-line]")})`);
+    await page.waitForFunction(() => !document.querySelector("[data-clips-line]")?.textContent?.includes("wedding"), null, { timeout: 10_000 }).catch(() => null); // the page refreshes after Remove
+    check(!((await page.textContent("[data-clips-line]")) ?? "").includes("wedding"), `Make after removing it: the clips line no longer names it (${await page.textContent("[data-clips-line]")})`);
+    // Add clips & photos → From a collection…: pick w2 (one clip), and the app's pick from the whole collection.
     await openPanel(page, "collections");
-    await page.check("input[data-edit$='-wedding']");
-    await sleep(800);
+    await page.click("[data-add-clips]");
+    check(!!(await page.waitForSelector("[data-add-from-computer]")) && !!(await page.$("[data-add-from-collection]")), "Add clips & photos: From my computer / From a collection…");
+    await page.click("[data-add-from-collection]");
+    await page.waitForSelector("[data-collection-picker] [data-picker-collection=wedding]");
+    await page.click("[data-picker-collection=wedding]");
+    await page.waitForSelector("[data-pick-clip='w2.mp4']");
+    check((await page.$$("[data-collection-picker] [data-pick-clip] img")).length === 2, "the picker shows the collection's thumbnails");
+    await page.click("[data-pick-clip='w2.mp4']");
+    check(((await page.textContent("[data-pick-add]")) ?? "").trim() === "Add 1 clip", `one clip chosen: "Add 1 clip" (${await page.textContent("[data-pick-add]")})`);
+    await page.click("[data-pick-add]");
+    await page.waitForSelector("[data-clip='w2.mp4'] [data-collection-badge=wedding]");
+    check((await lineKeys()).at(-1) === "w2.mp4" && ((await page.textContent("[data-clip='w2.mp4']")) ?? "").includes("Remove from this song") && !!(await page.$("[data-clip='w2.mp4'] [data-use-omit]")), "the picked clip is a card in the story line with its collection badge, Use / Omit and Remove from this song");
+    check(JSON.stringify(readRecipe(recipe).collections) === JSON.stringify(["wedding"]), "…and the song uses wedding again (song.json)");
+    await page.click("[data-omit-button='w2.mp4']");
+    await page.waitForSelector("[data-clip='w2.mp4'][data-omit='1']");
+    check(true, "a collection clip can be omitted like the song's own");
+    await page.click("[data-use='w2.mp4']");
+    await page.waitForSelector("[data-clip='w2.mp4'][data-omit='0']");
+    await page.click("[data-add-clips]");
+    await page.click("[data-add-from-collection]");
+    await page.waitForSelector("[data-pick-clip='w2.mp4'][disabled]");
+    check(true, "the picker marks clips already in the story line");
+    await page.check("[data-pick-whole]");
+    await page.click("[data-pick-add]");
+    await page.waitForSelector("[data-story-card=wedding]");
+    check(((await page.textContent("[data-story-card=wedding] [data-card-count]")) ?? "").trim() === "wedding · app picks · 1 clip", "the app's pick: one card, its count without the clip placed by hand");
+    // Drag the card to the front of the line: saved in clips.json.
+    const first = (await lineKeys())[0];
+    await page.dragAndDrop("[data-story-card=wedding]", `[data-clip='${first}']`);
+    for (let i = 0; i < 20 && JSON.parse(readFileSync(path.join(songPathsById(ws2, id).root, "clips.json"), "utf8")).order[0] !== "collection:wedding"; i++) await sleep(150);
+    check(JSON.parse(readFileSync(path.join(songPathsById(ws2, id).root, "clips.json"), "utf8")).order[0] === "collection:wedding", "the card moves like a clip (clips.json)");
 
     // Part 2. Two runs of Reels (v1 ready, v2 with a point) and one discarded video: Make counts every kept
     // video; Post offers the ready one; "Try another take" queues take 3; Style shows only what differs.
@@ -305,8 +344,7 @@ async function main() {
     await openPanel(page, "make");
     check(!(await page.$("[data-style-block=make]")) && !!(await page.$("[data-make-chip=reels][data-count='2']")), "platforms and versions in one place only: Make's chips");
     await openPanel(page, "collections");
-    check(JSON.stringify(await inBlock("collections")) === JSON.stringify(["collections"]), "Prepare → Clips: the collections");
-    check(((await page.textContent("[data-field=collections] [data-source]")) ?? "") === "Mixed into this song", `the song's collections: "Mixed into this song" (${await page.textContent("[data-field=collections] [data-source]")})`);
+    check(!(await page.$("[data-style-block=collections]")) && !!(await page.$("[data-story-card=wedding]")), "Prepare → Storyboard: the collections are in the story line, not a list of checkboxes");
     // N1 polish: the same stage line on every stage, one distinct icon per tab, and each stage opens on its last tab.
     const icons = await page.$$eval("[role=tab] svg", (e: Element[]) => e.map((x) => x.getAttribute("class")?.match(/lucide-[a-z0-9-]+/)?.[0] ?? ""));
     check(new Set(icons).size === icons.length && icons.length === 4, `Prepare's tabs: four distinct icons (${icons.join(", ")})`);

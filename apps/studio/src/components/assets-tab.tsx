@@ -1,11 +1,15 @@
 "use client";
 
-import { AudioLines, FileAudio, FileText, ImageIcon, ListMusic, Trash2, Upload } from "lucide-react";
+import { AudioLines, ChevronDown, FileAudio, FileText, FolderOpen, ImageIcon, Library, ListMusic, Shuffle, Trash2, Upload } from "lucide-react";
+import { DropdownMenu } from "radix-ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import type { AssetKind, SongAssets } from "@lyric/video/assets";
 import type { ReplacedFile } from "@lyric/video/replaced-files";
+import type { StoryItem } from "@lyric/video/story-line";
+
+import { CollectionPicker } from "@/components/collection-picker";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -40,8 +44,12 @@ function replaceWarning(kind: AssetKind, current: string, next: string): string 
 // Replaced files list (every kind, hints too).
 export type AssetsPart = "files" | "clips";
 const PART_KINDS: Record<Exclude<AssetsPart, "clips">, readonly string[]> = { files: ["song", "vocals", "lyrics", "hints", "backingVocals", "cover"] };
+// story: the story line (Prepare → Storyboard, 11 Nov 2026): the song's own clips, clips picked from a shared
+// collection and "the app picks" cards, in order (story-line.ts).
+type AssetsData = SongAssets & { story: StoryItem[] };
 export function AssetsTab({ projectId, part = "files" }: { projectId: string; part?: AssetsPart }) {
-  const [data, setData] = useState<SongAssets | null>(null);
+  const [data, setData] = useState<AssetsData | null>(null);
+  const [picker, setPicker] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -60,7 +68,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
     void loadReplaced();
     try {
       const r = await api(`/api/songs/${projectId}/assets`, { cache: "no-store" });
-      const d = (await r.json()) as SongAssets & { error?: string };
+      const d = (await r.json()) as AssetsData & { error?: string };
       if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
       setData(d);
     } catch (e) {
@@ -71,7 +79,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
   useEffect(() => {
     let alive = true;
     api(`/api/songs/${projectId}/assets`, { cache: "no-store" })
-      .then((r) => r.json() as Promise<SongAssets & { error?: string }>)
+      .then((r) => r.json() as Promise<AssetsData & { error?: string }>)
       .then((d) => {
         if (!alive) return;
         if (d.error) setError(d.error);
@@ -200,12 +208,12 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
   const [dragClip, setDragClip] = useState<string | null>(null);
   const [noteOpen, setNoteOpen] = useState<string | null>(null); // the clip whose story note is being written (its card does not drag meanwhile)
   const [overClip, setOverClip] = useState<string | null>(null);
-  async function saveOrder(names: string[], done: string) {
+  async function saveOrder(keys: string[], done: string) {
     if (!data) return;
     const before = data;
-    setData({ ...data, clips: names.map((n) => data.clips.find((c) => c.name === n)!) });
+    setData({ ...data, story: keys.map((k) => data.story.find((i) => i.key === k)!) });
     try {
-      const r = await api(`/api/songs/${projectId}/assets`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ order: names }) });
+      const r = await api(`/api/songs/${projectId}/assets`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ story: keys }) });
       const d = (await r.json()) as { error?: string };
       if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
       setNotice({ ok: true, text: done });
@@ -218,15 +226,16 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
   // For clips already named in order (01_..., 02_...): one click puts them in file-name order.
   function sortByName() {
     if (!data) return;
-    if (!window.confirm("Put the clips in file-name order? This replaces the order you dragged.")) return;
-    const names = data.clips.map((c) => c.name).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
-    void saveOrder(names, "The clips are in file-name order. Shape and Make use this order.");
+    if (!window.confirm("Put the clips in file-name order? This replaces the order you dragged. Collection cards (the app picks) go at the end.")) return;
+    const byName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+    const keys = [...data.story.filter((i) => i.clip).map((i) => i.key).sort(byName), ...data.story.filter((i) => i.card).map((i) => i.key)];
+    void saveOrder(keys, "The clips are in file-name order. Shape and Make use this order.");
   }
   // Use / Omit (the same switch as Shape → Clips): an omitted clip keeps its place, Make leaves it out.
   async function setOmit(name: string, omit: boolean) {
     if (!data) return;
     const before = data;
-    setData({ ...data, clips: data.clips.map((c) => (c.name === name ? { ...c, omit } : c)) });
+    setData({ ...data, clips: data.clips.map((c) => (c.name === name ? { ...c, omit } : c)), story: data.story.map((i) => (i.clip && i.key === name ? { ...i, clip: { ...i.clip, omit } } : i)) });
     try {
       const r = await api(`/api/songs/${projectId}/assets`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ omit: { name, omit } }) });
       const d = (await r.json()) as { error?: string };
@@ -240,13 +249,42 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
   }
   async function moveClip(name: string, onto: string) {
     if (!data || name === onto) return;
-    const names = data.clips.map((c) => c.name);
-    const from = names.indexOf(name);
-    const to = names.indexOf(onto);
+    const keys = data.story.map((i) => i.key);
+    const from = keys.indexOf(name);
+    const to = keys.indexOf(onto);
     if (from < 0 || to < 0) return;
-    names.splice(from, 1);
-    names.splice(to, 0, name); // takes the place of the clip it was dropped on
-    await saveOrder(names, `${name} is now clip ${to + 1}. Shape and Make use this order.`);
+    keys.splice(from, 1);
+    keys.splice(to, 0, name); // takes the place of the card it was dropped on
+    const label = data.story[from].card ? `${data.story[from].card!.collection} (the app picks)` : name;
+    await saveOrder(keys, `${label} is now number ${to + 1} in your story line. Shape and Make use this order.`);
+  }
+
+  // A collection clip or card: out of this song's story line only (it stays in its collection).
+  async function removeFromStory(item: StoryItem) {
+    const collection = item.card?.collection ?? item.clip?.collection ?? "";
+    const what = item.card ? `${collection} (the app picks)` : item.key;
+    if (!window.confirm(`Take ${what} out of this song's story line? It stays in the collection ${collection}.`)) return;
+    if (await send(null, "DELETE", `?story=${encodeURIComponent(item.key)}`)) setNotice({ ok: true, text: `${what} is out of this song's story line (still in ${collection}).` });
+  }
+  // "From a collection…": the picked clips (and the app's pick) join the end of the story line.
+  async function addFromCollection(collection: string, clips: string[], whole: boolean): Promise<boolean> {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const r = await api(`/api/songs/${projectId}/assets`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ add: { collection, clips, whole } }) });
+      const d = (await r.json()) as { added?: string[]; error?: string };
+      if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
+      await reload();
+      router.refresh();
+      const n = clips.length;
+      setNotice({ ok: true, text: `Added from ${collection}: ${[n ? `${n} clip${n === 1 ? "" : "s"}` : "", whole ? "the app picks from the whole collection" : ""].filter(Boolean).join(" and ")}, at the end of your story line. Drag to place them.` });
+      return true;
+    } catch (e) {
+      setNotice({ ok: false, text: (e as Error).message });
+      return false;
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function remove(name: string) {
@@ -268,6 +306,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
   // What this part shows: its own file kinds, the files to place and every replaced file (all in Assets).
   const kinds = part === "clips" ? [] : PART_KINDS[part];
   const has = (kind: string) => kinds.includes(kind);
+  const fromCollections = (data.story ?? []).filter((i) => i.clip?.collection || i.card).length; // collection clips and cards in the story line
   const unassigned = (part === "files" ? data.unassigned : []);
   const ownReplaced = part === "files" ? replaced : [];
   const fileRow = (kind: AssetKind, icon: React.ReactNode, title: string, value: React.ReactNode, warning?: React.ReactNode, button = "Replace…") => (
@@ -385,19 +424,41 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
             <p data-story-line className="text-sm">Your story line: drag to set the order.</p>
             <p data-usable className="text-muted-foreground text-xs">
               {data.clips.length} in this song&apos;s clips folder · 9:16 platforms can use {data.usable.vertical} · YouTube (16:9) can use {data.usable.horizontal}
-              {" "}· shared collections: below
+              {fromCollections ? ` · ${fromCollections} from shared collections` : ""}
             </p>
-            {data.clips.length > 1 ? <p data-order-hint className="text-muted-foreground text-xs">
-                Drag the clips into the order you want: Shape shows the same order and every video follows it. Omit leaves a clip out of the videos (it keeps its place). New clips go at the end, by file name.{" "}
+            {data.story.length > 1 ? <p data-order-hint className="text-muted-foreground text-xs">
+                Drag the clips into the order you want: Shape shows the same order and every video follows it. Omit leaves a clip out of the videos (it keeps its place). New clips go at the end.{" "}
                 <button type="button" data-sort-by-name disabled={busy} onClick={sortByName} className="hover:text-foreground underline underline-offset-2">
                   Sort by file name
                 </button>
               </p> : null}
           </div>
-          <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => clipInput.current?.click()}>
-            <Upload /> Add clips &amp; photos
-          </Button>
+          {/* Add clips & photos (11 Nov 2026): from the computer (copied into the song's clips folder) or from a shared collection. */}
+          <DropdownMenu.Root modal={false}>
+            <DropdownMenu.Trigger asChild>
+              <Button type="button" variant="outline" size="sm" disabled={busy} data-add-clips>
+                <Upload /> Add clips &amp; photos <ChevronDown className="size-3.5" />
+              </Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content align="end" sideOffset={4} className="bg-popover text-popover-foreground z-50 min-w-52 rounded-md border p-1 text-sm shadow-lg">
+                <DropdownMenu.Item data-add-from-computer onSelect={() => clipInput.current?.click()} className="hover:bg-accent focus:bg-accent flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 outline-none select-none">
+                  <FolderOpen className="size-4" /> From my computer
+                </DropdownMenu.Item>
+                <DropdownMenu.Item data-add-from-collection onSelect={() => setPicker(true)} className="hover:bg-accent focus:bg-accent flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 outline-none select-none">
+                  <Library className="size-4" /> From a collection…
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
           <input ref={clipInput} type="file" multiple accept="video/*,.mp4,.mov,.m4v,.webm,.mkv,.jpg,.jpeg,.png,.webp" className="hidden" data-clip-input onChange={(e) => e.target.files && addClips(e.target.files)} />
+          <CollectionPicker
+            open={picker}
+            onOpenChange={setPicker}
+            inStory={(collection, clip) => data.story.some((i) => i.clip?.collection === collection && i.key.toLowerCase() === clip.toLowerCase())}
+            cards={data.story.flatMap((i) => (i.card ? [i.card.collection] : []))}
+            onAdd={addFromCollection}
+          />
         </div>
         <div
           data-dropzone
@@ -415,82 +476,125 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
           }}
           className={cn("rounded-xl border border-dashed p-4 transition-colors", dragging ? "border-brand bg-brand/10" : "border-border")}
         >
-          {data.clips.length ? (
+          {data.story.length ? (
             <ul className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
-              {data.clips.map((c, i) => (
-                <li
-                  key={c.name}
-                  data-clip={c.name}
-                  data-position={i + 1}
-                  draggable={!busy && noteOpen !== c.name}
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData(CLIP_DRAG, c.name);
+              {data.story.map((item, i) => {
+                const c = item.clip;
+                const k = item.key;
+                const dragProps = {
+                  draggable: !busy && noteOpen !== k,
+                  onDragStart: (e: React.DragEvent) => {
+                    e.dataTransfer.setData(CLIP_DRAG, k);
                     e.dataTransfer.effectAllowed = "move";
-                    setDragClip(c.name);
-                  }}
-                  onDragEnd={() => {
+                    setDragClip(k);
+                  },
+                  onDragEnd: () => {
                     setDragClip(null);
                     setOverClip(null);
-                  }}
-                  onDragOver={(e) => {
+                  },
+                  onDragOver: (e: React.DragEvent) => {
                     if (!e.dataTransfer.types.includes(CLIP_DRAG)) return;
                     e.preventDefault();
                     e.dataTransfer.dropEffect = "move";
-                    if (overClip !== c.name) setOverClip(c.name);
-                  }}
-                  onDrop={(e) => {
+                    if (overClip !== k) setOverClip(k);
+                  },
+                  onDrop: (e: React.DragEvent) => {
                     const name = e.dataTransfer.getData(CLIP_DRAG);
                     if (!name) return;
                     e.preventDefault();
                     e.stopPropagation();
                     setDragClip(null);
                     setOverClip(null);
-                    void moveClip(name, c.name);
-                  }}
-                  data-omit={c.omit ? "1" : "0"}
-                  className={cn("bg-card flex cursor-grab flex-col overflow-hidden rounded-lg border active:cursor-grabbing", c.omit && "border-dashed", dragClip === c.name && "opacity-40", overClip === c.name && dragClip !== c.name && "border-brand ring-brand ring-2")}
-                >
-                  <div className="relative aspect-[9/12] bg-black">
-                    {c.thumb ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- a local thumbnail served by /api/files
-                      <img src={`/api/files/${c.thumb}`} alt="" draggable={false} className={cn("size-full object-contain", c.omit && "opacity-30 grayscale")} />
-                    ) : null}
-                    <span data-order-number className="bg-brand text-brand-foreground absolute top-1.5 left-1.5 flex size-6 items-center justify-center rounded-full text-xs font-semibold">{i + 1}</span>
-                    <span className="absolute top-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] tracking-wide uppercase">{c.orientation}</span>
-                  </div>
-                  <div className="flex flex-col gap-0.5 p-2 text-xs">
-                    <p className="truncate font-medium" title={c.name}>
-                      {c.name}
-                    </p>
-                    <p className="text-muted-foreground">
-                      {c.kind === "photo" ? "photo" : seconds(c.durationMs)} · {c.width}×{c.height}
-                    </p>
-                    {c.duplicateOf ? <p className="text-amber-300">same content as {c.duplicateOf}</p> : null}
-                    <div data-use-omit={c.name} role="group" aria-label={`Use or omit ${c.name}`} className="mt-1 flex w-fit overflow-hidden rounded-md border text-[11px]">
-                      <button type="button" data-use={c.name} aria-pressed={!c.omit} disabled={busy} onClick={() => c.omit && void setOmit(c.name, false)} className={cn("px-2 py-0.5", !c.omit ? "bg-brand/20 text-brand" : "hover:bg-accent")}>
-                        Use
-                      </button>
-                      <button type="button" data-omit-button={c.name} aria-pressed={!!c.omit} disabled={busy} onClick={() => !c.omit && void setOmit(c.name, true)} className={cn("border-l px-2 py-0.5", c.omit ? "bg-amber-400/20 text-amber-200" : "hover:bg-accent")}>
-                        Omit
-                      </button>
+                    void moveClip(name, k);
+                  },
+                };
+                const frame = cn("bg-card flex cursor-grab flex-col overflow-hidden rounded-lg border active:cursor-grabbing", dragClip === k && "opacity-40", overClip === k && dragClip !== k && "border-brand ring-brand ring-2");
+                const number = <span data-order-number className="bg-brand text-brand-foreground absolute top-1.5 left-1.5 flex size-6 items-center justify-center rounded-full text-xs font-semibold">{i + 1}</span>;
+                if (item.card) {
+                  // "Flowers · app picks · N clips": the app plays that collection's other clips at this place.
+                  const card = item.card;
+                  return (
+                    <li key={k} data-story-card={card.collection} data-position={i + 1} {...dragProps} className={cn(frame, "border-dashed")}>
+                      <div className="relative grid aspect-[9/12] grid-cols-2 grid-rows-2 gap-px bg-black">
+                        {card.thumbs.map((t) => (
+                          // eslint-disable-next-line @next/next/no-img-element -- a local thumbnail served by /api/files
+                          <img key={t} src={`/api/files/${t}`} alt="" draggable={false} className="size-full object-cover opacity-80" />
+                        ))}
+                        {number}
+                        <span className="absolute inset-x-0 bottom-1.5 mx-auto flex w-fit items-center gap-1 rounded bg-black/75 px-1.5 py-0.5 text-[10px]">
+                          <Shuffle className="size-3" /> app picks
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-0.5 p-2 text-xs">
+                        <p className="flex items-center gap-1 truncate font-medium">
+                          <Library className="text-brand size-3 shrink-0" /> {card.collection}
+                        </p>
+                        <p data-card-count className="text-muted-foreground">
+                          {card.collection} · app picks · {card.clips} clip{card.clips === 1 ? "" : "s"}
+                        </p>
+                        <button type="button" data-remove-story={k} disabled={busy} onClick={() => void removeFromStory(item)} className="text-muted-foreground hover:text-foreground mt-1 flex w-fit items-center gap-1">
+                          <Trash2 className="size-3" /> Remove from this song
+                        </button>
+                      </div>
+                    </li>
+                  );
+                }
+                if (!c) return null;
+                return (
+                  <li key={k} data-clip={c.name} data-collection-clip={c.collection} data-position={i + 1} data-omit={c.omit ? "1" : "0"} {...dragProps} className={cn(frame, c.omit && "border-dashed")}>
+                    <div className="relative aspect-[9/12] bg-black">
+                      {c.thumb ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- a local thumbnail served by /api/files
+                        <img src={`/api/files/${c.thumb}`} alt="" draggable={false} className={cn("size-full object-contain", c.omit && "opacity-30 grayscale")} />
+                      ) : null}
+                      {number}
+                      <span className="absolute top-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] tracking-wide uppercase">{c.orientation}</span>
+                      {c.collection ? (
+                        <span data-collection-badge={c.collection} title={`From the collection ${c.collection}`} className="border-brand/40 absolute bottom-1.5 left-1.5 flex max-w-[85%] items-center gap-1 truncate rounded border bg-black/75 px-1.5 py-0.5 text-[10px]">
+                          <Library className="text-brand size-3 shrink-0" /> {c.collection}
+                        </span>
+                      ) : null}
                     </div>
-                    <button type="button" data-remove={c.name} disabled={busy} onClick={() => remove(c.name)} className="text-muted-foreground hover:text-foreground mt-1 flex w-fit items-center gap-1">
-                      <Trash2 className="size-3" /> Remove
-                    </button>
-                    <ClipNoteField
-                      projectId={projectId}
-                      clip={c.name}
-                      note={c.note ?? null}
-                      editing={noteOpen === c.name}
-                      onEditing={(on) => setNoteOpen(on ? c.name : null)}
-                      onSaved={(note) => setData((d) => (d ? { ...d, clips: d.clips.map((x) => (x.hash === c.hash ? { ...x, note } : x)) } : d))}
-                    />
-                  </div>
-                </li>
-              ))}
+                    <div className="flex flex-col gap-0.5 p-2 text-xs">
+                      <p className="truncate font-medium" title={c.name}>
+                        {c.name}
+                      </p>
+                      <p className="text-muted-foreground">
+                        {c.kind === "photo" ? "photo" : seconds(c.durationMs)} · {c.width}×{c.height}
+                      </p>
+                      {c.duplicateOf ? <p className="text-amber-300">same content as {c.duplicateOf}</p> : null}
+                      <div data-use-omit={c.name} role="group" aria-label={`Use or omit ${c.name}`} className="mt-1 flex w-fit overflow-hidden rounded-md border text-[11px]">
+                        <button type="button" data-use={c.name} aria-pressed={!c.omit} disabled={busy} onClick={() => c.omit && void setOmit(c.name, false)} className={cn("px-2 py-0.5", !c.omit ? "bg-brand/20 text-brand" : "hover:bg-accent")}>
+                          Use
+                        </button>
+                        <button type="button" data-omit-button={c.name} aria-pressed={!!c.omit} disabled={busy} onClick={() => !c.omit && void setOmit(c.name, true)} className={cn("border-l px-2 py-0.5", c.omit ? "bg-amber-400/20 text-amber-200" : "hover:bg-accent")}>
+                          Omit
+                        </button>
+                      </div>
+                      {c.collection ? (
+                        <button type="button" data-remove-story={c.name} disabled={busy} onClick={() => void removeFromStory(item)} className="text-muted-foreground hover:text-foreground mt-1 flex w-fit items-center gap-1" title={`Out of this song only: it stays in ${c.collection}`}>
+                          <Trash2 className="size-3" /> Remove from this song
+                        </button>
+                      ) : (
+                        <button type="button" data-remove={c.name} disabled={busy} onClick={() => remove(c.name)} className="text-muted-foreground hover:text-foreground mt-1 flex w-fit items-center gap-1">
+                          <Trash2 className="size-3" /> Remove
+                        </button>
+                      )}
+                      <ClipNoteField
+                        projectId={projectId}
+                        clip={c.name}
+                        note={c.note ?? null}
+                        editing={noteOpen === k}
+                        onEditing={(on) => setNoteOpen(on ? k : null)}
+                        onSaved={(note) => setData((d) => (d ? { ...d, clips: d.clips.map((x) => (x.name === c.name && !c.collection ? { ...x, note } : x)), story: d.story.map((x) => (x.key === k && x.clip ? { ...x, clip: { ...x.clip, note } } : x)) } : d))}
+                      />
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           ) : (
-            <p className="text-muted-foreground py-8 text-center text-sm">Drop videos and photos here (or “Add clips &amp; photos”). They are copied into this song&apos;s clips folder.</p>
+            <p className="text-muted-foreground py-8 text-center text-sm">Drop videos and photos here, or “Add clips &amp; photos”: from your computer (copied into this song&apos;s clips folder) or from a collection.</p>
           )}
         </div>
         {data.removed.length ? (

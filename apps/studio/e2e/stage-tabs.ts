@@ -39,8 +39,9 @@ export async function openPanel(page: any, id: string): Promise<void> {
     return;
   }
   if (id === "collections") {
+    // 11 Nov 2026: the shared collections are in the story line (cards), no longer checkboxes.
     await openTab(page, "Clips");
-    await page.waitForSelector("[data-style-block=collections]");
+    await page.waitForSelector("[data-story-line]");
     return;
   }
   if (id === "make") {

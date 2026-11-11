@@ -194,7 +194,6 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
         <TabsContent value="clips">
           <div className="flex flex-col gap-4">
             <AssetsTab projectId={song.id} part="clips" />
-            <SongSettings projectId={song.id} only="collections" />
           </div>
         </TabsContent>
         <TabsContent value="shape">

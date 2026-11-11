@@ -353,21 +353,19 @@ async function main() {
       await page.waitForSelector("[data-replanning]", { timeout: 10_000 }).catch(() => null);
       await page.waitForSelector("[data-replanning]", { state: "detached", timeout: 180_000 });
     };
-    await page.click("[data-move-later='01_a.mp4']");
-    await replanned();
-    const order = await strip();
-    check(JSON.stringify(order) === JSON.stringify(["02_b.mp4", "01_a.mp4", "03_c.mp4", "04_d.mp4"]), `moved later, planned again (${order.join(", ")})`);
+    // 11 Nov 2026: the order is set in one place, Prepare → Storyboard (collection clips included); Shape shows it
+    // and links there, with no arrows of its own. The story line's order (its API) is planned here after a reload.
+    check(!(await page.$("[data-move-later]")) && !(await page.$("[data-move-earlier]")) && !!(await page.$("[data-story-strip-hint] [data-open-storyboard]")), "Shape: no reorder arrows; the order is changed in Prepare → Storyboard");
+    const order = ["04_d.mp4", "02_b.mp4", "01_a.mp4", "03_c.mp4"];
+    const put = await page.request.put(`${base}/api/songs/${sp.project.id}/assets`, { data: { story: order } });
+    check(put.ok(), `the story line's order saved (${put.status()})`);
     const clipsJson = () => JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8"));
     check(JSON.stringify(clipsJson().order) === JSON.stringify(order), "the order is kept in clips.json");
     await page.reload();
     await page.waitForSelector("[data-shot='1']", { timeout: 180_000 });
     await openPanel(page, "clips");
     await page.waitForSelector("[data-story-clip]", { timeout: 180_000 });
-    check(JSON.stringify(await strip()) === JSON.stringify(order), "and still there after reloading the page");
-    // Drag a clip onto another: it takes that place.
-    await page.dragAndDrop("[data-story-clip='04_d.mp4']", "[data-story-clip='02_b.mp4']");
-    await replanned();
-    check((await strip())[0] === "04_d.mp4", `dragged to the front (${(await strip()).join(", ")})`);
+    check(JSON.stringify(await strip()) === JSON.stringify(order), `Shape plans the story line's order (${(await strip()).join(", ")})`);
     // No Clip editor box (8 Nov 2026): a clip clicked in the strip is selected on the timeline; its ⋯ menu there holds
     // the speed, how it comes in, its best moment and the Canvas. On 01_a (shot 3 of this Reel; 03_c has no shot here).
     await page.click("[data-story-clip='01_a.mp4'] button");

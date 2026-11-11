@@ -313,13 +313,6 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
     setPanel("text");
     setDraft(board?.cards.find((c) => c.id === id)?.overrides ?? {});
   };
-  const moveClip = (name: string, to: number) => {
-    if (!view) return;
-    const order = view.clips.map((c) => c.name).filter((n) => n !== name);
-    order.splice(Math.max(0, Math.min(order.length, to)), 0, name);
-    void edit({ action: "order", order });
-  };
-
   // The preview follows the playhead.
   useEffect(() => {
     const p = playerInstance;
@@ -494,7 +487,10 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
     if (line?.number != null) void edit({ action: "anchor", line: line.number, clip });
     else {
       const at = view.clips.findIndex((c) => c.name === s.clip);
-      if (at >= 0 && s.clip !== clip) moveClip(clip, at);
+      if (at < 0 || s.clip === clip) return;
+      const order = view.clips.map((c) => c.name).filter((n) => n !== clip);
+      order.splice(Math.max(0, Math.min(order.length, at)), 0, clip);
+      void edit({ action: "order", order });
     }
   };
 
@@ -553,7 +549,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
       </div>
       <div className="flex flex-col gap-3" data-clips-panel>
         {view?.editable && view.clips.length ? (
-          <StoryStrip clips={view.clips} busy={saving || loading} onMove={moveClip} onOpen={openClip} onOmit={(clip, omit) => void edit({ action: "omit", clip, omit })} current={shot?.clip ?? null} />
+          <StoryStrip clips={view.clips} busy={saving || loading} onOpen={openClip} onOmit={(clip, omit) => void edit({ action: "omit", clip, omit })} current={shot?.clip ?? null} />
         ) : (
           <p className="text-muted-foreground text-xs">{view && !view.editable ? "A past run: its clips cannot be changed." : "The clips show once the video is planned."}</p>
         )}
@@ -1334,14 +1330,18 @@ function ShotDetails({ shot: s, editable, menu, onUnanchor, onOmit, onResetTimel
 }
 
 // The story order: every clip of the run (the song's own and the collections') in the order story
-// videos use them. Drag a card onto another to put it there (or use the arrows); drag a card onto a
-// lyric line to anchor it on that line; click it to edit it.
-function StoryStrip({ clips, busy, onMove, onOpen, onOmit, current }: { clips: StoryboardClip[]; busy: boolean; onMove: (name: string, to: number) => void; onOpen: (name: string) => void; onOmit: (name: string, omit: boolean) => void; current: string | null }) {
-  const [over, setOver] = useState<number | null>(null);
+// videos use them. The order itself is set in Prepare → Storyboard (11 Nov 2026: one place, collection clips
+// included); here: drag a card onto a lyric line or a shot to put it there; click it to find it on the timeline.
+function StoryStrip({ clips, busy, onOpen, onOmit, current }: { clips: StoryboardClip[]; busy: boolean; onOpen: (name: string) => void; onOmit: (name: string, omit: boolean) => void; current: string | null }) {
+  const goToTab = useGoToTab();
   return (
     <div data-story-strip>
-      <p className="text-muted-foreground mb-2 text-xs">
-        The clips in the song&apos;s order (the same order as Assets; every video follows it): drag one onto another to reorder, onto a shot or a lyric line to put it there; click one to find it on the timeline (its ⋯ there has its speed, best moment and more); Omit leaves a clip out of the videos. Each clip plays once before any repeats.
+      <p className="text-muted-foreground mb-2 text-xs" data-story-strip-hint>
+        The clips in your story order (every video follows it). Change the order in{" "}
+        <button type="button" data-open-storyboard onClick={() => goToTab("clips")} className="text-foreground underline underline-offset-2">
+          Prepare → Storyboard
+        </button>
+        . Drag one onto a shot or a lyric line to put it there; click one to find it on the timeline.
       </p>
       <ol className="grid grid-cols-2 gap-2">
         {clips.map((c, i) => (
@@ -1355,19 +1355,7 @@ function StoryStrip({ clips, busy, onMove, onOpen, onOmit, current }: { clips: S
               e.dataTransfer.setData("text/x-lyric-clip", c.name);
               e.dataTransfer.effectAllowed = "move";
             }}
-            onDragOver={(e) => {
-              if (!e.dataTransfer.types.includes("text/x-lyric-clip")) return;
-              e.preventDefault();
-              setOver(i);
-            }}
-            onDragLeave={() => setOver(null)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setOver(null);
-              const name = e.dataTransfer.getData("text/x-lyric-clip");
-              if (name && name !== c.name) onMove(name, i);
-            }}
-            className={cn("bg-card relative cursor-grab overflow-hidden rounded-lg border text-[11px]", over === i && "ring-brand ring-2", current === c.name && "border-brand", c.omit && "border-dashed")}
+            className={cn("bg-card relative cursor-grab overflow-hidden rounded-lg border text-[11px]", current === c.name && "border-brand", c.omit && "border-dashed")}
           >
             <button type="button" onClick={() => onOpen(c.name)} className="block w-full text-left" title={`${c.name}: click to show it on the timeline`}>
               <div className={cn("aspect-video bg-black bg-cover bg-center", c.omit && "opacity-30 grayscale")} style={{ backgroundImage: c.thumb ? `url(/api/files/${c.thumb})` : undefined }} />
@@ -1394,14 +1382,6 @@ function StoryStrip({ clips, busy, onMove, onOpen, onOmit, current }: { clips: S
             >
               {c.omit ? "Omit" : "Use"}
             </button>
-            <div className="absolute top-0.5 right-0.5 flex gap-0.5">
-              <button type="button" aria-label={`move ${c.name} earlier`} data-move-earlier={c.name} disabled={busy || i === 0} onClick={() => onMove(c.name, i - 1)} className="rounded bg-black/60 p-0.5 disabled:opacity-30">
-                <ChevronLeft className="size-3" />
-              </button>
-              <button type="button" aria-label={`move ${c.name} later`} data-move-later={c.name} disabled={busy || i === clips.length - 1} onClick={() => onMove(c.name, i + 1)} className="rounded bg-black/60 p-0.5 disabled:opacity-30">
-                <ChevronRight className="size-3" />
-              </button>
-            </div>
           </li>
         ))}
       </ol>

@@ -57,7 +57,7 @@ const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", 
 // The song's own settings outside Shape (N1): Prepare → Song Details (title, card texts, EP), Prepare → Lyrics Sync
 // (tempo, time the lyrics again), Prepare → Clips (collections), Make → Videos (platforms, videos per platform).
 // The same rows and saving as Shape's panels, one block each; nothing of the theme or the viewer.
-export type SongPart = "details" | "timing" | "collections"; // platforms and versions: Make's chips (generate-panel.tsx)
+export type SongPart = "details" | "timing"; // the shared collections: Prepare → Storyboard's story line (story-line.ts) // platforms and versions: Make's chips (generate-panel.tsx)
 const NO_LOOK = () => {};
 export function SongSettings({ projectId, only }: { projectId: string; only: SongPart }) {
   return <ShapeTools projectId={projectId} only={only} onLook={NO_LOOK} onSaved={NO_LOOK} planned={0} />;
@@ -1097,14 +1097,6 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
         </Block>
       ) : null}
 
-      {section === "collections" ? (
-        <Block id="collections" title="Clips from collections">
-          <p className="text-muted-foreground -mt-1 text-[11px]">
-            Shared clips mixed in with this song&apos;s own. The collections themselves: <Link href="/collections" className="underline underline-offset-2">Collections ↗</Link>
-          </p>
-          {rows(pick(["collections"]))}
-        </Block>
-      ) : null}
 
 
     </div>
