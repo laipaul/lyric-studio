@@ -143,7 +143,9 @@ async function main() {
     await page.goto(`${base}/songs/${sp.project.id}?tab=videos`);
     await showTab("reels");
     await page.waitForSelector("[data-video*='2026-10-20_1430/reels/'][data-video$='v1.manifest.json'] [data-verdict]");
-    check((await page.getAttribute("[data-video*='2026-10-20_1430/reels/'][data-video$='v1.manifest.json'] [data-verdict]", "data-verdict")) === "ready", "v1 (QA passed) is ✅ Ready to post");
+    check((await page.getAttribute("[data-video*='2026-10-20_1430/reels/'][data-video$='v1.manifest.json'] [data-verdict]", "data-verdict")) === "ready", "v1 (QA passed) is ✅ the app's best verdict");
+    // 11 Nov 2026: "Ready to post" only once approved; before that the app's quality verdict in words.
+    check((await page.getAttribute("[data-video*='2026-10-20_1430/reels/'][data-video$='v1.manifest.json'] [data-verdict]", "data-verdict-text")) === "Excellent", "not approved yet: its badge says Excellent, not Ready to post");
     await page.click("[data-video*='2026-10-20_1430/reels/'][data-video$='v1.manifest.json'] [data-reactions-toggle]");
     await page.click("[data-video*='2026-10-20_1430/reels/'][data-video$='v1.manifest.json'] [data-reaction=too-fast]");
     await page.waitForSelector("[data-video*='2026-10-20_1430/reels/'][data-video$='v1.manifest.json'] [data-reaction-plan]");
@@ -203,6 +205,7 @@ async function main() {
     await showTab("reels");
     await Promise.all([page.waitForResponse((r: { url(): string }) => r.url().includes("/api/marks")), page.click("[data-video*='2026-10-20_1430/reels/'][data-video$='v1.manifest.json'] button:has-text('Approve')")]);
     await page.waitForSelector("[data-video*='2026-10-20_1430/reels/'][data-video$='v1.manifest.json'][data-mark=approved]");
+    check((await page.getAttribute("[data-video*='2026-10-20_1430/reels/'][data-video$='v1.manifest.json'] [data-verdict]", "data-verdict-text")) === "Ready to post", "approved: now its badge says Ready to post");
     await page.goto(`${base}/songs/${sp.project.id}?tab=post`);
     await page.waitForSelector("[data-post-video]");
     check((await page.$$("[data-post-video]")).length === 1, "Post lists the approved video only (v1, not v2)");
@@ -321,7 +324,8 @@ async function main() {
     const tk = (n: string) => tile("2026-10-22_1000", "tiktok", n);
     // 1 + 4: the tab's header shows the verdict of the platform's videos; old-style manifests get a verdict too.
     check((await page.getAttribute(`${tt} [data-platform-verdict]`, "data-platform-verdict")) === "not-ready", "the TikTok tab's header: the worst verdict of its videos (Not ready)");
-    check((((await page.textContent(`${tt} [data-platform-verdict]`)) ?? "").toLowerCase()).includes("not ready"), "the header says it in plain words");
+    const ttSummary = (await page.textContent(`${tt} [data-platform-verdict]`)) ?? "";
+    check(/\d+ of \d+ could be better · \d+ approved/.test(ttSummary), `the header says it in the badges' words, with how many are approved (${ttSummary})`);
     const verdictOf = (sel: string) => page.getAttribute(`${sel} [data-verdict]`, "data-verdict");
     check((await verdictOf(tk("v1"))) === "ready" && (await verdictOf(tk("v2"))) === "good" && (await verdictOf(tk("v3"))) === "not-ready", "old-style manifests (no pace / ending / props): verdicts ready / good / not-ready on the tiles");
     const runsText = await page.$$eval("[data-review-platform] [data-card]", (els: Element[]) => els.map((e) => e.textContent).join("\n"));
@@ -379,7 +383,7 @@ async function main() {
     await page.click(`${r2} [data-tile-picture]`, { position: { x: 60, y: 200 } });
     await page.waitForSelector("[data-player-dialog]");
     check((((await page.textContent("[data-player-dialog] h2")) ?? "").trim()) === "Reels v2", "player dialog titled Reels v2");
-    check(((await page.textContent("[data-player-verdict]")) ?? "").includes("Ready to post"), "player dialog shows the verdict");
+    check(((await page.textContent("[data-player-verdict]")) ?? "").includes("Excellent"), "player dialog shows the verdict (Excellent: not approved, so not \"Ready to post\")");
     check((await page.$$("[data-player-dialog] button:has-text('Approve'), [data-player-dialog] button:has-text('Discard'), [data-player-dialog] button:has-text('Post')")).length === 3, "player dialog has Approve / Discard / Post");
     await page.waitForFunction(() => (document.querySelector("[data-player-dialog] video") as HTMLVideoElement).readyState >= 1);
     await page.$eval("[data-player-dialog] video", (v: HTMLVideoElement) => v.play());

@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 
 import type { VideoInfo } from "@lyric/video/exports";
 import { videoTitle } from "@lyric/video/video-names";
+import { headlineOf } from "@/components/assessment";
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { orderText, seconds } from "@/components/video-tile";
@@ -50,7 +51,7 @@ export function CompareDialog({ videos, open, onOpenChange }: { videos: VideoInf
     { label: "Cinematic bars", value: (v) => (v.bars ? "yes" : "no") },
     { label: "Effects", value: (v) => (v.effects ? `${v.effects.verse} / ${v.effects.hook}` : "old fade") },
     { label: "Length", value: (v) => seconds(v.durationS) },
-    { label: "Verdict", value: (v) => v.assessment.headline },
+    { label: "Verdict", value: (v) => headlineOf(v.assessment, v.mark?.status === "approved") },
   ];
 
   return (

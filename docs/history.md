@@ -4,6 +4,75 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Review: platform tabs, the same layout as the other stages ✅ (to verify on the Windows PC)
+- **Tabs:** one per platform that has videos (or one being made), with its count (Reels 2 · TikTok 6 · YouTube 1), then
+  **Post**; the same pink-underline tabs as Prepare, Shape and Make, and "Review · <status>" in the same place. The
+  platform summary boxes and "Showing Reels only · show all" are gone.
+- **Inside a platform tab:** a header with the platform's verdict, **Make another** and the filters (Favourites only,
+  Show discarded); then the approved video(s) first, then every other version newest first. The run's date and time
+  is a small line under each card (no more run headings); "command" and "settings" (with Use these settings) stay
+  on the card, folded; an interrupted or failed run shows its state (with Resume) there.
+- **A video being made** (or waiting in Tasks) is a placeholder card in its platform's tab: "Waiting… take 3, see
+  Tasks" / "Making… 1 new video, see Tasks"; the page looks again every 10 s until it is there.
+- **Empty runs** stay hidden behind "Show N empty runs" inside the tab (remembered). A platform with nothing finished
+  and nothing being made has no tab (an interrupted one keeps its Resume in the song header's chips and in Tasks).
+- Layout only: approve, discard, restore, favourites, compare, the player, Post and React work as before.
+- **Proposal (not built): Post inside each platform tab?** Recommendation: keep one Post tab. Posting is per platform
+  already where it matters: every card's Post button opens that video's own caption, hashtags (YouTube: title,
+  description, tags) and files, and the Post tab groups the approved videos by platform with each one's caption. The
+  Post tab's value is the release moment across platforms: everything approved for this song, ready to copy and
+  download together, the same day. Moving it into each platform tab would split that list into four places and
+  repeat the song's links in each. If a per-platform view is wanted, the small step would be a link in each tab's
+  header ("2 approved: Post →") that opens the Post tab at that platform.
+- Tests: song-stages.e2e.ts (+5: the tabs with counts and a platform being made, no summary boxes, approved first then
+  newest, the date line on the card, the placeholder cards for a queued take and the release pack), videos-post.e2e.ts
+  (moved to the tabs: the verdict in each tab's header, the tabs Reels / TikTok / YouTube / Post with no Shorts tab,
+  "Show 1 empty run" per tab, the marks compared by name since approved cards come first); style-lock, themes, releases,
+  library, collections, song-title, clip-notes still pass; tsc clean; pnpm build ok; eslint: only the old findings.
+- **To check on the PC:** open a song with videos: Review shows a tab per platform with counts and Post. In a tab: the
+  approved video first, the date under each card, Make another at the top; press it: a "Waiting… take N, see Tasks" card
+  appears and becomes the video when it is made.
+
+### Theme v2 storyboard, step 2e-1: Make, the release pack and Shape's viewer make every video from its shot plan ✅ (to verify on the Windows PC)
+- **Reference first (asked by the user, in place of the golden manifest):** before any change, three songs were made with
+  the old code and a renderer that only records what it is given: Ref One (Reels v1 + v2 and a YouTube clips video, title
+  opening, hook and end cards), Ref Two (Reels, TikTok, YouTube cover layout, a photo, a moved cut and a slip), Ref Three
+  (Shorts and YouTube, story shot length, flowing transitions, stacked lines, big hook): 8 videos, saved in
+  `packages\video\test\reference\2e1\` (captured twice: identical; its own commit, 078d8d0). **After 2e-1 the same
+  songs give identical props, frame for frame: the same cuts (shot starts, lengths, clips, where each clip starts,
+  speeds, dissolves), the same lyric timing and every other prop** (test/make-reference.test.ts).
+- **The shot plan is now complete for rendering:** each shot also holds what the renderer draws (where playback
+  starts in the clip, its length there, a photo's move, the dissolve, a loop blend) and the plan holds the audio fades,
+  the clip files it could use and a fingerprint of everything it is made from (the song, its lyric timing, the clips and
+  clips.json, the song's settings for that platform, the variation).
+- **One compile (shot plan -> props)** for Make, the release pack and Shape's viewer: the shots, cuts, part of the song,
+  fades and lyric timing come from the file; the look (theme, fonts, cards, effects) from the song as it is now.
+- **Make settles each video's shot plan before making it:** none yet: saved first; the same plan: made as saved; the
+  song, lyrics, clips or settings changed: planned and saved again first, the old plan kept as `<id>.previous.json`,
+  and what changed is said in the run's message in Tasks (e.g. "Instagram Reels v1: shot plan saved again before
+  making it: the part of the song: 0:02.3-0:16.0 -> 0:02.3-0:18.0; 4 shots -> 5 …"). **Nothing it is made from changed
+  but the app would now plan it differently: the SAVED plan is made** (the file wins; said in Tasks and in Shape). Each
+  run keeps a copy next to the video (`v1.shotplan.json`) and the manifest says which plan and what happened.
+- **Try other looks:** each try has its own shot plan, never the video's own: another theme for a run or Compare
+  themes `reels-1~theme-night-drive.json`, picture versions `reels-1~pictures-city.json` / `~pictures-song`, font
+  pairings `reels-1~fonts-elegant.json`. Shape's video picker lists them ("v1 · try: theme Night Drive") and opens one
+  with its theme, fonts or clips.
+- **What 2e-1 does not do yet:** the file wins only as a whole plan; Shape's edits still go to clips.json (2f writes them
+  into the plan and locks them); a changed input re-plans the whole video, the old plan kept one step back (2g merges and
+  keeps locked shots, with "Back to previous version"). The look always follows the song now (a try keeps its own theme).
+- Tests: make-reference (3 songs, 8 videos: identical); shot-plan-make (7: no plan -> saved first, Shape and Make agree,
+  the saved plan wins, settings changed -> saved again + .previous + said in Tasks, theme / picture / font tries, Shape
+  opens a try, the compile refuses a plan that no longer fits, older plans completed quietly); storyboard.e2e.ts (+3: the
+  try in Shape's list, opened with its theme, the own plan untouched). Updated for the new files: make (YouTube, Canvas
+  and the real-render list now include v1.shotplan.json; the real-render one runs on the PC only), song-folders
+  (storyboards\). Run here: the whole unit suite 1008 pass (only make / migrate / render's real renders fail: Remotion
+  cannot reach remotion.media from the cloud, as before); browser: storyboard, song-stages, style-lock, videos-post,
+  themes, textboard, title-opening all pass; tsc clean; pnpm build ok.
+- **To check on the PC:** open a song in Shape (its shot plans are completed quietly), Make → Make release pack: the
+  videos look exactly as before; each run folder has `v1.shotplan.json` next to `v1.mp4`. Change the part of the song in
+  Shape → Part & ending for a platform you did not open, Make it: Tasks says the shot plan was saved again and what
+  changed. Make → Try other looks → another theme: Shape's video picker lists "v1 · try: theme …".
+
 ### Prepare reorganised: Audio · Lyrics & timing · Details · Storyboard; the planned video is the "shot plan" ✅ (to verify on the Windows PC)
 - **One kind of input per tab** (Files vs Clips was unclear):
   - **Audio** (was Files): the song folder, the song, the vocal stem, backing vocals (and audio files to place).

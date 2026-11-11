@@ -9,6 +9,7 @@ import { storeCover } from "@lyric/video/project-settings";
 import { songRuns } from "@lyric/video/exports";
 import { checkRunRequest, enqueueRun, generateOptions, type RunRequest } from "@lyric/video/runs";
 import { saveRunToSong } from "@lyric/video/style";
+import { storyboardJson } from "@/lib/storyboard";
 
 import { withWorkspace } from "@/lib/workspace";
 
@@ -32,6 +33,15 @@ export async function POST(request: Request) {
       mkdirSync(tmp, { recursive: true });
       coverFile = path.join(tmp, safeName(cover.name));
       writeFileSync(coverFile, Buffer.from(await cover.arrayBuffer()));
+    }
+    // "Make another": a take that would make the same picture as one the song already has is refused, saying why.
+    // Planned in the planner process (packages/video/scripts/storyboard.ts --take-check): the planner imports the
+    // render code, which the studio's server does not bundle. A check that cannot run lets the take through.
+    if (req.take && req.take > 1 && !req.compare) {
+      for (const platform of req.platforms) {
+        const answer = (await storyboardJson([projectId, platform, "--take-check", String(req.take)]).catch(() => null)) as { problem?: string | null } | null;
+        if (answer?.problem) return Response.json({ error: answer.problem }, { status: 400 });
+      }
     }
     const { run, saved } = withWorkspace((ws) => {
       if (coverFile) storeCover(ws, projectId, coverFile);

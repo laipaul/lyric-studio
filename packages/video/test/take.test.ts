@@ -8,9 +8,9 @@ import { checkRunRequest } from "../src/node/runs";
 describe("another take", () => {
   it("take N is exactly vN of a run of N videos", () => {
     expect(planTake(1)).toEqual(planVariations(1));
-    expect(planTake(3)).toEqual([planVariations(3)[2]]);
+    expect(planTake(3)).toEqual([{ ...planVariations(3)[2], moment: 2 }]); // plus the take's own other-part-of-the-clips
     expect(planTake(3)[0]).toMatchObject({ index: 3, name: "v3", order: "shuffle", seed: 3 });
-    expect(planTake(4, { rate: "1x" })).toEqual([planVariations(4, { rate: "1x" })[3]]); // with a story: its rate / transitions
+    expect(planTake(4, { rate: "1x" })).toEqual([{ ...planVariations(4, { rate: "1x" })[3], moment: 3 }]); // with a story: its rate / transitions
   });
 
   it("each take is different from the one before", () => {

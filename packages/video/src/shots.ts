@@ -12,7 +12,7 @@ import { mulberry32, randomInt } from "./prng";
 
 // still: a photo (any length). From the clip editor (clips.json) or the analysis: rank (story order),
 // in / out (the usable part, ms), speed (0.5-1: slow motion), best (the best moment's start, ms).
-export type ClipInfo = { id: string; duration_ms: number; name?: string; still?: boolean; rank?: number; in_ms?: number; out_ms?: number; speed?: number; best_ms?: number };
+export type ClipInfo = { id: string; duration_ms: number; name?: string; still?: boolean; rank?: number; in_ms?: number; out_ms?: number; speed?: number; best_ms?: number; best_user?: boolean };
 export const BEST_WINDOW_MS = 2000; // the best moment: its strongest 2 s
 export type ClipOrder = "story" | "shuffle";
 
@@ -40,6 +40,10 @@ export type AssignOptions = {
   // Story anchors: shots whose pinned clip is reserved for them. The gaps use the other clips (all clips
   // when fewer than 4 are left) and never show an anchored clip within 3 shots of its anchor.
   anchored?: ReadonlySet<number>;
+  // "Make another" (take 2, 3, ...): a clip's shots play another part of its usable part (0 / unset = as ever).
+  // Seeded by the take and the clip's place in the story order, so the same take always gives the same picture.
+  // Never on a clip whose best moment the user set in the clip editor (best_user), a pin or an anchor.
+  moment?: number;
 };
 
 export const MIN_PLAYBACK_RATE = 0.5;
@@ -179,7 +183,11 @@ export function assignClips(plan: CutPlan, clipsIn: readonly ClipInfo[], seed: n
     } else if (outF - inF >= need) {
       rate = speed;
       if (order === "story") {
-        if (!shown.has(clip.id) && clip.best_ms !== undefined) {
+        const room = outF - inF - need;
+        if (options.moment && room > 0 && !clip.best_user && !shown.has(clip.id)) {
+          // This take: the first shot plays another part of the clip, somewhere in its usable part.
+          clipStart = inF + Math.floor(mulberry32(options.moment * 7919 + clips.indexOf(clip) * 104_729 + 3)() * (room + 1));
+        } else if (!shown.has(clip.id) && clip.best_ms !== undefined) {
           // Its first shot: centred on the best moment (inside the usable part).
           const centre = toFrames(clip.best_ms + BEST_WINDOW_MS / 2);
           clipStart = Math.min(Math.max(inF, centre - Math.floor(need / 2)), outF - need);

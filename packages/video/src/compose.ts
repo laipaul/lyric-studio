@@ -120,6 +120,7 @@ export type ComposeChoices = {
   effects?: LyricEffectsProps;
   plan?: CutPlan; // this variation's own cut plan (another cut rate); default base.plan
   transitions?: AnchorTransitions; // default "as-set"
+  moment?: number; // "Make another": this take plays other parts of the clips (see AssignOptions.moment)
 };
 
 // Before a pause the last line fades out this long after its last word ends (then 0.4 s fade).
@@ -253,10 +254,10 @@ export function composeProps(
     base.clips.map((c) => ({
       id: c.id, name: c.name, duration_ms: c.duration_ms, still: c.kind === "photo",
       ...(c.rank !== undefined ? { rank: c.rank } : {}), ...(c.in_ms !== undefined ? { in_ms: c.in_ms } : {}), ...(c.out_ms !== undefined ? { out_ms: c.out_ms } : {}),
-      ...(c.speed !== undefined ? { speed: c.speed } : {}), ...(c.best_ms !== undefined ? { best_ms: c.best_ms } : {}),
+      ...(c.speed !== undefined ? { speed: c.speed } : {}), ...(c.best_ms !== undefined ? { best_ms: c.best_ms } : {}), ...(c.best_from === "clip editor" ? { best_user: true } : {}),
     })),
     choices.seed,
-    { order: choices.order ?? "story", pins, loopEnding: platform.loopEnding, clipStarts: starts, anchored: new Set(anchorPlan?.shots.keys() ?? []) },
+    { order: choices.order ?? "story", pins, loopEnding: platform.loopEnding, clipStarts: starts, ...(choices.moment ? { moment: choices.moment } : {}), anchored: new Set(anchorPlan?.shots.keys() ?? []) },
   );
   let assigned = !base.clips.length ? [] : assignWith(byShot, clipStarts);
   if (slips.length && assigned.length) {

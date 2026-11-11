@@ -88,6 +88,7 @@
     "./posters": "./src/node/posters.ts",
     "./project-settings": "./src/node/project-settings.ts",
     "./runs": "./src/node/runs.ts",
+    "./take-check": "./src/node/take-check.ts",
     "./run-worker": "./src/node/run-worker.ts",
     "./assets": "./src/node/assets.ts",
     "./story-line": "./src/node/story-line.ts",

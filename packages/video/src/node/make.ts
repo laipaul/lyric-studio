@@ -117,6 +117,7 @@ export type MakeOptions = {
   variations?: number; // default: the song's count, else the platform preset's number (standard: 6)
   variationsBy?: Record<string, number>; // a count per platform (the studio's Make chips; wins over variations)
   take?: number; // "Try another take": only variation N of each platform (vN: its own seed and style), not v1..vN
+  takes?: number[]; // dry plans only: exactly these takes (planTake each), to compare what Make another would make
   platforms?: string; // "reels,tiktok,shorts" or "all"; default: the "standard" preset
   allowFill?: boolean; // use sources of the other orientation, shown whole over a blurred copy
   title?: string; // song title (saved to the project; default: the song's file name)
@@ -245,7 +246,7 @@ export function parsePictures(text: string): PictureSet[] {
   return sets;
 }
 
-export type VariationSpec = { index: number; name: string; order: ClipOrder; seed: number; style: StyleChoice; bars: boolean; rate?: CutRate; transitions?: AnchorTransitions; pairing?: { id: string; name: string }; picture?: { index: number; label: string; songClips: boolean; collections: string[] } };
+export type VariationSpec = { index: number; name: string; order: ClipOrder; seed: number; style: StyleChoice; bars: boolean; rate?: CutRate; transitions?: AnchorTransitions; moment?: number; pairing?: { id: string; name: string }; picture?: { index: number; label: string; songClips: boolean; collections: string[] } };
 
 export type VariationResult = VariationSpec & {
   platform: string;
@@ -325,7 +326,7 @@ export type MakeResult = {
 // platform that could not be made at all, with what to do. null when everything is finished.
 // Options that do not change a video's plan (where files are, how the run is made, what the run is called) or that
 // the variation itself carries (its spec): left out of the plan fingerprint (2e-1).
-const PLAN_KEY_SKIP = new Set(["now", "runId", "command", "workspaceDir", "song", "lyrics", "songFolder", "dryRun", "frameCheck", "parallel", "resume", "resumeFolder", "engine", "platform", "platforms", "variations", "take", "pictures", "pairings", "collection", "collectionPath", "title", "artist", "ep", "cover", "hint", "presetsFile", "lyricsOnly", "projectId", "theme", "realign", "variationsBy", "leadMs", "lyricsOffsetMs", "align", "voiceMap", "firstWords", "renderer", "thumbnailRenderer", "coverRenderer", "log", "shouldStop", "onRenderProgress", "onReady", "onRetry"]);
+const PLAN_KEY_SKIP = new Set(["now", "runId", "command", "workspaceDir", "song", "lyrics", "songFolder", "dryRun", "frameCheck", "parallel", "resume", "resumeFolder", "engine", "platform", "platforms", "variations", "take", "takes", "pictures", "pairings", "collection", "collectionPath", "title", "artist", "ep", "cover", "hint", "presetsFile", "lyricsOnly", "projectId", "theme", "realign", "variationsBy", "leadMs", "lyricsOffsetMs", "align", "voiceMap", "firstWords", "renderer", "thumbnailRenderer", "coverRenderer", "log", "shouldStop", "onRenderProgress", "onReady", "onRetry"]);
 const withShotPlan = (m: Manifest, shotPlan: Manifest["shot_plan"]): Manifest => (shotPlan ? { ...m, shot_plan: shotPlan } : m);
 export type ShotPlanUsed = { id: string; file: string; status: "new" | "same" | "kept" | "replanned"; note: string | null; props: Omit<LyricVideoProps, "mediaBaseUrl">; try?: SbTry | null };
 
@@ -366,9 +367,12 @@ export function planVariations(count: number, story?: { rate: CutRate }): Variat
     return { ...spec, rate: step === 2 ? coarserRate(story.rate) : step === 3 ? finerRate(story.rate) : story.rate, transitions: index % 2 === 1 ? "as-set" : index % 4 === 2 ? "dissolve" : "cut" };
   });
 }
-// "Try another take": only take N (the same variation vN a run of N videos would make), so every take differs.
+// "Make another": only take N. It is vN of a run of N videos (its seed, style, bars, cut rate, cut / dissolve),
+// and from take 2 on it also plays other parts of the clips (moment), so a song whose style, rate and
+// transitions change nothing still gets a different picture. Take 1 is exactly v1.
 export function planTake(take: number, story?: { rate: CutRate }): VariationSpec[] {
-  return planVariations(take, story).slice(take - 1);
+  const spec = planVariations(take, story)[take - 1];
+  return [take > 1 ? { ...spec, moment: take - 1 } : spec];
 }
 const RATES: CutRate[] = ["0.5x", "1x", "2x"];
 const coarserRate = (r: CutRate): CutRate => (r === "off" ? r : RATES[Math.max(0, RATES.indexOf(r) - 1)]);
@@ -1524,6 +1528,8 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     ? [{ index: sh.picture.index, name: `v${sh.picture.index}`, order: "story", seed: 1, style: "simple", bars: false, picture: { index: sh.picture.index, label: sh.picture.label, songClips: sh.picture.songClips, collections: sh.picture.collections }, ...(story ? { rate: options.rate ?? "1x", transitions: "as-set" as const } : {}) }]
     : compared.length
     ? compared.map((p, i) => ({ index: i + 1, name: `v${i + 1}`, order: "story", seed: 1, style: "simple", bars: false, pairing: { id: p.id, name: p.name }, ...(story ? { rate: options.rate ?? "1x", transitions: "as-set" as const } : {}) }))
+    : options.takes?.length && !canvas
+    ? options.takes.flatMap((t) => planTake(t, story ? { rate: options.rate ?? "1x" } : undefined))
     : options.take && !canvas
     ? planTake(options.take, story ? { rate: options.rate ?? "1x" } : undefined)
     : planVariations(canvas ? Math.max(1, canvas.loops.length) : sh.variationsFor(preset), story ? { rate: options.rate ?? "1x" } : undefined);
@@ -1536,7 +1542,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   };
   const choicesFor = (spec: VariationSpec) => ({
     seed: spec.seed, style: spec.style, order: spec.order, leadMs, lyricsOffsetMs, cinematicBars: ytLayout ? false : spec.bars, effects,
-    plan: planOf(spec), ...(spec.transitions ? { transitions: spec.transitions } : {}),
+    plan: planOf(spec), ...(spec.transitions ? { transitions: spec.transitions } : {}), ...(spec.moment ? { moment: spec.moment } : {}),
   });
   let specs = allSpecs;
   if (options.resume) {
@@ -1582,7 +1588,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
             layout: ytLayout, preset, props: composed.props, brand: sh.brand.brand, logo: sh.logo, ws, title: project.title, artist: project.artist,
             cover: coverSrc, coverBackground, stills: stillsPlan?.stills ?? null, beats: analysis.beats, startMs: chosen.start_ms,
             grain: options.grain ?? preset.youtube!.grain, glow: options.glow ?? preset.youtube!.glow,
-            sections: lyricSections(lines, analysis.duration_ms), seed: spec.seed,
+            sections: lyricSections(lines, analysis.duration_ms), seed: spec.seed, ...(spec.moment ? { moment: spec.moment } : {}),
           }),
           fonts: [...composed.props.fonts, ...fontFileRefs(resolveFace(sh.catalog, title.family, title.weight))],
         };

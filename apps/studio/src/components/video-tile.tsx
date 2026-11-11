@@ -65,7 +65,7 @@ export function VideoTile({
         <img src={`/api/poster/${video.mp4}`} alt="" loading="lazy" className="absolute inset-0 size-full object-cover" />
         <video ref={ref} src={`/api/files/${video.mp4}`} muted loop playsInline preload="none" className="absolute inset-0 size-full object-cover opacity-0 transition-opacity group-hover:opacity-100" />
         <div className="absolute top-2 left-2" onClick={(e) => e.stopPropagation()}>
-          <VerdictBadge a={video.assessment} technical={qaDetails.length ? qaDetails : ["QA: every check passed"]} heading={videoTitle(video, true).title} />
+          <VerdictBadge a={video.assessment} technical={qaDetails.length ? qaDetails : ["QA: every check passed"]} heading={videoTitle(video, true).title} approved={mark.status === "approved"} />
           {strongest ? (
             <span className="bg-brand/80 mt-1 block w-fit rounded px-1.5 py-0.5 text-[10px] text-white" title={`Strongest: ${strongest}`} data-strongest>
               ★ strongest

@@ -125,6 +125,14 @@ export function planStills(o: {
   return { stills, warnings: [...parsed.warnings, ...assigned.warnings], sections: sections.map((s, i) => `${s.name} = ${assigned.files[i]}`) };
 }
 
+// The cover's zoom: pushing in (as set); a take: pulling out, or holding at the middle (take 2: out, 3: hold, 4: in again...).
+export function coverZoomFor(zoom: readonly [number, number], moment = 0): { zoomFrom: number; zoomTo: number } {
+  const kind = moment % 3;
+  if (kind === 1) return { zoomFrom: zoom[1], zoomTo: zoom[0] };
+  if (kind === 2) return { zoomFrom: (zoom[0] + zoom[1]) / 2, zoomTo: (zoom[0] + zoom[1]) / 2 };
+  return { zoomFrom: zoom[0], zoomTo: zoom[1] };
+}
+
 // Extra props for a YouTube video (the base props come from composeProps).
 export function youtubeExtras(o: {
   layout: YouTubeLayout;
@@ -144,6 +152,7 @@ export function youtubeExtras(o: {
   glow: boolean;
   sections: readonly LyricSection[];
   seed: number;
+  moment?: number; // "Make another": take 2, 3, ...: the cover's camera move changes (push in / pull out / hold)
 }): Partial<LyricVideoProps> {
   const y = o.preset.youtube!;
   const format: Format = { width: o.preset.width, height: o.preset.height };
@@ -162,8 +171,7 @@ export function youtubeExtras(o: {
       o.layout === "cover" && o.cover
         ? {
             src: o.cover,
-            zoomFrom: y.coverZoom[0],
-            zoomTo: y.coverZoom[1],
+            ...coverZoomFor(y.coverZoom, o.moment),
             ...(o.coverBackground ? { backgroundSrc: o.coverBackground } : {}),
             drift: coverDrift(mulberry32((o.seed * 7919 + 977) >>> 0), coverSide(format), COVER_DRIFT),
             parallax: PARALLAX,
