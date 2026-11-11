@@ -147,7 +147,7 @@ export function storyboardChoices(ws: Workspace, projectId: string): StoryboardC
   const ready = !!paths.audio && existsSync(paths.audio) && existsSync(paths.lyricsTxt);
   const hasOwn = !!paths.clips && existsSync(paths.clips) && readdirSync(paths.clips).some((f) => SOURCE_FILE.test(f));
   return {
-    platforms, runs, ready, why: ready ? null : "This song needs its song file (Prepare → Audio) and lyrics.txt (Prepare → Lyrics & timing) first.",
+    platforms, runs, ready, why: ready ? null : "This song needs its song file and lyrics.txt first (Prepare → Assets).",
     pictures: { songClips: hasOwn, collections: sharedCollections(ws), recipe: { songClips: hasOwn, collections: songCollections(ws, projectId) } },
     tries: shotPlanTries(paths.root),
   };
@@ -174,7 +174,7 @@ function shotPlanTries(songRoot: string): StoryboardChoices["tries"] {
 // tryId: a Try other looks video's shot plan ("reels-1~theme-night-drive"): planned with that try's theme, fonts or clips.
 export async function storyboardPlan(ws: Workspace, projectId: string, platform: string, video = "v1", clipSet?: string, tryId?: string): Promise<StoryboardView> {
   const paths = songPathsById(ws, projectId);
-  if (!paths.audio || !existsSync(paths.audio)) throw new Error("This song has no song file yet (Prepare → Audio).");
+  if (!paths.audio || !existsSync(paths.audio)) throw new Error("This song has no song file yet (Prepare → Assets).");
   const t = tryId ? tryOf(paths.root, tryId) : null;
   const result = await makeVideos({
     workspaceDir: ws.dir,
@@ -242,7 +242,7 @@ const tryOptions = (t: SbTry): Partial<MakeOptions> => (t.kind === "theme" && t.
 // Shape's view of one planned video: its shots, lines, notes, assessment (and the props it plays).
 async function planView(ws: Workspace, projectId: string, p: { name: string; label: string; warnings: string[] }, plan: PlatformPlan, v: VideoPlan, picture: string | null): Promise<{ shown: StoryboardView; numbers: (number | null)[] }> {
   const paths = songPathsById(ws, projectId);
-  if (!paths.audio) throw new Error("This song has no song file yet (Prepare → Audio).");
+  if (!paths.audio) throw new Error("This song has no song file yet (Prepare → Assets).");
   const notes: string[] = [...p.warnings];
   // The best moments the planner used (the clip editor's, else the strongest 2 s).
   const clips = new Map<string, StoryClip>(plan.clips.map((c) => [c.path, { name: c.name, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, bestAtS: c.bestMs === null ? null : c.bestMs / 1000, bestFrom: c.bestFrom, edit: clipEdit(c.durationMs, { in: c.inMs === null ? null : c.inMs / 1000, out: c.outMs === null ? null : c.outMs / 1000, speed: c.speed }) }]));

@@ -140,7 +140,7 @@ export function saveSongClipOrder(songRoot: string, songClips: readonly string[]
   return writeClipEdits(songRoot, withSongOrder(kept, songClips, songOrder));
 }
 
-// Use / Omit (Assets or Shape): an omitted clip keeps its place in the order; Make does not use it.
+// Use / Omit (Prepare → Storyboard or Shape → Shots): an omitted clip keeps its place in the order; Make does not use it.
 export function isOmitted(edits: ClipEdits, name: string): boolean {
   return editOf(edits, name).omit === true;
 }

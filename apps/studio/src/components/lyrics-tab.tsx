@@ -286,7 +286,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
             ) : null}
             <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
               <span>Story anchors: {data.anchors.list.length} line(s) land on a chosen clip.</span>
-              <span>The other shots follow the song&apos;s clip order (Assets or Shape) in every video.</span>
+              <span>The other shots follow the song&apos;s clip order (Prepare → Storyboard) in every video.</span>
               {!data.anchors.clips.length ? <span className="text-amber-200">No clips to choose from: add clips and photos or a collection in Prepare → Storyboard.</span> : null}
             </div>
             {partPlatforms?.length ? (

@@ -38,7 +38,7 @@ export async function POST(request: Request, { params }: Params) {
       const run = withWorkspace((ws) => {
         const paths = songPathsById(ws, id);
         if (paths.instrumental) throw new Error("This song is an instrumental: nothing is sung, so there is no lyric timing.");
-        if (!paths.lyricsTxt || !existsSync(paths.lyricsTxt)) throw new Error("This song has no lyrics yet (Lyrics & timing).");
+        if (!paths.lyricsTxt || !existsSync(paths.lyricsTxt)) throw new Error("This song has no lyrics yet (Prepare → Assets).");
         return enqueueLyricTiming(ws, id, { realign: true });
       });
       return Response.json({ queued: run.id });

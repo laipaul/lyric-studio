@@ -103,7 +103,7 @@ export function generateOptions(ws: Workspace, projectId: string, req: RunReques
   const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
   if (!p) throw new Error("Song not found.");
   const lyrics = projectLyricsTxt(ws, projectId);
-  if (!lyrics) throw new Error(`"${p.title}" has no lyrics file in its song folder. Add it in Prepare → Lyrics & timing (Lyrics), or bring an earlier one back from Replaced files there.`);
+  if (!lyrics) throw new Error(`"${p.title}" has no lyrics file in its song folder. Add it in Prepare → Assets (Lyrics), or bring an earlier one back from Replaced files there.`);
   return {
     song: projectSong(ws, p),
     lyrics,
@@ -185,7 +185,7 @@ export function enqueueRun(ws: Workspace, projectId: string, options: RunOptions
 
 // A lyric-timing run for the song (after vocals.wav was added or replaced), unless one is already waiting.
 export const LYRIC_TIMING_LABEL = "Lyric timing · vocal stem";
-// options.realign ("Time the lyrics again", Prepare → Lyrics & timing / a stale word fix in Shape): align anew, not
+// options.realign ("Time the lyrics again", Prepare → Lyrics Sync / a stale word fix in Shape): align anew, not
 // from the stored alignment (hand-set starts and taps in hints.lrc are applied after, as always).
 export function enqueueLyricTiming(ws: Workspace, projectId: string, o: { realign?: boolean } = {}): MakeRun {
   const waiting = ws.db

@@ -126,8 +126,8 @@ async function main() {
     await page.waitForFunction(() => document.querySelectorAll("[data-clip]").length === 9, null, { timeout: 120_000 });
     check(true, "Assets: 9 clips added to the song's own clips");
     dialogs.length = 0;
-    await page.click("[data-stage-tab=lyrics]"); // the lyrics file: Prepare → Lyrics & timing (10 Nov 2026)
-    await page.waitForSelector("[data-assets=lyrics]");
+    await page.click("[data-stage-tab=assets]"); // the lyrics file: Prepare → Assets (11 Nov 2026)
+    await page.waitForSelector("[data-assets=files]");
     await page.setInputFiles("[data-replace=lyrics]", path.join(inDir, "Every Platform lyrics v2.txt"));
     await page.waitForSelector("[data-replaced-files]", { timeout: 30_000 });
     check(dialogs.some((d) => /Replace the lyrics with Every Platform lyrics v2\.txt\?/.test(d) && /kept under Replaced files/.test(d)), "Replace lyrics warns first and says the old ones are kept");

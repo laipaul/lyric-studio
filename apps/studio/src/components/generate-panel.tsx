@@ -41,7 +41,7 @@ export function GeneratePanel({
 }) {
   const { part } = useMakePart();
   const choices = data.platforms.filter((p) => p.name !== "standard");
-  const why = blocked ?? (!data.lyricsReady ? "First: the lyrics (Prepare → Lyrics & timing)." : null);
+  const why = blocked ?? (!data.lyricsReady ? "First: the lyrics file (Prepare → Assets)." : null);
   return (
     <section data-generate className="flex flex-col gap-5">
       <div hidden={part !== "videos"} data-make-part="videos">
@@ -289,7 +289,7 @@ function MakeVideos({ projectId, data, choices, preset, why }: { projectId: stri
           <p className="text-muted-foreground text-xs">
             Timing the lyrics again is in{" "}
             <button type="button" className="text-foreground underline underline-offset-2" onClick={() => goToTab("lyrics")} data-open-retime>
-              Prepare → Lyrics &amp; timing
+              Prepare → Lyrics Sync
             </button>
             .
           </p>

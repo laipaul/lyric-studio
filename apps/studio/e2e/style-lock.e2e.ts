@@ -112,7 +112,7 @@ async function main() {
     await page.waitForSelector("[data-saving=saved]");
     await sleep(300);
     check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { titleOpening?: string }).titleOpening === undefined, "back to off: the song's own title opening setting is gone");
-    // The tagline lives in Prepare → Details (song.json "tagline"; N1: one place, no longer also in Assets).
+    // The tagline lives in Prepare → Texts (song.json "tagline"; N1: one place, no longer also in Assets).
     await openPanel(page, "details");
     check(!(await page.$("[data-tagline-input]")), "no second tagline field");
     await page.fill("[data-edit='tagline-default']", "A song for the road");
@@ -164,9 +164,9 @@ async function main() {
     check(!!addedPaths && readFileSync(addedPaths.lyricsTxt, "utf8").includes("Tea with the monk") && addedPaths.lyricsTxt.endsWith("story.txt"), "its story is saved as story.txt");
     if (added) {
       await page.goto(`${base}/songs/${added.id}`);
-      await openTab(page, "Lyrics"); // the story file sits with the lyrics since 10 Nov 2026
+      await openTab(page, "Assets"); // the story file sits with the lyrics file in Assets (11 Nov 2026)
       await page.waitForSelector("text=Story (instrumental)");
-      check(((await page.textContent("body")) ?? "").includes("story.txt · 2 sentences, timed by the app"), "Lyrics & timing: the story row says story.txt · 2 sentences");
+      check(((await page.textContent("body")) ?? "").includes("story.txt · 2 sentences, timed by the app"), "Assets: the story row says story.txt · 2 sentences");
     }
     await browser.close();
   } finally {

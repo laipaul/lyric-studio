@@ -1,10 +1,10 @@
 // The song page (N1): a rail with the four stages only (Prepare, Shape, Make, Review), numbered; each stage's sections
-// are tabs inside it. Prepare: Files · Lyrics & timing · Details · Clips; Shape: Look · Part & ending · Pace · Shots (each
+// are tabs inside it. Prepare: Assets · Lyrics Sync · Texts · Clips (Storyboard); Shape: Look · Part & ending · Pace · Shots (each
 // opens one panel); Make: Videos · Try other looks · Options (one form); Review: Videos · Post.
-const STAGE_OF: Record<string, string> = { Assets: "prepare", Files: "prepare", Audio: "prepare", Lyrics: "prepare", Details: "prepare", Clips: "prepare", Style: "shape", Storyboard: "shape", Shape: "shape", Generate: "make", Make: "make", Videos: "review", Post: "review" };
-// Prepare (10 Nov 2026): Audio · Lyrics & timing · Details · Storyboard; the tab ids stay (assets, lyrics, details, clips).
+const STAGE_OF: Record<string, string> = { Assets: "prepare", Files: "prepare", Audio: "prepare", Lyrics: "prepare", "Lyrics Sync": "prepare", Details: "prepare", Texts: "prepare", Clips: "prepare", Style: "shape", Storyboard: "shape", Shape: "shape", Generate: "make", Make: "make", Videos: "review", Post: "review" };
+// Prepare (11 Nov 2026): Assets · Lyrics Sync · Texts · Storyboard; the tab ids stay (assets, lyrics, details, clips).
 // "Storyboard" here still means the Shape page (older tests); Prepare's Storyboard tab is "Clips".
-const TAB_ID: Record<string, string> = { Assets: "assets", Files: "assets", Audio: "assets", Lyrics: "lyrics", Details: "details", Clips: "clips", Videos: "videos", Post: "post" };
+const TAB_ID: Record<string, string> = { Assets: "assets", Files: "assets", Audio: "assets", Lyrics: "lyrics", "Lyrics Sync": "lyrics", Details: "details", Texts: "details", Clips: "clips", Videos: "videos", Post: "post" };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function openTab(page: any, tab: string): Promise<void> {
@@ -22,8 +22,8 @@ export async function openTab(page: any, tab: string): Promise<void> {
 }
 
 // Opens where a setting lives now (N1). Shape's tabs: look, part, pace, shots (old names: clips -> shots, auto -> part,
-// theme -> look). The song's settings moved out of Shape: "song" / "details" -> Prepare → Details, "tempo" -> Prepare →
-// Lyrics & timing, "collections" -> Prepare → Clips, "make" -> Make → Make (the chips). The theme editor (fonts, effects, colour):
+// theme -> look). The song's settings moved out of Shape: "song" / "details" -> Prepare → Texts, "tempo" -> Prepare →
+// Lyrics Sync, "collections" -> Prepare → Clips, "make" -> Make → Make (the chips). The theme editor (fonts, effects, colour):
 // Look → Edit theme (nothing is saved until saveTheme below); "fonts" also unfolds "Choose each font".
 const SHAPE_TAB: Record<string, string> = { look: "look", theme: "look", part: "part", auto: "part", pace: "pace", shots: "shots", clips: "shots" };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -83,7 +83,7 @@ export async function saveTheme(page: any): Promise<void> {
   await page.waitForSelector("[data-theme-editors]", { state: "detached" });
 }
 
-// Kept for older tests: where the tempo is (Prepare → Lyrics & timing since N1; it was in Automatic).
+// Kept for older tests: where the tempo is (Prepare → Lyrics Sync since N1; it was in Automatic).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function unfoldStyle(page: any): Promise<void> {
   await openPanel(page, "tempo");

@@ -4,6 +4,31 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Prepare regrouped: Assets · Lyrics Sync · Texts · Storyboard ✅ (to verify on the Windows PC)
+- Layout and labels only (nothing about how a video is made changed).
+- **Assets** (was Audio): the files you provide, in one list: Song, Vocal stem, Lyrics (.txt), then Backing vocals
+  and the Cover. Song / Vocals / Lyrics sit together, ready for the 2c slots. "What is this file?" for any file the
+  app cannot place (text files too) is here, with the song folder line and the replaced files.
+- **Lyrics Sync** (was Lyrics & timing): tempo (BPM, tap test), "Time the lyrics again", hints (tapped times), and the
+  lyric lines table. The lyrics file moved to Assets.
+- **Texts** (was Details): title and card texts, EP, links. The cover moved to Assets.
+- **Every on-screen pointer uses the new names** (Prepare → Texts, Prepare → Lyrics Sync, the lyrics file and cover
+  "Prepare → Assets", the clip order "(Prepare → Storyboard)" instead of "Assets or Shape"); the to-do buttons for
+  the lyrics file and the cover open Assets. Old links keep working (?tab=audio / files → Assets, ?tab=sync →
+  Lyrics Sync, ?tab=texts → Texts; the tab ids stay assets / lyrics / details / clips).
+- **Closed banners stay closed:** the only one-time notice is the 31 Oct "starts you set by hand were reset" one; its
+  × was already saved (.studio\hand-times.json) and now has a test (hand-reset). Every other banner has no × on
+  purpose: it shows something live and goes once solved (Prepare's to-do list, stale timing in Shape, the Library's
+  migration offer, "Editing theme …", the warning while you edit lyrics words, Make's "From the run of …"), or it is
+  a result that goes on reload (Make's "Queued…", "Saved" notices).
+- Tests: hand-reset (new); stability and runs (the new wording). Browser: song-stages (the tab names, Assets' order
+  song, vocals, lyrics, backing vocals, cover; the cover to-do opens Assets; Lyrics Sync has tempo, Time the lyrics
+  again and hints; Texts has no files; a text file to place is asked about in Assets), lyrics-tab, song-title,
+  clip-notes, style-lock, videos-post; new-song-every-platform follows (not run here: a real render worker).
+- **To check on the PC:** Prepare shows Assets · Lyrics Sync · Texts · Storyboard. Assets lists Song, Vocal stem,
+  Lyrics, Backing vocals, Cover. Lyrics Sync starts with the tempo and Time the lyrics again. Texts has the title and
+  links. An old bookmark ?tab=audio still opens Assets.
+
 ### Make stage simplified: Make and Compare looks, one counts rule everywhere ✅ (to verify on the Windows PC)
 - **Two tabs, each with its own button and count:**
   - **Make:** one row of platform chips, each with its versions (Canvas: loops), pre-filled from the song and saved to
@@ -333,13 +358,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Fix: TextCards.tsx draws every card block with `lineHeight: CARD_LINE_HEIGHT` (imported from card-layout.ts: one number for the planner, QA, the cover and the drawing; preview, render and the HyperFrames text layer share TextCards, so the manifest props and the preview props are the same and need no other change). YouTube's title now has the same 1.2 rows (one row: a few px less height).
 - Tests: title-opening.e2e.ts (4 scenarios x 5 moments = 20 checks, added to `pnpm test:e2e`); packages/video: the 9 files (title-opening, title-opening-make, textboard, qa, readability, text-layout, storyboard, extra-cards, textboard-make) 71 pass; tsc clean (packages/video, apps/studio typecheck); pnpm build ok; storyboard.e2e.ts all checks pass.
 - To check: `cd D:\videomaker`, `git pull`, restart, Shape → Reels, Title opening on, play from 0:00: title and byline sit clear above the first lyric line (a visible gap), the tagline below; the rows of a two-line title are a little tighter than before.
-
-### Bug fix: the Reel's moved title collided with the first lyric; title cards overlapped on the timeline ✅ (confirmed on the Windows PC in Shape, 8 Nov 2026)
-- Seen (Let My Love Carry You, Shape → Reels 1080x1920, Title opening on, first line on screen from 0:00.6): after the last fix the title moved up (y ~470-630) and the byline "Life Lyrics" sat at ~636, but the first lyric ("Let my love carry yo...", hook font, word by word) was drawn at ~650-700: byline and lyric touched. On the timeline the title, byline and tagline cards (same start) were drawn on top of each other: an unreadable jumble.
-- Causes: (1) the title was moved clear of a box that was smaller than what the composition draws: only line 1, measured with `nextLine: false` and without the glyphs' reach beyond the CSS row (script fonts), and only until 2.5 s, although later lines come in while the title is still on screen. The box is now the union of every line drawn in the title window (the first line, and any line entering before the cards end), with the waiting next line under it, and the glyphs' ink. It comes from `measureLyrics` (qa-check.ts), the very function QA uses, via the new `titleWindowBox`, which reads the plan's own lyric area (text layout: Centred / Lower third / Big hook), the line's card place and size, the effect reach and the hook scale; Remotion's LyricScene uses the same inputs. Evidence: Reels area centre 710 (not the 758 of the old tests); with the effect reach the box for that line starts at ~590 (Big hook ~528), not ~673 (the bare row). (I could not reproduce the exact pixels of the screenshot without the user's song: the missing reach, next line and ink are what the code was ignoring.) (2) The title-cards row gave every card `top: 2` in one 20 px lane.
-- Fix: make.ts `firstLyricBox` (exported) = `titleWindowBox` (qa-check.ts) over the cards' window; measure.ts `inkOverflow` (glyph reach beyond the line box) is now in every measured lyric box (QA too). The title opening now stays on screen at least 4 s (TITLE_MIN_S 4, was 2.5; asked by the user): clear blocks keep their place that long, also with the auto section's 2-bar lead-in (~3.8 s at 125 BPM); touching blocks are moved (title + byline up, tagline down, shrinking up to 25%), else the lead-in + the note. Shape timeline: cards that overlap in time go in thin lanes (14 px each, titleCardLanes in shape-board.tsx; data-lanes / data-lane; one lane = the row as before, 20 px; three lanes ~47 px); data-text-card and the clicks are unchanged.
-- Tests: title-opening.test.ts 22 (the 2.5 s tests are now 4 s = 120 frames; new: Centred / Lower third / Big hook: the title block and tagline are clear of the real box; script-font ink; the old bare box let the byline reach into the drawn line, the real one does not); the 6 files (title-opening, textboard, qa, storyboard, extra-cards, textboard-make) 60 pass; tsc clean (packages/video, apps/studio); eslint on shape-board.tsx: the same 4 old errors; pnpm build ok; storyboard.e2e.ts 149 checks pass (new: no two cards on the title-cards row overlap on screen; the e2e song has only the End card there, so the lane logic itself is checked by the build/typecheck and by eye).
-- To check: `cd D:\videomaker`, `git pull`, Shape → Reels, Title opening on, play from 0:00: title, byline and tagline stay at least 4 s, clear of the first lyric line (above it, or the tagline below); on the timeline the three cards sit in separate thin lanes.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

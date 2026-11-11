@@ -1,6 +1,6 @@
 "use client";
 
-import { AudioLines, ChevronRight, Clapperboard, Eye, Gauge, Info, Palette, Send, Scissors, SwatchBook, Type, Film, type LucideIcon } from "lucide-react";
+import { FolderOpen, ChevronRight, Clapperboard, Eye, Gauge, Info, Palette, Send, Scissors, SwatchBook, Type, Film, type LucideIcon } from "lucide-react";
 import { createContext, useContext, useEffect, useState } from "react";
 
 import type { TodoItem } from "@lyric/video/song-stages";
@@ -25,9 +25,9 @@ export const STAGES = [
 export type StageId = (typeof STAGES)[number]["id"];
 export type StageStatus = { text: string; tone: "done" | "todo" | "blocked" | "muted" | "busy" };
 
-// Prepare (10 Nov 2026): Audio · Lyrics & timing · Details · Storyboard, one kind of input per tab. The ids stay ("assets",
-// "clips") so every old link opens the right tab; ?tab=storyboard still means Shape (links from before 31 Oct).
-const TAB_LABEL: Record<string, string> = { assets: "Audio", lyrics: "Lyrics & timing", details: "Details", clips: "Storyboard", shape: "Shape", generate: "Make", videos: "Videos", post: "Post" };
+// Prepare (11 Nov 2026): Assets · Lyrics Sync · Texts · Storyboard. The ids stay ("assets", "lyrics", "details", "clips")
+// so every old link opens the right tab; ?tab=storyboard still means Shape (links from before 31 Oct).
+const TAB_LABEL: Record<string, string> = { assets: "Assets", lyrics: "Lyrics Sync", details: "Texts", clips: "Storyboard", shape: "Shape", generate: "Make", videos: "Videos", post: "Post" };
 const stageOf = (tab: string): StageId => STAGES.find((s) => (s.tabs as readonly string[]).includes(tab))?.id ?? "prepare";
 const TONE: Record<StageStatus["tone"], string> = {
   done: "text-emerald-300",
@@ -117,9 +117,9 @@ function rememberTab(stage: StageId, tab: string) {
 
 // The feature icons (lib/feature-icons.tsx): one icon per step, the same everywhere.
 const STAGE_ICON = { prepare: FEATURE.prepare.icon, shape: FEATURE.shape.icon, make: FEATURE.make.icon, review: FEATURE.review.icon } as const;
-// One distinct icon per tab (N1 polish): Audio, Lyrics & timing, Details and Storyboard each their own.
+// One distinct icon per tab (N1 polish): Assets, Lyrics Sync, Texts and Storyboard each their own.
 const TAB_ICON: Record<string, { icon: LucideIcon; colour: string }> = {
-  assets: { icon: AudioLines, colour: "" },
+  assets: { icon: FolderOpen, colour: "" },
   lyrics: { icon: Type, colour: FEATURE.lyrics.colour },
   details: { icon: Info, colour: "" },
   clips: { icon: Film, colour: FEATURE.clips.colour },

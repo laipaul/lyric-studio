@@ -54,7 +54,7 @@ const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", 
 // at once; the rarely used actions (per platform, back to the inherited value, lock, use for all my songs)
 // sit in each setting's ⋯ menu. onSaved: the recipe changed (the page plans the video again); planned:
 // counts the plans that arrived (the look patch is dropped once the plan has it).
-// The song's own settings outside Shape (N1): Prepare → Details (title, card texts, EP), Prepare → Lyrics & timing
+// The song's own settings outside Shape (N1): Prepare → Texts (title, card texts, EP), Prepare → Lyrics Sync
 // (tempo, time the lyrics again), Prepare → Clips (collections), Make → Videos (platforms, videos per platform).
 // The same rows and saving as Shape's panels, one block each; nothing of the theme or the viewer.
 export type SongPart = "details" | "timing" | "collections"; // platforms and versions: Make's chips (generate-panel.tsx)
@@ -157,7 +157,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
   const [hoverEffect, setHoverEffect] = useState<{ field: string; value: string; at: number } | null>(null);
   const [pickedEffect, setPickedEffect] = useState<{ field: string; value: string; at: number } | null>(null); // the effect just picked: its name shows in the viewer // a Motion gallery tile under the pointer // a theme tile under the pointer: the viewer tries it
   const [savingAs, setSavingAs] = useState<string | null>(null); // "Save as new theme": the name being typed
-  const [retime, setRetime] = useState<{ ok: boolean; text: string } | null>(null); // Lyrics & timing: "Time the lyrics again"
+  const [retime, setRetime] = useState<{ ok: boolean; text: string } | null>(null); // Lyrics Sync: "Time the lyrics again"
   // Look → Change (before 2e-1): the temporary theme picker. trying: the theme clicked, previewed in the viewer only
   // (nothing saved, the storyboard untouched) until Apply; Cancel puts the current look back. leaving: the question
   // asked before leaving a look customized for this song.
@@ -252,7 +252,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
     [data?.fonts],
   );
 
-  // Prepare → Lyrics & timing: the lyric timing made again now, on the user's request only (never silently).
+  // Prepare → Lyrics Sync: the lyric timing made again now, on the user's request only (never silently).
   async function timeAgain() {
     setRetime(null);
     try {
@@ -911,7 +911,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
                 <p className="text-muted-foreground -mt-1 text-[11px]">
                   How the cards look, for every song on this theme. Their words (title, tagline, Hook and End card text) are this song&apos;s:{" "}
                   <button type="button" data-card-text-link onClick={() => goToTab("details")} className="text-foreground underline underline-offset-2">
-                    Prepare → Details
+                    Prepare → Texts
                   </button>
                 </p>
                 <TitleStyleControls value={(k) => valueOf(k)} onSet={(field, value) => void act({ action: "set", field, value })} sample={data.title || "Your title"} font={String(valueOf("verseFont") ?? "")} />
@@ -1227,7 +1227,7 @@ const LOOK_FIELDS = ["textColour", "accentColour"] as const;
 const EFFECT_FIELDS = ["verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "emphasis"] as const;
 const TOOL_SECTIONS = ["look", "part", "pace", "theme"] as const; // Shape's panels drawn here (Shots, Text and Analysis: shape-board.tsx)
 // Shape's panels (N1). Look: this song's own look settings (the theme's are in the theme editor until O1 adds song
-// overrides); Part & ending and Pace: what Automatic held, the tempo now in Prepare → Lyrics & timing.
+// overrides); Part & ending and Pace: what Automatic held, the tempo now in Prepare → Lyrics Sync.
 const LOOK_SONG_FIELDS = ["titleOpening", "readability", "youtubeLayout"] as const;
 const PART_FIELDS = ["section", "length", "ending"] as const;
 const PACE_FIELDS = ["shotLength", "transitions", "paceShift"] as const;
@@ -1552,8 +1552,8 @@ function ExtraCardControls({ value, onSet, font, hookSample, endSample }: { valu
         ) : null}
         <p className="text-muted-foreground text-xs">
           {id === "hook"
-            ? "Reels, TikTok, Shorts: big, in the pause just before the first chorus (the app finds it; no pause, no card). Its words: Prepare → Details → Hook card text, else the chorus's first line."
-            : "Reels, TikTok, Shorts: the last seconds of the video, never over a lyric. Its words: Prepare → Details → End card text ({title} = the song's title)."}
+            ? "Reels, TikTok, Shorts: big, in the pause just before the first chorus (the app finds it; no pause, no card). Its words: Prepare → Texts → Hook card text, else the chorus's first line."
+            : "Reels, TikTok, Shorts: the last seconds of the video, never over a lyric. Its words: Prepare → Texts → End card text ({title} = the song's title)."}
         </p>
       </div>
     );

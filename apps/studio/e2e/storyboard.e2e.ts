@@ -661,9 +661,9 @@ async function main() {
     await page.waitForSelector("[data-make-chips]");
     check(true, "the rail's Make opens Make");
 
-    // The tempo (Prepare → Lyrics & timing since N1): x2/3 of 120 = 80 BPM in song.json; Shape plans the video with it.
+    // The tempo (Prepare → Lyrics Sync since N1): x2/3 of 120 = 80 BPM in song.json; Shape plans the video with it.
     await page.goto(`${base}/songs/${sp.project.id}?tab=style`);
-    await unfoldStyle(page); // the tempo: Prepare → Lyrics & timing
+    await unfoldStyle(page); // the tempo: Prepare → Lyrics Sync
     await page.waitForSelector("[data-tempo-check]");
     if (!(await page.$("[data-tempo-ratio='×2/3']"))) {
       // No video made yet: the detected tempo comes from the tempo check.

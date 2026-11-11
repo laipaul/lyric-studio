@@ -269,7 +269,7 @@ describe("why the aligner failed", () => {
   });
 });
 
-// N1: "Time the lyrics again" (Prepare → Lyrics & timing, and a stale word fix in Shape) queues a lyric timing job that
+// N1: "Time the lyrics again" (Prepare → Lyrics Sync, and a stale word fix in Shape) queues a lyric timing job that
 // aligns anew; a plain one already waiting is turned into it, never a second job.
 describe("Time the lyrics again", () => {
   it("queues one lyric timing job with realign", () => {

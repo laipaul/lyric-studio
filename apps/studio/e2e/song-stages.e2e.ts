@@ -62,26 +62,29 @@ async function main() {
     const items = await page.$$eval("[data-todo-item]", (e: Element[]) => e.map((x) => x.getAttribute("data-todo-item")));
     check(JSON.stringify(items) === JSON.stringify(["clips", "vocals", "cover", "labels"]), `to-do: clips, vocal stem (a suggestion), cover, labels (${items.join(", ")})`);
     const tabs = async () => page.$$eval("[role=tab]", (e: Element[]) => e.map((x) => x.textContent?.trim()));
-    check(JSON.stringify(await tabs()) === JSON.stringify(["Audio", "Lyrics & timing", "Details", "Storyboard"]), `Prepare's tabs: Audio, Lyrics & timing, Details, Storyboard (${(await tabs()).join(", ")})`);
-    // Prepare reorganised (10 Nov 2026): one kind of input per tab.
+    check(JSON.stringify(await tabs()) === JSON.stringify(["Assets", "Lyrics Sync", "Texts", "Storyboard"]), `Prepare's tabs: Assets, Lyrics Sync, Texts, Storyboard (${(await tabs()).join(", ")})`);
+    // Prepare regrouped (11 Nov 2026): Assets = the files the user provides; Lyrics Sync = timing; Texts = words and links.
     await page.click("[data-todo-item=clips] button");
     await page.waitForSelector("[data-assets=clips] [data-story-line]");
     check((await page.getAttribute("[role=tab][data-state=active]", "data-stage-tab")) === "clips" && ((await page.textContent("[data-story-line]")) ?? "") === "Your story line: drag to set the order.", "the clips to-do opens Storyboard, with its story line");
     check(((await page.textContent("[data-assets=clips] button:has(svg.lucide-upload)")) ?? "").trim() === "Add clips & photos" && ((await page.getAttribute("[data-clip-input]", "accept")) ?? "").includes(".jpg"), "Storyboard: Add clips & photos (photos accepted)");
     await page.click("[data-todo-item=cover] button");
-    await page.waitForSelector("[data-assets=cover] [data-asset=cover]");
-    check((await page.getAttribute("[role=tab][data-state=active]", "data-stage-tab")) === "details", "the cover to-do opens Details, where the cover is");
+    await page.waitForSelector("[data-assets=files] [data-asset=cover]");
+    check((await page.getAttribute("[role=tab][data-state=active]", "data-stage-tab")) === "assets", "the cover to-do opens Assets, where the cover is");
     await page.click("[data-stage-tab=lyrics]");
-    await page.waitForSelector("[data-assets=lyrics] [data-asset=lyrics]");
-    const lyricsRows = await page.$$eval("[data-assets=lyrics] [data-asset]", (e: Element[]) => e.map((x) => x.getAttribute("data-asset")));
-    check(JSON.stringify(lyricsRows) === JSON.stringify(["lyrics", "hints"]), `Lyrics & timing: the lyrics file and hints (${lyricsRows.join(", ")})`);
+    await page.waitForSelector("[data-assets=hints] [data-asset=hints]");
+    const lyricsRows = await page.$$eval("[data-assets=hints] [data-asset]", (e: Element[]) => e.map((x) => x.getAttribute("data-asset")));
+    check(JSON.stringify(lyricsRows) === JSON.stringify(["hints"]) && !!(await page.$("[data-field=tempo]")) && !!(await page.$("[data-retime-button]")), `Lyrics Sync: tempo, Time the lyrics again, hints (${lyricsRows.join(", ")})`);
+    await page.click("[data-stage-tab=details]");
+    await page.waitForSelector("[data-style-block=details]");
+    check(!(await page.$("[data-asset]")) && !!(await page.$("[data-links]")), "Texts: title and card texts, EP, links; no files");
     // L1a: the Assets tab has the vocal stem slot next to the song (none yet: "Add…").
     await page.click("[data-todo-item=vocals] button");
     await page.waitForSelector("[data-asset=vocals]");
     const slot = (await page.textContent("[data-asset=vocals]")) ?? "";
     check(slot.includes("Vocal stem") && slot.includes("Add…") && slot.includes("the app separates the vocals itself"), `the Assets tab offers the vocal stem (${slot})`);
-    const order = await page.$$eval("[data-assets=audio] [data-asset]", (e: Element[]) => e.map((x) => x.getAttribute("data-asset")));
-    check(JSON.stringify(order) === JSON.stringify(["song", "vocals", "backingVocals"]) && (await page.getAttribute("[role=tab][data-state=active]", "data-stage-tab")) === "assets", `Audio: the song, the vocal stem next to it, backing vocals; nothing else (${order.join(", ")})`);
+    const order = await page.$$eval("[data-assets=files] [data-asset]", (e: Element[]) => e.map((x) => x.getAttribute("data-asset")));
+    check(JSON.stringify(order) === JSON.stringify(["song", "vocals", "lyrics", "backingVocals", "cover"]) && (await page.getAttribute("[role=tab][data-state=active]", "data-stage-tab")) === "assets", `Assets: song, vocal stem, lyrics together, then backing vocals and the cover (${order.join(", ")})`);
     check(!(await page.$("[data-asset=themeCover]")), "Assets are the song's own files: no Theme cover here (it lives in Themes)");
     // Original file names: files put into the song folder by hand are recognised, the rest asked about once.
     const wsF = openWorkspace(wsDir);
@@ -94,10 +97,8 @@ async function main() {
     await page.click("[data-todo-item=vocals] button");
     await page.waitForSelector("[data-asset=backingVocals]");
     check(((await page.textContent("[data-asset=backingVocals]")) ?? "").includes("Hold On (Backing Vocals).wav"), "a backing-vocals file dropped by hand is recognised by its name");
-    check(!(await page.$("[data-unassigned-file='notes.txt']")), "a text file to place is not asked about in Audio…");
-    await page.click("[data-stage-tab=lyrics]");
-    await page.waitForSelector("[data-assets=lyrics] [data-unassigned-file='notes.txt']");
-    check(true, "…but in Lyrics & timing, with the lyrics file");
+    await page.waitForSelector("[data-assets=files] [data-unassigned-file='notes.txt']");
+    check(true, "a text file to place is asked about in Assets, with the lyrics file");
     check(!(await page.$("[data-unassigned-file='Hold On (Backing Vocals).wav']")), "…and not asked about");
     await page.click("[data-unassigned-file='notes.txt'] [data-assign=notUsed]");
     await page.waitForFunction(() => !document.querySelector("[data-unassigned]"));
@@ -153,9 +154,15 @@ async function main() {
     const lastRun = () => ws2.db.select().from(makeRun).all().at(-1);
     const optionsOf = () => (lastRun()?.options_json ?? {}) as { platforms?: string; variationsBy?: Record<string, number>; variations?: number };
     // (Queuing opens the Tasks menu over the page, as before: Esc closes it.)
+    // It can open a moment after the click: wait for it, then close it until it is gone.
     const closeTasks = async () => {
-      await page.keyboard.press("Escape");
-      await sleep(300);
+      await page.waitForSelector("[data-tasks]", { timeout: 3000 }).catch(() => null);
+      for (let i = 0; i < 10 && (await page.$("[data-tasks]")); i++) {
+        await page.keyboard.press("Escape");
+        await sleep(200);
+        if (await page.$("[data-tasks]")) await page.click("[data-tasks-button]").catch(() => null);
+        await sleep(200);
+      }
     };
     await page.click("[data-one-of-each]");
     await page.waitForSelector("[data-make-notice] >> text=Queued");
@@ -291,9 +298,9 @@ async function main() {
     check(await page.isVisible("[data-shape-tools]"), "a second click on the tab keeps its panel (never no tab)");
     const lookBarText = (await page.textContent("[data-look-bar]")) ?? "";
     check(!/^Look/.test(lookBarText.trim()), `the Look bar has no "Look" label above the theme name (${lookBarText})`);
-    // The song's own settings left Shape (N1): Details, Clips and Lyrics & timing in Prepare, What to make in Make.
+    // The song's own settings left Shape (N1): Details, Clips and Lyrics Sync in Prepare, What to make in Make.
     await openPanel(page, "details");
-    check(JSON.stringify(await inBlock("details")) === JSON.stringify(["tagline", "hookText", "endText", "ep"]) && !!(await page.$("[data-style-block=details] [data-card-title]")), `Prepare → Details: title, tagline, hook and end card texts, EP (${(await inBlock("details")).join(", ")})`);
+    check(JSON.stringify(await inBlock("details")) === JSON.stringify(["tagline", "hookText", "endText", "ep"]) && !!(await page.$("[data-style-block=details] [data-card-title]")), `Prepare → Texts: title, tagline, hook and end card texts, EP (${(await inBlock("details")).join(", ")})`);
     check(!(await page.$("[data-field=lineShape]")) && !(await page.$("[data-field=lineBuild]")) && !(await page.$("[data-field=finalHook]")), "the theme's line shape rows are not repeated outside the theme editor");
     await openPanel(page, "make");
     check(!(await page.$("[data-style-block=make]")) && !!(await page.$("[data-make-chip=reels][data-count='2']")), "platforms and versions in one place only: Make's chips");
@@ -353,7 +360,7 @@ async function main() {
     await page.click("[data-stage=prepare]");
     check((await page.getAttribute("[role=tab][data-state=active]", "data-stage-tab")) === "clips", "back to Prepare: its last tab (Clips) is selected");
     await openPanel(page, "tempo");
-    check(!!(await page.$("[data-field=tempo] [data-tempo-check]")) && !!(await page.$("[data-retime-button]")), "Prepare → Lyrics & timing: the tempo tools and Time the lyrics again");
+    check(!!(await page.$("[data-field=tempo] [data-tempo-check]")) && !!(await page.$("[data-retime-button]")), "Prepare → Lyrics Sync: the tempo tools and Time the lyrics again");
     check(!!(await page.$("[data-locked=tempo]")) && ((await page.textContent("[data-field=tempo] [data-source]")) ?? "") === "Set by me" && !(await page.$("[data-back-auto=tempo]")), "a locked value keeps its value and shows Set by me (no ↺ while locked)");
     // Part & ending and Pace: "auto" or "Set by me" in place, ↺ back to auto; no Automatic section any more.
     await openPanel(page, "part");

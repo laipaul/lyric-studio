@@ -1,6 +1,6 @@
 "use client";
 
-// The song page header's title: the pencil (or the title) opens Prepare → Details, where the title is changed (N1: one
+// The song page header's title: the pencil (or the title) opens Prepare → Texts, where the title is changed (N1: one
 // place; the song's folder follows the new title). The ⋯ menu next to it: "Delete song" (asks first; the whole song
 // folder moves to songs\_removed\, and the Library's "Deleted songs" brings it back).
 import { Pencil } from "lucide-react";
@@ -14,8 +14,8 @@ export function SongTitle({ id, title }: { id: string; title: string }) {
   const router = useRouter();
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const shown = title; // changed in Prepare → Details → Title (the page is refreshed)
-  // N1: the title is changed in one place, Prepare → Details (title and card texts); the header shows it and goes there.
+  const shown = title; // changed in Prepare → Texts → Title (the page is refreshed)
+  // N1: the title is changed in one place, Prepare → Texts (title and card texts); the header shows it and goes there.
   const edit = () => router.push(`/songs/${id}?tab=details`);
   async function remove() {
     setError(null);
@@ -28,10 +28,10 @@ export function SongTitle({ id, title }: { id: string; title: string }) {
   return (
     <div className="flex min-w-0 flex-col">
       <div className="flex min-w-0 items-center gap-1">
-        <h1 data-song-title className="cursor-pointer truncate text-xl leading-tight" title="Change the title: Prepare → Details" onClick={edit}>
+        <h1 data-song-title className="cursor-pointer truncate text-xl leading-tight" title="Change the title: Prepare → Texts" onClick={edit}>
           {shown}
         </h1>
-        <button type="button" data-song-title-edit aria-label="Change the title (Prepare → Details)" title="Change the title (Prepare → Details)" onClick={edit} className="text-muted-foreground hover:text-foreground rounded p-1">
+        <button type="button" data-song-title-edit aria-label="Change the title (Prepare → Texts)" title="Change the title (Prepare → Texts)" onClick={edit} className="text-muted-foreground hover:text-foreground rounded p-1">
           <Pencil className="size-3.5" />
         </button>
         <RowMenu label="this song" menuId="song" items={[{ key: "delete", label: "Delete song…", onSelect: () => setAsking(true), attrs: { "data-song-delete": true } }]} />

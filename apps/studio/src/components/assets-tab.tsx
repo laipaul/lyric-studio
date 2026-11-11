@@ -33,14 +33,13 @@ function replaceWarning(kind: AssetKind, current: string, next: string): string 
 // Remove moves a clip to clips\_removed\, nothing is deleted), shown in the song's clip order: drag to
 // reorder (clips.json, the one sequence Shape and Make use; new clips go at the end). Files put into the folder by hand that
 // the app cannot place are asked about once: "What is this file?".
-// N1: one part per Prepare tab (Prepare reorganised 10 Nov 2026: one kind of input per tab). "audio" = Prepare → Audio
-// (the song folder, song, vocal stem, backing vocals, audio files to place, their replaced files); "lyrics" = Prepare →
-// Lyrics & timing (the lyrics file and hints.lrc, text files to place); "cover" = Prepare → Details (the cover);
-// "clips" = Prepare → Storyboard (the song's own clips and photos, their story order, notes, Use / Omit, removed clips).
-// Each part lists only its own replaced files. The tagline and links are in Prepare → Details.
-export type AssetsPart = "audio" | "lyrics" | "cover" | "clips";
-const PART_KINDS: Record<Exclude<AssetsPart, "clips">, readonly string[]> = { audio: ["song", "vocals", "backingVocals"], lyrics: ["lyrics", "hints"], cover: ["cover"] };
-export function AssetsTab({ projectId, part = "audio" }: { projectId: string; part?: AssetsPart }) {
+// N1: one part per Prepare tab. "clips" = Prepare → Storyboard (the song's own clips and photos, their story order,
+// notes, Use / Omit, removed clips). Each part lists only its own replaced files. The tagline and links are in Prepare → Texts.
+// Prepare (11 Nov 2026): "files" = Prepare → Assets, the files the user provides (Song, Vocal stem and Lyrics together,
+// ready for the 2c slots; then backing vocals and the cover); "hints" = the tapped times, in Lyrics Sync.
+export type AssetsPart = "files" | "hints" | "clips";
+const PART_KINDS: Record<Exclude<AssetsPart, "clips">, readonly string[]> = { files: ["song", "vocals", "lyrics", "backingVocals", "cover"], hints: ["hints"] };
+export function AssetsTab({ projectId, part = "files" }: { projectId: string; part?: AssetsPart }) {
   const [data, setData] = useState<SongAssets | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
@@ -265,12 +264,12 @@ export function AssetsTab({ projectId, part = "audio" }: { projectId: string; pa
     );
   }
 
-  // What this part shows: its own file kinds, the files to place of its own sort (text in Lyrics, audio in Audio) and
-  // its own replaced files (a kept copy without a role: under Audio, with the song folder).
+  // What this part shows: its own file kinds, the files to place (all in Assets) and its own replaced files (a kept copy
+  // without a role: under Assets, with the song folder).
   const kinds = part === "clips" ? [] : PART_KINDS[part];
   const has = (kind: string) => kinds.includes(kind);
-  const unassigned = data.unassigned.filter((f) => (part === "lyrics" ? f.kind === "text" : part === "audio" ? f.kind !== "text" : false));
-  const ownReplaced = replaced.filter((f) => (f.role ? kinds.includes(f.role) : part === "audio"));
+  const unassigned = data.unassigned.filter((f) => (part === "files"));
+  const ownReplaced = replaced.filter((f) => (f.role ? kinds.includes(f.role) : part === "files"));
   const fileRow = (kind: AssetKind, icon: React.ReactNode, title: string, value: React.ReactNode, warning?: React.ReactNode, button = "Replace…") => (
     <li data-asset={kind} className={cn("bg-card flex items-center gap-3 rounded-lg border px-4 py-3", warning && "border-amber-400/40")}>
       <span className="text-brand">{icon}</span>
@@ -294,7 +293,7 @@ export function AssetsTab({ projectId, part = "audio" }: { projectId: string; pa
     <div data-assets={part} className="flex flex-col gap-6">
       {part !== "clips" ? (
       <>
-      {part === "audio" ? (
+      {part === "files" ? (
       <p className="text-muted-foreground text-xs">
         Song folder:{" "}
         <button type="button" data-open-folder title="Open in Explorer" onClick={openFolder} className="text-foreground hover:text-brand underline decoration-dotted underline-offset-2">
@@ -316,12 +315,12 @@ export function AssetsTab({ projectId, part = "audio" }: { projectId: string; pa
               data.vocals?.status === "rejected" ? data.vocals.message : undefined,
               data.vocals ? "Replace…" : "Add…",
             )}
-        {data.instrumental || !has("backingVocals")
-          ? null
-          : fileRow("backingVocals", <AudioLines className="size-5" />, "Backing vocals", data.backingVocals ? `${base(data.backingVocals)} · kept with the song, not used for timing` : "none (optional)", undefined, data.backingVocals ? "Replace…" : "Add…")}
         {!has("lyrics") ? null : data.instrumental
           ? fileRow("lyrics", <FileText className="size-5" />, "Story (instrumental)", data.lyrics?.lines ? `story.txt · ${data.lyrics.lines} sentence${data.lyrics.lines === 1 ? "" : "s"}, timed by the app` : "no story: music only (Replace adds a story.txt)")
           : fileRow("lyrics", <FileText className="size-5" />, "Lyrics", data.lyrics ? `${base(data.lyrics.file)} · ${data.lyrics.lines} lines` : "no lyrics yet (a .txt, any name)")}
+        {data.instrumental || !has("backingVocals")
+          ? null
+          : fileRow("backingVocals", <AudioLines className="size-5" />, "Backing vocals", data.backingVocals ? `${base(data.backingVocals)} · kept with the song, not used for timing` : "none (optional)", undefined, data.backingVocals ? "Replace…" : "Add…")}
         {!has("cover") ? null : fileRow(
           "cover",
           data.cover ? (

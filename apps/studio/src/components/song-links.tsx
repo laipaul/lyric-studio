@@ -33,7 +33,7 @@ function ServicePicker({ value, onPick, name }: { value: string; onPick: (id: st
   );
 }
 
-// Prepare → Details (N1; was the Assets tab): where people can hear the song and find the artist (song.json "links"). Paste a link and
+// Prepare → Texts (N1; was the Assets tab): where people can hear the song and find the artist (song.json "links"). Paste a link and
 // the app names its service; change it with the picker. Saved at once; the posting texts use them.
 export function LinksField({ projectId }: { projectId: string }) {
   const [links, setLinks] = useState<SongLink[] | null>(null);
@@ -144,7 +144,7 @@ export function LinksField({ projectId }: { projectId: string }) {
 
 // Post panel: the song's links picked for this post (chips; + to add one, × to leave one out), each with a
 // copy button for pasting while posting (e.g. the bio, a story's link sticker). The caption / YouTube
-// description follow the pick, which is kept per platform. No links yet: a pointer to Prepare → Details.
+// description follow the pick, which is kept per platform. No links yet: a pointer to Prepare → Texts.
 export function PostLinks({
   projectId,
   platform,
@@ -172,7 +172,7 @@ export function PostLinks({
       <p className="text-muted-foreground rounded-md border border-dashed p-3 text-xs" data-post-links-none>
         No links for this song yet (Spotify, Apple Music, a smart link, your website…).{" "}
         <a href={`/songs/${projectId}?tab=details`} className="text-foreground underline">
-          Add them in Prepare → Details
+          Add them in Prepare → Texts
         </a>
       </p>
     );

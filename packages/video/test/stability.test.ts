@@ -120,7 +120,7 @@ describe("no quiet fallbacks", () => {
     writeFileSync(path.join(store, "lyrics-0123456789ab.txt"), "Old copy\n");
     renameSync(lyrics, `${lyrics}.away`);
     expect(projectLyricsTxt(ws, r.id)).toBeNull();
-    expect(() => generateOptions(ws, r.id, { platforms: ["reels"] })).toThrow(/no lyrics file in its song folder.*Prepare → Lyrics & timing/s);
+    expect(() => generateOptions(ws, r.id, { platforms: ["reels"] })).toThrow(/no lyrics file in its song folder.*Prepare → Assets/s);
     renameSync(`${lyrics}.away`, lyrics);
   });
 

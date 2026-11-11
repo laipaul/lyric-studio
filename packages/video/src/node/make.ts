@@ -702,7 +702,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       leadMs,
       align: options.dryRun
         ? async () => {
-            throw new Error("This song has no lyric timing for its current lyrics yet: Prepare → Lyrics & timing → Time the lyrics again (or make a video), then its shot plan shows here.");
+            throw new Error("This song has no lyric timing for its current lyrics yet: Prepare → Lyrics Sync → Time the lyrics again (or make a video), then its shot plan shows here.");
           }
         : options.align,
     });
@@ -1281,10 +1281,10 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     };
   });
 
-  // Use / Omit (Assets or Shape): omitted clips keep their place in the order but are never shown.
+  // Use / Omit (Prepare → Storyboard or Shape → Shots): omitted clips keep their place in the order but are never shown.
   const usedClips = preparedClips.filter((c) => !isOmitted(edits, c.name));
   if (usesClips && preparedClips.length && !usedClips.length) {
-    throw new Error(`${preset.name}: every clip is set to Omit. Set at least one clip to Use (Assets or Shape → Clips).`);
+    throw new Error(`${preset.name}: every clip is set to Omit. Set at least one clip to Use (Prepare → Storyboard or Shape → Shots).`);
   }
   const omittedCount = preparedClips.length - usedClips.length;
   if (omittedCount && position.index === 0) log(`${omittedCount} clip(s) set to Omit: not used`);
