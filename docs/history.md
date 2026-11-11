@@ -4,6 +4,25 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Prepare → Clips: story notes on the clip cards ✅ (to verify on the Windows PC)
+- **Each clip card has a short note at the bottom** for the clip's role in the story line. An empty card shows a faint
+  "+ Add a note"; a click opens a small box on the card that **saves as you type** (no Save button); Esc or clicking
+  outside closes it to **one line ending in "…"**; a click shows the whole note again; clearing the text deletes it.
+  The card does not drag while its box is open, and dragging a card (also by its note line) never opens the box.
+- **Kept per clip for this song, keyed by the clip's content** (`.studio\clip-notes.json`): the note follows the clip
+  when it is reordered, renamed (the file itself), omitted / used again, removed and restored, and survives every
+  regeneration (notes are not in clips.json or the storyboards). A clip replaced by another file under the same name
+  finds its note by the name. Two clips with exactly the same content share one note.
+- **For you only:** shown in Prepare → Clips only, never in Shape (shot panel, timeline, the future shot list); the app
+  never reads them for planning, Make, storyboards, the assessment or anything else (a test checks that only the
+  clips list reads the file).
+- Tests: clip-notes.test.ts (5: save / delete, rename and reorder, replaced file, long notes, nothing else reads them);
+  clip-notes.e2e.ts (14 checks: + Add a note, no drag while writing, saved as you type, no Save, Esc to one line with
+  "…", click to expand, click outside, drag without editing and reorder, Omit, renamed file + reload, not in Shape,
+  clear = deleted), added to `pnpm test:e2e`; tsc clean; pnpm build ok.
+- **To check on the PC:** Prepare → Clips: "+ Add a note" on a card, type, click elsewhere: one line with "…"; drag the
+  card to another place, Omit and Use it, reload: the note is still there; open Shape: no note anywhere.
+
 ### Navigation N1: four numbered stages, tabs inside them, every setting in one place ✅ (to verify on the Windows PC)
 - **The rail holds the four stages only, numbered 1-4** (Prepare, Shape, Make, Review); Shape's menus and the Look
   group are gone from it. Each stage's sections are tabs at the top of its work area:

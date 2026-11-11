@@ -255,6 +255,58 @@ async function main() {
     const head = await fetch(mp4Url, { method: "HEAD" });
     check(head.status === 200 && Number(head.headers.get("content-length")) === total && head.headers.get("accept-ranges") === "bytes", "server: HEAD gives the length and Accept-Ranges");
 
+    // ---- Post downloads (11 Nov 2026): "Save as" in the last folder used for this song and platform; "Save all to…".
+    // The browser's pickers are replaced by in-memory stand-ins that record what the app asks for and writes.
+    // (Plain JavaScript text: code inside page.evaluate gets tsx's helpers, which the page does not have.)
+    await page.evaluate(`(() => {
+      window.__saves = { picks: [], written: {} };
+      // Classes: the data on the object, the methods on the prototype, so IndexedDB can keep a handle (as the real ones).
+      class FileH {
+        constructor(path) { this.kind = "file"; this.__path = path; this.name = path.split("/").pop(); }
+        async createWritable() {
+          let n = 0;
+          const path = this.__path;
+          return new WritableStream({ write: (c) => { n += c.byteLength; }, close: () => { window.__saves.written[path] = n; } });
+        }
+      }
+      class DirH {
+        constructor(path) { this.kind = "directory"; this.__path = path; this.name = path.split("/").pop(); }
+        async getDirectoryHandle(name) { return new DirH(this.__path + "/" + name); }
+        async getFileHandle(name) { return new FileH(this.__path + "/" + name); }
+      }
+      const where = (s) => (typeof s === "string" ? s : (s && s.__path) || "?");
+      window.showSaveFilePicker = async (o) => {
+        window.__saves.picks.push({ kind: "file", suggestedName: o.suggestedName, startIn: where(o.startIn) });
+        return new FileH("D:/Posts/" + o.suggestedName);
+      };
+      window.showDirectoryPicker = async (o) => {
+        window.__saves.picks.push({ kind: "folder", startIn: where(o.startIn) });
+        return new DirH("D:/Posts");
+      };
+    })()`);
+    const saves = () => page.evaluate(() => (window as unknown as { __saves: { picks: { kind: string; suggestedName?: string; startIn: string }[]; written: Record<string, number> } }).__saves);
+    const names = await page.$$eval("[data-save-file]", (e: Element[]) => e.map((x) => x.getAttribute("data-save-name")));
+    check(names.includes("Post Test - Instagram Reels.mp4") || names.some((n) => / - .+\.mp4$/.test(n ?? "")), `clear file names (${names.join(", ")})`);
+    await page.click("[data-save-file=Video]");
+    await page.waitForFunction(() => Object.keys((window as unknown as { __saves: { written: object } }).__saves.written).length === 1);
+    let rec = await saves();
+    check(rec.picks[0]?.kind === "file" && rec.picks[0].startIn === "downloads" && rec.written[`D:/Posts/${names[0]}`] === total, `Video: a "Save as" picker (first time: Downloads), the whole file written (${JSON.stringify(rec)})`);
+    await page.click("[data-save-file=Video]");
+    await page.waitForFunction(() => (window as unknown as { __saves: { picks: unknown[] } }).__saves.picks.length === 2);
+    rec = await saves();
+    check(rec.picks[1].startIn === `D:/Posts/${names[0]}`, `the next "Save as" opens where the last one went for this song and platform (${rec.picks[1].startIn})`);
+    await page.click("[data-save-all]");
+    await page.waitForSelector("text=/Saved \\d+ files in/");
+    rec = await saves();
+    const inFolder = Object.keys(rec.written).filter((k) => k.startsWith("D:/Posts/Post Test/"));
+    check(rec.picks[2].kind === "folder" && inFolder.length === names.length, `Save all to…: one folder picked, every file of the post written into a folder named after the song (${inFolder.join(", ")})`);
+    // The parent folder is remembered: the next "Save all to…" (this song or the next one) opens in it.
+    await page.click("[data-save-all]");
+    await page.waitForFunction(() => (window as unknown as { __saves: { picks: unknown[] } }).__saves.picks.length === 4);
+    check((await saves()).picks[3].startIn === "D:/Posts", `the next Save all opens in the parent folder (${(await saves()).picks[3].startIn})`);
+    const otherSong = await page.evaluate(`new Promise((resolve) => { const r = indexedDB.open("lyric-studio-save"); r.onsuccess = () => { const g = r.result.transaction("handles").objectStore("handles").get("parent"); g.onsuccess = () => resolve(g.result && g.result.__path); }; })`);
+    check(otherSong === "D:/Posts", `…kept for every song (parent: ${otherSong})`);
+
 
     // ---- Videos tab: verdicts, empty runs, the player, and fast clicks ----
     await page.goto(`${base}/songs/${sp.project.id}?tab=videos`);

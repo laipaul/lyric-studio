@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, FolderOpen } from "lucide-react";
+import { Download, FolderDown, FolderOpen } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { PostingPack } from "@lyric/video/captions";
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { VideoPlayer } from "@/components/video-player";
 import { api } from "@/lib/api";
+import { canPickFolder, folderName, saveAll, saveOne, type PostFile } from "@/lib/save-file";
 
 async function openFolder(file: string) {
   await api("/api/open-folder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file }) });
@@ -66,14 +67,52 @@ export function PostPanel({ projectId, songTitle, video }: { projectId: string; 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per video (the component is keyed by it)
   }, []);
 
-  const base = `${songTitle} - ${video.label} ${video.name}`;
-  const files = [
+  // Clear names (11 Nov 2026): "Here With Me - YouTube.mp4", ".srt", " - thumbnail.jpg"; " v2" when not the first version.
+  const base = `${folderName(songTitle)} - ${video.label}${video.name && video.name !== "v1" ? ` ${video.name}` : ""}`;
+  const files: PostFile[] = [
     { label: "Video", file: video.mp4, name: `${base}.mp4` },
     video.srt ? { label: "Captions (.srt)", file: video.srt, name: `${base}.srt` } : null,
-    video.thumbnail ? { label: "Thumbnail", file: video.thumbnail, name: `${songTitle} - thumbnail.jpg` } : null,
-    video.cover ? { label: "Cover (title inside the profile grid's 3:4 crop)", file: video.cover, name: `${songTitle} - ${video.label} cover.jpg` } : null,
-    video.publish ? { label: "publish.txt", file: video.publish, name: `${songTitle} - publish.txt` } : null,
-  ].filter((f): f is { label: string; file: string; name: string } => !!f);
+    video.thumbnail ? { label: "Thumbnail", file: video.thumbnail, name: `${base} - thumbnail.jpg` } : null,
+    video.cover ? { label: "Cover (title inside the profile grid's 3:4 crop)", file: video.cover, name: `${base} - cover.jpg` } : null,
+    video.publish ? { label: "publish.txt", file: video.publish, name: `${base} - publish.txt` } : null,
+  ].filter((f): f is PostFile => !!f);
+  // "Save as" in the last folder used for this song and platform; "Save all to…" into one folder (lib/save-file.ts).
+  const [saving, setSaving] = useState<string | null>(null);
+  const [subfolder, setSubfolder] = useState(true);
+  const [folderApi, setFolderApi] = useState(false); // Chrome / Edge: folders can be picked (read after the first paint)
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- browser-only facts, read after hydration on purpose
+    setFolderApi(canPickFolder());
+    try {
+      setSubfolder(window.localStorage.getItem("lyric-studio:save-subfolder") !== "0");
+    } catch {
+      // private mode: the default
+    }
+  }, []);
+  const run = async (what: string, job: () => Promise<string | null>) => {
+    setSaving(what);
+    setError(null);
+    try {
+      const text = await job();
+      if (text) setNotice(text);
+    } catch (e) {
+      setError(`Not saved: ${(e as Error).message}`);
+    } finally {
+      setSaving(null);
+    }
+  };
+  const save = (f: PostFile) =>
+    run(f.label, async () => {
+      const r = await saveOne(f, { song: projectId, platform: video.platform });
+      return r === "saved" ? `Saved ${f.name}.` : r === "downloaded" ? `${f.name}: downloaded (this browser has no "Save as": Chrome or Edge has).` : null;
+    });
+  const saveEverything = () =>
+    run("all", async () => {
+      const r = await saveAll(files, { song: projectId, songTitle, subfolder });
+      if (r === "cancelled") return null;
+      if (r === "downloaded") return `${files.length} files downloaded (this browser cannot pick a folder: Chrome or Edge can).`;
+      return `Saved ${r.count} files in ${r.folder}.`;
+    });
 
   const makeOwn = async () => {
     const r = await api("/api/captions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, platform: video.platform }) });
@@ -120,12 +159,32 @@ export function PostPanel({ projectId, songTitle, video }: { projectId: string; 
         {notice ? <p className="border-brand/30 bg-brand/10 rounded-md border p-2 text-xs">{notice}</p> : null}
         <div className="flex flex-wrap gap-2 border-t pt-4">
           {files.map((f) => (
-            <Button key={f.file} size="sm" variant="secondary" asChild>
-              <a href={`/api/files/${f.file}?download=${encodeURIComponent(f.name)}`} download={f.name}>
-                <Download /> {f.label}
-              </a>
+            <Button key={f.file} size="sm" variant="secondary" data-save-file={f.label} data-save-name={f.name} disabled={!!saving} onClick={() => void save(f)} title={`Save as ${f.name}`}>
+              <Download /> {saving === f.label ? "Saving…" : f.label}
             </Button>
           ))}
+          <Button size="sm" variant="secondary" data-save-all disabled={!!saving} onClick={() => void saveEverything()} title="Every file of this post into one folder you pick">
+            <FolderDown /> {saving === "all" ? "Saving…" : "Save all to…"}
+          </Button>
+          {folderApi ? (
+            <label className="text-muted-foreground flex items-center gap-1.5 text-xs" title="Pick the parent folder once (e.g. Posts): each song gets its own folder in it, and the next song's picker opens there">
+              <input
+                type="checkbox"
+                data-save-subfolder
+                checked={subfolder}
+                onChange={(e) => {
+                  setSubfolder(e.target.checked);
+                  try {
+                    window.localStorage.setItem("lyric-studio:save-subfolder", e.target.checked ? "1" : "0");
+                  } catch {
+                    // not remembered
+                  }
+                }}
+                className="accent-brand"
+              />
+              in a folder named “{folderName(songTitle)}”
+            </label>
+          ) : null}
           <Button size="sm" variant="ghost" onClick={() => openFolder(video.mp4)}>
             <FolderOpen /> Open folder
           </Button>

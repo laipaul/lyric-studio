@@ -4,6 +4,23 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Post downloads: "Save as" in your folder, "Save all to…", folders remembered ✅ (to verify on the Windows PC)
+- **Each file button** in the Post panel (Video, Captions (.srt), Thumbnail, Cover, publish.txt) opens a "Save as"
+  window (Chrome / Edge) in the last folder you used for this song and platform; other browsers download as before.
+- **Save all to…** writes every file of the post into one folder you pick. With "in a folder named “<song>”" (on by
+  default) you pick the parent (e.g. D:\Posts) and the song gets its own folder in it; the next song opens there.
+- **Clear names:** "Here With Me - YouTube.mp4", "Here With Me - YouTube.srt", "Here With Me - YouTube - thumbnail.jpg",
+  "… - publish.txt" (" v2" for a second version).
+- **Item 4 (other download buttons):** these are the app's only download buttons (Make has none, the release pack
+  is gone); all five changed: Video, Captions (.srt), Thumbnail, Cover, publish.txt; plus the new Save all to….
+- The folders are remembered in this browser (its folder handles, never paths): per song and platform, per song,
+  and the parent folder for the next song.
+- Tests (browser, videos-post, with stand-in pickers): clear names; Video's "Save as" opens in Downloads the first
+  time and writes the whole file; the next one opens where the last went; Save all writes every file into the
+  song's folder; the next Save all opens in the parent, kept for every song.
+- **To check on the PC (Chrome or Edge):** Review → Post → a video → Video: a Save as window; save to D:\Posts.
+  Save all to… → pick D:\Posts: a "Here With Me" folder with every file. Another song's Save all opens in D:\Posts.
+
 ### Song Details → Tags: ranked hashtags, brand tags, suggestions, the top ones per platform ✅ (to verify on the Windows PC)
 - **Before:** the Post panel's hashtags came from fixed templates (title and artist filled in, plus #reels / #fyp /
   #shorts); YouTube's Tags box from publish-template.txt, frozen in publish.txt. Nothing per song, no limits.
@@ -306,25 +323,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   new-song-every-platform not run here (a real render worker). tsc clean; pnpm build ok; eslint: only the old findings.
   storyboard.e2e.ts: with the panel shown, viewer, timeline and command bar fit on one 1440×1000 screen (viewer 501 px);
   collapsed, the viewer has its full 533 px. song-stages: the theme picker's Cancel check now waits for the viewer.
-
-### Prepare → Clips: story notes on the clip cards ✅ (to verify on the Windows PC)
-- **Each clip card has a short note at the bottom** for the clip's role in the story line. An empty card shows a faint
-  "+ Add a note"; a click opens a small box on the card that **saves as you type** (no Save button); Esc or clicking
-  outside closes it to **one line ending in "…"**; a click shows the whole note again; clearing the text deletes it.
-  The card does not drag while its box is open, and dragging a card (also by its note line) never opens the box.
-- **Kept per clip for this song, keyed by the clip's content** (`.studio\clip-notes.json`): the note follows the clip
-  when it is reordered, renamed (the file itself), omitted / used again, removed and restored, and survives every
-  regeneration (notes are not in clips.json or the storyboards). A clip replaced by another file under the same name
-  finds its note by the name. Two clips with exactly the same content share one note.
-- **For you only:** shown in Prepare → Clips only, never in Shape (shot panel, timeline, the future shot list); the app
-  never reads them for planning, Make, storyboards, the assessment or anything else (a test checks that only the
-  clips list reads the file).
-- Tests: clip-notes.test.ts (5: save / delete, rename and reorder, replaced file, long notes, nothing else reads them);
-  clip-notes.e2e.ts (14 checks: + Add a note, no drag while writing, saved as you type, no Save, Esc to one line with
-  "…", click to expand, click outside, drag without editing and reorder, Omit, renamed file + reload, not in Shape,
-  clear = deleted), added to `pnpm test:e2e`; tsc clean; pnpm build ok.
-- **To check on the PC:** Prepare → Clips: "+ Add a note" on a card, type, click elsewhere: one line with "…"; drag the
-  card to another place, Omit and Use it, reload: the note is still there; open Shape: no note anywhere.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
