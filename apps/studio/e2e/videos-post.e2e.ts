@@ -101,9 +101,17 @@ async function main() {
     }
     const browser = await playwright.chromium.launch();
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    // Review (11 Nov 2026): one tab per platform with videos; a platform's videos only show in its tab.
+    const showTab = async (plat: string) => {
+      await page.click(`[data-review-tab=${plat}]`);
+      await page.waitForSelector(`[data-review-platform=${plat}]`);
+    };
     await page.goto(`${base}/songs/${sp.project.id}`);
+    await page.waitForSelector("[data-review-tabs]");
+    await showTab("reels");
+    if (process.env.REVIEW_SHOT) await page.screenshot({ path: process.env.REVIEW_SHOT });
 
-    // Videos: the run's settings next to the recipe.
+    // Videos: the run's settings next to the recipe (on each card, folded).
     await page.waitForSelector("[data-run='2026-10-20_1430'] [data-run-settings]");
     const summary = (await page.textContent("[data-run='2026-10-20_1430'] [data-run-settings] summary")) ?? "";
     check(/\d+ differ(s)? from the recipe now/.test(summary), `Videos: the run says its settings differ from the recipe now (${summary.trim()})`);
@@ -126,6 +134,7 @@ async function main() {
 
     // The pro assessment on each tile, and a reaction: what it changes, then song.json.
     await page.goto(`${base}/songs/${sp.project.id}?tab=videos`);
+    await showTab("reels");
     await page.waitForSelector("[data-video*='2026-10-20_1430/reels/'][data-video$='v1.manifest.json'] [data-verdict]");
     check((await page.getAttribute("[data-video*='2026-10-20_1430/reels/'][data-video$='v1.manifest.json'] [data-verdict]", "data-verdict")) === "ready", "v1 (QA passed) is ✅ Ready to post");
     await page.click("[data-video*='2026-10-20_1430/reels/'][data-video$='v1.manifest.json'] [data-reactions-toggle]");
@@ -141,6 +150,7 @@ async function main() {
     // and after the end the bar can be dragged back and play starts again from 0.
     for (const round of ["first opening", "second opening (cached)"]) {
       await page.goto(`${base}/songs/${sp.project.id}?tab=videos`);
+      await showTab("reels");
       await page.click("[data-video*='2026-10-20_1430/reels/'][data-video$='v1.manifest.json'] button:has-text('Compare')");
       await page.click("[data-video*='2026-10-20_1430/reels/'][data-video$='v2.manifest.json'] button:has-text('Compare')");
       await page.locator("button:has-text('Compare'):not([disabled])").last().click();
@@ -183,6 +193,7 @@ async function main() {
     await page.waitForSelector("[data-post-empty]");
     check(true, "Post: empty until a video is approved");
     await page.goto(`${base}/songs/${sp.project.id}?tab=videos`);
+    await showTab("reels");
     await Promise.all([page.waitForResponse((r: { url(): string }) => r.url().includes("/api/marks")), page.click("[data-video*='2026-10-20_1430/reels/'][data-video$='v1.manifest.json'] button:has-text('Approve')")]);
     await page.waitForSelector("[data-video*='2026-10-20_1430/reels/'][data-video$='v1.manifest.json'][data-mark=approved]");
     await page.goto(`${base}/songs/${sp.project.id}?tab=post`);
@@ -244,34 +255,39 @@ async function main() {
 
     // ---- Videos tab: verdicts, empty runs, the player, and fast clicks ----
     await page.goto(`${base}/songs/${sp.project.id}?tab=videos`);
-    await page.waitForSelector("[data-run='2026-10-22_1000'] [data-video]");
-    const tt = "[data-run='2026-10-22_1000'] [data-platform-group=tiktok]";
+    await showTab("tiktok");
+    const tt = "[data-review-platform=tiktok] [data-review-header]";
     const tile = (run: string, plat: string, n: string) => `[data-video*='${run}/${plat}/'][data-video$='${n}.manifest.json']`;
     const tk = (n: string) => tile("2026-10-22_1000", "tiktok", n);
-    // 1 + 4: the heading shows the verdict of the platform's videos; old-style manifests get a verdict too.
-    check((await page.getAttribute(`${tt} [data-platform-verdict]`, "data-platform-verdict")) === "not-ready", "heading: the worst verdict of the run's videos (Not ready)");
-    check((((await page.textContent(`${tt} [data-platform-verdict]`)) ?? "").toLowerCase()).includes("not ready"), "heading says it in plain words");
-    check((await page.getAttribute(`[data-run='2026-10-20_1430'] [data-platform-verdict]`, "data-platform-verdict")) === "ready", "heading: both reels ready -> Ready");
-    check((await page.$(`[data-run='2026-10-23_0900'] [data-platform-verdict]`)) === null, "heading: no summary for a run with one video");
+    // 1 + 4: the tab's header shows the verdict of the platform's videos; old-style manifests get a verdict too.
+    check((await page.getAttribute(`${tt} [data-platform-verdict]`, "data-platform-verdict")) === "not-ready", "the TikTok tab's header: the worst verdict of its videos (Not ready)");
+    check((((await page.textContent(`${tt} [data-platform-verdict]`)) ?? "").toLowerCase()).includes("not ready"), "the header says it in plain words");
     const verdictOf = (sel: string) => page.getAttribute(`${sel} [data-verdict]`, "data-verdict");
     check((await verdictOf(tk("v1"))) === "ready" && (await verdictOf(tk("v2"))) === "good" && (await verdictOf(tk("v3"))) === "not-ready", "old-style manifests (no pace / ending / props): verdicts ready / good / not-ready on the tiles");
+    const runsText = await page.$$eval("[data-review-platform] [data-card]", (els: Element[]) => els.map((e) => e.textContent).join("\n"));
+    check(!/\b(WARN|PASS)\b/.test(runsText), "no WARN / PASS wording in Review");
+    await showTab("reels");
+    check((await page.getAttribute("[data-review-platform=reels] [data-review-header] [data-platform-verdict]", "data-platform-verdict")) === "ready", "the Reels tab's header: both reels ready -> Ready");
+    await showTab("youtube");
+    check((await page.$("[data-review-platform=youtube] [data-review-header] [data-platform-verdict]")) === null, "no summary for a platform with one video");
     check((await verdictOf(tile("2026-10-23_0900", "youtube", "v1"))) === "good", "old-style YouTube video has its verdict too");
-    const runsText = await page.$$eval("[data-run]", (els: Element[]) => els.map((e) => e.textContent).join("\n"));
-    check(!/\b(WARN|PASS)\b/.test(runsText), "no WARN / PASS wording in the Videos tab");
+    // Tabs: only the platforms with videos (Shorts has nothing finished: no tab), each with its count.
+    const tabNames = await page.$$eval("[data-review-tabs] [role=tab]", (e: Element[]) => e.map((x) => x.getAttribute("data-review-tab")));
+    check(JSON.stringify(tabNames) === JSON.stringify(["reels", "tiktok", "youtube", "post"]), `Review's tabs: Reels, TikTok, YouTube, Post (${tabNames.join(", ")})`);
 
-    // 2: empty runs / groups hidden, link brings them back, remembered.
-    check((await page.$("[data-run='2026-10-18_0900']")) === null && (await page.$("[data-run='2026-10-22_1000'] [data-platform-group=shorts]")) === null, "empty run and empty platform group are hidden");
-    check(((await page.textContent("[data-show-empty]")) ?? "").trim() === "Show 2 empty runs", 'link "Show 2 empty runs"');
+    // 2: empty runs hidden inside the tab, the link brings them back, remembered.
+    await showTab("reels");
+    check((await page.$("[data-run='2026-10-18_0900']")) === null, "the Reels tab hides its empty run");
+    check(((await page.textContent("[data-show-empty]")) ?? "").trim() === "Show 1 empty run", 'link "Show 1 empty run"');
     await page.click("[data-show-empty]");
     await page.waitForSelector("[data-run='2026-10-18_0900']");
     check(((await page.textContent("[data-run='2026-10-18_0900']")) ?? "").includes("No finished videos in this run."), "empty run is back, saying so");
-    check((await page.$("[data-run='2026-10-22_1000'] [data-platform-group=shorts]")) !== null, "empty group is back");
     await page.reload();
-    await page.waitForSelector("[data-run='2026-10-18_0900']");
-    check(true, "the choice is remembered after a reload");
+    await page.waitForSelector("[data-review-platform=reels] [data-run='2026-10-18_0900']");
+    check(true, "the choice and the tab are remembered after a reload");
     await page.click("[data-show-empty]");
     await page.waitForFunction(() => !document.querySelector("[data-run='2026-10-18_0900']"));
-    check(((await page.textContent("[data-show-empty]")) ?? "").trim() === "Show 2 empty runs", "hidden again with the toggle");
+    check(((await page.textContent("[data-show-empty]")) ?? "").trim() === "Show 1 empty run", "hidden again with the toggle");
 
     // 6: Ready to post shows the video with controls and sound.
     await page.click(`${tile("2026-10-20_1430", "reels", "v1")} button:has-text('Post')`);
@@ -312,6 +328,7 @@ async function main() {
 
     // 5: fast clicks. Discard six videos at once (three with Playwright clicks and no waits, three in one
     // synchronous burst): they stay hidden, the marks are stored, nothing comes back, also after a reload.
+    await showTab("tiktok");
     const discardBtn = (n: string) => `${tk(n)} button:has-text('Discard')`;
     const tilesLeft = () => page.$$eval("[data-video*='2026-10-22_1000/tiktok/']", (e: Element[]) => e.length);
     check((await tilesLeft()) === 6, "six TikTok tiles before");
@@ -352,7 +369,7 @@ async function main() {
     const discardedStored = () => stored().filter((m) => m.video.includes("2026-10-22_1000/tiktok/") && m.status === "discarded").length;
     check(discardedStored() === 6, `all six marks stored (${discardedStored()})`);
     await page.reload();
-    await page.waitForSelector("[data-run='2026-10-20_1430'] [data-video]");
+    await page.waitForSelector("[data-review-platform=tiktok]");
     check((await tilesLeft()) === 0, "after a reload they are still hidden");
     // Mixed quick clicks on the discarded ones: restore three, favourite one, approve one.
     await page.click("button:has-text('Show discarded')");
@@ -362,7 +379,9 @@ async function main() {
     await page.click(`${tk("v5")} button:has-text('Approve')`, { noWaitAfter: true });
     await page.waitForLoadState("networkidle");
     await sleep(2500);
-    const marksNow = async () => page.$$eval("[data-video*='2026-10-22_1000/tiktok/']", (e: Element[]) => Object.fromEntries(e.map((x) => [x.getAttribute("data-video")!.split("/").pop()!.split(".")[0], x.getAttribute("data-mark")])));
+    const marksShown = async (): Promise<Record<string, unknown>> => page.$$eval("[data-video*='2026-10-22_1000/tiktok/']", (e: Element[]) => Object.fromEntries(e.map((x) => [x.getAttribute("data-video")!.split("/").pop()!.split(".")[0], x.getAttribute("data-mark")])));
+    // By name (the order on screen: the approved ones first, since 11 Nov 2026).
+    const marksNow = async () => Object.fromEntries(Object.entries(await marksShown()).sort(([a], [b]) => a.localeCompare(b)));
     const want = { v1: "generated", v2: "generated", v3: "generated", v4: "discarded", v5: "approved", v6: "discarded" };
     check(JSON.stringify(await marksNow()) === JSON.stringify(want), `mixed quick clicks end as clicked (${JSON.stringify(await marksNow())})`);
     const st = stored().filter((m) => m.video.includes("2026-10-22_1000/tiktok/"));

@@ -4,13 +4,13 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 
-import { project } from "@lyric/db";
+import { makeRun, project } from "@lyric/db";
 import { approvedVideos, readyToApprove, songRuns } from "@lyric/video/exports";
 import { generatePanelData, platformLabels, platformState, songCard } from "@lyric/video/library";
 import { chipState } from "@lyric/video/library-status";
 import { RELEASE_PLATFORMS, songTodo } from "@lyric/video/song-stages";
 import { compareRunToRecipe, generatePresetFromRun, type GeneratePreset, type RunComparison } from "@lyric/video/run-settings";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { AssetsTab } from "@/components/assets-tab";
 import { GeneratePanel } from "@/components/generate-panel";
@@ -19,8 +19,8 @@ import { PostTab } from "@/components/post-tab";
 import { StatusBadge } from "@/components/status-badge";
 import { ShapePage } from "@/components/shape-page";
 import { SongTitle } from "@/components/song-title";
-import { SongView, type RunView } from "@/components/song-view";
-import { InMakePart, ReleasePack, SongStages, type MakePart, type ShapePanelId, type StageId, type StageStatus } from "@/components/song-stages";
+import { SongView, type MakingView, type RunView } from "@/components/song-view";
+import { InMakePart, ReleasePack, SongStages, type ReviewPlatform, type MakePart, type ShapePanelId, type StageId, type StageStatus } from "@/components/song-stages";
 import { SongSettings } from "@/components/shape-tools";
 import { LinksField } from "@/components/song-links";
 
@@ -81,10 +81,35 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
         presetError = (error as Error).message;
       }
     }
-    return { song: songCard(ws, p, labels), runs, settings, approved: approvedVideos(runs), offered: readyToApprove(runs), panel: generatePanelData(ws, p), preset, presetError };
+    // Review's placeholder cards: what is being made (or waiting) for this song, per platform (lyric timing runs aside).
+    const labelOf = Object.fromEntries(labels.map((l) => [l.name, l.label]));
+    const making: MakingView[] = ws.db
+      .select()
+      .from(makeRun)
+      .where(and(eq(makeRun.project_id, p.id), inArray(makeRun.status, ["queued", "running"])))
+      .all()
+      .flatMap((r) => {
+        const o = (r.options_json ?? {}) as { platforms?: string; take?: number; variations?: number; lyricsOnly?: boolean; pictures?: string; themes?: string[]; theme?: string; pairings?: string };
+        if (o.lyricsOnly || !o.platforms) return [];
+        const what = o.take ? `take ${o.take}` : o.theme ? `theme ${o.theme}` : o.pictures || o.pairings ? "the versions to compare" : `${o.variations ?? 1} new video${(o.variations ?? 1) === 1 ? "" : "s"}`;
+        return o.platforms.split(",").filter(Boolean).map((name) => ({ runId: r.id, platform: name, label: labelOf[name] ?? name, status: r.status as "queued" | "running", what }));
+      });
+    return { song: songCard(ws, p, labels), runs, settings, approved: approvedVideos(runs), offered: readyToApprove(runs), panel: generatePanelData(ws, p), preset, presetError, making };
   });
   if (!data) notFound();
-  const { song, runs, settings, approved, offered, panel, preset, presetError } = data;
+  const { song, runs, settings, approved, offered, panel, preset, presetError, making } = data;
+  // Review's tabs: every platform with videos (count: those not discarded) or being made, the song's own order first.
+  const reviewPlatforms: ReviewPlatform[] = (() => {
+    const found = new Map<string, ReviewPlatform>();
+    for (const r of runs) for (const pr of r.platforms) if (pr.videos.length) {
+      const c = found.get(pr.name) ?? { name: pr.name, label: pr.label, count: 0 };
+      c.count += pr.videos.filter((v) => v.mark.status !== "discarded").length;
+      found.set(pr.name, c);
+    }
+    for (const m of making) if (!found.has(m.platform)) found.set(m.platform, { name: m.platform, label: m.label, count: 0 });
+    const order = [...(song.wanted ?? []), "reels", "tiktok", "shorts", "youtube", "canvas", "standard"];
+    return [...found.values()].sort((a, b) => (order.indexOf(a.name) + 1 || 99) - (order.indexOf(b.name) + 1 || 99));
+  })();
   const todo = await withWorkspaceAsync((ws) => songTodo(ws, id)).catch(() => []);
   const blocking = todo.find((t) => t.blocking) ?? null;
   // Where the page opens: ?tab=; a song with videos: Review; before the first video: what still needs doing
@@ -146,7 +171,7 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
         {/* The Shape page puts its Analysis chip and Next: Make here (2 Nov 2026; shape-board.tsx, a portal). */}
         <div id="song-header-actions" data-song-header-actions className="ml-auto flex items-center gap-2" />
       </div>
-      <SongStages key={`${search.tab ?? ""}:${search.panel ?? ""}:${search.part ?? ""}:${search.from ?? ""}`} initialTab={tab} initialPanel={tab === "shape" ? askedPanel : null} initialPart={MAKE_PARTS.includes(search.part ?? "") ? (search.part as MakePart) : undefined} statuses={statuses} todo={todo} counts={{ post: approved.reduce((n, g) => n + g.videos.length, 0) + offered.length }}>
+      <SongStages key={`${search.tab ?? ""}:${search.panel ?? ""}:${search.part ?? ""}:${search.from ?? ""}`} initialTab={tab} initialPanel={tab === "shape" ? askedPanel : null} initialPart={MAKE_PARTS.includes(search.part ?? "") ? (search.part as MakePart) : undefined} statuses={statuses} todo={todo} counts={{ post: approved.reduce((n, g) => n + g.videos.length, 0) + offered.length }} reviewPlatforms={reviewPlatforms}>
         {/* Prepare (10 Nov 2026): one kind of input per tab. Audio = the song folder, song, vocal stem, backing vocals; the
             lyrics file and hints are in Lyrics & timing, the cover in Details; Storyboard = the clips and photos in story order. */}
         <TabsContent value="assets">
@@ -198,7 +223,7 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
           </div>
         </TabsContent>
         <TabsContent value="videos">
-          <SongView projectId={song.id} songTitle={song.title} runs={runs} settings={settings} platforms={(song.wanted ?? []).filter((n) => labels[n]).map((n) => ({ name: n, label: labels[n] }))} />
+          <SongView projectId={song.id} songTitle={song.title} runs={runs} settings={settings} making={making} />
         </TabsContent>
         <TabsContent value="post">
           <PostTab projectId={song.id} songTitle={song.title} groups={approved} offered={offered} />

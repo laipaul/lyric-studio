@@ -8,7 +8,7 @@ import type { TodoItem } from "@lyric/video/song-stages";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
-import { FEATURE, FeatureIcon } from "@/lib/feature-icons";
+import { FEATURE, FeatureIcon, PlatformMark } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
 
 // The four stages of a song (Prepare -> Shape -> Make -> Review) over the existing tabs: a stage
@@ -78,6 +78,10 @@ export const useMakePart = () => useContext(MakePartCtx);
 // ending for Reels / TikTok / Shorts, YouTube layout for YouTube. null: no video chosen yet (everything shows).
 const VideoCtx = createContext<{ platform: string | null; setPlatform: (p: string | null) => void }>({ platform: null, setPlatform: () => {} });
 export const useShapeVideo = () => useContext(VideoCtx);
+// Review's tabs (11 Nov 2026): one per platform with videos (or being made), then Post. The platform chosen; null: the first.
+export type ReviewPlatform = { name: string; label: string; count: number };
+const ReviewCtx = createContext<{ platform: string | null; setPlatform: (p: string) => void }>({ platform: null, setPlatform: () => {} });
+export const useReviewPlatform = () => useContext(ReviewCtx);
 
 // Theme editing mode (1 Nov 2026): while a theme is being edited the song page wears a pink frame and a
 // banner "Editing theme X · changes reach …" with Done. The Theme panel (shape-tools) reports it here.
@@ -154,6 +158,7 @@ export function SongStages({
   statuses,
   todo,
   counts,
+  reviewPlatforms = [],
   children,
 }: {
   initialTab: string;
@@ -162,6 +167,7 @@ export function SongStages({
   statuses: Record<StageId, StageStatus>;
   todo: TodoItem[];
   counts: Partial<Record<string, number>>; // a number next to a tab (Post: approved videos)
+  reviewPlatforms?: ReviewPlatform[]; // Review's platform tabs (with videos, or being made), in the song's order
   children: React.ReactNode; // the TabsContent of every tab
 }) {
   const [tab, setTabState] = useState(initialTab);
@@ -171,6 +177,12 @@ export function SongStages({
   const [collapsed, setCollapsed] = useState(false);
   const [part, setPartState] = useState<MakePart>(initialPart ?? "videos");
   const [platform, setPlatform] = useState<string | null>(null);
+  const [reviewPlatform, setReviewPlatformState] = useState<string | null>(null);
+  const setReviewPlatform = (p: string) => {
+    setReviewPlatformState(p);
+    rememberTab("review", `videos:${p}`);
+  };
+  const reviewShown = reviewPlatforms.find((r) => r.name === reviewPlatform)?.name ?? reviewPlatforms[0]?.name ?? null;
   const [themeMode, setThemeMode] = useState<ThemeMode | null>(null);
   const [themeNow, setThemeNow] = useState<ThemeNow | null>(null);
   const [shapeStatus, setShapeStatus] = useState<StageStatus | null>(null);
@@ -202,9 +214,11 @@ export function SongStages({
     if (!initialPanel && isShapeTab(shapeLast)) setShapeTab(shapeLast);
     const makeLast = lastTab("make");
     if (!initialPart && MAKE_PARTS.some((m) => m.id === makeLast)) setPartState(makeLast as MakePart);
+    const reviewLast = lastTab("review");
+    if (reviewLast?.startsWith("videos:")) setReviewPlatformState(reviewLast.slice(7));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const openStage = (s: (typeof STAGES)[number]) => {
-    const last = lastTab(s.id);
+    const last = s.id === "review" ? (lastTab(s.id)?.replace(/^videos:.*/, "videos") ?? null) : lastTab(s.id);
     setTabState(last && (s.tabs as readonly string[]).includes(last) ? last : s.tabs[0]);
   };
   // "theme X" (Analysis): Shape → Look, where the song's theme is shown and changed.
@@ -217,6 +231,7 @@ export function SongStages({
     <GoToTab.Provider value={setTab}>
       <ShapePanel.Provider value={{ panel, setPanel, tab: shapeTab, collapsed, setCollapsed }}>
         <MakePartCtx.Provider value={{ part, setPart }}>
+        <ReviewCtx.Provider value={{ platform: reviewShown, setPlatform: setReviewPlatform }}>
         <VideoCtx.Provider value={{ platform, setPlatform }}>
         <ThemeModeCtx.Provider value={setThemeMode}>
         <ThemeNowCtx.Provider value={setThemeNow}>
@@ -274,6 +289,25 @@ export function SongStages({
                     {m.label}
                   </button>
                 ))}
+              </div>
+            ) : stage === "review" ? (
+              // Review: one tab per platform with videos (count = the ones not discarded), then Post.
+              <div role="tablist" aria-label="Review" data-review-tabs className={TAB_LIST}>
+                {(reviewPlatforms.length ? reviewPlatforms : [{ name: "", label: "Videos", count: 0 }]).map((r) => {
+                  const on = tab === "videos" && (r.name === "" || reviewShown === r.name);
+                  return (
+                    <button key={r.name || "videos"} type="button" role="tab" data-review-tab={r.name || "videos"} aria-selected={on} onClick={() => (setTab("videos"), r.name && setReviewPlatform(r.name))} className={cn(TAB, on ? TAB_ON : TAB_OFF)}>
+                      {r.name ? <PlatformMark platform={r.name} /> : <Eye aria-hidden className="size-3.5" />}
+                      {r.label}
+                      {r.count ? <span className="text-muted-foreground tabular-nums">{r.count}</span> : null}
+                    </button>
+                  );
+                })}
+                <button type="button" role="tab" data-review-tab="post" aria-selected={tab === "post"} onClick={() => setTab("post")} className={cn(TAB, tab === "post" ? TAB_ON : TAB_OFF)}>
+                  <Send aria-hidden className="size-3.5" />
+                  Post
+                  {counts.post ? <span className="text-muted-foreground tabular-nums">{counts.post}</span> : null}
+                </button>
               </div>
             ) : stage === "make" ? (
               <div role="tablist" aria-label="Make" data-make-tabs className={TAB_LIST}>
@@ -341,6 +375,7 @@ export function SongStages({
         </ThemeNowCtx.Provider>
         </ThemeModeCtx.Provider>
         </VideoCtx.Provider>
+        </ReviewCtx.Provider>
         </MakePartCtx.Provider>
       </ShapePanel.Provider>
     </GoToTab.Provider>

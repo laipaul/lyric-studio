@@ -1,6 +1,6 @@
 "use client";
 
-import { Columns3, Shuffle, SlidersHorizontal, X } from "lucide-react";
+import { Columns3, Loader2, Shuffle, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -13,6 +13,7 @@ import { CopyButton } from "@/components/copy-button";
 import { ReadyToPost } from "@/components/ready-to-post";
 import { PlatformVerdict } from "@/components/assessment";
 import { StatusBadge, type BadgeStatus } from "@/components/status-badge";
+import { useReviewPlatform } from "@/components/song-stages";
 import { VideoPlayerDialog } from "@/components/video-player";
 import { VideoTile } from "@/components/video-tile";
 import { Button } from "@/components/ui/button";
@@ -21,30 +22,36 @@ import { api } from "@/lib/api";
 
 export type PlatformRunView = PlatformRun & { state: { status: BadgeStatus; details: string[] } };
 export type RunView = Omit<RunInfo, "platforms"> & { platforms: PlatformRunView[] };
+// A video being made or waiting in Tasks (Review's placeholder card, 11 Nov 2026).
+export type MakingView = { runId: string; platform: string; label: string; status: "queued" | "running"; what: string };
 
 const SHOW_EMPTY_KEY = "lyric-videos-show-empty-runs";
 
 const when = (iso: string | null, folder: string) =>
   iso ? new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : folder;
 
-// The song's exports: every run (also from the command line), newest first, grouped by platform; each
-// run with its settings (from its manifests) next to the recipe as it is now, and "Use these settings".
+// Review (11 Nov 2026, the same layout as the other stages): one tab per platform that has videos (the stage header's
+// tabs, song-stages.tsx), and here the chosen platform's videos: the approved ones first, then every other version
+// newest first, each card with its run's date and time, its command and settings (folded) and "Use these settings";
+// a video being made shows as a placeholder card; runs with nothing finished for this platform are behind "Show N
+// empty runs". "Make another" sits in the tab's header. Marks, compare, post and the player work as before.
 export function SongView({
   projectId,
   songTitle,
   runs,
   settings = {},
-  platforms = [],
+  making = [],
 }: {
   projectId: string;
   songTitle: string;
   runs: RunView[];
   settings?: Record<string, RunComparison[]>;
-  platforms?: { name: string; label: string }[]; // the platforms this song is made for (shown even before their first video)
+  platforms?: { name: string; label: string }[]; // kept for callers; the tabs come from the videos made
+  making?: MakingView[];
 }) {
   const router = useRouter();
   const [marks, setMarks] = useState<Record<string, VideoInfo["mark"]>>({});
-  const [platform, setPlatform] = useState<string>("all");
+  const { platform: chosen } = useReviewPlatform();
   const [favouritesOnly, setFavouritesOnly] = useState(false);
   const [showDiscarded, setShowDiscarded] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
@@ -72,13 +79,17 @@ export function SongView({
 
   const withMark = (v: VideoInfo): VideoInfo => ({ ...v, mark: marks[v.id] ?? v.mark });
   const allVideos = useMemo(() => runs.flatMap((r) => r.platforms.flatMap((p) => p.videos)).map(withMark), [runs, marks]); // eslint-disable-line react-hooks/exhaustive-deps
-  const counts = useMemo(() => {
-    const c = new Map<string, { label: string; n: number }>();
-    for (const v of allVideos) if (v.mark.status !== "discarded") c.set(v.platform, { label: v.label, n: (c.get(v.platform)?.n ?? 0) + 1 });
-    return c;
-  }, [allVideos]);
-  const discardedCount = allVideos.filter((v) => v.mark.status === "discarded").length;
-  const visible = (v: VideoInfo) => (platform === "all" || v.platform === platform) && (showDiscarded || v.mark.status !== "discarded") && (!favouritesOnly || v.mark.favourite);
+  // The platform shown: the tab chosen, else the first one with videos (or being made).
+  const names = [...new Set([...runs.flatMap((r) => r.platforms.filter((p) => p.videos.length).map((p) => p.name)), ...making.map((m) => m.platform)])];
+  const platform = chosen && (names.includes(chosen) || runs.some((r) => r.platforms.some((p) => p.name === chosen))) ? chosen : (names[0] ?? "");
+  const discardedCount = allVideos.filter((v) => v.platform === platform && v.mark.status === "discarded").length;
+  const visible = (v: VideoInfo) => v.platform === platform && (showDiscarded || v.mark.status !== "discarded") && (!favouritesOnly || v.mark.favourite);
+  // While something is being made, look again now and then: its card becomes the video when it is done.
+  useEffect(() => {
+    if (!making.length) return;
+    const t = setInterval(() => router.refresh(), 10_000);
+    return () => clearInterval(t);
+  }, [making.length, router]);
 
   // Marks: applied at once (marks = what the user clicked, which always wins over the page's data) and sent
   // to the server one after the other in click order. The page is refreshed once, after the last one has
@@ -110,110 +121,88 @@ export function SongView({
       if (!pending.current) router.refresh(); // the Post tab lists the approved videos
     });
   };
-  const emptyRuns = runs.filter((r) => r.platforms.some((p) => !p.videos.length)).length;
+  // This platform's runs: with its videos, and the ones with nothing finished for it (behind "Show N empty runs").
+  const platformRuns = runs.map((run) => ({ run, p: run.platforms.find((x) => x.name === platform) })).filter((x): x is { run: RunView; p: PlatformRunView } => !!x.p);
+  const emptyRuns = platformRuns.filter(({ p }) => !p.videos.length);
+  const cards = platformRuns
+    .flatMap(({ run, p }) => p.videos.map(withMark).filter(visible).map((v) => ({ v, run, p })))
+    // Approved first, then every other version; each newest first.
+    .sort((a, b) => Number(b.v.mark.status === "approved") - Number(a.v.mark.status === "approved") || b.v.createdAt.localeCompare(a.v.createdAt) || b.run.folder.localeCompare(a.run.folder));
+  const label = platformRuns[0]?.p.label ?? making.find((m) => m.platform === platform)?.label ?? platform;
+  const wide = platform === "youtube";
   const playing = playingId ? allVideos.find((v) => v.id === playingId) : null;
   const toggleCompare = (v: VideoInfo) =>
     setSelected((s) => (s.includes(v.id) ? s.filter((x) => x !== v.id) : s.length >= 3 ? [...s.slice(1), v.id] : [...s, v.id]));
   const compareVideos = selected.map((id) => allVideos.find((v) => v.id === id)).filter((v): v is VideoInfo => !!v);
 
-  if (!runs.length) {
-    return <div className="text-muted-foreground flex h-48 items-center justify-center rounded-xl border border-dashed text-sm">No videos yet: choose the platforms in the Generate tab and press Generate.</div>;
+  if (!runs.length && !making.length) {
+    return <div className="text-muted-foreground flex h-48 items-center justify-center rounded-xl border border-dashed text-sm">No videos yet: choose the platforms in Make and press Generate.</div>;
   }
 
   return (
-    <div className="flex flex-col gap-6 pb-24">
-      <PlatformOverview projectId={projectId} runs={runs} videos={allVideos} wanted={platforms} active={platform} onPick={(name) => setPlatform((p) => (p === name ? "all" : name))} />
-      <div className="flex flex-wrap items-center gap-2 text-xs" data-review-filters>
-        <span className="text-muted-foreground">
-          {platform === "all" ? (
-            "Showing every platform, newest first"
-          ) : (
-            <>
-              Showing {counts.get(platform)?.label ?? platform} only ·{" "}
-              <button type="button" data-show-all className="hover:text-foreground underline underline-offset-2" onClick={() => setPlatform("all")}>
-                show all
-              </button>
-            </>
-          )}
-        </span>
+    <div className="flex flex-col gap-4 pb-24" data-review-platform={platform}>
+      {/* The tab's header: the platform's verdict, Make another, the filters. */}
+      <div className="flex flex-wrap items-center gap-3" data-review-header>
+        <h2 className="font-display text-brand text-sm tracking-[0.14em] uppercase">{label}</h2>
+        <PlatformVerdict videos={platformRuns.flatMap(({ p }) => p.videos.map(withMark)).filter((v) => v.mark.status !== "discarded")} />
+        <MakeAnother projectId={projectId} runs={runs} platform={platform} onQueued={() => router.refresh()} />
         <span className="flex-1" />
-        <Chip active={favouritesOnly} onClick={() => setFavouritesOnly((f) => !f)}>
-          Favourites only
-        </Chip>
-        <Chip active={showDiscarded} onClick={() => setShowDiscarded((d) => !d)}>
-          Show discarded <span className="opacity-60">{discardedCount}</span>
-        </Chip>
+        <div className="flex flex-wrap items-center gap-2 text-xs" data-review-filters>
+          <Chip active={favouritesOnly} onClick={() => setFavouritesOnly((f) => !f)}>
+            Favourites only
+          </Chip>
+          <Chip active={showDiscarded} onClick={() => setShowDiscarded((d) => !d)}>
+            Show discarded <span className="opacity-60">{discardedCount}</span>
+          </Chip>
+        </div>
       </div>
       {error ? <p className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{error}</p> : null}
 
-      {emptyRuns ? (
+      <div className={cn("grid gap-4", wide ? "grid-cols-[repeat(auto-fill,minmax(360px,1fr))]" : "grid-cols-[repeat(auto-fill,minmax(190px,1fr))]")} data-review-cards>
+        {/* A video being made (or waiting): a placeholder until it is there. */}
+        {making
+          .filter((m) => m.platform === platform)
+          .map((m) => (
+            <div key={`${m.runId}-${m.platform}`} data-making={m.runId} className={cn("bg-card/40 text-muted-foreground flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-4 text-center text-sm", wide ? "aspect-video" : "aspect-[9/16] max-h-[420px]")}>
+              {m.status === "running" ? <Loader2 className="text-brand size-5 animate-spin" /> : null}
+              <span>
+                {m.status === "running" ? "Making…" : "Waiting…"} {m.what}, see Tasks
+              </span>
+            </div>
+          ))}
+        {cards.map(({ v, run, p }) => (
+          <div key={v.id} data-card data-run={run.folder} className="flex flex-col gap-1.5">
+            <VideoTile
+              projectId={projectId}
+              strongest={p.strongest?.name === v.name ? p.strongest.why : null}
+              onChanged={() => router.refresh()}
+              video={v}
+              wide={wide}
+              selected={selected.includes(v.id)}
+              onMark={(c) => mark(v, c)}
+              onCompare={() => toggleCompare(v)}
+              onPost={() => setPosting(v)}
+              onPlay={() => setPlayingId(v.id)}
+            />
+            <RunLine projectId={projectId} run={run} p={p} settings={settings[run.folder]} />
+          </div>
+        ))}
+      </div>
+      {!cards.length && !making.some((m) => m.platform === platform) ? <p className="text-muted-foreground text-xs">No video to show with these filters.</p> : null}
+
+      {emptyRuns.length ? (
         <button type="button" data-show-empty onClick={toggleEmpty} className="text-muted-foreground hover:text-foreground w-fit text-xs underline underline-offset-2">
-          {showEmpty ? "Hide empty runs" : `Show ${emptyRuns} empty run${emptyRuns === 1 ? "" : "s"}`}
+          {showEmpty ? "Hide empty runs" : `Show ${emptyRuns.length} empty run${emptyRuns.length === 1 ? "" : "s"}`}
         </button>
       ) : null}
-
-      {[...runs].reverse().map((run) => {
-        const groups = run.platforms.filter((p) => platform === "all" || p.name === platform);
-        // A group with no finished video is hidden (with the whole run when none of its groups has one).
-        const shown = groups.map((p) => ({ p, videos: p.videos.map(withMark).filter(visible) })).filter((g) => (g.p.videos.length ? g.videos.length : showEmpty && !favouritesOnly));
-        if (!shown.length || (!showEmpty && !run.platforms.some((p) => p.videos.length))) return null;
-        return (
-          <section key={run.folder} data-run={run.folder} className="flex flex-col gap-4">
-            <div className="flex flex-wrap items-center gap-3 border-b pb-2">
-              <h2 className="text-lg">{when(run.time, run.folder)}</h2>
-              {run.command ? (
-                <details className="text-muted-foreground text-xs">
-                  <summary className="cursor-pointer">command</summary>
-                  <div className="mt-2 flex items-start gap-2">
-                    <code className="bg-muted rounded p-2 break-all">{run.command}</code>
-                    <CopyButton text={run.command} />
-                  </div>
-                </details>
-              ) : null}
-              {settings[run.folder]?.length ? <RunSettings projectId={projectId} folder={run.folder} platforms={settings[run.folder]} /> : null}
+      {showEmpty && !favouritesOnly
+        ? emptyRuns.map(({ run, p }) => (
+            <div key={run.folder} data-run={run.folder} data-empty-run={run.folder} className="bg-card/40 flex flex-col gap-1 rounded-lg border border-dashed px-3 py-2 text-xs">
+              <span className="text-muted-foreground">No finished videos in this run.</span>
+              <RunLine projectId={projectId} run={run} p={p} settings={settings[run.folder]} />
             </div>
-            {shown.map(({ p, videos }) => (
-              <div key={p.name} data-platform-group={p.name} className="flex flex-col gap-3">
-                <div className="flex items-center gap-3">
-                  <h3 className="font-display text-brand text-sm tracking-[0.14em] uppercase">{p.label}</h3>
-                  <PlatformVerdict videos={p.videos.filter((v) => withMark(v).mark.status !== "discarded")} />
-                  {p.state.status === "interrupted" || p.state.status === "FAILED" ? (
-                    <StatusBadge
-                      status={p.state.status}
-                      details={p.state.details}
-                      resumeCommand={p.state.status === "interrupted" ? run.resumeCommand : null}
-                      resume={p.state.status === "interrupted" ? { projectId, folder: run.folder } : null}
-                    >
-                      {p.state.status === "interrupted" ? "interrupted" : "failed"}
-                    </StatusBadge>
-                  ) : null}
-                </div>
-                {videos.length ? (
-                  <div className={cn("grid gap-4", p.name === "youtube" ? "grid-cols-[repeat(auto-fill,minmax(360px,1fr))]" : "grid-cols-[repeat(auto-fill,minmax(190px,1fr))]")}>
-                    {videos.map((v) => (
-                      <VideoTile
-                        key={v.id}
-                        projectId={projectId}
-                        strongest={p.strongest?.name === v.name ? p.strongest.why : null}
-                        onChanged={() => router.refresh()}
-                        video={v}
-                        wide={p.name === "youtube"}
-                        selected={selected.includes(v.id)}
-                        onMark={(c) => mark(v, c)}
-                        onCompare={() => toggleCompare(v)}
-                        onPost={() => setPosting(v)}
-                        onPlay={() => setPlayingId(v.id)}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground text-xs">No finished videos in this run.</p>
-                )}
-              </div>
-            ))}
-          </section>
-        );
-      })}
+          ))
+        : null}
 
       {selected.length ? (
         <div className="bg-popover fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border px-4 py-2 shadow-2xl">
@@ -257,42 +246,16 @@ export function nextTakes(runs: readonly RunView[]): { name: string; label: stri
   return [...out.values()];
 }
 
-// The top of Review (1 Nov 2026): one card per platform, saying what has been made for it so far
-// (versions, approved, still to check, the latest date) with "Make another" for one more take (the next
-// variation: its own seed and style, the song's recipe and clips; the Canvas is one chosen loop, so no
-// takes). A platform of the song with nothing made yet says so, with a link to Make. Clicking a card shows
-// only that platform below; clicking it again shows all.
-function PlatformOverview({
-  projectId,
-  runs,
-  videos,
-  wanted,
-  active,
-  onPick,
-}: {
-  projectId: string;
-  runs: RunView[];
-  videos: VideoInfo[];
-  wanted: { name: string; label: string }[];
-  active: string;
-  onPick: (name: string) => void;
-}) {
-  const takes = new Map(nextTakes(runs).map((t) => [t.name, t]));
+// "Make another" in the tab's header: one more take of this platform (the next variation: its own seed and style, the
+// song's recipe and clips; the Canvas is one chosen loop, so no takes). Queued in Tasks; its card shows at once.
+function MakeAnother({ projectId, runs, platform, onQueued }: { projectId: string; runs: RunView[]; platform: string; onQueued: () => void }) {
+  const t = nextTakes(runs).find((x) => x.name === platform);
   const [note, setNote] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const cards = new Map<string, { name: string; label: string; made: number; approved: number; toCheck: number; latest: string | null }>();
-  for (const w of wanted) cards.set(w.name, { name: w.name, label: w.label, made: 0, approved: 0, toCheck: 0, latest: null });
-  for (const r of runs) for (const p of r.platforms) if (!cards.has(p.name)) cards.set(p.name, { name: p.name, label: p.label, made: 0, approved: 0, toCheck: 0, latest: null });
-  for (const v of videos) {
-    const c = cards.get(v.platform);
-    if (!c || v.mark.status === "discarded") continue;
-    c.made += 1;
-    if (v.mark.status === "approved") c.approved += 1;
-    else c.toCheck += 1;
-    if (!c.latest || v.createdAt > c.latest) c.latest = v.createdAt;
-  }
-  async function take(t: { name: string; label: string; take: number }) {
-    setBusy(t.name);
+  const [busy, setBusy] = useState(false);
+  if (!t) return null;
+  async function take() {
+    if (!t) return;
+    setBusy(true);
     setNote(null);
     const body = new FormData();
     body.set("projectId", projectId);
@@ -301,81 +264,47 @@ function PlatformOverview({
       const res = await api("/api/runs", { method: "POST", body });
       const result = (await res.json()) as { error?: string; label?: string };
       if (!res.ok || result.error) throw new Error(result.error ?? `The studio answered ${res.status}`);
-      setNote(`Queued: ${result.label}. It appears here when it is made (see Tasks).`);
+      setNote(`Queued: ${result.label}.`);
       window.dispatchEvent(new Event("lyric-tasks-changed"));
+      onQueued();
     } catch (e) {
       setNote((e as Error).message);
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   }
-  const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
   return (
-    <div className="flex flex-col gap-2" data-platform-overview data-another-take>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-3">
-        {[...cards.values()].map((c) => {
-          const t = takes.get(c.name);
-          const on = active === c.name;
-          return (
-            <div
-              key={c.name}
-              role="button"
-              tabIndex={0}
-              aria-pressed={on}
-              data-platform-card={c.name}
-              onClick={() => c.made && onPick(c.name)}
-              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && c.made && onPick(c.name)}
-              title={c.made ? (on ? "Show every platform" : `Show only ${c.label}`) : undefined}
-              className={cn(
-                "bg-card flex flex-col gap-2 rounded-xl border p-3 text-left transition-colors",
-                c.made ? "hover:border-brand/40 cursor-pointer" : "border-dashed",
-                on && "border-brand/60 bg-brand/10",
-              )}
-            >
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="font-display text-brand text-sm tracking-[0.14em] uppercase">{c.label}</span>
-                {c.latest ? <span className="text-muted-foreground text-[11px]">latest {day(c.latest)}</span> : null}
-              </div>
-              {c.made ? (
-                <p className="text-sm" data-platform-summary>
-                  {c.made} version{c.made === 1 ? "" : "s"}
-                  {c.approved ? <span className="text-emerald-300"> · {c.approved} approved</span> : null}
-                  {c.toCheck ? <span className="text-amber-200"> · {c.toCheck} to check</span> : null}
-                </p>
-              ) : (
-                <p className="text-muted-foreground text-sm" data-platform-summary>
-                  Nothing made yet
-                </p>
-              )}
-              <div className="flex items-center gap-2">
-                {c.made && t ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={!!busy}
-                    data-take={c.name}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void take(t);
-                    }}
-                    title={`One more ${c.label} video (take ${t.take}: a different cut and look, same song and clips)`}
-                  >
-                    <Shuffle /> Make another
-                  </Button>
-                ) : null}
-                {!c.made ? (
-                  <Button size="sm" variant="outline" asChild>
-                    <Link href={`/songs/${projectId}?tab=generate`} data-make-platform={c.name} onClick={(e) => e.stopPropagation()}>
-                      Make
-                    </Link>
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {note ? <p className="text-muted-foreground text-xs">{note}</p> : null}
+    <span className="flex items-center gap-2" data-another-take>
+      <Button size="sm" variant="outline" disabled={busy} data-take={t.name} onClick={() => void take()} title={`One more ${t.label} video (take ${t.take}: a different cut and look, same song and clips)`}>
+        <Shuffle /> Make another
+      </Button>
+      {note ? <span className="text-muted-foreground text-xs">{note}</span> : null}
+    </span>
+  );
+}
+
+// Under each card: when its run was made (a small line, no longer a heading), and the run's command and settings
+// (folded), with the run's state when it was interrupted or failed.
+function RunLine({ projectId, run, p, settings }: { projectId: string; run: RunView; p: PlatformRunView; settings?: RunComparison[] }) {
+  const mine = settings?.filter((x) => x.platform === p.name);
+  return (
+    <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]" data-card-run={run.folder}>
+      <span>{when(run.time, run.folder)}</span>
+      {p.state.status === "interrupted" || p.state.status === "FAILED" ? (
+        <StatusBadge status={p.state.status} details={p.state.details} resumeCommand={p.state.status === "interrupted" ? run.resumeCommand : null} resume={p.state.status === "interrupted" ? { projectId, folder: run.folder } : null}>
+          {p.state.status === "interrupted" ? "interrupted" : "failed"}
+        </StatusBadge>
+      ) : null}
+      {run.command ? (
+        <details className="w-full">
+          <summary className="hover:text-foreground cursor-pointer">command</summary>
+          <div className="mt-1 flex items-start gap-2">
+            <code className="bg-muted rounded p-2 break-all">{run.command}</code>
+            <CopyButton text={run.command} />
+          </div>
+        </details>
+      ) : null}
+      {settings?.length ? <RunSettings projectId={projectId} folder={run.folder} platforms={mine?.length ? mine : settings} /> : null}
     </div>
   );
 }

@@ -191,10 +191,24 @@ async function main() {
     await page.click("[data-approve]");
     await page.waitForSelector("[data-post-video]");
     check((await page.$("[data-ready-to-approve]")) === null, "Approve: it moves into the posting list");
-    await page.click("[role=tab]:has-text('Videos')");
-    await page.waitForSelector("[data-another-take]");
+    // Review's tabs (11 Nov 2026): one per platform with videos, with its count, then Post; no platform summary boxes.
+    const reviewTabs = await page.$$eval("[data-review-tabs] [role=tab]", (e: Element[]) => e.map((x) => `${x.getAttribute("data-review-tab")}:${x.textContent?.trim()}`));
+    // (YouTube too: the release pack queued above is being made for it, with no video yet.)
+    check(reviewTabs.length === 3 && /^reels:.*Reels2$/.test(reviewTabs[0]) && /^youtube:.*YouTube$/.test(reviewTabs[1]) && /^post:Post/.test(reviewTabs[2]), `Review's tabs: Reels (2), YouTube (being made), Post (${reviewTabs.join(" | ")})`);
+    check(!(await page.$("[data-platform-overview]")) && !(await page.$("[data-show-all]")), "no platform summary boxes, no 'show all'");
+    await page.click("[data-review-tab=reels]");
+    await page.waitForSelector("[data-review-platform=reels] [data-review-header] [data-another-take]");
+    // Approved first (v1, just approved in Post), then the others newest first; the run's date is a line on the card.
+    const cardOrder = await page.$$eval("[data-review-platform=reels] [data-card]", (e: Element[]) => e.map((x) => x.getAttribute("data-run")));
+    check(JSON.stringify(cardOrder) === JSON.stringify(["2026-10-28_1000", "2026-10-29_1000"]), `the approved video first, then the newest (${cardOrder.join(", ")})`);
+    check(!!(await page.$("[data-card] [data-card-run]")) && !(await page.$("[data-review-platform] h2 + [data-run]")), "the run's date and time is a small line on each card");
     await page.click("[data-take=reels]");
     await page.waitForSelector("[data-another-take] >> text=Queued");
+    // The queued take shows as a placeholder card in its platform's tab.
+    await page.waitForSelector("[data-review-platform=reels] [data-making]", { timeout: 20_000 });
+    await page.waitForFunction(() => [...document.querySelectorAll("[data-review-platform=reels] [data-making]")].some((e) => e.textContent?.includes("take 3")), null, { timeout: 20_000 }).catch(() => {});
+    const placeholders = await page.$$eval("[data-review-platform=reels] [data-making]", (e: Element[]) => e.map((x) => x.textContent?.trim()));
+    check(placeholders.some((t) => t === "Waiting… take 3, see Tasks") && placeholders.some((t) => t === "Waiting… 1 new video, see Tasks"), `placeholder cards for what is queued: "Waiting… take 3, see Tasks" and the release pack (${placeholders.join(" | ")})`);
     const takeRun = ws2.db.select().from(makeRun).all().at(-1);
     const takeOptions = (takeRun?.options_json ?? {}) as { platforms?: string; take?: number };
     check(takeOptions.platforms === "reels" && takeOptions.take === 3 && (takeRun?.label ?? "").includes("take 3"), `Try another take: Reels take 3 (${JSON.stringify(takeOptions)}, ${takeRun?.label})`);

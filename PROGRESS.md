@@ -4,6 +4,35 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Review: platform tabs, the same layout as the other stages ✅ (to verify on the Windows PC)
+- **Tabs:** one per platform that has videos (or one being made), with its count (Reels 2 · TikTok 6 · YouTube 1), then
+  **Post**; the same pink-underline tabs as Prepare, Shape and Make, and "Review · <status>" in the same place. The
+  platform summary boxes and "Showing Reels only · show all" are gone.
+- **Inside a platform tab:** a header with the platform's verdict, **Make another** and the filters (Favourites only,
+  Show discarded); then the approved video(s) first, then every other version newest first. The run's date and time
+  is a small line under each card (no more run headings); "command" and "settings" (with Use these settings) stay
+  on the card, folded; an interrupted or failed run shows its state (with Resume) there.
+- **A video being made** (or waiting in Tasks) is a placeholder card in its platform's tab: "Waiting… take 3, see
+  Tasks" / "Making… 1 new video, see Tasks"; the page looks again every 10 s until it is there.
+- **Empty runs** stay hidden behind "Show N empty runs" inside the tab (remembered). A platform with nothing finished
+  and nothing being made has no tab (an interrupted one keeps its Resume in the song header's chips and in Tasks).
+- Layout only: approve, discard, restore, favourites, compare, the player, Post and React work as before.
+- **Proposal (not built): Post inside each platform tab?** Recommendation: keep one Post tab. Posting is per platform
+  already where it matters: every card's Post button opens that video's own caption, hashtags (YouTube: title,
+  description, tags) and files, and the Post tab groups the approved videos by platform with each one's caption. The
+  Post tab's value is the release moment across platforms: everything approved for this song, ready to copy and
+  download together, the same day. Moving it into each platform tab would split that list into four places and
+  repeat the song's links in each. If a per-platform view is wanted, the small step would be a link in each tab's
+  header ("2 approved: Post →") that opens the Post tab at that platform.
+- Tests: song-stages.e2e.ts (+5: the tabs with counts and a platform being made, no summary boxes, approved first then
+  newest, the date line on the card, the placeholder cards for a queued take and the release pack), videos-post.e2e.ts
+  (moved to the tabs: the verdict in each tab's header, the tabs Reels / TikTok / YouTube / Post with no Shorts tab,
+  "Show 1 empty run" per tab, the marks compared by name since approved cards come first); style-lock, themes, releases,
+  library, collections, song-title, clip-notes still pass; tsc clean; pnpm build ok; eslint: only the old findings.
+- **To check on the PC:** open a song with videos: Review shows a tab per platform with counts and Post. In a tab: the
+  approved video first, the date under each card, Make another at the top; press it: a "Waiting… take N, see Tasks" card
+  appears and becomes the video when it is made.
+
 ### Theme v2 storyboard, step 2e-1: Make, the release pack and Shape's viewer make every video from its shot plan ✅ (to verify on the Windows PC)
 - **Reference first (asked by the user, in place of the golden manifest):** before any change, three songs were made with
   the old code and a renderer that only records what it is given: Ref One (Reels v1 + v2 and a YouTube clips video, title
@@ -283,12 +312,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Fix (automatic, no setting; src/node/textboard.ts titleCards): a block that touches the first line's box (same measuring as the last fix) is first moved inside the platform's safe area (and the profile grid's 3:4 crop when it fits): the title + byline UP above the line, the tagline DOWN below it, with a margin and clear of the other block; if that does not fit it shrinks step by step by up to 25% (CARD_MIN_SCALE, as fitCardBlocks). A clear place = the block stays its full 2.5 s, no note, QA "Title cards clear of the first lyric" passes. Only with no clear place: the lead-in only + the plain-words note, as before. Same props for Shape and render. YouTube and the auto section with a full lead-in are unchanged.
 - Tests: test/title-opening.test.ts 18 (2 new: title moves above the line and lasts 2.5 s with QA ok, tagline moves below the line; the "line on the title" test now has the line from the top of the safe area = no room = lead-in + note); the 6 files (title-opening, textboard, qa, storyboard, extra-cards, textboard-make) 55 pass; tsc clean (packages/video, apps/studio).
 - To check: `cd D:\videomaker`, `git pull`, Shape → Reels, play from 0:00: the title and byline stay about 2.5 s near the top, the first lyric line below them.
-
-### Bug fix: a line set by hand later disappeared from the video ✅ (confirmed on the Windows PC, 8 Nov 2026)
-- Seen (Let My Love Carry You, YouTube): "Hold on..." set by hand to 3:22.36 (stamp 3:14.76) was gone from Shape and the video; the Lyrics tab showed readable 3:22.10 and leaves 3:22.10 (zero time on screen).
-- Cause: applying a hand-set start moved the start, the word tags and the sung end, but not the line's own end (end_ms, the next line's old stamp 3:18.26) when a next line existed. A start set later than that end left the end before the start, so the line was shown for no time.
-- Fix: src/hand-times.ts shiftLine moves the end with the start, caps it before the next line's final start and never puts it before the line's sung end (squeezed before the next line, as before). Words and sung end were already moved as a whole.
-- Tests: hand-times.test.ts (9 pass; new one failed before): a line set 7 s later than its old end keeps its length and ends before the next line, also when the next line is set by hand or pushed. Run with lyrics-view, vocal-guard, storyboard and lrc tests: 80 pass; tsc ok in packages/video and apps/studio.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
