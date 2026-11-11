@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderOpen, ChevronRight, Clapperboard, Eye, Gauge, Info, Palette, Send, Scissors, SwatchBook, Type, Film, type LucideIcon } from "lucide-react";
+import { FolderOpen, ChevronRight, Clapperboard, Eye, Info, Send, SlidersHorizontal, SwatchBook, Type, Film, type LucideIcon } from "lucide-react";
 import { createContext, useContext, useEffect, useState } from "react";
 
 import type { TodoItem } from "@lyric/video/song-stages";
@@ -46,22 +46,27 @@ export const useGoToTab = () => useContext(GoToTab);
 // and how it ends; Pace = shot length, transitions, pace; Shots = the clips of the video and the shot clicked on the
 // timeline. Not tabs: "text" (a lyric line or card clicked), "analysis" (the header's chip) and "theme" (the theme
 // editor, opened from Look → Edit theme or the Themes page; it moves to Themes with or after 2i).
+// 11 Nov 2026: two tabs, Settings | Shots. Settings = one scrolling panel: "Set by me" (what the user changed), then
+// the sections Look (theme + Change, title opening, lyric readability), Part & ending and Pace, each folding (▸).
+// "look" / "part" / "pace" (the tabs before) still open: Settings, with that section open and scrolled to.
 export const SHAPE_PANELS = [
-  { id: "look", label: "Look", icon: Palette, colour: FEATURE.theme.colour },
-  { id: "part", label: "Part & ending", icon: Scissors, colour: "" },
-  { id: "pace", label: "Pace", icon: Gauge, colour: "" },
+  { id: "settings", label: "Settings", icon: SlidersHorizontal, colour: "" },
   { id: "shots", label: "Shots", icon: Film, colour: FEATURE.clips.colour },
 ] as const;
+export const SETTINGS_SECTIONS = ["look", "part", "pace"] as const;
+export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
+export const isSettingsSection = (p: string | null | undefined): p is SettingsSection => SETTINGS_SECTIONS.some((s) => s === p);
 export type ShapeTabId = (typeof SHAPE_PANELS)[number]["id"];
 const isShapeTab = (p: string | null | undefined): p is ShapeTabId => SHAPE_PANELS.some((m) => m.id === p);
-export type ShapePanelId = (typeof SHAPE_PANELS)[number]["id"] | "theme" | "text" | "analysis"; // analysis: the header's Analysis chip (2 Nov 2026)
+export type ShapePanelId = ShapeTabId | SettingsSection | "theme" | "text" | "analysis"; // analysis: the header's Analysis chip (2 Nov 2026)
 // Old panel names (links from before N1) -> where that content is now.
 export const OLD_SHAPE_PANELS: Record<string, ShapePanelId> = { clips: "shots", shot: "shots", auto: "part" };
 // N1 polish (10 Nov 2026): one Shape tab is always selected and its panel always shows beside the viewer; the panel can
 // only be collapsed (the button on its edge), never closed to "no tab". panel = what the panel shows: the tab, or for a
 // moment Text (a lyric line or card clicked), Theme (the theme editor) or Analysis; setPanel(null) goes back to the tab.
-type PanelState = { panel: ShapePanelId; setPanel: (p: ShapePanelId | null) => void; tab: ShapeTabId; collapsed: boolean; setCollapsed: (c: boolean) => void };
-const ShapePanel = createContext<PanelState>({ panel: "look", setPanel: () => {}, tab: "look", collapsed: false, setCollapsed: () => {} });
+// focus: a Settings section asked for (an old link, "Look: …" in Make): opened and scrolled to (n: each ask anew).
+type PanelState = { panel: ShapePanelId; setPanel: (p: ShapePanelId | null) => void; tab: ShapeTabId; collapsed: boolean; setCollapsed: (c: boolean) => void; focus: { section: SettingsSection; n: number } | null };
+const ShapePanel = createContext<PanelState>({ panel: "settings", setPanel: () => {}, tab: "settings", collapsed: false, setCollapsed: () => {}, focus: null });
 export const useShapePanel = () => useContext(ShapePanel);
 // Make's tabs (N1): one form, three parts. Videos = the release pack, the song's platforms and Generate; Try other
 // looks = another theme for one run, compare themes, picture versions; Options = the rarely needed ones.
@@ -171,8 +176,9 @@ export function SongStages({
 }) {
   const [tab, setTabState] = useState(initialTab);
   // Shape: the tab (always one), what its panel shows for a moment (Text, Theme, Analysis) and whether it is collapsed.
-  const [shapeTab, setShapeTab] = useState<ShapeTabId>(isShapeTab(initialPanel) ? initialPanel : "look");
-  const [overlay, setOverlay] = useState<ShapePanelId | null>(initialPanel && !isShapeTab(initialPanel) ? initialPanel : null);
+  const [shapeTab, setShapeTab] = useState<ShapeTabId>(isShapeTab(initialPanel) ? initialPanel : "settings");
+  const [overlay, setOverlay] = useState<ShapePanelId | null>(initialPanel && !isShapeTab(initialPanel) && !isSettingsSection(initialPanel) ? initialPanel : null);
+  const [focus, setFocus] = useState<PanelState["focus"]>(isSettingsSection(initialPanel) ? { section: initialPanel, n: 1 } : null);
   const [collapsed, setCollapsed] = useState(false);
   const [part, setPartState] = useState<MakePart>(initialPart ?? "videos");
   const [platform, setPlatform] = useState<string | null>(null);
@@ -199,6 +205,11 @@ export function SongStages({
   const setPanel = (p: ShapePanelId | null) => {
     setCollapsed(false);
     if (p === null) return setOverlay(null); // back to the tab
+    if (isSettingsSection(p)) {
+      const section = p;
+      setFocus((f) => ({ section, n: (f?.n ?? 0) + 1 }));
+      p = "settings";
+    }
     if (isShapeTab(p)) {
       setShapeTab(p);
       setOverlay(null);
@@ -211,6 +222,7 @@ export function SongStages({
     const shapeLast = lastTab("shape");
     // eslint-disable-next-line react-hooks/set-state-in-effect -- browser storage is read after hydration on purpose
     if (!initialPanel && isShapeTab(shapeLast)) setShapeTab(shapeLast);
+    else if (!initialPanel && isSettingsSection(shapeLast)) setShapeTab("settings"); // remembered before Settings | Shots
     const makeLast = lastTab("make");
     if (!initialPart && MAKE_PARTS.some((m) => m.id === makeLast)) setPartState(makeLast as MakePart);
     const reviewLast = lastTab("review");
@@ -228,7 +240,7 @@ export function SongStages({
   const status = stage === "shape" && shapeStatus ? shapeStatus : statuses[stage];
   return (
     <GoToTab.Provider value={setTab}>
-      <ShapePanel.Provider value={{ panel, setPanel, tab: shapeTab, collapsed, setCollapsed }}>
+      <ShapePanel.Provider value={{ panel, setPanel, tab: shapeTab, collapsed, setCollapsed, focus }}>
         <MakePartCtx.Provider value={{ part, setPart }}>
         <ReviewCtx.Provider value={{ platform: reviewShown, setPlatform: setReviewPlatform }}>
         <VideoCtx.Provider value={{ platform, setPlatform }}>

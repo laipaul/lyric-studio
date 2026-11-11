@@ -52,11 +52,17 @@ export async function openPanel(page: any, id: string): Promise<void> {
   }
   const look = ["fonts", "effects", "colour"].includes(id);
   if (!(await page.$("[data-stage=shape][aria-current=step]"))) await page.click("[data-stage=shape]");
-  const tab = look ? "look" : SHAPE_TAB[id];
+  // 11 Nov 2026: Shape's tabs are Settings | Shots; look / part / pace are folding sections of Settings.
+  const section = look ? "look" : SHAPE_TAB[id];
+  const tab = section === "shots" ? "shots" : "settings";
   if (look && (await page.$("[data-theme-editors]"))) return void (id === "fonts" && (await unfoldFonts(page)));
   if (!(await page.$(`[data-shape-panel=${tab}]`))) await page.click(`[data-shape-tab=${tab}]`); // the tab stays selected under Theme / Text / Analysis: a click goes back to it
   await page.waitForSelector(`[data-shape-panel=${tab}]`);
-  if (tab !== "shots") await page.waitForSelector(`[data-style-block=${tab}]`); // the song's settings loaded (Shape remounts after another stage)
+  if (tab === "settings") {
+    const toggle = await page.waitForSelector(`[data-settings-toggle=${section}]`); // the song's settings loaded (Shape remounts after another stage)
+    if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+    await page.waitForSelector(`[data-style-block=${section}]`, { state: "visible" });
+  }
   if (!look) return;
   await page.click("[data-look-edit-theme]");
   await page.waitForSelector("[data-theme-editors]");

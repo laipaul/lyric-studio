@@ -88,7 +88,7 @@ async function main() {
     check(!!pb && !!pv && !!pt && !!pc && pb.x + pb.width <= pv.x && pv.y + pv.height <= pt.y && pc.y + pc.height <= 1000, `the panel shown beside the viewer: viewer, timeline and command bar still on one 1440×1000 screen (viewer ${Math.round(pv?.height ?? 0)} px)`);
     await collapsePanel(page);
     await sleep(400);
-    check((await page.getAttribute("[data-shape-tab=look]", "aria-selected")) === "true", "collapsed: Look stays selected");
+    check((await page.getAttribute("[data-shape-tab=settings]", "aria-selected")) === "true", "collapsed: Settings stays selected");
     const [vb, tl] = await Promise.all(["[data-viewer]", "[data-storyboard-timeline]"].map(async (sel) => (await page.$(sel))!.boundingBox()));
     check(!!vb && !!tl && vb.y + vb.height <= tl.y && tl.width > 900, `top to bottom: the viewer, then the soundtrack and shots across the editor (${JSON.stringify(tl)})`);
     // One screen: the viewer, the timeline, then one command bar (which video, the transport, zoom, verdict, Next).
@@ -722,8 +722,8 @@ async function main() {
     check(!!vw && vw.width > vw.height * 1.7 && wideFit.ok, `16:9: the wide viewer (${Math.round(vw?.width ?? 0)}×${Math.round(vw?.height ?? 0)}), timeline and command bar on one screen`);
     check(((await page.textContent("[data-no-shots]").catch(() => null)) ?? "").includes("cover art"), "YouTube cover layout: the empty shots lane says why (your cover art, not clips)");
     await page.click("[data-open-song]");
-    check(!!(await page.waitForSelector("[data-shape-panel=look] [data-field=youtubeLayout]", { timeout: 5000 }).catch(() => null)), "…and its Look link opens the YouTube layout setting (shown on a YouTube video)");
-    check(!!(await page.$("[data-shape-panel=look] [data-other-videos] [data-field=titleOpening]")), "…a YouTube video's Look folds the title opening under Only for other videos");
+    check(!!(await page.waitForSelector("[data-shape-panel=settings] [data-style-block=look] [data-field=youtubeLayout]", { state: "visible", timeout: 5000 }).catch(() => null)), "…and its Look link opens the YouTube layout setting (shown on a YouTube video)");
+    check(!!(await page.$("[data-shape-panel=settings] [data-style-block=look] [data-other-videos] [data-field=titleOpening]")), "…a YouTube video's Look folds the title opening under Only for other videos");
     await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "storyboard-youtube.png") });
     check(existsSync(songFile), "the song file is untouched");
     await browser.close();

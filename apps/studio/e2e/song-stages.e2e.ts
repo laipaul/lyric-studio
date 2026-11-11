@@ -119,7 +119,7 @@ async function main() {
 
     // Shape and Review show their own tabs; Make has the release pack.
     await page.click("[data-stage=shape]");
-    check(JSON.stringify(await tabs()) === JSON.stringify(["Look", "Part & ending", "Pace", "Shots"]), `Shape's tabs: Look, Part & ending, Pace, Shots (${(await tabs()).join(", ")})`);
+    check(JSON.stringify(await tabs()) === JSON.stringify(["Settings", "Shots"]), `Shape's tabs (11 Nov 2026): Settings, Shots (${(await tabs()).join(", ")})`);
     await page.click("[data-stage=review]");
     check(JSON.stringify(await tabs()) === JSON.stringify(["Videos", "Post"]), "Review shows Videos and Post");
     // Make (11 Nov 2026): two tabs, each with its own button; the chips are the song's platforms and versions.
@@ -299,8 +299,12 @@ async function main() {
     check(JSON.stringify(stageIds) === JSON.stringify(["prepare", "shape", "make", "review"]) && !!railBox && railBox.x < 5 && railBox.width < 100, `the stages sit in the rail on the left (${stageIds.join(", ")})`);
     const numbers = await page.$$eval("[data-rail] [data-stage-number]", (e: Element[]) => e.map((x) => x.textContent));
     check(JSON.stringify(numbers) === JSON.stringify(["1", "2", "3", "4"]) && (await page.$$("[data-rail-item]")).length === 0 && !(await page.$("[data-rail-group]")), `N1: the rail holds the four stages only, numbered 1-4 (${numbers.join(", ")})`);
-    check((await page.isVisible("[data-shape-tools]")) && (await page.getAttribute("[data-shape-tab=look]", "aria-selected")) === "true", "N1 polish: one tab always selected (Look, the first) and its panel shows");
-    check(!(await page.$("[data-shape-panel=look] h2")), "no title repeating the tab's name in the panel");
+    check((await page.isVisible("[data-shape-tools]")) && (await page.getAttribute("[data-shape-tab=settings]", "aria-selected")) === "true", "N1 polish: one tab always selected (Settings, the first) and its panel shows");
+    check(!(await page.$("[data-shape-panel=settings] h2")), "no title repeating the tab's name in the panel");
+    await page.waitForSelector("[data-settings-section=pace]");
+    const shapeSections = await page.$$eval("[data-settings-section]", (e: Element[]) => e.map((x) => x.getAttribute("data-settings-section")));
+    check(JSON.stringify(shapeSections) === JSON.stringify(["look", "part", "pace"]) && !!(await page.$("[data-set-by-me]")), `Settings: one panel with "Set by me", then Look, Part & ending, Pace (${shapeSections.join(", ")})`);
+    check(((await page.textContent("[data-settings-toggle=look]")) ?? "").includes("theme + Change · title opening · lyric readability") && ((await page.textContent("[data-settings-toggle=pace]")) ?? "").includes("shot length · transitions · pace adjustment"), "each section says what it holds");
     const viewerBox = await (await page.waitForSelector("[data-viewer], [data-look-preview]")).boundingBox();
     check(!!viewerBox && viewerBox.y < 300, `the viewer at the top of the editor (${JSON.stringify(viewerBox)})`);
     check(!!(await page.$("[data-next-make]")), '"Next: Make" under the viewer');
@@ -331,9 +335,9 @@ async function main() {
     check(!!toolsBox && !!viewerAfter && toolsBox.x + toolsBox.width <= viewerAfter.x + 1, `the panel opens left of the viewer (${JSON.stringify(toolsBox)} / ${JSON.stringify(viewerAfter)})`);
     check((await inBlock("theme")).includes("accentColour"), `Edit theme: the accent colour row (${(await inBlock("theme")).join(", ")})`);
     await page.click("[data-theme-cancel]");
-    await page.click("[data-shape-tab=look]");
-    await page.waitForSelector("[data-shape-panel=look]");
-    await page.click("[data-shape-tab=look]");
+    await page.click("[data-shape-tab=settings]");
+    await page.waitForSelector("[data-shape-panel=settings]");
+    await page.click("[data-shape-tab=settings]");
     check(await page.isVisible("[data-shape-tools]"), "a second click on the tab keeps its panel (never no tab)");
     const lookBarText = (await page.textContent("[data-look-bar]")) ?? "";
     check(!/^Look/.test(lookBarText.trim()), `the Look bar has no "Look" label above the theme name (${lookBarText})`);
@@ -393,8 +397,8 @@ async function main() {
     check(((await page.textContent("[data-work-status=review]")) ?? "").startsWith("Review · ") && !(await page.$("[data-saved-at-once]")), `Review's stage line (${await page.textContent("[data-work-status=review]")})`);
     await page.click("[data-stage=shape]");
     const shapeIcons = await page.$$eval("[data-shape-tab] svg", (e: Element[]) => e.map((x) => x.getAttribute("class")?.match(/lucide-[a-z0-9-]+/)?.[0] ?? ""));
-    check(new Set(shapeIcons).size === 4, `Shape's tabs: four distinct icons (${shapeIcons.join(", ")})`);
-    check((await page.getAttribute("[data-shape-tab=pace]", "aria-selected")) === "true" || (await page.getAttribute("[data-shape-tab=part]", "aria-selected")) === "true" || (await page.getAttribute("[data-shape-tab=look]", "aria-selected")) === "true", "Shape opens on its last tab");
+    check(shapeIcons.length === 2 && new Set(shapeIcons).size === 2, `Shape's tabs: two distinct icons (${shapeIcons.join(", ")})`);
+    check((await page.getAttribute("[data-shape-tab=settings]", "aria-selected")) === "true", "Shape opens on its last tab");
     await page.click("[data-stage=prepare]");
     check((await page.getAttribute("[role=tab][data-state=active]", "data-stage-tab")) === "clips", "back to Prepare: its last tab (Clips) is selected");
     await openPanel(page, "tempo");
@@ -402,9 +406,9 @@ async function main() {
     check(!!(await page.$("[data-locked=tempo]")) && ((await page.textContent("[data-field=tempo] [data-source]")) ?? "") === "Set by me" && !(await page.$("[data-back-auto=tempo]")), "a locked value keeps its value and shows Set by me (no ↺ while locked)");
     // Part & ending and Pace: "auto" or "Set by me" in place, ↺ back to auto; no Automatic section any more.
     await openPanel(page, "part");
-    check(JSON.stringify(await visibleBlocks()) === JSON.stringify(["part"]), `one panel at a time (${(await visibleBlocks()).join(", ")})`);
+    check((await visibleBlocks()).includes("part") && (await page.getAttribute("[data-settings-toggle=part]", "aria-expanded")) === "true", `Part & ending unfolds inside Settings (${(await visibleBlocks()).join(", ")})`);
     check(JSON.stringify(await inBlock("part")) === JSON.stringify(["section", "length", "ending"]), `Part & ending: section, target length, ending (${(await inBlock("part")).join(", ")})`);
-    check((await page.textContent("[data-auto-summary]")) === "1 set by me: Ending; the rest automatic", `its summary line (${await page.textContent("[data-auto-summary]")})`);
+    check(((await page.textContent("[data-set-by-me]")) ?? "").startsWith("Set by me:") && ((await page.textContent("[data-set-by-me]")) ?? "").includes("Ending") && ((await page.textContent("[data-settings-toggle=part]")) ?? "").includes("1 set by me"), `the "Set by me" line names it, the section says 1 set by me (${await page.textContent("[data-set-by-me]")})`);
     check(((await page.textContent("[data-field=ending] [data-source]")) ?? "") === "Set by me" && ((await page.textContent("[data-field=section] [data-source]")) ?? "") === "auto", "Set by me / auto in place");
     await page.click("[data-back-auto=ending]");
     await page.waitForFunction(() => document.querySelector("[data-field=ending] [data-source]")?.textContent === "auto");
@@ -412,14 +416,14 @@ async function main() {
     check(readRecipe(recipe).ending === undefined, "↺ auto: the app chooses the ending again (song.json has none)");
     check(!(await page.$("[data-panel-close]")), "a tab's panel has no × (it can only be collapsed)");
     await collapsePanel(page);
-    check(!(await page.isVisible("[data-shape-tools]")) && (await page.getAttribute("[data-shape-tab=part]", "aria-selected")) === "true", "collapsed from its edge: the tab stays selected");
+    check(!(await page.isVisible("[data-shape-tools]")) && (await page.getAttribute("[data-shape-tab=settings]", "aria-selected")) === "true", "collapsed from its edge: the tab stays selected");
     await page.click("[data-panel-expand]");
-    await page.waitForSelector("[data-shape-panel=part]");
+    await page.waitForSelector("[data-shape-panel=settings]");
     check(await page.isVisible("[data-shape-tools]"), "the edge button shows the panel again");
     check((await page.$$("[data-saved-at-once]")).length === 1 && !((await page.textContent("[data-shape-tools]")) ?? "").includes("Every change is saved"), "'Every change is saved for this song at once' once, in the stage line, not in the panel");
     await openPanel(page, "pace");
     check(JSON.stringify(await inBlock("pace")) === JSON.stringify(["shotLength", "transitions", "paceShift"]), `Pace: shot length, transitions, pace (${(await inBlock("pace")).join(", ")})`);
-    check((await page.textContent("[data-auto-summary]")) === "All automatic: the app handles these", "Pace: all automatic");
+    check(!((await page.textContent("[data-settings-toggle=pace]")) ?? "").includes("set by me") && ((await page.textContent("[data-set-by-me]")) ?? "") === "Nothing set by me: the app chooses everything here.", `Pace: all automatic; nothing set by me (${await page.textContent("[data-set-by-me]")})`);
     check(((await page.getAttribute("[data-field=transitions] [data-source-hint]", "title")) ?? "").startsWith("From: "), "other sources: a tooltip on the label");
     check(!(await page.$("[data-locked=shotLength]")), "an unlocked setting shows no padlock");
     check(!(await page.$("[data-field=shotLength] [data-lock]")) && !(await page.$("[data-field=shotLength] [data-per-platform]")), "no lock or 'per platform' buttons in the row");
@@ -606,8 +610,9 @@ async function main() {
     // Shape's Look bar (any other panel): the song's theme, Change opens the picker; a click only previews.
     await openPanel(page, "part");
     await page.waitForSelector("[data-look-bar='Night Drive']");
-    const bar = await page.$eval("[data-look-bar]", (e: Element) => ({ y: e.getBoundingClientRect().top, tools: document.querySelector("[data-shape-tools]")!.getBoundingClientRect().top, mark: !!e.querySelector("[data-look-customized]") }));
-    check(bar.y - bar.tools < 80 && !bar.mark, `the Look bar at the top of the panel, Night Drive not marked customized (${JSON.stringify(bar)})`);
+    // Settings (11 Nov 2026): the Look bar opens the Look section, the first in the panel.
+    const bar = await page.$eval("[data-look-bar]", (e: Element) => ({ inLook: !!e.closest("[data-settings-section=look]"), first: e.closest("[data-settings-section]") === document.querySelector("[data-settings-section]"), mark: !!e.querySelector("[data-look-customized]") }));
+    check(bar.inLook && bar.first && !bar.mark, `the Look bar in Settings' first section (Look), Night Drive not marked customized (${JSON.stringify(bar)})`);
     check(!(await page.$("[data-look-bar] [data-theme-edit], [data-look-bar] [data-theme-new], [data-look-bar] [data-theme-reach]")), "the Look bar: no Edit / New theme, no second badge");
     await page.click("[data-look-change]");
     await page.waitForSelector("[data-theme-picker]");

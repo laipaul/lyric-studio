@@ -26,7 +26,7 @@ import { LinksField } from "@/components/song-links";
 
 // ?panel= (Shape's tabs; SHAPE_PANELS in song-stages.tsx, a client module) and the panels from before N1: where
 // their content is now (a panel that moved to another stage opens that stage's tab).
-const SHAPE_PANEL_IDS = ["look", "part", "pace", "shots", "theme"];
+const SHAPE_PANEL_IDS = ["settings", "look", "part", "pace", "shots", "theme"]; // look / part / pace: Settings, that section open (11 Nov 2026)
 const OLD_PANELS: Record<string, { tab: string; panel?: ShapePanelId }> = { clips: { tab: "shape", panel: "shots" }, shot: { tab: "shape", panel: "shots" }, auto: { tab: "shape", panel: "part" }, song: { tab: "details" }, make: { tab: "generate" } };
 const MAKE_PARTS = ["videos", "looks"]; // ?part=options (before 11 Nov 2026) opens Make: Advanced is there now
 import { TabsContent } from "@/components/ui/tabs";

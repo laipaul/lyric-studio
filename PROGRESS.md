@@ -4,6 +4,23 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Shape: two tabs, Settings | Shots ✅ (to verify on the Windows PC)
+- **Settings** is one scrolling panel. It starts with a **"Set by me"** line: what you changed (e.g. `Target length
+  90 s · Shot length "story"`), everything else is the app's ("Nothing set by me…" when you changed nothing).
+- Then three folding sections, each saying what it holds and how many you set:
+  - **▸ Look**: theme + Change · title opening · lyric readability (open at the start)
+  - **▸ Part & ending**: section · target length · ending
+  - **▸ Pace**: shot length · transitions · pace adjustment
+- **Shots** is unchanged. Old links (?panel=look / part / pace) and "Look: …" in Make open Settings with that
+  section unfolded and scrolled to; a tab remembered from before opens Settings.
+- Nothing about how a video is made changed (layout and labels only).
+- Tests (browser): song-stages (the two tabs and icons; Settings' sections and their contents lines; the "Set by
+  me" line names Ending and the section says "1 set by me"; ↺ auto empties it; collapse / expand keeps Settings),
+  storyboard (collapsed: Settings stays selected; a YouTube video's Look link opens the layout row), style-lock,
+  themes, title-opening, pairings (its 428 px check failed before this step too).
+- **To check on the PC:** a song → Shape: tabs Settings | Shots. Settings shows "Set by me" and Look open; open
+  Part & ending and set a target length of 90 s: the line says "Set by me: Target length 90 s"; ↺ auto removes it.
+
 ### Bug fix: adding a song link never replaces another; service from the URL; edit and Undo ✅ (to verify on the Windows PC)
 - Bug: Prepare → Song Details → Links: adding an Apple Music link to a song that had a Spotify link left only Apple Music. Cause: the page held its own copy of the list and saved the WHOLE list with every action (add, change a service, edit an address, remove), and a row's service and address were always-open fields that saved on their own. A save made from a stale or half-updated copy (two quick actions, or editing the Spotify row's picker / address instead of adding) wrote that copy over the file. The server and song.json were fine (tested).
 - Fix: the page now sends ONE change at a time (add / update / remove / restore) to PATCH /api/songs/[id]/links; the server applies it to the list in song.json as it is now (`changeSongLinks`), so no change can drop a link it is not about. The service is recognised from the pasted address; rows show service + address with ✎ (editor of that row only, Save / Cancel); removing offers Undo (back at the old place, with its Post picks). Every change of the links first keeps the previous song.json in `.studio\replaced\<date>-song.json`.
@@ -319,37 +336,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   (new: Time the lyrics again), lyrics-view, song-stages pass; the whole suite 994 pass, only make / migrate / render
   fail here because Remotion cannot reach remotion.media from the cloud session (real renders; unrelated). tsc
   clean; pnpm build ok; eslint: only the old findings.
-
-### Shape: change a video's theme from the Look bar (preview, then Apply) ✅ (to verify on the Windows PC)
-- **Principle (in CLAUDE.md):** "Shape = work on this video. Theme = manage reusable looks."
-- **Look bar** at the top of Shape's panel (every panel except Theme): the song's theme name, ONE mark
-  "Customized for this song" (only for a look made for this song: "<song> look" or "Made from X for <song>",
-  used by no other song) and **Change**. No Edit / New theme, no second badge there.
-- **Change** opens a searchable theme picker (name, fonts, effects): the Themes page's tall tiles, the whole card
-  clickable, the song's own first lines, the song's theme marked "✓ Selected". A click only **previews** the theme
-  in the viewer (the planned video, or the stand-in preview); nothing is saved, the storyboard is untouched.
-  **Apply** uses it for the song and closes the picker; **Cancel** (or Esc, or another panel) puts the look back.
-- **Storyboard safety (what was built: the simple note + Cancel, not 2g's summary):** a theme holds no pacing
-  field (shot length, transitions, pace shift, ending, section and length are the song's own), so applying one
-  re-paces nothing. Tested on a real song folder (test/theme-apply.test.ts): a moved cut and a slip, then a theme
-  with every text and card choice changed (stacked lines, build up, big hook, bigger final chorus, hook and end
-  cards, other effects, colours, grade): every shot (id, clip, start, end, trim, speed, transition, locks, anchor),
-  every lyric time, the range, beats and sections come back identical; only the storyboard's theme name changes.
-  The note above Apply says so. Leaving a look customized for this song asks first ("Use X" / "Keep Y"); that look
-  stays a theme, nothing is deleted.
-- **The Theme panel (rail → Look → Theme) manages themes only:** "Use for this song" on its tiles and "Change
-  theme ↓" are removed (they switched the theme at once, without preview or Cancel); Edit theme, New theme,
-  Rename, Duplicate, Delete, Restore stay. The Themes page (header) keeps "Use this theme for the song".
-- **Panel width:** 320-400 px (28% of the window: ~358 px at 1280, ~382 px at 1366, 400 px from 1430), was 340.
-- **Note:** the theme belongs to the song, so Apply changes the look of every video of the song (all platforms).
-- Tests: theme-apply (2); song-stages.e2e.ts new checks (Look bar place and contents, picker, Selected, search,
-  preview without saving, Cancel, Apply; the Theme panel has no Use for this song) all pass; storyboard.e2e.ts and
-  themes.e2e.ts all pass; storyboard-save, storyboard-file, storyboard, storyboard-edit, themes, style pass; tsc
-  clean; pnpm build ok. **Older, not from this step:** song-stages.e2e.ts "This song: Card text first …" fails
-  before and after it (the This song panel also lists Line shape, Lines appear, Bigger final chorus since 2b part 2).
-- **To check on the PC:** Shape → open This song (or Clips, Automatic …): the Look bar on top; Change → click a
-  theme: the viewer shows it, the song.json still has the old one; Cancel: back; Change → a theme → Apply: the
-  Look bar shows the new name and the video is planned again with the same shots and cuts.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

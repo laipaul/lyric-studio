@@ -342,7 +342,7 @@ function CompareLooks({ projectId, data, choices, why, ownMade }: { projectId: s
     <div className="flex flex-col gap-5">
       <p className="text-muted-foreground text-sm">
         The same video in other looks, to choose the best: one video per platform per look, each with its own shot plan, labelled &quot;try&quot; in Review. Nothing changes for the song; to use a
-        theme you like, change it in Shape → Look.
+        theme you like, change it in Shape → Settings → Look.
       </p>
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium">Platforms</h3>

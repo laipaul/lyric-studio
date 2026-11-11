@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Lock, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Lock, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -14,7 +14,7 @@ import type { StyleData, StyleField, StyleFont, StyleTheme } from "@lyric/video/
 import { PairingsRow, type DraftFonts } from "@/components/pairings-row";
 import { RowMenu, type RowMenuItem } from "@/components/row-menu";
 import { SetEffect, type EffectPart, type EffectValues } from "@/components/set-effect";
-import { useGoToTab, useSetThemeMode, useSetThemeNow, useShapePanel, useShapeVideo } from "@/components/song-stages";
+import { SETTINGS_SECTIONS, useGoToTab, useSetThemeMode, useSetThemeNow, useShapePanel, useShapeVideo, type SettingsSection } from "@/components/song-stages";
 import { ThemeReachBadge } from "@/components/theme-reach-badge";
 import { ThemeTile } from "@/components/themes-view";
 import { CoverPaletteRow } from "@/components/cover-palette-row";
@@ -66,7 +66,16 @@ export function SongSettings({ projectId, only }: { projectId: string; only: Son
 export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { projectId: string; onLook: (look: ShapeLook) => void; onSaved: () => void; planned: number; only?: SongPart }) {
   // The panel open in the rail (Fonts, Effects, Colour, This song, What to make, Automatic): only that
   // block shows; the tools stay mounted (hidden) for the other panels, so the viewer keeps its look.
-  const { panel, setPanel } = useShapePanel();
+  const { panel, setPanel, focus } = useShapePanel();
+  // Settings (11 Nov 2026): which sections are unfolded (Look first); a section asked for (focus) opens and is scrolled to.
+  const [unfolded, setUnfolded] = useState<Record<SettingsSection, boolean>>({ look: true, part: false, pace: false });
+  useEffect(() => {
+    if (!focus) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a section asked for from elsewhere opens once per ask
+    setUnfolded((u) => ({ ...u, [focus.section]: true }));
+    const t = window.setTimeout(() => document.querySelector(`[data-settings-section=${focus.section}]`)?.scrollIntoView({ block: "start", behavior: "smooth" }), 50);
+    return () => window.clearTimeout(t);
+  }, [focus]);
   const section: string | null = only ?? (panel && (TOOL_SECTIONS as readonly string[]).includes(panel) ? panel : null);
   const goToTab = useGoToTab();
   const video = useShapeVideo().platform; // the video Shape shows: only the settings that apply to it
@@ -841,7 +850,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
   const lookSlot = typeof document === "undefined" ? null : document.querySelector("[data-look-bar-slot]");
   return (
     <div data-style data-section={section ?? ""} className={cn("flex flex-col gap-4", !section && "hidden")}>
-      {lookSlot && lookBar ? createPortal(lookBar, lookSlot) : null}
+      {lookSlot && lookBar && section !== "settings" ? createPortal(lookBar, lookSlot) : null}
       <style>{fontCss}</style>
       <p
         data-saving={saving}
@@ -1032,33 +1041,71 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
         </Block>
       ) : null}
 
-      {section === "look" ? (
-        <Block id="look" title="This song's look">
-          <p className="text-muted-foreground -mt-1 text-[11px]">The theme above sets the fonts, effects, colours and cards; these are this song&apos;s own{video ? " (only what applies to this video)" : ""}.</p>
-          {rows(applies(pick(LOOK_SONG_FIELDS)))}
-          {otherVideos(pick(LOOK_SONG_FIELDS))}
-          <div className="flex flex-wrap items-center gap-3 text-xs">
-            <button type="button" data-look-edit-theme disabled={!saved?.theme} onClick={() => saved?.theme && (openEditor(saved.theme), setPanel("theme"))} className="text-muted-foreground hover:text-foreground underline underline-offset-2">
-              Edit theme {saved?.theme?.name ?? ""}
-            </button>
-            <Link href="/themes" data-look-all-themes className="text-muted-foreground hover:text-foreground underline underline-offset-2">
-              All themes ↗
-            </Link>
-          </div>
-        </Block>
-      ) : null}
-
-      {section === "part" || section === "pace" ? (
-        <Block id={section} title={section === "part" ? "Part of the song & ending" : "Pace"}>
-          <p data-auto-summary className="text-muted-foreground text-xs" title="Professional defaults chosen from the music and your clips; set one only to override the app.">
+      {section === "settings" ? (
+        // Settings (11 Nov 2026): one scrolling panel. "Set by me" says what the user changed (the rest is the app's);
+        // then Look, Part & ending and Pace, each folding (▸), each row with "auto" / "Set by me" in place.
+        <div data-settings className="flex flex-col gap-3">
+          <p data-set-by-me className="text-muted-foreground text-xs" title="Everything else is chosen by the app from the music and your clips; ↺ auto on a row gives it back to the app.">
             {(() => {
-              const mine = applies(pick(section === "part" ? PART_FIELDS : PACE_FIELDS)).filter(setByMe);
-              return mine.length ? `${mine.length} set by me: ${mine.map((f) => shortLabel(f.label)).join(", ")}; the rest automatic` : "All automatic: the app handles these";
+              const mine = applies(pick([...LOOK_SONG_FIELDS, ...PART_FIELDS, ...PACE_FIELDS])).filter(setByMe);
+              return mine.length ? (
+                <>
+                  <span className="text-foreground font-medium">Set by me:</span> {mine.map((f) => (f.own || f.locked ? `${shortLabel(f.label)} ${showValue(f)}` : `${shortLabel(f.label)} (per platform)`)).join(" · ")}
+                </>
+              ) : (
+                "Nothing set by me: the app chooses everything here."
+              );
             })()}
           </p>
-          {rows(applies(pick(section === "part" ? PART_FIELDS : PACE_FIELDS)))}
-          {otherVideos(pick(section === "part" ? PART_FIELDS : PACE_FIELDS))}
-        </Block>
+          {SETTINGS_SECTIONS.map((id) => {
+            const fields = id === "look" ? LOOK_SONG_FIELDS : id === "part" ? PART_FIELDS : PACE_FIELDS;
+            const mine = applies(pick(fields)).filter(setByMe).length;
+            const open = unfolded[id];
+            return (
+              <section key={id} data-settings-section={id} className="scroll-mt-2 rounded-lg border">
+                <button
+                  type="button"
+                  data-settings-toggle={id}
+                  aria-expanded={open}
+                  onClick={() => setUnfolded((u) => ({ ...u, [id]: !u[id] }))}
+                  className="hover:bg-accent/40 flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left"
+                >
+                  <ChevronRight className={cn("mt-0.5 size-4 shrink-0 transition-transform", open && "rotate-90")} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">{SETTINGS_TITLE[id]}</span>
+                    <span className="text-muted-foreground block text-[11px]">{SETTINGS_HINT[id]}</span>
+                  </span>
+                  {mine ? <span className="border-brand/40 text-brand shrink-0 rounded-full border px-2 py-0.5 text-[10px]">{mine} set by me</span> : null}
+                </button>
+                <div hidden={!open} className="flex flex-col gap-3 px-3 pb-3">
+                  {id === "look" ? (
+                    <>
+                      {lookBar}
+                      <Block id="look" title="This song's look">
+          <p className="text-muted-foreground -mt-1 text-[11px]">The theme sets the fonts, effects, colours and cards; these are this song&apos;s own{video ? " (only what applies to this video)" : ""}.</p>
+                    {rows(applies(pick(LOOK_SONG_FIELDS)))}
+                    {otherVideos(pick(LOOK_SONG_FIELDS))}
+                    <div className="flex flex-wrap items-center gap-3 text-xs">
+                      <button type="button" data-look-edit-theme disabled={!saved?.theme} onClick={() => saved?.theme && (openEditor(saved.theme), setPanel("theme"))} className="text-muted-foreground hover:text-foreground underline underline-offset-2">
+                        Edit theme {saved?.theme?.name ?? ""}
+                      </button>
+                      <Link href="/themes" data-look-all-themes className="text-muted-foreground hover:text-foreground underline underline-offset-2">
+                        All themes ↗
+                      </Link>
+                    </div>
+                      </Block>
+                    </>
+                  ) : (
+                    <Block id={id} title={SETTINGS_TITLE[id]}>
+                      {rows(applies(pick(fields)))}
+                      {otherVideos(pick(fields))}
+                    </Block>
+                  )}
+                </div>
+              </section>
+            );
+          })}
+        </div>
       ) : null}
 
       {section === "details" ? (
@@ -1212,18 +1259,23 @@ const str = (v: unknown) => (typeof v === "string" ? v : undefined);
 
 // "Tempo (BPM)" -> "Tempo", "Ending (Reels, TikTok, Shorts)" -> "Ending".
 const shortLabel = (label: string) => label.replace(/\s*\(.*\)\s*$/, "");
+// A value on the "Set by me" line: Target length 90 s · Shot length "story".
+const showValue = (f: StyleField) => (typeof f.value === "number" && f.field === "length" ? `${f.value} s` : typeof f.value === "string" ? `"${f.value}"` : show(f.value));
 
 // The tools column's blocks, each in its order (the six font rows sit under Look's "Fine-tune"; the
 // effect, Breathe and add-on settings are set in Set effect, their per-platform values under its ⋯).
 const CARD_TEXT_FIELDS = ["tagline", "hookText", "endText"] as const; // This song → Card text (with the title)
 const LOOK_FIELDS = ["textColour", "accentColour"] as const;
 const EFFECT_FIELDS = ["verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "emphasis"] as const;
-const TOOL_SECTIONS = ["look", "part", "pace", "theme"] as const; // Shape's panels drawn here (Shots, Text and Analysis: shape-board.tsx)
+const TOOL_SECTIONS = ["settings", "theme"] as const; // Shape's panels drawn here (Shots, Text and Analysis: shape-board.tsx)
 // Shape's panels (N1). Look: this song's own look settings (the theme's are in the theme editor until O1 adds song
 // overrides); Part & ending and Pace: what Automatic held, the tempo now in Prepare → Lyrics Sync.
 const LOOK_SONG_FIELDS = ["titleOpening", "readability", "youtubeLayout"] as const;
 const PART_FIELDS = ["section", "length", "ending"] as const;
 const PACE_FIELDS = ["shotLength", "transitions", "paceShift"] as const;
+// Settings' sections (11 Nov 2026): their names and what each holds, on the folded header.
+const SETTINGS_TITLE: Record<SettingsSection, string> = { look: "Look", part: "Part & ending", pace: "Pace" };
+const SETTINGS_HINT: Record<SettingsSection, string> = { look: "theme + Change · title opening · lyric readability", part: "section · target length · ending", pace: "shot length · transitions · pace adjustment" };
 // Only for the videos they change (the platform Shape shows): Reels / TikTok / Shorts, or YouTube.
 const SHORT_FORM = ["reels", "tiktok", "shorts"];
 const APPLIES: Record<string, string[]> = { titleOpening: SHORT_FORM, ending: SHORT_FORM, youtubeLayout: ["youtube"] };
