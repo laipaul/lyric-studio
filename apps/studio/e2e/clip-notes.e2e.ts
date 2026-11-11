@@ -142,6 +142,26 @@ async function main() {
     const notesFile = JSON.parse(readFileSync(path.join(paths.root, ".studio", "clip-notes.json"), "utf8")) as { storyIdea?: string };
     if (process.env.STORY_SHOT) await page.screenshot({ path: process.env.STORY_SHOT });
     check((await page.inputValue("[data-story-idea-input]")) === "Two people find each other again in the rain." && notesFile.storyIdea === "Two people find each other again in the rain.", "the story idea is kept for the song (.studio\\clip-notes.json), also after a reload");
+    // One frame for every card (11 Nov 2026): a 3:4 clip next to 9:16 ones gets the same frame; each card ends after its
+    // own content (no empty space to match the tallest).
+    ffmpeg("-f", "lavfi", "-i", "color=c=white:s=270x360:r=30:d=3", "-pix_fmt", "yuv420p", path.join(paths.clips!, "04_wide.mp4"));
+    await page.reload();
+    await page.waitForSelector("[data-clip='04_wide.mp4'] [data-clip-frame] img");
+    await sleep(500);
+    const frames = await page.$$eval("[data-clip-frame]", (e: Element[]) => e.map((x) => Math.round(x.getBoundingClientRect().height)));
+    check(frames.length === 4 && new Set(frames).size === 1, `every card's picture frame has the same size (${frames.join(", ")})`);
+    const fill = await page.$eval("[data-clip='04_wide.mp4'] [data-clip-frame] img", (e: Element) => getComputedStyle(e).objectFit);
+    check(fill === "cover", `the picture fills its frame (${fill})`);
+    // A note on one card: the cards of its row keep one height and their Use / Omit stay on one line.
+    await page.click("[data-clip-note-add='02_red.mp4']");
+    await page.fill("[data-clip-note-input='02_red.mp4']", "A long note that takes two lines on this card for sure");
+    await page.press("[data-clip-note-input='02_red.mp4']", "Escape");
+    await page.waitForSelector("[data-clip-note='02_red.mp4']");
+    await sleep(300);
+    const rows = await page.$$eval("[data-clip]", (e: Element[]) => e.map((x) => ({ h: Math.round(x.getBoundingClientRect().height), b: Math.round(x.querySelector("[data-card-actions]")!.getBoundingClientRect().bottom), top: Math.round(x.getBoundingClientRect().top) })));
+    const row1 = rows.filter((r) => r.top === rows[0].top);
+    check(row1.length > 1 && new Set(row1.map((r) => r.h)).size === 1 && new Set(row1.map((r) => r.b)).size === 1, `one row: one card height, Use / Omit on one line (${JSON.stringify(row1)})`);
+    if (process.env.STORY_SHOT) await page.screenshot({ path: process.env.STORY_SHOT.replace(".png", "-frames.png") });
     await browser.close();
   } finally {
     server.kill();

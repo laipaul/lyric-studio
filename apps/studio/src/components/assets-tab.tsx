@@ -478,7 +478,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
           className={cn("rounded-xl border border-dashed p-4 transition-colors", dragging ? "border-brand bg-brand/10" : "border-border")}
         >
           {data.story.length ? (
-            <ul className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
+            <ul className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">{/* the cards of a row share one height; Use / Omit sit on one line at the bottom (11 Nov 2026) */}
               {data.story.map((item, i) => {
                 const c = item.clip;
                 const k = item.key;
@@ -516,10 +516,10 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                   const card = item.card;
                   return (
                     <li key={k} data-story-card={card.collection} data-position={i + 1} {...dragProps} className={cn(frame, "border-dashed")}>
-                      <div className="relative grid aspect-[9/12] grid-cols-2 grid-rows-2 gap-px bg-black">
+                      <div className="relative grid aspect-[9/16] grid-cols-2 grid-rows-2 gap-px overflow-hidden bg-black">
                         {card.thumbs.map((t) => (
                           // eslint-disable-next-line @next/next/no-img-element -- a local thumbnail served by /api/files
-                          <img key={t} src={`/api/files/${t}`} alt="" draggable={false} className="size-full object-cover opacity-80" />
+                          <img key={t} src={`/api/files/${t}`} alt="" draggable={false} className="size-full min-h-0 object-cover opacity-80" />
                         ))}
                         {number}
                         <span className="absolute inset-x-0 bottom-1.5 mx-auto flex w-fit items-center gap-1 rounded bg-black/75 px-1.5 py-0.5 text-[10px]">
@@ -543,10 +543,12 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                 if (!c) return null;
                 return (
                   <li key={k} data-clip={c.name} data-collection-clip={c.collection} data-position={i + 1} data-omit={c.omit ? "1" : "0"} title={c.name} {...dragProps} className={cn(frame, c.omit && "border-dashed")}>
-                    <div className="relative aspect-[9/12] bg-black">
+                    {/* One 9:16 frame for every card (the vertical videos' shape), filled by the picture: it shows about what a
+                        Reel / TikTok / Short shows of the clip (they crop it the same way). */}
+                    <div data-clip-frame className="relative aspect-[9/16] overflow-hidden bg-black">
                       {c.thumb ? (
                         // eslint-disable-next-line @next/next/no-img-element -- a local thumbnail served by /api/files
-                        <img src={`/api/files/${c.thumb}`} alt="" draggable={false} className={cn("size-full object-contain", c.omit && "opacity-30 grayscale")} />
+                        <img src={`/api/files/${c.thumb}`} alt="" draggable={false} className={cn("absolute inset-0 size-full object-cover", c.omit && "opacity-30 grayscale")} />
                       ) : null}
                       {number}
                       {c.collection ? (
@@ -557,7 +559,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                     </div>
                     {/* The card reads as a story (11 Nov 2026): the note is its title; the file name, duration, size and Remove sit
                         in its ⋯ menu; a warning shows only when something is wrong. */}
-                    <div className="flex flex-col gap-1 p-2 text-xs">
+                    <div className="flex flex-1 flex-col gap-1 p-2 text-xs">
                       <ClipNoteField
                         projectId={projectId}
                         clip={c.name}
@@ -571,7 +573,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                           {clipProblem(c)}
                         </p>
                       ) : null}
-                      <div className="mt-0.5 flex items-center justify-between gap-1">
+                      <div data-card-actions className="mt-auto flex items-center justify-between gap-1 pt-0.5">
                         <div data-use-omit={c.name} role="group" aria-label={`Use or omit ${c.name}`} className="flex w-fit overflow-hidden rounded-md border text-[11px]">
                           <button type="button" data-use={c.name} aria-pressed={!c.omit} disabled={busy} onClick={() => c.omit && void setOmit(c.name, false)} className={cn("px-2 py-0.5", !c.omit ? "bg-brand/20 text-brand" : "hover:bg-accent")}>
                             Use

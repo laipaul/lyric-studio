@@ -12,6 +12,8 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **Visible:** number, thumbnail, note, Use / Omit (and the collection badge); a small warning only when something
   is wrong: "low resolution (544×720)" (short side under 720 px) or "same content as …".
 - **Story idea** above the clips: one sentence for the whole video, saved per song next to the notes.
+- **Every card the same shape** (your second test): one 9:16 frame, filled by the picture (about what a Reel shows of
+  the clip); a 9:16 clip no longer makes its card taller; the cards of a row share one height, Use / Omit on one line.
 - **For you only:** the app never reads the notes or the story idea to plan (test: clip-notes checks which files
   read them).
 - Tests: clip-notes (+1: the story idea kept with the notes, cleared, cut at 300 characters). Browser: clip-notes
