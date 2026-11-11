@@ -4,6 +4,13 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Bug fix: the Reel's title moves up instead of flashing when the first line starts at once ✅ (confirmed on the Windows PC in Shape, 8 Nov 2026)
+- Seen (Let My Love Carry You, Reel 1080x1920, Title opening on, part of the song starting on the first sung line, on screen from ~0:00.6): the tagline stayed 2.5 s, but the title and byline "Life Lyrics" (upper third, centred ~y 640) touch the first lyric line's box (two lines, centred ~y 758), so they showed only the 0.6 s lead-in and a note asked to move the song part: "too short".
+- Cause: the last fix only chose between "stay 2.5 s" and "shorten to the lead-in" for the block on its default place. Where the block sits is the app's job, not the user's: other places in the safe area were never tried.
+- Fix (automatic, no setting; src/node/textboard.ts titleCards): a block that touches the first line's box (same measuring as the last fix) is first moved inside the platform's safe area (and the profile grid's 3:4 crop when it fits): the title + byline UP above the line, the tagline DOWN below it, with a margin and clear of the other block; if that does not fit it shrinks step by step by up to 25% (CARD_MIN_SCALE, as fitCardBlocks). A clear place = the block stays its full 2.5 s, no note, QA "Title cards clear of the first lyric" passes. Only with no clear place: the lead-in only + the plain-words note, as before. Same props for Shape and render. YouTube and the auto section with a full lead-in are unchanged.
+- Tests: test/title-opening.test.ts 18 (2 new: title moves above the line and lasts 2.5 s with QA ok, tagline moves below the line; the "line on the title" test now has the line from the top of the safe area = no room = lead-in + note); the 6 files (title-opening, textboard, qa, storyboard, extra-cards, textboard-make) 55 pass; tsc clean (packages/video, apps/studio).
+- To check: `cd D:\videomaker`, `git pull`, Shape → Reels, play from 0:00: the title and byline stay about 2.5 s near the top, the first lyric line below them.
+
 ### Bug fix: a line set by hand later disappeared from the video ✅ (confirmed on the Windows PC, 8 Nov 2026)
 - Seen (Let My Love Carry You, YouTube): "Hold on..." set by hand to 3:22.36 (stamp 3:14.76) was gone from Shape and the video; the Lyrics tab showed readable 3:22.10 and leaves 3:22.10 (zero time on screen).
 - Cause: applying a hand-set start moved the start, the word tags and the sung end, but not the line's own end (end_ms, the next line's old stamp 3:18.26) when a next line existed. A start set later than that end left the end before the start, so the line was shown for no time.

@@ -164,26 +164,38 @@ async function main() {
     await page.click("[data-theme-save]");
     await page.waitForSelector("[data-theme-editors]", { state: "detached" });
     check(loadTheme(wsDir, "Night Drive copy").look.verseEffect === "ink" && theme(ids[0]) === "Life Lyrics" && loadTheme(wsDir, "Life Lyrics").look.verseEffect !== "ink", "Save edits that theme; the song keeps its own");
-    // Make → Generate: the theme for this run and Compare themes (one run per theme, the same choices).
+    // Make → Compare looks (11 Nov 2026): 1-3 OTHER themes; one video per platform per theme, and the song's own v1 (the
+    // baseline) made too where the platform has none yet. The song needs a clip first (Make waits for it, saying so).
+    {
+      const clips = songPathsById(ws, ids[0]).clips!;
+      mkdirSync(clips, { recursive: true });
+      ffmpeg("-f", "lavfi", "-i", "testsrc2=s=216x384:r=30:d=2", "-pix_fmt", "yuv420p", path.join(clips, "01_a.mp4"));
+    }
     await page.goto(`${base}/songs/${ids[0]}`);
     await page.waitForSelector("[data-stages]");
     await openTab(page, "Generate");
-    await page.click("[data-make-tab=looks]"); // Make → Try other looks (N1)
+    await page.click("[data-make-tab=looks]");
     await page.waitForSelector("[data-compare-themes]");
     await page.click("[data-picker-open=compare-themes]");
     await page.fill("[data-picker=compare-themes] [data-picker-search]", "night");
-    check((await page.$$("[data-picker=compare-themes] [data-picker-item]")).length >= 1 && !(await page.$("[data-picker=compare-themes] [data-picker-item='Life Lyrics']")), "Compare themes: the picker searches");
-    await page.click("[data-picker=compare-themes] [data-picker-item='Night Drive']");
+    check((await page.$$("[data-picker=compare-themes] [data-picker-item]")).length >= 1, "Compare looks: the theme picker searches");
     await page.fill("[data-picker=compare-themes] [data-picker-search]", "");
-    await page.click("[data-picker=compare-themes] [data-picker-item='Life Lyrics']");
+    check(!(await page.$("[data-picker=compare-themes] [data-picker-item='Life Lyrics']")), "the song's own theme is not offered (it is the baseline)");
+    await page.click("[data-picker=compare-themes] [data-picker-item='Night Drive']");
     await page.keyboard.press("Escape");
     const picked = await page.$$eval("[data-picked=compare-theme]", (e: Element[]) => e.map((x) => x.getAttribute("data-picked-id")));
-    check(picked.length === 2 && picked.includes("Night Drive") && picked.includes("Life Lyrics"), `Compare themes: the chosen themes as chips with × (${picked.join(", ")})`);
-    check(!(await page.$("[data-picker-open=run-theme]")), "Compare themes: the single theme choice steps aside");
-    await page.click("[data-generate] button[type=submit]");
-    await page.waitForSelector("[data-generate] [role=status], [data-generate] .text-emerald-300, [data-generate] p:has-text('Queued')", { timeout: 15_000 }).catch(() => {});
-    const runs = ws.db.select().from(makeRun).all().map((r) => ({ label: r.label, theme: (r.options_json as { theme?: string }).theme }));
-    check(runs.length === 2 && runs.some((r) => r.theme === "Life Lyrics" && r.label.includes("theme Life Lyrics")) && runs.some((r) => r.theme === "Night Drive"), `Compare themes: one run per theme (${JSON.stringify(runs)})`);
+    check(JSON.stringify(picked) === JSON.stringify(["Night Drive"]), `one other theme is a comparison (${picked.join(", ")})`);
+    check(((await page.textContent("[data-make-comparison]")) ?? "").includes("Make comparison (2 videos)"), `the button counts the try and the baseline (${await page.textContent("[data-make-comparison]")})`);
+    check(!(await page.$("[data-picker-open=run-theme]")), "no separate 'theme for this run'");
+    await page.click("[data-make-comparison]");
+    await page.waitForSelector("[data-make-part=looks] [data-make-notice]", { timeout: 15_000 }).catch(() => {});
+    const runs = ws.db.select().from(makeRun).all().map((r) => ({ label: r.label, o: r.options_json as { theme?: string; platforms?: string; variations?: number; variationsBy?: Record<string, number> } }));
+    check(
+      runs.length === 2 &&
+        runs.some((r) => !r.o.theme && r.o.platforms === "reels" && JSON.stringify(r.o.variationsBy) === JSON.stringify({ reels: 1 }) && r.label.includes("your look")) &&
+        runs.some((r) => r.o.theme === "Night Drive" && r.o.platforms === "reels" && r.o.variations === 1 && r.label === "Compare looks: theme Night Drive"),
+      `Compare looks: the baseline Reel and one Night Drive Reel (${JSON.stringify(runs)})`,
+    );
     if (process.env.THEMES_SHOT) {
       await page.goto(`${base}/themes`);
       await page.waitForSelector("[data-themes-tile]");
@@ -202,7 +214,7 @@ async function main() {
 main()
   .then(() => {
     console.log(failures ? `\n${failures} check(s) failed` : "\nAll browser checks passed");
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); // the studio may still be writing a thumbnail
     process.exit(failures ? 1 : 0);
   })
   .catch((error) => {

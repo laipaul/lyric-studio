@@ -2,6 +2,7 @@
 // files with their content hashes, in/out points and speeds, the cuts, every lyric timing (with lead
 // and offset), style, font files, all settings, and the full composition props. "pnpm rerender"
 // renders those props again after checking that the song, clips and fonts are unchanged.
+import type { SbTry } from "../storyboard-file";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -102,7 +103,7 @@ export type Manifest = {
   // <name>.shotplan.json) and what Make did with it: "same" (as Shape last showed it), "new" (there was none: saved
   // first), "replanned" (the song, its clips or settings changed: saved again first), "kept" (the app would plan it
   // differently now; the saved plan was made as it is). Absent in older manifests.
-  shot_plan?: { id: string; file: string; copy: string; status: "new" | "same" | "kept" | "replanned"; note: string | null } | null;
+  shot_plan?: { id: string; file: string; copy: string; status: "new" | "same" | "kept" | "replanned"; note: string | null; try?: SbTry | null } | null;
   warnings: string[];
 };
 

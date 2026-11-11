@@ -126,8 +126,10 @@ async function main() {
     await page.waitForSelector("[data-from-run]");
     check(page.url().includes("tab=generate") && page.url().includes("from=2026-10-20_1430"), "Use these settings opens Generate for that run");
     check((await page.textContent("[data-run-section-label]")) === "0:34–1:06 (from that run)", 'section "0:34–1:06 (from that run)"');
-    const chips = await page.$$eval("[data-platform-choice]", (e: Element[]) => e.filter((x) => x.className.includes("bg-brand")).map((x) => x.getAttribute("data-platform-choice")));
-    check(JSON.stringify(chips) === JSON.stringify(["reels"]), `the platforms of that run (got ${(chips as string[]).join(", ")})`);
+    // The chips start from that run (11 Nov 2026), with a banner saying so: Reels, its two videos.
+    const chips = await page.$$eval("[data-make-chip]", (e: Element[]) => e.filter((x) => x.getAttribute("data-count") !== "0").map((x) => `${x.getAttribute("data-make-chip")}:${x.getAttribute("data-count")}`));
+    check(JSON.stringify(chips) === JSON.stringify(["reels:2"]), `the platforms and versions of that run (got ${(chips as string[]).join(", ")})`);
+    check(((await page.textContent("[data-from-run]")) ?? "").startsWith("From the run of "), `the banner: "From the run of …" (${(await page.textContent("[data-from-run]"))?.slice(0, 60)})`);
     await page.click("[data-switch-auto]");
     // N1: no editable section / length in Make any more; the run's values are shown read-only.
     check(((await page.textContent("[data-run-section]")) ?? "").includes("auto · 32 s") && !(await page.$("input[name=section]")), 'one click back to "auto · 32 s" (shown, not an input)');

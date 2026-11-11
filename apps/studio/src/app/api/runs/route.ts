@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { resolveWorkspaceDir, safeName } from "@lyric/db";
 import { platformLabels } from "@lyric/video/library";
 import { storeCover } from "@lyric/video/project-settings";
+import { songRuns } from "@lyric/video/exports";
 import { checkRunRequest, enqueueRun, generateOptions, type RunRequest } from "@lyric/video/runs";
 import { saveRunToSong } from "@lyric/video/style";
 
@@ -35,11 +36,15 @@ export async function POST(request: Request) {
     const { run, saved } = withWorkspace((ws) => {
       if (coverFile) storeCover(ws, projectId, coverFile);
       const options = generateOptions(ws, projectId, req);
-      // Compare themes: one run per theme with the same choices (same section, clips and order: the plan
-      // is deterministic), so only the look differs; nothing is saved to the song.
-      if (req.themes?.length) {
-        const runs = req.themes.map((theme) => enqueueRun(ws, projectId, { ...options, theme: theme.trim() }));
-        return { run: { id: runs[0].id, label: `Compare themes: ${req.themes.join(", ")}` }, saved: null };
+      // Compare looks (11 Nov 2026): one video per platform per look, each with its own shot plan (a try); first the
+      // song's own v1 wherever a platform has none yet (the baseline); nothing is saved to the song.
+      if (req.compare) {
+        const own = new Set(songRuns(ws, projectId).flatMap((r) => r.platforms.flatMap((p) => p.videos.filter((v) => !v.try && v.mark.status !== "discarded").map(() => p.name))));
+        const missing = req.platforms.filter((p) => !own.has(p));
+        const baseline = missing.length ? [enqueueRun(ws, projectId, { ...generateOptions(ws, projectId, { platforms: missing, counts: Object.fromEntries(missing.map((p) => [p, 1])) }) }, `${missing.join(", ")} · your look (to compare with)`)] : [];
+        const tries = req.themes?.length ? req.themes.map((theme) => enqueueRun(ws, projectId, { ...options, theme: theme.trim() }, `Compare looks: theme ${theme.trim()}`)) : [enqueueRun(ws, projectId, options, `Compare looks: pictures ${(req.pictures ?? []).join(" / ")}`)];
+        const all = [...baseline, ...tries];
+        return { run: { id: all[0].id, label: `Compare looks: ${req.themes?.length ? req.themes.join(", ") : (req.pictures ?? []).join(" / ")}${baseline.length ? ` (and your look for ${missing.join(", ")})` : ""}` }, saved: null };
       }
       // "Save to song": this run's choices become the song's own settings (locked ones stay).
       const saved = req.saveToSong ? saveRunToSong(ws, projectId, options) : null;

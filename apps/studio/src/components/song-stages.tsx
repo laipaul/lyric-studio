@@ -1,13 +1,12 @@
 "use client";
 
-import { AudioLines, ChevronRight, Clapperboard, Eye, Gauge, Info, Palette, Send, SlidersHorizontal, Scissors, SwatchBook, Type, Film, Package, type LucideIcon } from "lucide-react";
+import { AudioLines, ChevronRight, Clapperboard, Eye, Gauge, Info, Palette, Send, Scissors, SwatchBook, Type, Film, type LucideIcon } from "lucide-react";
 import { createContext, useContext, useEffect, useState } from "react";
 
 import type { TodoItem } from "@lyric/video/song-stages";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { api } from "@/lib/api";
 import { FEATURE, FeatureIcon, PlatformMark } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
 
@@ -66,10 +65,10 @@ const ShapePanel = createContext<PanelState>({ panel: "look", setPanel: () => {}
 export const useShapePanel = () => useContext(ShapePanel);
 // Make's tabs (N1): one form, three parts. Videos = the release pack, the song's platforms and Generate; Try other
 // looks = another theme for one run, compare themes, picture versions; Options = the rarely needed ones.
+// Make's tabs (11 Nov 2026): Make (the song's platforms and versions) and Compare looks; each has its own button.
 export const MAKE_PARTS = [
-  { id: "videos", label: "Videos", icon: Clapperboard },
-  { id: "looks", label: "Try other looks", icon: SwatchBook },
-  { id: "options", label: "Options", icon: SlidersHorizontal },
+  { id: "videos", label: "Make", icon: Clapperboard },
+  { id: "looks", label: "Compare looks", icon: SwatchBook },
 ] as const;
 export type MakePart = (typeof MAKE_PARTS)[number]["id"];
 const MakePartCtx = createContext<{ part: MakePart; setPart: (p: MakePart) => void }>({ part: "videos", setPart: () => {} });
@@ -382,65 +381,3 @@ export function SongStages({
   );
 }
 
-// Make's content that belongs to one of its tabs (the release pack and the song's platforms: Videos).
-export function InMakePart({ part, children }: { part: MakePart; children: React.ReactNode }) {
-  const now = useMakePart().part;
-  return <div hidden={now !== part} className="flex flex-col gap-4" data-make-part={part}>{children}</div>;
-}
-
-// "Make release pack": one video per platform for the song's platforms, from its recipe and clips.
-export function ReleasePack({
-  projectId,
-  platforms,
-  fromRecipe,
-  clipsNote,
-  blocked,
-}: {
-  projectId: string;
-  platforms: { name: string; label: string }[];
-  fromRecipe: boolean; // the song's own list (song.json) vs every platform
-  clipsNote: string; // "the song's 12 clips + wedding"
-  blocked: string | null; // why it cannot be made yet (a blocking to-do)
-}) {
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
-  async function make() {
-    setBusy(true);
-    setNotice(null);
-    const body = new FormData();
-    body.set("projectId", projectId);
-    body.set("request", JSON.stringify({ platforms: platforms.map((p) => p.name), variations: 1 }));
-    try {
-      const res = await api("/api/runs", { method: "POST", body });
-      const result = (await res.json()) as { error?: string; label?: string };
-      if (!res.ok || result.error) throw new Error(result.error ?? `The studio answered ${res.status}`);
-      setNotice({ ok: true, text: `Queued: ${result.label}. Follow it in Tasks (top right); the videos appear under Review.` });
-      window.dispatchEvent(new Event("lyric-tasks-changed"));
-    } catch (e) {
-      setNotice({ ok: false, text: (e as Error).message });
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <div className="border-brand/30 bg-brand/5 flex flex-col gap-3 rounded-xl border p-5" data-release-pack>
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <h2 className="font-display flex items-center gap-2 text-lg tracking-[0.08em]">
-            <Package className="text-brand size-5" /> Make release pack
-          </h2>
-          <p className="text-muted-foreground text-sm" data-release-platforms>
-            One video for each of {platforms.map((p) => p.label).join(" · ")}
-            {fromRecipe ? " (this song's platforms)" : " (set the song's own platforms below, in What to make)"}, with {clipsNote}. The app makes every technical choice;
-            you review the result.
-          </p>
-        </div>
-        <Button size="lg" onClick={make} disabled={busy || !!blocked} data-make-release>
-          <Package /> {busy ? "Queuing…" : "Make release pack"}
-        </Button>
-      </div>
-      {blocked ? <p className="text-sm text-red-200">{blocked}</p> : null}
-      {notice ? <p className={cn("text-sm", notice.ok ? "text-emerald-200" : "text-red-200")}>{notice.text}</p> : null}
-    </div>
-  );
-}

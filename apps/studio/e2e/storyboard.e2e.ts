@@ -658,7 +658,7 @@ async function main() {
     await page.waitForFunction(() => document.querySelector("[data-viewer]")?.getAttribute("data-patched") === "0", null, { timeout: 60_000 }).catch(() => {});
     check((await page.getAttribute("[data-viewer]", "data-patched")) === "0" && (await page.getAttribute("[data-viewer]", "data-effect")) === "spread", "…and the new plan has it (nothing patched any more)");
     await page.click("[data-stage=make]");
-    await page.waitForSelector("[data-release-pack]");
+    await page.waitForSelector("[data-make-chips]");
     check(true, "the rail's Make opens Make");
 
     // The tempo (Prepare → Lyrics & timing since N1): x2/3 of 120 = 80 BPM in song.json; Shape plans the video with it.

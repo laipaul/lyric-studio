@@ -121,13 +121,18 @@ async function main() {
     check(JSON.stringify(await tabs()) === JSON.stringify(["Look", "Part & ending", "Pace", "Shots"]), `Shape's tabs: Look, Part & ending, Pace, Shots (${(await tabs()).join(", ")})`);
     await page.click("[data-stage=review]");
     check(JSON.stringify(await tabs()) === JSON.stringify(["Videos", "Post"]), "Review shows Videos and Post");
+    // Make (11 Nov 2026): two tabs, each with its own button; the chips are the song's platforms and versions.
     await page.click("[data-stage=make]");
-    await page.waitForSelector("[data-release-pack]");
-    check(JSON.stringify(await tabs()) === JSON.stringify(["Videos", "Try other looks", "Options"]), `Make's tabs: Videos, Try other looks, Options (${(await tabs()).join(", ")})`);
-    check(((await page.textContent("[data-release-platforms]")) ?? "").includes("Reels · TikTok · Shorts · YouTube · Canvas"), "release pack: every platform when the song has none of its own");
-    check(await page.isDisabled("[data-make-release]"), "release pack waits for the clips (blocking to-do)");
+    await page.waitForSelector("[data-make-chips]");
+    check(JSON.stringify(await tabs()) === JSON.stringify(["Make", "Compare looks"]), `Make's tabs: Make, Compare looks (${(await tabs()).join(", ")})`);
+    const chipCounts = () => page.$$eval("[data-make-chip]", (e: Element[]) => Object.fromEntries(e.map((x) => [x.getAttribute("data-make-chip"), Number(x.getAttribute("data-count"))])));
+    check(JSON.stringify(await chipCounts()) === JSON.stringify({ reels: 1, tiktok: 1, shorts: 1, youtube: 1, canvas: 1 }), `nothing set: every platform once (the studio's rule, never the presets' 3 / 3 / 2) (${JSON.stringify(await chipCounts())})`);
+    check(((await page.textContent("[data-count-text=canvas]")) ?? "") === "1 loop" && ((await page.textContent("[data-count-text=reels]")) ?? "") === "1 video", "the Canvas chip says loops");
+    check(((await page.textContent("[data-make-videos]")) ?? "").includes("Make 5 videos") && ((await page.textContent("[data-one-of-each]")) ?? "").includes("One of each (5)"), "the buttons count what they make");
+    check((await page.isDisabled("[data-make-videos]")) && (await page.isDisabled("[data-one-of-each]")) && ((await page.textContent("[data-make-blocked]")) ?? "").startsWith("First:"), `both wait for the clips, saying why (${await page.textContent("[data-make-blocked]")})`);
+    check(!(await page.$("[data-release-pack]")) && !(await page.$("[data-platform-choice]")) && !(await page.$("[data-make-tab=options]")), "no release pack, no second set of platform chips, no Options tab");
 
-    // Clips (a collection) + the song's own platforms: the release pack makes one video for each.
+    // Clips (a collection) + the song's own platforms.
     const ws2 = openWorkspace(wsDir);
     mkdirSync(path.join(wsDir, "collections", "wedding"), { recursive: true });
     const recipe = songPathsById(ws2, id).recipe!;
@@ -137,23 +142,47 @@ async function main() {
     // Still 3 things to check (vocal stem, cover, label line), none blocking: Prepare says "to check", Make is open.
     check(((await page.textContent("[data-stage=prepare] [data-stage-status]")) ?? "").includes("3 to check"), "nothing blocking: Prepare says 3 to check");
     await page.click("[data-stage=make]");
-    check(((await page.textContent("[data-release-platforms]")) ?? "").includes("Reels · YouTube (this song's platforms)"), "release pack: the song's own platforms");
-    await page.click("[data-make-release]");
-    await page.waitForSelector("[data-release-pack] >> text=Queued");
-    const run = ws2.db.select().from(makeRun).all().at(-1);
-    const options = (run?.options_json ?? {}) as { platforms?: string; variations?: number };
-    check(run?.status === "queued" && options.platforms === "reels,youtube" && options.variations === 1, `queued: Reels + YouTube, one video each (${JSON.stringify(options)})`);
-
-    // What was chosen in Make survives a trip to Prepare and back (the Generate tab stays mounted, hidden meanwhile).
-    await page.click("button[aria-expanded]:has-text('Generate videos')");
-    await page.click("[data-platform-choice=tiktok]");
-    const chosen = () => page.$$eval("[data-platform-choice]", (e: Element[]) => e.filter((x) => x.className.includes("bg-brand")).map((x) => x.getAttribute("data-platform-choice")));
-    check(JSON.stringify(await chosen()) === JSON.stringify(["reels", "tiktok", "youtube"]), "Make: TikTok ticked next to the recipe's platforms");
+    await page.waitForSelector("[data-make-chips]");
+    check(JSON.stringify(await chipCounts()) === JSON.stringify({ reels: 1, tiktok: 0, shorts: 0, youtube: 1, canvas: 0 }), `the song's own platforms (${JSON.stringify(await chipCounts())})`);
+    // One more Reel: saved for the song at once; the totals follow.
+    await page.click("[data-count-plus=reels]");
+    await page.waitForFunction(() => document.querySelector("[data-make-videos]")?.textContent?.includes("Make 3 videos"));
+    for (let i = 0; i < 20 && JSON.stringify(readRecipe(recipe).variations) !== JSON.stringify({ reels: 2, youtube: 1 }); i++) await sleep(150);
+    check(JSON.stringify(readRecipe(recipe).platforms) === JSON.stringify(["reels", "youtube"]) && JSON.stringify(readRecipe(recipe).variations) === JSON.stringify({ reels: 2, youtube: 1 }), `saved in song.json: Reels 2, YouTube 1 (${JSON.stringify(readRecipe(recipe).variations)})`);
+    check(((await page.textContent("[data-one-of-each]")) ?? "").includes("One of each (2)"), "One of each: one per platform that is on");
+    const lastRun = () => ws2.db.select().from(makeRun).all().at(-1);
+    const optionsOf = () => (lastRun()?.options_json ?? {}) as { platforms?: string; variationsBy?: Record<string, number>; variations?: number };
+    // (Queuing opens the Tasks menu over the page, as before: Esc closes it.)
+    const closeTasks = async () => {
+      await page.keyboard.press("Escape");
+      await sleep(300);
+    };
+    await page.click("[data-one-of-each]");
+    await page.waitForSelector("[data-make-notice] >> text=Queued");
+    await closeTasks();
+    check(optionsOf().platforms === "reels,youtube" && JSON.stringify(optionsOf().variationsBy) === JSON.stringify({ reels: 1, youtube: 1 }), `One of each: Reels + YouTube, one each (${JSON.stringify(optionsOf())})`);
+    await page.click("[data-make-videos]");
+    for (let i = 0; i < 20 && JSON.stringify(optionsOf().variationsBy) !== JSON.stringify({ reels: 2, youtube: 1 }); i++) await sleep(150);
+    await closeTasks();
+    check(optionsOf().platforms === "reels,youtube" && JSON.stringify(optionsOf().variationsBy) === JSON.stringify({ reels: 2, youtube: 1 }), `Make 3 videos: Reels 2 + YouTube 1 (${JSON.stringify(optionsOf())})`);
+    await page.click("[data-make-only=youtube]");
+    for (let i = 0; i < 20 && optionsOf().platforms !== "youtube"; i++) await sleep(150);
+    await closeTasks();
+    check(optionsOf().platforms === "youtube" && JSON.stringify(optionsOf().variationsBy) === JSON.stringify({ youtube: 1 }), `▶ on a chip makes only that platform (${JSON.stringify(optionsOf())})`);
+    // The chips are the song's: the same after a trip to Prepare and back, and in Shape's video list.
     await page.click("[data-stage=prepare]");
-    check(!(await page.isVisible("[data-generate]")), "the hidden Generate panel is not visible on Prepare");
     await page.click("[data-stage=make]");
-    await page.waitForSelector("[data-generate]", { state: "visible" });
-    check(JSON.stringify(await chosen()) === JSON.stringify(["reels", "tiktok", "youtube"]), "Make -> Prepare -> Make keeps the ticked platforms");
+    await page.waitForSelector("[data-make-chips]", { state: "visible" });
+    check(JSON.stringify(await chipCounts()) === JSON.stringify({ reels: 2, tiktok: 0, shorts: 0, youtube: 1, canvas: 0 }), "Make -> Prepare -> Make: the same chips");
+    // Compare looks: its own chips (Reels), its own button and count; the song's own v1 is the baseline.
+    await page.click("[data-make-tab=looks]");
+    await page.waitForSelector("[data-compare-chips]");
+    const comparePicked = await page.$$eval("[data-compare-chip][aria-pressed=true]", (e: Element[]) => e.map((x) => x.getAttribute("data-compare-chip")));
+    check(JSON.stringify(comparePicked) === JSON.stringify(["reels"]), `Compare looks starts with Reels only (${comparePicked.join(", ")})`);
+    check((await page.isDisabled("[data-make-comparison]")) && ((await page.textContent("[data-compare-blocked]")) ?? "") === "Choose 1-3 other themes.", "Make comparison waits for a theme, saying so");
+    check(((await page.textContent("[data-compare-baseline]")) ?? "").includes("made too for Reels"), `the baseline: your Reel v1, made too (none yet) (${await page.textContent("[data-compare-baseline]")})`);
+    check(!(await page.isVisible("[data-make-videos]")), "Make's button is not on this tab");
+    await page.click("[data-make-tab=videos]");
 
     // The hidden Generate panel follows the song's collections: untick "wedding" in Prepare → Clips and the
     // clips line in Make no longer names it (it used to keep the first value and send it with the run).
@@ -163,6 +192,7 @@ async function main() {
     await page.waitForFunction(() => !document.querySelector("input[data-edit$='-wedding']:checked"));
     await sleep(800);
     await page.click("[data-stage=make]");
+    await page.click("[data-make-tab=videos]");
     await page.waitForSelector("[data-generate]", { state: "visible" });
     check(!((await page.textContent("[data-clips-line]")) ?? "").includes("wedding"), `Make after unticking it in Prepare → Clips: the clips line no longer names it (${await page.textContent("[data-clips-line]")})`);
     await openPanel(page, "collections");
@@ -266,9 +296,7 @@ async function main() {
     check(JSON.stringify(await inBlock("details")) === JSON.stringify(["tagline", "hookText", "endText", "ep"]) && !!(await page.$("[data-style-block=details] [data-card-title]")), `Prepare → Details: title, tagline, hook and end card texts, EP (${(await inBlock("details")).join(", ")})`);
     check(!(await page.$("[data-field=lineShape]")) && !(await page.$("[data-field=lineBuild]")) && !(await page.$("[data-field=finalHook]")), "the theme's line shape rows are not repeated outside the theme editor");
     await openPanel(page, "make");
-    const makeLine = (await page.textContent("[data-compact-summary=make]")) ?? "";
-    check(makeLine.startsWith("Reels 3 · YouTube 1") && makeLine.includes("clips: the song's own"), `What to make's line (${makeLine})`);
-    check(JSON.stringify(await inBlock("make")) === JSON.stringify(["platforms", "variations"]), `Make → Videos: platforms, videos per platform (${(await inBlock("make")).join(", ")})`);
+    check(!(await page.$("[data-style-block=make]")) && !!(await page.$("[data-make-chip=reels][data-count='2']")), "platforms and versions in one place only: Make's chips");
     await openPanel(page, "collections");
     check(JSON.stringify(await inBlock("collections")) === JSON.stringify(["collections"]), "Prepare → Clips: the collections");
     check(((await page.textContent("[data-field=collections] [data-source]")) ?? "") === "Mixed into this song", `the song's collections: "Mixed into this song" (${await page.textContent("[data-field=collections] [data-source]")})`);
@@ -315,7 +343,7 @@ async function main() {
     await page.click("[data-stage=make]");
     check(((await page.textContent("[data-work-status=make]")) ?? "").startsWith("Make · "), `Make's stage line (${await page.textContent("[data-work-status=make]")})`);
     const makeIcons = await page.$$eval("[data-make-tab] svg", (e: Element[]) => e.map((x) => x.getAttribute("class")?.match(/lucide-[a-z0-9-]+/)?.[0] ?? ""));
-    check(new Set(makeIcons).size === 3, `Make's tabs: three distinct icons (${makeIcons.join(", ")})`);
+    check(makeIcons.length === 2 && new Set(makeIcons).size === 2, `Make's two tabs: two distinct icons (${makeIcons.join(", ")})`);
     await page.click("[data-stage=review]");
     check(((await page.textContent("[data-work-status=review]")) ?? "").startsWith("Review · ") && !(await page.$("[data-saved-at-once]")), `Review's stage line (${await page.textContent("[data-work-status=review]")})`);
     await page.click("[data-stage=shape]");
@@ -575,7 +603,7 @@ async function main() {
     await page.click("[data-theme-cancel]");
     // Make (the rail; with a plan the page has no Next: Make since 2 Nov 2026).
     await page.click("[data-stage=make]");
-    await page.waitForSelector("[data-release-pack]");
+    await page.waitForSelector("[data-make-chips]");
     check((await page.getAttribute("[data-stage=make]", "aria-current")) === "step", '"Next: Make" opens Make');
     ws2.close();
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });

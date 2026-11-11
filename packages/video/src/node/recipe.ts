@@ -462,7 +462,25 @@ export function artistRecipe(brand: Pick<Brand, "verseFont" | "hookFont" | "acce
   };
 }
 
-// A run's choices ("pnpm make" options or the Generate panel). variations "*" = every platform.
+// How many videos (versions) a platform gets (11 Nov 2026, one rule everywhere): the song's own count for it
+// (song.json "variations": { "reels": 2 }, "*" = every platform), else the fallback: 1 in the studio (Make's chips,
+// its button totals, One of each, Shape's video list), the platform preset's number only for "pnpm make" without a
+// count. A platform the song does not make (not in its platforms) is 0 in the studio.
+export const STUDIO_VIDEOS = 1;
+export function videoCount(variations: Record<string, number> | undefined, platform: string, fallback: number): number {
+  return variations?.[platform] ?? variations?.["*"] ?? fallback;
+}
+
+// The platforms the studio makes for a song and how many videos each (Make's chips, Shape's video list, One of each):
+// the song's own platforms (song.json "platforms"; none chosen yet: every platform you post to), each with its count.
+export const STUDIO_PLATFORMS = ["reels", "tiktok", "shorts", "youtube", "canvas"] as const;
+export function studioCounts(values: Partial<Pick<RecipeValues, "platforms" | "variations">>, available: readonly string[] = STUDIO_PLATFORMS): Record<string, number> {
+  const names = (values.platforms?.length ? values.platforms : [...STUDIO_PLATFORMS]).filter((n) => available.includes(n));
+  return Object.fromEntries(names.map((n) => [n, videoCount(values.variations, n, STUDIO_VIDEOS)]));
+}
+
+// A run's choices ("pnpm make" options or the Generate panel). variations "*" = every platform; variationsBy: a count
+// per platform (Make's chips).
 export function runRecipe(o: {
   lineEffect?: string;
   hookEffect?: string;
@@ -477,6 +495,7 @@ export function runRecipe(o: {
   collection?: string;
   platforms?: string;
   variations?: number;
+  variationsBy?: Record<string, number>;
   section?: string;
   length?: number;
   ending?: EndingChoice;
@@ -498,7 +517,7 @@ export function runRecipe(o: {
     tempo: o.tempo,
     collections: list(o.collection),
     platforms: list(o.platforms?.toLowerCase()),
-    variations: o.variations !== undefined ? { "*": o.variations } : undefined,
+    variations: o.variationsBy ? { ...o.variationsBy } : o.variations !== undefined ? { "*": o.variations } : undefined,
     section: o.section,
     length: o.length,
     ending: o.ending,

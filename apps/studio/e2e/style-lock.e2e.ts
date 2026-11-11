@@ -59,10 +59,10 @@ async function main() {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     await page.goto(`${base}/songs/${sp.project.id}`);
     await openTab(page, "Style");
-    // Polish (Make → Videos since N1): wide "videos per platform" inputs with the preset's number; the empty-platforms note.
+    // Make (11 Nov 2026): no preset numbers on screen: a song without counts makes 1 per platform, and the chips say so.
     await openPanel(page, "make");
-    check((await page.getAttribute("[data-field=variations] input", "placeholder")) === "3 (preset)", 'videos per platform placeholder "3 (preset)" (Reels)');
-    check(!!(await page.$("[data-platforms-empty]")), "empty platforms: the note says Generate starts with Reels + YouTube");
+    check(((await page.textContent("[data-count-text=reels]")) ?? "") === "1 video" && !((await page.textContent("[data-make-chips]")) ?? "").includes("preset"), "Reels: 1 video (not the preset's 3)");
+    await openTab(page, "Style");
 
     // The bug: type a length, then lock a setting straight away (here the length itself, before it is saved).
     await openPanel(page, "part");
@@ -130,16 +130,16 @@ async function main() {
     await openTab(page, "Generate");
     await page.waitForSelector("[data-song-line]");
     check(((await page.textContent("[data-look-line]")) ?? "").startsWith("Look: "), "Make: the song's look in the song line");
-    await page.click("[data-make-tab=looks]"); // Try other looks (its own tab since N1): the theme for this run
-    check((await page.$$("[aria-label='Verse effect'], [aria-label='Hook effect']")).length === 0, "Generate: no font or effect lists any more (the theme holds them)");
-    check(((await page.textContent("[data-generate-theme] [data-theme-chip]")) ?? "").includes("(this song's)"), "Generate: the song's theme is chosen");
-    check((await page.$$("[data-generate] input[type=checkbox][data-collection-choice], [data-generate] input[type=checkbox][data-theme-option]")).length === 0, "Generate: no tick boxes for themes or collections (pickers with chips)");
-    const groups = await page.$$eval("[data-generate-group]", (e: Element[]) => e.map((x) => x.getAttribute("data-generate-group")));
-    check(JSON.stringify(groups) === JSON.stringify(["1", "2"]) && !(await page.$("[data-generate] [data-shot-length], [data-generate] input[name=section], [data-generate] input[name=length], [data-generate] select[name=layout]")) && !!(await page.$("[data-output-planned]")) && !!(await page.$("[data-song-line]")) && !(await page.$("[data-generate] input[name=title]")) && !!(await page.$("[data-generate] [data-compare]")) && !(await page.$("[data-generate-footer] [data-save-to-song]")) && !(await page.$("[data-generate] input[name=realign]")), `N1: Make makes what Shape planned: no part of the song, length, shot length, layout or re-time here, no "keep these choices" (${groups.join(", ")})`);
+    check((await page.$$("[aria-label='Verse effect'], [aria-label='Hook effect']")).length === 0, "Make: no font or effect lists (the theme holds them)");
+    check(!(await page.$("[data-generate] [data-shot-length], [data-generate] input[name=section], [data-generate] input[name=length], [data-generate] select[name=layout], [data-generate] input[name=title]")) && !(await page.$("[data-picker-open=run-theme]")), "Make makes what Shape planned: no part of the song, length, shot length, layout, title or 'theme for this run' here");
     check(!!(await page.$("[data-clips-line]")) && !(await page.$("[data-picker-open=collections]")), "Make: the clips are the song's, one line with a link to Prepare → Storyboard (no picker here)");
+    check(!(await page.isVisible("[data-advanced] input[name=allowFill]")) && !!(await page.$("[data-advanced] input[name=allowFill]")), "the other-orientation option is folded under Advanced");
     if (process.env.GENERATE_SHOT) await page.screenshot({ path: process.env.GENERATE_SHOT, fullPage: true });
-    const chips = await page.$$eval("[data-platform-choice]", (e: Element[]) => e.filter((x) => x.className.includes("bg-brand")).map((x) => x.getAttribute("data-platform-choice")));
-    check(JSON.stringify(chips) === JSON.stringify(["reels", "youtube"]), `Generate starts with Reels + YouTube (got ${(chips as string[]).join(", ")})`);
+    const chips = await page.$$eval("[data-make-chip]", (e: Element[]) => e.filter((x) => x.getAttribute("data-count") !== "0").map((x) => x.getAttribute("data-make-chip")));
+    check(JSON.stringify(chips) === JSON.stringify(["reels", "tiktok", "shorts", "youtube", "canvas"]), `no platforms chosen yet: every platform you post to (got ${(chips as string[]).join(", ")})`);
+    await page.click("[data-make-tab=looks]");
+    await page.waitForSelector("[data-compare-themes]");
+    check((await page.$$("[data-generate] input[type=checkbox][data-collection-choice], [data-generate] input[type=checkbox][data-theme-option]")).length === 0, "Compare looks: no tick boxes for themes or collections (pickers with chips)");
 
     // + New song: Instrumental -> an optional story.txt instead of lyrics.txt; song.json "instrumental".
     const instrumentalSong = path.join(root, "Tea With The Monk.wav");

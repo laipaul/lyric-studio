@@ -57,7 +57,7 @@ const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", 
 // The song's own settings outside Shape (N1): Prepare → Details (title, card texts, EP), Prepare → Lyrics & timing
 // (tempo, time the lyrics again), Prepare → Clips (collections), Make → Videos (platforms, videos per platform).
 // The same rows and saving as Shape's panels, one block each; nothing of the theme or the viewer.
-export type SongPart = "details" | "timing" | "collections" | "make";
+export type SongPart = "details" | "timing" | "collections"; // platforms and versions: Make's chips (generate-panel.tsx)
 const NO_LOOK = () => {};
 export function SongSettings({ projectId, only }: { projectId: string; only: SongPart }) {
   return <ShapeTools projectId={projectId} only={only} onLook={NO_LOOK} onSaved={NO_LOOK} planned={0} />;
@@ -734,12 +734,6 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
   };
   const rows = (fields: StyleField[]) => <ul className="flex flex-col gap-2">{fields.map(row)}</ul>;
 
-  // The compact lines.
-  const chosen = (valueOf("platforms") as string[] | undefined) ?? [];
-  const counts = (valueOf("variations") as Record<string, number> | undefined) ?? {};
-  const shownPlatforms = data.platforms.filter((p) => (chosen.length ? chosen.includes(p.name) : RELEASE.includes(p.name)));
-  const collections = (valueOf("collections") as string[] | undefined) ?? [];
-  const makeLine = `${shownPlatforms.map((p) => `${p.label} ${counts[p.name] ?? p.presetVariations}`).join(" · ")}${chosen.length ? "" : " (none ticked: all five)"} · clips: the song's own${collections.length ? ` + ${collections.join(" + ")}` : ""}`;
   const effectValues = effectValuesOf(data);
 
   // The Look bar (before 2e-1, "Shape = work on this video. Theme = manage reusable looks."): the song's theme, one
@@ -1111,14 +1105,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
         </Block>
       ) : null}
 
-      {section === "make" ? (
-        <Block id="make" title="What to make">
-          <p data-compact-summary="make" className="text-muted-foreground text-xs">
-            {makeLine}
-          </p>
-          {rows(pick(["platforms", "variations"]))}
-        </Block>
-      ) : null}
+
     </div>
   );
 }
@@ -1238,7 +1225,6 @@ const shortLabel = (label: string) => label.replace(/\s*\(.*\)\s*$/, "");
 const CARD_TEXT_FIELDS = ["tagline", "hookText", "endText"] as const; // This song → Card text (with the title)
 const LOOK_FIELDS = ["textColour", "accentColour"] as const;
 const EFFECT_FIELDS = ["verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "emphasis"] as const;
-const RELEASE = ["reels", "tiktok", "shorts", "youtube", "canvas"];
 const TOOL_SECTIONS = ["look", "part", "pace", "theme"] as const; // Shape's panels drawn here (Shots, Text and Analysis: shape-board.tsx)
 // Shape's panels (N1). Look: this song's own look settings (the theme's are in the theme editor until O1 adds song
 // overrides); Part & ending and Pace: what Automatic held, the tempo now in Prepare → Lyrics & timing.

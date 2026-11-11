@@ -11,7 +11,7 @@ import { openWorkspace, seedStylePresets, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { compileShotPlan, planChanges, sameDecisions, storyboardTiming, type StoryboardFile } from "../src";
-import { createTheme, findOrCreateSongProject, runSummary, storyboardChoices, loadFontCatalog, makeVideos, readRecipe, readStoryboard, songPathsById, storyboardFile, storyboardPlan, writeRecipe, writeStoryboard, type Manifest, type RenderOptions } from "../src/node";
+import { createTheme, findOrCreateSongProject, runSummary, songRuns, storyboardChoices, loadFontCatalog, makeVideos, readRecipe, readStoryboard, songPathsById, storyboardFile, storyboardPlan, writeRecipe, writeStoryboard, type Manifest, type RenderOptions } from "../src/node";
 import { collectionFolder } from "../src/node/collections";
 import { fakeAlign, ffmpeg, LYRICS, makeClip, makeSong } from "./media-helpers";
 
@@ -134,6 +134,10 @@ describe("Make makes every video from its shot plan", () => {
     expect(t.output.try).toEqual({ kind: "theme", label: "Night Drive", theme: "Night Drive" });
     expect(t.output.theme.name).toBe("Night Drive");
     expect(manifestOf(r.exportDir).shot_plan).toMatchObject({ id: "reels-1~theme-night-drive", status: "new" });
+    // Review labels it (11 Nov 2026): "try: theme Night Drive" on its card; the song's own versions have no label.
+    const videos = songRuns(ws, id).flatMap((x) => x.platforms.flatMap((p) => p.videos));
+    expect(videos.filter((v) => v.try === "theme Night Drive")).toHaveLength(1);
+    expect(videos.filter((v) => !v.try).length).toBeGreaterThan(0);
     expect(readFileSync(storyboardFile(songRoot, "reels-1"), "utf8")).toBe(own);
     // A theme is only the look: the try plans the same cuts and lyric timing.
     expect(sameDecisions(readStoryboard(storyboardFile(songRoot, "reels-1"))!, t)).toBe(true);

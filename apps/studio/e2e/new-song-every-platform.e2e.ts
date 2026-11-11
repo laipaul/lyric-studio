@@ -150,14 +150,14 @@ async function main() {
     const workerLog: string[] = [];
     worker.stdout?.on("data", (c: Buffer) => workerLog.push(c.toString("utf8")));
     worker.stderr?.on("data", (c: Buffer) => workerLog.push(c.toString("utf8")));
+    // Make (11 Nov 2026): every platform's chip on (one video each), then "Make N videos".
     await page.click("[data-stage=make]");
-    const toggle = await page.waitForSelector("button[aria-expanded]:has-text('Generate videos')");
-    if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+    await page.click("[data-make-tab=videos]");
     for (const p of PLATFORMS) {
-      const chip = await page.waitForSelector(`[data-platform-choice=${p}]`);
-      if (!(await chip.getAttribute("class"))?.includes("bg-brand")) await chip.click();
+      const chip = await page.waitForSelector(`[data-make-chip=${p}]`);
+      if ((await chip.getAttribute("data-count")) === "0") await page.click(`[data-chip-toggle=${p}]`);
     }
-    await page.click("[data-generate] button[type=submit]");
+    await page.click("[data-make-videos]");
     const deadline = Date.now() + 40 * 60_000;
     let run: { status: string; message: string | null; export_dir: string | null } | undefined;
     for (;;) {

@@ -59,6 +59,9 @@ export type VideoInfo = {
   effects: { verse: string; hook: string } | null;
   layout: string | null;
   theme: string | null; // the theme that made it (manifest settings.theme; null: made before themes)
+  // A Try other looks / Compare looks video (11 Nov 2026): "theme Night Drive", "pictures city", "fonts Elegant";
+  // null: one of the song's own versions.
+  try: string | null;
   createdAt: string;
   qa: QaResult;
   reactions: { id: Reaction; label: string }[]; // the reaction keywords this video offers
@@ -115,6 +118,17 @@ export function resumeCommandFor(command: string | null): string | null {
 // A mark belongs to a video only when it was made after the video: a mark older than the manifest's
 // created_at is left over from an earlier video on the same path (resume, rerender, re-used folder), so a
 // new render always starts unapproved.
+// Which try a video is: its shot plan's (2e-1), else, for older runs, its picture version or the run's own theme
+// (settings.theme is only set when a run used a theme other than the song's: Theme for this run, Compare themes).
+function tryLabel(m: Manifest): string | null {
+  const t = m.shot_plan?.try;
+  if (t) return `${t.kind} ${t.label}`;
+  if (m.shot_plan) return null;
+  if (m.picture?.label) return `pictures ${m.picture.label}`;
+  const theme = (m.settings as Record<string, unknown> | undefined)?.theme;
+  return typeof theme === "string" && theme ? `theme ${theme}` : null;
+}
+
 export function markApplies(mark: { updated_at: Date } | undefined | null, createdAt: string | undefined | null): boolean {
   if (!mark) return false;
   const made = createdAt ? Date.parse(createdAt) : NaN;
@@ -203,6 +217,7 @@ export function songRuns(ws: Workspace, projectId: string, labels: Record<string
           effects: typeof settings.line_effect === "string" ? { verse: settings.line_effect, hook: String(settings.hook_effect ?? "") } : null,
           layout: m.props?.layout ?? null,
           theme: typeof settings.theme === "string" && settings.theme ? settings.theme : null,
+          try: tryLabel(m),
           createdAt: m.created_at,
           qa: parseQaReport(readFileSync(path.join(dir, `${n}.qa.txt`), "utf8")),
           reactions: reactionsFor(name),

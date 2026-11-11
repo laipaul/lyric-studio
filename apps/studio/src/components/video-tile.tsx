@@ -90,7 +90,12 @@ export function VideoTile({
           </span>
           <span className="text-muted-foreground text-xs tabular-nums">{seconds(video.durationS)}</span>
         </div>
-        {video.theme ? <span data-video-theme={video.theme} className="text-brand flex items-center gap-1 text-[11px]"><FeatureIcon feature="theme" className="size-3" />{video.theme}</span> : null}
+        {/* A Compare looks / Try other looks video (11 Nov 2026): said on the card, so a comparison is never mistaken for a version. */}
+        {video.try ? (
+          <span data-video-try={video.try} className="w-fit rounded-full border border-amber-300/40 bg-amber-300/10 px-2 py-0.5 text-[11px] text-amber-100">
+            try: {video.try}
+          </span>
+        ) : video.theme ? <span data-video-theme={video.theme} className="text-brand flex items-center gap-1 text-[11px]"><FeatureIcon feature="theme" className="size-3" />{video.theme}</span> : null}
         <p className="text-muted-foreground text-[11px] leading-relaxed">
           {[video.style, orderText(video), video.bars ? "bars" : null, video.layout && video.layout !== "vertical" ? video.layout : null, video.effects ? `${video.effects.verse} / ${video.effects.hook}` : null]
             .filter(Boolean)

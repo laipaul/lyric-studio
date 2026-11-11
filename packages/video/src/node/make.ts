@@ -65,7 +65,7 @@ import { artistBrandFile } from "./captions";
 import { readProjectSettings, rememberCollection, rememberedCollection, updateProjectSettings } from "./project-settings";
 import { PLATFORM_FIELDS, type PlatformField } from "./per-platform";
 import { pickedLinks, type SongLink } from "../song-links";
-import { artistRecipe, LIBRARY_RECIPE, readRecipe, recipeSummary, recipeText, resolveRecipe, runRecipe, writeRecipe, type RecipeField, type RecipeInput, type RecipeValues, type ResolvedRecipe } from "./recipe";
+import { artistRecipe, LIBRARY_RECIPE, readRecipe, recipeSummary, recipeText, resolveRecipe, runRecipe, videoCount, writeRecipe, type RecipeField, type RecipeInput, type RecipeValues, type ResolvedRecipe } from "./recipe";
 import { renameSongFolder, songPathsById, STORY_FILE } from "./song-folder";
 import { ensureSongTheme, loadTheme, themeLayer } from "./themes";
 import { barStarts, rmsLevel, strongestStretch } from "../story";
@@ -113,7 +113,8 @@ export type MakeOptions = {
   pictures?: string;
   // One clip set for this run instead of the recipe's (the storyboard's picture swap), never saved.
   clipSet?: string;
-  variations?: number; // default: the platform preset's number (standard: 6)
+  variations?: number; // default: the song's count, else the platform preset's number (standard: 6)
+  variationsBy?: Record<string, number>; // a count per platform (the studio's Make chips; wins over variations)
   take?: number; // "Try another take": only variation N of each platform (vN: its own seed and style), not v1..vN
   platforms?: string; // "reels,tiktok,shorts" or "all"; default: the "standard" preset
   allowFill?: boolean; // use sources of the other orientation, shown whole over a blurred copy
@@ -323,9 +324,9 @@ export type MakeResult = {
 // platform that could not be made at all, with what to do. null when everything is finished.
 // Options that do not change a video's plan (where files are, how the run is made, what the run is called) or that
 // the variation itself carries (its spec): left out of the plan fingerprint (2e-1).
-const PLAN_KEY_SKIP = new Set(["now", "runId", "command", "workspaceDir", "song", "lyrics", "songFolder", "dryRun", "frameCheck", "parallel", "resume", "resumeFolder", "engine", "platform", "platforms", "variations", "take", "pictures", "pairings", "collection", "collectionPath", "title", "artist", "ep", "cover", "hint", "presetsFile", "lyricsOnly", "projectId", "theme", "realign", "leadMs", "lyricsOffsetMs", "align", "voiceMap", "firstWords", "renderer", "thumbnailRenderer", "coverRenderer", "log", "shouldStop", "onRenderProgress", "onReady", "onRetry"]);
+const PLAN_KEY_SKIP = new Set(["now", "runId", "command", "workspaceDir", "song", "lyrics", "songFolder", "dryRun", "frameCheck", "parallel", "resume", "resumeFolder", "engine", "platform", "platforms", "variations", "take", "pictures", "pairings", "collection", "collectionPath", "title", "artist", "ep", "cover", "hint", "presetsFile", "lyricsOnly", "projectId", "theme", "realign", "variationsBy", "leadMs", "lyricsOffsetMs", "align", "voiceMap", "firstWords", "renderer", "thumbnailRenderer", "coverRenderer", "log", "shouldStop", "onRenderProgress", "onReady", "onRetry"]);
 const withShotPlan = (m: Manifest, shotPlan: Manifest["shot_plan"]): Manifest => (shotPlan ? { ...m, shot_plan: shotPlan } : m);
-export type ShotPlanUsed = { id: string; file: string; status: "new" | "same" | "kept" | "replanned"; note: string | null; props: Omit<LyricVideoProps, "mediaBaseUrl"> };
+export type ShotPlanUsed = { id: string; file: string; status: "new" | "same" | "kept" | "replanned"; note: string | null; props: Omit<LyricVideoProps, "mediaBaseUrl">; try?: SbTry | null };
 
 export function failureSummary(result: Pick<MakeResult, "platforms" | "variations">): string[] | null {
   const videos = result.variations.filter((v) => v.error);
@@ -633,7 +634,9 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     if (effective.hookEffect) parseEffectChoice(effective.hookEffect, "song.json hookEffect");
     if (own("accentColour")) brand = { ...brand, brand: { ...brand.brand, accentColour: recipe.values.accentColour } };
     const chosenPlatforms = choosePlatforms(effective.platforms, presets);
-    const variationsFor = (preset: PlatformPreset) => recipe.values.variations[preset.name] ?? recipe.values.variations["*"] ?? preset.variations;
+    // The counts rule (recipe.ts videoCount): the run's or the song's count, else the preset's (pnpm make only: the
+    // studio always sends its counts).
+    const variationsFor = (preset: PlatformPreset) => videoCount(recipe.values.variations, preset.name, preset.variations);
     const fromLabel = (k: RecipeField, flag: string) => (recipe.sources[k] === "song" ? "song.json" : recipe.sources[k] === "theme" ? `theme "${theme?.name}"` : flag);
     const effectLabels = { verse: fromLabel("verseEffect", "--line-effect"), hook: fromLabel("hookEffect", "--hook-effect") };
     log(`recipe: ${recipeSummary(recipe)}`);
@@ -1894,7 +1897,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
                 changes: overrideCount(sh.textboard.board), cards: sh.textboard.board.cards.length,
               }
             : null, loop: loops ? (loop ? { checked: true, ...loop } : null) : { checked: false, why: canvas ? "a Spotify Canvas has its own loop checks" : `${preset.label} does not loop` },
-        }), sp ? { id: sp.id, file: path.relative(ws.dir, sp.file).split(path.sep).join("/"), copy: path.basename(shotPlanCopy), status: sp.status, note: sp.note } : null),
+        }), sp ? { id: sp.id, file: path.relative(ws.dir, sp.file).split(path.sep).join("/"), copy: path.basename(shotPlanCopy), status: sp.status, note: sp.note, try: sp.try ?? null } : null),
       );
       // Captions for every video; YouTube also gets a thumbnail and a publishing pack.
       if (preset.lyrics && props.lyrics.length) writeSrt(result.srtFile, props); // (a Canvas, an instrumental without a story: no captions)

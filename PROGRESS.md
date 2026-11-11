@@ -4,6 +4,41 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Make stage simplified: Make and Compare looks, one counts rule everywhere ✅ (to verify on the Windows PC)
+- **Two tabs, each with its own button and count:**
+  - **Make:** one row of platform chips, each with its versions (Canvas: loops), pre-filled from the song and saved to
+    it at once (0 = not made; a song with nothing chosen yet: every platform once). **One of each (N)** replaces the
+    release pack (one video for every platform that is on); **Make N videos** makes them all; ▶ on a chip makes only
+    that platform. "Allow clips of the other orientation" is folded under Advanced. The Options tab is gone.
+  - **Compare looks:** its own platform chips (Reels by default), 1-3 other themes OR 2-4 picture sets; one video per
+    platform per look, each with its own shot plan; the song's own v1 is the baseline, made too where a platform has
+    none yet. **Make comparison (N videos)**. No separate "Theme for this run" (one other theme = a comparison).
+- **One counts rule everywhere (the bug found):** before, "Videos per platform" showed the presets' numbers (Reels 3,
+  TikTok 3, Shorts 2) that the studio never used: with nothing set Generate made 1 per platform; with one platform set
+  the others silently took the preset's number while the chips and the total said 1; the release pack always made 1;
+  Shape listed v1-v3 of videos never made. Now (recipe.ts videoCount / studioCounts): the song's own count, else 1 in
+  the studio (the chips, the button totals, One of each, Shape's video list); the presets' numbers only for pnpm make
+  without a count. The studio sends each platform's count with every run.
+- **Platforms and counts live in one place only:** Make's chips (the ticks in "What to make", Generate's run chips and
+  the release pack are gone).
+- **Review labels a try** on its card ("try: theme Night Drive", "try: pictures city"): Compare looks videos are
+  never mistaken for versions; older runs made with another theme or picture set are labelled too.
+- **"Use these settings"** (a past run) pre-fills the chips from that run (not saved) under a "From the run of …"
+  banner, with its part of the song and "Also keep that run's settings for this song".
+- **Both buttons wait with the reason** while something blocks ("First: add your clips…", no lyrics, no platform on).
+- Every video still comes from its shot plan; tries keep their own (2e-1). Font pairings stay command-line only.
+- Tests: video-counts (5: the rule, the studio's platforms, run counts, and a real song where Make, Shape's video
+  list and pnpm make agree, with and without the song's counts); shot-plan-make (+ the try label); runs, exports,
+  library, run-settings, style, storyboard-save, make-reference still pass. Browser: song-stages (Make: the tabs, the
+  chips at 1 each with Canvas loops, the totals, both buttons blocked with the reason, the song's platforms, + saved
+  to song.json, One of each / Make 3 videos / ▶ queue the right counts, the chips survive a trip, Compare looks: Reels
+  only, blocked until a theme, the baseline note), themes (Compare looks: the song's theme not offered, one other
+  theme = 2 videos with the baseline, the two runs), videos-post (the run's chips and banner), style-lock (no preset
+  numbers, Advanced folded), storyboard; new-song-every-platform follows (not run here: a real render worker).
+- **To check on the PC:** Make: the chips show your platforms at 1 each (Canvas "1 loop"); press + on Reels: "Make N
+  videos" grows; reload: still there (Shape lists v1-v2 of Reels). One of each makes one per platform. Compare looks:
+  add one theme: "Make comparison (2 videos)" when no Reel exists yet; in Review the try has its "try: theme …" label.
+
 ### Review: platform tabs, the same layout as the other stages ✅ (to verify on the Windows PC)
 - **Tabs:** one per platform that has videos (or one being made), with its count (Reels 2 · TikTok 6 · YouTube 1), then
   **Post**; the same pink-underline tabs as Prepare, Shape and Make, and "Review · <status>" in the same place. The
@@ -305,13 +340,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Fix: make.ts `firstLyricBox` (exported) = `titleWindowBox` (qa-check.ts) over the cards' window; measure.ts `inkOverflow` (glyph reach beyond the line box) is now in every measured lyric box (QA too). The title opening now stays on screen at least 4 s (TITLE_MIN_S 4, was 2.5; asked by the user): clear blocks keep their place that long, also with the auto section's 2-bar lead-in (~3.8 s at 125 BPM); touching blocks are moved (title + byline up, tagline down, shrinking up to 25%), else the lead-in + the note. Shape timeline: cards that overlap in time go in thin lanes (14 px each, titleCardLanes in shape-board.tsx; data-lanes / data-lane; one lane = the row as before, 20 px; three lanes ~47 px); data-text-card and the clicks are unchanged.
 - Tests: title-opening.test.ts 22 (the 2.5 s tests are now 4 s = 120 frames; new: Centred / Lower third / Big hook: the title block and tagline are clear of the real box; script-font ink; the old bare box let the byline reach into the drawn line, the real one does not); the 6 files (title-opening, textboard, qa, storyboard, extra-cards, textboard-make) 60 pass; tsc clean (packages/video, apps/studio); eslint on shape-board.tsx: the same 4 old errors; pnpm build ok; storyboard.e2e.ts 149 checks pass (new: no two cards on the title-cards row overlap on screen; the e2e song has only the End card there, so the lane logic itself is checked by the build/typecheck and by eye).
 - To check: `cd D:\videomaker`, `git pull`, Shape → Reels, Title opening on, play from 0:00: title, byline and tagline stay at least 4 s, clear of the first lyric line (above it, or the tagline below); on the timeline the three cards sit in separate thin lanes.
-
-### Bug fix: the Reel's title moves up instead of flashing when the first line starts at once ✅ (confirmed on the Windows PC in Shape, 8 Nov 2026)
-- Seen (Let My Love Carry You, Reel 1080x1920, Title opening on, part of the song starting on the first sung line, on screen from ~0:00.6): the tagline stayed 2.5 s, but the title and byline "Life Lyrics" (upper third, centred ~y 640) touch the first lyric line's box (two lines, centred ~y 758), so they showed only the 0.6 s lead-in and a note asked to move the song part: "too short".
-- Cause: the last fix only chose between "stay 2.5 s" and "shorten to the lead-in" for the block on its default place. Where the block sits is the app's job, not the user's: other places in the safe area were never tried.
-- Fix (automatic, no setting; src/node/textboard.ts titleCards): a block that touches the first line's box (same measuring as the last fix) is first moved inside the platform's safe area (and the profile grid's 3:4 crop when it fits): the title + byline UP above the line, the tagline DOWN below it, with a margin and clear of the other block; if that does not fit it shrinks step by step by up to 25% (CARD_MIN_SCALE, as fitCardBlocks). A clear place = the block stays its full 2.5 s, no note, QA "Title cards clear of the first lyric" passes. Only with no clear place: the lead-in only + the plain-words note, as before. Same props for Shape and render. YouTube and the auto section with a full lead-in are unchanged.
-- Tests: test/title-opening.test.ts 18 (2 new: title moves above the line and lasts 2.5 s with QA ok, tagline moves below the line; the "line on the title" test now has the line from the top of the safe area = no room = lead-in + note); the 6 files (title-opening, textboard, qa, storyboard, extra-cards, textboard-make) 55 pass; tsc clean (packages/video, apps/studio).
-- To check: `cd D:\videomaker`, `git pull`, Shape → Reels, play from 0:00: the title and byline stay about 2.5 s near the top, the first lyric line below them.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

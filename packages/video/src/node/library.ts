@@ -17,7 +17,7 @@ import { renderingPlatforms, SHORT_LABELS, songRuns, type PlatformRun } from "./
 import { keepReplaced, setSongEp, songCollections, songEp, storeCover, storeLyricsTxt } from "./project-settings";
 import { projectLyricsTxt } from "./runs";
 import { cachedFileHash, SOURCE_FILE } from "./collection";
-import { readRecipe, resolveRecipe, writeRecipe } from "./recipe";
+import { readRecipe, resolveRecipe, studioCounts, writeRecipe } from "./recipe";
 import { isRemovedSong, moveEntry, relocatePaths, removeEmptyDirs, REMOVED_SONGS, renameSongFolder, sharedCollections, songBusy, songFolderFor, songPathsById, SONGS_DIR } from "./song-folder";
 import { presetLengthText, recipeInputFor } from "./style";
 import { ensureAllThemes, listThemes, themeCover, themeUsers } from "./themes";
@@ -287,6 +287,7 @@ export async function createSong(ws: Workspace, input: NewSongInput): Promise<{ 
 }
 
 export type GeneratePanelData = {
+  counts: Record<string, number>; // the song's platforms and how many videos each (0 / absent: not made)
   platforms: { name: string; label: string; variations: number; lyrics: boolean }[];
   collections: string[]; // shared collections: folders in WORKSPACE_DIR\collections (and the old clips\)
   chosen: string[]; // the ones this song uses (song.json, else the one it used last)
@@ -365,6 +366,8 @@ export function generatePanelData(ws: Workspace, p: typeof projectTable.$inferSe
     effects: EFFECT_NAMES.map((name) => ({ name, label: effectOptionLabel(name) })),
     verseEffect: resolved.values.verseEffect,
     hookEffect: resolved.values.hookEffect,
+    // Make's chips (11 Nov 2026): the song's platforms with their counts, by the one counts rule (recipe.ts).
+    counts: studioCounts(resolved.values, presets.filter((x) => x.name !== "standard").map((x) => x.name)),
     recipe: {
       platforms: resolved.values.platforms,
       variations: resolved.values.variations,

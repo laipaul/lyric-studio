@@ -21,6 +21,10 @@ export type RunRequest = {
   platforms: string[];
   collection?: string;
   variations?: number;
+  counts?: Record<string, number>; // Make's chips (11 Nov 2026): videos per platform for this run (the song's counts)
+  // Compare looks: one video per platform per look (theme or picture set), and the song's own v1 made too where a
+  // platform has none yet (the baseline).
+  compare?: boolean;
   take?: number; // "Try another take": only video vN of the platform (one platform per take)
   lineEffect?: string;
   hookEffect?: string;
@@ -36,7 +40,7 @@ export type RunRequest = {
   saveToSong?: boolean; // keep this run's choices in the song's recipe (song.json; locked settings stay)
   pairings?: string[]; // compare font pairings: one video per pairing (ids from presets/font-pairings.json, "brand")
   pictures?: string[]; // picture versions: one video per clip set ("song+wedding", "city"), the same textboard
-  themes?: string[]; // Compare themes: one run per theme (2-3), the same choices otherwise
+  themes?: string[]; // Compare themes: one run per theme (1-3 other themes), the same choices otherwise
   theme?: string; // this run uses another theme (one of a Compare themes set)
 };
 
@@ -48,6 +52,7 @@ export function checkRunRequest(req: RunRequest, platformNames: readonly string[
   if (!Array.isArray(req.platforms) || !req.platforms.length) problems.push("Choose at least one platform.");
   else for (const p of req.platforms) if (!platformNames.includes(p)) problems.push(`Unknown platform "${p}".`);
   if (req.variations !== undefined && !(Number.isInteger(req.variations) && req.variations >= 1 && req.variations <= 24)) problems.push("Videos per platform must be 1-24.");
+  if (req.counts !== undefined && !(req.counts && typeof req.counts === "object" && Object.entries(req.counts).every(([k, n]) => platformNames.includes(k) && Number.isInteger(n) && n >= 1 && n <= 24))) problems.push("Videos per platform must be 1-24.");
   if (req.take !== undefined && !(Number.isInteger(req.take) && req.take >= 1 && req.take <= 99)) problems.push("A take is a number 1-99.");
   for (const [field, value] of [["Verse effect", req.lineEffect], ["Hook effect", req.hookEffect]] as const) {
     if (value) {
@@ -63,7 +68,7 @@ export function checkRunRequest(req: RunRequest, platformNames: readonly string[
   if (req.pairings !== undefined && !(Array.isArray(req.pairings) && req.pairings.length <= 3 && req.pairings.every((x) => typeof x === "string" && /^[a-z0-9-]+$/.test(x)))) problems.push("Compare pairings: choose up to 3.");
   if (req.layout && !["cover", "stills", "clips"].includes(req.layout)) problems.push("YouTube layout must be cover, stills or clips.");
   if (req.pictures !== undefined && !(Array.isArray(req.pictures) && req.pictures.length >= 2 && req.pictures.length <= 4 && req.pictures.every((x) => typeof x === "string" && /^[^\\/:*?"<>|,]+$/.test(x)))) problems.push("Picture versions: choose 2-4 clip sets.");
-  if (req.themes !== undefined && !(Array.isArray(req.themes) && req.themes.length >= 2 && req.themes.length <= 3 && req.themes.every((x) => typeof x === "string" && x.trim() && x.length <= 100))) problems.push("Compare themes: choose 2-3 themes.");
+  if (req.themes !== undefined && !(Array.isArray(req.themes) && req.themes.length >= 1 && req.themes.length <= 3 && req.themes.every((x) => typeof x === "string" && x.trim() && x.length <= 100))) problems.push("Compare looks: choose 1-3 other themes.");
   if (req.themes?.length && (req.pairings?.length || req.pictures?.length)) problems.push("Compare themes cannot be combined with font pairings or picture versions in one run.");
   if (req.pictures?.length && req.pairings?.length) problems.push("Compare font pairings and picture versions cannot be combined in one run.");
   if (req.shotLength !== undefined && !["auto", "1", "2", "4", "8", "story", "rate"].includes(req.shotLength)) problems.push("Shot length must be auto, 1, 2, 4 or 8 bars, story or the cut rate.");
@@ -105,6 +110,8 @@ export function generateOptions(ws: Workspace, projectId: string, req: RunReques
     platforms: req.platforms.join(","),
     ...(req.collection ? { collection: req.collection } : {}),
     ...(req.variations ? { variations: req.variations } : {}),
+    ...(req.counts && !req.take ? { variationsBy: Object.fromEntries(req.platforms.map((p) => [p, req.counts![p] ?? 1])) } : {}),
+    ...(req.compare && !req.counts ? { variations: 1 } : {}),
     ...(req.take ? { take: req.take } : {}),
     ...(req.lineEffect ? { lineEffect: req.lineEffect } : {}),
     ...(req.hookEffect ? { hookEffect: req.hookEffect } : {}),

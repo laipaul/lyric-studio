@@ -8,7 +8,7 @@ import { makeRun, project } from "@lyric/db";
 import { approvedVideos, readyToApprove, songRuns } from "@lyric/video/exports";
 import { generatePanelData, platformLabels, platformState, songCard } from "@lyric/video/library";
 import { chipState } from "@lyric/video/library-status";
-import { RELEASE_PLATFORMS, songTodo } from "@lyric/video/song-stages";
+import { songTodo } from "@lyric/video/song-stages";
 import { compareRunToRecipe, generatePresetFromRun, type GeneratePreset, type RunComparison } from "@lyric/video/run-settings";
 import { and, eq, inArray } from "drizzle-orm";
 
@@ -20,7 +20,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { ShapePage } from "@/components/shape-page";
 import { SongTitle } from "@/components/song-title";
 import { SongView, type MakingView, type RunView } from "@/components/song-view";
-import { InMakePart, ReleasePack, SongStages, type ReviewPlatform, type MakePart, type ShapePanelId, type StageId, type StageStatus } from "@/components/song-stages";
+import { SongStages, type ReviewPlatform, type MakePart, type ShapePanelId, type StageId, type StageStatus } from "@/components/song-stages";
 import { SongSettings } from "@/components/shape-tools";
 import { LinksField } from "@/components/song-links";
 
@@ -28,7 +28,7 @@ import { LinksField } from "@/components/song-links";
 // their content is now (a panel that moved to another stage opens that stage's tab).
 const SHAPE_PANEL_IDS = ["look", "part", "pace", "shots", "theme"];
 const OLD_PANELS: Record<string, { tab: string; panel?: ShapePanelId }> = { clips: { tab: "shape", panel: "shots" }, shot: { tab: "shape", panel: "shots" }, auto: { tab: "shape", panel: "part" }, song: { tab: "details" }, make: { tab: "generate" } };
-const MAKE_PARTS = ["videos", "looks", "options"];
+const MAKE_PARTS = ["videos", "looks"]; // ?part=options (before 11 Nov 2026) opens Make: Advanced is there now
 import { TabsContent } from "@/components/ui/tabs";
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
@@ -89,15 +89,23 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
       .where(and(eq(makeRun.project_id, p.id), inArray(makeRun.status, ["queued", "running"])))
       .all()
       .flatMap((r) => {
-        const o = (r.options_json ?? {}) as { platforms?: string; take?: number; variations?: number; lyricsOnly?: boolean; pictures?: string; themes?: string[]; theme?: string; pairings?: string };
+        const o = (r.options_json ?? {}) as { platforms?: string; take?: number; variations?: number; variationsBy?: Record<string, number>; lyricsOnly?: boolean; pictures?: string; themes?: string[]; theme?: string; pairings?: string };
         if (o.lyricsOnly || !o.platforms) return [];
-        const what = o.take ? `take ${o.take}` : o.theme ? `theme ${o.theme}` : o.pictures || o.pairings ? "the versions to compare" : `${o.variations ?? 1} new video${(o.variations ?? 1) === 1 ? "" : "s"}`;
-        return o.platforms.split(",").filter(Boolean).map((name) => ({ runId: r.id, platform: name, label: labelOf[name] ?? name, status: r.status as "queued" | "running", what }));
+        const what = (name: string) => {
+          if (o.take) return `take ${o.take}`;
+          if (o.theme) return `try: theme ${o.theme}`;
+          if (o.pictures || o.pairings) return "the looks to compare";
+          const n = o.variationsBy?.[name] ?? o.variations ?? 1;
+          return `${n} new ${name === "canvas" ? "loop" : "video"}${n === 1 ? "" : "s"}`;
+        };
+        return o.platforms.split(",").filter(Boolean).map((name) => ({ runId: r.id, platform: name, label: labelOf[name] ?? name, status: r.status as "queued" | "running", what: what(name) }));
       });
     return { song: songCard(ws, p, labels), runs, settings, approved: approvedVideos(runs), offered: readyToApprove(runs), panel: generatePanelData(ws, p), preset, presetError, making };
   });
   if (!data) notFound();
   const { song, runs, settings, approved, offered, panel, preset, presetError, making } = data;
+  // Compare looks' baseline: the platforms that already have one of the song's own videos (not a try).
+  const ownMade = [...new Set(runs.flatMap((r) => r.platforms.filter((pr) => pr.videos.some((v) => !v.try && v.mark.status !== "discarded")).map((pr) => pr.name)))];
   // Review's tabs: every platform with videos (count: those not discarded) or being made, the song's own order first.
   const reviewPlatforms: ReviewPlatform[] = (() => {
     const found = new Map<string, ReviewPlatform>();
@@ -131,13 +139,6 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
     make: rendering ? { text: "Rendering…", tone: "busy" } : made ? { text: `${made} video${made === 1 ? "" : "s"} made`, tone: "done" } : { text: "No videos yet", tone: "muted" },
     review: !made ? { text: "Nothing to review yet", tone: "muted" } : toReview ? { text: `${toReview} to review · ${approvedCount} approved`, tone: "todo" } : { text: `${approvedCount} approved`, tone: approvedCount ? "done" : "muted" },
   };
-  // The release pack: the song's own platforms, else every platform you post to.
-  const labels = Object.fromEntries(panel.platforms.map((p) => [p.name, p.label]));
-  const releaseNames = (song.wanted ?? RELEASE_PLATFORMS).filter((n) => labels[n]);
-  const clipsNote =
-    [panel.songClips ? `the song's ${panel.songClips} clip${panel.songClips === 1 ? "" : "s"}` : null, panel.chosen.length ? `the ${panel.chosen.join(" + ")} collection${panel.chosen.length === 1 ? "" : "s"}` : null]
-      .filter(Boolean)
-      .join(" and ") || "no clips yet";
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
       {/* A slim header: cover, title, artist and the platform counts on one line (the work area gets the rest). */}
@@ -203,23 +204,8 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
         {/* Kept mounted (hidden when inactive) so what was chosen here (platforms, collections, effects...) survives a trip to another stage. */}
         <TabsContent value="generate" forceMount className="data-[state=inactive]:hidden">
           <div className="flex flex-col gap-4">
-            <InMakePart part="videos">
-            {!preset ? (
-              <ReleasePack
-                projectId={song.id}
-                platforms={releaseNames.map((n) => ({ name: n, label: labels[n] }))}
-                fromRecipe={!!song.wanted}
-                clipsNote={clipsNote}
-                blocked={blocking ? `First: ${blocking.text}` : null}
-              />
-            ) : null}
-            </InMakePart>
             {presetError ? <p className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{presetError}</p> : null}
-            <InMakePart part="videos">
-              {!preset ? <SongSettings projectId={song.id} only="make" /> : null}
-              {!preset ? <p className="text-muted-foreground text-xs">Or choose the platforms for one run (other looks: the Try other looks tab):</p> : null}
-            </InMakePart>
-            <GeneratePanel key={preset?.folder ?? "recipe"} projectId={song.id} data={panel} open={!!preset} preset={preset} />
+            <GeneratePanel key={preset?.folder ?? "recipe"} projectId={song.id} data={panel} preset={preset} blocked={blocking ? `First: ${blocking.text}` : null} ownMade={ownMade} />
           </div>
         </TabsContent>
         <TabsContent value="videos">

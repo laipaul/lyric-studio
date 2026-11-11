@@ -27,7 +27,7 @@ import { SHORT_LABELS, songRuns } from "./exports";
 import { makeVideos, type MakeOptions, type PlatformPlan, type ShotPlanUsed, type VideoPlan } from "./make";
 import type { Manifest } from "./manifest";
 import { resolveMoved } from "./media";
-import { readRecipe, resolveRecipe } from "./recipe";
+import { readRecipe, resolveRecipe, studioCounts } from "./recipe";
 import { SOURCE_FILE } from "./collection";
 import { songCollections } from "./project-settings";
 import { readMoves, sharedCollections, songPathsById } from "./song-folder";
@@ -132,9 +132,11 @@ export function storyboardChoices(ws: Workspace, projectId: string): StoryboardC
   const all = presets();
   const { input } = recipeInputFor(ws, projectId);
   const r = resolveRecipe(input).values;
-  const names = (r.platforms.length ? r.platforms : ["reels", "youtube"]).filter((n) => all[n]?.available && all[n].layout !== "canvas");
+  // The same platforms and counts as Make's chips (recipe.ts studioCounts): v1..vN of each (not the Canvas: its own loops).
+  const counts = studioCounts(r, Object.keys(all).filter((n) => all[n]?.available && all[n].layout !== "canvas"));
+  const names = Object.keys(counts);
   const platforms = names.map((n) => {
-    const count = r.variations[n] ?? r.variations["*"] ?? all[n].variations;
+    const count = counts[n];
     return { name: n, label: SHORT_LABELS[n] ?? all[n].label, videos: Array.from({ length: count }, (_, i) => `v${i + 1}`) };
   });
   const runs = songRuns(ws, projectId).map((run) => ({
@@ -180,6 +182,8 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
     lyrics: paths.lyricsTxt,
     ...(paths.hints && existsSync(paths.hints) ? { hint: paths.hints } : {}),
     platforms: platform,
+    // As many videos as Make makes for it (the counts rule), so the plan's video list is the one Shape shows.
+    variationsBy: { [platform]: studioCounts(resolveRecipe(recipeInputFor(ws, projectId).input).values, [platform])[platform] ?? 1 },
     ...(clipSet && !t ? { clipSet } : {}),
     ...(t ? tryOptions(t) : {}),
     dryRun: true,
@@ -209,7 +213,7 @@ export async function shotPlanForMake(ws: Workspace, projectId: string, p: { nam
     r.saved.status === "replanned" ? `shot plan saved again before making it: ${r.saved.changes.join("; ") || "it changed"} (the song, its clips or its settings changed since it was last planned; the old one is kept as ${path.basename(previousFile(r.saved.file))})` :
     r.saved.status === "kept" ? `made from its saved shot plan as it is; the app would now plan it differently (${r.saved.changes.join("; ")}), but nothing it is made from changed` :
     null;
-  return { id, file: r.saved.file, status: r.saved.status, note, props: r.view.props };
+  return { id, file: r.saved.file, status: r.saved.status, note, props: r.view.props, try: v.try };
 }
 
 async function settledView(ws: Workspace, projectId: string, p: { name: string; label: string; warnings: string[] }, plan: PlatformPlan, v: VideoPlan, shown: StoryboardView, numbers: (number | null)[]) {
