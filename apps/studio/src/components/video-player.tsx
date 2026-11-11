@@ -3,6 +3,7 @@
 import { Check, Send, Trash2, Undo2 } from "lucide-react";
 
 import type { VideoInfo } from "@lyric/video/exports";
+import { videoTitle } from "@lyric/video/video-names";
 
 import { VERDICT_TEXT } from "@/components/assessment";
 import { Button } from "@/components/ui/button";
@@ -47,7 +48,7 @@ export function VideoPlayerDialog({
       <DialogContent className="max-w-3xl" data-player-dialog={video.id}>
         <DialogHeader>
           <DialogTitle>
-            {video.label} {video.name}
+            {videoTitle(video, true).title}
           </DialogTitle>
           <DialogDescription data-player-verdict={a.verdict}>
             {VERDICT_TEXT[a.verdict]}

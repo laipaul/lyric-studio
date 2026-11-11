@@ -4,6 +4,7 @@ import { Check, Columns3, MessageSquareHeart, Send, Star, Trash2, Undo2 } from "
 import { useRef, useState } from "react";
 
 import type { VideoInfo } from "@lyric/video/exports";
+import { videoTitle } from "@lyric/video/video-names";
 
 import { VerdictBadge } from "@/components/assessment";
 import { api } from "@/lib/api";
@@ -64,7 +65,7 @@ export function VideoTile({
         <img src={`/api/poster/${video.mp4}`} alt="" loading="lazy" className="absolute inset-0 size-full object-cover" />
         <video ref={ref} src={`/api/files/${video.mp4}`} muted loop playsInline preload="none" className="absolute inset-0 size-full object-cover opacity-0 transition-opacity group-hover:opacity-100" />
         <div className="absolute top-2 left-2" onClick={(e) => e.stopPropagation()}>
-          <VerdictBadge a={video.assessment} technical={qaDetails.length ? qaDetails : ["QA: every check passed"]} heading={`${video.label} ${video.name}`} />
+          <VerdictBadge a={video.assessment} technical={qaDetails.length ? qaDetails : ["QA: every check passed"]} heading={videoTitle(video, true).title} />
           {strongest ? (
             <span className="bg-brand/80 mt-1 block w-fit rounded px-1.5 py-0.5 text-[10px] text-white" title={`Strongest: ${strongest}`} data-strongest>
               ★ strongest
@@ -85,15 +86,17 @@ export function VideoTile({
       </div>
       <div className="flex flex-col gap-2 p-3">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="text-sm font-medium">
-            {video.label} {video.name}
+          {/* 11 Nov 2026: a try by its own name ("Try · Midnight Highway"), with the version it is based on. */}
+          <span className="text-sm font-medium" data-video-title={videoTitle(video).title}>
+            {videoTitle(video).title}
+            {videoTitle(video).basedOn ? <span data-video-based-on className="text-muted-foreground block text-[11px] font-normal">{videoTitle(video).basedOn}</span> : null}
           </span>
           <span className="text-muted-foreground text-xs tabular-nums">{seconds(video.durationS)}</span>
         </div>
         {/* A Compare looks / Try other looks video (11 Nov 2026): said on the card, so a comparison is never mistaken for a version. */}
         {video.try ? (
           <span data-video-try={video.try} className="w-fit rounded-full border border-amber-300/40 bg-amber-300/10 px-2 py-0.5 text-[11px] text-amber-100">
-            try: {video.try}
+            a try: not one of your versions
           </span>
         ) : video.theme ? <span data-video-theme={video.theme} className="text-brand flex items-center gap-1 text-[11px]"><FeatureIcon feature="theme" className="size-3" />{video.theme}</span> : null}
         <p className="text-muted-foreground text-[11px] leading-relaxed">

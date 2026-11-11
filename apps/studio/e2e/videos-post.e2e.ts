@@ -70,6 +70,9 @@ async function main() {
   plain(tiktok, "v2", GOOD);
   plain(tiktok, "v3", BAD);
   plain(path.join(paths.exports, "2026-10-23_0900", "youtube"), "v1", GOOD);
+  // A try (Compare looks: another theme), made from v1's shot plan with the theme Midnight Highway.
+  plain(path.join(paths.exports, "2026-10-24_0900", "youtube"), "v1", GOOD);
+  writeFileSync(path.join(paths.exports, "2026-10-24_0900", "youtube", "v1.manifest.json"), JSON.stringify({ created_at: "2026-10-24T09:00:00.000Z", output: { duration_s: 5 }, shot_plan: { id: "youtube-1~theme-midnight-highway", try: { kind: "theme", label: "Midnight Highway" } } }));
   mkdirSync(path.join(paths.exports, "2026-10-22_1000", "shorts"), { recursive: true });
   writeFileSync(path.join(paths.exports, "2026-10-22_1000", "shorts", "v1.mp4"), "unfinished");
   mkdirSync(path.join(paths.exports, "2026-10-18_0900", "reels"), { recursive: true });
@@ -324,7 +327,9 @@ async function main() {
     await showTab("reels");
     check((await page.getAttribute("[data-review-platform=reels] [data-review-header] [data-platform-verdict]", "data-platform-verdict")) === "ready", "the Reels tab's header: both reels ready -> Ready");
     await showTab("youtube");
-    check((await page.$("[data-review-platform=youtube] [data-review-header] [data-platform-verdict]")) === null, "no summary for a platform with one video");
+    // Tries by their own name (11 Nov 2026): "Try · Midnight Highway", based on v1; your own video stays "YouTube v1".
+    const ytTitles = await page.$$eval("[data-review-platform=youtube] [data-video-title]", (e: Element[]) => e.map((x) => x.textContent));
+    check(ytTitles.includes("YouTube v1") && ytTitles.includes("Try · Midnight Highwaybased on v1") && !ytTitles.some((t) => /YouTube v1based/.test(t ?? "")), `the try is named "Try · Midnight Highway" with "based on v1"; your video "YouTube v1" (${ytTitles.join(" | ")})`);
     check((await verdictOf(tile("2026-10-23_0900", "youtube", "v1"))) === "good", "old-style YouTube video has its verdict too");
     // Tabs: only the platforms with videos (Shorts has nothing finished: no tab), each with its count.
     const tabNames = await page.$$eval("[data-review-tabs] [role=tab]", (e: Element[]) => e.map((x) => x.getAttribute("data-review-tab")));

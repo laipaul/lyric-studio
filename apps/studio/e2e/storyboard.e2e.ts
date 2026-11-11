@@ -696,7 +696,7 @@ async function main() {
       const ownBefore = JSON.parse(readFileSync(own, "utf8")).shots;
       await page.reload();
       await page.waitForSelector("[data-storyboard-try='reels-1~theme-e2e-try']", { state: "attached", timeout: 180_000 });
-      check(((await page.textContent("[data-storyboard-try='reels-1~theme-e2e-try']")) ?? "").includes("v1 · try: theme E2E Try"), "Shape's video list names the try");
+      check(((await page.textContent("[data-storyboard-try='reels-1~theme-e2e-try']")) ?? "").includes("Try · E2E Try (based on v1)"), "Shape's video list names the try by its own name (based on v1)");
       await page.selectOption("[data-storyboard-video]", "try:reels-1~theme-e2e-try");
       await page.waitForFunction(() => !document.querySelector("[data-storyboard-show] .animate-spin"), null, { timeout: 180_000 }).catch(() => {});
       await sleep(1500);

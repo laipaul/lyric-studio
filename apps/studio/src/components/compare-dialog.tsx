@@ -4,6 +4,7 @@ import { Pause, Play } from "lucide-react";
 import { useRef, useState } from "react";
 
 import type { VideoInfo } from "@lyric/video/exports";
+import { videoTitle } from "@lyric/video/video-names";
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { orderText, seconds } from "@/components/video-tile";
@@ -80,7 +81,7 @@ export function CompareDialog({ videos, open, onOpenChange }: { videos: VideoInf
                 className={cn("max-h-[55vh] rounded-lg bg-black", v.platform === "youtube" ? "w-full" : "h-[55vh]")}
               />
               <span className="text-sm">
-                {v.label} {v.name}
+                {videoTitle(v, true).title}
               </span>
             </div>
           ))}

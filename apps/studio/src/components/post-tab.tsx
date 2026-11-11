@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import type { VideoInfo } from "@lyric/video/exports";
+import { videoTitle } from "@lyric/video/video-names";
 
 import { PostPanel } from "@/components/ready-to-post";
 import { Button } from "@/components/ui/button";
@@ -57,7 +58,7 @@ export function PostTab({ projectId, songTitle, groups, offered = [] }: { projec
                     </div>
                     <div className="flex min-w-0 flex-1 flex-col">
                       <span className="text-sm font-medium">
-                        {v.label} {v.name}
+                        {videoTitle(v, true).title}
                         {v.mark.favourite ? <span className="text-brand"> ★</span> : null}
                       </span>
                       {v.theme ? <span data-video-theme={v.theme} className="text-brand flex items-center gap-1 text-[11px]"><FeatureIcon feature="theme" className="size-3" />{v.theme}</span> : null}
@@ -123,7 +124,8 @@ function ReadyToApprove({ projectId, videos }: { projectId: string; videos: Vide
             </div>
             <div className="flex flex-col text-xs">
               <span className="font-medium">
-                {v.label} {v.name}
+                {videoTitle(v, true).title}
+                {videoTitle(v).basedOn ? <span data-video-based-on className="text-muted-foreground block text-[11px] font-normal">{videoTitle(v).basedOn}</span> : null}
               </span>
               {v.theme ? <span data-video-theme={v.theme} className="text-brand flex items-center gap-1 text-[11px]"><FeatureIcon feature="theme" className="size-3" />{v.theme}</span> : null}
               <span className="text-muted-foreground">{when(v.createdAt)}</span>

@@ -18,6 +18,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 
 import { clockTenths, type TimelineEdits, EFFECT_NAMES, effectTitle, followScrollLeft, LyricVideo, playheadLabel, revealScrollLeft, songTimeMs, timeTicks, patchLook, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
 import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node";
+import { tryName } from "@lyric/video/video-names";
 import { ClipMenu } from "./clip-menu";
 import { SongRange, SongTrackBehind, SongWindow, type SongWindowDrag } from "./soundtrack-window";
 import { useTimelineEditing, ViewerFrame } from "./timeline-editing"; // types only (erased): the data comes from /api/songs/[id]/storyboard
@@ -844,7 +845,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                 {source?.kind === "plan"
                   ? (choices?.tries ?? []).filter((t) => t.platform === source.platform).map((t) => (
                       <option key={t.id} value={`try:${t.id}`} data-storyboard-try={t.id}>
-                        {t.video} · try: {t.label}
+                        {tryName(t.label)} (based on {t.video})
                       </option>
                     ))
                   : null}

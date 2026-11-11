@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import type { PostingPack } from "@lyric/video/captions";
 import type { VideoInfo } from "@lyric/video/exports";
+import { videoFilePart, videoTitle } from "@lyric/video/video-names";
 
 import { CopyButton } from "@/components/copy-button";
 import { PostLinks } from "@/components/song-links";
@@ -25,7 +26,8 @@ export function ReadyToPost({ projectId, songTitle, video, onClose }: { projectI
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            Post {video.label} {video.name}
+            Post {videoTitle(video, true).title}
+            {videoTitle(video).basedOn ? <span className="text-muted-foreground ml-2 text-xs font-normal">{videoTitle(video).basedOn}</span> : null}
           </DialogTitle>
           <DialogDescription>Copy the text, download the files, then post it yourself on {video.label}.</DialogDescription>
         </DialogHeader>
@@ -68,7 +70,7 @@ export function PostPanel({ projectId, songTitle, video }: { projectId: string; 
   }, []);
 
   // Clear names (11 Nov 2026): "Here With Me - YouTube.mp4", ".srt", " - thumbnail.jpg"; " v2" when not the first version.
-  const base = `${folderName(songTitle)} - ${video.label}${video.name && video.name !== "v1" ? ` ${video.name}` : ""}`;
+  const base = `${folderName(songTitle)} - ${videoFilePart(video)}`; // a try: "… - Reels - Try Midnight Highway"
   const files: PostFile[] = [
     { label: "Video", file: video.mp4, name: `${base}.mp4` },
     video.srt ? { label: "Captions (.srt)", file: video.srt, name: `${base}.srt` } : null,

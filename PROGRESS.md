@@ -4,6 +4,16 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Tries have their own name: "Try · Midnight Highway" (based on v1) ✅ (to verify on the Windows PC)
+- Your videos stay "Reels v1"; a try (Compare looks) is "Try · Midnight Highway" (a picture set: "Try · pictures
+  city") with a small "based on v1" line, never a version number of its own.
+- The same everywhere: Review cards, the player, Compare, Shape's video picker ("Try · Midnight Highway (based on
+  v1)"), Post (its list and title), and the Post file names ("Here With Me - Reels - Try Midnight Highway.mp4").
+- Tests: video-names (2). Browser: videos-post (a YouTube try named "Try · Midnight Highway" with "based on v1"
+  next to "YouTube v1"), storyboard (Shape's picker).
+- **To check on the PC:** Review → Reels: a Compare looks video reads "Try · <theme>" with "based on v1"; Shape's
+  video picker lists it the same way; its Post files are named "… - Reels - Try <theme>.mp4".
+
 ### Storyboard reads as a story: notes as card titles, a Story idea line, details in ⋯ ✅ (to verify on the Windows PC)
 - **Card title = your note** (larger, up to two lines); a card without one shows "+ Add a note" there. The file name
   is the card's tooltip and the first line of its ⋯ menu.
@@ -292,23 +302,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   fail here (real renders: Remotion cannot reach remotion.media from the cloud), as before; the "No clips yet" message
   check sits in make's real-render test, so it runs on the PC only. new-song-every-platform not run here (a real render
   worker). tsc clean; pnpm build ok.
-
-### Song page: the selected stage and tab are unmistakable (pink) ✅ (to verify on the Windows PC)
-- **The app's pink accent** (as on the play button) marks what is selected, in all four stages; never green or yellow
-  (those keep meaning ready / needs attention, as the stage dots do).
-- **Rail:** the selected stage has a pink bar on its left edge, a pink icon, a bold pink label and a light pink tint;
-  the other stages are slightly dimmer.
-- **Tabs:** the selected tab has a pink underline and bold text; the others stay grey (no more grey "pill").
-- **The stage line** ("Prepare · Ready") is a size up, as the page title.
-- **Contrast on the dark theme** (WCAG AA needs 4.5:1): pink on the page 9.7:1, pink on the rail's tint 7.3:1, the
-  dimmed stage labels 4.9:1.
-- Layout and colours only: nothing moved, nothing new.
-- Tests: song-stages.e2e.ts (+12: in each stage the rail's selected stage is pink and bold with a 4 px pink bar and the
-  others are not; exactly one tab with a pink underline and bold text, the others grey; the stage name 16 px).
-  Run in the cloud session: song-stages 158, storyboard 156 (the viewer 532 px: the bigger stage name keeps a 20 px
-  line so the header stays as tall as the tabs), style-lock 29, videos-post 64, lyrics-tab 33, title-opening 40,
-  textboard 19, collections 16, library 22, releases 16, themes 35, song-title 7, clip-notes 14: all pass. pairings:
-  only its old check (428 px), as before. tsc clean; pnpm build ok.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
