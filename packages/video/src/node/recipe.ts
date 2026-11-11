@@ -8,6 +8,7 @@
 // first): library -> artist -> artist (that platform) -> song -> song (that platform) -> run.
 // platforms.json is format only (size, length, safe zones, ...): it never sets the style.
 // A locked field uses only the song's values (its default and per-platform ones).
+import { cleanTags } from "../song-tags";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -85,7 +86,7 @@ export { isPlatformField, isWeight, ITALIC_FIELDS, PLATFORM_FIELDS, WEIGHT_FIELD
 // outside Reset / Lock.
 // canvas: the clip (and moment, seconds) chosen for the Spotify Canvas (the clip editor's "Use for Canvas").
 // theme: the song's theme (themes\<name>\theme.json): its fonts, effects, accent colour and add-ons.
-export type SongRecipe = Partial<RecipeValues> & { theme?: string; perPlatform?: PerPlatform; locked?: RecipeField[]; anchors?: AnchorSpec[]; gapOrder?: GapOrder; canvas?: { clip: string; at?: number }; instrumental?: boolean; links?: SongLink[]; postLinks?: Record<string, string[]> };
+export type SongRecipe = Partial<RecipeValues> & { theme?: string; perPlatform?: PerPlatform; locked?: RecipeField[]; anchors?: AnchorSpec[]; gapOrder?: GapOrder; canvas?: { clip: string; at?: number }; instrumental?: boolean; links?: SongLink[]; postLinks?: Record<string, string[]>; tags?: string[] }; // tags: the song's YouTube tags (Song Details; song-tags.ts)
 // library | artist | artist:<platform> | song | song:<platform> | run
 export type RecipeSource = string;
 
@@ -257,6 +258,11 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
     const checked = checkLinks(r.links);
     if (checked.links.length) recipe.links = checked.links;
   }
+  // The song's YouTube tags (Song Details): a list of words; a wrong value is left out (never blocks the song).
+  if (r.tags !== undefined && r.tags !== null) {
+    const tags = cleanTags(r.tags);
+    if (tags.length) recipe.tags = tags;
+  }
   if (r.postLinks !== undefined && r.postLinks !== null) {
     const pl = r.postLinks as Record<string, unknown>;
     if (typeof pl === "object" && !Array.isArray(pl) && Object.values(pl).every((v) => Array.isArray(v) && v.every((x) => typeof x === "string"))) recipe.postLinks = pl as Record<string, string[]>;
@@ -290,6 +296,7 @@ export function recipeJson(recipe: SongRecipe): string {
   if (recipe.anchors?.length) ordered.anchors = recipe.anchors;
   if (recipe.canvas) ordered.canvas = recipe.canvas;
   if (recipe.links?.length) ordered.links = recipe.links;
+  if (recipe.tags?.length) ordered.tags = recipe.tags;
   if (recipe.postLinks && Object.keys(recipe.postLinks).length) ordered.postLinks = recipe.postLinks;
   return `${JSON.stringify(ordered, null, 2)}\n`;
 }

@@ -89,6 +89,38 @@ async function main() {
     await page.reload();
     await page.waitForSelector("[data-links] [data-link-row=spotify]");
     check((await rows()) === "spotify,appleMusic", `Undo put Spotify back first, also after a reload (${await rows()})`);
+    // Tags (11 Nov 2026): a ranked list of hashtags in Song Details; the brand's tag on every song; grey suggestions
+    // (one click adds them, they turn pink); each platform uses its top ones (Instagram / Facebook 5).
+    const tagsNow = () => (JSON.parse(readFileSync(paths.recipe!, "utf8")) as { tags?: string[] }).tags;
+    const tagList = () => page.$$eval("[data-tag-list] [data-tag]", (e: Element[]) => e.map((x) => x.getAttribute("data-tag")));
+    await page.waitForSelector("[data-tags] [data-tag-brand]");
+    check(JSON.stringify(await tagList()) === JSON.stringify(["lifelyrics"]) && tagsNow() === undefined, `the brand's tag is there on its own, "from your brand" (${(await tagList()).join(", ")})`);
+    const suggested = await page.$$eval("[data-tag-suggestion]", (e: Element[]) => e.map((x) => x.getAttribute("data-tag-suggestion")));
+    check(suggested.includes("herewithme") && !suggested.some((t) => ["reels", "explore", "fyp", "viral"].includes(t ?? "")), `suggestions from the title (#herewithme), never generic (${suggested.join(", ")})`);
+    await page.click("[data-tag-suggestion=herewithme]");
+    await page.waitForSelector("[data-tag-suggestion=herewithme][aria-pressed=true]");
+    await page.fill("[data-tag-new]", "Emotional Pop, #Chanson Française, emotionalpop");
+    await page.press("[data-tag-new]", "Enter");
+    await page.waitForSelector("[data-tag-list] [data-tag=chansonfrancaise]");
+    check(JSON.stringify(await tagList()) === JSON.stringify(["lifelyrics", "herewithme", "emotionalpop", "chansonfrancaise"]), `added: clean (lowercase, no spaces or accents, no duplicates) (${(await tagList()).join(", ")})`);
+    for (const t of ["piano", "ballad", "lovesong"]) {
+      await page.fill("[data-tag-new]", t);
+      await page.press("[data-tag-new]", "Enter");
+      await page.waitForSelector(`[data-tag-list] [data-tag=${t}]`);
+    }
+    // Drag #lovesong to the front: the top 5 for Instagram follow.
+    await page.dragAndDrop("[data-tag-list] [data-tag=lovesong]", "[data-tag-list] [data-tag=lifelyrics]");
+    for (let i = 0; i < 20 && tagsNow()?.[0] !== "lovesong"; i++) await sleep(150);
+    await page.reload();
+    await page.waitForSelector("[data-tag-list] [data-tag=lovesong]");
+    check((tagsNow() ?? [])[0] === "lovesong" && (await tagList()).length === 7, `dragged first, kept after a reload, more than 5 kept (${(await tagList()).join(", ")})`);
+    const insta = (await page.textContent("[data-tag-preview=reels]")) ?? "";
+    check(insta.includes("uses: #lovesong #lifelyrics #herewithme #emotionalpop #chansonfrancaise") && insta.includes("(top 5)"), `Instagram / Facebook uses the top 5 (${insta})`);
+    check(((await page.textContent("[data-tag-preview=youtube]")) ?? "").includes("#lovesong #lifelyrics #herewithme above the title"), "YouTube: 3 above the title, the rest in its Tags box");
+    await page.click("[data-tag-remove=piano]");
+    await page.waitForSelector("[data-tag-list] [data-tag=piano]", { state: "detached" });
+    check(!(await page.$("[data-tag-remove=lifelyrics]")), "a brand tag cannot be taken off one song (it is the artist's)");
+    if (process.env.TAGS_SHOT) await (await page.$("[data-tags]"))!.screenshot({ path: process.env.TAGS_SHOT });
     await browser.close();
   } finally {
     server.kill();

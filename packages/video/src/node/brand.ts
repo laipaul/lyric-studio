@@ -1,6 +1,7 @@
 // The artist's brand: WORKSPACE_DIR\brand\brand.json (+ logo.png). Created with the Life Lyrics
 // defaults the first time. Lyrics use the verse and hook fonts (unless --font / --font-hook);
 // thumbnails and title cards (Step 5g.2) use the title font, accent colour and logo.
+import { cleanTags, DEFAULT_TAG_STARTERS, normaliseTag } from "../song-tags";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -34,6 +35,10 @@ export type Brand = {
   // fonts, accent colour and section; above the defaults here and platforms.json, below the song.
   perPlatform: PerPlatform;
   shotLength?: string; // the artist's pace: "1" | "2" | "4" | "8" bars per shot, or "story"
+  // Tags (11 Nov 2026, song-tags.ts): tags added to every song of the artist ("from your brand"; without the field: the
+  // artist's name, e.g. lifelyrics), and the genre / mood starter set offered as suggestions on every song.
+  tags?: string[];
+  tagStarters?: string[];
 };
 
 export const DEFAULT_BRAND: Brand = {
@@ -60,7 +65,9 @@ const HELP =
   "motion.gapHideS: during an instrumental gap longer than this (seconds, default 3) no lyric is shown; motion.gapLeadInS: the next line then fades in this long before its first sung word (default 1). " +
   'appIcon.style: "logo" (the logo alone, default) or "tile" (the logo on a rounded square in the accent colour); run Create Desktop Shortcut.cmd again after a change. ' +
   'perPlatform: values for one platform only, e.g. { "youtube": { "verseEffect": "cinematic-fade" }, "reels": { "verseEffect": "glide" } } ' +
-  "(verseEffect, hookEffect, verseFont, hookFont, accentColour, section); a song's song.json can still override them.";
+  "(verseEffect, hookEffect, verseFont, hookFont, accentColour, section); a song's song.json can still override them. " +
+  'tags: hashtags added to every song of this artist, e.g. ["lifelyrics", "lifelyricsstudio"] (without it: the artist\'s name); ' +
+  'tagStarters: the genre / mood tags offered as suggestions on every song, e.g. ["emotionalpop", "cinematicpop"] (Prepare → Song Details → Tags).';
 
 export function brandDir(workspaceDir: string): string {
   return path.join(workspaceDir, "brand");
@@ -142,6 +149,11 @@ export function loadBrand(
       for (const k of ["verseFont", "hookFont"] as const) if (v[k] && !findFamily(catalog, v[k]!)) problems.push(`perPlatform.${platform}.${k}: font "${v[k]}" not found (see pnpm fonts)`);
     }
   }
+  for (const key of ["tags", "tagStarters"] as const) {
+    if (raw[key] === undefined) continue;
+    if (!Array.isArray(raw[key]) || !raw[key]!.every((t) => typeof t === "string")) problems.push(`${key} must be a list of tags, e.g. ["lifelyrics", "lifelyricsstudio"]`);
+    else brand[key] = cleanTags(raw[key]);
+  }
   if (brand.shotLength !== undefined && !(SHOT_LENGTH_VALUES as readonly string[]).includes(String(brand.shotLength))) problems.push(`shotLength must be ${SHOT_LENGTH_VALUES.join(", ")} (bars per shot, or "story")`);
   if (!/^#[0-9a-fA-F]{6}$/.test(brand.accentColour)) problems.push(`accentColour must look like #E8A3B5 (found ${JSON.stringify(brand.accentColour)})`);
   const corners = ["top-left", "top-right", "bottom-left", "bottom-right"];
@@ -152,4 +164,19 @@ export function loadBrand(
   if (problems.length) throw new Error(`Problems in ${file}:\n  - ${problems.join("\n  - ")}`);
   const logo = path.join(dir, brand.logo.file);
   return { brand, file, dir, created, logoFile: existsSync(logo) ? logo : null };
+}
+
+// The artist's tag settings without loading the whole brand (fonts): brand.json "tags" (else the artist's name) and
+// "tagStarters" (else the default starter set). A brand.json that cannot be read gives the defaults.
+export function brandTagSettings(workspaceDir: string, artist: string): { tags: string[]; starters: string[]; file: string; set: boolean } {
+  const file = path.join(brandDirFor(workspaceDir, artist), "brand.json");
+  let raw: { tags?: unknown; tagStarters?: unknown } = {};
+  try {
+    raw = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as typeof raw) : {};
+  } catch {
+    raw = {};
+  }
+  const own = Array.isArray(raw.tags) ? cleanTags(raw.tags) : null;
+  const starters = Array.isArray(raw.tagStarters) ? cleanTags(raw.tagStarters) : DEFAULT_TAG_STARTERS;
+  return { tags: own ?? [normaliseTag(artist)].filter(Boolean), starters, file, set: own !== null };
 }

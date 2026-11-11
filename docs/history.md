@@ -4,6 +4,44 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Navigation N1: four numbered stages, tabs inside them, every setting in one place ✅ (to verify on the Windows PC)
+- **The rail holds the four stages only, numbered 1-4** (Prepare, Shape, Make, Review); Shape's menus and the Look
+  group are gone from it. Each stage's sections are tabs at the top of its work area:
+  - **1 Prepare:** Files (the song's files; was Assets) · Lyrics & timing (the tempo with the tap test and the tempo
+    check, **Time the lyrics again**, then the lyrics) · Details (title, tagline, hook and end card texts, EP, the
+    song's links) · Clips (the song's own clips, their order, Use / Omit, removed clips, **clips from collections**).
+  - **2 Shape:** Look (the Look bar, then this song's title opening, lyric readability, YouTube layout; "Edit theme",
+    "All themes ↗") · Part & ending (section, target length, ending) · Pace (shot length, transitions, pace) · Shots
+    (the clip strip and the shot clicked on the timeline). A second click on a tab closes its panel.
+  - **3 Make:** Videos (release pack, What to make = the song's platforms and videos per platform, Generate) · Try
+    other looks · Options (rarely needed). One form: what is chosen stays across the tabs.
+  - **4 Review:** Videos · Post (unchanged).
+- **Removed duplicates (one place each):** Make's per-run part of the song, length, shot length, YouTube layout and
+  videos per platform (a run makes what Shape planned; "Use these settings" from a past run still re-makes that
+  run's part and layout, shown read-only, and "Also keep that run's settings for this song" stays for that case);
+  "Keep these choices for this song"; "Time the lyrics again first" (now its own action in Prepare); the tagline
+  field in Assets (Details); the header's title editor (the pencil opens Details); Shape's theme library (tiles, New
+  theme, rename, duplicate, delete, restore: the Themes page has them all); the theme's Line shape / Lines appear /
+  Bigger final chorus rows that leaked into "This song" (they did nothing there).
+- **"Automatic" is no longer a section:** every setting the app chooses shows **auto** or **Set by me** in place, with
+  **↺ auto** to give it back to the app; a locked value keeps its value and shows "Set by me" (no ↺ while locked).
+- **Only what applies to the video shown:** a Reel shows the title opening and ending, a YouTube video the YouTube
+  layout; the others are folded under "Only for other videos: …" (still one click away). No video planned yet: all.
+- **Word fixes in Shape:** the note says whether the lyric timing is still valid; when it is stale, "Time the lyrics
+  again" queues it (never silently). **Swaps** say "changes the song's clip order: every video of this song" (2f
+  makes them this video's only). Analysis "theme X" opens Look.
+- **Old links keep working:** ?tab=assets (Files), ?panel=clips / shot (Shots), auto (Part & ending), song (Details),
+  make (Make), theme (the theme editor, ?edit= from the Themes page); the Prepare to-do "Add clips" opens Clips.
+- **Reachability check:** every control reachable before N1 is reachable after it (listed in the summary to the user);
+  only the per-run overrides in Make were removed on purpose (decided).
+- Tests (browser tests updated to the new places through stage-tabs.ts): song-stages, style-lock, storyboard,
+  textboard, themes, lyrics-tab, song-title, collections, library, releases, videos-post, title-opening all pass.
+  pairings: one old check fails before and after N1 (the stand-in viewer is 428 px wide, the check expects 300-380;
+  it fills the free height since 2 Nov). new-song-every-platform not run here (a real render worker). Unit: runs
+  (new: Time the lyrics again), lyrics-view, song-stages pass; the whole suite 994 pass, only make / migrate / render
+  fail here because Remotion cannot reach remotion.media from the cloud session (real renders; unrelated). tsc
+  clean; pnpm build ok; eslint: only the old findings.
+
 ### Shape: change a video's theme from the Look bar (preview, then Apply) ✅ (to verify on the Windows PC)
 - **Principle (in CLAUDE.md):** "Shape = work on this video. Theme = manage reusable looks."
 - **Look bar** at the top of Shape's panel (every panel except Theme): the song's theme name, ONE mark

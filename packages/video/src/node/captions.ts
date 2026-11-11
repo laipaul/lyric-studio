@@ -8,6 +8,7 @@ import path from "node:path";
 import { safeName } from "@lyric/db";
 
 import { dropEmptyLinkLines, linkPlaceholders, pickedLinks, relink, type SongLink } from "../song-links";
+import { withSongTags } from "../song-tags";
 
 import { brandDir, DEFAULT_ARTIST } from "./brand";
 
@@ -145,7 +146,7 @@ export type PostingPack = {
 // platform, or (YouTube) the publish.txt written next to the video.
 export function postingPack(
   ws: { dir: string },
-  input: { platform: string; artist: string; song: string; ep?: string | null; hook?: string | null; publishFile?: string | null; now?: Date; links?: SongLink[]; postLinks?: Record<string, string[]> },
+  input: { platform: string; artist: string; song: string; ep?: string | null; hook?: string | null; publishFile?: string | null; now?: Date; links?: SongLink[]; postLinks?: Record<string, string[]>; tags?: string[] },
 ): PostingPack {
   const all = input.links ?? [];
   const picked = pickedLinks(all, input.postLinks, input.platform);
@@ -156,10 +157,12 @@ export function postingPack(
     const tpl = artistBrandFile(ws.dir, input.artist, "publish-template.txt");
     const sections = parseSections(text);
     if (sections.Description !== undefined) sections.Description = relink(sections.Description, all, picked);
-    return { ...base, kind: "youtube", sections, template: { file: tpl.file, relative: rel(ws.dir, tpl.file), own: tpl.own } };
+    // The song's tags (Song Details, with the brand's) win, also for a video made before they changed.
+    return { ...base, kind: "youtube", sections: withSongTags(sections, input.tags ?? [], "youtube"), template: { file: tpl.file, relative: rel(ws.dir, tpl.file), own: tpl.own } };
   }
   const platform = (CAPTION_PLATFORMS as readonly string[]).includes(input.platform) ? input.platform : "reels";
   const t = captionTemplate(ws.dir, input.artist, platform);
-  const sections = fillCaption(readFileSync(t.file, "utf8"), { song: input.song, artist: input.artist, ep: input.ep, hook: input.hook, year: (input.now ?? new Date()).getFullYear(), links: picked });
+  const filled = fillCaption(readFileSync(t.file, "utf8"), { song: input.song, artist: input.artist, ep: input.ep, hook: input.hook, year: (input.now ?? new Date()).getFullYear(), links: picked });
+  const sections = withSongTags(filled, input.tags ?? [], platform); // the platform's top tags (Song Details) replace the template's hashtags
   return { ...base, kind: "caption", sections, template: { file: t.file, relative: rel(ws.dir, t.file), own: t.own } };
 }

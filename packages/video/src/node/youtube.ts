@@ -17,6 +17,7 @@ import { kenBurns } from "../photo";
 import { lyricArea, type Format, type LyricArea, type PlatformPreset, type SafeZone } from "../platform";
 import { mulberry32 } from "../prng";
 import { dropEmptyLinkLines, linkPlaceholders, OLD_SPOTIFY_LINE, type SongLink } from "../song-links";
+import { withSongTagsText, youtubeTagsField } from "../song-tags";
 import type { LyricVideoProps, StillProps } from "../props";
 import { COVER_DRIFT, COVER_LYRICS_LEFT, COVER_NEXT_LINE_SCALE, COVER_TEXT_SCALE, coverSide, PARALLAX } from "../youtube-layout";
 import {
@@ -259,7 +260,7 @@ Lyric video: {{artist}}
 `;
 
 // WORKSPACE_DIR\brand\publish-template.txt (created the first time) filled in for one song.
-// Placeholders: {{song}} {{artist}} {{lyrics}} {{songTag}} {{artistTag}} {{year}} {{ep}} {{epLine}} {{endScreen}},
+// Placeholders: {{song}} {{artist}} {{lyrics}} {{songTag}} {{artistTag}} {{year}} {{ep}} {{epLine}} {{endScreen}} {{tags}} (the song's tags),
 // and the song's links picked for YouTube (song-links.ts: {{listen}} {{follow}} {{links}} {{spotify}} ...).
 // {{epLine}} is 'From the EP "<name>"' with --ep, otherwise its line is left out. A template from
 // before --ep existed gets that line right after the first line of the description.
@@ -268,7 +269,7 @@ Lyric video: {{artist}}
 // description and tags, so nothing of it is published by accident.
 export function publishText(
   workspaceDir: string,
-  values: { song: string; artist: string; lyricsTxt: string; year: number; ep?: string; endScreen?: string; links?: SongLink[] },
+  values: { song: string; artist: string; lyricsTxt: string; year: number; ep?: string; endScreen?: string; links?: SongLink[]; tags?: string[] }, // tags: the song's ranked tags with the brand's (Song Details): the Tags box and the description's hashtag line
   folder: string = brandDir(workspaceDir), // the artist's brand folder
 ): { text: string; template: string; created: boolean } {
   const template = path.join(folder, "publish-template.txt");
@@ -296,6 +297,7 @@ export function publishText(
     ep: values.ep ?? "",
     epLine: values.ep ? `From the EP "${values.ep}"` : "",
     endScreen: values.endScreen ? `End screen: ${values.endScreen}` : "",
+    tags: youtubeTagsField(values.tags ?? []),
     ...linkPlaceholders(values.links ?? []),
   };
   let content = readFileSync(template, "utf8").replace(/\r\n/g, "\n");
@@ -313,7 +315,7 @@ export function publishText(
   content = linkBlock ? content.replace(OLD_SPOTIFY_LINE, linkBlock) : content.replace(new RegExp(`${OLD_SPOTIFY_LINE.source}\\n?`, "m"), "");
   const linked = dropEmptyLinkLines(content, map);
   if (linked !== content) content = linked.replace(/\n{3,}/g, "\n\n"); // no gap left where a link line went
-  const text = content.replace(/\{\{(\w+)\}\}/g, (m, k: string) => map[k] ?? m);
+  const text = withSongTagsText(content.replace(/\{\{(\w+)\}\}/g, (m, k: string) => map[k] ?? m), values.tags ?? []);
   return { text, template, created };
 }
 

@@ -23,6 +23,7 @@ import { SongView, type MakingView, type RunView } from "@/components/song-view"
 import { SongStages, type ReviewPlatform, type MakePart, type ShapePanelId, type StageId, type StageStatus } from "@/components/song-stages";
 import { SongSettings } from "@/components/shape-tools";
 import { LinksField } from "@/components/song-links";
+import { TagsField } from "@/components/song-tags";
 
 // ?panel= (Shape's tabs; SHAPE_PANELS in song-stages.tsx, a client module) and the panels from before N1: where
 // their content is now (a panel that moved to another stage opens that stage's tab).
@@ -188,6 +189,7 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
         <TabsContent value="details">
           <div className="flex max-w-3xl flex-col gap-4">
             <SongSettings projectId={song.id} only="details" />
+            <TagsField projectId={song.id} />
             <LinksField projectId={song.id} />
           </div>
         </TabsContent>

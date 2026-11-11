@@ -1,11 +1,15 @@
 // The song's links in song.json: "links" (the Assets tab) and "postLinks" (the links picked per platform
 // on the Post panel). The rest of song.json is kept as it is.
-import type { Workspace } from "@lyric/db";
+import { project as projectTable, type Workspace } from "@lyric/db";
+import { eq } from "drizzle-orm";
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { checkLinks, detectService, normaliseUrl, type SongLink } from "../song-links";
+import { cleanTags, rankedTags, suggestTags, TAG_LIMITS, TAG_PLATFORM_LABEL, tagsFor, type RankedTag, type TagSuggestion } from "../song-tags";
+import { brandTagSettings } from "./brand";
+import { songEp } from "./project-settings";
 import { keepReplaced } from "./project-settings";
 import { readRecipe, writeRecipe } from "./recipe";
 import { songPathsById } from "./song-folder";
@@ -108,4 +112,43 @@ export function setPostLinks(ws: Workspace, projectId: string, platform: string,
   if (urls === null) delete postLinks[platform];
   else postLinks[platform] = urls.filter((u, i) => known.has(u) && urls.indexOf(u) === i);
   writeRecipe(file, { ...recipe, postLinks: Object.keys(postLinks).length ? postLinks : undefined });
+}
+
+// The song's tags (Prepare → Song Details → Tags): the ranked list with the brand's tags, the suggestions and what
+// each platform's post uses (the top ones; song-tags.ts TAG_LIMITS).
+export type SongTagsView = {
+  tags: RankedTag[];
+  brand: { tags: string[]; starters: string[]; file: string; set: boolean };
+  suggestions: (TagSuggestion & { added: boolean })[];
+  previews: { platform: string; label: string; limit: number; uses: string[] }[];
+};
+export function songTags(ws: Workspace, projectId: string): SongTagsView {
+  const paths = songPathsById(ws, projectId);
+  const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
+  if (!p) throw new Error("Song not found.");
+  const brand = brandTagSettings(ws.dir, p.artist);
+  const tags = rankedTags(readRecipe(paths.recipe).tags, brand.tags);
+  const list = tags.map((t) => t.tag);
+  const lyrics = paths.lyricsTxt && existsSync(paths.lyricsTxt) ? readFileSync(paths.lyricsTxt, "utf8") : "";
+  const suggestions = suggestTags({ artist: p.artist, song: p.title, ep: songEp(ws, projectId) ?? null, lyrics, starters: brand.starters })
+    .filter((s) => !brand.tags.includes(s.tag))
+    .map((s) => ({ ...s, added: list.includes(s.tag) }));
+  const previews = ["reels", "tiktok", "shorts", "youtube"].map((platform) => ({ platform, label: TAG_PLATFORM_LABEL[platform], limit: TAG_LIMITS[platform], uses: tagsFor(list, platform) }));
+  return { tags, brand, suggestions, previews };
+}
+
+// The list the Post panel and publish.txt use: the song's ranked tags with the brand's.
+export function songTagList(ws: Workspace, projectId: string, artist: string): string[] {
+  return rankedTags(readRecipe(songPathsById(ws, projectId).recipe).tags, brandTagSettings(ws.dir, artist).tags).map((t) => t.tag);
+}
+
+// Saves the song's ranked list (cleaned: lowercase, no spaces or accents, no duplicates); brand tags may be placed
+// in it (they are added at the end otherwise). Empty: only the brand's tags.
+export function setSongTags(ws: Workspace, projectId: string, raw: unknown): string[] {
+  const file = songPathsById(ws, projectId).recipe;
+  if (!file) throw new Error("This song has no folder yet: run the migration first (pnpm songs:migrate).");
+  const tags = cleanTags(raw);
+  const { tags: _old, ...rest } = readRecipe(file);
+  writeRecipe(file, tags.length ? { ...rest, tags } : rest);
+  return tags;
 }

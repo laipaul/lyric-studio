@@ -4,6 +4,28 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Song Details → Tags: ranked hashtags, brand tags, suggestions, the top ones per platform ✅ (to verify on the Windows PC)
+- **Before:** the Post panel's hashtags came from fixed templates (title and artist filled in, plus #reels / #fyp /
+  #shorts); YouTube's Tags box from publish-template.txt, frozen in publish.txt. Nothing per song, no limits.
+- **Tags** (Prepare → Song Details, between EP and Links): your hashtags as ranked chips; drag to reorder; keep as
+  many as you like (song.json "tags"). Clean: lowercase, no spaces or accents, no duplicates.
+- **Brand tags** on every song, marked "from your brand": brand.json "tags" (Life Lyrics: brand\brand.json; Pômé:
+  brand\Pômé\brand.json); without them the artist's name (#lifelyrics). The Brand page comes later.
+- **Suggestions** (grey chips; one click adds, they turn pink): the artist, title (#herewithme), EP
+  (#quietheartbreaks), the lyrics' language (e.g. French → #chansonfrancaise #musiquefrancaise) and the brand's
+  starter set (brand.json "tagStarters"; default #lyricvideo #emotionalpop #cinematicpop #lovesong #sadsongs).
+  Local rules only; never #reels #explore #fyp #viral and other generic tags.
+- **The Post panel uses the top ones per platform**, with a preview line each in Song Details: Instagram / Facebook
+  5, TikTok 8, Shorts 8, YouTube 3 in the description (above the title) and the Tags box up to 500 characters (also
+  for YouTube videos made before). publish.txt gets them with each new YouTube video.
+- Tests: song-tags (8: clean format, rank with the brand's, the limits, suggestions and language, brand.json, the
+  Post panel, publish.txt, song.json); exports, library, song-links, style still pass. Browser: song-links (the brand
+  chip, suggestions without generic tags, add / clean / drag / reload, Instagram's top 5, YouTube's 3), videos-post,
+  song-stages.
+- **To check on the PC:** Here With Me → Prepare → Song Details → Tags: #lifelyrics "from your brand"; click
+  #herewithme and #quietheartbreaks; add "emotional pop"; drag one first; Review → Post: Reels shows those top 5.
+  For #lifelyricsstudio on every song: add "tags": ["lifelyrics", "lifelyricsstudio"] to workspace\brand\brand.json.
+
 ### Shape: two tabs, Settings | Shots ✅ (to verify on the Windows PC)
 - **Settings** is one scrolling panel. It starts with a **"Set by me"** line: what you changed (e.g. `Target length
   90 s · Shot length "story"`), everything else is the app's ("Nothing set by me…" when you changed nothing).
@@ -300,44 +322,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   clear = deleted), added to `pnpm test:e2e`; tsc clean; pnpm build ok.
 - **To check on the PC:** Prepare → Clips: "+ Add a note" on a card, type, click elsewhere: one line with "…"; drag the
   card to another place, Omit and Use it, reload: the note is still there; open Shape: no note anywhere.
-
-### Navigation N1: four numbered stages, tabs inside them, every setting in one place ✅ (to verify on the Windows PC)
-- **The rail holds the four stages only, numbered 1-4** (Prepare, Shape, Make, Review); Shape's menus and the Look
-  group are gone from it. Each stage's sections are tabs at the top of its work area:
-  - **1 Prepare:** Files (the song's files; was Assets) · Lyrics & timing (the tempo with the tap test and the tempo
-    check, **Time the lyrics again**, then the lyrics) · Details (title, tagline, hook and end card texts, EP, the
-    song's links) · Clips (the song's own clips, their order, Use / Omit, removed clips, **clips from collections**).
-  - **2 Shape:** Look (the Look bar, then this song's title opening, lyric readability, YouTube layout; "Edit theme",
-    "All themes ↗") · Part & ending (section, target length, ending) · Pace (shot length, transitions, pace) · Shots
-    (the clip strip and the shot clicked on the timeline). A second click on a tab closes its panel.
-  - **3 Make:** Videos (release pack, What to make = the song's platforms and videos per platform, Generate) · Try
-    other looks · Options (rarely needed). One form: what is chosen stays across the tabs.
-  - **4 Review:** Videos · Post (unchanged).
-- **Removed duplicates (one place each):** Make's per-run part of the song, length, shot length, YouTube layout and
-  videos per platform (a run makes what Shape planned; "Use these settings" from a past run still re-makes that
-  run's part and layout, shown read-only, and "Also keep that run's settings for this song" stays for that case);
-  "Keep these choices for this song"; "Time the lyrics again first" (now its own action in Prepare); the tagline
-  field in Assets (Details); the header's title editor (the pencil opens Details); Shape's theme library (tiles, New
-  theme, rename, duplicate, delete, restore: the Themes page has them all); the theme's Line shape / Lines appear /
-  Bigger final chorus rows that leaked into "This song" (they did nothing there).
-- **"Automatic" is no longer a section:** every setting the app chooses shows **auto** or **Set by me** in place, with
-  **↺ auto** to give it back to the app; a locked value keeps its value and shows "Set by me" (no ↺ while locked).
-- **Only what applies to the video shown:** a Reel shows the title opening and ending, a YouTube video the YouTube
-  layout; the others are folded under "Only for other videos: …" (still one click away). No video planned yet: all.
-- **Word fixes in Shape:** the note says whether the lyric timing is still valid; when it is stale, "Time the lyrics
-  again" queues it (never silently). **Swaps** say "changes the song's clip order: every video of this song" (2f
-  makes them this video's only). Analysis "theme X" opens Look.
-- **Old links keep working:** ?tab=assets (Files), ?panel=clips / shot (Shots), auto (Part & ending), song (Details),
-  make (Make), theme (the theme editor, ?edit= from the Themes page); the Prepare to-do "Add clips" opens Clips.
-- **Reachability check:** every control reachable before N1 is reachable after it (listed in the summary to the user);
-  only the per-run overrides in Make were removed on purpose (decided).
-- Tests (browser tests updated to the new places through stage-tabs.ts): song-stages, style-lock, storyboard,
-  textboard, themes, lyrics-tab, song-title, collections, library, releases, videos-post, title-opening all pass.
-  pairings: one old check fails before and after N1 (the stand-in viewer is 428 px wide, the check expects 300-380;
-  it fills the free height since 2 Nov). new-song-every-platform not run here (a real render worker). Unit: runs
-  (new: Time the lyrics again), lyrics-view, song-stages pass; the whole suite 994 pass, only make / migrate / render
-  fail here because Remotion cannot reach remotion.media from the cloud session (real renders; unrelated). tsc
-  clean; pnpm build ok; eslint: only the old findings.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

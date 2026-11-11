@@ -2,6 +2,7 @@
 // manifest and a QA report. Steps: project (by song hash) -> beats (cached) -> lyric alignment
 // (stored, never rewritten) -> section -> collection import -> cuts -> N variations rendered in
 // parallel -> QA -> manifest.
+import { songTagList } from "./song-links";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -1958,7 +1959,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
           outFile: result.thumbnailFile,
           log,
         });
-        const pack = publishText(ws.dir, { song: project.title, artist: project.artist, lyricsTxt: readFileSync(alignment.lyricsTxt, "utf8"), year: sh.now.getFullYear(), ep: sh.ep, links: sh.youtubeLinks, ...(props.endScreen?.seconds ? { endScreen: endScreenText({ fromFrame: props.endScreen.fromFrame, seconds: props.endScreen.seconds }, VIDEO.fps) } : {}) }, path.dirname(artistBrandFile(ws.dir, project.artist, "publish-template.txt").file));
+        const pack = publishText(ws.dir, { song: project.title, artist: project.artist, lyricsTxt: readFileSync(alignment.lyricsTxt, "utf8"), year: sh.now.getFullYear(), ep: sh.ep, links: sh.youtubeLinks, tags: songTagList(ws, project.id, project.artist), ...(props.endScreen?.seconds ? { endScreen: endScreenText({ fromFrame: props.endScreen.fromFrame, seconds: props.endScreen.seconds }, VIDEO.fps) } : {}) }, path.dirname(artistBrandFile(ws.dir, project.artist, "publish-template.txt").file));
         if (pack.created) log(`publishing template created: ${pack.template} (edit it to change publish.txt)`);
         result.publishFile = path.join(exportDir, one ? "publish.txt" : `${spec.name}.publish.txt`);
         writeFileSync(result.publishFile, pack.text);

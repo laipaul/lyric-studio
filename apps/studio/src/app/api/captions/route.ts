@@ -6,7 +6,7 @@ import path from "node:path";
 import { project } from "@lyric/db";
 import { makeOwnCaptionTemplate, postingPack } from "@lyric/video/captions";
 import { songEp } from "@lyric/video/project-settings";
-import { songLinks } from "@lyric/video/song-links-node";
+import { songLinks, songTagList } from "@lyric/video/song-links-node";
 import { songPathsById } from "@lyric/video/song-folder";
 import { eq } from "drizzle-orm";
 
@@ -31,6 +31,7 @@ export async function GET(request: Request) {
         const platform = m.platform?.name ?? "standard";
         const { links, postLinks } = songLinks(ws, projectId);
         return postingPack(ws, {
+          tags: songTagList(ws, projectId, p.artist), // the song's ranked tags with the brand's (Song Details → Tags)
           links,
           postLinks,
           platform,
