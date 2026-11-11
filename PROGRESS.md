@@ -4,6 +4,25 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Title cards, Canva-like: size as a number, instant viewer, a toolbar above the video ✅ (to verify on the Windows PC)
+- **Size in px with − / +** (and typing; ↑ / ↓ by 1): from half the card's usual size up to **twice the title's**
+  usual size, so the credits can be as big as the title (a Reel: credits usually 29 px, now up to 168 px). Under 28 px
+  a warning says it is hard to read on a phone; nothing is blocked. Lyric lines keep their slider.
+- **The viewer shows each change at once** (size, colour, transparency, capitals, place); it is saved as you change
+  it and the plan after it fits the card into the safe area exactly as the render will. A new font shows once saved.
+- **Toolbar above the video** when you click a title card (or its T bar, or Edit ›): font, size − N +, colour,
+  transparency, Aa capitals, Done. The card is outlined in the viewer; Esc or a click elsewhere in the video closes it.
+- Next (each its own step, when you decide): C move / resize in the viewer with "Set by me" / ↺ auto; D drag a card's
+  bar on the timeline.
+- Tests: unit (title-card-size: range, px ↔ multiplier, readable warning, live preview), browser (textboard: toolbar,
+  outline, + five times shown at once and saved, typed size capped, colour at once, capitals, Esc), song-stages,
+  storyboard, title-opening.
+- Known (not from this step, they fail the same before it): unit tests song-stages "Prepare to-do list" (2),
+  make "youtube --cover and --title" (expects the old #LifeLyrics tags line), render / migrate (need remotion.media,
+  not reachable in the cloud test machine). To fix in a bug-fix pass.
+- **To check on the PC:** Shape → click the title in the video: the toolbar appears above it; press + a few times:
+  the title grows at once; open Edit › on Credits and type 84: as big as the title.
+
 ### Look simplified: Theme, On-screen text (Title · Artist · Credits), Advanced ✅ (to verify on the Windows PC)
 - **The rule:** the theme decides how everything looks; the song decides what appears.
 - **Theme:** the song's theme with Change, and Edit theme.
@@ -186,25 +205,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **To check on the PC:** Here With Me → Prepare → Song Details → Tags: #lifelyrics "from your brand"; click
   #herewithme and #quietheartbreaks; add "emotional pop"; drag one first; Review → Post: Reels shows those top 5.
   Edit brand tags → add "lifelyricsstudio": it shows on every Life Lyrics song; a Pômé song shows her own set.
-
-### Shape: two tabs, Settings | Shots ✅ (to verify on the Windows PC)
-- **Settings** is one scrolling panel. It starts with a **"Set by me"** line: what you changed (e.g. `Target length
-  90 s · Shot length "story"`), everything else is the app's ("Nothing set by me…" when you changed nothing).
-- Then three folding sections, each saying what it holds and how many you set:
-  - **▸ Look**: theme + Change · title opening · lyric readability (open at the start)
-  - **▸ Part & ending**: section · target length · ending
-  - **▸ Pace**: shot length · transitions · pace adjustment
-- **One section open at a time** (your first test: Look's rows looked like Part & ending's): opening one folds the
-  others; the open one has a tinted header and a pink edge down its settings.
-- **Shots** is unchanged. Old links (?panel=look / part / pace) and "Look: …" in Make open Settings with that
-  section unfolded and scrolled to; a tab remembered from before opens Settings.
-- Nothing about how a video is made changed (layout and labels only).
-- Tests (browser): song-stages (the two tabs and icons; Settings' sections and their contents lines; the "Set by
-  me" line names Ending and the section says "1 set by me"; ↺ auto empties it; collapse / expand keeps Settings),
-  storyboard (collapsed: Settings stays selected; a YouTube video's Look link opens the layout row), style-lock,
-  themes, title-opening, pairings (its 428 px check failed before this step too).
-- **To check on the PC:** a song → Shape: tabs Settings | Shots. Settings shows "Set by me" and Look open; open
-  Part & ending and set a target length of 90 s: the line says "Set by me: Target length 90 s"; ↺ auto removes it.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

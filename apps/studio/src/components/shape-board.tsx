@@ -16,7 +16,7 @@ import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 
-import { clockTenths, type TimelineEdits, EFFECT_NAMES, effectTitle, followScrollLeft, LyricVideo, playheadLabel, revealScrollLeft, songTimeMs, timeTicks, patchLook, previewCard, type CardOverrides, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
+import { clockTenths, type TimelineEdits, EFFECT_NAMES, effectTitle, followScrollLeft, LyricVideo, playheadLabel, revealScrollLeft, songTimeMs, timeTicks, patchLook, previewCard, previewTitleCard, readableWarning, titleCardMult, titleCardSize, TITLE_SIZE_RANGE, type CardOverrides, type TextCardProps, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
 import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node";
 import { tryName } from "@lyric/video/video-names";
 import { ClipMenu } from "./clip-menu";
@@ -544,11 +544,24 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   };
 
   const card = board?.cards.find((c) => c.id === cardId) ?? null;
+  // The cards' own looks the shown plan was made with (taken when a plan arrives): the live preview patches only what
+  // the draft changes since, so a planned card (fitted into the safe area as the render does) is never overridden.
+  const plannedWith = useMemo(() => Object.fromEntries((board?.cards ?? []).map((c) => [c.id, c.overrides])), [view]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The planned title card being edited, and the title's usual size (the editor's px scale, 12 Nov 2026).
+  const plannedCard = card && card.type !== "lyric" ? (view?.props.textCards?.find((c) => c.id === card.id && !c.off) ?? null) : null;
+  const titleBase = view?.props.textCards?.find((c) => c.id === "title")?.baseSize;
   // The live preview: the edited card's place, size, hold and effect on the planned props (a font
-  // change shows after saving: it needs its font file).
+  // change shows after saving: it needs its font file). Title cards (12 Nov 2026): size, colour, transparency,
+  // capitals and place at once, before the save and the plan that follows.
   const props = useMemo(() => {
     if (!view) return null;
     let lyrics = view.props.lyrics;
+    let textCards = view.props.textCards;
+    if (card && card.type !== "lyric" && textCards && view.props.lyricArea) {
+      const was = (plannedWith[card.id] ?? {}) as Record<string, unknown>;
+      const changed = Object.fromEntries(Object.entries(draft).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(was[k]))) as CardStyle;
+      if (Object.keys(changed).length) textCards = previewTitleCard(textCards, card.id, changed, { area: view.props.lyricArea, frameHeight: view.props.format?.height ?? 1920 });
+    }
     if (card?.type === "lyric" && view.props.lyricArea) {
       const own: CardOverrides = { ...draft };
       delete own.text;
@@ -556,10 +569,53 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
       const style: CardStyle = { ...(board?.roles[card.isHook ? "hook" : "verse"] ?? {}), ...own };
       lyrics = previewCard(lyrics, card.id, style, { area: view.props.lyricArea, durationInFrames: view.props.durationInFrames });
     }
-    const planned = { ...view.props, lyrics, mediaBaseUrl: `/api/songs/${projectId}/storyboard/media` };
+    const planned = { ...view.props, lyrics, ...(textCards ? { textCards } : {}), mediaBaseUrl: `/api/songs/${projectId}/storyboard/media` };
     // A look change not planned yet (or a pairing pointed at): patched in at once (plans only).
     return view.source === "plan" ? patchLook(planned, look?.patch ?? null, view.bars.map((ms) => Math.round((ms * 30) / 1000))) : planned;
-  }, [view, projectId, card, draft, board, look?.patch]);
+  }, [view, projectId, card, draft, board, look?.patch, plannedWith]);
+  // The selected title card (12 Nov 2026): outlined in the viewer while its toolbar is open; Esc, or a click in the
+  // viewer away from it, closes it (that click does not play / pause).
+  const selectedTitle = card && card.type !== "lyric" ? card.id : null;
+  useEffect(() => {
+    const block = viewerBlock.current;
+    if (!block) return;
+    for (const el of block.querySelectorAll<HTMLElement>("[data-card-selected]")) {
+      if (el.getAttribute("data-text-card") === selectedTitle) continue;
+      el.style.boxShadow = "";
+      el.removeAttribute("data-card-selected");
+    }
+    if (!selectedTitle) return;
+    const el = block.querySelector<HTMLElement>(`[data-viewer] [data-text-card='${selectedTitle}']`);
+    if (el && !el.hasAttribute("data-card-selected")) {
+      el.style.boxShadow = "0 0 0 3px rgba(232, 163, 181, 1)";
+      el.setAttribute("data-card-selected", "1");
+    }
+  }, [selectedTitle, frame, props]);
+  const closeTitleRef = useRef<() => void>(() => {});
+  closeTitleRef.current = () => selectedTitle && pickTitleCard(null);
+  useEffect(() => {
+    if (!selectedTitle) return;
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest("input, select, textarea") && !t.closest("[data-card-toolbar]")) return;
+      closeTitleRef.current();
+    };
+    const away = (e: Event) => {
+      const t = e.target as Element | null;
+      if (!t?.closest("[data-viewer]") || t.closest("[data-text-card]")) return;
+      e.preventDefault();
+      e.stopPropagation(); // closes the selection, not play / pause
+      closeTitleRef.current();
+    };
+    const block = viewerBlock.current;
+    window.addEventListener("keydown", key);
+    block?.addEventListener("click", away, true);
+    return () => {
+      window.removeEventListener("keydown", key);
+      block?.removeEventListener("click", away, true);
+    };
+  }, [selectedTitle]);
   const playFrom = (ms: number) => {
     const p = player.current;
     if (!p || !view) return;
@@ -713,6 +769,9 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                       fonts={board.fonts ?? []}
                       titleFont={board.titleFont ?? ""}
                       artist={board.artist ?? "Life Lyrics"}
+                      planned={plannedCard}
+                      titleBase={titleBase}
+                      frameWidth={view?.props.format?.width ?? 1080}
                     />
                   </div>
                 ) : null}
@@ -770,6 +829,9 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
             fonts={board?.fonts ?? []}
             titleFont={board?.titleFont ?? ""}
             artist={board?.artist ?? "Life Lyrics"}
+            planned={plannedCard}
+            titleBase={titleBase}
+            frameWidth={view?.props.format?.width ?? 1080}
           />
         ) : null}
         {view?.editable && board ? <TemplateBar board={board} busy={saving} onEdit={(b) => void editText(b)} onOpen={openCard} /> : null}
@@ -1130,6 +1192,20 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
 
         {/* 1. the viewer */}
         <div ref={viewerBlock} className="flex flex-col items-center gap-2" data-viewer-block>
+          {card && plannedCard && view && props ? (
+            <TitleCardToolbar
+              card={card}
+              planned={props.textCards?.find((c) => c.id === card.id) ?? plannedCard}
+              plannedSize={plannedCard}
+              titleBase={titleBase}
+              frameWidth={view.props.format?.width ?? 1080}
+              draft={draft}
+              setDraft={setDraft}
+              fonts={board?.fonts ?? []}
+              titleFont={board?.titleFont ?? ""}
+              onClose={() => pickTitleCard(null)}
+            />
+          ) : null}
           {viewer}
           {view ? null : !choices ? (
             <p className="text-muted-foreground text-sm">Loading the plan…</p>
@@ -1610,7 +1686,10 @@ const POSITION_LABELS: Record<string, string> = { lyrics: "the lyric spot", "wit
 
 // A card's own look: place, size, hold, effect (and, for title / byline / tagline, its text and whether
 // it is shown). The preview shows lyric cards at once; Save keeps them in textboard.json.
-function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClose, onFixLine, fonts, titleFont, artist }: {
+function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClose, onFixLine, fonts, titleFont, artist, planned, titleBase, frameWidth }: {
+  planned?: TextCardProps | null;
+  titleBase?: number;
+  frameWidth?: number;
   onFixLine: (number: number, text: string) => void;
   fonts: string[];
   titleFont: string;
@@ -1714,8 +1793,14 @@ function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClos
         </label>
         <label className="flex items-center gap-2">
           <span className="w-20">Size</span>
-          <input data-card-size type="range" min={0.5} max={2} step={0.05} value={draft.size ?? role.size ?? 1} onChange={(e) => set("size", Number(e.target.value))} className="accent-brand flex-1" />
-          <span className="w-10 tabular-nums">{(draft.size ?? role.size ?? 1).toFixed(2)}x</span>
+          {!lyric && planned ? (
+            <SizeField planned={planned} titleBase={titleBase} frameWidth={frameWidth ?? 1080} mult={draft.size ?? role.size ?? 1} onMult={(m) => set("size", m)} />
+          ) : (
+            <>
+              <input data-card-size type="range" min={0.5} max={lyric ? 2 : TITLE_SIZE_RANGE[1]} step={0.05} value={draft.size ?? role.size ?? 1} onChange={(e) => set("size", Number(e.target.value))} className="accent-brand flex-1" />
+              <span className="w-10 tabular-nums">{(draft.size ?? role.size ?? 1).toFixed(2)}x</span>
+            </>
+          )}
         </label>
         <label className="flex items-center gap-2">
           <span className="w-20">Hold (s)</span>
@@ -1790,7 +1875,7 @@ function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClos
         </div>
       ) : null}
       <p className="text-muted-foreground mt-2">
-        {lyric ? "The preview shows the change at once (its timing comes from the lyric alignment). " : "Saved as you change it; the viewer shows it a moment later. "}
+        {lyric ? "The preview shows the change at once (its timing comes from the lyric alignment). " : "The viewer shows it at once and it is saved as you change it (a new font shows once saved). "}
         Places stay inside the platform&apos;s safe area.
       </p>
       <div className="mt-2 flex gap-2">
@@ -1928,4 +2013,107 @@ function titleCardSummary(c: TextCard, drawn: { font: string; colour: string; op
   const position = c.overrides.position ?? role.position;
   const place = position ? (POSITION_LABELS[position] ?? position) : (TITLE_DEFAULT_PLACE[c.type] ?? "as the platform");
   return [drawn.font, `${drawn.colour.toUpperCase()} ${Math.round((drawn.opacity ?? 1) * 100)}%`, place, drawn.upper ? "CAPITALS" : "as written"].join(" · ");
+}
+
+// A title card's size as a number (12 Nov 2026, asked by the user): px at the video's size with − / + and typing, up to
+// twice the title's usual size; stored as today's multiplier. Under the readable size: a warning, never a block.
+function SizeField({ planned, titleBase, frameWidth, mult, onMult, compact = false }: { planned: TextCardProps; titleBase?: number; frameWidth: number; mult: number; onMult: (m: number) => void; compact?: boolean }) {
+  const s = titleCardSize(planned, mult, titleBase);
+  const [typed, setTyped] = useState<string | null>(null); // while typing; else the size itself
+  const text = typed ?? String(s.px);
+  const commit = (px: number) => {
+    setTyped(null);
+    if (!Number.isFinite(px) || px <= 0) return;
+    const m = titleCardMult(px, s.base, s.max);
+    if (m !== mult) onMult(m);
+  };
+  const warn = readableWarning(s.px, frameWidth);
+  const btn = "hover:bg-accent flex size-6 items-center justify-center rounded-md border text-sm disabled:opacity-40";
+  return (
+    <span data-card-size-field className={cn("flex items-center gap-1", !compact && "flex-1 flex-wrap")}>
+      <button type="button" data-card-size-minus className={btn} disabled={s.px <= s.min} onClick={() => commit(s.px - 2)} aria-label="Smaller">
+        −
+      </button>
+      <input
+        data-card-size-px
+        type="text"
+        inputMode="numeric"
+        value={text}
+        onChange={(e) => setTyped(e.target.value.replace(/[^0-9]/g, ""))}
+        onBlur={() => commit(Number(text))}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit(Number(text));
+          if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+            e.preventDefault();
+            commit(s.px + (e.key === "ArrowUp" ? 1 : -1));
+          }
+        }}
+        className="bg-input/30 border-input h-6 w-12 rounded-md border px-1 text-center text-xs tabular-nums"
+        aria-label="Size in px"
+        title={`${s.min}-${s.max} px at the video's size (the usual ${s.base} px)`}
+      />
+      <button type="button" data-card-size-plus className={btn} disabled={s.px >= s.max} onClick={() => commit(s.px + 2)} aria-label="Larger">
+        +
+      </button>
+      <span className="text-muted-foreground text-[11px]">px</span>
+      {warn ? (
+        compact ? (
+          <AlertTriangle data-card-size-warn className="size-3.5 text-amber-300" aria-label={warn}>
+            <title>{warn}</title>
+          </AlertTriangle>
+        ) : (
+          <span data-card-size-warn className="text-[11px] text-amber-300">{warn}</span>
+        )
+      ) : !compact ? (
+        <span className="text-muted-foreground text-[11px]">usual {s.base} px · up to {s.max}</span>
+      ) : null}
+    </span>
+  );
+}
+
+// The floating toolbar above the video (12 Nov 2026, Canva-like): the selected title card's font, size, colour,
+// transparency and capitals, the same draft as the editor in Look → Advanced (shown at once, saved as changed).
+function TitleCardToolbar({ card, planned, plannedSize, titleBase, frameWidth, draft, setDraft, fonts, titleFont, onClose }: {
+  card: TextCard;
+  planned: TextCardProps; // as the viewer draws it now (colour, transparency, capitals)
+  plannedSize: TextCardProps; // as planned (its usual size)
+  titleBase?: number;
+  frameWidth: number;
+  draft: CardOverrides;
+  setDraft: (d: CardOverrides) => void;
+  fonts: string[];
+  titleFont: string;
+  onClose: () => void;
+}) {
+  const set = <K extends keyof CardOverrides>(k: K, v: CardOverrides[K] | undefined) => {
+    const next = { ...draft };
+    if (v === undefined || v === "") delete next[k];
+    else next[k] = v;
+    setDraft(next);
+  };
+  const field = "bg-input/30 border-input h-7 rounded-md border px-1.5 text-xs";
+  const opacity = draft.opacity ?? planned.opacity ?? 1;
+  const upper = draft.upper ?? planned.upper;
+  return (
+    <div data-card-toolbar={card.id} className="bg-card flex max-w-full flex-wrap items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs shadow-lg">
+      <span className="text-muted-foreground text-[11px] font-medium uppercase">{TITLE_CARD_LABEL[card.type] ?? card.type}</span>
+      <select data-toolbar-font className={cn(field, "max-w-40")} value={draft.font ?? ""} onChange={(e) => set("font", e.target.value || undefined)} title="Font (shows once saved)">
+        <option value="">{titleFont ? `${planned.font || titleFont} (theme)` : "the theme's"}</option>
+        {fonts.map((f) => (
+          <option key={f} value={f} style={{ fontFamily: f }}>
+            {f}
+          </option>
+        ))}
+      </select>
+      <SizeField compact planned={plannedSize} titleBase={titleBase} frameWidth={frameWidth} mult={draft.size ?? 1} onMult={(m) => set("size", m)} />
+      <input data-toolbar-colour type="color" value={(draft.colour ?? planned.colour).slice(0, 7)} onChange={(e) => set("colour", e.target.value.toUpperCase())} className="h-7 w-8 rounded border" title="Colour" />
+      <input data-toolbar-opacity type="range" min={0.2} max={1} step={0.05} value={opacity} onChange={(e) => set("opacity", Number(e.target.value))} className="accent-brand w-20" title={`Transparency: ${Math.round(opacity * 100)}%`} />
+      <button type="button" data-toolbar-upper aria-pressed={upper} onClick={() => set("upper", !upper)} className={cn("h-7 rounded-md border px-2 font-medium", upper ? "bg-brand/20 border-brand" : "hover:bg-accent")} title={upper ? "ALL CAPITALS: click for as written" : "As written: click for ALL CAPITALS"}>
+        {upper ? "AA" : "Aa"}
+      </button>
+      <button type="button" data-toolbar-close onClick={onClose} className="hover:bg-accent rounded-md p-1" aria-label="Done (Esc)" title="Done (Esc)">
+        <X className="size-3.5" />
+      </button>
+    </div>
+  );
 }

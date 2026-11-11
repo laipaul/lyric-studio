@@ -69,6 +69,7 @@ export type TextCardProps = {
   weight: number;
   italic?: boolean;
   size: number; // px
+  baseSize?: number; // title / byline / tagline: the usual size (px) before the user's own size and the fit (the editor's px scale)
   colour: string;
   opacity?: number; // of the text colour (byline: 0.85)
   letterSpacing: number; // em

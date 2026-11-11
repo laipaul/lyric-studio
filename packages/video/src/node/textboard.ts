@@ -33,6 +33,7 @@ import {
   type TextCard,
   type Textboard,
   type TextTemplate,
+  TITLE_CARD_RATIO,
 } from "../textboard";
 import { fitCardBlocks, type CardMeasure } from "../card-layout";
 import { fontFileRefs, forText, loadFontCatalog, resolveFace, resolveFont, type FontCatalog } from "./font-catalog";
@@ -46,7 +47,7 @@ export const TEMPLATES_DIR = "templates";
 
 const HELP =
   "The text layer of this song (Shape writes it): every card (title, byline, tagline, each lyric line) in order, and per card " +
-  'only what differs from the brand and the recipe ("overrides": position lyrics | with-title | top | upper | centre | lower, size 0.5-2, ' +
+  'only what differs from the brand and the recipe ("overrides": position lyrics | with-title | top | upper | centre | lower, size 0.5-2 (title cards 0.5-6), ' +
   'hold seconds, effect "name[:intensity]", font, weight, italic; title / byline / tagline also text and show). "roles": rules per kind of ' +
   'card (title, byline, tagline, verse, hook), e.g. { "hook": { "size": 1.2 } }. Timing always comes from the lyric alignment.';
 
@@ -285,11 +286,11 @@ export function titleCards(
   const baseSize = y?.size ?? Math.round(TITLE_SIZE_VERTICAL * o.textScale);
   const open = !y && o.opening ? o.opening : null;
   const defaults = {
-    title: { show: !!y || !!open, size: baseSize, position: (y ? "top" : open ? "upper-third" : "centre") as CardPosition, colour: o.accent, opacity: 1, upper: true },
-    byline: { show: !!y || !!open, size: Math.round(baseSize * 0.45), position: "with-title" as CardPosition, colour: "#ffffff", opacity: 0.85, upper: false },
+    title: { show: !!y || !!open, size: Math.round(baseSize * TITLE_CARD_RATIO.title), position: (y ? "top" : open ? "upper-third" : "centre") as CardPosition, colour: o.accent, opacity: 1, upper: true },
+    byline: { show: !!y || !!open, size: Math.round(baseSize * TITLE_CARD_RATIO.byline), position: "with-title" as CardPosition, colour: "#ffffff", opacity: 0.85, upper: false },
     // The tagline (11 Nov 2026): stacked under the title and byline, smaller, in the lyric font (a caption, not a
     // second title); its place, size, font, colour, transparency and capitals can be set on the card.
-    tagline: { show: !!open, size: Math.round(baseSize * 0.35), position: "with-title" as CardPosition, colour: "#ffffff", opacity: 0.8, upper: false },
+    tagline: { show: !!open, size: Math.round(baseSize * TITLE_CARD_RATIO.tagline), position: "with-title" as CardPosition, colour: "#ffffff", opacity: 0.8, upper: false },
   };
   const holdFrames = y ? y.untilFrame : open ? Math.max(1, Math.min(o.durationInFrames, open.untilFrame)) : Math.round(TITLE_HOLD_VERTICAL_S * o.fps);
   const fonts: FontFileRef[] = [];
@@ -326,6 +327,7 @@ export function titleCards(
       weight: font.weight,
       ...(font.italic ? { italic: true } : {}),
       size: Math.round(d.size * (style.size ?? 1)),
+      baseSize: d.size,
       colour: style.colour ?? d.colour,
       ...((style.opacity ?? d.opacity) !== 1 ? { opacity: style.opacity ?? d.opacity } : {}),
       // A tagline in the lyric font keeps that font's own spacing (the title's wide tracking is for capitals).

@@ -4,6 +4,25 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Shape: two tabs, Settings | Shots ✅ (to verify on the Windows PC)
+- **Settings** is one scrolling panel. It starts with a **"Set by me"** line: what you changed (e.g. `Target length
+  90 s · Shot length "story"`), everything else is the app's ("Nothing set by me…" when you changed nothing).
+- Then three folding sections, each saying what it holds and how many you set:
+  - **▸ Look**: theme + Change · title opening · lyric readability (open at the start)
+  - **▸ Part & ending**: section · target length · ending
+  - **▸ Pace**: shot length · transitions · pace adjustment
+- **One section open at a time** (your first test: Look's rows looked like Part & ending's): opening one folds the
+  others; the open one has a tinted header and a pink edge down its settings.
+- **Shots** is unchanged. Old links (?panel=look / part / pace) and "Look: …" in Make open Settings with that
+  section unfolded and scrolled to; a tab remembered from before opens Settings.
+- Nothing about how a video is made changed (layout and labels only).
+- Tests (browser): song-stages (the two tabs and icons; Settings' sections and their contents lines; the "Set by
+  me" line names Ending and the section says "1 set by me"; ↺ auto empties it; collapse / expand keeps Settings),
+  storyboard (collapsed: Settings stays selected; a YouTube video's Look link opens the layout row), style-lock,
+  themes, title-opening, pairings (its 428 px check failed before this step too).
+- **To check on the PC:** a song → Shape: tabs Settings | Shots. Settings shows "Set by me" and Look open; open
+  Part & ending and set a target length of 90 s: the line says "Set by me: Target length 90 s"; ↺ auto removes it.
+
 ### Bug fix: adding a song link never replaces another; service from the URL; edit and Undo ✅ (to verify on the Windows PC)
 - Bug: Prepare → Song Details → Links: adding an Apple Music link to a song that had a Spotify link left only Apple Music. Cause: the page held its own copy of the list and saved the WHOLE list with every action (add, change a service, edit an address, remove), and a row's service and address were always-open fields that saved on their own. A save made from a stale or half-updated copy (two quick actions, or editing the Spotify row's picker / address instead of adding) wrote that copy over the file. The server and song.json were fine (tested).
 - Fix: the page now sends ONE change at a time (add / update / remove / restore) to PATCH /api/songs/[id]/links; the server applies it to the list in song.json as it is now (`changeSongLinks`), so no change can drop a link it is not about. The service is recognised from the pasted address; rows show service + address with ✎ (editor of that row only, Save / Cancel); removing offers Undo (back at the old place, with its Post picks). Every change of the links first keeps the previous song.json in `.studio\replaced\<date>-song.json`.

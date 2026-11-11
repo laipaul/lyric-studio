@@ -226,6 +226,38 @@ async function main() {
     await page.click("[data-textboard-titles] [data-text-card='title']");
     await page.waitForSelector("[data-title-card-row='title'][data-open='1'] [data-card-editor='title']");
     check((await page.getAttribute("[data-shape-tab=settings]", "aria-selected")) === "true", "the title's T bar on the timeline opens it in Look too");
+    // Canva-like editing, A + B (12 Nov 2026): the floating toolbar above the video, size as a number (− / +, typed,
+    // up to twice the title's usual size), shown in the viewer at once, saved as changed; Esc closes it.
+    await page.waitForSelector("[data-card-toolbar='title']");
+    check(!!(await page.$("[data-viewer] [data-text-card='title'][data-card-selected]")), "the selected title card is outlined in the viewer, its toolbar above the video");
+    const titleEl = "[data-viewer] [data-text-card='title']";
+    const fontPx = () => page.$eval(titleEl, (e: Element) => parseFloat(getComputedStyle(e).fontSize));
+    const sizeBox = "[data-card-toolbar='title'] [data-card-size-px]";
+    const px0 = Number(await page.inputValue(sizeBox));
+    const drawn0 = await fontPx();
+    check(px0 > 40 && Math.abs(drawn0 - px0) <= 1, `the toolbar shows the title's real size in px (${px0}; the viewer draws ${drawn0})`);
+    for (let i = 0; i < 5; i++) await page.click("[data-card-toolbar='title'] [data-card-size-plus]");
+    await sleep(150); // well before the save (0.7 s) and the plan after it
+    const drawn1 = await fontPx();
+    check(Number(await page.inputValue(sizeBox)) === px0 + 10 && Math.abs(drawn1 - (px0 + 10)) <= 1, `+ five times: ${px0 + 10} px, in the viewer at once (${drawn1})`);
+    const titleOwn = () => (board().cards as { id: string; overrides: Record<string, unknown> }[]).find((c) => c.id === "title")?.overrides ?? {};
+    for (let i = 0; i < 60 && titleOwn().size === undefined; i++) await sleep(250);
+    check(titleOwn().size === Math.round(((px0 + 10) / px0) * 100) / 100, `saved as the size multiplier in textboard.json (${JSON.stringify(titleOwn())})`);
+    await page.fill(sizeBox, "999");
+    await page.press(sizeBox, "Enter");
+    await sleep(150);
+    check(Number(await page.inputValue(sizeBox)) === px0 * 2, `a typed size is kept up to twice the title's usual size (${await page.inputValue(sizeBox)})`);
+    await page.fill("[data-card-toolbar='title'] [data-toolbar-colour]", "#22aa44");
+    await sleep(150);
+    check((await page.$eval(titleEl, (e: Element) => getComputedStyle(e).color)) === "rgb(34, 170, 68)", "the toolbar's colour shows in the viewer at once");
+    const upper0 = (await page.getAttribute("[data-toolbar-upper]", "aria-pressed")) === "true";
+    await page.click("[data-toolbar-upper]");
+    for (let i = 0; i < 60 && titleOwn().upper !== !upper0; i++) await sleep(250);
+    check(titleOwn().upper === !upper0 && titleOwn().colour === "#22AA44", `capitals and colour saved from the toolbar (${JSON.stringify(titleOwn())})`);
+    check(Number(await page.inputValue("[data-card-editor='title'] [data-card-size-px]")) === px0 * 2, "the editor in Look shows the same size (one draft)");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("[data-card-toolbar]", { state: "detached" });
+    check(!(await page.$("[data-viewer] [data-card-selected]")), "Esc closes the toolbar and the outline");
     // Look -> On-screen text (11 Nov 2026): Title, Artist, Credits each on / off, the words shared with Song Details.
     check((await page.getAttribute("[data-on-screen='tagline']", "data-on")) === "0", "with the title opening off the credits are off");
     await page.click("[data-on-screen-toggle='tagline']");

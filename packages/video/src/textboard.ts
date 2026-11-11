@@ -7,7 +7,7 @@
 import { parseEffectChoice, type EffectChoice } from "./effects/names";
 import { VIDEO } from "./config";
 import type { LyricArea } from "./platform";
-import type { LyricLineProps } from "./props";
+import type { LyricLineProps, TextCardProps } from "./props";
 
 export const CARD_TYPES = ["title", "byline", "tagline", "lyric"] as const;
 export type CardType = (typeof CARD_TYPES)[number];
@@ -20,13 +20,20 @@ export const POSITIONS = ["lyrics", "with-title", "top", "upper", "centre", "low
 export type CardPosition = (typeof POSITIONS)[number];
 export const POSITION_AT: Record<"upper" | "centre" | "lower", number> = { upper: 0.3, centre: 0.5, lower: 0.7 };
 export const SIZE_RANGE = [0.5, 2] as const;
+// Title cards (12 Nov 2026, asked by the user: the tagline at its largest was still small): a title, artist or credits
+// card may grow up to twice the title's own size, so its range is wider (x its own usual size).
+export const TITLE_SIZE_RANGE = [0.5, 6] as const;
+// Each title card's usual size as a share of the title's (the planner's defaults).
+export const TITLE_CARD_RATIO: Record<"title" | "byline" | "tagline", number> = { title: 1, byline: 0.45, tagline: 0.35 };
+// Under this (px at 1080 wide) a card is hard to read on a phone: a warning, never a block.
+export const READABLE_MIN_PX = 28;
 export const HOLD_MAX_S = 10;
 
 // A look; every field optional ("not set": the brand / recipe decides).
 export type CardStyle = {
   show?: boolean; // title / byline / tagline: on screen or not
   position?: CardPosition;
-  size?: number; // x the role's size (0.5-2)
+  size?: number; // x the role's size (0.5-2; title cards 0.5-6)
   hold?: number; // seconds. Lyric: stays at least this long after its last word. Title cards: shown this long.
   effect?: string; // "glide", "soft-blur:subtle", ...
   font?: string;
@@ -52,7 +59,7 @@ export const taglineFor = (ep?: string | null) => (ep ? `From the EP "${ep}"` : 
 
 const STYLE_KEYS = ["show", "position", "size", "hold", "effect", "font", "weight", "italic", "colour", "opacity", "upper"] as const;
 
-export function checkStyle(raw: unknown, where: string, problems: string[], withText = false): CardOverrides {
+export function checkStyle(raw: unknown, where: string, problems: string[], withText = false, range: readonly [number, number] = withText ? TITLE_SIZE_RANGE : SIZE_RANGE): CardOverrides {
   const out: CardOverrides = {};
   if (raw === undefined || raw === null) return out;
   if (typeof raw !== "object" || Array.isArray(raw)) {
@@ -65,7 +72,7 @@ export function checkStyle(raw: unknown, where: string, problems: string[], with
   }
   if (r.show !== undefined) typeof r.show === "boolean" ? (out.show = r.show) : problems.push(`${where}.show must be true or false`);
   if (r.position !== undefined) (POSITIONS as readonly unknown[]).includes(r.position) ? (out.position = r.position as CardPosition) : problems.push(`${where}.position must be ${POSITIONS.join(", ")}`);
-  if (r.size !== undefined) typeof r.size === "number" && r.size >= SIZE_RANGE[0] && r.size <= SIZE_RANGE[1] ? (out.size = Math.round(r.size * 100) / 100) : problems.push(`${where}.size must be ${SIZE_RANGE[0]}-${SIZE_RANGE[1]} (x the usual size)`);
+  if (r.size !== undefined) typeof r.size === "number" && r.size >= range[0] && r.size <= range[1] ? (out.size = Math.round(r.size * 100) / 100) : problems.push(`${where}.size must be ${range[0]}-${range[1]} (x the usual size)`);
   if (r.hold !== undefined) typeof r.hold === "number" && r.hold >= 0 && r.hold <= HOLD_MAX_S ? (out.hold = Math.round(r.hold * 10) / 10) : problems.push(`${where}.hold must be 0-${HOLD_MAX_S} seconds`);
   if (r.effect !== undefined) {
     try {
@@ -95,7 +102,7 @@ function checkRoles(raw: unknown, where: string, problems: string[]): Partial<Re
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
     if (!(ROLES as readonly string[]).includes(k)) problems.push(`${where}.${k}: unknown role (known: ${ROLES.join(", ")})`);
     else {
-      const s = checkStyle(v, `${where}.${k}`, problems);
+      const s = checkStyle(v, `${where}.${k}`, problems, false, k === "verse" || k === "hook" ? SIZE_RANGE : TITLE_SIZE_RANGE);
       if (Object.keys(s).length) out[k as Role] = s;
     }
   }
@@ -144,7 +151,7 @@ export function checkTemplate(raw: unknown, file = "template"): { template: Text
   if (r.opening && typeof r.opening === "object") {
     for (const [k, v] of Object.entries(r.opening as Record<string, unknown>)) {
       if (!["title", "byline", "tagline"].includes(k)) problems.push(`opening.${k}: only title, byline and tagline`);
-      else opening[k as "title"] = checkStyle(v, `opening.${k}`, problems);
+      else opening[k as "title"] = checkStyle(v, `opening.${k}`, problems, false, TITLE_SIZE_RANGE);
     }
   }
   return {
@@ -309,3 +316,66 @@ export function previewCard(
 }
 
 export const effectOf = (style: CardStyle): EffectChoice | null => (style.effect ? parseEffectChoice(style.effect) : null);
+
+// ---------------------------------------------------------------- title card size and live preview (12 Nov 2026)
+
+// A title card's size in the editor: px at the video's own size (what the video draws before the automatic fit),
+// from its usual size (`baseSize`, planned) and the title's. Up to twice the title's usual size.
+// `titleBase`: the title's usual size when the title is planned (else worked out from the card's share of it).
+export function titleCardSize(card: Pick<TextCardProps, "type" | "baseSize" | "size">, mult: number, titleBase?: number): { px: number; min: number; max: number; base: number } {
+  const base = card.baseSize ?? card.size;
+  const ratio = TITLE_CARD_RATIO[card.type as "title"] ?? 1;
+  const tb = titleBase ?? Math.round(base / ratio);
+  const min = Math.max(1, Math.round(base * TITLE_SIZE_RANGE[0]));
+  const max = Math.min(Math.round(base * TITLE_SIZE_RANGE[1]), tb * 2);
+  return { px: Math.round(base * mult), min, max, base };
+}
+// The px typed or stepped in the editor, as the stored multiplier (x the card's usual size), kept inside the range.
+export function titleCardMult(px: number, base: number, max: number): number {
+  const clamped = Math.min(max, Math.max(Math.max(1, Math.round(base * TITLE_SIZE_RANGE[0])), Math.round(px)));
+  return Math.round((clamped / base) * 100) / 100;
+}
+// The warning under the minimum readable size (scaled to the video's width), or null.
+export function readableWarning(px: number, frameWidth: number): string | null {
+  const at1080 = (px * 1080) / frameWidth;
+  return at1080 < READABLE_MIN_PX ? `Hard to read on a phone under ${READABLE_MIN_PX} px (this is ${Math.round(at1080)} px at 1080 wide)` : null;
+}
+// The live preview of a title card being edited: the planned card with the draft's size, colour, transparency,
+// capitals and place, at once (the plan that follows the save fits it into the safe area as the render will).
+export function previewTitleCard(
+  cards: readonly TextCardProps[],
+  id: string,
+  style: CardStyle,
+  o: { area: Pick<LyricArea, "top" | "bottom" | "centerY">; frameHeight: number },
+): TextCardProps[] {
+  return cards.map((c) => {
+    if (c.id !== id) return c;
+    const next: TextCardProps = { ...c };
+    if (style.size !== undefined && c.baseSize) {
+      const px = Math.round(c.baseSize * style.size);
+      if (px !== c.size) {
+        next.size = px;
+        delete next.lines; // wrapped at the old size
+      }
+    }
+    if (style.colour) next.colour = style.colour;
+    if (style.opacity !== undefined) {
+      if (style.opacity === 1) delete next.opacity;
+      else next.opacity = style.opacity;
+    }
+    if (style.upper !== undefined) next.upper = style.upper;
+    const position = style.position;
+    if (position && position !== "with-title" && position !== "lyrics") {
+      delete next.stackOn;
+      delete next.top;
+      delete next.centerY;
+      if (position === "top") next.top = Math.max(Math.round(o.frameHeight * 0.07), o.area.top);
+      else next.centerY = cardCenterY(position, o.area, o.frameHeight);
+    } else if (position === "with-title" && c.id !== "title" && cards.some((x) => x.id === "title" && !x.off)) {
+      delete next.top;
+      delete next.centerY;
+      next.stackOn = "title";
+    }
+    return next;
+  });
+}
