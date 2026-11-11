@@ -33,7 +33,7 @@ import {
   type RecipeValues,
   type SongRecipe,
 } from "./recipe";
-import { TITLE_SIZE_VERTICAL } from "./textboard";
+import { readTextboard, TITLE_SIZE_VERTICAL } from "./textboard";
 import { isRemovedSong, sharedCollections, songPathsById } from "./song-folder";
 import { brandThemes, ensureAllThemes, ensureSongTheme, isThemeField, listThemes, loadTheme, plainSongThemeNames, removedThemes, setThemeLook, themeCover, themeCoverVideo, themeLayer, type RemovedTheme, type ThemeLook } from "./themes";
 import { SHORT_LABELS } from "./exports";
@@ -502,13 +502,24 @@ function cardFitData(ws: Workspace, projectId: string, catalog: FontCatalog, val
   const title = { family: brand.titleFont.family, weight: brand.titleFont.weight, italic: brand.titleFont.italic === true };
   const hookFamily = String(values.hookFont ?? values.verseFont ?? brand.hookFont.family);
   const hook = { family: hookFamily, weight: Number(values.hookWeight ?? brand.hookFont.weight ?? 400), italic: values.hookItalic === true };
+  // The tagline (11 Nov 2026): the lyric font by default, or the font, size and capitals set on its card (Shape).
+  let board = null as ReturnType<typeof readTextboard>;
+  try {
+    const p = songPathsById(ws, projectId);
+    board = p.legacy ? null : readTextboard(p.root);
+  } catch {
+    board = null; // a broken textboard.json: the defaults (Shape reports it)
+  }
+  const tag = { ...(board?.roles.tagline ?? {}), ...(board?.cards.find((c) => c.type === "tagline")?.overrides ?? {}) };
+  const lyric = { family: String(values.verseFont ?? brand.verseFont.family), weight: Number(values.verseWeight ?? brand.verseFont.weight ?? 400), italic: values.verseItalic === true };
+  const tagFace = tag.font ? { family: tag.font, weight: tag.weight ?? 400, italic: tag.italic === true } : lyric;
   return {
     platform: SHORT_LABELS.reels ?? "Reels",
     theme,
     artist: artistOf(ws, projectId),
     room,
     cards: {
-      tagline: { ...title, size: Math.round(base * 0.42), letterSpacing: brand.titleFont.letterSpacing ?? 0.18, upper: false },
+      tagline: { ...tagFace, size: Math.round(base * 0.35 * (tag.size ?? 1)), letterSpacing: tagFace.family === title.family ? (brand.titleFont.letterSpacing ?? 0.18) : 0.02, upper: tag.upper === true },
       hookText: { ...hook, size: Math.round(base * 1.1), letterSpacing: 0.06, upper: true },
       endText: { ...title, size: Math.round(base * 0.6), letterSpacing: 0.04, upper: false },
     },

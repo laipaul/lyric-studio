@@ -1047,6 +1047,7 @@ export function coverProps(props: Omit<LyricVideoProps, "mediaBaseUrl">, sh: Pic
   const tc = titleCards(sh.textboard.board, {
     format, area: props.lyricArea, fps: VIDEO.fps, durationInFrames: props.durationInFrames, youtube: null,
     titleFont: sh.brand.brand.titleFont, accent: sh.brand.brand.accentColour, textScale: preset.textScale,
+    lyricFont: { family: props.style.font, weight: props.style.weight ?? 400, italic: props.style.italic === true }, // as in the video
     fontFor: (style, b, text, role) => cardFont(sh.catalog, style, b, text, role),
     opening: { untilFrame: props.durationInFrames + CARD_COVER_PAD },
     fallbackFor: (face, text) => titleFallback(sh.catalog, face, text),
@@ -1610,6 +1611,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         const tc = titleCards(sh.textboard.board, {
           format, area: rest.lyricArea!, fps: VIDEO.fps, durationInFrames: rest.durationInFrames, youtube: titleOverlay ?? null,
           titleFont: sh.brand.brand.titleFont, accent: sh.brand.brand.accentColour, textScale: preset.textScale,
+          lyricFont: { family: rest.style.font, weight: rest.style.weight ?? 400, italic: rest.style.italic === true }, // the tagline's default face
           fontFor: (style, b, text, role) => cardFont(sh.catalog, style, b, text, role),
           // The title opening: gone as the first lyric line fades in.
           opening: titleOpeningOn ? { untilFrame: rest.lyrics[0] ? (rest.lyrics[0].enterFrame ?? rest.lyrics[0].startFrame) : Math.min(rest.durationInFrames, Math.round(TITLE_ALONE_S * VIDEO.fps)), lyricBox: firstLyricBox(rest, stylesOf(spec)[spec.style], sh.catalog, Math.round(TITLE_MIN_S * VIDEO.fps)) } : null,

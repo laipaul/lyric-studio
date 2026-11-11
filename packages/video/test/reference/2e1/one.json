@@ -329,14 +329,14 @@
       "text": "Ref One",
       "font": "Cinzel",
       "weight": 700,
-      "size": 80,
+      "size": 84,
       "colour": "#E8A3B5",
       "letterSpacing": 0.18,
       "upper": true,
       "startFrame": 0,
-      "endFrame": 120,
+      "endFrame": 1,
       "effect": null,
-      "top": 407
+      "centerY": 640
      },
      {
       "id": "byline",
@@ -344,13 +344,13 @@
       "text": "Life Lyrics",
       "font": "Cinzel",
       "weight": 700,
-      "size": 36,
+      "size": 38,
       "colour": "#ffffff",
       "opacity": 0.85,
       "letterSpacing": 0.18,
       "upper": false,
       "startFrame": 0,
-      "endFrame": 120,
+      "endFrame": 1,
       "effect": null,
       "stackOn": "title"
      },
@@ -358,17 +358,17 @@
       "id": "tagline",
       "type": "tagline",
       "text": "A song for the road",
-      "font": "Cinzel",
-      "weight": 700,
-      "size": 35,
+      "font": "Cormorant Garamond",
+      "weight": 600,
+      "size": 29,
       "colour": "#ffffff",
       "opacity": 0.8,
-      "letterSpacing": 0.18,
+      "letterSpacing": 0.02,
       "upper": false,
       "startFrame": 0,
-      "endFrame": 120,
+      "endFrame": 1,
       "effect": null,
-      "centerY": 1131
+      "stackOn": "title"
      },
      {
       "id": "end",
@@ -720,9 +720,9 @@
       "letterSpacing": 0.18,
       "upper": true,
       "startFrame": 0,
-      "endFrame": 120,
+      "endFrame": 1,
       "effect": null,
-      "top": 394
+      "centerY": 640
      },
      {
       "id": "byline",
@@ -736,7 +736,7 @@
       "letterSpacing": 0.18,
       "upper": false,
       "startFrame": 0,
-      "endFrame": 120,
+      "endFrame": 1,
       "effect": null,
       "stackOn": "title"
      },
@@ -744,17 +744,17 @@
       "id": "tagline",
       "type": "tagline",
       "text": "A song for the road",
-      "font": "Cinzel",
-      "weight": 700,
-      "size": 35,
+      "font": "Cormorant Garamond",
+      "weight": 600,
+      "size": 29,
       "colour": "#ffffff",
       "opacity": 0.8,
-      "letterSpacing": 0.18,
+      "letterSpacing": 0.02,
       "upper": false,
       "startFrame": 0,
-      "endFrame": 120,
+      "endFrame": 1,
       "effect": null,
-      "centerY": 1131
+      "stackOn": "title"
      },
      {
       "id": "end",

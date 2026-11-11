@@ -639,6 +639,29 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
             if (!v) void act({ action: "reset", field: f.field, platform });
             else void set(v);
           }}
+          after={
+            f.field === "tagline" ? (
+              // 11 Nov 2026: straight to the tagline's look (Shape → Settings → Look → Title cards → Tagline).
+              <button
+                type="button"
+                data-tagline-look
+                onClick={() => {
+                  try {
+                    window.sessionStorage.setItem("lyric-studio:open-title-card", "tagline");
+                  } catch {
+                    // the Look section still opens; the card is one click there
+                  }
+                  // Shape may be on the page already (a stage switch keeps it): it also hears this signal.
+                  window.dispatchEvent(new CustomEvent("lyric-open-title-card", { detail: "tagline" }));
+                  goToTab("shape");
+                  setPanel("look");
+                }}
+                className="text-muted-foreground hover:text-foreground w-fit text-[11px] underline underline-offset-2"
+              >
+                Tagline look… (place, size, font, colour)
+              </button>
+            ) : null
+          }
         />
       );
     }
@@ -1107,6 +1130,17 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
           <p className="text-muted-foreground -mt-1 text-[11px]">The theme sets the fonts, effects, colours and cards; these are this song&apos;s own{video ? " (only what applies to this video)" : ""}.</p>
                     {rows(applies(pick(LOOK_SONG_FIELDS)))}
                     {otherVideos(pick(LOOK_SONG_FIELDS))}
+                                {/* Title cards (11 Nov 2026): the title, byline and tagline editor, drawn here by the Shape board
+                                    (shape-board.tsx TitleCardsInLook, a portal); the same editor as a title card clicked on the timeline. */}
+                                {valueOf("titleOpening") === "off" ? (
+                                  <p data-title-opening-off className="text-muted-foreground text-[11px]">
+                                    Title opening is off: Reels, TikTok and Shorts show no title, byline or tagline (YouTube always shows its title).{" "}
+                                    <button type="button" data-title-opening-on onClick={() => void act({ action: "set", field: "titleOpening", value: "on" })} className="text-foreground underline underline-offset-2">
+                                      Turn it on
+                                    </button>
+                                  </p>
+                                ) : null}
+                                <div data-title-cards-slot className="empty:hidden" />
                     <div className="flex flex-wrap items-center gap-3 text-xs">
                       <button type="button" data-look-edit-theme disabled={!saved?.theme} onClick={() => saved?.theme && (openEditor(saved.theme), setPanel("theme"))} className="text-muted-foreground hover:text-foreground underline underline-offset-2">
                         Edit theme {saved?.theme?.name ?? ""}
@@ -1864,7 +1898,7 @@ function PictureControls({ value, onSet }: { value: (field: string) => unknown; 
 // fits in a Reel, measured as the card is drawn (its font, size, letter spacing and case, inside the safe area), with
 // the rule the render uses (card-layout.ts cardFit: one line, else 2 balanced lines, else up to 25% smaller).
 type FitInput = { spec: CardFitSpec; room: number; platform: string; theme: string | null; fill: (t: string) => string };
-function CardTextField({ editKey, value, placeholder, fit, onCommit }: { editKey: string; value: string; placeholder: string; fit: FitInput | null; onCommit: (v: string) => void }) {
+function CardTextField({ editKey, value, placeholder, fit, onCommit, after }: { editKey: string; value: string; placeholder: string; fit: FitInput | null; onCommit: (v: string) => void; after?: React.ReactNode }) {
   const [text, setText] = useState(value);
   const area = useRef<HTMLTextAreaElement>(null);
   const [fontsReady, setFontsReady] = useState(0); // measured again once the card's font has loaded
@@ -1908,6 +1942,7 @@ function CardTextField({ editKey, value, placeholder, fit, onCommit }: { editKey
           {hint.text}
         </p>
       ) : null}
+      {after}
     </div>
   );
 }

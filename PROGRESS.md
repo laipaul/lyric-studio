@@ -4,6 +4,28 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Title cards: edited in Shape → Settings → Look, saved as changed; a quieter tagline; no crowding ✅ (to verify on the Windows PC)
+- **Look → Title cards:** Title · Byline · Tagline chips under Title opening; the chosen card's editor opens right
+  there (Shown, Place, Size, Hold, Font, Effect, and new **Colour, Transparency, Capitals**). The same editor as a
+  title card clicked on the timeline. With Title opening off, Look says so with "Turn it on".
+- **Song Details → Tagline → "Tagline look…"** opens Shape → Settings → Look with the tagline's editor.
+- **Saved as you change it:** title cards are saved a moment after the last change and the viewer shows it after
+  the plan (no "Save and plan again" for title cards; lyric lines keep it).
+- **A quieter default tagline:** under the title and byline, smaller (0.35 of the title), in the lyric font, as
+  written, 80% opaque (was: the lower third, in the title font).
+- **No crowding:** the title, byline and tagline are gone as the first sung line fades in (before: they stayed 4 s
+  next to it when they did not overlap). A lead-in under 1.5 s gets a note: start the part about 2 bars earlier, or
+  let the app choose it (Automatic). A song whose part starts on a sung line therefore shows its title only briefly.
+- **The fit hint** in Song Details measures the tagline in its own font, size and capitals.
+- Tests: title-opening (rewritten for the new rule: gone as the line fades in, the note, the stacked tagline in the
+  lyric font, colour / transparency / capitals), title-opening-make, card-fit, make-reference (only the title cards'
+  fields changed: cuts, lyric timing and shots identical), textboard, extra-cards, qa, youtube. Browser: textboard
+  (no Save button on a title card; Tagline look… opens Look with the tagline's editor; colour, transparency and
+  capitals saved as changed), title-opening, song-stages, storyboard.
+- **To check on the PC:** Let My Love Carry You → Prepare → Song Details → Tagline look…: Shape opens on Look with the
+  tagline; pick a font, colour and transparency: the viewer follows after a moment. The tagline sits under "Life
+  Lyrics" in the lyric font; the title cards are gone when the first line starts.
+
 ### Song Details: card texts full width, growing to two lines, with a fit hint ✅ (to verify on the Windows PC)
 - Tagline, Hook card text, End card text and EP are as wide as Title and grow to a second line for a longer text.
 - Under each card text (not EP: it is not drawn on the video), a fit hint measured as the card is drawn in a Reel
@@ -189,22 +211,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **To check on the PC:** open "Here With Me" → Prepare → Storyboard: your old collection (if any) is one card at
   the end. Add clips & photos → From a collection… → Flowers: pick two clips → they appear at the end with a
   "Flowers" badge; drag one between your own clips; Shape shows the same order.
-
-### Prepare fixes: Song Details, hints in Assets, one Replaced files list, "Set by me" ✅ (to verify on the Windows PC)
-- **Song Details** (was Texts): the tab and every pointer ("Prepare → Song Details"). Old links ?tab=texts and
-  ?tab=details keep opening it.
-- **Hints (tapped times, hints.lrc) moved to Assets**, right after Lyrics: Song, Vocal stem, Lyrics, Hints, Backing
-  vocals, Cover.
-- **One Replaced files list, in Assets only**, for every file (hints and earlier lyrics too, each with Restore).
-  Lyrics Sync's own "Earlier versions" list is gone; it keeps tempo, Time the lyrics again, the summary line and the
-  lyric lines table (and the lyrics editor; after a Save it says the old file is in Assets → Replaced files).
-- **The "This song" badge** (EP and the other song settings) meant "saved on this song, changed from the default":
-  it now says **Set by me**, like the auto settings (the tooltip still says where it is saved).
-- Tests: browser song-stages (the tab names; Assets' order with hints; Lyrics Sync has no files and no Replaced
-  files), lyrics-tab (no list of its own; Restore of the earlier lyrics from Assets → Replaced files), style-lock,
-  song-title, videos-post.
-- **To check on the PC:** Prepare shows Assets · Lyrics Sync · Song Details · Storyboard. Assets lists Hints after
-  Lyrics and has the only Replaced files list. In Song Details, EP shows "Set by me" once you set it.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

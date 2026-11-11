@@ -120,7 +120,8 @@ async function main() {
     await page.waitForSelector("[data-card-editor='title']");
     await page.selectOption("[data-card-show]", "true");
     await page.fill("[data-card-hold]", "3");
-    await page.click("[data-card-save]");
+    // 11 Nov 2026: title cards are saved as they are changed (no Save button) and the video is planned again.
+    check(!(await page.$("[data-card-editor='title'] [data-card-save]")), "a title card has no Save button: saved as changed");
     await replanned();
     await page.waitForSelector("[data-textboard-titles] [data-text-card='title']");
     check(((await page.textContent("[data-text-card='title']")) ?? "").includes("Text Board"), "the title card is on the timeline (the song's title)");
@@ -171,6 +172,23 @@ async function main() {
     check(!(await page.$("[data-needs-clip]")) && line4 === "03_bridge.mp4 null", `a city clip dragged onto the slot fills it (${line4})`);
     await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "textboard.png") });
     check(existsSync(songFile), "the song file is untouched");
+    // Song Details -> "Tagline look..." (11 Nov 2026): Shape opens on Settings -> Look with the tagline's editor; colour,
+    // transparency and capitals; saved as changed (textboard.json).
+    const recipeNow = JSON.parse(readFileSync(paths.recipe!, "utf8"));
+    writeFileSync(paths.recipe!, JSON.stringify({ ...recipeNow, tagline: "Art: @noriko_imazeki", titleOpening: "on" }));
+    await page.goto(`${base}/songs/${sp.project.id}?tab=details`);
+    await page.waitForSelector("[data-tagline-look]");
+    await page.click("[data-tagline-look]");
+    await page.waitForSelector("[data-title-cards] [data-card-editor='tagline']", { timeout: 180_000 }).catch(async () => { await page.screenshot({ path: process.env.TB_SHOT ?? path.join(root, "textboard-look.png") }); throw new Error("no tagline editor in Look"); });
+    check((await page.getAttribute("[data-shape-tab=settings]", "aria-selected")) === "true" && (await page.getAttribute("[data-settings-toggle=look]", "aria-expanded")) === "true", "Tagline look... opens Shape -> Settings -> Look with the tagline's editor");
+    check((await page.$$("[data-title-cards] [data-title-card-chip]")).length >= 2, "Look lists the title cards as chips");
+    await page.fill("[data-title-cards] [data-card-colour]", "#336699");
+    await page.fill("[data-title-cards] [data-card-opacity]", "0.6");
+    await page.selectOption("[data-title-cards] [data-card-upper]", "true");
+    const tagOverrides = () => (board().cards as { id: string; overrides: Record<string, unknown> }[]).find((c) => c.id === "tagline")?.overrides ?? {};
+    for (let i = 0; i < 60 && tagOverrides().upper !== true; i++) await sleep(250);
+    const own = tagOverrides();
+    check(own.colour === "#336699" && own.opacity === 0.6 && own.upper === true, `the tagline's colour, transparency and capitals are saved as changed (${JSON.stringify(own)})`);
     await browser.close();
   } finally {
     server.kill();

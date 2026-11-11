@@ -58,13 +58,14 @@ describe("the title opening", () => {
     expect(cards.find((c) => c.type === "tagline")!.text).toBe("A song for the road");
     const first = m.props.lyrics[0];
     const firstFrame = first.enterFrame ?? first.startFrame;
-    // Gone before the first lyric line, or (a short lead-in, 8 Nov 2026) kept at least 4 s in a place clear of it.
-    for (const c of cards) if (c.endFrame > firstFrame + 1) expect(c.endFrame - (c.startFrame ?? 0)).toBeGreaterThanOrEqual(120);
+    // 11 Nov 2026: every card is gone as the first lyric line fades in (never on screen with it).
+    for (const c of cards) expect(c.endFrame).toBeLessThanOrEqual(firstFrame + 1);
     const title = cards.find((c) => c.type === "title")!;
     const tagline = cards.find((c) => c.type === "tagline")!;
-    const y = (c: { centerY?: number; top?: number }) => c.centerY ?? c.top!; // a moved block is placed by its top
+    const y = (c: { centerY?: number; top?: number }) => c.centerY ?? c.top!;
     expect(y(title)).toBeLessThan(1920 / 2);
-    expect(y(tagline)).toBeGreaterThan(1920 / 2);
+    // The tagline stacks under the title and byline (a caption, not a second title).
+    expect(tagline.stackOn).toBe("title");
     // QA lists the title-card checks.
     const qa = readFileSync(v.manifestFile.replace(/\.manifest\.json$/, ".qa.txt"), "utf8");
     expect(qa).toContain("Title cards clear of the first lyric");

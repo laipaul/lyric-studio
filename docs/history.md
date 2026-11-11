@@ -4,6 +4,22 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Prepare fixes: Song Details, hints in Assets, one Replaced files list, "Set by me" ✅ (to verify on the Windows PC)
+- **Song Details** (was Texts): the tab and every pointer ("Prepare → Song Details"). Old links ?tab=texts and
+  ?tab=details keep opening it.
+- **Hints (tapped times, hints.lrc) moved to Assets**, right after Lyrics: Song, Vocal stem, Lyrics, Hints, Backing
+  vocals, Cover.
+- **One Replaced files list, in Assets only**, for every file (hints and earlier lyrics too, each with Restore).
+  Lyrics Sync's own "Earlier versions" list is gone; it keeps tempo, Time the lyrics again, the summary line and the
+  lyric lines table (and the lyrics editor; after a Save it says the old file is in Assets → Replaced files).
+- **The "This song" badge** (EP and the other song settings) meant "saved on this song, changed from the default":
+  it now says **Set by me**, like the auto settings (the tooltip still says where it is saved).
+- Tests: browser song-stages (the tab names; Assets' order with hints; Lyrics Sync has no files and no Replaced
+  files), lyrics-tab (no list of its own; Restore of the earlier lyrics from Assets → Replaced files), style-lock,
+  song-title, videos-post.
+- **To check on the PC:** Prepare shows Assets · Lyrics Sync · Song Details · Storyboard. Assets lists Hints after
+  Lyrics and has the only Replaced files list. In Song Details, EP shows "Set by me" once you set it.
+
 ### Prepare regrouped: Assets · Lyrics Sync · Texts · Storyboard ✅ (to verify on the Windows PC)
 - Layout and labels only (nothing about how a video is made changed).
 - **Assets** (was Audio): the files you provide, in one list: Song, Vocal stem, Lyrics (.txt), then Backing vocals

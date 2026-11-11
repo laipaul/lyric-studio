@@ -2,7 +2,8 @@
 // A Reels part of the song that starts exactly on a sung line (Let My Love Carry You, hook in a script font),
 // Title opening on, a tagline. Shape's player is seeked to 1.5-2.7 s and the boxes of the title, byline,
 // tagline and the lyric line are read from the DRAWN DOM (data-text-card, data-lyric), in composition pixels:
-// no title-opening block may touch the lyric box, and the cards are still on screen after 4 s of video time.
+// no title-opening block may touch the lyric box. Since 11 Nov 2026 the cards never share the screen with a sung line
+// (they are gone as the first line fades in), so while a line is drawn no title card is.
 import { execFileSync, spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -159,7 +160,8 @@ async function main() {
       const cards = got.cards.filter((c) => c.box);
       const lyrics = got.lyrics.filter((l) => l.box && l.role !== "next");
       console.log(`    t=${sec} s (frame ${await tFrame()}, scale ${got.scale.toFixed(3)}): ${got.cards.map((c) => `${c.id} y ${rnd(c.box)}`).join(", ")} | ${got.lyrics.map((l) => `"${l.text}" [${l.role}, op ${l.opacity}] y ${rnd(l.box)} (row ${Math.round(l.css.top)}-${Math.round(l.css.bottom)})`).join(" | ")}`);
-      check(cards.some((c) => c.id === "title") && cards.some((c) => c.id === "tagline"), `at ${sec} s the title and the tagline are still on screen (${cards.map((c) => c.id).join(", ")})`);
+      // 11 Nov 2026: never on screen with a sung line (no crowding).
+      check(!(lyrics.length && cards.length), `at ${sec} s no title card shares the screen with a sung line (${cards.map((c) => c.id).join(", ") || "no cards"} | ${lyrics.map((l) => l.text).join(", ") || "no line"})`);
       const clashes = cards.flatMap((c) => lyrics.filter((l) => hit(c.box!, l.box!, 4)).map((l) => `${c.id} ${rnd(c.box)} x "${l.text}" ${rnd(l.box)}`));
       check(clashes.length === 0, `at ${sec} s no title-opening block touches a lyric line${clashes.length ? ` (${clashes.join("; ")})` : ""}`);
     }

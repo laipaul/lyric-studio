@@ -180,7 +180,8 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
     setError(null);
     if (!keep) {
       setSelected(null);
-      setCardId(null);
+      // A title card (the song's, in Settings → Look) stays chosen across plans; a lyric line belongs to this plan.
+      setCardId((id) => (id === "title" || id === "byline" || id === "tagline" ? id : null));
     }
     try {
       const swap = s.kind === "plan" && !s.try ? clipSet(set) : null;
@@ -314,6 +315,51 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
     setPanel("text");
     setDraft(board?.cards.find((c) => c.id === id)?.overrides ?? {});
   };
+  // A title card picked in Settings → Look (11 Nov 2026): its editor opens there, not in the Text panel.
+  const pickTitleCard = (id: string | null) => {
+    setCardId(id);
+    setDraft(id ? (board?.cards.find((c) => c.id === id)?.overrides ?? {}) : {});
+  };
+  // Song Details → "Tagline look…": Shape opens on Settings → Look with that card's editor (one ask, kept for the visit).
+  useEffect(() => {
+    if (!board) return;
+    let asked: string | null = null;
+    try {
+      asked = window.sessionStorage.getItem("lyric-studio:open-title-card");
+      if (asked) window.sessionStorage.removeItem("lyric-studio:open-title-card");
+    } catch {
+      asked = null;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a request left by another page, read once the board is here
+    if (asked && board.cards.some((c) => c.id === asked)) pickTitleCard(asked);
+  }, [board]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The same request while Shape is already on the page (Song Details' link switches the stage without a reload).
+  const boardRef = useRef(board);
+  boardRef.current = board;
+  useEffect(() => {
+    const open = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      const b = boardRef.current;
+      if (!b?.cards.some((c) => c.id === id)) return; // not loaded yet: the stored request is read when it is
+      try {
+        window.sessionStorage.removeItem("lyric-studio:open-title-card");
+      } catch {
+        // nothing stored
+      }
+      setCardId(id);
+      setDraft(b.cards.find((c) => c.id === id)?.overrides ?? {});
+    };
+    window.addEventListener("lyric-open-title-card", open);
+    return () => window.removeEventListener("lyric-open-title-card", open);
+  }, []);
+  // Title cards are saved as they are changed (a moment after the last change) and the video is planned again, so the
+  // viewer shows the change without a Save button.
+  useEffect(() => {
+    const c = board?.cards.find((x) => x.id === cardId);
+    if (!c || c.type === "lyric" || JSON.stringify(draft) === JSON.stringify(c.overrides)) return;
+    const t = setTimeout(() => void editText({ action: "card", id: c.id, overrides: draft }), 700);
+    return () => clearTimeout(t);
+  }, [draft, cardId]); // eslint-disable-line react-hooks/exhaustive-deps
   // The preview follows the playhead.
   useEffect(() => {
     const p = playerInstance;
@@ -530,6 +576,54 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
     if (panel === "shots") setSelected(null);
     setPanel(null);
   };
+  // Settings → Look's "Title cards" (11 Nov 2026): the title, byline and tagline as chips, the chosen one's editor below
+  // (the same CardEditor as a title card clicked on the timeline), drawn into ShapeTools' slot.
+  const titleCardsSlot = useTitleCardsSlot();
+  const titleCardList = (board?.cards ?? []).filter((c) => c.type === "title" || c.type === "byline" || c.type === "tagline");
+  const titleCardsInLook =
+    board && view?.editable ? (
+      <div data-title-cards className="flex flex-col gap-2 rounded-lg border px-3 py-2.5">
+        <p className="text-sm font-medium">
+          Title cards <span className="text-muted-foreground text-[11px] font-normal">· how the title, byline and tagline look in this song (the words: Prepare → Song Details)</span>
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {titleCardList.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              data-title-card-chip={c.id}
+              aria-pressed={cardId === c.id && panel !== "text"}
+              onClick={() => pickTitleCard(cardId === c.id ? null : c.id)}
+              title={c.text}
+              className={cn("rounded-full border px-3 py-0.5 text-xs", cardId === c.id && panel !== "text" ? "border-brand bg-brand/15 text-brand" : "hover:bg-accent")}
+            >
+              {c.type[0].toUpperCase() + c.type.slice(1)}
+            </button>
+          ))}
+          {!titleCardList.some((c) => c.type === "tagline") ? <span className="text-muted-foreground self-center text-[11px]">no tagline yet (Song Details)</span> : null}
+        </div>
+        {card && card.type !== "lyric" && panel !== "text" ? (
+          <CardEditor
+            key={`look-${card.id}`}
+            card={card}
+            role={board.roles[card.type as "title"] ?? {}}
+            draft={draft}
+            setDraft={setDraft}
+            busy={saving}
+            onSave={() => void editText({ action: "card", id: card.id, overrides: draft })}
+            onReset={() => {
+              setDraft({});
+              void editText({ action: "card", id: card.id, overrides: null });
+            }}
+            onClose={() => pickTitleCard(null)}
+            onFixLine={(n, t) => void fixLine(n, t)}
+            fonts={board.fonts ?? []}
+            titleFont={board.titleFont ?? ""}
+            artist={board.artist ?? "Life Lyrics"}
+          />
+        ) : null}
+      </div>
+    ) : null;
   const panelBody =
     panel === "shots" ? (
       <div className="flex flex-col gap-4" data-shots-panel>
@@ -923,6 +1017,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
           {analysisBody}
         </div>
         {tools}
+        {titleCardsSlot && titleCardsInLook ? createPortal(titleCardsInLook, titleCardsSlot) : null}
       </aside>
       <button type="button" data-panel-collapse onClick={() => setCollapsed(true)} title="Collapse the panel (the viewer gets the width)" aria-label="collapse the panel" className="bg-card/40 text-muted-foreground hover:text-foreground -ml-px flex h-24 w-5 shrink-0 items-center justify-center rounded-r-md border">
         <ChevronLeft className="size-4" />
@@ -1556,14 +1651,49 @@ function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClos
           ) : null}
         </label>
       </div>
+      {!lyric ? (
+        // Title cards (11 Nov 2026): their own colour, transparency and capitals.
+        <div className="mt-2 grid gap-2">
+          <label className="flex items-center gap-2">
+            <span className="w-20">Colour</span>
+            <input data-card-colour type="color" value={draft.colour ?? (card.type === "title" ? "#E8A3B5" : "#FFFFFF")} onChange={(e) => set("colour", e.target.value.toUpperCase())} className="h-7 w-10 rounded border" />
+            {draft.colour ? (
+              <button type="button" data-card-colour-reset onClick={() => set("colour", undefined)} className="text-muted-foreground hover:text-foreground underline underline-offset-2">
+                as the theme
+              </button>
+            ) : (
+              <span className="text-muted-foreground">as the theme</span>
+            )}
+          </label>
+          <label className="flex items-center gap-2">
+            <span className="w-20">Transparency</span>
+            <input data-card-opacity type="range" min={0.2} max={1} step={0.05} value={draft.opacity ?? (card.type === "tagline" ? 0.8 : card.type === "byline" ? 0.85 : 1)} onChange={(e) => set("opacity", Number(e.target.value))} className="accent-brand flex-1" />
+            <span className="w-10 tabular-nums">{Math.round((draft.opacity ?? (card.type === "tagline" ? 0.8 : card.type === "byline" ? 0.85 : 1)) * 100)}%</span>
+          </label>
+          <label className="flex items-center gap-2">
+            <span className="w-20">Capitals</span>
+            <select data-card-upper className={field} value={draft.upper === undefined ? "" : String(draft.upper)} onChange={(e) => set("upper", e.target.value === "" ? undefined : e.target.value === "true")}>
+              <option value="">{card.type === "title" ? "as the platform (capitals)" : "as written"}</option>
+              <option value="true">ALL CAPITALS</option>
+              <option value="false">as written</option>
+            </select>
+          </label>
+        </div>
+      ) : null}
       <p className="text-muted-foreground mt-2">
-        {lyric ? "The preview shows the change at once (its timing comes from the lyric alignment). " : "Title cards change in the preview after saving. "}
+        {lyric ? "The preview shows the change at once (its timing comes from the lyric alignment). " : "Saved as you change it; the viewer shows it a moment later. "}
         Places stay inside the platform&apos;s safe area.
       </p>
       <div className="mt-2 flex gap-2">
-        <Button size="sm" data-card-save disabled={busy || !changed} onClick={onSave}>
-          {busy ? <Loader2 className="animate-spin" /> : null} Save and plan again
-        </Button>
+        {lyric ? (
+          <Button size="sm" data-card-save disabled={busy || !changed} onClick={onSave}>
+            {busy ? <Loader2 className="animate-spin" /> : null} Save and plan again
+          </Button>
+        ) : busy ? (
+          <span data-card-saving className="text-muted-foreground flex items-center gap-1">
+            <Loader2 className="size-3.5 animate-spin" /> saving…
+          </span>
+        ) : null}
         <Button size="sm" variant="outline" data-card-reset disabled={busy || !Object.keys(card.overrides).length} onClick={onReset}>
           Reset this card
         </Button>
@@ -1665,3 +1795,17 @@ function AnalysisSection({ title, children }: { title: string; children: ReactNo
 const noSubscribe = () => () => {};
 const findHeaderSlot = () => document.getElementById("song-header-actions");
 const noHeaderSlot = () => null;
+
+// The Look section's slot for the title cards (ShapeTools draws it; it comes and goes as Look opens and closes): watched,
+// so the board draws its title-card editor there as soon as the slot is on the page.
+function useTitleCardsSlot(): Element | null {
+  const [slot, setSlot] = useState<Element | null>(null);
+  useEffect(() => {
+    const find = () => setSlot(document.querySelector("[data-title-cards-slot]"));
+    find();
+    const watch = new MutationObserver(find);
+    watch.observe(document.body, { childList: true, subtree: true });
+    return () => watch.disconnect();
+  }, []);
+  return slot;
+}

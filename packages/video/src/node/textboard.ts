@@ -34,7 +34,7 @@ import {
   type Textboard,
   type TextTemplate,
 } from "../textboard";
-import { CARD_MIN_SCALE, cardBlocks, fitCardBlocks, gridCrop, type CardMeasure } from "../card-layout";
+import { fitCardBlocks, type CardMeasure } from "../card-layout";
 import { fontFileRefs, forText, loadFontCatalog, resolveFace, resolveFont, type FontCatalog } from "./font-catalog";
 import { faceMeasure } from "./measure";
 import { loadBrand } from "./brand";
@@ -247,7 +247,8 @@ export function cardMeasure(catalog: FontCatalog, cards: readonly Pick<TextCardP
 
 export const TITLE_SIZE_VERTICAL = 84; // px at 1080x1920 (x the platform's text scale)
 export const TITLE_HOLD_VERTICAL_S = 4;
-export const TITLE_MIN_S = 4;  // the title opening is on screen at least this long (unless it would sit on the first lyric line)
+export const TITLE_MIN_S = 4;  // the title opening's time when the video has no lyric line to wait for
+export const TITLE_SHORT_S = 1.5; // less than this before the first line: the title is said to be too short (a note)
 
 // The title, byline and tagline cards of one video. Defaults: YouTube shows title + artist as before
 // (`youtube`, the layout's title), the vertical platforms none (a card shows when the board says
@@ -261,13 +262,16 @@ export function titleCards(
     durationInFrames: number;
     youtube: TitleOverlayProps | null;
     titleFont: { family: string; weight: number; letterSpacing?: number };
+    // The lyric font: the tagline's default face in the title opening (11 Nov 2026: a credit or tagline reads as a
+    // caption under the title, not as a second title). Without it the title font, as before.
+    lyricFont?: { family: string; weight: number; italic?: boolean } | null;
     accent: string;
     textScale: number;
     fontFor: (style: CardStyle, base: Face, text: string, role: string) => CardFont | null;
     // The title opening (Reels, TikTok, Shorts, recipe titleOpening "on"): title + byline in the frame's
     // upper third, the tagline (when the song has one) in the lower third, all gone by `untilFrame` (when
     // the first lyric line fades in: they never overlap it).
-    // `lyricBox`: where the first lyric line sits. A card block that does not touch it stays until TITLE_MIN_S
+    // `lyricBox`: where the first lyric line sits (kept for callers; since 11 Nov 2026 every card is gone as that line fades in).
     // even when the line comes sooner; one that does is gone as the line fades in (and a note says what to do).
     opening?: { untilFrame: number; lyricBox?: { left: number; top: number; right: number; bottom: number } | null } | null;
     // The platform's safe area (and the font catalog to measure in): the cards are laid out to fit inside it
@@ -283,7 +287,9 @@ export function titleCards(
   const defaults = {
     title: { show: !!y || !!open, size: baseSize, position: (y ? "top" : open ? "upper-third" : "centre") as CardPosition, colour: o.accent, opacity: 1, upper: true },
     byline: { show: !!y || !!open, size: Math.round(baseSize * 0.45), position: "with-title" as CardPosition, colour: "#ffffff", opacity: 0.85, upper: false },
-    tagline: { show: !!open, size: Math.round(baseSize * (open ? 0.42 : 0.35)), position: (open ? "lower-third" : "with-title") as CardPosition, colour: "#ffffff", opacity: 0.8, upper: false },
+    // The tagline (11 Nov 2026): stacked under the title and byline, smaller, in the lyric font (a caption, not a
+    // second title); its place, size, font, colour, transparency and capitals can be set on the card.
+    tagline: { show: !!open, size: Math.round(baseSize * 0.35), position: "with-title" as CardPosition, colour: "#ffffff", opacity: 0.8, upper: false },
   };
   const holdFrames = y ? y.untilFrame : open ? Math.max(1, Math.min(o.durationInFrames, open.untilFrame)) : Math.round(TITLE_HOLD_VERTICAL_S * o.fps);
   const fonts: FontFileRef[] = [];
@@ -300,7 +306,7 @@ export function titleCards(
     const style = { ...board.roles[type], ...(card?.overrides ?? {}) } as CardOverrides;
     const text = (card?.overrides.text ?? card?.text ?? "").trim();
     if (!(style.show ?? d.show) || !text) continue;
-    const base: Face = { family: o.titleFont.family, weight: o.titleFont.weight };
+    const base: Face = type === "tagline" && open && o.lyricFont ? { family: o.lyricFont.family, weight: o.lyricFont.weight, ...(o.lyricFont.italic ? { italic: true } : {}) } : { family: o.titleFont.family, weight: o.titleFont.weight };
     const own = o.fontFor(style, base, text, `${type} font`);
     if (own) {
       fonts.push(...own.refs);
@@ -320,10 +326,11 @@ export function titleCards(
       weight: font.weight,
       ...(font.italic ? { italic: true } : {}),
       size: Math.round(d.size * (style.size ?? 1)),
-      colour: d.colour,
-      ...(d.opacity !== 1 ? { opacity: d.opacity } : {}),
-      letterSpacing: o.titleFont.letterSpacing ?? 0.18,
-      upper: d.upper,
+      colour: style.colour ?? d.colour,
+      ...((style.opacity ?? d.opacity) !== 1 ? { opacity: style.opacity ?? d.opacity } : {}),
+      // A tagline in the lyric font keeps that font's own spacing (the title's wide tracking is for capitals).
+      letterSpacing: base.family === o.titleFont.family ? (o.titleFont.letterSpacing ?? 0.18) : 0.02,
+      upper: style.upper ?? d.upper,
       startFrame: 0,
       // With the title opening a card never stays into the first lyric line, even with its own hold.
       endFrame: Math.min(style.hold !== undefined ? Math.min(o.durationInFrames, Math.round(style.hold * o.fps)) : holdFrames, open ? holdFrames : Infinity),
@@ -340,67 +347,13 @@ export function titleCards(
   const cards = out.map((c) => (c.stackOn === undefined ? (({ stackOn: _s, ...rest }) => rest)(c) : c));
   // The vertical platforms' cards (not YouTube's title): fitted into the safe area, as QA measures them.
   const fitted = o.fit && !y ? fitCardBlocks(cards, { format: o.format, safeZone: o.fit.safeZone, measure: cardMeasure(o.fit.catalog, cards) }) : cards;
-  // The title opening with a first lyric line sooner than TITLE_MIN_S: a block clear of that line's box stays
-  // on screen for TITLE_MIN_S; one that touches it (or whose line is unknown) is shown alone until the line
-  // fades in, and the note names the creative fix. The music and the lyric timing are never touched.
+  // The title opening never shares the screen with the first sung line (11 Nov 2026, asked by the user: title, byline,
+  // tagline and the first line at once looked crowded): every card is gone as that line fades in (endFrame above).
+  // When that leaves the title only a moment on screen, the note names the creative fix. The music and the lyric
+  // timing are never touched.
   const notes: string[] = [];
-  const minFrame = Math.min(o.durationInFrames, Math.round(TITLE_MIN_S * o.fps));
-  if (open && open.untilFrame < minFrame && fitted.length) {
-    const measure = o.fit ? cardMeasure(o.fit.catalog, fitted) : (c: { text: string; size: number }) => c.text.length * c.size * 0.6;
-    const lyric = open.lyricBox ?? null;
-    const blocks = cardBlocks(fitted, o.format, measure as never);
-    const keep = new Set<string>();
-    // Where a touching block can go instead, inside the platform's safe area (and the profile grid's 3:4 crop
-    // when the block fits there): the title moves up above the line, the tagline down below it, shrinking
-    // by up to 25% when needed (as fitCardBlocks does), clear of the line and of the other block.
-    const safe = o.fit?.safeZone;
-    const grid = o.format.height > o.format.width ? gridCrop(o.format) : null;
-    const gap = Math.round(o.format.height * 0.012);
-    const overlaps = (a: { left: number; top: number; right: number; bottom: number }, b: { left: number; top: number; right: number; bottom: number }, m = 0) =>
-      a.left < b.right + m && a.right > b.left - m && a.top < b.bottom + m && a.bottom > b.top - m;
-    const moved = new Map<string, Partial<TextCardProps>>();
-    const placed = blocks.map((b) => ({ ids: b.ids, box: b.box }));
-    const relocate = (b: (typeof blocks)[number], dir: "up" | "down") => {
-      if (!lyric || !safe) return false;
-      const safeTop = o.format.height * safe.top;
-      const safeBottom = o.format.height * (1 - safe.bottom);
-      const parts = fitted.filter((c) => b.ids.includes(c.id));
-      for (let scale = 1; scale >= CARD_MIN_SCALE - 1e-9; scale -= 0.05) {
-        const sized = parts.map((c) => ({ ...c, size: Math.max(1, Math.round(c.size * scale)), centerY: undefined, top: 0 }));
-        const probe = cardBlocks(sized, o.format, measure as never)[0];
-        const h = probe.box.bottom - probe.box.top;
-        const gridFits = grid && Math.min(safeBottom, grid.bottom) - Math.max(safeTop, grid.top) >= h;
-        const lo = Math.ceil(gridFits ? Math.max(safeTop, grid!.top) : safeTop);
-        const hi = Math.floor((gridFits ? Math.min(safeBottom, grid!.bottom) : safeBottom) - h);
-        const top = dir === "up" ? Math.round(lyric.top - gap - h) : Math.round(lyric.bottom + gap);
-        if (top < lo || top > hi) continue;
-        const box = { left: probe.box.left, right: probe.box.right, top, bottom: top + h };
-        if (overlaps(box, lyric, gap) || placed.some((p) => p.ids !== b.ids && overlaps(box, p.box, gap))) continue;
-        const rootId = b.ids[0];
-        parts.forEach((c) => {
-          const size = Math.max(1, Math.round(c.size * scale));
-          moved.set(c.id, c.id === rootId ? { size, top, centerY: undefined } : { size });
-        });
-        const at = placed.find((p) => p.ids === b.ids)!;
-        at.box = box;
-        return true;
-      }
-      return false;
-    };
-    for (const b of blocks) {
-      const touches = !lyric || overlaps(b.box, lyric);
-      const isTitle = b.ids.includes("title");
-      if (!touches || relocate(b, isTitle ? "up" : "down")) b.ids.forEach((id) => keep.add(id));
-      else notes.push(`No room for the ${isTitle ? "title" : "tagline"} before the first line: start the Reel's part of the song about 2 bars earlier (drag the pink window's start on the song track) or let the app choose it (Automatic).`);
-    }
-    const cards2 = fitted.map((c) => {
-      if (!keep.has(c.id)) return c;
-      const m = moved.get(c.id);
-      const base = m ? ({ ...c, ...m } as TextCardProps) : c;
-      if (m && "centerY" in m) delete (base as { centerY?: number }).centerY;
-      return { ...base, endFrame: Math.max(c.endFrame, minFrame) };
-    });
-    return { cards: cards2, fonts, warnings, notes };
+  if (open && fitted.length && open.untilFrame < Math.round(TITLE_SHORT_S * o.fps)) {
+    notes.push(`The title is on screen only ${(open.untilFrame / o.fps).toFixed(1)} s before the first line: start the Reel's part of the song about 2 bars earlier (drag the pink window's start on the song track) or let the app choose it (Automatic).`);
   }
   return { cards: fitted, fonts, warnings, notes };
 }

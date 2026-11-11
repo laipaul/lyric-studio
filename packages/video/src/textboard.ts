@@ -32,6 +32,10 @@ export type CardStyle = {
   font?: string;
   weight?: number;
   italic?: boolean;
+  // Title cards (11 Nov 2026): the card's colour (#RRGGBB), how opaque it is (0.2-1) and capitals (true / false).
+  colour?: string;
+  opacity?: number;
+  upper?: boolean;
 };
 export type CardOverrides = CardStyle & { text?: string }; // text: title / byline / tagline only
 export type TextCard = { id: string; type: CardType; line?: number; text: string; isHook?: boolean; overrides: CardOverrides };
@@ -46,7 +50,7 @@ export const taglineFor = (ep?: string | null) => (ep ? `From the EP "${ep}"` : 
 
 // ---------------------------------------------------------------- checks
 
-const STYLE_KEYS = ["show", "position", "size", "hold", "effect", "font", "weight", "italic"] as const;
+const STYLE_KEYS = ["show", "position", "size", "hold", "effect", "font", "weight", "italic", "colour", "opacity", "upper"] as const;
 
 export function checkStyle(raw: unknown, where: string, problems: string[], withText = false): CardOverrides {
   const out: CardOverrides = {};
@@ -74,6 +78,9 @@ export function checkStyle(raw: unknown, where: string, problems: string[], with
   if (r.font !== undefined) typeof r.font === "string" && r.font.trim() ? (out.font = r.font.trim()) : problems.push(`${where}.font must be a font family`);
   if (r.weight !== undefined) Number.isInteger(r.weight) && (r.weight as number) >= 100 && (r.weight as number) <= 900 && (r.weight as number) % 100 === 0 ? (out.weight = r.weight as number) : problems.push(`${where}.weight must be 100, 200, ... 900`);
   if (r.italic !== undefined) typeof r.italic === "boolean" ? (out.italic = r.italic) : problems.push(`${where}.italic must be true or false`);
+  if (r.colour !== undefined) typeof r.colour === "string" && /^#[0-9a-f]{6}$/i.test(r.colour) ? (out.colour = r.colour.toUpperCase()) : problems.push(`${where}.colour must look like #FFFFFF`);
+  if (r.opacity !== undefined) typeof r.opacity === "number" && r.opacity >= 0.2 && r.opacity <= 1 ? (out.opacity = Math.round(r.opacity * 100) / 100) : problems.push(`${where}.opacity must be 0.2-1`);
+  if (r.upper !== undefined) typeof r.upper === "boolean" ? (out.upper = r.upper) : problems.push(`${where}.upper must be true or false`);
   if (withText && r.text !== undefined) typeof r.text === "string" ? (out.text = r.text) : problems.push(`${where}.text must be text`);
   return out;
 }
