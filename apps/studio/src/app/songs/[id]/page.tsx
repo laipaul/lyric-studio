@@ -107,7 +107,8 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
   const { song, runs, settings, approved, offered, panel, preset, presetError, making } = data;
   // Compare looks' baseline: the platforms that already have one of the song's own videos (not a try).
   const ownMade = [...new Set(runs.flatMap((r) => r.platforms.filter((pr) => pr.videos.some((v) => !v.try && v.mark.status !== "discarded")).map((pr) => pr.name)))];
-  // Review's tabs: every platform with videos (count: those not discarded) or being made, the song's own order first.
+  // Review's tabs: every platform with videos (count: those not discarded) or being made, in the fixed order
+  // Reels · TikTok · Shorts · YouTube · Canvas, then Post.
   const reviewPlatforms: ReviewPlatform[] = (() => {
     const found = new Map<string, ReviewPlatform>();
     for (const r of runs) for (const pr of r.platforms) if (pr.videos.length) {
@@ -116,7 +117,7 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
       found.set(pr.name, c);
     }
     for (const m of making) if (!found.has(m.platform)) found.set(m.platform, { name: m.platform, label: m.label, count: 0 });
-    const order = [...(song.wanted ?? []), "reels", "tiktok", "shorts", "youtube", "canvas", "standard"];
+    const order = ["reels", "tiktok", "shorts", "youtube", "canvas", "standard"]; // always this order, whatever the counts (11 Nov 2026)
     return [...found.values()].sort((a, b) => (order.indexOf(a.name) + 1 || 99) - (order.indexOf(b.name) + 1 || 99));
   })();
   const todo = await withWorkspaceAsync((ws) => songTodo(ws, id)).catch(() => []);

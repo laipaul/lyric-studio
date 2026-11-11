@@ -287,6 +287,11 @@ async function main() {
     const cardOrder = await page.$$eval("[data-review-platform=reels] [data-card]", (e: Element[]) => e.map((x) => x.getAttribute("data-run")));
     check(JSON.stringify(cardOrder) === JSON.stringify(["2026-10-28_1000", "2026-10-29_1000"]), `the approved video first, then the newest (${cardOrder.join(", ")})`);
     check(!!(await page.$("[data-card] [data-card-run]")) && !(await page.$("[data-review-platform] h2 + [data-run]")), "the run's date and time is a small line on each card");
+    // 11 Nov 2026: the run's command is in the card's ⋯ menu (with Copy); "settings" stays visible on the card.
+    check(!((await page.textContent("[data-card-run]")) ?? "").includes("command") && !!(await page.$("[data-card-run] [data-run-settings]")), "the card shows settings, not the command");
+    await page.click("[data-card-run] [data-card-menu]");
+    check(((await page.textContent("[data-run-command]")) ?? "").startsWith("pnpm make") && !!(await page.$("[data-copy-command]")), `its ⋯ menu: the command and Copy (${await page.textContent("[data-run-command]")})`);
+    await page.keyboard.press("Escape");
     await page.click("[data-take=reels]");
     await page.waitForSelector("[data-another-take] >> text=Queued");
     // The queued take shows as a placeholder card in its platform's tab.

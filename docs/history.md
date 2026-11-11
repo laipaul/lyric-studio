@@ -4,6 +4,38 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Prepare reorganised: Audio · Lyrics & timing · Details · Storyboard; the planned video is the "shot plan" ✅ (to verify on the Windows PC)
+- **One kind of input per tab** (Files vs Clips was unclear):
+  - **Audio** (was Files): the song folder, the song, the vocal stem, backing vocals (and audio files to place).
+  - **Lyrics & timing**: the tempo and Time the lyrics again, then **the lyrics file and hints (tapped times)** (moved
+    here from Files, with "What is this file?" for text files), then the lyrics.
+  - **Details**: title, tagline, card texts, EP, **the cover** (moved here from Files), the song's links.
+  - **Storyboard** (was Clips): "Your story line: drag to set the order.", your clips and photos in story order with their
+    notes, Use / Omit, **Add clips & photos** (photos were already accepted: .jpg, .png, .webp; now the button says so),
+    removed clips, shared collections.
+  - Each tab lists only its own replaced files. Prepare's to-do buttons go to the new places (cover → Details, lyrics →
+    Lyrics & timing, clips → Storyboard, vocal stem → Audio).
+- **Old links still work:** ?tab=assets / files / audio → Audio, ?tab=clips → Storyboard, ?panel=song → Details;
+  ?tab=storyboard (from before 31 Oct) still opens Shape.
+- **Naming rule (added to CLAUDE.md):** on screen "Storyboard" means only your story line (Prepare → Storyboard). The
+  app's planned video is the **shot plan** everywhere you read it: Shape's hints ("Shape → Analysis says which"), "The
+  shot plan could not be made", "…then its shot plan shows here", pnpm storyboards' report ("shot plans: reels-1"), the
+  README ("Shot plan (Shape)"). File and code names stay (storyboards\*.json, pnpm storyboards). Messages that pointed to
+  old tab names now say Prepare → Audio / Lyrics & timing / Details / Storyboard (no clips yet, no lyrics file, title
+  too long, more clips needed, the help text in clips.json and textboard.json, Collections).
+- Layout and labels: no setting changed, nothing new besides the moved rows.
+- Tests: song-stages.e2e.ts (+13: the tab names, Audio shows only song / stem / backing vocals, Lyrics & timing the
+  lyrics file and hints and the text file to place, the cover to-do opens Details, Storyboard's line and Add clips &
+  photos with photos accepted, five old links, ?tab=storyboard still Shape, Shape never says "storyboard"); stage-tabs.ts
+  opens Prepare's tabs by id; style-lock, clip-notes and new-song-every-platform follow the moves; unit: song-stages
+  (to-do targets), stability and make (messages), storyboard-save ("shot plans:").
+  Run in the cloud session: song-stages 171, storyboard 156, style-lock 29, videos-post 64, lyrics-tab 33,
+  title-opening 40, textboard 19, collections 16, library 22, releases 16, themes 35, song-title 7, clip-notes 14: all
+  pass; pairings: only its old 428 px check, as before. Unit (packages/video): 1001 pass; only make / migrate / render
+  fail here (real renders: Remotion cannot reach remotion.media from the cloud), as before; the "No clips yet" message
+  check sits in make's real-render test, so it runs on the PC only. new-song-every-platform not run here (a real render
+  worker). tsc clean; pnpm build ok.
+
 ### Song page: the selected stage and tab are unmistakable (pink) ✅ (to verify on the Windows PC)
 - **The app's pink accent** (as on the play button) marks what is selected, in all four stages; never green or yellow
   (those keep meaning ready / needs attention, as the stage dots do).

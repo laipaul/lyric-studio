@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { makeRun, openWorkspace, videoMark } from "@lyric/db";
-import { findOrCreateSongProject, songPathsById } from "@lyric/video/node";
+import { findOrCreateSongProject, songPathsById, writeRecipe } from "@lyric/video/node";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-post-"));
 const wsDir = path.join(root, "workspace");
@@ -31,6 +31,8 @@ async function main() {
   const sp = await findOrCreateSongProject(ws, song);
   const paths = songPathsById(ws, sp.project.id);
   writeFileSync(path.join(paths.root, "lyrics.txt"), "Line one\n* Hold on\n");
+  // The song's platforms in another order: Review's tabs stay Reels · TikTok · Shorts · YouTube · Canvas (11 Nov 2026).
+  writeRecipe(paths.recipe!, { platforms: ["youtube", "tiktok", "reels"] });
   mkdirSync(path.join(wsDir, "collections", "wedding"), { recursive: true });
 
   // A Reels run made with "floating" and an auto section 0:34–1:06 (target 32 s); the recipe now says glide.

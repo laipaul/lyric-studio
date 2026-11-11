@@ -1,6 +1,7 @@
 "use client";
 
-import { Columns3, Loader2, Shuffle, SlidersHorizontal, X } from "lucide-react";
+import { Columns3, Loader2, MoreHorizontal, Shuffle, SlidersHorizontal, X } from "lucide-react";
+import { DropdownMenu } from "radix-ui";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -9,7 +10,6 @@ import type { PlatformRun, RunInfo, VideoInfo } from "@lyric/video/exports";
 import type { RunComparison } from "@lyric/video/run-settings";
 
 import { CompareDialog } from "@/components/compare-dialog";
-import { CopyButton } from "@/components/copy-button";
 import { ReadyToPost } from "@/components/ready-to-post";
 import { PlatformVerdict } from "@/components/assessment";
 import { StatusBadge, type BadgeStatus } from "@/components/status-badge";
@@ -295,16 +295,9 @@ function RunLine({ projectId, run, p, settings }: { projectId: string; run: RunV
           {p.state.status === "interrupted" ? "interrupted" : "failed"}
         </StatusBadge>
       ) : null}
-      {run.command ? (
-        <details className="w-full">
-          <summary className="hover:text-foreground cursor-pointer">command</summary>
-          <div className="mt-1 flex items-start gap-2">
-            <code className="bg-muted rounded p-2 break-all">{run.command}</code>
-            <CopyButton text={run.command} />
-          </div>
-        </details>
-      ) : null}
       {settings?.length ? <RunSettings projectId={projectId} folder={run.folder} platforms={mine?.length ? mine : settings} /> : null}
+      {/* The run's command (11 Nov 2026): in the card's ⋯ menu, with Copy; "settings" stays visible. */}
+      {run.command ? <CommandMenu id={`${run.folder}/${p.name}`} command={run.command} /> : null}
     </div>
   );
 }
@@ -353,5 +346,35 @@ function RunSettings({ projectId, folder, platforms }: { projectId: string; fold
         </Button>
       </div>
     </details>
+  );
+}
+
+// A card's ⋯ menu: the terminal command that made its run (pnpm make …), and Copy.
+function CommandMenu({ id, command }: { id: string; command: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <DropdownMenu.Root modal={false} onOpenChange={(o) => !o && setCopied(false)}>
+      <DropdownMenu.Trigger asChild>
+        <button type="button" data-card-menu={id} aria-label="More" title="More: the command that made this run" className="hover:text-foreground hover:bg-accent ml-auto rounded p-0.5">
+          <MoreHorizontal className="size-4" />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content align="end" sideOffset={4} className="bg-popover text-popover-foreground z-50 w-96 max-w-[90vw] rounded-md border p-2 text-xs shadow-lg">
+          <p className="text-muted-foreground mb-1">Command (to make this run again from the terminal)</p>
+          <code data-run-command className="bg-muted block rounded p-2 break-all">{command}</code>
+          <DropdownMenu.Item
+            data-copy-command
+            onSelect={(e) => {
+              e.preventDefault(); // stays open to say it was copied
+              void navigator.clipboard?.writeText(command).then(() => setCopied(true));
+            }}
+            className="hover:bg-accent focus:bg-accent mt-1 flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 outline-none select-none"
+          >
+            {copied ? "✓ Copied" : "Copy command"}
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }
