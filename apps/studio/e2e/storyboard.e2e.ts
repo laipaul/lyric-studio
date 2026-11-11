@@ -125,7 +125,7 @@ async function main() {
     // N1: a panel shows only what applies to the video shown (a Reel: title opening, no YouTube layout).
     await openPanel(page, "look");
     const lookRows = await page.$$eval("[data-style-block=look] [data-field]", (e: Element[]) => e.filter((x) => !x.closest("[data-other-videos]")).map((x) => x.getAttribute("data-field")));
-    check(JSON.stringify(lookRows) === JSON.stringify(["titleOpening", "readability"]), `Look on a Reel: title opening and readability (${lookRows.join(", ")})`);
+    check(JSON.stringify(lookRows) === JSON.stringify(["readability"]), `Look on a Reel: readability (under Advanced) (${lookRows.join(", ")})`);
     check(!!(await page.$("[data-style-block=look] [data-other-videos] [data-field=youtubeLayout]")), "…the YouTube layout folded under Only for other videos (still reachable)");
     await openPanel(page, "part");
     check(!!(await page.$("[data-style-block=part] [data-field=ending]")), "Part & ending on a Reel: the ending is there");
@@ -723,7 +723,7 @@ async function main() {
     check(((await page.textContent("[data-no-shots]").catch(() => null)) ?? "").includes("cover art"), "YouTube cover layout: the empty shots lane says why (your cover art, not clips)");
     await page.click("[data-open-song]");
     check(!!(await page.waitForSelector("[data-shape-panel=settings] [data-style-block=look] [data-field=youtubeLayout]", { state: "visible", timeout: 5000 }).catch(() => null)), "…and its Look link opens the YouTube layout setting (shown on a YouTube video)");
-    check(!!(await page.$("[data-shape-panel=settings] [data-style-block=look] [data-other-videos] [data-field=titleOpening]")), "…a YouTube video's Look folds the title opening under Only for other videos");
+    check(!(await page.$("[data-field=titleOpening]")) && !!(await page.$("[data-on-screen-toggle=title]")), "…no Title opening setting: the On-screen text switches set it");
     await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR ?? root, "storyboard-youtube.png") });
     check(existsSync(songFile), "the song file is untouched");
     await browser.close();

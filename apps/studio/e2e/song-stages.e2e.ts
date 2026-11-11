@@ -318,7 +318,7 @@ async function main() {
     await page.waitForSelector("[data-settings-section=pace]");
     const shapeSections = await page.$$eval("[data-settings-section]", (e: Element[]) => e.map((x) => x.getAttribute("data-settings-section")));
     check(JSON.stringify(shapeSections) === JSON.stringify(["look", "part", "pace"]) && !!(await page.$("[data-set-by-me]")), `Settings: one panel with "Set by me", then Look, Part & ending, Pace (${shapeSections.join(", ")})`);
-    check(((await page.textContent("[data-settings-toggle=look]")) ?? "").includes("theme + Change · title opening · lyric readability") && ((await page.textContent("[data-settings-toggle=pace]")) ?? "").includes("shot length · transitions · pace adjustment"), "each section says what it holds");
+    check(((await page.textContent("[data-settings-toggle=look]")) ?? "").includes("theme · on-screen text (title, artist, credits)") && ((await page.textContent("[data-settings-toggle=pace]")) ?? "").includes("shot length · transitions · pace adjustment"), "each section says what it holds");
     const viewerBox = await (await page.waitForSelector("[data-viewer], [data-look-preview]")).boundingBox();
     check(!!viewerBox && viewerBox.y < 300, `the viewer at the top of the editor (${JSON.stringify(viewerBox)})`);
     check(!!(await page.$("[data-next-make]")), '"Next: Make" under the viewer');
@@ -329,7 +329,11 @@ async function main() {
     const themeName = (await page.getAttribute("[data-look-bar]", "data-look-bar")) ?? "";
     check(themeName.length > 0, `Look: the Look bar names the song's theme (${themeName})`);
     const lookMain = await page.$$eval("[data-style-block=look] [data-field]", (e: Element[]) => e.filter((x) => !x.closest("[data-other-videos]")).map((x) => x.getAttribute("data-field")));
-    check(JSON.stringify(lookMain) === JSON.stringify(["titleOpening", "readability"]) && !!(await page.$("[data-style-block=look] [data-other-videos] [data-field=youtubeLayout]")), `Look for the Reel chosen: title opening and readability; the YouTube layout folded under Only for other videos (${lookMain.join(", ")})`);
+    check(JSON.stringify(lookMain) === JSON.stringify(["readability"]) && !!(await page.$("[data-style-block=look] [data-other-videos] [data-field=youtubeLayout]")), `Look for the Reel chosen: readability; the YouTube layout folded under Only for other videos (${lookMain.join(", ")})`);
+    // Look simplified (11 Nov 2026): Theme (Change · Edit theme), On-screen text (Title, Artist, Credits), Advanced folded.
+    const onScreen = await page.$$eval("[data-on-screen]", (e: Element[]) => e.map((x) => x.getAttribute("data-on-screen")));
+    check(JSON.stringify(onScreen) === JSON.stringify(["title", "byline", "tagline"]) && !!(await page.$("[data-look-theme] [data-look-bar]")) && !(await page.$("[data-on-screen-text-input=byline]")), `Look: the theme, then Title · Artist (read-only) · Credits (${onScreen.join(", ")})`);
+    check((await page.$eval("[data-look-advanced]", (e: Element) => (e as HTMLDetailsElement).open)) === false && !(await page.isVisible("[data-field=readability]")) && !(await page.$("[data-field=titleOpening]")), "Advanced (the song's own overrides) is folded; no Title opening setting any more");
     check(!(await page.$("[data-theme-tile]")) && !(await page.$("[data-theme-new]")) && !(await page.$("[data-removed-themes]")), "no theme library in Shape: it is on the Themes page");
     check(!(await page.$("[data-theme-banner]")) && !(await page.$("[data-work-area][data-theme-mode]")), "not editing: no pink frame, no banner");
     const lookLine = (await page.textContent("[data-look-content]")) ?? "";

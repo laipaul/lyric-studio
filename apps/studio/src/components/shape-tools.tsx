@@ -71,6 +71,17 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
   const { panel, setPanel, focus } = useShapePanel();
   // Settings (11 Nov 2026): which sections are unfolded (Look first); a section asked for (focus) opens and is scrolled to.
   const [unfolded, setUnfolded] = useState<Record<SettingsSection, boolean>>({ look: true, part: false, pace: false });
+  // Look → Advanced (the song's own overrides), folded; opened when Song Details asks for the credits' look.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  useEffect(() => {
+    const open = () => setAdvancedOpen(true);
+    window.addEventListener("lyric-open-title-card", open);
+    window.addEventListener("lyric-look-advanced", open); // a title card picked in the viewer or on the timeline
+    return () => {
+      window.removeEventListener("lyric-open-title-card", open);
+      window.removeEventListener("lyric-look-advanced", open);
+    };
+  }, []);
   useEffect(() => {
     if (!focus) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- a section asked for from elsewhere opens once per ask
@@ -658,7 +669,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
                 }}
                 className="text-muted-foreground hover:text-foreground w-fit text-[11px] underline underline-offset-2"
               >
-                Tagline look… (place, size, font, colour)
+                Credits look… (place, size, font, colour)
               </button>
             ) : null
           }
@@ -1124,31 +1135,46 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
                 </button>
                 <div hidden={!open} className="border-brand/60 mt-3 mr-3 mb-3 ml-3 flex flex-col gap-3 border-l-2 pl-3">
                   {id === "look" ? (
+                    // Look (11 Nov 2026, decided with the user): the theme decides how everything looks, the song decides
+                    // what appears. Theme (Change · Edit theme), On-screen text (Title, Artist, Credits: on / off, their
+                    // words shared with Song Details), and Advanced (this song's own overrides), folded.
                     <>
-                      {lookBar}
-                      <Block id="look" title="This song's look">
-          <p className="text-muted-foreground -mt-1 text-[11px]">The theme sets the fonts, effects, colours and cards; these are this song&apos;s own{video ? " (only what applies to this video)" : ""}.</p>
-                    {rows(applies(pick(LOOK_SONG_FIELDS)))}
-                    {otherVideos(pick(LOOK_SONG_FIELDS))}
-                                {/* Title cards (11 Nov 2026): the title, byline and tagline editor, drawn here by the Shape board
-                                    (shape-board.tsx TitleCardsInLook, a portal); the same editor as a title card clicked on the timeline. */}
-                                {valueOf("titleOpening") === "off" ? (
-                                  <p data-title-opening-off className="text-muted-foreground text-[11px]">
-                                    Title opening is off: Reels, TikTok and Shorts show no title, byline or tagline (YouTube always shows its title).{" "}
-                                    <button type="button" data-title-opening-on onClick={() => void act({ action: "set", field: "titleOpening", value: "on" })} className="text-foreground underline underline-offset-2">
-                                      Turn it on
-                                    </button>
-                                  </p>
-                                ) : null}
-                                <div data-title-cards-slot className="empty:hidden" />
-                    <div className="flex flex-wrap items-center gap-3 text-xs">
-                      <button type="button" data-look-edit-theme disabled={!saved?.theme} onClick={() => saved?.theme && (openEditor(saved.theme), setPanel("theme"))} className="text-muted-foreground hover:text-foreground underline underline-offset-2">
-                        Edit theme {saved?.theme?.name ?? ""}
-                      </button>
-                      <Link href="/themes" data-look-all-themes className="text-muted-foreground hover:text-foreground underline underline-offset-2">
-                        All themes ↗
-                      </Link>
-                    </div>
+                      <div data-look-theme className="flex flex-col gap-1.5">
+                        {lookBar}
+                        <div className="flex items-center gap-3 text-xs">
+                          <button type="button" data-look-edit-theme disabled={!saved?.theme} onClick={() => saved?.theme && (openEditor(saved.theme), setPanel("theme"))} className="text-muted-foreground hover:text-foreground underline underline-offset-2 disabled:opacity-50">
+                            Edit theme {saved?.theme?.name ?? ""}
+                          </button>
+                          <span className="text-muted-foreground text-[11px]">the theme sets the fonts, colours, effects, placement and timing</span>
+                        </div>
+                      </div>
+                      <Block id="look" title="On-screen text">
+                        <OnScreenText
+                          projectId={projectId}
+                          title={data.title}
+                          artist={data.cardFit?.artist ?? ""}
+                          credits={String(valueOf("tagline") ?? "")}
+                          opening={valueOf("titleOpening") === "on"}
+                          onCredits={(v) => void (v ? act({ action: "set", field: "tagline", value: v }) : act({ action: "reset", field: "tagline" }))}
+                          onOpening={(on) => void act({ action: "set", field: "titleOpening", value: on ? "on" : "off" })}
+                          onTitle={(t) => {
+                            setData((d) => (d ? { ...d, title: t } : d));
+                            router.refresh();
+                            onSaved();
+                          }}
+                        />
+                        <details data-look-advanced open={advancedOpen} onToggle={(e) => setAdvancedOpen((e.target as HTMLDetailsElement).open)} className="rounded-lg border px-3 py-2">
+                          <summary className="cursor-pointer text-sm font-medium">
+                            Advanced <span className="text-muted-foreground text-[11px] font-normal">· this song&apos;s own overrides of the theme</span>
+                          </summary>
+                          <div className="mt-2 flex flex-col gap-3">
+                            {rows(applies(pick(LOOK_SONG_FIELDS.filter((f) => f !== "titleOpening"))))}
+                            {otherVideos(pick(LOOK_SONG_FIELDS.filter((f) => f !== "titleOpening")))}
+                            {/* The title, artist and credits cards' own look (place, size, font, colour…): drawn here by the
+                                Shape board (shape-board.tsx, a portal); the same editor as a title card clicked on the timeline. */}
+                            <div data-title-cards-slot className="empty:hidden" />
+                          </div>
+                        </details>
                       </Block>
                     </>
                   ) : (
@@ -1331,7 +1357,7 @@ const PART_FIELDS = ["section", "length", "ending"] as const;
 const PACE_FIELDS = ["shotLength", "transitions", "paceShift"] as const;
 // Settings' sections (11 Nov 2026): their names and what each holds, on the folded header.
 const SETTINGS_TITLE: Record<SettingsSection, string> = { look: "Look", part: "Part & ending", pace: "Pace" };
-const SETTINGS_HINT: Record<SettingsSection, string> = { look: "theme + Change · title opening · lyric readability", part: "section · target length · ending", pace: "shot length · transitions · pace adjustment" };
+const SETTINGS_HINT: Record<SettingsSection, string> = { look: "theme · on-screen text (title, artist, credits)", part: "section · target length · ending", pace: "shot length · transitions · pace adjustment" };
 // Only for the videos they change (the platform Shape shows): Reels / TikTok / Shorts, or YouTube.
 const SHORT_FORM = ["reels", "tiktok", "shorts"];
 const APPLIES: Record<string, string[]> = { titleOpening: SHORT_FORM, ending: SHORT_FORM, youtubeLayout: ["youtube"] };
@@ -1966,4 +1992,116 @@ function fitHint(fit: FitInput, raw: string): { kind: "one" | "two" | "too-long"
   if (!r) return { kind: "too-long", text: `too long: more than 2 lines ${where} even 25% smaller; shorten it` };
   const smaller = r.scale < 1 ? `, drawn ${Math.round((1 - r.scale) * 100)}% smaller` : "";
   return r.lines === 1 ? { kind: "one", text: `fits on one line ${where}${smaller}` } : { kind: "two", text: `will wrap to 2 lines ${where}${smaller}` };
+}
+
+// Look → On-screen text (11 Nov 2026): Title, Artist and Credits, each on or off (on every platform), their words shared
+// with Song Details (one value: typing here or there changes both; the artist is the song's own, changed in the
+// Library). Turning any on gives the Reel its title opening; all off: none. How they look comes from the theme
+// (Advanced: this song's own overrides). Saved at once; the viewer follows.
+type OnScreenRow = { id: "title" | "byline" | "tagline"; label: string };
+const ON_SCREEN: OnScreenRow[] = [
+  { id: "title", label: "Title" },
+  { id: "byline", label: "Artist" },
+  { id: "tagline", label: "Credits" },
+];
+function OnScreenText({ projectId, title, artist, credits, opening, onCredits, onOpening, onTitle }: {
+  projectId: string;
+  title: string;
+  artist: string;
+  credits: string;
+  opening: boolean;
+  onCredits: (v: string) => void;
+  onOpening: (on: boolean) => void;
+  onTitle: (t: string) => void;
+}) {
+  const [shows, setShows] = useState<Record<string, boolean | undefined>>({});
+  const [overrides, setOverrides] = useState<Record<string, Record<string, unknown>>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const load = async () => {
+    const r = await api(`/api/songs/${projectId}/textboard`, { cache: "no-store" }).catch(() => null);
+    const d = (await r?.json().catch(() => null)) as { cards?: { id: string; overrides: Record<string, unknown> }[] } | null;
+    const own = Object.fromEntries((d?.cards ?? []).map((c) => [c.id, c.overrides]));
+    setOverrides(own);
+    setShows(Object.fromEntries(Object.entries(own).map(([id, o]) => [id, typeof o.show === "boolean" ? o.show : undefined])));
+  };
+  useEffect(() => {
+    void load();
+  }, [projectId, credits, title]); // eslint-disable-line react-hooks/exhaustive-deps
+  const text = { title, byline: artist, tagline: credits };
+  const isOn = (id: string) => !!text[id as keyof typeof text]?.trim() && (shows[id] ?? opening);
+  async function toggle(id: string, on: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api(`/api/songs/${projectId}/textboard`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "card", id, overrides: { ...(overrides[id] ?? {}), show: on } }) });
+      const d = (await r.json()) as { error?: string };
+      if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
+      const next = { ...shows, [id]: on };
+      setShows(next);
+      // The Reel's title opening follows: on while any of the three is on.
+      const any = ON_SCREEN.some((row) => !!text[row.id].trim() && (row.id === id ? on : (next[row.id] ?? opening)));
+      if (any !== opening) onOpening(any);
+      window.dispatchEvent(new Event("lyric-textboard-changed")); // the Shape board reloads its cards and plans again
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function saveTitle(t: string) {
+    const clean = t.replace(/\s+/g, " ").trim();
+    if (!clean || clean === title) return;
+    const r = await api(`/api/songs/${projectId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: clean }) });
+    if (r.ok) onTitle(clean);
+    else setError(((await r.json().catch(() => ({}))) as { error?: string }).error ?? "The title was not saved");
+  }
+  return (
+    <div data-on-screen-text className="flex flex-col gap-1.5">
+      {ON_SCREEN.map((row) => {
+        const value = text[row.id];
+        const on = isOn(row.id);
+        return (
+          <div key={row.id} data-on-screen={row.id} data-on={on ? "1" : "0"} className="bg-card flex items-center gap-2 rounded-lg border px-3 py-2">
+            <span className="w-16 shrink-0 text-sm">{row.label}</span>
+            {row.id === "byline" ? (
+              <span className="text-muted-foreground min-w-0 flex-1 truncate text-sm" title="The song's artist (changed in the Library: the song's ⋯ menu)">
+                {value || "—"}
+              </span>
+            ) : (
+              <input
+                key={`${row.id}-${value}`}
+                data-on-screen-text-input={row.id}
+                defaultValue={value}
+                placeholder={row.id === "tagline" ? "e.g. Art: @noriko_imazeki" : ""}
+                onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  if (v === value) return;
+                  if (row.id === "title") void saveTitle(v);
+                  else onCredits(v);
+                }}
+                className="bg-input/30 border-input h-8 min-w-0 flex-1 rounded-md border px-2 text-sm"
+              />
+            )}
+            <button
+              type="button"
+              role="switch"
+              data-on-screen-toggle={row.id}
+              aria-checked={on}
+              disabled={busy || !value.trim()}
+              title={!value.trim() ? `Write the ${row.label.toLowerCase()} first` : on ? "Shown in the video: click to hide" : "Hidden: click to show"}
+              onClick={() => void toggle(row.id, !on)}
+              className={cn("relative h-5 w-9 shrink-0 rounded-full border transition-colors disabled:opacity-40", on ? "bg-brand border-brand" : "bg-muted")}
+            >
+              <span className={cn("absolute top-0.5 size-3.5 rounded-full bg-white transition-all", on ? "left-[18px]" : "left-0.5")} />
+            </button>
+          </div>
+        );
+      })}
+      <p className="text-muted-foreground text-[11px]">The same words as Prepare → Song Details. Their look, place and timing come from the theme.</p>
+      {error ? <p className="text-xs text-red-300">{error}</p> : null}
+    </div>
+  );
 }

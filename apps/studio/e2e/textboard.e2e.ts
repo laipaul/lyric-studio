@@ -180,7 +180,8 @@ async function main() {
     await page.waitForSelector("[data-tagline-look]");
     await page.click("[data-tagline-look]");
     await page.waitForSelector("[data-title-cards] [data-card-editor='tagline']", { timeout: 180_000 }).catch(async () => { await page.screenshot({ path: process.env.TB_SHOT ?? path.join(root, "textboard-look.png") }); throw new Error("no tagline editor in Look"); });
-    check((await page.getAttribute("[data-shape-tab=settings]", "aria-selected")) === "true" && (await page.getAttribute("[data-settings-toggle=look]", "aria-expanded")) === "true", "Tagline look... opens Shape -> Settings -> Look with the tagline's editor");
+    check((await page.getAttribute("[data-shape-tab=settings]", "aria-selected")) === "true" && (await page.getAttribute("[data-settings-toggle=look]", "aria-expanded")) === "true", "Credits look... opens Shape -> Settings -> Look with the tagline's editor");
+    check((await page.$eval("[data-look-advanced]", (e: Element) => (e as HTMLDetailsElement).open)) === true, "…under Advanced, unfolded");
     await page.fill("[data-title-cards] [data-card-colour]", "#336699");
     await page.fill("[data-title-cards] [data-card-opacity]", "0.6");
     await page.selectOption("[data-title-cards] [data-card-upper]", "true");
@@ -201,6 +202,7 @@ async function main() {
     writeFileSync(paths.recipe!, JSON.stringify({ ...JSON.parse(readFileSync(paths.recipe!, "utf8")), titleOpening: "off" }));
     await page.reload();
     await openPanel(page, "look");
+    await page.click("[data-look-advanced] summary"); // the cards' own look sits under Advanced
     await page.waitForSelector("[data-title-card-edit='title']", { timeout: 180_000 });
     await page.click("[data-title-card-edit='title']");
     await page.waitForSelector("[data-title-card-row='title'][data-open='1'] [data-card-editor='title']");
@@ -224,6 +226,22 @@ async function main() {
     await page.click("[data-textboard-titles] [data-text-card='title']");
     await page.waitForSelector("[data-title-card-row='title'][data-open='1'] [data-card-editor='title']");
     check((await page.getAttribute("[data-shape-tab=settings]", "aria-selected")) === "true", "the title's T bar on the timeline opens it in Look too");
+    // Look -> On-screen text (11 Nov 2026): Title, Artist, Credits each on / off, the words shared with Song Details.
+    check((await page.getAttribute("[data-on-screen='tagline']", "data-on")) === "0", "with the title opening off the credits are off");
+    await page.click("[data-on-screen-toggle='tagline']");
+    for (let i = 0; i < 60 && tagOverrides().show !== true; i++) await sleep(250);
+    const recipeOpen = () => JSON.parse(readFileSync(paths.recipe!, "utf8")) as Record<string, unknown>;
+    for (let i = 0; i < 60 && recipeOpen().titleOpening !== "on"; i++) await sleep(250);
+    check(tagOverrides().show === true && recipeOpen().titleOpening === "on" && tagOverrides().colour === "#336699", `Credits on: the card is shown (its own look kept) and the Reel gets its title opening (${JSON.stringify(tagOverrides())}, ${recipeOpen().titleOpening})`);
+    await page.waitForSelector("[data-on-screen='tagline'][data-on='1']");
+    await page.fill("[data-on-screen-text-input='tagline']", "Art: Noriko Imazeki");
+    await page.press("[data-on-screen-text-input='tagline']", "Enter");
+    for (let i = 0; i < 60 && recipeOpen().tagline !== "Art: Noriko Imazeki"; i++) await sleep(250);
+    check(recipeOpen().tagline === "Art: Noriko Imazeki", `Credits edited in Look: the same words as Song Details (song.json tagline: ${recipeOpen().tagline})`);
+    check(!(await page.$("[data-on-screen-text-input='byline']")) && ((await page.textContent("[data-on-screen='byline']")) ?? "").length > 6, "the artist is shown, read-only (changed in the Library)");
+    await page.click("[data-on-screen-toggle='tagline']");
+    for (let i = 0; i < 60 && tagOverrides().show !== false; i++) await sleep(250);
+    check(tagOverrides().show === false, "Credits off: hidden in the video");
     await browser.close();
   } finally {
     server.kill();

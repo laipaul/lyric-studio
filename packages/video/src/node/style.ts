@@ -69,7 +69,7 @@ export const FIELD_LABELS: Record<RecipeField, string> = {
   shine: "Shine (choruses)",
   emphasis: "Emphasis word",
   titleOpening: "Title opening (Reels, TikTok, Shorts)",
-  tagline: "Tagline",
+  tagline: "Credits", // on screen since 11 Nov 2026 (song.json keeps "tagline")
   ep: "EP",
   youtubeLayout: "YouTube layout",
   textColour: "Text colour",

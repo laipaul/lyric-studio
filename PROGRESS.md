@@ -4,6 +4,21 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Look simplified: Theme, On-screen text (Title · Artist · Credits), Advanced ✅ (to verify on the Windows PC)
+- **The rule:** the theme decides how everything looks; the song decides what appears.
+- **Theme:** the song's theme with Change, and Edit theme.
+- **On-screen text:** Title, Artist and Credits, each with its words and an on / off switch (every platform). The words
+  are the same as in Song Details (type in either place); the Artist is read-only (changed in the Library). Saved at
+  once, the viewer follows; no Save button. Switching any on gives the Reel its title opening; all off, none.
+- **Advanced** (folded): readability, the YouTube layout and the title cards' own look (font, colour, place…). It
+  opens by itself when you click a title card in the viewer or on the timeline, or Song Details → "Credits look…".
+- **Gone from the default view:** Title opening, Title cards, Lyric readability. "Tagline" reads **Credits** and
+  "Byline" reads **Artist** on screen. Changing the theme keeps the words and the switches.
+- Tests (browser): textboard (switches save the card and the title opening, Credits edited in Look reach song.json,
+  Artist read-only, Advanced opens for Credits look…), song-stages, storyboard.
+- **To check on the PC:** Shape → Settings → Look: the theme, then three rows; switch Credits off: it leaves the viewer;
+  type new credits: Song Details shows the same; open ▸ Advanced for the fonts and colours.
+
 ### Look → Title cards made obvious: a row per card, click the card in the viewer ✅ (to verify on the Windows PC)
 - **One row per card** (Title, Byline, Tagline): its text, its look in one line (font · colour and transparency ·
   place · capitals, as the video draws it) and **Edit ›**. The editor opens under the row; the row is highlighted.
@@ -190,13 +205,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   themes, title-opening, pairings (its 428 px check failed before this step too).
 - **To check on the PC:** a song → Shape: tabs Settings | Shots. Settings shows "Set by me" and Look open; open
   Part & ending and set a target length of 90 s: the line says "Set by me: Target length 90 s"; ↺ auto removes it.
-
-### Bug fix: adding a song link never replaces another; service from the URL; edit and Undo ✅ (to verify on the Windows PC)
-- Bug: Prepare → Song Details → Links: adding an Apple Music link to a song that had a Spotify link left only Apple Music. Cause: the page held its own copy of the list and saved the WHOLE list with every action (add, change a service, edit an address, remove), and a row's service and address were always-open fields that saved on their own. A save made from a stale or half-updated copy (two quick actions, or editing the Spotify row's picker / address instead of adding) wrote that copy over the file. The server and song.json were fine (tested).
-- Fix: the page now sends ONE change at a time (add / update / remove / restore) to PATCH /api/songs/[id]/links; the server applies it to the list in song.json as it is now (`changeSongLinks`), so no change can drop a link it is not about. The service is recognised from the pasted address; rows show service + address with ✎ (editor of that row only, Save / Cancel); removing offers Undo (back at the old place, with its Post picks). Every change of the links first keeps the previous song.json in `.studio\replaced\<date>-song.json`.
-- Tests: packages/video/test/song-links-server.test.ts (4), apps/studio/e2e/song-links.e2e.ts (in `pnpm test:e2e`). Docs: docs/screens.md (Song links).
-- **To check on the PC:** `cd D:\videomaker` · `git pull` · `pnpm dev`. Song → Prepare → Song Details → Links: paste a Spotify link, then an Apple Music link: two rows, each named by its service. ✎ on a row opens only that row; Remove shows "Removed … Undo".
-- **Lost link:** look in `D:\videomaker\workspace\songs\<Here With Me folder>\.studio\replaced\` for `*-song.json` copies (made from now on only; older changes kept none).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

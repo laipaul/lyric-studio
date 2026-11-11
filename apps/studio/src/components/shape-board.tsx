@@ -319,7 +319,10 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   const pickTitleCard = (id: string | null) => {
     setCardId(id);
     setDraft(id ? (board?.cards.find((c) => c.id === id)?.overrides ?? {}) : {});
-    if (id) showTitleCard(id);
+    if (id) {
+      showTitleCard(id);
+      window.dispatchEvent(new Event("lyric-look-advanced")); // its editor sits in Look → Advanced: unfolded
+    }
   };
   // The viewer goes to the middle of the card's time on screen: past its fade in, before its fade out (11 Nov 2026).
   const showTitleCard = (id: string) => {
@@ -354,6 +357,22 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   // The same request while Shape is already on the page (Song Details' link switches the stage without a reload).
   const boardRef = useRef(board);
   boardRef.current = board;
+  // Look → On-screen text changed a card's on / off (11 Nov 2026): the cards are read again and the video planned again.
+  const replanRef = useRef<() => void>(() => {});
+  replanRef.current = () => {
+    void api(`/api/songs/${projectId}/textboard`, { cache: "no-store" })
+      .then((r) => r.json() as Promise<TextboardData & { error?: string }>)
+      .then((d) => {
+        if (!d.error) setBoard(d);
+        if (source) void show(source, true);
+      })
+      .catch(() => null);
+  };
+  useEffect(() => {
+    const changed = () => replanRef.current();
+    window.addEventListener("lyric-textboard-changed", changed);
+    return () => window.removeEventListener("lyric-textboard-changed", changed);
+  }, []);
   const showRef = useRef<(id: string) => void>(() => {});
   showRef.current = (id: string) => showTitleCard(id);
   const openTitleRef = useRef<(id: string) => void>(() => {});
@@ -648,7 +667,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
     board && view?.editable ? (
       <div data-title-cards className="flex flex-col gap-2 rounded-lg border px-3 py-2.5">
         <p className="text-sm font-medium">
-          Title cards <span className="text-muted-foreground text-[11px] font-normal">· how the title, byline and tagline look in this song (the words: Prepare → Song Details)</span>
+          Title, artist and credits <span className="text-muted-foreground text-[11px] font-normal">· their own look in this song, over the theme&apos;s (the words: On-screen text above)</span>
         </p>
         <ul className="flex flex-col gap-1.5">
           {titleCardList.map((c) => {
@@ -658,7 +677,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                 <div className="flex items-start gap-2">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm" title={c.overrides.text ?? c.text}>
-                      <span className="text-muted-foreground mr-1.5 text-[11px] uppercase">{c.type}</span>
+                      <span className="text-muted-foreground mr-1.5 text-[11px] uppercase">{TITLE_CARD_LABEL[c.type] ?? c.type}</span>
                       {(c.overrides.text ?? c.text) || <span className="text-muted-foreground italic">empty</span>}
                     </p>
                     <p data-title-card-summary className="text-muted-foreground truncate text-[11px]">
@@ -1256,7 +1275,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                       {view.platform.name === "youtube" ? (
                         <span>
                           No clip shots: this YouTube video shows your cover art for the whole song (the cover layout). To build it from your clips instead, open{" "}
-                          <button type="button" className="text-foreground underline underline-offset-2" onClick={(e) => { e.stopPropagation(); setPanel("look"); }} data-open-song>
+                          <button type="button" className="text-foreground underline underline-offset-2" onClick={(e) => { e.stopPropagation(); setPanel("look"); window.dispatchEvent(new Event("lyric-look-advanced")); }} data-open-song>
                             Look
                           </button>{" "}
                           and set the YouTube layout to clips.
@@ -1584,7 +1603,9 @@ function titleCardLanes(cards: readonly { startMs: number; endMs: number }[], x:
     });
   return { lane, count: Math.max(1, ends.length) };
 }
-const CARD_TYPE_LABELS: Record<string, string> = { title: "title", byline: "byline", tagline: "tagline", hook: "Hook card", end: "End card" };
+// On screen (11 Nov 2026): the byline is "artist", the tagline "credits" (the files keep byline / tagline).
+const CARD_TYPE_LABELS: Record<string, string> = { title: "title", byline: "artist", tagline: "credits", hook: "Hook card", end: "End card" };
+const TITLE_CARD_LABEL: Record<string, string> = { title: "Title", byline: "Artist", tagline: "Credits" };
 const POSITION_LABELS: Record<string, string> = { lyrics: "the lyric spot", "with-title": "under the title", top: "top", upper: "upper", centre: "centre", lower: "lower", "upper-third": "upper third (title opening)", "lower-third": "lower third (title opening)" };
 
 // A card's own look: place, size, hold, effect (and, for title / byline / tagline, its text and whether
@@ -1630,7 +1651,7 @@ function CardEditor({ card, role, draft, setDraft, busy, onSave, onReset, onClos
     <div className="bg-card rounded-lg border p-3 text-xs" data-card-editor={card.id}>
       <div className="mb-2 flex items-center gap-2">
         <p className="text-sm font-medium">
-          {lyric ? `Line ${card.line}` : card.type[0].toUpperCase() + card.type.slice(1)}: <span className="font-normal">&quot;{draft.text ?? card.text}&quot;</span>
+          {lyric ? `Line ${card.line}` : (TITLE_CARD_LABEL[card.type] ?? card.type)}: <span className="font-normal">&quot;{draft.text ?? card.text}&quot;</span>
         </p>
         {Object.keys(role).length ? <span className="text-muted-foreground">({lyric ? (card.isHook ? "hook" : "verse") : card.type} rule: {Object.entries(role).map(([k, v]) => `${k} ${String(v)}`).join(", ")})</span> : null}
         <button type="button" onClick={onClose} aria-label="close the card editor" className="text-muted-foreground hover:text-foreground ml-auto rounded p-1">
