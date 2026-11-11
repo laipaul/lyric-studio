@@ -4,6 +4,15 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Song Details: card texts full width, growing to two lines, with a fit hint ✅ (to verify on the Windows PC)
+- Tagline, Hook card text, End card text and EP are as wide as Title and grow to a second line for a longer text.
+- Under each card text (not EP: it is not drawn on the video), a fit hint measured as the card is drawn in a Reel
+  (its font, size, letter spacing and case, inside the Reel's safe width) with the render's own rule (one line, else
+  2 balanced lines, else up to 25% smaller), naming the theme: "fits on one line in Reels · Golden Hour", "will wrap
+  to 2 lines in Reels · Golden Hour", or (amber) "too long: … shorten it".
+- Tests: card-fit (3: one line, 2 lines, smaller, too long). Browser: song-stages (widths, growth to 2 lines, the
+  hints with the theme, none on EP).
+
 ### Bug fix: song-wide version numbers per platform; a Make run that would duplicate a video warns first ✅ (to verify on the Windows PC)
 - **The bug:** every new Reels video was called "v1". The name was the file's number inside its run folder
   (exports\<run>\reels\v1.mp4), and every Make run starts again at v1.mp4.
@@ -196,31 +205,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   song-title, videos-post.
 - **To check on the PC:** Prepare shows Assets · Lyrics Sync · Song Details · Storyboard. Assets lists Hints after
   Lyrics and has the only Replaced files list. In Song Details, EP shows "Set by me" once you set it.
-
-### Prepare regrouped: Assets · Lyrics Sync · Texts · Storyboard ✅ (to verify on the Windows PC)
-- Layout and labels only (nothing about how a video is made changed).
-- **Assets** (was Audio): the files you provide, in one list: Song, Vocal stem, Lyrics (.txt), then Backing vocals
-  and the Cover. Song / Vocals / Lyrics sit together, ready for the 2c slots. "What is this file?" for any file the
-  app cannot place (text files too) is here, with the song folder line and the replaced files.
-- **Lyrics Sync** (was Lyrics & timing): tempo (BPM, tap test), "Time the lyrics again", hints (tapped times), and the
-  lyric lines table. The lyrics file moved to Assets.
-- **Texts** (was Details): title and card texts, EP, links. The cover moved to Assets.
-- **Every on-screen pointer uses the new names** (Prepare → Texts, Prepare → Lyrics Sync, the lyrics file and cover
-  "Prepare → Assets", the clip order "(Prepare → Storyboard)" instead of "Assets or Shape"); the to-do buttons for
-  the lyrics file and the cover open Assets. Old links keep working (?tab=audio / files → Assets, ?tab=sync →
-  Lyrics Sync, ?tab=texts → Texts; the tab ids stay assets / lyrics / details / clips).
-- **Closed banners stay closed:** the only one-time notice is the 31 Oct "starts you set by hand were reset" one; its
-  × was already saved (.studio\hand-times.json) and now has a test (hand-reset). Every other banner has no × on
-  purpose: it shows something live and goes once solved (Prepare's to-do list, stale timing in Shape, the Library's
-  migration offer, "Editing theme …", the warning while you edit lyrics words, Make's "From the run of …"), or it is
-  a result that goes on reload (Make's "Queued…", "Saved" notices).
-- Tests: hand-reset (new); stability and runs (the new wording). Browser: song-stages (the tab names, Assets' order
-  song, vocals, lyrics, backing vocals, cover; the cover to-do opens Assets; Lyrics Sync has tempo, Time the lyrics
-  again and hints; Texts has no files; a text file to place is asked about in Assets), lyrics-tab, song-title,
-  clip-notes, style-lock, videos-post; new-song-every-platform follows (not run here: a real render worker).
-- **To check on the PC:** Prepare shows Assets · Lyrics Sync · Texts · Storyboard. Assets lists Song, Vocal stem,
-  Lyrics, Backing vocals, Cover. Lyrics Sync starts with the tempo and Time the lyrics again. Texts has the title and
-  links. An old bookmark ?tab=audio still opens Assets.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

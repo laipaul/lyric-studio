@@ -4,6 +4,31 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Prepare regrouped: Assets · Lyrics Sync · Texts · Storyboard ✅ (to verify on the Windows PC)
+- Layout and labels only (nothing about how a video is made changed).
+- **Assets** (was Audio): the files you provide, in one list: Song, Vocal stem, Lyrics (.txt), then Backing vocals
+  and the Cover. Song / Vocals / Lyrics sit together, ready for the 2c slots. "What is this file?" for any file the
+  app cannot place (text files too) is here, with the song folder line and the replaced files.
+- **Lyrics Sync** (was Lyrics & timing): tempo (BPM, tap test), "Time the lyrics again", hints (tapped times), and the
+  lyric lines table. The lyrics file moved to Assets.
+- **Texts** (was Details): title and card texts, EP, links. The cover moved to Assets.
+- **Every on-screen pointer uses the new names** (Prepare → Texts, Prepare → Lyrics Sync, the lyrics file and cover
+  "Prepare → Assets", the clip order "(Prepare → Storyboard)" instead of "Assets or Shape"); the to-do buttons for
+  the lyrics file and the cover open Assets. Old links keep working (?tab=audio / files → Assets, ?tab=sync →
+  Lyrics Sync, ?tab=texts → Texts; the tab ids stay assets / lyrics / details / clips).
+- **Closed banners stay closed:** the only one-time notice is the 31 Oct "starts you set by hand were reset" one; its
+  × was already saved (.studio\hand-times.json) and now has a test (hand-reset). Every other banner has no × on
+  purpose: it shows something live and goes once solved (Prepare's to-do list, stale timing in Shape, the Library's
+  migration offer, "Editing theme …", the warning while you edit lyrics words, Make's "From the run of …"), or it is
+  a result that goes on reload (Make's "Queued…", "Saved" notices).
+- Tests: hand-reset (new); stability and runs (the new wording). Browser: song-stages (the tab names, Assets' order
+  song, vocals, lyrics, backing vocals, cover; the cover to-do opens Assets; Lyrics Sync has tempo, Time the lyrics
+  again and hints; Texts has no files; a text file to place is asked about in Assets), lyrics-tab, song-title,
+  clip-notes, style-lock, videos-post; new-song-every-platform follows (not run here: a real render worker).
+- **To check on the PC:** Prepare shows Assets · Lyrics Sync · Texts · Storyboard. Assets lists Song, Vocal stem,
+  Lyrics, Backing vocals, Cover. Lyrics Sync starts with the tempo and Time the lyrics again. Texts has the title and
+  links. An old bookmark ?tab=audio still opens Assets.
+
 ### Make stage simplified: Make and Compare looks, one counts rule everywhere ✅ (to verify on the Windows PC)
 - **Two tabs, each with its own button and count:**
   - **Make:** one row of platform chips, each with its versions (Canvas: loops), pre-filled from the song and saved to

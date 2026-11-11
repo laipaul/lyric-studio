@@ -85,6 +85,7 @@
     "./song-links-node": "./src/node/song-links.ts",
     "./song-tags": "./src/song-tags.ts",
     "./video-names": "./src/video-names.ts",
+    "./card-layout": "./src/card-layout.ts",
     "./posters": "./src/node/posters.ts",
     "./project-settings": "./src/node/project-settings.ts",
     "./runs": "./src/node/runs.ts",

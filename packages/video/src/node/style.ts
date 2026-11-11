@@ -30,8 +30,10 @@ import {
   writeRecipe,
   type RecipeField,
   type RecipeInput,
+  type RecipeValues,
   type SongRecipe,
 } from "./recipe";
+import { TITLE_SIZE_VERTICAL } from "./textboard";
 import { isRemovedSong, sharedCollections, songPathsById } from "./song-folder";
 import { brandThemes, ensureAllThemes, ensureSongTheme, isThemeField, listThemes, loadTheme, plainSongThemeNames, removedThemes, setThemeLook, themeCover, themeCoverVideo, themeLayer, type RemovedTheme, type ThemeLook } from "./themes";
 import { SHORT_LABELS } from "./exports";
@@ -113,6 +115,9 @@ export type StyleData = {
   collections: string[];
   previewLine: string;
   sampleLines: string[]; // the song's first sung lines (the effects preview)
+  // Song Details' fit hint (11 Nov 2026): how the tagline, Hook and End cards are drawn in a Reel (font, size, letter
+  // spacing, case) and the width they may use (the safe area), with the theme they come from; measured in the studio.
+  cardFit: CardFitData;
   userFonts: string; // the folder for the user's own fonts (WORKSPACE_DIR\fonts)
   theme: StyleTheme | null; // the song's theme
   themes: StyleTheme[]; // every theme, for the Theme panel's tiles
@@ -233,6 +238,7 @@ export function styleData(ws: Workspace, projectId: string): StyleData {
     collections: sharedCollections(ws),
     previewLine: PREVIEW_LINE,
     sampleLines: sampleLines(ws, projectId),
+    cardFit: cardFitData(ws, projectId, catalog, all.values, song.theme ?? null),
     userFonts: userFontsDir(ws.dir),
     song: songRow(ws, projectId),
     ...themesOf(ws, song.theme ?? null, catalog),
@@ -479,4 +485,32 @@ export async function themesPageWithFrames(ws: Workspace): Promise<ThemesPageDat
     t.backgroundVideo = video ? `${path.relative(ws.dir, video).split(path.sep).join("/")}?v=${Math.round(statSync(video).mtimeMs)}` : null;
   }
   return data;
+}
+
+// ---- Song Details: how each card text is drawn in a Reel (the fit hint) ----
+export type CardFitSpec = { family: string; weight: number; italic: boolean; size: number; letterSpacing: number; upper: boolean };
+export type CardFitData = { platform: string; theme: string | null; artist: string; room: number; cards: { tagline: CardFitSpec; hookText: CardFitSpec; endText: CardFitSpec } };
+// The same sizes and faces Make uses (textboard.ts title cards: the tagline at 0.42 of the title size in the title
+// opening, in the title font; make.ts extraCards: the Hook card at 1.1 in the hook font, upper case; the End card at
+// 0.6 in the title font), at the Reel's text scale, inside its safe area's width (fitCardBlocks keeps cards centred).
+function cardFitData(ws: Workspace, projectId: string, catalog: FontCatalog, values: Partial<RecipeValues>, theme: string | null): CardFitData {
+  const reels = presetsList().find((p) => p.name === "reels") ?? presetsList()[0];
+  const brand = loadBrand(ws.dir, catalog, artistOf(ws, projectId)).brand;
+  const width = 1080;
+  const room = Math.round(width - 2 * width * Math.max(reels.safeZone.left, reels.safeZone.right));
+  const base = Math.round(TITLE_SIZE_VERTICAL * (reels.textScale ?? 1));
+  const title = { family: brand.titleFont.family, weight: brand.titleFont.weight, italic: brand.titleFont.italic === true };
+  const hookFamily = String(values.hookFont ?? values.verseFont ?? brand.hookFont.family);
+  const hook = { family: hookFamily, weight: Number(values.hookWeight ?? brand.hookFont.weight ?? 400), italic: values.hookItalic === true };
+  return {
+    platform: SHORT_LABELS.reels ?? "Reels",
+    theme,
+    artist: artistOf(ws, projectId),
+    room,
+    cards: {
+      tagline: { ...title, size: Math.round(base * 0.42), letterSpacing: brand.titleFont.letterSpacing ?? 0.18, upper: false },
+      hookText: { ...hook, size: Math.round(base * 1.1), letterSpacing: 0.06, upper: true },
+      endText: { ...title, size: Math.round(base * 0.6), letterSpacing: 0.04, upper: false },
+    },
+  };
 }

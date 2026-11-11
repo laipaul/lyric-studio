@@ -10,6 +10,8 @@ import { isFinalHook, isLineBuild, isLineShape, LINE_BUILD_HINTS, LINE_BUILD_LAB
 import { BACKING_LABELS, effectTitle, themeReach, isTextLayout, parseColourRef, TEXT_LAYOUT_HINTS, TEXT_LAYOUT_LABELS, TEXT_LAYOUTS, type TextLayout, FALLBACK_LABELS, GRADE_LABELS, patchChoice, pictureOf, TITLE_STYLE_LABELS, TITLE_WARP_LABELS, titleStyleCss, VIGNETTE_LABELS, warpLetter, type TitleStyle, type TitleWarp, previewBacking, previewFace, previewLyrics, type LookPatch, type LookPreviewProps, type PatchFace, type Readability } from "@lyric/video";
 import type { PairingCard, PairingsView } from "@lyric/video/pairings";
 import type { StyleData, StyleField, StyleFont, StyleTheme } from "@lyric/video/style";
+import { cardFit } from "@lyric/video/card-layout";
+import type { CardFitSpec } from "@lyric/video/style";
 
 import { PairingsRow, type DraftFonts } from "@/components/pairings-row";
 import { RowMenu, type RowMenuItem } from "@/components/row-menu";
@@ -622,7 +624,25 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
         </select>
       );
     }
-    // section, ep, tagline, card texts: text, saved on Enter or when leaving the field
+    // Card texts and EP (11 Nov 2026): full width, growing to a second line; the card texts with their fit hint.
+    if ((CARD_TEXT_FIELDS as readonly string[]).includes(f.field) || f.field === "ep") {
+      const card = f.field === "ep" ? null : data.cardFit?.cards[f.field as "tagline" | "hookText" | "endText"];
+      return (
+        <CardTextField
+          key={`${key}-${String(value)}`}
+          editKey={key}
+          value={String(value ?? "")}
+          placeholder={f.field === "hookText" ? "the first chorus line" : f.field === "endText" ? "Stream {title} on Spotify" : ""}
+          fit={card && data.cardFit ? { spec: card, room: data.cardFit.room, platform: data.cardFit.platform, theme: data.cardFit.theme, fill: (t: string) => t.replace(/\{title\}/gi, data.title || "").replace(/\{artist\}/gi, data.cardFit!.artist) } : null}
+          onCommit={(v) => {
+            if (v === String(value ?? "")) return;
+            if (!v) void act({ action: "reset", field: f.field, platform });
+            else void set(v);
+          }}
+        />
+      );
+    }
+    // section: text, saved on Enter or when leaving the field
     return (
       <input
         key={`${key}-${String(value)}`}
@@ -1838,3 +1858,77 @@ function PictureControls({ value, onSet }: { value: (field: string) => unknown; 
   );
 }
 
+
+// A card text (Tagline, Hook card text, End card text) or the EP (11 Nov 2026): full width, one line that grows to a
+// second one for a longer text (Enter saves, no line breaks), saved when leaving the field. Under a card text: how it
+// fits in a Reel, measured as the card is drawn (its font, size, letter spacing and case, inside the safe area), with
+// the rule the render uses (card-layout.ts cardFit: one line, else 2 balanced lines, else up to 25% smaller).
+type FitInput = { spec: CardFitSpec; room: number; platform: string; theme: string | null; fill: (t: string) => string };
+function CardTextField({ editKey, value, placeholder, fit, onCommit }: { editKey: string; value: string; placeholder: string; fit: FitInput | null; onCommit: (v: string) => void }) {
+  const [text, setText] = useState(value);
+  const area = useRef<HTMLTextAreaElement>(null);
+  const [fontsReady, setFontsReady] = useState(0); // measured again once the card's font has loaded
+  const grow = () => {
+    const el = area.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  };
+  useEffect(grow, [text]);
+  useEffect(() => {
+    if (!fit || typeof document === "undefined" || !document.fonts) return;
+    let alive = true;
+    const s = fit.spec;
+    document.fonts.load(`${s.italic ? "italic " : ""}${s.weight} ${s.size}px "${s.family}"`).then(() => alive && setFontsReady((n) => n + 1), () => {});
+    return () => {
+      alive = false;
+    };
+  }, [fit?.spec.family, fit?.spec.weight, fit?.spec.italic, fit?.spec.size]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hint = useMemo(() => (fit ? fitHint(fit, text) : null), [fit, text, fontsReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="flex w-full flex-col gap-1">
+      <textarea
+        ref={area}
+        data-edit={editKey}
+        rows={1}
+        value={text}
+        placeholder={placeholder}
+        onChange={(e) => setText(e.target.value.replace(/\r?\n/g, " "))}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            (e.target as HTMLTextAreaElement).blur();
+          }
+        }}
+        onBlur={() => onCommit(text.trim())}
+        className="bg-input/30 border-input w-full resize-none overflow-hidden rounded-md border px-2 py-1.5 text-sm leading-snug"
+      />
+      {hint ? (
+        <p data-fit-hint={editKey} data-fit={hint.kind} className={cn("text-[11px]", hint.kind === "too-long" ? "text-amber-300" : hint.kind === "one" ? "text-muted-foreground" : "text-sky-200/80")}>
+          {hint.text}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// The card text in its font, as the card draws it: one line's width in px at a size (case and letter spacing in).
+let fitCanvas: HTMLCanvasElement | null = null;
+function fitHint(fit: FitInput, raw: string): { kind: "one" | "two" | "too-long"; text: string } | null {
+  const text = fit.fill(raw).trim();
+  if (!text || typeof document === "undefined") return null;
+  fitCanvas ??= document.createElement("canvas");
+  const ctx = fitCanvas.getContext("2d");
+  if (!ctx) return null;
+  const s = fit.spec;
+  const widthAt = (t: string, size: number) => {
+    const shown = s.upper ? t.toUpperCase() : t;
+    ctx.font = `${s.italic ? "italic " : ""}${s.weight} ${size}px "${s.family}", serif`;
+    return ctx.measureText(shown).width + s.letterSpacing * size * shown.length;
+  };
+  const r = cardFit(text, s.size, fit.room, widthAt);
+  const where = `in ${fit.platform}${fit.theme ? ` · ${fit.theme}` : ""}`;
+  if (!r) return { kind: "too-long", text: `too long: more than 2 lines ${where} even 25% smaller; shorten it` };
+  const smaller = r.scale < 1 ? `, drawn ${Math.round((1 - r.scale) * 100)}% smaller` : "";
+  return r.lines === 1 ? { kind: "one", text: `fits on one line ${where}${smaller}` } : { kind: "two", text: `will wrap to 2 lines ${where}${smaller}` };
+}

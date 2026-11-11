@@ -358,6 +358,28 @@ async function main() {
     // The song's own settings left Shape (N1): Details, Clips and Lyrics Sync in Prepare, What to make in Make.
     await openPanel(page, "details");
     check(JSON.stringify(await inBlock("details")) === JSON.stringify(["tagline", "hookText", "endText", "ep"]) && !!(await page.$("[data-style-block=details] [data-card-title]")), `Prepare → Song Details: title, tagline, hook and end card texts, EP (${(await inBlock("details")).join(", ")})`);
+    // Card texts (11 Nov 2026): full width like the title, a second line for a longer text, and a fit hint measured as
+    // the card is drawn in a Reel, naming the theme; none on EP (it is not drawn on the video).
+    const widths = await page.$$eval("[data-card-title], [data-field=tagline] textarea, [data-field=endText] textarea, [data-field=ep] textarea", (e: Element[]) => e.map((x) => Math.round(x.getBoundingClientRect().width)));
+    const titleW = widths[0];
+    check(widths.length === 4 && widths.slice(1).every((w) => w >= titleW - 40), `the card texts and EP are about as wide as the title (${widths.join(", ")})`);
+    await page.fill("[data-field=tagline] textarea", "Art: @noriko_imazeki");
+    await page.waitForFunction(() => document.querySelector("[data-field=tagline] [data-fit-hint]")?.textContent?.startsWith("fits on one line in Reels"));
+    const tagHint = (await page.textContent("[data-field=tagline] [data-fit-hint]")) ?? "";
+    check(/^fits on one line in Reels · .+/.test(tagHint), `a short tagline: "fits on one line in Reels · <theme>" (${tagHint})`);
+    const oneLine = await page.$eval("[data-field=endText] textarea", (e: Element) => e.getBoundingClientRect().height);
+    await page.fill("[data-field=endText] textarea", "Floral artwork by Noriko Imazeki @noriko_imazeki, stream Let My Love Carry You everywhere now, on every platform, with the whole EP and its story told in every song");
+    await page.waitForFunction(() => /^(will wrap to 2 lines|too long)/.test(document.querySelector("[data-field=endText] [data-fit-hint]")?.textContent ?? ""));
+    const endHint = (await page.textContent("[data-field=endText] [data-fit-hint]")) ?? "";
+    const twoLines = await page.$eval("[data-field=endText] textarea", (e: Element) => e.getBoundingClientRect().height);
+    check(twoLines > oneLine + 8, `a long text grows the field to more lines instead of scrolling sideways (${Math.round(oneLine)} -> ${Math.round(twoLines)} px)`);
+    check(/(wrap to 2 lines|too long).* in Reels · /.test(endHint), `a long end card text says it wraps (or is too long) in Reels, with the theme (${endHint})`);
+    await page.fill("[data-field=ep] textarea", "A very long EP name that would not fit anywhere on a card at all");
+    check(!(await page.$("[data-field=ep] [data-fit-hint]")), "no fit hint on EP (it is not drawn on the video)");
+    await page.fill("[data-field=endText] textarea", "");
+    await page.fill("[data-field=ep] textarea", "");
+    await page.fill("[data-field=tagline] textarea", "");
+    await page.click("[data-card-title]"); // leave the fields without saving changes (empty = as before)
     check(!(await page.$("[data-field=lineShape]")) && !(await page.$("[data-field=lineBuild]")) && !(await page.$("[data-field=finalHook]")), "the theme's line shape rows are not repeated outside the theme editor");
     await openPanel(page, "make");
     check(!(await page.$("[data-style-block=make]")) && !!(await page.$("[data-make-chip=reels][data-count='2']")), "platforms and versions in one place only: Make's chips");

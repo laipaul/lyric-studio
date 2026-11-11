@@ -151,3 +151,19 @@ export function fitCardBlocks<T extends TextCardProps>(cards: readonly T[], o: {
   }
   return cards.map((c) => out.get(c.id) ?? c);
 }
+
+// One card text, as fitCardBlocks lays it out (Song Details' fit hint, 11 Nov 2026): on one line when it fits the
+// width, else on 2 balanced lines, else the same made up to 25% smaller; null when even that does not fit (the
+// render would leave it too wide). widthAt: the text's one-line width at a font size (letter spacing and case in).
+export function cardFit(text: string, size: number, room: number, widthAt: (text: string, size: number) => number): { lines: 1 | 2; scale: number } | null {
+  const t = text.trim();
+  if (!t) return { lines: 1, scale: 1 };
+  for (let scale = 1; scale >= CARD_MIN_SCALE - 1e-9; scale = Math.round((scale - CARD_SCALE_STEP) * 100) / 100) {
+    const s = Math.max(1, Math.round(size * scale));
+    const w = (x: string) => widthAt(x, s);
+    if (w(t) <= room) return { lines: 1, scale };
+    const two = balancedLines(t, 2, w);
+    if (two.length === 2 && two.every((l) => w(l) <= room)) return { lines: 2, scale };
+  }
+  return null;
+}
