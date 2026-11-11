@@ -54,7 +54,7 @@ const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", 
 // at once; the rarely used actions (per platform, back to the inherited value, lock, use for all my songs)
 // sit in each setting's ⋯ menu. onSaved: the recipe changed (the page plans the video again); planned:
 // counts the plans that arrived (the look patch is dropped once the plan has it).
-// The song's own settings outside Shape (N1): Prepare → Texts (title, card texts, EP), Prepare → Lyrics Sync
+// The song's own settings outside Shape (N1): Prepare → Song Details (title, card texts, EP), Prepare → Lyrics Sync
 // (tempo, time the lyrics again), Prepare → Clips (collections), Make → Videos (platforms, videos per platform).
 // The same rows and saving as Shape's panels, one block each; nothing of the theme or the viewer.
 export type SongPart = "details" | "timing" | "collections"; // platforms and versions: Make's chips (generate-panel.tsx)
@@ -684,8 +684,9 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
               </span>
             )
           ) : f.own ? (
-            <span data-source className="border-brand/40 text-brand rounded-full border px-2 py-0.5 text-xs">
-              {f.field === "collections" && f.source === "song" ? "Mixed into this song" : sourceLabel(f.source, data.platforms)}
+            // 11 Nov 2026: a value saved on this song (changed from the theme's, brand's or library default) says "Set by me", like the auto rows.
+            <span data-source={f.field === "collections" ? "" : "me"} title={`Saved: ${sourceLabel(f.source, data.platforms)}`} className="border-brand/40 text-brand rounded-full border px-2 py-0.5 text-xs">
+              {f.field === "collections" && f.source === "song" ? "Mixed into this song" : "Set by me"}
             </span>
           ) : null}
           {f.locked ? <Lock className="text-brand size-3.5" aria-label="locked" data-locked={f.field} /> : null}
@@ -712,8 +713,8 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
                         {p.label}
                       </span>
                       {p.own ? (
-                        <span data-source={AUTO_LABEL_FIELDS.has(f.field) ? "me" : ""} className="border-brand/40 text-brand rounded-full border px-2 py-0.5 text-xs">
-                          {AUTO_LABEL_FIELDS.has(f.field) ? "Set by me" : sourceLabel(p.source, data.platforms)}
+                        <span data-source="me" title={`Saved: ${sourceLabel(p.source, data.platforms)}`} className="border-brand/40 text-brand rounded-full border px-2 py-0.5 text-xs">
+                          Set by me
                         </span>
                       ) : null}
                       {p.own ? (
@@ -911,7 +912,7 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
                 <p className="text-muted-foreground -mt-1 text-[11px]">
                   How the cards look, for every song on this theme. Their words (title, tagline, Hook and End card text) are this song&apos;s:{" "}
                   <button type="button" data-card-text-link onClick={() => goToTab("details")} className="text-foreground underline underline-offset-2">
-                    Prepare → Texts
+                    Prepare → Song Details
                   </button>
                 </p>
                 <TitleStyleControls value={(k) => valueOf(k)} onSet={(field, value) => void act({ action: "set", field, value })} sample={data.title || "Your title"} font={String(valueOf("verseFont") ?? "")} />
@@ -1552,8 +1553,8 @@ function ExtraCardControls({ value, onSet, font, hookSample, endSample }: { valu
         ) : null}
         <p className="text-muted-foreground text-xs">
           {id === "hook"
-            ? "Reels, TikTok, Shorts: big, in the pause just before the first chorus (the app finds it; no pause, no card). Its words: Prepare → Texts → Hook card text, else the chorus's first line."
-            : "Reels, TikTok, Shorts: the last seconds of the video, never over a lyric. Its words: Prepare → Texts → End card text ({title} = the song's title)."}
+            ? "Reels, TikTok, Shorts: big, in the pause just before the first chorus (the app finds it; no pause, no card). Its words: Prepare → Song Details → Hook card text, else the chorus's first line."
+            : "Reels, TikTok, Shorts: the last seconds of the video, never over a lyric. Its words: Prepare → Song Details → End card text ({title} = the song's title)."}
         </p>
       </div>
     );

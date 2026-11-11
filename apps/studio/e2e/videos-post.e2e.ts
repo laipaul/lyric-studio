@@ -203,11 +203,11 @@ async function main() {
     check((await page.$$("[data-post-video]")).length === 1, "Post lists the approved video only (v1, not v2)");
     await page.waitForSelector("[data-post-panel] [data-section]");
     check(((await page.textContent("[data-post-panel]")) ?? "").includes("Caption"), "with its caption to copy");
-    // Song links: none yet = a pointer to Prepare → Texts; added there (N1; was Assets) (the service recognised from the link),
+    // Song links: none yet = a pointer to Prepare → Song Details; added there (N1; was Assets) (the service recognised from the link),
     // the Reel's post shows the best one (the smart link) with a copy button; "Add a link" picks another,
     // kept per platform in song.json postLinks.
     await page.waitForSelector("[data-post-links-none]");
-    check(((await page.textContent("[data-post-links-none]")) ?? "").includes("Prepare → Texts"), "Post: no links yet, with a pointer to Prepare → Texts");
+    check(((await page.textContent("[data-post-links-none]")) ?? "").includes("Prepare → Song Details"), "Post: no links yet, with a pointer to Prepare → Song Details");
     await page.goto(`${base}/songs/${sp.project.id}?tab=details`);
     await page.waitForSelector("[data-links] [data-link-new]");
     for (const url of ["https://open.spotify.com/track/abc", "https://ffm.to/posttest", "https://www.facebook.com/lifelyrics"]) {

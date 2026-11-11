@@ -19,7 +19,7 @@ export const RELEASE_PLATFORMS = ["reels", "tiktok", "shorts", "youtube", "canva
 export type TodoItem = {
   id: string;
   text: string; // plain words: what is needed
-  tab: "assets" | "lyrics" | "details" | "clips" | "generate"; // where to do it (assets = Prepare → Assets: the song, vocal stem, lyrics file, backing vocals, cover; lyrics = Lyrics Sync: tempo, timing, hints, the lines; details = Texts; clips = Prepare → Storyboard)
+  tab: "assets" | "lyrics" | "details" | "clips" | "generate"; // where to do it (assets = Prepare → Assets: the song, vocal stem, lyrics file, hints, backing vocals, cover; lyrics = Lyrics Sync: tempo, timing, the lines; details = Song Details; clips = Prepare → Storyboard)
   action: string; // the button
   blocking: boolean; // no video can be made without it
 };

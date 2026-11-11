@@ -56,7 +56,7 @@ async function main() {
 
     await page.goto(`${base}/songs/${ids[0]}`);
     await page.waitForSelector("[data-song-title]");
-    // N1: the header's pencil opens Prepare → Texts, the one place the title is changed.
+    // N1: the header's pencil opens Prepare → Song Details, the one place the title is changed.
     await page.click("[data-song-title-edit]");
     await page.waitForSelector("[data-style-block=details] [data-card-title]");
     check(!(await page.$("[data-song-title-input]")), "the header has no title editor of its own (one place: Details)");

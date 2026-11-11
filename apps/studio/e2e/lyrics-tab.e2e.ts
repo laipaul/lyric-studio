@@ -169,12 +169,16 @@ async function main() {
     await page.waitForFunction(() => document.querySelector("[role=status]")?.textContent?.includes("lyrics.txt saved"));
     check(readFileSync(paths.lyricsTxt, "utf8") === "The verse line\n* You had a heart for two\nNext verse\n", "lyrics.txt saved without the label");
     check(existsSync(path.join(paths.root, ".studio", "replaced")) && readdirSync(path.join(paths.root, ".studio", "replaced")).some((f) => f.endsWith("-lyrics.txt")), "the old lyrics.txt is kept in .studio\\replaced\\");
-    // Both earlier versions listed (the page has reloaded), then open the list (and wait until it is open).
-    await page.waitForFunction(() => document.querySelectorAll("[data-restore]").length >= 2);
-    await page.click("[data-lyrics-text] summary");
-    await page.waitForSelector("[data-restore] >> nth=0", { state: "visible" });
-    await page.click("[data-restore] >> nth=0");
-    await page.waitForSelector("[data-label-flags]");
+    // One Replaced files list, in Assets (11 Nov 2026): Lyrics Sync has none of its own; the version with the label is restored there.
+    check(!(await page.$("[data-restore]")) && !(await page.$("[data-replaced-files]")), "Lyrics Sync: no list of earlier versions of its own");
+    const withLabel = readdirSync(path.join(paths.root, ".studio", "replaced")).find((f) => f.endsWith("-lyrics.txt") && readFileSync(path.join(paths.root, ".studio", "replaced", f), "utf8").startsWith("[Chorus]"))!;
+    page.on("dialog", (d: { accept: () => Promise<void> }) => void d.accept());
+    await page.click("[data-stage-tab=assets]");
+    await page.click("[data-replaced-files] summary");
+    const restoreButton = (await page.$$("[data-restore-replaced]")).length;
+    check(restoreButton >= 2, `Assets → Replaced files lists both earlier lyrics (${restoreButton})`);
+    await page.click(`[data-restore-replaced$='${withLabel}']`);
+    await page.waitForSelector("text=is the lyrics again");
     check(readFileSync(paths.lyricsTxt, "utf8").startsWith("[Chorus]"), "Restore brings the earlier version back");
     check(existsSync(songFile), "the song file is untouched");
 
@@ -190,7 +194,7 @@ main()
     failures += 1;
   })
   .finally(() => {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true, maxRetries: 5 });
     console.log(failures ? `\n${failures} check(s) failed` : "\nAll browser checks passed");
     process.exit(failures ? 1 : 0);
   });

@@ -25,9 +25,9 @@ export const STAGES = [
 export type StageId = (typeof STAGES)[number]["id"];
 export type StageStatus = { text: string; tone: "done" | "todo" | "blocked" | "muted" | "busy" };
 
-// Prepare (11 Nov 2026): Assets · Lyrics Sync · Texts · Storyboard. The ids stay ("assets", "lyrics", "details", "clips")
+// Prepare (11 Nov 2026): Assets · Lyrics Sync · Song Details · Storyboard. The ids stay ("assets", "lyrics", "details", "clips")
 // so every old link opens the right tab; ?tab=storyboard still means Shape (links from before 31 Oct).
-const TAB_LABEL: Record<string, string> = { assets: "Assets", lyrics: "Lyrics Sync", details: "Texts", clips: "Storyboard", shape: "Shape", generate: "Make", videos: "Videos", post: "Post" };
+const TAB_LABEL: Record<string, string> = { assets: "Assets", lyrics: "Lyrics Sync", details: "Song Details", clips: "Storyboard", shape: "Shape", generate: "Make", videos: "Videos", post: "Post" };
 const stageOf = (tab: string): StageId => STAGES.find((s) => (s.tabs as readonly string[]).includes(tab))?.id ?? "prepare";
 const TONE: Record<StageStatus["tone"], string> = {
   done: "text-emerald-300",
@@ -117,7 +117,7 @@ function rememberTab(stage: StageId, tab: string) {
 
 // The feature icons (lib/feature-icons.tsx): one icon per step, the same everywhere.
 const STAGE_ICON = { prepare: FEATURE.prepare.icon, shape: FEATURE.shape.icon, make: FEATURE.make.icon, review: FEATURE.review.icon } as const;
-// One distinct icon per tab (N1 polish): Assets, Lyrics Sync, Texts and Storyboard each their own.
+// One distinct icon per tab (N1 polish): Assets, Lyrics Sync, Song Details and Storyboard each their own.
 const TAB_ICON: Record<string, { icon: LucideIcon; colour: string }> = {
   assets: { icon: FolderOpen, colour: "" },
   lyrics: { icon: Type, colour: FEATURE.lyrics.colour },

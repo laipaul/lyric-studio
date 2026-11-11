@@ -112,7 +112,7 @@ async function main() {
     await page.waitForSelector("[data-saving=saved]");
     await sleep(300);
     check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { titleOpening?: string }).titleOpening === undefined, "back to off: the song's own title opening setting is gone");
-    // The tagline lives in Prepare → Texts (song.json "tagline"; N1: one place, no longer also in Assets).
+    // The tagline lives in Prepare → Song Details (song.json "tagline"; N1: one place, no longer also in Assets).
     await openPanel(page, "details");
     check(!(await page.$("[data-tagline-input]")), "no second tagline field");
     await page.fill("[data-edit='tagline-default']", "A song for the road");

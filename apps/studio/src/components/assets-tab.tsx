@@ -34,11 +34,12 @@ function replaceWarning(kind: AssetKind, current: string, next: string): string 
 // reorder (clips.json, the one sequence Shape and Make use; new clips go at the end). Files put into the folder by hand that
 // the app cannot place are asked about once: "What is this file?".
 // N1: one part per Prepare tab. "clips" = Prepare → Storyboard (the song's own clips and photos, their story order,
-// notes, Use / Omit, removed clips). Each part lists only its own replaced files. The tagline and links are in Prepare → Texts.
-// Prepare (11 Nov 2026): "files" = Prepare → Assets, the files the user provides (Song, Vocal stem and Lyrics together,
-// ready for the 2c slots; then backing vocals and the cover); "hints" = the tapped times, in Lyrics Sync.
-export type AssetsPart = "files" | "hints" | "clips";
-const PART_KINDS: Record<Exclude<AssetsPart, "clips">, readonly string[]> = { files: ["song", "vocals", "lyrics", "backingVocals", "cover"], hints: ["hints"] };
+// notes, Use / Omit, removed clips). Each part lists only its own replaced files. The tagline and links are in Prepare → Song Details.
+// Prepare (11 Nov 2026): "files" = Prepare → Assets, every file the user provides (Song, Vocal stem and Lyrics together,
+// ready for the 2c slots; then Hints (tapped times), backing vocals and the cover), the files to place and the one
+// Replaced files list (every kind, hints too).
+export type AssetsPart = "files" | "clips";
+const PART_KINDS: Record<Exclude<AssetsPart, "clips">, readonly string[]> = { files: ["song", "vocals", "lyrics", "hints", "backingVocals", "cover"] };
 export function AssetsTab({ projectId, part = "files" }: { projectId: string; part?: AssetsPart }) {
   const [data, setData] = useState<SongAssets | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -264,12 +265,11 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
     );
   }
 
-  // What this part shows: its own file kinds, the files to place (all in Assets) and its own replaced files (a kept copy
-  // without a role: under Assets, with the song folder).
+  // What this part shows: its own file kinds, the files to place and every replaced file (all in Assets).
   const kinds = part === "clips" ? [] : PART_KINDS[part];
   const has = (kind: string) => kinds.includes(kind);
-  const unassigned = data.unassigned.filter((f) => (part === "files"));
-  const ownReplaced = replaced.filter((f) => (f.role ? kinds.includes(f.role) : part === "files"));
+  const unassigned = (part === "files" ? data.unassigned : []);
+  const ownReplaced = part === "files" ? replaced : [];
   const fileRow = (kind: AssetKind, icon: React.ReactNode, title: string, value: React.ReactNode, warning?: React.ReactNode, button = "Replace…") => (
     <li data-asset={kind} className={cn("bg-card flex items-center gap-3 rounded-lg border px-4 py-3", warning && "border-amber-400/40")}>
       <span className="text-brand">{icon}</span>
@@ -318,6 +318,17 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
         {!has("lyrics") ? null : data.instrumental
           ? fileRow("lyrics", <FileText className="size-5" />, "Story (instrumental)", data.lyrics?.lines ? `story.txt · ${data.lyrics.lines} sentence${data.lyrics.lines === 1 ? "" : "s"}, timed by the app` : "no story: music only (Replace adds a story.txt)")
           : fileRow("lyrics", <FileText className="size-5" />, "Lyrics", data.lyrics ? `${base(data.lyrics.file)} · ${data.lyrics.lines} lines` : "no lyrics yet (a .txt, any name)")}
+        {!has("hints") ? null : fileRow(
+          "hints",
+          <ListMusic className="size-5" />,
+          "Hints (tapped times)",
+          data.hints
+            ? `hints.lrc · ${data.hints.timed} timed line${data.hints.timed === 1 ? "" : "s"}${data.hints.marks ? ` + ${data.hints.marks} end mark${data.hints.marks === 1 ? "" : "s"} (where the singing stops)` : ""}${data.hints.untapped ? ` · ${data.hints.untapped} lyric line${data.hints.untapped === 1 ? "" : "s"} not tapped (the aligner times them)` : ""}`
+            : "none (optional)",
+          data.hints?.orphans.length
+            ? `${data.hints.orphans.length} tapped line${data.hints.orphans.length === 1 ? " matches" : "s match"} no line of lyrics.txt (left from an older version?): ${data.hints.orphans.map((o) => `“${o}”`).join(", ")}. Replace hints.lrc, or fix the line in lyrics.txt.`
+            : undefined,
+        )}
         {data.instrumental || !has("backingVocals")
           ? null
           : fileRow("backingVocals", <AudioLines className="size-5" />, "Backing vocals", data.backingVocals ? `${base(data.backingVocals)} · kept with the song, not used for timing` : "none (optional)", undefined, data.backingVocals ? "Replace…" : "Add…")}
@@ -331,17 +342,6 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
           ),
           "Cover",
           data.cover ? win(data.cover.slice(data.folder.length + 1)) : "none (YouTube uses stills or clips)",
-        )}
-        {!has("hints") ? null : fileRow(
-          "hints",
-          <ListMusic className="size-5" />,
-          "Hints (tapped times)",
-          data.hints
-            ? `hints.lrc · ${data.hints.timed} timed line${data.hints.timed === 1 ? "" : "s"}${data.hints.marks ? ` + ${data.hints.marks} end mark${data.hints.marks === 1 ? "" : "s"} (where the singing stops)` : ""}${data.hints.untapped ? ` · ${data.hints.untapped} lyric line${data.hints.untapped === 1 ? "" : "s"} not tapped (the aligner times them)` : ""}`
-            : "none (optional)",
-          data.hints?.orphans.length
-            ? `${data.hints.orphans.length} tapped line${data.hints.orphans.length === 1 ? " matches" : "s match"} no line of lyrics.txt (left from an older version?): ${data.hints.orphans.map((o) => `“${o}”`).join(", ")}. Replace hints.lrc, or fix the line in lyrics.txt.`
-            : undefined,
         )}
       </ul>
 

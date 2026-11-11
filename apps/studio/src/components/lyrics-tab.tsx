@@ -647,13 +647,6 @@ function LyricsText({
     setNotice({ ok: true, text: r.realign ? "lyrics.txt saved (the old one is in .studio\\replaced\\). The words changed: the next video aligns the lyrics again." : "lyrics.txt saved (the old one is in .studio\\replaced\\). Only hook markers or blank lines changed: the stored alignment is kept." });
   }
 
-  async function restore(file: string) {
-    const r = await post({ action: "restore", file });
-    if (!r) return;
-    await onSaved();
-    setNotice({ ok: true, text: `Earlier ${fileName} restored (the current one was kept).${r.realign ? " The next video aligns the lyrics for these words (or reuses an alignment made for them before)." : ""}` });
-  }
-
   const removeLabels = () =>
     setText(
       text
@@ -688,7 +681,7 @@ function LyricsText({
       </p>
       {confirm ? (
         <p className="rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100" data-realign-warning>
-          The words change: the next video aligns the lyrics again (a few minutes; needs the AI packages), and hand-set times of changed lines are ignored. The old lyrics.txt is kept and can be restored below. Press Save again to go ahead.
+          The words change: the next video aligns the lyrics again (a few minutes; needs the AI packages), and hand-set times of changed lines are ignored. The old lyrics.txt is kept: Restore it in Prepare → Assets → Replaced files. Press Save again to go ahead.
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2">
@@ -699,22 +692,6 @@ function LyricsText({
           Discard changes
         </Button>
       </div>
-      {data.replaced.length ? (
-        <details className="text-sm">
-          <summary className="text-muted-foreground cursor-pointer">Earlier versions ({data.replaced.length})</summary>
-          <ul className="mt-2 flex flex-col gap-1">
-            {data.replaced.map((r) => (
-              <li key={r.file} className="flex items-center gap-3 text-xs">
-                <span className="tabular-nums">{new Date(r.at).toLocaleString()}</span>
-                <span className="text-muted-foreground">{r.lines} lines</span>
-                <Button size="sm" variant="ghost" disabled={busy} onClick={() => restore(r.file)} data-restore={r.file}>
-                  Restore
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
     </section>
   );
 }

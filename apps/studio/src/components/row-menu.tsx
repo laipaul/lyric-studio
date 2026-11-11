@@ -1,7 +1,7 @@
 "use client";
 
 // The ⋯ menu of a Shape setting: the rarely used actions (per platform, back to the inherited value, lock,
-// use for all my songs) out of the row, so each row shows only its name, its value and the "This song"
+// use for all my songs) out of the row, so each row shows only its name, its value and the "Set by me"
 // badge. Each item keeps its own data-* attribute (data-lock, data-reset, ...) for the browser tests.
 import { MoreHorizontal } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
