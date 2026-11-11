@@ -14,7 +14,9 @@ import { STUDIO_DIR } from "./song-folder";
 export const CLIP_NOTES_FILE = "clip-notes.json";
 export const CLIP_NOTE_MAX = 2000; // characters
 export type ClipNote = { text: string; clip: string; updatedAt: string }; // clip: the file name when last written
-type NotesFile = { about: string; notes: Record<string, ClipNote> };
+// storyIdea (11 Nov 2026): one sentence for the whole video (Prepare → Storyboard), for the user only as well.
+type NotesFile = { about: string; notes: Record<string, ClipNote>; storyIdea?: string };
+export const STORY_IDEA_MAX = 300; // characters
 const ABOUT = "Story notes on this song's clips (Prepare → Storyboard), for you only: the app never reads them for anything. Keyed by each clip's content, so they follow a renamed or moved clip.";
 
 const fileOf = (songRoot: string) => path.join(songRoot, STUDIO_DIR, CLIP_NOTES_FILE);
@@ -56,10 +58,30 @@ export function setClipNote(songRoot: string, o: { hash: string; clip: string; t
   const note = text.trim() ? { text, clip: o.clip, updatedAt: (o.now ?? new Date()).toISOString() } : null;
   if (note) notes[o.hash] = note;
   else delete notes[o.hash];
+  writeNotesFile(songRoot, { notes, storyIdea: readStoryIdea(songRoot) });
+  return note;
+}
+
+function writeNotesFile(songRoot: string, o: { notes: Record<string, ClipNote>; storyIdea: string | null }): void {
   const file = fileOf(songRoot);
   mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify({ about: ABOUT, notes } satisfies NotesFile, null, 2)}\n`);
+  writeFileSync(tmp, `${JSON.stringify({ about: ABOUT, ...(o.storyIdea ? { storyIdea: o.storyIdea } : {}), notes: o.notes } satisfies NotesFile, null, 2)}\n`);
   renameSync(tmp, file);
-  return note;
+}
+
+// The song's story idea (one sentence above the story line), or null. For the user only, like the notes.
+export function readStoryIdea(songRoot: string): string | null {
+  try {
+    const raw = JSON.parse(readFileSync(fileOf(songRoot), "utf8")) as Partial<NotesFile>;
+    return typeof raw.storyIdea === "string" && raw.storyIdea.trim() ? raw.storyIdea : null;
+  } catch {
+    return null;
+  }
+}
+// Saves (or, empty, clears) the story idea: one line, at most STORY_IDEA_MAX characters. The notes are kept.
+export function setStoryIdea(songRoot: string, text: string): string | null {
+  const idea = String(text ?? "").replace(/\s+/g, " ").trim().slice(0, STORY_IDEA_MAX) || null;
+  writeNotesFile(songRoot, { notes: readClipNotes(songRoot), storyIdea: idea });
+  return idea;
 }

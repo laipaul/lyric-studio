@@ -75,11 +75,12 @@ async function main() {
     // Esc closes it to one line with "…".
     await page.press("[data-clip-note-input='01_blue.mp4']", "Escape");
     await page.waitForSelector("[data-clip-note='01_blue.mp4']");
+    // 11 Nov 2026: the note is the card's title (larger), at most two lines ending in "…".
     const line = await page.$eval("[data-clip-note='01_blue.mp4']", (e: Element) => {
       const s = getComputedStyle(e);
-      return { ellipsis: s.textOverflow === "ellipsis", oneLine: s.whiteSpace === "nowrap", cut: (e as HTMLElement).scrollWidth > (e as HTMLElement).clientWidth, h: e.getBoundingClientRect().height };
+      return { clamp: s.webkitLineClamp, size: parseFloat(s.fontSize), cut: (e as HTMLElement).scrollHeight > (e as HTMLElement).clientHeight + 1, h: e.getBoundingClientRect().height };
     });
-    check(line.ellipsis && line.oneLine && line.cut && line.h < 24, `Esc: one line ending in "…" (${JSON.stringify(line)})`);
+    check(line.clamp === "2" && line.size >= 14 && line.cut && line.h < 48, `Esc: the card's title, two lines ending in "…" (${JSON.stringify(line)})`);
     check((await page.getAttribute("[data-clip='01_blue.mp4']", "draggable")) === "true", "…and the card drags again");
     // A click expands it; clicking outside closes it.
     await page.click("[data-clip-note='01_blue.mp4']");
@@ -123,6 +124,24 @@ async function main() {
     await sleep(600);
     check(Object.keys(stored()).length === 0, "clearing the text deletes the note");
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+    // The card reads as a story (11 Nov 2026): no file name, duration or Remove on it; they are in its ⋯ menu (and the
+    // file name in the tooltip); a warning only when something is wrong (these test clips are 216×384: low resolution).
+    const card = (await page.textContent("[data-clip='03_green.mp4']")) ?? "";
+    check(!card.includes("03_green.mp4") && !/\d+\.\d s/.test(card) && !card.includes("Remove") && (await page.getAttribute("[data-clip='03_green.mp4']", "title")) === "03_green.mp4", `the card shows no file name, duration or Remove; the file name is its tooltip (${card})`);
+    check(((await page.textContent("[data-clip-warning='03_green.mp4']")) ?? "").startsWith("low resolution (216×384)"), "a small warning when something is wrong: low resolution");
+    await page.click("[data-card-menu='03_green.mp4']");
+    const details = await page.$$eval("[data-card-detail]", (e: Element[]) => e.map((x) => x.textContent));
+    check(details[0] === "03_green.mp4" && /216×384/.test(details[1] ?? "") && !!(await page.$("[role=menuitem][data-remove='03_green.mp4']")), `its ⋯ menu: file name, duration and size, Remove (${details.join(" | ")})`);
+    await page.keyboard.press("Escape");
+    // Story idea: one sentence for the whole video, saved per song (with the notes, for you only), kept after a reload.
+    await page.fill("[data-story-idea-input]", "Two people find each other again in the rain.");
+    await page.press("[data-story-idea-input]", "Enter");
+    await page.waitForSelector("[data-story-idea] >> text=✓ Saved");
+    await page.reload();
+    await page.waitForSelector("[data-story-idea-input]");
+    const notesFile = JSON.parse(readFileSync(path.join(paths.root, ".studio", "clip-notes.json"), "utf8")) as { storyIdea?: string };
+    if (process.env.STORY_SHOT) await page.screenshot({ path: process.env.STORY_SHOT });
+    check((await page.inputValue("[data-story-idea-input]")) === "Two people find each other again in the rain." && notesFile.storyIdea === "Two people find each other again in the rain.", "the story idea is kept for the song (.studio\\clip-notes.json), also after a reload");
     await browser.close();
   } finally {
     server.kill();

@@ -6,7 +6,7 @@ import path from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { CLIP_NOTE_MAX, notesForClips, readClipNotes, setClipNote } from "../src/node/clip-notes";
+import { CLIP_NOTE_MAX, notesForClips, readClipNotes, readStoryIdea, setClipNote, setStoryIdea, STORY_IDEA_MAX } from "../src/node/clip-notes";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-clip-notes-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -53,6 +53,21 @@ describe("clip story notes", () => {
     rmSync(broken, { recursive: true, force: true });
   });
 
+  it("the story idea: one line per song, kept next to the notes (each kept when the other changes), cleared when empty", () => {
+    const song = mkdtempSync(path.join(os.tmpdir(), "lyric-story-idea-"));
+    expect(readStoryIdea(song)).toBeNull();
+    setClipNote(song, { hash: A, clip: "01.mp4", text: "The meeting" });
+    expect(setStoryIdea(song, "  Two people find each other\n again.  ")).toBe("Two people find each other again.");
+    setClipNote(song, { hash: B, clip: "02.mp4", text: "The rain" });
+    expect(readStoryIdea(song)).toBe("Two people find each other again."); // a note saved later keeps the idea
+    expect(Object.keys(readClipNotes(song)).sort()).toEqual([A, B].sort());
+    expect(setStoryIdea(song, "x".repeat(STORY_IDEA_MAX + 50))).toHaveLength(STORY_IDEA_MAX);
+    expect(setStoryIdea(song, "   ")).toBeNull();
+    expect(readStoryIdea(song)).toBeNull();
+    expect(Object.keys(readClipNotes(song))).toHaveLength(2); // the notes stay
+    rmSync(song, { recursive: true, force: true });
+  });
+
   it("is never read by the app for anything but the clips list: only assets.ts and the story line use it", () => {
     const src = path.join(__dirname, "..", "src");
     const users: string[] = [];
@@ -60,7 +75,7 @@ describe("clip story notes", () => {
       for (const f of readdirSync(dir, { withFileTypes: true })) {
         const p = path.join(dir, f.name);
         if (f.isDirectory()) walk(p);
-        else if (/\.tsx?$/.test(f.name) && /clip-notes|readClipNotes|notesForClips|CLIP_NOTES_FILE/.test(readFileSync(p, "utf8"))) users.push(path.relative(src, p).split(path.sep).join("/"));
+        else if (/\.tsx?$/.test(f.name) && /clip-notes|readClipNotes|notesForClips|CLIP_NOTES_FILE|readStoryIdea|setStoryIdea/.test(readFileSync(p, "utf8"))) users.push(path.relative(src, p).split(path.sep).join("/"));
       }
     };
     walk(src);

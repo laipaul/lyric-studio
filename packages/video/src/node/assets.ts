@@ -9,7 +9,7 @@ import { absPath, clip as clipTable, PHOTO_EXTENSION, probeMedia, project as pro
 import { eq } from "drizzle-orm";
 
 import { isHandTimeLine } from "../hand-times";
-import { notesForClips, readClipNotes, setClipNote } from "./clip-notes";
+import { notesForClips, readClipNotes, setClipNote, readStoryIdea, setStoryIdea } from "./clip-notes";
 import { HOOK_MARKER, normalizeLyric } from "../lrc";
 import { inClipOrder, isOmitted, readClipEdits, saveSongClipOrder, setClipOmit } from "./clip-edits";
 import { cachedFileHash, SOURCE_FILE, syncCollection } from "./collection";
@@ -58,6 +58,7 @@ export type SongAssets = {
   clips: ClipAsset[];
   removed: string[]; // in clips\_removed\
   usable: { vertical: number; horizontal: number }; // for 9:16 and 16:9 platforms
+  storyIdea?: string | null; // Prepare → Storyboard's one sentence for the whole video (clip-notes.ts): for the user only
 };
 
 const rel = (ws: Workspace, file: string) => path.relative(ws.dir, file).split(path.sep).join("/");
@@ -105,7 +106,7 @@ export async function songAssets(ws: Workspace, projectId: string, options: { ch
   // The user's story notes (Prepare → Clips): only shown there, never read by the planner or Make.
   const notes = notesForClips(readClipNotes(paths.root), listed.clips);
   for (const c of listed.clips) c.note = notes.get(c.name) ?? null;
-  return { ...out, ...listed };
+  return { ...out, ...listed, storyIdea: readStoryIdea(paths.root) };
 }
 
 // Prepare → Clips: a clip's story note saved (empty text deletes it). Keyed by the clip's content (clip-notes.ts).
@@ -436,4 +437,11 @@ export async function assignSongFile(ws: Workspace, projectId: string, name: str
   if (role === "vocals") return (await storeVocalStem(ws, projectId, file, name, options)).stored;
   if (role === "backingVocals") return replaceAsset(ws, projectId, "backingVocals", file, name);
   throw new Error(`Unknown role: ${String(role)}`);
+}
+
+// Prepare → Storyboard → Story idea: one sentence for the whole video, saved per song; for the user only.
+export function setSongStoryIdea(ws: Workspace, projectId: string, text: unknown): string | null {
+  const paths = songPathsById(ws, projectId);
+  if (paths.legacy) throw new Error("This song has no folder yet: run the migration first (pnpm songs:migrate).");
+  return setStoryIdea(paths.root, String(text ?? ""));
 }

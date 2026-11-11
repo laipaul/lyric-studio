@@ -203,6 +203,7 @@ async function main() {
     const lineKeys = async () => page.$$eval("[data-clip], [data-story-card]", (e: Element[]) => e.map((x) => x.getAttribute("data-clip") ?? `card:${x.getAttribute("data-story-card")}`));
     check((await lineKeys()).at(-1) === "card:wedding", `…at the end of the story line (${(await lineKeys()).join(", ")})`);
     page.once("dialog", (d: { accept: () => Promise<void> }) => void d.accept());
+    await page.click("[data-card-menu='collection:wedding']"); // Remove is in the card's ⋯ menu (11 Nov 2026)
     await page.click("[data-remove-story='collection:wedding']");
     await page.waitForSelector("[data-story-card=wedding]", { state: "detached" });
     check(JSON.stringify(readRecipe(recipe).collections) === "[]" && readdirSync(path.join(wsDir, "collections", "wedding")).filter((f) => f.endsWith(".mp4")).length === 2, "Remove from this song: off the song (song.json), the collection keeps its clips");
@@ -224,7 +225,7 @@ async function main() {
     check(((await page.textContent("[data-pick-add]")) ?? "").trim() === "Add 1 clip", `one clip chosen: "Add 1 clip" (${await page.textContent("[data-pick-add]")})`);
     await page.click("[data-pick-add]");
     await page.waitForSelector("[data-clip='w2.mp4'] [data-collection-badge=wedding]");
-    check((await lineKeys()).at(-1) === "w2.mp4" && ((await page.textContent("[data-clip='w2.mp4']")) ?? "").includes("Remove from this song") && !!(await page.$("[data-clip='w2.mp4'] [data-use-omit]")), "the picked clip is a card in the story line with its collection badge, Use / Omit and Remove from this song");
+    check((await lineKeys()).at(-1) === "w2.mp4" && !!(await page.$("[data-clip='w2.mp4'] [data-card-menu='w2.mp4']")) && !!(await page.$("[data-clip='w2.mp4'] [data-use-omit]")), "the picked clip is a card in the story line with its collection badge, Use / Omit and Remove from this song");
     check(JSON.stringify(readRecipe(recipe).collections) === JSON.stringify(["wedding"]), "…and the song uses wedding again (song.json)");
     await page.click("[data-omit-button='w2.mp4']");
     await page.waitForSelector("[data-clip='w2.mp4'][data-omit='1']");
@@ -242,8 +243,16 @@ async function main() {
     // Drag the card to the front of the line: saved in clips.json.
     const first = (await lineKeys())[0];
     await page.dragAndDrop("[data-story-card=wedding]", `[data-clip='${first}']`);
-    for (let i = 0; i < 20 && JSON.parse(readFileSync(path.join(songPathsById(ws2, id).root, "clips.json"), "utf8")).order[0] !== "collection:wedding"; i++) await sleep(150);
-    check(JSON.parse(readFileSync(path.join(songPathsById(ws2, id).root, "clips.json"), "utf8")).order[0] === "collection:wedding", "the card moves like a clip (clips.json)");
+    // (Read again while the studio may be writing the file: a half-written file counts as "not yet".)
+    const firstInOrder = () => {
+      try {
+        return (JSON.parse(readFileSync(path.join(songPathsById(ws2, id).root, "clips.json"), "utf8")) as { order: string[] }).order[0];
+      } catch {
+        return null;
+      }
+    };
+    for (let i = 0; i < 20 && firstInOrder() !== "collection:wedding"; i++) await sleep(150);
+    check(firstInOrder() === "collection:wedding", "the card moves like a clip (clips.json)");
 
     // Part 2. Two runs of Reels (v1 ready, v2 with a point) and one discarded video: Make counts every kept
     // video; Post offers the ready one; "Try another take" queues take 3; Style shows only what differs.

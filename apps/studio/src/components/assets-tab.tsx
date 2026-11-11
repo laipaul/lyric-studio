@@ -1,6 +1,6 @@
 "use client";
 
-import { AudioLines, ChevronDown, FileAudio, FileText, FolderOpen, ImageIcon, Library, ListMusic, Shuffle, Trash2, Upload } from "lucide-react";
+import { AudioLines, ChevronDown, FileAudio, FileText, FolderOpen, ImageIcon, Library, ListMusic, MoreHorizontal, Shuffle, Trash2, Upload } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -460,6 +460,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
             onAdd={addFromCollection}
           />
         </div>
+        <StoryIdeaField projectId={projectId} idea={data.storyIdea ?? null} />
         <div
           data-dropzone
           onDragOver={(e) => {
@@ -532,54 +533,31 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                         <p data-card-count className="text-muted-foreground">
                           {card.collection} · app picks · {card.clips} clip{card.clips === 1 ? "" : "s"}
                         </p>
-                        <button type="button" data-remove-story={k} disabled={busy} onClick={() => void removeFromStory(item)} className="text-muted-foreground hover:text-foreground mt-1 flex w-fit items-center gap-1">
-                          <Trash2 className="size-3" /> Remove from this song
-                        </button>
+                        <div className="flex justify-end">
+                          <CardMenu id={k} details={[`${card.clips} clip${card.clips === 1 ? "" : "s"} from ${card.collection}: the app picks which play here`]} action={{ label: "Remove from this song", attr: { "data-remove-story": k }, run: () => void removeFromStory(item), title: `Out of this song only: the collection ${card.collection} keeps its clips` }} disabled={busy} />
+                        </div>
                       </div>
                     </li>
                   );
                 }
                 if (!c) return null;
                 return (
-                  <li key={k} data-clip={c.name} data-collection-clip={c.collection} data-position={i + 1} data-omit={c.omit ? "1" : "0"} {...dragProps} className={cn(frame, c.omit && "border-dashed")}>
+                  <li key={k} data-clip={c.name} data-collection-clip={c.collection} data-position={i + 1} data-omit={c.omit ? "1" : "0"} title={c.name} {...dragProps} className={cn(frame, c.omit && "border-dashed")}>
                     <div className="relative aspect-[9/12] bg-black">
                       {c.thumb ? (
                         // eslint-disable-next-line @next/next/no-img-element -- a local thumbnail served by /api/files
                         <img src={`/api/files/${c.thumb}`} alt="" draggable={false} className={cn("size-full object-contain", c.omit && "opacity-30 grayscale")} />
                       ) : null}
                       {number}
-                      <span className="absolute top-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] tracking-wide uppercase">{c.orientation}</span>
                       {c.collection ? (
                         <span data-collection-badge={c.collection} title={`From the collection ${c.collection}`} className="border-brand/40 absolute bottom-1.5 left-1.5 flex max-w-[85%] items-center gap-1 truncate rounded border bg-black/75 px-1.5 py-0.5 text-[10px]">
                           <Library className="text-brand size-3 shrink-0" /> {c.collection}
                         </span>
                       ) : null}
                     </div>
-                    <div className="flex flex-col gap-0.5 p-2 text-xs">
-                      <p className="truncate font-medium" title={c.name}>
-                        {c.name}
-                      </p>
-                      <p className="text-muted-foreground">
-                        {c.kind === "photo" ? "photo" : seconds(c.durationMs)} · {c.width}×{c.height}
-                      </p>
-                      {c.duplicateOf ? <p className="text-amber-300">same content as {c.duplicateOf}</p> : null}
-                      <div data-use-omit={c.name} role="group" aria-label={`Use or omit ${c.name}`} className="mt-1 flex w-fit overflow-hidden rounded-md border text-[11px]">
-                        <button type="button" data-use={c.name} aria-pressed={!c.omit} disabled={busy} onClick={() => c.omit && void setOmit(c.name, false)} className={cn("px-2 py-0.5", !c.omit ? "bg-brand/20 text-brand" : "hover:bg-accent")}>
-                          Use
-                        </button>
-                        <button type="button" data-omit-button={c.name} aria-pressed={!!c.omit} disabled={busy} onClick={() => !c.omit && void setOmit(c.name, true)} className={cn("border-l px-2 py-0.5", c.omit ? "bg-amber-400/20 text-amber-200" : "hover:bg-accent")}>
-                          Omit
-                        </button>
-                      </div>
-                      {c.collection ? (
-                        <button type="button" data-remove-story={c.name} disabled={busy} onClick={() => void removeFromStory(item)} className="text-muted-foreground hover:text-foreground mt-1 flex w-fit items-center gap-1" title={`Out of this song only: it stays in ${c.collection}`}>
-                          <Trash2 className="size-3" /> Remove from this song
-                        </button>
-                      ) : (
-                        <button type="button" data-remove={c.name} disabled={busy} onClick={() => remove(c.name)} className="text-muted-foreground hover:text-foreground mt-1 flex w-fit items-center gap-1">
-                          <Trash2 className="size-3" /> Remove
-                        </button>
-                      )}
+                    {/* The card reads as a story (11 Nov 2026): the note is its title; the file name, duration, size and Remove sit
+                        in its ⋯ menu; a warning shows only when something is wrong. */}
+                    <div className="flex flex-col gap-1 p-2 text-xs">
                       <ClipNoteField
                         projectId={projectId}
                         clip={c.name}
@@ -588,6 +566,31 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                         onEditing={(on) => setNoteOpen(on ? k : null)}
                         onSaved={(note) => setData((d) => (d ? { ...d, clips: d.clips.map((x) => (x.name === c.name && !c.collection ? { ...x, note } : x)), story: d.story.map((x) => (x.key === k && x.clip ? { ...x, clip: { ...x.clip, note } } : x)) } : d))}
                       />
+                      {clipProblem(c) ? (
+                        <p data-clip-warning={c.name} className="text-[11px] text-amber-300">
+                          {clipProblem(c)}
+                        </p>
+                      ) : null}
+                      <div className="mt-0.5 flex items-center justify-between gap-1">
+                        <div data-use-omit={c.name} role="group" aria-label={`Use or omit ${c.name}`} className="flex w-fit overflow-hidden rounded-md border text-[11px]">
+                          <button type="button" data-use={c.name} aria-pressed={!c.omit} disabled={busy} onClick={() => c.omit && void setOmit(c.name, false)} className={cn("px-2 py-0.5", !c.omit ? "bg-brand/20 text-brand" : "hover:bg-accent")}>
+                            Use
+                          </button>
+                          <button type="button" data-omit-button={c.name} aria-pressed={!!c.omit} disabled={busy} onClick={() => !c.omit && void setOmit(c.name, true)} className={cn("border-l px-2 py-0.5", c.omit ? "bg-amber-400/20 text-amber-200" : "hover:bg-accent")}>
+                            Omit
+                          </button>
+                        </div>
+                        <CardMenu
+                          id={c.name}
+                          details={[c.name, `${c.kind === "photo" ? "photo" : seconds(c.durationMs)} · ${c.width}×${c.height} · ${c.orientation}`, ...(c.collection ? [`from the collection ${c.collection}`] : [])]}
+                          action={
+                            c.collection
+                              ? { label: "Remove from this song", attr: { "data-remove-story": c.name }, run: () => void removeFromStory(item), title: `Out of this song only: it stays in ${c.collection}` }
+                              : { label: "Remove", attr: { "data-remove": c.name }, run: () => void remove(c.name), title: "Moves the file to clips\\_removed\\ (never deleted)" }
+                          }
+                          disabled={busy}
+                        />
+                      </div>
                     </div>
                   </li>
                 );
@@ -683,11 +686,11 @@ function ClipNoteField({ projectId, clip, note, editing, onEditing, onSaved }: {
     return (
       <div className="mt-1 min-w-0">
         {note ? (
-          <button type="button" data-clip-note={clip} onClick={open} title={note} className="text-foreground/80 hover:text-foreground block w-full truncate text-left text-[11px] italic">
+          <button type="button" data-clip-note={clip} onClick={open} title={`${note}\n\n${clip}`} className="text-foreground hover:text-brand line-clamp-2 w-full text-left text-sm leading-snug font-medium">
             {note.replace(/\s+/g, " ")}
           </button>
         ) : (
-          <button type="button" data-clip-note-add={clip} onClick={open} className="text-muted-foreground/60 hover:text-muted-foreground text-[11px]">
+          <button type="button" data-clip-note-add={clip} onClick={open} title={clip} className="text-muted-foreground/70 hover:text-foreground block w-full text-left text-sm leading-snug">
             + Add a note
           </button>
         )}
@@ -723,9 +726,88 @@ function ClipNoteField({ projectId, clip, note, editing, onEditing, onSaved }: {
           void save(latest.current);
           onEditing(false);
         }}
-        className="bg-input/30 border-input w-full resize-y rounded-md border px-1.5 py-1 text-[11px] leading-snug"
+        className="bg-input/30 border-input w-full resize-y rounded-md border px-1.5 py-1 text-sm leading-snug"
       />
       {failed ? <p className="text-[10px] text-red-300">{failed}</p> : null}
     </div>
+  );
+}
+
+// A problem worth a word on the card (11 Nov 2026): the same content twice, or a picture smaller than the videos'
+// frame (its short side under 720 px: 544×720 is blown up about twice on a 1080-wide video).
+function clipProblem(c: { duplicateOf: string | null; width: number; height: number }): string | null {
+  if (c.duplicateOf) return `same content as ${c.duplicateOf}`;
+  if (c.width && c.height && Math.min(c.width, c.height) < 720) return `low resolution (${c.width}×${c.height})`;
+  return null;
+}
+
+// A card's ⋯ menu: its technical details (file name, duration, size) and Remove.
+function CardMenu({ id, details, action, disabled }: { id: string; details: string[]; action: { label: string; attr: Record<string, string>; run: () => void; title: string }; disabled: boolean }) {
+  return (
+    <DropdownMenu.Root modal={false}>
+      <DropdownMenu.Trigger asChild>
+        <button type="button" data-card-menu={id} aria-label={`More for ${id}`} title="Details and Remove" disabled={disabled} className="text-muted-foreground hover:text-foreground hover:bg-accent rounded p-1">
+          <MoreHorizontal className="size-4" />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content align="end" sideOffset={4} className="bg-popover text-popover-foreground z-50 max-w-72 min-w-52 rounded-md border p-1 text-xs shadow-lg">
+          {details.map((d, i) => (
+            <p key={d} data-card-detail className={cn("px-2 py-1 break-all", i === 0 ? "text-foreground font-medium" : "text-muted-foreground")}>
+              {d}
+            </p>
+          ))}
+          <DropdownMenu.Separator className="bg-border my-1 h-px" />
+          <DropdownMenu.Item {...action.attr} title={action.title} onSelect={action.run} className="hover:bg-accent focus:bg-accent flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 outline-none select-none">
+            <Trash2 className="size-3.5" /> {action.label}
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+// Prepare → Storyboard → Story idea (11 Nov 2026): one sentence for the whole video, saved per song (with the notes,
+// .studio\\clip-notes.json). For the user only: the app never reads it to plan. Saved as typed (after a pause) and on leaving.
+function StoryIdeaField({ projectId, idea }: { projectId: string; idea: string | null }) {
+  const [text, setText] = useState(idea ?? "");
+  const [state, setState] = useState<"idle" | "saved" | "error">("idle");
+  const sent = useRef(idea ?? "");
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  async function save(value: string) {
+    clearTimeout(timer.current);
+    if (value.trim() === sent.current.trim()) return;
+    sent.current = value;
+    try {
+      const r = await api(`/api/songs/${projectId}/assets`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ storyIdea: value }) });
+      const d = (await r.json()) as { error?: string };
+      setState(!r.ok || d.error ? "error" : "saved");
+    } catch {
+      setState("error");
+    }
+  }
+  return (
+    <label className="flex flex-col gap-1" data-story-idea>
+      <span className="text-muted-foreground flex items-center gap-2 text-xs">
+        Story idea <span className="opacity-70">· one sentence for the whole video, for you only</span>
+        {state === "saved" ? <span className="text-emerald-300">✓ Saved</span> : state === "error" ? <span className="text-red-300">Not saved</span> : null}
+      </span>
+      <input
+        data-story-idea-input
+        value={text}
+        maxLength={300}
+        placeholder="e.g. Two people find each other again in a rainy Paris night."
+        onChange={(e) => {
+          setText(e.target.value);
+          setState("idle");
+          clearTimeout(timer.current);
+          const v = e.target.value;
+          timer.current = setTimeout(() => void save(v), 700);
+        }}
+        onBlur={() => void save(text)}
+        onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
+        className="bg-input/30 border-input h-9 rounded-md border px-3 text-base italic"
+      />
+    </label>
   );
 }

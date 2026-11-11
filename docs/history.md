@@ -4,6 +4,38 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Navigation N1 polish: the four stages behave the same way ✅ (to verify on the Windows PC)
+- **One header on every stage:** the stage's tabs on the left and, on the same row at the right, "<Stage> · <status>"
+  (Shape and Review had no such line; on one row so Shape's viewer keeps its height). Shape says which video it shows ("Shape · Reels v1 planned", "… planning…", or the past run shown).
+  The rail and the line say "Review" (was "Review & Post"). A banner only when something needs attention: Prepare's
+  to-do list and the "Editing theme" banner; the green "Nothing to prepare" box is gone (the line says "Ready").
+- **One tab always selected; each stage opens on its last tab** (remembered in this browser, per stage); the first tab
+  the first time.
+- **Shape's panel always shows its tab's content** beside the viewer. It can only be **collapsed**, with the button on
+  its right edge (‹); a thin strip (›) brings it back. The tab stays highlighted while collapsed, and also while Text,
+  Theme or Analysis is shown in the panel (their × goes back to the tab). A second click on a tab no longer closes it.
+- **No repeated titles:** a Shape tab's panel has no heading (the tab is the title); the Look bar lost its "LOOK" label
+  above the theme name; Prepare → Clips lost its "CLIPS" heading; Make → Try other looks lost its "Try other looks
+  (optional)" heading (its one-line explanation stays).
+- **One distinct icon per tab:** Files (folder), Lyrics & timing (T), Details (i), Clips (film); Look (palette), Part &
+  ending (scissors), Pace (gauge), Shots (film); Make: Videos (clapperboard), Try other looks (swatches), Options
+  (sliders); Review: Videos (eye), Post (send).
+- **"Every change is saved for this song at once." once per stage**, at the right of the stage line (Prepare, Shape,
+  Make); the panels only show "Saving…" / "✓ Saved" while a change saves. (The lyrics editor and the theme editor keep
+  their own Save buttons, as before.)
+- **Wording:** Prepare → Clips → Shared collections: the badge says "Mixed into this song" (was "This song").
+- Layout and labels only: no setting moved, nothing new.
+- Tests: song-stages.e2e.ts (new checks: Look selected and shown at once, no tab title, no "Look" label, second click
+  keeps the panel, no × on a tab's panel, collapse / show again with the tab still selected, the saved-at-once line once,
+  "Mixed into this song", distinct icons in every stage, each stage's line, Prepare opens on its last tab); the panel
+  helpers in stage-tabs.ts (collapsePanel); storyboard.e2e.ts collapses the panel where it used to close it.
+  Run in the cloud session: song-stages 146 (twice), storyboard 156, style-lock 29, videos-post 64, lyrics-tab 33,
+  title-opening 40, textboard 19, collections 16, library 22, releases 16, themes 35, song-title 7, clip-notes 14: all
+  pass. pairings: only its old check fails (the stand-in viewer 428 px, expects 300-380), as before N1.
+  new-song-every-platform not run here (a real render worker). tsc clean; pnpm build ok; eslint: only the old findings.
+  storyboard.e2e.ts: with the panel shown, viewer, timeline and command bar fit on one 1440×1000 screen (viewer 501 px);
+  collapsed, the viewer has its full 533 px. song-stages: the theme picker's Cancel check now waits for the viewer.
+
 ### Prepare → Clips: story notes on the clip cards ✅ (to verify on the Windows PC)
 - **Each clip card has a short note at the bottom** for the clip's role in the story line. An empty card shows a faint
   "+ Add a note"; a click opens a small box on the card that **saves as you type** (no Save button); Esc or clicking

@@ -4,6 +4,22 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Storyboard reads as a story: notes as card titles, a Story idea line, details in ⋯ ✅ (to verify on the Windows PC)
+- **Card title = your note** (larger, up to two lines); a card without one shows "+ Add a note" there. The file name
+  is the card's tooltip and the first line of its ⋯ menu.
+- **⋯ menu per card:** file name, duration, size and orientation (and the collection), then Remove (or "Remove from
+  this song" for collection clips and the "app picks" cards).
+- **Visible:** number, thumbnail, note, Use / Omit (and the collection badge); a small warning only when something
+  is wrong: "low resolution (544×720)" (short side under 720 px) or "same content as …".
+- **Story idea** above the clips: one sentence for the whole video, saved per song next to the notes.
+- **For you only:** the app never reads the notes or the story idea to plan (test: clip-notes checks which files
+  read them).
+- Tests: clip-notes (+1: the story idea kept with the notes, cleared, cut at 300 characters). Browser: clip-notes
+  (the title in two lines, no file name / duration / Remove on the card, the tooltip, the low-resolution warning, the
+  ⋯ menu's details and Remove, the story idea kept after a reload), song-stages (Remove from this song in ⋯).
+- **To check on the PC:** Here With Me → Prepare → Storyboard: type a Story idea; give two clips a note: the notes are
+  the cards' titles; ⋯ shows the file name and size; a small clip shows "low resolution".
+
 ### Post downloads: "Save as" in your folder, "Save all to…", folders remembered ✅ (to verify on the Windows PC)
 - **Each file button** in the Post panel (Video, Captions (.srt), Thumbnail, Cover, publish.txt) opens a "Save as"
   window (Chrome / Edge) in the last folder you used for this song and platform; other browsers download as before.
@@ -291,38 +307,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   line so the header stays as tall as the tabs), style-lock 29, videos-post 64, lyrics-tab 33, title-opening 40,
   textboard 19, collections 16, library 22, releases 16, themes 35, song-title 7, clip-notes 14: all pass. pairings:
   only its old check (428 px), as before. tsc clean; pnpm build ok.
-
-### Navigation N1 polish: the four stages behave the same way ✅ (to verify on the Windows PC)
-- **One header on every stage:** the stage's tabs on the left and, on the same row at the right, "<Stage> · <status>"
-  (Shape and Review had no such line; on one row so Shape's viewer keeps its height). Shape says which video it shows ("Shape · Reels v1 planned", "… planning…", or the past run shown).
-  The rail and the line say "Review" (was "Review & Post"). A banner only when something needs attention: Prepare's
-  to-do list and the "Editing theme" banner; the green "Nothing to prepare" box is gone (the line says "Ready").
-- **One tab always selected; each stage opens on its last tab** (remembered in this browser, per stage); the first tab
-  the first time.
-- **Shape's panel always shows its tab's content** beside the viewer. It can only be **collapsed**, with the button on
-  its right edge (‹); a thin strip (›) brings it back. The tab stays highlighted while collapsed, and also while Text,
-  Theme or Analysis is shown in the panel (their × goes back to the tab). A second click on a tab no longer closes it.
-- **No repeated titles:** a Shape tab's panel has no heading (the tab is the title); the Look bar lost its "LOOK" label
-  above the theme name; Prepare → Clips lost its "CLIPS" heading; Make → Try other looks lost its "Try other looks
-  (optional)" heading (its one-line explanation stays).
-- **One distinct icon per tab:** Files (folder), Lyrics & timing (T), Details (i), Clips (film); Look (palette), Part &
-  ending (scissors), Pace (gauge), Shots (film); Make: Videos (clapperboard), Try other looks (swatches), Options
-  (sliders); Review: Videos (eye), Post (send).
-- **"Every change is saved for this song at once." once per stage**, at the right of the stage line (Prepare, Shape,
-  Make); the panels only show "Saving…" / "✓ Saved" while a change saves. (The lyrics editor and the theme editor keep
-  their own Save buttons, as before.)
-- **Wording:** Prepare → Clips → Shared collections: the badge says "Mixed into this song" (was "This song").
-- Layout and labels only: no setting moved, nothing new.
-- Tests: song-stages.e2e.ts (new checks: Look selected and shown at once, no tab title, no "Look" label, second click
-  keeps the panel, no × on a tab's panel, collapse / show again with the tab still selected, the saved-at-once line once,
-  "Mixed into this song", distinct icons in every stage, each stage's line, Prepare opens on its last tab); the panel
-  helpers in stage-tabs.ts (collapsePanel); storyboard.e2e.ts collapses the panel where it used to close it.
-  Run in the cloud session: song-stages 146 (twice), storyboard 156, style-lock 29, videos-post 64, lyrics-tab 33,
-  title-opening 40, textboard 19, collections 16, library 22, releases 16, themes 35, song-title 7, clip-notes 14: all
-  pass. pairings: only its old check fails (the stand-in viewer 428 px, expects 300-380), as before N1.
-  new-song-every-platform not run here (a real render worker). tsc clean; pnpm build ok; eslint: only the old findings.
-  storyboard.e2e.ts: with the panel shown, viewer, timeline and command bar fit on one 1440×1000 screen (viewer 501 px);
-  collapsed, the viewer has its full 533 px. song-stages: the theme picker's Cancel check now waits for the viewer.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

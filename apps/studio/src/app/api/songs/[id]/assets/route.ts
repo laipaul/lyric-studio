@@ -17,11 +17,11 @@ import path from "node:path";
 import { connection } from "next/server";
 
 import { resolveWorkspaceDir, safeName } from "@lyric/db";
-import { assignSongFile, importSongClips, removeSongClip, replaceAsset, restoreSongClip, setSongClipNote, setSongClipOmit, setSongClipOrder, songAssets, storeVocalStem, type AssetKind, type AssignRole } from "@lyric/video/assets";
+import { assignSongFile, importSongClips, setSongStoryIdea, removeSongClip, replaceAsset, restoreSongClip, setSongClipNote, setSongClipOmit, setSongClipOrder, songAssets, storeVocalStem, type AssetKind, type AssignRole } from "@lyric/video/assets";
 
 import { addFromCollection, isPickedClip, removeFromStory, setPickedClipNote, setPickedClipOmit, setStoryOrder, songStory } from "@lyric/video/story-line";
 
-import { withWorkspaceAsync } from "@/lib/workspace";
+import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
 type Params = { params: Promise<{ id: string }> };
 const fail = (error: unknown) => Response.json({ error: (error as Error).message }, { status: 400 });
@@ -93,7 +93,9 @@ export async function PUT(request: Request, { params }: Params) {
       add?: { collection?: unknown; clips?: unknown; whole?: unknown };
       omit?: { name?: unknown; omit?: unknown };
       note?: { name?: unknown; text?: unknown };
+      storyIdea?: unknown; // Prepare → Storyboard's one sentence for the whole video (for the user only)
     };
+    if (body.storyIdea !== undefined) return Response.json({ storyIdea: withWorkspace((ws) => setSongStoryIdea(ws, id, body.storyIdea)) });
     const picked = (ws: Parameters<typeof isPickedClip>[0], name: unknown) => typeof name === "string" && !!isPickedClip(ws, id, name);
     if (body.note)
       return Response.json({
