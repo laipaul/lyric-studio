@@ -1,0 +1,9 @@
+{
+  "name": "lipsync-spike",
+  "private": true,
+  "description": "Lip Sync, step 1: compare three fal.ai lip-sync models on one clip and one lyric line. Not part of the app.",
+  "type": "module",
+  "dependencies": {
+    "@fal-ai/client": "1.10.1"
+  }
+}

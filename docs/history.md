@@ -4,6 +4,31 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Song Details → Tags: ranked hashtags, brand tags, suggestions, the top ones per platform ✅ (to verify on the Windows PC)
+- **Before:** the Post panel's hashtags came from fixed templates (title and artist filled in, plus #reels / #fyp /
+  #shorts); YouTube's Tags box from publish-template.txt, frozen in publish.txt. Nothing per song, no limits.
+- **Tags** (Prepare → Song Details, between EP and Links): your hashtags as ranked chips; drag to reorder; keep as
+  many as you like (song.json "tags"). Clean: lowercase, no spaces or accents, no duplicates.
+- **Brand tags** on every song, marked "from your brand": brand.json "tags" (Life Lyrics: brand\brand.json; Pômé:
+  brand\Pômé\brand.json); without them the artist's name (#lifelyrics). The Brand page comes later.
+- **Suggestions** (grey chips; one click adds, they turn pink): the artist, title (#herewithme), EP
+  (#quietheartbreaks), the lyrics' language (e.g. French → #chansonfrancaise #musiquefrancaise) and the brand's
+  starter set (brand.json "tagStarters"; default #lyricvideo #emotionalpop #cinematicpop #lovesong #sadsongs).
+  Local rules only; never #reels #explore #fyp #viral and other generic tags.
+- **The Post panel uses the top ones per platform**, with a preview line each in Song Details: Instagram / Facebook
+  5, TikTok 8, Shorts 8, YouTube 3 in the description (above the title) and the Tags box up to 500 characters (also
+  for YouTube videos made before). publish.txt gets them with each new YouTube video.
+- Tests: song-tags (8: clean format, rank with the brand's, the limits, suggestions and language, brand.json, the
+  Post panel, publish.txt, song.json); exports, library, song-links, style still pass. Browser: song-links (the brand
+  chip, suggestions without generic tags, add / clean / drag / reload, Instagram's top 5, YouTube's 3), videos-post,
+  song-stages.
+- **Edit brand tags** (a link next to the brand chip): the brand tags and the starter set as chips, saved for every
+  song of the artist (Life Lyrics: brand\brand.json, the rest of it kept; Pômé: her own brand.json if she has one,
+  else brand\Pômé\tags.json, so her videos' look never changes). Test: song-tags (+1), song-links (browser).
+- **To check on the PC:** Here With Me → Prepare → Song Details → Tags: #lifelyrics "from your brand"; click
+  #herewithme and #quietheartbreaks; add "emotional pop"; drag one first; Review → Post: Reels shows those top 5.
+  Edit brand tags → add "lifelyricsstudio": it shows on every Life Lyrics song; a Pômé song shows her own set.
+
 ### Shape: two tabs, Settings | Shots ✅ (to verify on the Windows PC)
 - **Settings** is one scrolling panel. It starts with a **"Set by me"** line: what you changed (e.g. `Target length
   90 s · Shot length "story"`), everything else is the app's ("Nothing set by me…" when you changed nothing).

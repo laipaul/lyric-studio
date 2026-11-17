@@ -4,6 +4,33 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Lip Sync, step 1 (spike): three fal.ai models side by side ✅ (to verify on the Windows PC)
+- **Isolated spike** in `spikes/lipsync/` (README there). Nothing in apps/ or packages/ changed (no HyperFrames,
+  Remotion, Prepare/Storyboard, Shape or Theme v2 code). It only reads the workspace, with the database opened
+  read-only so the app can stay open.
+- **`pnpm lipsync "<song>" --clip "<path>" --lines 12,13 | chorus:2 | --from/--to`**, with `--pad` (0.2 s),
+  `--providers`, `--max-cost` (default $3: above it nothing is uploaded, even with `--yes`) and `--yes`.
+  `--list` shows the lines (Lyrics tab numbers, ♪ = chorus).
+- **One job and one folder per line.** The vocal stem (the Vocals slot, your own file name) is cut for the models;
+  the full song is cut for review only. The clip is trimmed to the same length, keeping its resolution and fps.
+  A clip shorter than the line stops that line with a message.
+- **Models** (endpoint IDs, inputs and prices checked on fal.ai): Sync lipsync 2 (`fal-ai/sync-lipsync/v2`),
+  Kling LipSync (`fal-ai/kling-video/lipsync/audio-to-video`; a clip outside 720–1920 px is sent as a resized copy)
+  and InfiniteTalk (`fal-ai/infinitalk/video-to-video`, 480p). All sit behind one `LipSyncProvider` interface.
+  They run in parallel; each has a timeout and one retry.
+- **Output** in `spikes\lipsync\out\<song>\<clip>_line<N>\`: clip_trimmed.mp4, audio_slice.wav,
+  mix_slice.wav, `<model>.mp4`, `<model>_review.mp4` (with the full song), comparison.mp4 (side by side,
+  labelled, with the full song), report.json (endpoint, seconds, est. and fal-priced cost, every fal request ID,
+  checks) and report.md (a verdict per model in plain words).
+- **Checks:** a length more than 0.1 s off the audio, a different aspect ratio or a file that does not play is a
+  problem. A lower resolution or another fps is information only ("Model output 480p, clip was 1080p").
+- Tests: `pnpm lipsync:test` (16). They cover timing and padding, chorus:N, the clip-too-short stop, prices and
+  limits, the inputs against fal's schemas, the retry with request IDs, and the checks. They also run the whole
+  pipeline with a stand-in fal client (no network, no key): cap, dry run, one folder per line, stem vs mix,
+  comparison and reports.
+- **To check on the PC:** see the Windows commands in the step's message: `npm install` in spikes\lipsync once,
+  FAL_KEY in .env, `pnpm lipsync "Wedding Day" --list`, then the estimate, then `--yes`.
+
 ### Title cards, Canva-like: size as a number, instant viewer, a toolbar above the video ✅ (to verify on the Windows PC)
 - **Size in px with − / +** (and typing; ↑ / ↓ by 1): from half the card's usual size up to **twice the title's**
   usual size, so the credits can be as big as the title (a Reel: credits usually 29 px, now up to 168 px). Under 28 px
@@ -181,31 +208,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **To check on the PC (Chrome or Edge):** Review → Post → a video → Video: a Save as window; save to D:\Posts.
   Save all to… → pick D:\Posts: a "Here With Me" folder with every file. Another song's Save all opens in D:\Posts.
 
-### Song Details → Tags: ranked hashtags, brand tags, suggestions, the top ones per platform ✅ (to verify on the Windows PC)
-- **Before:** the Post panel's hashtags came from fixed templates (title and artist filled in, plus #reels / #fyp /
-  #shorts); YouTube's Tags box from publish-template.txt, frozen in publish.txt. Nothing per song, no limits.
-- **Tags** (Prepare → Song Details, between EP and Links): your hashtags as ranked chips; drag to reorder; keep as
-  many as you like (song.json "tags"). Clean: lowercase, no spaces or accents, no duplicates.
-- **Brand tags** on every song, marked "from your brand": brand.json "tags" (Life Lyrics: brand\brand.json; Pômé:
-  brand\Pômé\brand.json); without them the artist's name (#lifelyrics). The Brand page comes later.
-- **Suggestions** (grey chips; one click adds, they turn pink): the artist, title (#herewithme), EP
-  (#quietheartbreaks), the lyrics' language (e.g. French → #chansonfrancaise #musiquefrancaise) and the brand's
-  starter set (brand.json "tagStarters"; default #lyricvideo #emotionalpop #cinematicpop #lovesong #sadsongs).
-  Local rules only; never #reels #explore #fyp #viral and other generic tags.
-- **The Post panel uses the top ones per platform**, with a preview line each in Song Details: Instagram / Facebook
-  5, TikTok 8, Shorts 8, YouTube 3 in the description (above the title) and the Tags box up to 500 characters (also
-  for YouTube videos made before). publish.txt gets them with each new YouTube video.
-- Tests: song-tags (8: clean format, rank with the brand's, the limits, suggestions and language, brand.json, the
-  Post panel, publish.txt, song.json); exports, library, song-links, style still pass. Browser: song-links (the brand
-  chip, suggestions without generic tags, add / clean / drag / reload, Instagram's top 5, YouTube's 3), videos-post,
-  song-stages.
-- **Edit brand tags** (a link next to the brand chip): the brand tags and the starter set as chips, saved for every
-  song of the artist (Life Lyrics: brand\brand.json, the rest of it kept; Pômé: her own brand.json if she has one,
-  else brand\Pômé\tags.json, so her videos' look never changes). Test: song-tags (+1), song-links (browser).
-- **To check on the PC:** Here With Me → Prepare → Song Details → Tags: #lifelyrics "from your brand"; click
-  #herewithme and #quietheartbreaks; add "emotional pop"; drag one first; Review → Post: Reels shows those top 5.
-  Edit brand tags → add "lifelyricsstudio": it shows on every Life Lyrics song; a Pômé song shows her own set.
-
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -350,6 +352,13 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   mix has different timing, use Generate -> advanced -> re-align.
 
 ## Next
+
+**Lip Sync roadmap (agreed 17 Nov 2026; separate from the Theme v2 order below, which continues unaffected).**
+Step 1 (the spike, three fal.ai models compared) is done, to verify. Next, each its own step, when the user decides:
+- **Step 2:** a "Lip sync" button on Prepare → Storyboard clip cards. A provider switch (the model the user picks
+  from the step 1 comparison). The result becomes a variant of the clip on its card, or replaces it.
+- **Step 3 (optional):** a local, free provider (MuseTalk or LatentSync) on the RTX 5060 8 GB, behind the same
+  `LipSyncProvider` interface.
 
 **Navigation and the order from here (agreed with the user, 9 Nov 2026).** Rule: every setting lives in the stage
 where the user looks for it, in ONE place. Order: **N1** (navigation, done, to verify; N1 polish: the four stages behave the same way, done, to verify) → story notes on clip cards
