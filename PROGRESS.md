@@ -353,6 +353,41 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 
 ## Next
 
+**Characters roadmap (C1–C4: plan proposed 17 Nov 2026, WAITING FOR THE USER'S APPROVAL; nothing built).** Vision: Paul drops
+ONE picture of a character; the app builds a locked character pack, turns an imported shot list into planned Storyboard
+slots, generates consistent stills for every slot, checks them against the character's face and regenerates misses.
+Paul only picks. Rendering stays local with zero network calls: generation is a separate, priced, opt-in step, and
+its results are saved as ordinary photos in the song folder. Order:
+- **C1 spike first** (`spikes/characters/`, like spikes/lipsync): Paul's East Asian bride image → the C1.0 reference
+  check → a 4-view pack (front portrait, 3/4, profile, full body on grey) from several fal image-edit models side by
+  side → the face check of every view against the original, plus a contact sheet. It settles the look, the default
+  model and the face stack before any app work.
+- **C1.0 Reference check** (automatic on upload, local, free; the same face stack as C4). It measures:
+  - exactly one face, with its confidence, and its size in px (target ≥ 512 tall);
+  - blur on the face area and head pose (yaw / pitch);
+  - which landmarks are visible (eyes / nose / mouth; a hidden mouth is flagged for lip sync);
+  - expression (mouth / eye openness) and lighting (exposure, left / right balance on the face);
+  - body visibility (pose keypoints).
+
+  Verdict: Ready / Usable with fix / Not suitable, with reasons in plain words. One-click fixes: upscale, crop to the
+  face, or add a second reference image of the same character. An AI vision opinion (paid) is off by default and
+  shows its cost first.
+- **C1 Character from one picture:** a Characters screen. The upload is the identity AND style reference for a pack
+  made with a fal image-edit model. The app drafts a fixed description that Paul can edit. Each generated view is
+  checked against the original and drifted views are regenerated automatically before approval. Approve → Lock
+  (read-only, versioned). Stored in workspace\characters\<name>\ and the database; scope song / EP / artist.
+- **C2 Shot list import:** a JSON shot list (schema: slot id, order, characters, outfit, scene, shot type, anchor
+  lyric line, tag) becomes planned slots in Prepare → Storyboard. The story notes stay separate and are never read
+  as instructions. ("Shot list" is Paul's input; the app's planned video stays the "shot plan".)
+- **C3 Auto-generate stills:** 2–4 variants per slot, with the pack images as references; prompt = the fixed
+  description + outfit + scene + shot type + style. A cost estimate and a --max-cost style cap come before any call.
+  Same adapter pattern as spikes/lipsync, with a provider switch: Nano Banana, Seedream, GPT Image. Endpoints
+  verified on fal's docs; FAL_KEY from .env only. The picked still becomes a photo of the slot.
+- **C4 Consistency check:** a local face-embedding model scores each variant against the pack (green / amber /
+  red, with a verdict in plain words). Red slots are regenerated automatically, at most 2 more times.
+- List only, later: C5 pick & animate (export for Midjourney video; optional fal image-to-video), C6 a lip-sync
+  button using the locked face portrait (builds on Lip Sync step 2), and a Midjourney prompt builder as a fallback.
+
 **Lip Sync roadmap (agreed 17 Nov 2026; separate from the Theme v2 order below, which continues unaffected).**
 Step 1 (the spike, three fal.ai models compared) is done, to verify. Next, each its own step, when the user decides:
 - **Step 2:** a "Lip sync" button on Prepare → Storyboard clip cards. A provider switch (the model the user picks
