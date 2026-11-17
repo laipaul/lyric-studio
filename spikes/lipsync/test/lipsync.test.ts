@@ -12,7 +12,7 @@ import { after, before, describe, test } from "node:test";
 
 import { checkResult, reportMarkdown, verdict, type JobReport } from "../src/checks";
 import { comparisonArgs } from "../src/media";
-import { clipTooShort, estimateCost, infinitalkFrames, klingSize, parseSelection, providerLimit, resolveWindows, safeName, type Line } from "../src/plan";
+import { clipTooShort, DEFAULT_PROVIDERS, estimateCost, FALLBACK_PROVIDER, infinitalkFrames, klingSize, needsFallback, parseSelection, providerLimit, resolveWindows, safeName, type Line } from "../src/plan";
 import { PROVIDERS, runWithRetry } from "../src/providers";
 import { REPO_ROOT } from "../src/song";
 import { run, Stop } from "../lipsync";
@@ -61,6 +61,16 @@ describe("which part of the song", () => {
 });
 
 describe("providers", () => {
+  test("singing defaults to InfiniteTalk (whole face); Sync only as the fallback; Kling only when asked", () => {
+    assert.deepEqual(DEFAULT_PROVIDERS, ["infinitetalk"]);
+    assert.equal(FALLBACK_PROVIDER, "sync");
+    assert.equal(needsFallback([{ status: "done", problem: false }]), false);
+    assert.equal(needsFallback([{ status: "failed", problem: false }]), true);
+    assert.equal(needsFallback([{ status: "skipped", problem: false }]), true);
+    assert.equal(needsFallback([{ status: "done", problem: true }]), true); // wrong length / shape / does not play
+    assert.equal(needsFallback([{ status: "failed", problem: false }, { status: "done", problem: false }]), false);
+  });
+
   test("estimated cost per fal's price rules", () => {
     assert.equal(estimateCost("sync", 6).toFixed(3), "0.300"); // $3 / min
     assert.equal(estimateCost("kling", 3).toFixed(3), "0.070"); // rounded up to 5 s x $0.014
@@ -200,6 +210,7 @@ describe("pipeline (stand-in fal)", () => {
     else rmSync(tmp, { recursive: true, force: true });
   });
 
+  let failInfinitalk = false;
   const fakeFal = () => {
     let n = 0;
     return {
@@ -213,6 +224,7 @@ describe("pipeline (stand-in fal)", () => {
       queue: {
         submit: async (endpoint: string, o: { input: Record<string, unknown> }) => {
           submitted.push({ endpoint, input: o.input });
+          if (endpoint.includes("infinitalk") && failInfinitalk) throw Object.assign(new Error("Internal Server Error"), { status: 500, body: { detail: "GPU out of memory" } });
           if (endpoint.includes("kling") && ++klingCalls === 1) throw Object.assign(new Error("Unprocessable Entity"), { status: 422, body: { detail: "face not found" } });
           const id = `${endpoint.split("/")[1]}-${submitted.length}`;
           inputs.set(id, o.input);
@@ -254,7 +266,7 @@ describe("pipeline (stand-in fal)", () => {
   });
 
   test("two chorus lines: one folder each, slices, results, review copies, comparison, report with request IDs", async () => {
-    await run(["Wedding Day", "--clip", clip, "--lines", "chorus:2", "--yes"], { fal: fakeFal(), out, env: env() });
+    await run(["Wedding Day", "--clip", clip, "--lines", "chorus:2", "--providers", "sync,kling,infinitetalk", "--yes"], { fal: fakeFal(), out, env: env() });
     const songDir = path.join(out, "Wedding Day");
     assert.deepEqual(readdirSync(songDir).sort(), ["midjourney clip_line2", "midjourney clip_line3"]);
     const dir = path.join(songDir, "midjourney clip_line2");
@@ -313,5 +325,59 @@ describe("pipeline (stand-in fal)", () => {
     assert.ok(logs.some((l) => /Line 4 .*STOPPED\. The clip is 6\.00 s long, but this part of the song lasts 9\.40 s/.test(l)), logs.join("\n"));
     assert.ok(existsSync(path.join(out, "Wedding Day", "midjourney clip_line2 (2)", "sync.mp4")), `${readdirSync(path.join(out, "Wedding Day")).join(", ")}\n${logs.join("\n")}`);
     assert.equal(existsSync(path.join(out, "Wedding Day", "midjourney clip_line4")), false);
+  });
+
+  const endpointsSent = () => submitted.map((x) => x.endpoint.split("/")[1]);
+
+  test("default: InfiniteTalk only; no Sync while it works, never Kling", async () => {
+    submitted.length = 0;
+    const out2 = path.join(tmp, "out-default");
+    await run(["Wedding Day", "--clip", clip, "--lines", "3", "--yes"], { fal: fakeFal(), out: out2, env: env() });
+    assert.deepEqual(endpointsSent(), ["infinitalk"]);
+    const dir = path.join(out2, "Wedding Day", "midjourney clip_line3");
+    const report = JSON.parse(readFileSync(path.join(dir, "report.json"), "utf8")) as JobReport;
+    assert.deepEqual(report.providers.map((p) => [p.id, p.status]), [["infinitetalk", "done"]]);
+    assert.equal(existsSync(path.join(dir, "sync.mp4")), false);
+    assert.ok(existsSync(path.join(dir, "comparison.mp4")));
+  });
+
+  test("InfiniteTalk fails (both tries): Sync runs as the automatic fallback, and the report says why", async () => {
+    submitted.length = 0;
+    failInfinitalk = true;
+    const out3 = path.join(tmp, "out-fallback");
+    try {
+      await run(["Wedding Day", "--clip", clip, "--lines", "3", "--yes"], { fal: fakeFal(), out: out3, env: env() });
+    } finally {
+      failInfinitalk = false;
+    }
+    assert.deepEqual(endpointsSent(), ["infinitalk", "infinitalk", "sync-lipsync"]);
+    const dir = path.join(out3, "Wedding Day", "midjourney clip_line3");
+    const report = JSON.parse(readFileSync(path.join(dir, "report.json"), "utf8")) as JobReport;
+    const [inf, sync] = report.providers;
+    assert.equal(inf.status, "failed");
+    assert.match(inf.reason!, /GPU out of memory/);
+    assert.equal(sync.id, "sync");
+    assert.equal(sync.status, "done");
+    assert.equal(sync.fallback_for, "InfiniteTalk failed");
+    assert.match(readFileSync(path.join(dir, "report.md"), "utf8"), /\(automatic fallback: InfiniteTalk failed\)/);
+    assert.ok(existsSync(path.join(dir, "sync_review.mp4")));
+  });
+
+  test("--no-fallback: no Sync; and the cap also holds the fallback back", async () => {
+    submitted.length = 0;
+    failInfinitalk = true;
+    try {
+      await run(["Wedding Day", "--clip", clip, "--lines", "3", "--no-fallback", "--yes"], { fal: fakeFal(), out: path.join(tmp, "out-nofb"), env: env() });
+      assert.deepEqual(endpointsSent(), ["infinitalk", "infinitalk"]);
+      submitted.length = 0;
+      const out5 = path.join(tmp, "out-cap");
+      await run(["Wedding Day", "--clip", clip, "--lines", "3", "--max-cost", "0.9", "--yes"], { fal: fakeFal(), out: out5, env: env() });
+      assert.deepEqual(endpointsSent(), ["infinitalk", "infinitalk"]); // $0.88 + Sync $0.14 > $0.90
+      const report = JSON.parse(readFileSync(path.join(out5, "Wedding Day", "midjourney clip_line3", "report.json"), "utf8")) as JobReport;
+      assert.equal(report.providers[1].status, "skipped");
+      assert.match(report.providers[1].reason!, /cap of \$0\.90/);
+    } finally {
+      failInfinitalk = false;
+    }
   });
 });

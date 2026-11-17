@@ -78,6 +78,18 @@ export function clipTooShort(clipDurationS: number, windowS: number, clipStartS 
 export type ProviderId = "sync" | "kling" | "infinitetalk";
 export const PROVIDER_IDS: readonly ProviderId[] = ["sync", "kling", "infinitetalk"];
 
+// Lesson from the first test (17 Nov 2026): mouth-only models (Sync, Kling LipSync) look unnatural for singing, because
+// the rest of the face stays still. Singing defaults to a whole-face, audio-driven model (InfiniteTalk). Sync runs
+// only as an automatic fallback when InfiniteTalk gives nothing usable. Kling runs only when asked for (--providers).
+export const DEFAULT_PROVIDERS: readonly ProviderId[] = ["infinitetalk"];
+export const FALLBACK_PROVIDER: ProviderId = "sync";
+
+// The fallback runs when none of the chosen models gave a usable result: each one was skipped, failed, or came back
+// with a problem (wrong length or shape, does not play).
+export function needsFallback(results: { status: "done" | "failed" | "skipped"; problem: boolean }[]): boolean {
+  return !results.some((r) => r.status === "done" && !r.problem);
+}
+
 export const PRICES = {
   // fal-ai/sync-lipsync/v2: "$3 per minute of video" (model lipsync-2).
   syncPerSecond: 3 / 60,

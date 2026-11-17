@@ -66,6 +66,14 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   limits, the inputs against fal's schemas, the retry with request IDs, and the checks. They also run the whole
   pipeline with a stand-in fal client (no network, no key): cap, dry run, one folder per line, stem vs mix,
   comparison and reports.
+- **Update after the first test (17 Nov 2026, decided by the user):** mouth-only models (Kling LipSync, Sync) look
+  unnatural for singing: the rest of the face stays still. So the default is now **InfiniteTalk** (whole face, audio
+  driven).
+  - **Sync** is only the automatic fallback. It runs when InfiniteTalk fails, is too long for one request, or comes
+    back with a problem; it stays within the cap, and `--no-fallback` turns it off. The report marks it
+    "(automatic fallback: …)".
+  - **Kling LipSync** is out of the default list and runs only with `--providers kling`.
+  - Tests: 20 (+ the default, the fallback, `--no-fallback`, the cap holding the fallback back).
 - **To check on the PC:** see the Windows commands in the step's message: `npm install` in spikes\lipsync once,
   FAL_KEY in .env, `pnpm lipsync "Wedding Day" --list`, then the estimate, then `--yes`.
 
@@ -418,12 +426,19 @@ its results are saved as ordinary photos in the song folder. Order:
   (RTX 5060), one setting per song, cost shown first for fal. It sits before rendering, so the render paths and
   the zero-network render rule do not change.
 - List only, later: C5 pick & animate (export for Midjourney video; optional fal image-to-video), C6 a lip-sync
-  button using the locked face portrait (builds on Lip Sync step 2), and a Midjourney prompt builder as a fallback.
+  button using the locked face portrait (builds on Lip Sync step 2: a whole-face model, InfiniteTalk or what the
+  OmniHuman 1.5 / Kling Avatar evaluation picks), and a Midjourney prompt builder as a fallback.
 
 **Lip Sync roadmap (agreed 17 Nov 2026; separate from the Theme v2 order below, which continues unaffected).**
 Step 1 (the spike, three fal.ai models compared) is done, to verify. Next, each its own step, when the user decides:
-- **Step 2:** a "Lip sync" button on Prepare → Storyboard clip cards. A provider switch (the model the user picks
-  from the step 1 comparison). The result becomes a variant of the clip on its card, or replaces it.
+- **Step 2:** a "Lip sync" button on Prepare → Storyboard clip cards. Singing defaults to InfiniteTalk (whole face),
+  with Sync only as the automatic fallback; a provider switch stays as an override. The result becomes a variant of
+  the clip on its card, or replaces it.
+- **Evaluate for still-image characters** (one picture + the song → a singing shot, no clip needed). Endpoints seen
+  on fal.ai, 17 Nov 2026; to verify when the step starts:
+  - OmniHuman 1.5: `fal-ai/bytedance/omnihuman/v1.5`, $0.16/s.
+  - Kling Avatar v2: `fal-ai/kling-video/ai-avatar/v2/standard` $0.0562/s and `/pro` $0.115/s.
+  - For comparison, InfiniteTalk image-to-video: `fal-ai/infinitalk`, $0.20/s.
 - **Step 3 (optional):** a local, free provider (MuseTalk or LatentSync) on the RTX 5060 8 GB, behind the same
   `LipSyncProvider` interface.
 

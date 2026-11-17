@@ -2,7 +2,8 @@
 // models and a side-by-side comparison. Not part of the app: it only reads the workspace (database read-only).
 //
 //   pnpm lipsync "<song>" --list
-//   pnpm lipsync "<song>" --clip "<path>" --lines 12,13 [--pad 0.2] [--providers sync,kling,infinitetalk] [--max-cost 3] [--yes]
+//   pnpm lipsync "<song>" --clip "<path>" --lines 12,13 [--pad 0.2] [--providers infinitetalk] [--no-fallback] [--max-cost 3] [--yes]
+//   Default: InfiniteTalk (whole face, natural for singing); Sync only as the automatic fallback; Kling only when asked.
 //   pnpm lipsync "<song>" --clip "<path>" --lines chorus:2 --yes
 //   pnpm lipsync "<song>" --clip "<path>" --from 61.2 --to 66.8 --yes
 //
@@ -15,7 +16,7 @@ import { parseArgs } from "node:util";
 
 import { checkResult, reportMarkdown, verdict, type JobReport, type ProviderReport } from "./src/checks";
 import { audioDuration, comparisonArgs, ffmpeg, findTools, hasFilter, plays, probeVideo, reviewArgs, sliceAudioArgs, trimClipArgs, type Panel, type Tools } from "./src/media";
-import { clipTooShort, klingSize, money, parseSelection, PROVIDER_IDS, providerLimit, resolveWindows, safeName, type ProviderId, type Window } from "./src/plan";
+import { clipTooShort, DEFAULT_PROVIDERS, FALLBACK_PROVIDER, klingSize, money, needsFallback, parseSelection, PROVIDER_IDS, providerLimit, resolveWindows, safeName, type ProviderId, type Window } from "./src/plan";
 import { DEFAULT_PROMPT, errorText, PROVIDERS, runWithRetry, type Attempt } from "./src/providers";
 import { envIgnored, loadEnv, readSong, REPO_ROOT, workspaceDir, type Song } from "./src/song";
 
@@ -42,6 +43,7 @@ function args(argv: string[]) {
       "timeout-min": { type: "string" },
       yes: { type: "boolean", default: false },
       list: { type: "boolean", default: false },
+      "no-fallback": { type: "boolean", default: false },
     },
   });
   const project = values.project ?? positionals.join(" ");
@@ -52,7 +54,7 @@ function args(argv: string[]) {
     if (!Number.isFinite(n) || n < 0) throw new Stop(`--${name} takes a number (got "${v}").`);
     return n;
   };
-  const providers = (values.providers ?? PROVIDER_IDS.join(",")).split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const providers = (values.providers ?? DEFAULT_PROVIDERS.join(",")).split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
   const unknown = providers.filter((p) => !(PROVIDER_IDS as readonly string[]).includes(p));
   if (unknown.length) throw new Stop(`Unknown provider "${unknown.join(", ")}": use ${PROVIDER_IDS.join(", ")}.`);
   return {
@@ -64,6 +66,8 @@ function args(argv: string[]) {
     to: values.to,
     padS: num(values.pad, 0.2, "pad"),
     providers: providers as ProviderId[],
+    // Sync steps in automatically when the chosen models give nothing usable (unless it is chosen already, or --no-fallback).
+    fallback: values["no-fallback"] || providers.includes(FALLBACK_PROVIDER) ? null : FALLBACK_PROVIDER,
     maxCost: num(values["max-cost"], 3, "max-cost"),
     prompt: values.prompt?.trim() || DEFAULT_PROMPT,
     timeoutMs: num(values["timeout-min"], 20, "timeout-min") * 60_000,
@@ -90,6 +94,7 @@ type Prepared = {
   mixFile: string;
   audioS: number;
   plan: { id: ProviderId; cost: number; skip: string | null }[];
+  fallback: { id: ProviderId; cost: number; skip: string | null } | null;
 };
 
 function jobDir(song: Song, clip: string, w: Window): string {
@@ -117,8 +122,8 @@ function prepare(t: Tools, song: Song, clip: string, clipInfo: { width: number; 
     ffmpeg(t, trimClipArgs(clipFile, 0, w.durationS, klingFile, size));
   }
   const bytes = statSync(audioFile).size;
-  const plan = a.providers.map((id) => ({ id, cost: PROVIDERS[id].estimateCost(w.durationS), skip: providerLimit(id, w.durationS, bytes) }));
-  return { window: w, dir, clipFile, klingFile, audioFile, mixFile, audioS, plan };
+  const entry = (id: ProviderId) => ({ id, cost: PROVIDERS[id].estimateCost(w.durationS), skip: providerLimit(id, w.durationS, bytes) });
+  return { window: w, dir, clipFile, klingFile, audioFile, mixFile, audioS, plan: a.providers.map(entry), fallback: a.fallback ? entry(a.fallback) : null };
 }
 
 // The model's video, with up to 3 tries (a dropped connection is not a failed model).
@@ -147,7 +152,9 @@ function labelFont(): string | null {
   }
 }
 
-async function runJob(t: Tools, fal: Fal, song: Song, clip: string, prep: Prepared, a: Args): Promise<JobReport> {
+type Budget = { cap: number; spent: number };
+
+async function runJob(t: Tools, fal: Fal, song: Song, clip: string, prep: Prepared, a: Args, budget: Budget): Promise<JobReport> {
   const w = prep.window;
   const tag = w.line ? `line ${w.line.number}` : w.label;
   const log = (m: string) => console.log(`  [${tag}] ${m}`);
@@ -159,8 +166,7 @@ async function runJob(t: Tools, fal: Fal, song: Song, clip: string, prep: Prepar
   const videoUrl = await up(prep.clipFile, "video/mp4");
   const klingUrl = prep.klingFile ? await up(prep.klingFile, "video/mp4") : null;
 
-  const reports = await Promise.all(
-    prep.plan.map(async ({ id, cost, skip }): Promise<ProviderReport> => {
+  const runOne = async ({ id, cost, skip }: { id: ProviderId; cost: number; skip: string | null }): Promise<ProviderReport> => {
       const p = PROVIDERS[id];
       const base: ProviderReport = { id, name: p.name, endpoint: p.endpoint, status: "skipped", attempts: [], estimated_cost_usd: round2(cost) };
       if (skip) return { ...base, reason: skip };
@@ -196,8 +202,24 @@ async function runJob(t: Tools, fal: Fal, song: Song, clip: string, prep: Prepar
         const tried = (error as { attempts?: Attempt[] }).attempts ?? attempts;
         return { ...base, status: "failed", attempts: tried, seconds: (Date.now() - started) / 1000, reason: errorText(error) };
       }
-    }),
-  );
+  };
+  const reports = await Promise.all(prep.plan.map(runOne));
+  budget.spent += prep.plan.filter((p) => !p.skip).reduce((s, p) => s + p.cost, 0);
+
+  // The automatic fallback (Sync) when the chosen models gave nothing usable.
+  const usable = reports.map((r) => ({ status: r.status, problem: !!r.checks?.some((c) => c.level === "problem") }));
+  if (prep.fallback && needsFallback(usable)) {
+    const why = reports.map((r) => `${r.name} ${r.status === "done" ? "had a problem" : r.status}`).join(", ");
+    const fb = prep.fallback;
+    if (!fb.skip && budget.spent + fb.cost > budget.cap + 1e-9) {
+      const p = PROVIDERS[fb.id];
+      reports.push({ id: fb.id, name: p.name, endpoint: p.endpoint, status: "skipped", attempts: [], estimated_cost_usd: round2(fb.cost), fallback_for: why, reason: `the cap of ${money(budget.cap)} would be passed` });
+    } else {
+      log(`${why}: trying ${PROVIDERS[fb.id].name} instead (automatic fallback)`);
+      if (!fb.skip) budget.spent += fb.cost;
+      reports.push({ ...(await runOne(fb)), fallback_for: why });
+    }
+  }
 
   // comparison.mp4: the original + each result, side by side, sound = the full mix.
   const done = reports.filter((r) => r.status === "done" && r.output && r.output.width > 0);
@@ -291,10 +313,11 @@ export async function run(argv: string[], deps: Deps = {}): Promise<void> {
     jobs.push(prep);
     console.log(`${head}: ${w.startS.toFixed(2)}–${w.endS.toFixed(2)} s (${w.durationS.toFixed(2)} s)`);
     for (const p of prep.plan) console.log(`   ${PROVIDERS[p.id].name.padEnd(16)} ${p.skip ? `skipped: ${p.skip}` : `est. ${money(p.cost)}`}`);
+    if (prep.fallback) console.log(`   ${PROVIDERS[prep.fallback.id].name.padEnd(16)} only if ${prep.plan.map((p) => PROVIDERS[p.id].name).join(" / ")} gives nothing usable: ${prep.fallback.skip ? `not possible (${prep.fallback.skip})` : `est. ${money(prep.fallback.cost)}`}`);
   }
   if (!jobs.length) throw new Stop("Nothing to send.");
   const total = jobs.reduce((s, j) => s + j.plan.filter((p) => !p.skip).reduce((x, p) => x + p.cost, 0), 0);
-  console.log(`\nEstimated total: ${money(total)} (cap ${money(a.maxCost)}; prices as fal.ai lists them, your fal.ai dashboard shows the real charge)`);
+  console.log(`\nEstimated total: ${money(total)} (cap ${money(a.maxCost)}; prices as fal.ai lists them, your fal.ai dashboard shows the real charge)${a.fallback ? `; a fallback runs only within the cap` : ""}`);
   if (total > a.maxCost)
     throw new Stop(`The estimate (${money(total)}) is above the cap of ${money(a.maxCost)}: nothing was uploaded. Pick fewer lines or providers, or raise the cap with --max-cost ${Math.ceil(total)}.`);
   if (!a.yes) {
@@ -302,8 +325,9 @@ export async function run(argv: string[], deps: Deps = {}): Promise<void> {
     return;
   }
 
+  const budget: Budget = { cap: a.maxCost, spent: 0 };
   if (deps.fal) {
-    for (const prep of jobs) await finish(tools, deps.fal, song, clip, prep, a);
+    for (const prep of jobs) await finish(tools, deps.fal, song, clip, prep, a, budget);
     return;
   }
   if (!envIgnored()) throw new Stop(".env is not in .gitignore: add a line `.env` there first, so your fal key never goes to git.");
@@ -316,15 +340,15 @@ export async function run(argv: string[], deps: Deps = {}): Promise<void> {
     throw new Stop("The fal client is not installed yet. First time only: cd spikes\\lipsync; npm install; cd ..\\..");
   }
   const fal = createFalClient({ credentials: key, suppressLocalCredentialsWarning: true });
-  for (const prep of jobs) await finish(tools, fal, song, clip, prep, a);
+  for (const prep of jobs) await finish(tools, fal, song, clip, prep, a, budget);
 }
 
-async function finish(tools: Tools, fal: Fal, song: Song, clip: string, prep: Prepared, a: Args): Promise<void> {
+async function finish(tools: Tools, fal: Fal, song: Song, clip: string, prep: Prepared, a: Args, budget: Budget): Promise<void> {
   console.log(`\n${prep.window.line ? `Line ${prep.window.line.number}` : prep.window.label}:`);
-  const report = await runJob(tools, fal, song, clip, prep, a);
+  const report = await runJob(tools, fal, song, clip, prep, a, budget);
   writeFileSync(path.join(prep.dir, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
   writeFileSync(path.join(prep.dir, "report.md"), reportMarkdown(report));
-  for (const p of report.providers) console.log(`  ${p.name}: ${p.status === "done" ? p.verdict : `${p.status}: ${p.reason}`}`);
+  for (const p of report.providers) console.log(`  ${p.name}${p.fallback_for ? " (automatic fallback)" : ""}: ${p.status === "done" ? p.verdict : `${p.status}: ${p.reason}`}`);
   console.log(`  → ${report.comparison.file ? path.join(prep.dir, report.comparison.file) : prep.dir}`);
 }
 

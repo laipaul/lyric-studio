@@ -1,5 +1,15 @@
 # Lip Sync spike (step 1): three fal.ai models side by side
 
+> **Lesson from the first test (17 Nov 2026).** Mouth-only models (Kling LipSync, Sync) look unnatural for singing:
+> the rest of the face stays still. So the default for singing is now a whole-face, audio-driven model,
+> **InfiniteTalk**:
+> - **Sync** runs only as an **automatic fallback**: when InfiniteTalk fails, is too long for one request, or
+>   comes back with a problem (wrong length or shape, does not play). It runs within the cap, and `--no-fallback`
+>   turns it off.
+> - **Kling LipSync** is no longer in the default list. It runs only with `--providers kling` (or a list that
+>   includes it).
+> - To compare all three again: `--providers sync,kling,infinitetalk`.
+
 Which cloud model makes a Midjourney clip **sing** best? This folder answers that **without touching the app**.
 Nothing in `apps/` or `packages/` changes. The spike only reads the workspace: it opens the database **read-only**,
 so the app can stay open. It never writes into the song folder, and it only reads the song and the vocal stem.
@@ -30,7 +40,7 @@ pnpm lipsync "Wedding Day" --clip "D:\clips\bride.mp4" --lines chorus:2 --yes
 
 - `--list` shows the song's lines with the Lyrics tab's numbers and times, and marks the chorus lines with ♪.
 - Without `--yes` you get the estimate only. Nothing is uploaded.
-- With `--yes` it uploads, runs the three models at the same time, and writes the results.
+- With `--yes` it uploads, runs the chosen models at the same time (default InfiniteTalk, then Sync only if needed), and writes the results.
 
 | Option | Meaning |
 |---|---|
@@ -38,7 +48,8 @@ pnpm lipsync "Wedding Day" --clip "D:\clips\bride.mp4" --lines chorus:2 --yes
 | `--lines chorus:2` | The first 2 lines marked as chorus. |
 | `--from 61.2 --to 66.8` | Any part of the song, in seconds. |
 | `--pad 0.2` | Seconds added before and after each line (default 0.2). |
-| `--providers sync,kling,infinitetalk` | Which models (default all three). |
+| `--providers infinitetalk` | Which models (default: InfiniteTalk only). `sync,kling,infinitetalk` compares all three. |
+| `--no-fallback` | No automatic Sync when InfiniteTalk gives nothing usable. |
 | `--max-cost 3` | Safety cap in dollars (default 3). Above it nothing is uploaded, even with `--yes`. |
 | `--clip-start 2.5` | Where in the clip to start (default 0). |
 | `--prompt "…"` | InfiniteTalk's text prompt (it requires one; a neutral "keep the scene, sing" prompt is the default). |

@@ -62,6 +62,8 @@ export type ProviderReport = {
   endpoint: string;
   status: "done" | "failed" | "skipped";
   reason?: string;
+  fallback_for?: string; // set when this model ran as the automatic fallback, with why
+  
   attempts: { request_id: string | null; started_at: string; ended_at: string; outcome: string }[];
   seconds?: number; // wall time from first submit to download
   estimated_cost_usd: number;
@@ -91,7 +93,8 @@ export function reportMarkdown(r: JobReport): string {
   out.push(`- Voice sent to the models: the vocal stem (${r.vocal_stem}); the review copies and comparison.mp4 play the full song.`, "");
   out.push("| Model | Result | Time | Cost (est. → by fal's price) |", "|---|---|---|---|");
   for (const p of r.providers) {
-    const result = p.status === "done" ? p.verdict ?? "" : p.status === "skipped" ? `Skipped: ${p.reason}` : `Failed: ${p.reason}`;
+    const result0 = p.status === "done" ? p.verdict ?? "" : p.status === "skipped" ? `Skipped: ${p.reason}` : `Failed: ${p.reason}`;
+    const result = p.fallback_for ? `(automatic fallback: ${p.fallback_for}) ${result0}` : result0;
     const time = p.seconds !== undefined ? `${Math.round(p.seconds)} s` : "–";
     const cost = `${money(p.estimated_cost_usd)}${p.billed_cost_usd !== undefined ? ` → ${money(p.billed_cost_usd)}` : ""}`;
     out.push(`| ${p.name} | ${result.replace(/\|/g, "/")} | ${time} | ${cost} |`);
