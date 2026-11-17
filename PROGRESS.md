@@ -376,8 +376,13 @@ its results are saved as ordinary photos in the song folder. Order:
   made with a fal image-edit model. The app drafts a fixed description that Paul can edit. Each generated view is
   checked against the original and drifted views are regenerated automatically before approval. Approve → Lock
   (read-only, versioned). Stored in workspace\characters\<name>\ and the database; scope song / EP / artist.
-- **C2 Shot list import:** a JSON shot list (schema: slot id, order, characters, outfit, scene, shot type, anchor
-  lyric line, tag) becomes planned slots in Prepare → Storyboard. The story notes stay separate and are never read
+- **Scene cards (with C1, same flow):** a pack for a location. From one picture, 3–4 angles of the same place,
+  the same checks in spirit (sharpness, size, the place still recognisable), Approve → Lock. A planned slot names
+  a character card AND a scene card; both packs go as references on every generation (C3).
+- **Story bible (series scope):** the cast (character cards) and the places (scene cards) of an EP, with the songs
+  as its episodes, so the cards carry across the songs. A song uses its EP's bible, plus cards of its own.
+- **C2 Shot list import:** a JSON shot list (schema: slot id, order, characters, scene card, outfit, shot type,
+  anchor lyric line, tag, animate with) becomes planned slots in Prepare → Storyboard. The story notes stay separate and are never read
   as instructions. ("Shot list" is Paul's input; the app's planned video stays the "shot plan".)
 - **C3 Auto-generate stills:** 2–4 variants per slot, with the pack images as references; prompt = the fixed
   description + outfit + scene + shot type + style. A cost estimate and a --max-cost style cap come before any call.
@@ -385,6 +390,12 @@ its results are saved as ordinary photos in the song folder. Order:
   verified on fal's docs; FAL_KEY from .env only. The picked still becomes a photo of the slot.
 - **C4 Consistency check:** a local face-embedding model scores each variant against the pack (green / amber /
   red, with a verdict in plain words). Red slots are regenerated automatically, at most 2 more times.
+- **Model routing:** each slot has an "animate with" field. Its default comes from the shot type (emotion
+  close-up / motion / wide → a model per kind); Paul can change it on the slot. It is used by C5.
+- **Upscale pass before export:** Paul's Midjourney clips are 544×720. A pass makes upscaled copies of the clips
+  and stills, cached and never replacing the originals, before Make uses them. Provider switch fal or local
+  (RTX 5060), one setting per song, cost shown first for fal. It sits before rendering, so the render paths and
+  the zero-network render rule do not change.
 - List only, later: C5 pick & animate (export for Midjourney video; optional fal image-to-video), C6 a lip-sync
   button using the locked face portrait (builds on Lip Sync step 2), and a Midjourney prompt builder as a fallback.
 
