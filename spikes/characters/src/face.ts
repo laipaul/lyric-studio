@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import type { FaceResult } from "./plan";
 
@@ -27,12 +28,17 @@ export interface FaceTool {
   sheet(spec: SheetSpec): { file: string };
 }
 
+// A dynamic import() of an absolute path needs a file:// URL: Node's ESM loader rejects "D:\..." on Windows.
+export function importUrl(file: string, win = process.platform === "win32" || /^[A-Za-z]:[\\/]/.test(file)): string {
+  return pathToFileURL(file, { windows: win }).href;
+}
+
 export async function localFaceTool(repoRoot: string): Promise<FaceTool> {
   const scripts = path.join(repoRoot, "services", "audio", "scripts");
-  const common = (await import(path.join(scripts, "common.mjs"))) as { faceReady(): boolean; venvPython: string; serviceDir: string };
+  const common = (await import(importUrl(path.join(scripts, "common.mjs")))) as { faceReady(): boolean; venvPython: string; serviceDir: string };
   if (!common.faceReady()) {
     console.log("Installing the local face checks (first time only: MediaPipe + OpenCV, about 120 MB)…");
-    const setup = (await import(path.join(scripts, "setup.mjs"))) as { setupFace(): void };
+    const setup = (await import(importUrl(path.join(scripts, "setup.mjs")))) as { setupFace(): void };
     setup.setupFace();
   }
   const run = <T>(args: string[]): T => {

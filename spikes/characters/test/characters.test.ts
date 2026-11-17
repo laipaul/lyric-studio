@@ -10,7 +10,9 @@ import path from "node:path";
 import { after, before, describe, test } from "node:test";
 
 import { actualTotal, calibrationMarkdown, packMarkdown, run, Stop } from "../characters";
+import { importUrl } from "../src/face";
 import type { CheckResult, FaceTool, SheetSpec } from "../src/face";
+import { REPO_ROOT } from "../src/env";
 import { actualCosts, callModel } from "../src/fal";
 import { angleNote, anglePrompt, ANGLES, Budget, classify, DEFAULT_THRESHOLDS, estimate, MODELS, VIEWS, viewPrompt } from "../src/plan";
 
@@ -300,5 +302,47 @@ describe("pack run (stand-in fal, face check and billing)", () => {
     assert.equal(report.cost.estimate_spent_usd, 0.25);
     assert.ok(report.items.some((i: { text: string }) => /the cap of \$0\.25 was reached/.test(i.text)));
     assert.equal(report.cost.actual.status, "failed"); // no key: not asked
+  });
+});
+
+describe("importUrl (dynamic imports of absolute paths)", () => {
+  test("Windows paths become file:// URLs, spaces and accents encoded", () => {
+    assert.equal(importUrl("D:\\videomaker\\services\\audio\\scripts\\common.mjs", true), "file:///D:/videomaker/services/audio/scripts/common.mjs");
+    assert.equal(importUrl("D:\\Mes Vidéos\\x.mjs", true), "file:///D:/Mes%20Vid%C3%A9os/x.mjs");
+  });
+  test("POSIX paths become file:// URLs", () => {
+    assert.equal(importUrl("/home/x/common.mjs", false), "file:///home/x/common.mjs");
+  });
+  test("the URL is importable here, also from a folder with a space and an accent", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "imp orté-"));
+    try {
+      const f = path.join(dir, "m.mjs");
+      writeFileSync(f, "export const ok = 42;\n");
+      const m = (await import(importUrl(f))) as { ok: number };
+      assert.equal(m.ok, 42);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  test("no source file imports a path directly (only package names or importUrl)", () => {
+    const root = path.join(REPO_ROOT, "spikes");
+    const files: string[] = [];
+    const walk = (d: string) => {
+      for (const e of readdirSync(d, { withFileTypes: true })) {
+        const p = path.join(d, e.name);
+        if (e.isDirectory()) { if (!["node_modules", "out", "test"].includes(e.name)) walk(p); }
+        else if (e.name.endsWith(".ts")) files.push(p);
+      }
+    };
+    walk(path.join(root, "characters"));
+    walk(path.join(root, "lipsync"));
+    assert.ok(files.some((f) => f.endsWith(`${path.sep}face.ts`)) && files.some((f) => f.endsWith(`${path.sep}lipsync.ts`)), "the scan found the spikes' files");
+    const bad: string[] = [];
+    for (const f of files) {
+      for (const m of readFileSync(f, "utf8").matchAll(/await import\(([^)]*)/g)) {
+        if (!/^\s*("[^"./][^"]*"|importUrl\()/.test(m[1])) bad.push(`${path.relative(root, f)}: import(${m[1]}`);
+      }
+    }
+    assert.deepEqual(bad, []);
   });
 });
