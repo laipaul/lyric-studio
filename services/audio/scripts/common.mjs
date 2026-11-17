@@ -81,3 +81,17 @@ export function aiReady() {
 
 // Models download here on first use (inside the project, not the user profile).
 export const modelsDir = path.join(serviceDir, "models");
+
+// Face checks for Characters (pnpm audio:setup --face): requirements-face.txt on top of requirements.txt.
+export const faceRequirementsFile = path.join(serviceDir, "requirements-face.txt");
+export const faceInstalledMarker = path.join(venvDir, ".face-requirements-sha256");
+export function faceRequirementsHash() {
+  return createHash("sha256").update(readFileSync(faceRequirementsFile)).digest("hex");
+}
+export function faceReady() {
+  try {
+    return venvReady() && readFileSync(faceInstalledMarker, "utf8").trim() === faceRequirementsHash();
+  } catch {
+    return false;
+  }
+}

@@ -7,6 +7,9 @@ import {
   aiInstalledMarker,
   aiRequirementsFile,
   aiRequirementsHash,
+  faceInstalledMarker,
+  faceRequirementsFile,
+  faceRequirementsHash,
   torchVariant,
   installedMarker,
   isWindows,
@@ -95,10 +98,21 @@ export function setupAi(variantOverride) {
   console.error("[audio setup] AI packages ready. Models download on first use into services/audio/models.");
 }
 
+// pnpm audio:setup --face: the local face checks for Characters (MediaPipe + OpenCV, about 120 MB; CPU only).
+export function setupFace() {
+  setup();
+  console.error("[audio setup] installing the face check packages (MediaPipe, OpenCV)");
+  run(venvPython, ["-m", "pip", "install", "--disable-pip-version-check", "-q", "--only-binary=:all:", "-r", faceRequirementsFile]);
+  writeFileSync(faceInstalledMarker, faceRequirementsHash());
+  console.error("[audio setup] face checks ready. The face models (about 52 MB) download on first use into services/audio/models/face.");
+}
+
 // Run directly (pnpm audio:setup [--ai] [--torch cpu|cu128]) rather than imported by run.mjs.
 if (process.argv[1]?.endsWith("setup.mjs")) {
   const args = process.argv.slice(2);
-  if (args.includes("--ai")) {
+  if (args.includes("--face")) {
+    setupFace();
+  } else if (args.includes("--ai")) {
     const t = args.indexOf("--torch");
     const variant = t >= 0 ? args[t + 1] : undefined;
     if (variant !== undefined && !["cpu", "cu128", "cu126", "default"].includes(variant)) {

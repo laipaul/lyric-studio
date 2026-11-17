@@ -4,6 +4,44 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Characters, C1 spike: reference check, character pack, location angles, local face check ✅ (to run on the Windows PC)
+- **Isolated spike** in `spikes/characters/` (README there). Nothing in apps/ or packages/ changed (no HyperFrames,
+  Remotion, Prepare/Storyboard or Shape code). The database is opened read-only, only for `--song`.
+- **Local face checks** (new, in the Python service: `services/audio/app/face.py`).
+  - Installed with `pnpm audio:setup --face` (mediapipe 1.2.0, opencv-contrib-python 5.0.0.93, nothing newer than
+    3 Nov), and run with `pnpm face check|scene-check|compare|calibrate|crop`.
+  - The models download once with pinned SHA-256 sums. Each file's own licence: YuNet MIT, SFace Apache 2.0,
+    MediaPipe Face Landmarker and Pose Landmarker Apache 2.0 (model cards).
+- **C1.0 reference check**, with a verdict Ready / Usable with fix / Not suitable and reasons in plain words. It
+  measures:
+  - one face and its confidence, its size (target 512 px tall), blur;
+  - head pose, eyes / nose / mouth visibility, a confident hand over the mouth (flagged for lip sync), mouth and eye
+    openness;
+  - exposure and left/right balance, and how much of the body is visible.
+
+  A veil over the mouth is not detectable: the report says to check by eye. Fixes: `--crop` and
+  `--image2` (a second reference). The upscale fix is the later upscale pass. `--ai-opinion` is paid ($0.01) and
+  off by default.
+- **`pnpm characters calibrate`** (free) sets the "same person" line on Paul's own pictures: the bride against the
+  faces in the song's clips. A clip that scores above SFace's line is left out as "probably her" and listed. It also
+  scores changed copies of her picture. Saved per character.
+- **`pnpm characters pack`**:
+  - 4 views (front, 3/4, profile, full body on grey) and 3 location angles (`--scene`), per model: Nano Banana Pro,
+    Nano Banana 2, Seedream 4.5 and GPT Image 1.5 (endpoints, inputs and prices checked on fal.ai). The picture is
+    both the identity and the style reference.
+  - Each view is face-checked: green / amber / red. A red view is made again at most twice and the best try is
+    kept. Profiles and tiny faces are judged by eye.
+  - Draft descriptions, contact sheets, and report.md / report.json with every request ID.
+  - The cost estimate and `--max-cost` (default $3) come first, and the cap also stops the retries.
+  - The actual cost comes from fal's Billing Events API (needs a key with billing permission;
+    `pnpm characters cost <folder>` asks again later).
+- Tests: `pnpm characters:test` (12; a stand-in fal client, face check and billing) and
+  `pnpm test:audio tests/test_face.py` (12). The whole audio suite passes (115).
+- Checked here with the real face models on public test photos. A drifted view (another person's face, 0.21) was
+  red and made again (0.91, green); a 40 px face was not judged; the contact sheets were drawn.
+- **To run on the PC:** see the step's message (calibrate on the bride vs the Wedding Day clips, then the estimate,
+  then `--yes`).
+
 ### Lip Sync, step 1 (spike): three fal.ai models side by side ✅ (to verify on the Windows PC)
 - **Isolated spike** in `spikes/lipsync/` (README there). Nothing in apps/ or packages/ changed (no HyperFrames,
   Remotion, Prepare/Storyboard, Shape or Theme v2 code). It only reads the workspace, with the database opened
@@ -191,23 +229,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **To check on the PC:** Here With Me → Prepare → Storyboard: type a Story idea; give two clips a note: the notes are
   the cards' titles; ⋯ shows the file name and size; a small clip shows "low resolution".
 
-### Post downloads: "Save as" in your folder, "Save all to…", folders remembered ✅ (to verify on the Windows PC)
-- **Each file button** in the Post panel (Video, Captions (.srt), Thumbnail, Cover, publish.txt) opens a "Save as"
-  window (Chrome / Edge) in the last folder you used for this song and platform; other browsers download as before.
-- **Save all to…** writes every file of the post into one folder you pick. With "in a folder named “<song>”" (on by
-  default) you pick the parent (e.g. D:\Posts) and the song gets its own folder in it; the next song opens there.
-- **Clear names:** "Here With Me - YouTube.mp4", "Here With Me - YouTube.srt", "Here With Me - YouTube - thumbnail.jpg",
-  "… - publish.txt" (" v2" for a second version).
-- **Item 4 (other download buttons):** these are the app's only download buttons (Make has none, the release pack
-  is gone); all five changed: Video, Captions (.srt), Thumbnail, Cover, publish.txt; plus the new Save all to….
-- The folders are remembered in this browser (its folder handles, never paths): per song and platform, per song,
-  and the parent folder for the next song.
-- Tests (browser, videos-post, with stand-in pickers): clear names; Video's "Save as" opens in Downloads the first
-  time and writes the whole file; the next one opens where the last went; Save all writes every file into the
-  song's folder; the next Save all opens in the parent, kept for every song.
-- **To check on the PC (Chrome or Edge):** Review → Post → a video → Video: a Save as window; save to D:\Posts.
-  Save all to… → pick D:\Posts: a "Here With Me" folder with every file. Another song's Save all opens in D:\Posts.
-
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -353,12 +374,12 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 
 ## Next
 
-**Characters roadmap (C1–C4: plan proposed 17 Nov 2026, WAITING FOR THE USER'S APPROVAL; nothing built).** Vision: Paul drops
+**Characters roadmap (C1–C4: approved 17 Nov 2026 with the face models YuNet + SFace + MediaPipe (local, CPU, in the Python service), a Characters page in the header next to Collections (characters, scene cards, EP story bibles), a picker in Prepare → Storyboard to assign them to slots; the C1 spike is built, the rest is not).** Vision: Paul drops
 ONE picture of a character; the app builds a locked character pack, turns an imported shot list into planned Storyboard
 slots, generates consistent stills for every slot, checks them against the character's face and regenerates misses.
 Paul only picks. Rendering stays local with zero network calls: generation is a separate, priced, opt-in step, and
 its results are saved as ordinary photos in the song folder. Order:
-- **C1 spike first** (`spikes/characters/`, like spikes/lipsync): Paul's East Asian bride image → the C1.0 reference
+- **C1 spike first** (BUILT 17 Nov 2026, to run on the PC; `spikes/characters/`, like spikes/lipsync): Paul's East Asian bride image → the C1.0 reference
   check → a 4-view pack (front portrait, 3/4, profile, full body on grey) from several fal image-edit models side by
   side → the face check of every view against the original, plus a contact sheet. It settles the look, the default
   model and the face stack before any app work.

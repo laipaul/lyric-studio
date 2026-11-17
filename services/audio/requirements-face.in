@@ -1,0 +1,9 @@
+# Face checks for Characters (C1 spike onward): installed by "pnpm audio:setup --face".
+# Local, CPU, free. Model licences (checked 17 Nov 2026, each model's own licence file / model card):
+#   YuNet face detector (opencv_zoo)            MIT
+#   SFace face recognition (opencv_zoo)         Apache 2.0
+#   MediaPipe Face Landmarker (BlazeFace short range, Face Mesh V2, Blendshape V2)   Apache 2.0
+#   MediaPipe Pose Landmarker (BlazePose GHUM 3D)                                    Apache 2.0
+# Libraries: opencv-contrib-python (Apache 2.0), mediapipe (Apache 2.0).
+mediapipe==1.2.0
+opencv-contrib-python==5.0.0.93

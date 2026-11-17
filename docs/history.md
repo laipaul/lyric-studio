@@ -4,6 +4,23 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Post downloads: "Save as" in your folder, "Save all to…", folders remembered ✅ (to verify on the Windows PC)
+- **Each file button** in the Post panel (Video, Captions (.srt), Thumbnail, Cover, publish.txt) opens a "Save as"
+  window (Chrome / Edge) in the last folder you used for this song and platform; other browsers download as before.
+- **Save all to…** writes every file of the post into one folder you pick. With "in a folder named “<song>”" (on by
+  default) you pick the parent (e.g. D:\Posts) and the song gets its own folder in it; the next song opens there.
+- **Clear names:** "Here With Me - YouTube.mp4", "Here With Me - YouTube.srt", "Here With Me - YouTube - thumbnail.jpg",
+  "… - publish.txt" (" v2" for a second version).
+- **Item 4 (other download buttons):** these are the app's only download buttons (Make has none, the release pack
+  is gone); all five changed: Video, Captions (.srt), Thumbnail, Cover, publish.txt; plus the new Save all to….
+- The folders are remembered in this browser (its folder handles, never paths): per song and platform, per song,
+  and the parent folder for the next song.
+- Tests (browser, videos-post, with stand-in pickers): clear names; Video's "Save as" opens in Downloads the first
+  time and writes the whole file; the next one opens where the last went; Save all writes every file into the
+  song's folder; the next Save all opens in the parent, kept for every song.
+- **To check on the PC (Chrome or Edge):** Review → Post → a video → Video: a Save as window; save to D:\Posts.
+  Save all to… → pick D:\Posts: a "Here With Me" folder with every file. Another song's Save all opens in D:\Posts.
+
 ### Song Details → Tags: ranked hashtags, brand tags, suggestions, the top ones per platform ✅ (to verify on the Windows PC)
 - **Before:** the Post panel's hashtags came from fixed templates (title and artist filled in, plus #reels / #fyp /
   #shorts); YouTube's Tags box from publish-template.txt, frozen in publish.txt. Nothing per song, no limits.

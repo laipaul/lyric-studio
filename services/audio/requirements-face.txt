@@ -1,0 +1,58 @@
+# Exact versions for "pnpm audio:setup --face" (Python 3.12; ready-made wheels only), on top of requirements.txt.
+# Regenerate after editing requirements-face.in:
+#   uv pip compile --universal --python-version 3.12 --only-binary :all: --exclude-newer <date 2 weeks ago> -c requirements.txt --no-header requirements-face.in -o requirements-face.txt
+absl-py==2.5.1
+    # via mediapipe
+certifi==2026.10.19
+    # via
+    #   -c requirements.txt
+    #   mediapipe
+cffi==2.1.1
+    # via
+    #   -c requirements.txt
+    #   sounddevice
+contourpy==1.4.0
+    # via matplotlib
+cycler==0.12.1
+    # via matplotlib
+flatbuffers==25.12.19
+    # via mediapipe
+fonttools==4.68.0
+    # via matplotlib
+kiwisolver==1.5.1
+    # via matplotlib
+matplotlib==3.11.2
+    # via mediapipe
+mediapipe==1.2.0
+    # via -r requirements-face.in
+numpy==2.5.4
+    # via
+    #   -c requirements.txt
+    #   contourpy
+    #   matplotlib
+    #   mediapipe
+    #   opencv-contrib-python
+opencv-contrib-python==5.0.0.93
+    # via
+    #   -r requirements-face.in
+    #   mediapipe
+packaging==26.3
+    # via
+    #   -c requirements.txt
+    #   matplotlib
+pillow==13.0.0
+    # via matplotlib
+pycparser==3.12 ; implementation_name != 'PyPy'
+    # via
+    #   -c requirements.txt
+    #   cffi
+pyparsing==3.3.3
+    # via matplotlib
+python-dateutil==4.0.0
+    # via matplotlib
+sounddevice==0.5.6
+    # via
+    #   -c requirements.txt
+    #   mediapipe
+tzdata==2026.6
+    # via python-dateutil
