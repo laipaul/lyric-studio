@@ -438,6 +438,40 @@ its results are saved as ordinary photos in the song folder. Order:
   and stills, cached and never replacing the originals, before Make uses them. Provider switch fal or local
   (RTX 5060), one setting per song, cost shown first for fal. It sits before rendering, so the render paths and
   the zero-network render rule do not change.
+- **Recast: put a locked character into an existing clip** (designed 18 Nov 2026; nothing built; first as a spike
+  `spikes/recast/`, later part of C5).
+  - **What it does:** an existing clip (Midjourney, or a trend reference) keeps its motion, camera and timing; the
+    person in it becomes the locked character. This is not C3 (stills) or C5 (animating a still).
+  - **One adapter, two layers,** like `LipSyncProvider`:
+    - `RecastProvider` describes a model: id, name, mode ("swap": replace the person, keep the scene; or "motion":
+      the character performs the clip's motion), limits (min/max seconds, the part of the clip used, resolutions,
+      fps), `estimateCost(seconds, resolution)`, and `input(job)`.
+    - A `Transport` carries the requests: upload, submit, poll, download, cancel, request ID. The **fal**
+      transport already exists. A **Higgsfield** transport (its own REST API and key) is added once.
+    - Adding Genjutsu Light is then one transport plus one config entry. The pipeline, checks and report don't
+      change.
+  - **Job:** the clip (trimmed to the part used), the character's references from the locked pack (the close-up
+    first, then the 3/4 face and the body views), the resolution, and an optional scene card.
+  - **Providers to start with:**
+    - **Baseline on fal:** Wan 2.2 Animate Replace (`fal-ai/wan/v2.2-14b/animate/replace`, inputs `video_url` +
+      `image_url`, billed per frame at 16 frames per video second; also `/animate/move` for the "motion" mode).
+    - **Higgsfield Genjutsu Light, as seen 18 Nov 2026 (to verify when built; open.higgsfield.ai is not reachable
+      from the cloud session):** `higgsfield/genjutsu-light/object-swap/v1.0` ("swap") and
+      `higgsfield/genjutsu-light/motion-transfer/v1.0` ("motion"). Inputs: a video URL, image URLs and a
+      resolution. Listed price $0.0739/s at 480p, $0.1471/s at 720p, $0.2936/s at 1080p. It uses the first 15 s of
+      the source and keeps the source audio, which is never used: a video's audio is always the song.
+    - Check Higgsfield's API terms for commercial use of the outputs before it becomes a default.
+  - **Hand benchmark first** (Paul may try Genjutsu Lite in Higgsfield's app before any API work).
+    - `--import "<file made by hand>" --as genjutsu-lite [--cost 0.75]` runs a hand-made result through the same
+      checks, the same comparison video and the same report as the API providers. Hand tests and API runs are
+      therefore compared the same way.
+  - **Checks, in plain words:**
+    - The face is sampled across the clip (about 2 frames per second) and scored against the pack's close-up: the
+      median and the lowest score, and a dip mid-clip means the identity flickers.
+    - The length matches the source (±0.1 s); aspect and fps match, or differences are reported as information;
+      the file plays.
+  - **Rules:** a cost estimate and `--max-cost` before any call; keys from .env only (the Higgsfield key names are
+    checked when built); nothing is sent without `--yes`.
 - **Cast for Wedding Day:** a second character card is needed, the **groom** (same C1 flow: one picture → pack).
 - **Animation prompt default (prompt builder, C5):** light breeze, hair and fabric movement, unless the slot says
   otherwise.
