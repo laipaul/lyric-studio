@@ -59,8 +59,23 @@ export const ANGLES: { id: AngleId; label: string; prompt: string }[] = [
 export const SCENE_STYLE =
   "Use the reference picture as BOTH the location and the style reference: the same room with the same architecture, furniture, colours, materials and light, and the same visual style, colour grading and rendering. Only the camera position changes. Keep it empty: no people. No text.";
 
-export function viewPrompt(v: View): string {
-  return `${v.prompt} ${PACK_STYLE}`;
+// The outfit comes from Paul (--outfit): the reference often shows only the shoulders, and each model invented a
+// different outfit below them (Seedream: a trouser suit). Without it, the prompt asks to continue the reference's.
+export function viewPrompt(v: View, outfit?: string): string {
+  const o = outfit?.trim();
+  const wear = o
+    ? v.face
+      ? ` Outfit (the part that shows): ${o}.`
+      : ` Outfit: ${o}. Keep exactly this outfit, the same in the front and back views.`
+    : v.face
+      ? ""
+      : " Outfit: continue the outfit of the reference naturally below the frame, in the same style; do not change it into something else.";
+  return `${v.prompt}${wear} ${PACK_STYLE}`;
+}
+
+export type ViewSet = "all" | "face" | "body";
+export function viewsFor(set: ViewSet): View[] {
+  return VIEWS.filter((v) => set === "all" || (set === "face" ? v.face : !v.face));
 }
 export function anglePrompt(a: (typeof ANGLES)[number]): string {
   return `${a.prompt} ${SCENE_STYLE}`;
@@ -70,6 +85,9 @@ export function anglePrompt(a: (typeof ANGLES)[number]): string {
 
 export type ModelId = "nano-pro" | "nano2" | "seedream" | "gpt";
 export const MODEL_IDS: readonly ModelId[] = ["nano-pro", "nano2", "seedream", "gpt"];
+// Default after the first bride test (18 Nov 2026, Paul): Seedream 4.5 gave the closest face (0.74), kept the reference's
+// look and is the cheapest. The others stay available with --models.
+export const DEFAULT_MODELS: readonly ModelId[] = ["seedream"];
 
 export type ImageModel = {
   id: ModelId;

@@ -25,6 +25,7 @@ export interface FaceTool {
   compare(reference: string, files: string[]): { results: (FaceResult & { file: string })[] };
   calibrate(reference: string, others: string[], her?: string[]): Calibration;
   crop(image: string, out: string): { file: string };
+  cropBody(image: string, out: string): { file: string; cropped: boolean; cut_y: number | null };
   sheet(spec: SheetSpec): { file: string };
 }
 
@@ -58,6 +59,7 @@ export async function localFaceTool(repoRoot: string): Promise<FaceTool> {
     compare: (reference, files) => run(["compare", reference, ...files]),
     calibrate: (reference, others, her = []) => run(["calibrate", ...her.flatMap((h) => ["--her", h]), reference, ...others]),
     crop: (image, out) => run(["crop", image, out]),
+    cropBody: (image, out) => run(["crop-body", image, out]),
     sheet(spec) {
       const dir = mkdtempSync(path.join(os.tmpdir(), "sheet-"));
       const file = path.join(dir, "spec.json");

@@ -52,6 +52,20 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
     face finder now checks 3 sizes); calibration (`--her`, no auto-exclusion at 0.363, an overlap warning); UTF-8
     output from Python.
   - Tests: characters 17, face checks 18.
+- **Update after Paul's first pack review (18 Nov 2026):**
+  - Face scores: Nano Banana Pro 0.65 / 0.68, Nano Banana 2 0.60 / 0.60, Seedream 4.5 0.74 / 0.58, GPT Image 1.5
+    0.57 / 0.52, all well above the other Midjourney women (at most 0.43). Paul picked **Seedream 4.5**: the best
+    likeness, keeps the reference's look, the cheapest.
+  - Seedream changed the outfit into a trouser suit and ignored the neck crop. Fixes:
+    - `--outfit "<text>"`: Paul's words go into every view's prompt.
+    - The app now crops the body views at the neck itself (face.py `crop-body`: chin and shoulders from YuNet and
+      the pose; the model's own picture is kept as `_full.png`).
+    - `--views all|face|body`.
+    - Seedream is the default model.
+    - The live log names model and view on every score line.
+  - Earlier fixes from the same run: downloads retry 6 times, and `pnpm characters fetch "<run folder>"` recovers
+    paid images without regenerating.
+  - Tests: characters 22, face checks 21.
 - **To run on the PC:** see the step's message (calibrate on the bride vs the Wedding Day clips, then the estimate,
   then `--yes`).
 

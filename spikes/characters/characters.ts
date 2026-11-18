@@ -4,7 +4,8 @@
 //
 //   pnpm characters calibrate --image "<bride.jpg>" --song "Wedding Day"      (or --others "<folder or files>")
 //                        [--her "<clip name>"]   (repeatable; clips of her: a part of the file name is enough)
-//   pnpm characters pack --image "<bride.jpg>" --scene "<room.jpg>" [--name bride] [--models nano-pro,nano2,seedream,gpt]
+//   pnpm characters pack --image "<bride.jpg>" --scene "<room.jpg>" [--name bride] [--outfit "<outfit in your words>"]
+//                        [--views all|face|body] [--models seedream (default) | nano-pro,nano2,seedream,gpt]
 //                        [--image2 "<second.jpg>"] [--crop] [--ai-opinion] [--max-cost 3] [--force] [--yes]
 //   pnpm characters cost "<run folder>"                                         (the actual cost, again, later)
 //   pnpm characters fetch "<run folder>"       (downloads images that fal made but that could not be downloaded; no new
@@ -23,7 +24,7 @@ import { localFaceTool, type CheckResult, type FaceTool } from "./src/face";
 import { actualCosts, callModel, download, errorText, firstImageUrl, type ActualCost, type Attempt } from "./src/fal";
 import {
   angleNote, anglePrompt, ANGLES, Budget, classify, DEFAULT_THRESHOLDS, DESCRIPTION_PROMPT, estimate, MODEL_IDS, MODELS, money, OPINION_PROMPT,
-  safeName, SCENE_DESCRIPTION_PROMPT, VIEWS, viewPrompt, VISION, type Light, type ModelId, type Thresholds, type ViewId,
+  safeName, SCENE_DESCRIPTION_PROMPT, VIEWS, viewPrompt, viewsFor, VISION, DEFAULT_MODELS, type Light, type ModelId, type Thresholds, type ViewId, type ViewSet,
 } from "./src/plan";
 
 export class Stop extends Error {}
@@ -55,6 +56,8 @@ function options(argv: string[]) {
       others: { type: "string", multiple: true },
       her: { type: "string", multiple: true },
       models: { type: "string" },
+      outfit: { type: "string" },
+      views: { type: "string" },
       "max-cost": { type: "string" },
       "timeout-min": { type: "string" },
       crop: { type: "boolean", default: false },
@@ -64,9 +67,11 @@ function options(argv: string[]) {
     },
   });
   const [command, ...rest] = positionals;
-  const models = (values.models ?? MODEL_IDS.join(",")).split(",").map((s) => s.trim()).filter(Boolean);
+  const models = (values.models ?? DEFAULT_MODELS.join(",")).split(",").map((s) => s.trim()).filter(Boolean);
   const bad = models.filter((m) => !(MODEL_IDS as readonly string[]).includes(m));
   if (bad.length) throw new Stop(`Unknown model "${bad.join(", ")}": use ${MODEL_IDS.join(", ")}.`);
+  const views = (values.views ?? "all").trim().toLowerCase();
+  if (!["all", "face", "body"].includes(views)) throw new Stop(`--views takes all, face or body (got "${values.views}").`);
   const cap = Number(values["max-cost"] ?? 3);
   if (!Number.isFinite(cap) || cap < 0) throw new Stop("--max-cost takes a number of dollars, e.g. --max-cost 5");
   const image = values.image ? path.resolve(values.image) : undefined;
@@ -81,6 +86,8 @@ function options(argv: string[]) {
     others: (values.others ?? []).map((o) => path.resolve(o)),
     her: values.her ?? [],
     models: models as ModelId[],
+    outfit: values.outfit?.trim() || undefined,
+    views: views as ViewSet,
     cap,
     timeoutMs: Number(values["timeout-min"] ?? 10) * 60_000,
     crop: values.crop,
@@ -211,6 +218,14 @@ function buildSheets(face: FaceTool, dir: string, name: string, models: ModelId[
   return sheets;
 }
 
+// Body views are cropped at the neck here, locally and for free, whatever the model did: faces only ever come from the
+// face views. The model's own picture is kept next to it as <view>_full.png.
+function cropBodyView(face: FaceTool, file: string): void {
+  const full = file.replace(/\.png$/i, "_full.png");
+  copyFileSync(file, full);
+  face.cropBody(full, file);
+}
+
 async function pack(o: Opts, deps: Deps, face: FaceTool, out: string, env: Record<string, string>): Promise<void> {
   const ref = need(o.image, "picture");
   const refCheck = face.check(ref);
@@ -231,8 +246,11 @@ async function pack(o: Opts, deps: Deps, face: FaceTool, out: string, env: Recor
   console.log(`\nFace thresholds: green ≥ ${t.green_from}, red < ${t.red_below} (${t.source})`);
 
   const visionCalls = 1 + (o.scene ? 1 : 0) + (o.aiOpinion ? 1 : 0);
-  const est = estimate(o.models, { views: VIEWS.length, angles: o.scene ? ANGLES.length : 0, retries: RETRIES, vision: visionCalls });
-  console.log(`\nEstimate (${VIEWS.length} views${o.scene ? ` + ${ANGLES.length} location angles` : ""} per model):`);
+  const chosenViews = viewsFor(o.views);
+  if (!o.outfit && chosenViews.some((v) => !v.face))
+    console.log('\nTip: add --outfit "<the outfit in your words>": your picture shows only part of it, and without it each model invents the rest.');
+  const est = estimate(o.models, { views: chosenViews.length, angles: o.scene ? ANGLES.length : 0, retries: RETRIES, vision: visionCalls });
+  console.log(`\nEstimate (${chosenViews.length} ${o.views === "all" ? "" : `${o.views} `}views${o.scene ? ` + ${ANGLES.length} location angles` : ""} per model):`);
   for (const m of est.perModel) console.log(`  ${MODELS[m.id].name.padEnd(16)} ${m.images} images  ${money(m.usd)}   (${MODELS[m.id].priceNote})`);
   console.log(`  ${"Descriptions".padEnd(16)} ${visionCalls} call(s)  ${money(est.visionUsd)}   (${VISION.model}, $0.01 per call)`);
   console.log(`  Total ${money(est.baseUsd)}; up to ${money(est.worstUsd)} if every view drifts twice. Cap ${money(o.cap)}: retries stop at the cap.`);
@@ -340,12 +358,13 @@ async function pack(o: Opts, deps: Deps, face: FaceTool, out: string, env: Recor
         rep.text = "Location: judge by eye (no face check).";
         break;
       }
+      const view = VIEWS.find((v) => v.id === id)!;
+      if (!view.face) cropBodyView(face, file);
       const fr = face.compare(refFile, [file]).results[0];
       const c = classify(id as ViewId, fr, t);
       tr.score = fr.score;
       tr.light = c.light;
       tr.text = c.text;
-      const view = VIEWS.find((v) => v.id === id)!;
       // Keep the best try: by result first (green, then amber / a body view with no face, then red), then by score.
       const rank = (l: Light | null) => (l === "green" ? 3 : l === "amber" || l === "grey" ? 2 : 0);
       const prev = rep.chosen === null ? null : rep.tries[rep.chosen];
@@ -357,7 +376,8 @@ async function pack(o: Opts, deps: Deps, face: FaceTool, out: string, env: Recor
         rep.text = c.text;
         rep.angle_note = angleNote(view, fr.yaw);
       }
-      console.log(`    face ${fr.score ?? "–"} → ${c.light}${c.regenerate && k < RETRIES ? ": drifted, making it again" : ""}`);
+      const why = c.regenerate && k < RETRIES ? (view.face ? ": drifted, making it again" : ": a face still shows, making it again") : "";
+      console.log(`    ${m.name} · ${label}${k ? ` (try ${k + 1})` : ""}: ${view.face ? `face ${fr.score ?? "–"}` : "body"} → ${c.light}${why}`);
       if (!c.regenerate) break;
     }
     if (rep.tries.length > 1 && rep.chosen !== null) rep.text = `${rep.text} (best of ${rep.tries.length} tries)`;
@@ -368,7 +388,7 @@ async function pack(o: Opts, deps: Deps, face: FaceTool, out: string, env: Recor
   const perModel = await Promise.all(
     o.models.map(async (model) => {
       const out: ViewReport[] = [];
-      for (const v of VIEWS) out.push(await one(model, "view", v.id, v.label, viewPrompt(v), refUrls, v.aspect));
+      for (const v of chosenViews) out.push(await one(model, "view", v.id, v.label, viewPrompt(v, o.outfit), refUrls, v.aspect));
       if (sceneUrl) for (const a of ANGLES) out.push(await one(model, "angle", a.id, a.label, anglePrompt(a), [sceneUrl], "3:4"));
       return out;
     }),
@@ -401,6 +421,8 @@ async function pack(o: Opts, deps: Deps, face: FaceTool, out: string, env: Recor
     reference2: ref2Check ? { file: path.basename(ref2File!), check: ref2Check } : null,
     location: sceneCheck ? { file: path.basename(sceneFile!), check: sceneCheck } : null,
     thresholds: t,
+    outfit: o.outfit ?? null,
+    views: o.views,
     models: o.models.map((m) => ({ id: m, name: MODELS[m].name, endpoint: MODELS[m].endpoint, price: MODELS[m].priceNote })),
     items: items.map((r) => ({ ...r, file: r.file ? path.relative(dir, r.file) : null, tries: r.tries.map((x) => ({ ...x, file: x.file ? path.relative(dir, x.file) : null })) })),
     descriptions: { character: desc, location: sceneDesc, opinion },
@@ -434,6 +456,8 @@ type PackReport = {
   reference2: { file: string; check: CheckResult } | null;
   location: { file: string; check: CheckResult } | null;
   thresholds: Thresholds;
+  outfit?: string | null;
+  views?: string;
   models: { id: ModelId; name: string; endpoint: string; price: string }[];
   items: ViewReport[];
   descriptions: { character: { text: string | null; error?: string } | null; location: { text: string | null } | null; opinion: { text: string | null } | null };
@@ -452,6 +476,8 @@ export function packMarkdown(r: PackReport): string {
   if (r.reference2) L.push(...check(`Second reference (${r.reference2.file})`, r.reference2.check));
   if (r.location) L.push(...check(`Location picture (${r.location.file})`, r.location.check));
   L.push(`Face scores: green ≥ ${r.thresholds.green_from}, red < ${r.thresholds.red_below} (${r.thresholds.source}).`, "");
+  if (r.outfit !== undefined) L.push(r.outfit ? `Outfit (yours): ${r.outfit}` : "Outfit: not given, so each model invented what the reference does not show (use --outfit).", "");
+  L.push("Body views are cropped at the neck by the app (the model's own picture is kept as <view>_full.png).", "");
   const dot: Record<string, string> = { green: "🟢", amber: "🟠", red: "🔴", grey: "⚪" };
   for (const m of r.models) {
     const mine = r.items.filter((i) => i.model === m.id);
@@ -460,7 +486,8 @@ export function packMarkdown(r: PackReport): string {
     const faceViews = views.filter((v) => faceIds.has(v.label));
     const greens = faceViews.filter((v) => v.light === "green").length;
     const bodies = views.length - faceViews.length;
-    L.push(`## ${m.name} — ${greens} of ${faceViews.length} face views green${bodies ? ` · ${bodies} body views to judge by eye` : ""}`, `\`${m.endpoint}\` · ${m.price}`, "");
+    const parts = [faceViews.length ? `${greens} of ${faceViews.length} face views green` : "", bodies ? `${bodies} body views to judge by eye` : ""].filter(Boolean);
+    L.push(`## ${m.name} — ${parts.join(" · ")}`, `\`${m.endpoint}\` · ${m.price}`, "");
     L.push("| View | Face | Result | Tries |", "|---|---|---|---|");
     for (const v of views) {
       const best = Math.max(...v.tries.map((x) => x.score ?? -1));
@@ -551,6 +578,7 @@ async function fetchAgain(o: Opts, deps: Deps, env: Record<string, string>): Pro
         tr.light = "grey";
         tr.text = "Location: judge by eye (no face check).";
       } else {
+        if (!VIEWS.find((v) => v.id === it.id)?.face) cropBodyView(face, target);
         const fr = face.compare(refFile, [target]).results[0];
         const c = classify(it.id as ViewId, fr, t);
         tr.score = fr.score;

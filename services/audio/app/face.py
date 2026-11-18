@@ -710,6 +710,42 @@ def crop_face(kit: FaceKit, path: str, out: str, aspect: float = 3 / 4, margin: 
     return {"file": out, "box": [x0, y0, int(cw), int(ch)]}
 
 
+def neck_line(height: int, face_box: list[float] | None, points: list[tuple[float, float, float]] | None, min_vis: float = 0.5) -> int | None:
+    """The row to cut at so no face shows: just below the chin, above the shoulders. Pure (tested on numbers).
+
+    - With pose points: the lowest visible head point (nose, mouth, ears: 0, 7, 8, 9, 10) and the higher shoulder
+      (11, 12); the cut is 55% of the way from the head point down to the shoulder (the neck).
+    - With a face box (a front view): never above the chin (box bottom + 3% of the face height).
+    - Neither: None (nothing to cut). A cut in the top 2% of the picture is not needed (already cropped): None.
+    """
+    cut: float | None = None
+    if points:
+        head = [points[i][1] for i in (0, 7, 8, 9, 10) if points[i][2] >= min_vis * 0.6]
+        shoulders = [points[i][1] for i in (11, 12) if points[i][2] >= min_vis]
+        if head and shoulders and min(shoulders) > max(head):
+            cut = max(head) + 0.55 * (min(shoulders) - max(head))
+        elif shoulders:
+            cut = min(shoulders) - 0.04 * height
+    if face_box:
+        chin = face_box[1] + face_box[3] * 1.03
+        cut = chin if cut is None else max(cut, chin)
+    if cut is None or cut <= 0.02 * height:
+        return None
+    return int(min(cut, height * 0.6))  # never more than the top 60%: the body must stay
+
+
+def crop_body(kit: FaceKit, path: str, out: str) -> dict:
+    """A full-body view cropped at the neck, so faces only ever come from the face views. Writes `out` (a copy when
+    there is nothing to cut)."""
+    img = read_image(path)
+    h = img.shape[0]
+    faces = kit.detect(img, min_score=0.5)
+    pts = kit.pose(img)
+    cut = neck_line(h, [faces[0].x, faces[0].y, faces[0].w, faces[0].h] if faces else None, pts)
+    write_image(out, img[cut:] if cut else img)
+    return {"file": out, "cropped": cut is not None, "cut_y": cut, "height": h, "face_found": bool(faces), "pose_found": pts is not None}
+
+
 def contact_sheet(spec: dict) -> dict:
     """spec = {out, title, rows: [{label, cells: [{file, caption, colour}]}]}: one row per model, labelled thumbnails."""
     import cv2
@@ -769,6 +805,9 @@ def main(argv: list[str]) -> int:
     a = sub.add_parser("crop")
     a.add_argument("image")
     a.add_argument("out")
+    a = sub.add_parser("crop-body")
+    a.add_argument("image")
+    a.add_argument("out")
     a = sub.add_parser("sheet")
     a.add_argument("spec_json")
     args = ap.parse_args(argv)
@@ -787,6 +826,8 @@ def main(argv: list[str]) -> int:
             result = compare(kit, args.reference, args.files)
         elif args.cmd == "calibrate":
             result = calibrate(kit, args.reference, args.others, args.her)
+        elif args.cmd == "crop-body":
+            result = crop_body(kit, args.image, args.out)
         else:
             result = crop_face(kit, args.image, args.out)
     for s in (sys.stdout, sys.stderr):  # Windows pipes default to the ANSI code page, so force UTF-8

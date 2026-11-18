@@ -48,6 +48,8 @@ pnpm characters pack --image "D:\pictures\bride.jpg" --scene "D:\pictures\bridal
      drifted. A red view is **made again, at most twice** (a new seed), and the best try is kept. Retries stop at
      the cap. The **body views** get no face score: if a face shows up anyway (not cropped at the neck), the view
      is red and made again; otherwise judge the outfit and body by eye.
+   - **The app crops the body views at the neck itself** (locally, free): it finds the chin and the shoulders and cuts
+     between them, whatever the model drew. The model's own picture is kept as `<view>_full.png`.
    - A **draft description** of her (and of the place), to edit before locking. It uses the cheapest vision model at
      $0.01 per call. `--ai-opinion` adds a paid opinion on the reference picture.
    - **Contact sheets**: `sheet_pack.jpg` (one row per model: your picture + the 4 views, the face views with their score and
@@ -67,8 +69,10 @@ pnpm characters pack --image "D:\pictures\bride.jpg" --scene "D:\pictures\bridal
 
 | Option | Meaning |
 |---|---|
+| `--outfit "<text>"` | The outfit in your words, sent with every view (e.g. "floor-length white A-line gown, short sleeves, round neckline, long sheer veil"). Your picture usually shows only the shoulders: without it each model invents the rest (Seedream made a trouser suit). |
+| `--views all\|face\|body` | Which views to make (default all). `--views body` re-runs only the two body views, e.g. after changing the outfit. |
 | `--name bride` | The character's name (folder `out\bride\`). Default: the picture's file name. |
-| `--models nano-pro,nano2,seedream,gpt` | Which image models (default all four). |
+| `--models seedream` | Which image models. Default: **Seedream 4.5** (best likeness in the first bride test, keeps the reference's look, cheapest). `nano-pro,nano2,seedream,gpt` compares all four. |
 | `--her "<clip name>"` | calibrate: a clip that really is her (repeatable; a part of the file name is enough). Without it every clip counts as another person. |
 | `--image2 "<path>"` | A second picture of her, sent as a second reference (one of the reference check's fixes). |
 | `--crop` | Crop your picture to her face first (one of the fixes; the cropped copy is what gets sent). |

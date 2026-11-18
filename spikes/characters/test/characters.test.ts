@@ -14,7 +14,7 @@ import { importUrl } from "../src/face";
 import type { CheckResult, FaceTool, SheetSpec } from "../src/face";
 import { REPO_ROOT } from "../src/env";
 import { actualCosts, callModel, download } from "../src/fal";
-import { angleNote, anglePrompt, ANGLES, Budget, classify, DEFAULT_THRESHOLDS, estimate, MODELS, VIEWS, viewPrompt } from "../src/plan";
+import { angleNote, anglePrompt, ANGLES, Budget, classify, DEFAULT_MODELS, DEFAULT_THRESHOLDS, estimate, MODELS, VIEWS, viewPrompt, viewsFor } from "../src/plan";
 
 describe("plan", () => {
   test("every view asks for the reference as identity AND style; locations keep the room, no people", () => {
@@ -26,6 +26,19 @@ describe("plan", () => {
     assert.deepEqual(VIEWS.map((v) => v.id), ["closeup", "three_quarter", "body_front", "body_back"]);
     assert.deepEqual(VIEWS.filter((v) => v.face).map((v) => v.id), ["closeup", "three_quarter"]); // faces only from the face views
     assert.equal(ANGLES.length, 3);
+  });
+
+  test("outfit from Paul in every view; without it, body views continue the reference's outfit; view sets; Seedream default", () => {
+    const outfit = "floor-length white A-line gown, long sheer veil";
+    const [closeup, , front, back] = VIEWS;
+    assert.match(viewPrompt(closeup, outfit), /Outfit \(the part that shows\): floor-length white A-line gown/);
+    assert.match(viewPrompt(front, outfit), /Outfit: floor-length white A-line gown, long sheer veil\. Keep exactly this outfit, the same in the front and back views\./);
+    assert.match(viewPrompt(back), /continue the outfit of the reference naturally below the frame/);
+    assert.doesNotMatch(viewPrompt(closeup), /Outfit/);
+    assert.deepEqual(viewsFor("body").map((v) => v.id), ["body_front", "body_back"]);
+    assert.deepEqual(viewsFor("face").map((v) => v.id), ["closeup", "three_quarter"]);
+    assert.equal(viewsFor("all").length, 4);
+    assert.deepEqual(DEFAULT_MODELS, ["seedream"]);
   });
 
   test("model inputs follow fal's schemas", () => {
@@ -197,13 +210,20 @@ describe("pack run (stand-in fal, face check and billing)", () => {
 
   // Face scores by model and try: Nano Banana 2's 3/4 face drifts twice then is fine; GPT's close-up always drifts;
   // Seedream's back view shows a face once (not cropped at the neck); body views otherwise have no face.
-  const fakeFace = (): FaceTool & { compared: string[]; sheets: SheetSpec[] } => {
+  const fakeFace = (): FaceTool & { compared: string[]; sheets: SheetSpec[]; cropped: string[] } => {
     const ok: CheckResult = { file: "", measures: {}, verdict: "Ready", reasons: [{ level: "ok", text: "One face.", check: "faces" }], fixes: [] };
     const compared: string[] = [];
     const sheets: SheetSpec[] = [];
+    const cropped: string[] = [];
     return {
       compared,
       sheets,
+      cropped,
+      cropBody: (i, o) => {
+        cropped.push(o);
+        writeFileSync(o, readFileSync(i));
+        return { file: o, cropped: true, cut_y: 100 };
+      },
       check: () => ok,
       sceneCheck: () => ({ ...ok, reasons: [{ level: "ok", text: "Size 1920×1080.", check: "size" }] }),
       compare: (_ref, fs) => {
@@ -234,7 +254,7 @@ describe("pack run (stand-in fal, face check and billing)", () => {
   test("above the cap: stops before uploading, even with --yes", async () => {
     const ref = png("bride.png", "white");
     await assert.rejects(
-      run(["pack", "--image", ref, "--scene", ref, "--yes"], { fal: fakeFal(), face: fakeFace(), out: path.join(tmp, "out"), env: {} }),
+      run(["pack", "--image", ref, "--scene", ref, "--models", "nano-pro,nano2,seedream,gpt", "--yes"], { fal: fakeFal(), face: fakeFace(), out: path.join(tmp, "out"), env: {} }),
       (e: Error) => e instanceof Stop && /above the cap of \$3\.00/.test(e.message),
     );
     assert.equal(files.size, 0);
@@ -263,7 +283,7 @@ describe("pack run (stand-in fal, face check and billing)", () => {
       return new Response(JSON.stringify({ billing_events: ids.map((id) => ({ request_id: id, cost_total: id.includes("vision") ? 0.01 : 0.05 })), has_more: false }));
     }) as unknown as typeof fetch;
     const out = path.join(tmp, "out");
-    await run(["pack", "--image", ref, "--scene", room, "--name", "bride", "--max-cost", "8", "--yes"], {
+    await run(["pack", "--image", ref, "--scene", room, "--name", "bride", "--models", "nano-pro,nano2,seedream,gpt", "--outfit", "floor-length white A-line gown, long sheer veil", "--max-cost", "8", "--yes"], {
       fal: fakeFal(),
       face,
       out,
@@ -273,6 +293,13 @@ describe("pack run (stand-in fal, face check and billing)", () => {
       billingWaitMs: 1,
     });
     const dir = path.join(out, "bride", "2026-11-17_2030");
+    // Body views: cropped at the neck by the app (every try), the model's own picture kept as _full.png; the outfit
+    // is in every body request.
+    const bodyRequests = submitted.filter((x) => /CROPPED AT THE NECK/.test(String(x.input.prompt ?? "")));
+    assert.ok(bodyRequests.length >= 8 && bodyRequests.every((x) => /Outfit: floor-length white A-line gown, long sheer veil/.test(String(x.input.prompt))));
+    assert.equal(face.cropped.length, bodyRequests.length);
+    assert.ok(existsSync(path.join(dir, "nano2", "body_front_full.png")));
+    assert.ok(existsSync(path.join(dir, "nano2", "body_front.png")));
     const report = JSON.parse(readFileSync(path.join(dir, "report.json"), "utf8"));
 
     // What was sent: the reference (identity + style) for views, the location picture for angles.
@@ -315,7 +342,31 @@ describe("pack run (stand-in fal, face check and billing)", () => {
     assert.match(md, /Actual, from fal: \$/);
     assert.match(md, /Nano Banana 2 — 2 of 2 face views green · 2 body views to judge by eye/);
     assert.match(md, /GPT Image 1\.5 — 1 of 2 face views green/);
+    assert.match(md, /Outfit \(yours\): floor-length white A-line gown, long sheer veil/);
+    assert.match(md, /Body views are cropped at the neck by the app/);
     assert.equal(packMarkdown(report), md);
+  });
+
+  test("--views body with the default model: only the two body views, from Seedream, logged by model and view", async () => {
+    submitted.length = 0;
+    const ref = png("bride3.png", "white");
+    const face = fakeFace();
+    const logs: string[] = [];
+    const orig = console.log;
+    console.log = (...m: unknown[]) => void logs.push(m.join(" "));
+    try {
+      await run(["pack", "--image", ref, "--views", "body", "--outfit", "white gown", "--yes"], { fal: fakeFal(), face, out: path.join(tmp, "out3"), env: {}, now: () => new Date("2026-11-18T09:00:00Z") });
+    } finally {
+      console.log = orig;
+    }
+    const images = submitted.filter((x) => x.endpoint !== "fal-ai/any-llm/vision");
+    assert.ok(images.every((x) => x.endpoint === "fal-ai/bytedance/seedream/v4.5/edit"));
+    assert.ok(images.every((x) => /CROPPED AT THE NECK/.test(String(x.input.prompt))));
+    assert.ok(logs.some((l) => l.includes("Seedream 4.5 · Full body, front (cropped at the neck): body → grey")), logs.join("\n"));
+    assert.ok(logs.some((l) => /Estimate \(2 body views per model\)/.test(l)));
+    const report = JSON.parse(readFileSync(path.join(tmp, "out3", "bride3", "2026-11-18_0900", "report.json"), "utf8"));
+    assert.deepEqual(report.items.map((i: { id: string }) => i.id).filter((v: string, k: number, a: string[]) => a.indexOf(v) === k), ["body_front", "body_back"]);
+    assert.equal(report.views, "body");
   });
 
   test("retries stop at the cap, and the report says so", async () => {

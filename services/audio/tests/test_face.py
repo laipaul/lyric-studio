@@ -227,3 +227,29 @@ def test_sheet_prints_utf8_json_even_when_the_pipe_codepage_is_ansi(tmp_path):
         cwd=Path(face.__file__).resolve().parent.parent, env=env, capture_output=True, check=True,
     )
     assert json.loads(r.stdout.decode("utf-8"))["file"] == out
+
+
+def _pose(**rows):
+    pts = [(0.0, 0.0, 0.0)] * 33
+    for k, v in rows.items():
+        pts[int(k[1:])] = v
+    return pts
+
+
+def test_neck_line_from_pose_head_and_shoulders():
+    # mouth at y=100, shoulders at y=200: cut 55% of the way down = 155
+    pts = _pose(p9=(50, 100, 0.9), p10=(60, 100, 0.9), p11=(40, 200, 0.9), p12=(70, 205, 0.9))
+    assert face.neck_line(1000, None, pts) == 155
+
+
+def test_neck_line_never_above_the_chin_and_never_past_60_percent():
+    pts = _pose(p9=(50, 100, 0.9), p11=(40, 200, 0.9))
+    assert face.neck_line(1000, [40, 60, 40, 120], pts) == int(60 + 120 * 1.03)  # chin at 183.6 beats the pose's 155
+    assert face.neck_line(400, [0, 0, 100, 380], None) == 240  # a portrait: capped at 60% so the body stays
+
+
+def test_neck_line_nothing_to_cut():
+    assert face.neck_line(1000, None, None) is None
+    assert face.neck_line(1000, None, _pose(p11=(40, 30, 0.9), p12=(70, 30, 0.9))) is None  # already cropped
+    # back view: no face, ears and shoulders from the pose
+    assert face.neck_line(1000, None, _pose(p7=(40, 90, 0.4), p8=(60, 92, 0.4), p11=(30, 200, 0.9), p12=(80, 200, 0.9))) == int(92 + 0.55 * 108)
