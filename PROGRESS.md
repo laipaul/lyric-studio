@@ -4,7 +4,7 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### Characters C2: Shot list import — planned slots in the story line ✅ (to verify on the Windows PC)
+### Characters C2: Shot list import — planned slots in the story line ✅ (verified by Paul, 18 Nov 2026: "C2 works")
 - **Prepare → Storyboard → Import shot list** (next to "Add clips & photos"): drop or choose your shot list (.json).
   The app checks it first, in plain words, slot by slot: an unknown character or scene ("did you mean Bride No 2?"),
   a wrong shot type, a lyric line that does not exist, a missing "shows" sentence, an id used twice → errors (Import
@@ -338,9 +338,18 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 
 ## Next
 
-**Order from here (confirmed by Paul, 18 Nov 2026):** Paul's review of the C1 spike (done) → C1 in the app (done,
-verified 18 Nov) → C2 (built 18 Nov, to verify on the PC) → C3 → C4
-→ Lip Sync step 2 → Instagram Growth. The Theme v2 order below (2e-2 → O1 → 2c → …) waits until then.
+**Order from here (changed by Paul, 18 Nov 2026, after C2 worked):** his real workflow builds the storyboard from
+Midjourney clips, so replacing the person in each clip with his main character comes first:
+1. **Recast spike** (spikes/recast/, like spikes/lipsync: cost first, --max-cost, --yes, parallel jobs, report.md,
+   comparison video, request IDs): song + locked character + clips → Wan 2.2 Animate Replace and MiniMax H3 Max Recast
+   on fal (adapter ready for Higgsfield Genjutsu later); length, fps and aspect kept; face check vs the character;
+   originals never replaced. Test: 3 Wedding Day clips with different women (close-up, medium, wide) as Bride No 2.
+2. **Recast in the app** (a button on Storyboard clips).
+3. **C4 face check.**
+4. **Lip Sync step 2.**
+5. **C3** (generate stills for slots).
+Then Instagram Growth. C1 (done, verified 18 Nov) and C2 (done, verified 18 Nov) are finished. The Theme v2 order below
+(2e-2 → O1 → 2c → …) waits until then.
 
 **Characters roadmap (C1–C4: approved 17 Nov 2026 with the face models YuNet + SFace + MediaPipe (local, CPU, in the Python service), a Characters page in the header next to Collections (characters, scene cards, EP story bibles), a picker in Prepare → Storyboard to assign them to slots; the C1 spike is built, the rest is not).** Vision: Paul drops
 ONE picture of a character; the app builds a locked character pack, turns an imported shot list into planned Storyboard
