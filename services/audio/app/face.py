@@ -135,6 +135,24 @@ class Face:
         }
 
 
+def merge_detections(rows: list[np.ndarray], iou: float = 0.4) -> list[np.ndarray]:
+    """The same face found at several scales: of overlapping boxes (IoU >= iou) keep the highest score."""
+    kept: list[np.ndarray] = []
+    for r in sorted(rows, key=lambda r: float(r[14]), reverse=True):
+        x1, y1, x2, y2 = float(r[0]), float(r[1]), float(r[0] + r[2]), float(r[1] + r[3])
+        dup = False
+        for k in kept:
+            kx1, ky1, kx2, ky2 = float(k[0]), float(k[1]), float(k[0] + k[2]), float(k[1] + k[3])
+            inter = max(0.0, min(x2, kx2) - max(x1, kx1)) * max(0.0, min(y2, ky2) - max(y1, ky1))
+            union = (x2 - x1) * (y2 - y1) + (kx2 - kx1) * (ky2 - ky1) - inter
+            if union > 0 and inter / union >= iou:
+                dup = True
+                break
+        if not dup:
+            kept.append(r)
+    return kept
+
+
 class FaceKit:
     """Loads each model on first use."""
 
@@ -157,18 +175,22 @@ class FaceKit:
         import cv2
 
         h, w = img.shape[:2]
-        scale = min(1.0, 1280 / max(h, w))  # YuNet works best on images up to ~1280 px
-        small = cv2.resize(img, (round(w * scale), round(h * scale))) if scale < 1 else img
+        long = max(h, w)
+        # YuNet's anchors top out around 256 px, so a face filling the frame needs a smaller copy: run 1280, 640, 320
+        sizes = [min(long, 1280)] + [s for s in (640, 320) if s < long]  # always its own size (at most 1280), then smaller
         if self._det is None:
             self._det = cv2.FaceDetectorYN.create(str(self.paths["yunet"]), "", (320, 320), 0.6, 0.3, 5000)
-        self._det.setInputSize((small.shape[1], small.shape[0]))
-        _, rows = self._det.detect(small)
-        faces: list[Face] = []
-        for r in rows if rows is not None else []:
-            r = r.copy()
-            r[:14] /= scale
-            if r[14] >= min_score:
-                faces.append(Face(float(r[0]), float(r[1]), float(r[2]), float(r[3]), float(r[14]), r))
+        rows_all: list[np.ndarray] = []
+        for size in sizes:
+            scale = min(1.0, size / long)
+            small = cv2.resize(img, (max(1, round(w * scale)), max(1, round(h * scale)))) if scale < 1 else img
+            self._det.setInputSize((small.shape[1], small.shape[0]))
+            _, rows = self._det.detect(small)
+            for r in rows if rows is not None else []:
+                r = r.copy()
+                r[:14] /= scale
+                rows_all.append(r)
+        faces = [Face(float(r[0]), float(r[1]), float(r[2]), float(r[3]), float(r[14]), r) for r in merge_detections(rows_all) if r[14] >= min_score]
         return sorted(faces, key=lambda f: f.area, reverse=True)
 
     def embed(self, img: np.ndarray, face: Face) -> np.ndarray:
@@ -506,7 +528,7 @@ def _reference_print(kit: FaceKit, ref: str) -> tuple[np.ndarray, np.ndarray]:
     img = read_image(ref)
     faces = kit.detect(img)
     if not faces:
-        raise ValueError(f"no face found in {ref}")
+        raise ValueError(f"No face found in {Path(ref).name}: the face finder needs a clearly visible face (not in profile, not covered). Try a front or 3/4 picture, or crop closer.")
     return img, kit.embed(img, faces[0])
 
 

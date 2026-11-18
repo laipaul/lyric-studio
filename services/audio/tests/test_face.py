@@ -23,6 +23,24 @@ def measures(**over):
     return m
 
 
+def det(x, y, w, h, score):
+    r = np.zeros(15, dtype=np.float32)
+    r[:4] = (x, y, w, h)
+    r[14] = score
+    return r
+
+
+def test_merge_keeps_the_best_of_overlapping_boxes():
+    out = face.merge_detections([det(100, 100, 200, 200, 0.7), det(105, 98, 205, 210, 0.92)])
+    assert len(out) == 1 and abs(float(out[0][14]) - 0.92) < 1e-6
+
+
+def test_merge_keeps_separate_faces_and_handles_empty():
+    out = face.merge_detections([det(0, 0, 100, 100, 0.9), det(500, 0, 100, 100, 0.8)])
+    assert len(out) == 2
+    assert face.merge_detections([]) == []
+
+
 def run(**over):
     reasons, fixes = face.judge_reference(measures(**over))
     return face.verdict(reasons), reasons, fixes

@@ -228,6 +228,13 @@ describe("pack run (stand-in fal, face check and billing)", () => {
     await assert.rejects(run(["pack", "--image", ref, "--yes"], { fal: fakeFal(), face, out: path.join(tmp, "out"), env: {} }), /not suitable/);
   });
 
+  test("calibrate stops on a not-suitable reference unless --force", async () => {
+    const ref = png("bad2.png", "black");
+    const face = fakeFace();
+    face.check = () => ({ file: "", measures: {}, verdict: "Not suitable", reasons: [{ level: "bad", text: "No face found.", check: "faces" }] });
+    await assert.rejects(run(["calibrate", "--image", ref, "--others", tmp], { face, out: path.join(tmp, "out"), env: {} }), (e: Error) => e instanceof Stop && /not suitable/.test(e.message));
+  });
+
   test("full run: 4 views + 3 angles per model, drifted views made again (max 2), sheets, descriptions, report with actual cost", async () => {
     const ref = png("bride.png", "white");
     const room = png("room.png", "beige", "640x480");

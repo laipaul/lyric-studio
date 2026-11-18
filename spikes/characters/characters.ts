@@ -103,6 +103,10 @@ async function calibrate(o: Opts, face: FaceTool, out: string, env: Record<strin
   let others = o.others;
   if (o.song) others = [...others, songClipsFolder(workspaceDir(env), o.song).clips];
   if (!others.length) throw new Stop('Compare with whom? --song "Wedding Day" (its clips) or --others "<folder or files>"');
+  const refCheck = face.check(ref);
+  printCheck(`Reference check (${path.basename(ref)})`, refCheck);
+  if (refCheck.verdict === "Not suitable" && !o.force)
+    throw new Stop("\nThe reference is not suitable (see above): nothing was calibrated. Use another picture, or --force to try anyway.");
   console.log(`Calibrating on ${path.basename(ref)} against ${others.map((x) => path.basename(x)).join(", ")} (local, free)…`);
   const c = face.calibrate(ref, others);
   const dir = path.join(out, o.name);

@@ -46,6 +46,8 @@ export async function localFaceTool(repoRoot: string): Promise<FaceTool> {
     if (r.error) throw r.error;
     if (r.status !== 0) {
       const err = (r.stderr || "").trim().split(/\r?\n/).filter((l) => !/^(W0000|I0000|INFO:|WARNING: Logging)/.test(l));
+      const last = err[err.length - 1]?.match(/^ValueError: (.+)$/); // a plain message from the face tool: no traceback
+      if (last) throw new Error(last[1]);
       throw new Error(`face check failed: ${err.slice(-3).join(" | ")}`);
     }
     return JSON.parse(r.stdout) as T;
