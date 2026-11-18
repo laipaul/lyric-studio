@@ -42,7 +42,7 @@ export async function localFaceTool(repoRoot: string): Promise<FaceTool> {
     setup.setupFace();
   }
   const run = <T>(args: string[]): T => {
-    const r = spawnSync(common.venvPython, ["-m", "app.face", ...args], { cwd: common.serviceDir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    const r = spawnSync(common.venvPython, ["-m", "app.face", ...args], { cwd: common.serviceDir, encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" }, maxBuffer: 64 * 1024 * 1024 });
     if (r.error) throw r.error;
     if (r.status !== 0) {
       const err = (r.stderr || "").trim().split(/\r?\n/).filter((l) => !/^(W0000|I0000|INFO:|WARNING: Logging)/.test(l));

@@ -789,6 +789,10 @@ def main(argv: list[str]) -> int:
             result = calibrate(kit, args.reference, args.others, args.her)
         else:
             result = crop_face(kit, args.image, args.out)
+    for s in (sys.stdout, sys.stderr):  # Windows pipes default to the ANSI code page, so force UTF-8
+        reconfigure = getattr(s, "reconfigure", None)
+        if reconfigure:
+            reconfigure(encoding="utf-8")
     print(json.dumps(result, ensure_ascii=False, default=_plain))
     if args.cmd != "sheet":
         kit.close()

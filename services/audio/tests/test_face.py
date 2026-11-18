@@ -3,6 +3,9 @@
 The rules are pure functions on measurements, so they run everywhere. The model tests at the bottom run only when the
 face packages are installed (pnpm audio:setup --face) and the models are in services/audio/models/face.
 """
+import os
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -201,3 +204,26 @@ def test_a_picture_without_a_face_is_not_suitable(tmp_path):
     finally:
         kit.close()
     assert r["verdict"] == "Not suitable" and r["measures"]["faces"] == 0
+
+
+@needs_cv2
+def test_sheet_prints_utf8_json_even_when_the_pipe_codepage_is_ansi(tmp_path):
+    import json
+    import subprocess
+    import sys
+
+    folder = tmp_path / "Vidéos – test"
+    folder.mkdir()
+    out = str(folder / "sheet.jpg")
+    spec = tmp_path / "spec.json"
+    spec.write_text(
+        json.dumps({"out": out, "title": "t", "rows": [{"label": "a", "cells": [{"file": str(folder / "none.jpg"), "caption": "0.32 – 0.32"}]}]}),
+        encoding="utf-8",
+    )
+    env = {**os.environ, "PYTHONIOENCODING": "cp1252"}  # simulate a Windows pipe
+    env.pop("PYTHONUTF8", None)
+    r = subprocess.run(
+        [sys.executable, "-m", "app.face", "sheet", str(spec)],
+        cwd=Path(face.__file__).resolve().parent.parent, env=env, capture_output=True, check=True,
+    )
+    assert json.loads(r.stdout.decode("utf-8"))["file"] == out
