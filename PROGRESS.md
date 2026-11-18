@@ -4,6 +4,34 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Recast spike: the main character in place of the person in Storyboard clips ✅ (to run on the Windows PC)
+- `spikes/recast/` (like spikes/lipsync; nothing in the app changes), `pnpm recast …`:
+  - `check` reads fal's own description of each endpoint (fields, price) before anything is sent; every request is built
+    from those fields (fal.ai was out of reach from the cloud session, so the IDs and fields are verified on the PC).
+  - `"<song>" --list` shows the Storyboard cards with their numbers.
+  - `--character "Bride No 2" --clips 7,9,10 --keyframe-clips 7 --max-cost 10`: the estimate per clip and method,
+    then `--yes` sends it; 3 jobs at a time; request IDs saved as they come; `fetch "<run folder>"` gets a result that
+    did not download (free).
+- Methods: **A** Wan 2.2 Animate Replace (720p), **B** MiniMax H3 Max Recast (768P), **C** Keyframe + Seedance (first
+  frame → depth map → Seedream 4.5 depth-guided first frame with the character in the same layout → Seedance reference
+  video-to-video with the original clip as motion reference; 480p draft; card 7 only in the first run). **D** Runway
+  Aleph and **E** Higgsfield Genjutsu are stubs (D: no key yet).
+- Pictures sent: the card's close-up, 3/4 face and reference picture (latest locked version); never the full-body views.
+- Each result is fitted back to the clip's exact size, fps and length; outputs go to
+  `workspace\recast\<song>\<date-time>\` (never into the clips folder): comparison.mp4 (Original | A | B | C per clip),
+  report.md / report.json (verdict in plain words, checks, cost, request IDs).
+- Local judge (services/audio/app/recast_judge.py, MediaPipe + SFace, free): **face** (share of frames matching the
+  character, weakest moment, the original person's face still visible), **scene kept** (people masked out; background
+  SSIM + colour histogram → "Repainted scene"), **motion kept** (pose normalised to the body, optical-flow agreement).
+  Thresholds are first guesses, every number is in report.json.
+- Prices: fal's price list is read with your key; until then the estimate uses prices seen on other sites (marked
+  "not confirmed"): Wan ~$0.08/s at 720p, H3 ~$0.30/s at 768P, Seedream $0.04, Seedance ~$0.12/s at 480p.
+- Tests: recast spike (11, stand-ins for fal and the judge), recast judge (6, Python). Found and fixed while testing:
+  the first motion measure called identical movement "not following" (0.14); it now compares flow fields over 0.1 s
+  (identical 1.00, same movement in other colours 0.77).
+- Before the run (Paul, in the app): Bride No 2 v2 (New version → Remake front, then back → lock). The spike uses the
+  latest locked version's close-up, 3/4 face and reference (v1 until v2 is locked).
+
 ### Characters C2: Shot list import — planned slots in the story line ✅ (verified by Paul, 18 Nov 2026: "C2 works")
 - **Prepare → Storyboard → Import shot list** (next to "Add clips & photos"): drop or choose your shot list (.json).
   The app checks it first, in plain words, slot by slot: an unknown character or scene ("did you mean Bride No 2?"),
