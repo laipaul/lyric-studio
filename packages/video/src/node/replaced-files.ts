@@ -11,6 +11,7 @@ import type { Workspace } from "@lyric/db";
 import { replaceAsset, storeVocalStem } from "./assets";
 import { restoreLyrics } from "./lyrics-view";
 import { readReplacedIndex, type ReplacedRole } from "./project-settings";
+import { restoreShotList } from "./shotlist";
 import { songPathsById, STUDIO_DIR } from "./song-folder";
 
 export type ReplacedFile = {
@@ -26,6 +27,7 @@ const STAMPED = /^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})(?:\.\d+)?-(.+)$/;
 function roleFromName(original: string): ReplacedRole | null {
   if (/^cover\.(jpe?g|png|webp)$/i.test(original)) return "cover";
   if (/\.lrc$/i.test(original)) return "hints";
+  if (original === "shotlist.json") return "shotlist";
   if (/\.txt$/i.test(original)) return "lyrics";
   return null; // a WAV or MP3 could be the song, the vocal stem or the backing vocals
 }
@@ -61,6 +63,11 @@ export async function restoreReplacedFile(ws: Workspace, projectId: string, file
   const source = path.join(paths.root, STUDIO_DIR, "replaced", file);
   const before = readFileSync(source);
   let restored: string;
+  if (entry.role === "shotlist") {
+    // The kept shot list is imported again (the one in use now goes to Replaced files); its kept copy stays.
+    await restoreShotList(ws, projectId, source);
+    return { role: entry.role, restored: entry.original };
+  }
   if (entry.role === "lyrics") {
     restoreLyrics(ws, projectId, file);
     restored = entry.original;

@@ -16,10 +16,16 @@ import { notesForClips, readClipNotes, setClipNote } from "./clip-notes";
 import { collectionFolder } from "./collections";
 import { songCollections } from "./project-settings";
 import { readRecipe, writeRecipe } from "./recipe";
+import { listCards } from "./characters/cards";
+import { animateFor, readShotListFile, SHOTLIST_FILE, slotOf, type Slot } from "./shotlist";
 import { sharedCollections, songPathsById } from "./song-folder";
+import { songText } from "./textboard";
 
 export type StoryCard = { collection: string; clips: number; thumbs: string[] }; // "Flowers · app picks · N clips"
-export type StoryItem = { key: string; clip?: ClipAsset & { collection?: string }; card?: StoryCard };
+// A planned slot from the shot list (C2): its picture is made later (C3); Make skips it until then.
+export type SlotCard = { id: string; name: string; thumb: string | null; locked: boolean } | { id: null; name: string; thumb: null; locked: false };
+export type StorySlot = Slot & { animateWith: string; animateIsDefault: boolean; cast: SlotCard[]; place: SlotCard | null; lineText: string | null };
+export type StoryItem = { key: string; clip?: ClipAsset & { collection?: string }; card?: StoryCard; slot?: StorySlot };
 export type SongStory = { items: StoryItem[]; collections: string[] };
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -87,9 +93,17 @@ export async function songStory(ws: Workspace, projectId: string, own: readonly 
   };
   const items: StoryItem[] = [];
   const shown = new Set<string>();
+  const slots = readShotListFile(path.join(root, SHOTLIST_FILE))?.slots ?? [];
+  const slotView = slots.length ? slotViews(ws, projectId) : null;
   const ownInOrder = inClipOrder(edits, ownNames);
   // Own clips without a place yet follow at the end (as Make plays them).
   for (const e of [...edits.order, ...ownInOrder.filter((n) => !edits.order.some((o) => same(o, n)))]) {
+    const slotId = slotOf(e);
+    if (slotId !== null) {
+      const slot = slots.find((x) => x.id.toLowerCase() === slotId.toLowerCase());
+      if (slot && slotView) items.push({ key: e, slot: slotView(slot) });
+      continue;
+    }
     const card = cardOf(e);
     if (card !== null) {
       const list = (await clipsOfCollection(card)).filter((x) => !x.duplicateOf);
@@ -114,6 +128,25 @@ export async function songStory(ws: Workspace, projectId: string, own: readonly 
     shown.add(e.toLowerCase());
   }
   return { items, collections: songCollections(ws, projectId) };
+}
+
+// How a slot shows: its characters' and scene's cards (thumbnail, locked or not; a name with no card any more shows
+// as just the name), the lyric line's words and the animation model (named, or the default for the shot type).
+function slotViews(ws: Workspace, projectId: string): (slot: Slot) => StorySlot {
+  const cards = listCards(ws);
+  const lines = songText(ws, projectId).lines;
+  const find = (kind: "character" | "scene", name: string): SlotCard => {
+    const c = cards.find((x) => x.kind === kind && same(x.name, name));
+    return c ? { id: c.id, name: c.name, thumb: c.thumbnail, locked: c.status === "locked" } : { id: null, name, thumb: null, locked: false };
+  };
+  return (slot) => ({
+    ...slot,
+    animateWith: animateFor(slot),
+    animateIsDefault: !slot.animate,
+    cast: slot.characters.map((n) => find("character", n)),
+    place: slot.scene ? find("scene", slot.scene) : null,
+    lineText: slot.line !== null ? (lines.find((l) => l.number === slot.line)?.text ?? null) : null,
+  });
 }
 
 // "From a collection…": clips chosen in the picker join the end of the story line (each once); `whole`: the

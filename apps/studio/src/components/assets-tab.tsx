@@ -1,6 +1,6 @@
 "use client";
 
-import { AudioLines, ChevronDown, FileAudio, FileText, FolderOpen, ImageIcon, Library, ListMusic, MoreHorizontal, Shuffle, Trash2, Upload } from "lucide-react";
+import { AudioLines, ChevronDown, Clapperboard, FileAudio, FileJson, FileText, FolderOpen, ImageIcon, Library, ListMusic, MapPin, MoreHorizontal, Shuffle, Trash2, Upload, UserRound } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -10,6 +10,7 @@ import type { ReplacedFile } from "@lyric/video/replaced-files";
 import type { StoryItem } from "@lyric/video/story-line";
 
 import { CollectionPicker } from "@/components/collection-picker";
+import { ShotListImport } from "@/components/shotlist-import";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -21,7 +22,7 @@ const win = (rel: string) => rel.split("/").join("\\");
 const ACCEPT: Record<AssetKind, string> = { song: ".wav,.mp3", lyrics: ".txt", cover: ".jpg,.jpeg,.png,.webp", hints: ".lrc", vocals: ".wav", backingVocals: ".wav" };
 const ROLE_NAME: Record<string, string> = { lyrics: "the lyrics", vocals: "the vocal stem", backingVocals: "the backing vocals", notUsed: "not used" };
 const base = (rel: string) => rel.split("/").pop() ?? rel;
-const REPLACED_ROLE: Record<string, string> = { song: "the song file", lyrics: "the lyrics", vocals: "the vocal stem", backingVocals: "the backing vocals", cover: "the cover", hints: "the hints (tapped times)" };
+const REPLACED_ROLE: Record<string, string> = { song: "the song file", lyrics: "the lyrics", vocals: "the vocal stem", backingVocals: "the backing vocals", cover: "the cover", hints: "the hints (tapped times)", shotlist: "the shot list" };
 // What a Replace changes, in plain words, before it happens.
 function replaceWarning(kind: AssetKind, current: string, next: string): string {
   const kept = `The current one (${current}) is kept under Replaced files at the bottom of this page; Restore brings it back.`;
@@ -160,7 +161,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
 
   async function restoreFile(f: ReplacedFile) {
     const what = REPLACED_ROLE[f.role ?? ""] ?? "the file";
-    const now = f.role ? currentName(f.role === "hints" ? "hints" : f.role) : null;
+    const now = f.role && f.role !== "shotlist" ? currentName(f.role) : f.role === "shotlist" ? "shotlist.json" : null;
     if (!window.confirm(`Make ${f.original} ${what} again?${now ? ` The one in use now (${now}) is kept under Replaced files.` : ""}${f.role === "song" || f.role === "lyrics" || f.role === "vocals" ? " New videos use it; videos already made stay as they are." : ""}`)) return;
     setBusy(true);
     setNotice(null);
@@ -206,7 +207,8 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
   // Drag and drop: the song's clips in a new order (clips.json). Shape shows and Make uses this sequence.
   const CLIP_DRAG = "application/x-lyric-song-clip";
   const [dragClip, setDragClip] = useState<string | null>(null);
-  const [noteOpen, setNoteOpen] = useState<string | null>(null); // the clip whose story note is being written (its card does not drag meanwhile)
+  const [noteOpen, setNoteOpen] = useState<string | null>(null);
+  const [shotlistOpen, setShotlistOpen] = useState(false); // Import shot list (C2) // the clip whose story note is being written (its card does not drag meanwhile)
   const [overClip, setOverClip] = useState<string | null>(null);
   async function saveOrder(keys: string[], done: string) {
     if (!data) return;
@@ -228,7 +230,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
     if (!data) return;
     if (!window.confirm("Put the clips in file-name order? This replaces the order you dragged. Collection cards (the app picks) go at the end.")) return;
     const byName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
-    const keys = [...data.story.filter((i) => i.clip).map((i) => i.key).sort(byName), ...data.story.filter((i) => i.card).map((i) => i.key)];
+    const keys = [...data.story.filter((i) => i.clip).map((i) => i.key).sort(byName), ...data.story.filter((i) => i.card || i.slot).map((i) => i.key)];
     void saveOrder(keys, "The clips are in file-name order. Shape and Make use this order.");
   }
   // Use / Omit (the same switch as Shape → Clips): an omitted clip keeps its place, Make leaves it out.
@@ -255,7 +257,8 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
     if (from < 0 || to < 0) return;
     keys.splice(from, 1);
     keys.splice(to, 0, name); // takes the place of the card it was dropped on
-    const label = data.story[from].card ? `${data.story[from].card!.collection} (the app picks)` : name;
+    const moved = data.story[from];
+    const label = moved.card ? `${moved.card.collection} (the app picks)` : moved.slot ? `Slot ${moved.slot.id}` : name;
     await saveOrder(keys, `${label} is now number ${to + 1} in your story line. Shape and Make use this order.`);
   }
 
@@ -451,6 +454,18 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
+          <Button type="button" variant="outline" size="sm" disabled={busy} data-import-shotlist onClick={() => setShotlistOpen(true)} title="Your shot list (.json) becomes planned slots in the story line">
+            <FileJson /> Import shot list
+          </Button>
+          <ShotListImport
+            projectId={projectId}
+            open={shotlistOpen}
+            onOpenChange={setShotlistOpen}
+            onImported={(text) => {
+              void reload();
+              setNotice({ ok: true, text });
+            }}
+          />
           <input ref={clipInput} type="file" multiple accept="video/*,.mp4,.mov,.m4v,.webm,.mkv,.jpg,.jpeg,.png,.webp" className="hidden" data-clip-input onChange={(e) => e.target.files && addClips(e.target.files)} />
           <CollectionPicker
             open={picker}
@@ -535,6 +550,80 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                         </p>
                         <div className="flex justify-end">
                           <CardMenu id={k} details={[`${card.clips} clip${card.clips === 1 ? "" : "s"} from ${card.collection}: the app picks which play here`]} action={{ label: "Remove from this song", attr: { "data-remove-story": k }, run: () => void removeFromStory(item), title: `Out of this song only: the collection ${card.collection} keeps its clips` }} disabled={busy} />
+                        </div>
+                      </div>
+                    </li>
+                  );
+                }
+                if (item.slot) {
+                  // A planned slot from the shot list (C2): its picture is made later (C3); Make skips it until then.
+                  const sl = item.slot;
+                  const cardImg = (x: { id: string | null; thumb: string | null }) => (x.id && x.thumb ? `/api/cards/${x.id}/file/${x.thumb.split("/").map(encodeURIComponent).join("/")}` : null);
+                  const faces = [...sl.cast, ...(sl.place ? [sl.place] : [])];
+                  const unlocked = faces.filter((x) => !x.locked).map((x) => (x.id ? `${x.name} (not locked yet)` : `${x.name} (no card any more)`));
+                  return (
+                    <li key={k} data-story-slot={sl.id} data-position={i + 1} {...dragProps} className={cn(frame, "border-brand/50 border-dashed")} title={sl.shows}>
+                      <div data-slot-frame className="relative grid aspect-[9/16] grid-cols-2 gap-px overflow-hidden bg-black/60">
+                        {faces.length ? (
+                          faces.map((x) => {
+                            const src = cardImg(x);
+                            return src ? (
+                              // eslint-disable-next-line @next/next/no-img-element -- a card picture served by /api/cards
+                              <img key={`${x.name}`} src={src} alt={x.name} title={x.name} draggable={false} className={cn("size-full min-h-0 object-cover opacity-60", faces.length === 1 && "col-span-2")} />
+                            ) : (
+                              <span key={x.name} className={cn("text-muted-foreground flex items-center justify-center p-1 text-center text-[10px]", faces.length === 1 && "col-span-2")}>
+                                {x.name}
+                              </span>
+                            );
+                          })
+                        ) : (
+                          <span className="text-muted-foreground col-span-2 flex items-center justify-center text-[10px]">no card</span>
+                        )}
+                        {number}
+                        <span data-slot-badge className="absolute inset-x-0 bottom-1.5 mx-auto flex w-fit items-center gap-1 rounded bg-black/80 px-1.5 py-0.5 text-[10px]">
+                          <Clapperboard className="text-brand size-3" /> No picture yet
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-1 p-2 text-xs">
+                        <p data-slot-shows className="line-clamp-3 text-sm leading-snug font-medium">
+                          {sl.shows}
+                        </p>
+                        <p className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                          <span data-slot-shot className="bg-brand/15 text-brand rounded px-1">{sl.shot}</span>
+                          {sl.cast.length ? (
+                            <span className="flex items-center gap-0.5">
+                              <UserRound className="size-3" /> {sl.cast.map((x) => x.name).join(", ")}
+                            </span>
+                          ) : null}
+                          {sl.place ? (
+                            <span className="flex items-center gap-0.5">
+                              <MapPin className="size-3" /> {sl.place.name}
+                            </span>
+                          ) : null}
+                        </p>
+                        {sl.line !== null ? (
+                          <p data-slot-line className="text-muted-foreground truncate" title={sl.lineText ?? undefined}>
+                            line {sl.line}{sl.lineText ? `: “${sl.lineText}”` : ""}
+                          </p>
+                        ) : null}
+                        {unlocked.length ? (
+                          <p data-slot-warning className="text-amber-400">
+                            {unlocked.join(", ")}
+                          </p>
+                        ) : null}
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-muted-foreground truncate">{sl.tag ? `#${sl.tag}` : ""}</span>
+                          <CardMenu
+                            id={k}
+                            details={[
+                              `Slot ${sl.id} (from your shot list)`,
+                              `Shows: ${sl.shows}`,
+                              ...(sl.outfit ? [`Outfit for this slot: ${sl.outfit}`] : []),
+                              `Animate with: ${sl.animateWith}${sl.animateIsDefault ? ` (the default for a ${sl.shot})` : ""}`,
+                              "Its picture is made later from the characters and scene; until then the videos skip it. Change it in your shot list file and import it again.",
+                            ]}
+                            disabled={busy}
+                          />
                         </div>
                       </div>
                     </li>
@@ -744,7 +833,7 @@ function clipProblem(c: { duplicateOf: string | null; width: number; height: num
 }
 
 // A card's ⋯ menu: its technical details (file name, duration, size) and Remove.
-function CardMenu({ id, details, action, disabled }: { id: string; details: string[]; action: { label: string; attr: Record<string, string>; run: () => void; title: string }; disabled: boolean }) {
+function CardMenu({ id, details, action, disabled }: { id: string; details: string[]; action?: { label: string; attr: Record<string, string>; run: () => void; title: string }; disabled: boolean }) {
   return (
     <DropdownMenu.Root modal={false}>
       <DropdownMenu.Trigger asChild>
@@ -759,10 +848,14 @@ function CardMenu({ id, details, action, disabled }: { id: string; details: stri
               {d}
             </p>
           ))}
-          <DropdownMenu.Separator className="bg-border my-1 h-px" />
-          <DropdownMenu.Item {...action.attr} title={action.title} onSelect={action.run} className="hover:bg-accent focus:bg-accent flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 outline-none select-none">
-            <Trash2 className="size-3.5" /> {action.label}
-          </DropdownMenu.Item>
+          {action ? (
+            <>
+              <DropdownMenu.Separator className="bg-border my-1 h-px" />
+              <DropdownMenu.Item {...action.attr} title={action.title} onSelect={action.run} className="hover:bg-accent focus:bg-accent flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 outline-none select-none">
+                <Trash2 className="size-3.5" /> {action.label}
+              </DropdownMenu.Item>
+            </>
+          ) : null}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>

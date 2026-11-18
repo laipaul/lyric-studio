@@ -4,6 +4,183 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Lip Sync, step 1 (spike): three fal.ai models side by side ✅ (to verify on the Windows PC)
+- **Isolated spike** in `spikes/lipsync/` (README there). Nothing in apps/ or packages/ changed (no HyperFrames,
+  Remotion, Prepare/Storyboard, Shape or Theme v2 code). It only reads the workspace, with the database opened
+  read-only so the app can stay open.
+- **`pnpm lipsync "<song>" --clip "<path>" --lines 12,13 | chorus:2 | --from/--to`**, with `--pad` (0.2 s),
+  `--providers`, `--max-cost` (default $3: above it nothing is uploaded, even with `--yes`) and `--yes`.
+  `--list` shows the lines (Lyrics tab numbers, ♪ = chorus).
+- **One job and one folder per line.** The vocal stem (the Vocals slot, your own file name) is cut for the models;
+  the full song is cut for review only. The clip is trimmed to the same length, keeping its resolution and fps.
+  A clip shorter than the line stops that line with a message.
+- **Models** (endpoint IDs, inputs and prices checked on fal.ai): Sync lipsync 2 (`fal-ai/sync-lipsync/v2`),
+  Kling LipSync (`fal-ai/kling-video/lipsync/audio-to-video`; a clip outside 720–1920 px is sent as a resized copy)
+  and InfiniteTalk (`fal-ai/infinitalk/video-to-video`, 480p). All sit behind one `LipSyncProvider` interface.
+  They run in parallel; each has a timeout and one retry.
+- **Output** in `spikes\lipsync\out\<song>\<clip>_line<N>\`: clip_trimmed.mp4, audio_slice.wav,
+  mix_slice.wav, `<model>.mp4`, `<model>_review.mp4` (with the full song), comparison.mp4 (side by side,
+  labelled, with the full song), report.json (endpoint, seconds, est. and fal-priced cost, every fal request ID,
+  checks) and report.md (a verdict per model in plain words).
+- **Checks:** a length more than 0.1 s off the audio, a different aspect ratio or a file that does not play is a
+  problem. A lower resolution or another fps is information only ("Model output 480p, clip was 1080p").
+- Tests: `pnpm lipsync:test` (16). They cover timing and padding, chorus:N, the clip-too-short stop, prices and
+  limits, the inputs against fal's schemas, the retry with request IDs, and the checks. They also run the whole
+  pipeline with a stand-in fal client (no network, no key): cap, dry run, one folder per line, stem vs mix,
+  comparison and reports.
+- **Update after the first test (17 Nov 2026, decided by the user):** mouth-only models (Kling LipSync, Sync) look
+  unnatural for singing: the rest of the face stays still. So the default is now **InfiniteTalk** (whole face, audio
+  driven).
+  - **Sync** is only the automatic fallback. It runs when InfiniteTalk fails, is too long for one request, or comes
+    back with a problem; it stays within the cap, and `--no-fallback` turns it off. The report marks it
+    "(automatic fallback: …)".
+  - **Kling LipSync** is out of the default list and runs only with `--providers kling`.
+  - Tests: 20 (+ the default, the fallback, `--no-fallback`, the cap holding the fallback back).
+- **To check on the PC:** see the Windows commands in the step's message: `npm install` in spikes\lipsync once,
+  FAL_KEY in .env, `pnpm lipsync "Wedding Day" --list`, then the estimate, then `--yes`.
+
+### Title cards, Canva-like: size as a number, instant viewer, a toolbar above the video ✅ (to verify on the Windows PC)
+- **Size in px with − / +** (and typing; ↑ / ↓ by 1): from half the card's usual size up to **twice the title's**
+  usual size, so the credits can be as big as the title (a Reel: credits usually 29 px, now up to 168 px). Under 28 px
+  a warning says it is hard to read on a phone; nothing is blocked. Lyric lines keep their slider.
+- **The viewer shows each change at once** (size, colour, transparency, capitals, place); it is saved as you change
+  it and the plan after it fits the card into the safe area exactly as the render will. A new font shows once saved.
+- **Toolbar above the video** when you click a title card (or its T bar, or Edit ›): font, size − N +, colour,
+  transparency, Aa capitals, Done. The card is outlined in the viewer; Esc or a click elsewhere in the video closes it.
+- Next (each its own step, when you decide): C move / resize in the viewer with "Set by me" / ↺ auto; D drag a card's
+  bar on the timeline.
+- Tests: unit (title-card-size: range, px ↔ multiplier, readable warning, live preview), browser (textboard: toolbar,
+  outline, + five times shown at once and saved, typed size capped, colour at once, capitals, Esc), song-stages,
+  storyboard, title-opening.
+- Known (not from this step, they fail the same before it): unit tests song-stages "Prepare to-do list" (2),
+  make "youtube --cover and --title" (expects the old #LifeLyrics tags line), render / migrate (need remotion.media,
+  not reachable in the cloud test machine). To fix in a bug-fix pass.
+- **To check on the PC:** Shape → click the title in the video: the toolbar appears above it; press + a few times:
+  the title grows at once; open Edit › on Credits and type 84: as big as the title.
+
+### Look simplified: Theme, On-screen text (Title · Artist · Credits), Advanced ✅ (to verify on the Windows PC)
+- **The rule:** the theme decides how everything looks; the song decides what appears.
+- **Theme:** the song's theme with Change, and Edit theme.
+- **On-screen text:** Title, Artist and Credits, each with its words and an on / off switch (every platform). The words
+  are the same as in Song Details (type in either place); the Artist is read-only (changed in the Library). Saved at
+  once, the viewer follows; no Save button. Switching any on gives the Reel its title opening; all off, none.
+- **Advanced** (folded): readability, the YouTube layout and the title cards' own look (font, colour, place…). It
+  opens by itself when you click a title card in the viewer or on the timeline, or Song Details → "Credits look…".
+- **Gone from the default view:** Title opening, Title cards, Lyric readability. "Tagline" reads **Credits** and
+  "Byline" reads **Artist** on screen. Changing the theme keeps the words and the switches.
+- Tests (browser): textboard (switches save the card and the title opening, Credits edited in Look reach song.json,
+  Artist read-only, Advanced opens for Credits look…), song-stages, storyboard.
+- **To check on the PC:** Shape → Settings → Look: the theme, then three rows; switch Credits off: it leaves the viewer;
+  type new credits: Song Details shows the same; open ▸ Advanced for the fonts and colours.
+
+### Look → Title cards made obvious: a row per card, click the card in the viewer ✅ (to verify on the Windows PC)
+- **One row per card** (Title, Byline, Tagline): its text, its look in one line (font · colour and transparency ·
+  place · capitals, as the video draws it) and **Edit ›**. The editor opens under the row; the row is highlighted.
+- **In the viewer:** a title card under the pointer is outlined; a click opens its row in Look (it does not play /
+  pause). A title card's **T bar on the timeline** does the same.
+- **The viewer jumps** to the middle of the card's time on screen when you pick it, so it is fully visible.
+- **The text is read-only here**, with "change in Song Details" (the words live in Prepare → Song Details only).
+- Tests (browser): textboard (rows with their look, the editor under the highlighted row, read-only text with the
+  link, the viewer fully showing the card, hover outline, click in the viewer, the T bar), song-stages, storyboard.
+- **To check on the PC:** Shape → Settings → Look → Title cards: three rows; Edit › on Tagline opens under it and the
+  viewer shows the tagline; hover the title in the viewer: outlined; click it: its row opens.
+
+### Title cards: edited in Shape → Settings → Look, saved as changed; a quieter tagline; no crowding ✅ (to verify on the Windows PC)
+- **Look → Title cards:** Title · Byline · Tagline chips under Title opening; the chosen card's editor opens right
+  there (Shown, Place, Size, Hold, Font, Effect, and new **Colour, Transparency, Capitals**). The same editor as a
+  title card clicked on the timeline. With Title opening off, Look says so with "Turn it on".
+- **Song Details → Tagline → "Tagline look…"** opens Shape → Settings → Look with the tagline's editor.
+- **Saved as you change it:** title cards are saved a moment after the last change and the viewer shows it after
+  the plan (no "Save and plan again" for title cards; lyric lines keep it).
+- **A quieter default tagline:** under the title and byline, smaller (0.35 of the title), in the lyric font, as
+  written, 80% opaque (was: the lower third, in the title font).
+- **No crowding:** the title, byline and tagline are gone as the first sung line fades in (before: they stayed 4 s
+  next to it when they did not overlap). A lead-in under 1.5 s gets a note: start the part about 2 bars earlier, or
+  let the app choose it (Automatic). A song whose part starts on a sung line therefore shows its title only briefly.
+- **The fit hint** in Song Details measures the tagline in its own font, size and capitals.
+- Tests: title-opening (rewritten for the new rule: gone as the line fades in, the note, the stacked tagline in the
+  lyric font, colour / transparency / capitals), title-opening-make, card-fit, make-reference (only the title cards'
+  fields changed: cuts, lyric timing and shots identical), textboard, extra-cards, qa, youtube. Browser: textboard
+  (no Save button on a title card; Tagline look… opens Look with the tagline's editor; colour, transparency and
+  capitals saved as changed), title-opening, song-stages, storyboard.
+- **To check on the PC:** Let My Love Carry You → Prepare → Song Details → Tagline look…: Shape opens on Look with the
+  tagline; pick a font, colour and transparency: the viewer follows after a moment. The tagline sits under "Life
+  Lyrics" in the lyric font; the title cards are gone when the first line starts.
+
+### Song Details: card texts full width, growing to two lines, with a fit hint ✅ (to verify on the Windows PC)
+- Tagline, Hook card text, End card text and EP are as wide as Title and grow to a second line for a longer text.
+- Under each card text (not EP: it is not drawn on the video), a fit hint measured as the card is drawn in a Reel
+  (its font, size, letter spacing and case, inside the Reel's safe width) with the render's own rule (one line, else
+  2 balanced lines, else up to 25% smaller), naming the theme: "fits on one line in Reels · Golden Hour", "will wrap
+  to 2 lines in Reels · Golden Hour", or (amber) "too long: … shorten it".
+- Tests: card-fit (3: one line, 2 lines, smaller, too long). Browser: song-stages (widths, growth to 2 lines, the
+  hints with the theme, none on EP).
+
+### Bug fix: song-wide version numbers per platform; a Make run that would duplicate a video warns first ✅ (to verify on the Windows PC)
+- **The bug:** every new Reels video was called "v1". The name was the file's number inside its run folder
+  (exports\<run>\reels\v1.mp4), and every Make run starts again at v1.mp4.
+- **Now** (src/node/versions.ts): a video is called v1, v2, v3... per platform for the whole song, in the order the videos
+  were made, never reused (a discarded or deleted video keeps its number). Review, Shape's video picker for past runs,
+  Post, the player, Compare, the Library and the file names all show this name. The files on disk are not renamed
+  (the number in the file name is only the take's variation). The numbers are kept in `<song folder>\.studio\versions.json`,
+  written the first time a song's videos are read (existing videos: creation order). Approved / posted / favourite marks
+  stay on the file, so nothing changed state. A try (Compare looks) is not a version: "Try · Midnight Highway", "based on
+  v3" (the newest own video made before it).
+- **`pnpm versions "<song title>"`** prints what each existing video is called now:
+  `exports\2025-11-10_1505\reels\v1.mp4 -> v1 (approved, ★)`.
+- **"Make another"** sends the next variation number not used by any file of that platform (so takes keep varying);
+  the video that comes out is simply the next version. Its refusal message uses the new names too.
+- **A Make run that would duplicate a video asks first:** before queuing, POST /api/runs plans the run in the planner
+  process (`--dup-check`, take-check.ts `duplicateProblem`) and compares it with the platform's videos that are not
+  discarded (their manifests' props). If one would be identical: 409 "Reels v4 would be identical to Reels v3 (made 11 Nov
+  15:05): change a setting in Shape first, or press Make anyway." and nothing is queued; Make shows it with a **Make anyway**
+  button (data-make-anyway; the request is sent again with force). A check that cannot run lets the run through.
+- Tests: new versions (8), take-variation (+3, messages use the new names), exports, library (names), video-names; browser:
+  videos-post, song-stages, storyboard pass.
+
+### Review: the app's quality verdict on every card; "Ready to post" only once approved ✅ (to verify on the Windows PC)
+- Before approval a card's badge says the app's verdict in words: Excellent / Good / Could be better (its details:
+  "Excellent: nothing a viewer would notice", "Good — 2 to improve", "Could be better — fix 1 first"). "Ready to
+  post" shows only on a video you approved. The player and Compare use the same words.
+- Each platform's summary matches the stage line: "All 3 good · 0 approved", "1 of 3 could be better · 2 approved".
+- Shape's predicted verdict uses the same words ("Excellent: nothing a viewer would notice (prediction before rendering)").
+- Tests (browser): videos-post (Excellent before approval, Ready to post after, the summary with "approved", the
+  player's verdict), storyboard (Shape's prediction), song-stages.
+
+### Bug fix: Make another — every take varies something; a take that would be identical is refused, saying why ✅ (to verify on the Windows PC)
+- **What changed between takes before:** only the style (Simple / Bold), the cinematic bars (Reels etc.), and, from take 3
+  on, the cut rate and cut / dissolve. Your clip order is yours (never shuffled), the cuts are the song's, effects and
+  fonts are your settings. On a short song, or with a look that makes Simple and Bold alike, or on YouTube's cover
+  layout (no clips on screen), almost nothing was left: three near-identical videos.
+- **Now (take 2 onward, from the take number, always the same for the same take):** each clip's first shot plays another
+  part of the clip (inside your trim; never a clip whose best moment you set, an anchor, a pin or a slip); on YouTube's
+  cover layout the cover's camera move changes (pull out, hold, push in). Cuts, lyric timing, the music and the ending
+  stay. Take 1 is exactly v1.
+- **Refused before queuing:** Make another plans the take (no render) next to the song's other takes of that platform;
+  if it would look the same: "Take 7 would be identical to v1: change a setting in Shape first (e.g. choose another
+  look (Shape → Look bar → Change) or another cover picture)." (shown in the Make another note).
+- Code: `moment` in `planTake` / `assignClips` / `composeProps`, `coverZoomFor`, `takeProblem` (take-check.ts), checked in
+  POST /api/runs (checked in the planner process, packages/video/scripts/storyboard.ts --take-check). Docs: pacing-and-cuts.md "Takes". Tests: take-variation (7), take.
+- **To check on the PC:** Review → a platform → Make another twice: the new videos differ (clip moments); on YouTube
+  (cover) take 2 zooms out; after enough takes the app says which earlier take it would repeat.
+
+### Review: the command in the card's ⋯ menu; platform tabs in a fixed order ✅ (to verify on the Windows PC)
+- Each card's "command" moved into a ⋯ menu on its run line (the command and Copy command); "settings" stays visible.
+- The platform tabs are always Reels · TikTok · Shorts · YouTube · Canvas, then Post, whatever the counts or the
+  song's own platform order (only platforms with videos, or being made, show).
+- Tests (browser): song-stages (settings visible, no "command" on the card, ⋯: the command and Copy), videos-post
+  (a song whose platforms are YouTube, TikTok, Reels still shows Reels · TikTok · YouTube · Post).
+
+### Tries have their own name: "Try · Midnight Highway" (based on v1) ✅ (to verify on the Windows PC)
+- Your videos stay "Reels v1"; a try (Compare looks) is "Try · Midnight Highway" (a picture set: "Try · pictures
+  city") with a small "based on v1" line, never a version number of its own.
+- The same everywhere: Review cards, the player, Compare, Shape's video picker ("Try · Midnight Highway (based on
+  v1)"), Post (its list and title), and the Post file names ("Here With Me - Reels - Try Midnight Highway.mp4").
+- Tests: video-names (2). Browser: videos-post (a YouTube try named "Try · Midnight Highway" with "based on v1"
+  next to "YouTube v1"), storyboard (Shape's picker).
+- **To check on the PC:** Review → Reels: a Compare looks video reads "Try · <theme>" with "based on v1"; Shape's
+  video picker lists it the same way; its Post files are named "… - Reels - Try <theme>.mp4".
+
 ### Storyboard reads as a story: notes as card titles, a Story idea line, details in ⋯ ✅ (to verify on the Windows PC)
 - **Card title = your note** (larger, up to two lines); a card without one shows "+ Add a note" there. The file name
   is the card's tooltip and the first line of its ⋯ menu.
