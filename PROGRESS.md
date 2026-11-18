@@ -4,6 +4,47 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Characters, C1 in the app: the Characters page, cards from one picture, packs, lock and versions ✅ (to verify on the Windows PC)
+- **Characters page** in the header, after Collections, with two sections: Characters and Scene cards. "New …" tiles
+  take a name and one picture; the reference check (or location check) runs at once, locally and for free.
+- **Card page:**
+  - the picture and its check, with Check again, Crop to face and Add a second picture;
+  - the face-check lines, calibrated on a song's clips with "clips of her", or SFace's defaults;
+  - the outfit in Paul's words (characters) or the key props (scenes);
+  - **Make pack**: the cost first, a confirm, then a background job shown in the Tasks menu. The views show their
+    face lights, with a Remake per view, "Get missing pictures (free)" and the contact sheet;
+  - the description, drafted by the vision model and edited by Paul;
+  - **Approve and lock** (it needs every view and a description; read-only afterwards), and **New version** (the
+    next draft from the latest).
+- **Pack and angles:**
+  - Seedream 4.5 by default (others selectable).
+  - Characters: close-up, 3/4 face, and full body front and back, cropped at the neck by the app.
+  - Scenes: wide from the left, the opposite side (a more explicit prompt after the test), and a closer detail, with
+    the key props named in every angle.
+  - Drifted face views are made again (max 2, within the cap), and paid pictures are never made twice.
+- **Storage and code:**
+  - `workspace\characters\<name>\` and `workspace\scenes\<name>\` (card.json, v1/, v2/ …), plus the database
+    tables `card` and `card_job` (migration 0007).
+  - The code is in packages/video/src/node/characters (moved from the spike), with the face checks in the Python
+    service. The jobs run in the studio's process.
+  - The fal client is now an app dependency (@fal-ai/client 1.10.1); FAL_KEY comes from .env.
+  - Rendering is unchanged and still makes no network calls.
+- **Docs:** docs/screens.md (Characters) and docs/data-model.md (cards).
+- **Tests:**
+  - Unit: characters-cards (8: folders, drafts, Make pack with the stand-ins, neck crop, lock, new version, cost cap,
+    jobs, no FAL_KEY, Get missing pictures, calibration).
+  - Browser: e2e/characters.e2e.ts (18 checks, with LYRIC_CARDS_STUB stand-ins), added to `pnpm test:e2e`.
+  - Checked with the real face models through the running studio: the check, Crop to face, and Make pack without a
+    key (a plain message).
+  - The 22 unit test files that already failed in the cloud test machine fail the same before and after this step.
+- **To check on the PC:**
+  1. Start the app and open **Characters**, then New character: `bride` with `refs\bride.png`. The check shows
+     "Ready".
+  2. Face-check lines → Calibrate on Wedding Day, with clips of her `Korean_bri_1e58e52b`.
+  3. Type the outfit, then Make pack (about $0.17), and look at the views.
+  4. Edit the description, then Approve and lock.
+  5. A scene card: `bridal room`, with its key props.
+
 ### Characters, C1 spike: reference check, character pack, location angles, local face check ✅ (reviewed by Paul, 18 Nov 2026: done)
 - **Isolated spike** in `spikes/characters/` (README there). Nothing in apps/ or packages/ changed (no HyperFrames,
   Remotion, Prepare/Storyboard or Shape code). The database is opened read-only, only for `--song`.
@@ -254,24 +295,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **To check on the PC:** Review → Reels: a Compare looks video reads "Try · <theme>" with "based on v1"; Shape's
   video picker lists it the same way; its Post files are named "… - Reels - Try <theme>.mp4".
 
-### Storyboard reads as a story: notes as card titles, a Story idea line, details in ⋯ ✅ (to verify on the Windows PC)
-- **Card title = your note** (larger, up to two lines); a card without one shows "+ Add a note" there. The file name
-  is the card's tooltip and the first line of its ⋯ menu.
-- **⋯ menu per card:** file name, duration, size and orientation (and the collection), then Remove (or "Remove from
-  this song" for collection clips and the "app picks" cards).
-- **Visible:** number, thumbnail, note, Use / Omit (and the collection badge); a small warning only when something
-  is wrong: "low resolution (544×720)" (short side under 720 px) or "same content as …".
-- **Story idea** above the clips: one sentence for the whole video, saved per song next to the notes.
-- **Every card the same shape** (your second test): one 9:16 frame, filled by the picture (about what a Reel shows of
-  the clip); a 9:16 clip no longer makes its card taller; the cards of a row share one height, Use / Omit on one line.
-- **For you only:** the app never reads the notes or the story idea to plan (test: clip-notes checks which files
-  read them).
-- Tests: clip-notes (+1: the story idea kept with the notes, cleared, cut at 300 characters). Browser: clip-notes
-  (the title in two lines, no file name / duration / Remove on the card, the tooltip, the low-resolution warning, the
-  ⋯ menu's details and Remove, the story idea kept after a reload), song-stages (Remove from this song in ⋯).
-- **To check on the PC:** Here With Me → Prepare → Storyboard: type a Story idea; give two clips a note: the notes are
-  the cards' titles; ⋯ shows the file name and size; a small clip shows "low resolution".
-
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -349,6 +372,12 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   reactivity; it saves versioned, data-only presets to the effects library. Not scheduled yet.
 
 ## Known issues
+- **`next build` stops after compiling** with a "SecurityFatalError". The studio's Next.js version (16.4.3) has a
+  known vulnerability, so the build stops to recommend an upgrade. The build files are complete, so the studio runs.
+  Upgrading Next.js is its own step, to agree with Paul (found 18 Nov 2026, during C1).
+- **Already there before C1** (to fix in a bug-fix pass):
+  - `tsc` in apps/studio reports `Cannot find name 'LayoutProps'` (layout.tsx).
+  - `pnpm --filter @lyric/studio lint` reports 7 errors in files C1 did not touch.
 - **Next bug-fix round (noted 30 Oct):** (1) the song page header chips still use the old colours (green "Standard 0",
   orange "Reels !"): show the Library card's chips (grey —, amber to review, green approved, red failed / stopped,
   Standard only when made); (2) old Tasks entries say "2 PASS" (messages written before the wording fix) and two
@@ -417,7 +446,8 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 
 ## Next
 
-**Order from here (confirmed by Paul, 18 Nov 2026):** Paul's review of the C1 spike → C1 in the app → C2 → C3 → C4
+**Order from here (confirmed by Paul, 18 Nov 2026):** Paul's review of the C1 spike (done) → C1 in the app (built
+18 Nov, to verify on the PC) → C2 → C3 → C4
 → Lip Sync step 2 → Instagram Growth. The Theme v2 order below (2e-2 → O1 → 2c → …) waits until then.
 
 **Characters roadmap (C1–C4: approved 17 Nov 2026 with the face models YuNet + SFace + MediaPipe (local, CPU, in the Python service), a Characters page in the header next to Collections (characters, scene cards, EP story bibles), a picker in Prepare → Storyboard to assign them to slots; the C1 spike is built, the rest is not).** Vision: Paul drops
@@ -439,7 +469,8 @@ its results are saved as ordinary photos in the song folder. Order:
   Verdict: Ready / Usable with fix / Not suitable, with reasons in plain words. One-click fixes: upscale, crop to the
   face, or add a second reference image of the same character. An AI vision opinion (paid) is off by default and
   shows its cost first.
-- **C1 Character from one picture:** a Characters screen. The upload is the identity AND style reference for a pack
+- **C1 Character from one picture** (BUILT 18 Nov 2026, to verify; the groom's card and EP story bibles still to come):
+  a Characters screen. The upload is the identity AND style reference for a pack
   made with a fal image-edit model. The app drafts a fixed description that Paul can edit. Each generated view is
   checked against the original and drifted views are regenerated automatically before approval. Approve → Lock
   (read-only, versioned). Stored in workspace\characters\<name>\ and the database; scope song / EP / artist.

@@ -5,12 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { Tasks } from "@lyric/video/runs";
+import type { CardTask } from "@lyric/video/characters";
+import type { Tasks as RunTasks } from "@lyric/video/runs";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 
+type Tasks = RunTasks & { cards: CardTask[] };
 type Run = Tasks["runs"][number];
 const ACTIVE = new Set(["queued", "running"]);
 const STATUS: Record<string, { text: string; style: string }> = {
@@ -27,7 +29,7 @@ const STATUS: Record<string, { text: string; style: string }> = {
 export function TasksMenu() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [tasks, setTasks] = useState<Tasks>({ runs: [], terminal: [] });
+  const [tasks, setTasks] = useState<Tasks>({ runs: [], terminal: [], cards: [] });
   const last = useRef<Map<string, string>>(new Map());
   const terminalCount = useRef(0);
 
@@ -36,10 +38,11 @@ export function TasksMenu() {
       const r = await api("/api/tasks", { cache: "no-store" });
       if (!r.ok) return;
       const next = (await r.json()) as Tasks;
+      next.cards ??= [];
       // A run finished (or a terminal run ended): show its videos.
-      const finished = next.runs.some((run) => ACTIVE.has(last.current.get(run.id) ?? "") && !ACTIVE.has(run.status));
+      const finished = [...next.runs, ...next.cards].some((run) => ACTIVE.has(last.current.get(run.id) ?? "") && !ACTIVE.has(run.status));
       if (finished || next.terminal.length < terminalCount.current) router.refresh();
-      last.current = new Map(next.runs.map((run) => [run.id, run.status]));
+      last.current = new Map([...next.runs, ...next.cards].map((run) => [run.id, run.status]));
       terminalCount.current = next.terminal.length;
       setTasks(next);
     } catch {
@@ -47,7 +50,7 @@ export function TasksMenu() {
     }
   }, [router]);
 
-  const active = tasks.runs.filter((r) => ACTIVE.has(r.status)).length + tasks.terminal.length;
+  const active = tasks.runs.filter((r) => ACTIVE.has(r.status)).length + tasks.terminal.length + tasks.cards.filter((c) => ACTIVE.has(c.status)).length;
   useEffect(() => {
     const first = setTimeout(load, 0);
     const timer = setInterval(load, active || open ? 1500 : 5000);
@@ -72,7 +75,11 @@ export function TasksMenu() {
     setAskStopped(includeStopped ? 0 : result.resumable);
     void load();
   };
-  const finishedCount = tasks.runs.filter((r) => !ACTIVE.has(r.status)).length;
+  const finishedCount = tasks.runs.filter((r) => !ACTIVE.has(r.status)).length + tasks.cards.filter((c) => !ACTIVE.has(c.status)).length;
+  const stopCard = async (job: CardTask) => {
+    await api(`/api/cards/${job.card_id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "stop", job: job.id }) });
+    void load();
+  };
 
   const stop = async (run: Run) => {
     await api("/api/runs/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: run.id }) });
@@ -136,7 +143,7 @@ export function TasksMenu() {
       </button>
       {open ? (
         <div data-tasks className="bg-popover absolute right-0 z-40 mt-2 flex max-h-[70vh] w-96 flex-col gap-3 overflow-y-auto rounded-lg border p-4 text-sm shadow-xl">
-          {!tasks.runs.length && !tasks.terminal.length ? (
+          {!tasks.runs.length && !tasks.terminal.length && !tasks.cards.length ? (
             <div>
               <p className="font-medium">No tasks</p>
               <p className="text-muted-foreground mt-1 text-xs">Press Generate on a song page; its progress shows here.</p>
@@ -186,6 +193,25 @@ export function TasksMenu() {
               </div>
             );
           })}
+          {tasks.cards.map((job) => (
+            <div key={job.id} data-task={job.status} data-card-task={job.kind} className="flex flex-col gap-1.5 border-t pt-3 first:border-t-0 first:pt-0">
+              <div className="flex items-center justify-between gap-2">
+                <Link href={`/characters/${job.card_id}`} className="truncate font-medium hover:underline" onClick={() => setOpen(false)}>
+                  {job.cardName}
+                </Link>
+                <span className={cn("text-xs", STATUS[job.status]?.style)}>{STATUS[job.status]?.text ?? job.status}</span>
+              </div>
+              <p className="text-muted-foreground text-xs">{job.label}</p>
+              {ACTIVE.has(job.status) ? <Bar value={job.status === "queued" ? 0 : job.progress} /> : null}
+              {job.current && ACTIVE.has(job.status) ? <p className="text-xs">{job.current}</p> : null}
+              {job.message && !ACTIVE.has(job.status) ? <p className="text-muted-foreground text-xs whitespace-pre-line">{job.message}</p> : null}
+              {ACTIVE.has(job.status) ? (
+                <Button type="button" size="sm" variant="outline" onClick={() => stopCard(job)} className="w-fit" data-stop-card>
+                  <Square /> {job.status === "queued" ? "Cancel" : "Stop after this picture"}
+                </Button>
+              ) : null}
+            </div>
+          ))}
           {tasks.runs.map((run) => (
             <div key={run.id} data-task={run.status} className="flex flex-col gap-1.5 border-t pt-3 first:border-t-0 first:pt-0">
               <div className="flex items-center justify-between gap-2">

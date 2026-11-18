@@ -4,6 +4,24 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Storyboard reads as a story: notes as card titles, a Story idea line, details in ⋯ ✅ (to verify on the Windows PC)
+- **Card title = your note** (larger, up to two lines); a card without one shows "+ Add a note" there. The file name
+  is the card's tooltip and the first line of its ⋯ menu.
+- **⋯ menu per card:** file name, duration, size and orientation (and the collection), then Remove (or "Remove from
+  this song" for collection clips and the "app picks" cards).
+- **Visible:** number, thumbnail, note, Use / Omit (and the collection badge); a small warning only when something
+  is wrong: "low resolution (544×720)" (short side under 720 px) or "same content as …".
+- **Story idea** above the clips: one sentence for the whole video, saved per song next to the notes.
+- **Every card the same shape** (your second test): one 9:16 frame, filled by the picture (about what a Reel shows of
+  the clip); a 9:16 clip no longer makes its card taller; the cards of a row share one height, Use / Omit on one line.
+- **For you only:** the app never reads the notes or the story idea to plan (test: clip-notes checks which files
+  read them).
+- Tests: clip-notes (+1: the story idea kept with the notes, cleared, cut at 300 characters). Browser: clip-notes
+  (the title in two lines, no file name / duration / Remove on the card, the tooltip, the low-resolution warning, the
+  ⋯ menu's details and Remove, the story idea kept after a reload), song-stages (Remove from this song in ⋯).
+- **To check on the PC:** Here With Me → Prepare → Storyboard: type a Story idea; give two clips a note: the notes are
+  the cards' titles; ⋯ shows the file name and size; a small clip shows "low resolution".
+
 ### Post downloads: "Save as" in your folder, "Save all to…", folders remembered ✅ (to verify on the Windows PC)
 - **Each file button** in the Post panel (Video, Captions (.srt), Thumbnail, Cover, publish.txt) opens a "Save as"
   window (Chrome / Edge) in the last folder you used for this song and platform; other browsers download as before.

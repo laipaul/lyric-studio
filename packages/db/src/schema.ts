@@ -262,6 +262,70 @@ export const makeRun = sqliteTable(
   ],
 );
 
+// Characters and scene cards (C1, 18 Nov 2026): one picture in, a locked, versioned pack out. The files live in
+// workspace/characters/<name>/ or workspace/scenes/<name>/ (card.json + v1/, v2/…); this table lists them.
+export const CARD_KINDS = ["character", "scene"] as const;
+export const CARD_STATUSES = ["draft", "locked"] as const;
+export const CARD_SCOPES = ["artist", "ep", "song"] as const;
+export const card = sqliteTable(
+  "card",
+  {
+    id: id(),
+    kind: text("kind", { enum: CARD_KINDS }).notNull(),
+    name: text("name").notNull(),
+    folder: text("folder").notNull(), // workspace-relative, e.g. "characters/bride"
+    scope_kind: text("scope_kind", { enum: CARD_SCOPES }).notNull().default("artist"),
+    scope_value: text("scope_value"), // the artist, EP or song it belongs to (null: the default artist)
+    status: text("status", { enum: CARD_STATUSES }).notNull().default("draft"),
+    version: integer("version").notNull().default(1), // the version being edited or the latest locked one
+    created_at: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updated_at: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("card_kind_name").on(t.kind, t.name),
+    check("card_kind_values", inList("kind", CARD_KINDS)),
+    check("card_status_values", inList("status", CARD_STATUSES)),
+    check("card_scope_values", inList("scope_kind", CARD_SCOPES)),
+  ],
+);
+
+// A card's background work (make the pack, remake one view, fetch lost images, calibrate), shown in the Tasks menu.
+export const CARD_JOB_KINDS = ["pack", "view", "fetch", "calibrate"] as const;
+export const cardJob = sqliteTable(
+  "card_job",
+  {
+    id: id(),
+    card_id: text("card_id")
+      .notNull()
+      .references(() => card.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: CARD_JOB_KINDS }).notNull(),
+    status: text("status", { enum: RUN_STATUSES }).notNull().default("queued"),
+    label: text("label").notNull(),
+    options_json: text("options_json", { mode: "json" }).notNull().$type<Record<string, unknown>>(),
+    progress: real("progress").notNull().default(0),
+    current: text("current"),
+    message: text("message"),
+    cost_usd: real("cost_usd"), // the estimate of what was sent
+    pid: integer("pid"),
+    created_at: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    started_at: integer("started_at", { mode: "timestamp_ms" }),
+    finished_at: integer("finished_at", { mode: "timestamp_ms" }),
+    cleared_at: integer("cleared_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [
+    index("card_job_status").on(t.status),
+    check("card_job_status_values", inList("status", RUN_STATUSES)),
+    check("card_job_kind_values", inList("kind", CARD_JOB_KINDS)),
+    check("card_job_progress", sql.raw("progress >= 0 and progress <= 1")),
+  ],
+);
+
 export const TABLES = {
   project,
   lyric_line: lyricLine,
@@ -274,6 +338,8 @@ export const TABLES = {
   render_job: renderJob,
   video_mark: videoMark,
   make_run: makeRun,
+  card,
+  card_job: cardJob,
 } as const;
 
 export type Project = typeof project.$inferSelect;
@@ -287,3 +353,5 @@ export type Clip = typeof clip.$inferSelect;
 export type StylePreset = typeof stylePreset.$inferSelect;
 export type Variation = typeof variation.$inferSelect;
 export type RenderJob = typeof renderJob.$inferSelect;
+export type Card = typeof card.$inferSelect;
+export type CardJob = typeof cardJob.$inferSelect;

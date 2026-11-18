@@ -1,16 +1,17 @@
-import { CircleCheckBig, Clapperboard, Diamond, Eye, Film, Layers, Music, Palette, Send, Type, Wand2, type LucideIcon } from "lucide-react";
+import { CircleCheckBig, Clapperboard, Diamond, Eye, Film, Layers, Music, Palette, Send, Type, UserRound, Wand2, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 // One icon and one colour per core feature, used the same way everywhere (header, rail, stages, cards),
 // so a user knows at a glance what a thing is (asked by the user on 1 Nov 2026):
-// Song: music note, white · Theme: palette, pink (the brand) · Clips: film, teal (a collection: a stack) ·
+// Song: music note, white · Theme: palette, pink (the brand) · Clips: film, teal (a collection: a stack) · Characters: person, violet ·
 // Lyrics and card text: "T", amber · Steps: Prepare ✓, Shape ◇, Make 🎬, Review 👁, Post 📤 · Automatic: wand.
 export const FEATURE = {
   song: { icon: Music, colour: "text-white" },
   theme: { icon: Palette, colour: "text-brand" },
   clips: { icon: Film, colour: "text-teal-300" },
   collection: { icon: Layers, colour: "text-teal-300" },
+  character: { icon: UserRound, colour: "text-violet-300" }, // characters and scene cards (C1)
   lyrics: { icon: Type, colour: "text-amber-300" },
   prepare: { icon: CircleCheckBig, colour: "" },
   shape: { icon: Diamond, colour: "" },

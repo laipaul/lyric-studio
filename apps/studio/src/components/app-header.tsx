@@ -13,6 +13,7 @@ const NAV: { href: string; label: string; feature: Feature }[] = [
   { href: "/", label: "Library", feature: "song" },
   { href: "/themes", label: "Themes", feature: "theme" },
   { href: "/collections", label: "Collections", feature: "collection" },
+  { href: "/characters", label: "Characters", feature: "character" },
   { href: "/releases", label: "Releases", feature: "post" },
 ];
 
