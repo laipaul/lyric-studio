@@ -4,7 +4,7 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### Characters, C1 fixes 4: neutral wording, the reference's hair, old pictures framing-checked ✅ (to verify on the Windows PC)
+### Characters, C1 fixes 4: neutral wording, the reference's hair, old pictures framing-checked ✅ (verified by Paul, 18 Nov 2026)
 - The groom came out with a feminine look and hair pulled back: the prompts still said "her" / "the same woman".
   Now "this person" everywhere (views, shared style, description draft).
 - Face views keep the reference's hairstyle (length, parting, volume, direction) unless the outfit text says otherwise.
@@ -12,7 +12,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   full-length "close-up" turns red instead of staying green.
 - Tests: characters-cards (17) and the Characters browser test pass.
 
-### Characters, C1 fixes 3: eye-level framing, a real 3/4, the outfit split per view ✅ (to verify on the Windows PC)
+### Characters, C1 fixes 3: eye-level framing, a real 3/4, the outfit split per view ✅ (verified by Paul, 18 Nov 2026)
 - Paul's review of Bride No 2: close-up from above showing the whole body, 3/4 mostly from behind, the front view
   with the back's V-neck and buttons.
 - All four views: camera at eye level, no high angle, no top-down view. Close-up straight on, face about half the
@@ -24,7 +24,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   and back are told what belongs only to the other side. Without a key or on failure: the outfit text as before.
 - Tests: characters-cards (15) and the Characters browser test pass.
 
-### Characters, C1 fixes 2: face views are real close-ups, the latest Make wins ✅ (to verify on the Windows PC)
+### Characters, C1 fixes 2: face views are real close-ups, the latest Make wins ✅ (verified by Paul, 18 Nov 2026)
 - Seen on the groom and Bride No 1 / No 2: the close-up and 3/4 came out as full-length shots from a high wide
   angle (the whole outfit, shoes included, went into the face prompts), and "Make the pack again" still showed the
   old pictures (the best try of all runs was kept; body views tied, so the oldest won).
@@ -37,7 +37,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   made before this are picked again once, free, when their page opens (newest try), with the contact sheet rebuilt.
 - Tests: characters-cards (12) and the Characters browser test pass.
 
-### Characters, C1 fixes after Paul's first test ("Bride No 1") ✅ (to verify on the Windows PC)
+### Characters, C1 fixes after Paul's first test ("Bride No 1") ✅ (verified by Paul, 18 Nov 2026)
 - The **back view** gets the chosen front view as an extra reference: the same outfit seen from behind (in the
   test, the front was a jumper and trousers and the back a knitted dress).
 - **Make pack warns when the outfit is empty** ("the model will invent it… Add it above first?" → Make it anyway / Cancel).
@@ -50,7 +50,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   known ones below. Note: in the cloud check, librosa crashed until numba's stale cache files (*.nbi / *.nbc in the
   .venv) were cleared; this only affects the cloud machine.
 
-### Characters, C1 in the app: the Characters page, cards from one picture, packs, lock and versions ✅ (to verify on the Windows PC)
+### Characters, C1 in the app: the Characters page, cards from one picture, packs, lock and versions ✅ (verified by Paul, 18 Nov 2026: "all good", with fixes 1–4 below)
 - **Characters page** in the header, after Collections, with two sections: Characters and Scene cards. "New …" tiles
   take a name and one picture; the reference check (or location check) runs at once, locally and for free.
 - **Card page:**
@@ -357,6 +357,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
 
 ## Backlog (not scheduled yet)
+- Characters, outfit split: hairstyle always to "Close-ups show" (and "Back shows" when visible from behind), earrings only to "Close-ups show" (seen on Bride No 1, 18 Nov 2026; Paul corrects by hand for now).
 - **A shot ends where your trimmed clip ends** (2 Nov 2026): when a clip you trimmed in Edit clip is shorter than its shot, move the cut earlier to the last bar (else beat) the clip covers, the next shot starting earlier; needs the cut plan to know the clips (today cuts are fixed first).
 - **Delete a song (cleanup; asked 30 Oct, after the freeze)**: the song card's ⋯ menu -> Delete (asks first), exactly like Collections (the user, 30 Oct):
   like Collections: the folder moves to songs\_removed\<title> (removed <date>), never deleted; its database
