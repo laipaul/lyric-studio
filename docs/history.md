@@ -4,6 +4,47 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Characters, C1 in the app: the Characters page, cards from one picture, packs, lock and versions ✅ (verified by Paul, 18 Nov 2026: "all good", with fixes 1–4 below)
+- **Characters page** in the header, after Collections, with two sections: Characters and Scene cards. "New …" tiles
+  take a name and one picture; the reference check (or location check) runs at once, locally and for free.
+- **Card page:**
+  - the picture and its check, with Check again, Crop to face and Add a second picture;
+  - the face-check lines, calibrated on a song's clips with "clips of her", or SFace's defaults;
+  - the outfit in Paul's words (characters) or the key props (scenes);
+  - **Make pack**: the cost first, a confirm, then a background job shown in the Tasks menu. The views show their
+    face lights, with a Remake per view, "Get missing pictures (free)" and the contact sheet;
+  - the description, drafted by the vision model and edited by Paul;
+  - **Approve and lock** (it needs every view and a description; read-only afterwards), and **New version** (the
+    next draft from the latest).
+- **Pack and angles:**
+  - Seedream 4.5 by default (others selectable).
+  - Characters: close-up, 3/4 face, and full body front and back, cropped at the neck by the app.
+  - Scenes: wide from the left, the opposite side (a more explicit prompt after the test), and a closer detail, with
+    the key props named in every angle.
+  - Drifted face views are made again (max 2, within the cap), and paid pictures are never made twice.
+- **Storage and code:**
+  - `workspace\characters\<name>\` and `workspace\scenes\<name>\` (card.json, v1/, v2/ …), plus the database
+    tables `card` and `card_job` (migration 0007).
+  - The code is in packages/video/src/node/characters (moved from the spike), with the face checks in the Python
+    service. The jobs run in the studio's process.
+  - The fal client is now an app dependency (@fal-ai/client 1.10.1); FAL_KEY comes from .env.
+  - Rendering is unchanged and still makes no network calls.
+- **Docs:** docs/screens.md (Characters) and docs/data-model.md (cards).
+- **Tests:**
+  - Unit: characters-cards (8: folders, drafts, Make pack with the stand-ins, neck crop, lock, new version, cost cap,
+    jobs, no FAL_KEY, Get missing pictures, calibration).
+  - Browser: e2e/characters.e2e.ts (18 checks, with LYRIC_CARDS_STUB stand-ins), added to `pnpm test:e2e`.
+  - Checked with the real face models through the running studio: the check, Crop to face, and Make pack without a
+    key (a plain message).
+  - The 22 unit test files that already failed in the cloud test machine fail the same before and after this step.
+- **To check on the PC:**
+  1. Start the app and open **Characters**, then New character: `bride` with `refs\bride.png`. The check shows
+     "Ready".
+  2. Face-check lines → Calibrate on Wedding Day, with clips of her `Korean_bri_1e58e52b`.
+  3. Type the outfit, then Make pack (about $0.17), and look at the views.
+  4. Edit the description, then Approve and lock.
+  5. A scene card: `bridal room`, with its key props.
+
 ### Characters, C1 spike: reference check, character pack, location angles, local face check ✅ (reviewed by Paul, 18 Nov 2026: done)
 - **Isolated spike** in `spikes/characters/` (README there). Nothing in apps/ or packages/ changed (no HyperFrames,
   Remotion, Prepare/Storyboard or Shape code). The database is opened read-only, only for `--song`.

@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "typeRoots": ["../../packages/video/node_modules/@types"], "noEmit": true, "allowImportingTsExtensions": true, "jsx": "react-jsx" },
+  "include": ["recast.ts", "src/**/*.ts", "test/**/*.ts"]
+}

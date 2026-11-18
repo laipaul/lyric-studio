@@ -4,6 +4,34 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Recast spike: the main character in place of the person in Storyboard clips ✅ (to run on the Windows PC)
+- `spikes/recast/` (like spikes/lipsync; nothing in the app changes), `pnpm recast …`:
+  - `check` reads fal's own description of each endpoint (fields, price) before anything is sent; every request is built
+    from those fields (fal.ai was out of reach from the cloud session, so the IDs and fields are verified on the PC).
+  - `"<song>" --list` shows the Storyboard cards with their numbers.
+  - `--character "Bride No 2" --clips 7,9,10 --keyframe-clips 7 --max-cost 10`: the estimate per clip and method,
+    then `--yes` sends it; 3 jobs at a time; request IDs saved as they come; `fetch "<run folder>"` gets a result that
+    did not download (free).
+- Methods: **A** Wan 2.2 Animate Replace (720p), **B** MiniMax H3 Max Recast (768P), **C** Keyframe + Seedance (first
+  frame → depth map → Seedream 4.5 depth-guided first frame with the character in the same layout → Seedance reference
+  video-to-video with the original clip as motion reference; 480p draft; card 7 only in the first run). **D** Runway
+  Aleph and **E** Higgsfield Genjutsu are stubs (D: no key yet).
+- Pictures sent: the card's close-up, 3/4 face and reference picture (latest locked version); never the full-body views.
+- Each result is fitted back to the clip's exact size, fps and length; outputs go to
+  `workspace\recast\<song>\<date-time>\` (never into the clips folder): comparison.mp4 (Original | A | B | C per clip),
+  report.md / report.json (verdict in plain words, checks, cost, request IDs).
+- Local judge (services/audio/app/recast_judge.py, MediaPipe + SFace, free): **face** (share of frames matching the
+  character, weakest moment, the original person's face still visible), **scene kept** (people masked out; background
+  SSIM + colour histogram → "Repainted scene"), **motion kept** (pose normalised to the body, optical-flow agreement).
+  Thresholds are first guesses, every number is in report.json.
+- Prices: fal's price list is read with your key; until then the estimate uses prices seen on other sites (marked
+  "not confirmed"): Wan ~$0.08/s at 720p, H3 ~$0.30/s at 768P, Seedream $0.04, Seedance ~$0.12/s at 480p.
+- Tests: recast spike (11, stand-ins for fal and the judge), recast judge (6, Python). Found and fixed while testing:
+  the first motion measure called identical movement "not following" (0.14); it now compares flow fields over 0.1 s
+  (identical 1.00, same movement in other colours 0.77).
+- Before the run (Paul, in the app): Bride No 2 v2 (New version → Remake front, then back → lock). The spike uses the
+  latest locked version's close-up, 3/4 face and reference (v1 until v2 is locked).
+
 ### Characters: pack fixes (buttons, neckline, veil), New version keeps v1 in use, Remake the full-body views ✅ (to verify on the Windows PC)
 - Seen on Bride No 2 v1 (locked; faces good: close-up 0.67, 3/4 0.58): the front full-body view had a row of buttons
   down the front bodice and a sweetheart-like neckline; the veil was missing in both full-body views and the 3/4.
@@ -89,47 +117,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: characters-cards (9) and the Characters browser test (23 checks) pass. The other unit-test failures are the
   known ones below. Note: in the cloud check, librosa crashed until numba's stale cache files (*.nbi / *.nbc in the
   .venv) were cleared; this only affects the cloud machine.
-
-### Characters, C1 in the app: the Characters page, cards from one picture, packs, lock and versions ✅ (verified by Paul, 18 Nov 2026: "all good", with fixes 1–4 below)
-- **Characters page** in the header, after Collections, with two sections: Characters and Scene cards. "New …" tiles
-  take a name and one picture; the reference check (or location check) runs at once, locally and for free.
-- **Card page:**
-  - the picture and its check, with Check again, Crop to face and Add a second picture;
-  - the face-check lines, calibrated on a song's clips with "clips of her", or SFace's defaults;
-  - the outfit in Paul's words (characters) or the key props (scenes);
-  - **Make pack**: the cost first, a confirm, then a background job shown in the Tasks menu. The views show their
-    face lights, with a Remake per view, "Get missing pictures (free)" and the contact sheet;
-  - the description, drafted by the vision model and edited by Paul;
-  - **Approve and lock** (it needs every view and a description; read-only afterwards), and **New version** (the
-    next draft from the latest).
-- **Pack and angles:**
-  - Seedream 4.5 by default (others selectable).
-  - Characters: close-up, 3/4 face, and full body front and back, cropped at the neck by the app.
-  - Scenes: wide from the left, the opposite side (a more explicit prompt after the test), and a closer detail, with
-    the key props named in every angle.
-  - Drifted face views are made again (max 2, within the cap), and paid pictures are never made twice.
-- **Storage and code:**
-  - `workspace\characters\<name>\` and `workspace\scenes\<name>\` (card.json, v1/, v2/ …), plus the database
-    tables `card` and `card_job` (migration 0007).
-  - The code is in packages/video/src/node/characters (moved from the spike), with the face checks in the Python
-    service. The jobs run in the studio's process.
-  - The fal client is now an app dependency (@fal-ai/client 1.10.1); FAL_KEY comes from .env.
-  - Rendering is unchanged and still makes no network calls.
-- **Docs:** docs/screens.md (Characters) and docs/data-model.md (cards).
-- **Tests:**
-  - Unit: characters-cards (8: folders, drafts, Make pack with the stand-ins, neck crop, lock, new version, cost cap,
-    jobs, no FAL_KEY, Get missing pictures, calibration).
-  - Browser: e2e/characters.e2e.ts (18 checks, with LYRIC_CARDS_STUB stand-ins), added to `pnpm test:e2e`.
-  - Checked with the real face models through the running studio: the check, Crop to face, and Make pack without a
-    key (a plain message).
-  - The 22 unit test files that already failed in the cloud test machine fail the same before and after this step.
-- **To check on the PC:**
-  1. Start the app and open **Characters**, then New character: `bride` with `refs\bride.png`. The check shows
-     "Ready".
-  2. Face-check lines → Calibrate on Wedding Day, with clips of her `Korean_bri_1e58e52b`.
-  3. Type the outfit, then Make pack (about $0.17), and look at the views.
-  4. Edit the description, then Approve and lock.
-  5. A scene card: `bridal room`, with its key props.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -287,7 +274,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 Midjourney clips, so replacing the person in each clip with his main character comes first:
 0. **Pack fixes + New version** (done 18 Nov 2026, above; to verify on the PC): make Bride No 2 v2, remake only the
    full-body views, lock v2.
-1. **Recast spike** (plan approved 18 Nov 2026; spikes/recast/, like spikes/lipsync: cost first, --max-cost (first run
+1. **Recast spike** (BUILT 18 Nov 2026, above; to run on the PC once v2 is locked. Plan approved 18 Nov 2026; spikes/recast/, like spikes/lipsync: cost first, --max-cost (first run
    10), --yes, parallel jobs, report.md, comparison video, request IDs): song + locked character + clips (one, several
    or all Storyboard clips). References: close-up, 3/4 face and the reference picture only; v1's full-body views are
    NOT sent (wrong buttons, no veil), v2's once locked. Methods (endpoint IDs and schemas checked in current docs):
