@@ -77,6 +77,12 @@ async function main() {
     await page.click("h1"); // blur: saved
     await sleep(400);
     check(readFileSync(path.join(dir, "card.json"), "utf8").includes("floor-length white A-line gown"), "the outfit is saved in card.json");
+    await page.waitForSelector("[data-outfit-closeups]", { timeout: 10_000 });
+    check(((await page.inputValue("[data-outfit-closeups]")) ?? "").includes("neckline") && ((await page.inputValue("[data-outfit-front]")) ?? "").length > 0 && ((await page.inputValue("[data-outfit-back]")) ?? "").length > 0, "the outfit is split into Close-ups / Front / Back parts, shown under it");
+    await page.fill("[data-outfit-back]", "V-neck back with a row of buttons");
+    await page.click("h1");
+    await sleep(400);
+    check(readFileSync(path.join(dir, "card.json"), "utf8").includes("V-neck back with a row of buttons"), "a corrected part is saved in card.json");
     check(((await page.textContent("[data-estimate]")) ?? "") === "$0.17", "the estimate is shown before anything is sent ($0.17 with Seedream)");
     await page.click("[data-make-pack]");
     check(((await page.textContent("[data-confirm-yes]")) ?? "").includes("about $0.17") && !(await page.$("[data-outfit-warning]")), "Make pack asks to confirm, with the cost (no warning once the outfit is given)");

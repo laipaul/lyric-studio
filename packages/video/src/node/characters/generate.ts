@@ -13,8 +13,9 @@ import type { FalClient } from "@fal-ai/client";
 import { cardRoot, cardThresholds, currentVersion, getCard, readCardFile, referenceFiles, versionDir, writeCardFile, type CardFile } from "./cards";
 import type { FaceTool } from "./face";
 import { callModel, download, errorText, firstImageUrl, type Attempt } from "./fal";
+import { makeSplit, splitNeeded } from "./split";
 import {
-  angleNote, anglePrompt, ANGLES, Budget, classify, DESCRIPTION_PROMPT, imageSize, MODELS, money, SCENE_DESCRIPTION_PROMPT, VIEWS, viewPrompt, VISION,
+  angleNote, anglePrompt, ANGLES, Budget, classify, DESCRIPTION_PROMPT, imageSize, MODELS, money, SCENE_DESCRIPTION_PROMPT, TEXT_MODEL, VIEWS, viewPrompt, VISION,
   type Light, type Thresholds, type ViewId,
 } from "./plan";
 
@@ -25,7 +26,7 @@ export const RETRIES = 2;
 export const BACK_FROM_FRONT =
   "The second reference picture is the SAME outfit seen from the front: show exactly that outfit from behind (same garment, fabric, length and colour), not a different one.";
 
-export type Try = { file: string | null; url?: string; request_id: string | null; score: number | null; face_px?: number; frame_h?: number; run?: number; light: Light | null; text: string; attempts: Attempt[]; seed: number };
+export type Try = { file: string | null; url?: string; request_id: string | null; score: number | null; face_px?: number; frame_h?: number; yaw?: number | null; run?: number; light: Light | null; text: string; attempts: Attempt[]; seed: number };
 export type Item = { id: string; label: string; kind: "view" | "angle"; tries: Try[]; chosen: number | null; light: Light | null; text: string; angle_note?: string | null };
 export type VersionReport = { updated_at: string; model: string; endpoint: string; thresholds: Thresholds; items: Item[]; request_ids: string[]; spent_usd: number; description_request?: string | null; picked?: number };
 
@@ -109,6 +110,7 @@ async function judge(face: FaceTool, refFile: string, item: Item, t: Try, file: 
   const c = classify(item.id as ViewId, fr, th, t.frame_h);
   t.score = fr.score;
   t.face_px = fr.face_px;
+  t.yaw = fr.yaw ?? null;
   t.light = c.light;
   t.text = c.text;
   const view = VIEWS.find((v) => v.id === item.id)!;
@@ -122,8 +124,8 @@ export type MakeResult = { spentUsd: number; made: number; notDownloaded: number
 export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps, o: { cap: number; only?: string[] }): Promise<MakeResult> {
   const row = getCard(ws, cardId);
   const root = cardRoot(ws, row);
-  const file = readCardFile(root);
-  const v = currentVersion(file);
+  let file = readCardFile(root);
+  let v = currentVersion(file);
   if (v.status === "locked") throw new Error(`Version ${v.n} is locked: start a new version to change it.`);
   const dir = versionDir(root, v.n);
   mkdirSync(dir, { recursive: true });
@@ -137,6 +139,25 @@ export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps,
   const budget = new Budget(o.cap);
   const callOpts = { timeoutMs: deps.timeoutMs ?? 10 * 60_000, pollMs: deps.pollMs ?? 3000, log, sleep: deps.sleep };
 
+  // The outfit in three parts (close-ups / front / back): made first when missing or made from another outfit text.
+  if (file.kind === "character" && splitNeeded(v.outfit, v.outfit_split)) {
+    if (budget.canSpend(TEXT_MODEL.perCallUsd)) {
+      budget.spend(TEXT_MODEL.perCallUsd);
+      try {
+        log("Splitting the outfit per view…");
+        const { split, requestId } = await makeSplit(deps.fal, v.outfit!, callOpts);
+        report.request_ids.push(requestId);
+        const f = readCardFile(root);
+        currentVersion(f).outfit_split = split;
+        writeCardFile(root, f);
+        file = f;
+        v = currentVersion(f);
+      } catch (error) {
+        log(`outfit split not made (${errorText(error)}): the outfit text is used as it is for every view`);
+      }
+    } else log("outfit split skipped: the cost cap was reached");
+  }
+
   const refs = referenceFiles(root, file);
   const refFile = refs[0];
   const mime = (f: string) => (/\.png$/i.test(f) ? "image/png" : /\.webp$/i.test(f) ? "image/webp" : "image/jpeg");
@@ -147,7 +168,7 @@ export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps,
   type Job = { id: string; label: string; kind: "view" | "angle"; prompt: string; aspect: "3:4" | "2:3" };
   const all: Job[] =
     file.kind === "character"
-      ? VIEWS.map((x) => ({ id: x.id, label: x.label, kind: "view" as const, prompt: viewPrompt(x, v.outfit), aspect: x.aspect }))
+      ? VIEWS.map((x) => ({ id: x.id, label: x.label, kind: "view" as const, prompt: viewPrompt(x, v.outfit, v.outfit_split), aspect: x.aspect }))
       : ANGLES.map((a) => ({ id: a.id, label: a.label, kind: "angle" as const, prompt: anglePrompt(a, v.props), aspect: "3:4" as const }));
   const jobs = o.only?.length ? all.filter((j) => o.only!.includes(j.id)) : all;
   if (!jobs.length) throw new Error("Nothing to make.");
@@ -348,7 +369,7 @@ export function rescore(root: string, file: CardFile, th: Thresholds): number {
     if (item.kind !== "view" || !view?.face) continue;
     for (const t of item.tries) {
       if (!t.file) continue;
-      const c = classify(item.id as ViewId, { score: t.score, face_px: t.face_px ?? 999 }, th, t.frame_h);
+      const c = classify(item.id as ViewId, { score: t.score, face_px: t.face_px ?? 999, yaw: t.yaw }, th, t.frame_h);
       t.light = c.light;
       t.text = c.text;
       n++;

@@ -332,7 +332,7 @@ export function CardPage({ id }: { id: string }) {
               {character ? "Outfit, in your words" : "Key props that must not change"}
             </label>
             <p className="text-muted-foreground text-xs">
-              {character ? "Your picture shows only part of it: without this, each model invents the rest. Sent with every view." : "Small details drift between angles: name the things that must stay (e.g. gilded floor mirror, velvet armchair)."}
+              {character ? "Your picture shows only part of it: without this, each model invents the rest. The app splits it into what the close-ups, the front and the back show." : "Small details drift between angles: name the things that must stay (e.g. gilded floor mirror, velvet armchair)."}
             </p>
             <textarea
               id="card-words"
@@ -345,6 +345,36 @@ export function CardPage({ id }: { id: string }) {
               className="bg-background rounded-md border px-3 py-2 text-sm"
               placeholder={character ? "e.g. floor-length white A-line bridal gown, short sleeves, round neckline, long sheer veil" : "e.g. gilded floor mirror, velvet armchair, white veil draped on the chair"}
             />
+            {character && version.outfit_split && version.outfit_split.from.trim() === (version.outfit ?? "").trim() ? (
+              <div className="flex flex-col gap-2" data-outfit-split>
+                <p className="text-muted-foreground text-xs">Split from your outfit by the app; correct it if a detail is on the wrong side.</p>
+                {(
+                  [
+                    ["closeups", "Close-ups show", "data-outfit-closeups"],
+                    ["front", "Front shows", "data-outfit-front"],
+                    ["back", "Back shows", "data-outfit-back"],
+                  ] as const
+                ).map(([k, label, attr]) => (
+                  <label key={k} className="flex flex-col gap-1 text-xs">
+                    {label}
+                    <textarea
+                      {...{ [attr]: "" }}
+                      key={`${version.n}-${k}-${version.outfit_split![k]}`}
+                      defaultValue={version.outfit_split![k]}
+                      disabled={!draft}
+                      rows={2}
+                      onBlur={(e) => e.target.value.trim() !== version.outfit_split![k] && save({ outfit_split: { [k]: e.target.value } })}
+                      className="bg-background rounded-md border px-3 py-2 text-sm"
+                    />
+                  </label>
+                ))}
+              </div>
+            ) : null}
+            {d.message ? (
+              <p className="text-amber-400 text-xs" data-outfit-message>
+                {d.message}
+              </p>
+            ) : null}
           </section>
 
           {/* The pack */}

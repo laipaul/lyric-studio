@@ -42,6 +42,12 @@ export function stubFal(dir: string): FalClient {
       status: async () => ({ status: "COMPLETED" }),
       result: async (_e: string, o: { requestId: string }) => {
         const job = inputs.get(o.requestId)!;
+        if (job.endpoint === "fal-ai/any-llm") {
+          // The outfit split: valid JSON in a code fence (as models often answer).
+          const outfit = /Outfit text:\n([\s\S]*)$/.exec(String(job.input.prompt ?? ""))?.[1]?.trim() ?? "";
+          const json = { closeups: "neckline and veil at the head", front: `front of the outfit (from: ${outfit})`, back: `back of the outfit (from: ${outfit})` };
+          return { data: { output: `\`\`\`json\n${JSON.stringify(json)}\n\`\`\`` }, requestId: o.requestId };
+        }
         if (job.endpoint.includes("any-llm")) return { data: { output: "A woman in her twenties with an oval face, dark eyes, long dark hair in a low bun, a white dress and a sheer veil." }, requestId: o.requestId };
         return { data: { images: [{ url: dataUrl(pick(String(job.input.prompt ?? ""))) }] }, requestId: o.requestId };
       },

@@ -1,6 +1,7 @@
 // One character or scene card.
 // GET: the card, its current version, the pictures' report, the cost of Make pack, what is missing before Lock, jobs.
-// PATCH { outfit?, props?, description?, model? }: the draft's texts (refused on a locked version).
+// PATCH { outfit?, outfit_split?, props?, description?, model? }: the draft's texts (refused on a locked version). A changed outfit is split per view
+//   (close-ups / front / back) with the cheap text model; without a fal key the outfit is still saved and `message` says so.
 // POST { action }: "check" (the picture again) · "crop" (crop to face) · "pack" { cap } · "remake" { only, cap } ·
 //   "calibrate" { songId, her } (the face-check lines on a song's clips, local and free) ·
 //   "fetch" (get missing pictures, free) · "lock" · "new-version" · "stop" { job }.
@@ -9,7 +10,7 @@ import { connection } from "next/server";
 
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import {
-  calibrationSongs, cardFace, cardJobsFor, cardRoot, cardThresholds, checkCardPicture, cropCardToFace, currentVersion, enqueueCardJob, getCard, lockCard, lockProblems,
+  calibrationSongs, cardFace, cardTools, ensureSplit, splitNeeded, cardJobsFor, cardRoot, cardThresholds, checkCardPicture, cropCardToFace, currentVersion, enqueueCardJob, getCard, lockCard, lockProblems,
   MODELS, newVersion, packEstimate, readCardFile, readReport, repickLegacy, buildSheet, runCardJob, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId,
 } from "@lyric/video/characters";
 
@@ -18,7 +19,7 @@ import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 type Params = { params: Promise<{ id: string }> };
 const fail = (error: unknown) => Response.json({ error: (error as Error).message }, { status: 400 });
 
-function detail(id: string) {
+function detail(id: string, message: string | null = null) {
   return withWorkspace((ws) => {
     const row = getCard(ws, id);
     const root = cardRoot(ws, row);
@@ -31,6 +32,7 @@ function detail(id: string) {
       if (report) void buildSheet(cardFace(), root, file, report).catch(() => undefined);
     }
     return {
+      message,
       card: row,
       file,
       version: v,
@@ -59,9 +61,20 @@ export async function GET(_request: Request, { params }: Params) {
 export async function PATCH(request: Request, { params }: Params) {
   try {
     const { id } = await params;
-    const body = (await request.json()) as { outfit?: string; props?: string; description?: string; model?: ModelId };
+    const body = (await request.json()) as { outfit?: string; outfit_split?: { closeups?: string; front?: string; back?: string }; props?: string; description?: string; model?: ModelId };
     withWorkspace((ws) => updateDraft(ws, id, body));
-    return Response.json(detail(id));
+    let message: string | null = null;
+    if (body.outfit !== undefined) {
+      const needed = withWorkspace((ws) => {
+        const v = currentVersion(readCardFile(cardRoot(ws, getCard(ws, id))));
+        return splitNeeded(v.outfit, v.outfit_split);
+      });
+      if (needed) {
+        const tools = cardTools();
+        message = (await withWorkspaceAsync((ws) => ensureSplit(ws, id, "error" in tools ? null : tools.fal))).message;
+      }
+    }
+    return Response.json(detail(id, message));
   } catch (error) {
     return fail(error);
   }

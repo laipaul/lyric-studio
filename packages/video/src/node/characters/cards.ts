@@ -17,7 +17,7 @@ import { absPath, card as cardTable, CARD_SCOPES, type Card, type Workspace } fr
 import { and, eq } from "drizzle-orm";
 
 import type { CheckResult } from "./face";
-import { ANGLES, DEFAULT_MODELS, estimate, MODELS, safeName, VIEWS, VISION, type ModelId, type Thresholds, DEFAULT_THRESHOLDS } from "./plan";
+import { ANGLES, DEFAULT_MODELS, estimate, MODELS, safeName, splitIsCurrent, TEXT_MODEL, VIEWS, VISION, type ModelId, type OutfitSplit, type Thresholds, DEFAULT_THRESHOLDS } from "./plan";
 
 export type CardKind = Card["kind"];
 export type CardScope = { kind: (typeof CARD_SCOPES)[number]; value: string | null };
@@ -28,7 +28,8 @@ export type CardVersion = {
   created_at: string;
   locked_at?: string;
   model: ModelId;
-  outfit?: string; // characters: the outfit in Paul's words (sent with every view)
+  outfit?: string; // characters: the outfit in Paul's words
+  outfit_split?: OutfitSplit; // the outfit in three parts (close-ups / front / back), made by the app from `outfit` (from)
   props?: string; // scenes: the key props that must not change
   description?: string; // the fixed description (drafted by the vision model, edited by Paul)
 };
@@ -158,12 +159,22 @@ export function setCheck(ws: Workspace, id: string, check: CheckResult, which: "
 }
 
 // The draft's texts and settings (refused on a locked version).
-export function updateDraft(ws: Workspace, id: string, o: { outfit?: string; props?: string; description?: string; model?: ModelId; scope?: CardScope }): CardFile {
+export function updateDraft(
+  ws: Workspace,
+  id: string,
+  o: { outfit?: string; outfit_split?: Partial<Pick<OutfitSplit, "closeups" | "front" | "back">>; props?: string; description?: string; model?: ModelId; scope?: CardScope },
+): CardFile {
   const row = getCard(ws, id);
   const root = cardRoot(ws, row);
   const file = readCardFile(root);
   const v = editable(file);
   if (o.outfit !== undefined) v.outfit = o.outfit.trim() || undefined;
+  if (o.outfit_split) {
+    // Paul's corrections: the parts he sends replace the app's; `from` is kept (a split of an older outfit stays stale).
+    const s = v.outfit_split ?? { from: v.outfit ?? "", closeups: "", front: "", back: "" };
+    for (const k of ["closeups", "front", "back"] as const) if (typeof o.outfit_split[k] === "string") s[k] = o.outfit_split[k]!.trim();
+    v.outfit_split = s;
+  }
   if (o.props !== undefined) v.props = o.props.trim() || undefined;
   if (o.description !== undefined) v.description = o.description.trim() || undefined;
   if (o.model !== undefined) {
@@ -240,7 +251,7 @@ export function newVersion(ws: Workspace, id: string): CardFile {
   const n = last.n + 1;
   if (existsSync(versionDir(root, last.n))) cpSync(versionDir(root, last.n), versionDir(root, n), { recursive: true });
   else mkdirSync(versionDir(root, n), { recursive: true });
-  file.versions.push({ n, status: "draft", created_at: now(), model: last.model, outfit: last.outfit, props: last.props, description: last.description });
+  file.versions.push({ n, status: "draft", created_at: now(), model: last.model, outfit: last.outfit, outfit_split: last.outfit_split, props: last.props, description: last.description });
   writeCardFile(root, file);
   touch(ws, id, { status: "draft", version: n });
   return file;
@@ -261,12 +272,15 @@ export function packEstimate(file: CardFile): { usd: number; worstUsd: number; i
   const angles = file.kind === "scene" ? ANGLES.length : 0;
   const e = estimate([v.model], { views, angles, retries: 2, vision: 1 });
   const m = MODELS[v.model];
+  // The outfit split (a text call) is still to be made when the outfit has no current split.
+  const split = file.kind === "character" && !!v.outfit?.trim() && !splitIsCurrent(v.outfit_split, v.outfit);
+  const extra = split ? TEXT_MODEL.perCallUsd : 0;
   return {
-    usd: e.baseUsd,
-    worstUsd: e.worstUsd,
+    usd: e.baseUsd + extra,
+    worstUsd: e.worstUsd + extra,
     images: views + angles,
     model: v.model,
-    text: `${views + angles} pictures with ${m.name} (${m.priceNote}) + the description draft (${VISION.model}, $0.01)`,
+    text: `${views + angles} pictures with ${m.name} (${m.priceNote}) + the description draft (${VISION.model}, $0.01)${split ? ` + splitting your outfit per view (${TEXT_MODEL.model}, $0.01)` : ""}`,
   };
 }
 

@@ -4,6 +4,18 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Characters, C1 fixes 3: eye-level framing, a real 3/4, the outfit split per view ✅ (to verify on the Windows PC)
+- Paul's review of Bride No 2: close-up from above showing the whole body, 3/4 mostly from behind, the front view
+  with the back's V-neck and buttons.
+- All four views: camera at eye level, no high angle, no top-down view. Close-up straight on, face about half the
+  frame; 3/4 turned about 45° toward the camera, both eyes visible.
+- Checks (red, made again within the cap): close-up face < 35% of the picture's height, 3/4 < 30%; a face turned
+  more than 70° ("Turned away").
+- The outfit is split by the cheap text model (about $0.01, only when the outfit text changes) into "Close-ups
+  show", "Front shows" and "Back shows", shown on the card and correctable. Each view gets only its part, and front
+  and back are told what belongs only to the other side. Without a key or on failure: the outfit text as before.
+- Tests: characters-cards (15) and the Characters browser test pass.
+
 ### Characters, C1 fixes 2: face views are real close-ups, the latest Make wins ✅ (to verify on the Windows PC)
 - Seen on the groom and Bride No 1 / No 2: the close-up and 3/4 came out as full-length shots from a high wide
   angle (the whole outfit, shoes included, went into the face prompts), and "Make the pack again" still showed the

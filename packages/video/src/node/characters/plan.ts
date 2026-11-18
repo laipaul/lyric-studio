@@ -10,7 +10,10 @@ export type Aspect = "3:4" | "2:3";
 // Pack layout (decided 18 Nov 2026): the close-up is the identity source; faces come ONLY from the two face views.
 // The full-body views are cropped at the neck, so no model invents a second, different face there. Face checks run
 // on the face views only; a body view that shows a face anyway is made again.
-export type View = { id: ViewId; label: string; aspect: Aspect; face: boolean; expectYaw: [number, number] | null; prompt: string };
+// minFace: the face is at least this fraction of the picture's height (a face view is a close-up; Seedream once sent
+// high-angle full-length shots). Null for the body views.
+export type View = { id: ViewId; label: string; aspect: Aspect; face: boolean; expectYaw: [number, number] | null; minFace: number | null; prompt: string };
+export const EYE_LEVEL = "Camera at eye level, level with her face: no high angle, no top-down view.";
 export const VIEWS: View[] = [
   {
     id: "closeup",
@@ -18,7 +21,8 @@ export const VIEWS: View[] = [
     aspect: "3:4",
     face: true,
     expectYaw: [0, 20],
-    prompt: "A close-up portrait of her face and the top of her shoulders, facing the camera straight on, looking into the lens, relaxed neutral expression, mouth gently closed. Framing: head-and-shoulders portrait, the face filling a large part of the picture, camera at eye level, portrait lens (about 85 mm). Not a full-length shot, no high angle, no wide angle. Natural skin texture with pores and fine detail, no retouching. Eyebrows exactly as in the reference picture (same shape, thickness and colour), soft and natural with individual hairs, not drawn on, filled in or sharpened. Hair soft and natural with individual strands, no net, mesh, grid or lace-like pattern on the hair or skin.",
+    minFace: 0.35,
+    prompt: "A close-up portrait of her face and the top of her shoulders, straight on, facing the camera and looking into the lens, relaxed neutral expression, mouth gently closed. Framing: head-and-shoulders portrait, the face filling about half the frame, camera at eye level, portrait lens (about 85 mm). Not a full-length shot, no high angle, no wide angle. Camera at eye level, level with her face: no high angle, no top-down view. Natural skin texture with pores and fine detail, no retouching. Eyebrows exactly as in the reference picture (same shape, thickness and colour), soft and natural with individual hairs, not drawn on, filled in or sharpened. Hair soft and natural with individual strands, no net, mesh, grid or lace-like pattern on the hair or skin.",
   },
   {
     id: "three_quarter",
@@ -26,7 +30,8 @@ export const VIEWS: View[] = [
     aspect: "3:4",
     face: true,
     expectYaw: [20, 60],
-    prompt: "A close-up portrait of her face with the head turned about 45 degrees to her left (a three-quarter view), eyes following the turn, relaxed neutral expression. Framing: head-and-shoulders portrait, the face filling a large part of the picture, camera at eye level, portrait lens (about 85 mm). Not a full-length shot, no high angle, no wide angle. Natural skin texture, no retouching. Eyebrows exactly as in the reference picture (same shape, thickness and colour), soft and natural with individual hairs, not drawn on, filled in or sharpened. Hair soft and natural with individual strands, no net, mesh, grid or lace-like pattern on the hair or skin.",
+    minFace: 0.3,
+    prompt: "A head-and-shoulders portrait in a three-quarter view: her face turned about 45 degrees toward the camera, both eyes visible, not viewed from behind, eyes following the turn, relaxed neutral expression. Framing: head and shoulders, the face filling a large part of the picture, camera at eye level, portrait lens (about 85 mm). Not a full-length shot, no high angle, no wide angle. Camera at eye level, level with her face: no high angle, no top-down view. Natural skin texture, no retouching. Eyebrows exactly as in the reference picture (same shape, thickness and colour), soft and natural with individual hairs, not drawn on, filled in or sharpened. Hair soft and natural with individual strands, no net, mesh, grid or lace-like pattern on the hair or skin.",
   },
   {
     id: "body_front",
@@ -34,7 +39,8 @@ export const VIEWS: View[] = [
     aspect: "2:3",
     face: false,
     expectYaw: null,
-    prompt: "A full-length photograph of her body from the front, standing naturally, arms relaxed, the whole outfit and shoes visible. The frame is CROPPED AT THE NECK: the top edge of the picture cuts just below the chin, so the face and head are completely out of frame.",
+    minFace: null,
+    prompt: "A full-length photograph of her body from the front, standing naturally, arms relaxed, the whole outfit and shoes visible, camera at eye level (no high angle, no top-down view). The frame is CROPPED AT THE NECK: the top edge of the picture cuts just below the chin, so the face and head are completely out of frame.",
   },
   {
     id: "body_back",
@@ -42,7 +48,8 @@ export const VIEWS: View[] = [
     aspect: "2:3",
     face: false,
     expectYaw: null,
-    prompt: "A full-length photograph of her body seen from behind, standing naturally, the back of the outfit (and veil, train or hair falling on the back) fully visible down to the shoes. The frame is CROPPED AT THE NECK: the top edge of the picture cuts at the nape, so the head is out of frame. Anything pinned or worn on the front only (a boutonnière, brooch, corsage, front buttons) is not visible from behind: do not show it at the shoulder or anywhere on the back.",
+    minFace: null,
+    prompt: "A full-length photograph of her body seen from behind, standing naturally, camera at eye level (no high angle, no top-down view), the back of the outfit (and veil, train or hair falling on the back) fully visible down to the shoes. The frame is CROPPED AT THE NECK: the top edge of the picture cuts at the nape, so the head is out of frame. Anything pinned or worn on the front only (a boutonnière, brooch, corsage, front buttons) is not visible from behind: do not show it at the shoulder or anywhere on the back.",
   },
 ];
 
@@ -62,15 +69,27 @@ export const SCENE_STYLE =
 
 // The outfit comes from Paul (--outfit): the reference often shows only the shoulders, and each model invented a
 // different outfit below them (Seedream: a trouser suit). Without it, the prompt asks to continue the reference's.
-export function viewPrompt(v: View, outfit?: string): string {
+// The outfit in three parts (what a head-and-shoulders frame, the front and the back show), made from Paul's one text.
+export type OutfitSplit = { from: string; closeups: string; front: string; back: string };
+export const splitIsCurrent = (s: OutfitSplit | undefined | null, outfit: string | undefined): s is OutfitSplit => !!s && !!outfit?.trim() && s.from.trim() === outfit.trim();
+
+export function viewPrompt(v: View, outfit?: string, split?: OutfitSplit | null): string {
   const o = outfit?.trim();
-  const wear = o
-    ? v.face
-      ? ` Outfit (only the part inside this head-and-shoulders frame: neckline, collar, shoulders, earrings, hair): ${o}. The frame ends at the upper chest: do NOT show the waist, legs, skirt, trousers or shoes.`
-      : ` Outfit: ${o}. Keep exactly this outfit, the same in the front and back views.`
-    : v.face
-      ? ""
-      : " Outfit: continue the outfit of the reference naturally below the frame, in the same style; do not change it into something else.";
+  const sp = splitIsCurrent(split, outfit) ? split : null;
+  const keep = "Keep exactly this outfit, the same in the front and back views.";
+  let wear: string;
+  if (sp) {
+    if (v.face) wear = ` Outfit (only the part inside this head-and-shoulders frame: neckline, collar, shoulders, earrings, hair): ${sp.closeups.trim() || "as in the reference picture"}. The frame ends at the upper chest: do NOT show the waist, legs, skirt, trousers or shoes.`;
+    else if (v.id === "body_front") wear = ` Outfit: ${sp.front.trim()}. ${keep}${sp.back.trim() ? ` Details that are only on the back (${sp.back.trim()}) must NOT appear on the front.` : ""}`;
+    else wear = ` Outfit: ${sp.back.trim()}. ${keep}${sp.front.trim() ? ` Details that are only on the front (${sp.front.trim()}) are not visible from behind.` : ""}`;
+  } else
+    wear = o
+      ? v.face
+        ? ` Outfit (only the part inside this head-and-shoulders frame: neckline, collar, shoulders, earrings, hair): ${o}. The frame ends at the upper chest: do NOT show the waist, legs, skirt, trousers or shoes.`
+        : ` Outfit: ${o}. ${keep}`
+      : v.face
+        ? ""
+        : " Outfit: continue the outfit of the reference naturally below the frame, in the same style; do not change it into something else.";
   return `${v.prompt}${wear} ${PACK_STYLE}`;
 }
 
@@ -143,6 +162,8 @@ export const MODELS: Record<ModelId, ImageModel> = {
   },
 };
 
+// The cheap text model (no picture): splits the outfit per view. About $0.01 a call.
+export const TEXT_MODEL = { endpoint: "fal-ai/any-llm", model: "google/gemini-2.5-flash-lite", perCallUsd: 0.01 };
 export const VISION = { endpoint: "fal-ai/any-llm/vision", model: "google/gemini-2.5-flash-lite", perCallUsd: 0.01 };
 
 export const DESCRIPTION_PROMPT =
@@ -190,8 +211,10 @@ export const DEFAULT_THRESHOLDS: Thresholds = { red_below: 0.25, green_from: 0.3
 export type Light = "green" | "amber" | "red" | "grey";
 export type FaceResult = { score: number | null; face_px?: number; yaw?: number | null; note?: string };
 
-// A face view is a close-up: the face is at least this fraction of the picture's height (Seedream once sent full-length shots).
-export const MIN_FACE_FRACTION = 0.2;
+// A face view is a close-up: the face is at least this fraction of the picture's height (per view: View.minFace).
+export const minFaceFor = (view: ViewId): number | null => VIEWS.find((x) => x.id === view)?.minFace ?? null;
+// A face turned more than this far (degrees) is not a face view any more: both eyes should be visible.
+export const MAX_YAW = 70;
 export const MIN_JUDGED_FACE_PX = 64; // smaller faces (e.g. in a full-body view) give unreliable scores
 
 export function classify(view: ViewId, r: FaceResult, t: Thresholds, frame_h?: number | null): { light: Light; text: string; regenerate: boolean } {
@@ -202,8 +225,11 @@ export function classify(view: ViewId, r: FaceResult, t: Thresholds, frame_h?: n
     return { light: "grey", text: "No face, as asked (cropped at the neck): judge the outfit and body by eye.", regenerate: false };
   }
   if (r.score === null) return { light: "red", text: `No face found${r.note ? ` (${r.note})` : ""}.`, regenerate: true };
-  if (frame_h && r.face_px && r.face_px / frame_h < MIN_FACE_FRACTION)
-    return { light: "red", text: `Not a close-up: the face is only ${Math.round((r.face_px / frame_h) * 100)}% of the picture's height.`, regenerate: true };
+  const need = v.minFace;
+  if (need && frame_h && r.face_px && r.face_px / frame_h < need)
+    return { light: "red", text: `Not a close-up: the face is ${Math.round((r.face_px / frame_h) * 100)}% of the picture's height, needs ${Math.round(need * 100)}%.`, regenerate: true };
+  if (r.yaw !== null && r.yaw !== undefined && Math.abs(r.yaw) > MAX_YAW)
+    return { light: "red", text: `Turned away: the face is turned ${Math.round(Math.abs(r.yaw))}°, both eyes should be visible.`, regenerate: true };
   const s = r.score.toFixed(2);
   const small = (r.face_px ?? 0) < MIN_JUDGED_FACE_PX;
   if (r.score >= t.green_from) return { light: "green", text: `Same person (${s}).`, regenerate: false };
