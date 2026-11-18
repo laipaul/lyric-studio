@@ -53,17 +53,32 @@ export function errorText(error: unknown): string {
   return text.replace(/Key\s+[A-Za-z0-9:_-]{8,}/g, "Key ***").slice(0, 400);
 }
 
-export async function download(url: string, file: string, write: (file: string, data: Buffer) => void): Promise<void> {
+const DOWNLOAD_WAITS_MS = [1000, 2000, 4000, 8000, 15000];
+
+// Downloads the result image: up to 6 tries (waits 1, 2, 4, 8, 15 s) on network errors and HTTP 5xx / 429; any other
+// HTTP 4xx gives up at once. `sleep` and `fetchImpl` can be replaced (tests).
+export async function download(
+  url: string,
+  file: string,
+  write: (file: string, data: Buffer) => void,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise<void>((r) => setTimeout(r, ms)),
+  fetchImpl: typeof fetch = (...a) => globalThis.fetch(...a),
+): Promise<void> {
   let last: unknown;
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i <= DOWNLOAD_WAITS_MS.length; i++) {
+    let retry = true;
     try {
-      const r = await fetch(url);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const r = await fetchImpl(url);
+      if (!r.ok) {
+        retry = r.status >= 500 || r.status === 429;
+        throw new Error(`HTTP ${r.status}`);
+      }
       write(file, Buffer.from(await r.arrayBuffer()));
       return;
     } catch (error) {
       last = error;
-      await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+      if (!retry || i === DOWNLOAD_WAITS_MS.length) break;
+      await sleep(DOWNLOAD_WAITS_MS[i]);
     }
   }
   throw new Error(`the image could not be downloaded (${errorText(last)})`);

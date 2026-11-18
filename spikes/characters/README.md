@@ -56,7 +56,14 @@ pnpm characters pack --image "D:\pictures\bride.jpg" --scene "D:\pictures\bridal
    - The **actual cost** comes from fal's Billing Events API, per request ID. This needs a key with billing
      permission (fal key presets BILLING or FULL). Without it the report says so, and fal.ai → Dashboard → Usage
      has it. fal can report a few minutes late: `pnpm characters cost "<run folder>"` asks again.
+   - The download of a result is tried up to 6 times (waits 1, 2, 4, 8, 15 s). If it still fails, the picture was made
+     and paid but not saved: the report says `Generated but not downloaded (…)`, keeps the result URL and request ID,
+     and the run never generates it again.
 3. **`cost "<run folder>"`** fetches the actual cost again and updates the report.
+4. **`fetch "<run folder>"`** downloads the images that fal made but that could not be downloaded (or are missing on disk),
+   from the saved result URL, or by asking fal for the result of the saved request ID (older reports). It never
+   generates anything, so it costs nothing. Face views are face-checked like in the pack, the best try is chosen
+   again, and the contact sheets, `report.json` and `report.md` are rebuilt. Needs `FAL_KEY` like `pack`.
 
 | Option | Meaning |
 |---|---|
@@ -103,7 +110,7 @@ pnpm characters:test
 pnpm test:audio tests/test_face.py
 ```
 
-- `characters:test`: prompts, model inputs against fal's schemas, cost and cap, green/amber/red, retries, billing.
+- `characters:test`: prompts, model inputs against fal's schemas, cost and cap, green/amber/red, retries, billing, the download retries and `fetch`.
   It also runs the whole pack with a stand-in fal client, face check and billing (no network, no key).
 - `test_face.py`: the reference-check rules, the thresholds, body visibility and lighting. With the face packages
   installed, it also runs the models on a picture without a face.

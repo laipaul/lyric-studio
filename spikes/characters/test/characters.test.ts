@@ -13,7 +13,7 @@ import { actualTotal, calibrationMarkdown, packMarkdown, run, Stop } from "../ch
 import { importUrl } from "../src/face";
 import type { CheckResult, FaceTool, SheetSpec } from "../src/face";
 import { REPO_ROOT } from "../src/env";
-import { actualCosts, callModel } from "../src/fal";
+import { actualCosts, callModel, download } from "../src/fal";
 import { angleNote, anglePrompt, ANGLES, Budget, classify, DEFAULT_THRESHOLDS, estimate, MODELS, VIEWS, viewPrompt } from "../src/plan";
 
 describe("plan", () => {
@@ -330,6 +330,126 @@ describe("pack run (stand-in fal, face check and billing)", () => {
     assert.equal(report.cost.estimate_spent_usd, 0.25);
     assert.ok(report.items.some((i: { text: string }) => /the cap of \$0\.25 was reached/.test(i.text)));
     assert.equal(report.cost.actual.status, "failed"); // no key: not asked
+  });
+
+  test("a result that cannot be downloaded: not regenerated, URL kept; fetch then recovers it (also via queue.result for old reports)", async () => {
+    submitted.length = 0;
+    const ref = png("bride3.png", "white");
+    const room = png("room3.png", "beige", "640x480");
+    const out = path.join(tmp, "out3");
+    const base0 = fakeFal() as unknown as { queue: { submit: (e: string, o: { input: Record<string, unknown> }) => Promise<{ request_id: string }>; result: (e: string, o: { requestId: string }) => Promise<unknown> } };
+    let submits = 0;
+    let resultCalls = 0;
+    const brokenIds = new Set<string>(); // request ids whose result URL answers 500
+    let n = 0;
+    const fal = {
+      ...base0,
+      queue: {
+        ...base0.queue,
+        submit: async (e: string, o: { input: Record<string, unknown> }) => {
+          submits++;
+          const r = await base0.queue.submit(e, o);
+          // One model: 4 views + 1 redo of the back view, then the first angle (wide_left) is the 6th image request.
+          if (e !== "fal-ai/any-llm/vision" && ++n === 6) brokenIds.add(r.request_id);
+          return r;
+        },
+        result: async (e: string, o: { requestId: string }) => {
+          resultCalls++;
+          return base0.queue.result(e, o);
+        },
+      },
+    } as never;
+    const origCreate = server.listeners("request")[0] as (rq: http.IncomingMessage, rs: http.ServerResponse) => void;
+    server.removeAllListeners("request");
+    server.on("request", (rq, rs) => {
+      const id = /\/r\/(.*)\.png/.exec(rq.url ?? "")?.[1];
+      if (id && brokenIds.has(id)) return void rs.writeHead(500).end();
+      origCreate(rq, rs);
+    });
+    const face = fakeFace();
+    const sleeps: number[] = [];
+    await run(["pack", "--image", ref, "--scene", room, "--name", "bride", "--models", "seedream", "--max-cost", "5", "--yes"], {
+      fal, face, out, env: {}, now: () => new Date("2026-11-18T09:00:00Z"), sleep: async (ms) => void sleeps.push(ms),
+    });
+    const dir = path.join(out, "bride", "2026-11-18_0900");
+    const rj = () => JSON.parse(readFileSync(path.join(dir, "report.json"), "utf8"));
+    let report = rj();
+    const lost = report.items.find((i: { id: string }) => i.id === "wide_left");
+    assert.match(lost.text, /^Generated but not downloaded \(HTTP 500\): run pnpm characters fetch "/);
+    assert.equal(lost.file, null);
+    assert.equal(lost.tries.length, 1); // no retry spent
+    assert.ok(lost.tries[0].request_id && /^http/.test(lost.tries[0].url));
+    assert.deepEqual(sleeps.slice(0, 5), [1000, 2000, 4000, 8000, 15000]);
+    assert.equal(submitted.filter((s) => s.endpoint !== "fal-ai/any-llm/vision").length, 8); // 4 views + 1 redo (back view) + 3 angles; the lost one is not made again
+    assert.match(readFileSync(path.join(dir, "report.md"), "utf8"), /not downloaded/);
+    const target = path.join(dir, "location", "seedream", "wide_left.png");
+    assert.equal(existsSync(target), false);
+
+    // fetch: the URL answers 200 now. No new submit, no regeneration.
+    brokenIds.clear();
+    const submitsBefore = submits;
+    const sheetsBefore = face.sheets.length;
+    await run(["fetch", dir], { fal, face, env: { FAL_KEY: "k" }, out, sleep: async () => {} });
+    assert.equal(submits, submitsBefore);
+    assert.equal(existsSync(target), true);
+    report = rj();
+    const got = report.items.find((i: { id: string }) => i.id === "wide_left");
+    assert.equal(got.file, path.join("location", "seedream", "wide_left.png"));
+    assert.equal(got.light, "grey");
+    assert.equal(got.text, "Location: judge by eye (no face check).");
+    assert.doesNotMatch(readFileSync(path.join(dir, "report.md"), "utf8"), /not downloaded/);
+    assert.ok(face.sheets.length > sheetsBefore);
+    await run(["fetch", dir], { fal, face, env: { FAL_KEY: "k" }, out }); // nothing left: still fine
+    assert.equal(submits, submitsBefore);
+
+    // An old report (no url on the try): the result is asked from fal again.
+    rmSync(target);
+    report = rj();
+    const t0 = report.items.find((i: { id: string }) => i.id === "wide_left");
+    t0.file = null;
+    t0.tries[0].file = null;
+    t0.tries[0].text = "Failed: the image could not be downloaded (HTTP 500)";
+    delete t0.tries[0].url;
+    writeFileSync(path.join(dir, "report.json"), JSON.stringify(report));
+    const before = resultCalls;
+    await run(["fetch", dir], { fal, face, env: { FAL_KEY: "k" }, out });
+    assert.equal(resultCalls, before + 1);
+    assert.equal(submits, submitsBefore);
+    assert.equal(existsSync(target), true);
+    assert.equal(rj().items.find((i: { id: string }) => i.id === "wide_left").light, "grey");
+    assert.ok(rj().items.find((i: { id: string }) => i.id === "wide_left").tries[0].url);
+    server.removeAllListeners("request");
+    server.on("request", origCreate);
+  });
+});
+
+describe("download retries", () => {
+  const stub = (statuses: number[]) => {
+    const calls: string[] = [];
+    const waits: number[] = [];
+    const fetchImpl = (async (u: string) => {
+      calls.push(u);
+      const st = statuses[Math.min(calls.length - 1, statuses.length - 1)];
+      return new Response(st === 200 ? "img" : "no", { status: st });
+    }) as unknown as typeof fetch;
+    return { calls, waits, fetchImpl, sleep: async (ms: number) => void waits.push(ms) };
+  };
+  test("500, 500, then 200: saved after 3 tries, with backoff and no real waiting", async () => {
+    const s = stub([500, 500, 200]);
+    let written = "";
+    await download("http://x/a.png", "f", (_f, d) => void (written = d.toString()), s.sleep, s.fetchImpl);
+    assert.equal(s.calls.length, 3);
+    assert.deepEqual(s.waits, [1000, 2000]);
+    assert.equal(written, "img");
+  });
+  test("a 404 gives up at once; a 500 forever gives up after 6 tries", async () => {
+    const a = stub([404]);
+    await assert.rejects(download("u", "f", () => {}, a.sleep, a.fetchImpl), /could not be downloaded \(HTTP 404\)/);
+    assert.equal(a.calls.length, 1);
+    const b = stub([500]);
+    await assert.rejects(download("u", "f", () => {}, b.sleep, b.fetchImpl), /HTTP 500/);
+    assert.equal(b.calls.length, 6);
+    assert.deepEqual(b.waits, [1000, 2000, 4000, 8000, 15000]);
   });
 });
 

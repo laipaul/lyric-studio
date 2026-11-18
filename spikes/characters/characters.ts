@@ -7,6 +7,8 @@
 //   pnpm characters pack --image "<bride.jpg>" --scene "<room.jpg>" [--name bride] [--models nano-pro,nano2,seedream,gpt]
 //                        [--image2 "<second.jpg>"] [--crop] [--ai-opinion] [--max-cost 3] [--force] [--yes]
 //   pnpm characters cost "<run folder>"                                         (the actual cost, again, later)
+//   pnpm characters fetch "<run folder>"       (downloads images that fal made but that could not be downloaded; no new
+//                                               generation, no cost; face-checks them and updates the report and sheets)
 //
 // Results: spikes\characters\out\<name>\ (calibration) and spikes\characters\out\<name>\<date_time>\ (each pack run).
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -37,6 +39,7 @@ export type Deps = {
   fetch?: typeof fetch;
   now?: () => Date;
   billingWaitMs?: number;
+  sleep?: (ms: number) => Promise<void>;
 };
 
 function options(argv: string[]) {
@@ -155,7 +158,7 @@ type ViewReport = {
   id: string;
   label: string;
   file: string | null;
-  tries: { file: string | null; request_id: string | null; score: number | null; light: Light | null; text: string; attempts: Attempt[]; seed: number }[];
+  tries: { file: string | null; request_id: string | null; url?: string | null; score: number | null; light: Light | null; text: string; attempts: Attempt[]; seed: number }[];
   chosen: number | null;
   light: Light | null;
   text: string;
@@ -167,6 +170,45 @@ function thresholdsFor(dir: string): Thresholds {
   if (!existsSync(f)) return DEFAULT_THRESHOLDS;
   const t = (JSON.parse(readFileSync(f, "utf8")) as { thresholds: { red_below: number; green_from: number }; created_at?: string }).thresholds;
   return { red_below: t.red_below, green_from: t.green_from, source: "calibrated on your pictures (calibration.json)" };
+}
+
+// Contact sheets (made locally). `items` carry absolute file paths.
+function buildSheets(face: FaceTool, dir: string, name: string, models: ModelId[], items: ViewReport[], refFile: string, sceneFile: string | null, t: Thresholds): Record<"pack" | "location", string | null> {
+  const word: Record<Light, string> = { green: "same person", amber: "check by eye", red: "drifted", grey: "judge by eye" };
+  const cap = (r: ViewReport) => {
+    if (r.kind === "angle" || !r.file) return `${r.label}\n${r.file ? "judge by eye" : "not made"}`;
+    const sc = r.tries[r.chosen ?? 0]?.score;
+    return `${r.label}\n${sc === null || sc === undefined ? "" : `${sc.toFixed(2)} `}${word[r.light ?? "grey"]}${r.tries.length > 1 ? ` (${r.tries.length} tries)` : ""}`;
+  };
+  const sheets: Record<"pack" | "location", string | null> = { pack: null, location: null };
+  try {
+    sheets.pack = face.sheet({
+      out: path.join(dir, "sheet_pack.jpg"),
+      title: `${name}: character pack (outdoor daylight); face views scored vs the reference (green >= ${t.green_from}, red < ${t.red_below}); body views cropped at the neck`,
+      rows: models.map((m) => ({
+        label: MODELS[m].name,
+        cells: [
+          { file: refFile, caption: "Reference", colour: "grey" },
+          ...items.filter((r) => r.model === m && r.kind === "view").map((r) => ({ file: r.file ?? "", caption: cap(r), colour: r.light ?? "grey" })),
+        ],
+      })),
+    }).file;
+    if (sceneFile)
+      sheets.location = face.sheet({
+        out: path.join(dir, "sheet_location.jpg"),
+        title: `${name}: location angles`,
+        rows: models.map((m) => ({
+          label: MODELS[m].name,
+          cells: [
+            { file: sceneFile, caption: "Location picture", colour: "grey" },
+            ...items.filter((r) => r.model === m && r.kind === "angle").map((r) => ({ file: r.file ?? "", caption: cap(r), colour: "grey" })),
+          ],
+        })),
+      }).file;
+  } catch (error) {
+    console.log(`  (contact sheet not made: ${errorText(error)})`);
+  }
+  return sheets;
 }
 
 async function pack(o: Opts, deps: Deps, face: FaceTool, out: string, env: Record<string, string>): Promise<void> {
@@ -200,19 +242,8 @@ async function pack(o: Opts, deps: Deps, face: FaceTool, out: string, env: Recor
     return;
   }
 
-  let fal = deps.fal;
   const key = env.FAL_KEY?.trim() ?? "";
-  if (!fal) {
-    if (!envIgnored()) throw new Stop(".env is not in .gitignore: add a line `.env` there first, so your fal key never goes to git.");
-    if (!key) throw new Stop("No FAL_KEY in .env: add a line FAL_KEY=<your key from fal.ai → Dashboard → API keys> to D:\\videomaker\\.env.");
-    let create: typeof import("@fal-ai/client").createFalClient;
-    try {
-      ({ createFalClient: create } = await import("@fal-ai/client"));
-    } catch {
-      throw new Stop("The fal client is not installed yet. First time only: cd spikes\\characters; npm install; cd ..\\..");
-    }
-    fal = create({ credentials: key, suppressLocalCredentialsWarning: true });
-  }
+  const fal = await falClient(deps, key);
 
   const now = deps.now ?? (() => new Date());
   const started = now();
@@ -235,7 +266,7 @@ async function pack(o: Opts, deps: Deps, face: FaceTool, out: string, env: Recor
   if (sceneFile) copyFileSync(o.scene!, sceneFile);
 
   const mime = (f: string) => (/\.png$/i.test(f) ? "image/png" : /\.webp$/i.test(f) ? "image/webp" : "image/jpeg");
-  const up = (f: string) => fal!.storage.upload(new File([readFileSync(f)], path.basename(f), { type: mime(f) }));
+  const up = (f: string) => fal.storage.upload(new File([readFileSync(f)], path.basename(f), { type: mime(f) }));
   console.log("\nUploading the pictures to fal storage…");
   const refUrls = [await up(refFile), ...(ref2File ? [await up(ref2File)] : [])];
   const sceneUrl = sceneFile ? await up(sceneFile) : null;
@@ -249,7 +280,7 @@ async function pack(o: Opts, deps: Deps, face: FaceTool, out: string, env: Recor
     if (!budget.canSpend(VISION.perCallUsd)) return { text: null, request_id: null, error: "skipped: the cap was reached" };
     budget.spend(VISION.perCallUsd);
     try {
-      const r = await callModel(fal!, VISION.endpoint, { prompt, image_urls: [url], model: VISION.model }, callOpts);
+      const r = await callModel(fal, VISION.endpoint, { prompt, image_urls: [url], model: VISION.model }, callOpts);
       requestIds.push(r.requestId);
       return { text: String(r.data.output ?? "").trim(), request_id: r.requestId };
     } catch (error) {
@@ -279,18 +310,28 @@ async function pack(o: Opts, deps: Deps, face: FaceTool, out: string, env: Recor
       rep.tries.push(tr);
       try {
         console.log(`  ${m.name}: ${label}${k ? ` (try ${k + 1})` : ""}…`);
-        const r = await callModel(fal!, m.endpoint, m.input(prompt, refs, aspect, seed), callOpts);
+        const r = await callModel(fal, m.endpoint, m.input(prompt, refs, aspect, seed), callOpts);
         tr.attempts = r.attempts;
         tr.request_id = r.requestId;
         requestIds.push(r.requestId);
-        await download(firstImageUrl(r.data), file, (f, d) => writeFileSync(f, d));
-        tr.file = file;
+        tr.url = firstImageUrl(r.data);
       } catch (error) {
         tr.attempts = (error as { attempts?: Attempt[] }).attempts ?? tr.attempts;
         for (const a of tr.attempts) if (a.request_id && !requestIds.includes(a.request_id)) requestIds.push(a.request_id);
         tr.text = `Failed: ${errorText(error)}`;
         rep.text = tr.text;
         continue;
+      }
+      try {
+        await download(tr.url, file, (f, d) => writeFileSync(f, d), deps.sleep);
+        tr.file = file;
+      } catch (error) {
+        // The model call worked (and was paid): never generate it again, `fetch` can still get it.
+        const reason = errorText(error).replace(/^the image could not be downloaded \((.*)\)$/, "$1");
+        tr.text = `Generated but not downloaded (${reason}): run pnpm characters fetch "${dir}" to get it`;
+        console.log(`    ${tr.text}`);
+        rep.text = rep.chosen === null ? tr.text : `${rep.text} Another try was made but not downloaded: run pnpm characters fetch "${dir}".`;
+        break;
       }
       if (kind === "angle") {
         rep.file = file;
@@ -338,40 +379,7 @@ async function pack(o: Opts, deps: Deps, face: FaceTool, out: string, env: Recor
   if (sceneDesc?.text) writeFileSync(path.join(dir, "location-description.txt"), `${sceneDesc.text}\n`);
 
   // Contact sheets (made locally).
-  const word: Record<Light, string> = { green: "same person", amber: "check by eye", red: "drifted", grey: "judge by eye" };
-  const cap = (r: ViewReport) => {
-    if (r.kind === "angle" || !r.file) return `${r.label}\n${r.file ? "judge by eye" : "not made"}`;
-    const sc = r.tries[r.chosen ?? 0]?.score;
-    return `${r.label}\n${sc === null || sc === undefined ? "" : `${sc.toFixed(2)} `}${word[r.light ?? "grey"]}${r.tries.length > 1 ? ` (${r.tries.length} tries)` : ""}`;
-  };
-  const sheets: Record<string, string | null> = { pack: null, location: null };
-  try {
-    sheets.pack = face.sheet({
-      out: path.join(dir, "sheet_pack.jpg"),
-      title: `${o.name}: character pack (outdoor daylight); face views scored vs the reference (green >= ${t.green_from}, red < ${t.red_below}); body views cropped at the neck`,
-      rows: o.models.map((m) => ({
-        label: MODELS[m].name,
-        cells: [
-          { file: refFile, caption: "Reference", colour: "grey" },
-          ...items.filter((r) => r.model === m && r.kind === "view").map((r) => ({ file: r.file ?? "", caption: cap(r), colour: r.light ?? "grey" })),
-        ],
-      })),
-    }).file;
-    if (sceneFile)
-      sheets.location = face.sheet({
-        out: path.join(dir, "sheet_location.jpg"),
-        title: `${o.name}: location angles`,
-        rows: o.models.map((m) => ({
-          label: MODELS[m].name,
-          cells: [
-            { file: sceneFile, caption: "Location picture", colour: "grey" },
-            ...items.filter((r) => r.model === m && r.kind === "angle").map((r) => ({ file: r.file ?? "", caption: cap(r), colour: "grey" })),
-          ],
-        })),
-      }).file;
-  } catch (error) {
-    console.log(`  (contact sheet not made: ${errorText(error)})`);
-  }
+  const sheets = buildSheets(face, dir, o.name, o.models, items, refFile, sceneFile, t);
 
   // The actual charge per request, from fal (when the key may read billing).
   let actual: ActualCost = { status: "failed", message: "not asked" };
@@ -405,6 +413,19 @@ async function pack(o: Opts, deps: Deps, face: FaceTool, out: string, env: Recor
   console.log(`→ ${dir}`);
 }
 
+async function falClient(deps: Deps, key: string): Promise<FalClient> {
+  if (deps.fal) return deps.fal;
+  if (!envIgnored()) throw new Stop(".env is not in .gitignore: add a line `.env` there first, so your fal key never goes to git.");
+  if (!key) throw new Stop("No FAL_KEY in .env: add a line FAL_KEY=<your key from fal.ai → Dashboard → API keys> to D:\\videomaker\\.env.");
+  let create: typeof import("@fal-ai/client").createFalClient;
+  try {
+    ({ createFalClient: create } = await import("@fal-ai/client"));
+  } catch {
+    throw new Stop("The fal client is not installed yet. First time only: cd spikes\\characters; npm install; cd ..\\..");
+  }
+  return create({ credentials: key, suppressLocalCredentialsWarning: true });
+}
+
 const round2 = (x: number) => Math.round(x * 100) / 100;
 
 type PackReport = {
@@ -414,7 +435,7 @@ type PackReport = {
   location: { file: string; check: CheckResult } | null;
   thresholds: Thresholds;
   models: { id: ModelId; name: string; endpoint: string; price: string }[];
-  items: { model: ModelId; kind: "view" | "angle"; label: string; file: string | null; tries: { score: number | null; request_id: string | null }[]; light: Light | null; text: string; angle_note?: string | null }[];
+  items: ViewReport[];
   descriptions: { character: { text: string | null; error?: string } | null; location: { text: string | null } | null; opinion: { text: string | null } | null };
   sheets: { pack: string | null; location: string | null };
   cost: { cap_usd: number; estimate_base_usd: number; estimate_spent_usd: number; request_ids: string[]; actual: ActualCost };
@@ -479,6 +500,104 @@ async function costAgain(o: Opts, deps: Deps, env: Record<string, string>): Prom
   console.log(total !== null ? `Actual cost from fal: ${money(total)}${r.cost.actual.status === "ok" && r.cost.actual.missing.length ? ` (${r.cost.actual.missing.length} requests not reported yet)` : ""}` : `Not available: ${(r.cost.actual as { message: string }).message}`);
 }
 
+// ---------------------------------------------------------------- fetch (images made by fal but not downloaded)
+
+type RunReport = PackReport & { created_at: string };
+
+async function fetchAgain(o: Opts, deps: Deps, env: Record<string, string>): Promise<void> {
+  const dir = path.resolve(o.rest[0] ?? "");
+  const file = path.join(dir, "report.json");
+  if (!existsSync(file)) throw new Stop(`No report.json in ${dir}`);
+  const report = JSON.parse(readFileSync(file, "utf8")) as RunReport;
+  const abs = (f: string | null) => (f ? path.join(dir, f) : null);
+  const lost = (it: ViewReport) => !it.file || !existsSync(abs(it.file)!) || it.tries.some((x) => !x.file && x.request_id && /^Generated but not downloaded/.test(x.text));
+  const todo = report.items.filter(lost);
+  if (!todo.length) {
+    console.log("Nothing to fetch: every image of this run is on disk.");
+    return;
+  }
+  const fal = await falClient(deps, env.FAL_KEY?.trim() ?? "");
+  const face = deps.face ?? (await localFaceTool(REPO_ROOT));
+  const refFile = path.join(dir, report.reference.file);
+  const t = report.thresholds;
+  const rank = (l: Light | null) => (l === "green" ? 3 : l === "amber" || l === "grey" ? 2 : 0);
+  const recovered: string[] = [];
+  const notRecovered: string[] = [];
+
+  for (const it of todo) {
+    const endpoint = report.models.find((m) => m.id === it.model)?.endpoint ?? MODELS[it.model].endpoint;
+    const sub = path.join(dir, it.kind === "view" ? it.model : path.join("location", it.model));
+    mkdirSync(sub, { recursive: true });
+    const yaws = new Map<number, number | null | undefined>();
+    let got = 0;
+    for (let k = 0; k < it.tries.length; k++) {
+      const tr = it.tries[k];
+      if (!tr.request_id || (tr.file && existsSync(abs(tr.file)!))) continue;
+      const target = path.join(sub, `${it.id}${k ? `_try${k + 1}` : ""}.png`);
+      try {
+        console.log(`  ${MODELS[it.model].name}: ${it.label}${k ? ` (try ${k + 1})` : ""}…`);
+        if (!tr.url) tr.url = firstImageUrl((await fal.queue.result(endpoint, { requestId: tr.request_id })).data as Record<string, unknown>);
+        await download(tr.url, target, (f, d) => writeFileSync(f, d), deps.sleep);
+      } catch (error) {
+        const reason = errorText(error).replace(/^the image could not be downloaded \((.*)\)$/, "$1");
+        tr.text = `Generated but not downloaded (${reason}): run pnpm characters fetch "${dir}" to get it`;
+        if (!it.file) it.text = tr.text;
+        notRecovered.push(`${it.model}/${it.id}: ${reason}`);
+        continue;
+      }
+      tr.file = path.relative(dir, target);
+      got++;
+      if (it.kind === "angle") {
+        tr.light = "grey";
+        tr.text = "Location: judge by eye (no face check).";
+      } else {
+        const fr = face.compare(refFile, [target]).results[0];
+        const c = classify(it.id as ViewId, fr, t);
+        tr.score = fr.score;
+        tr.light = c.light;
+        tr.text = c.text;
+        yaws.set(k, fr.yaw);
+      }
+    }
+    if (!got) continue;
+    // Choose the best try again, by the same rule as the pack run.
+    let chosen: number | null = null;
+    for (let k = 0; k < it.tries.length; k++) {
+      const tr = it.tries[k];
+      if (!tr.file || !existsSync(abs(tr.file)!)) continue;
+      if (it.kind === "angle") {
+        chosen ??= k;
+        continue;
+      }
+      const prev = chosen === null ? null : it.tries[chosen];
+      if (!prev || rank(tr.light) > rank(prev.light) || (rank(tr.light) === rank(prev.light) && (tr.score ?? -1) > (prev.score ?? -1))) chosen = k;
+    }
+    if (chosen === null) continue;
+    const best = it.tries[chosen];
+    it.chosen = chosen;
+    it.file = best.file;
+    it.light = best.light;
+    it.text = `${best.text}${it.tries.length > 1 && it.kind === "view" ? ` (best of ${it.tries.length} tries)` : ""}`;
+    if (it.kind === "view" && yaws.has(chosen)) it.angle_note = angleNote(VIEWS.find((v) => v.id === it.id)!, yaws.get(chosen));
+    recovered.push(`${it.model}/${it.id}: ${it.light}`);
+  }
+
+  if (recovered.length) {
+    const items = report.items.map((r) => ({ ...r, file: abs(r.file) }));
+    const sceneFile = report.location ? path.join(dir, report.location.file) : null;
+    const modelIds = report.models.map((m) => m.id);
+    const sheets = buildSheets(face, dir, report.name, modelIds, items, refFile, sceneFile, t);
+    report.sheets = { pack: sheets.pack ? path.basename(sheets.pack) : report.sheets.pack, location: sheets.location ? path.basename(sheets.location) : report.sheets.location };
+  }
+  writeFileSync(file, `${JSON.stringify(report, null, 2)}\n`);
+  writeFileSync(path.join(dir, "report.md"), packMarkdown(report));
+  console.log(`\nRecovered ${recovered.length} of ${todo.length} image(s), no new generation (no cost).`);
+  for (const r of recovered) console.log(`  ✓ ${r}`);
+  for (const r of notRecovered) console.log(`  ✗ ${r}`);
+  if (notRecovered.length) console.log(`Run the same command again later for the ones that failed.`);
+  console.log(`→ ${dir}`);
+}
+
 // ---------------------------------------------------------------- entry
 
 export async function run(argv: string[], deps: Deps = {}): Promise<void> {
@@ -486,7 +605,8 @@ export async function run(argv: string[], deps: Deps = {}): Promise<void> {
   const env = deps.env ?? loadEnv();
   const out = deps.out ?? OUT_DEFAULT;
   if (o.command === "cost") return costAgain(o, deps, env);
-  if (o.command !== "calibrate" && o.command !== "pack") throw new Stop("Use: pnpm characters calibrate … | pack … | cost <folder> (see spikes\\characters\\README.md)");
+  if (o.command === "fetch") return fetchAgain(o, deps, env);
+  if (o.command !== "calibrate" && o.command !== "pack") throw new Stop("Use: pnpm characters calibrate … | pack … | cost <folder> | fetch <folder> (see spikes\\characters\\README.md)");
   const face = deps.face ?? (await localFaceTool(REPO_ROOT));
   if (o.command === "calibrate") return calibrate(o, face, out, env);
   return pack(o, deps, face, out, env);
