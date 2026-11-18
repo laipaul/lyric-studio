@@ -38,7 +38,8 @@ Screens (Step 6, in the Life Lyrics look: dark, Cinzel headings, accent pink):
   - **New card**: a dialog with a name and one picture (data-card-name, data-card-picture, data-create-card). The reference check (characters) or location check (scenes) runs at once, locally and for free. The first time, the face checks install themselves (about a minute).
   - **The card page** (data-card-page):
     - The picture and its check (data-check-verdict; ✓ / · / ! / ✗ reasons), with Check again, Crop to face and Add a second picture.
-    - **Face-check lines**, folded (data-calibration): green / red, calibrated or SFace's defaults. "Calibrate on these clips": a song with clips, plus the clips of her by part of the file name. A background job, local and free.
+    - **Face-check lines**, folded (data-calibration): green / red, calibrated or SFace's defaults. "Calibrate on these clips": a song with clips, plus the clips of her by part of the file name. A background job, local and free. After calibrating, the face views already made (every try) are judged again with the new lines and the best try chosen again (a draft only; free).
+    - **Make pack** with an empty outfit warns first ("the model will invent it"; Make it anyway / Cancel). The back view gets the chosen front view as a second reference, so it shows the same outfit from behind.
     - **Outfit, in your words** (characters) or **Key props that must not change** (scenes) (data-card-words), saved on leaving the field.
     - **Pack** (characters: close-up, 3/4 face, full body front and back cropped at the neck by the app) or **Angles** (scenes: wide from the left, from the opposite side, a closer detail):
       - the estimate first (data-estimate), the model (Seedream 4.5 by default) and the cap;

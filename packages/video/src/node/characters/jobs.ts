@@ -8,10 +8,10 @@ import { absPath, cardJob, card as cardTable, project as projectTable, type Card
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import { processAlive } from "../jobs";
-import { cardRoot, currentVersion, getCard, packEstimate, readCardFile, referenceFiles } from "./cards";
+import { cardRoot, cardThresholds, currentVersion, getCard, packEstimate, readCardFile, referenceFiles, versionDir } from "./cards";
 import { localFaceTool, type FaceTool } from "./face";
 import { errorText } from "./fal";
-import { fetchMissing, makePictures, type GenDeps } from "./generate";
+import { buildSheet, fetchMissing, makePictures, readReport, rescore, type GenDeps } from "./generate";
 import { money, VIEWS, ANGLES } from "./plan";
 import { stubFace, stubFal } from "./stub";
 
@@ -42,7 +42,14 @@ async function calibrateCard(ws: Workspace, cardId: string, face: FaceTool, o: C
   const c = await face.calibrate(referenceFiles(root, readCardFile(root))[0], [clips], o.her ?? []);
   writeFileSync(path.join(root, "calibration.json"), `${JSON.stringify({ ...c, song: song.title, created_at: new Date().toISOString() }, null, 2)}\n`);
   const t = c.thresholds;
-  return `Green ≥ ${t.green_from}, red < ${t.red_below} (${t.others_used} other clip(s) of ${song.title}, the best other person ${t.top_other})${t.note ? `. ${t.note}` : ""}`;
+  // The views already made are judged again with the new lines (free).
+  const file = readCardFile(root);
+  const again = rescore(root, file, cardThresholds(root));
+  if (again) {
+    const report = readReport(versionDir(root, currentVersion(file).n));
+    if (report) await buildSheet(face, root, file, report);
+  }
+  return `${again ? `${again} face picture(s) judged again. ` : ""}Green ≥ ${t.green_from}, red < ${t.red_below} (${t.others_used} other clip(s) of ${song.title}, the best other person ${t.top_other})${t.note ? `. ${t.note}` : ""}`;
 }
 
 const ACTIVE = ["queued", "running"] as const;

@@ -67,6 +67,11 @@ async function main() {
     check(existsSync(path.join(dir, "reference.png")) && existsSync(path.join(dir, "card.json")), "workspace\\characters\\bride\\ holds the picture and card.json");
     check((await page.isDisabled("[data-lock]")) && ((await page.textContent("[data-lock-problems]")) ?? "").includes("Not made yet"), "Lock is not possible before the pack is made, and says why");
 
+    check(((await page.textContent("[data-lock-problems]")) ?? "").includes("Close-up face, 3/4 face"), "the missing views are named in plain words");
+    // No outfit yet: Make pack warns before anything is spent.
+    await page.click("[data-make-pack]");
+    check(!!(await page.$("[data-outfit-warning]")) && ((await page.textContent("[data-confirm-yes]")) ?? "").includes("Make it anyway"), "Make pack warns when the outfit is empty");
+    await page.click("[data-confirm-pack] button:has-text('Cancel')");
     // The outfit, then Make pack (the cost first).
     await page.fill("[data-card-words]", "floor-length white A-line gown, long sheer veil");
     await page.click("h1"); // blur: saved
@@ -74,7 +79,7 @@ async function main() {
     check(readFileSync(path.join(dir, "card.json"), "utf8").includes("floor-length white A-line gown"), "the outfit is saved in card.json");
     check(((await page.textContent("[data-estimate]")) ?? "") === "$0.17", "the estimate is shown before anything is sent ($0.17 with Seedream)");
     await page.click("[data-make-pack]");
-    check(((await page.textContent("[data-confirm-yes]")) ?? "").includes("about $0.17"), "Make pack asks to confirm, with the cost");
+    check(((await page.textContent("[data-confirm-yes]")) ?? "").includes("about $0.17") && !(await page.$("[data-outfit-warning]")), "Make pack asks to confirm, with the cost (no warning once the outfit is given)");
     await page.click("[data-confirm-yes]");
     await page.waitForSelector("[data-view=body_back][data-light=grey]", { timeout: 20_000 });
     check((await page.getAttribute("[data-view=closeup]", "data-light")) === "green" && (await page.getAttribute("[data-view=three_quarter]", "data-light")) === "green", "the face views are green");

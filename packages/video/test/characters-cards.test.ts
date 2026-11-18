@@ -13,7 +13,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { findOrCreateSongProject, songPathsById } from "../src/node";
 import {
   calibrationSongs, cardRoot, cardThresholds, createCard, currentVersion, enqueueCardJob, fetchMissing, getCard, listCardJobs, listCards, lockCard, lockProblems, makePictures, newVersion,
-  packEstimate, readCardFile, readReport, runCardJob, updateDraft, versionDir,
+  packEstimate, readCardFile, readReport, rescore, runCardJob, updateDraft, versionDir,
 } from "../src/node/characters";
 import { anglePrompt, ANGLES } from "../src/node/characters/plan";
 import { stubFace, stubFal } from "../src/node/characters/stub";
@@ -55,7 +55,7 @@ describe("cards", () => {
   test("Make pack: 4 views with the outfit, body views cropped by the app (model's picture kept), report, description draft", async () => {
     const c = getCard(ws, listCards(ws)[0].id);
     updateDraft(ws, c.id, { outfit: "floor-length white A-line gown, long sheer veil" });
-    expect(lockProblems(cardRoot(ws, c), readCardFile(cardRoot(ws, c)))[0]).toMatch(/Not made yet: closeup, three_quarter, body_front, body_back/);
+    expect(lockProblems(cardRoot(ws, c), readCardFile(cardRoot(ws, c)))[0]).toMatch(/Not made yet: Close-up face, 3\/4 face, Full body, front, Full body, back\./);
     const r = await makePictures(ws, c.id, { ...tools(), sleep: async () => {} }, { cap: 3 });
     const dir = versionDir(cardRoot(ws, c), 1);
     for (const f of ["closeup.png", "three_quarter.png", "body_front.png", "body_back.png", "body_front_t1_full.png", "sheet.jpg", "report.json"]) expect(existsSync(path.join(dir, f)), f).toBe(true);
@@ -64,6 +64,22 @@ describe("cards", () => {
     expect(r.summary).toMatch(/4 picture\(s\) made · 2 of 2 face views green · about \$0\.17 sent/);
     expect(currentVersion(readCardFile(cardRoot(ws, c))).description).toMatch(/A woman in her twenties/);
     expect(listCards(ws)[0].thumbnail).toBe("v1/closeup.png");
+  });
+
+  test("the back view gets the front view as an extra reference (the same outfit from behind); face prompts guard brows and hair", async () => {
+    const c = createCard(ws, { kind: "character", name: "groom", picture: readFileSync(path.join(pics, "default.png")), fileName: "g.png" });
+    const fal = stubFal(pics);
+    const sent: Record<string, unknown>[] = [];
+    const submit = fal.queue.submit.bind(fal.queue);
+    (fal.queue as { submit: unknown }).submit = (e: string, o: { input: Record<string, unknown> }) => (sent.push(o.input), submit(e as never, o as never));
+    await makePictures(ws, c.id, { fal, face: stubFace(), sleep: async () => {} }, { cap: 3 });
+    const prompts = sent.filter((i) => Array.isArray(i.image_urls));
+    const back = prompts.find((i) => /seen from behind/.test(String(i.prompt)))!;
+    const front = prompts.find((i) => /from the front, standing/.test(String(i.prompt)))!;
+    expect((front.image_urls as string[]).length).toBe(1);
+    expect((back.image_urls as string[]).length).toBe(2);
+    expect(String(back.prompt)).toMatch(/SAME outfit seen from the front/);
+    expect(String(prompts.find((i) => /close-up portrait of her face and the top/.test(String(i.prompt)))!.prompt)).toMatch(/Eyebrows exactly as in the reference.*no net, mesh/);
   });
 
   test("lock: read-only; a new version starts from it as a draft", () => {
@@ -151,6 +167,13 @@ describe("cards", () => {
     expect(done).toMatchObject({ status: "done", cost_usd: 0 });
     expect(done.message).toMatch(/Green ≥ 0\.528, red < 0\.458 \(3 other clip\(s\) of Wedding Day/);
     expect(cardThresholds(cardRoot(ws, c))).toMatchObject({ green_from: 0.528, red_below: 0.458, source: "calibrated on your clips" });
+    expect(done.message).toMatch(/^3 face picture\(s\) judged again\./); // every try already made (the 3/4 was remade once), free
+    // Stricter lines: the same pictures are judged again (no new picture made), the face views turn amber.
+    const before = readdirSync(versionDir(cardRoot(ws, c), 2)).length;
+    expect(rescore(cardRoot(ws, c), readCardFile(cardRoot(ws, c)), { red_below: 0.5, green_from: 0.7, source: "test" })).toBe(3);
+    const rep = readReport(versionDir(cardRoot(ws, c), 2))!;
+    expect(rep.items.filter((i) => i.kind === "view").map((i) => i.light)).toEqual(["amber", "amber", "grey", "grey"]);
+    expect(readdirSync(versionDir(cardRoot(ws, c), 2)).length).toBe(before);
     const s = listCards(ws).find((x) => x.kind === "scene")!;
     const sj = enqueueCardJob(ws, s.id, "calibrate", { songId: sp.project.id });
     await runCardJob(() => openWorkspace(wsDir), sj.id, { fal: undefined as never, face: stubFace() });

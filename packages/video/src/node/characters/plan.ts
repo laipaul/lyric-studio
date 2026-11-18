@@ -18,7 +18,7 @@ export const VIEWS: View[] = [
     aspect: "3:4",
     face: true,
     expectYaw: [0, 20],
-    prompt: "A close-up portrait of her face and the top of her shoulders, facing the camera straight on, looking into the lens, relaxed neutral expression, mouth gently closed. Natural skin texture with pores and fine detail, no retouching.",
+    prompt: "A close-up portrait of her face and the top of her shoulders, facing the camera straight on, looking into the lens, relaxed neutral expression, mouth gently closed. Natural skin texture with pores and fine detail, no retouching. Eyebrows exactly as in the reference picture (same shape, thickness and colour), soft and natural with individual hairs, not drawn on, filled in or sharpened. Hair soft and natural with individual strands, no net, mesh, grid or lace-like pattern on the hair or skin.",
   },
   {
     id: "three_quarter",
@@ -26,7 +26,7 @@ export const VIEWS: View[] = [
     aspect: "3:4",
     face: true,
     expectYaw: [20, 60],
-    prompt: "A close-up portrait of her face with the head turned about 45 degrees to her left (a three-quarter view), eyes following the turn, relaxed neutral expression. Natural skin texture, no retouching.",
+    prompt: "A close-up portrait of her face with the head turned about 45 degrees to her left (a three-quarter view), eyes following the turn, relaxed neutral expression. Natural skin texture, no retouching. Eyebrows exactly as in the reference picture (same shape, thickness and colour), soft and natural with individual hairs, not drawn on, filled in or sharpened. Hair soft and natural with individual strands, no net, mesh, grid or lace-like pattern on the hair or skin.",
   },
   {
     id: "body_front",
@@ -185,7 +185,7 @@ export class Budget {
 // ---- face scores ----
 
 export type Thresholds = { red_below: number; green_from: number; source: string };
-export const DEFAULT_THRESHOLDS: Thresholds = { red_below: 0.25, green_from: 0.363, source: "SFace's defaults (not calibrated on your pictures yet)" };
+export const DEFAULT_THRESHOLDS: Thresholds = { red_below: 0.25, green_from: 0.363, source: "SFace's defaults, not calibrated yet" };
 
 export type Light = "green" | "amber" | "red" | "grey";
 export type FaceResult = { score: number | null; face_px?: number; yaw?: number | null; note?: string };

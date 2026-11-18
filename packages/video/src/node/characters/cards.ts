@@ -210,7 +210,8 @@ export function lockProblems(root: string, file: CardFile): string[] {
   const ids = file.kind === "character" ? VIEWS.map((x) => x.id) : ANGLES.map((x) => x.id);
   const missing = ids.filter((id) => !existsSync(path.join(dir, `${id}.png`)));
   const problems: string[] = [];
-  if (missing.length) problems.push(`Not made yet: ${missing.join(", ")}. Make the pack (or remake those) first.`);
+  const label = (id: string) => [...VIEWS, ...ANGLES].find((x) => x.id === id)?.label.replace(/ \(cropped at the neck\)/, "") ?? id;
+  if (missing.length) problems.push(`Not made yet: ${missing.map(label).join(", ")}. Make the pack (or remake those) first.`);
   if (!v.description?.trim()) problems.push("Write (or keep) the description first: it is locked with the pictures.");
   return problems;
 }

@@ -22,7 +22,10 @@ import type { Workspace } from "@lyric/db";
 
 export const RETRIES = 2;
 
-export type Try = { file: string | null; url?: string; request_id: string | null; score: number | null; light: Light | null; text: string; attempts: Attempt[]; seed: number };
+export const BACK_FROM_FRONT =
+  "The second reference picture is the SAME outfit seen from the front: show exactly that outfit from behind (same garment, fabric, length and colour), not a different one.";
+
+export type Try = { file: string | null; url?: string; request_id: string | null; score: number | null; face_px?: number; light: Light | null; text: string; attempts: Attempt[]; seed: number };
 export type Item = { id: string; label: string; kind: "view" | "angle"; tries: Try[]; chosen: number | null; light: Light | null; text: string; angle_note?: string | null };
 export type VersionReport = { updated_at: string; model: string; endpoint: string; thresholds: Thresholds; items: Item[]; request_ids: string[]; spent_usd: number; description_request?: string | null };
 
@@ -91,6 +94,7 @@ async function judge(face: FaceTool, refFile: string, item: Item, t: Try, file: 
   const fr = (await face.compare(refFile, [file])).results[0];
   const c = classify(item.id as ViewId, fr, th);
   t.score = fr.score;
+  t.face_px = fr.face_px;
   t.light = c.light;
   t.text = c.text;
   const view = VIEWS.find((v) => v.id === item.id)!;
@@ -162,6 +166,16 @@ export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps,
   for (const job of jobs) {
     if (deps.shouldStop?.()) break;
     deps.progress?.(done, jobs.length, job.label);
+    // The back view gets the chosen front view as an extra reference: the same outfit, seen from behind (in the
+    // first app test, without it the front was a jumper and trousers and the back a knitted dress).
+    let frontUrl: string | null = null;
+    const frontFile = path.join(dir, "body_front_full.png");
+    if (job.id === "body_back") {
+      const front = report.items.find((i) => i.id === "body_front");
+      const chosen = front && front.chosen !== null ? front.tries[front.chosen] : null;
+      const full = chosen?.file ? path.join(dir, chosen.file.replace(/\.png$/i, "_full.png")) : frontFile;
+      if (existsSync(full)) frontUrl = await deps.fal.storage.upload(new File([readFileSync(full)], "front.png", { type: "image/png" }));
+    }
     let item = report.items.find((i) => i.id === job.id);
     if (!item) {
       item = { id: job.id, label: job.label, kind: job.kind, tries: [], chosen: null, light: null, text: "" };
@@ -181,7 +195,7 @@ export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps,
       item.tries.push(t);
       try {
         log(`${m.name} · ${job.label}${n > 1 ? ` (try ${n})` : ""}…`);
-        const r = await callModel(deps.fal, m.endpoint, m.input(job.prompt, file.kind === "character" ? refUrls : [refUrls[0]], job.aspect, seed), callOpts);
+        const r = await callModel(deps.fal, m.endpoint, m.input(job.id === "body_back" && frontUrl ? `${job.prompt} ${BACK_FROM_FRONT}` : job.prompt, file.kind === "character" ? [...refUrls, ...(job.id === "body_back" && frontUrl ? [frontUrl] : [])] : [refUrls[0]], job.aspect, seed), callOpts);
         t.attempts = r.attempts;
         t.request_id = r.requestId;
         report.request_ids.push(r.requestId);
@@ -303,4 +317,30 @@ export function summarize(file: CardFile, report: VersionReport, r: { made: numb
     `about ${money(r.spent)} sent`,
   ].filter(Boolean);
   return parts.join(" · ");
+}
+
+// After a calibration: the face views already made are judged again with the new lines (no new pictures, no cost),
+// and the best try is chosen again. Only for a draft (a locked version stays as it was locked).
+export function rescore(root: string, file: CardFile, th: Thresholds): number {
+  const v = currentVersion(file);
+  if (v.status !== "draft") return 0;
+  const dir = versionDir(root, v.n);
+  const report = readReport(dir);
+  if (!report) return 0;
+  let n = 0;
+  for (const item of report.items) {
+    const view = VIEWS.find((x) => x.id === item.id);
+    if (item.kind !== "view" || !view?.face) continue;
+    for (const t of item.tries) {
+      if (!t.file) continue;
+      const c = classify(item.id as ViewId, { score: t.score, face_px: t.face_px ?? 999 }, th);
+      t.light = c.light;
+      t.text = c.text;
+      n++;
+    }
+    choose(item, dir);
+  }
+  report.thresholds = th;
+  writeReport(dir, report);
+  return n;
 }

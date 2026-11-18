@@ -4,6 +4,19 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Characters, C1 fixes after Paul's first test ("Bride No 1") ✅ (to verify on the Windows PC)
+- The **back view** gets the chosen front view as an extra reference: the same outfit seen from behind (in the
+  test, the front was a jumper and trousers and the back a knitted dress).
+- **Make pack warns when the outfit is empty** ("the model will invent it… Add it above first?" → Make it anyway / Cancel).
+- **Face views** ask for eyebrows exactly as in the reference (soft, individual hairs, not drawn or sharpened) and
+  natural hair with no net / mesh pattern (the test's close-up had both problems).
+- **Calibrating judges the views already made again** (every try, the best one chosen again), free, on a draft.
+- Plain words: "Not made yet: Close-up face, 3/4 face, Full body, front, Full body, back"; no double brackets in
+  the face-check line.
+- Tests: characters-cards (9) and the Characters browser test (23 checks) pass. The other unit-test failures are the
+  known ones below. Note: in the cloud check, librosa crashed until numba's stale cache files (*.nbi / *.nbc in the
+  .venv) were cleared; this only affects the cloud machine.
+
 ### Characters, C1 in the app: the Characters page, cards from one picture, packs, lock and versions ✅ (to verify on the Windows PC)
 - **Characters page** in the header, after Collections, with two sections: Characters and Scene cards. "New …" tiles
   take a name and one picture; the reference check (or location check) runs at once, locally and for free.

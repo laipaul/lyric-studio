@@ -371,9 +371,14 @@ export function CardPage({ id }: { id: string }) {
                     <input data-card-cap type="number" min={0} step={0.5} value={cap} onChange={(e) => setCap(Number(e.target.value))} className="bg-background w-14 rounded border px-1 py-0.5" />
                   </label>
                   {confirm === "pack" ? (
-                    <span className="flex items-center gap-2" data-confirm-pack>
+                    <span className="flex flex-wrap items-center gap-2" data-confirm-pack>
+                      {character && !version.outfit?.trim() ? (
+                        <span className="text-amber-400 w-full text-xs" data-outfit-warning>
+                          No outfit given: the model will invent it (and front and back may not match). Add it above first?
+                        </span>
+                      ) : null}
                       <Button size="sm" disabled={!!busy} onClick={() => act("pack", { action: "pack", cap })} data-confirm-yes>
-                        Yes, make it (about {money(d.estimate.usd)})
+                        {character && !version.outfit?.trim() ? "Make it anyway" : "Yes, make it"} (about {money(d.estimate.usd)})
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => setConfirm(null)}>
                         Cancel
