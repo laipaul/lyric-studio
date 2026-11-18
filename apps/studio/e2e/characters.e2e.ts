@@ -51,10 +51,15 @@ async function main() {
     await page.waitForSelector("[data-cards-section=character] [data-new-card=character]");
     check(!!(await page.$("[data-cards-section=scene] [data-new-card=scene]")), "the page has Characters and Scene cards, each with its New tile");
 
+    // The tile invites a drop; the dialog shows a clear drop area, then a preview of the chosen picture.
+    check(((await page.textContent("[data-new-card=character]")) ?? "").includes("Drop a picture here, or click to choose one"), "the New tile says a picture can be dropped on it");
     // A new character from one picture.
     await page.click("[data-new-card=character]");
-    await page.fill("[data-card-name]", "bride");
+    check(((await page.textContent("[data-card-drop]")) ?? "").includes("Drop the picture here, or click to choose"), "the dialog's picture area says what to do (not the browser's plain file field)");
     await page.setInputFiles("[data-card-picture]", path.join(pics, "default.png"));
+    await page.waitForSelector("[data-card-preview]");
+    check((await page.inputValue("[data-card-name]")) === "default", "choosing a picture shows its preview and fills the name from the file name");
+    await page.fill("[data-card-name]", "bride");
     await page.click("[data-create-card]");
     await page.waitForSelector("[data-card-page=bride]");
     check(((await page.textContent("[data-check-verdict]")) ?? "").includes("Reference check: Ready"), "the reference check is shown at once");

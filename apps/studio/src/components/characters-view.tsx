@@ -3,7 +3,7 @@
 import { ArrowLeft, Crop, ImagePlus, Lock, Plus, RefreshCw, RotateCcw, Square, Wand2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { CardSummary } from "@lyric/video/characters";
 
@@ -42,6 +42,8 @@ export function CharactersList() {
   const [cards, setCards] = useState<CardSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState<"character" | "scene" | null>(null);
+  const [dropped, setDropped] = useState<File | null>(null);
+  const [dragOver, setDragOver] = useState<"character" | "scene" | null>(null);
   useEffect(() => {
     call<{ cards: CardSummary[] }>("/api/cards")
       .then((d) => setCards(d.cards))
@@ -56,12 +58,28 @@ export function CharactersList() {
       </div>
       <ul className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
         <li>
-          <button type="button" data-new-card={kind} onClick={() => setCreating(kind)} className="hover:border-brand/60 hover:text-foreground text-muted-foreground flex size-full min-h-[260px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed transition-colors">
+          {/* Click to open the dialog, or drop a picture from Explorer straight onto the tile. */}
+          <button
+            type="button"
+            data-new-card={kind}
+            onClick={() => (setDropped(null), setCreating(kind))}
+            onDragOver={(e) => (e.preventDefault(), setDragOver(kind))}
+            onDragLeave={() => setDragOver(null)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(null);
+              const f = e.dataTransfer.files?.[0];
+              if (!f) return;
+              setDropped(f);
+              setCreating(kind);
+            }}
+            className={cn("hover:border-brand/60 hover:text-foreground text-muted-foreground flex size-full min-h-[260px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 text-center transition-colors", dragOver === kind && "border-brand bg-brand/10 text-foreground")}
+          >
             <span className="border-brand/50 text-brand flex size-12 items-center justify-center rounded-full border">
               <Plus className="size-6" />
             </span>
             <span className="text-sm font-medium">New {KIND_LABEL[kind]}</span>
-            <span className="text-xs">From one picture</span>
+            <span className="text-xs">Drop a picture here, or click to choose one</span>
           </button>
         </li>
         {(cards ?? [])
@@ -94,14 +112,23 @@ export function CharactersList() {
       {!cards ? <p className="text-muted-foreground text-sm">Loading…</p> : null}
       {cards ? section("character", "Characters", "A face view close-up, a 3/4 face, and the full body front and back (cropped at the neck, so faces only come from the close-up).") : null}
       {cards ? section("scene", "Scene cards", "A place from one picture: three more angles of the same room or location, its key props kept.") : null}
-      <NewCardDialog kind={creating} onClose={() => setCreating(null)} onCreated={(id) => router.push(`/characters/${id}`)} />
+      <NewCardDialog key={`${creating}-${dropped?.name ?? ""}`} kind={creating} initialFile={dropped} onClose={() => (setCreating(null), setDropped(null))} onCreated={(id) => router.push(`/characters/${id}`)} />
     </div>
   );
 }
 
-function NewCardDialog({ kind, onClose, onCreated }: { kind: "character" | "scene" | null; onClose: () => void; onCreated: (id: string) => void }) {
-  const [name, setName] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+const baseName = (f: File) => f.name.replace(/\.[^.]+$/, "");
+
+function NewCardDialog({ kind, initialFile, onClose, onCreated }: { kind: "character" | "scene" | null; initialFile: File | null; onClose: () => void; onCreated: (id: string) => void }) {
+  const [file, setFileState] = useState<File | null>(initialFile);
+  const [name, setName] = useState(initialFile ? baseName(initialFile) : "");
+  const [over, setOver] = useState(false);
+  const preview = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
+  useEffect(() => () => void (preview && URL.revokeObjectURL(preview)), [preview]);
+  const setFile = (f: File | null) => {
+    setFileState(f);
+    if (f && !name.trim()) setName(baseName(f));
+  };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const create = async () => {
@@ -111,7 +138,7 @@ function NewCardDialog({ kind, onClose, onCreated }: { kind: "character" | "scen
     try {
       const form = new FormData();
       form.set("kind", kind);
-      form.set("name", name || file.name.replace(/\.[^.]+$/, ""));
+      form.set("name", name || baseName(file));
       form.set("picture", file);
       const d = await call<{ id: string }>("/api/cards", { method: "POST", body: form });
       onCreated(d.id);
@@ -130,7 +157,33 @@ function NewCardDialog({ kind, onClose, onCreated }: { kind: "character" | "scen
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <Input data-card-name placeholder={kind === "scene" ? "e.g. bridal room" : "e.g. bride"} value={name} onChange={(e) => setName(e.target.value)} />
-          <input data-card-picture type="file" accept=".jpg,.jpeg,.png,.webp" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-sm" />
+          {/* The picture: a drop area (click to choose, or drop from Explorer), with a preview once chosen. */}
+          <label
+            data-card-drop
+            onDragOver={(e) => (e.preventDefault(), setOver(true))}
+            onDragLeave={() => setOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setOver(false);
+              const f = e.dataTransfer.files?.[0];
+              if (f) setFile(f);
+            }}
+            className={cn("hover:border-brand/60 flex cursor-pointer items-center gap-3 rounded-lg border border-dashed p-3 transition-colors", over && "border-brand bg-brand/10")}
+          >
+            {file && preview ? (
+              // eslint-disable-next-line @next/next/no-img-element -- a local preview of the chosen picture
+              <img src={preview} alt="" className="size-20 rounded-md object-cover" data-card-preview />
+            ) : (
+              <span className="border-brand/50 text-brand flex size-20 shrink-0 items-center justify-center rounded-md border border-dashed">
+                <ImagePlus className="size-7" />
+              </span>
+            )}
+            <span className="flex min-w-0 flex-col gap-0.5 text-sm">
+              <span className="font-medium">{file ? file.name : "Drop the picture here, or click to choose"}</span>
+              <span className="text-muted-foreground text-xs">{file ? "Click to choose another" : "JPG, PNG or WebP"}</span>
+            </span>
+            <input data-card-picture type="file" accept=".jpg,.jpeg,.png,.webp" className="sr-only" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          </label>
           {busy ? <p className="text-muted-foreground text-xs">Checking the picture… The first time, the face checks install themselves (about a minute).</p> : null}
           {error ? <p className="text-xs text-red-300" data-card-error>{error}</p> : null}
           <Button data-create-card disabled={!file || busy} onClick={create}>
