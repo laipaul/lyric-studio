@@ -4,6 +4,14 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Characters, C1 fixes 4: neutral wording, the reference's hair, old pictures framing-checked ✅ (to verify on the Windows PC)
+- The groom came out with a feminine look and hair pulled back: the prompts still said "her" / "the same woman".
+  Now "this person" everywhere (views, shared style, description draft).
+- Face views keep the reference's hairstyle (length, parting, volume, direction) unless the outfit text says otherwise.
+- Old pictures (made before the framing check) are measured from the file when a card opens (once), so a
+  full-length "close-up" turns red instead of staying green.
+- Tests: characters-cards (17) and the Characters browser test pass.
+
 ### Characters, C1 fixes 3: eye-level framing, a real 3/4, the outfit split per view ✅ (to verify on the Windows PC)
 - Paul's review of Bride No 2: close-up from above showing the whole body, 3/4 mostly from behind, the front view
   with the back's V-neck and buttons.

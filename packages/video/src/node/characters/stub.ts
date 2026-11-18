@@ -12,7 +12,7 @@ export function stubFal(dir: string): FalClient {
   let n = 0;
   const inputs = new Map<string, { endpoint: string; input: Record<string, unknown> }>();
   const pick = (prompt: string) => {
-    const key = /close-up portrait of her face and/i.test(prompt)
+    const key = /close-up portrait of this person's face and/i.test(prompt)
       ? "closeup"
       : /three-quarter/i.test(prompt)
         ? "three_quarter"

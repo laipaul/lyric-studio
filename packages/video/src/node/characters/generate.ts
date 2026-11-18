@@ -357,6 +357,16 @@ export function summarize(file: CardFile, report: VersionReport, r: { made: numb
 
 // After a calibration: the face views already made are judged again with the new lines (no new pictures, no cost),
 // and the best try is chosen again. Only for a draft (a locked version stays as it was locked).
+// A try made before the framing check has no frame_h: read it from the picture so the close-up check applies to it too.
+function fillFrameH(dir: string, t: Try): void {
+  if (t.frame_h || !t.file) return;
+  try {
+    t.frame_h = imageSize(readFileSync(path.join(dir, t.file)))?.height;
+  } catch {
+    /* the file cannot be read: the framing stays unchecked */
+  }
+}
+
 export function rescore(root: string, file: CardFile, th: Thresholds): number {
   const v = currentVersion(file);
   if (v.status !== "draft") return 0;
@@ -369,6 +379,7 @@ export function rescore(root: string, file: CardFile, th: Thresholds): number {
     if (item.kind !== "view" || !view?.face) continue;
     for (const t of item.tries) {
       if (!t.file) continue;
+      fillFrameH(dir, t);
       const c = classify(item.id as ViewId, { score: t.score, face_px: t.face_px ?? 999, yaw: t.yaw }, th, t.frame_h);
       t.light = c.light;
       t.text = c.text;
@@ -387,10 +398,23 @@ export function repickLegacy(root: string, file: CardFile): boolean {
   if (v.status !== "draft") return false;
   const dir = versionDir(root, v.n);
   const report = readReport(dir);
-  if (!report || (report.picked ?? 0) >= 2) return false;
+  if (!report || (report.picked ?? 0) >= 3) return false;
   if (!report.items.some((i) => i.tries.some((t) => t.run === undefined))) return false;
-  for (const item of report.items) choose(item, dir);
-  report.picked = 2;
+  // 3: the face views are also judged again with the framing check (old tries had no frame_h), then picked again.
+  const th = cardThresholds(root);
+  for (const item of report.items) {
+    const view = VIEWS.find((x) => x.id === item.id);
+    if (item.kind === "view" && view?.face)
+      for (const t of item.tries) {
+        if (!t.file || t.frame_h || t.score === null) continue;
+        fillFrameH(dir, t);
+        const c = classify(item.id as ViewId, { score: t.score, face_px: t.face_px ?? 999, yaw: t.yaw }, th, t.frame_h);
+        t.light = c.light;
+        t.text = c.text;
+      }
+    choose(item, dir);
+  }
+  report.picked = 3;
   writeReport(dir, report);
   return true;
 }

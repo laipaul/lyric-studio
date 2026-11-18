@@ -13,7 +13,7 @@ export type Aspect = "3:4" | "2:3";
 // minFace: the face is at least this fraction of the picture's height (a face view is a close-up; Seedream once sent
 // high-angle full-length shots). Null for the body views.
 export type View = { id: ViewId; label: string; aspect: Aspect; face: boolean; expectYaw: [number, number] | null; minFace: number | null; prompt: string };
-export const EYE_LEVEL = "Camera at eye level, level with her face: no high angle, no top-down view.";
+export const EYE_LEVEL = "Camera at eye level, level with their face: no high angle, no top-down view.";
 export const VIEWS: View[] = [
   {
     id: "closeup",
@@ -22,7 +22,7 @@ export const VIEWS: View[] = [
     face: true,
     expectYaw: [0, 20],
     minFace: 0.35,
-    prompt: "A close-up portrait of her face and the top of her shoulders, straight on, facing the camera and looking into the lens, relaxed neutral expression, mouth gently closed. Framing: head-and-shoulders portrait, the face filling about half the frame, camera at eye level, portrait lens (about 85 mm). Not a full-length shot, no high angle, no wide angle. Camera at eye level, level with her face: no high angle, no top-down view. Natural skin texture with pores and fine detail, no retouching. Eyebrows exactly as in the reference picture (same shape, thickness and colour), soft and natural with individual hairs, not drawn on, filled in or sharpened. Hair soft and natural with individual strands, no net, mesh, grid or lace-like pattern on the hair or skin.",
+    prompt: "A close-up portrait of this person's face and the top of their shoulders, straight on, facing the camera and looking into the lens, relaxed neutral expression, mouth gently closed. Framing: head-and-shoulders portrait, the face filling about half the frame, camera at eye level, portrait lens (about 85 mm). Not a full-length shot, no high angle, no wide angle. Camera at eye level, level with their face: no high angle, no top-down view. Natural skin texture with pores and fine detail, no retouching. Eyebrows exactly as in the reference picture (same shape, thickness and colour), soft and natural with individual hairs, not drawn on, filled in or sharpened. Hair soft and natural with individual strands, no net, mesh, grid or lace-like pattern on the hair or skin. The same hairstyle as in the reference picture: the same length, parting, volume and direction; do not tie it back or restyle it, unless the outfit text below says otherwise.",
   },
   {
     id: "three_quarter",
@@ -31,7 +31,7 @@ export const VIEWS: View[] = [
     face: true,
     expectYaw: [20, 60],
     minFace: 0.3,
-    prompt: "A head-and-shoulders portrait in a three-quarter view: her face turned about 45 degrees toward the camera, both eyes visible, not viewed from behind, eyes following the turn, relaxed neutral expression. Framing: head and shoulders, the face filling a large part of the picture, camera at eye level, portrait lens (about 85 mm). Not a full-length shot, no high angle, no wide angle. Camera at eye level, level with her face: no high angle, no top-down view. Natural skin texture, no retouching. Eyebrows exactly as in the reference picture (same shape, thickness and colour), soft and natural with individual hairs, not drawn on, filled in or sharpened. Hair soft and natural with individual strands, no net, mesh, grid or lace-like pattern on the hair or skin.",
+    prompt: "A head-and-shoulders portrait in a three-quarter view: this person's face turned about 45 degrees toward the camera, both eyes visible, not viewed from behind, eyes following the turn, relaxed neutral expression. Framing: head and shoulders, the face filling a large part of the picture, camera at eye level, portrait lens (about 85 mm). Not a full-length shot, no high angle, no wide angle. Camera at eye level, level with their face: no high angle, no top-down view. Natural skin texture, no retouching. Eyebrows exactly as in the reference picture (same shape, thickness and colour), soft and natural with individual hairs, not drawn on, filled in or sharpened. Hair soft and natural with individual strands, no net, mesh, grid or lace-like pattern on the hair or skin. The same hairstyle as in the reference picture: the same length, parting, volume and direction; do not tie it back or restyle it, unless the outfit text below says otherwise.",
   },
   {
     id: "body_front",
@@ -40,7 +40,7 @@ export const VIEWS: View[] = [
     face: false,
     expectYaw: null,
     minFace: null,
-    prompt: "A full-length photograph of her body from the front, standing naturally, arms relaxed, the whole outfit and shoes visible, camera at eye level (no high angle, no top-down view). The frame is CROPPED AT THE NECK: the top edge of the picture cuts just below the chin, so the face and head are completely out of frame.",
+    prompt: "A full-length photograph of this person's body from the front, standing naturally, arms relaxed, the whole outfit and shoes visible, camera at eye level (no high angle, no top-down view). The frame is CROPPED AT THE NECK: the top edge of the picture cuts just below the chin, so the face and head are completely out of frame.",
   },
   {
     id: "body_back",
@@ -49,13 +49,13 @@ export const VIEWS: View[] = [
     face: false,
     expectYaw: null,
     minFace: null,
-    prompt: "A full-length photograph of her body seen from behind, standing naturally, camera at eye level (no high angle, no top-down view), the back of the outfit (and veil, train or hair falling on the back) fully visible down to the shoes. The frame is CROPPED AT THE NECK: the top edge of the picture cuts at the nape, so the head is out of frame. Anything pinned or worn on the front only (a boutonnière, brooch, corsage, front buttons) is not visible from behind: do not show it at the shoulder or anywhere on the back.",
+    prompt: "A full-length photograph of this person's body seen from behind, standing naturally, camera at eye level (no high angle, no top-down view), the back of the outfit (and veil, train or hair falling on the back) fully visible down to the shoes. The frame is CROPPED AT THE NECK: the top edge of the picture cuts at the nape, so the head is out of frame. Anything pinned or worn on the front only (a boutonnière, brooch, corsage, front buttons) is not visible from behind: do not show it at the shoulder or anywhere on the back.",
   },
 ];
 
 // Setting (decided 18 Nov 2026): a neutral, empty outdoor place in soft daylight. Grey studio backdrops gave plastic skin.
 export const PACK_STYLE =
-  "Use the reference picture as BOTH the identity and the style reference: the same woman (the same face, features, skin tone, hair and makeup), the same outfit, and the same visual style, colour grading, lens look and rendering as the reference. Do not change her identity, age or ethnicity. Setting: a neutral, empty outdoor place (an open field or a quiet garden path, softly out of focus behind her) in soft natural daylight, slightly overcast, gentle shadows. Not a studio, no backdrop, no text, no other people.";
+  "Use the reference picture as BOTH the identity and the style reference: the same person (the same face, features, skin tone, hair and makeup), the same outfit, and the same visual style, colour grading, lens look and rendering as the reference. Do not change their identity, age or ethnicity. Setting: a neutral, empty outdoor place (an open field or a quiet garden path, softly out of focus behind them) in soft natural daylight, slightly overcast, gentle shadows. Not a studio, no backdrop, no text, no other people.";
 
 export const ANGLES: { id: AngleId; label: string; prompt: string }[] = [
   { id: "wide_left", label: "Wide, from the left", prompt: "A wide view of this same place seen from the left side of the room, showing more of it." },
@@ -167,7 +167,7 @@ export const TEXT_MODEL = { endpoint: "fal-ai/any-llm", model: "google/gemini-2.
 export const VISION = { endpoint: "fal-ai/any-llm/vision", model: "google/gemini-2.5-flash-lite", perCallUsd: 0.01 };
 
 export const DESCRIPTION_PROMPT =
-  "Describe the woman in this picture for an image generator, so the same person can be drawn again in other shots. 60 to 90 words, one paragraph, present tense, appearance only: apparent age range, face shape and features, eyes, eyebrows, skin tone, hair (colour, length, style), makeup, and the outfit and accessories. No name, no guesses about personality, no camera or lighting words.";
+  "Describe the person in this picture for an image generator, so the same person can be drawn again in other shots. 60 to 90 words, one paragraph, present tense, appearance only: apparent age range, face shape and features, eyes, eyebrows, skin tone, hair (colour, length, style), makeup, and the outfit and accessories. No name, no guesses about personality, no camera or lighting words.";
 export const SCENE_DESCRIPTION_PROMPT =
   "Describe this place for an image generator, so the same location can be drawn again from other angles. 50 to 80 words, one paragraph: the kind of room, its architecture, the main furniture and objects (with their positions), materials, colours and the light. No people, no camera words.";
 export const OPINION_PROMPT =

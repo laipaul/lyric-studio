@@ -15,7 +15,8 @@ import {
   calibrationSongs, cardRoot, cardThresholds, createCard, currentVersion, enqueueCardJob, fetchMissing, getCard, listCardJobs, listCards, lockCard, lockProblems, makePictures, newVersion,
   packEstimate, readCardFile, readReport, rescore, repickLegacy, runCardJob, updateDraft, versionDir, ensureSplit, makeSplit, parseSplit,
 } from "../src/node/characters";
-import { anglePrompt, ANGLES, classify, DEFAULT_THRESHOLDS, imageSize, MAX_YAW, minFaceFor, VIEWS, viewPrompt } from "../src/node/characters/plan";
+import { anglePrompt, ANGLES, classify, DEFAULT_THRESHOLDS, DESCRIPTION_PROMPT, PACK_STYLE, imageSize, MAX_YAW, minFaceFor, VIEWS, viewPrompt } from "../src/node/characters/plan";
+import { outfitSplitPrompt } from "../src/node/characters/split";
 import { stubFace, stubFal } from "../src/node/characters/stub";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-cards-"));
@@ -79,7 +80,7 @@ describe("cards", () => {
     expect((front.image_urls as string[]).length).toBe(1);
     expect((back.image_urls as string[]).length).toBe(2);
     expect(String(back.prompt)).toMatch(/SAME outfit seen from the front/);
-    expect(String(prompts.find((i) => /close-up portrait of her face and the top/.test(String(i.prompt)))!.prompt)).toMatch(/Eyebrows exactly as in the reference.*no net, mesh/);
+    expect(String(prompts.find((i) => /close-up portrait of this person's face and the top/.test(String(i.prompt)))!.prompt)).toMatch(/Eyebrows exactly as in the reference.*no net, mesh/);
   });
 
   test("face-view prompts: head-and-shoulders only (no shoes, trousers), firm framing; the back view hides front-only details", () => {
@@ -160,8 +161,8 @@ describe("cards", () => {
     expect(sent.filter((i) => /any-llm/.test(String(i.model ?? "")) && /Outfit text/.test(String(i.prompt))).length).toBe(0); // no second split
     const imgs = sent.filter((i) => Array.isArray(i.image_urls));
     const find = (re: RegExp) => String(imgs.find((i) => re.test(String(i.prompt)))!.prompt);
-    expect(find(/close-up portrait of her face and the top/)).toMatch(/neckline and veil at the head/);
-    expect(find(/close-up portrait of her face and the top/)).not.toMatch(/buttons/);
+    expect(find(/close-up portrait of this person's face and the top/)).toMatch(/neckline and veil at the head/);
+    expect(find(/close-up portrait of this person's face and the top/)).not.toMatch(/buttons/);
     expect(find(/three-quarter/)).toMatch(/Outfit \(only the part inside this head-and-shoulders frame.*neckline and veil/);
     expect(find(/from the front, standing/)).toMatch(/Outfit: front of the outfit.*Details that are only on the back \(V-neck back, buttons down the spine\) must NOT appear on the front/);
     expect(find(/seen from behind/)).toMatch(/Outfit: V-neck back, buttons down the spine\..*Details that are only on the front \(front of the outfit.*\) are not visible from behind/);
@@ -234,7 +235,7 @@ describe("cards", () => {
     writeFileSync(path.join(dir, "report.json"), JSON.stringify(rep));
     expect(repickLegacy(cardDir, readCardFile(cardDir))).toBe(true);
     const again = readReport(dir)!;
-    expect(again.picked).toBe(2);
+    expect(again.picked).toBe(3);
     expect(again.items.map((i) => i.chosen)).toEqual([1, 1, 1, 1]);
     expect(repickLegacy(cardDir, readCardFile(cardDir))).toBe(false);
     lockCard(ws, c.id);
@@ -242,6 +243,59 @@ describe("cards", () => {
     delete locked.picked;
     writeFileSync(path.join(dir, "report.json"), JSON.stringify(locked));
     expect(repickLegacy(cardDir, readCardFile(cardDir))).toBe(false);
+  });
+
+  test("prompts are gender-neutral; the face views keep the hairstyle of the reference", () => {
+    const texts = [...VIEWS.map((v) => v.prompt), ...VIEWS.map((v) => viewPrompt(v, "red dress")), PACK_STYLE, DESCRIPTION_PROMPT, outfitSplitPrompt("red dress")];
+    for (const t of texts) expect(t).not.toMatch(/\b(her|hers|she|woman|women)\b/i);
+    for (const v of VIEWS) {
+      const p = viewPrompt(v, "hair in a bun");
+      if (v.face) {
+        expect(p).toMatch(/The same hairstyle as in the reference picture: the same length, parting, volume and direction; do not tie it back or restyle it, unless the outfit text below says otherwise\./);
+        expect(p.indexOf("The same hairstyle")).toBeLessThan(p.indexOf("hair in a bun"));
+      } else expect(p).not.toMatch(/same hairstyle/);
+    }
+    expect(VIEWS.find((v) => v.id === "body_back")!.prompt).toMatch(/seen from behind/);
+    expect(VIEWS.find((v) => v.id === "three_quarter")!.prompt).toMatch(/not viewed from behind/);
+  });
+
+  test("old tries without frame_h get the framing check once (picked 3); a locked version is untouched", async () => {
+    const c = createCard(ws, { kind: "character", name: "legacy-frame", picture: readFileSync(path.join(pics, "default.png")), fileName: "lf.png" });
+    const cardDir = cardRoot(ws, c);
+    await makePictures(ws, c.id, { ...tools(), sleep: async () => {} }, { cap: 3 });
+    const dir = versionDir(cardDir, 1);
+    const rep = readReport(dir)!;
+    const closeup = rep.items.find((i) => i.id === "closeup")!;
+    expect(closeup.light).toBe("green");
+    // A legacy try: no run, no frame_h, the face is small in a 300x400 picture (40 px = 10%).
+    for (const i of rep.items) for (const t of i.tries) delete t.run;
+    for (const t of closeup.tries) {
+      delete t.frame_h;
+      t.face_px = 40;
+    }
+    delete rep.picked;
+    writeFileSync(path.join(dir, "report.json"), JSON.stringify(rep));
+    expect(repickLegacy(cardDir, readCardFile(cardDir))).toBe(true);
+    const after = readReport(dir)!;
+    const ci = after.items.find((i) => i.id === "closeup")!;
+    expect(after.picked).toBe(3);
+    expect(ci.tries[0].frame_h).toBe(400);
+    expect(ci.tries[0].light).toBe("red");
+    expect(ci.tries[0].text).toMatch(/^Not a close-up/);
+    expect(ci.light).toBe("red");
+    expect(after.items.find((i) => i.id === "three_quarter")!.tries[0].frame_h).toBe(400);
+    expect(repickLegacy(cardDir, readCardFile(cardDir))).toBe(false);
+    // Already re-picked once (picked = 2): runs again.
+    after.picked = 2;
+    writeFileSync(path.join(dir, "report.json"), JSON.stringify(after));
+    expect(repickLegacy(cardDir, readCardFile(cardDir))).toBe(true);
+    expect(readReport(dir)!.picked).toBe(3);
+    lockCard(ws, c.id);
+    const locked = readReport(dir)!;
+    locked.picked = 2;
+    writeFileSync(path.join(dir, "report.json"), JSON.stringify(locked));
+    expect(repickLegacy(cardDir, readCardFile(cardDir))).toBe(false);
+    expect(readReport(dir)!.picked).toBe(2);
   });
 
   test("lock: read-only; a new version starts from it as a draft", () => {
