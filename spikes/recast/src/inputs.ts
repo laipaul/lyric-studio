@@ -74,7 +74,7 @@ export function pickClips(s: SongClips, spec: string | undefined): StoryClip[] {
   });
 }
 
-export type Character = { name: string; version: number; refs: Refs; greenFrom: number; thresholdsSource: string };
+export type Character = { name: string; version: number; refs: Refs; greenFrom: number; redBelow: number; thresholdsSource: string };
 
 // The character's close-up, 3/4 face and reference picture of its latest LOCKED version (or --card-version N).
 // Never the full-body views (Paul, 18 Nov 2026: v1's front view has the wrong buttons and no veil).
@@ -90,5 +90,5 @@ export function character(ws: Workspace, name: string, version?: number): Charac
   const refs: Refs = { closeup: path.join(dir, "closeup.png"), threeQuarter: path.join(dir, "three_quarter.png"), reference: path.join(root, file.reference) };
   for (const [k, f] of Object.entries(refs)) if (!existsSync(f)) throw new Error(`${c.name} v${v.n} has no ${k === "threeQuarter" ? "3/4 face" : k} picture (${f}).`);
   const t = cardThresholds(root);
-  return { name: c.name, version: v.n, refs, greenFrom: t.green_from, thresholdsSource: t.source };
+  return { name: c.name, version: v.n, refs, greenFrom: t.green_from, redBelow: t.red_below, thresholdsSource: t.source };
 }

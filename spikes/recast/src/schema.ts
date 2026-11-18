@@ -70,8 +70,10 @@ export async function fetchSchema(id: string, fetchImpl: typeof fetch = fetch): 
 // What a method wants to send, by role. Each role is matched to the endpoint's field names below.
 export type Wants = {
   video?: string; // the clip (or the motion reference video)
-  images?: string[]; // the character's pictures, best first
-  firstFrame?: string; // the new first frame (method C)
+  images?: string[]; // pictures, best first (the character's, or the new first frame for an endpoint that takes it as a picture)
+  elements?: { frontal: string; refs: string[] }[]; // characters as fal "elements" (Kling): frontal picture + more views
+  extra?: Record<string, unknown>; // optional fields, each sent only if fal lists a field of that exact name
+  firstFrame?: string; // the new first frame (an endpoint with a first-frame field)
   image?: string; // a single picture to process (depth map)
   prompt?: string;
   resolution?: string[]; // preferred values, first match wins (e.g. ["480p"] or ["768P", "720p"])
@@ -79,7 +81,8 @@ export type Wants = {
   aspect?: number; // width / height of the clip
   fps?: number;
   seed?: number;
-  imageSize?: { width: number; height: number };
+  imageSize?: { width: number; height: number }; // for an object-typed image_size
+  imageSizeText?: string; // for a text-typed image_size ("1024x1536")
 };
 
 const ROLE_NAMES: Record<string, RegExp[]> = {
@@ -132,6 +135,11 @@ export function mapInput(schema: EndpointSchema, w: Wants): Mapped {
     if (f && !f.isArray && w.images.length > 1) notes.push(`${schema.id} takes one picture (${f.name}): the first was sent.`);
     put(f, f?.isArray ? w.images : w.images[0]);
   }
+  if (w.elements?.length) {
+    const f = fields.find((x) => x.name === "elements" && !used.has("elements"));
+    if (f) put(f, w.elements.map((e) => ({ frontal_image_url: e.frontal, reference_image_urls: e.refs })));
+    else notes.push(`${schema.id} lists no field "elements": the character was not sent as an element.`);
+  }
   if (w.image) put(find(fields, "image", used), w.image);
   if (w.prompt) put(find(fields, "prompt", used), w.prompt);
   if (w.seed !== undefined) put(find(fields, "seed", used), w.seed);
@@ -162,13 +170,19 @@ export function mapInput(schema: EndpointSchema, w: Wants): Mapped {
     if (opts.length) put(asp, opts.sort((a, b) => Math.abs(Math.log(a.r! / w.aspect!)) - Math.abs(Math.log(b.r! / w.aspect!)))[0].o);
   }
   const size = find(fields, "imageSize", used);
-  if (size && w.imageSize) put(size, w.imageSize);
+  if (size && w.imageSizeText && (size.type === "string" || size.enum)) put(size, w.imageSizeText);
+  else if (size && w.imageSize && size.type !== "string") put(size, w.imageSize);
   const frames = find(fields, "numFrames", used);
   if (frames?.required && w.durationS !== undefined) {
     let n = Math.round(w.durationS * (w.fps ?? 16));
     if (frames.minimum !== undefined) n = Math.max(n, frames.minimum);
     if (frames.maximum !== undefined) n = Math.min(n, frames.maximum);
     put(frames, n);
+  }
+  for (const [k, v] of Object.entries(w.extra ?? {})) {
+    const f = fields.find((x) => x.name === k && !used.has(k));
+    if (f) put(f, v);
+    else notes.push(`${schema.id} lists no field "${k}": not sent.`);
   }
   const missing = fields.filter((f) => f.required && !(f.name in input) && f.default === undefined).map((f) => f.name);
   return { input, notes, missing };

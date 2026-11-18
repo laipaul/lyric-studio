@@ -37,3 +37,33 @@ export function verdict(j: Judgement | null, fitNote: string | null): string {
   if (warns.length) return `Good — ${warns.length === 1 ? "one thing" : `${warns.length} things`} to improve: ${warns.join(" ")}`;
   return "Ready to use: the character, the scene and the movement all hold.";
 }
+
+// ---- the free gate before the expensive video step: is the new first frame the character? ----
+
+export type GateScores = { faces: number; character: number | null; original: number | null };
+export type GateFn = (o: { frame: string; keyframe: string; refs: string[] }) => Promise<GateScores | { error: string }>;
+
+export function localGate(repoRoot: string): GateFn {
+  return async ({ frame, keyframe, refs }) => {
+    const script = path.join(repoRoot, "services", "audio", "scripts", "recast-judge.mjs");
+    const args = [script, "--gate", "--original", frame, "--result", keyframe, ...refs.flatMap((r) => ["--reference", r])];
+    const r = spawnSync(process.execPath, args, { encoding: "utf8", maxBuffer: 8 * 1024 * 1024, env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" } });
+    const line = (r.stdout || "").trim().split(/\r?\n/).filter((l) => l.startsWith("{")).pop();
+    if (!line) return { error: `the local face check gave no answer (${(r.stderr || "").trim().split(/\r?\n/).slice(-2).join(" | ") || `exit ${r.status}`})` };
+    try {
+      return JSON.parse(line) as GateScores | { error: string };
+    } catch {
+      return { error: "the local face check's answer could not be read" };
+    }
+  };
+}
+
+const sc = (x: number | null) => (x === null ? "none" : x.toFixed(2));
+
+// Pass only when a face is found, it reaches the red line and it is closer to the character than to the original person.
+export function gateVerdict(g: GateScores, redBelow: number): { passed: boolean; reason: string | null } {
+  if (g.character === null) return { passed: false, reason: "The new first frame shows no face I can check: the video step was not sent." };
+  if (g.original !== null && g.original > g.character) return { passed: false, reason: `The new first frame still shows the original person (character score ${sc(g.character)}, original person ${sc(g.original)}): the video step was not sent.` };
+  if (g.character < redBelow) return { passed: false, reason: `The new first frame does not look like the character (score ${sc(g.character)}, below the red line ${redBelow.toFixed(2)}): the video step was not sent.` };
+  return { passed: true, reason: null };
+}

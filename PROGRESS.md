@@ -31,6 +31,28 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   (identical 1.00, same movement in other colours 0.77).
 - Fix (18 Nov 2026, Paul's first run): PowerShell hands an unquoted `--clips 7,9,10` over as "7 9 10" ("No clip
   \"7 9 10\""); card numbers now split on commas and spaces (file names still on commas only), `--methods` too.
+- **First paid run (18 Nov 2026, cards 7, 9, 10): nothing usable.** Causes found in fal's current docs:
+  - MiniMax H3 takes ONE photo per new person; the spike sent 3, so the original woman mostly stayed (0–82%).
+  - Wan takes one picture and works in 9:16: it got only the close-up (invented clothes, a different-looking woman),
+    and 26% was cropped back off.
+  - Seedance refuses "likenesses of real people" (its safety rule): removed.
+  - The Seedream "new first frame" came back almost unchanged (depth map as a 5th picture, long prompt).
+  - Prices: H3 is ~$1.13–1.57 per 5 s clip, not $0.05; Seedance tokens were counted once. The first run cost about
+    $5.50 against an estimate of $2.08.
+- **Round 2 (18 Nov 2026):**
+  - Methods:
+    - A Wan: the clip padded to 9:16, the padding removed after; nothing lost.
+    - B H3: one photo, enhance_realism, 1080P; clips under 5 s are skipped.
+    - C Keyframe + Kling O1 edit: the clip scaled to ≥720 px; the character as an element, the keyframe as an image.
+    - F Keyframe + Wan (new): the keyframe as Wan's picture, padded like the clip.
+  - The keyframe: 3 pictures (frame, close-up, 3/4), a short "replace this person" prompt, Nano Banana Pro by default
+    (`--keyframe-model`), made once when C and F both run.
+  - A free face gate before any video is paid for: a keyframe that still looks like the original person (or shows no
+    face) is tried once more, then its video step is not sent.
+  - `--keyframe-only`: the keyframes alone, for a few cents each.
+  - Prices from fal's docs per endpoint (formulas); an unknown unit stops the run before anything is uploaded.
+  - report.md is saved with a BOM, so PowerShell shows it correctly.
+  - Tests: recast spike (29). The gate's Python side was not run in the cloud (no face models there).
 - Before the run (Paul, in the app): Bride No 2 v2 (New version → Remake front, then back → lock). The spike uses the
   latest locked version's close-up, 3/4 face and reference (v1 until v2 is locked).
 

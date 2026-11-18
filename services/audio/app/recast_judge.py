@@ -307,6 +307,24 @@ class Judge:
             raise ValueError("No face found in the character's pictures.")
         return prints
 
+    def gate(self, frame: str, keyframe: str, refs: list[str]) -> dict:
+        """The free check of a new first frame before any video is paid for: the best face in the keyframe against the
+        character's pictures, and against the original frame's main face."""
+        prints = self.references(refs)
+        orig = self.kit.detect(read_image(frame), min_score=MIN_FACE_SCORE)
+        orig_print = self.kit.embed(read_image(frame), orig[0]) if orig else None
+        img = read_image(keyframe)
+        faces = self.kit.detect(img, min_score=MIN_FACE_SCORE)
+        char, old = None, None
+        for f in faces:
+            e = self.kit.embed(img, f)
+            s = max(self.kit.similarity(p, e) for p in prints)
+            char = s if char is None or s > char else char
+            if orig_print is not None:
+                so = self.kit.similarity(orig_print, e)
+                old = so if old is None or so > old else old
+        return {"faces": len(faces), "character": r3(char), "original": r3(old)}
+
     def judge(self, original: str, result: str, refs: list[str], every: float = 0.5, green: float = GREEN_FROM) -> dict:
         import cv2
 
@@ -405,10 +423,11 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--reference", action="append", required=True)
     ap.add_argument("--every", type=float, default=0.5)
     ap.add_argument("--green", type=float, default=GREEN_FROM)
+    ap.add_argument("--gate", action="store_true", help="--original is the clip's first frame, --result the new first frame (pictures)")
     a = ap.parse_args(argv)
     j = Judge()
     try:
-        out = j.judge(a.original, a.result, a.reference, a.every, a.green)
+        out = j.gate(a.original, a.result, a.reference) if a.gate else j.judge(a.original, a.result, a.reference, a.every, a.green)
     except ValueError as e:
         print(json.dumps({"error": str(e)}))
         return 2

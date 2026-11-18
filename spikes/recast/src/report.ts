@@ -18,6 +18,9 @@ export type StepRecord = {
   reason?: string;
 };
 
+// The new first frame of the keyframe methods and the free face check on it (every try).
+export type KeyframeRecord = { file: string | null; model: string; passed: boolean; attempts: { seed: number; character: number | null; original: number | null; passed: boolean; file: string }[]; reason?: string };
+
 export type MethodResult = {
   method: string;
   letter: string;
@@ -26,7 +29,8 @@ export type MethodResult = {
   reason?: string;
   steps: StepRecord[];
   seconds?: number;
-  output?: { raw: string; fitted: string; raw_size: string; crop_share: number };
+  output?: { raw: string; fitted: string; raw_size: string; crop_share: number; padding_removed?: boolean };
+  keyframe?: KeyframeRecord;
   judge?: Judgement | null;
   judge_error?: string;
   verdict?: string;
@@ -39,6 +43,7 @@ export type RunReport = {
   song: string;
   character: { name: string; version: number; pictures: string[]; green_from: number; lines: string };
   methods: string[];
+  keyframe_model?: string;
   cap_usd: number;
   estimated_usd: number;
   billed_usd: number | null;
@@ -52,7 +57,7 @@ const icon = (l: string | undefined) => (l === "ok" ? "✓" : l === "warn" ? "!"
 export function reportMarkdown(r: RunReport): string {
   const out: string[] = [];
   out.push(`# Recast: ${r.song} → ${r.character.name} (v${r.character.version})`, "");
-  out.push(`- Pictures sent: ${r.character.pictures.join(", ")} (never the full-body views).`);
+  out.push(`- Pictures: ${r.character.pictures.join(", ")} (never the full-body views). MiniMax and Wan get the close-up only; the keyframe gets the close-up and 3/4 face; Kling gets all three as an element.`);
   out.push(`- Face check: SFace against those pictures, same person from ${r.character.green_from} (${r.character.lines}).`);
   out.push(`- Cost: estimated ${money(r.estimated_usd)} (cap ${money(r.cap_usd)})${r.billed_usd !== null ? `, billed by fal ${money(r.billed_usd)}` : ""}. ${r.billing_note}`);
   out.push(`- Methods: ${r.methods.join(", ")}.`, "");
@@ -72,7 +77,9 @@ export function reportMarkdown(r: RunReport): string {
     if (c.comparison) out.push(`Side by side: \`${c.folder}/${c.comparison}\``, "");
     for (const m of c.results) {
       if (m.judge?.face.weakest) out.push(`- ${m.letter}: weakest face moment ${m.judge.face.weakest.t.toFixed(1)} s (score ${m.judge.face.weakest.score.toFixed(2)}).`);
-      if (m.output && m.output.crop_share > 0.02) out.push(`- ${m.letter}: the model returned ${m.output.raw_size}; ${Math.round(m.output.crop_share * 100)}% was cropped to keep the clip's shape.`);
+      if (m.keyframe) out.push(`- ${m.letter}: new first frame (${m.keyframe.model}): ${m.keyframe.attempts.map((x, i) => `try ${i + 1} seed ${x.seed}: face vs character ${x.character === null ? "none" : x.character.toFixed(2)}, vs original person ${x.original === null ? "none" : x.original.toFixed(2)} ${x.passed ? "✓" : "×"}`).join("; ")}${m.keyframe.reason ? `. ${m.keyframe.reason}` : ""}`);
+      if (m.output?.padding_removed) out.push(`- ${m.letter}: the model worked on the clip padded to 9:16; the padding was removed (nothing of the picture was cropped).`);
+      else if (m.output && m.output.crop_share > 0.02) out.push(`- ${m.letter}: the model returned ${m.output.raw_size}; ${Math.round(m.output.crop_share * 100)}% was cropped to keep the clip's shape.`);
       for (const s of m.steps) for (const n of s.notes ?? []) out.push(`- ${m.letter} (${s.label}): ${n}`);
     }
     out.push("");
@@ -80,5 +87,5 @@ export function reportMarkdown(r: RunReport): string {
   out.push("Which recast looks right is your call; the checks say whether the character, the scene and the movement held.");
   const ids = r.clips.flatMap((c) => c.results.flatMap((m) => m.steps.filter((s) => s.request_id).map((s) => `card ${c.position} ${m.letter} ${s.label}: ${s.endpoint} ${s.request_id} (${s.status})`)));
   if (ids.length) out.push("", "fal request IDs (to trace a result, or `pnpm recast fetch` to get one that did not download):", ...ids.map((x) => `- ${x}`));
-  return `${out.join("\n")}\n`;
+  return `\uFEFF${out.join("\n")}\n`; // with a BOM: Windows PowerShell's Get-Content then shows ✓ × → – correctly
 }

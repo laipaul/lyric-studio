@@ -11,20 +11,62 @@ export function sendCopyArgs(input: string, out: string): string[] {
   return ["-y", "-v", "error", "-i", input, "-map", "0:v:0", "-an", "-c:v", "libx264", "-preset", "medium", "-crf", "16", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out];
 }
 
-// The clip's first frame as PNG (method C).
+export type Rect = { x: number; y: number; width: number; height: number };
+const evenDown = (x: number) => Math.floor(x / 2) * 2;
+
+// The 9:16 canvas the clip is centred on (black padding), and where the clip sits on it. Sizes are even. A clip as wide
+// as 9:16 or wider keeps its own width and gets bars above and below; a clip taller than 9:16 keeps its own height and
+// gets bars left and right. The model's video is later scaled to the canvas and this rectangle cut out again.
+export function padLayout(width: number, height: number): { canvas: { width: number; height: number }; clip: Rect } {
+  const w = even(width);
+  const h = even(height);
+  if (w / h >= 9 / 16) {
+    const H = Math.max(h, even((w * 16) / 9));
+    return { canvas: { width: w, height: H }, clip: { x: 0, y: evenDown((H - h) / 2), width: w, height: h } };
+  }
+  const W = Math.max(w, even((h * 9) / 16));
+  return { canvas: { width: W, height: h }, clip: { x: evenDown((W - w) / 2), y: 0, width: w, height: h } };
+}
+
+// The clip (or a picture) on its 9:16 canvas. `image` writes one PNG instead of a video.
+export function padArgs(input: string, size: { width: number; height: number }, out: string, image = false): string[] {
+  const { canvas, clip } = padLayout(size.width, size.height);
+  const vf = `scale=${clip.width}:${clip.height}:flags=lanczos,pad=${canvas.width}:${canvas.height}:${clip.x}:${clip.y}:color=black,setsar=1`;
+  if (image) return ["-y", "-v", "error", "-i", input, "-frames:v", "1", "-vf", vf, out];
+  return ["-y", "-v", "error", "-i", input, "-map", "0:v:0", "-an", "-vf", `${vf},format=yuv420p`, "-c:v", "libx264", "-preset", "medium", "-crf", "16", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out];
+}
+
+// Kling O1 wants both sides at least 720 px (at most 2160) and at least 24 fps: the clip scaled up (lanczos, same shape,
+// even sizes), its frame rate raised to 24 when lower.
+export function kling720Size(width: number, height: number): { width: number; height: number } {
+  const s = Math.max(1, 720 / Math.min(width, height));
+  const up = (x: number) => Math.max(720, Math.ceil((x * s - 1e-6) / 2) * 2);
+  return { width: up(width), height: up(height) };
+}
+export function kling720Args(input: string, size: { width: number; height: number }, fps: number, out: string): string[] {
+  const k = kling720Size(size.width, size.height);
+  const vf = [`scale=${k.width}:${k.height}:flags=lanczos`, "setsar=1", ...(fps < 24 ? ["fps=24"] : [])].join(",");
+  return ["-y", "-v", "error", "-i", input, "-map", "0:v:0", "-an", "-vf", vf, "-c:v", "libx264", "-preset", "medium", "-crf", "16", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out];
+}
+
+// The clip's first frame as PNG (the keyframe methods).
 export function firstFrameArgs(input: string, out: string): string[] {
   return ["-y", "-v", "error", "-i", input, "-frames:v", "1", out];
 }
 
 // A model's video back to the clip's exact shape: scaled to cover, centre-cropped to the clip's size, the clip's frame
 // rate, exactly the clip's length (the last frame held when shorter, cut when longer), no sound.
-export function fitArgs(input: string, t: Target, out: string): string[] {
+// With `padded`, the model worked on the clip on its 9:16 canvas (padLayout): its video is scaled to cover the canvas,
+// and exactly the clip's rectangle is cut out, so the padding is gone and nothing of the picture is lost.
+export function fitArgs(input: string, t: Target, out: string, padded = false): string[] {
   const w = even(t.width);
   const h = even(t.height);
   const d = t.durationS.toFixed(3);
+  const lay = padLayout(w, h);
   const vf = [
-    `scale=${w}:${h}:force_original_aspect_ratio=increase:flags=lanczos`,
-    `crop=${w}:${h}`,
+    ...(padded
+      ? [`scale=${lay.canvas.width}:${lay.canvas.height}:force_original_aspect_ratio=increase:flags=lanczos`, `crop=${lay.canvas.width}:${lay.canvas.height}`, `crop=${lay.clip.width}:${lay.clip.height}:${lay.clip.x}:${lay.clip.y}`]
+      : [`scale=${w}:${h}:force_original_aspect_ratio=increase:flags=lanczos`, `crop=${w}:${h}`]),
     "setsar=1",
     `fps=${t.fps > 0 ? t.fps.toFixed(3) : "30"}`,
     `tpad=stop_mode=clone:stop_duration=${d}`,
