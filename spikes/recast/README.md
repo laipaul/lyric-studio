@@ -46,7 +46,7 @@ pnpm recast "Wedding Day" --character "Bride No 2" --clips 7,9,10 --keyframe-cli
 
 | Option | Meaning |
 |---|---|
-| `--clips 7,9,10` | The numbers on the Storyboard cards (as `--list` shows them), clip file names, or `all`. |
+| `--clips 7,9,10` (on PowerShell either `--clips 7,9,10` or `--clips "7,9,10"` works) | The numbers on the Storyboard cards (as `--list` shows them), clip file names, or `all`. |
 | `--methods wan,h3,keyframe` | Which methods: names or letters (A–E). The default is A, B and C. |
 | `--keyframe-clips 7` | C only on these cards (the first run: the close-up). |
 | `--quality draft\|high` | A and B both at their lower (draft) or higher resolution. The default is A 720p, B 768P. C is always 480p. |

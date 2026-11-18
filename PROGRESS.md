@@ -29,6 +29,8 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: recast spike (11, stand-ins for fal and the judge), recast judge (6, Python). Found and fixed while testing:
   the first motion measure called identical movement "not following" (0.14); it now compares flow fields over 0.1 s
   (identical 1.00, same movement in other colours 0.77).
+- Fix (18 Nov 2026, Paul's first run): PowerShell hands an unquoted `--clips 7,9,10` over as "7 9 10" ("No clip
+  \"7 9 10\""); card numbers now split on commas and spaces (file names still on commas only), `--methods` too.
 - Before the run (Paul, in the app): Bride No 2 v2 (New version → Remake front, then back → lock). The spike uses the
   latest locked version's close-up, 3/4 face and reference (v1 until v2 is locked).
 

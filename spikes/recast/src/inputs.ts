@@ -48,13 +48,19 @@ export async function songClips(ws: Workspace, query: string): Promise<SongClips
   };
 }
 
+// Splits a list option. PowerShell hands an unquoted 7,9,10 over as "7 9 10", so a spec of only digits, commas and
+// spaces splits on both; anything else (clip file names may contain spaces) splits on commas only.
+export function splitList(spec: string): string[] {
+  const parts = /^[\d,\s]*$/.test(spec) ? spec.split(/[\s,]+/) : spec.split(",");
+  return parts.map((s) => s.trim()).filter(Boolean);
+}
+
 // --clips 7,9,10 (the numbers on the Storyboard cards) | names | all (every video clip, not the omitted ones).
 export function pickClips(s: SongClips, spec: string | undefined): StoryClip[] {
   if (!spec?.trim()) throw new Error("Which clips? --clips 7,9,10 (the numbers on the Storyboard cards), file names, or all. --list shows them.");
   const clips = s.items.flatMap((i) => (i.clip ? [i.clip] : []));
   if (spec.trim().toLowerCase() === "all") return clips.filter((c) => c.kind === "video" && !c.omit);
-  return spec.split(",").map((raw) => {
-    const x = raw.trim();
+  return splitList(spec).map((x) => {
     if (/^\d+$/.test(x)) {
       const it = s.items.find((i) => i.position === Number(x));
       if (!it) throw new Error(`There is no card ${x} on ${s.title}'s Storyboard (it has ${s.items.length}).`);

@@ -122,7 +122,7 @@ export const METHODS: Record<MethodId, Method> = {
 
 // --methods "wan,h3,keyframe"; --keyframe-clips limits C to some clips (the first run: the close-up only).
 export function parseMethods(text: string | undefined): MethodId[] {
-  const list = (text ?? DEFAULT_METHODS.join(",")).split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const list = (text ?? DEFAULT_METHODS.join(",")).split(/[\s,]+/).map((s) => s.trim().toLowerCase()).filter(Boolean);
   const alias: Record<string, MethodId> = { a: "wan", b: "h3", c: "keyframe", d: "aleph", e: "genjutsu", seedance: "keyframe" };
   const out = list.map((x) => alias[x] ?? x);
   const bad = out.filter((x) => !(METHOD_IDS as readonly string[]).includes(x));

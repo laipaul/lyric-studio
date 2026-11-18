@@ -18,6 +18,7 @@ import { run, Stop } from "../recast";
 import type { Judgement } from "../src/judge";
 import { verdict } from "../src/judge";
 import { cropShare, fitArgs, probeVideo, findTools, ffmpeg, type Tools } from "../src/media";
+import { pickClips, splitList, type SongClips } from "../src/inputs";
 import { keyframeSize, parseMethods } from "../src/methods";
 import { costOf } from "../src/pricing";
 import { reportMarkdown, type RunReport } from "../src/report";
@@ -323,5 +324,24 @@ describe("a whole run with stand-ins", () => {
     assert.ok(existsSync(path.join(runDir!, r3.clips[1].folder, "B_h3.mp4")));
     assert.equal(submits.length, before, "fetch sends nothing new");
     assert.match(reportMarkdown(r3), /Card 2/);
+  });
+});
+
+describe("list options survive PowerShell's unquoted 7,9,10", () => {
+  const mk = (position: number, name: string) => ({ position, label: name, clip: { name, kind: "video", omit: false } });
+  const song = { title: "Wedding Day", items: [mk(7, "a.mp4"), mk(9, "b.mp4"), mk(10, "c.mp4"), mk(11, "My clip 1.mp4")] } as unknown as SongClips;
+  test("clips: spaces, commas, both", () => {
+    for (const spec of ["7 9 10", "7,9,10", "7, 9 ,10"]) {
+      assert.deepEqual(splitList(spec), ["7", "9", "10"]);
+      assert.deepEqual(pickClips(song, spec).map((c) => c.name), ["a.mp4", "b.mp4", "c.mp4"]);
+    }
+  });
+  test("a file name with a space stays whole", () => {
+    assert.deepEqual(splitList("My clip 1.mp4, a.mp4"), ["My clip 1.mp4", "a.mp4"]);
+    assert.deepEqual(pickClips(song, "My clip 1.mp4").map((c) => c.name), ["My clip 1.mp4"]);
+  });
+  test("methods accept spaces", () => {
+    assert.deepEqual(parseMethods("wan h3"), ["wan", "h3"]);
+    assert.deepEqual(parseMethods("wan h3 keyframe"), ["wan", "h3", "keyframe"]);
   });
 });
