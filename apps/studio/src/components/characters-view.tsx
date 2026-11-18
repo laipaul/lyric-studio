@@ -91,7 +91,10 @@ export function CharactersList() {
                 <img src={fileUrl(c.id, c.thumbnail, new Date(c.updated_at).getTime())} alt="" className="aspect-[3/4] w-full object-cover" />
                 <div className="flex items-center justify-between gap-2 p-3">
                   <span className="truncate text-sm font-medium">{c.name}</span>
-                  <StatusChip status={c.status} version={c.version} />
+                  <span className="flex items-center gap-1">
+                    <StatusChip status={c.status} version={c.version} />
+                    {c.draft ? <span className="text-muted-foreground text-[11px]" data-card-draft={c.draft}>v{c.draft} draft</span> : null}
+                  </span>
                 </div>
               </Link>
             </li>
@@ -206,7 +209,9 @@ export function CardPage({ id }: { id: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [cap, setCap] = useState(3);
   const [confirm, setConfirm] = useState<"pack" | "lock" | null>(null);
-  const load = useCallback(() => call<CardDetail>(`/api/cards/${id}`).then(setD).catch((e: Error) => setError(e.message)), [id]);
+  // The version shown: null = the newest; a number = an older, read-only version.
+  const [viewN, setViewN] = useState<number | null>(null);
+  const load = useCallback(() => call<CardDetail>(`/api/cards/${id}${viewN ? `?v=${viewN}` : ""}`).then(setD).catch((e: Error) => setError(e.message)), [id, viewN]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -222,6 +227,7 @@ export function CardPage({ id }: { id: string }) {
     setError(null);
     try {
       setD(await call<CardDetail>(`/api/cards/${id}`, { method: "POST", ...json(body) }));
+      setViewN(null);
       setConfirm(null);
       if (["pack", "remake", "fetch"].includes(String(body.action))) window.dispatchEvent(new Event("lyric-tasks-changed"));
     } catch (e) {
@@ -275,8 +281,35 @@ export function CardPage({ id }: { id: string }) {
         <h1 className="text-xl font-medium">{card.name}</h1>
         <span className="text-muted-foreground text-sm">{KIND_LABEL[card.kind]}</span>
         <StatusChip status={version.status} version={version.n} />
-        {file.versions.length > 1 ? <span className="text-muted-foreground text-xs">{file.versions.map((v) => `v${v.n} ${v.status}`).join(" · ")}</span> : null}
+        {file.versions.length > 1 ? (
+          <span className="flex flex-wrap items-center gap-1 text-xs" data-card-versions>
+            {file.versions.map((v) => (
+              <button
+                key={v.n}
+                type="button"
+                data-card-version={v.n}
+                data-active={v.n === version.n ? "" : undefined}
+                onClick={() => setViewN(v.n === d.latest ? null : v.n)}
+                className={cn("rounded-full border px-2 py-0.5", v.n === version.n ? "border-brand/60 text-foreground" : "text-muted-foreground hover:text-foreground")}
+              >
+                v{v.n} {v.status === "locked" ? (v.n === d.inUse ? "locked · in use" : "locked") : "draft"}
+              </button>
+            ))}
+          </span>
+        ) : null}
       </div>
+      {version.n !== d.latest ? (
+        <p className="text-muted-foreground rounded-md border px-4 py-2 text-xs" data-old-version>
+          You are looking at v{version.n} (read-only{version.n === d.inUse ? ", still in use until v" + d.latest + " is locked" : ""}).{" "}
+          <button type="button" className="text-foreground underline" onClick={() => setViewN(null)}>
+            Open v{d.latest}
+          </button>
+        </p>
+      ) : draft && d.inUse ? (
+        <p className="text-muted-foreground rounded-md border px-4 py-2 text-xs" data-draft-note>
+          v{version.n} is a draft. Scenes, stills and recasts keep using locked v{d.inUse} until you lock v{version.n}.
+        </p>
+      ) : null}
       {error ? <p className="rounded-md border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-sm text-amber-100" data-card-error>{error}</p> : null}
 
       <div className="grid gap-6 md:grid-cols-[280px_1fr]">
@@ -440,6 +473,11 @@ export function CardPage({ id }: { id: string }) {
                 {lastJob.label}: {lastJob.message}
               </p>
             ) : null}
+            {character && draft && items.some((i) => i.id === "body_front" || i.id === "body_back") ? (
+              <Button size="sm" variant="outline" className="w-fit" disabled={!!running || !!busy} onClick={() => act("remake", { action: "remake", only: ["body_front", "body_back"], cap })} data-remake-body>
+                <RefreshCw /> Remake the full-body views (front, then back)
+              </Button>
+            ) : null}
             {missing && draft ? (
               <Button size="sm" variant="outline" className="w-fit" disabled={!!running || !!busy} onClick={() => act("fetch", { action: "fetch" })} data-fetch-missing>
                 <RotateCcw /> Get missing pictures (free)
@@ -527,11 +565,15 @@ export function CardPage({ id }: { id: string }) {
             ) : (
               <div className="flex flex-wrap items-center gap-3 text-xs">
                 <span data-locked-note>
-                  Locked{version.locked_at ? ` on ${new Date(version.locked_at).toLocaleString()}` : ""}: read-only. Scenes and stills will use this version.
+                  Locked{version.locked_at ? ` on ${new Date(version.locked_at).toLocaleString()}` : ""}: read-only.{" "}
+                  {version.n === d.inUse ? "Scenes, stills and recasts use this version." : `Replaced by v${d.inUse}.`}
+                  {version.n === d.latest ? " New version starts a draft with the same picture, outfit, description and pictures; remake only what needs it." : ""}
                 </span>
-                <Button size="sm" variant="outline" disabled={!!busy} onClick={() => act("new-version", { action: "new-version" })} data-new-version>
-                  <Plus /> New version
-                </Button>
+                {version.n === d.latest ? (
+                  <Button size="sm" variant="outline" disabled={!!busy} onClick={() => act("new-version", { action: "new-version" })} data-new-version>
+                    <Plus /> New version
+                  </Button>
+                ) : null}
               </div>
             )}
           </section>

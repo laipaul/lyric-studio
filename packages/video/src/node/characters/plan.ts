@@ -73,24 +73,140 @@ export const SCENE_STYLE =
 export type OutfitSplit = { from: string; closeups: string; front: string; back: string };
 export const splitIsCurrent = (s: OutfitSplit | undefined | null, outfit: string | undefined): s is OutfitSplit => !!s && !!outfit?.trim() && s.from.trim() === outfit.trim();
 
+// ---- per-view details: what is only on one side, the neckline, the veil ----
+
+// Details that sit on one side of the outfit only; each gets a short negative on the other side (front: "No buttons on the front.").
+type SideDetail = { re: RegExp; backNo: string; frontNo: string };
+const SIDE_DETAILS: SideDetail[] = [
+  { re: /\bbuttons?\b/i, backNo: "buttons", frontNo: "buttons" },
+  { re: /\bbows?\b/i, backNo: "bow", frontNo: "bow" },
+  { re: /\b(lacing|lace[- ]up|corset)\b/i, backNo: "lacing or corset ties", frontNo: "lacing or corset ties" },
+  { re: /\bzip(per)?s?\b/i, backNo: "zipper", frontNo: "zipper" },
+  { re: /\bcut[- ]?outs?\b/i, backNo: "cut-out", frontNo: "cut-out" },
+  { re: /\bkeyhole\b/i, backNo: "keyhole opening", frontNo: "keyhole opening" },
+  { re: /\bopen[- ]back\b/i, backNo: "open-back cut", frontNo: "open-back cut" },
+  { re: /\bV[- ]back\b/i, backNo: "V-shaped back cut", frontNo: "V-shaped back cut" },
+  { re: /\btrain\b/i, backNo: "train", frontNo: "train" },
+];
+const FRONT_ONLY: { re: RegExp; no: string }[] = [
+  { re: /\bboutonni[eè]re\b/i, no: "boutonnière" },
+  { re: /\bbrooch(es)?\b/i, no: "brooch" },
+  { re: /\bcorsage\b/i, no: "corsage" },
+  { re: /\bbuttons?\b/i, no: "buttons" },
+];
+
+// Explicit negatives for the front view: details found in the back text but not in the front text.
+export function frontNegatives(front: string, back: string): string[] {
+  return SIDE_DETAILS.filter((d) => d.re.test(back) && !d.re.test(front)).map((d) => `No ${d.frontNo} on the front.`);
+}
+// Explicit negatives for the back view: details found in the front text but not in the back text.
+export function backNegatives(front: string, back: string): string[] {
+  return FRONT_ONLY.filter((d) => d.re.test(front) && !d.re.test(back)).map((d) => `No ${d.no} on the back.`);
+}
+
+const NECKLINES: { re: RegExp; name: string }[] = [
+  { re: /\b(bateau|boat[- ]?neck(line)?)\b/i, name: "bateau" },
+  { re: /\bsweetheart\b/i, name: "sweetheart" },
+  { re: /\bv[- ]?neck(line)?\b/i, name: "V-neck" },
+  { re: /\boff[- ]the[- ]shoulders?\b/i, name: "off-the-shoulder" },
+  { re: /\bone[- ]shoulder\b/i, name: "one-shoulder" },
+  { re: /\bhalter\b/i, name: "halter" },
+  { re: /\b(high[- ]neck(line)?|turtle[- ]?neck|mock[- ]neck)\b/i, name: "high" },
+  { re: /\bcowl\b/i, name: "cowl" },
+  { re: /\billusion\b/i, name: "illusion" },
+  { re: /\bsquare[- ](neck(line)?|cut)\b/i, name: "square" },
+  { re: /\b(scoop(ed)?)\b/i, name: "scoop" },
+  { re: /\b(jewel)\b/i, name: "jewel" },
+  { re: /\b(crew[- ]?neck|round[- ]neck(line)?|round neckline)\b/i, name: "round" },
+];
+const OTHER_NECKLINES = ["sweetheart", "V-neck", "round", "square", "off-the-shoulder"];
+
+// The neckline named in a text (the earliest one), or null.
+export function necklineOf(text: string): string | null {
+  let best: { i: number; name: string } | null = null;
+  for (const n of NECKLINES) {
+    const m = n.re.exec(text);
+    if (m && (!best || m.index < best.i)) best = { i: m.index, name: n.name };
+  }
+  return best?.name ?? null;
+}
+export function necklineSentence(closeups: string): string | null {
+  const name = necklineOf(closeups);
+  if (!name) return null;
+  const others = OTHER_NECKLINES.filter((x) => x !== name);
+  const list = `${others.slice(0, -1).join(", ")} or ${others[others.length - 1]}`;
+  return `Neckline: ${name} neckline, exactly as in the close-ups; not ${list}.`;
+}
+
+// The clause of the outfit text that names the veil (e.g. "sheer ivory tulle veil"), or "the veil" when it cannot be taken out cleanly.
+// Returns null when no veil is mentioned.
+// A part of the outfit text without its veil clauses ("" when nothing else is left).
+export function withoutVeil(text: string): string {
+  return text
+    .split(/\s*[,;]\s*/)
+    .filter((c) => c.trim() && !/\bveil/i.test(c))
+    .join(", ")
+    .trim();
+}
+
+export function veilPhrase(...texts: (string | undefined | null)[]): string | null {
+  let mentioned = false;
+  for (const t of texts) {
+    if (!t || !/\bveils?\b/i.test(t)) continue;
+    mentioned = true;
+    for (const clause of t.split(/\s*(?:[,;.]|\band\b|\bwith\b|\bplus\b)\s*/i)) {
+      if (!/\bveil\b/i.test(clause)) continue;
+      const c = clause.replace(/^\s*(?:(?:wearing|finished|topped|and|a|an|the|their|her|his)\s+)+/i, "").replace(/[.\s]+$/, "").trim();
+      if (c && !/^veils?$/i.test(c) && c.split(/\s+/).length <= 8) return c;
+    }
+  }
+  return mentioned ? "the veil" : null;
+}
+const cap1 = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+export function veilSentence(viewId: ViewId, phrase: string | null): string | null {
+  if (!phrase) return null;
+  const p = cap1(phrase);
+  if (viewId === "body_front") return `${p} falling behind their shoulders, visible at both sides of the shoulders and arms.`;
+  if (viewId === "body_back") return `${p} falling down their back, clearly visible.`;
+  return `${p} falling behind their shoulders, visible in this picture.`;
+}
+
 export function viewPrompt(v: View, outfit?: string, split?: OutfitSplit | null): string {
   const o = outfit?.trim();
   const sp = splitIsCurrent(split, outfit) ? split : null;
   const keep = "Keep exactly this outfit, the same in the front and back views.";
+  const veil = veilSentence(v.id, veilPhrase(o, sp?.closeups, sp?.front, sp?.back));
+  const frame = `The frame ends at the upper chest: do NOT show the waist, legs, skirt, trousers or shoes${veil ? " (the veil is allowed to show)" : ""}.`;
+  const extra: string[] = [];
   let wear: string;
   if (sp) {
-    if (v.face) wear = ` Outfit (only the part inside this head-and-shoulders frame: neckline, collar, shoulders, earrings, hair): ${sp.closeups.trim() || "as in the reference picture"}. The frame ends at the upper chest: do NOT show the waist, legs, skirt, trousers or shoes.`;
-    else if (v.id === "body_front") wear = ` Outfit: ${sp.front.trim()}. ${keep}${sp.back.trim() ? ` Details that are only on the back (${sp.back.trim()}) must NOT appear on the front.` : ""}`;
-    else wear = ` Outfit: ${sp.back.trim()}. ${keep}${sp.front.trim() ? ` Details that are only on the front (${sp.front.trim()}) are not visible from behind.` : ""}`;
+    if (v.face) wear = ` Outfit (only the part inside this head-and-shoulders frame: neckline, collar, shoulders, earrings, hair): ${sp.closeups.trim() || "as in the reference picture"}. ${frame}`;
+    else if (v.id === "body_front") {
+      {
+        // The veil is seen from the front too (behind the shoulders): it is never listed as a back-only detail.
+        const backOnly = withoutVeil(sp.back);
+        wear = ` Outfit: ${sp.front.trim()}. ${keep}${backOnly ? ` Details that are only on the back (${backOnly}) must NOT appear on the front.` : ""}`;
+      }
+      extra.push(...frontNegatives(sp.front, sp.back));
+      const nl = necklineSentence(sp.closeups);
+      if (nl) extra.push(nl);
+    } else {
+      // Only the named front-only items (backNegatives) are hidden: the "front" text also holds the gown itself, which
+      // is of course visible from behind (seen in Bride No 2's prompt, 18 Nov 2026).
+      wear = ` Outfit: ${sp.back.trim()}. ${keep}`;
+      extra.push(...backNegatives(sp.front, sp.back));
+    }
   } else
     wear = o
       ? v.face
-        ? ` Outfit (only the part inside this head-and-shoulders frame: neckline, collar, shoulders, earrings, hair): ${o}. The frame ends at the upper chest: do NOT show the waist, legs, skirt, trousers or shoes.`
+        ? ` Outfit (only the part inside this head-and-shoulders frame: neckline, collar, shoulders, earrings, hair): ${o}. ${frame}`
         : ` Outfit: ${o}. ${keep}`
       : v.face
         ? ""
         : " Outfit: continue the outfit of the reference naturally below the frame, in the same style; do not change it into something else.";
-  return `${v.prompt}${wear} ${PACK_STYLE}`;
+  if (veil) extra.push(veil);
+  return `${v.prompt}${wear}${extra.length ? ` ${extra.join(" ")}` : ""} ${PACK_STYLE}`;
 }
 
 export type ViewSet = "all" | "face" | "body";

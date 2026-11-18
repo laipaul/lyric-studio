@@ -1,5 +1,5 @@
 // One character or scene card.
-// GET: the card, its current version, the pictures' report, the cost of Make pack, what is missing before Lock, jobs.
+// GET (?v=n to view an older, read-only version): the card, its current version (or version n), the version in use, the pictures' report, the cost of Make pack, what is missing before Lock, jobs.
 // PATCH { outfit?, outfit_split?, props?, description?, model? }: the draft's texts (refused on a locked version). A changed outfit is split per view
 //   (close-ups / front / back) with the cheap text model; without a fal key the outfit is still saved and `message` says so.
 // POST { action }: "check" (the picture again) · "crop" (crop to face) · "pack" { cap } · "remake" { only, cap } ·
@@ -11,7 +11,7 @@ import { connection } from "next/server";
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import {
   calibrationSongs, cardFace, cardTools, ensureSplit, splitNeeded, cardJobsFor, cardRoot, cardThresholds, checkCardPicture, cropCardToFace, currentVersion, enqueueCardJob, getCard, lockCard, lockProblems,
-  MODELS, newVersion, packEstimate, readCardFile, readReport, repickLegacy, buildSheet, runCardJob, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId,
+  MODELS, newVersion, usableVersion, versionByNumber, packEstimate, readCardFile, readReport, repickLegacy, buildSheet, runCardJob, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId,
 } from "@lyric/video/characters";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
@@ -19,15 +19,17 @@ import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 type Params = { params: Promise<{ id: string }> };
 const fail = (error: unknown) => Response.json({ error: (error as Error).message }, { status: 400 });
 
-function detail(id: string, message: string | null = null) {
+function detail(id: string, message: string | null = null, n: number | null = null) {
   return withWorkspace((ws) => {
     const row = getCard(ws, id);
     const root = cardRoot(ws, row);
     const file = readCardFile(root);
-    const v = currentVersion(file);
+    const current = currentVersion(file);
+    const v = versionByNumber(file, n);
+    const latest = v.n === current.n;
     // A draft made before "the latest run wins" is picked again once (free); the contact sheet is rebuilt in the background.
     const busy = cardJobsFor(ws, id).some((j) => j.status === "queued" || j.status === "running");
-    if (row.kind === "character" && !busy && repickLegacy(root, file)) {
+    if (latest && row.kind === "character" && !busy && repickLegacy(root, file)) {
       const report = readReport(versionDir(root, v.n));
       if (report) void buildSheet(cardFace(), root, file, report).catch(() => undefined);
     }
@@ -36,9 +38,12 @@ function detail(id: string, message: string | null = null) {
       card: row,
       file,
       version: v,
+      // The version scenes, stills and recasts use (the latest locked one), and the newest version (a draft, maybe).
+      inUse: usableVersion(file)?.n ?? null,
+      latest: current.n,
       report: readReport(versionDir(root, v.n)),
       estimate: packEstimate(file),
-      lockProblems: v.status === "draft" ? lockProblems(root, file) : [],
+      lockProblems: latest && v.status === "draft" ? lockProblems(root, file) : [],
       thresholds: cardThresholds(root),
       jobs: cardJobsFor(ws, id),
       models: Object.values(MODELS).map((m) => ({ id: m.id, name: m.name, price: m.priceNote })),
@@ -48,11 +53,12 @@ function detail(id: string, message: string | null = null) {
 }
 export type CardDetail = ReturnType<typeof detail>;
 
-export async function GET(_request: Request, { params }: Params) {
+export async function GET(request: Request, { params }: Params) {
   await connection();
   try {
     const { id } = await params;
-    return Response.json(detail(id), { headers: { "Cache-Control": "no-store" } });
+    const v = Number(new URL(request.url).searchParams.get("v"));
+    return Response.json(detail(id, null, Number.isInteger(v) && v > 0 ? v : null), { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return fail(error);
   }

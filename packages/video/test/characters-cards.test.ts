@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { findOrCreateSongProject, songPathsById } from "../src/node";
 import {
-  calibrationSongs, cardRoot, cardThresholds, createCard, currentVersion, enqueueCardJob, fetchMissing, getCard, listCardJobs, listCards, lockCard, lockProblems, makePictures, newVersion,
+  calibrationSongs, cardRoot, cardThresholds, createCard, currentVersion, enqueueCardJob, fetchMissing, getCard, listCardJobs, listCards, lockCard, lockProblems, makePictures, newVersion, usableVersion, versionByNumber,
   packEstimate, readCardFile, readReport, rescore, repickLegacy, runCardJob, updateDraft, versionDir, ensureSplit, makeSplit, parseSplit,
 } from "../src/node/characters";
 import { anglePrompt, ANGLES, classify, DEFAULT_THRESHOLDS, DESCRIPTION_PROMPT, PACK_STYLE, imageSize, MAX_YAW, minFaceFor, VIEWS, viewPrompt } from "../src/node/characters/plan";
@@ -77,7 +77,8 @@ describe("cards", () => {
     const prompts = sent.filter((i) => Array.isArray(i.image_urls));
     const back = prompts.find((i) => /seen from behind/.test(String(i.prompt)))!;
     const front = prompts.find((i) => /from the front, standing/.test(String(i.prompt)))!;
-    expect((front.image_urls as string[]).length).toBe(1);
+    expect((front.image_urls as string[]).length).toBe(2); // the card picture + the close-up (neckline and veil)
+    expect(String(front.prompt)).toMatch(/The last reference picture is a close-up of this same outfit/);
     expect((back.image_urls as string[]).length).toBe(2);
     expect(String(back.prompt)).toMatch(/SAME outfit seen from the front/);
     expect(String(prompts.find((i) => /close-up portrait of this person's face and the top/.test(String(i.prompt)))!.prompt)).toMatch(/Eyebrows exactly as in the reference.*no net, mesh/);
@@ -165,7 +166,8 @@ describe("cards", () => {
     expect(find(/close-up portrait of this person's face and the top/)).not.toMatch(/buttons/);
     expect(find(/three-quarter/)).toMatch(/Outfit \(only the part inside this head-and-shoulders frame.*neckline and veil/);
     expect(find(/from the front, standing/)).toMatch(/Outfit: front of the outfit.*Details that are only on the back \(V-neck back, buttons down the spine\) must NOT appear on the front/);
-    expect(find(/seen from behind/)).toMatch(/Outfit: V-neck back, buttons down the spine\..*Details that are only on the front \(front of the outfit.*\) are not visible from behind/);
+    expect(find(/seen from behind/)).toMatch(/Outfit: V-neck back, buttons down the spine\./);
+    expect(find(/seen from behind/)).not.toMatch(/Details that are only on the front \(/); // the gown itself is visible from behind
     // A new outfit: the old split is not used (stale), and Make pack makes a new one inside the job (counted in the cost).
     updateDraft(ws, c.id, { outfit: "short lace dress, pearl earrings" });
     expect(viewPrompt(VIEWS[0], "short lace dress, pearl earrings", split())).not.toMatch(/neckline and veil/);
@@ -308,7 +310,18 @@ describe("cards", () => {
     expect(f.versions.map((v) => [v.n, v.status])).toEqual([[1, "locked"], [2, "draft"]]);
     expect(existsSync(path.join(versionDir(cardRoot(ws, c), 2), "closeup.png"))).toBe(true); // the pictures came along
     expect(currentVersion(f).outfit).toMatch(/A-line gown/);
-    expect(getCard(ws, c.id)).toMatchObject({ status: "draft", version: 2 });
+    // v1 stays locked and in use until v2 is locked: the row (Storyboard slots, recasts) still says locked v1.
+    expect(getCard(ws, c.id)).toMatchObject({ status: "locked", version: 1 });
+    expect(usableVersion(f)?.n).toBe(1);
+    expect(versionByNumber(f, 1).status).toBe("locked");
+    expect(versionByNumber(f, 9).n).toBe(2);
+    expect(currentVersion(f)).toMatchObject({ description: currentVersion(f).description, outfit_split: f.versions[0].outfit_split });
+    expect(listCards(ws).find((x) => x.id === c.id)).toMatchObject({ status: "locked", version: 1, draft: 2 });
+    expect(() => newVersion(ws, c.id)).toThrow(/still a draft/);
+    // v1 is still read-only: a job on the card now works on the v2 draft only.
+    expect(() => updateDraft(ws, c.id, { outfit: "A-line gown, sheer ivory tulle veil" })).not.toThrow();
+    expect(readCardFile(cardRoot(ws, c)).versions[0].outfit).toMatch(/A-line gown/);
+    expect(readCardFile(cardRoot(ws, c)).versions[0].outfit).not.toMatch(/tulle/);
   });
 
   test("scene cards: 3 angles with the key props named; the cost estimate and the cap", () => {

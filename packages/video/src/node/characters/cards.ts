@@ -69,6 +69,11 @@ export function writeCardFile(root: string, file: CardFile): void {
 
 export const versionDir = (root: string, n: number) => path.join(root, `v${n}`);
 export const currentVersion = (file: CardFile): CardVersion => file.versions[file.versions.length - 1];
+// The version scenes, stills and recasts use: the latest locked one (a newer draft does not take its place until it is
+// locked). Null while nothing is locked yet.
+export const usableVersion = (file: CardFile): CardVersion | null => [...file.versions].reverse().find((v) => v.status === "locked") ?? null;
+// One version by number (for viewing an older, read-only version); the current one when n is missing or unknown.
+export const versionByNumber = (file: CardFile, n?: number | null): CardVersion => file.versions.find((v) => v.n === n) ?? currentVersion(file);
 
 // A file inside the card folder, never outside it (for serving pictures to the page).
 export function cardFilePath(root: string, rel: string): string | null {
@@ -84,7 +89,8 @@ export function getCard(ws: Workspace, id: string): Card {
   return row;
 }
 
-export type CardSummary = Card & { thumbnail: string; views: number; description: string | null };
+// draft: the number of a newer draft being worked on next to the locked version in use (null when there is none).
+export type CardSummary = Card & { thumbnail: string; views: number; description: string | null; draft: number | null };
 
 // The page's list: every card with its thumbnail (the close-up, or the first location angle, else the picture).
 export function listCards(ws: Workspace): CardSummary[] {
@@ -99,7 +105,8 @@ export function listCards(ws: Workspace): CardSummary[] {
       const views = existsSync(vdir) ? readdirSync(vdir).filter((f) => IMAGE_EXT.test(f) && !/_full|_try\d/.test(f) && !/^sheet/.test(f)) : [];
       const main = row.kind === "character" ? "closeup.png" : "wide_left.png";
       const thumbnail = views.includes(main) ? `v${v.n}/${main}` : file.reference;
-      return { ...row, thumbnail, views: views.length, description: v.description ?? null };
+      const used = usableVersion(file);
+      return { ...row, thumbnail, views: views.length, description: (used ?? v).description ?? null, draft: used && v.status === "draft" ? v.n : null };
     })
     .filter((x): x is CardSummary => x !== null)
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -241,7 +248,9 @@ export function lockCard(ws: Workspace, id: string): CardFile {
   return file;
 }
 
-// The next version as a draft, starting from the latest (its pictures, texts and model are copied).
+// The next version as a draft, starting from the latest locked one: the same reference picture(s) (kept at the card's
+// root), outfit, outfit split, description, model and pictures, so only what needs it is remade. The locked version
+// stays read-only AND in use (the card row keeps status "locked" and its number) until the new draft is locked.
 export function newVersion(ws: Workspace, id: string): CardFile {
   const row = getCard(ws, id);
   const root = cardRoot(ws, row);
@@ -253,7 +262,7 @@ export function newVersion(ws: Workspace, id: string): CardFile {
   else mkdirSync(versionDir(root, n), { recursive: true });
   file.versions.push({ n, status: "draft", created_at: now(), model: last.model, outfit: last.outfit, outfit_split: last.outfit_split, props: last.props, description: last.description });
   writeCardFile(root, file);
-  touch(ws, id, { status: "draft", version: n });
+  touch(ws, id, { status: "locked", version: last.n });
   return file;
 }
 

@@ -6,7 +6,7 @@
 // app (the model's picture kept); the drafted description; Remake one view; Approve and lock (read-only); New
 // version; a scene card with its key props and 3 angles.
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -112,6 +112,22 @@ async function main() {
     await page.click("[data-new-version]");
     await page.waitForSelector("[data-card-status=draft]");
     check(((await page.textContent("[data-card-status]")) ?? "").includes("Draft v2") && existsSync(path.join(dir, "v2", "closeup.png")), "New version: v2 is a draft, starting from v1's pictures");
+    check(((await page.textContent("[data-draft-note]")) ?? "").includes("keep using locked v1"), "the draft says v1 stays in use until v2 is locked");
+    check(((await page.textContent("[data-card-version='1']")) ?? "").includes("locked · in use"), "v1 is shown as locked and in use");
+    check(((await page.inputValue("[data-card-words]")) ?? "").length > 0, "v2 starts with v1's outfit");
+    // Remake only the full-body views in the draft: front, then back; the face views are kept.
+    await page.click("[data-remake-body]");
+    await page.waitForFunction(() => document.querySelector("[data-last-job]")?.textContent?.includes("Remake Full body, front"), null, { timeout: 20_000 });
+    const v2 = readdirSync(path.join(dir, "v2"));
+    check(v2.some((f) => /^body_front_t\d+\.png$/.test(f) && !readdirSync(path.join(dir, "v1")).includes(f)) && v2.some((f) => /^body_back_t\d+\.png$/.test(f) && !readdirSync(path.join(dir, "v1")).includes(f)), "Remake the full-body views: a new front and back try in v2");
+    check(!v2.some((f) => /^(closeup|three_quarter)_t\d+\.png$/.test(f) && !readdirSync(path.join(dir, "v1")).includes(f)), "the face views are not remade");
+    // v1 stays read-only and viewable.
+    await page.click("[data-card-version='1']");
+    await page.waitForSelector("[data-old-version]");
+    check((await page.isDisabled("[data-card-words]")) && !(await page.$("[data-remake-body]")) && !(await page.$("[data-new-version]")), "v1 opens read-only (no Remake, no New version)");
+    await page.goto(`${base}/characters`);
+    await page.waitForSelector("[data-card=bride]");
+    check(((await page.textContent("[data-card=bride]")) ?? "").includes("Locked v1") && !!(await page.$("[data-card=bride] [data-card-draft='2']")), "the list: Locked v1, v2 draft");
 
     // A scene card with its key props.
     await page.goto(`${base}/characters`);

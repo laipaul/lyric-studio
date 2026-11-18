@@ -26,6 +26,9 @@ export const RETRIES = 2;
 export const BACK_FROM_FRONT =
   "The second reference picture is the SAME outfit seen from the front: show exactly that outfit from behind (same garment, fabric, length and colour), not a different one.";
 
+export const FRONT_FROM_CLOSEUP =
+  "The last reference picture is a close-up of this same outfit: the neckline, shoulders and veil must match it exactly; ignore its framing and face.";
+
 export type Try = { file: string | null; url?: string; request_id: string | null; score: number | null; face_px?: number; frame_h?: number; yaw?: number | null; run?: number; light: Light | null; text: string; attempts: Attempt[]; seed: number };
 export type Item = { id: string; label: string; kind: "view" | "angle"; tries: Try[]; chosen: number | null; light: Light | null; text: string; angle_note?: string | null };
 export type VersionReport = { updated_at: string; model: string; endpoint: string; thresholds: Thresholds; items: Item[]; request_ids: string[]; spent_usd: number; description_request?: string | null; picked?: number };
@@ -212,6 +215,12 @@ export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps,
       const full = chosen?.file ? path.join(dir, chosen.file.replace(/\.png$/i, "_full.png")) : frontFile;
       if (existsSync(full)) frontUrl = await deps.fal.storage.upload(new File([readFileSync(full)], "front.png", { type: "image/png" }));
     }
+    // The front view also gets the chosen close-up of the same version (neckline, shoulders, veil), after the card references.
+    let closeupUrl: string | null = null;
+    if (job.id === "body_front" && file.kind === "character") {
+      const cu = path.join(dir, "closeup.png");
+      if (existsSync(cu)) closeupUrl = await deps.fal.storage.upload(new File([readFileSync(cu)], "closeup.png", { type: "image/png" }));
+    }
     let item = report.items.find((i) => i.id === job.id);
     if (!item) {
       item = { id: job.id, label: job.label, kind: job.kind, tries: [], chosen: null, light: null, text: "" };
@@ -231,7 +240,9 @@ export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps,
       item.tries.push(t);
       try {
         log(`${m.name} · ${job.label}${n > 1 ? ` (try ${n})` : ""}…`);
-        const r = await callModel(deps.fal, m.endpoint, m.input(job.id === "body_back" && frontUrl ? `${job.prompt} ${BACK_FROM_FRONT}` : job.prompt, file.kind === "character" ? [...refUrls, ...(job.id === "body_back" && frontUrl ? [frontUrl] : [])] : [refUrls[0]], job.aspect, seed), callOpts);
+        const prompt = job.id === "body_back" && frontUrl ? `${job.prompt} ${BACK_FROM_FRONT}` : job.id === "body_front" && closeupUrl ? `${job.prompt} ${FRONT_FROM_CLOSEUP}` : job.prompt;
+        const extraRefs = job.id === "body_back" && frontUrl ? [frontUrl] : job.id === "body_front" && closeupUrl ? [closeupUrl] : [];
+        const r = await callModel(deps.fal, m.endpoint, m.input(prompt, file.kind === "character" ? [...refUrls, ...extraRefs] : [refUrls[0]], job.aspect, seed), callOpts);
         t.attempts = r.attempts;
         t.request_id = r.requestId;
         report.request_ids.push(r.requestId);

@@ -35,9 +35,11 @@ Characters and scene cards (C1, 18 Nov 2026; packages/video src/node/characters/
       request_ids, spent_usd);
     - `sheet.jpg`.
 - **Versions:** a locked version is read-only. New version copies the latest folder into the next one as a draft.
-  Nothing is deleted.
+  Nothing is deleted. The version in use is the latest locked one (`usableVersion`): while a newer draft exists the
+  card row keeps status locked and the locked version's number.
 - **Table `card`:** id, kind, name (unique per kind), folder, scope_kind artist | ep | song, scope_value, status
-  draft | locked, version, created_at, updated_at.
+  draft | locked (locked once any version is), version (the version in use; the newest while nothing is locked),
+  created_at, updated_at.
 - **Table `card_job`:** id, card_id, kind pack | view | fetch | calibrate, status (as make_run), label,
   options_json, progress, current, message, cost_usd (the estimate of what was sent), pid, created_at, started_at,
   finished_at, cleared_at. The jobs run in the studio's own process; a job whose process is gone is marked

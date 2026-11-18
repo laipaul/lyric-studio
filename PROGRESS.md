@@ -4,6 +4,24 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Characters: pack fixes (buttons, neckline, veil), New version keeps v1 in use, Remake the full-body views ✅ (to verify on the Windows PC)
+- Seen on Bride No 2 v1 (locked; faces good: close-up 0.67, 3/4 0.58): the front full-body view had a row of buttons
+  down the front bodice and a sweetheart-like neckline; the veil was missing in both full-body views and the 3/4.
+- **Per-view rules from the outfit split:** a detail only in "Back shows" (buttons, bow, lacing, zipper, cut-out,
+  keyhole, open back, V-back, train) becomes a negative on the front ("No buttons on the front."). The neckline in
+  "Close-ups show" is required on the front ("Neckline: bateau neckline, exactly as in the close-ups; not sweetheart,
+  V-neck, …"). A veil named in the outfit gets its own sentence in every view ("Sheer ivory tulle veil falling behind
+  their shoulders, visible …", back: "… falling down their back, clearly visible."). The front view also gets the
+  chosen close-up as an extra reference (neckline, shoulders, veil).
+- Two contradictions removed: the front no longer lists the veil as a back-only detail, and the back is no longer
+  told that "the gown (front text) is not visible from behind".
+- **New version** on a locked card: a v2 draft with the same picture, outfit, outfit split, description and pictures.
+  v1 stays read-only **and in use** (Storyboard slots, later recasts) until v2 is locked; the list shows
+  "Locked v1 · v2 draft"; the version chips open v1 read-only.
+- **"Remake the full-body views (front, then back)"** on a draft: only those two, the face views are kept.
+- Tests: characters-cards (17) and characters-prompts (9, new) pass; the Characters browser test (32 checks) and the
+  shot list browser test pass.
+
 ### Characters C2: Shot list import — planned slots in the story line ✅ (verified by Paul, 18 Nov 2026: "C2 works")
 - **Prepare → Storyboard → Import shot list** (next to "Add clips & photos"): drop or choose your shot list (.json).
   The app checks it first, in plain words, slot by slot: an unknown character or scene ("did you mean Bride No 2?"),
@@ -112,79 +130,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   3. Type the outfit, then Make pack (about $0.17), and look at the views.
   4. Edit the description, then Approve and lock.
   5. A scene card: `bridal room`, with its key props.
-
-### Characters, C1 spike: reference check, character pack, location angles, local face check ✅ (reviewed by Paul, 18 Nov 2026: done)
-- **Isolated spike** in `spikes/characters/` (README there). Nothing in apps/ or packages/ changed (no HyperFrames,
-  Remotion, Prepare/Storyboard or Shape code). The database is opened read-only, only for `--song`.
-- **Local face checks** (new, in the Python service: `services/audio/app/face.py`).
-  - Installed with `pnpm audio:setup --face` (mediapipe 1.2.0, opencv-contrib-python 5.0.0.93, nothing newer than
-    3 Nov), and run with `pnpm face check|scene-check|compare|calibrate|crop`.
-  - The models download once with pinned SHA-256 sums. Each file's own licence: YuNet MIT, SFace Apache 2.0,
-    MediaPipe Face Landmarker and Pose Landmarker Apache 2.0 (model cards).
-- **C1.0 reference check**, with a verdict Ready / Usable with fix / Not suitable and reasons in plain words. It
-  measures:
-  - one face and its confidence, its size (target 512 px tall), blur;
-  - head pose, eyes / nose / mouth visibility, a confident hand over the mouth (flagged for lip sync), mouth and eye
-    openness;
-  - exposure and left/right balance, and how much of the body is visible.
-
-  A veil over the mouth is not detectable: the report says to check by eye. Fixes: `--crop` and
-  `--image2` (a second reference). The upscale fix is the later upscale pass. `--ai-opinion` is paid ($0.01) and
-  off by default.
-- **`pnpm characters calibrate`** (free) sets the "same person" line on Paul's own pictures: the bride against the
-  faces in the song's clips. Every clip counts as another person unless marked with `--her "<clip name>"`; an unmarked clip
-  scoring 0.6+ is left out as a copy of the reference. It also
-  scores changed copies of her picture. Saved per character.
-- **`pnpm characters pack`**:
-  - 4 views and 3 location angles (`--scene`), per model: Nano Banana Pro,
-    Nano Banana 2, Seedream 4.5 and GPT Image 1.5 (endpoints, inputs and prices checked on fal.ai). The picture is
-    both the identity and the style reference.
-  - Each view is face-checked: green / amber / red. A red view is made again at most twice and the best try is
-    kept. Profiles and tiny faces are judged by eye.
-  - Draft descriptions, contact sheets, and report.md / report.json with every request ID.
-  - The cost estimate and `--max-cost` (default $3) come first, and the cap also stops the retries.
-  - The actual cost comes from fal's Billing Events API (needs a key with billing permission;
-    `pnpm characters cost <folder>` asks again later).
-- Tests: `pnpm characters:test` (12; a stand-in fal client, face check and billing) and
-  `pnpm test:audio tests/test_face.py` (12). The whole audio suite passes (115).
-- Checked here with the real face models on public test photos. A drifted view (another person's face, 0.21) was
-  red and made again (0.91, green); a 40 px face was not judged; the contact sheets were drawn.
-- **Update 18 Nov 2026 (decided by the user, same spike):**
-  - The pack views sit in a **neutral, empty outdoor setting in soft natural daylight**, not a grey studio backdrop
-    (studio backdrops gave plastic skin).
-  - **New layout:** a close-up face (the identity source), a 3/4 face, and the full body from the front and from
-    the back, both cropped at the neck, so faces only come from the close-up.
-  - Face checks run on the two face views only. A body view that shows a face anyway is red and made again.
-  - The best try is now chosen by result first (green, then amber or a body view without a face, then red), then by
-    score.
-  - Also fixed for Windows since: dynamic imports of a path (file:// URLs); faces filling a close-up portrait (the
-    face finder now checks 3 sizes); calibration (`--her`, no auto-exclusion at 0.363, an overlap warning); UTF-8
-    output from Python.
-  - Tests: characters 17, face checks 18.
-- **Update after Paul's first pack review (18 Nov 2026):**
-  - Face scores: Nano Banana Pro 0.65 / 0.68, Nano Banana 2 0.60 / 0.60, Seedream 4.5 0.74 / 0.58, GPT Image 1.5
-    0.57 / 0.52, all well above the other Midjourney women (at most 0.43). Paul picked **Seedream 4.5**: the best
-    likeness, keeps the reference's look, the cheapest.
-  - Seedream changed the outfit into a trouser suit and ignored the neck crop. Fixes:
-    - `--outfit "<text>"`: Paul's words go into every view's prompt.
-    - The app now crops the body views at the neck itself (face.py `crop-body`: chin and shoulders from YuNet and
-      the pose; the model's own picture is kept as `_full.png`).
-    - `--views all|face|body`.
-    - Seedream is the default model.
-    - The live log names model and view on every score line.
-  - Earlier fixes from the same run: downloads retry 6 times, and `pnpm characters fetch "<run folder>"` recovers
-    paid images without regenerating.
-  - Tests: characters 22, face checks 21.
-- **Conclusion (Paul's review, 18 Nov 2026):**
-  - **Seedream 4.5 is the default** for faces, bodies and location angles. It has the best likeness (0.74) and keeps
-    the reference's warm look, its location angles keep the room's light and its props, and it is the cheapest.
-  - The outfit comes from Paul's words (`--outfit`): the body test gave the same floor-length A-line gown and veil
-    in front and back.
-  - The app's own neck crop is clean: no face in body views.
-  - Watch: small prop details drift (the mirror's crest), so scene cards name their key props. "Wide, from the
-    right" stays close to the original framing and needs a more explicit prompt.
-- **To run on the PC:** see the step's message (calibrate on the bride vs the Wedding Day clips, then the estimate,
-  then `--yes`).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -340,10 +285,19 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 
 **Order from here (changed by Paul, 18 Nov 2026, after C2 worked):** his real workflow builds the storyboard from
 Midjourney clips, so replacing the person in each clip with his main character comes first:
-1. **Recast spike** (spikes/recast/, like spikes/lipsync: cost first, --max-cost, --yes, parallel jobs, report.md,
-   comparison video, request IDs): song + locked character + clips → Wan 2.2 Animate Replace and MiniMax H3 Max Recast
-   on fal (adapter ready for Higgsfield Genjutsu later); length, fps and aspect kept; face check vs the character;
-   originals never replaced. Test: 3 Wedding Day clips with different women (close-up, medium, wide) as Bride No 2.
+0. **Pack fixes + New version** (done 18 Nov 2026, above; to verify on the PC): make Bride No 2 v2, remake only the
+   full-body views, lock v2.
+1. **Recast spike** (plan approved 18 Nov 2026; spikes/recast/, like spikes/lipsync: cost first, --max-cost (first run
+   10), --yes, parallel jobs, report.md, comparison video, request IDs): song + locked character + clips (one, several
+   or all Storyboard clips). References: close-up, 3/4 face and the reference picture only; v1's full-body views are
+   NOT sent (wrong buttons, no veil), v2's once locked. Methods (endpoint IDs and schemas checked in current docs):
+   (1) Wan 2.2 Animate Replace (fal), (2) MiniMax recast (fal), (3) Keyframe + Seedance: first frame → depth map → new
+   first frame with the character (image edit, depth-guided) → Seedance 2.5 reference video-to-video, 480p draft,
+   clip 7 only in the first run, (4) Runway Aleph 2.0 (skipped until Paul has a key); adapter ready for Higgsfield
+   Genjutsu. Length, fps and aspect kept; originals never replaced. Judged per result: environment kept (background
+   similarity outside the person, "repainted the scene" flag), face (raw SFace scores), motion kept, technical.
+   Test: Wedding Day Storyboard cards 7 (close-up, looking up), 9 (medium, among flowers), 10 (wide, white dress on
+   the road) as Bride No 2; the clip list is printed with card positions for Paul to confirm.
 2. **Recast in the app** (a button on Storyboard clips).
 3. **C4 face check.**
 4. **Lip Sync step 2.**

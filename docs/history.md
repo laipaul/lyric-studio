@@ -4,6 +4,79 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Characters, C1 spike: reference check, character pack, location angles, local face check ✅ (reviewed by Paul, 18 Nov 2026: done)
+- **Isolated spike** in `spikes/characters/` (README there). Nothing in apps/ or packages/ changed (no HyperFrames,
+  Remotion, Prepare/Storyboard or Shape code). The database is opened read-only, only for `--song`.
+- **Local face checks** (new, in the Python service: `services/audio/app/face.py`).
+  - Installed with `pnpm audio:setup --face` (mediapipe 1.2.0, opencv-contrib-python 5.0.0.93, nothing newer than
+    3 Nov), and run with `pnpm face check|scene-check|compare|calibrate|crop`.
+  - The models download once with pinned SHA-256 sums. Each file's own licence: YuNet MIT, SFace Apache 2.0,
+    MediaPipe Face Landmarker and Pose Landmarker Apache 2.0 (model cards).
+- **C1.0 reference check**, with a verdict Ready / Usable with fix / Not suitable and reasons in plain words. It
+  measures:
+  - one face and its confidence, its size (target 512 px tall), blur;
+  - head pose, eyes / nose / mouth visibility, a confident hand over the mouth (flagged for lip sync), mouth and eye
+    openness;
+  - exposure and left/right balance, and how much of the body is visible.
+
+  A veil over the mouth is not detectable: the report says to check by eye. Fixes: `--crop` and
+  `--image2` (a second reference). The upscale fix is the later upscale pass. `--ai-opinion` is paid ($0.01) and
+  off by default.
+- **`pnpm characters calibrate`** (free) sets the "same person" line on Paul's own pictures: the bride against the
+  faces in the song's clips. Every clip counts as another person unless marked with `--her "<clip name>"`; an unmarked clip
+  scoring 0.6+ is left out as a copy of the reference. It also
+  scores changed copies of her picture. Saved per character.
+- **`pnpm characters pack`**:
+  - 4 views and 3 location angles (`--scene`), per model: Nano Banana Pro,
+    Nano Banana 2, Seedream 4.5 and GPT Image 1.5 (endpoints, inputs and prices checked on fal.ai). The picture is
+    both the identity and the style reference.
+  - Each view is face-checked: green / amber / red. A red view is made again at most twice and the best try is
+    kept. Profiles and tiny faces are judged by eye.
+  - Draft descriptions, contact sheets, and report.md / report.json with every request ID.
+  - The cost estimate and `--max-cost` (default $3) come first, and the cap also stops the retries.
+  - The actual cost comes from fal's Billing Events API (needs a key with billing permission;
+    `pnpm characters cost <folder>` asks again later).
+- Tests: `pnpm characters:test` (12; a stand-in fal client, face check and billing) and
+  `pnpm test:audio tests/test_face.py` (12). The whole audio suite passes (115).
+- Checked here with the real face models on public test photos. A drifted view (another person's face, 0.21) was
+  red and made again (0.91, green); a 40 px face was not judged; the contact sheets were drawn.
+- **Update 18 Nov 2026 (decided by the user, same spike):**
+  - The pack views sit in a **neutral, empty outdoor setting in soft natural daylight**, not a grey studio backdrop
+    (studio backdrops gave plastic skin).
+  - **New layout:** a close-up face (the identity source), a 3/4 face, and the full body from the front and from
+    the back, both cropped at the neck, so faces only come from the close-up.
+  - Face checks run on the two face views only. A body view that shows a face anyway is red and made again.
+  - The best try is now chosen by result first (green, then amber or a body view without a face, then red), then by
+    score.
+  - Also fixed for Windows since: dynamic imports of a path (file:// URLs); faces filling a close-up portrait (the
+    face finder now checks 3 sizes); calibration (`--her`, no auto-exclusion at 0.363, an overlap warning); UTF-8
+    output from Python.
+  - Tests: characters 17, face checks 18.
+- **Update after Paul's first pack review (18 Nov 2026):**
+  - Face scores: Nano Banana Pro 0.65 / 0.68, Nano Banana 2 0.60 / 0.60, Seedream 4.5 0.74 / 0.58, GPT Image 1.5
+    0.57 / 0.52, all well above the other Midjourney women (at most 0.43). Paul picked **Seedream 4.5**: the best
+    likeness, keeps the reference's look, the cheapest.
+  - Seedream changed the outfit into a trouser suit and ignored the neck crop. Fixes:
+    - `--outfit "<text>"`: Paul's words go into every view's prompt.
+    - The app now crops the body views at the neck itself (face.py `crop-body`: chin and shoulders from YuNet and
+      the pose; the model's own picture is kept as `_full.png`).
+    - `--views all|face|body`.
+    - Seedream is the default model.
+    - The live log names model and view on every score line.
+  - Earlier fixes from the same run: downloads retry 6 times, and `pnpm characters fetch "<run folder>"` recovers
+    paid images without regenerating.
+  - Tests: characters 22, face checks 21.
+- **Conclusion (Paul's review, 18 Nov 2026):**
+  - **Seedream 4.5 is the default** for faces, bodies and location angles. It has the best likeness (0.74) and keeps
+    the reference's warm look, its location angles keep the room's light and its props, and it is the cheapest.
+  - The outfit comes from Paul's words (`--outfit`): the body test gave the same floor-length A-line gown and veil
+    in front and back.
+  - The app's own neck crop is clean: no face in body views.
+  - Watch: small prop details drift (the mirror's crest), so scene cards name their key props. "Wide, from the
+    right" stays close to the original framing and needs a more explicit prompt.
+- **To run on the PC:** see the step's message (calibrate on the bride vs the Wedding Day clips, then the estimate,
+  then `--yes`).
+
 ### Lip Sync, step 1 (spike): three fal.ai models side by side ✅ (to verify on the Windows PC)
 - **Isolated spike** in `spikes/lipsync/` (README there). Nothing in apps/ or packages/ changed (no HyperFrames,
   Remotion, Prepare/Storyboard, Shape or Theme v2 code). It only reads the workspace, with the database opened
