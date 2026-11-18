@@ -18,7 +18,7 @@ export const VIEWS: View[] = [
     aspect: "3:4",
     face: true,
     expectYaw: [0, 20],
-    prompt: "A close-up portrait of her face and the top of her shoulders, facing the camera straight on, looking into the lens, relaxed neutral expression, mouth gently closed. Natural skin texture with pores and fine detail, no retouching. Eyebrows exactly as in the reference picture (same shape, thickness and colour), soft and natural with individual hairs, not drawn on, filled in or sharpened. Hair soft and natural with individual strands, no net, mesh, grid or lace-like pattern on the hair or skin.",
+    prompt: "A close-up portrait of her face and the top of her shoulders, facing the camera straight on, looking into the lens, relaxed neutral expression, mouth gently closed. Framing: head-and-shoulders portrait, the face filling a large part of the picture, camera at eye level, portrait lens (about 85 mm). Not a full-length shot, no high angle, no wide angle. Natural skin texture with pores and fine detail, no retouching. Eyebrows exactly as in the reference picture (same shape, thickness and colour), soft and natural with individual hairs, not drawn on, filled in or sharpened. Hair soft and natural with individual strands, no net, mesh, grid or lace-like pattern on the hair or skin.",
   },
   {
     id: "three_quarter",
@@ -26,7 +26,7 @@ export const VIEWS: View[] = [
     aspect: "3:4",
     face: true,
     expectYaw: [20, 60],
-    prompt: "A close-up portrait of her face with the head turned about 45 degrees to her left (a three-quarter view), eyes following the turn, relaxed neutral expression. Natural skin texture, no retouching. Eyebrows exactly as in the reference picture (same shape, thickness and colour), soft and natural with individual hairs, not drawn on, filled in or sharpened. Hair soft and natural with individual strands, no net, mesh, grid or lace-like pattern on the hair or skin.",
+    prompt: "A close-up portrait of her face with the head turned about 45 degrees to her left (a three-quarter view), eyes following the turn, relaxed neutral expression. Framing: head-and-shoulders portrait, the face filling a large part of the picture, camera at eye level, portrait lens (about 85 mm). Not a full-length shot, no high angle, no wide angle. Natural skin texture, no retouching. Eyebrows exactly as in the reference picture (same shape, thickness and colour), soft and natural with individual hairs, not drawn on, filled in or sharpened. Hair soft and natural with individual strands, no net, mesh, grid or lace-like pattern on the hair or skin.",
   },
   {
     id: "body_front",
@@ -42,7 +42,7 @@ export const VIEWS: View[] = [
     aspect: "2:3",
     face: false,
     expectYaw: null,
-    prompt: "A full-length photograph of her body seen from behind, standing naturally, the back of the outfit (and veil, train or hair falling on the back) fully visible down to the shoes. The frame is CROPPED AT THE NECK: the top edge of the picture cuts at the nape, so the head is out of frame.",
+    prompt: "A full-length photograph of her body seen from behind, standing naturally, the back of the outfit (and veil, train or hair falling on the back) fully visible down to the shoes. The frame is CROPPED AT THE NECK: the top edge of the picture cuts at the nape, so the head is out of frame. Anything pinned or worn on the front only (a boutonnière, brooch, corsage, front buttons) is not visible from behind: do not show it at the shoulder or anywhere on the back.",
   },
 ];
 
@@ -66,7 +66,7 @@ export function viewPrompt(v: View, outfit?: string): string {
   const o = outfit?.trim();
   const wear = o
     ? v.face
-      ? ` Outfit (the part that shows): ${o}.`
+      ? ` Outfit (only the part inside this head-and-shoulders frame: neckline, collar, shoulders, earrings, hair): ${o}. The frame ends at the upper chest: do NOT show the waist, legs, skirt, trousers or shoes.`
       : ` Outfit: ${o}. Keep exactly this outfit, the same in the front and back views.`
     : v.face
       ? ""
@@ -190,9 +190,11 @@ export const DEFAULT_THRESHOLDS: Thresholds = { red_below: 0.25, green_from: 0.3
 export type Light = "green" | "amber" | "red" | "grey";
 export type FaceResult = { score: number | null; face_px?: number; yaw?: number | null; note?: string };
 
+// A face view is a close-up: the face is at least this fraction of the picture's height (Seedream once sent full-length shots).
+export const MIN_FACE_FRACTION = 0.2;
 export const MIN_JUDGED_FACE_PX = 64; // smaller faces (e.g. in a full-body view) give unreliable scores
 
-export function classify(view: ViewId, r: FaceResult, t: Thresholds): { light: Light; text: string; regenerate: boolean } {
+export function classify(view: ViewId, r: FaceResult, t: Thresholds, frame_h?: number | null): { light: Light; text: string; regenerate: boolean } {
   const v = VIEWS.find((x) => x.id === view)!;
   if (!v.face) {
     // A neck-cropped body view must show no face: faces come only from the close-up.
@@ -200,6 +202,8 @@ export function classify(view: ViewId, r: FaceResult, t: Thresholds): { light: L
     return { light: "grey", text: "No face, as asked (cropped at the neck): judge the outfit and body by eye.", regenerate: false };
   }
   if (r.score === null) return { light: "red", text: `No face found${r.note ? ` (${r.note})` : ""}.`, regenerate: true };
+  if (frame_h && r.face_px && r.face_px / frame_h < MIN_FACE_FRACTION)
+    return { light: "red", text: `Not a close-up: the face is only ${Math.round((r.face_px / frame_h) * 100)}% of the picture's height.`, regenerate: true };
   const s = r.score.toFixed(2);
   const small = (r.face_px ?? 0) < MIN_JUDGED_FACE_PX;
   if (r.score >= t.green_from) return { light: "green", text: `Same person (${s}).`, regenerate: false };
@@ -221,4 +225,32 @@ export function angleNote(view: View, yaw: number | null | undefined): string | 
 export function safeName(text: string): string {
   const clean = text.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").replace(/\s+/g, " ").trim().replace(/[. ]+$/, "");
   return (clean || "untitled").slice(0, 60).trim();
+}
+
+// The size of a PNG or JPEG from its header (downloaded files may be JPEG bytes with a .png name). Null if unreadable.
+export function imageSize(b: Uint8Array): { width: number; height: number } | null {
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  if (b.length > 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return { width: dv.getUint32(16), height: dv.getUint32(20) };
+  if (b.length > 4 && b[0] === 0xff && b[1] === 0xd8) {
+    let i = 2;
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xff) {
+        i++;
+        continue;
+      }
+      const m = b[i + 1];
+      if (m === 0xff) {
+        i++;
+        continue;
+      }
+      if (m === 0xd8 || m === 0x01 || (m >= 0xd0 && m <= 0xd7)) {
+        i += 2;
+        continue;
+      }
+      const len = dv.getUint16(i + 2);
+      if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return { height: dv.getUint16(i + 5), width: dv.getUint16(i + 7) };
+      i += 2 + len;
+    }
+  }
+  return null;
 }

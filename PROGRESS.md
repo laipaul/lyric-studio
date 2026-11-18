@@ -4,6 +4,19 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Characters, C1 fixes 2: face views are real close-ups, the latest Make wins ✅ (to verify on the Windows PC)
+- Seen on the groom and Bride No 1 / No 2: the close-up and 3/4 came out as full-length shots from a high wide
+  angle (the whole outfit, shoes included, went into the face prompts), and "Make the pack again" still showed the
+  old pictures (the best try of all runs was kept; body views tied, so the oldest won).
+- Face views get only the part of the outfit inside a head-and-shoulders frame, plus firm framing (eye level,
+  portrait lens, no full-length, no high or wide angle).
+- New check: a face view whose face is under 20% of the picture's height is red ("Not a close-up: …") and is made
+  again automatically within the cap.
+- The back view leaves out what is pinned on the front only (boutonnière, brooch, corsage).
+- The latest Make or Remake wins: the best try of the newest run; older tries only if every new one is red. Cards
+  made before this are picked again once, free, when their page opens (newest try), with the contact sheet rebuilt.
+- Tests: characters-cards (12) and the Characters browser test pass.
+
 ### Characters, C1 fixes after Paul's first test ("Bride No 1") ✅ (to verify on the Windows PC)
 - The **back view** gets the chosen front view as an extra reference: the same outfit seen from behind (in the
   test, the front was a jumper and trousers and the back a knitted dress).

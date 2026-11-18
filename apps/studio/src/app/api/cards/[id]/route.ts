@@ -10,7 +10,7 @@ import { connection } from "next/server";
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import {
   calibrationSongs, cardFace, cardJobsFor, cardRoot, cardThresholds, checkCardPicture, cropCardToFace, currentVersion, enqueueCardJob, getCard, lockCard, lockProblems,
-  MODELS, newVersion, packEstimate, readCardFile, readReport, runCardJob, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId,
+  MODELS, newVersion, packEstimate, readCardFile, readReport, repickLegacy, buildSheet, runCardJob, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId,
 } from "@lyric/video/characters";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
@@ -24,6 +24,12 @@ function detail(id: string) {
     const root = cardRoot(ws, row);
     const file = readCardFile(root);
     const v = currentVersion(file);
+    // A draft made before "the latest run wins" is picked again once (free); the contact sheet is rebuilt in the background.
+    const busy = cardJobsFor(ws, id).some((j) => j.status === "queued" || j.status === "running");
+    if (row.kind === "character" && !busy && repickLegacy(root, file)) {
+      const report = readReport(versionDir(root, v.n));
+      if (report) void buildSheet(cardFace(), root, file, report).catch(() => undefined);
+    }
     return {
       card: row,
       file,

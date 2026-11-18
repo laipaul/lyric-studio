@@ -14,7 +14,7 @@ import { cardRoot, cardThresholds, currentVersion, getCard, readCardFile, refere
 import type { FaceTool } from "./face";
 import { callModel, download, errorText, firstImageUrl, type Attempt } from "./fal";
 import {
-  angleNote, anglePrompt, ANGLES, Budget, classify, DESCRIPTION_PROMPT, MODELS, money, SCENE_DESCRIPTION_PROMPT, VIEWS, viewPrompt, VISION,
+  angleNote, anglePrompt, ANGLES, Budget, classify, DESCRIPTION_PROMPT, imageSize, MODELS, money, SCENE_DESCRIPTION_PROMPT, VIEWS, viewPrompt, VISION,
   type Light, type Thresholds, type ViewId,
 } from "./plan";
 
@@ -25,9 +25,9 @@ export const RETRIES = 2;
 export const BACK_FROM_FRONT =
   "The second reference picture is the SAME outfit seen from the front: show exactly that outfit from behind (same garment, fabric, length and colour), not a different one.";
 
-export type Try = { file: string | null; url?: string; request_id: string | null; score: number | null; face_px?: number; light: Light | null; text: string; attempts: Attempt[]; seed: number };
+export type Try = { file: string | null; url?: string; request_id: string | null; score: number | null; face_px?: number; frame_h?: number; run?: number; light: Light | null; text: string; attempts: Attempt[]; seed: number };
 export type Item = { id: string; label: string; kind: "view" | "angle"; tries: Try[]; chosen: number | null; light: Light | null; text: string; angle_note?: string | null };
-export type VersionReport = { updated_at: string; model: string; endpoint: string; thresholds: Thresholds; items: Item[]; request_ids: string[]; spent_usd: number; description_request?: string | null };
+export type VersionReport = { updated_at: string; model: string; endpoint: string; thresholds: Thresholds; items: Item[]; request_ids: string[]; spent_usd: number; description_request?: string | null; picked?: number };
 
 export type GenDeps = {
   fal: FalClient;
@@ -56,17 +56,30 @@ function writeReport(dir: string, r: VersionReport): void {
 
 const rank = (l: Light | null) => (l === "green" ? 3 : l === "amber" || l === "grey" ? 2 : 0);
 
-function choose(item: Item, dir: string): void {
+const better = (t: Try, prev: Try) => rank(t.light) > rank(prev.light) || (rank(t.light) === rank(prev.light) && (t.score ?? -1) > (prev.score ?? -1));
+
+// The latest run wins: among the tries of the newest run that have a file, the best (light, then score); older tries
+// only if every try of the latest run is red or missing. A legacy try has no run: the newest one counts as its own run.
+export function choose(item: Item, dir: string): void {
+  const has = (t: Try) => !!t.file && existsSync(path.join(dir, t.file));
   let best: number | null = null;
-  item.tries.forEach((t, k) => {
-    if (!t.file || !existsSync(path.join(dir, t.file))) return;
-    if (item.kind === "angle") {
-      best = k; // the latest made
-      return;
-    }
-    const prev = best === null ? null : item.tries[best];
-    if (!prev || rank(t.light) > rank(prev.light) || (rank(t.light) === rank(prev.light) && (t.score ?? -1) > (prev.score ?? -1))) best = k;
-  });
+  if (item.kind === "angle") {
+    item.tries.forEach((t, k) => {
+      if (has(t)) best = k; // the latest made
+    });
+  } else {
+    const runOf = (t: Try, k: number) => t.run ?? (k === item.tries.length - 1 ? Number.MAX_SAFE_INTEGER : 0);
+    const latest = Math.max(0, ...item.tries.map(runOf));
+    const pick = (only: (t: Try, k: number) => boolean) => {
+      let b: number | null = null;
+      item.tries.forEach((t, k) => {
+        if (!has(t) || !only(t, k)) return;
+        if (b === null || better(t, item.tries[b])) b = k;
+      });
+      return b;
+    };
+    best = pick((t, k) => runOf(t, k) === latest && t.light !== "red") ?? pick(() => true);
+  }
   item.chosen = best;
   if (best === null) return;
   const t = item.tries[best];
@@ -92,7 +105,8 @@ async function judge(face: FaceTool, refFile: string, item: Item, t: Try, file: 
     return { regenerate: false };
   }
   const fr = (await face.compare(refFile, [file])).results[0];
-  const c = classify(item.id as ViewId, fr, th);
+  t.frame_h = imageSize(readFileSync(file))?.height;
+  const c = classify(item.id as ViewId, fr, th, t.frame_h);
   t.score = fr.score;
   t.face_px = fr.face_px;
   t.light = c.light;
@@ -159,6 +173,7 @@ export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps,
       .catch((e) => log(`description draft not made (${errorText(e)})`));
   }
 
+  const run = Math.max(0, ...report.items.flatMap((i) => i.tries.map((t) => t.run ?? 0))) + 1;
   let made = 0;
   let notDownloaded = 0;
   let skippedForCap = 0;
@@ -191,7 +206,7 @@ export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps,
       budget.spend(m.perImageUsd);
       const n = first + k + 1;
       const seed = 1000 + n;
-      const t: Try = { file: null, request_id: null, score: null, light: null, text: "", attempts: [], seed };
+      const t: Try = { file: null, request_id: null, score: null, light: null, text: "", attempts: [], seed, run };
       item.tries.push(t);
       try {
         log(`${m.name} · ${job.label}${n > 1 ? ` (try ${n})` : ""}…`);
@@ -333,7 +348,7 @@ export function rescore(root: string, file: CardFile, th: Thresholds): number {
     if (item.kind !== "view" || !view?.face) continue;
     for (const t of item.tries) {
       if (!t.file) continue;
-      const c = classify(item.id as ViewId, { score: t.score, face_px: t.face_px ?? 999 }, th);
+      const c = classify(item.id as ViewId, { score: t.score, face_px: t.face_px ?? 999 }, th, t.frame_h);
       t.light = c.light;
       t.text = c.text;
       n++;
@@ -343,4 +358,18 @@ export function rescore(root: string, file: CardFile, th: Thresholds): number {
   report.thresholds = th;
   writeReport(dir, report);
   return n;
+}
+
+// Draft cards made before "the latest run wins": picked again once, free (no new pictures). Returns true if changed.
+export function repickLegacy(root: string, file: CardFile): boolean {
+  const v = currentVersion(file);
+  if (v.status !== "draft") return false;
+  const dir = versionDir(root, v.n);
+  const report = readReport(dir);
+  if (!report || (report.picked ?? 0) >= 2) return false;
+  if (!report.items.some((i) => i.tries.some((t) => t.run === undefined))) return false;
+  for (const item of report.items) choose(item, dir);
+  report.picked = 2;
+  writeReport(dir, report);
+  return true;
 }

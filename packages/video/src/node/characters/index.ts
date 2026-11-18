@@ -4,4 +4,4 @@ export * from "./cards";
 export * from "./face";
 export * from "./generate";
 export * from "./jobs";
-export { ANGLES, DEFAULT_MODELS, MODEL_IDS, MODELS, VIEWS, money, type ModelId, type Light } from "./plan";
+export { ANGLES, DEFAULT_MODELS, MODEL_IDS, MIN_FACE_FRACTION, MODELS, VIEWS, money, type ModelId, type Light } from "./plan";
