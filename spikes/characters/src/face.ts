@@ -14,8 +14,8 @@ export type CheckResult = { file: string; measures: Record<string, unknown>; ver
 export type Calibration = {
   reference: string;
   same_picture: { variant: string; score: number | null }[];
-  others: { file: string; frames: number; faces: number; best: number | null; mean: number | null; probably_same: boolean }[];
-  thresholds: { red_below: number; green_from: number; top_other: number; others_used: number; probably_same: number; lowest_same: number | null; sface_default: number; note: string | null };
+  others: { file: string; frames: number; faces: number; best: number | null; mean: number | null; role: "her" | "copy" | "other"; probably_same: boolean }[];
+  thresholds: { red_below: number; green_from: number; top_other: number; others_used: number; her_used: number; her_range: [number, number] | null; copies: number; overlap: boolean; lowest_same: number | null; sface_default: number; note: string | null };
 };
 export type SheetSpec = { out: string; title: string; height?: number; rows: { label: string; cells: { file: string; caption: string; colour: string }[] }[] };
 
@@ -23,7 +23,7 @@ export interface FaceTool {
   check(image: string): CheckResult;
   sceneCheck(image: string): CheckResult;
   compare(reference: string, files: string[]): { results: (FaceResult & { file: string })[] };
-  calibrate(reference: string, others: string[]): Calibration;
+  calibrate(reference: string, others: string[], her?: string[]): Calibration;
   crop(image: string, out: string): { file: string };
   sheet(spec: SheetSpec): { file: string };
 }
@@ -56,7 +56,7 @@ export async function localFaceTool(repoRoot: string): Promise<FaceTool> {
     check: (image) => run(["check", image]),
     sceneCheck: (image) => run(["scene-check", image]),
     compare: (reference, files) => run(["compare", reference, ...files]),
-    calibrate: (reference, others) => run(["calibrate", reference, ...others]),
+    calibrate: (reference, others, her = []) => run(["calibrate", ...her.flatMap((h) => ["--her", h]), reference, ...others]),
     crop: (image, out) => run(["crop", image, out]),
     sheet(spec) {
       const dir = mkdtempSync(path.join(os.tmpdir(), "sheet-"));

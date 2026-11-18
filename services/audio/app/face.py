@@ -599,45 +599,70 @@ def _same_picture_variants(img: np.ndarray) -> dict[str, np.ndarray]:
     out["brighter"] = cv2.convertScaleAbs(img, alpha=1.3, beta=20)
     for a in (-10, 10):
         M = cv2.getRotationMatrix2D((w / 2, h / 2), a, 1.0)
-        out[f"tilted {a:+d}°"] = cv2.warpAffine(img, M, (w, h), borderMode=cv2.BORDER_REFLECT)
+        out[f"tilted {a:+d} deg"] = cv2.warpAffine(img, M, (w, h), borderMode=cv2.BORDER_REFLECT)
     ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 35])
     out["heavy JPEG"] = cv2.imdecode(buf, cv2.IMREAD_COLOR)
     out["blurred"] = cv2.GaussianBlur(img, (0, 0), 2.0)
     return out
 
 
-def thresholds(other_best: list[float], same_scores: list[float]) -> dict:
+COPY_FROM = 0.6  # an unmarked clip this alike is almost certainly the reference picture itself (or a copy of it)
+
+
+def clip_role(name: str, best: float | None, her_names: list[str] | None) -> str:
+    """'her' = marked by the user (the file name equals or contains one of her names, any case); 'copy' = not marked but
+    scoring >= 0.6 (the reference picture itself or a copy); otherwise 'other'."""
+    low = name.lower()
+    if any(h.strip() and h.strip().lower() in low for h in her_names or []):
+        return "her"
+    if best is not None and best >= COPY_FROM:
+        return "copy"
+    return "other"
+
+
+def thresholds(other_best: list[float], same_scores: list[float], her_best: list[float] | None = None, copies: int = 0) -> dict:
     """Green / amber / red from the user's own pictures.
 
-    Clips whose best face scores at or above SFace's own same-person line (0.363) are probably the same person: they are
-    left out of "other people" (and listed, so the user can say otherwise).
+    other_best = best score of every clip of OTHER people (clips marked as her and copies of the reference are not in it).
     red   = below the best score any other person reached + 0.03 (it could be anyone)
     green = at least SFace's own line (0.363) and at least 0.10 above the best other person
-    amber = in between: probably her, check by eye
+    amber = in between: check by eye
     """
-    others = [s for s in other_best if s < SFACE_SAME]
+    others = list(other_best)
+    her = list(her_best or [])
     top_other = max(others) if others else 0.0
     red_below = round(max(0.20, top_other + 0.03), 3)
     green_from = round(max(SFACE_SAME, top_other + 0.10), 3)
+    green_from = max(green_from, red_below)
     low_same = min(same_scores) if same_scores else None
+    her_range = [round(min(her), 3), round(max(her), 3)] if her else None
+    overlap = any(h < green_from for h in her)
     notes = []
     if not others:
         notes.append("No other woman's face was found to compare with: the thresholds are SFace's defaults.")
+    if overlap and her_range:
+        notes.append(
+            f"The face check cannot reliably tell her from some other women here: her own clips score {her_range[0]:.2f}\u2013{her_range[1]:.2f}, "
+            f"other women up to {top_other:.2f}. Green means very likely her; amber and red mean check by eye before regenerating."
+        )
     if low_same is not None and low_same < green_from:
         notes.append(f"Some changed copies of the reference itself score only {low_same:.2f}: a small or blurred face can land in amber even when it is her.")
     return {
         "red_below": red_below,
-        "green_from": max(green_from, red_below),
+        "green_from": green_from,
         "top_other": round(top_other, 3),
         "others_used": len(others),
-        "probably_same": sum(1 for s in other_best if s >= SFACE_SAME),
+        "her_used": len(her),
+        "her_range": her_range,
+        "copies": copies,
+        "overlap": overlap,
         "lowest_same": round(low_same, 3) if low_same is not None else None,
         "sface_default": SFACE_SAME,
         "note": " ".join(notes) or None,
     }
 
 
-def calibrate(kit: FaceKit, ref: str, others: list[str]) -> dict:
+def calibrate(kit: FaceKit, ref: str, others: list[str], her: list[str] | None = None) -> dict:
     ref_img, ref_f = _reference_print(kit, ref)
     same = []
     for name, v in _same_picture_variants(ref_img).items():
@@ -654,8 +679,15 @@ def calibrate(kit: FaceKit, ref: str, others: list[str]) -> dict:
         rows.append({"file": str(p), "frames": len(frames), "faces": len(scores), "best": round(max(scores), 3) if scores else None, "mean": round(float(np.mean(scores)), 3) if scores else None})
     rows.sort(key=lambda r: -(r["best"] if r["best"] is not None else -9))
     for r in rows:
-        r["probably_same"] = r["best"] is not None and r["best"] >= SFACE_SAME
-    t = thresholds([r["best"] for r in rows if r["best"] is not None], [s["score"] for s in same if s["score"] is not None])
+        r["role"] = clip_role(Path(r["file"]).stem, r["best"], her)
+        r["probably_same"] = r["role"] != "other"
+    scored = [r for r in rows if r["best"] is not None]
+    t = thresholds(
+        [r["best"] for r in scored if r["role"] == "other"],
+        [s["score"] for s in same if s["score"] is not None],
+        [r["best"] for r in scored if r["role"] == "her"],
+        sum(1 for r in rows if r["role"] == "copy"),
+    )
     return {"reference": ref, "same_picture": same, "others": rows, "thresholds": t}
 
 
@@ -733,6 +765,7 @@ def main(argv: list[str]) -> int:
     a = sub.add_parser("calibrate")
     a.add_argument("reference")
     a.add_argument("others", nargs="+")
+    a.add_argument("--her", action="append", default=[])
     a = sub.add_parser("crop")
     a.add_argument("image")
     a.add_argument("out")
@@ -753,7 +786,7 @@ def main(argv: list[str]) -> int:
         elif args.cmd == "compare":
             result = compare(kit, args.reference, args.files)
         elif args.cmd == "calibrate":
-            result = calibrate(kit, args.reference, args.others)
+            result = calibrate(kit, args.reference, args.others, args.her)
         else:
             result = crop_face(kit, args.image, args.out)
     print(json.dumps(result, ensure_ascii=False, default=_plain))

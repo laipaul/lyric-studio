@@ -30,8 +30,10 @@ pnpm characters pack --image "D:\pictures\bride.jpg" --scene "D:\pictures\bridal
    - the faces in other clips (`--song` = that song's clips folder, or `--others "<folder or files>"`);
    - changed copies of her own picture (mirrored, smaller, darker, tilted, compressed, blurred).
 
-   A clip that scores as "probably her" is left out of the "other people" and listed, so tell me if it is
-   someone else. The thresholds are saved in `out\<name>\calibration.json`, and every pack run for that `--name`
+   Every clip counts as "another person" unless you mark it with `--her "<clip name>"` (repeatable; a part of the
+   file name is enough, any case). A clip you did not mark that scores 0.6 or more is taken for the reference picture
+   itself (or a copy) and left out. If her own clips score below the best other woman, the report says the check
+   cannot tell them apart reliably (green = very likely her; otherwise check by eye). The thresholds are saved in `out\<name>\calibration.json`, and every pack run for that `--name`
    uses them.
 2. **`pack`** runs the steps below. Without `--yes` it stops after the estimate (nothing uploaded).
    - The **reference check** of the picture (and of `--image2`), and the **location check** of `--scene`.
@@ -57,6 +59,7 @@ pnpm characters pack --image "D:\pictures\bride.jpg" --scene "D:\pictures\bridal
 |---|---|
 | `--name bride` | The character's name (folder `out\bride\`). Default: the picture's file name. |
 | `--models nano-pro,nano2,seedream,gpt` | Which image models (default all four). |
+| `--her "<clip name>"` | calibrate: a clip that really is her (repeatable; a part of the file name is enough). Without it every clip counts as another person. |
 | `--image2 "<path>"` | A second picture of her, sent as a second reference (one of the reference check's fixes). |
 | `--crop` | Crop your picture to her face first (one of the fixes; the cropped copy is what gets sent). |
 | `--ai-opinion` | A paid AI opinion on the reference picture ($0.01). |

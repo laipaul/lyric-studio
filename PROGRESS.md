@@ -23,7 +23,8 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   `--image2` (a second reference). The upscale fix is the later upscale pass. `--ai-opinion` is paid ($0.01) and
   off by default.
 - **`pnpm characters calibrate`** (free) sets the "same person" line on Paul's own pictures: the bride against the
-  faces in the song's clips. A clip that scores above SFace's line is left out as "probably her" and listed. It also
+  faces in the song's clips. Every clip counts as another person unless marked with `--her "<clip name>"`; an unmarked clip
+  scoring 0.6+ is left out as a copy of the reference. It also
   scores changed copies of her picture. Saved per character.
 - **`pnpm characters pack`**:
   - 4 views (front, 3/4, profile, full body on grey) and 3 location angles (`--scene`), per model: Nano Banana Pro,

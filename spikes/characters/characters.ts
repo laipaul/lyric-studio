@@ -3,6 +3,7 @@
 // and a report with the actual cost. Not part of the app: it only reads the workspace (database read-only).
 //
 //   pnpm characters calibrate --image "<bride.jpg>" --song "Wedding Day"      (or --others "<folder or files>")
+//                        [--her "<clip name>"]   (repeatable; clips of her: a part of the file name is enough)
 //   pnpm characters pack --image "<bride.jpg>" --scene "<room.jpg>" [--name bride] [--models nano-pro,nano2,seedream,gpt]
 //                        [--image2 "<second.jpg>"] [--crop] [--ai-opinion] [--max-cost 3] [--force] [--yes]
 //   pnpm characters cost "<run folder>"                                         (the actual cost, again, later)
@@ -49,6 +50,7 @@ function options(argv: string[]) {
       name: { type: "string" },
       song: { type: "string" },
       others: { type: "string", multiple: true },
+      her: { type: "string", multiple: true },
       models: { type: "string" },
       "max-cost": { type: "string" },
       "timeout-min": { type: "string" },
@@ -74,6 +76,7 @@ function options(argv: string[]) {
     name: safeName(values.name ?? (image ? path.parse(image).name : "character")),
     song: values.song,
     others: (values.others ?? []).map((o) => path.resolve(o)),
+    her: values.her ?? [],
     models: models as ModelId[],
     cap,
     timeoutMs: Number(values["timeout-min"] ?? 10) * 60_000,
@@ -108,7 +111,7 @@ async function calibrate(o: Opts, face: FaceTool, out: string, env: Record<strin
   if (refCheck.verdict === "Not suitable" && !o.force)
     throw new Stop("\nThe reference is not suitable (see above): nothing was calibrated. Use another picture, or --force to try anyway.");
   console.log(`Calibrating on ${path.basename(ref)} against ${others.map((x) => path.basename(x)).join(", ")} (local, free)…`);
-  const c = face.calibrate(ref, others);
+  const c = face.calibrate(ref, others, o.her);
   const dir = path.join(out, o.name);
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, "calibration.json"), `${JSON.stringify({ ...c, created_at: new Date().toISOString() }, null, 2)}\n`);
@@ -128,16 +131,16 @@ export function calibrationMarkdown(c: ReturnType<FaceTool["calibrate"]>): strin
     "## The same picture, changed (mirror, size, light, tilt, compression, blur)",
     ...c.same_picture.map((s) => `- ${s.variant}: ${s.score ?? "no face found"}`),
     "",
-    "## Other people (best face per clip)",
+    "## Clips (best face per clip)",
     "| Clip | Faces seen | Best score | Mean | |",
     "|---|---|---|---|---|",
-    ...c.others.map((r) => `| ${path.basename(r.file)} | ${r.faces} (in ${r.frames} frames) | ${r.best ?? "–"} | ${r.mean ?? "–"} | ${r.probably_same ? "**probably her** (left out)" : ""} |`),
+    ...c.others.map((r) => `| ${path.basename(r.file)} | ${r.faces} (in ${r.frames} frames) | ${r.best ?? "–"} | ${r.mean ?? "–"} | ${r.role === "her" ? "**her** (marked by you)" : r.role === "copy" ? "**copy of the reference** (left out)" : ""} |`),
     "",
     "## Thresholds for the pack",
     `- **Green (same person): ${t.green_from}** or more`,
     `- **Amber (check by eye):** ${t.red_below} – ${t.green_from}`,
     `- **Red (drifted, made again): below ${t.red_below}**`,
-    `- Based on ${t.others_used} other clip(s); the best other person scored ${t.top_other}.${t.probably_same ? ` ${t.probably_same} clip(s) scored as probably her and were left out: if that is someone else, tell me.` : ""}`,
+    `- Based on ${t.others_used} other clip(s); the best other person scored ${t.top_other}.${t.her_used && t.her_range ? ` Your marked clip(s) of her score ${t.her_range[0]}–${t.her_range[1]}.` : ""}${t.copies ? ` ${t.copies} clip(s) look like the reference picture itself and were left out.` : ""}`,
     ...(t.note ? [`- Note: ${t.note}`] : []),
     "",
   ];

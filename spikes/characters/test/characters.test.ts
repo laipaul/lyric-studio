@@ -103,19 +103,31 @@ describe("plan", () => {
     assert.equal(d.status, "no_permission");
   });
 
-  test("calibration report says which clips were left out as probably her", () => {
+  test("calibration report marks her clips and copies, and says when the check cannot tell them apart", () => {
     const md = calibrationMarkdown({
       reference: "bride.jpg",
       same_picture: [{ variant: "mirrored", score: 0.91 }],
       others: [
-        { file: "a.mp4", frames: 10, faces: 8, best: 0.71, mean: 0.6, probably_same: true },
-        { file: "b.mp4", frames: 10, faces: 5, best: 0.18, mean: 0.05, probably_same: false },
+        { file: "copy.jpg", frames: 1, faces: 1, best: 0.88, mean: 0.88, role: "copy", probably_same: true },
+        { file: "lena again.mp4", frames: 10, faces: 8, best: 0.369, mean: 0.3, role: "her", probably_same: true },
+        { file: "b.mp4", frames: 10, faces: 5, best: 0.401, mean: 0.05, role: "other", probably_same: false },
       ],
-      thresholds: { red_below: 0.21, green_from: 0.363, top_other: 0.18, others_used: 1, probably_same: 1, lowest_same: 0.91, sface_default: 0.363, note: null },
+      thresholds: {
+        red_below: 0.431, green_from: 0.501, top_other: 0.401, others_used: 1, her_used: 1, her_range: [0.369, 0.369], copies: 1, overlap: true,
+        lowest_same: 0.91, sface_default: 0.363, note: "The face check cannot reliably tell her from some other women here.",
+      },
     });
-    assert.match(md, /\*\*probably her\*\* \(left out\)/);
-    assert.match(md, /Green \(same person\): 0\.363/);
-    assert.match(md, /below 0\.21/);
+    assert.match(md, /## Clips \(best face per clip\)/);
+    assert.match(md, /lena again\.mp4 .*her\*\* \(marked by you\)/);
+    assert.match(md, /copy\.jpg .*copy of the reference\*\* \(left out\)/);
+    assert.match(md, /\| b\.mp4 .*\| {2}\|/);
+    assert.match(md, /Green \(same person\): 0\.501/);
+    assert.match(md, /below 0\.431/);
+    assert.match(md, /Based on 1 other clip\(s\); the best other person scored 0\.401\./);
+    assert.match(md, /Your marked clip\(s\) of her score 0\.369–0\.369\./);
+    assert.match(md, /1 clip\(s\) look like the reference picture itself and were left out\./);
+    assert.match(md, /cannot reliably tell her/);
+    assert.doesNotMatch(md, /probably her/);
   });
 });
 

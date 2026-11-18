@@ -106,10 +106,29 @@ def test_thresholds_from_the_users_pictures():
     assert t["red_below"] == 0.24 and t["green_from"] == 0.363 and t["others_used"] == 3
     t = face.thresholds([0.30, 0.10], [0.9])
     assert t["green_from"] == 0.4 and t["red_below"] == 0.33
-    # A clip at or above SFace's own same-person line is probably her: left out of "other women".
-    t = face.thresholds([0.62, 0.15], [0.9])
-    assert t["probably_same"] == 1 and t["top_other"] == 0.15
     assert "defaults" in face.thresholds([], [0.9])["note"]
+
+
+def test_thresholds_no_exclusion_at_the_sface_line():
+    t = face.thresholds([0.401, 0.375, 0.2], [0.9])
+    assert t["others_used"] == 3 and t["top_other"] == 0.401
+    assert t["red_below"] == 0.431 and t["green_from"] == 0.501
+    assert t["her_used"] == 0 and t["her_range"] is None and t["overlap"] is False
+
+
+def test_thresholds_her_overlap_note():
+    t = face.thresholds([0.401, 0.375], [0.9], [0.369], copies=1)
+    assert t["overlap"] is True and t["her_used"] == 1 and t["her_range"] == [0.369, 0.369] and t["copies"] == 1
+    assert "0.37" in t["note"] and "0.40" in t["note"]
+    assert face.thresholds([0.2], [0.9], [0.8])["overlap"] is False
+
+
+def test_clip_role():
+    assert face.clip_role("Lena Again (544x720)", 0.369, ["lena again"]) == "her"
+    assert face.clip_role("lena", None, ["LENA"]) == "her"
+    assert face.clip_role("woman2", 0.879, ["lena"]) == "copy"
+    assert face.clip_role("woman2", 0.401, ["lena"]) == "other"
+    assert face.clip_role("woman2", None, []) == "other"
 
 
 def test_body_visibility():
