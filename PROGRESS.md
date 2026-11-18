@@ -395,6 +395,9 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 
 ## Next
 
+**Order from here (confirmed by Paul, 18 Nov 2026):** Paul's review of the C1 spike → C1 in the app → C2 → C3 → C4
+→ Lip Sync step 2 → Instagram Growth. The Theme v2 order below (2e-2 → O1 → 2c → …) waits until then.
+
 **Characters roadmap (C1–C4: approved 17 Nov 2026 with the face models YuNet + SFace + MediaPipe (local, CPU, in the Python service), a Characters page in the header next to Collections (characters, scene cards, EP story bibles), a picker in Prepare → Storyboard to assign them to slots; the C1 spike is built, the rest is not).** Vision: Paul drops
 ONE picture of a character; the app builds a locked character pack, turns an imported shot list into planned Storyboard
 slots, generates consistent stills for every slot, checks them against the character's face and regenerates misses.
