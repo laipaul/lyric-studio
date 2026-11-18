@@ -4,7 +4,7 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### Characters, C1 spike: reference check, character pack, location angles, local face check ✅ (to run on the Windows PC)
+### Characters, C1 spike: reference check, character pack, location angles, local face check ✅ (reviewed by Paul, 18 Nov 2026: done)
 - **Isolated spike** in `spikes/characters/` (README there). Nothing in apps/ or packages/ changed (no HyperFrames,
   Remotion, Prepare/Storyboard or Shape code). The database is opened read-only, only for `--song`.
 - **Local face checks** (new, in the Python service: `services/audio/app/face.py`).
@@ -66,6 +66,14 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   - Earlier fixes from the same run: downloads retry 6 times, and `pnpm characters fetch "<run folder>"` recovers
     paid images without regenerating.
   - Tests: characters 22, face checks 21.
+- **Conclusion (Paul's review, 18 Nov 2026):**
+  - **Seedream 4.5 is the default** for faces, bodies and location angles. It has the best likeness (0.74) and keeps
+    the reference's warm look, its location angles keep the room's light and its props, and it is the cheapest.
+  - The outfit comes from Paul's words (`--outfit`): the body test gave the same floor-length A-line gown and veil
+    in front and back.
+  - The app's own neck crop is clean: no face in body views.
+  - Watch: small prop details drift (the mirror's crest), so scene cards name their key props. "Wide, from the
+    right" stays close to the original framing and needs a more explicit prompt.
 - **To run on the PC:** see the step's message (calibrate on the bride vs the Wedding Day clips, then the estimate,
   then `--yes`).
 
