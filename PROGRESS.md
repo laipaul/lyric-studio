@@ -472,6 +472,16 @@ its results are saved as ordinary photos in the song folder. Order:
       the file plays.
   - **Rules:** a cost estimate and `--max-cost` before any call; keys from .env only (the Higgsfield key names are
     checked when built); nothing is sent without `--yes`.
+  - **Reference rule (decided 18 Nov 2026):** motion references must be Paul's own (his Midjourney clips, footage
+    he films himself), licensed, or public domain. Never a movie scene, another artist's music video or anyone
+    else's footage, even when a tool accepts it: Higgsfield's own terms (s.4.2) make infringement the user's
+    responsibility. Each reference keeps its source link and a mark: "made by me", "licensed" or "public domain".
+    A trend's structure (hook, pacing, the move) is recreated, never its footage.
+  - **Match-cut sequence (decided 18 Nov 2026):** one motion reference × several scene cards or outfits → one Recast
+    clip each, with the same motion in another place or weather (stage, rain, snow, sun). Make assembles them as a
+    match cut on the beat: the subject stays anchored while the world changes behind them. The per-scene prompts
+    come from the scene cards (C2 fields), never typed by hand. It builds on the scene cards, the C2 slots and the
+    cut planner (part of C5 / Recast).
 - **Cast for Wedding Day:** a second character card is needed, the **groom** (same C1 flow: one picture → pack).
 - **Animation prompt default (prompt builder, C5):** light breeze, hair and fabric movement, unless the slot says
   otherwise.
