@@ -21,7 +21,7 @@ import { localFaceTool, type CheckResult, type FaceTool } from "./src/face";
 import { actualCosts, callModel, download, errorText, firstImageUrl, type ActualCost, type Attempt } from "./src/fal";
 import {
   angleNote, anglePrompt, ANGLES, Budget, classify, DEFAULT_THRESHOLDS, DESCRIPTION_PROMPT, estimate, MODEL_IDS, MODELS, money, OPINION_PROMPT,
-  safeName, SCENE_DESCRIPTION_PROMPT, VIEWS, viewPrompt, VISION, type Light, type ModelId, type Thresholds,
+  safeName, SCENE_DESCRIPTION_PROMPT, VIEWS, viewPrompt, VISION, type Light, type ModelId, type Thresholds, type ViewId,
 } from "./src/plan";
 
 export class Stop extends Error {}
@@ -300,12 +300,15 @@ async function pack(o: Opts, deps: Deps, face: FaceTool, out: string, env: Recor
         break;
       }
       const fr = face.compare(refFile, [file]).results[0];
-      const c = classify(id as (typeof VIEWS)[number]["id"], fr, t);
+      const c = classify(id as ViewId, fr, t);
       tr.score = fr.score;
       tr.light = c.light;
       tr.text = c.text;
       const view = VIEWS.find((v) => v.id === id)!;
-      const better = rep.chosen === null || (fr.score ?? -1) > (rep.tries[rep.chosen].score ?? -1);
+      // Keep the best try: by result first (green, then amber / a body view with no face, then red), then by score.
+      const rank = (l: Light | null) => (l === "green" ? 3 : l === "amber" || l === "grey" ? 2 : 0);
+      const prev = rep.chosen === null ? null : rep.tries[rep.chosen];
+      const better = !prev || rank(c.light) > rank(prev.light) || (rank(c.light) === rank(prev.light) && (fr.score ?? -1) > (prev.score ?? -1));
       if (better) {
         rep.chosen = rep.tries.length - 1;
         rep.file = file;
@@ -345,7 +348,7 @@ async function pack(o: Opts, deps: Deps, face: FaceTool, out: string, env: Recor
   try {
     sheets.pack = face.sheet({
       out: path.join(dir, "sheet_pack.jpg"),
-      title: `${o.name}: character pack, face score vs the reference (green >= ${t.green_from}, red < ${t.red_below})`,
+      title: `${o.name}: character pack (outdoor daylight); face views scored vs the reference (green >= ${t.green_from}, red < ${t.red_below}); body views cropped at the neck`,
       rows: o.models.map((m) => ({
         label: MODELS[m].name,
         cells: [
@@ -432,9 +435,11 @@ export function packMarkdown(r: PackReport): string {
   for (const m of r.models) {
     const mine = r.items.filter((i) => i.model === m.id);
     const views = mine.filter((i) => i.kind === "view");
-    const greens = views.filter((v) => v.light === "green").length;
-    const byEye = views.filter((v) => v.light === "grey").length;
-    L.push(`## ${m.name} — ${greens} of ${views.length} views green${byEye ? ` (${byEye} to judge by eye)` : ""}`, `\`${m.endpoint}\` · ${m.price}`, "");
+    const faceIds = new Set<string>(VIEWS.filter((v) => v.face).map((v) => v.label));
+    const faceViews = views.filter((v) => faceIds.has(v.label));
+    const greens = faceViews.filter((v) => v.light === "green").length;
+    const bodies = views.length - faceViews.length;
+    L.push(`## ${m.name} — ${greens} of ${faceViews.length} face views green${bodies ? ` · ${bodies} body views to judge by eye` : ""}`, `\`${m.endpoint}\` · ${m.price}`, "");
     L.push("| View | Face | Result | Tries |", "|---|---|---|---|");
     for (const v of views) {
       const best = Math.max(...v.tries.map((x) => x.score ?? -1));

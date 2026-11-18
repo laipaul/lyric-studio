@@ -27,7 +27,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   scoring 0.6+ is left out as a copy of the reference. It also
   scores changed copies of her picture. Saved per character.
 - **`pnpm characters pack`**:
-  - 4 views (front, 3/4, profile, full body on grey) and 3 location angles (`--scene`), per model: Nano Banana Pro,
+  - 4 views and 3 location angles (`--scene`), per model: Nano Banana Pro,
     Nano Banana 2, Seedream 4.5 and GPT Image 1.5 (endpoints, inputs and prices checked on fal.ai). The picture is
     both the identity and the style reference.
   - Each view is face-checked: green / amber / red. A red view is made again at most twice and the best try is
@@ -40,6 +40,18 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   `pnpm test:audio tests/test_face.py` (12). The whole audio suite passes (115).
 - Checked here with the real face models on public test photos. A drifted view (another person's face, 0.21) was
   red and made again (0.91, green); a 40 px face was not judged; the contact sheets were drawn.
+- **Update 18 Nov 2026 (decided by the user, same spike):**
+  - The pack views sit in a **neutral, empty outdoor setting in soft natural daylight**, not a grey studio backdrop
+    (studio backdrops gave plastic skin).
+  - **New layout:** a close-up face (the identity source), a 3/4 face, and the full body from the front and from
+    the back, both cropped at the neck, so faces only come from the close-up.
+  - Face checks run on the two face views only. A body view that shows a face anyway is red and made again.
+  - The best try is now chosen by result first (green, then amber or a body view without a face, then red), then by
+    score.
+  - Also fixed for Windows since: dynamic imports of a path (file:// URLs); faces filling a close-up portrait (the
+    face finder now checks 3 sizes); calibration (`--her`, no auto-exclusion at 0.363, an overlap warning); UTF-8
+    output from Python.
+  - Tests: characters 17, face checks 18.
 - **To run on the PC:** see the step's message (calibrate on the bride vs the Wedding Day clips, then the estimate,
   then `--yes`).
 
@@ -426,6 +438,9 @@ its results are saved as ordinary photos in the song folder. Order:
   and stills, cached and never replacing the originals, before Make uses them. Provider switch fal or local
   (RTX 5060), one setting per song, cost shown first for fal. It sits before rendering, so the render paths and
   the zero-network render rule do not change.
+- **Cast for Wedding Day:** a second character card is needed, the **groom** (same C1 flow: one picture → pack).
+- **Animation prompt default (prompt builder, C5):** light breeze, hair and fabric movement, unless the slot says
+  otherwise.
 - List only, later: C5 pick & animate (export for Midjourney video; optional fal image-to-video), C6 a lip-sync
   button using the locked face portrait (builds on Lip Sync step 2: a whole-face model, InfiniteTalk or what the
   OmniHuman 1.5 / Kling Avatar evaluation picks), and a Midjourney prompt builder as a fallback.
@@ -434,7 +449,8 @@ its results are saved as ordinary photos in the song folder. Order:
 Step 1 (the spike, three fal.ai models compared) is done, to verify. Next, each its own step, when the user decides:
 - **Step 2:** a "Lip sync" button on Prepare → Storyboard clip cards. Singing defaults to InfiniteTalk (whole face),
   with Sync only as the automatic fallback; a provider switch stays as an override. The result becomes a variant of
-  the clip on its card, or replaces it.
+  the clip on its card, or replaces it. **`--join`:** consecutive lines become one sung phrase of up to about 10 s
+  (one clip, one request), with the prompt "single continuous shot, no cuts".
 - **Evaluate for still-image characters** (one picture + the song → a singing shot, no clip needed). Endpoints seen
   on fal.ai, 17 Nov 2026; to verify when the step starts:
   - OmniHuman 1.5: `fal-ai/bytedance/omnihuman/v1.5`, $0.16/s.
@@ -442,6 +458,38 @@ Step 1 (the spike, three fal.ai models compared) is done, to verify. Next, each 
   - For comparison, InfiniteTalk image-to-video: `fal-ai/infinitalk`, $0.20/s.
 - **Step 3 (optional):** a local, free provider (MuseTalk or LatentSync) on the RTX 5060 8 GB, behind the same
   `LipSyncProvider` interface.
+
+**Instagram Growth module (recorded 18 Nov 2026; nothing built).** It extends the planned Reverse Engineer (Theme v2)
+and the planned Trend Scout.
+- **Priority:** after Characters C1–C4 and Lip Sync step 2.
+- **The current order stays:** Windows import fix → C1 spike → Paul's review.
+
+The module's parts:
+1. **Trend Scout, outlier rule.** Only propose Reels with **500K+ views**, from any genre (travel, weddings,
+   K-drama, cinematic edits), not just music. Output: the link, the views, and why it is an outlier (hook, pacing,
+   structure).
+2. **Reverse Engineer, own outliers first.**
+   - Import Paul's own top Reel, "Hujan in Jakarta" (about 1M views, against his usual 13K–90K).
+   - Turn its pattern into a reusable template: the first-2-seconds hook, the story beats, the clip / lyric
+     matches, the caption and the length.
+   - Templates store **structure only**, never copyrighted characters or footage, and keep the source link for
+     credit.
+3. **Trial variants.** One click on a finished Reel gives 2–3 variants for Instagram Trial Reels.
+   - What changes: the first clip / hook, the title or caption wording, a subtle zoom, a mirrored frame, or the
+     length (90 s vs 60 s).
+   - Clearly named files, same export preset.
+4. **Export pack per Reel.** The 9:16 1080×1920 video, the chosen cover frame, the caption text, and an
+   "AI-generated" reminder for the platform's label.
+5. **Results tracking.**
+   - Per Reel and per variant: views, shares, saves and profile visits, plus the song's Spotify streams and saves
+     in the following 7 days.
+   - **Shares + saves are the main score**, not likes or views.
+   - Start with manual entry or a CSV import.
+   - Verify what the Instagram Graph API allows (insights, publishing, Trial Reels) before designing any
+     automation. (The Out of scope list in CLAUDE.md excludes social posting and analytics, so any API use needs
+     Paul's explicit OK at that step.)
+6. **Pattern report.** What the winning Reels have in common (hook type, length, first clip, caption style). It
+   feeds back into the Theme rules and the templates.
 
 **Navigation and the order from here (agreed with the user, 9 Nov 2026).** Rule: every setting lives in the stage
 where the user looks for it, in ONE place. Order: **N1** (navigation, done, to verify; N1 polish: the four stages behave the same way, done, to verify) → story notes on clip cards

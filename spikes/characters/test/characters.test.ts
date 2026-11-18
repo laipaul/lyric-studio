@@ -19,9 +19,12 @@ import { angleNote, anglePrompt, ANGLES, Budget, classify, DEFAULT_THRESHOLDS, e
 describe("plan", () => {
   test("every view asks for the reference as identity AND style; locations keep the room, no people", () => {
     for (const v of VIEWS) assert.match(viewPrompt(v), /BOTH the identity and the style reference/);
-    assert.match(viewPrompt(VIEWS[0]), /grey studio background/);
+    for (const v of VIEWS) assert.match(viewPrompt(v), /neutral, empty outdoor place .* soft natural daylight/);
+    for (const v of VIEWS) assert.match(viewPrompt(v), /Not a studio, no backdrop/);
+    assert.ok(VIEWS.filter((v) => !v.face).every((v) => /CROPPED AT THE NECK/.test(v.prompt)));
     for (const a of ANGLES) assert.match(anglePrompt(a), /no people/);
-    assert.deepEqual(VIEWS.map((v) => v.id), ["front", "three_quarter", "profile", "full_body"]);
+    assert.deepEqual(VIEWS.map((v) => v.id), ["closeup", "three_quarter", "body_front", "body_back"]);
+    assert.deepEqual(VIEWS.filter((v) => v.face).map((v) => v.id), ["closeup", "three_quarter"]); // faces only from the face views
     assert.equal(ANGLES.length, 3);
   });
 
@@ -45,26 +48,29 @@ describe("plan", () => {
     assert.equal(b.canSpend(0.08), false);
   });
 
-  test("face score -> green / amber / red; red is made again; profiles and tiny faces are judged by eye", () => {
+  test("face score -> green / amber / red on face views; red is made again; body views must show no face", () => {
     const t = { red_below: 0.25, green_from: 0.4, source: "test" };
-    assert.deepEqual(classify("front", { score: 0.55, face_px: 300 }, t).light, "green");
-    assert.deepEqual(classify("front", { score: 0.3, face_px: 300 }, t).light, "amber");
+    assert.deepEqual(classify("closeup", { score: 0.55, face_px: 300 }, t).light, "green");
+    assert.deepEqual(classify("closeup", { score: 0.3, face_px: 300 }, t).light, "amber");
     const red = classify("three_quarter", { score: 0.1, face_px: 300 }, t);
     assert.equal(red.light, "red");
     assert.equal(red.regenerate, true);
     assert.match(red.text, /Drifted/);
-    assert.equal(classify("front", { score: null, note: "no face found" }, t).regenerate, true);
-    const prof = classify("profile", { score: null }, t);
-    assert.deepEqual([prof.light, prof.regenerate], ["grey", false]);
-    assert.equal(classify("profile", { score: 0.1, face_px: 200 }, t).regenerate, false);
-    assert.equal(classify("full_body", { score: 0.1, face_px: 40 }, t).regenerate, false);
+    assert.equal(classify("closeup", { score: null, note: "no face found" }, t).regenerate, true);
+    const body = classify("body_back", { score: null }, t);
+    assert.deepEqual([body.light, body.regenerate], ["grey", false]);
+    const faceInBody = classify("body_front", { score: 0.5, face_px: 200 }, t);
+    assert.deepEqual([faceInBody.light, faceInBody.regenerate], ["red", true]);
+    assert.match(faceInBody.text, /cropped at the neck/);
+    assert.equal(classify("body_front", { score: 0.1, face_px: 20 }, t).regenerate, false); // a speck, not a face
+    assert.equal(classify("three_quarter", { score: 0.1, face_px: 40 }, t).regenerate, false); // too small to judge
     assert.equal(DEFAULT_THRESHOLDS.green_from, 0.363);
   });
 
   test("angle note: the head turn vs the view asked for", () => {
     assert.equal(angleNote(VIEWS[0], 4), null);
     assert.match(angleNote(VIEWS[1], 5)!, /turned only 5°/);
-    assert.equal(angleNote(VIEWS[2], 10), null); // a profile is not measured
+    assert.equal(angleNote(VIEWS[2], 10), null); // body views are not measured
   });
 
   test("one retry of a failed request, both request IDs kept", async () => {
@@ -189,7 +195,8 @@ describe("pack run (stand-in fal, face check and billing)", () => {
     } as never;
   };
 
-  // Face scores by model and try: Nano Banana 2's 3/4 view drifts twice then is fine; GPT's front always drifts.
+  // Face scores by model and try: Nano Banana 2's 3/4 face drifts twice then is fine; GPT's close-up always drifts;
+  // Seedream's back view shows a face once (not cropped at the neck); body views otherwise have no face.
   const fakeFace = (): FaceTool & { compared: string[]; sheets: SheetSpec[] } => {
     const ok: CheckResult = { file: "", measures: {}, verdict: "Ready", reasons: [{ level: "ok", text: "One face.", check: "faces" }], fixes: [] };
     const compared: string[] = [];
@@ -205,8 +212,8 @@ describe("pack run (stand-in fal, face check and billing)", () => {
         const rel = f.split(path.sep).slice(-2).join("/");
         let score: number | null = 0.52;
         if (rel === "nano2/three_quarter.png" || rel === "nano2/three_quarter_try2.png") score = 0.1;
-        if (rel.startsWith("gpt/front")) score = 0.05;
-        if (rel.endsWith("profile.png")) score = null;
+        if (rel.startsWith("gpt/closeup")) score = 0.05;
+        if (rel.includes("/body_")) score = rel === "seedream/body_back.png" ? 0.4 : null;
         return { results: [{ file: f, score, face_px: 300, yaw: rel.includes("three_quarter") ? 40 : 3 }] };
       },
       calibrate: () => {
@@ -272,22 +279,24 @@ describe("pack run (stand-in fal, face check and billing)", () => {
     const views = submitted.filter((s) => s.endpoint !== "fal-ai/any-llm/vision");
     const perModel = (ep: string) => views.filter((s) => s.endpoint === ep).length;
     assert.equal(perModel("fal-ai/nano-banana-pro/edit"), 7);
-    assert.equal(perModel("fal-ai/bytedance/seedream/v4.5/edit"), 7);
+    assert.equal(perModel("fal-ai/bytedance/seedream/v4.5/edit"), 7 + 1); // the back view showed a face: made again
     assert.equal(perModel("fal-ai/nano-banana-2/edit"), 7 + 2); // the 3/4 view made twice more
-    assert.equal(perModel("fal-ai/gpt-image-1.5/edit"), 7 + 2); // the front made twice more, still drifted
+    assert.equal(perModel("fal-ai/gpt-image-1.5/edit"), 7 + 2); // the close-up made twice more, still drifted
     const nano2tries = views.filter((s) => s.endpoint === "fal-ai/nano-banana-2/edit" && /three-quarter/.test(String(s.input.prompt)));
     assert.deepEqual(nano2tries.map((s) => s.input.seed), [1000, 1001, 1002]);
 
     const item = (model: string, label: string) => report.items.find((i: { model: string; label: string }) => i.model === model && i.label === label);
-    assert.equal(item("nano2", "3/4 view").light, "green");
-    assert.equal(item("nano2", "3/4 view").tries.length, 3);
-    assert.equal(item("nano2", "3/4 view").file, path.join("nano2", "three_quarter_try3.png"));
-    assert.equal(item("gpt", "Front portrait").light, "red");
-    assert.match(item("gpt", "Front portrait").text, /best of 3 tries/);
-    assert.equal(item("seedream", "Profile").light, "grey");
+    assert.equal(item("nano2", "3/4 face").light, "green");
+    assert.equal(item("nano2", "3/4 face").tries.length, 3);
+    assert.equal(item("nano2", "3/4 face").file, path.join("nano2", "three_quarter_try3.png"));
+    assert.equal(item("gpt", "Close-up face").light, "red");
+    assert.match(item("gpt", "Close-up face").text, /best of 3 tries/);
+    assert.equal(item("nano-pro", "Full body, front (cropped at the neck)").light, "grey");
+    const back = item("seedream", "Full body, back (cropped at the neck)");
+    assert.deepEqual([back.light, back.tries.length, back.file], ["grey", 2, path.join("seedream", "body_back_try2.png")]);
     assert.equal(item("seedream", "Wide, from the left").file, path.join("location", "seedream", "wide_left.png"));
     assert.ok(existsSync(path.join(dir, "location", "gpt", "detail.png")));
-    assert.ok(readdirSync(path.join(dir, "nano-pro")).includes("full_body.png"));
+    assert.ok(readdirSync(path.join(dir, "nano-pro")).includes("body_back.png"));
 
     // Angles are not face-checked; every view is.
     assert.ok(face.compared.every((f) => !f.includes(`${path.sep}location${path.sep}`)));
@@ -304,8 +313,8 @@ describe("pack run (stand-in fal, face check and billing)", () => {
     assert.equal(actualTotal(report.cost.actual), Math.round((views.length * 0.05 + 2 * 0.01) * 100) / 100);
     const md = readFileSync(path.join(dir, "report.md"), "utf8");
     assert.match(md, /Actual, from fal: \$/);
-    assert.match(md, /Nano Banana 2 — 3 of 4 views green \(1 to judge by eye\)/);
-    assert.match(md, /GPT Image 1\.5 — 2 of 4 views green/);
+    assert.match(md, /Nano Banana 2 — 2 of 2 face views green · 2 body views to judge by eye/);
+    assert.match(md, /GPT Image 1\.5 — 1 of 2 face views green/);
     assert.equal(packMarkdown(report), md);
   });
 

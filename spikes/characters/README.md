@@ -39,15 +39,18 @@ pnpm characters pack --image "D:\pictures\bride.jpg" --scene "D:\pictures\bridal
    - The **reference check** of the picture (and of `--image2`), and the **location check** of `--scene`.
      "Not suitable" stops the run (`--force` to try anyway).
    - The **estimate** per model and the total. Above `--max-cost` (default $3) nothing is uploaded, even with `--yes`.
-   - With `--yes`: per model, the 4 views (front portrait, 3/4, profile, full body on grey) and the 3 location angles
-     (wide from the left, wide from the right, a closer detail). Your picture is sent as identity AND style reference.
-   - Each view is face-checked against your picture: green = same person, amber = check by eye, red = drifted.
-     A red view is **made again, at most twice** (a new seed), and the best try is kept. Retries stop at the cap.
-     The profile is judged by eye (the face models need both eyes). So is a face under 64 px tall, for example in
-     a full-body picture.
+   - With `--yes`: per model, 4 views in a **neutral, empty outdoor setting in soft natural daylight** (a grey
+     studio backdrop gave plastic skin): a **close-up face** (the identity source), a **3/4 face**, and a **full body
+     from the front** and **from the back**, both **cropped at the neck**, so faces only ever come from the
+     close-up. Then the 3 location angles (wide from the left, wide from the right, a closer detail). Your picture
+     is sent as identity AND style reference.
+   - The **face views** are face-checked against your picture: green = same person, amber = check by eye, red =
+     drifted. A red view is **made again, at most twice** (a new seed), and the best try is kept. Retries stop at
+     the cap. The **body views** get no face score: if a face shows up anyway (not cropped at the neck), the view
+     is red and made again; otherwise judge the outfit and body by eye.
    - A **draft description** of her (and of the place), to edit before locking. It uses the cheapest vision model at
      $0.01 per call. `--ai-opinion` adds a paid opinion on the reference picture.
-   - **Contact sheets**: `sheet_pack.jpg` (one row per model: your picture + 4 views, each with its score and
+   - **Contact sheets**: `sheet_pack.jpg` (one row per model: your picture + the 4 views, the face views with their score and
      colour) and `sheet_location.jpg`.
    - **Report**: `report.md` (in plain words) and `report.json` (every try, its fal request ID and its score).
    - The **actual cost** comes from fal's Billing Events API, per request ID. This needs a key with billing

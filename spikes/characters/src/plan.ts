@@ -3,43 +3,52 @@
 
 // ---- what is generated ----
 
-export type ViewId = "front" | "three_quarter" | "profile" | "full_body";
+export type ViewId = "closeup" | "three_quarter" | "body_front" | "body_back";
 export type AngleId = "wide_left" | "wide_right" | "detail";
 export type Aspect = "3:4" | "2:3";
 
-export const VIEWS: { id: ViewId; label: string; aspect: Aspect; expectYaw: [number, number] | null; prompt: string }[] = [
+// Pack layout (decided 18 Nov 2026): the close-up is the identity source; faces come ONLY from the two face views.
+// The full-body views are cropped at the neck, so no model invents a second, different face there. Face checks run
+// on the face views only; a body view that shows a face anyway is made again.
+export type View = { id: ViewId; label: string; aspect: Aspect; face: boolean; expectYaw: [number, number] | null; prompt: string };
+export const VIEWS: View[] = [
   {
-    id: "front",
-    label: "Front portrait",
+    id: "closeup",
+    label: "Close-up face",
     aspect: "3:4",
+    face: true,
     expectYaw: [0, 20],
-    prompt: "A head-and-shoulders portrait of her facing the camera straight on, looking into the lens, relaxed neutral expression, mouth gently closed.",
+    prompt: "A close-up portrait of her face and the top of her shoulders, facing the camera straight on, looking into the lens, relaxed neutral expression, mouth gently closed. Natural skin texture with pores and fine detail, no retouching.",
   },
   {
     id: "three_quarter",
-    label: "3/4 view",
+    label: "3/4 face",
     aspect: "3:4",
+    face: true,
     expectYaw: [20, 60],
-    prompt: "A head-and-shoulders portrait of her with the head turned about 45 degrees to her left (a three-quarter view), eyes following the turn, relaxed neutral expression.",
+    prompt: "A close-up portrait of her face with the head turned about 45 degrees to her left (a three-quarter view), eyes following the turn, relaxed neutral expression. Natural skin texture, no retouching.",
   },
   {
-    id: "profile",
-    label: "Profile",
-    aspect: "3:4",
-    expectYaw: null, // a true profile is often beyond what the face models can measure
-    prompt: "A head-and-shoulders portrait of her in full side profile, facing to the left (90 degrees), relaxed neutral expression.",
-  },
-  {
-    id: "full_body",
-    label: "Full body",
+    id: "body_front",
+    label: "Full body, front (cropped at the neck)",
     aspect: "2:3",
-    expectYaw: [0, 35],
-    prompt: "A full-length photograph of her from head to toe, standing naturally and facing the camera, arms relaxed, the whole outfit visible.",
+    face: false,
+    expectYaw: null,
+    prompt: "A full-length photograph of her body from the front, standing naturally, arms relaxed, the whole outfit and shoes visible. The frame is CROPPED AT THE NECK: the top edge of the picture cuts just below the chin, so the face and head are completely out of frame.",
+  },
+  {
+    id: "body_back",
+    label: "Full body, back (cropped at the neck)",
+    aspect: "2:3",
+    face: false,
+    expectYaw: null,
+    prompt: "A full-length photograph of her body seen from behind, standing naturally, the back of the outfit (and veil, train or hair falling on the back) fully visible down to the shoes. The frame is CROPPED AT THE NECK: the top edge of the picture cuts at the nape, so the head is out of frame.",
   },
 ];
 
+// Setting (decided 18 Nov 2026): a neutral, empty outdoor place in soft daylight. Grey studio backdrops gave plastic skin.
 export const PACK_STYLE =
-  "Use the reference picture as BOTH the identity and the style reference: the same woman (the same face, features, skin tone, hair and makeup), the same outfit, and the same visual style, colour grading, lens look and rendering as the reference. Do not change her identity, age or ethnicity. Plain seamless mid-grey studio background, soft even light, no text, no other people.";
+  "Use the reference picture as BOTH the identity and the style reference: the same woman (the same face, features, skin tone, hair and makeup), the same outfit, and the same visual style, colour grading, lens look and rendering as the reference. Do not change her identity, age or ethnicity. Setting: a neutral, empty outdoor place (an open field or a quiet garden path, softly out of focus behind her) in soft natural daylight, slightly overcast, gentle shadows. Not a studio, no backdrop, no text, no other people.";
 
 export const ANGLES: { id: AngleId; label: string; prompt: string }[] = [
   { id: "wide_left", label: "Wide, from the left", prompt: "A wide view of this same place seen from the left side of the room, showing more of it." },
@@ -50,7 +59,7 @@ export const ANGLES: { id: AngleId; label: string; prompt: string }[] = [
 export const SCENE_STYLE =
   "Use the reference picture as BOTH the location and the style reference: the same room with the same architecture, furniture, colours, materials and light, and the same visual style, colour grading and rendering. Only the camera position changes. Keep it empty: no people. No text.";
 
-export function viewPrompt(v: (typeof VIEWS)[number]): string {
+export function viewPrompt(v: View): string {
   return `${v.prompt} ${PACK_STYLE}`;
 }
 export function anglePrompt(a: (typeof ANGLES)[number]): string {
@@ -119,7 +128,7 @@ export const DESCRIPTION_PROMPT =
 export const SCENE_DESCRIPTION_PROMPT =
   "Describe this place for an image generator, so the same location can be drawn again from other angles. 50 to 80 words, one paragraph: the kind of room, its architecture, the main furniture and objects (with their positions), materials, colours and the light. No people, no camera words.";
 export const OPINION_PROMPT =
-  "You are checking a reference picture for an AI character pack (front, 3/4, profile and full-body views will be generated from it, and later lip sync). In 3 short bullet points, say plainly what will work well and what may cause problems (face visibility, lighting, occlusions such as a veil, expression, resolution). Then one line: Ready, Usable with fix, or Not suitable.";
+  "You are checking a reference picture for an AI character pack (a close-up, a 3/4 face and neck-cropped full-body views will be generated from it, and later lip sync). In 3 short bullet points, say plainly what will work well and what may cause problems (face visibility, lighting, occlusions such as a veil, expression, resolution). Then one line: Ready, Usable with fix, or Not suitable.";
 
 // ---- cost ----
 
@@ -162,21 +171,23 @@ export type FaceResult = { score: number | null; face_px?: number; yaw?: number 
 export const MIN_JUDGED_FACE_PX = 64; // smaller faces (e.g. in a full-body view) give unreliable scores
 
 export function classify(view: ViewId, r: FaceResult, t: Thresholds): { light: Light; text: string; regenerate: boolean } {
-  if (r.score === null) {
-    if (view === "profile") return { light: "grey", text: "Profile: not measurable by the face model (it needs both eyes); judge it by eye.", regenerate: false };
-    return { light: "red", text: `No face found${r.note ? ` (${r.note})` : ""}.`, regenerate: true };
+  const v = VIEWS.find((x) => x.id === view)!;
+  if (!v.face) {
+    // A neck-cropped body view must show no face: faces come only from the close-up.
+    if (r.score !== null && (r.face_px ?? 0) >= 40) return { light: "red", text: "A face is visible: the view should be cropped at the neck.", regenerate: true };
+    return { light: "grey", text: "No face, as asked (cropped at the neck): judge the outfit and body by eye.", regenerate: false };
   }
+  if (r.score === null) return { light: "red", text: `No face found${r.note ? ` (${r.note})` : ""}.`, regenerate: true };
   const s = r.score.toFixed(2);
   const small = (r.face_px ?? 0) < MIN_JUDGED_FACE_PX;
   if (r.score >= t.green_from) return { light: "green", text: `Same person (${s}).`, regenerate: false };
   if (r.score >= t.red_below) return { light: "amber", text: `Probably the same person (${s}): check by eye.`, regenerate: false };
   if (small) return { light: "amber", text: `Low score (${s}) but the face is only ${r.face_px} px: too small to judge, check by eye.`, regenerate: false };
-  if (view === "profile") return { light: "amber", text: `Low score (${s}) on a profile, where the face model is unreliable: check by eye.`, regenerate: false };
   return { light: "red", text: `Drifted: looks like another person (${s}).`, regenerate: true };
 }
 
 // Does the head turn match the view asked for? Information only.
-export function angleNote(view: (typeof VIEWS)[number], yaw: number | null | undefined): string | null {
+export function angleNote(view: View, yaw: number | null | undefined): string | null {
   if (!view.expectYaw || yaw === null || yaw === undefined) return null;
   const a = Math.abs(yaw);
   const [lo, hi] = view.expectYaw;
