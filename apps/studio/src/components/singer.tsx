@@ -145,21 +145,7 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
   const t = l.take;
   return (
     <div className="flex flex-col gap-1 text-[11px]" data-singer-line={number}>
-      <select
-        data-singer-source
-        value={l.source ?? ""}
-        onChange={(e) => void singer.setLine(number, e.target.value || null)}
-        className={cn("bg-background max-w-40 rounded-md border px-1.5 py-0.5", l.source && "border-brand/60")}
-        aria-label={`Singer on line ${number}`}
-      >
-        <option value="">—</option>
-        {v.sources.map((s) => (
-          <option key={s.file} value={s.file}>
-            {s.file}
-            {s.kind === "video" ? " (video)" : ""}
-          </option>
-        ))}
-      </select>
+      <SourcePicker sources={v.sources} value={l.source} onChange={(src) => void singer.setLine(number, src)} line={number} />
       {l.source && t ? (
         <span data-singer-status={t.status} className={cn(t.status === "done" ? "text-emerald-300" : t.status === "running" ? "text-muted-foreground" : "text-amber-200")}>
           {t.status === "done" ? (
@@ -181,5 +167,61 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
       ) : null}
       {!v.sources.length ? <span className="text-muted-foreground">Add pictures in Creation first</span> : null}
     </div>
+  );
+}
+
+// What a line is sung from: a small picker with a thumbnail and the short name of every picture and video in Creation
+// (searchable when the list grows).
+function SourcePicker({ sources, value, onChange, line }: { sources: SingerView["sources"]; value: string | null; onChange: (file: string | null) => void; line: number }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  const chosen = sources.find((s) => s.file === value) ?? null;
+  const shown = sources.filter((s) => !q.trim() || `${s.label ?? ""} ${s.file}`.toLowerCase().includes(q.trim().toLowerCase()));
+  return (
+    <div ref={box} className="relative">
+      <button type="button" data-singer-source={line} aria-label={`Singer on line ${line}`} onClick={() => setOpen(!open)} className={cn("bg-background flex w-44 items-center gap-1.5 rounded-md border px-1 py-0.5 text-left", chosen && "border-brand/60")} title={chosen ? chosen.file : "Choose what the singer is sung from"}>
+        {chosen ? <SourceThumb s={chosen} /> : null}
+        <span className={cn("truncate", !chosen && "text-muted-foreground")}>{chosen ? (chosen.label ?? chosen.file) : "— no singer"}</span>
+      </button>
+      {open ? (
+        <div data-singer-picker={line} className="bg-popover absolute right-0 z-30 mt-1 flex max-h-80 w-64 flex-col gap-1 overflow-auto rounded-lg border p-1.5 shadow-lg">
+          {sources.length > 6 ? <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name" className="bg-background rounded-md border px-2 py-1 text-xs" data-singer-search /> : null}
+          {value ? (
+            <button type="button" data-singer-option="" onClick={() => { onChange(null); setOpen(false); }} className="hover:bg-accent rounded px-2 py-1 text-left text-xs">
+              — no singer on this line
+            </button>
+          ) : null}
+          {shown.map((s) => (
+            <button key={s.file} type="button" data-singer-option={s.file} onClick={() => { onChange(s.file); setOpen(false); }} title={s.file} className={cn("hover:bg-accent flex items-center gap-2 rounded px-1 py-1 text-left text-xs", s.file === value && "bg-brand/10")}>
+              <SourceThumb s={s} big />
+              <span className="min-w-0">
+                <span className="block truncate font-medium">{s.label ?? s.file}</span>
+                {s.label ? <span className="text-muted-foreground block truncate text-[10px]">{s.file}</span> : null}
+                {s.kind === "video" ? <span className="text-muted-foreground text-[10px]">video</span> : null}
+              </span>
+            </button>
+          ))}
+          {!shown.length ? <span className="text-muted-foreground px-2 py-1 text-xs">Nothing with that name.</span> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SourceThumb({ s, big }: { s: SingerView["sources"][number]; big?: boolean }) {
+  const url = `/api/files/${s.url.split("/").map(encodeURIComponent).join("/")}`;
+  const size = big ? "size-10" : "size-5";
+  return s.kind === "video" ? (
+    <video src={`${url}#t=0.1`} muted playsInline preload="metadata" className={cn("bg-muted shrink-0 rounded object-cover", size)} />
+  ) : (
+    // eslint-disable-next-line @next/next/no-img-element -- a local picture served by /api/files
+    <img src={url} alt="" className={cn("bg-muted shrink-0 rounded object-cover", size)} />
   );
 }

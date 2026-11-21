@@ -12,6 +12,7 @@ import type { StoryItem } from "@lyric/video/story-line";
 import { CollectionPicker } from "@/components/collection-picker";
 import { ShotListImport } from "@/components/shotlist-import";
 
+import { NameField } from "@/components/name-field";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
@@ -649,6 +650,21 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                     {/* The card reads as a story (11 Nov 2026): the note is its title; the file name, duration, size and Remove sit
                         in its ⋯ menu; a warning shows only when something is wrong. */}
                     <div className="flex flex-1 flex-col gap-1 p-2 text-xs">
+                      {!c.collection ? (
+                        <NameField
+                          id={c.name}
+                          name={c.label ?? null}
+                          file={c.name}
+                          className="text-[11px]"
+                          onSave={async (label) => {
+                            const r = await api(`/api/songs/${projectId}/assets`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: { name: c.name, label } }) });
+                            const d = (await r.json()) as { label?: string | null; error?: string };
+                            if (!r.ok || d.error) return;
+                            const next = d.label ?? null;
+                            setData((x) => (x ? { ...x, clips: x.clips.map((y) => (y.name === c.name ? { ...y, label: next } : y)), story: x.story.map((y) => (y.key === k && y.clip ? { ...y, clip: { ...y.clip, label: next } } : y)) } : x));
+                          }}
+                        />
+                      ) : null}
                       <ClipNoteField
                         projectId={projectId}
                         clip={c.name}

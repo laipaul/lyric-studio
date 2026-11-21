@@ -20,8 +20,9 @@ import { absPath, beat as beatTable, ffmpegBin, project as projectTable, uniqueF
 import { eq } from "drizzle-orm";
 
 import { applyDownbeatOffset } from "../beats";
-import { BOARD_VIDEO_FILE, makePlayable, PICTURE_FILE, POLL_MS, TAKES_DIR, TIMEOUT_MS, WAVESPEED, data, json, keyFor, readPictures, setTake, sleepMs, songFolder, update, waveSpeedUpload, type Take } from "./animate";
+import { BOARD_VIDEO_FILE, itemLabel, makePlayable, PICTURE_FILE, POLL_MS, TAKES_DIR, TIMEOUT_MS, WAVESPEED, data, json, keyFor, readPictures, setTake, sleepMs, songFolder, update, waveSpeedUpload, type Take } from "./animate";
 import { importSongClips } from "./assets";
+import { setClipLabel } from "./clip-edits";
 import { download, errorText } from "./characters/fal";
 import { lyricsView, saveAnchors } from "./lyrics-view";
 import { readRecipe } from "./recipe";
@@ -49,7 +50,7 @@ export type SingerLine = {
 export type SingerView = {
   lines: SingerLine[] | null; // null: no timed lines yet
   why: string | null;
-  sources: { file: string; kind: "picture" | "video" }[]; // Creation's pictures and videos
+  sources: { file: string; label: string | null; url: string; kind: "picture" | "video" }[]; // Creation's pictures and videos (url: workspace-relative)
   voice: "stem" | "song";
   ready: boolean; // WAVESPEED_API_KEY (or the stand-in)
   keyName: string;
@@ -115,11 +116,13 @@ const covers = (t: Take | null, piece: Piece) => !!t && (t.status === "running" 
 export async function singerView(ws: Workspace, projectId: string, env: NodeJS.ProcessEnv = process.env): Promise<SingerView> {
   const c = await context(ws, projectId);
   const settings = readSinger(c.dir);
+  const board = readPictures(c.dir).pictures;
+  const rel = path.relative(ws.dir, c.dir).split(path.sep).join("/");
   const sources = existsSync(c.dir)
     ? readdirSync(c.dir)
         .filter((f) => (PICTURE_FILE.test(f) || BOARD_VIDEO_FILE.test(f)) && statSync(path.join(c.dir, f)).isFile())
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }))
-        .map((f) => ({ file: f, kind: PICTURE_FILE.test(f) ? ("picture" as const) : ("video" as const) }))
+        .map((f) => ({ file: f, label: board[f]?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? ("picture" as const) : ("video" as const) }))
     : [];
   const lines = c.lines?.map((l) => {
     const source = settings.lines[String(l.number)] ?? null;
@@ -146,8 +149,12 @@ export function setSingerLine(ws: Workspace, projectId: string, line: unknown, s
   const n = Number(line);
   if (!Number.isInteger(n) || n < 1) throw new Error("Choose a line.");
   const s = readSinger(dir);
-  if (source === null || source === undefined || source === "") delete s.lines[String(n)];
-  else {
+  if (source === null || source === undefined || source === "") {
+    delete s.lines[String(n)];
+    // No singer on this line: its singing clip leaves the line (and is set to Omit, see saveAnchors).
+    const recipe = readRecipe(songPathsById(ws, projectId).recipe);
+    if ((recipe.anchors ?? []).some((a) => a.line === n && a.sync !== undefined)) saveAnchors(ws, projectId, (recipe.anchors ?? []).filter((a) => !(a.line === n && a.sync !== undefined)));
+  } else {
     const name = path.basename(String(source));
     if (!(PICTURE_FILE.test(name) || BOARD_VIDEO_FILE.test(name)) || !existsSync(path.join(dir, name))) throw new Error(`No ${name} in this song's Creation space: add the picture or video there first.`);
     s.lines[String(n)] = name;
@@ -358,6 +365,8 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
           const r = await importSongClips(ws, projectId, [{ file: path.join(takesDir, name), name }]);
           const clip = r.added[0] ?? r.duplicates[0]?.sameAs;
           if (!clip) throw Object.assign(new Error(r.skipped[0]?.reason ?? "it could not be added to the Storyboard"), { made: true });
+          const label = itemLabel(readPictures(dir).pictures[j.source], j.n);
+          if (label && r.added.length) setClipLabel(songPathsById(ws, projectId).root, clip, label);
           const recipe = readRecipe(songPathsById(ws, projectId).recipe);
           const others = (recipe.anchors ?? []).filter((a) => a.line !== t.line);
           saveAnchors(ws, projectId, [...others, { line: t.line, clip, sync: t.sync_ms / 1000 }]);

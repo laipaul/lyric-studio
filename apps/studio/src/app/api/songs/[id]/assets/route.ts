@@ -17,7 +17,7 @@ import path from "node:path";
 import { connection } from "next/server";
 
 import { resolveWorkspaceDir, safeName } from "@lyric/db";
-import { assignSongFile, importSongClips, setSongStoryIdea, removeSongClip, replaceAsset, restoreSongClip, setSongClipNote, setSongClipOmit, setSongClipOrder, songAssets, storeVocalStem, type AssetKind, type AssignRole } from "@lyric/video/assets";
+import { assignSongFile, importSongClips, setSongStoryIdea, removeSongClip, replaceAsset, restoreSongClip, setSongClipNote, setSongClipLabel, setSongClipOmit, setSongClipOrder, songAssets, storeVocalStem, type AssetKind, type AssignRole } from "@lyric/video/assets";
 
 import { addFromCollection, isPickedClip, removeFromStory, setPickedClipNote, setPickedClipOmit, setStoryOrder, songStory } from "@lyric/video/story-line";
 
@@ -93,6 +93,7 @@ export async function PUT(request: Request, { params }: Params) {
       add?: { collection?: unknown; clips?: unknown; whole?: unknown };
       omit?: { name?: unknown; omit?: unknown };
       note?: { name?: unknown; text?: unknown };
+      label?: { name?: unknown; label?: unknown }; // a clip's short name (the file keeps its name)
       storyIdea?: unknown; // Prepare → Storyboard's one sentence for the whole video (for the user only)
     };
     if (body.storyIdea !== undefined) return Response.json({ storyIdea: withWorkspace((ws) => setSongStoryIdea(ws, id, body.storyIdea)) });
@@ -101,6 +102,7 @@ export async function PUT(request: Request, { params }: Params) {
       return Response.json({
         note: await withWorkspaceAsync((ws) => (picked(ws, body.note!.name) ? setPickedClipNote(ws, id, String(body.note!.name), String(body.note!.text ?? "")) : setSongClipNote(ws, id, body.note!.name, body.note!.text))),
       });
+    if (body.label) return Response.json({ label: withWorkspace((ws) => setSongClipLabel(ws, id, body.label!.name, body.label!.label)) });
     if (body.omit)
       return Response.json({
         omit: await withWorkspaceAsync(async (ws) => (picked(ws, body.omit!.name) ? setPickedClipOmit(ws, id, String(body.omit!.name), body.omit!.omit === true) : setSongClipOmit(ws, id, body.omit!.name, body.omit!.omit))),

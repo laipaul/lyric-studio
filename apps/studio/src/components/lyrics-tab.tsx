@@ -332,8 +332,8 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">On screen</th>
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Confidence</th>
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Adjust</th>
-                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap min-w-36">Lands on</th>
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap" title="The lines where the singer shows, each with a picture or video from Creation">Singer</th>
+                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap min-w-36">Lands on</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -445,18 +445,21 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                             ) : null}
                           </div>
                         </td>
-                        <td className="min-w-36 px-3 py-2" data-anchor-cell>
+                        <td className="px-3 py-2" data-singer-cell>
+                          <SingerCell singer={singer} number={l.number} />
+                        </td>
+                        <td className="w-60 max-w-60 min-w-36 px-3 py-2" data-anchor-cell>
                           {anchor ? (
-                            <div className="flex items-center gap-2" data-anchor={anchor.clip}>
+                            <div className="flex max-w-56 min-w-0 items-center gap-2" data-anchor={anchor.clip}>
                               <Thumb clip={anchorClip} />
                               <div className="min-w-0 text-xs">
-                                <div className="truncate">{anchor.clip}</div>
+                                <div className="truncate" title={anchor.clip}>{anchorClip?.label ?? anchor.clip}</div>
                                 <div className="text-muted-foreground">
                                   {anchor.sync !== undefined ? "singing · in time with the song" : anchor.transition === "dissolve" ? "dissolve" : "cut"}
                                   {anchor.clipIn ? ` · from ${anchor.clipIn} s` : ""}
                                 </div>
                               </div>
-                              <button type="button" disabled={busy} onClick={() => saveAnchor(l.number, null)} className="text-muted-foreground hover:text-foreground rounded-md border p-0.5" aria-label={`Remove the anchor on line ${l.number}`} data-anchor-remove>
+                              <button type="button" disabled={busy} onClick={() => (anchor.sync !== undefined ? void singer.setLine(l.number, null).then(() => load()) : saveAnchor(l.number, null))} className="text-muted-foreground hover:text-foreground shrink-0 rounded-md border p-0.5" aria-label={`Remove the anchor on line ${l.number}`} title={anchor.sync !== undefined ? "No singer on this line (the singing clip is set to Omit; it stays in Creation and the Storyboard)" : undefined} data-anchor-remove>
                                 <X className="size-3.5" />
                               </button>
                             </div>
@@ -469,9 +472,6 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                               <AlertTriangle className="mt-0.5 size-3 shrink-0" /> {p.problem}
                             </p>
                           ))}
-                        </td>
-                        <td className="px-3 py-2" data-singer-cell>
-                          <SingerCell singer={singer} number={l.number} />
                         </td>
                       </tr>
                       {picking === l.number ? (
@@ -568,7 +568,7 @@ function AnchorPicker({
                   type="button"
                   onClick={() => setClip(c.name)}
                   className={cn("flex w-20 flex-col items-center gap-1 rounded-md border p-1 text-[10px]", clip === c.name ? "border-brand bg-brand/10" : "hover:border-foreground/30")}
-                  title={`${c.name} · ${c.kind === "photo" ? "photo" : `${(c.durationMs / 1000).toFixed(1)} s`} · ${c.orientation}`}
+                  title={`${c.label ? `${c.label} (${c.name})` : c.name} · ${c.kind === "photo" ? "photo" : `${(c.durationMs / 1000).toFixed(1)} s`} · ${c.orientation}`}
                   data-anchor-clip={c.name}
                 >
                   <div className="bg-muted h-24 w-full overflow-hidden rounded">
@@ -577,7 +577,7 @@ function AnchorPicker({
                       <img src={`/api/files/${c.thumb}`} alt="" className="size-full object-cover" />
                     ) : null}
                   </div>
-                  <span className="w-full truncate">{c.name}</span>
+                  <span className="w-full truncate">{c.label ?? c.name}</span>
                   <span className="text-muted-foreground">{c.kind === "photo" ? "photo" : `${(c.durationMs / 1000).toFixed(1)} s`}</span>
                 </button>
               ))}
@@ -599,7 +599,7 @@ function AnchorPicker({
         </label>
         {left !== null && left < lineMs ? (
           <span className="flex items-center gap-1 text-amber-200" data-anchor-short>
-            <AlertTriangle className="size-3" /> {chosen!.name} has {(Math.max(0, left) / 1000).toFixed(1)} s from there: it will be slowed to cover the line (QA warns)
+            <AlertTriangle className="size-3" /> {chosen!.label ?? chosen!.name} has {(Math.max(0, left) / 1000).toFixed(1)} s from there: it will be slowed to cover the line (QA warns)
           </span>
         ) : null}
         <div className="ml-auto flex gap-2">

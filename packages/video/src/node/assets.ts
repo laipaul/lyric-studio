@@ -11,7 +11,9 @@ import { eq } from "drizzle-orm";
 import { isHandTimeLine } from "../hand-times";
 import { notesForClips, readClipNotes, setClipNote, readStoryIdea, setStoryIdea } from "./clip-notes";
 import { HOOK_MARKER, normalizeLyric } from "../lrc";
-import { inClipOrder, isOmitted, readClipEdits, saveSongClipOrder, setClipOmit } from "./clip-edits";
+import { inClipOrder, isOmitted, readClipEdits, saveSongClipOrder, setClipLabel, setClipOmit, type ClipEdits } from "./clip-edits";
+
+const labelOf = (edits: ClipEdits, name: string) => Object.entries(edits.clips).find(([n]) => n.toLowerCase() === name.toLowerCase())?.[1].label ?? null;
 import { cachedFileHash, SOURCE_FILE, syncCollection } from "./collection";
 import { keepReplaced, placeRoleFile, storeCover, storeLyricsTxt } from "./project-settings";
 import { isRemovedSong, isWavFile, moveEntry, songPathsById } from "./song-folder";
@@ -39,6 +41,7 @@ export type ClipAsset = {
   hash: string; // the content's fingerprint (story notes are keyed by it)
   note?: string | null; // the user's story note on this clip (Prepare → Clips; clip-notes.ts): shown, never used by the app
   omit?: boolean; // a song's clip set to Omit (clips.json): keeps its place in the order, Make does not use it
+  label?: string | null; // the user's short name for the clip (clips.json "label"), shown instead of the file name
 };
 
 export type SongAssets = {
@@ -102,7 +105,10 @@ export async function songAssets(ws: Workspace, projectId: string, options: { ch
   const edits = readClipEdits(paths.root);
   const order = inClipOrder(edits, listed.clips.map((c) => c.name));
   listed.clips.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
-  for (const c of listed.clips) c.omit = isOmitted(edits, c.name);
+  for (const c of listed.clips) {
+    c.omit = isOmitted(edits, c.name);
+    c.label = labelOf(edits, c.name);
+  }
   // The user's story notes (Prepare → Clips): only shown there, never read by the planner or Make.
   const notes = notesForClips(readClipNotes(paths.root), listed.clips);
   for (const c of listed.clips) c.note = notes.get(c.name) ?? null;
@@ -142,6 +148,14 @@ export function setSongClipOmit(ws: Workspace, projectId: string, name: unknown,
   if (!paths.clips) throw new Error("This song has no folder yet.");
   if (typeof name !== "string" || !songClipFiles(paths.clips).some((f) => f.toLowerCase() === name.toLowerCase())) throw new Error(`No clip ${String(name)} in this song.`);
   return isOmitted(setClipOmit(paths.root, name, omit === true), name);
+}
+
+// A short name for one of the song's clips (Storyboard, Creation): shown instead of its file name; the file keeps its name.
+export function setSongClipLabel(ws: Workspace, projectId: string, name: unknown, label: unknown): string | null {
+  const paths = songPathsById(ws, projectId);
+  if (!paths.clips) throw new Error("This song has no folder yet.");
+  if (typeof name !== "string" || !songClipFiles(paths.clips).some((f) => f.toLowerCase() === name.toLowerCase())) throw new Error(`No clip ${String(name)} in this song.`);
+  return labelOf(setClipLabel(paths.root, name, label), name);
 }
 
 // After clips were added, removed or restored: `last` go at the end of the order, `forget` leave it.

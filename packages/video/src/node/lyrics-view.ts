@@ -25,6 +25,7 @@ import { loadFontCatalog } from "./font-catalog";
 import { songAssets } from "./assets";
 import { syncCollection } from "./collection";
 import { keepReplaced, rememberedCollection } from "./project-settings";
+import { setClipOmit } from "./clip-edits";
 import { readRecipe, writeRecipe } from "./recipe";
 import { songPathsById } from "./song-folder";
 import { dismissHandReset, noteHandTimesSaved, readHandRecord, resetAllHandTimes, resetHandTimesMadeBeforeStem, undoHandReset, type HandReset } from "./hand-reset";
@@ -131,7 +132,7 @@ async function storedAlignment(ws: Workspace, projectId: string): Promise<{ alig
 
 // Story anchors in the Lyrics tab: the song.json list, the clips it can choose from (the song's own and
 // its collections, with thumbnails) and what will clash, per line.
-export type AnchorClip = { name: string; thumb: string | null; kind: "video" | "photo"; durationMs: number; orientation: string; from: string }; // from: "song" or the collection
+export type AnchorClip = { name: string; label?: string | null; thumb: string | null; kind: "video" | "photo"; durationMs: number; orientation: string; from: string }; // from: "song" or the collection
 export type AnchorsView = { list: AnchorSpec[]; gapOrder: GapOrder | null; clips: AnchorClip[]; problems: { line: number; problem: string }[]; collections: string[] };
 
 export async function anchorClips(ws: Workspace, projectId: string): Promise<{ clips: AnchorClip[]; collections: string[] }> {
@@ -140,7 +141,7 @@ export async function anchorClips(ws: Workspace, projectId: string): Promise<{ c
   const remembered = rememberedCollection(ws, projectId);
   const collections = recipe.collections ?? (remembered ? [remembered.name] : []);
   const own = await songAssets(ws, projectId);
-  const clips: AnchorClip[] = own.clips.filter((c) => !c.duplicateOf).map((c) => ({ name: c.name, thumb: c.thumb, kind: c.kind, durationMs: c.durationMs, orientation: c.orientation, from: "song" }));
+  const clips: AnchorClip[] = own.clips.filter((c) => !c.duplicateOf).map((c) => ({ name: c.name, label: c.label ?? null, thumb: c.thumb, kind: c.kind, durationMs: c.durationMs, orientation: c.orientation, from: "song" }));
   for (const name of collections) {
     try {
       const sync = await syncCollection(ws, { name, prepare: false, ...(remembered?.name === name && remembered.folder ? { folder: remembered.folder } : {}) });
@@ -170,6 +171,17 @@ export function saveAnchors(ws: Workspace, projectId: string, anchors: unknown, 
   const next = { ...recipe, anchors: list.length ? list : undefined };
   if (gapOrder !== undefined) next.gapOrder = gapOrder ?? undefined;
   writeRecipe(paths.recipe, next);
+  // A singing clip taken off its line (removed, or replaced by another) is set to Omit: out of its line its lips would
+  // be out of time. It stays in the Storyboard and Creation (Use brings it back).
+  const stillSinging = new Set(list.filter((a) => a.sync !== undefined).map((a) => a.clip.toLowerCase()));
+  for (const old of recipe.anchors ?? []) {
+    if (old.sync === undefined || stillSinging.has(old.clip.toLowerCase())) continue;
+    try {
+      setClipOmit(paths.root, old.clip, true);
+    } catch {
+      // not a song clip any more
+    }
+  }
   return list;
 }
 

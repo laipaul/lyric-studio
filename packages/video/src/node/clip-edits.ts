@@ -9,7 +9,11 @@ import type { CutMove, Slip } from "../timeline-edits";
 
 // transition: how this clip comes in (absent: the app chooses). omit: the user set the clip to Omit (Assets
 // or Shape): it keeps its place in the order but Make does not use it.
-export type ClipEdit = { in?: number; out?: number; speed?: number; best?: number; transition?: "cut" | "dissolve"; omit?: true };
+// label (21 Nov 2026): a short name the user gives the clip ("Bride smile"); shown instead of the file name, which stays.
+export type ClipEdit = { in?: number; out?: number; speed?: number; best?: number; transition?: "cut" | "dissolve"; omit?: true; label?: string };
+export const LABEL_MAX = 60;
+// A short name as typed: spaces tidied, at most 60 characters ("" = no name).
+export const cleanLabel = (raw: unknown) => String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, LABEL_MAX);
 // cuts / slips: the Shape timeline's roll and slip edits, on the song's timeline (src/timeline-edits.ts).
 // picked (11 Nov 2026): clips of a shared collection chosen one by one into the story line ({ "Flowers": ["03_rose.mp4"] });
 // "order" names them like the song's own clips, and holds "collection:Flowers" for a whole collection the app picks
@@ -22,7 +26,7 @@ export const CLIP_EDITS_FILE = "clips.json";
 
 const HELP =
   'The story order and clip edits of this song (Prepare → Storyboard writes the order, Shape the clip edits). "order": clip file names in the story order ' +
-  "(clips not listed follow in file-name order). \"clips\": per clip \"omit\": true (set to Omit: not used by Make), \"in\" / \"out\" (the part used, seconds), \"speed\" (0.5-1, slow motion) and " +
+  "(clips not listed follow in file-name order). \"clips\": per clip \"label\" (a short name shown instead of the file name), \"omit\": true (set to Omit: not used by Make), \"in\" / \"out\" (the part used, seconds), \"speed\" (0.5-1, slow motion) and " +
   '"best" (the best moment, seconds; wins over the automatic one) and "transition" ("cut" or "dissolve": how the clip comes in; left out, the app chooses). ' +
   '"cuts": cuts moved on the Shape timeline (song seconds: the planned cut at "from" goes to "to", on the beat unless "free"). ' +
   '"slips": shots that play another part of their clip ("at": the shot\'s start in the song, "clip", "in": seconds into the clip). ' +
@@ -59,6 +63,12 @@ export function checkClipEdits(raw: unknown): { edits: ClipEdits; problems: stri
         if (v?.omit !== undefined && v?.omit !== null && v?.omit !== false) {
           if (v.omit === true) e.omit = true;
           else problems.push(`clips["${name}"].omit must be true (or left out: the clip is used)`);
+        }
+        if (v?.label !== undefined && v?.label !== null) {
+          if (typeof v.label === "string") {
+            const label = cleanLabel(v.label);
+            if (label) e.label = label;
+          } else problems.push(`clips["${name}"].label must be a short name (text)`);
         }
         if (e.in !== undefined && e.out !== undefined && e.out <= e.in) problems.push(`clips["${name}"]: out must be after in`);
         else if (Object.keys(e).length) edits.clips[name] = e;
@@ -166,6 +176,19 @@ export function setClipOmit(songRoot: string, name: string, omit: boolean): Clip
   const { omit: _old, ...rest } = edits.clips[key] ?? {};
   const clips = Object.fromEntries(Object.entries(edits.clips).filter(([n]) => n !== key));
   const next: ClipEdit = omit ? { ...rest, omit: true } : rest;
+  if (Object.keys(next).length) clips[key] = next;
+  return writeClipEdits(songRoot, { ...edits, clips });
+}
+
+// A clip's short name (null or "": back to its file name).
+export function setClipLabel(songRoot: string, name: string, label: unknown): ClipEdits {
+  if (typeof name !== "string" || !name.trim()) throw new Error("Which clip?");
+  const edits = readClipEdits(songRoot);
+  const key = Object.keys(edits.clips).find((n) => n.toLowerCase() === name.toLowerCase()) ?? name;
+  const { label: _old, ...rest } = edits.clips[key] ?? {};
+  const clips = Object.fromEntries(Object.entries(edits.clips).filter(([n]) => n !== key));
+  const text = cleanLabel(label);
+  const next: ClipEdit = text ? { ...rest, label: text } : rest;
   if (Object.keys(next).length) clips[key] = next;
   return writeClipEdits(songRoot, { ...edits, clips });
 }

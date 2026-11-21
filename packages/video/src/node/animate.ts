@@ -26,6 +26,7 @@ import path from "node:path";
 import { ffmpegBin, ffprobeBin, probeMedia, uniqueFileName, type Workspace } from "@lyric/db";
 
 import { importSongClips } from "./assets";
+import { cleanLabel, setClipLabel } from "./clip-edits";
 import { download, errorText } from "./characters/fal";
 import { processAlive } from "./jobs";
 import { songPathsById } from "./song-folder";
@@ -94,12 +95,13 @@ export type Take = {
   clip?: string; // (21 Nov 2026 first build: takes went to the clips by themselves; read as `sent`)
   error?: string;
   pid?: number;
+  label?: string; // the user's short name for this take ("Bride smile"); shown instead of "Take N"
   playable?: boolean; // the file was checked (and if needed re-made) to play in the browser: H.264, yuv420p, fast start
 };
-export type PictureRecord = { source?: string; mood?: string; takes: Take[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string }; // sent: the picture itself sent to the Storyboard (its clip name)
+export type PictureRecord = { label?: string; source?: string; mood?: string; takes: Take[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string }; // sent: the picture itself sent to the Storyboard (its clip name)
 export type PicturesFile = { _help?: string; pictures: Record<string, PictureRecord> };
 // source: where it came from, a small label ("Added by you", "Midjourney", "From higgsfield.ai"). kind: only a picture can be animated.
-export type PictureView = { file: string; url: string; kind: "picture" | "video"; source: string; mood: string; takes: Take[]; width: number | null; height: number | null; sent: string | null };
+export type PictureView = { file: string; label: string | null; url: string; kind: "picture" | "video"; source: string; mood: string; takes: Take[]; width: number | null; height: number | null; sent: string | null };
 // Paul's own defaults for Animate (Creation → Defaults), for every song: the service and model, how many takes, the cap.
 export type CreationDefaults = { service: ServiceId; quality: Quality; takes: number; cap: number };
 export const CREATION_FILE = "creation.json"; // in the workspace folder
@@ -305,7 +307,7 @@ export async function picturesView(ws: Workspace, projectId: string, env: NodeJS
     const info = await probeMedia(path.join(dir, f)).catch(() => null);
     const rec = all.pictures[f];
     const takes = (rec?.takes ?? []).map((t) => (t.clip && !t.sent ? { ...t, sent: t.clip } : t));
-    pictures.push({ file: f, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? "picture" : "video", source: sourceLabel(f, rec?.source), mood: rec?.mood ?? "", takes, width: info?.width ?? null, height: info?.height ?? null, sent: rec?.sent ?? null });
+    pictures.push({ file: f, label: rec?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? "picture" : "video", source: sourceLabel(f, rec?.source), mood: rec?.mood ?? "", takes, width: info?.width ?? null, height: info?.height ?? null, sent: rec?.sent ?? null });
   }
   const stub = !!env.LYRIC_GENERATE_STUB;
   return {
@@ -654,6 +656,45 @@ export function startResume(ws: Workspace, projectId: string, file: string, n: n
   return t;
 }
 
+// The short name an item carries to the Storyboard: its own, else (a take) the picture's name with "take N" or
+// "sings line N"; null: none (the file name shows).
+export function itemLabel(rec: PictureRecord | undefined, n?: number | null): string | null {
+  if (n === undefined || n === null) return rec?.label ?? null;
+  const t = rec?.takes.find((x) => x.n === n);
+  if (t?.label) return t.label;
+  if (!rec?.label) return null;
+  return t?.kind === "lipsync" ? `${rec.label} sings line ${t.line}` : `${rec.label} take ${n}`;
+}
+
+// Rename (Creation): a short name for a picture, video (n null) or take (n), shown instead of the file name; the file
+// keeps its name. What was already sent to the Storyboard is renamed there too.
+export function setItemLabel(ws: Workspace, projectId: string, file: string, n: number | null | undefined, label: unknown): string | null {
+  const { root, dir } = songFolder(ws, projectId);
+  const name = path.basename(String(file ?? ""));
+  if (!name || !existsSync(path.join(dir, name))) throw new Error(`No ${file} in this song's Creation space.`);
+  const text = cleanLabel(label);
+  const rec = update(dir, name, (p) => {
+    if (n === undefined || n === null) p.label = text || undefined;
+    else {
+      const t = p.takes.find((x) => x.n === n);
+      if (!t) throw new Error("No such take.");
+      t.label = text || undefined;
+    }
+  });
+  // Rename in the Storyboard what carries this name there (the item itself, and its takes that follow the picture's name).
+  const rename = (clip: string | undefined, next: string | null) => {
+    if (clip) setClipLabel(root, clip, next ?? "");
+  };
+  if (n === undefined || n === null) {
+    rename(rec.sent, rec.label ?? null);
+    for (const t of rec.takes) if (!t.label) rename(t.sent ?? t.clip, itemLabel(rec, t.n));
+  } else {
+    const t = rec.takes.find((x) => x.n === n)!;
+    rename(t.sent ?? t.clip, itemLabel(rec, n));
+  }
+  return text || null;
+}
+
 // "Send to Storyboard": a picture or one of its finished takes is copied into the song's clips and joins the END of the
 // story line (like any dropped clip; Paul orders it there). The board keeps its own copy, marked as sent.
 export async function sendToStoryboard(ws: Workspace, projectId: string, file: string, n?: number | null): Promise<{ clip: string; already: boolean }> {
@@ -678,6 +719,9 @@ export async function sendToStoryboard(ws: Workspace, projectId: string, file: s
   const r = await importSongClips(ws, projectId, [{ file: source, name: as }]);
   const clip = r.added[0] ?? r.duplicates[0]?.sameAs;
   if (!clip) throw new Error(r.skipped[0]?.reason ?? "It could not be added to the Storyboard.");
+  // Its short name goes with it (the Storyboard and the pickers show it).
+  const label = itemLabel(rec, n);
+  if (label && r.added.length) setClipLabel(songFolder(ws, projectId).root, clip, label);
   update(dir, name, (p) => {
     if (n === undefined || n === null) p.sent = clip;
     else {

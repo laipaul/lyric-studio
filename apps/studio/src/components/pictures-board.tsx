@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { CreationDefaults, PictureView, PicturesView, Quality, ServiceId, Take } from "@lyric/video/animate";
 
+import { NameField } from "@/components/name-field";
 import { useGoToTab } from "@/components/song-stages";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -322,15 +323,16 @@ function PictureTile({
         </span>
       </div>
       <span className="flex items-center justify-between gap-2 text-xs">
-        <span className="truncate font-medium" title={p.file}>
-          {p.file}
-        </span>
+        <NameField id={p.file} name={p.label} file={p.file} onSave={async (label) => {
+          await post({ action: "label", file: p.file, label }).catch((e: Error) => setNotice({ ok: false, text: e.message }));
+          await reload();
+        }} />
         {p.sent ? (
           <span data-picture-sent className="flex shrink-0 items-center gap-1 text-emerald-300" title={`In your Storyboard as ${p.sent}`}>
             <Check className="size-3" /> In Storyboard
           </span>
         ) : (
-          <button type="button" data-picture-send onClick={() => void send(null, p.file)} className="hover:bg-accent flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[11px]" title={video ? "Put this video in your Storyboard" : "Use the picture itself as a photo in your Storyboard"}>
+          <button type="button" data-picture-send onClick={() => void send(null, p.label ?? p.file)} className="hover:bg-accent flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[11px]" title={video ? "Put this video in your Storyboard" : "Use the picture itself as a photo in your Storyboard"}>
             <Send className="size-3" /> {video ? "Send to Storyboard" : "Send picture"}
           </button>
         )}
@@ -376,7 +378,10 @@ function PictureTile({
       {p.takes.length ? (
         <ul className="flex flex-col gap-1" data-picture-takes-list>
           {[...p.takes].reverse().map((t) => (
-            <TakeRow key={t.n} t={t} source={`${board.services.find((s) => s.id === t.service)?.label ?? t.service} · ${t.model}${t.kind === "lipsync" ? ` · lip sync, line ${t.line}` : ""}`} url={takeUrl(t)} onPlay={(url) => play(url, `${p.file} · Take ${t.n}`)} onSend={() => void send(t.n, `Take ${t.n}`)} onResume={() => void post({ action: "resume", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message }))} />
+            <TakeRow key={t.n} t={t} onRename={async (label) => {
+              await post({ action: "label", file: p.file, n: t.n, label }).catch((e: Error) => setNotice({ ok: false, text: e.message }));
+              await reload();
+            }} source={`${board.services.find((s) => s.id === t.service)?.label ?? t.service} · ${t.model}${t.kind === "lipsync" ? ` · lip sync, line ${t.line}` : ""}`} url={takeUrl(t)} onPlay={(url) => play(url, `${p.file} · Take ${t.n}`)} onSend={() => void send(t.n, t.label ?? `Take ${t.n}`)} onResume={() => void post({ action: "resume", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message }))} />
           ))}
         </ul>
       ) : null}
@@ -384,7 +389,7 @@ function PictureTile({
   );
 }
 
-function TakeRow({ t, source, url, onPlay, onSend, onResume }: { t: Take; source: string; url: string | null; onPlay: (url: string) => void; onSend: () => void; onResume: () => void }) {
+function TakeRow({ t, source, url, onPlay, onRename, onSend, onResume }: { t: Take; source: string; url: string | null; onPlay: (url: string) => void; onRename: (label: string) => Promise<void>; onSend: () => void; onResume: () => void }) {
   const label = `Take ${t.n}`;
   return (
     <li data-take={t.n} data-take-status={t.status} className="flex items-center gap-2 text-[11px]">
@@ -399,7 +404,7 @@ function TakeRow({ t, source, url, onPlay, onSend, onResume }: { t: Take; source
         <span className="bg-muted flex size-10 shrink-0 items-center justify-center rounded">{t.status === "running" ? <Loader2 className="text-brand size-4 animate-spin" /> : null}</span>
       )}
       <span className="min-w-0 flex-1">
-        <b>{label}</b>{" "}
+        <NameField id={`take-${t.n}`} name={t.label ?? null} file={label} className="inline-flex max-w-full font-bold" onSave={onRename} />{" "}
         <span data-take-source className="text-muted-foreground">
           {source}
         </span>

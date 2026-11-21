@@ -12,7 +12,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
-import { addFromLink, addPictures, picturesView, runTakes, saveCreationDefaults, sendToStoryboard, setMood, startAnimate, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
+import { addFromLink, addPictures, picturesView, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, startAnimate, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
 import { runSinging } from "@lyric/video/singer";
 import { connection } from "next/server";
 
@@ -58,6 +58,10 @@ export async function POST(request: Request, { params }: Params) {
     const body = (await request.json().catch(() => ({}))) as { action?: unknown; file?: unknown; service?: unknown; quality?: unknown; takes?: unknown; cap?: unknown; mood?: unknown; n?: unknown };
     const file = String(body.file ?? "");
     if (body.action === "link") return Response.json(await withWorkspaceAsync((ws) => addFromLink(ws, id, (body as { url?: unknown }).url)));
+    if (body.action === "label") {
+      const n = body.n === undefined || body.n === null ? null : Number(body.n);
+      return Response.json({ label: withWorkspace((ws) => setItemLabel(ws, id, file, n, (body as { label?: unknown }).label)) });
+    }
     if (body.action === "mood") return Response.json({ mood: withWorkspace((ws) => setMood(ws, id, file, body.mood)) });
     if (body.action === "animate") {
       const started = withWorkspace((ws) => startAnimate(ws, id, file, { service: body.service as ServiceId, quality: body.quality as Quality, takes: Number(body.takes), capUsd: Number(body.cap) }));

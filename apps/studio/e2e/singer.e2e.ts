@@ -75,12 +75,18 @@ async function main() {
       await sleep(500);
     }
     const browser = await playwright.chromium.launch();
-    const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     await page.goto(`${base}/songs/${sp.project.id}?tab=lyrics`);
     await page.waitForSelector("[data-singer]");
+    // A short name for the picture (Creation → Rename): the pickers show it; the file keeps its name.
+    await fetch(`${base}/api/songs/${sp.project.id}/pictures`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "label", file: "singer close.png", label: "Close up" }) });
+    await page.reload();
     await page.waitForSelector("[data-singer-line='2'] [data-singer-source]");
     check(((await page.textContent("[data-singer-summary]")) ?? "").includes("Choose a picture or video"), "the Singer bar says what to do");
-    await page.selectOption("[data-singer-line='2'] [data-singer-source]", "singer close.png");
+    await page.click("[data-singer-line='2'] [data-singer-source]");
+    await page.waitForSelector("[data-singer-picker='2'] [data-singer-option='singer close.png'] img");
+    check(((await page.textContent("[data-singer-picker='2'] [data-singer-option='singer close.png']")) ?? "").includes("Close up"), "the Singer picker shows each picture with its thumbnail and short name");
+    await page.click("[data-singer-picker='2'] [data-singer-option='singer close.png']");
     await page.waitForSelector("[data-singer-line='2'] [data-singer-status=todo]");
     const settings = JSON.parse(readFileSync(path.join(pictures, "singer.json"), "utf8")) as { lines: Record<string, string> };
     check(settings.lines["2"] === "singer close.png", "line 2 is a singing line, sung from its picture (pictures\\singer.json)");
@@ -96,12 +102,24 @@ async function main() {
     check(a?.clip === "singer close sings line 2.mp4" && typeof a.sync === "number" && a.sync > 60 && a.sync < 68.5, `it lands on line 2, locked to the song (${JSON.stringify(a)})`);
     const order = (JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8")) as { order: string[] }).order;
     check(order.at(-1) === "singer close sings line 2.mp4", `it joins the end of the Storyboard (${order.join(", ")})`);
+    const labels = (JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8")) as { clips: Record<string, { label?: string }> }).clips;
+    check(labels["singer close sings line 2.mp4"]?.label === "Close up sings line 2", "the clip carries a short name into the Storyboard (Close up sings line 2)");
     const take = path.join(pictures, "takes", "singer close sings line 2.mp4");
     check(existsSync(take) && !(await probeMedia(take)).hasAudio, "it is in Creation, without sound (the voice is never kept)");
-    const landed = await page.waitForFunction(() => document.querySelector("tr[data-line='2'] [data-anchor-cell]")?.textContent?.includes("in time with the song"), null, { timeout: 15_000 }).then(() => true).catch(() => false);
-    check(landed, `the line's Lands on shows the singing clip, in time with the song (${await page.textContent("tr[data-line='2'] [data-anchor-cell]")})`);
+    const landed = await page.waitForFunction(() => document.querySelector("tr[data-line='2'] [data-anchor-cell]")?.textContent?.includes("Close up sings line 2"), null, { timeout: 15_000 }).then(() => true).catch(() => false);
+    check(landed, `the line's Lands on shows the singing clip by its short name (${await page.textContent("tr[data-line='2'] [data-anchor-cell]")})`);
     check(((await page.textContent("[data-singer-summary]")) ?? "").includes("all made"), "nothing left to make: a line is never paid for twice");
+    // A long file name never pushes the Singer column out of view (Paul, 21 Nov 2026).
+    const box = await page.$eval("[data-singer-line='2'] [data-singer-source]", (e: Element) => { const r = e.getBoundingClientRect(); const c = document.querySelector("[data-lines-scroll]")!.getBoundingClientRect(); return { right: r.right, edge: c.right }; });
+    check(box.right <= box.edge, `the Singer column is in view without scrolling sideways (${Math.round(box.right)} ≤ ${Math.round(box.edge)})`);
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+    // Wrong picture: "no singer on this line" takes the singing clip off the line and sets it to Omit (kept).
+    await page.click("[data-singer-line='2'] [data-singer-source]");
+    await page.click("[data-singer-picker='2'] [data-singer-option='']");
+    await page.waitForFunction(() => !document.querySelector("tr[data-line='2'] [data-anchor-cell]")?.textContent?.includes("Close up"), null, { timeout: 15_000 });
+    const after = JSON.parse(readFileSync(paths.recipe!, "utf8")) as { anchors?: { line: number }[] };
+    const omitted = (JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8")) as { clips: Record<string, { omit?: boolean }> }).clips["singer close sings line 2.mp4"]?.omit;
+    check(!after.anchors?.some((x) => x.line === 2) && omitted === true && existsSync(path.join(paths.clips!, "singer close sings line 2.mp4")), "No singer on a line: its singing clip leaves the line and is set to Omit (kept, out of its line its lips would be out of time)");
 
     await page.goto(`${base}/songs/${sp.project.id}?tab=production`);
     await page.waitForSelector("[data-take-source]");

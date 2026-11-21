@@ -85,6 +85,13 @@ async function main() {
     check(((await page.textContent(`${vtile} [data-source]`)) ?? "").includes("Midjourney · video"), "a Midjourney video is labelled Midjourney");
     check(!(await page.isVisible(`${vtile} [data-picture-animate]`)), "a video has no Animate (only pictures animate)");
     check(((await page.textContent(`${tile} [data-picture-cost]`)) ?? "").includes("3 × 5 s · about $3.24"), "the cost of 3 takes shows before anything is sent");
+    // Rename: a short name instead of the long file name (the file keeps its name).
+    await page.click(`${vtile} [data-name-field]`);
+    await page.fill(`${vtile} [data-name-input]`, "Bride walks");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction((t: string) => document.querySelector(`${t} [data-name-field]`)?.textContent?.includes("Bride walks"), vtile);
+    const pj = () => JSON.parse(readFileSync(path.join(paths.root, "pictures", "pictures.json"), "utf8")) as { pictures: Record<string, { label?: string; takes: { n: number; label?: string }[] }> };
+    check(pj().pictures[path.basename(mjVideo)].label === "Bride walks" && existsSync(path.join(paths.root, "pictures", path.basename(mjVideo))), "a video gets a short name; its file keeps its own name");
 
     // Paul's defaults, for every song: the best model.
     await page.selectOption("[data-animate-service]", "wavespeed:best");
@@ -122,6 +129,11 @@ async function main() {
     check(json.pictures["bride by the sea.png"].mood === "quiet, longing", "the mood words are kept with the picture");
     check(((await page.textContent("[data-animate-spent]")) ?? "").includes("$3.24"), "what was sent for the song is shown ($3.24)");
 
+    await page.click(`${tile} [data-take='2'] [data-name-field]`);
+    await page.fill(`${tile} [data-take='2'] [data-name-input]`, "Sea smile");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction((t: string) => document.querySelector(`${t} [data-take='2'] [data-name-field]`)?.textContent?.includes("Sea smile"), tile);
+    check(pj().pictures["bride by the sea.png"].takes.find((x) => x.n === 2)?.label === "Sea smile", "a take gets a short name");
     await page.click(`${tile} [data-take='2'] [data-take-send]`);
     await page.waitForSelector(`${tile} [data-take='2'] [data-take-sent]`);
     await page.click(`${vtile} [data-picture-send]`);
@@ -129,12 +141,21 @@ async function main() {
     const want = ["01_blue.mp4", "02_red.mp4", "bride by the sea take 2.mp4", path.basename(mjVideo)];
     check(JSON.stringify(order()) === JSON.stringify(want), `Send to Storyboard puts each at the END of the story line (${order().join(", ")})`);
     check(!(await page.isVisible(`${tile} [data-take='1'] [data-take-sent]`)), "a take not sent stays only in Creation");
+    const clipLabels = (JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8")) as { clips: Record<string, { label?: string }> }).clips;
+    check(clipLabels["bride by the sea take 2.mp4"]?.label === "Sea smile" && clipLabels[path.basename(mjVideo)]?.label === "Bride walks", "the short names go with them to the Storyboard");
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
 
     await page.goto(`${base}/songs/${id}?tab=clips`);
     await page.waitForSelector(`[data-clip='${path.basename(mjVideo)}']`);
     const line = await page.$$eval("[data-position]", (e: Element[]) => e.map((x) => x.getAttribute("data-clip")));
     check(JSON.stringify(line) === JSON.stringify(want), "the Storyboard shows what was sent after the song's own clips, ready to be dragged");
+    check(((await page.textContent(`[data-clip='bride by the sea take 2.mp4'] [data-name-field]`)) ?? "").includes("Sea smile"), "the Storyboard card shows the short name");
+    await page.click(`[data-clip='01_blue.mp4'] [data-name-field]`);
+    await page.fill(`[data-clip='01_blue.mp4'] [data-name-input]`, "Blue sky");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => document.querySelector(`[data-clip='01_blue.mp4'] [data-name-field]`)?.textContent?.includes("Blue sky"));
+    const after = (JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8")) as { clips: Record<string, { label?: string }> }).clips;
+    check(after["01_blue.mp4"]?.label === "Blue sky" && existsSync(path.join(paths.clips!, "01_blue.mp4")), "any Storyboard clip can be renamed there too (the file keeps its name)");
     await browser.close();
   } finally {
     server.kill();
