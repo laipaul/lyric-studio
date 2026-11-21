@@ -10,3 +10,6 @@ export async function api(input: string, init?: RequestInit): Promise<Response> 
     throw new Error(SERVER_DOWN);
   }
 }
+
+// Prepare → Storyboard saved a new story order (clips.json): an open Shape plans again so both show the one order.
+export const STORY_ORDER_SAVED = "lyric-story-order-saved";

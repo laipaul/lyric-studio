@@ -31,7 +31,7 @@ import { useGoToTab, useSetShapeStatus, useShapePanel, useShapeVideo, useThemeLo
 import { ThemeReachBadge } from "@/components/theme-reach-badge";
 import { TransportBar } from "@/components/transport-bar";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { api, STORY_ORDER_SAVED } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const clock = (ms: number) => `${Math.floor(ms / 60_000)}:${((ms % 60_000) / 1000).toFixed(1).padStart(4, "0")}`;
@@ -218,6 +218,18 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the recipe changed
   }, [replan]);
+
+  // The story order was saved in Prepare → Storyboard while this page was opening (the save takes a moment): plan again
+  // with it, keeping the selection and the playhead (one clip order, shown the same in both places).
+  const latest = useRef({ source, show });
+  latest.current = { source, show };
+  useEffect(() => {
+    const again = () => {
+      if (latest.current.source) void latest.current.show(latest.current.source, true);
+    };
+    window.addEventListener(STORY_ORDER_SAVED, again);
+    return () => window.removeEventListener(STORY_ORDER_SAVED, again);
+  }, []);
 
   // "Use automatic" next to a typed length the app could not end cleanly near: the song's length and this
   // platform's own go back to Automatic; the page reloads so the tools show it too.

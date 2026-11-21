@@ -14,7 +14,7 @@ import path from "node:path";
 import { absPath, openWorkspace, project } from "@lyric/db";
 import { createTheme, ensureAlignment, findOrCreateSongProject, loadFontCatalog, loadTheme, readRecipe, songPathsById, type AlignRunner } from "@lyric/video/node";
 import { eq } from "drizzle-orm";
-import { collapsePanel, openPanel, saveTheme, unfoldStyle } from "./stage-tabs";
+import { collapsePanel, openPanel, openTab, saveTheme, unfoldStyle } from "./stage-tabs";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-storyboard-"));
 const wsDir = path.join(root, "workspace");
@@ -366,6 +366,46 @@ async function main() {
     await openPanel(page, "clips");
     await page.waitForSelector("[data-story-clip]", { timeout: 180_000 });
     check(JSON.stringify(await strip()) === JSON.stringify(order), `Shape plans the story line's order (${(await strip()).join(", ")})`);
+    // The one clip order stays in sync without a reload: reorder by dragging in Prepare → Storyboard, then open Shape in the
+    // same page; Shape's Clips rail and the plan's first shots show the new order.
+    {
+      await openTab(page, "Clips");
+      await page.waitForSelector("[data-clip='03_c.mp4']");
+      await page.dragAndDrop("[data-clip='03_c.mp4']", "[data-clip='04_d.mp4']", { targetPosition: { x: 10, y: 10 } });
+      await sleep(1500);
+      const nowOrder = clipsJson().order as string[];
+      check(nowOrder[0] === "03_c.mp4", `dragging in Storyboard saved the new order (${nowOrder.join(", ")})`);
+      await openTab(page, "Shape");
+      await openPanel(page, "clips");
+      await page.waitForSelector("[data-story-clip]", { timeout: 180_000 });
+      await page.waitForSelector("[data-shot='1']", { timeout: 180_000 });
+      await sleep(1500);
+      const stripNow = await strip();
+      check(JSON.stringify(stripNow) === JSON.stringify(nowOrder), `Shape's clips follow the Storyboard order without a reload (${stripNow.join(", ")})`);
+      const firstShots = await page.$$eval("[data-shot]", (els: Element[]) => els.slice(0, 2).map((e) => e.textContent ?? ""));
+      check(firstShots.some((t) => t.includes("03_c")), `the plan's shots follow the new order (${firstShots.join(" | ").slice(0, 160)})`);
+      // The save is slow (a big folder on Windows): Shape is opened before it is done and must still end up with the new order.
+      await page.route("**/api/songs/*/assets", async (route: { request(): { method(): string }; continue(): Promise<void> }) => {
+        if (route.request().method() === "PUT") await sleep(4000);
+        await route.continue();
+      });
+      await openTab(page, "Clips");
+      await page.waitForSelector("[data-clip='01_a.mp4']");
+      await page.dragAndDrop("[data-clip='01_a.mp4']", "[data-clip='03_c.mp4']", { targetPosition: { x: 10, y: 10 } });
+      await openTab(page, "Shape");
+      await openPanel(page, "clips");
+      await page.waitForSelector("[data-story-clip]", { timeout: 180_000 });
+      await page.waitForFunction(() => [...document.querySelectorAll("[data-story-clip]")][0]?.getAttribute("data-story-clip") === "01_a.mp4", null, { timeout: 60_000 }).catch(() => null);
+      await sleep(1000);
+      const slow = await strip();
+      check(slow[0] === "01_a.mp4" && JSON.stringify(slow) === JSON.stringify(clipsJson().order), `Shape opened while the order was still saving ends with the saved order (${slow.join(", ")})`);
+      await page.unroute("**/api/songs/*/assets");
+      await page.request.put(`${base}/api/songs/${sp.project.id}/assets`, { data: { story: order } });
+      await page.reload();
+      await page.waitForSelector("[data-shot='1']", { timeout: 180_000 });
+      await openPanel(page, "clips");
+      await page.waitForSelector("[data-story-clip]", { timeout: 180_000 });
+    }
     // No Clip editor box (8 Nov 2026): a clip clicked in the strip is selected on the timeline; its ⋯ menu there holds
     // the speed, how it comes in, its best moment and the Canvas. On 01_a (shot 3 of this Reel; 03_c has no shot here).
     await page.click("[data-story-clip='01_a.mp4'] button");
