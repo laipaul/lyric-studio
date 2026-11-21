@@ -4,6 +4,17 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Creation's player plays a take with the song ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "why can't I hear in Animate both the song and video, it'd be easier to check" / "else I need to
+  juggle back to Shape". Takes stay silent files (the music is never changed, the vocal never kept); the player now
+  plays the song file with them: a singing take from its own first frame (where its vocal starts), an Animate take
+  shown on a line from the downbeat that line cuts to it. Play, pause, seeking and the end keep them together (a drift
+  above 80 ms is set right). "With the song" switch (on by default); a take on no line plays alone with a note.
+- Code: singer.ts withSongStarts (songFromMs / clipInS / songWhy per take, added by GET /api/songs/[id]/pictures);
+  components/with-song.tsx.
+- Tests: browser singer (+2: a singing take plays with the song from its first frame, an Animate take on a line from
+  its cut), pictures pass.
+
 ### Fix: Who sings showed a take "In use" after a plain clip replaced it ✅ (to verify on the PC)
 - Paul (21 Nov 2026, line 32): Who sings said "Take 1 · In use" while Shows clip had TheEnding · Take 3. Saving a
   clip on a line reloaded only the Shows clip column; the singing column kept its old view. A line holds one thing:

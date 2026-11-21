@@ -265,6 +265,20 @@ async function main() {
     const card = await page.$$eval("[data-picture='singer close.png'] [data-take]", (rows: Element[]) => rows.map((r) => `${r.getAttribute("data-take")}:${r.querySelector("[data-take-badge]")?.getAttribute("data-take-badge") ?? "-"}:${r.querySelector("[data-take-use]") ? "use" : "-"}`));
     check(card.length === 4 && card.filter((c) => c.endsWith(":-:use")).length === 3, `the Creation card lists all takes with In use / Use this take (${card.join(", ")})`);
     check(((await page.textContent("[data-picture='singer close.png'] [data-take='1'] [data-take-on]")) ?? "").includes("On line 1"), "the Creation card says where a take shows: On line 1");
+    // ▶ in Creation plays a take with the song (Paul, 21 Nov 2026: "else I need to juggle back to Shape"): a singing take
+    // from its own first frame, an Animate take on a line from where the line cuts to it.
+    const sungTake = (JSON.parse(readFileSync(path.join(pictures, "pictures.json"), "utf8")) as { pictures: Record<string, { takes: { n: number; kind?: string; line?: number; through?: number; sync_ms?: number; status: string }[] }> }).pictures["singer close.png"].takes.find((t) => t.kind === "lipsync" && t.line === 2 && !t.through && t.status === "done")!;
+    await page.click(`[data-picture='singer close.png'] [data-take='${sungTake.n}'] [data-take-play]`);
+    await page.waitForSelector("[data-take-player] [data-with-song='on'] [data-with-song-audio]", { state: "attached" });
+    await page.waitForTimeout(1500);
+    const heard = await page.$eval("[data-take-player]", (e: Element) => ({ song: (e.querySelector("audio") as HTMLAudioElement).src, at: (e.querySelector("audio") as HTMLAudioElement).currentTime, why: e.querySelector("[data-with-song-why]")?.textContent ?? "" }));
+    check(heard.song.includes("A%20Heart%20For%20Two") && heard.at >= sungTake.sync_ms! / 1000 - 0.2 && heard.at < sungTake.sync_ms! / 1000 + 5 && /with the song from 1:05\.8/.test(heard.why), `a singing take plays with the song from its first frame (${JSON.stringify(heard)})`);
+    await page.keyboard.press("Escape");
+    await page.click("[data-picture='singer close.png'] [data-take='1'] [data-take-play]");
+    await page.waitForSelector("[data-take-player] [data-with-song-why]");
+    const onLine = (await page.textContent("[data-take-player] [data-with-song-why]")) ?? "";
+    check(/with the song from 1:0\d\.\d, where line 1 cuts to it/.test(onLine), `an Animate take on a line plays with the song from that line's cut (${onLine})`);
+    await page.keyboard.press("Escape");
     await browser.close();
   } finally {
     server.kill();

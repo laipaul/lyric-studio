@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
 
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import { addFromLink, addPictures, picturesView, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, startAnimate, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
-import { runSinging } from "@lyric/video/singer";
+import { runSinging, withSongStarts } from "@lyric/video/singer";
 import { connection } from "next/server";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
@@ -27,7 +27,8 @@ export async function GET(_request: Request, { params }: Params) {
   await connection();
   const { id } = await params;
   try {
-    return Response.json({ board: await withWorkspaceAsync((ws) => picturesView(ws, id)) });
+    // Each finished take with the song second its first frame belongs to (Creation plays it with the song).
+    return Response.json({ board: await withWorkspaceAsync(async (ws) => withSongStarts(ws, id, await picturesView(ws, id))) });
   } catch (error) {
     return fail(error);
   }

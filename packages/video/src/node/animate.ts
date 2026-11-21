@@ -114,7 +114,7 @@ export type Take = {
 export type PictureRecord = { label?: string; source?: string; mood?: string; takes: Take[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string }; // sent: the picture itself sent to the Storyboard (its clip name)
 export type PicturesFile = { _help?: string; pictures: Record<string, PictureRecord> };
 // source: where it came from, a small label ("Added by you", "Midjourney", "From higgsfield.ai"). kind: only a picture can be animated.
-export type PictureView = { file: string; label: string | null; url: string; kind: "picture" | "video"; source: string; mood: string; takes: (Take & { inUse?: boolean; onLines?: string })[]; width: number | null; height: number | null; sent: string | null };
+export type PictureView = { file: string; label: string | null; url: string; kind: "picture" | "video"; source: string; mood: string; takes: (Take & { inUse?: boolean; onLines?: string; songFromMs?: number; clipInS?: number; songWhy?: string })[]; width: number | null; height: number | null; sent: string | null };
 // Paul's own defaults for Animate (Creation → Defaults), for every song: the service and model, how many takes, the cap.
 export type CreationDefaults = { service: ServiceId; quality: Quality; takes: number; cap: number; length: TakeLength }; // length: "song" = one phrase of the song, "short" = 5 s
 export const CREATION_FILE = "creation.json"; // in the workspace folder
@@ -162,7 +162,9 @@ export function saveCreationDefaults(wsDir: string, raw: unknown): CreationDefau
   return d;
 }
 
+// song (with songStarts, singer.ts): the song file, so a take plays with the song from the second its first frame belongs to.
 export type PicturesView = {
+  song?: string | null;
   defaults: CreationDefaults;
   pictures: PictureView[];
   services: { id: ServiceId; label: string; ready: boolean; keyName: string; qualities: { id: Quality; label: string; usdPerSecond: number; priceNote: string }[] }[];

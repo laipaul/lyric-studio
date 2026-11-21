@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { WithSong } from "@/components/with-song";
 
 const money = (usd: number) => `$${usd.toFixed(2)}`;
 type Svc = PicturesView["services"][number];
@@ -39,7 +40,9 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
   const [adding, setAdding] = useState(false);
   const [link, setLink] = useState("");
   const [cap, setCap] = useState<string>("");
-  const [playing, setPlaying] = useState<{ url: string; title: string } | null>(null); // a take or video in the big player
+  // A take or video in the big player; a take with its place in the song (take: played with the song when it has one).
+  type Playing = { url: string; title: string; take?: { fromS: number | null; clipInS: number; why: string | null } };
+  const [playing, setPlaying] = useState<Playing | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -198,7 +201,7 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
         {board.pictures.map((p) => (
-          <PictureTile key={p.file} projectId={projectId} p={p} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title) => setPlaying({ url, title })} />
+          <PictureTile key={p.file} projectId={projectId} p={p} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title, take) => setPlaying({ url, title, take })} />
         ))}
         <div className="flex min-h-48 flex-col gap-2">
           <button
@@ -249,9 +252,13 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
         <DialogContent data-take-player className="w-[min(40rem,95vw)] max-w-none">
           <DialogHeader>
             <DialogTitle>{playing?.title}</DialogTitle>
-            <DialogDescription>Takes are made without sound: your song is added when the video is made.</DialogDescription>
+            <DialogDescription>{playing?.take ? "Takes are made without sound: here the song plays with it from the second it belongs to." : "Takes are made without sound: your song is added when the video is made."}</DialogDescription>
           </DialogHeader>
-          {playing ? <video key={playing.url} src={playing.url} controls autoPlay loop playsInline className="bg-muted max-h-[70vh] w-full rounded object-contain" /> : null}
+          {playing?.take ? (
+            <WithSong key={playing.url} video={playing.url} song={board.song ? `/api/files/${board.song.split("/").map(encodeURIComponent).join("/")}` : null} fromS={playing.take.fromS} clipInS={playing.take.clipInS} why={playing.take.why} />
+          ) : playing ? (
+            <video key={playing.url} src={playing.url} controls autoPlay loop playsInline className="bg-muted max-h-[70vh] w-full rounded object-contain" />
+          ) : null}
         </DialogContent>
       </Dialog>
       {board.pictures.some((p) => p.sent || p.takes.some((t) => t.sent)) ? (
@@ -283,7 +290,7 @@ function PictureTile({
   projectId: string;
   p: PictureView;
   board: PicturesView;
-  play: (url: string, title: string) => void;
+  play: (url: string, title: string, take?: { fromS: number | null; clipInS: number; why: string | null }) => void;
   post: (b: Record<string, unknown>) => Promise<unknown>;
   reload: () => Promise<void>;
   setNotice: (n: { ok: boolean; text: string }) => void;
@@ -423,7 +430,7 @@ function PictureTile({
               await post({ action: "label", file: p.file, n: t.n, label }).catch((e: Error) => setNotice({ ok: false, text: e.message }));
               await reload();
             }} source={`${board.services.find((s) => s.id === t.service)?.label ?? t.service} · ${t.model}${t.kind === "lipsync" ? ` · lip sync, ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` : ""}`} url={takeUrl(t)} onPlay={(url) => {
-              play(url, `${p.file} · Take ${t.n}`);
+              play(url, `${p.file} · Take ${t.n}`, { fromS: t.songFromMs !== undefined ? t.songFromMs / 1000 : null, clipInS: t.clipInS ?? 0, why: t.songWhy ?? null });
               if (t.fresh) void singer({ action: "seen", n: t.n }).then(reload).catch(() => undefined);
             }} onSend={() => void send(t.n, t.label ?? `Take ${t.n}`)} onUse={() => void chooseTake(t)} onResume={() => void post({ action: "resume", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message }))} />
           ))}

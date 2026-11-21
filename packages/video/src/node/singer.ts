@@ -25,6 +25,7 @@ import { absPath, beat as beatTable, ffmpegBin, project as projectTable, uniqueF
 import { eq } from "drizzle-orm";
 
 import { applyDownbeatOffset } from "../beats";
+import { type PicturesView } from "./animate";
 import { BOARD_VIDEO_FILE, itemLabel, makePlayable, PICTURE_FILE, POLL_MS, TAKES_DIR, TIMEOUT_MS, WAVESPEED, data, json, keyFor, readPictures, setTake, sleepMs, songFolder, update, waveSpeedUpload, type Take } from "./animate";
 import { importSongClips } from "./assets";
 import { setClipLabel, setClipOmit } from "./clip-edits";
@@ -282,6 +283,38 @@ export function cutVoice(voice: Voice, songFile: string, piece: { fromMs: number
   } else {
     execFileSync(ffmpegBin(), ["-y", "-v", "error", "-ss", (piece.fromMs / 1000).toFixed(3), "-t", durS.toFixed(3), "-i", songFile, "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", out]);
   }
+}
+
+// ---------------------------------------------------------------- a take with the song (Creation's player)
+
+// Where each take belongs in the song (Paul, 21 Nov 2026: "why can't I hear the song with the take? it would be easier to
+// check"): a singing take from its own first frame (sync_ms: the vocal piece it was made from); an Animate take shown on
+// a line from the downbeat that line cuts in on (minus where in the clip it starts). A take on no line has no place in
+// the song yet. Adds song / songFromMs / clipInS / songWhy to the view (Creation plays the song file with the silent take).
+export async function withSongStarts(ws: Workspace, projectId: string, view: PicturesView): Promise<PicturesView> {
+  const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
+  if (!p?.audio_path) return view;
+  const recipe = songPathsById(ws, projectId).recipe;
+  const plain = (recipe ? (readRecipe(recipe).anchors ?? []) : []).filter((a) => a.sync === undefined);
+  const placed = (t: Take) => {
+    const clip = (t.sent ?? t.clip)?.toLowerCase();
+    return clip ? plain.filter((a) => a.clip.toLowerCase() === clip).sort((a, b) => a.line - b.line)[0] : undefined;
+  };
+  const needLines = view.pictures.some((pic) => pic.takes.some((t) => t.kind !== "lipsync" && t.status === "done" && placed(t)));
+  const c = needLines ? await context(ws, projectId).catch(() => null) : null;
+  const clock = (ms: number) => `${Math.floor(ms / 60_000)}:${((ms % 60_000) / 1000).toFixed(1).padStart(4, "0")}`;
+  for (const pic of view.pictures) {
+    pic.takes = pic.takes.map((t) => {
+      if (t.status !== "done") return t;
+      if (t.kind === "lipsync" && t.sync_ms !== undefined) return { ...t, songFromMs: t.sync_ms, clipInS: 0, songWhy: `with the song from ${clock(t.sync_ms)}, where this take's vocal starts: the lips should sing what the song sings` };
+      const a = placed(t);
+      const line = a && c?.lines?.find((l) => l.number === a.line);
+      if (!a || !line || !c) return t;
+      const cut = c.downbeats.filter((d) => d <= line.shownMs).at(-1) ?? line.shownMs;
+      return { ...t, songFromMs: cut, clipInS: a.clipIn ?? 0, songWhy: `with the song from ${clock(cut)}, where line ${a.line} cuts to it` };
+    });
+  }
+  return { ...view, song: p.audio_path };
 }
 
 // ---------------------------------------------------------------- the service
