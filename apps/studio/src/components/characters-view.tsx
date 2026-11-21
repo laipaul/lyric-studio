@@ -97,6 +97,15 @@ export function CharactersList() {
                     {c.draft ? <span className="text-muted-foreground text-[11px]" data-card-draft={c.draft}>v{c.draft} draft</span> : null}
                   </span>
                 </div>
+                {c.looks.length ? (
+                  <div className="flex flex-wrap gap-1 px-3 pb-3" data-card-looks>
+                    {c.looks.map((l) => (
+                      <span key={l} className="text-muted-foreground rounded-full border px-2 py-0.5 text-[10px]">
+                        {l}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </Link>
             </li>
           ))}
@@ -615,6 +624,8 @@ export function CardPage({ id }: { id: string }) {
             ) : null}
           </section>
 
+          {character && version.n === d.latest ? <Wardrobe d={d} id={card.id} cap={cap} running={!!running} onChanged={setD} reload={load} /> : null}
+
           {/* The description */}
           <section className="flex flex-col gap-2">
             <label className="text-sm font-medium" htmlFor="card-description">
@@ -688,6 +699,247 @@ export function CardPage({ id }: { id: string }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- the Wardrobe
+
+// One face, many looks: the pack above is the main look; further looks have their own outfit and full body views (and,
+// if asked, a close-up in the look), made by the app or from the user's own pictures, each locked on its own. A song
+// chooses which look a character wears (Prepare → Production → Cast).
+type WardrobeLook = CardDetail["wardrobe"][number];
+
+function Wardrobe({ d, id, cap, running, onChanged, reload }: { d: CardDetail; id: string; cap: number; running: boolean; onChanged: (d: CardDetail) => void; reload: () => Promise<void> | void }) {
+  const looks = d.wardrobe;
+  const [open, setOpen] = useState<string>(looks.find((l) => !l.main)?.id ?? looks[0]?.id ?? "main");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const [slot, setSlot] = useState<string | null>(null);
+  const look: WardrobeLook | undefined = looks.find((l) => l.id === open) ?? looks[0];
+  if (!look) return null;
+  const locked = look.status === "locked";
+  const stamp = look.report?.updated_at ?? String(d.card.updated_at);
+
+  const post = async (what: string, body: Record<string, unknown>, after?: (r: CardDetail) => void) => {
+    setBusy(what);
+    setError(null);
+    try {
+      const r = await call<CardDetail>(`/api/cards/${id}`, { method: "POST", ...json(body) });
+      setNote(r.message);
+      onChanged({ ...r, message: null });
+      after?.(r);
+      if (["look-make", "look-remake"].includes(String(body.action))) window.dispatchEvent(new Event("lyric-tasks-changed"));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const save = (body: Record<string, unknown>) => post("save", { action: "look-save", look: look.id, ...body });
+  const choose = (s: string | null) => {
+    setSlot(s);
+    if (input.current) {
+      input.current.multiple = !s;
+      input.current.value = "";
+      input.current.click();
+    }
+  };
+  const addOwn = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setBusy("own");
+    setError(null);
+    try {
+      const form = new FormData();
+      for (const f of Array.from(files)) form.append("picture", f);
+      form.set("look", look.id);
+      if (slot) form.set("slot", slot);
+      setNote((await call<{ summary: string }>(`/api/cards/${id}/own`, { method: "POST", body: form })).summary);
+      await reload();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const disabled = running || !!busy;
+
+  return (
+    <section className="flex flex-col gap-3 border-t pt-4" data-wardrobe>
+      <div>
+        <h2 className="text-sm font-medium">Wardrobe</h2>
+        <p className="text-muted-foreground text-xs">One face, many looks. The pack above is the main look; add others (a travel coat, an evening dress …). Each song chooses which look a character wears (Prepare → Production → Cast).</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {looks.map((l) => (
+          <button
+            key={l.id}
+            type="button"
+            data-look-tab={l.id}
+            data-active={l.id === look.id ? "" : undefined}
+            onClick={() => (setOpen(l.id), setConfirm(false), setNote(null))}
+            className={cn("flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs", l.id === look.id ? "border-brand/60 text-foreground" : "text-muted-foreground hover:text-foreground")}
+          >
+            {l.status === "locked" ? <Lock className="size-3" /> : null}
+            {l.name}
+          </button>
+        ))}
+        <form
+          className="flex items-center gap-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (name.trim()) void post("add", { action: "look-add", name }, (r) => (setName(""), setOpen(r.wardrobe[r.wardrobe.length - 1].id)));
+          }}
+        >
+          <Input data-look-new-name value={name} onChange={(e) => setName(e.target.value)} placeholder="New look, e.g. Travel coat" className="h-7 w-48 text-xs" />
+          <Button type="submit" size="sm" variant="outline" disabled={disabled || !name.trim()} data-look-add>
+            <Plus /> Add look
+          </Button>
+        </form>
+      </div>
+      {error ? <p className="text-xs text-amber-200" data-look-error>{error}</p> : null}
+      {note ? <p className="text-xs text-emerald-200" data-look-note>{note}</p> : null}
+
+      {look.main ? (
+        <div className="flex flex-col gap-2 text-xs" data-look={look.id}>
+          <label className="flex items-center gap-2">
+            Name
+            <Input data-look-name key={look.name} defaultValue={look.name} onBlur={(e) => e.target.value.trim() !== look.name && void save({ name: e.target.value })} className="h-7 w-56 text-xs" />
+          </label>
+          <p className="text-muted-foreground">Its outfit and pictures are the Pack above (close-up, 3/4 face, full body front and back).</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3" data-look={look.id} data-look-status={look.status}>
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <label className="flex items-center gap-2">
+              Name
+              <Input data-look-name key={`${look.id}-${look.name}`} defaultValue={look.name} onBlur={(e) => e.target.value.trim() !== look.name && void save({ name: e.target.value })} className="h-7 w-48 text-xs" />
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input type="checkbox" data-look-closeup checked={look.closeup} disabled={locked || disabled} onChange={(e) => void save({ closeup: e.target.checked })} />
+              Also a close-up in this look (hair, neckline, jewellery)
+            </label>
+          </div>
+          <label className="flex flex-col gap-1 text-xs">
+            Outfit, in your words
+            <textarea
+              data-look-outfit
+              key={`${look.id}-${look.outfit}`}
+              defaultValue={look.outfit ?? ""}
+              disabled={locked}
+              rows={2}
+              onBlur={(e) => e.target.value.trim() !== (look.outfit ?? "") && void save({ outfit: e.target.value })}
+              className="bg-background rounded-md border px-3 py-2 text-sm"
+              placeholder="e.g. camel wool travel coat over a cream knit dress, ankle boots"
+            />
+          </label>
+          {!locked ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <select data-look-model value={look.model} onChange={(e) => void save({ model: e.target.value })} className="bg-background rounded-md border px-2 py-1 text-xs" title="The image model for this look">
+                {d.models.map((m) => (
+                  <option key={m.id} value={m.id} title={m.price}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+              {look.estimate ? (
+                <span className="text-muted-foreground">
+                  {look.estimate.text}: about <span data-look-estimate>{money(look.estimate.usd)}</span>
+                </span>
+              ) : null}
+              {confirm ? (
+                <span className="flex flex-wrap items-center gap-2">
+                  {!look.outfit?.trim() ? <span className="text-amber-400">No outfit given: the model will invent it.</span> : null}
+                  <Button size="sm" disabled={disabled} onClick={() => void post("look-make", { action: "look-make", look: look.id, cap }, () => setConfirm(false))} data-look-confirm>
+                    Yes, make it (about {money(look.estimate?.usd ?? 0)})
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>
+                    Cancel
+                  </Button>
+                </span>
+              ) : (
+                <Button size="sm" disabled={disabled || !!look.geminiMissing} onClick={() => setConfirm(true)} data-look-make>
+                  <Wand2 /> {look.report?.items.length ? "Make the look again" : "Make look"}
+                </Button>
+              )}
+              <Button size="sm" variant="outline" disabled={disabled} onClick={() => choose(null)} data-look-own title="Pictures you made elsewhere (Gemini, Midjourney …): free, nothing sent online">
+                <Upload /> Add my pictures
+              </Button>
+              <input ref={input} type="file" accept=".png,.jpg,.jpeg,.webp" hidden onChange={(e) => void addOwn(e.target.files)} data-look-own-input />
+            </div>
+          ) : null}
+          {look.geminiMissing ? <p className="text-xs text-amber-300">{look.geminiMissing}</p> : null}
+          {busy === "own" ? <p className="text-muted-foreground text-xs">Checking your pictures… (free, on this PC)</p> : null}
+          <ul className={cn("grid gap-3", look.closeup ? "grid-cols-3" : "grid-cols-2 lg:grid-cols-3")}>
+            {look.views.map((v) => {
+              const it = look.report?.items.find((i) => i.id === v.id);
+              const t = it && it.chosen !== null ? it.tries[it.chosen] : null;
+              return (
+                <li key={v.id} className="flex flex-col gap-1.5" data-look-view={v.id} data-light={it?.light ?? "none"}>
+                  {v.file ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- a look's picture
+                    <img src={fileUrl(id, v.file, stamp)} alt="" className="aspect-[3/4] w-full rounded-md border object-cover" />
+                  ) : (
+                    <div className="text-muted-foreground flex aspect-[3/4] w-full items-center justify-center rounded-md border border-dashed text-xs">not made yet</div>
+                  )}
+                  <div className="flex items-center gap-1.5 text-xs">
+                    {it?.light ? <span className={cn("size-2 rounded-full", LIGHT[it.light])} /> : null}
+                    <span className="font-medium">{v.label}</span>
+                  </div>
+                  {it?.text ? <p className="text-muted-foreground text-[11px] leading-snug">{it.text}</p> : null}
+                  {!locked ? (
+                    <div className="flex flex-wrap items-center gap-1">
+                      {look.report?.items.length ? (
+                        <Button size="sm" variant="ghost" disabled={disabled} onClick={() => void post("look-remake", { action: "look-remake", look: look.id, only: [v.id], cap })} data-look-remake={v.id}>
+                          <RefreshCw /> Remake
+                        </Button>
+                      ) : null}
+                      <Button size="sm" variant="ghost" disabled={disabled} onClick={() => choose(v.id)} data-look-own-slot={v.id}>
+                        <Upload /> Use my own picture
+                      </Button>
+                      {t?.own ? (
+                        <select
+                          data-look-move={v.id}
+                          value=""
+                          disabled={disabled}
+                          onChange={(e) => e.target.value && void post("move", { action: "own-move", look: look.id, from: v.id, to: e.target.value })}
+                          className="bg-background text-muted-foreground rounded border px-1 py-0.5 text-[11px]"
+                        >
+                          <option value="">Move to…</option>
+                          {look.views
+                            .filter((o) => o.id !== v.id)
+                            .map((o) => (
+                              <option key={o.id} value={o.id}>
+                                {o.label}
+                              </option>
+                            ))}
+                        </select>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+          {look.problems.length && !locked ? <p className="text-muted-foreground text-xs" data-look-problems>· {look.problems.join(" ")}</p> : null}
+          {locked ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span data-look-locked>Locked: songs that choose &quot;{look.name}&quot; use these pictures.</span>
+              <Button size="sm" variant="outline" disabled={disabled} onClick={() => void post("unlock", { action: "look-unlock", look: look.id })} data-look-unlock>
+                Change this look
+              </Button>
+            </div>
+          ) : (
+            <Button size="sm" className="w-fit" disabled={disabled || look.problems.length > 0} onClick={() => void post("lock", { action: "look-lock", look: look.id })} data-look-lock>
+              <Lock /> Lock this look
+            </Button>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 

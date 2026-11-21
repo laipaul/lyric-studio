@@ -11,7 +11,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { findOrCreateSongProject, songPathsById } from "../src/node";
 import { createCard } from "../src/node/characters/cards";
-import { epBibleFile, productionData, readPasted, readProduction, saveBible, setBibleSource, setCast, songBrief, type TimedLine } from "../src/node/production";
+import { epBibleFile, productionData, readPasted, readProduction, saveBible, setBibleSource, setCast, setCastLook, songBrief, type CastCard, type TimedLine } from "../src/node/production";
+import { addLook, updateDraft } from "../src/node/characters";
 import { readRecipe, writeRecipe } from "../src/node/recipe";
 import { restoreReplacedFile, songReplacedFiles } from "../src/node/replaced-files";
 import { checkSongShotList } from "../src/node/shotlist";
@@ -72,6 +73,22 @@ describe("the cast", () => {
     ws.db.update(cardTable).set({ name: "Bride Two" }).where(eq(cardTable.id, cards["Bride No 2"])).run();
     expect(productionData(ws, id).cast[0].name).toBe("Bride Two");
     ws.db.update(cardTable).set({ name: "Bride No 2" }).where(eq(cardTable.id, cards["Bride No 2"])).run();
+  });
+  it("the Wardrobe: the song chooses the look a character wears; its outfit goes into the Song brief", () => {
+    updateDraft(ws, cards["Bride No 2"], { outfit: "white bridal gown" });
+    expect(productionData(ws, id).cast[0]).toMatchObject({ look: "main", lookName: null, outfit: "white bridal gown" });
+    const coat = addLook(ws, cards["Bride No 2"], { name: "Travel coat", outfit: "camel wool coat, ankle boots" });
+    const before = productionData(ws, id).cast[0] as CastCard;
+    expect(before.looks.map((l) => l.name)).toEqual(["Main look", "Travel coat"]);
+    expect(before.lookName).toBe("Main look");
+    expect(setCastLook(ws, id, cards["Bride No 2"], coat.id)).toBe(coat.id);
+    expect(readProduction(songRoot).looks).toEqual({ [cards["Bride No 2"]]: coat.id });
+    expect(productionData(ws, id).cast[0]).toMatchObject({ look: coat.id, lookName: "Travel coat", outfit: "camel wool coat, ankle boots" });
+    expect(songBrief(ws, id, timed)).toContain("Outfit (look: Travel coat): camel wool coat, ankle boots");
+    expect(() => setCastLook(ws, id, cards["Bridegroom"], "main")).toThrow(/not in the song's cast/);
+    expect(() => setCastLook(ws, id, cards["Bride No 2"], "gone")).toThrow(/no longer in the wardrobe/);
+    setCastLook(ws, id, cards["Bride No 2"], "main");
+    expect(readProduction(songRoot).looks).toEqual({});
   });
 });
 

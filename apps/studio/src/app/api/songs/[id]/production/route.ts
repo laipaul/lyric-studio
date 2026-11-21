@@ -1,13 +1,14 @@
 // Prepare → Production (G1). GET: the song's production (cast linked from the shared library, which bible and its
 // text, the shot list's state, the platform sizes). POST { action, … }:
 //   "cast" { ids }: the cast (card ids from the Characters page, in order)
+//   "look" { card, look }: the look (Wardrobe) a cast character wears in this song
 //   "bibleSource" { source: "song" | "ep" }: the song's own bible or its EP's shared one
 //   "bible" { text }: saves the bible text (the earlier text goes to Replaced files)
 //   "brief": the Song brief (Markdown) to copy into Claude
 //   "paste" { text }: what a pasted answer is (a shot list, checked like an imported file, or a story bible)
 import { connection } from "next/server";
 
-import { productionData, readPasted, saveBible, setBibleSource, setCast, songBrief, timedLines } from "@lyric/video/production";
+import { productionData, readPasted, saveBible, setBibleSource, setCast, setCastLook, songBrief, timedLines } from "@lyric/video/production";
 import { checkSongShotList } from "@lyric/video/shotlist";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
@@ -27,11 +28,13 @@ export async function GET(_request: Request, { params }: Params) {
 
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
-  const body = (await request.json().catch(() => ({}))) as { action?: unknown; ids?: unknown; source?: unknown; text?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { action?: unknown; ids?: unknown; source?: unknown; text?: unknown; card?: unknown; look?: unknown };
   try {
     switch (body.action) {
       case "cast":
         return Response.json({ cast: withWorkspace((ws) => setCast(ws, id, body.ids)) });
+      case "look":
+        return Response.json({ look: withWorkspace((ws) => setCastLook(ws, id, body.card, body.look)) });
       case "bibleSource":
         return Response.json({ source: withWorkspace((ws) => setBibleSource(ws, id, body.source)) });
       case "bible":

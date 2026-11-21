@@ -17,6 +17,7 @@ import { absPath, card as cardTable, CARD_SCOPES, type Card, type Workspace } fr
 import { and, eq } from "drizzle-orm";
 
 import type { CheckResult } from "./face";
+import type { Look } from "./looks";
 import { ANGLES, DEFAULT_MODELS, estimate, MODELS, safeName, splitIsCurrent, TEXT_MODEL, VIEWS, VISION, type ModelId, type OutfitSplit, type Thresholds, DEFAULT_THRESHOLDS } from "./plan";
 
 export type CardKind = Card["kind"];
@@ -45,6 +46,8 @@ export type CardFile = {
   check?: CheckResult; // the reference (or location) check of `reference`
   check2?: CheckResult;
   versions: CardVersion[];
+  main_look?: string; // the Wardrobe: the name of the pack's own outfit (default "Main look")
+  looks?: Look[]; // the Wardrobe: further looks (looks.ts)
 };
 
 export const CARD_DIRS: Record<CardKind, string> = { character: "characters", scene: "scenes" };
@@ -90,7 +93,7 @@ export function getCard(ws: Workspace, id: string): Card {
 }
 
 // draft: the number of a newer draft being worked on next to the locked version in use (null when there is none).
-export type CardSummary = Card & { thumbnail: string; views: number; description: string | null; draft: number | null };
+export type CardSummary = Card & { thumbnail: string; views: number; description: string | null; draft: number | null; looks: string[] };
 
 // The page's list: every card with its thumbnail (the close-up, or the first location angle, else the picture).
 export function listCards(ws: Workspace): CardSummary[] {
@@ -106,7 +109,8 @@ export function listCards(ws: Workspace): CardSummary[] {
       const main = row.kind === "character" ? "closeup.png" : "wide_left.png";
       const thumbnail = views.includes(main) ? `v${v.n}/${main}` : file.reference;
       const used = usableVersion(file);
-      return { ...row, thumbnail, views: views.length, description: (used ?? v).description ?? null, draft: used && v.status === "draft" ? v.n : null };
+      const looks = row.kind === "character" && file.looks?.length ? [file.main_look?.trim() || "Main look", ...file.looks.map((l) => l.name)] : [];
+      return { ...row, thumbnail, views: views.length, description: (used ?? v).description ?? null, draft: used && v.status === "draft" ? v.n : null, looks };
     })
     .filter((x): x is CardSummary => x !== null)
     .sort((a, b) => a.name.localeCompare(b.name));

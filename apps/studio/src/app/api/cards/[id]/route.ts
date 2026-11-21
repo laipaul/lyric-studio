@@ -5,13 +5,15 @@
 // POST { action }: "check" (the picture again) · "crop" (crop to face) · "pack" { cap } · "remake" { only, cap } ·
 //   "calibrate" { songId, her } (the face-check lines on a song's clips, local and free) ·
 //   "fetch" (get missing pictures, free) · "lock" · "new-version" · "stop" { job } ·
-//   "own-move" { from, to } (move your own picture to another slot, free) · "describe" (draft the description, about $0.01).
+//   "own-move" { from, to, look? } (move your own picture to another slot, free) · "describe" (draft the description, about $0.01).
+// The Wardrobe: "look-add" { name, outfit?, closeup? } · "look-save" { look, name?, outfit?, outfit_split?, model?, closeup? } ·
+//   "look-make" { look, cap } · "look-remake" { look, only, cap } (queued, like Make pack) · "look-lock" / "look-unlock" { look }.
 // Make pack / Remake / Get missing pictures are queued and run in the studio's process (the Tasks menu shows them).
 import { connection } from "next/server";
 
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import {
-  calibrationSongs, cardFace, draftDescription, hasGeminiKey, moveOwnPicture, GEMINI_KEY_MISSING, cardTools, ensureSplit, splitNeeded, cardJobsFor, cardRoot, cardThresholds, checkCardPicture, cropCardToFace, currentVersion, enqueueCardJob, getCard, lockCard, lockProblems,
+  calibrationSongs, cardFace, draftDescription, hasGeminiKey, moveOwnPicture, GEMINI_KEY_MISSING, addLook, getLook, listLooks, lookDir, lookEstimate, lookProblems, setLookLocked, updateLook, MAIN_LOOK, cardTools, ensureSplit, splitNeeded, cardJobsFor, cardRoot, cardThresholds, checkCardPicture, cropCardToFace, currentVersion, enqueueCardJob, getCard, lockCard, lockProblems,
   MODELS, newVersion, usableVersion, versionByNumber, packEstimate, readCardFile, readReport, repickLegacy, buildSheet, runCardJob, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId,
 } from "@lyric/video/characters";
 
@@ -50,6 +52,18 @@ function detail(id: string, message: string | null = null, n: number | null = nu
       models: Object.values(MODELS).map((m) => ({ id: m.id, name: m.name, price: m.priceNote })),
       // The "gemini" model runs on the user's own key: without it, the plain note and no Make pack.
       geminiMissing: v.model === "gemini" && !hasGeminiKey() ? GEMINI_KEY_MISSING : null,
+      // The Wardrobe: the main look (the pack above) and the further looks with their pictures, checks and cost.
+      wardrobe: listLooks(root, file).map((l) => {
+        const look = l.main ? null : getLook(file, l.id);
+        return {
+          ...l,
+          outfit_split: look?.outfit_split ?? null,
+          report: look ? readReport(lookDir(root, look.id)) : null,
+          estimate: look ? lookEstimate(look) : null,
+          problems: look ? lookProblems(root, look) : [],
+          geminiMissing: look?.model === "gemini" && !hasGeminiKey() ? GEMINI_KEY_MISSING : null,
+        };
+      }),
       songs: row.kind === "character" ? calibrationSongs(ws) : [],
     };
   });
@@ -97,7 +111,10 @@ function start(jobId: string, kind: CardJobKind) {
 export async function POST(request: Request, { params }: Params) {
   try {
     const { id } = await params;
-    const body = (await request.json()) as { action: string; cap?: number; only?: string[]; job?: string; songId?: string; her?: string[]; from?: string; to?: string };
+    const body = (await request.json()) as {
+      action: string; cap?: number; only?: string[]; job?: string; songId?: string; her?: string[]; from?: string; to?: string;
+      look?: string; name?: string; outfit?: string; outfit_split?: { closeups?: string; front?: string; back?: string }; model?: ModelId; closeup?: boolean;
+    };
     let message: string | null = null;
     switch (body.action) {
       case "check":
@@ -129,7 +146,24 @@ export async function POST(request: Request, { params }: Params) {
         withWorkspace((ws) => stopCardJob(ws, String(body.job)));
         break;
       case "own-move":
-        message = (await withWorkspaceAsync((ws) => moveOwnPicture(ws, id, cardFace(), String(body.from), String(body.to)))).summary;
+        message = (await withWorkspaceAsync((ws) => moveOwnPicture(ws, id, cardFace(), String(body.from), String(body.to), body.look ?? null))).summary;
+        break;
+      case "look-add":
+        message = `"${withWorkspace((ws) => addLook(ws, id, { name: String(body.name ?? ""), outfit: body.outfit, closeup: body.closeup })).name}" is in the wardrobe: make it, or add your own pictures.`;
+        break;
+      case "look-save":
+        withWorkspace((ws) => updateLook(ws, id, String(body.look ?? MAIN_LOOK), { name: body.name, outfit: body.outfit, outfit_split: body.outfit_split, model: body.model, closeup: body.closeup }));
+        break;
+      case "look-make":
+      case "look-remake": {
+        const kind = body.action === "look-make" ? "pack" : "view";
+        const job = withWorkspace((ws) => enqueueCardJob(ws, id, kind, { cap: body.cap, only: body.only, look: String(body.look) }));
+        start(job.id, kind);
+        break;
+      }
+      case "look-lock":
+      case "look-unlock":
+        withWorkspace((ws) => setLookLocked(ws, id, String(body.look), body.action === "look-lock"));
         break;
       case "describe": {
         const tools = cardTools();

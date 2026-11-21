@@ -3639,3 +3639,22 @@ D. ✅ (built 29 Oct, to verify) **Title opening** (items 1-8 below).
   - Tests: recast spike (29). The gate's Python side was not run in the cloud (no face models there).
 - Before the run (Paul, in the app): Bride No 2 v2 (New version → Remake front, then back → lock). The spike uses the
   latest locked version's close-up, 3/4 face and reference (v1 until v2 is locked).
+
+### G1 Prepare → Production: cast from the shared library, story bible, Song brief for Claude ✅ (to verify on the PC)
+- Paul's workflow (21 Nov 2026): build the song's assets in the app → generate the clips on WaveSpeed (or Higgsfield) →
+  assemble in the app. G1 is the first part; G2 shot scripts per slot and G3 sending + takes in slots follow.
+- **Prepare → Production** (a fifth Prepare tab after Storyboard), four sections; cast and bible are optional:
+  1. **Cast:** character and scene cards picked from the ONE shared library (Characters page) with a searchable picker;
+     linked by id (production\production.json), never copied: a newly locked version reaches every song.
+  2. **Story bible:** this song's own, or the EP's (shared by the EP's songs; workspace\eps\<EP>\bible.md). An earlier
+     text goes to Assets → Replaced files ("the story bible", Restore).
+  3. **Ask Claude:** **Copy Song brief** (one click) or Save as file: lyrics with times and instrumental parts, length,
+     tempo, picture sizes from the song's platforms, "no sound", the cast's locked descriptions and outfits, the bible,
+     and the exact shot list format. **Paste Claude's answer:** a shot list (also inside a ```json block) → the C2
+     check and import; other text → "Use as the story bible".
+  4. **Shot list:** how many slots are in the Storyboard; Import shot list file; Open Storyboard. The shot list's
+     characters missing from the cast: "Add to the cast".
+- The Storyboard's story idea and story notes stay the user's own and are never read. Nothing is spent (no AI calls).
+- Checked for G3 (21 Nov 2026): WaveSpeed and Higgsfield both offer Seedance 2.5 through their own API keys
+  (Higgsfield now has a self-serve API).
+- Tests: production (10). Browser: production (17 checks); shotlist and song-stages (now five Prepare tabs) pass.

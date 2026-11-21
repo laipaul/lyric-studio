@@ -4,6 +4,15 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Wardrobe: one face, many looks ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "other apps added the full wardrobe with different looks", "go". On a character card, the
+  pack is the main look; "Add look" (e.g. Travel coat) with its own outfit, full body front and back and an optional
+  close-up in it, made by the app (Seedream or Gemini, cost first) or from his own pictures (free), locked on its
+  own. Existing cards are "face + main look" with nothing moved. A song picks the look each cast character wears
+  (Production → Cast; used in the Song brief). Creation → "From a character" adds a look's picture to animate or
+  to sing with. Recast will use the chosen look when it is built.
+- Tests: vitest characters-looks (2), production (+1), browser characters (+5), production and pictures pass.
+
 ### Gemini (Nano Banana Pro) on your own key as a pack model ✅ (to verify on the PC, needs GEMINI_API_KEY in .env)
 - Paul (21 Nov 2026): yes to "Gemini in the app, on your own Gemini bill". Characters → Pack → model
   "Gemini · Nano Banana Pro (your key)": the 4 views come from Google on GEMINI_API_KEY (.env only), about $0.14 a
@@ -161,25 +170,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   .env.example; without a key Animate stays off. Tests: update-script (5).
 - Tests: animate (12, with stand-ins for both services). Browser: pictures (11 checks, LYRIC_GENERATE_STUB),
   production (story tools folded), song-stages, shotlist pass.
-
-### G1 Prepare → Production: cast from the shared library, story bible, Song brief for Claude ✅ (to verify on the PC)
-- Paul's workflow (21 Nov 2026): build the song's assets in the app → generate the clips on WaveSpeed (or Higgsfield) →
-  assemble in the app. G1 is the first part; G2 shot scripts per slot and G3 sending + takes in slots follow.
-- **Prepare → Production** (a fifth Prepare tab after Storyboard), four sections; cast and bible are optional:
-  1. **Cast:** character and scene cards picked from the ONE shared library (Characters page) with a searchable picker;
-     linked by id (production\production.json), never copied: a newly locked version reaches every song.
-  2. **Story bible:** this song's own, or the EP's (shared by the EP's songs; workspace\eps\<EP>\bible.md). An earlier
-     text goes to Assets → Replaced files ("the story bible", Restore).
-  3. **Ask Claude:** **Copy Song brief** (one click) or Save as file: lyrics with times and instrumental parts, length,
-     tempo, picture sizes from the song's platforms, "no sound", the cast's locked descriptions and outfits, the bible,
-     and the exact shot list format. **Paste Claude's answer:** a shot list (also inside a ```json block) → the C2
-     check and import; other text → "Use as the story bible".
-  4. **Shot list:** how many slots are in the Storyboard; Import shot list file; Open Storyboard. The shot list's
-     characters missing from the cast: "Add to the cast".
-- The Storyboard's story idea and story notes stay the user's own and are never read. Nothing is spent (no AI calls).
-- Checked for G3 (21 Nov 2026): WaveSpeed and Higgsfield both offer Seedance 2.5 through their own API keys
-  (Higgsfield now has a self-serve API).
-- Tests: production (10). Browser: production (17 checks); shotlist and song-stages (now five Prepare tabs) pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

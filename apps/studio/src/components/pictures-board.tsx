@@ -7,7 +7,7 @@
 // Paul may add a few words of mood. His own defaults (model, takes, cap) apply to every song; each picture can override
 // them. The cost shows before sending and a press above the cap is refused. Each item shows where it came from. Paul
 // sends his favourites with "Send to Storyboard" (the end of his story line, marked ✓).
-import { Check, Film, ImagePlus, Link2, Loader2, Play, RotateCw, Send, Sparkles } from "lucide-react";
+import { Check, Film, ImagePlus, Link2, Loader2, Play, RotateCw, Send, Sparkles, UserRound } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { CreationDefaults, PictureView, PicturesView, Quality, ServiceId, Take } from "@lyric/video/animate";
@@ -16,6 +16,7 @@ import { NameField } from "@/components/name-field";
 import { useGoToTab } from "@/components/song-stages";
 import { takeFacts } from "@lyric/video/take-facts";
 
+import { CharacterPicker } from "@/components/character-picker";
 import { FramePicker } from "@/components/frame-picker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -69,6 +70,7 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
     setNotice({ ok: !!d.added?.length, text: `${d.added?.length ?? 0} file${d.added?.length === 1 ? "" : "s"} added.${skipped}` });
   }
   const [frames, setFrames] = useState(false);
+  const [people, setPeople] = useState(false);
   async function add(files: FileList | File[] | null | undefined) {
     const list = Array.from(files ?? []);
     if (!list.length) return;
@@ -236,6 +238,10 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
             <Film /> Pick a frame from a video
           </Button>
           <FramePicker open={frames} onOpenChange={setFrames} onPick={(f) => add([f])} use="Add to Creation" />
+          <Button type="button" size="sm" variant="ghost" disabled={adding} onClick={() => setPeople(true)} data-pictures-character title="One of your characters, in one of their looks (the Wardrobe)">
+            <UserRound /> From a character
+          </Button>
+          <CharacterPicker open={people} onOpenChange={setPeople} onPick={(f) => add([f])} />
         </div>
       </div>
       <input ref={input} type="file" multiple accept=".jpg,.jpeg,.png,.webp,.mp4,.m4v,.mov,.webm,image/*,video/*" className="hidden" data-pictures-input onChange={(e) => void add(e.target.files)} />

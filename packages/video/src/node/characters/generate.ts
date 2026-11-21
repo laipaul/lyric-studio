@@ -10,10 +10,11 @@ import path from "node:path";
 
 import type { FalClient } from "@fal-ai/client";
 
-import { cardRoot, cardThresholds, currentVersion, getCard, readCardFile, referenceFiles, versionDir, writeCardFile, type CardFile } from "./cards";
+import { cardRoot, cardThresholds, currentVersion, getCard, readCardFile, referenceFiles, usableVersion, versionDir, writeCardFile, type CardFile } from "./cards";
 import type { FaceTool } from "./face";
 import { callModel, download, errorText, firstImageUrl, type Attempt } from "./fal";
 import { GEMINI_KEY_MISSING } from "./gemini";
+import { getLook, lookDir, lookViews } from "./looks";
 import { makeSplit, splitNeeded } from "./split";
 import {
   angleNote, anglePrompt, ANGLES, Budget, classify, DESCRIPTION_PROMPT, imageSize, MODELS, money, SCENE_DESCRIPTION_PROMPT, TEXT_MODEL, VIEWS, viewPrompt, VISION,
@@ -126,18 +127,23 @@ export async function judge(face: FaceTool, refFile: string, item: Item, t: Try,
 export type MakeResult = { spentUsd: number; made: number; notDownloaded: number; skippedForCap: number; summary: string };
 
 // Makes the pack (all views or angles) or only some of them (`only`: remake those), within `cap` dollars.
-export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps, o: { cap: number; only?: string[] }): Promise<MakeResult> {
+// `look`: a Wardrobe look instead (its own outfit and model; its full body views and, if asked, a close-up in it),
+// in looks\<id>\; the face pack and the version are not touched.
+export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps, o: { cap: number; only?: string[]; look?: string }): Promise<MakeResult> {
   const row = getCard(ws, cardId);
   const root = cardRoot(ws, row);
   let file = readCardFile(root);
   let v = currentVersion(file);
-  if (v.status === "locked") throw new Error(`Version ${v.n} is locked: start a new version to change it.`);
-  const dir = versionDir(root, v.n);
+  let look = o.look ? getLook(file, o.look) : null;
+  if (look?.status === "locked") throw new Error(`"${look.name}" is locked: press "Change this look" first.`);
+  if (!look && v.status === "locked") throw new Error(`Version ${v.n} is locked: start a new version to change it.`);
+  const dir = look ? lookDir(root, look.id) : versionDir(root, v.n);
   mkdirSync(dir, { recursive: true });
-  const m = MODELS[v.model];
+  const modelId = look ? look.model : v.model;
+  const m = MODELS[modelId];
   const th = cardThresholds(root);
-  const report: VersionReport = readReport(dir) ?? { updated_at: "", model: v.model, endpoint: m.endpoint, thresholds: th, items: [], request_ids: [], spent_usd: 0 };
-  report.model = v.model;
+  const report: VersionReport = readReport(dir) ?? { updated_at: "", model: modelId, endpoint: m.endpoint, thresholds: th, items: [], request_ids: [], spent_usd: 0 };
+  report.model = modelId;
   report.endpoint = m.endpoint;
   report.thresholds = th;
   const log = deps.log ?? (() => {});
@@ -145,18 +151,21 @@ export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps,
   const callOpts = { timeoutMs: deps.timeoutMs ?? 10 * 60_000, pollMs: deps.pollMs ?? 3000, log, sleep: deps.sleep };
 
   // The outfit in three parts (close-ups / front / back): made first when missing or made from another outfit text.
-  if (file.kind === "character" && splitNeeded(v.outfit, v.outfit_split)) {
+  const wear = () => (look ? { outfit: look.outfit, split: look.outfit_split } : { outfit: v.outfit, split: v.outfit_split });
+  if (file.kind === "character" && splitNeeded(wear().outfit, wear().split)) {
     if (budget.canSpend(TEXT_MODEL.perCallUsd)) {
       budget.spend(TEXT_MODEL.perCallUsd);
       try {
         log("Splitting the outfit per view…");
-        const { split, requestId } = await makeSplit(deps.fal, v.outfit!, callOpts);
+        const { split, requestId } = await makeSplit(deps.fal, wear().outfit!, callOpts);
         report.request_ids.push(requestId);
         const f = readCardFile(root);
-        currentVersion(f).outfit_split = split;
+        if (look) getLook(f, look.id).outfit_split = split;
+        else currentVersion(f).outfit_split = split;
         writeCardFile(root, f);
         file = f;
         v = currentVersion(f);
+        if (look) look = getLook(f, look.id);
       } catch (error) {
         log(`outfit split not made (${errorText(error)}): the outfit text is used as it is for every view`);
       }
@@ -176,14 +185,14 @@ export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps,
   type Job = { id: string; label: string; kind: "view" | "angle"; prompt: string; aspect: "3:4" | "2:3" };
   const all: Job[] =
     file.kind === "character"
-      ? VIEWS.map((x) => ({ id: x.id, label: x.label, kind: "view" as const, prompt: viewPrompt(x, v.outfit, v.outfit_split), aspect: x.aspect }))
+      ? VIEWS.filter((x) => !look || lookViews(look).includes(x.id)).map((x) => ({ id: x.id, label: x.label, kind: "view" as const, prompt: viewPrompt(x, wear().outfit, wear().split), aspect: x.aspect }))
       : ANGLES.map((a) => ({ id: a.id, label: a.label, kind: "angle" as const, prompt: anglePrompt(a, v.props), aspect: "3:4" as const }));
   const jobs = o.only?.length ? all.filter((j) => o.only!.includes(j.id)) : all;
   if (!jobs.length) throw new Error("Nothing to make.");
 
   // The description draft (once, on a full pack, unless one is already written).
   let descriptionP: Promise<void> = Promise.resolve();
-  if (!o.only?.length && !v.description && budget.canSpend(VISION.perCallUsd)) {
+  if (!look && !o.only?.length && !v.description && budget.canSpend(VISION.perCallUsd)) {
     budget.spend(VISION.perCallUsd);
     const describe = async () => {
       const url = img === deps.fal ? refUrls[0] : await deps.fal.storage.upload(new File([readFileSync(refFile)], path.basename(refFile), { type: mime(refFile) }));
@@ -227,7 +236,9 @@ export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps,
     // The front view also gets the chosen close-up of the same version (neckline, shoulders, veil), after the card references.
     let closeupUrl: string | null = null;
     if (job.id === "body_front" && file.kind === "character") {
-      const cu = path.join(dir, "closeup.png");
+      // A look without its own close-up: the face pack's close-up (the version in use).
+      const own = path.join(dir, "closeup.png");
+      const cu = existsSync(own) || !look ? own : path.join(versionDir(root, (usableVersion(file) ?? v).n), "closeup.png");
       if (existsSync(cu)) closeupUrl = await img.storage.upload(new File([readFileSync(cu)], "closeup.png", { type: "image/png" }));
     }
     let item = report.items.find((i) => i.id === job.id);
@@ -285,7 +296,7 @@ export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps,
   await descriptionP;
   report.spent_usd = Math.round((report.spent_usd + budget.spent) * 100) / 100;
   writeReport(dir, report);
-  await buildSheet(deps.face, root, readCardFile(root), report);
+  if (!look) await buildSheet(deps.face, root, readCardFile(root), report);
   deps.progress?.(jobs.length, jobs.length, "done");
   const summary = summarize(file, report, { made, notDownloaded, skippedForCap, spent: budget.spent });
   return { spentUsd: budget.spent, made, notDownloaded, skippedForCap, summary };

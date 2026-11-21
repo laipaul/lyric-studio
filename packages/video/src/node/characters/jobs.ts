@@ -2,6 +2,7 @@
 // the studio's own process: it mostly waits on fal.ai, so it does not need the render worker. The Tasks menu lists
 // these jobs next to the Make runs. A job whose process is gone (the studio was stopped) shows as interrupted.
 import { geminiClient } from "./gemini";
+import { getLook, lookEstimate } from "./looks";
 import { writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 
@@ -19,7 +20,7 @@ import { stubFace, stubFal } from "./stub";
 import { createFalClient, type FalClient } from "@fal-ai/client";
 
 export type CardJobKind = CardJob["kind"];
-export type CardJobOptions = { cap?: number; only?: string[]; songId?: string; her?: string[] };
+export type CardJobOptions = { cap?: number; only?: string[]; songId?: string; her?: string[]; look?: string };
 
 // The songs whose clips can calibrate a character's face check (their own clips folder).
 export function calibrationSongs(ws: Workspace): { id: string; title: string }[] {
@@ -58,7 +59,8 @@ const stops = new Set<string>(); // jobs asked to stop (checked between pictures
 
 export const DEFAULT_CAP = 3;
 
-export function jobLabel(name: string, kind: CardJobKind, o: CardJobOptions): string {
+export function jobLabel(name: string, kind: CardJobKind, o: CardJobOptions, lookName?: string): string {
+  if (lookName) return `${name} · ${kind === "pack" ? `Make look "${lookName}"` : `Remake ${lookName}: ${o.only?.map((id) => VIEWS.find((x) => x.id === id)?.label ?? id).join(", ")}`}`;
   const what = kind === "pack" ? "Make pack" : kind === "view" ? `Remake ${o.only?.map((id) => [...VIEWS, ...ANGLES].find((x) => x.id === id)?.label ?? id).join(", ")}` : kind === "fetch" ? "Get missing pictures" : "Calibrate";
   return `${name} · ${what}`;
 }
@@ -68,15 +70,20 @@ export function enqueueCardJob(ws: Workspace, cardId: string, kind: CardJobKind,
   const busy = ws.db.select().from(cardJob).where(and(eq(cardJob.card_id, cardId), inArray(cardJob.status, [...ACTIVE]))).get();
   if (busy) throw new Error(`"${busy.label}" is still running for this card: wait for it to finish.`);
   const file = readCardFile(cardRoot(ws, row));
-  if (kind !== "fetch" && kind !== "calibrate" && currentVersion(file).status === "locked") throw new Error("This version is locked: start a new version to change it.");
+  const look = o.look ? getLook(file, o.look) : null;
+  if (look && look.status === "locked") throw new Error(`"${look.name}" is locked: press "Change this look" first.`);
+  if (!look && kind !== "fetch" && kind !== "calibrate" && currentVersion(file).status === "locked") throw new Error("This version is locked: start a new version to change it.");
   const cap = o.cap ?? DEFAULT_CAP;
-  if (kind === "pack") {
+  if (kind === "pack" && look) {
+    const e = lookEstimate(look);
+    if (e.usd > cap) throw new Error(`The estimate (${money(e.usd)}) is above the cap of ${money(cap)}: raise the cap to make the look.`);
+  } else if (kind === "pack") {
     const e = packEstimate(file);
     if (e.usd > cap) throw new Error(`The estimate (${money(e.usd)}) is above the cap of ${money(cap)}: raise the cap to make the pack.`);
   }
   return ws.db
     .insert(cardJob)
-    .values({ card_id: cardId, kind, label: jobLabel(row.name, kind, o), options_json: { ...o, cap } as Record<string, unknown> })
+    .values({ card_id: cardId, kind, label: jobLabel(row.name, kind, o, look?.name), options_json: { ...o, cap } as Record<string, unknown> })
     .returning()
     .get();
 }
@@ -125,7 +132,7 @@ export async function runCardJob(openWs: () => Workspace, jobId: string, tools: 
       set({ status: "done", progress: 1, current: null, message, cost_usd: 0, finished_at: new Date() });
       return;
     }
-    const result = job.kind === "fetch" ? await fetchMissing(ws, job.card_id, deps) : await makePictures(ws, job.card_id, deps, { cap: o.cap ?? DEFAULT_CAP, only: job.kind === "view" ? o.only : undefined });
+    const result = job.kind === "fetch" ? await fetchMissing(ws, job.card_id, deps) : await makePictures(ws, job.card_id, deps, { cap: o.cap ?? DEFAULT_CAP, only: job.kind === "view" ? o.only : undefined, look: o.look });
     const stopped = stops.has(jobId);
     set({ status: stopped ? "stopped" : "done", progress: 1, current: null, message: result.summary, cost_usd: Math.round(result.spentUsd * 100) / 100, finished_at: new Date() });
     ws.db.update(cardTable).set({ updated_at: new Date() }).where(eq(cardTable.id, job.card_id)).run();

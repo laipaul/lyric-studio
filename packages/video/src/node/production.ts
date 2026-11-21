@@ -19,7 +19,8 @@ import path from "node:path";
 import { project as projectTable, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
-import { listCards, type CardSummary } from "./characters/cards";
+import { listCards, readCardFile, type CardSummary } from "./characters/cards";
+import { lookOutfit, MAIN_LOOK, mainLookName } from "./characters/looks";
 import { lyricsView } from "./lyrics-view";
 import { keepReplaced } from "./project-settings";
 import { readRecipe, studioCounts } from "./recipe";
@@ -33,8 +34,8 @@ export const BIBLE_FILE = "bible.md";
 export const EPS_DIR = "eps";
 
 export type BibleSource = "song" | "ep";
-export type ProductionFile = { _help?: string; cast: string[]; bible: BibleSource };
-export type CastCard = { id: string; name: string; kind: "character" | "scene"; status: string; locked: boolean; thumbnail: string; updated_at: string; description: string | null; outfit: string | null; props: string | null; missing?: false };
+export type ProductionFile = { _help?: string; cast: string[]; bible: BibleSource; looks?: Record<string, string> }; // looks: card id → the look it wears in this song (the Wardrobe)
+export type CastCard = { id: string; name: string; kind: "character" | "scene"; status: string; locked: boolean; thumbnail: string; updated_at: string; description: string | null; outfit: string | null; props: string | null; looks: { id: string; name: string; locked: boolean }[]; look: string; lookName: string | null; missing?: false };
 export type MissingCard = { id: string; name: string; missing: true };
 export type TimedLine = { number: number; text: string; isHook: boolean; startMs: number | null; endMs: number | null };
 export type ProductionData = {
@@ -51,7 +52,8 @@ export type ProductionData = {
 
 const HELP =
   "This song's production (Prepare → Production): \"cast\" = the character and scene cards it uses, linked by id from the shared " +
-  'library on the Characters page (never copied); "bible" = "song" (production\\bible.md) or "ep" (the EP\'s bible in workspace\\eps\\<EP>\\bible.md).';
+  'library on the Characters page (never copied); "bible" = "song" (production\\bible.md) or "ep" (the EP\'s bible in workspace\\eps\\<EP>\\bible.md); ' +
+  '"looks" = which look of its wardrobe each character wears in this song (card id → look id; "main" or missing = the main look).';
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 const safeFolder = (name: string) => name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").replace(/[. ]+$/g, "").trim() || "EP";
@@ -67,9 +69,11 @@ export function readProduction(root: string): ProductionFile {
   if (!existsSync(file)) return { cast: [], bible: "song" };
   try {
     const raw = JSON.parse(readFileSync(file, "utf8").replace(/^﻿/, "")) as Partial<ProductionFile>;
+    const looks = raw.looks && typeof raw.looks === "object" ? Object.fromEntries(Object.entries(raw.looks).filter(([k, v]) => typeof v === "string" && !!k)) : {};
     return {
       cast: Array.isArray(raw.cast) ? [...new Set(raw.cast.filter((x): x is string => typeof x === "string" && !!x))] : [],
       bible: raw.bible === "ep" ? "ep" : "song",
+      looks,
     };
   } catch {
     return { cast: [], bible: "song" };
@@ -78,7 +82,7 @@ export function readProduction(root: string): ProductionFile {
 
 function writeProduction(root: string, p: ProductionFile): void {
   mkdirSync(path.join(root, PRODUCTION_DIR), { recursive: true });
-  writeFileSync(path.join(root, PRODUCTION_DIR, PRODUCTION_FILE), `${JSON.stringify({ _help: HELP, cast: p.cast, bible: p.bible }, null, 2)}\n`);
+  writeFileSync(path.join(root, PRODUCTION_DIR, PRODUCTION_FILE), `${JSON.stringify({ _help: HELP, cast: p.cast, bible: p.bible, ...(p.looks && Object.keys(p.looks).length ? { looks: p.looks } : {}) }, null, 2)}\n`);
 }
 
 function songEp(ws: Workspace, projectId: string): string | null {
@@ -100,19 +104,29 @@ function bibleOf(ws: Workspace, projectId: string): { source: BibleSource; file:
   return { source: "song", file: songBibleFile(root), ep };
 }
 
-function castCard(c: CardSummary, ws: Workspace): CastCard {
-  // The outfit / props of the version in use (the latest locked, else the current draft), read from card.json.
+function castCard(c: CardSummary, ws: Workspace, lookId: string | null = null): CastCard {
+  // The outfit / props of the version in use (the latest locked, else the current draft), read from card.json; for a
+  // character, the outfit of the look it wears in this song (the Wardrobe; the main look by default).
   let outfit: string | null = null;
   let props: string | null = null;
+  let looks: CastCard["looks"] = [];
+  let look = MAIN_LOOK;
+  let lookName: string | null = null;
   try {
-    const file = JSON.parse(readFileSync(path.join(ws.dir, c.folder, "card.json"), "utf8")) as { versions: { status: string; outfit?: string; props?: string }[] };
+    const file = readCardFile(path.join(ws.dir, c.folder));
     const used = [...file.versions].reverse().find((v) => v.status === "locked") ?? file.versions[file.versions.length - 1];
-    outfit = used?.outfit?.trim() || null;
     props = used?.props?.trim() || null;
+    if (c.kind === "character") {
+      const worn = lookOutfit(file, lookId);
+      outfit = worn.outfit?.trim() || null;
+      look = worn.id;
+      looks = [{ id: MAIN_LOOK, name: mainLookName(file), locked: used?.status === "locked" }, ...(file.looks ?? []).map((l) => ({ id: l.id, name: l.name, locked: l.status === "locked" }))];
+      lookName = looks.length > 1 ? worn.name : null;
+    } else outfit = used?.outfit?.trim() || null;
   } catch {
     // a card folder that cannot be read: shown without outfit
   }
-  return { id: c.id, name: c.name, kind: c.kind, status: c.status, locked: c.status === "locked", thumbnail: c.thumbnail, updated_at: new Date(c.updated_at).toISOString(), description: c.description, outfit, props };
+  return { id: c.id, name: c.name, kind: c.kind, status: c.status, locked: c.status === "locked", thumbnail: c.thumbnail, updated_at: new Date(c.updated_at).toISOString(), description: c.description, outfit, props, looks, look, lookName };
 }
 
 // The platforms the song makes, grouped by picture shape (what a generated clip should be).
@@ -134,8 +148,12 @@ export function productionData(ws: Workspace, projectId: string, timed: TimedLin
   if (!p) throw new Error("Song not found.");
   const root = songRoot(ws, projectId);
   const prod = readProduction(root);
-  const library = listCards(ws).map((c) => castCard(c, ws));
-  const cast = prod.cast.map((id): CastCard | MissingCard => library.find((c) => c.id === id) ?? { id, name: "A card that is no longer in the library", missing: true });
+  const cards = listCards(ws);
+  const library = cards.map((c) => castCard(c, ws));
+  const cast = prod.cast.map((id): CastCard | MissingCard => {
+    const c = cards.find((x) => x.id === id);
+    return c ? castCard(c, ws, prod.looks?.[id] ?? null) : { id, name: "A card that is no longer in the library", missing: true };
+  });
   const bible = bibleOf(ws, projectId);
   const ep = bible.ep;
   const epSongs = ep
@@ -171,6 +189,23 @@ export function setCast(ws: Workspace, projectId: string, ids: unknown): string[
   const cast = [...new Set(ids as string[])];
   writeProduction(root, { ...readProduction(root), cast });
   return cast;
+}
+
+// The look a cast character wears in this song (the Wardrobe): "main" = the pack's own outfit.
+export function setCastLook(ws: Workspace, projectId: string, cardId: unknown, lookId: unknown): string {
+  if (typeof cardId !== "string" || typeof lookId !== "string") throw new Error("Choose a character and a look.");
+  const root = songRoot(ws, projectId);
+  const prod = readProduction(root);
+  if (!prod.cast.includes(cardId)) throw new Error("This character is not in the song's cast.");
+  const card = listCards(ws).find((c) => c.id === cardId);
+  if (!card) throw new Error("This card is no longer in the library.");
+  const file = readCardFile(path.join(ws.dir, card.folder));
+  if (lookId !== MAIN_LOOK && !(file.looks ?? []).some((l) => l.id === lookId)) throw new Error("This look is no longer in the wardrobe: reload the page.");
+  const looks = { ...(prod.looks ?? {}) };
+  if (lookId === MAIN_LOOK) delete looks[cardId];
+  else looks[cardId] = lookId;
+  writeProduction(root, { ...prod, looks });
+  return lookId;
 }
 
 // Which bible the song uses: its own, or its EP's (shared with every song of the EP that chooses it).
@@ -214,7 +249,7 @@ const clock = (ms: number | null) => {
 function cardBlock(c: CastCard): string {
   const parts = [`- **${c.name}** (${c.kind === "character" ? "character" : "scene"}${c.locked ? "" : ", not locked yet"})`];
   if (c.description) parts.push(`  - Looks: ${c.description.replace(/\s+/g, " ").trim()}`);
-  if (c.outfit) parts.push(`  - Outfit: ${c.outfit.replace(/\s+/g, " ").trim()}`);
+  if (c.outfit) parts.push(`  - Outfit${c.lookName ? ` (look: ${c.lookName})` : ""}: ${c.outfit.replace(/\s+/g, " ").trim()}`);
   if (c.props) parts.push(`  - Props that must not change: ${c.props.replace(/\s+/g, " ").trim()}`);
   return parts.join("\n");
 }

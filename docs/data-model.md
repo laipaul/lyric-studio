@@ -23,7 +23,9 @@ Characters and scene cards (C1, 18 Nov 2026; packages/video src/node/characters/
 - **Folders:** `workspace/characters/<name>/` and `workspace/scenes/<name>/` (Windows-safe names). Each holds:
   - `card.json`: version 1, kind, name, created_at, reference (the picture sent to the models: the upload, or
     `reference_cropped.jpg` after Crop to face), original, reference2?, check? / check2? (the reference or location
-    check), and versions [{n, status draft | locked, created_at, locked_at?, model, outfit?, props?, description?}].
+    check), and versions [{n, status draft | locked, created_at, locked_at?, model, outfit?, props?, description?}];
+    the Wardrobe (21 Nov 2026): main_look? (the pack's own outfit's name, default "Main look") and looks? [{id, name,
+    outfit?, outfit_split?, model, closeup (also a close-up in the look), status draft | locked, created_at, locked_at?}].
   - the picture(s);
   - `calibration.json` (characters: the face-check lines on a song's clips);
   - one folder per version, `v1/`, `v2/` …, holding:
@@ -33,7 +35,13 @@ Characters and scene cards (C1, 18 Nov 2026; packages/video src/node/characters/
       wide_right, detail);
     - `report.json` (model, endpoint, thresholds, items with every try's request ID, URL, score, light and text,
       request_ids, spent_usd);
-    - `sheet.jpg`.
+    - `sheet.jpg`;
+    - your own pictures (Add my pack / Use my own picture): tries with `own` (the file name), also kept as given in
+      `<id>_t<k>_own.png` (for Move to);
+  - `looks/<look id>/` (characters, the Wardrobe): the look's tries and chosen `body_front.png`, `body_back.png`
+    (+ `closeup.png` when asked) and its `report.json` (no contact sheet). The main look is the version's own views.
+- **A song's looks:** `production/production.json` `looks` {card id: look id} = which look each cast character wears
+  (missing or "main" = the main look); the Song brief uses that look's outfit.
 - **Versions:** a locked version is read-only. New version copies the latest folder into the next one as a draft.
   Nothing is deleted. The version in use is the latest locked one (`usableVersion`): while a newer draft exists the
   card row keeps status locked and the locked version's number.

@@ -173,6 +173,32 @@ async function main() {
     await page.waitForSelector("[data-describe-note]");
     check(((await page.inputValue("[data-card-description]")) ?? "").includes("A woman") && (await page.isEnabled("[data-lock]")), "the description is drafted (about $0.01) and Lock is possible");
 
+    // The Wardrobe: a second look from your own pictures, locked on its own; the list shows the looks.
+    await page.waitForSelector("[data-wardrobe] [data-look-tab=main]");
+    await page.fill("[data-look-new-name]", "Travel coat");
+    await page.click("[data-look-add]");
+    await page.waitForSelector("[data-look-tab=travel-coat][data-active]");
+    check(((await page.textContent("[data-look-note]")) ?? "").includes('"Travel coat" is in the wardrobe'), "Add look: a new look in the wardrobe, opened");
+    await page.fill("[data-look-outfit]", "camel wool travel coat, ankle boots");
+    await page.click("[data-wardrobe] h2");
+    await page.waitForFunction(() => document.querySelector("[data-look-estimate]")?.textContent?.startsWith("$"));
+    for (const [n, from] of [["coat front.png", "body_front"], ["coat back.png", "body_back"]] as const) copyFileSync(path.join(pics, `${from}.png`), path.join(pics, n));
+    const lookChooser = page.waitForEvent("filechooser");
+    await page.click("[data-look-own]");
+    await (await lookChooser).setFiles([path.join(pics, "coat front.png"), path.join(pics, "coat back.png")]);
+    await page.waitForFunction(() => document.querySelector("[data-look-note]")?.textContent?.includes("coat back.png → Full body, back"));
+    check(existsSync(path.join(wsDir, "characters", "gemini bride", "looks", "travel-coat", "body_front.png")), "your own pictures go into the look's places (workspace\\characters\\gemini bride\\looks\\travel-coat\\)");
+    await page.click("[data-look-lock]");
+    await page.waitForSelector("[data-look-locked]");
+    check(!!(await page.$("[data-look-tab=travel-coat] svg")) && (await page.isDisabled("[data-look-outfit]")), "Lock this look: read-only, shown with a lock");
+    const looksApi = (await (await fetch(`${base}/api/cards/looks`)).json()) as { characters: { name: string; looks: { name: string }[] }[] };
+    check(looksApi.characters.find((c) => c.name === "gemini bride")?.looks.map((l) => l.name).join(",") === "Main look,Travel coat", "Creation's \"From a character\" lists the character's looks with pictures");
+    await page.goto(`${base}/characters`);
+    await page.waitForSelector("[data-card='gemini bride'] [data-card-looks]");
+    check(((await page.textContent("[data-card='gemini bride'] [data-card-looks]")) ?? "") === "Main lookTravel coat", "the list shows the character's looks");
+    await page.click("[data-card='gemini bride']");
+    await page.waitForSelector("[data-card-page='gemini bride']");
+
     // Gemini on your own key as the pack's model: the estimate says it is billed by Google (the stand-in has a key).
     await page.selectOption("[data-card-model]", "gemini");
     await page.waitForFunction(() => document.querySelector("[data-card-pack]")?.textContent?.includes("your own Google bill"));

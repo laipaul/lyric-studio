@@ -39,7 +39,7 @@ test("the request: the key in a header (never the URL), the pictures inline, the
     seen.push({ url, init });
     return new Response(JSON.stringify(answer(png)), { status: 200 });
   }) as unknown as typeof fetch);
-  const ref = await g.storage.upload(new File([png], "ref.png", { type: "image/png" }));
+  const ref = await g.storage.upload(new File([new Uint8Array(png)], "ref.png", { type: "image/png" }));
   const r = await callModel(g, MODELS.gemini.endpoint, MODELS.gemini.input("A close-up portrait", [ref], "3:4", 7), opts);
   expect(seen[0].url).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image:generateContent");
   expect(seen[0].url).not.toContain("secret-key");

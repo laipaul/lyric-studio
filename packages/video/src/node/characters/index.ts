@@ -10,3 +10,4 @@ export { splitIsCurrent, type OutfitSplit } from "./plan";
 export * from "./frames";
 export * from "./own";
 export * from "./gemini";
+export * from "./looks";

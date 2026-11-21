@@ -174,6 +174,23 @@ export function ProductionTab({ projectId }: { projectId: string }) {
                 <span className="font-medium">{c.name}</span>
                 <span className="text-muted-foreground">{c.kind === "character" ? "character" : "scene"}</span>
                 {!c.locked ? <span className="text-amber-300" title="Lock it on the Characters page before its clips are made">not locked</span> : null}
+                {c.looks.length > 1 ? (
+                  <select
+                    data-cast-look={c.id}
+                    value={c.look}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => void run(async () => (await post({ action: "look", card: c.id, look: e.target.value }), `${c.name} wears "${c.looks.find((l) => l.id === e.target.value)?.name}" in this song.`))}
+                    className="bg-background rounded border px-1 py-0.5 text-xs"
+                    title="Which look of the wardrobe this character wears in this song"
+                  >
+                    {c.looks.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name}
+                        {l.locked ? "" : " (not locked)"}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
               </PickedChip>
             ),
           )}

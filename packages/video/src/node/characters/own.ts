@@ -16,6 +16,7 @@ import { cardRoot, cardThresholds, currentVersion, getCard, readCardFile, refere
 import type { FaceTool } from "./face";
 import { callModel, errorText } from "./fal";
 import { buildSheet, finishPicture, judge, readReport, writeReport, type Item, type Try, type VersionReport } from "./generate";
+import { getLook, lookDir, lookViews, MAIN_LOOK } from "./looks";
 import { ANGLES, DESCRIPTION_PROMPT, imageSize, SCENE_DESCRIPTION_PROMPT, VIEWS, VISION } from "./plan";
 
 export type OwnPicture = { name: string; bytes: Buffer; slot?: string | null };
@@ -60,22 +61,25 @@ function toPng(from: string, to: string): void {
 }
 
 // The user's pictures into the draft's slots. `slot` on a picture: that slot (Use my own picture); otherwise sorted.
-export async function useOwnPictures(ws: Workspace, cardId: string, face: FaceTool, pictures: OwnPicture[]): Promise<{ placed: Placed[]; summary: string }> {
+// `look`: a Wardrobe look's places instead (its full body views and, if it has one, its close-up).
+export async function useOwnPictures(ws: Workspace, cardId: string, face: FaceTool, pictures: OwnPicture[], lookId?: string | null): Promise<{ placed: Placed[]; summary: string }> {
   const row = getCard(ws, cardId);
   const root = cardRoot(ws, row);
   const file = readCardFile(root);
   const v = currentVersion(file);
-  if (v.status === "locked") throw new Error(`Version ${v.n} is locked: start a new version to change it.`);
-  const slots = slotsFor(row.kind);
+  const look = lookId && lookId !== MAIN_LOOK ? getLook(file, lookId) : null;
+  if (look?.status === "locked") throw new Error(`"${look.name}" is locked: press "Change this look" first.`);
+  if (!look && v.status === "locked") throw new Error(`Version ${v.n} is locked: start a new version to change it.`);
+  const slots = look ? lookViews(look) : slotsFor(row.kind);
   const pics = pictures.filter((p) => p.bytes.length);
   if (!pics.length) throw new Error("Choose a picture.");
   for (const p of pics) if (!IMAGE.test(p.name)) throw new Error(`${p.name} is not a picture (.png, .jpg, .webp).`);
-  if (pics.length > slots.length) throw new Error(`A ${row.kind === "character" ? "pack has 4" : "scene has 3"} pictures: you chose ${pics.length}.`);
+  if (pics.length > slots.length) throw new Error(`${look ? `"${look.name}" has ${slots.length}` : row.kind === "character" ? "A pack has 4" : "A scene has 3"} pictures: you chose ${pics.length}.`);
   for (const p of pics) if (p.slot && !slots.includes(p.slot)) throw new Error(`Unknown place "${p.slot}".`);
-  const dir = versionDir(root, v.n);
+  const dir = look ? lookDir(root, look.id) : versionDir(root, v.n);
   mkdirSync(dir, { recursive: true });
   const th = cardThresholds(root);
-  const report: VersionReport = readReport(dir) ?? { updated_at: "", model: v.model, endpoint: "", thresholds: th, items: [], request_ids: [], spent_usd: 0 };
+  const report: VersionReport = readReport(dir) ?? { updated_at: "", model: look?.model ?? v.model, endpoint: "", thresholds: th, items: [], request_ids: [], spent_usd: 0 };
   const refFile = referenceFiles(root, file)[0];
 
   // The app's own PNG copies first (the user's files are only read).
@@ -137,7 +141,7 @@ export async function useOwnPictures(ws: Workspace, cardId: string, face: FaceTo
     }
     report.items.sort((a, b) => slots.indexOf(a.id) - slots.indexOf(b.id));
     writeReport(dir, report);
-    await buildSheet(face, root, readCardFile(root), report);
+    if (!look) await buildSheet(face, root, readCardFile(root), report);
     const how = (b: Placed["by"]) => (b === "name" ? " (by its name)" : b === "face" ? " (by the face check)" : b === "order" ? " (first free place)" : "");
     const summary = `${placed.map((x) => `${x.name} → ${x.label}${how(x.by)}`).join(" · ")}. Free, nothing sent online. Wrong place? Use "Move to" under the picture.`;
     return { placed, summary };
@@ -156,11 +160,12 @@ function pickOwn(item: Item, k: number, dir: string): void {
 }
 
 // "Move to": the user's picture in one slot goes to another; a picture of theirs already there takes its place.
-export async function moveOwnPicture(ws: Workspace, cardId: string, face: FaceTool, from: string, to: string): Promise<{ placed: Placed[]; summary: string }> {
+export async function moveOwnPicture(ws: Workspace, cardId: string, face: FaceTool, from: string, to: string, lookId?: string | null): Promise<{ placed: Placed[]; summary: string }> {
   const row = getCard(ws, cardId);
   const root = cardRoot(ws, row);
   const file = readCardFile(root);
-  const dir = versionDir(root, currentVersion(file).n);
+  const look = lookId && lookId !== MAIN_LOOK ? getLook(file, lookId) : null;
+  const dir = look ? lookDir(root, look.id) : versionDir(root, currentVersion(file).n);
   const report = readReport(dir);
   const given = (id: string) => {
     const it = report?.items.find((i) => i.id === id);
@@ -173,7 +178,7 @@ export async function moveOwnPicture(ws: Workspace, cardId: string, face: FaceTo
   if (!a) throw new Error("Only your own pictures can be moved.");
   if (from === to) throw new Error("It is already there.");
   const b = given(to);
-  return useOwnPictures(ws, cardId, face, [{ ...a, slot: to }, ...(b ? [{ ...b, slot: from }] : [])]);
+  return useOwnPictures(ws, cardId, face, [{ ...a, slot: to }, ...(b ? [{ ...b, slot: from }] : [])], lookId);
 }
 
 // The description drafted from the card's picture by the cheap vision model (about $0.01): for a pack of the user's
