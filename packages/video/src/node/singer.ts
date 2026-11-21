@@ -7,6 +7,10 @@
 //   - into the Storyboard (the end of his story line; he may move it) and onto its line as a story anchor with "sync":
 //     the song second its first frame belongs to. Make cuts it in on the beat and plays it in time with the song
 //     (anchors.ts), never slowed, never used for other shots.
+// Lines in a row sung from the same picture or video are one RUN: one continuous take from just before the first line
+// to two bars after the last (one request, one cost), placed on the first line with "through" = the last line, so the
+// singer stays on screen, lips in time, until the last line is sung (Paul, 21 Nov 2026: "the missing part"). A pause
+// between two lines longer than RUN_GAP_MS (an instrumental break) starts a new run.
 // The vocal piece runs from just before the downbeat before the line to two bars after it is sung, so the cut and the
 // hold that follow always have footage, and the lips sing what the song sings there.
 // The song and the stem are only read (FFmpeg decodes a piece into a temporary file). Requests are never retried.
@@ -36,6 +40,7 @@ export const LIPSYNC_MIN_SECONDS = 3; // billed at least 3 s, rounded up to whol
 export const LIPSYNC_MODEL = "InfiniteTalk";
 const LEAD_MS = 500; // the piece starts this long before the downbeat the shot cuts in on
 const TAIL_BARS = 2; // and runs two bars past the line's sung end (the shot holds until the next regular cut)
+export const RUN_GAP_MS = 8000; // lines in a row with the same picture and at most this pause between them: one take
 
 export type SingerSettings = { lines: Record<string, string> };
 export type Piece = { fromMs: number; toMs: number; seconds: number; usd: number };
@@ -43,9 +48,10 @@ export type SingerLine = {
   number: number;
   text: string;
   source: string | null; // the Creation file sung from (null: not ticked)
-  piece: Piece; // what would be sent for this line
-  take: (Take & { file?: string }) | null; // the newest singing take of this line from its source
-  needed: boolean; // ticked and without a finished or running take of this source and piece
+  piece: Piece; // what would be sent for this line's run (the same on every line of a run)
+  run: { first: number; last: number } | null; // the run of lines in a row sung from the same source, in one take
+  take: (Take & { file?: string }) | null; // the newest singing take of this line's run from its source
+  needed: boolean; // ticked and without a finished or running take of this source and piece (only on a run's first line)
 };
 export type SingerView = {
   lines: SingerLine[] | null; // null: no timed lines yet
@@ -107,9 +113,24 @@ async function context(ws: Workspace, projectId: string): Promise<Ctx> {
   };
 }
 
-function newestTake(dir: string, source: string, line: number): Take | null {
+function newestTake(dir: string, source: string, first: number, last: number): Take | null {
   const rec = readPictures(dir).pictures[source];
-  return [...(rec?.takes ?? [])].reverse().find((t) => t.kind === "lipsync" && t.line === line) ?? null;
+  return [...(rec?.takes ?? [])].reverse().find((t) => t.kind === "lipsync" && t.line === first && (t.through ?? t.line) === last) ?? null;
+}
+
+// The runs: ticked lines in a row (by number) with the same source and a short pause between them.
+export function singingRuns(lines: readonly { number: number; shownMs: number; sungEndMs: number }[], settings: SingerSettings, gapMs = RUN_GAP_MS): { source: string; first: number; last: number }[] {
+  const runs: { source: string; first: number; last: number; endMs: number }[] = [];
+  for (const l of [...lines].sort((a, b) => a.number - b.number)) {
+    const source = settings.lines[String(l.number)];
+    if (!source) continue;
+    const prev = runs.at(-1);
+    if (prev && prev.source === source && prev.last === l.number - 1 && l.shownMs - prev.endMs <= gapMs) {
+      prev.last = l.number;
+      prev.endMs = l.sungEndMs;
+    } else runs.push({ source, first: l.number, last: l.number, endMs: l.sungEndMs });
+  }
+  return runs.map(({ source, first, last }) => ({ source, first, last }));
 }
 const covers = (t: Take | null, piece: Piece) => !!t && (t.status === "running" || t.status === "done" || t.status === "interrupted") && t.sync_ms === piece.fromMs && t.to_ms === piece.toMs;
 
@@ -124,11 +145,16 @@ export async function singerView(ws: Workspace, projectId: string, env: NodeJS.P
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }))
         .map((f) => ({ file: f, label: board[f]?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? ("picture" as const) : ("video" as const) }))
     : [];
+  const runs = c.lines ? singingRuns(c.lines, settings) : [];
+  const byNumber = new Map((c.lines ?? []).map((l) => [l.number, l]));
   const lines = c.lines?.map((l) => {
     const source = settings.lines[String(l.number)] ?? null;
-    const piece = singingPiece(l, c.downbeats, c.songMs);
-    const take = source ? newestTake(c.dir, source, l.number) : null;
-    return { number: l.number, text: l.text, source, piece, take, needed: !!source && !covers(take, piece) };
+    const run = runs.find((r) => r.first <= l.number && l.number <= r.last) ?? null;
+    const first = run ? byNumber.get(run.first)! : l;
+    const last = run ? byNumber.get(run.last)! : l;
+    const piece = singingPiece({ shownMs: first.shownMs, sungEndMs: last.sungEndMs }, c.downbeats, c.songMs);
+    const take = source && run ? newestTake(c.dir, source, run.first, run.last) : null;
+    return { number: l.number, text: l.text, source, piece, run: run ? { first: run.first, last: run.last } : null, take, needed: !!source && run?.first === l.number && !covers(take, piece) };
   }) ?? null;
   const toMake = (lines ?? []).filter((l) => l.needed);
   return {
@@ -151,9 +177,11 @@ export function setSingerLine(ws: Workspace, projectId: string, line: unknown, s
   const s = readSinger(dir);
   if (source === null || source === undefined || source === "") {
     delete s.lines[String(n)];
-    // No singer on this line: its singing clip leaves the line (and is set to Omit, see saveAnchors).
+    // No singer on this line: the singing clip that covers it leaves (and is set to Omit, see saveAnchors); the other
+    // lines of its run are made again as their own run.
     const recipe = readRecipe(songPathsById(ws, projectId).recipe);
-    if ((recipe.anchors ?? []).some((a) => a.line === n && a.sync !== undefined)) saveAnchors(ws, projectId, (recipe.anchors ?? []).filter((a) => !(a.line === n && a.sync !== undefined)));
+    const covering = (a: { line: number; sync?: number; through?: number }) => a.sync !== undefined && a.line <= n && n <= (a.through ?? a.line);
+    if ((recipe.anchors ?? []).some(covering)) saveAnchors(ws, projectId, (recipe.anchors ?? []).filter((a) => !covering(a)));
   } else {
     const name = path.basename(String(source));
     if (!(PICTURE_FILE.test(name) || BOARD_VIDEO_FILE.test(name)) || !existsSync(path.join(dir, name))) throw new Error(`No ${name} in this song's Creation space: add the picture or video there first.`);
@@ -278,7 +306,7 @@ export async function startSinging(ws: Workspace, projectId: string, o: { capUsd
   for (const l of todo) {
     update(dir, l.source!, (p) => {
       const n = p.takes.reduce((m, t) => Math.max(m, t.n), 0) + 1;
-      p.takes.push({ n, kind: "lipsync", line: l.number, sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, service: "wavespeed", quality: "best", model: LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: l.piece.usd, pid: process.pid });
+      p.takes.push({ n, kind: "lipsync", line: l.number, ...(l.run && l.run.last > l.number ? { through: l.run.last } : {}), sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, service: "wavespeed", quality: "best", model: LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: l.piece.usd, pid: process.pid });
       jobs.push({ source: l.source!, n });
     });
   }
@@ -356,7 +384,7 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
         const silent = got;
         const takesDir = path.join(dir, TAKES_DIR);
         mkdirSync(takesDir, { recursive: true });
-        const name = uniqueFileName(takesDir, `${path.parse(j.source).name} sings line ${t.line}.mp4`);
+        const name = uniqueFileName(takesDir, `${path.parse(j.source).name} sings ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}.mp4`);
         copyFileSync(silent, path.join(takesDir, name));
         setTake(dir, j.source, j.n, { file: `${TAKES_DIR}/${name}`, playable: true });
         // Into the Storyboard (the end of the story line) and onto its line, locked to the song; then it shows as done.
@@ -368,8 +396,10 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
           const label = itemLabel(readPictures(dir).pictures[j.source], j.n);
           if (label && r.added.length) setClipLabel(songPathsById(ws, projectId).root, clip, label);
           const recipe = readRecipe(songPathsById(ws, projectId).recipe);
-          const others = (recipe.anchors ?? []).filter((a) => a.line !== t.line);
-          saveAnchors(ws, projectId, [...others, { line: t.line, clip, sync: t.sync_ms / 1000 }]);
+          // The take's lines: no other anchor on them (a singing take over line 9 alone, made before, gives way).
+          const last = t.through ?? t.line;
+          const others = (recipe.anchors ?? []).filter((a) => a.line < t.line! || a.line > last);
+          saveAnchors(ws, projectId, [...others, { line: t.line, clip, sync: t.sync_ms / 1000, ...(t.through ? { through: t.through } : {}) }]);
           setTake(dir, j.source, j.n, { status: "done", sent: clip, ended_at: new Date().toISOString(), pid: undefined });
         } finally {
           ws.close();

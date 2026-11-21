@@ -10,17 +10,19 @@
 //   Lip sync ("sync", 21 Nov 2026): a singing clip made for this moment of the song (Lyrics Sync → Singer): its first
 //          frame belongs at song second `sync`. It cuts in on the downbeat (never before its footage starts), plays
 //          at exactly normal speed from the frame that matches the song at the cut, always with a hard cut, and is
-//          never used to fill other shots: the lips stay in time with the song.
+//          never used to fill other shots: the lips stay in time with the song. `through`: one continuous singing take
+//          over lines `line`..`through` (lines in a row with the same singer picture): it stays on screen until the last
+//          of them is sung.
 // Pure: pnpm make, the preview and the Lyrics tab use the same rules.
 import type { Beat } from "./beats";
 import { cutPointAt, type CutPlan, type CutPoint } from "./cuts";
 
 export type AnchorTransition = "cut" | "dissolve";
-export type AnchorSpec = { line: number; clip: string; clipIn?: number; transition?: AnchorTransition; sync?: number }; // song.json (sync: song seconds of the clip's first frame)
+export type AnchorSpec = { line: number; clip: string; clipIn?: number; transition?: AnchorTransition; sync?: number; through?: number }; // song.json (sync: song seconds of the clip's first frame; through: the last line a singing take covers)
 export type GapOrder = "story" | "shuffle";
 
 // An anchor whose clip was found; `lyric` is the line's index in the render's lyric list.
-export type ResolvedAnchor = { line: number; text: string; lyric: number; clipId: string; clipName: string; clipInMs: number | null; transition: AnchorTransition; syncMs?: number | null };
+export type ResolvedAnchor = { line: number; text: string; lyric: number; clipId: string; clipName: string; clipInMs: number | null; transition: AnchorTransition; syncMs?: number | null; throughLyric?: number | null }; // throughLyric: a singing take over several lines, the last one's index
 
 export type AnchorUse = {
   line: number;
@@ -74,15 +76,16 @@ export function planAnchors(
   const byTime = [...anchors].sort((x, y) => (lines[x.lyric]?.startFrame ?? 0) - (lines[y.lyric]?.startFrame ?? 0) || x.line - y.line);
   for (const a of byTime) {
     const l = lines[a.lyric];
+    const last = (a.throughLyric != null ? lines[a.throughLyric] : undefined) ?? l; // a singing take over several lines: held until the last
     const duration = end - start;
-    if (!l || l.startFrame >= duration || l.endFrame <= 0) {
+    if (!l || l.startFrame >= duration || last.endFrame <= 0) {
       uses.push({ ...base(a), used: false, shot: null, at_ms: null, why: "outside this section" });
       continue;
     }
     const appear = start + Math.max(0, l.startFrame);
     // A singing clip has no footage before its first frame: no cut before it (song frames).
     const footage = a.syncMs != null ? Math.ceil((a.syncMs * fps) / 1000) : -Infinity;
-    const hold = start + Math.max(l.sungEndFrame ?? l.endFrame, Math.max(0, l.startFrame) + 1);
+    const hold = start + Math.max(last.sungEndFrame ?? last.endFrame, Math.max(0, l.startFrame) + 1);
     const prev = placed.at(-1);
     const after = prev ? prev.frame + minShot : start + minShot;
     // Candidate cuts at or before the line's on-screen time: downbeats first, then (only when the bar is
@@ -205,7 +208,9 @@ export function anchorProblems(
       const cutAt = barOf(l.shownMs);
       if (from > l.shownMs) out.push({ line: a.line, problem: `the singing clip ${a.clip} starts ${((from - l.shownMs) / 1000).toFixed(1)} s after line ${a.line} shows: make it again (it starts too late)` });
       else if (downbeats.length && from > cutAt + 1) out.push({ line: a.line, problem: `the singing clip ${a.clip} starts after the downbeat before line ${a.line}: it cuts in a little later, on a beat` });
-      if (to < l.sungEndMs) out.push({ line: a.line, problem: `the singing clip ${a.clip} ends ${((l.sungEndMs - to) / 1000).toFixed(1)} s before line ${a.line} is sung: its last frame holds` });
+      const lastLine = (a.through !== undefined ? lines.get(a.through) : undefined) ?? l;
+      const lastN = a.through !== undefined && lines.has(a.through) ? a.through : a.line;
+      if (to < lastLine.sungEndMs) out.push({ line: a.line, problem: `the singing clip ${a.clip} ends ${((lastLine.sungEndMs - to) / 1000).toFixed(1)} s before line ${lastN} is sung: its last frame holds` });
     } else if (length !== null && length !== undefined) {
       const left = length - (a.clipIn ?? 0) * 1000;
       if (left < lineMs) {
@@ -251,7 +256,8 @@ export function checkAnchors(raw: unknown): { anchors: AnchorSpec[]; problems: s
     if (a.clipIn !== undefined && (typeof a.clipIn !== "number" || !Number.isFinite(a.clipIn) || a.clipIn < 0)) return problems.push(`${at}: clipIn must be seconds into the clip (0 or more)`);
     if (a.transition !== undefined && a.transition !== "cut" && a.transition !== "dissolve") return problems.push(`${at}: transition must be "cut" or "dissolve"`);
     if (a.sync !== undefined && (typeof a.sync !== "number" || !Number.isFinite(a.sync) || a.sync < 0)) return problems.push(`${at}: sync must be the song second of the singing clip's first frame (0 or more)`);
-    anchors.push({ line: a.line as number, clip: (a.clip as string).trim(), ...(a.clipIn !== undefined ? { clipIn: a.clipIn as number } : {}), ...(a.transition ? { transition: a.transition as AnchorTransition } : {}), ...(a.sync !== undefined ? { sync: a.sync as number } : {}) });
+    if (a.through !== undefined && (!Number.isInteger(a.through) || (a.through as number) < (a.line as number))) return problems.push(`${at}: through must be the last line the singing clip covers (${a.line} or later)`);
+    anchors.push({ line: a.line as number, clip: (a.clip as string).trim(), ...(a.clipIn !== undefined ? { clipIn: a.clipIn as number } : {}), ...(a.transition ? { transition: a.transition as AnchorTransition } : {}), ...(a.sync !== undefined ? { sync: a.sync as number } : {}), ...(a.through !== undefined && (a.through as number) > (a.line as number) ? { through: a.through as number } : {}) });
   });
   return { anchors, problems };
 }

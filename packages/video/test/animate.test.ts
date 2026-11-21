@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { findOrCreateSongProject, readClipEdits, songPathsById } from "../src/node";
 import { addFromLink, addPictures, readCreationDefaults, saveCreationDefaults, sourceLabel, sendToStoryboard, estimate, higgsfieldTransport, motionPrompt, picturesView, readPictures, runTakes, setMood, startAnimate, startResume, stubTransport, waveSpeedTransport } from "../src/node/animate";
-import { runSinging, singingPiece, stubSingTransport } from "../src/node/singer";
+import { runSinging, singingPiece, singingRuns, stubSingTransport } from "../src/node/singer";
 import { makePlayable, update } from "../src/node/animate";
 import { execFileSync } from "node:child_process";
 import { probeMedia } from "@lyric/db";
@@ -246,6 +246,17 @@ describe("singing lines (lip sync, 21 Nov 2026)", () => {
     expect(singingPiece({ shownMs: 4500, sungEndMs: 7000 }, downbeats, 60_000)).toEqual({ fromMs: 3500, toMs: 11_000, seconds: 8, usd: 0.48 });
     expect(singingPiece({ shownMs: 300, sungEndMs: 600 }, downbeats, 60_000).fromMs).toBe(0);
     expect(singingPiece({ shownMs: 58_000, sungEndMs: 59_500 }, [], 60_000)).toEqual({ fromMs: 55_500, toMs: 60_000, seconds: 5, usd: 0.3 });
+  });
+  it("lines in a row with the same picture are one take; another picture, a skipped line or a long pause starts a new one", () => {
+    const l = (number: number, shownMs: number, sungEndMs: number) => ({ number, shownMs, sungEndMs });
+    const lines = [l(9, 49_000, 51_000), l(10, 51_500, 54_000), l(11, 54_500, 57_000), l(12, 57_500, 60_000), l(13, 61_000, 63_000), l(15, 66_000, 68_000), l(16, 90_000, 92_000)];
+    const settings = { lines: { "9": "bride.png", "10": "bride.png", "11": "bride.png", "12": "groom.png", "13": "groom.png", "15": "groom.png", "16": "groom.png" } };
+    expect(singingRuns(lines, settings)).toEqual([
+      { source: "bride.png", first: 9, last: 11 },
+      { source: "groom.png", first: 12, last: 13 },
+      { source: "groom.png", first: 15, last: 15 }, // line 14 is not ticked
+      { source: "groom.png", first: 16, last: 16 }, // 22 s of music before it
+    ]);
   });
   it("a singing clip comes back without sound, into Creation, the Storyboard and onto its line with its song time", async () => {
     const paths = songPathsById(ws, id);

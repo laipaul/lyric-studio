@@ -111,7 +111,7 @@ export function SingerBar({ singer }: { singer: Singer }) {
         <span className="font-medium">Singer</span>
         <span className="text-muted-foreground" data-singer-summary>
           {ticked ? `${ticked} line${ticked === 1 ? "" : "s"} where the singer shows` : "Choose a picture or video in the Who sings column on the lines where the singer shows."}
-          {v.toMake.lines.length ? ` · to make: ${v.toMake.lines.length} (${v.toMake.seconds} s of voice, about ${money(v.toMake.usd)})` : ticked ? " · all made" : ""}
+          {v.toMake.lines.length ? ` · to make: ${v.toMake.lines.length} take${v.toMake.lines.length === 1 ? "" : "s"} (${v.toMake.seconds} s of voice, about ${money(v.toMake.usd)})` : ticked ? " · all made" : ""}
           {over ? ` · above your cap of ${money(singer.cap)} (Creation → Your defaults)` : ""}
         </span>
         {v.toMake.lines.length ? (
@@ -121,7 +121,7 @@ export function SingerBar({ singer }: { singer: Singer }) {
         ) : null}
       </div>
       <p className="text-muted-foreground">
-        Each line&apos;s voice is sent with its picture or video to WaveSpeed InfiniteTalk ({money(v.usdPerSecond)} per second). The clip comes back into Creation and your Storyboard, lands on its line and always plays in time with the song: Make cuts to it on the beat. The voice is {v.voice === "stem" ? "your vocal stem" : "the song itself (add your vocal stem in Assets for cleaner lips)"}.
+        Lines in a row with the same picture are sung in one continuous take. Each take&apos;s voice is sent with its picture or video to WaveSpeed InfiniteTalk ({money(v.usdPerSecond)} per second). The clip comes back into Creation and your Storyboard, lands on its line and always plays in time with the song: Make cuts to it on the beat. The voice is {v.voice === "stem" ? "your vocal stem" : "the song itself (add your vocal stem in Assets for cleaner lips)"}.
       </p>
       {!v.ready ? (
         <p data-singer-nokey className="text-amber-200">
@@ -143,14 +143,21 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
   const l: SingerLine | undefined = v?.lines?.find((x) => x.number === number);
   if (!v || !l) return null;
   const t = l.take;
+  const inRun = !!l.run && l.run.last > l.run.first;
+  const later = inRun && l.run!.first !== l.number; // a later line of a run: its take is made with the run's first line
   return (
     <div className="flex flex-col gap-1 text-[11px]" data-singer-line={number}>
       <SourcePicker sources={v.sources} value={l.source} onChange={(src) => void singer.setLine(number, src)} line={number} />
-      {l.source && t ? (
+      {l.source && later ? (
+        <span className="text-muted-foreground" data-singer-status="run">
+          one take with line {l.run!.first}
+          {t?.status === "done" && !l.needed ? " · made" : ""}
+        </span>
+      ) : l.source && t ? (
         <span data-singer-status={t.status} className={cn(t.status === "done" ? "text-emerald-300" : t.status === "running" ? "text-muted-foreground" : "text-amber-200")}>
           {t.status === "done" ? (
             <>
-              <Check className="inline size-3" /> {l.needed ? "made for an earlier timing: make again" : "singing clip on this line"}
+              <Check className="inline size-3" /> {l.needed ? "made for an earlier timing: make again" : inRun ? `singing clip on lines ${l.run!.first}-${l.run!.last}` : "singing clip on this line"}
             </>
           ) : t.status === "running" ? (
             <>
@@ -162,6 +169,7 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
         </span>
       ) : l.source ? (
         <span className="text-muted-foreground" data-singer-status="todo">
+          {inRun ? `lines ${l.run!.first}-${l.run!.last} in one take · ` : ""}
           {l.piece.seconds} s · about {money(l.piece.usd)}
         </span>
       ) : null}

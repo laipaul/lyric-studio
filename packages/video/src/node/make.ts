@@ -1162,7 +1162,8 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   // on screen from (stamp - lead + offset) until the line is sung.
   const anchorLines = sh.anchors.flatMap((a) => {
     const i = a.line - 1;
-    return !lines[i] ? [] : [{ line: a.line, shownMs: lines[i].start_ms - leadMs + lyricsOffsetMs, sungEndMs: sungEnd(sh.sectionLines[i]) }];
+    const last = a.through !== undefined && lines[a.through - 1] ? a.through - 1 : i; // a singing take over several lines
+    return !lines[i] ? [] : [{ line: a.line, shownMs: lines[i].start_ms - leadMs + lyricsOffsetMs, sungEndMs: sungEnd(sh.sectionLines[last]) }];
   });
   // An instrumental's short-form section: the strongest stretch of the music (no chorus line to start on).
   let musicStart: number | undefined;
@@ -1390,7 +1391,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         anchorMissing.push(`slot: line ${a.line} "${lines[i].text}" needs a clip (${a.clip} is not among this video's clips: ${sh.picture?.label ?? "the song's clips and its collections"}, ${prepared.kind} for ${preset.label})`);
         anchorSlots.push({ line: a.line, text: lines[i].text, clip: a.clip });
       }
-      else anchors.push({ line: a.line, text: lines[i].text, lyric: shown.indexOf(i), clipId: clip.id, clipName: clip.name, clipInMs: a.clipIn !== undefined ? Math.round(a.clipIn * 1000) : null, transition: a.sync !== undefined ? "cut" : (a.transition ?? "cut"), ...(a.sync !== undefined ? { syncMs: Math.round(a.sync * 1000) } : {}) });
+      else anchors.push({ line: a.line, text: lines[i].text, lyric: shown.indexOf(i), clipId: clip.id, clipName: clip.name, clipInMs: a.clipIn !== undefined ? Math.round(a.clipIn * 1000) : null, transition: a.sync !== undefined ? "cut" : (a.transition ?? "cut"), ...(a.sync !== undefined ? { syncMs: Math.round(a.sync * 1000) } : {}), ...(a.sync !== undefined && a.through !== undefined && lines[a.through - 1] && shown.indexOf(a.through - 1) >= 0 ? { throughLyric: shown.indexOf(a.through - 1) } : {}) });
     }
   }
   // Lyric readability (src/readability.ts): "auto" (default) adds the soft dark band behind the lyrics

@@ -89,7 +89,8 @@ export type Take = {
   file?: string; // the finished video, in pictures\ ("takes/<picture> take N.mp4")
   sent?: string; // "Send to Storyboard": the clip it became in the song's clips folder
   kind?: "lipsync"; // a singing clip (Lyrics Sync → Singer): made from this picture or video and the vocal of one line
-  line?: number; // lipsync: the lyric line (Lyrics tab number)
+  line?: number; // lipsync: the lyric line (Lyrics tab number); with `through`: the first line of the run
+  through?: number; // lipsync: the last line of a run of lines in a row sung from the same picture (one continuous take)
   sync_ms?: number; // lipsync: the song time of the take's first frame (the vocal piece started there)
   to_ms?: number; // lipsync: the song time where the vocal piece ended
   clip?: string; // (21 Nov 2026 first build: takes went to the clips by themselves; read as `sent`)
@@ -663,7 +664,7 @@ export function itemLabel(rec: PictureRecord | undefined, n?: number | null): st
   const t = rec?.takes.find((x) => x.n === n);
   if (t?.label) return t.label;
   if (!rec?.label) return null;
-  return t?.kind === "lipsync" ? `${rec.label} sings line ${t.line}` : `${rec.label} take ${n}`;
+  return t?.kind === "lipsync" ? `${rec.label} sings ${t.through && t.through > (t.line ?? 0) ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` : `${rec.label} take ${n}`;
 }
 
 // Rename (Creation): a short name for a picture, video (n null) or take (n), shown instead of the file name; the file

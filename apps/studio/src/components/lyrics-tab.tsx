@@ -342,6 +342,8 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                     const delta = start - l.startMs; // unsaved change: the screen times shift with it
                     const changed = pending.has(l.number);
                     const anchor = data.anchors.list.find((a) => a.line === l.number) ?? null;
+                    // A later line of a singing take over several lines (the take sits on its first line).
+                    const sungWith = anchor ? null : (data.anchors.list.find((a) => a.sync !== undefined && a.line < l.number && l.number <= (a.through ?? a.line)) ?? null);
                     const anchorClip = anchor ? data.anchors.clips.find((c) => c.name.toLowerCase() === anchor.clip.toLowerCase()) : undefined;
                     const problems = data.anchors.problems.filter((p) => p.line === l.number);
                     return (
@@ -462,6 +464,11 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                               <button type="button" disabled={busy} onClick={() => (anchor.sync !== undefined ? void singer.setLine(l.number, null).then(() => load()) : saveAnchor(l.number, null))} className="text-muted-foreground hover:text-foreground shrink-0 rounded-md border p-0.5" aria-label={`Remove the anchor on line ${l.number}`} title={anchor.sync !== undefined ? "No singer on this line (the singing clip is set to Omit; it stays in Creation and the Storyboard)" : undefined} data-anchor-remove>
                                 <X className="size-3.5" />
                               </button>
+                            </div>
+                          ) : null}
+                          {sungWith ? (
+                            <div className="text-muted-foreground text-[11px]" data-anchor-continues={sungWith.line}>
+                              the singer from line {sungWith.line} continues (one take)
                             </div>
                           ) : null}
                           <button type="button" disabled={busy} onClick={() => setPicking(picking === l.number ? null : l.number)} className="text-muted-foreground hover:text-foreground mt-1 flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] whitespace-nowrap" data-anchor-pick>

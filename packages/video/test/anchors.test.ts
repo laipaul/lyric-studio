@@ -226,4 +226,22 @@ describe("singing clips (lip sync, 21 Nov 2026): locked to the song", () => {
     expect(checkAnchors([{ line: 5, clip: "sings.mp4", sync: 13.5 }]).anchors).toEqual([{ line: 5, clip: "sings.mp4", sync: 13.5 }]);
     expect(checkAnchors([{ line: 5, clip: "x.mp4", sync: -1 }]).problems).toHaveLength(1);
   });
+  it("one take over lines in a row (through): stays on screen until the last line is sung, in time, in one shot", () => {
+    // "run.mp4": lines 5 to 9 in one take, from the vocal of 0:13.5 to 0:36.0.
+    const run = { id: "run.mp4", name: "run.mp4", duration_ms: 22_500, path: "cache/run.mp4", durationFrames: 675 };
+    const a = anchor(1, "run.mp4", { clipInMs: null, syncMs: 13_500, throughLyric: 4 });
+    const { props, anchors } = composeProps(base(10_500, 40_500, [a], { clips: [...clips, run] }), { seed: 1, style: "simple", order: "story" });
+    const shots = props.shots.filter((s) => s.src === "cache/run.mp4");
+    expect(shots).toHaveLength(1);
+    expect(shots[0].start).toBe(rel(14_500));
+    // Line 9 is sung until 0:33.0: the next cut is the bar at 0:34.5.
+    expect(shots[0].start + shots[0].duration).toBe(rel(34_500));
+    expect(shots[0].playbackRate).toBe(1);
+    expect(anchors!.conflicts).toEqual([]);
+    // song.json keeps "through"; the song-level check wants footage until the last line is sung.
+    expect(checkAnchors([{ line: 5, clip: "run.mp4", sync: 13.5, through: 9 }]).anchors).toEqual([{ line: 5, clip: "run.mp4", sync: 13.5, through: 9 }]);
+    expect(checkAnchors([{ line: 5, clip: "run.mp4", sync: 13.5, through: 4 }]).problems).toHaveLength(1);
+    const lines = new Map([[5, { text: "Hold my hands", shownMs: 15_200, sungEndMs: 19_000 }], [9, { text: "Turn around", shownMs: 30_200, sungEndMs: 33_000 }]]);
+    expect(anchorProblems([{ line: 5, clip: "run.mp4", sync: 13.5, through: 9 }], lines, new Map([["run.mp4", 10_000]]), [12_500, 14_500]).map((p) => p.problem)).toEqual([expect.stringMatching(/ends 9\.5 s before line 9 is sung/)]);
+  });
 });

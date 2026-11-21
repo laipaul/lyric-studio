@@ -91,7 +91,7 @@ async function main() {
     const settings = JSON.parse(readFileSync(path.join(pictures, "singer.json"), "utf8")) as { lines: Record<string, string> };
     check(settings.lines["2"] === "singer close.png", "line 2 is a singing line, sung from its picture (pictures\\singer.json)");
     const summary = (await page.textContent("[data-singer-summary]")) ?? "";
-    check(/1 line where the singer shows · to make: 1 \(\d+ s of voice, about \$\d+\.\d\d\)/.test(summary), `the cost shows before anything is sent (${summary})`);
+    check(/1 line where the singer shows · to make: 1 take \(\d+ s of voice, about \$\d+\.\d\d\)/.test(summary), `the cost shows before anything is sent (${summary})`);
     check(((await page.textContent("[data-singer]")) ?? "").includes("the song itself"), "without a vocal stem, the song itself is the voice (said plainly)");
 
     await page.click("[data-singer-make]");
