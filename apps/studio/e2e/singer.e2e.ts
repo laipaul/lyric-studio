@@ -107,8 +107,19 @@ async function main() {
     for (let i = 0; i < 20 && !(JSON.parse(readFileSync(path.join(pictures, "singer.json"), "utf8")) as { scripts?: Record<string, string> }).scripts?.["2"]; i++) await page.waitForTimeout(200);
     check((JSON.parse(readFileSync(path.join(pictures, "singer.json"), "utf8")) as { scripts?: Record<string, string> }).scripts?.["2"] === "turns to the sea, soft smile", "the singer's little script is saved for the block (pictures\\singer.json)");
     await page.click("[data-singer-make]");
+    // The takes panel opens on the line being made (Paul, 21 Nov 2026: no need to go to Creation to watch it).
+    await page.waitForSelector("[data-singer-panel='2']", { timeout: 15_000 });
+    check(((await page.textContent("[data-singer-panel='2']")) ?? "").includes("Line 2"), "Make opens the takes panel on line 2");
     await page.waitForSelector("[data-singer-line='2'] [data-singer-status=done]", { timeout: 90_000 });
     check(true, "the singing clip is made");
+    await page.waitForSelector("[data-singer-panel='2'] [data-singer-take] [data-singer-take-play]", { timeout: 15_000 });
+    check(((await page.textContent("[data-singer-panel='2']")) ?? "").includes("Jump to Creation"), "the panel lists the take, ready to play, with Jump to Creation");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("[data-singer-panel]", { state: "detached", timeout: 5_000 });
+    await page.click("[data-singer-show-takes='2']");
+    await page.waitForSelector("[data-singer-panel='2']", { timeout: 5_000 });
+    await page.click("[data-singer-panel-close]");
+    check(!(await page.$("[data-singer-panel]")), "Esc and ✕ close the panel; Takes opens it again");
     const recipe = JSON.parse(readFileSync(paths.recipe!, "utf8")) as { anchors?: { line: number; clip: string; sync?: number }[] };
     const a = recipe.anchors?.find((x) => x.line === 2);
     check(a?.clip === "singer close sings line 2.mp4" && typeof a.sync === "number" && a.sync > 60 && a.sync < 68.5, `it lands on line 2, locked to the song (${JSON.stringify(a)})`);
@@ -135,6 +146,8 @@ async function main() {
     await page.fill("[data-singer-script='2']", "singing clearly, precise lip shapes");
     await page.click("[data-singer-retake='2']"); // the mood box loses focus as Retake is pressed: it is saved first
     await page.waitForSelector("[data-singer-line='2'] [data-singer-take-state='new']", { timeout: 90_000 });
+    check(!!(await page.$("[data-singer-panel='2'] [data-singer-take-state='new']")), "Retake opens the takes panel, where the new take waits as New — compare");
+    await page.keyboard.press("Escape");
     const takes = (JSON.parse(readFileSync(path.join(pictures, "pictures.json"), "utf8")) as { pictures: Record<string, { takes: { n: number; kind?: string; prompt?: string; resolution?: string; fresh?: boolean; file?: string }[] }> }).pictures["singer close.png"].takes.filter((t) => t.kind === "lipsync");
     const retake = takes.at(-1)!;
     check(takes.length === 2 && retake.resolution === "480p" && retake.prompt === "singing clearly, precise lip shapes" && retake.fresh === true, `the retake is a new take with the mood and resolution of now; the first take stays (${JSON.stringify(takes.map((t) => [t.n, t.resolution, t.prompt]))})`);
@@ -165,6 +178,7 @@ async function main() {
     check(((await page.textContent("[data-singer-summary]")) ?? "").includes("to make: 1 take"), "lines in a row with the same picture: one take to make");
     await page.click("[data-singer-make]");
     await page.waitForFunction(() => document.querySelector("tr[data-line='3'] [data-anchor-continues='2']"), null, { timeout: 60_000 });
+    await page.keyboard.press("Escape"); // the takes panel
     const block = (JSON.parse(readFileSync(paths.recipe!, "utf8")) as { anchors?: { line: number; clip: string; sync?: number; through?: number }[] }).anchors ?? [];
     const singing = block.filter((x) => x.sync !== undefined);
     const firstOmitted = (JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8")) as { clips: Record<string, { omit?: boolean }> }).clips["singer close sings line 2.mp4"]?.omit;
@@ -176,6 +190,14 @@ async function main() {
     const task = (await page.textContent("[data-take-task='singing']")) ?? "";
     check(/Singing · lines 2-3/.test(task) && /InfiniteTalk/.test(task) && /\d+ s · about \$\d+\.\d\d/.test(task) && /done/.test(task), `the Tasks menu shows the singing take with its model, length and cost (${task})`);
     await page.keyboard.press("Escape");
+
+    // A line with takes says they are in Creation too; the link opens Creation on the picture they were made from.
+    check(((await page.textContent("[data-singer-line='2'] [data-singer-creation-note]")) ?? "").includes("to see and pick your takes"), "the line says its takes can be seen and picked in Creation");
+    await page.click("[data-singer-line='2'] [data-singer-to-creation]");
+    await page.waitForSelector("[data-picture='singer close.png'] [data-take]", { state: "visible", timeout: 15_000 });
+    check(true, "Jump to Creation opens Creation on the picture card with its takes");
+    await page.goto(`${base}/songs/${sp.project.id}?tab=lyrics`);
+    await page.waitForSelector("[data-singer-line='2'] [data-singer-source]");
 
     // Wrong picture: "no singer on this line" takes the singing clip off the line and sets it to Omit (kept).
     await page.click("[data-singer-line='2'] [data-singer-source]");

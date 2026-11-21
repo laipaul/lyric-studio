@@ -72,3 +72,11 @@ export function dipOpacity(frame: number, dips: readonly { frame: number; frames
   }
   return Math.max(0, Math.min(1, o));
 }
+
+// The lights-dim ending: over the last `frames` frames the picture goes to black, slowly at first (the studio light
+// lingers, then goes), fully dark on the last frame.
+export function endDimOpacity(frame: number, durationInFrames: number, frames: number): number {
+  if (frames <= 0) return 0;
+  const q = Math.max(0, Math.min(1, (frame - (durationInFrames - frames) + 1) / frames));
+  return q * q * (3 - 2 * q);
+}

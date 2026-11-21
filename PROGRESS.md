@@ -4,6 +4,22 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Lip-sync takes panel; Jump to Creation; lights-dim ending ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "a pop up window when we press Make lipsync like what we see in Creation" and "end the reel
+  [with] her whispering and fading with the studio light going to dim".
+- Lyrics Sync: Make singing clips, Retake and a line's new **Takes** button open a takes panel (top right): the
+  picture, "being made" while a take runs, every take with ▶ (with the song) and Use this take, and **Jump to
+  Creation** (opens Creation on the picture card). Esc / ✕ close it. Under a line's takes the same link as a note.
+- Lights-dim ending: a Reel / TikTok / Short that ends on a fade or ring-out now also takes the picture to black
+  over the same frames as the music fade; the lyrics stay on top, so the last word is the last thing seen. Loops are
+  unchanged. QA does not count that black as a fault.
+- Wedding Day: Reel section end 2:27.7 → 2:30.0 (her whispered "too" fades out by 2:29.7); line 37 "I've spent so
+  long wondering" hand-set to 2:30.85 (the aligner had put it on the whisper at 2:29.0, so the old end cut it).
+  The plan now ends on "And today is yours too" with a 1.9 s fade of music and picture.
+- Tests: packages/video test/end-dim.test.ts (new, 4); apps/studio e2e/singer.e2e.ts extended (panel, Esc, Takes,
+  Jump to Creation; not run here: it needs a fresh studio build). Note: test/make-reference.test.ts fails on this PC
+  with and without this change (normalised clip names differ): not caused by it.
+
 ### Singing takes: Retake, compare, choose; resolution; mood hint; two fixes; running badge ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "InfiniteTalk takes vary a lot in articulation. I make several takes per sung group and pick the
   best. Today a new take of the same lines can land on its line by itself and replace the one in use."
@@ -162,24 +178,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   2026 (the video-to-video fields from its model page).
 - Tests: anchors (+4 singing clips), animate (+3: the piece, a clip back without sound onto its line, a refusal).
   Browser: singer (new, 13 checks), pictures, lyrics-tab, storyboard pass.
-
-### G2b Prepare → Creation: a messy creation space for pictures and videos from anywhere, your own defaults ✅ (to verify on the PC)
-- Paul (21 Nov 2026): keep it apart from the Storyboard, "a creation messy space from which I can pick my favourites";
-  call it **Creation**; "I can add Midjourney videos manually, use the API of WaveSpeed, or import them from outside
-  sources: I need flexibility".
-- **Creation** (the tab first called Pictures) takes three sources, side by side: pictures and videos added by hand
-  (drop or choose; .jpg .png .webp .mp4 .mov .webm; own names), takes made here with Animate, and **a pasted link** to a
-  picture or video anywhere (downloaded once, up to 1 GB). Each item has a small label of where it came from: "Added
-  by you", "Midjourney" (a "midjourney" name or Midjourney's download name with the job id, or a midjourney link),
-  "From <site>", and each take its service and model. Only pictures can be animated.
-- **Takes stay in Creation** (`pictures\takes\<picture> take N.mp4`); nothing goes to the Storyboard by itself.
-  **Send to Storyboard** on a take, a picture or a video copies it to the END of the story line (his order rule) and
-  marks it "✓ In Storyboard"; sending again does nothing.
-- **Your defaults (every song):** Model (WaveSpeed · Seedance 2.5 Flash / WaveSpeed · Seedance 2.5 / Higgsfield ·
-  Seedance 2.5), Takes (1–6) and the spending cap, saved in `workspace\creation.json`; each picture can choose another
-  model or number of takes for itself.
-- Tests: animate (17: sources, a Midjourney video, a link, defaults). Browser: pictures (19 checks), song-stages,
-  production pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

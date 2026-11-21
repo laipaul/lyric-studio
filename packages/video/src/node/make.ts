@@ -52,7 +52,7 @@ import type { SbTry } from "../storyboard-file";
 import { formatQa, LOW_CONFIDENCE, qaReasons, runQa, type QaInput, type QaReport } from "../qa";
 import { autoSection, clockText, titleLeadMs, finishedBeforeStart, SECTION_TARGET, sectionCuts, startsAfterEnd, sungEnd, sungStart, type SectionCut, type SectionLine } from "../section";
 import { loopFit, loopFlows, loopSuggestions, type LoopAudio, type LoopResult, type LoopSuggestion } from "../loop";
-import { chooseEnding, type Ending, type EndingChoice } from "../ending";
+import { chooseEnding, endDimSeconds, type Ending, type EndingChoice } from "../ending";
 import { choosePace, songFeel, type Pace } from "../pace";
 import type { TransitionStyle } from "../transitions";
 import { anchorsInside, type AnchorSpec, type GapOrder, type ResolvedAnchor } from "../anchors";
@@ -1461,6 +1461,8 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     // Loop platforms: the last frames blend into the first shot's opening when the last shot cannot
     // continue into it (about the ending's fade, 0.4-1 s).
     ...(loops && usesClips ? { loopInto: Math.max(12, Math.min(30, Math.round((ending?.fadeOutS ?? 0.5) * VIDEO.fps))) } : {}),
+    // A fade or ring-out ending: the picture dims to black with the music (the lights-dim ending, src/ending.ts).
+    ...(endDimSeconds(ending) > 0 ? { endDim: { frames: Math.round(endDimSeconds(ending) * VIDEO.fps) } } : {}),
     // Automatic transitions (src/transitions.ts): from the song's feel, its hooks and sung stretches; a
     // clip's own choice in the clip editor (clips.json "transition") wins.
     ...(usesClips && !canvas

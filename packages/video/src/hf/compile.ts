@@ -61,6 +61,7 @@ export function hyperframesGaps(props: Props, o: { standInLyrics?: boolean } = {
   if (props.glow) add("the beat glow");
   if (props.cinematicBars) add("cinematic bars");
   if (props.endScreen) add("the end-screen area");
+  if (props.endDim?.frames) add("the lights-dim ending");
   if (!props.shots.length) add("a video without clips");
   return gaps;
 }

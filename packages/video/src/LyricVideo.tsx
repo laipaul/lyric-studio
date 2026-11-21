@@ -21,7 +21,7 @@ import { TextCards } from "./TextCards";
 import { activeLyricLine, applyTextCase, layoutLyric } from "./lyrics";
 import { kenBurnsAt } from "./photo";
 import { loopBlendOpacity, photoLoopProgress } from "./canvas";
-import { dipOpacity } from "./transitions";
+import { dipOpacity, endDimOpacity } from "./transitions";
 import { beatPulse, coverMotionAt, endScreenAreaAt, logoOpacity, moodAt, stillOpacity, type Rgba } from "./youtube";
 import { COVER_CENTRE_X, coverSide } from "./youtube-layout";
 
@@ -107,6 +107,12 @@ function DissolveIn({ frames, children }: { frames: number; children: React.Reac
 function DipOverlay({ dips }: { dips: NonNullable<LyricVideoProps["dips"]> }) {
   const opacity = dipOpacity(useCurrentFrame(), dips);
   return opacity > 0 ? <AbsoluteFill style={{ backgroundColor: "#000", opacity }} /> : null;
+}
+
+// The lights-dim ending: the picture under the lyrics goes to black with the music fade.
+function EndDim({ frames, durationInFrames }: { frames: number; durationInFrames: number }) {
+  const opacity = endDimOpacity(useCurrentFrame(), durationInFrames, frames);
+  return opacity > 0 ? <AbsoluteFill data-end-dim style={{ pointerEvents: "none", backgroundColor: "#000", opacity }} /> : null;
 }
 
 // Loop platforms: the last `frames` frames fade into the first shot's opening (the frames just before it,
@@ -496,6 +502,8 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
           <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: barHeight, background: "#000" }} />
         </>
       ) : null}
+
+      {props.endDim?.frames ? <EndDim frames={props.endDim.frames} durationInFrames={durationInFrames} /> : null}
 
       {props.lyricEffects ? (
         <LyricScene

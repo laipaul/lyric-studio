@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { GroupTake, SingerLine, SingerView } from "@lyric/video/singer";
 import { takeWhen } from "@lyric/video/take-facts";
 
+import { useGoToTab } from "@/components/song-stages";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,8 @@ export type Singer = {
   retake: (line: number) => Promise<void>;
   chooseTake: (source: string, t: GroupTake) => Promise<void>;
   play: (source: string, t: GroupTake | null) => void;
+  panel: number | null; // the line whose takes show in the takes panel (opened by Make, Retake or Takes)
+  showTakes: (line: number | null) => void;
 };
 
 // `onMade`: called when a take lands on (or is switched onto) its lines (the Lyrics tab reloads its anchors).
@@ -46,6 +49,7 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [playing, setPlaying] = useState<Playing | null>(null);
+  const [panel, setPanel] = useState<number | null>(null);
   // A mood text still being saved (its box loses focus as Make or Retake is pressed): they wait for it, so the take is
   // sent with the words on screen and the "to make" count is right afterwards.
   const saving = useRef<Promise<void>>(Promise.resolve());
@@ -100,6 +104,8 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
     notice,
     busy,
     playing,
+    panel,
+    showTakes: setPanel,
     setLine: (line, source) => attempt(async () => {
       await post({ action: "line", line, source });
       await load();
@@ -120,7 +126,9 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
       setBusy(true);
       try {
         await saving.current;
+        const first = view?.toMake.lines[0] ?? null;
         const d = await post({ action: "make" });
+        if (first !== null) setPanel(first); // the takes panel follows the first take being made
         setNotice({ ok: true, text: `${d.jobs?.length ?? 0} singing clip${d.jobs?.length === 1 ? "" : "s"} sent to WaveSpeed (${d.seconds} s of voice, about ${money(d.usd ?? 0)}). The first take of each group lands on its lines by itself when it is ready (a few minutes each); follow it in Tasks.` });
         window.dispatchEvent(new Event("lyric-tasks-changed")); // the Tasks menu opens with it
       } catch (e) {
@@ -135,6 +143,7 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
       try {
         await saving.current;
         const d = await post({ action: "retake", line });
+        setPanel(line);
         setNotice({ ok: true, text: `Retake sent to WaveSpeed (${d.seconds} s of voice, about ${money(d.usd ?? 0)}). It arrives as “New — compare” under its lines; the take in use stays until you choose another.` });
         window.dispatchEvent(new Event("lyric-tasks-changed"));
       } catch (e) {
@@ -204,7 +213,49 @@ export function SingerBar({ singer }: { singer: Singer }) {
           {singer.notice.text}
         </p>
       ) : null}
+      {singer.panel !== null ? <TakesPanel singer={singer} line={singer.panel} /> : null}
       {singer.playing && v.song ? <TakePlayer key={`${singer.playing.source}:${singer.playing.n}`} playing={singer.playing} song={fileUrl(v.song)} onClose={() => singer.play("", null)} /> : null}
+    </div>
+  );
+}
+
+// The takes panel (21 Nov 2026, Paul: "a pop up window when we press Make lipsync like what we see in Creation"):
+// opened by Make singing clips, Retake or a line's Takes button, it shows the group's picture and every take as it is
+// made (length, cost, when), ▶ to watch one with the song and Use this take, without leaving Lyrics Sync; Jump to
+// Creation opens the picture's card there. Closes with ✕ or Esc.
+function TakesPanel({ singer, line }: { singer: Singer; line: number }) {
+  const { showTakes } = singer;
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && showTakes(null);
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [showTakes]);
+  const v = singer.view;
+  const l = v?.lines?.find((x) => x.number === line);
+  const first = l?.run && l.run.first !== l.number ? v?.lines?.find((x) => x.number === l.run!.first) : l;
+  if (!v || !first?.source) return null;
+  const src = v.sources.find((s) => s.file === first.source);
+  const lines = first.run && first.run.last > first.run.first ? `Lines ${first.run.first}-${first.run.last}` : `Line ${first.number}`;
+  const running = first.takes.some((t) => t.status === "running");
+  return (
+    <div data-singer-panel={first.number} className="bg-popover fixed top-24 right-4 z-40 flex max-h-[70vh] w-80 flex-col gap-2 overflow-y-auto rounded-xl border p-3 text-[11px] shadow-2xl">
+      <div className="flex items-center gap-2 text-xs">
+        {src ? <SourceThumb s={src} big /> : null}
+        <span className="min-w-0 flex-1">
+          <span className="block font-medium">{lines} · singing takes</span>
+          <span className="text-muted-foreground block truncate">{src?.label ?? first.source}</span>
+        </span>
+        <button type="button" onClick={() => showTakes(null)} className="text-muted-foreground hover:text-foreground rounded-md p-1" aria-label="Close" data-singer-panel-close>
+          <X className="size-3.5" />
+        </button>
+      </div>
+      {running ? (
+        <span className="text-muted-foreground flex items-center gap-1" data-singer-panel-running>
+          <Loader2 className="text-brand size-3 animate-spin" /> Being made at WaveSpeed: a few minutes. It shows here when it is ready.
+        </span>
+      ) : null}
+      {first.takes.length ? <TakesList singer={singer} source={first.source} takes={first.takes} /> : <span className="text-muted-foreground">No take yet.</span>}
+      <CreationNote source={first.source} running={false} />
     </div>
   );
 }
@@ -321,6 +372,11 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
               <RefreshCw className="size-3" /> Retake
             </button>
           ) : null}
+          {l.takes.length ? (
+            <button type="button" data-singer-show-takes={number} onClick={() => singer.showTakes(number)} className="hover:bg-accent rounded border px-1.5 py-0.5">
+              Takes
+            </button>
+          ) : null}
         </div>
       ) : l.source ? (
         <span className="text-muted-foreground" data-singer-status="todo">
@@ -329,8 +385,34 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
         </span>
       ) : null}
       {l.source && l.takes.length ? <TakesList singer={singer} source={l.source} takes={l.takes} /> : null}
+      {l.source && !later && l.takes.length ? <CreationNote source={l.source} running={l.takes.some((x) => x.status === "running")} /> : null}
       {!v.sources.length ? <span className="text-muted-foreground">Add pictures in Creation first</span> : null}
     </div>
+  );
+}
+
+// Once a group has a take (21 Nov 2026, Paul: "not easy to remember at first"): a note that its takes are also in
+// Creation, with a link that opens Creation and scrolls to the picture card they were made from.
+function CreationNote({ source, running }: { source: string; running: boolean }) {
+  const goTo = useGoToTab();
+  const open = () => {
+    goTo("production");
+    const until = Date.now() + 4000; // Creation loads its pictures after it opens
+    const find = () => {
+      const card = document.querySelector(`[data-picture="${CSS.escape(source)}"]`);
+      if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+      else if (Date.now() < until) setTimeout(find, 150);
+    };
+    setTimeout(find, 0);
+  };
+  return (
+    <span className="text-muted-foreground" data-singer-creation-note>
+      {running ? "Take being made. " : ""}
+      <button type="button" data-singer-to-creation onClick={open} className="text-brand hover:underline">
+        Jump to Creation
+      </button>{" "}
+      to see and pick your takes.
+    </span>
   );
 }
 

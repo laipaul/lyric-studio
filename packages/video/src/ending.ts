@@ -37,6 +37,11 @@ export type Ending = {
   note: string | null; // when the requested ending was not possible
 };
 
+// The lights-dim ending (21 Nov 2026, Paul: "fading with the studio light going to dim"): a fade or ring-out also
+// takes the picture to black over the same frames as the music, so the light and the sound go out together. A loop
+// (it has to flow back into the start) and the song's own end (no fade) keep their picture.
+export const endDimSeconds = (e: Ending | null): number => (e && (e.kind === "fade" || e.kind === "ring-out") ? e.fadeOutS : 0);
+
 const s1 = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 const round2 = (ms: number) => Math.round(ms / 10) / 100;
 

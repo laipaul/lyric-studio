@@ -30,7 +30,7 @@ export type QaLyric = {
 };
 
 export type QaInput = {
-  props: Pick<LyricVideoProps, "shots" | "lyrics" | "cinematicBars" | "durationInFrames" | "format" | "safeZone" | "logo" | "lyricEffects">;
+  props: Pick<LyricVideoProps, "shots" | "lyrics" | "cinematicBars" | "durationInFrames" | "format" | "safeZone" | "logo" | "lyricEffects" | "endDim">;
   shotClips: string[]; // clip file name of each shot
   poolSize: number; // clips in the collection
   lyrics: QaLyric[]; // lines visible in this variation
@@ -171,7 +171,9 @@ export function runQa(input: QaInput): QaReport {
   // 3. Black or frozen frames in the rendered video.
   if (input.frames) {
     const details: string[] = [];
-    for (const b of input.frames.black) details.push(`black ${t(b.start_s)}-${t(b.end_s)} (${(b.end_s - b.start_s).toFixed(1)} s)`);
+    // The lights-dim ending goes to black on purpose: black inside its last frames is not a fault.
+    const dimFromS = props.endDim?.frames ? (props.durationInFrames - props.endDim.frames) / VIDEO.fps - 0.1 : Infinity;
+    for (const b of input.frames.black) if (b.start_s < dimFromS) details.push(`black ${t(b.start_s)}-${t(b.end_s)} (${(b.end_s - b.start_s).toFixed(1)} s)`);
     for (const f of input.frames.frozen) {
       const held = props.shots.findIndex(
         (s) => s.holdLastFrame && s.start / VIDEO.fps < f.end_s && (s.start + s.duration) / VIDEO.fps > f.start_s,

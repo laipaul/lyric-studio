@@ -87,6 +87,7 @@ export type RenderBase = {
   // Loop platforms: blend the last frames into the first shot's opening (frames) when the last shot does
   // not continue into the first one.
   loopInto?: number;
+  endDim?: { frames: number }; // a fade or ring-out ending: the picture dims to black with the music (src/ending.ts)
   lyricBacking?: boolean; // readability "strong": a soft dark band behind the lyrics
   picture?: PictureProps; // the theme's grade, vignette, behind the words, background without a clip
   transitions?: {
@@ -382,6 +383,7 @@ export function composeProps(
       ...(choices.effects ? { lyricEffects: choices.effects } : {}),
       ...(dips.length ? { dips } : {}),
       ...(base.lyricBacking ? { lyricBacking: true } : {}),
+      ...(base.endDim ? { endDim: base.endDim } : {}),
       ...(base.picture ? { picture: base.picture } : {}),
       ...(base.loopInto && shots.length > 1 && !assigned.at(-1)?.loop ? { loopInto: { frames: Math.max(4, Math.min(base.loopInto, Math.floor(shots.at(-1)!.duration / 2))) } } : {}),
     },

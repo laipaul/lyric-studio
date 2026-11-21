@@ -4,6 +4,24 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### G2b Prepare → Creation: a messy creation space for pictures and videos from anywhere, your own defaults ✅ (to verify on the PC)
+- Paul (21 Nov 2026): keep it apart from the Storyboard, "a creation messy space from which I can pick my favourites";
+  call it **Creation**; "I can add Midjourney videos manually, use the API of WaveSpeed, or import them from outside
+  sources: I need flexibility".
+- **Creation** (the tab first called Pictures) takes three sources, side by side: pictures and videos added by hand
+  (drop or choose; .jpg .png .webp .mp4 .mov .webm; own names), takes made here with Animate, and **a pasted link** to a
+  picture or video anywhere (downloaded once, up to 1 GB). Each item has a small label of where it came from: "Added
+  by you", "Midjourney" (a "midjourney" name or Midjourney's download name with the job id, or a midjourney link),
+  "From <site>", and each take its service and model. Only pictures can be animated.
+- **Takes stay in Creation** (`pictures\takes\<picture> take N.mp4`); nothing goes to the Storyboard by itself.
+  **Send to Storyboard** on a take, a picture or a video copies it to the END of the story line (his order rule) and
+  marks it "✓ In Storyboard"; sending again does nothing.
+- **Your defaults (every song):** Model (WaveSpeed · Seedance 2.5 Flash / WaveSpeed · Seedance 2.5 / Higgsfield ·
+  Seedance 2.5), Takes (1–6) and the spending cap, saved in `workspace\creation.json`; each picture can choose another
+  model or number of takes for itself.
+- Tests: animate (17: sources, a Midjourney video, a link, defaults). Browser: pictures (19 checks), song-stages,
+  production pass.
+
 ### G2 Prepare → Pictures: picture board and Animate (WaveSpeed / Higgsfield), takes at the end of the clips ✅ (to verify on the PC)
 - Paul's real flow (21 Nov 2026): Midjourney pictures → clips at random → play with the order against the song until it
   feels right; no preset storyboard. So the path is **pictures, then clips, then play with the order**; the G1 story

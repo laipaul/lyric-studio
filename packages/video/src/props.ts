@@ -169,6 +169,9 @@ export type LyricVideoProps = {
   // Loop platforms: over the last `frames` frames the first shot's opening fades in on top, so the last
   // frame leads straight into the first (when the last shot does not already continue into it).
   loopInto?: { frames: number } | null;
+  // A fade or ring-out ending: the picture goes to black over the last `frames` frames, with the music fade (the
+  // lyrics stay on top, so the last word is the last thing seen).
+  endDim?: { frames: number } | null;
   nextLine?: boolean; // show the next lyric line, small and faded, under the current one
   nextLineScale?: number; // its size compared with the current line (default 0.55)
   grain?: boolean; // subtle film grain
