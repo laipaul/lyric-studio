@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { chooseEnding, type LoopAudio, type LoopLine } from "../src";
+import { ringOutLimitMs } from "../src/node/make";
 
 const RATE = 16_000;
 const midi = (n: number) => 440 * 2 ** ((n - 69) / 12);
@@ -51,6 +52,21 @@ describe("automatic endings", () => {
     const sung = [...lines(40_200), { number: 3, text: "Next line", sungStartMs: 41_500, sungEndMs: 44_000 }];
     expect(chooseEnding({ ...base, lines: sung, audio: loudEnd })).toMatchObject({ kind: "fade", endMs: 40_500 });
   });
+  it("no room and no ring-out: the fade takes the tail of the last word (half a bar, at most 1 s), never an earlier word", () => {
+    const word = (lastWordStartMs: number): LoopLine[] => [lines(40_200)[0], { ...lines(40_200)[1], lastWordStartMs }];
+    // A held last note (1.2 s): 1.0 s of fade (the cap), from inside the note.
+    const held = chooseEnding({ ...base, lines: word(39_000), audio: loudEnd, maxEndMs: 40_500 });
+    expect(held).toMatchObject({ kind: "fade", endMs: 40_500, fadeOutS: 1 });
+    expect(held.text).toContain("from the tail of the last held note");
+    // A short last word (0.3 s): the 0.3 s of room and that word only, 0.6 s, not the word before.
+    expect(chooseEnding({ ...base, lines: word(39_900), audio: loudEnd, maxEndMs: 40_500 })).toMatchObject({ kind: "fade", fadeOutS: 0.6 });
+  });
+  it("a part chosen by hand may ring out one more bar too, within the platform's length (never past it)", () => {
+    // Reels: 0:48.9 - 2:27.7 chosen by hand (98.8 s), the length allows up to 120 s.
+    expect(ringOutLimitMs({ start_ms: 48_900, end_ms: 147_700 }, { hardMaxMs: 120_000 })).toBe(168_900);
+    expect(ringOutLimitMs({ start_ms: 0, end_ms: 130_000 }, { hardMaxMs: 120_000 })).toBe(130_000); // already longer: no bar added
+    expect(ringOutLimitMs({ start_ms: 0, end_ms: 30_000 }, null)).toBe(30_000);
+  });
   it("the song's own end: no fade", () => {
     expect(chooseEnding({ ...base, endMs: 60_000, lines: lines(38_000), audio: loudEnd })).toMatchObject({ kind: "song-end", fadeOutS: 0 });
   });
@@ -92,6 +108,10 @@ describe('QA "Loop flows" with the chosen ending', () => {
     expect(sound.detail).toMatch(/^level jump \d+\.\d dB, softened by a 2\.0 s fade: the loop starts the song again gently$/);
     expect(r.ending).toMatchObject({ kind: "fade", fade_out_s: 2 });
     expect(loopFlows({ ...o, ending: { ...ending, kind: "loop", fadeOutS: 0.12 } }).points.find((p) => p.point === "sound")!.ok).toBe(false);
+    // A 0.3 s fade does not soften it: the music stops dead. A WARN that names the creative fix.
+    const abrupt = loopFlows({ ...o, ending: { ...ending, fadeOutS: 0.3 } }).points.find((p) => p.point === "sound")!;
+    expect(abrupt.ok).toBe(false);
+    expect(abrupt.detail).toMatch(/the music stops in 0\.3 s: end the part a bar after the last sung word, or let the app choose it \(Automatic\)$/);
   });
 });
 

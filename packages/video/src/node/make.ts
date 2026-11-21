@@ -490,6 +490,13 @@ export function openFolder(dir: string): void {
   }
 }
 
+// The latest end a ring-out bar may reach: within the platform's length, for an automatic part and for a part chosen by
+// hand alike (Paul, 21 Nov 2026: a hand-set end on loud music "ends too brutally"; the last chord rings out one more bar
+// instead). Never shortens a part; without a length window (whole song) the end stays as it is.
+export function ringOutLimitMs(section: { start_ms: number; end_ms: number }, window: { hardMaxMs: number } | null): number {
+  return window ? Math.max(section.end_ms, section.start_ms + window.hardMaxMs) : section.end_ms;
+}
+
 type SectionChoiceOut = {
   mode: string;
   start_ms: number;
@@ -1198,8 +1205,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         lines: loopLines,
         audio: loopSong,
         loopFadeS: preset.fadeOutSeconds,
-        // A ring-out may add one bar to an auto section within the platform's length; a fixed section stays exactly as given.
-        maxEndMs: chosen0.mode === "auto" && lengthWindow ? chosen0.start_ms + lengthWindow.hardMaxMs : chosen0.end_ms,
+        maxEndMs: ringOutLimitMs(chosen0, lengthWindow),
       })
     : null;
   const chosen: SectionChoiceOut = ending

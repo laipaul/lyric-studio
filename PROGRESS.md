@@ -20,6 +20,22 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   Jump to Creation; not run here: it needs a fresh studio build). Note: test/make-reference.test.ts fails on this PC
   with and without this change (normalised clip names differ): not caused by it.
 
+### Softer Reel endings: a ring-out bar on a hand-chosen part, longer soft fades, QA for an abrupt stop ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "the sound at the end of the reel ends too brutally". The part was chosen by hand (0:48.9 –
+  2:27.7) and ends on loud music. The app never changes the music's volume; it only fades where it cuts the song. A
+  hand-chosen end could not move, so with a word sung up to the end the fade fell to 0.3 s (or 0.12 s for a loop).
+- **Ring-out on a hand-chosen part:** when there is little room after the last word, the last chord now rings out one
+  more bar and fades over it, as for an automatic part (only a bar with no sung words, within the platform's length:
+  Reels up to 120 s). Shape's plan says "+ one ring-out bar to …".
+- **Longer soft fades:** a soft fade is now at least half a bar (at most 1 s). With no room after the words it takes the
+  tail of the last word, never an earlier word, rather than a 0.3 s drop.
+- **QA "Loop flows":** a loud-to-quiet jump with a fade under 0.5 s stays a WARN, with the creative fix in plain words
+  ("end the part a bar after the last sung word, or let the app choose it (Automatic)").
+- A tight loop (the end flows straight back into the start) keeps the short 0.12 s fade: there the music does not stop.
+- Tests: vitest ending (+3: fade from the last word's tail, hand-chosen part may ring out within the length, abrupt
+  fade stays a WARN), loop pass. pnpm make could not run in the cloud: Python crashes in this container (audio
+  analysis), the same before this step; the full make path is checked on the PC.
+
 ### Singing takes: Retake, compare, choose; resolution; mood hint; two fixes; running badge ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "InfiniteTalk takes vary a lot in articulation. I make several takes per sung group and pick the
   best. Today a new take of the same lines can land on its line by itself and replace the one in use."
