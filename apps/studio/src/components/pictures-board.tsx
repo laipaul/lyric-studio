@@ -361,7 +361,7 @@ function PictureTile({
       {p.takes.length ? (
         <ul className="flex flex-col gap-1" data-picture-takes-list>
           {[...p.takes].reverse().map((t) => (
-            <TakeRow key={t.n} t={t} source={`${board.services.find((s) => s.id === t.service)?.label ?? t.service} · ${t.model}`} url={takeUrl(t)} onSend={() => void send(t.n, `Take ${t.n}`)} onResume={() => void post({ action: "resume", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message }))} />
+            <TakeRow key={t.n} t={t} source={`${board.services.find((s) => s.id === t.service)?.label ?? t.service} · ${t.model}${t.kind === "lipsync" ? ` · lip sync, line ${t.line}` : ""}`} url={takeUrl(t)} onSend={() => void send(t.n, `Take ${t.n}`)} onResume={() => void post({ action: "resume", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message }))} />
           ))}
         </ul>
       ) : null}

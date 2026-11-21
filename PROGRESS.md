@@ -4,6 +4,25 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### G3 Singing lines: tick lines in Lyrics Sync, WaveSpeed lip sync, placed in time on their line ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "I decide the singing lines and the clips attached to them, I place them in my Storyboard order,
+  and the app does the hard part: assembling them to the beat and the cuts."
+- **Lyrics Sync → Singer column:** on each line where the singer shows, choose a picture or video from Creation. The
+  Singer bar shows what is left to make, its seconds of voice and cost (InfiniteTalk 720p, $0.06/s, at least 3 s),
+  refused above the Creation cap; **Make singing clips**.
+- **What the app does:** cuts the line's vocal (the vocal stem lined up on the song; else the song itself) from just
+  before the downbeat before the line to two bars after it is sung, sends it with the picture (InfiniteTalk) or video
+  (InfiniteTalk video-to-video) to WaveSpeed, removes the voice from the result, and puts the clip into Creation
+  ("lip sync, line N"), the end of the Storyboard and onto its line (song.json anchor with "sync"). A line already
+  made is never paid for twice; a lost one: Get result (free) in Creation.
+- **In every video:** a singing clip cuts in on the beat, plays at normal speed from the frame that matches the song
+  (always in time), with a hard cut, and never fills other shots; the other clips keep the story order. QA "Singer in
+  time" names the lines.
+- Not tested against WaveSpeed itself (no key in the cloud): requests follow its InfiniteTalk docs as read on 21 Nov
+  2026 (the video-to-video fields from its model page).
+- Tests: anchors (+4 singing clips), animate (+3: the piece, a clip back without sound onto its line, a refusal).
+  Browser: singer (new, 13 checks), pictures, lyrics-tab, storyboard pass.
+
 ### G2b Prepare → Creation: a messy creation space for pictures and videos from anywhere, your own defaults ✅ (to verify on the PC)
 - Paul (21 Nov 2026): keep it apart from the Storyboard, "a creation messy space from which I can pick my favourites";
   call it **Creation**; "I can add Midjourney videos manually, use the API of WaveSpeed, or import them from outside
@@ -157,14 +176,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   story-line.ts; studio: components/shotlist-import.tsx, assets-tab.tsx, api/songs/[id]/shotlist.
 - Tests: shotlist (8). Browser: shotlist (16 checks). Unchanged and passing: story-line, collections, storyboard-edit,
   clip-notes and collections browser tests.
-
-### Characters, C1 fixes 4: neutral wording, the reference's hair, old pictures framing-checked ✅ (verified by Paul, 18 Nov 2026)
-- The groom came out with a feminine look and hair pulled back: the prompts still said "her" / "the same woman".
-  Now "this person" everywhere (views, shared style, description draft).
-- Face views keep the reference's hairstyle (length, parting, volume, direction) unless the outfit text says otherwise.
-- Old pictures (made before the framing check) are measured from the file when a card opens (once), so a
-  full-length "close-up" turns red instead of staying green.
-- Tests: characters-cards (17) and the Characters browser test pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -325,6 +336,8 @@ preset storyboard, discovery against the music).
 - ✅ (built 21 Nov, to verify) **G2 Pictures + Animate:** picture board, WaveSpeed / Higgsfield image-to-video with
   his own key, cost first and a cap, 3 takes by default. G2b (21 Nov): renamed **Creation**, takes stay there and
   favourites are sent to the Storyboard; pictures and videos from anywhere (by hand, a link); your own defaults.
+- ✅ (built 21 Nov, to verify) **G3 Singing lines:** tick lines in Lyrics Sync, WaveSpeed InfiniteTalk lip sync per
+  line, each clip placed on its line and always in time with the song.
 - ~~Shot scripts per slot~~ dropped by Paul on 21 Nov 2026 (not his way of working).
 - Possible next (not agreed): the character's locked picture as a reference so faces stay the same; a quick
   "try it against the song" preview of the newest takes.

@@ -44,6 +44,11 @@ export type AssignOptions = {
   // Seeded by the take and the clip's place in the story order, so the same take always gives the same picture.
   // Never on a clip whose best moment the user set in the clip editor (best_user), a pin or an anchor.
   moment?: number;
+  // Singing clips (lip sync): these shots play their clip at exactly normal speed from clipStarts (the frame that
+  // matches the song), holding the last frame if it runs out; never slowed. `anchorOnly`: clips never used to fill
+  // other shots (a singer out of time would show).
+  exact?: ReadonlySet<number>;
+  anchorOnly?: ReadonlySet<string>;
 };
 
 export const MIN_PLAYBACK_RATE = 0.5;
@@ -68,8 +73,10 @@ export function assignClips(plan: CutPlan, clipsIn: readonly ClipInfo[], seed: n
   // Story anchors: the clips that fill the gaps, and the anchored clips near each shot.
   const anchoredShots = [...(options.anchored ?? [])].filter((i) => pins.has(i));
   const reserved = new Set(anchoredShots.map((i) => pins.get(i)!));
-  const unreserved = clips.filter((c) => !reserved.has(c.id));
-  const fill = unreserved.length > RECENT_WINDOW ? unreserved : clips;
+  const fillable = options.anchorOnly?.size ? clips.filter((c) => !options.anchorOnly!.has(c.id)) : clips;
+  const pool = fillable.length ? fillable : clips;
+  const unreserved = pool.filter((c) => !reserved.has(c.id));
+  const fill = unreserved.length > RECENT_WINDOW ? unreserved : pool;
   const nearAnchors = (i: number) => new Set(anchoredShots.filter((k) => k !== i && Math.abs(k - i) <= RECENT_WINDOW).map((k) => pins.get(k)!));
   // The usable part of a clip (the clip editor's in / out), in clip frames, and its speed.
   const toFrames = (ms: number) => Math.floor((ms * plan.fps) / 1000);
@@ -168,6 +175,11 @@ export function assignClips(plan: CutPlan, clipsIn: readonly ClipInfo[], seed: n
     const fixedStart = pinnedId ? options.clipStarts?.get(i) : undefined;
     if (loopShot) {
       // clip start already set
+    } else if (fixedStart !== undefined && !clip.still && options.exact?.has(i)) {
+      // A singing clip: normal speed from the frame that matches the song; its last frame holds if it runs out.
+      clipStart = Math.max(0, Math.min(fixedStart, total(clip) - 1));
+      rate = 1;
+      hold = total(clip) - clipStart < length;
     } else if (fixedStart !== undefined && !clip.still) {
       // A story anchor from its clipIn: slowed (down to 0.5x, then its last frame held) when the rest of
       // the clip is shorter than the shot.

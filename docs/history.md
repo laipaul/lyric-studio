@@ -3539,3 +3539,11 @@ D. ✅ (built 29 Oct, to verify) **Title opening** (items 1-8 below).
   show", "Front shows" and "Back shows", shown on the card and correctable. Each view gets only its part, and front
   and back are told what belongs only to the other side. Without a key or on failure: the outfit text as before.
 - Tests: characters-cards (15) and the Characters browser test pass.
+
+### Characters, C1 fixes 4: neutral wording, the reference's hair, old pictures framing-checked ✅ (verified by Paul, 18 Nov 2026)
+- The groom came out with a feminine look and hair pulled back: the prompts still said "her" / "the same woman".
+  Now "this person" everywhere (views, shared style, description draft).
+- Face views keep the reference's hairstyle (length, parting, volume, direction) unless the outfit text says otherwise.
+- Old pictures (made before the framing check) are measured from the file when a card opens (once), so a
+  full-length "close-up" turns red instead of staying green.
+- Tests: characters-cards (17) and the Characters browser test pass.

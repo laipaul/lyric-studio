@@ -215,6 +215,8 @@ export function composeProps(
   const { byShot, warnings } = pinsToShots(base.pins, allLines, bounds);
   const notes: string[] = [];
   const clipStarts = new Map<number, number>();
+  const exact = new Set<number>(); // singing clips' shots (lip sync): normal speed from the frame that matches the song
+  const anchorOnly = new Set((base.anchors ?? []).filter((a) => a.syncMs != null).map((a) => a.clipId));
   for (const [shot, a] of anchorPlan?.shots ?? []) {
     // The anchor wins over a pin on the same shot.
     const pinned = byShot.get(shot);
@@ -231,6 +233,11 @@ export function composeProps(
       inMs = Math.max(from, Math.min(clip.best_ms + BEST_WINDOW_MS / 2 - needMs / 2, (clip.out_ms ?? clip.duration_ms) - needMs));
     }
     clipStarts.set(shot, Math.round((inMs * VIDEO.fps) / 1000));
+    if (a.syncMs != null) {
+      // Lip sync: the clip frame that belongs to this moment of the song (song frames: the plan's own).
+      clipStarts.set(shot, Math.max(0, plan.start_frame + bounds[shot] - Math.round((a.syncMs * VIDEO.fps) / 1000)));
+      exact.add(shot);
+    }
   }
 
   // The user's slips: that shot plays another part of its clip. The story order decides which clip plays
@@ -242,7 +249,7 @@ export function composeProps(
       const slip = slipFor(base.timeline.slips, ((plan.start_frame + start) * 1000) / VIDEO.fps);
       const clip = slip && base.clips.find((c) => c.name.toLowerCase() === slip.clip.toLowerCase() && c.kind !== "photo");
       if (!slip || !clip) continue;
-      if (anchorPlan?.shots.has(i) && anchorPlan.shots.get(i)!.clipId !== clip.id) continue;
+      if (anchorPlan?.shots.has(i) && (anchorPlan.shots.get(i)!.clipId !== clip.id || exact.has(i))) continue; // a singing clip stays in time
       slips.push({ shot: i, clipId: clip.id, inMs: slip.in * 1000 });
     }
   }
@@ -257,7 +264,7 @@ export function composeProps(
       ...(c.speed !== undefined ? { speed: c.speed } : {}), ...(c.best_ms !== undefined ? { best_ms: c.best_ms } : {}), ...(c.best_from === "clip editor" ? { best_user: true } : {}),
     })),
     choices.seed,
-    { order: choices.order ?? "story", pins, loopEnding: platform.loopEnding, clipStarts: starts, ...(choices.moment ? { moment: choices.moment } : {}), anchored: new Set(anchorPlan?.shots.keys() ?? []) },
+    { order: choices.order ?? "story", pins, loopEnding: platform.loopEnding, clipStarts: starts, ...(choices.moment ? { moment: choices.moment } : {}), anchored: new Set(anchorPlan?.shots.keys() ?? []), exact, anchorOnly },
   );
   let assigned = !base.clips.length ? [] : assignWith(byShot, clipStarts);
   if (slips.length && assigned.length) {
@@ -300,7 +307,7 @@ export function composeProps(
   // over the previous one, which keeps playing `after` frames into it.
   const bar = barFrames(base.beats ?? []);
   for (const [index, a] of anchorPlan?.shots ?? []) {
-    const transition = choices.transitions === "cut" || choices.transitions === "dissolve" ? choices.transitions : a.transition;
+    const transition = a.syncMs != null ? "cut" : choices.transitions === "cut" || choices.transitions === "dissolve" ? choices.transitions : a.transition;
     if (transition !== "dissolve" || index === 0 || !shots[index] || !shots[index - 1]) continue;
     const prev = shots[index - 1];
     const prevLeft = prev.kind === "photo" ? Infinity : Math.floor((prev.clipDurationFrames - 1 - prev.clipStartFrame) / prev.playbackRate) - prev.duration;
@@ -345,7 +352,7 @@ export function composeProps(
     ? {
         uses: anchorPlan.uses.map((u) => {
           const s = u.shot !== null ? assigned[u.shot] : undefined;
-          const transition = choices.transitions === "cut" || choices.transitions === "dissolve" ? choices.transitions : u.transition;
+          const transition = u.lipsync ? "cut" : choices.transitions === "cut" || choices.transitions === "dissolve" ? choices.transitions : u.transition;
           return { ...u, transition, ...(s && s.playback_rate < 1 ? { playback_rate: s.playback_rate } : {}) };
         }),
         conflicts: anchorPlan.conflicts,

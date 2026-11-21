@@ -94,6 +94,8 @@ function pointsFor(p: Problem): AssessPoint[] {
       return [major("length", "The file does not have the length it should.", AGAIN)];
     case "Story anchors":
       return [minor("anchors", `Not every anchor could be placed as asked: ${p.details[0] ?? "see the details"}.`, "Check the anchored lines on the Shape page (⚓).")];
+    case "Singer in time":
+      return p.details.filter((d) => /not shown/.test(d)).map((d) => minor(`singer:${d.split(" ")[1]}`, `The singer is left out on ${d.split(":")[0]}.`, "Tick fewer singing lines close together in Lyrics Sync, or move that line's singing clip to a line further away."));
     case "Loop flows":
       return p.details.map((d) =>
         /both show (\S+)/.test(d)

@@ -42,8 +42,8 @@ export const RESOLUTION = "720p";
 export const DEFAULT_TAKES = 3;
 export const MAX_TAKES = 6;
 export const DEFAULT_CAP_USD = 10;
-const POLL_MS = 4000;
-const TIMEOUT_MS = 20 * 60 * 1000;
+export const POLL_MS = 4000;
+export const TIMEOUT_MS = 20 * 60 * 1000;
 const UPLOAD_KEEP_MS = 5 * 24 * 3600 * 1000; // WaveSpeed keeps uploads 7 days: reused for 5
 
 export type ServiceId = "wavespeed" | "higgsfield";
@@ -87,6 +87,10 @@ export type Take = {
   cost_usd: number; // the estimate (the services bill what they bill)
   file?: string; // the finished video, in pictures\ ("takes/<picture> take N.mp4")
   sent?: string; // "Send to Storyboard": the clip it became in the song's clips folder
+  kind?: "lipsync"; // a singing clip (Lyrics Sync → Singer): made from this picture or video and the vocal of one line
+  line?: number; // lipsync: the lyric line (Lyrics tab number)
+  sync_ms?: number; // lipsync: the song time of the take's first frame (the vocal piece started there)
+  to_ms?: number; // lipsync: the song time where the vocal piece ended
   clip?: string; // (21 Nov 2026 first build: takes went to the clips by themselves; read as `sent`)
   error?: string;
   pid?: number;
@@ -141,7 +145,7 @@ const HELP =
 
 // ---------------------------------------------------------------- files
 
-function songFolder(ws: Workspace, projectId: string): { root: string; dir: string } {
+export function songFolder(ws: Workspace, projectId: string): { root: string; dir: string } {
   const paths = songPathsById(ws, projectId);
   if (paths.legacy) throw new Error("This song has no folder yet: run the migration first (pnpm songs:migrate).");
   return { root: paths.root, dir: path.join(paths.root, PICTURES_DIR) };
@@ -162,7 +166,7 @@ function writePictures(dir: string, f: PicturesFile): void {
   writeFileSync(path.join(dir, PICTURES_FILE), `${JSON.stringify({ _help: HELP, pictures: f.pictures }, null, 2)}\n`);
 }
 // Read, change and write in one go (synchronous: the takes running at the same time never overwrite each other).
-function update(dir: string, file: string, change: (p: PictureRecord) => void): PictureRecord {
+export function update(dir: string, file: string, change: (p: PictureRecord) => void): PictureRecord {
   const all = readPictures(dir);
   const rec = all.pictures[file] ?? { takes: [] };
   change(rec);
@@ -170,7 +174,7 @@ function update(dir: string, file: string, change: (p: PictureRecord) => void): 
   writePictures(dir, all);
   return rec;
 }
-function setTake(dir: string, file: string, n: number, patch: Partial<Take>): void {
+export function setTake(dir: string, file: string, n: number, patch: Partial<Take>): void {
   update(dir, file, (p) => {
     const t = p.takes.find((x) => x.n === n);
     if (t) Object.assign(t, patch);
@@ -346,11 +350,11 @@ export type Transport = {
   download: (url: string, file: string) => Promise<void>;
 };
 
-const WAVESPEED = "https://api.wavespeed.ai/api/v3";
+export const WAVESPEED = "https://api.wavespeed.ai/api/v3";
 const HIGGSFIELD = "https://api.higgsfield.ai";
-const MIME: Record<string, string> = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp" };
+const MIME: Record<string, string> = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".wav": "audio/wav", ".mp4": "video/mp4", ".m4v": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm" };
 
-async function json(r: Response, what: string): Promise<Record<string, unknown>> {
+export async function json(r: Response, what: string): Promise<Record<string, unknown>> {
   const text = await r.text();
   let body: Record<string, unknown> = {};
   try {
@@ -365,18 +369,18 @@ async function json(r: Response, what: string): Promise<Record<string, unknown>>
   }
   return body;
 }
-const data = (b: Record<string, unknown>) => ((b.data && typeof b.data === "object" ? b.data : b) as Record<string, unknown>);
+export const data = (b: Record<string, unknown>) => ((b.data && typeof b.data === "object" ? b.data : b) as Record<string, unknown>);
 
 // WaveSpeed's direct upload: a ticket, then the bytes PUT to it; the picture's public URL lives 7 days.
-async function waveSpeedUpload(key: string, file: string, f: typeof fetch): Promise<string> {
+export async function waveSpeedUpload(key: string, file: string, f: typeof fetch): Promise<string> {
   const bytes = readFileSync(file);
   const ext = path.extname(file).toLowerCase();
-  const ticket = data(await json(await f(`${WAVESPEED}/media/uploads`, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ filename: `picture${ext}`, size: bytes.length, content_type: MIME[ext] ?? "image/jpeg" }) }), "WaveSpeed upload"));
+  const ticket = data(await json(await f(`${WAVESPEED}/media/uploads`, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ filename: `${/\.(wav)$/.test(ext) ? "voice" : /\.(mp4|m4v|mov|webm)$/.test(ext) ? "video" : "picture"}${ext}`, size: bytes.length, content_type: MIME[ext] ?? "image/jpeg" }) }), "WaveSpeed upload"));
   const up = ticket.upload as { method?: string; url?: string; headers?: Record<string, string> } | undefined;
   const url = ticket.download_url;
   if (!up?.url || typeof url !== "string") throw new Error("WaveSpeed upload: no upload address in the answer");
   const put = await f(up.url, { method: up.method ?? "PUT", headers: up.headers ?? {}, body: bytes });
-  if (!put.ok) throw new Error(`WaveSpeed upload: HTTP ${put.status} when sending the picture`);
+  if (!put.ok) throw new Error(`WaveSpeed upload: HTTP ${put.status} when sending the file`);
   return url;
 }
 
@@ -504,7 +508,7 @@ export function startAnimate(ws: Workspace, projectId: string, file: string, o: 
   return { takes: made, estimate: e };
 }
 
-const sleepMs = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+export const sleepMs = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 // Makes the takes (in parallel): the picture online once, each request sent once, its result polled, downloaded and
 // put at the end of the song's clips. `resume`: takes that already have a request id are only polled and fetched.

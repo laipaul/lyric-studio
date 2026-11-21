@@ -236,6 +236,18 @@ export function runQa(input: QaInput): QaReport {
     });
   }
 
+  // Singing clips (lip sync): in time with the song wherever they show; a singing line this video leaves out is named.
+  if (input.anchors?.uses.some((u) => u.lipsync)) {
+    const sing = input.anchors.uses.filter((u) => u.lipsync);
+    const used = sing.filter((u) => u.used).map((u) => u.line);
+    const left = sing.filter((u) => !u.used && u.why !== "outside this section").map((u) => `line ${u.line} "${u.text}": the singer is not shown (${u.why})`);
+    checks.push({
+      name: "Singer in time",
+      ok: left.length === 0,
+      details: [...(used.length ? [`singer in time with the song on line${used.length === 1 ? "" : "s"} ${used.join(", ")}`] : []), ...left],
+    });
+  }
+
   // Reels, TikTok, Shorts loop on the platform: beat, phrase, sound, harmony and picture across the
   // wrap-around. A failed point names its cause; when all flow, one line says what was measured.
   if (input.loop) {

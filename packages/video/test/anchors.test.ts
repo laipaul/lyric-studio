@@ -187,3 +187,43 @@ describe("story anchors in pnpm make", () => {
     expect(planVariations(2).map((v) => v.order)).toEqual(["story", "shuffle"]); // no story: as before
   });
 });
+
+describe("singing clips (lip sync, 21 Nov 2026): locked to the song", () => {
+  // "sings.mp4" was made from the vocal of 0:13.5 to 0:22.0 (8.5 s): its first frame belongs at song 0:13.5.
+  const singer = { id: "sings.mp4", name: "sings.mp4", duration_ms: 8_500, path: "cache/sings.mp4", durationFrames: 255 };
+  const withSinger = (anchors: ResolvedAnchor[], over: Partial<RenderBase> = {}) => base(10_500, 40_500, anchors, { clips: [...clips, singer], ...over });
+  it("plays from the frame that matches the song at the cut, at normal speed, with a hard cut", () => {
+    const a = anchor(1, "sings.mp4", { clipInMs: null, syncMs: 13_500, transition: "dissolve" });
+    const { props, anchors } = composeProps(withSinger([a]), { seed: 1, style: "simple", order: "story", transitions: "dissolve" });
+    const at = props.shots.findIndex((s) => s.src === "cache/sings.mp4");
+    const shot = props.shots[at];
+    expect(shot.start).toBe(rel(14_500)); // the downbeat before the line, as every anchor
+    // song frame of the cut (14.5 s - 2 frames) minus the clip's first frame (13.5 s) = clip frame 28
+    expect(shot.clipStartFrame).toBe(Math.round((14_500 * 30) / 1000) - 2 - Math.round((13_500 * 30) / 1000));
+    expect(shot.playbackRate).toBe(1);
+    expect(shot.dissolve).toBeUndefined();
+    expect(anchors!.uses[0]).toMatchObject({ line: 5, used: true, transition: "cut", lipsync: true });
+    expect(anchors!.uses[0].playback_rate).toBeUndefined();
+  });
+  it("is never used to fill the other shots; the others keep the story order", () => {
+    const a = anchor(1, "sings.mp4", { clipInMs: null, syncMs: 13_500 });
+    const names = composeProps(withSinger([a]), { seed: 1, style: "simple", order: "story" }).props.shots.map((s) => s.src.replace("cache/", ""));
+    expect(names.filter((n) => n === "sings.mp4")).toHaveLength(1);
+    expect(names.filter((n) => n !== "sings.mp4").slice(0, 4)).toEqual(["01_a.mp4", "02_b.mp4", "03_c.mp4", "04_d.mp4"]);
+  });
+  it("never cuts in before its footage: a clip that starts after the downbeat cuts in on the first beat it covers", () => {
+    const a = anchor(1, "sings.mp4", { clipInMs: null, syncMs: 14_800 });
+    const { props } = composeProps(withSinger([a]), { seed: 1, style: "simple" });
+    const shot = props.shots.find((s) => s.src === "cache/sings.mp4")!;
+    expect(shot.start).toBeGreaterThanOrEqual(rel(14_800, 0));
+    expect(shot.clipStartFrame).toBe(shot.start + startFrame - Math.round((14_800 * 30) / 1000));
+  });
+  it("the song-level check names a singing clip that starts too late or ends too early; song.json takes sync", () => {
+    const lines = new Map([[5, { text: "Hold my hands", shownMs: 15_200, sungEndMs: 19_000 }]]);
+    const lens = new Map([["sings.mp4", 3_000]]);
+    expect(anchorProblems([{ line: 5, clip: "sings.mp4", sync: 13.5 }], lines, lens, [12_500, 14_500, 16_500]).map((p) => p.problem)).toEqual([expect.stringMatching(/ends 2\.5 s before line 5 is sung/)]);
+    expect(anchorProblems([{ line: 5, clip: "sings.mp4", sync: 15.5 }], lines, new Map([["sings.mp4", 9_000]]), [14_500]).map((p) => p.problem)).toEqual([expect.stringMatching(/starts 0\.3 s after line 5 shows/)]);
+    expect(checkAnchors([{ line: 5, clip: "sings.mp4", sync: 13.5 }]).anchors).toEqual([{ line: 5, clip: "sings.mp4", sync: 13.5 }]);
+    expect(checkAnchors([{ line: 5, clip: "x.mp4", sync: -1 }]).problems).toHaveLength(1);
+  });
+});

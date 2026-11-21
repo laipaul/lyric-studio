@@ -10,7 +10,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { findOrCreateSongProject, readClipEdits, songPathsById } from "../src/node";
 import { addFromLink, addPictures, readCreationDefaults, saveCreationDefaults, sourceLabel, sendToStoryboard, estimate, higgsfieldTransport, motionPrompt, picturesView, readPictures, runTakes, setMood, startAnimate, startResume, stubTransport, waveSpeedTransport } from "../src/node/animate";
+import { runSinging, singingPiece, stubSingTransport } from "../src/node/singer";
+import { update } from "../src/node/animate";
+import { probeMedia } from "@lyric/db";
 import { ffmpeg, makeClip, makeSong } from "./media-helpers";
+const now0 = async () => undefined;
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-animate-"));
 const wsDir = path.join(root, "workspace");
@@ -232,5 +236,44 @@ describe("Creation takes anything, from anywhere (Paul, 21 Nov 2026)", () => {
     expect(readCreationDefaults(wsDir)).toEqual({ service: "higgsfield", quality: "best", takes: 5, cap: 20 });
     expect(saveCreationDefaults(wsDir, { service: "x", takes: 99, cap: -1 })).toEqual({ service: "wavespeed", quality: "standard", takes: 3, cap: 10 });
     expect(() => saveCreationDefaults(wsDir, null)).toThrow();
+  });
+});
+
+describe("singing lines (lip sync, 21 Nov 2026)", () => {
+  it("the vocal piece: from just before the downbeat before the line to two bars after it is sung; billed per second", () => {
+    const downbeats = [0, 2000, 4000, 6000, 8000, 10000, 12000];
+    expect(singingPiece({ shownMs: 4500, sungEndMs: 7000 }, downbeats, 60_000)).toEqual({ fromMs: 3500, toMs: 11_000, seconds: 8, usd: 0.48 });
+    expect(singingPiece({ shownMs: 300, sungEndMs: 600 }, downbeats, 60_000).fromMs).toBe(0);
+    expect(singingPiece({ shownMs: 58_000, sungEndMs: 59_500 }, [], 60_000)).toEqual({ fromMs: 55_500, toMs: 60_000, seconds: 5, usd: 0.3 });
+  });
+  it("a singing clip comes back without sound, into Creation, the Storyboard and onto its line with its song time", async () => {
+    const paths = songPathsById(ws, id);
+    const now = new Date().toISOString();
+    let n = 0;
+    update(pics, "rain street.jpg", (p) => {
+      n = p.takes.reduce((m, t) => Math.max(m, t.n), 0) + 1;
+      p.takes.push({ n, kind: "lipsync", line: 2, sync_ms: 500, to_ms: 3500, service: "wavespeed", quality: "best", model: "InfiniteTalk", status: "running", started_at: now, cost_usd: 0.18, pid: process.pid });
+    });
+    await runSinging(open, id, [{ source: "rain street.jpg", n }], { transport: stubSingTransport("1"), sleep: now0 });
+    const t = readPictures(pics).pictures["rain street.jpg"].takes.find((x) => x.n === n)!;
+    expect(t.status).toBe("done");
+    expect(t.file).toBe("takes/rain street sings line 2.mp4");
+    const info = await probeMedia(path.join(pics, t.file!));
+    expect(info.hasAudio).toBe(false);
+    expect(Math.abs(info.durationMs - 3000)).toBeLessThan(200);
+    expect(readClipEdits(paths.root).order?.at(-1)).toBe("rain street sings line 2.mp4");
+    const recipe = JSON.parse(readFileSync(paths.recipe!, "utf8")) as { anchors?: unknown[] };
+    expect(recipe.anchors).toEqual([{ line: 2, clip: "rain street sings line 2.mp4", sync: 0.5 }]);
+  });
+  it("a refused request fails in plain words and nothing was spent; no line is anchored", async () => {
+    const now = new Date().toISOString();
+    let n = 0;
+    update(pics, "rain street.jpg", (p) => {
+      n = p.takes.reduce((m, t) => Math.max(m, t.n), 0) + 1;
+      p.takes.push({ n, kind: "lipsync", line: 3, sync_ms: 0, to_ms: 3000, service: "wavespeed", quality: "best", model: "InfiniteTalk", status: "running", started_at: now, cost_usd: 0.18, pid: process.pid });
+    });
+    await runSinging(open, id, [{ source: "rain street.jpg", n }], { transport: stubSingTransport("fail"), sleep: now0 });
+    const t = readPictures(pics).pictures["rain street.jpg"].takes.find((x) => x.n === n)!;
+    expect([t.status, t.error]).toEqual(["failed", "stand-in: the service refused the request. Nothing was spent."]);
   });
 });

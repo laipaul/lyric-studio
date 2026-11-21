@@ -1,11 +1,12 @@
 "use client";
 
 import { AlertTriangle, Clapperboard, Ear, Pause, Play, RotateCcw, Save, Star, Undo2, X } from "lucide-react";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { clockTenths, linesInVideo } from "@lyric/video";
 import type { AnchorClip, LyricsLine, LyricsView } from "@lyric/video/lyrics-view";
 
+import { SingerBar, SingerCell, useSinger } from "@/components/singer";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -120,6 +121,12 @@ export function LyricsTab({ projectId }: { projectId: string }) {
       alive = false;
     };
   }, [projectId]);
+
+  // Singing lines (Singer column): when their clips land, the anchors change.
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  const reloadAnchors = useCallback(() => void loadRef.current(), []);
+  const singer = useSinger(projectId, reloadAnchors);
 
   const change = (update: (p: Pending) => void) => {
     setHistory((h) => [...h, pending]);
@@ -289,6 +296,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
               <span>The other shots follow the song&apos;s clip order (Prepare → Storyboard) in every video.</span>
               {!data.anchors.clips.length ? <span className="text-amber-200">No clips to choose from: add clips and photos or a collection in Prepare → Storyboard.</span> : null}
             </div>
+            <SingerBar singer={singer} />
             {partPlatforms?.length ? (
               <div className="bg-card/60 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs" data-reel-part title={part?.section.reason ?? undefined}>
                 <span className="text-muted-foreground">Part of the song in</span>
@@ -325,6 +333,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Confidence</th>
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Adjust</th>
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap min-w-36">Lands on</th>
+                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap" title="The lines where the singer shows, each with a picture or video from Creation">Singer</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -443,7 +452,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                               <div className="min-w-0 text-xs">
                                 <div className="truncate">{anchor.clip}</div>
                                 <div className="text-muted-foreground">
-                                  {anchor.transition === "dissolve" ? "dissolve" : "cut"}
+                                  {anchor.sync !== undefined ? "singing · in time with the song" : anchor.transition === "dissolve" ? "dissolve" : "cut"}
                                   {anchor.clipIn ? ` · from ${anchor.clipIn} s` : ""}
                                 </div>
                               </div>
@@ -461,10 +470,13 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                             </p>
                           ))}
                         </td>
+                        <td className="px-3 py-2" data-singer-cell>
+                          <SingerCell singer={singer} number={l.number} />
+                        </td>
                       </tr>
                       {picking === l.number ? (
                         <tr className="bg-muted/30 border-b" data-anchor-picker>
-                          <td colSpan={8} className="px-3 py-3">
+                          <td colSpan={9} className="px-3 py-3">
                             <AnchorPicker line={l} clips={data.anchors.clips} current={anchor} busy={busy} onSave={(a) => saveAnchor(l.number, a)} onCancel={() => setPicking(null)} />
                           </td>
                         </tr>

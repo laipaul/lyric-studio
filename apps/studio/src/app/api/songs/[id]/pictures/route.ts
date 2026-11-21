@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import { addFromLink, addPictures, picturesView, runTakes, saveCreationDefaults, sendToStoryboard, setMood, startAnimate, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
+import { runSinging } from "@lyric/video/singer";
 import { connection } from "next/server";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
@@ -71,7 +72,8 @@ export async function POST(request: Request, { params }: Params) {
     if (body.action === "resume") {
       const n = Number(body.n);
       const take = withWorkspace((ws) => startResume(ws, id, file, n));
-      void runTakes(open, id, path.basename(file), [take.n]);
+      if (take.kind === "lipsync") void runSinging(open, id, [{ source: path.basename(file), n: take.n }]);
+      else void runTakes(open, id, path.basename(file), [take.n]);
       return Response.json({ take });
     }
     throw new Error("Unknown action.");

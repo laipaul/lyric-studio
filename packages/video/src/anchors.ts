@@ -7,16 +7,20 @@
 //   Never dropped silently: an anchor that cannot be placed (too close to another, too near the end of
 //          the section) says why; anchors outside a platform's section are listed as such.
 //   Dissolve: ~1 bar centred on the downbeat (less when a neighbouring shot is short).
+//   Lip sync ("sync", 21 Nov 2026): a singing clip made for this moment of the song (Lyrics Sync → Singer): its first
+//          frame belongs at song second `sync`. It cuts in on the downbeat (never before its footage starts), plays
+//          at exactly normal speed from the frame that matches the song at the cut, always with a hard cut, and is
+//          never used to fill other shots: the lips stay in time with the song.
 // Pure: pnpm make, the preview and the Lyrics tab use the same rules.
 import type { Beat } from "./beats";
 import { cutPointAt, type CutPlan, type CutPoint } from "./cuts";
 
 export type AnchorTransition = "cut" | "dissolve";
-export type AnchorSpec = { line: number; clip: string; clipIn?: number; transition?: AnchorTransition }; // song.json
+export type AnchorSpec = { line: number; clip: string; clipIn?: number; transition?: AnchorTransition; sync?: number }; // song.json (sync: song seconds of the clip's first frame)
 export type GapOrder = "story" | "shuffle";
 
 // An anchor whose clip was found; `lyric` is the line's index in the render's lyric list.
-export type ResolvedAnchor = { line: number; text: string; lyric: number; clipId: string; clipName: string; clipInMs: number | null; transition: AnchorTransition };
+export type ResolvedAnchor = { line: number; text: string; lyric: number; clipId: string; clipName: string; clipInMs: number | null; transition: AnchorTransition; syncMs?: number | null };
 
 export type AnchorUse = {
   line: number;
@@ -28,6 +32,7 @@ export type AnchorUse = {
   transition: AnchorTransition;
   why: string | null; // not used: why; used: how (e.g. "on the beat at 0:41.5: the bar is taken by line 8")
   playback_rate?: number; // < 1: slowed to cover its line (QA WARN)
+  lipsync?: boolean; // a singing clip locked to the song (always in time)
 };
 
 export type AnchorPlan = {
@@ -62,7 +67,7 @@ export function planAnchors(
   const uses: AnchorUse[] = [];
   const conflicts: string[] = [];
   const notes: string[] = [];
-  const base = (a: ResolvedAnchor) => ({ line: a.line, text: a.text, clip: a.clipName, transition: a.transition });
+  const base = (a: ResolvedAnchor) => ({ line: a.line, text: a.text, clip: a.clipName, transition: a.syncMs != null ? ("cut" as const) : a.transition, ...(a.syncMs != null ? { lipsync: true } : {}) });
 
   type Placed = { a: ResolvedAnchor; cut: CutPoint | null; frame: number; hold: number; use: AnchorUse };
   const placed: Placed[] = [];
@@ -75,6 +80,8 @@ export function planAnchors(
       continue;
     }
     const appear = start + Math.max(0, l.startFrame);
+    // A singing clip has no footage before its first frame: no cut before it (song frames).
+    const footage = a.syncMs != null ? Math.ceil((a.syncMs * fps) / 1000) : -Infinity;
     const hold = start + Math.max(l.sungEndFrame ?? l.endFrame, Math.max(0, l.startFrame) + 1);
     const prev = placed.at(-1);
     const after = prev ? prev.frame + minShot : start + minShot;
@@ -85,12 +92,16 @@ export function planAnchors(
         .map((b, i) => ({ b, i }))
         .filter(({ b }) => !downbeatsOnly || b.is_downbeat)
         .map(({ i }) => cutPointAt(beats, i, fps, early))
-        .filter((c) => c.frame <= appear)
+        .filter((c) => c.frame <= appear && c.frame >= footage)
         .reverse();
     const bar = candidates(true)[0];
     let cut: CutPoint | null = null;
     let how: string | null = null;
-    if (!prev && (!bar || bar.frame < start + minShot)) {
+    const singerLate = a.syncMs != null && !bar && !(start >= footage) ? beats.map((_, i) => cutPointAt(beats, i, fps, early)).find((c) => c.frame >= footage && c.frame >= after) : undefined;
+    if (singerLate) {
+      cut = singerLate; // the singing clip starts after the downbeat: the first beat with footage
+      how = `on the beat at ${clock(singerLate.beat_time_ms)}: the singing clip starts there`;
+    } else if (!prev && (!bar || bar.frame < start + minShot) && start >= footage) {
       cut = null; // the first shot of the video
       how = "from the first frame";
     } else if (bar && bar.frame >= after) {
@@ -187,7 +198,15 @@ export function anchorProblems(
     if (!clips.has(key)) out.push({ line: a.line, problem: `${a.clip} is not in the song's clips or its collections` });
     const length = clips.get(key);
     const lineMs = l.sungEndMs - l.shownMs;
-    if (length !== null && length !== undefined) {
+    if (a.sync !== undefined && length !== null && length !== undefined) {
+      // A singing clip: it must have footage from the cut (the downbeat before the line) to the line's sung end.
+      const from = a.sync * 1000;
+      const to = from + length;
+      const cutAt = barOf(l.shownMs);
+      if (from > l.shownMs) out.push({ line: a.line, problem: `the singing clip ${a.clip} starts ${((from - l.shownMs) / 1000).toFixed(1)} s after line ${a.line} shows: make it again (it starts too late)` });
+      else if (downbeats.length && from > cutAt + 1) out.push({ line: a.line, problem: `the singing clip ${a.clip} starts after the downbeat before line ${a.line}: it cuts in a little later, on a beat` });
+      if (to < l.sungEndMs) out.push({ line: a.line, problem: `the singing clip ${a.clip} ends ${((l.sungEndMs - to) / 1000).toFixed(1)} s before line ${a.line} is sung: its last frame holds` });
+    } else if (length !== null && length !== undefined) {
       const left = length - (a.clipIn ?? 0) * 1000;
       if (left < lineMs) {
         out.push({ line: a.line, problem: `${a.clip} has ${(Math.max(0, left) / 1000).toFixed(1)} s${a.clipIn ? ` from ${a.clipIn} s` : ""}, line ${a.line} lasts ${(lineMs / 1000).toFixed(1)} s: it will be slowed to ${Math.max(0.5, left / lineMs).toFixed(2)}x${left / lineMs < 0.5 ? " and its last frame held" : ""}` });
@@ -231,7 +250,8 @@ export function checkAnchors(raw: unknown): { anchors: AnchorSpec[]; problems: s
     if (typeof a.clip !== "string" || !a.clip.trim()) return problems.push(`${at}: clip must be a clip file name`);
     if (a.clipIn !== undefined && (typeof a.clipIn !== "number" || !Number.isFinite(a.clipIn) || a.clipIn < 0)) return problems.push(`${at}: clipIn must be seconds into the clip (0 or more)`);
     if (a.transition !== undefined && a.transition !== "cut" && a.transition !== "dissolve") return problems.push(`${at}: transition must be "cut" or "dissolve"`);
-    anchors.push({ line: a.line as number, clip: (a.clip as string).trim(), ...(a.clipIn !== undefined ? { clipIn: a.clipIn as number } : {}), ...(a.transition ? { transition: a.transition as AnchorTransition } : {}) });
+    if (a.sync !== undefined && (typeof a.sync !== "number" || !Number.isFinite(a.sync) || a.sync < 0)) return problems.push(`${at}: sync must be the song second of the singing clip's first frame (0 or more)`);
+    anchors.push({ line: a.line as number, clip: (a.clip as string).trim(), ...(a.clipIn !== undefined ? { clipIn: a.clipIn as number } : {}), ...(a.transition ? { transition: a.transition as AnchorTransition } : {}), ...(a.sync !== undefined ? { sync: a.sync as number } : {}) });
   });
   return { anchors, problems };
 }
