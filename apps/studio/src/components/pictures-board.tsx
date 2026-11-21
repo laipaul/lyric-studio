@@ -7,13 +7,14 @@
 // Paul may add a few words of mood. His own defaults (model, takes, cap) apply to every song; each picture can override
 // them. The cost shows before sending and a press above the cap is refused. Each item shows where it came from. Paul
 // sends his favourites with "Send to Storyboard" (the end of his story line, marked ✓).
-import { Check, ImagePlus, Link2, Loader2, RotateCw, Send, Sparkles } from "lucide-react";
+import { Check, ImagePlus, Link2, Loader2, Play, RotateCw, Send, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { CreationDefaults, PictureView, PicturesView, Quality, ServiceId, Take } from "@lyric/video/animate";
 
 import { useGoToTab } from "@/components/song-stages";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +34,7 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
   const [adding, setAdding] = useState(false);
   const [link, setLink] = useState("");
   const [cap, setCap] = useState<string>("");
+  const [playing, setPlaying] = useState<{ url: string; title: string } | null>(null); // a take or video in the big player
   const input = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -182,7 +184,7 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
         {board.pictures.map((p) => (
-          <PictureTile key={p.file} p={p} board={board} post={post} reload={load} setNotice={setNotice} />
+          <PictureTile key={p.file} p={p} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title) => setPlaying({ url, title })} />
         ))}
         <div className="flex min-h-48 flex-col gap-2">
           <button
@@ -221,6 +223,15 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
         </div>
       </div>
       <input ref={input} type="file" multiple accept=".jpg,.jpeg,.png,.webp,.mp4,.m4v,.mov,.webm,image/*,video/*" className="hidden" data-pictures-input onChange={(e) => void add(e.target.files)} />
+      <Dialog open={!!playing} onOpenChange={(o) => !o && setPlaying(null)}>
+        <DialogContent data-take-player className="w-[min(40rem,95vw)] max-w-none">
+          <DialogHeader>
+            <DialogTitle>{playing?.title}</DialogTitle>
+            <DialogDescription>Takes are made without sound: your song is added when the video is made.</DialogDescription>
+          </DialogHeader>
+          {playing ? <video key={playing.url} src={playing.url} controls autoPlay loop playsInline className="bg-muted max-h-[70vh] w-full rounded object-contain" /> : null}
+        </DialogContent>
+      </Dialog>
       {board.pictures.some((p) => p.sent || p.takes.some((t) => t.sent)) ? (
         <p className="text-muted-foreground text-xs">
           What you send joins the end of your story line.{" "}
@@ -244,9 +255,11 @@ function PictureTile({
   post,
   reload,
   setNotice,
+  play,
 }: {
   p: PictureView;
   board: PicturesView;
+  play: (url: string, title: string) => void;
   post: (b: Record<string, unknown>) => Promise<unknown>;
   reload: () => Promise<void>;
   setNotice: (n: { ok: boolean; text: string }) => void;
@@ -296,7 +309,9 @@ function PictureTile({
     <div data-picture={p.file} data-kind={p.kind} className="bg-card/40 flex flex-col gap-2 rounded-lg border p-2">
       <div className="relative">
         {video ? (
-          <video src={`${fileUrl(p.url)}#t=0.1`} muted loop playsInline preload="metadata" onMouseEnter={(e) => void e.currentTarget.play().catch(() => undefined)} onMouseLeave={(e) => e.currentTarget.pause()} className="bg-muted h-48 w-full rounded object-contain" />
+          <button type="button" data-picture-play onClick={() => play(fileUrl(p.url), p.file)} className="block w-full cursor-pointer" title="Click to watch it big">
+            <video src={`${fileUrl(p.url)}#t=0.1`} muted loop playsInline preload="metadata" onMouseEnter={(e) => void e.currentTarget.play().catch(() => undefined)} onMouseLeave={(e) => e.currentTarget.pause()} className="bg-muted h-48 w-full rounded object-contain" />
+          </button>
         ) : (
           // eslint-disable-next-line @next/next/no-img-element -- a local picture served by /api/files
           <img src={fileUrl(p.url)} alt="" className="bg-muted h-48 w-full rounded object-contain" />
@@ -361,7 +376,7 @@ function PictureTile({
       {p.takes.length ? (
         <ul className="flex flex-col gap-1" data-picture-takes-list>
           {[...p.takes].reverse().map((t) => (
-            <TakeRow key={t.n} t={t} source={`${board.services.find((s) => s.id === t.service)?.label ?? t.service} · ${t.model}${t.kind === "lipsync" ? ` · lip sync, line ${t.line}` : ""}`} url={takeUrl(t)} onSend={() => void send(t.n, `Take ${t.n}`)} onResume={() => void post({ action: "resume", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message }))} />
+            <TakeRow key={t.n} t={t} source={`${board.services.find((s) => s.id === t.service)?.label ?? t.service} · ${t.model}${t.kind === "lipsync" ? ` · lip sync, line ${t.line}` : ""}`} url={takeUrl(t)} onPlay={(url) => play(url, `${p.file} · Take ${t.n}`)} onSend={() => void send(t.n, `Take ${t.n}`)} onResume={() => void post({ action: "resume", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message }))} />
           ))}
         </ul>
       ) : null}
@@ -369,12 +384,17 @@ function PictureTile({
   );
 }
 
-function TakeRow({ t, source, url, onSend, onResume }: { t: Take; source: string; url: string | null; onSend: () => void; onResume: () => void }) {
+function TakeRow({ t, source, url, onPlay, onSend, onResume }: { t: Take; source: string; url: string | null; onPlay: (url: string) => void; onSend: () => void; onResume: () => void }) {
   const label = `Take ${t.n}`;
   return (
     <li data-take={t.n} data-take-status={t.status} className="flex items-center gap-2 text-[11px]">
       {t.status === "done" && url ? (
-        <video src={`${url}#t=0.1`} muted loop playsInline preload="metadata" onMouseEnter={(e) => void e.currentTarget.play().catch(() => undefined)} onMouseLeave={(e) => e.currentTarget.pause()} className="bg-muted size-10 shrink-0 rounded object-cover" />
+        <button type="button" data-take-play onClick={() => onPlay(url)} className="group relative size-10 shrink-0 cursor-pointer" title="Click to watch it big">
+          <video src={`${url}#t=0.1`} muted loop playsInline preload="metadata" onMouseEnter={(e) => void e.currentTarget.play().catch(() => undefined)} onMouseLeave={(e) => e.currentTarget.pause()} className="bg-muted size-10 rounded object-cover" />
+          <span className="absolute inset-0 flex items-center justify-center rounded bg-black/30 group-hover:bg-transparent">
+            <Play className="size-4 fill-white text-white group-hover:opacity-0" />
+          </span>
+        </button>
       ) : (
         <span className="bg-muted flex size-10 shrink-0 items-center justify-center rounded">{t.status === "running" ? <Loader2 className="text-brand size-4 animate-spin" /> : null}</span>
       )}

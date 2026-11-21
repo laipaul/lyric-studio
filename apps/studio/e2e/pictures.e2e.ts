@@ -109,6 +109,12 @@ async function main() {
     await page.waitForFunction((t: string) => document.querySelectorAll(`${t} [data-take-status=done]`).length === 2, tile, { timeout: 60000 });
     check(true, "Animate makes the 2 takes");
     check(((await page.textContent(`${tile} [data-take='1'] [data-take-source]`)) ?? "").includes("WaveSpeed · Seedance 2.5"), "each take shows where it came from");
+    await page.click(`${tile} [data-take='1'] [data-take-play]`);
+    await page.waitForSelector("[data-take-player] video");
+    const playable = await page.waitForFunction(() => { const v = document.querySelector("[data-take-player] video") as HTMLVideoElement | null; return !!v && v.readyState >= 2 && v.videoWidth > 0; }, null, { timeout: 15_000 }).then(() => true).catch(() => false);
+    check(playable, "a click on a take opens it big and it plays");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("[data-take-player]", { state: "detached" });
     // The story line: clips.json's order once there is one; before that, the clips by file name.
     const order = () => (existsSync(path.join(paths.root, "clips.json")) ? (JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8")) as { order: string[] }).order : readdirSync(paths.clips!).sort());
     check(JSON.stringify(order()) === JSON.stringify(["01_blue.mp4", "02_red.mp4"]), `the takes stay in Creation: the clips are untouched (${order().join(", ")})`);
