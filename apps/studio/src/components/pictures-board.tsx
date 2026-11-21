@@ -198,7 +198,7 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
         {board.pictures.map((p) => (
-          <PictureTile key={p.file} p={p} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title) => setPlaying({ url, title })} />
+          <PictureTile key={p.file} projectId={projectId} p={p} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title) => setPlaying({ url, title })} />
         ))}
         <div className="flex min-h-48 flex-col gap-2">
           <button
@@ -272,6 +272,7 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
 }
 
 function PictureTile({
+  projectId,
   p,
   board,
   post,
@@ -279,6 +280,7 @@ function PictureTile({
   setNotice,
   play,
 }: {
+  projectId: string;
   p: PictureView;
   board: PicturesView;
   play: (url: string, title: string) => void;
@@ -307,6 +309,23 @@ function PictureTile({
     try {
       const d = (await post({ action: "send", file: p.file, n })) as { clip: string; already: boolean };
       setNotice({ ok: true, text: d.already ? `${what} is already in your Storyboard (${d.clip}).` : `${what} is at the end of your Storyboard as ${d.clip}.` });
+      await reload();
+    } catch (e) {
+      setNotice({ ok: false, text: (e as Error).message });
+    }
+  }
+
+  // A singing take: the same choice as in Lyrics Sync (it goes on its lines at once; nothing is made again), and a
+  // "New — compare" take loses its mark once watched.
+  async function singer(body: Record<string, unknown>) {
+    const r = await api(`/api/songs/${projectId}/singer`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, source: p.file }) });
+    const d = (await r.json()) as { error?: string };
+    if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
+  }
+  async function chooseTake(t: Take) {
+    try {
+      await singer({ action: "use", n: t.n });
+      setNotice({ ok: true, text: `${t.label ?? `Take ${t.n}`} is now on ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`} (nothing was made again). The next video uses it.` });
       await reload();
     } catch (e) {
       setNotice({ ok: false, text: (e as Error).message });
@@ -403,7 +422,10 @@ function PictureTile({
             <TakeRow key={t.n} t={t} onRename={async (label) => {
               await post({ action: "label", file: p.file, n: t.n, label }).catch((e: Error) => setNotice({ ok: false, text: e.message }));
               await reload();
-            }} source={`${board.services.find((s) => s.id === t.service)?.label ?? t.service} · ${t.model}${t.kind === "lipsync" ? ` · lip sync, ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` : ""}`} url={takeUrl(t)} onPlay={(url) => play(url, `${p.file} · Take ${t.n}`)} onSend={() => void send(t.n, t.label ?? `Take ${t.n}`)} onResume={() => void post({ action: "resume", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message }))} />
+            }} source={`${board.services.find((s) => s.id === t.service)?.label ?? t.service} · ${t.model}${t.kind === "lipsync" ? ` · lip sync, ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` : ""}`} url={takeUrl(t)} onPlay={(url) => {
+              play(url, `${p.file} · Take ${t.n}`);
+              if (t.fresh) void singer({ action: "seen", n: t.n }).then(reload).catch(() => undefined);
+            }} onSend={() => void send(t.n, t.label ?? `Take ${t.n}`)} onUse={() => void chooseTake(t)} onResume={() => void post({ action: "resume", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message }))} />
           ))}
         </ul>
       ) : null}
@@ -411,7 +433,7 @@ function PictureTile({
   );
 }
 
-function TakeRow({ t, source, url, onPlay, onRename, onSend, onResume }: { t: Take; source: string; url: string | null; onPlay: (url: string) => void; onRename: (label: string) => Promise<void>; onSend: () => void; onResume: () => void }) {
+function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onResume }: { t: Take & { inUse?: boolean }; source: string; url: string | null; onPlay: (url: string) => void; onRename: (label: string) => Promise<void>; onSend: () => void; onUse: () => void; onResume: () => void }) {
   const label = `Take ${t.n}`;
   return (
     <li data-take={t.n} data-take-status={t.status} className="flex items-center gap-2 text-[11px]">
@@ -436,7 +458,25 @@ function TakeRow({ t, source, url, onPlay, onRename, onSend, onResume }: { t: Ta
         </span>
         {t.status === "failed" || t.status === "interrupted" ? <span className={t.status === "failed" ? "text-red-300" : "text-amber-300"}> · {t.error}</span> : null}
       </span>
-      {t.status === "done" ? (
+      {t.status === "done" && t.kind === "lipsync" ? (
+        // A singing take belongs on its lines (elsewhere its lips are out of time): In use, or Use this take.
+        t.inUse ? (
+          <span data-take-badge="in-use" className="flex shrink-0 items-center gap-1 rounded bg-emerald-400/15 px-1.5 py-0.5 text-emerald-300" title={t.sent ? `On its lines as ${t.sent}` : undefined}>
+            <Check className="size-3" /> In use
+          </span>
+        ) : (
+          <span className="flex shrink-0 items-center gap-1">
+            {t.fresh ? (
+              <span data-take-badge="new" className="bg-brand/15 text-brand rounded px-1.5 py-0.5">
+                New — compare
+              </span>
+            ) : null}
+            <button type="button" data-take-use onClick={onUse} className="hover:bg-accent rounded border px-1.5 py-0.5" title="Put this take on its lines now (nothing is made again)">
+              Use this take
+            </button>
+          </span>
+        )
+      ) : t.status === "done" ? (
         t.sent ? (
           <span data-take-sent className="flex shrink-0 items-center gap-1 text-emerald-300" title={`In your Storyboard as ${t.sent}`}>
             <Check className="size-3" /> In Storyboard

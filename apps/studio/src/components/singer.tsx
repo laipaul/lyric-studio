@@ -2,18 +2,25 @@
 
 // Lyrics Sync → Singer (21 Nov 2026, Paul's workflow): tick the lines where the singer shows, each with a picture or
 // video from Creation; "Make singing clips" sends each line's vocal with it to WaveSpeed InfiniteTalk (cost first, your
-// Creation cap). Each clip comes back into Creation, the Storyboard and onto its line, and Make plays it in time with
-// the song. API: /api/songs/[id]/singer.
-import { Check, Loader2, Mic } from "lucide-react";
+// Creation cap). The first take of a group (its picture, its lines) comes back into Creation, the Storyboard and onto its
+// lines, and Make plays it in time with the song. Retake makes another take of the same group: it waits as "New — compare"
+// (never replaces the take in use) until Paul chooses it with "Use this take" (21 Nov 2026). Every take plays with the
+// song from its first frame. API: /api/songs/[id]/singer.
+import { Check, Loader2, Mic, Pause, Play, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { SingerLine, SingerView } from "@lyric/video/singer";
+import type { GroupTake, SingerLine, SingerView } from "@lyric/video/singer";
+import { takeWhen } from "@lyric/video/take-facts";
 
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const money = (usd: number) => `$${usd.toFixed(2)}`;
+const fileUrl = (rel: string) => `/api/files/${rel.split("/").map(encodeURIComponent).join("/")}`;
+
+// The take being watched: its video (no sound) with the song from the take's first frame.
+export type Playing = { source: string; n: number; video: string; fromS: number; title: string };
 
 export type Singer = {
   view: SingerView | null;
@@ -21,18 +28,27 @@ export type Singer = {
   error: string | null;
   notice: { ok: boolean; text: string } | null;
   busy: boolean;
+  playing: Playing | null;
   setLine: (line: number, source: string | null) => Promise<void>;
   setScript: (line: number, script: string) => Promise<void>;
+  setResolution: (resolution: string) => Promise<void>;
   make: () => Promise<void>;
+  retake: (line: number) => Promise<void>;
+  chooseTake: (source: string, t: GroupTake) => Promise<void>;
+  play: (source: string, t: GroupTake | null) => void;
 };
 
-// `onMade`: called when singing clips finish (the Lyrics tab reloads its anchors).
+// `onMade`: called when a take lands on (or is switched onto) its lines (the Lyrics tab reloads its anchors).
 export function useSinger(projectId: string, onMade: () => void): Singer {
   const [view, setView] = useState<SingerView | null>(null);
   const [cap, setCap] = useState(10);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [playing, setPlaying] = useState<Playing | null>(null);
+  // A mood text still being saved (its box loses focus as Make or Retake is pressed): they wait for it, so the take is
+  // sent with the words on screen and the "to make" count is right afterwards.
+  const saving = useRef<Promise<void>>(Promise.resolve());
   const load = useCallback(async () => {
     try {
       const r = await api(`/api/songs/${projectId}/singer`, { cache: "no-store" });
@@ -49,20 +65,20 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the singing lines, read once the tab is shown
     void load();
   }, [load]);
-  const running = !!view?.lines?.some((l) => l.take?.status === "running");
+  const running = !!view?.running;
   useEffect(() => {
     if (!running) return;
     const t = setInterval(() => void load(), 4000);
     return () => clearInterval(t);
   }, [running, load]);
-  // A singing clip landed on its line: the Lyrics tab's anchors changed.
-  const done = view?.lines?.filter((l) => l.take?.status === "done").map((l) => `${l.number}:${l.take!.n}`).join(",") ?? null;
+  // A take landed on its lines or was chosen: the Lyrics tab's anchors changed.
+  const inUse = view?.lines?.flatMap((l) => l.takes.filter((t) => t.inUse).map((t) => `${l.number}:${t.n}`)).join(",") ?? null;
   const seen = useRef<string | null>(null);
   useEffect(() => {
-    if (done === null) return;
-    if (seen.current !== null && seen.current !== done) onMade();
-    seen.current = done;
-  }, [done, onMade]);
+    if (inUse === null) return;
+    if (seen.current !== null && seen.current !== inUse) onMade();
+    seen.current = inUse;
+  }, [inUse, onMade]);
 
   async function post(body: Record<string, unknown>) {
     const r = await api(`/api/songs/${projectId}/singer`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -70,40 +86,73 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
     if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
     return d;
   }
+  const attempt = async (what: () => Promise<void>) => {
+    try {
+      await what();
+    } catch (e) {
+      setNotice({ ok: false, text: (e as Error).message });
+    }
+  };
   return {
     view,
     cap,
     error,
     notice,
     busy,
-    setLine: async (line, source) => {
-      try {
-        await post({ action: "line", line, source });
-        await load();
-      } catch (e) {
-        setNotice({ ok: false, text: (e as Error).message });
-      }
-    },
-    setScript: async (line, script) => {
-      try {
+    playing,
+    setLine: (line, source) => attempt(async () => {
+      await post({ action: "line", line, source });
+      await load();
+    }),
+    setScript: (line, script) => {
+      const p = attempt(async () => {
         await post({ action: "script", line, script });
         await load();
-      } catch (e) {
-        setNotice({ ok: false, text: (e as Error).message });
-      }
+      });
+      saving.current = saving.current.then(() => p);
+      return p;
     },
+    setResolution: (resolution) => attempt(async () => {
+      await post({ action: "resolution", resolution });
+      await load();
+    }),
     make: async () => {
       setBusy(true);
       try {
+        await saving.current;
         const d = await post({ action: "make" });
-        setNotice({ ok: true, text: `${d.jobs?.length ?? 0} singing clip${d.jobs?.length === 1 ? "" : "s"} sent to WaveSpeed (${d.seconds} s of voice, about ${money(d.usd ?? 0)}). Each lands on its line by itself when it is ready (a few minutes each); follow it in Tasks.` });
+        setNotice({ ok: true, text: `${d.jobs?.length ?? 0} singing clip${d.jobs?.length === 1 ? "" : "s"} sent to WaveSpeed (${d.seconds} s of voice, about ${money(d.usd ?? 0)}). The first take of each group lands on its lines by itself when it is ready (a few minutes each); follow it in Tasks.` });
         window.dispatchEvent(new Event("lyric-tasks-changed")); // the Tasks menu opens with it
-        await load();
       } catch (e) {
         setNotice({ ok: false, text: (e as Error).message });
       } finally {
+        await load();
         setBusy(false);
       }
+    },
+    retake: async (line) => {
+      setBusy(true);
+      try {
+        await saving.current;
+        const d = await post({ action: "retake", line });
+        setNotice({ ok: true, text: `Retake sent to WaveSpeed (${d.seconds} s of voice, about ${money(d.usd ?? 0)}). It arrives as “New — compare” under its lines; the take in use stays until you choose another.` });
+        window.dispatchEvent(new Event("lyric-tasks-changed"));
+      } catch (e) {
+        setNotice({ ok: false, text: (e as Error).message });
+      } finally {
+        await load();
+        setBusy(false);
+      }
+    },
+    chooseTake: (source, t) => attempt(async () => {
+      await post({ action: "use", source, n: t.n });
+      setNotice({ ok: true, text: `${t.label ?? `Take ${t.n}`} is now on ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`} (nothing was made again). The next video uses it.` });
+      await load();
+    }),
+    play: (source, t) => {
+      if (!t?.file || !view) return setPlaying(null);
+      setPlaying({ source, n: t.n, video: fileUrl(`${view.folder}/${t.file}`), fromS: (t.sync_ms ?? 0) / 1000, title: `${t.label ?? `Take ${t.n}`} · ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` });
+      if (t.fresh) void post({ action: "seen", source, n: t.n }).then(load).catch(() => undefined);
     },
   };
 }
@@ -121,9 +170,21 @@ export function SingerBar({ singer }: { singer: Singer }) {
         <span className="font-medium">Singer</span>
         <span className="text-muted-foreground" data-singer-summary>
           {ticked ? `${ticked} line${ticked === 1 ? "" : "s"} where the singer shows` : "Choose a picture or video in the Who sings column on the lines where the singer shows."}
-          {v.toMake.lines.length ? ` · to make: ${v.toMake.lines.length} take${v.toMake.lines.length === 1 ? "" : "s"} (${v.toMake.seconds} s of voice, about ${money(v.toMake.usd)})` : ticked ? " · all made" : ""}
+          {v.toMake.lines.length ? ` · to make: ${v.toMake.lines.length} take${v.toMake.lines.length === 1 ? "" : "s"} (${v.toMake.seconds} s of voice at ${v.resolution}, about ${money(v.toMake.usd)})` : ticked ? " · all made" : ""}
           {over ? ` · above your cap of ${money(singer.cap)} (Creation → Your defaults)` : ""}
         </span>
+        {v.running ? (
+          <span data-singer-running className="text-brand flex items-center gap-1">
+            <Loader2 className="size-3 animate-spin" /> {v.running} being made
+          </span>
+        ) : null}
+        <label className="text-muted-foreground ml-auto flex items-center gap-1" title="The size InfiniteTalk makes the singing clips at (this video; takes already made keep theirs). 720p is sharper; 480p costs half.">
+          Resolution
+          <select data-singer-resolution value={v.resolution} onChange={(e) => void singer.setResolution(e.target.value)} className="bg-background rounded-md border px-1 py-0.5">
+            <option value="720p">720p · $0.06/s</option>
+            <option value="480p">480p · $0.03/s</option>
+          </select>
+        </label>
         {v.toMake.lines.length ? (
           <Button type="button" size="sm" data-singer-make disabled={singer.busy || !v.ready || over} onClick={() => void singer.make()} title={!v.ready ? "No WaveSpeed key yet" : over ? `Above your cap of ${money(singer.cap)}` : undefined}>
             {singer.busy ? <Loader2 className="animate-spin" /> : <Mic />} Make singing clips
@@ -131,7 +192,7 @@ export function SingerBar({ singer }: { singer: Singer }) {
         ) : null}
       </div>
       <p className="text-muted-foreground">
-        Lines in a row with the same picture are sung in one continuous take. Each take&apos;s voice is sent with its picture or video to WaveSpeed InfiniteTalk ({money(v.usdPerSecond)} per second). The clip comes back into Creation and your Storyboard, lands on its line and always plays in time with the song: Make cuts to it on the beat. The voice is {v.voice === "stem" ? "your vocal stem" : "the song itself (add your vocal stem in Assets for cleaner lips)"}.
+        Lines in a row with the same picture are sung in one continuous take. Each take&apos;s voice is sent with its picture or video to WaveSpeed InfiniteTalk at {v.resolution} ({money(v.usdPerSecond)} per second). The first take of a group comes back into Creation and your Storyboard, lands on its lines and always plays in time with the song: Make cuts to it on the beat. Retake makes another take of the same lines; it waits as “New — compare” until you choose it. The voice is {v.voice === "stem" ? "your vocal stem" : "the song itself (add your vocal stem in Assets for cleaner lips)"}.
       </p>
       {!v.ready ? (
         <p data-singer-nokey className="text-amber-200">
@@ -143,11 +204,80 @@ export function SingerBar({ singer }: { singer: Singer }) {
           {singer.notice.text}
         </p>
       ) : null}
+      {singer.playing && v.song ? <TakePlayer key={`${singer.playing.source}:${singer.playing.n}`} playing={singer.playing} song={fileUrl(v.song)} onClose={() => singer.play("", null)} /> : null}
     </div>
   );
 }
 
-// The Singer cell of one line: what it is sung from (a dropdown of Creation's pictures and videos) and its clip's state.
+// A take with the song: the take's video (no sound) and the song from the song second of the take's first frame, kept
+// together, so the lips can be judged against the real song. The song file is only read (played).
+function TakePlayer({ playing, song, onClose }: { playing: Playing; song: string; onClose: () => void }) {
+  const video = useRef<HTMLVideoElement>(null);
+  const audio = useRef<HTMLAudioElement>(null);
+  const [on, setOn] = useState(false);
+  const start = useCallback(() => {
+    const v = video.current;
+    const a = audio.current;
+    if (!v || !a) return;
+    v.currentTime = 0;
+    a.currentTime = playing.fromS;
+    void Promise.all([v.play(), a.play()]).then(() => setOn(true)).catch(() => setOn(false));
+  }, [playing.fromS]);
+  const stop = () => {
+    video.current?.pause();
+    audio.current?.pause();
+    setOn(false);
+  };
+  useEffect(() => {
+    const v = video.current;
+    const a = audio.current;
+    if (!v || !a) return;
+    let ready = 0;
+    const go = () => (ready += 1) === 2 && start();
+    v.addEventListener("canplay", go, { once: true });
+    a.addEventListener("canplay", go, { once: true });
+    a.load();
+    return () => {
+      v.removeEventListener("canplay", go);
+      a.removeEventListener("canplay", go);
+      v.pause();
+      a.pause();
+    };
+  }, [start]);
+  return (
+    <div data-singer-player className="bg-popover fixed right-4 bottom-24 z-40 flex w-72 flex-col gap-2 rounded-xl border p-2 shadow-2xl">
+      <div className="flex items-center gap-2 text-xs">
+        <span className="min-w-0 flex-1 truncate font-medium">{playing.title}</span>
+        <button type="button" onClick={on ? stop : start} className="rounded-md border p-1" aria-label={on ? "Pause" : "Play from the start"} data-singer-player-toggle>
+          {on ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
+        </button>
+        <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground rounded-md p-1" aria-label="Close" data-singer-player-close>
+          <X className="size-3.5" />
+        </button>
+      </div>
+      <video
+        ref={video}
+        src={playing.video}
+        muted
+        playsInline
+        preload="auto"
+        className="bg-muted max-h-96 w-full rounded-lg object-contain"
+        onTimeUpdate={(e) => {
+          // Keep the song on the picture: a drift above 80 ms is set right.
+          const a = audio.current;
+          const want = playing.fromS + e.currentTarget.currentTime;
+          if (a && !a.paused && Math.abs(a.currentTime - want) > 0.08) a.currentTime = want;
+        }}
+        onEnded={stop}
+      />
+      <audio ref={audio} src={song} preload="auto" />
+      <span className="text-muted-foreground text-[11px]">With the song from {Math.floor(playing.fromS / 60)}:{(playing.fromS % 60).toFixed(1).padStart(4, "0")}: the lips should sing what the song sings.</span>
+    </div>
+  );
+}
+
+// The Singer cell of one line: what it is sung from (a dropdown of Creation's pictures and videos), the mood box, and on
+// a group's first line its state, Retake and every take of the group to compare and choose from.
 export function SingerCell({ singer, number }: { singer: Singer; number: number }) {
   const v = singer.view;
   const l: SingerLine | undefined = v?.lines?.find((x) => x.number === number);
@@ -155,6 +285,9 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
   const t = l.take;
   const inRun = !!l.run && l.run.last > l.run.first;
   const later = inRun && l.run!.first !== l.number; // a later line of a run: its take is made with the run's first line
+  const lines = inRun ? `lines ${l.run!.first}-${l.run!.last}` : "this line";
+  const used = l.takes.find((x) => x.inUse) ?? null;
+  const madeBefore = l.needed && l.takes.some((x) => x.status === "done");
   return (
     <div className="flex flex-col gap-1 text-[11px]" data-singer-line={number}>
       <SourcePicker sources={v.sources} value={l.source} onChange={(src) => void singer.setLine(number, src)} line={number} />
@@ -165,27 +298,80 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
           {t?.status === "done" && !l.needed ? " · made" : ""}
         </span>
       ) : l.source && t ? (
-        <span data-singer-status={t.status} className={cn(t.status === "done" ? "text-emerald-300" : t.status === "running" ? "text-muted-foreground" : "text-amber-200")}>
-          {t.status === "done" ? (
-            <>
-              <Check className="inline size-3" /> {l.needed ? "made before (an earlier timing or the talking style): make again to sing" : inRun ? `singing clip on lines ${l.run!.first}-${l.run!.last}` : "singing clip on this line"}
-            </>
-          ) : t.status === "running" ? (
-            <>
-              <Loader2 className="inline size-3 animate-spin" /> being made…
-            </>
-          ) : (
-            t.error
-          )}
-        </span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span data-singer-status={madeBefore ? "remake" : used ? "done" : t.status} className={cn(used && !madeBefore ? "text-emerald-300" : t.status === "running" ? "text-muted-foreground" : t.status === "done" ? "text-muted-foreground" : "text-amber-200")}>
+            {madeBefore ? (
+              "made before (an earlier timing or the talking style): make again to sing"
+            ) : used ? (
+              <>
+                <Check className="inline size-3" /> singing clip on {lines}
+              </>
+            ) : t.status === "running" ? (
+              <>
+                <Loader2 className="inline size-3 animate-spin" /> being made…
+              </>
+            ) : t.status === "done" ? (
+              "no take on the line now: choose one below"
+            ) : (
+              t.error
+            )}
+          </span>
+          {!l.needed && l.takes.some((x) => x.status === "done" || x.status === "running") ? (
+            <button type="button" data-singer-retake={number} disabled={singer.busy || !v.ready || l.piece.usd > singer.cap} onClick={() => void singer.retake(number)} className="hover:bg-accent flex items-center gap-1 rounded border px-1.5 py-0.5 disabled:opacity-50" title={`The same picture and piece of the vocal again, with the mood text and resolution of now (${v.resolution}): ${l.piece.seconds} s · about ${money(l.piece.usd)}. Earlier takes stay.`}>
+              <RefreshCw className="size-3" /> Retake
+            </button>
+          ) : null}
+        </div>
       ) : l.source ? (
         <span className="text-muted-foreground" data-singer-status="todo">
           {inRun ? `lines ${l.run!.first}-${l.run!.last} in one take · ` : ""}
-          {l.piece.seconds} s · about {money(l.piece.usd)}
+          {l.piece.seconds} s · {v.resolution} · about {money(l.piece.usd)}
         </span>
       ) : null}
+      {l.source && l.takes.length ? <TakesList singer={singer} source={l.source} takes={l.takes} /> : null}
       {!v.sources.length ? <span className="text-muted-foreground">Add pictures in Creation first</span> : null}
     </div>
+  );
+}
+
+// Every take of a group, newest first: ▶ plays it with the song; "Use this take" puts it on the lines at once.
+function TakesList({ singer, source, takes }: { singer: Singer; source: string; takes: GroupTake[] }) {
+  return (
+    <ul data-singer-takes className="mt-0.5 flex w-52 flex-col gap-1 border-l pl-1.5">
+      {[...takes].reverse().map((t) => {
+        const on = singer.playing?.source === source && singer.playing.n === t.n;
+        return (
+          <li key={t.n} data-singer-take={t.n} data-singer-take-state={t.inUse ? "in-use" : t.fresh ? "new" : t.status} className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-1">
+              {t.status === "done" && t.file ? (
+                <button type="button" data-singer-take-play onClick={() => singer.play(source, on ? null : t)} className="hover:bg-accent shrink-0 rounded border p-0.5" aria-label={`Play take ${t.n} with the song`} title="Plays the take with the song from its first frame">
+                  {on ? <Pause className="size-3" /> : <Play className="size-3" />}
+                </button>
+              ) : t.status === "running" ? (
+                <Loader2 className="text-brand size-3.5 shrink-0 animate-spin" />
+              ) : (
+                <span className="size-3.5 shrink-0" />
+              )}
+              <span className="truncate font-medium">{t.label ?? `Take ${t.n}`}</span>
+              {t.inUse ? (
+                <span data-singer-take-badge="in-use" className="rounded bg-emerald-400/15 px-1 text-emerald-300">In use</span>
+              ) : t.fresh ? (
+                <span data-singer-take-badge="new" className="bg-brand/15 text-brand rounded px-1">New — compare</span>
+              ) : null}
+              {t.status === "done" && !t.inUse ? (
+                <button type="button" data-singer-take-use onClick={() => void singer.chooseTake(source, t)} className="hover:bg-accent ml-auto shrink-0 rounded border px-1 py-px whitespace-nowrap" title="Put this take on its lines now (nothing is made again)">
+                  Use this take
+                </button>
+              ) : null}
+            </div>
+            <span className="text-muted-foreground pl-5" data-singer-take-facts>
+              {[takeWhen(t), t.status === "running" ? "being made…" : t.status === "done" || t.request_id ? `about ${money(t.cost_usd)}` : "nothing spent", t.resolution ?? "720p"].filter(Boolean).join(" · ")}
+              {t.status === "failed" || t.status === "interrupted" ? <span className={t.status === "failed" ? "text-red-300" : "text-amber-300"}> · {t.error}</span> : null}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -197,6 +383,7 @@ function ScriptField({ line, value, onSave }: { line: number; value: string; onS
     if (next !== value) void onSave(next);
   };
   return (
+    <div className="flex w-44 flex-col gap-0.5">
     <input
       data-singer-script={line}
       value={text}
@@ -204,12 +391,19 @@ function ScriptField({ line, value, onSave }: { line: number; value: string; onS
       onChange={(e) => setText(e.target.value)}
       onBlur={save}
       onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-      placeholder="What the singer does (optional)"
-      title="A few words sent with the voice: expression and pose, e.g. turns to the sea, soft smile"
+      placeholder="Mood (optional)"
+      title="Sent to InfiniteTalk as its prompt, after the singing cue. A new mood is used by the next Retake."
       className="bg-background w-44 rounded-md border px-1.5 py-0.5"
     />
+      <span data-singer-mood-hint className="text-muted-foreground text-[10px] leading-tight">
+        {MOOD_HINT}
+      </span>
+    </div>
   );
 }
+
+// Under the mood box: the words go to InfiniteTalk as its prompt, and it only shapes the picture.
+export const MOOD_HINT = "Describe the face and mouth, not the voice — e.g. singing clearly, precise lip shapes, gentle head sway.";
 
 // What a line is sung from: a small picker with a thumbnail and the short name of every picture and video in Creation
 // (searchable when the list grows).

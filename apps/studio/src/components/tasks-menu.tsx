@@ -13,6 +13,7 @@ import type { Tasks as RunTasks } from "@lyric/video/runs";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
+import { publishTakes } from "@/lib/tasks-state";
 
 type Tasks = RunTasks & { cards: CardTask[]; takes: GenerateTask[] };
 type Run = Tasks["runs"][number];
@@ -49,6 +50,7 @@ export function TasksMenu() {
       last.current = new Map([...next.runs, ...next.cards, ...next.takes].map((run) => [run.id, run.status]));
       terminalCount.current = next.terminal.length;
       setTasks(next);
+      publishTakes(next.takes); // the song page's running-task badges
     } catch {
       // the studio is restarting: try again on the next tick
     }

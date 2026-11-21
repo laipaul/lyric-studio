@@ -78,6 +78,11 @@ async function main() {
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     await page.goto(`${base}/songs/${sp.project.id}?tab=lyrics`);
     await page.waitForSelector("[data-singer]");
+    // "N lines to check by ear" follows at once when a line is marked Checked by ear (the bug of 21 Nov 2026: it stayed).
+    check(((await page.textContent("[data-todo-item='listen']").catch(() => "")) ?? "").includes("line 2"), "Prepare lists line 2 to check by ear");
+    await page.click("tr[data-line='2'] [data-ear='off']");
+    const banner = await page.waitForFunction(() => !document.querySelector("[data-todo-item='listen']"), null, { timeout: 15_000 }).then(() => true).catch(() => false);
+    check(banner, "marked Checked by ear: the banner no longer lists it, without reloading the page");
     // A short name for the picture (Creation → Rename): the pickers show it; the file keeps its name.
     await fetch(`${base}/api/songs/${sp.project.id}/pictures`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "label", file: "singer close.png", label: "Close up" }) });
     await page.reload();
@@ -91,9 +96,11 @@ async function main() {
     const settings = JSON.parse(readFileSync(path.join(pictures, "singer.json"), "utf8")) as { lines: Record<string, string> };
     check(settings.lines["2"] === "singer close.png", "line 2 is a singing line, sung from its picture (pictures\\singer.json)");
     const summary = (await page.textContent("[data-singer-summary]")) ?? "";
-    check(/1 line where the singer shows · to make: 1 take \(\d+ s of voice, about \$\d+\.\d\d\)/.test(summary), `the cost shows before anything is sent (${summary})`);
+    check(/1 line where the singer shows · to make: 1 take \(\d+ s of voice at 720p, about \$\d+\.\d\d\)/.test(summary), `the cost shows before anything is sent (${summary})`);
     check(((await page.textContent("[data-singer]")) ?? "").includes("the song itself"), "without a vocal stem, the song itself is the voice (said plainly)");
 
+    check(((await page.textContent("[data-singer-line='2'] [data-singer-mood-hint]")) ?? "").includes("Describe the face and mouth, not the voice"), "the mood box says what to write (the face and mouth, not the voice)");
+    check((await page.inputValue("[data-singer-resolution]")) === "720p" && summary.includes("at 720p"), "singing clips are made at 720p unless chosen otherwise; the cost says so");
     // The block's little script (what the singer does): saved, sent with the voice.
     await page.fill("[data-singer-script='2']", "turns to the sea, soft smile");
     await page.press("[data-singer-script='2']", "Enter");
@@ -119,6 +126,37 @@ async function main() {
     // A long file name never pushes the Singer column out of view (Paul, 21 Nov 2026).
     const box = await page.$eval("[data-singer-line='2'] [data-singer-source]", (e: Element) => { const r = e.getBoundingClientRect(); const c = document.querySelector("[data-lines-scroll]")!.getBoundingClientRect(); return { right: r.right, edge: c.right }; });
     check(box.right <= box.edge, `the Singer column is in view without scrolling sideways (${Math.round(box.right)} ≤ ${Math.round(box.edge)})`);
+    check(((await page.textContent("[data-singer-line='2'] [data-singer-take-state='in-use']")) ?? "").includes("In use"), "its take is listed under the line, marked In use");
+
+    // Retake (Paul, 21 Nov 2026): the same lines again at 480p with a new mood, sent straight from the mood box.
+    await page.selectOption("[data-singer-resolution]", "480p");
+    await page.waitForFunction(() => (document.querySelector("[data-singer-retake='2']") as HTMLElement | null)?.title.includes("480p"), null, { timeout: 15_000 });
+    check((JSON.parse(readFileSync(path.join(pictures, "singer.json"), "utf8")) as { resolution?: string }).resolution === "480p", "the resolution is saved for this video (pictures\\singer.json)");
+    await page.fill("[data-singer-script='2']", "singing clearly, precise lip shapes");
+    await page.click("[data-singer-retake='2']"); // the mood box loses focus as Retake is pressed: it is saved first
+    await page.waitForSelector("[data-singer-line='2'] [data-singer-take-state='new']", { timeout: 90_000 });
+    const takes = (JSON.parse(readFileSync(path.join(pictures, "pictures.json"), "utf8")) as { pictures: Record<string, { takes: { n: number; kind?: string; prompt?: string; resolution?: string; fresh?: boolean; file?: string }[] }> }).pictures["singer close.png"].takes.filter((t) => t.kind === "lipsync");
+    const retake = takes.at(-1)!;
+    check(takes.length === 2 && retake.resolution === "480p" && retake.prompt === "singing clearly, precise lip shapes" && retake.fresh === true, `the retake is a new take with the mood and resolution of now; the first take stays (${JSON.stringify(takes.map((t) => [t.n, t.resolution, t.prompt]))})`);
+    const kept = (JSON.parse(readFileSync(paths.recipe!, "utf8")) as { anchors?: { line: number; clip: string }[] }).anchors?.find((x) => x.line === 2);
+    check(kept?.clip === "singer close sings line 2.mp4", `the retake does not replace the take in use (${kept?.clip})`);
+    check(((await page.textContent("[data-singer-line='2'] [data-singer-take-state='new']")) ?? "").includes("New — compare") && ((await page.textContent("[data-singer-summary]")) ?? "").includes("all made"), "it is marked New — compare; nothing is left to make (the count follows the take sent)");
+    const facts = (await page.textContent(`[data-singer-line='2'] [data-singer-take='${retake.n}'] [data-singer-take-facts]`)) ?? "";
+    check(/\d\d:\d\d.* · about \$\d+\.\d\d · 480p$/.test(facts), `each take shows its date, cost and resolution (${facts})`);
+    // ▶ plays the take with the song from the group's start.
+    await page.click(`[data-singer-line='2'] [data-singer-take='${retake.n}'] [data-singer-take-play]`);
+    await page.waitForSelector("[data-singer-player] video");
+    const player = await page.$eval("[data-singer-player]", (e: Element) => ({ video: (e.querySelector("video") as HTMLVideoElement).src, song: (e.querySelector("audio") as HTMLAudioElement).src, text: e.textContent ?? "" }));
+    check(player.video.includes("sings%20line%202") && player.song.includes("A%20Heart%20For%20Two") && /With the song from 1:0\d\.\d/.test(player.text), `the take plays with the song from the group's start (${JSON.stringify(player)})`);
+    await page.click("[data-singer-player-close]");
+    // Use this take: the line switches at once (nothing is made again); the first take goes to Omit.
+    await page.click(`[data-singer-line='2'] [data-singer-take='${retake.n}'] [data-singer-take-use]`);
+    await page.waitForSelector(`[data-singer-line='2'] [data-singer-take='${retake.n}'][data-singer-take-state='in-use']`, { timeout: 15_000 });
+    const switched = (JSON.parse(readFileSync(paths.recipe!, "utf8")) as { anchors?: { line: number; clip: string; sync?: number }[] }).anchors?.find((x) => x.line === 2);
+    const clipsNow = (JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8")) as { clips: Record<string, { omit?: boolean }> }).clips;
+    const lipsyncCount = (JSON.parse(readFileSync(path.join(pictures, "pictures.json"), "utf8")) as { pictures: Record<string, { takes: { kind?: string }[] }> }).pictures["singer close.png"].takes.filter((t) => t.kind === "lipsync").length;
+    check(switched?.clip !== "singer close sings line 2.mp4" && switched?.sync === a?.sync && clipsNow["singer close sings line 2.mp4"]?.omit === true && lipsyncCount === 2, `Use this take puts it on the line at once, in time with the song; the other goes to Omit; nothing new is made (${JSON.stringify(switched)})`);
+    await page.selectOption("[data-singer-resolution]", "720p");
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
     // A block: the same picture on line 3 too -> one take over lines 2-3; it replaces the line-2 take by itself.
     await page.click("[data-singer-line='3'] [data-singer-source]");
@@ -150,6 +188,9 @@ async function main() {
     await page.goto(`${base}/songs/${sp.project.id}?tab=production`);
     await page.waitForSelector("[data-take-source]");
     check(((await page.textContent("[data-picture='singer close.png'] [data-take-source]")) ?? "").includes("lip sync, line"), "Creation labels it: lip sync, line …");
+    // The picture card shows every take (line 2 now has no singer, so none is in use: each can be chosen again).
+    const card = await page.$$eval("[data-picture='singer close.png'] [data-take]", (rows: Element[]) => rows.map((r) => `${r.getAttribute("data-take")}:${r.querySelector("[data-take-badge]")?.getAttribute("data-take-badge") ?? "-"}:${r.querySelector("[data-take-use]") ? "use" : "-"}`));
+    check(card.length === 3 && card.every((c) => c.endsWith(":-:use")), `the Creation card lists all takes with In use / Use this take (${card.join(", ")})`);
     await browser.close();
   } finally {
     server.kill();

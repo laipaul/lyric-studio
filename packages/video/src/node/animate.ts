@@ -30,6 +30,7 @@ import { importSongClips } from "./assets";
 import { cleanLabel, setClipLabel } from "./clip-edits";
 import { download, errorText } from "./characters/fal";
 import { processAlive } from "./jobs";
+import { readRecipe } from "./recipe";
 import { songPathsById } from "./song-folder";
 
 export const PICTURES_DIR = "pictures";
@@ -107,11 +108,13 @@ export type Take = {
   label?: string; // the user's short name for this take ("Bride smile"); shown instead of "Take N"
   cleared?: boolean; // hidden from the Tasks menu (Clear finished); the take itself stays
   playable?: boolean; // the file was checked (and if needed re-made) to play in the browser: H.264, yuv420p, fast start
+  resolution?: string; // lipsync: the resolution asked of InfiniteTalk ("480p" | "720p"; before 21 Nov 2026 always 720p)
+  fresh?: boolean; // lipsync: a later take of lines that already had a take in use: waits for Paul ("New — compare"), never placed by itself
 };
 export type PictureRecord = { label?: string; source?: string; mood?: string; takes: Take[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string }; // sent: the picture itself sent to the Storyboard (its clip name)
 export type PicturesFile = { _help?: string; pictures: Record<string, PictureRecord> };
 // source: where it came from, a small label ("Added by you", "Midjourney", "From higgsfield.ai"). kind: only a picture can be animated.
-export type PictureView = { file: string; label: string | null; url: string; kind: "picture" | "video"; source: string; mood: string; takes: Take[]; width: number | null; height: number | null; sent: string | null };
+export type PictureView = { file: string; label: string | null; url: string; kind: "picture" | "video"; source: string; mood: string; takes: (Take & { inUse?: boolean })[]; width: number | null; height: number | null; sent: string | null };
 // Paul's own defaults for Animate (Creation → Defaults), for every song: the service and model, how many takes, the cap.
 export type CreationDefaults = { service: ServiceId; quality: Quality; takes: number; cap: number; length: TakeLength }; // length: "song" = one phrase of the song, "short" = 5 s
 export const CREATION_FILE = "creation.json"; // in the workspace folder
@@ -331,11 +334,14 @@ export async function picturesView(ws: Workspace, projectId: string, env: NodeJS
   const files = existsSync(dir) ? readdirSync(dir).filter((f) => BOARD_FILE.test(f) && statSync(path.join(dir, f)).isFile()) : [];
   files.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
   const rel = path.relative(ws.dir, dir).split(path.sep).join("/");
+  const recipeFile = songPathsById(ws, projectId).recipe;
+  const singingAnchors = new Set((recipeFile ? (readRecipe(recipeFile).anchors ?? []) : []).filter((a) => a.sync !== undefined).map((a) => `${a.line}:${a.through ?? a.line}:${a.clip.toLowerCase()}`));
   const pictures: PictureView[] = [];
   for (const f of files) {
     const info = await probeMedia(path.join(dir, f)).catch(() => null);
     const rec = all.pictures[f];
-    const takes = (rec?.takes ?? []).map((t) => (t.clip && !t.sent ? { ...t, sent: t.clip } : t));
+    // A singing take is "in use" while its clip is the singing anchor on its lines (song.json).
+    const takes = (rec?.takes ?? []).map((t) => (t.clip && !t.sent ? { ...t, sent: t.clip } : t)).map((t) => (t.kind === "lipsync" ? { ...t, inUse: !!t.sent && singingAnchors.has(`${t.line}:${t.through ?? t.line}:${t.sent.toLowerCase()}`) } : t));
     pictures.push({ file: f, label: rec?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? "picture" : "video", source: sourceLabel(f, rec?.source), mood: rec?.mood ?? "", takes, width: info?.width ?? null, height: info?.height ?? null, sent: rec?.sent ?? null });
   }
   const stub = !!env.LYRIC_GENERATE_STUB;

@@ -4,6 +4,31 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### G2 Prepare → Pictures: picture board and Animate (WaveSpeed / Higgsfield), takes at the end of the clips ✅ (to verify on the PC)
+- Paul's real flow (21 Nov 2026): Midjourney pictures → clips at random → play with the order against the song until it
+  feels right; no preset storyboard. So the path is **pictures, then clips, then play with the order**; the G1 story
+  tools stay, folded under "Story tools (optional)". G2 shot scripts are dropped.
+- **Prepare → Pictures** (the tab G1 called Production): drop pictures (own names, `pictures\`); per picture a few
+  optional mood words, 1–6 takes (default 3), Standard / Best, **Animate**.
+- **The app decides the technical part:** Seedance 2.5 image-to-video, 5 s, 720p, the picture's own shape, no sound,
+  a gentle-motion prompt that keeps the picture as it is ("Mood: …" added when given). Requests are never retried on
+  submit (a retry could be billed twice).
+- **Money:** your own key in .env (WAVESPEED_API_KEY; HIGGSFIELD_API_KEY as "id:secret"); the cost shows before
+  sending ("3 × 5 s · about $3.24": WaveSpeed Flash $0.216/s, Seedance 2.5 $0.324/s at 720p); a press above the
+  spending cap (default $10) is refused; "Sent for this song so far". Higgsfield's price is not in its docs: WaveSpeed's
+  is shown, marked "(estimate)". Higgsfield needs the picture online: it goes up through WaveSpeed's upload (or fal's
+  storage with FAL_KEY).
+- **Takes:** made at the same time; each finished take joins the END of the song's clips as "<picture> take N.mp4", in
+  take order, never placed anywhere else (Paul's order rule). A take the studio lost mid-way: "Get result" (free).
+- Not tested against the real services from the cloud (no keys here): the requests follow WaveSpeed's and
+  Higgsfield's docs as read on 21 Nov 2026; the first real run on the PC confirms them.
+- Fix (21 Nov 2026, Paul's update stopped on a changed .env.example): **Update Lyric Studio.cmd** in the project folder
+  (scripts/update.mjs) moves a key typed into .env.example into .env, keeps the edited file aside, puts .env.example
+  back, then pulls, installs and starts. The Pictures tab says plainly that the key goes in D:\videomaker\.env, not
+  .env.example; without a key Animate stays off. Tests: update-script (5).
+- Tests: animate (12, with stand-ins for both services). Browser: pictures (11 checks, LYRIC_GENERATE_STUB),
+  production (story tools folded), song-stages, shotlist pass.
+
 ### Characters, C1 in the app: the Characters page, cards from one picture, packs, lock and versions ✅ (verified by Paul, 18 Nov 2026: "all good", with fixes 1–4 below)
 - **Characters page** in the header, after Collections, with two sections: Characters and Scene cards. "New …" tiles
   take a name and one picture; the reference check (or location check) runs at once, locally and for free.

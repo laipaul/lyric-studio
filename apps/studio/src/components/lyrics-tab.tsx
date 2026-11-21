@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, Clapperboard, Ear, Pause, Play, RotateCcw, Save, Star, Undo2, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { clockTenths, linesInVideo } from "@lyric/video";
@@ -47,6 +48,7 @@ const PART_PLATFORMS = new Set(["reels", "tiktok", "shorts"]);
 // own clips and its collections; saved in song.json at once). Below: lyrics.txt itself, with label /
 // title / credit lines flagged.
 export function LyricsTab({ projectId }: { projectId: string }) {
+  const router = useRouter(); // the page's Prepare to-do list ("N lines to check by ear") is read again after a change
   const [data, setData] = useState<LyricsView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
@@ -182,6 +184,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
     if (!result) return;
     setNotice({ ok: true, text: checked ? `Line ${l.number} checked by ear: QA no longer warns about its timing (until the alignment or its time changes).` : `Line ${l.number}: "checked by ear" taken off.` });
     await load();
+    router.refresh(); // the "lines to check by ear" banner and Prepare's status follow at once
   }
 
   async function save(from: Pending = pending) {
@@ -196,6 +199,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
     const extra = `${skipped.map((k) => ` Line ${k.line} "${k.text}" is NOT used: ${k.why}.`).join("")}${dropped.map((d) => ` ${d}.`).join("")}`;
     setNotice({ ok: !skipped.length, text: `Saved to hints.lrc (${result.handSet} line(s) set by hand). The next video uses them; the stored alignment is kept. Make the video again to see it.${extra}` });
     await load();
+    router.refresh(); // a line set by hand leaves the "to check by ear" banner
   }
 
   // Every hand-set start back to the timing (the vocal stem's when it is used), Undo of a reset, or closing its notice.

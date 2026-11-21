@@ -4,6 +4,41 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Singing takes: Retake, compare, choose; resolution; mood hint; two fixes; running badge ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "InfiniteTalk takes vary a lot in articulation. I make several takes per sung group and pick the
+  best. Today a new take of the same lines can land on its line by itself and replace the one in use."
+- **Retake** (Lyrics Sync → Who sings, next to "singing clip on lines X–Y"): the same group again as a new take (same
+  picture or video, same piece of the vocal, the mood text and resolution of now; cost against the cap). Earlier
+  takes are never deleted or replaced.
+- **No silent replacement:** the first take of a group still goes into the Storyboard and onto its lines by itself. A
+  later take of the same lines arrives as **"New — compare"** and stays out of the Storyboard until chosen. **"Use this
+  take"** switches the lines at once (nothing is made or rendered again; the take it replaces goes to Omit, the chosen
+  one comes out of Omit). A take of other lines (e.g. line 9 alone before the block 9–11) still gives way to the block's
+  first take, as before. A new mood text or resolution no longer marks a group "to make": Retake is how they are tried.
+- **Compare in place:** under each group, every take (Take N, or its short name) with ▶, date, cost, resolution and
+  In use / New — compare. ▶ plays the take with the song from the take's first frame (the group's start), kept in step,
+  in a small player at the bottom right; watching a "New — compare" take takes the mark off. The Creation picture card
+  shows the same labels; for a singing take "Use this take" replaces "Send to Storyboard" (out of its line its lips
+  would be out of time).
+- **Resolution:** Singer bar → Resolution 480p ($0.03/s) / 720p ($0.06/s), default 720p, saved per video in
+  pictures\singer.json; the cost estimate says "… s of voice at 720p"; every take records and shows its resolution.
+  Checked in code: **until now every singing clip was sent to WaveSpeed InfiniteTalk at 720p** (a fixed
+  `resolution: "720p"` in node/singer.ts, both the picture and the video model; seed −1, so every take differs).
+- **Mood box:** the hint under it: "Describe the face and mouth, not the voice — e.g. singing clearly, precise lip
+  shapes, gentle head sway." (it is InfiniteTalk's prompt, after the singing cue).
+- **Fix: "N lines to check by ear" did not update** when a line was marked Checked by ear. The banner is built by the
+  page on the server and was never read again; the page now refreshes it after Checked by ear and after Save.
+- **Fix: "to make: N take(s)" did not update after sending.** Typing a mood and pressing Make right away sent the take
+  with the old words while the new words were saved, so the group looked unmade. Make and Retake now wait for the mood
+  to be saved, and the count no longer depends on the mood text.
+- **Running badge:** a spinner and a count on the Creation and Lyrics Sync tabs while singing clips are being made
+  (from the Tasks menu's own list, no extra polling); a click opens Tasks. The Singer bar says "N being made".
+- Tests: vitest animate (+8: resolution price and request, first take placed, later take New — compare and not
+  placed, seen, Use this take and back, unfinished take refused, facts). Browser: singer (+12: banner refresh, mood
+  hint, resolution, Retake with the mood from the box, take in use kept, New — compare, all made, facts, ▶ with the
+  song, Use this take, Creation labels), lyrics-tab, pictures, production, song-stages pass. The other vitest failures
+  in the cloud (renders reaching remotion.media, audio analysis) are the same without this step.
+
 ### Wardrobe: one face, many looks ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "other apps added the full wardrobe with different looks", "go". On a character card, the
   pack is the main look; "Add look" (e.g. Travel coat) with its own outfit, full body front and back and an optional
@@ -145,31 +180,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   model or number of takes for itself.
 - Tests: animate (17: sources, a Midjourney video, a link, defaults). Browser: pictures (19 checks), song-stages,
   production pass.
-
-### G2 Prepare → Pictures: picture board and Animate (WaveSpeed / Higgsfield), takes at the end of the clips ✅ (to verify on the PC)
-- Paul's real flow (21 Nov 2026): Midjourney pictures → clips at random → play with the order against the song until it
-  feels right; no preset storyboard. So the path is **pictures, then clips, then play with the order**; the G1 story
-  tools stay, folded under "Story tools (optional)". G2 shot scripts are dropped.
-- **Prepare → Pictures** (the tab G1 called Production): drop pictures (own names, `pictures\`); per picture a few
-  optional mood words, 1–6 takes (default 3), Standard / Best, **Animate**.
-- **The app decides the technical part:** Seedance 2.5 image-to-video, 5 s, 720p, the picture's own shape, no sound,
-  a gentle-motion prompt that keeps the picture as it is ("Mood: …" added when given). Requests are never retried on
-  submit (a retry could be billed twice).
-- **Money:** your own key in .env (WAVESPEED_API_KEY; HIGGSFIELD_API_KEY as "id:secret"); the cost shows before
-  sending ("3 × 5 s · about $3.24": WaveSpeed Flash $0.216/s, Seedance 2.5 $0.324/s at 720p); a press above the
-  spending cap (default $10) is refused; "Sent for this song so far". Higgsfield's price is not in its docs: WaveSpeed's
-  is shown, marked "(estimate)". Higgsfield needs the picture online: it goes up through WaveSpeed's upload (or fal's
-  storage with FAL_KEY).
-- **Takes:** made at the same time; each finished take joins the END of the song's clips as "<picture> take N.mp4", in
-  take order, never placed anywhere else (Paul's order rule). A take the studio lost mid-way: "Get result" (free).
-- Not tested against the real services from the cloud (no keys here): the requests follow WaveSpeed's and
-  Higgsfield's docs as read on 21 Nov 2026; the first real run on the PC confirms them.
-- Fix (21 Nov 2026, Paul's update stopped on a changed .env.example): **Update Lyric Studio.cmd** in the project folder
-  (scripts/update.mjs) moves a key typed into .env.example into .env, keeps the edited file aside, puts .env.example
-  back, then pulls, installs and starts. The Pictures tab says plainly that the key goes in D:\videomaker\.env, not
-  .env.example; without a key Animate stays off. Tests: update-script (5).
-- Tests: animate (12, with stand-ins for both services). Browser: pictures (11 checks, LYRIC_GENERATE_STUB),
-  production (story tools folded), song-stages, shotlist pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

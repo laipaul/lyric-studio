@@ -175,7 +175,7 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
         {/* The Shape page puts its Analysis chip and Next: Make here (2 Nov 2026; shape-board.tsx, a portal). */}
         <div id="song-header-actions" data-song-header-actions className="ml-auto flex items-center gap-2" />
       </div>
-      <SongStages key={`${search.tab ?? ""}:${search.panel ?? ""}:${search.part ?? ""}:${search.from ?? ""}`} initialTab={tab} initialPanel={tab === "shape" ? askedPanel : null} initialPart={MAKE_PARTS.includes(search.part ?? "") ? (search.part as MakePart) : undefined} statuses={statuses} todo={todo} counts={{ post: approved.reduce((n, g) => n + g.videos.length, 0) + offered.length }} reviewPlatforms={reviewPlatforms}>
+      <SongStages key={`${search.tab ?? ""}:${search.panel ?? ""}:${search.part ?? ""}:${search.from ?? ""}`} initialTab={tab} initialPanel={tab === "shape" ? askedPanel : null} initialPart={MAKE_PARTS.includes(search.part ?? "") ? (search.part as MakePart) : undefined} statuses={statuses} todo={todo} counts={{ post: approved.reduce((n, g) => n + g.videos.length, 0) + offered.length }} reviewPlatforms={reviewPlatforms} projectId={song.id}>
         {/* Prepare (11 Nov 2026): Assets = every file the user provides (song, vocal stem, lyrics, hints, backing vocals,
             cover) and the one Replaced files list; Lyrics Sync = tempo, Time the lyrics again, the summary and the lyric lines; Song Details = title and card texts, EP, links;
             Storyboard = the clips and photos in story order. */}

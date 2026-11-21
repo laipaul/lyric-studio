@@ -2,11 +2,14 @@
 // GET: the lines with their vocal piece, cost and newest singing clip; what is left to make and its cost.
 // POST { action: "line", line, source|null }: tick a line (or untick it with null) and choose what it is sung from.
 // POST { action: "script", line, script }: the little script of the singing block that starts on that line (empty: none).
+// POST { action: "resolution", resolution }: "480p" or "720p" for the takes made from now on (singer.json).
+// POST { action: "retake", line }: the group that starts on that line again, as a new take (cost against the cap).
+// POST { action: "use", source, n }: that take on its lines now (nothing re-made); { action: "seen", source, n }: watched.
 // POST { action: "make", lines? }: checks the cost against your Creation cap and makes the singing clips (the request
 //   does not wait); each comes back into Creation, the Storyboard and onto its line, in time with the song.
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import { readCreationDefaults } from "@lyric/video/animate";
-import { runSinging, setSingerLine, setSingerScript, singerView, startSinging } from "@lyric/video/singer";
+import { runSinging, seenSingingTake, setSingerLine, setSingerResolution, setSingerScript, singerView, startRetake, startSinging, chooseSingingTake } from "@lyric/video/singer";
 import { connection } from "next/server";
 
 import { withWorkspaceAsync, withWorkspace } from "@/lib/workspace";
@@ -29,9 +32,18 @@ export async function GET(_request: Request, { params }: Params) {
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
   try {
-    const body = (await request.json().catch(() => ({}))) as { action?: unknown; line?: unknown; source?: unknown; lines?: unknown; script?: unknown };
+    const body = (await request.json().catch(() => ({}))) as { action?: unknown; line?: unknown; source?: unknown; lines?: unknown; script?: unknown; resolution?: unknown; n?: unknown };
     if (body.action === "line") return Response.json({ settings: withWorkspace((ws) => setSingerLine(ws, id, body.line, body.source)) });
     if (body.action === "script") return Response.json({ settings: withWorkspace((ws) => setSingerScript(ws, id, body.line, body.script)) });
+    if (body.action === "resolution") return Response.json({ settings: withWorkspace((ws) => setSingerResolution(ws, id, body.resolution)) });
+    if (body.action === "use") return Response.json(await withWorkspaceAsync((ws) => chooseSingingTake(ws, id, body.source, body.n)));
+    if (body.action === "seen") return Response.json({ ok: withWorkspace((ws) => (seenSingingTake(ws, id, body.source, body.n), true)) });
+    if (body.action === "retake") {
+      const cap = readCreationDefaults(resolveWorkspaceDir()).cap;
+      const started = await withWorkspaceAsync((ws) => startRetake(ws, id, { capUsd: cap, line: body.line }));
+      void runSinging(open, id, started.jobs);
+      return Response.json(started);
+    }
     if (body.action === "make") {
       const cap = readCreationDefaults(resolveWorkspaceDir()).cap;
       const lines = Array.isArray(body.lines) ? body.lines.map(Number).filter(Number.isInteger) : undefined;

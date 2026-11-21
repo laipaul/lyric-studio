@@ -12,7 +12,7 @@ import { findOrCreateSongProject, readClipEdits, songPathsById } from "../src/no
 import { addFromLink, addPictures, phraseSeconds, readCreationDefaults, saveCreationDefaults, sourceLabel, sendToStoryboard, estimate, higgsfieldTransport, motionPrompt, picturesView, readPictures, runTakes, setMood, startAnimate, startResume, stubTransport, waveSpeedTransport } from "../src/node/animate";
 import { clearFinishedGenerateTasks, listGenerateTasks, RECENT_MS } from "../src/node/generate-tasks";
 import { takeFacts } from "../src/take-facts";
-import { infiniteTalkTransport, runSinging, singingPrompt, SINGING_CUE, singingPiece, singingRuns, stubSingTransport } from "../src/node/singer";
+import { chooseSingingTake, infiniteTalkTransport, LIPSYNC_USD_PER_SECOND_AT, runSinging, seenSingingTake, singingPrompt, SINGING_CUE, singingPiece, singingRuns, stubSingTransport, type SingTransport } from "../src/node/singer";
 import { makePlayable, update } from "../src/node/animate";
 import { execFileSync } from "node:child_process";
 import { probeMedia } from "@lyric/db";
@@ -319,13 +319,92 @@ describe("singing lines (lip sync, 21 Nov 2026)", () => {
   });
 });
 
+describe("singing takes: retake, compare, choose (Paul, 21 Nov 2026)", () => {
+  const paths = () => songPathsById(ws, id);
+  const anchors = () => (JSON.parse(readFileSync(paths().recipe!, "utf8")) as { anchors?: { line: number; clip: string; sync?: number; through?: number }[] }).anchors ?? [];
+  const omitted = (clip: string) => (readClipEdits(paths().root).clips[clip] as { omit?: boolean } | undefined)?.omit === true;
+  const take = (n: number) => readPictures(pics).pictures["bride by the sea.png"].takes.find((x) => x.n === n)!;
+  // A running take of lines 6-7 from the bride picture, as Make singing clips or Retake records it.
+  const record = (resolution: string, toMs = 4000) => {
+    let n = 0;
+    update(pics, "bride by the sea.png", (p) => {
+      n = p.takes.reduce((m, t) => Math.max(m, t.n), 0) + 1;
+      p.takes.push({ n, kind: "lipsync", line: 6, through: 7, sync_ms: 1000, to_ms: toMs, style: 1, resolution, service: "wavespeed", quality: "best", model: "InfiniteTalk", status: "running", started_at: new Date().toISOString(), cost_usd: 0.18, pid: process.pid });
+    });
+    return n;
+  };
+  // The stand-in, remembering what each request asked for.
+  const asked: { resolution?: string }[] = [];
+  const spy = (): SingTransport => {
+    const t = stubSingTransport("1");
+    return { ...t, submit: (o) => (asked.push({ resolution: o.resolution }), t.submit(o)) };
+  };
+  let first = 0;
+  let second = 0;
+
+  it("the price per second follows the resolution (480p half of 720p)", () => {
+    expect(LIPSYNC_USD_PER_SECOND_AT).toEqual({ "480p": 0.03, "720p": 0.06 });
+    expect(singingPiece({ shownMs: 4500, sungEndMs: 7000 }, [0, 2000, 4000, 6000, 8000, 10000, 12000], 60_000, LIPSYNC_USD_PER_SECOND_AT["480p"]).usd).toBe(0.24);
+  });
+  it("the resolution of each take is the one sent to InfiniteTalk", async () => {
+    const bodies: { resolution?: string }[] = [];
+    const f = (async (_url: string, init?: RequestInit) => (bodies.push(JSON.parse(String(init?.body))), Response.json({ data: { id: "s1" } }))) as typeof fetch;
+    await infiniteTalkTransport("KEY", f).submit({ image: "https://cdn/p.png", audio: "https://cdn/v.wav", resolution: "480p" });
+    expect(bodies[0].resolution).toBe("480p");
+  });
+  it("the first take of a group goes onto its lines by itself", async () => {
+    first = record("720p");
+    await runSinging(open, id, [{ source: "bride by the sea.png", n: first }], { transport: spy(), sleep: now0 });
+    expect(take(first)).toMatchObject({ status: "done", sent: "bride by the sea sings lines 6-7.mp4" });
+    expect(take(first).fresh).toBeUndefined();
+    expect(anchors().filter((a) => a.line === 6)).toEqual([{ line: 6, clip: "bride by the sea sings lines 6-7.mp4", sync: 1, through: 7 }]);
+    expect(asked.at(-1)).toEqual({ resolution: "720p" });
+  });
+  it("a later take of the same lines arrives as New — compare and never replaces the take in use", async () => {
+    second = record("480p", 3500);
+    await runSinging(open, id, [{ source: "bride by the sea.png", n: second }], { transport: spy(), sleep: now0 });
+    expect(take(second)).toMatchObject({ status: "done", fresh: true, file: "takes/bride by the sea sings lines 6-7-2.mp4" });
+    expect(take(second).sent).toBeUndefined(); // not in the Storyboard until chosen
+    expect(anchors().find((a) => a.line === 6)?.clip).toBe("bride by the sea sings lines 6-7.mp4");
+    expect(take(first).status).toBe("done"); // the earlier take is untouched
+    expect(asked.at(-1)).toEqual({ resolution: "480p" });
+    const card = (await picturesView(ws, id, STUB)).pictures.find((p) => p.file === "bride by the sea.png")!.takes;
+    expect([card.find((t) => t.n === first)!.inUse, card.find((t) => t.n === second)!.inUse, card.find((t) => t.n === second)!.fresh]).toEqual([true, false, true]);
+  });
+  it("watching a New — compare take takes its mark off", () => {
+    seenSingingTake(ws, id, "bride by the sea.png", second);
+    expect(take(second).fresh).toBeUndefined();
+    update(pics, "bride by the sea.png", (p) => (p.takes.find((x) => x.n === second)!.fresh = true));
+  });
+  it("Use this take switches the lines at once (nothing made again); the take it replaces is set to Omit, and can come back", async () => {
+    const made = asked.length;
+    const r = await chooseSingingTake(ws, id, "bride by the sea.png", second);
+    expect(r).toEqual({ clip: "bride by the sea sings lines 6-7-2.mp4", line: 6, through: 7 });
+    expect(anchors().filter((a) => a.line === 6)).toEqual([{ line: 6, clip: "bride by the sea sings lines 6-7-2.mp4", sync: 1, through: 7 }]);
+    expect(omitted("bride by the sea sings lines 6-7.mp4")).toBe(true);
+    expect(take(second).fresh).toBeUndefined();
+    expect(asked.length).toBe(made);
+    await chooseSingingTake(ws, id, "bride by the sea.png", first);
+    expect(anchors().find((a) => a.line === 6)?.clip).toBe("bride by the sea sings lines 6-7.mp4");
+    expect([omitted("bride by the sea sings lines 6-7.mp4"), omitted("bride by the sea sings lines 6-7-2.mp4")]).toEqual([false, true]);
+  });
+  it("a take that is not finished cannot be chosen", async () => {
+    const n = record("720p");
+    await expect(chooseSingingTake(ws, id, "bride by the sea.png", n)).rejects.toThrow(/not ready yet/);
+    update(pics, "bride by the sea.png", (p) => (p.takes = p.takes.filter((x) => x.n !== n)));
+  });
+  it("a take's facts show its resolution", () => {
+    expect(takeFacts({ ...take(second), ended_at: undefined })).toMatch(/^3 s · 480p · about \$0\.18/);
+  });
+});
+
 describe("the Tasks menu lists the online takes (Paul, 21 Nov 2026: 'add it to the task in the queue')", () => {
   it("every take of every song, with its song, line or picture, model, length, cost and where it lands; Clear finished hides the finished ones", () => {
     const tasks = listGenerateTasks(ws, Date.now(), () => false);
     expect(tasks.length).toBeGreaterThan(0);
     const sing = tasks.find((t) => t.kind === "singing");
     expect(sing).toMatchObject({ project_id: id, href: `/songs/${id}?tab=lyrics`, model: expect.stringMatching(/^WaveSpeed · InfiniteTalk/) });
-    expect(sing!.what).toMatch(/^Singing · line \d+/);
+    expect(sing!.what).toMatch(/^Singing · lines? \d+/);
     const anim = tasks.find((t) => t.kind === "animate");
     expect(anim).toMatchObject({ href: `/songs/${id}?tab=production`, seconds: expect.any(Number) });
     expect(anim!.what).toMatch(/^Animate · .+ · take \d+/);

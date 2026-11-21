@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderOpen, ChevronRight, Clapperboard, Eye, Image as ImageIcon, Info, Send, SlidersHorizontal, SwatchBook, Type, Film, type LucideIcon } from "lucide-react";
+import { FolderOpen, ChevronRight, Clapperboard, Eye, Image as ImageIcon, Info, Send, SlidersHorizontal, SwatchBook, Type, Film, Loader2, type LucideIcon } from "lucide-react";
 import { createContext, useContext, useEffect, useState } from "react";
 
 import type { TodoItem } from "@lyric/video/song-stages";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FEATURE, FeatureIcon, PlatformMark } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
+import { openTasks, useRunningTakes } from "@/lib/tasks-state";
 
 // The four stages of a song (Prepare -> Shape -> Make -> Review) over the existing tabs: a stage
 // shows only its own tabs; the Prepare stage lists what still needs the user's ears or eyes.
@@ -164,6 +165,7 @@ export function SongStages({
   todo,
   counts,
   reviewPlatforms = [],
+  projectId,
   children,
 }: {
   initialTab: string;
@@ -173,9 +175,11 @@ export function SongStages({
   todo: TodoItem[];
   counts: Partial<Record<string, number>>; // a number next to a tab (Post: approved videos)
   reviewPlatforms?: ReviewPlatform[]; // Review's platform tabs (with videos, or being made), in the song's order
+  projectId?: string; // the song (the running-task badge on Creation and Lyrics Sync)
   children: React.ReactNode; // the TabsContent of every tab
 }) {
   const [tab, setTabState] = useState(initialTab);
+  const singing = useRunningTakes(projectId, "singing"); // singing clips being made for this song (the Tasks menu's list)
   // Shape: the tab (always one), what its panel shows for a moment (Text, Theme, Analysis) and whether it is collapsed.
   const [shapeTab, setShapeTab] = useState<ShapeTabId>(isShapeTab(initialPanel) ? initialPanel : "settings");
   const [overlay, setOverlay] = useState<ShapePanelId | null>(initialPanel && !isShapeTab(initialPanel) && !isSettingsSection(initialPanel) ? initialPanel : null);
@@ -339,6 +343,7 @@ export function SongStages({
                       <Icon aria-hidden className={cn("size-3.5", colour)} />
                       {TAB_LABEL[t]}
                       {counts[t] ? <span className="text-muted-foreground ml-1.5 tabular-nums">{counts[t]}</span> : null}
+                      {singing && (t === "lyrics" || t === "production") ? <RunningBadge count={singing} /> : null}
                     </TabsTrigger>
                   );
                 })}
@@ -394,3 +399,27 @@ export function SongStages({
   );
 }
 
+// "2 ⟳" on a tab while singing clips are being made; a click opens the Tasks menu (and does not switch the tab).
+function RunningBadge({ count }: { count: number }) {
+  const open = (e: React.SyntheticEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    openTasks();
+  };
+  return (
+    <span
+      role="link"
+      tabIndex={0}
+      data-running-badge={count}
+      title={`${count} singing clip${count === 1 ? "" : "s"} being made: open Tasks`}
+      onMouseDown={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={open}
+      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && open(e)}
+      className="bg-brand/15 text-brand ml-1.5 inline-flex items-center gap-1 rounded-full px-1.5 text-[10px] font-medium tabular-nums"
+    >
+      <Loader2 aria-hidden className="size-3 animate-spin" />
+      {count}
+    </span>
+  );
+}
