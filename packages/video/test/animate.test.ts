@@ -10,6 +10,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { findOrCreateSongProject, readClipEdits, songPathsById } from "../src/node";
 import { addFromLink, addPictures, phraseSeconds, readCreationDefaults, saveCreationDefaults, sourceLabel, sendToStoryboard, estimate, higgsfieldTransport, motionPrompt, picturesView, readPictures, runTakes, setMood, startAnimate, startResume, stubTransport, waveSpeedTransport } from "../src/node/animate";
+import { clearFinishedGenerateTasks, listGenerateTasks, RECENT_MS } from "../src/node/generate-tasks";
+import { takeFacts } from "../src/take-facts";
 import { infiniteTalkTransport, runSinging, singingPiece, singingRuns, stubSingTransport } from "../src/node/singer";
 import { makePlayable, update } from "../src/node/animate";
 import { execFileSync } from "node:child_process";
@@ -309,6 +311,32 @@ describe("singing lines (lip sync, 21 Nov 2026)", () => {
     await runSinging(open, id, [{ source: "rain street.jpg", n }], { transport: stubSingTransport("fail"), sleep: now0 });
     const t = readPictures(pics).pictures["rain street.jpg"].takes.find((x) => x.n === n)!;
     expect([t.status, t.error]).toEqual(["failed", "stand-in: the service refused the request. Nothing was spent."]);
+  });
+});
+
+describe("the Tasks menu lists the online takes (Paul, 21 Nov 2026: 'add it to the task in the queue')", () => {
+  it("every take of every song, with its song, line or picture, model, length, cost and where it lands; Clear finished hides the finished ones", () => {
+    const tasks = listGenerateTasks(ws, Date.now(), () => false);
+    expect(tasks.length).toBeGreaterThan(0);
+    const sing = tasks.find((t) => t.kind === "singing");
+    expect(sing).toMatchObject({ project_id: id, href: `/songs/${id}?tab=lyrics`, model: expect.stringMatching(/^WaveSpeed · InfiniteTalk/) });
+    expect(sing!.what).toMatch(/^Singing · line \d+/);
+    const anim = tasks.find((t) => t.kind === "animate");
+    expect(anim).toMatchObject({ href: `/songs/${id}?tab=production`, seconds: expect.any(Number) });
+    expect(anim!.what).toMatch(/^Animate · .+ · take \d+/);
+    // Read from the song's own files: a restart of the studio keeps the list.
+    expect(listGenerateTasks(ws, Date.now(), () => false).map((t) => t.id)).toEqual(tasks.map((t) => t.id));
+    // A day later, finished takes leave the list by themselves; Clear finished hides them at once.
+    expect(listGenerateTasks(ws, Date.now() + 2 * RECENT_MS, () => false).filter((t) => t.status !== "running")).toEqual([]);
+    const cleared = clearFinishedGenerateTasks(ws);
+    expect(cleared).toBe(tasks.filter((t) => t.status !== "running").length);
+    expect(listGenerateTasks(ws, Date.now(), () => false).filter((t) => t.status !== "running")).toEqual([]);
+  });
+  it("a take's facts in plain words: length, cost (nothing when never sent), when", () => {
+    const base = { started_at: "2026-11-21T13:40:00Z", ended_at: "2026-11-21T13:42:00Z", cost_usd: 1.94 };
+    expect(takeFacts({ ...base, status: "done", request_id: "r", seconds: 9 }, "en-GB")).toMatch(/^9 s · about \$1\.94 · 21 Nov, \d\d:\d\d$/);
+    expect(takeFacts({ ...base, status: "failed", cost_usd: 1.26, kind: "lipsync", sync_ms: 48_500, to_ms: 69_200 }, "en-GB")).toMatch(/^21 s · nothing spent · /);
+    expect(takeFacts({ started_at: base.started_at, status: "running", cost_usd: 1.08 }, "en-GB")).toMatch(/^5 s · about \$1\.08 · sent 21 Nov/);
   });
 });
 

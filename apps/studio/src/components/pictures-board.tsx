@@ -14,6 +14,8 @@ import type { CreationDefaults, PictureView, PicturesView, Quality, ServiceId, T
 
 import { NameField } from "@/components/name-field";
 import { useGoToTab } from "@/components/song-stages";
+import { takeFacts } from "@lyric/video/take-facts";
+
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
@@ -304,7 +306,8 @@ function PictureTile({
     try {
       if (mood !== p.mood) await post({ action: "mood", file: p.file, mood });
       await post({ action: "animate", file: p.file, service: svc.id, quality: q.id, takes, cap: capUsd });
-      setNotice({ ok: true, text: `${p.file}: ${takes} take${takes === 1 ? "" : "s"} sent to ${svc.label} · ${q.label} (about ${money(total)}). They stay here: send your favourites to the Storyboard.` });
+      setNotice({ ok: true, text: `${p.file}: ${takes} take${takes === 1 ? "" : "s"} sent to ${svc.label} · ${q.label} (about ${money(total)}). They stay here: send your favourites to the Storyboard; follow them in Tasks.` });
+      window.dispatchEvent(new Event("lyric-tasks-changed")); // the Tasks menu opens with them
       await reload();
     } catch (e) {
       setNotice({ ok: false, text: (e as Error).message });
@@ -416,6 +419,9 @@ function TakeRow({ t, source, url, onPlay, onRename, onSend, onResume }: { t: Ta
           {source}
         </span>
         {t.status === "running" ? " · being made…" : null}
+        <span data-take-facts className="text-muted-foreground block">
+          {takeFacts(t)}
+        </span>
         {t.status === "failed" || t.status === "interrupted" ? <span className={t.status === "failed" ? "text-red-300" : "text-amber-300"}> · {t.error}</span> : null}
       </span>
       {t.status === "done" ? (

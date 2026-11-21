@@ -96,7 +96,8 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
       setBusy(true);
       try {
         const d = await post({ action: "make" });
-        setNotice({ ok: true, text: `${d.jobs?.length ?? 0} singing clip${d.jobs?.length === 1 ? "" : "s"} sent to WaveSpeed (${d.seconds} s of voice, about ${money(d.usd ?? 0)}). Each lands on its line by itself when it is ready (a few minutes each).` });
+        setNotice({ ok: true, text: `${d.jobs?.length ?? 0} singing clip${d.jobs?.length === 1 ? "" : "s"} sent to WaveSpeed (${d.seconds} s of voice, about ${money(d.usd ?? 0)}). Each lands on its line by itself when it is ready (a few minutes each); follow it in Tasks.` });
+        window.dispatchEvent(new Event("lyric-tasks-changed")); // the Tasks menu opens with it
         await load();
       } catch (e) {
         setNotice({ ok: false, text: (e as Error).message });

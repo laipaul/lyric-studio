@@ -104,6 +104,7 @@ export type Take = {
   seconds?: number; // how long the take was asked to be (4 to 30 s; before 21 Nov 2026: 5)
   prompt?: string; // lipsync: the singer's little script sent with the voice (what the singer does)
   label?: string; // the user's short name for this take ("Bride smile"); shown instead of "Take N"
+  cleared?: boolean; // hidden from the Tasks menu (Clear finished); the take itself stays
   playable?: boolean; // the file was checked (and if needed re-made) to play in the browser: H.264, yuv420p, fast start
 };
 export type PictureRecord = { label?: string; source?: string; mood?: string; takes: Take[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string }; // sent: the picture itself sent to the Storyboard (its clip name)
@@ -302,7 +303,7 @@ export function setMood(ws: Workspace, projectId: string, file: string, mood: un
 }
 
 // Takes left "running" by a studio that stopped are interrupted (their result may still be fetched).
-function markInterrupted(dir: string, isAlive: (pid: number) => boolean): void {
+export function markInterrupted(dir: string, isAlive: (pid: number) => boolean): void {
   const all = readPictures(dir);
   let changed = false;
   for (const rec of Object.values(all.pictures))

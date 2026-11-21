@@ -132,6 +132,13 @@ async function main() {
     const firstOmitted = (JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8")) as { clips: Record<string, { omit?: boolean }> }).clips["singer close sings line 2.mp4"]?.omit;
     check(singing.length === 1 && singing[0].line === 2 && singing[0].through === 3 && singing[0].clip === "singer close sings lines 2-3.mp4" && firstOmitted === true, `the block take replaces the line-2 take by itself, placed once (${JSON.stringify(singing)}; old one set to Omit: ${firstOmitted})`);
 
+    // The Tasks menu lists the singing takes: song, lines, model, length, cost, when; a link back to Lyrics Sync.
+    if (!(await page.$("[data-tasks]"))) await page.click("[data-tasks-button]");
+    await page.waitForSelector("[data-take-task='singing']", { timeout: 15_000 });
+    const task = (await page.textContent("[data-take-task='singing']")) ?? "";
+    check(/Singing · lines 2-3/.test(task) && /InfiniteTalk/.test(task) && /\d+ s · about \$\d+\.\d\d/.test(task) && /done/.test(task), `the Tasks menu shows the singing take with its model, length and cost (${task})`);
+    await page.keyboard.press("Escape");
+
     // Wrong picture: "no singer on this line" takes the singing clip off the line and sets it to Omit (kept).
     await page.click("[data-singer-line='2'] [data-singer-source]");
     await page.click("[data-singer-picker='2'] [data-singer-option='']");

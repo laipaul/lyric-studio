@@ -117,6 +117,7 @@ async function main() {
     await page.waitForFunction((t: string) => document.querySelectorAll(`${t} [data-take-status=done]`).length === 2, tile, { timeout: 60000 });
     check(true, "Animate makes the 2 takes");
     check(((await page.textContent(`${tile} [data-take='1'] [data-take-source]`)) ?? "").includes("WaveSpeed · Seedance 2.5"), "each take shows where it came from");
+    check(/^\d+ s · about \$\d+\.\d\d · .*\d\d?:\d\d/.test(((await page.textContent(`${tile} [data-take='1'] [data-take-facts]`)) ?? "").trim()), `each take shows its length, cost and when it was made (${await page.textContent(`${tile} [data-take='1'] [data-take-facts]`)})`);
     await page.click(`${tile} [data-take='1'] [data-take-play]`);
     await page.waitForSelector("[data-take-player] video");
     const playable = await page.waitForFunction(() => { const v = document.querySelector("[data-take-player] video") as HTMLVideoElement | null; return !!v && v.readyState >= 2 && v.videoWidth > 0; }, null, { timeout: 15_000 }).then(() => true).catch(() => false);

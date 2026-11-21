@@ -98,6 +98,8 @@
     "./production": "./src/node/production.ts",
     "./animate": "./src/node/animate.ts",
     "./singer": "./src/node/singer.ts",
+    "./generate-tasks": "./src/node/generate-tasks.ts",
+    "./take-facts": "./src/take-facts.ts",
     "./replaced-files": "./src/node/replaced-files.ts",
     "./collections": "./src/node/collections.ts",
     "./migrate": "./src/node/migrate.ts",
