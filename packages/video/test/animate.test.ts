@@ -11,7 +11,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { findOrCreateSongProject, readClipEdits, songPathsById } from "../src/node";
 import { addFromLink, addPictures, readCreationDefaults, saveCreationDefaults, sourceLabel, sendToStoryboard, estimate, higgsfieldTransport, motionPrompt, picturesView, readPictures, runTakes, setMood, startAnimate, startResume, stubTransport, waveSpeedTransport } from "../src/node/animate";
 import { runSinging, singingPiece, stubSingTransport } from "../src/node/singer";
-import { update } from "../src/node/animate";
+import { makePlayable, update } from "../src/node/animate";
+import { execFileSync } from "node:child_process";
 import { probeMedia } from "@lyric/db";
 import { ffmpeg, makeClip, makeSong } from "./media-helpers";
 const now0 = async () => undefined;
@@ -275,5 +276,30 @@ describe("singing lines (lip sync, 21 Nov 2026)", () => {
     await runSinging(open, id, [{ source: "rain street.jpg", n }], { transport: stubSingTransport("fail"), sleep: now0 });
     const t = readPictures(pics).pictures["rain street.jpg"].takes.find((x) => x.n === n)!;
     expect([t.status, t.error]).toEqual(["failed", "stand-in: the service refused the request. Nothing was spent."]);
+  });
+});
+
+describe("takes play in the browser (Paul, 21 Nov 2026: a real take did not play)", () => {
+  const probe = (f: string) => execFileSync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name,pix_fmt", "-of", "csv=p=0", f], { encoding: "utf8" }).trim();
+  it("a take in another codec or colour format is re-made as H.264 yuv420p; an H.264 one is only copied", () => {
+    const odd = path.join(root, "odd.mp4");
+    ffmpeg("-f", "lavfi", "-i", "testsrc2=s=160x288:r=24:d=1", "-c:v", "mpeg4", odd);
+    makePlayable(odd, false);
+    expect(probe(odd)).toBe("h264,yuv420p");
+    const rich = path.join(root, "rich.mp4");
+    ffmpeg("-f", "lavfi", "-i", "testsrc2=s=160x288:r=24:d=1", "-c:v", "libx264", "-pix_fmt", "yuv444p", rich);
+    makePlayable(rich, false);
+    expect(probe(rich)).toBe("h264,yuv420p");
+  });
+  it("a take downloaded before this fix is made playable once when the board is read", async () => {
+    const takes = path.join(pics, "takes");
+    mkdirSync(takes, { recursive: true });
+    ffmpeg("-f", "lavfi", "-i", "testsrc2=s=160x288:r=24:d=1", "-c:v", "mpeg4", path.join(takes, "old take.mp4"));
+    update(pics, "bride by the sea.png", (p) => {
+      p.takes.push({ n: 90, service: "wavespeed", quality: "standard", model: "x", status: "done", started_at: new Date().toISOString(), cost_usd: 1, file: "takes/old take.mp4" });
+    });
+    await picturesView(ws, id, STUB);
+    expect(probe(path.join(takes, "old take.mp4"))).toBe("h264,yuv420p");
+    expect(readPictures(pics).pictures["bride by the sea.png"].takes.find((t) => t.n === 90)!.playable).toBe(true);
   });
 });

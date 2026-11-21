@@ -20,7 +20,7 @@ import { absPath, beat as beatTable, ffmpegBin, project as projectTable, uniqueF
 import { eq } from "drizzle-orm";
 
 import { applyDownbeatOffset } from "../beats";
-import { BOARD_VIDEO_FILE, PICTURE_FILE, POLL_MS, TAKES_DIR, TIMEOUT_MS, WAVESPEED, data, json, keyFor, readPictures, setTake, sleepMs, songFolder, update, waveSpeedUpload, type Take } from "./animate";
+import { BOARD_VIDEO_FILE, makePlayable, PICTURE_FILE, POLL_MS, TAKES_DIR, TIMEOUT_MS, WAVESPEED, data, json, keyFor, readPictures, setTake, sleepMs, songFolder, update, waveSpeedUpload, type Take } from "./animate";
 import { importSongClips } from "./assets";
 import { download, errorText } from "./characters/fal";
 import { lyricsView, saveAnchors } from "./lyrics-view";
@@ -345,13 +345,13 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
         const got = path.join(tmp, "sings.mp4");
         await transport.download(url, got);
         // The model's copy carries the vocal: only the picture is kept (the vocal never goes into any file of ours).
-        const silent = path.join(tmp, "silent.mp4");
-        execFileSync(ffmpegBin(), ["-y", "-v", "error", "-i", got, "-map", "0:v:0", "-an", "-c:v", "copy", silent]);
+        makePlayable(got, false); // the voice removed; browser-ready H.264
+        const silent = got;
         const takesDir = path.join(dir, TAKES_DIR);
         mkdirSync(takesDir, { recursive: true });
         const name = uniqueFileName(takesDir, `${path.parse(j.source).name} sings line ${t.line}.mp4`);
         copyFileSync(silent, path.join(takesDir, name));
-        setTake(dir, j.source, j.n, { file: `${TAKES_DIR}/${name}` });
+        setTake(dir, j.source, j.n, { file: `${TAKES_DIR}/${name}`, playable: true });
         // Into the Storyboard (the end of the story line) and onto its line, locked to the song; then it shows as done.
         const ws = openWs();
         try {

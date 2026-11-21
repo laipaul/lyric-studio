@@ -19,11 +19,11 @@
 // The picture is never changed. Requests are never retried on submit (a retry could be billed twice).
 // No rendering code is imported here, so the studio's server can use it.
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { ffmpegBin, probeMedia, uniqueFileName, type Workspace } from "@lyric/db";
+import { ffmpegBin, ffprobeBin, probeMedia, uniqueFileName, type Workspace } from "@lyric/db";
 
 import { importSongClips } from "./assets";
 import { download, errorText } from "./characters/fal";
@@ -94,6 +94,7 @@ export type Take = {
   clip?: string; // (21 Nov 2026 first build: takes went to the clips by themselves; read as `sent`)
   error?: string;
   pid?: number;
+  playable?: boolean; // the file was checked (and if needed re-made) to play in the browser: H.264, yuv420p, fast start
 };
 export type PictureRecord = { source?: string; mood?: string; takes: Take[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string }; // sent: the picture itself sent to the Storyboard (its clip name)
 export type PicturesFile = { _help?: string; pictures: Record<string, PictureRecord> };
@@ -291,7 +292,10 @@ export function keyFor(service: ServiceId, env: NodeJS.ProcessEnv = process.env)
 
 export async function picturesView(ws: Workspace, projectId: string, env: NodeJS.ProcessEnv = process.env, isAlive: (pid: number) => boolean = processAlive): Promise<PicturesView> {
   const { dir } = songFolder(ws, projectId);
-  if (existsSync(dir)) markInterrupted(dir, isAlive);
+  if (existsSync(dir)) {
+    markInterrupted(dir, isAlive);
+    repairTakes(dir);
+  }
   const all = readPictures(dir);
   const files = existsSync(dir) ? readdirSync(dir).filter((f) => BOARD_FILE.test(f) && statSync(path.join(dir, f)).isFile()) : [];
   files.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
@@ -320,6 +324,44 @@ export async function picturesView(ws: Workspace, projectId: string, env: NodeJS
     defaultCap: DEFAULT_CAP_USD,
     spentUsd: Math.round(Object.values(all.pictures).flatMap((p) => p.takes).filter((t) => t.request_id && t.status !== "failed").reduce((s, t) => s + t.cost_usd, 0) * 100) / 100,
   };
+}
+
+// A take as the services send it may not play in a browser (another codec, 10-bit colour, the index at the end): it is
+// re-written once as H.264 / yuv420p with the index first (a plain copy when the picture is already H.264 yuv420p).
+// `keepSound` false: the sound is left out. The file is replaced in place.
+export function makePlayable(file: string, keepSound = true): void {
+  let codec = "";
+  let pix = "";
+  try {
+    const out = execFileSync(ffprobeBin(), ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name,pix_fmt", "-of", "csv=p=0", file], { encoding: "utf8" });
+    [codec, pix] = out.trim().split(",");
+  } catch {
+    // unreadable: re-encoded below
+  }
+  const tmp = `${file}.playable.mp4`;
+  const copy = codec === "h264" && pix === "yuv420p";
+  execFileSync(ffmpegBin(), [
+    "-y", "-v", "error", "-i", file, "-map", "0:v:0", ...(keepSound ? ["-map", "0:a?"] : []),
+    ...(copy ? ["-c:v", "copy"] : ["-c:v", "libx264", "-preset", "medium", "-crf", "17", "-pix_fmt", "yuv420p"]),
+    ...(keepSound ? ["-c:a", "aac", "-b:a", "192k"] : ["-an"]),
+    "-movflags", "+faststart", tmp,
+  ]);
+  renameSync(tmp, file);
+}
+
+// Takes downloaded before makePlayable existed (21 Nov 2026): made playable once when the board is read.
+function repairTakes(dir: string): void {
+  const all = readPictures(dir);
+  for (const [name, rec] of Object.entries(all.pictures))
+    for (const t of rec.takes)
+      if (t.status === "done" && t.file && !t.playable && existsSync(path.join(dir, t.file))) {
+        try {
+          makePlayable(path.join(dir, t.file), t.kind !== "lipsync");
+          setTake(dir, name, t.n, { playable: true });
+        } catch {
+          // left as it is; the file can still be opened from the song folder
+        }
+      }
 }
 
 // ---------------------------------------------------------------- the request
@@ -583,11 +625,12 @@ export async function runTakes(openWs: () => Workspace, projectId: string, file:
         try {
           const out = path.join(tmp, "take.mp4");
           await transport.download(url, out);
+          makePlayable(out, false); // the takes have no sound (generate_audio false); browser-ready H.264
           const takesDir = path.join(dir, TAKES_DIR);
           mkdirSync(takesDir, { recursive: true });
           const name = uniqueFileName(takesDir, `${path.parse(file).name} take ${t.n}.mp4`);
           copyFileSync(out, path.join(takesDir, name));
-          setTake(dir, file, t.n, { status: "done", file: `${TAKES_DIR}/${name}`, ended_at: new Date().toISOString(), pid: undefined });
+          setTake(dir, file, t.n, { status: "done", file: `${TAKES_DIR}/${name}`, playable: true, ended_at: new Date().toISOString(), pid: undefined });
         } finally {
           rmSync(tmp, { recursive: true, force: true });
         }
