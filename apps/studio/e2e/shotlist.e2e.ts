@@ -114,6 +114,12 @@ async function main() {
     check(((await page.textContent("[data-story-slot=s01]")) ?? "").includes("She runs along the path"), "the changed slot is updated, the removed one is gone");
     const replaced = (await (await fetch(`${base}/api/songs/${id}/replaced`)).json()) as { files: { role: string }[] };
     check(replaced.files.some((f) => f.role === "shotlist"), "the previous shot list is in Replaced files (with a Restore)");
+    // Paul (21 Nov 2026): a planned slot can be removed from its ⋯ menu; "Remove all planned slots" takes the rest.
+    await page.click("[data-story-slot=s01] [data-card-menu]");
+    await page.click("[data-remove-slot=s01]");
+    await page.waitForFunction(() => !document.querySelector("[data-story-slot=s01]"), null, { timeout: 15_000 });
+    check(!(await page.$("[data-story-slot]")) && !(await page.$("[data-remove-all-slots]")), "Remove this planned slot: the card leaves the Storyboard (no slot left: no Remove all)");
+    check(((await page.textContent("[data-assets-notice], [role=status], body")) ?? "").includes("kept under Replaced files"), "it says the shot list is kept under Replaced files");
     await browser.close();
   } finally {
     server.kill();

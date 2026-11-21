@@ -14,7 +14,7 @@ import { folderClips, songClipsCollection } from "../src/node/assets";
 import { createCard } from "../src/node/characters/cards";
 import { inClipOrder } from "../src/node/clip-edits";
 import { restoreReplacedFile, songReplacedFiles } from "../src/node/replaced-files";
-import { checkShotList, closest, importShotList, placeSlots, readShotList, slotKey, type CheckContext } from "../src/node/shotlist";
+import { checkShotList, closest, importShotList, placeSlots, readShotList, removeSlots, slotKey, type CheckContext } from "../src/node/shotlist";
 import { setStoryOrder, songStory } from "../src/node/story-line";
 import { LYRICS, ffmpeg, makeClip, makeSong } from "./media-helpers";
 
@@ -150,5 +150,25 @@ describe("import into the song", () => {
     await expect(importShotList(ws, id, { slots: [{ id: "x", shows: "y", characters: ["Nobody"], shot: "wide" }] })).rejects.toThrow(/cannot be imported yet: x: no character called "Nobody"/);
     expect(readFileSync(path.join(songRoot, "shotlist.json"), "utf8")).toBe(before);
     expect(existsSync(path.join(songRoot, "shotlist.json"))).toBe(true);
+  });
+
+  it("Remove a planned slot, or all of them: they leave the story line, the shot list is kept, Restore brings them back", async () => {
+    const own = (await folderClips(ws, songPathsById(ws, id).clips!, songClipsCollection(id))).clips;
+    const keptBefore = songReplacedFiles(ws, id).filter((f) => f.role === "shotlist").length;
+    expect(removeSlots(ws, id, ["s02"])).toBe(1);
+    expect(readShotList(ws, id)!.slots.map((s) => s.id)).toEqual(["s01"]);
+    expect((await songStory(ws, id, own)).items.filter((i) => i.slot).map((i) => i.key)).toEqual([slotKey("s01")]);
+    expect(() => removeSlots(ws, id, ["nope"])).toThrow(/not in this song's Storyboard/);
+    expect(removeSlots(ws, id, null)).toBe(1);
+    expect(readShotList(ws, id)).toBeNull();
+    expect((await songStory(ws, id, own)).items.some((i) => i.slot)).toBe(false);
+    expect(inClipOrder(readClipEdits(songRoot), own.map((c) => c.name))).toEqual(["01_a.mp4", "02_b.mp4", "03_c.mp4"]); // the clips stay
+    const kept = songReplacedFiles(ws, id).filter((f) => f.role === "shotlist");
+    expect(kept).toHaveLength(keptBefore + 2);
+    const onlyS01 = kept.find((f) => readFileSync(path.join(songRoot, ".studio", "replaced", f.file), "utf8").includes('"s01"') && !readFileSync(path.join(songRoot, ".studio", "replaced", f.file), "utf8").includes('"s02"'))!;
+    await restoreReplacedFile(ws, id, onlyS01.file); // the list as it was before Remove all
+    expect(readShotList(ws, id)!.slots.map((s) => s.id)).toEqual(["s01"]);
+    expect(removeSlots(ws, id, null)).toBe(1);
+    expect(removeSlots(ws, id, null)).toBe(0); // nothing left
   });
 });

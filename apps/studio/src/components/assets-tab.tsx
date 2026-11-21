@@ -97,6 +97,25 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
     };
   }, [projectId]);
 
+  // Planned slots ("No picture yet" cards from a shot list) leave the Storyboard; the shot list is kept in Replaced files.
+  async function removeSlots(ids: string[] | "all") {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const r = await api(`/api/songs/${projectId}/shotlist`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ remove: ids }) });
+      const d = (await r.json()) as { removed?: number; error?: string };
+      if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
+      await reload();
+      void loadReplaced();
+      router.refresh();
+      setNotice({ ok: true, text: `${d.removed} planned slot${d.removed === 1 ? "" : "s"} removed from the Storyboard. Your shot list is kept under Replaced files (Restore brings ${d.removed === 1 ? "it" : "them"} back).` });
+    } catch (e) {
+      setNotice({ ok: false, text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function send(body: FormData | null, method = "POST", query = ""): Promise<Record<string, unknown> | null> {
     setBusy(true);
     setNotice(null);
@@ -457,6 +476,11 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
+          {data?.story.some((i) => i.slot) ? (
+            <Button type="button" variant="ghost" size="sm" disabled={busy} data-remove-all-slots onClick={() => void removeSlots("all")} title="Every “No picture yet” card leaves the Storyboard; your shot list is kept under Replaced files (Restore brings it back)">
+              <Trash2 /> Remove all planned slots
+            </Button>
+          ) : null}
           <Button type="button" variant="outline" size="sm" disabled={busy} data-import-shotlist onClick={() => setShotlistOpen(true)} title="Your shot list (.json) becomes planned slots in the story line">
             <FileJson /> Import shot list
           </Button>
@@ -626,6 +650,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                               "Its picture is made later from the characters and scene; until then the videos skip it. Change it in your shot list file and import it again.",
                             ]}
                             disabled={busy}
+                            action={{ label: "Remove this planned slot", attr: { "data-remove-slot": sl.id }, title: "It leaves the Storyboard; your shot list is kept under Replaced files (Restore brings it back)", run: () => void removeSlots([sl.id]) }}
                           />
                         </div>
                       </div>

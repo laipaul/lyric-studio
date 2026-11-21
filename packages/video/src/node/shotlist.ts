@@ -250,6 +250,28 @@ export async function importShotList(ws: Workspace, projectId: string, input: un
   return check;
 }
 
+// Remove planned slots (Paul, 21 Nov 2026: "why can't I remove 2 and 6 from my Storyboard"): the slots leave the story
+// line; shotlist.json is kept in Replaced files first (Restore brings every slot back) and written again with the
+// slots that stay (none left: no shot list). `ids` null: every slot. Returns how many were removed.
+export function removeSlots(ws: Workspace, projectId: string, ids: readonly string[] | null): number {
+  const root = songRoot(ws, projectId);
+  const file = path.join(root, SHOTLIST_FILE);
+  const current = readShotListFile(file);
+  const edits = readClipEdits(root);
+  const inOrder = edits.order.map(slotOf).filter((x): x is string => x !== null);
+  const gone = new Set(ids ?? [...(current?.slots ?? []).map((s) => s.id), ...inOrder]);
+  if (ids && ids.some((id) => !(current?.slots ?? []).some((s) => s.id === id) && !inOrder.includes(id))) throw new Error("That planned slot is not in this song's Storyboard.");
+  const removed = new Set([...(current?.slots ?? []).map((s) => s.id), ...inOrder].filter((id) => gone.has(id)));
+  if (!removed.size) return 0;
+  if (existsSync(file)) {
+    keepReplaced(root, file);
+    const left = (current?.slots ?? []).filter((s) => !gone.has(s.id));
+    if (left.length) writeFileSync(file, `${JSON.stringify({ ...current, slots: left }, null, 2)}\n`);
+  }
+  writeClipEdits(root, { ...edits, order: edits.order.filter((e) => { const id = slotOf(e); return id === null || !gone.has(id); }) });
+  return removed.size;
+}
+
 // Restore of a kept shotlist.json (Assets → Replaced files): imported again as it was.
 export async function restoreShotList(ws: Workspace, projectId: string, keptFile: string): Promise<ShotListCheck> {
   const kept = readShotListFile(keptFile);
