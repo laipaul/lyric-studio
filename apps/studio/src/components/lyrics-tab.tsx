@@ -332,8 +332,8 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">On screen</th>
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Confidence</th>
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Adjust</th>
-                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap" title="The lines where the singer shows, each with a picture or video from Creation">Singer</th>
-                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap min-w-36">Lands on</th>
+                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap" title="The lines where the singer shows, each with a picture or video from Creation">Who sings (lip-sync)</th>
+                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap min-w-36">Shows clip (no singing)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -465,7 +465,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                             </div>
                           ) : null}
                           <button type="button" disabled={busy} onClick={() => setPicking(picking === l.number ? null : l.number)} className="text-muted-foreground hover:text-foreground mt-1 flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] whitespace-nowrap" data-anchor-pick>
-                            <Clapperboard className="size-3" /> {anchor ? "Change" : "Choose a clip"}
+                            <Clapperboard className="size-3" /> {anchor ? "Change" : "Show a clip"}
                           </button>
                           {problems.map((p) => (
                             <p key={p.problem} className="mt-1 flex items-start gap-1 text-[11px] text-amber-200" data-anchor-problem>
@@ -551,40 +551,16 @@ function AnchorPicker({
   const chosen = clips.find((c) => c.name === clip);
   const lineMs = (line.sungEndMs ?? line.screen.leaveMs) - line.screen.readableMs;
   const left = chosen && chosen.kind === "video" ? chosen.durationMs - (Number(clipIn) || 0) * 1000 : null;
+  const save = (name: string) => {
+    if (!name || busy) return;
+    onSave({ line: line.number, clip: name, ...(Number(clipIn) > 0 ? { clipIn: Number(clipIn) } : {}), ...(transition === "dissolve" ? { transition } : {}) });
+  };
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs">
-        Line {line.number} &quot;{line.text}&quot; lands on a clip: it cuts in on the downbeat at or just before the line ({(lineMs / 1000).toFixed(1)} s on screen) and stays until the line ends.
+        <strong>Show this clip on line {line.number} (no singing).</strong> Line {line.number} &quot;{line.text}&quot; lands on a clip: it cuts in on the downbeat at or just before the line ({(lineMs / 1000).toFixed(1)} s on screen) and stays until the line ends.
       </p>
-      {groups.map((g) => (
-        <div key={g} className="flex flex-col gap-1">
-          <span className="text-muted-foreground text-[11px]">{g === "song" ? "This song's clips" : `Collection ${g}`}</span>
-          <div className="flex flex-wrap gap-2">
-            {clips
-              .filter((c) => c.from === g)
-              .map((c) => (
-                <button
-                  key={c.name}
-                  type="button"
-                  onClick={() => setClip(c.name)}
-                  className={cn("flex w-20 flex-col items-center gap-1 rounded-md border p-1 text-[10px]", clip === c.name ? "border-brand bg-brand/10" : "hover:border-foreground/30")}
-                  title={`${c.label ? `${c.label} (${c.name})` : c.name} · ${c.kind === "photo" ? "photo" : `${(c.durationMs / 1000).toFixed(1)} s`} · ${c.orientation}`}
-                  data-anchor-clip={c.name}
-                >
-                  <div className="bg-muted h-24 w-full overflow-hidden rounded">
-                    {c.thumb ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- a local thumbnail served by /api/files
-                      <img src={`/api/files/${c.thumb}`} alt="" className="size-full object-cover" />
-                    ) : null}
-                  </div>
-                  <span className="w-full truncate">{c.label ?? c.name}</span>
-                  <span className="text-muted-foreground">{c.kind === "photo" ? "photo" : `${(c.durationMs / 1000).toFixed(1)} s`}</span>
-                </button>
-              ))}
-          </div>
-        </div>
-      ))}
-      <div className="flex flex-wrap items-center gap-3 text-xs">
+      <div className="bg-background sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b py-2 text-xs" data-anchor-controls>
         <label className="flex items-center gap-1">
           Start in the clip at
           <input type="number" min={0} step={0.1} value={clipIn} onChange={(e) => setClipIn(e.target.value)} placeholder="0" className="bg-background w-16 rounded-md border px-1.5 py-0.5" data-anchor-clipin />
@@ -609,13 +585,43 @@ function AnchorPicker({
           <Button
             size="sm"
             disabled={!clip || busy}
-            onClick={() => onSave({ line: line.number, clip, ...(Number(clipIn) > 0 ? { clipIn: Number(clipIn) } : {}), ...(transition === "dissolve" ? { transition } : {}) })}
+            onClick={() => save(clip)}
             data-anchor-save
           >
-            <Save /> Save
+            <Save /> {chosen ? `Save: ${chosen.label ?? chosen.name}` : "Save"}
           </Button>
         </div>
       </div>
+      <p className="text-muted-foreground text-[11px]">Click a clip, then Save (or double-click it).</p>
+      {groups.map((g) => (
+        <div key={g} className="flex flex-col gap-1">
+          <span className="text-muted-foreground text-[11px]">{g === "song" ? "This song's clips" : `Collection ${g}`}</span>
+          <div className="flex flex-wrap gap-2">
+            {clips
+              .filter((c) => c.from === g)
+              .map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  onClick={() => setClip(c.name)}
+                  onDoubleClick={() => save(c.name)}
+                  className={cn("flex w-20 flex-col items-center gap-1 rounded-md border p-1 text-[10px]", clip === c.name ? "border-brand bg-brand/10" : "hover:border-foreground/30")}
+                  title={`${c.label ? `${c.label} (${c.name})` : c.name} · ${c.kind === "photo" ? "photo" : `${(c.durationMs / 1000).toFixed(1)} s`} · ${c.orientation}`}
+                  data-anchor-clip={c.name}
+                >
+                  <div className="bg-muted h-24 w-full overflow-hidden rounded">
+                    {c.thumb ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- a local thumbnail served by /api/files
+                      <img src={`/api/files/${c.thumb}`} alt="" className="size-full object-cover" />
+                    ) : null}
+                  </div>
+                  <span className="w-full truncate">{c.label ?? c.name}</span>
+                  <span className="text-muted-foreground">{c.kind === "photo" ? "photo" : `${(c.durationMs / 1000).toFixed(1)} s`}</span>
+                </button>
+              ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

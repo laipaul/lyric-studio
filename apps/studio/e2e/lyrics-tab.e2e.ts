@@ -88,7 +88,7 @@ async function main() {
     // The part of the song the Reel uses (7 Nov 2026): a band with the platform chips, planned like the Shape page.
     await page.waitForSelector("[data-reel-part-platform='reels']", { timeout: 30_000 }).catch(() => {});
     check((await page.locator("[data-reel-part-platform='reels']").count()) === 1, "the part of the song the Reels video uses is offered above the lines");
-    check((await page.evaluate("(() => { const b = document.querySelector('[data-anchor-pick]'); return b.scrollWidth <= b.clientWidth; })()")) === true, "\"Choose a clip\" is not cut off");
+    check((await page.evaluate("(() => { const b = document.querySelector('[data-anchor-pick]'); return b.scrollWidth <= b.clientWidth; })()")) === true, "\"Show a clip\" is not cut off");
     check(((await page.textContent("[data-line='2'] [data-screen]")) ?? "").includes("readable 1:08.27"), "what the viewer sees: readable 1:08.27 (0.25 s before the stamp)");
 
     // "Checked by ear": the flagged line is no longer flagged (stored with the song).
@@ -149,6 +149,13 @@ async function main() {
     await page.click("[data-anchor-save]");
     await page.waitForSelector("[data-line='2'] [data-anchor-problem]");
     check(((await page.textContent("[data-line='2'] [data-anchor-problem]")) ?? "").includes("01_hands.mp4 has 1.0 s, line 2 lasts 4.2 s: it will be slowed"), "the conflict is named on the line");
+    await page.click("[data-line='2'] [data-anchor-remove]");
+    await page.waitForFunction(() => !document.querySelector("[data-line='2'] [data-anchor]"));
+    // Double-clicking a clip saves the anchor right away (no Save click).
+    await page.click("[data-line='2'] [data-anchor-pick]");
+    await page.dblclick("[data-anchor-clip='02_rings.mp4']");
+    await page.waitForSelector("[data-line='2'] [data-anchor='02_rings.mp4']");
+    check(true, "double-clicking a clip saves the anchor");
     await page.click("[data-line='2'] [data-anchor-remove]");
     await page.waitForFunction(() => !document.querySelector("[data-line='2'] [data-anchor]"));
     check(recipe().anchors?.length === 1, "Remove takes it out of song.json");
