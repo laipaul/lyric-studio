@@ -120,17 +120,29 @@ async function main() {
     const box = await page.$eval("[data-singer-line='2'] [data-singer-source]", (e: Element) => { const r = e.getBoundingClientRect(); const c = document.querySelector("[data-lines-scroll]")!.getBoundingClientRect(); return { right: r.right, edge: c.right }; });
     check(box.right <= box.edge, `the Singer column is in view without scrolling sideways (${Math.round(box.right)} ≤ ${Math.round(box.edge)})`);
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+    // A block: the same picture on line 3 too -> one take over lines 2-3; it replaces the line-2 take by itself.
+    await page.click("[data-singer-line='3'] [data-singer-source]");
+    await page.click("[data-singer-picker='3'] [data-singer-option='singer close.png']");
+    await page.waitForFunction(() => document.querySelector("[data-singer-line='3']")?.textContent?.includes("one take with line 2"), null, { timeout: 15_000 });
+    check(((await page.textContent("[data-singer-summary]")) ?? "").includes("to make: 1 take"), "lines in a row with the same picture: one take to make");
+    await page.click("[data-singer-make]");
+    await page.waitForFunction(() => document.querySelector("tr[data-line='3'] [data-anchor-continues='2']"), null, { timeout: 60_000 });
+    const block = (JSON.parse(readFileSync(paths.recipe!, "utf8")) as { anchors?: { line: number; clip: string; sync?: number; through?: number }[] }).anchors ?? [];
+    const singing = block.filter((x) => x.sync !== undefined);
+    const firstOmitted = (JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8")) as { clips: Record<string, { omit?: boolean }> }).clips["singer close sings line 2.mp4"]?.omit;
+    check(singing.length === 1 && singing[0].line === 2 && singing[0].through === 3 && singing[0].clip === "singer close sings lines 2-3.mp4" && firstOmitted === true, `the block take replaces the line-2 take by itself, placed once (${JSON.stringify(singing)}; old one set to Omit: ${firstOmitted})`);
+
     // Wrong picture: "no singer on this line" takes the singing clip off the line and sets it to Omit (kept).
     await page.click("[data-singer-line='2'] [data-singer-source]");
     await page.click("[data-singer-picker='2'] [data-singer-option='']");
     await page.waitForFunction(() => !document.querySelector("tr[data-line='2'] [data-anchor-cell]")?.textContent?.includes("Close up"), null, { timeout: 15_000 });
     const after = JSON.parse(readFileSync(paths.recipe!, "utf8")) as { anchors?: { line: number }[] };
     const omitted = (JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8")) as { clips: Record<string, { omit?: boolean }> }).clips["singer close sings line 2.mp4"]?.omit;
-    check(!after.anchors?.some((x) => x.line === 2) && omitted === true && existsSync(path.join(paths.clips!, "singer close sings line 2.mp4")), "No singer on a line: its singing clip leaves the line and is set to Omit (kept, out of its line its lips would be out of time)");
+    check(!after.anchors?.some((x) => x.line === 2 || x.line === 3) && omitted === true && existsSync(path.join(paths.clips!, "singer close sings line 2.mp4")), "No singer on a line: its singing clip leaves the line and is set to Omit (kept, out of its line its lips would be out of time)");
 
     await page.goto(`${base}/songs/${sp.project.id}?tab=production`);
     await page.waitForSelector("[data-take-source]");
-    check(((await page.textContent("[data-picture='singer close.png'] [data-take-source]")) ?? "").includes("lip sync, line 2"), "Creation labels it: lip sync, line 2");
+    check(((await page.textContent("[data-picture='singer close.png'] [data-take-source]")) ?? "").includes("lip sync, line"), "Creation labels it: lip sync, line …");
     await browser.close();
   } finally {
     server.kill();

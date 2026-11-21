@@ -461,7 +461,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                                   {anchor.clipIn ? ` · from ${anchor.clipIn} s` : ""}
                                 </div>
                               </div>
-                              <button type="button" disabled={busy} onClick={() => (anchor.sync !== undefined ? void singer.setLine(l.number, null).then(() => load()) : saveAnchor(l.number, null))} className="text-muted-foreground hover:text-foreground shrink-0 rounded-md border p-0.5" aria-label={`Remove the anchor on line ${l.number}`} title={anchor.sync !== undefined ? "No singer on this line (the singing clip is set to Omit; it stays in Creation and the Storyboard)" : undefined} data-anchor-remove>
+                              <button type="button" disabled={busy} onClick={() => saveAnchor(l.number, null)} className="text-muted-foreground hover:text-foreground shrink-0 rounded-md border p-0.5" aria-label={`Remove the anchor on line ${l.number}`} title={anchor.sync !== undefined ? "Take this singing clip off the line (it is set to Omit and stays in Creation and the Storyboard). Who sings stays as it is: to stop the singer here, choose — no singer in Who sings." : undefined} data-anchor-remove>
                                 <X className="size-3.5" />
                               </button>
                             </div>

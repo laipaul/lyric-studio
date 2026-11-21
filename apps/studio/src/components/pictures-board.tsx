@@ -388,7 +388,7 @@ function PictureTile({
             <TakeRow key={t.n} t={t} onRename={async (label) => {
               await post({ action: "label", file: p.file, n: t.n, label }).catch((e: Error) => setNotice({ ok: false, text: e.message }));
               await reload();
-            }} source={`${board.services.find((s) => s.id === t.service)?.label ?? t.service} · ${t.model}${t.kind === "lipsync" ? ` · lip sync, line ${t.line}` : ""}`} url={takeUrl(t)} onPlay={(url) => play(url, `${p.file} · Take ${t.n}`)} onSend={() => void send(t.n, t.label ?? `Take ${t.n}`)} onResume={() => void post({ action: "resume", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message }))} />
+            }} source={`${board.services.find((s) => s.id === t.service)?.label ?? t.service} · ${t.model}${t.kind === "lipsync" ? ` · lip sync, ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` : ""}`} url={takeUrl(t)} onPlay={(url) => play(url, `${p.file} · Take ${t.n}`)} onSend={() => void send(t.n, t.label ?? `Take ${t.n}`)} onResume={() => void post({ action: "resume", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message }))} />
           ))}
         </ul>
       ) : null}

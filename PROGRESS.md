@@ -14,6 +14,9 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Checked on WaveSpeed's pages: Seedance Talking Avatar ($0.27/s; "the generated audio can differ from the original
   recording") and Reference To Video (audio as style only, 30 s) are not used for singing; InfiniteTalk stays.
 - Tests: vitest animate (+2), browser singer (+2), pictures (+1) pass.
+- Then (Paul's block 9-14): a block take replaces an earlier one-line take on its first line by itself (the old clip
+  set to Omit, placed once; checked in the browser test). The ✕ in "Shows clip" now only takes the singing clip off
+  the line; Who sings stays as it is (it used to also remove the line from its block).
 
 ### Singing blocks: lines in a row with the same picture are one continuous take ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "select a scene where the singer will perform the whole lines I pick, then move on to the B-roll".
