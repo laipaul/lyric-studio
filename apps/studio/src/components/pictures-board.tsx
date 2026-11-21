@@ -106,7 +106,7 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
     if (!board) return;
     try {
       const d = (await post({ action: "defaults", defaults: { ...board.defaults, ...change } })) as { defaults: CreationDefaults };
-      setBoard({ ...board, defaults: d.defaults });
+      setBoard({ ...board, defaults: d.defaults, ...(change.length ? { takeSeconds: d.defaults.length === "short" ? 5 : (board.phraseSeconds ?? 5) } : {}) });
     } catch (e) {
       setNotice({ ok: false, text: (e as Error).message });
     }
@@ -148,6 +148,13 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
                 {n}
               </option>
             ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5" title="How long each take is. Fit the song: one musical phrase of this song (4 bars at its tempo), so a take covers a phrase and the cuts have room.">
+          Length
+          <select data-default-length value={defaults.length} onChange={(e) => void saveDefaults({ length: e.target.value === "short" ? "short" : "song" })} className="bg-background rounded-md border px-2 py-1">
+            <option value="song">Fit the song{board.phraseSeconds ? ` (one phrase, ${board.phraseSeconds} s here)` : " (5 s until the beats are found)"}</option>
+            <option value="short">Short (5 s)</option>
           </select>
         </label>
         <label className="flex items-center gap-1.5" title="An Animate that would cost more than this is refused before anything is sent.">

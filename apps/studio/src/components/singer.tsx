@@ -22,6 +22,7 @@ export type Singer = {
   notice: { ok: boolean; text: string } | null;
   busy: boolean;
   setLine: (line: number, source: string | null) => Promise<void>;
+  setScript: (line: number, script: string) => Promise<void>;
   make: () => Promise<void>;
 };
 
@@ -78,6 +79,14 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
     setLine: async (line, source) => {
       try {
         await post({ action: "line", line, source });
+        await load();
+      } catch (e) {
+        setNotice({ ok: false, text: (e as Error).message });
+      }
+    },
+    setScript: async (line, script) => {
+      try {
+        await post({ action: "script", line, script });
         await load();
       } catch (e) {
         setNotice({ ok: false, text: (e as Error).message });
@@ -148,6 +157,7 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
   return (
     <div className="flex flex-col gap-1 text-[11px]" data-singer-line={number}>
       <SourcePicker sources={v.sources} value={l.source} onChange={(src) => void singer.setLine(number, src)} line={number} />
+      {l.source && !later ? <ScriptField key={l.script} line={number} value={l.script} onSave={(text) => singer.setScript(number, text)} /> : null}
       {l.source && later ? (
         <span className="text-muted-foreground" data-singer-status="run">
           one take with line {l.run!.first}
@@ -175,6 +185,28 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
       ) : null}
       {!v.sources.length ? <span className="text-muted-foreground">Add pictures in Creation first</span> : null}
     </div>
+  );
+}
+
+// The block's little script: what the singer does while singing ("turns to the sea, soft smile"), sent with the voice.
+function ScriptField({ line, value, onSave }: { line: number; value: string; onSave: (text: string) => Promise<void> }) {
+  const [text, setText] = useState(value);
+  const save = () => {
+    const next = text.replace(/\s+/g, " ").trim();
+    if (next !== value) void onSave(next);
+  };
+  return (
+    <input
+      data-singer-script={line}
+      value={text}
+      maxLength={200}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={save}
+      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+      placeholder="What the singer does (optional)"
+      title="A few words sent with the voice: expression and pose, e.g. turns to the sea, soft smile"
+      className="bg-background w-44 rounded-md border px-1.5 py-0.5"
+    />
   );
 }
 

@@ -9,8 +9,8 @@ import { openWorkspace, resolveWorkspaceDir, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { findOrCreateSongProject, readClipEdits, songPathsById } from "../src/node";
-import { addFromLink, addPictures, readCreationDefaults, saveCreationDefaults, sourceLabel, sendToStoryboard, estimate, higgsfieldTransport, motionPrompt, picturesView, readPictures, runTakes, setMood, startAnimate, startResume, stubTransport, waveSpeedTransport } from "../src/node/animate";
-import { runSinging, singingPiece, singingRuns, stubSingTransport } from "../src/node/singer";
+import { addFromLink, addPictures, phraseSeconds, readCreationDefaults, saveCreationDefaults, sourceLabel, sendToStoryboard, estimate, higgsfieldTransport, motionPrompt, picturesView, readPictures, runTakes, setMood, startAnimate, startResume, stubTransport, waveSpeedTransport } from "../src/node/animate";
+import { infiniteTalkTransport, runSinging, singingPiece, singingRuns, stubSingTransport } from "../src/node/singer";
 import { makePlayable, update } from "../src/node/animate";
 import { execFileSync } from "node:child_process";
 import { probeMedia } from "@lyric/db";
@@ -77,6 +77,14 @@ describe("the request", () => {
     expect(estimate("wavespeed", "standard", 3)).toMatchObject({ seconds: 5, usdPerTake: 1.08, usd: 3.24, model: "Seedance 2.5 Flash" });
     expect(estimate("wavespeed", "best", 1)).toMatchObject({ usdPerTake: 1.62 });
     expect(estimate("higgsfield", "standard", 2).priceNote).toMatch(/estimate/);
+    // A take as long as one phrase of the song (4 bars, rounded up to whole seconds; 4 to 30 s).
+    expect(estimate("wavespeed", "standard", 2, 9)).toMatchObject({ seconds: 9, usdPerTake: 1.94, usd: 3.88 });
+    const bars = (ms: number) => Array.from({ length: 20 }, (_, i) => i * ms);
+    expect(phraseSeconds(bars(2072))).toBe(9); // 115.8 BPM: 4 bars = 8.3 s
+    expect(phraseSeconds(bars(2000))).toBe(8); // 120 BPM: exactly 8 s
+    expect(phraseSeconds(bars(500))).toBe(4); // never under the services' 4 s
+    expect(phraseSeconds(bars(9000))).toBe(30); // never over 30 s
+    expect(phraseSeconds([1000])).toBeNull(); // no beats yet: 5 s
   });
   it("WaveSpeed: upload ticket + PUT, then image-to-video without sound; polled until completed", async () => {
     const calls: { url: string; init?: RequestInit }[] = [];
@@ -232,10 +240,10 @@ describe("Creation takes anything, from anywhere (Paul, 21 Nov 2026)", () => {
     await expect(addFromLink(ws, id, "not a link", gone)).rejects.toThrow(/full link/);
   });
   it("Paul's defaults (model, takes, cap) are saved for every song; bad values fall back to safe ones", () => {
-    expect(readCreationDefaults(wsDir)).toEqual({ service: "wavespeed", quality: "standard", takes: 3, cap: 10 });
-    expect(saveCreationDefaults(wsDir, { service: "higgsfield", quality: "standard", takes: 5, cap: 20 })).toEqual({ service: "higgsfield", quality: "best", takes: 5, cap: 20 });
-    expect(readCreationDefaults(wsDir)).toEqual({ service: "higgsfield", quality: "best", takes: 5, cap: 20 });
-    expect(saveCreationDefaults(wsDir, { service: "x", takes: 99, cap: -1 })).toEqual({ service: "wavespeed", quality: "standard", takes: 3, cap: 10 });
+    expect(readCreationDefaults(wsDir)).toEqual({ service: "wavespeed", quality: "standard", takes: 3, cap: 10, length: "song" });
+    expect(saveCreationDefaults(wsDir, { service: "higgsfield", quality: "standard", takes: 5, cap: 20, length: "short" })).toEqual({ service: "higgsfield", quality: "best", takes: 5, cap: 20, length: "short" });
+    expect(readCreationDefaults(wsDir)).toEqual({ service: "higgsfield", quality: "best", takes: 5, cap: 20, length: "short" });
+    expect(saveCreationDefaults(wsDir, { service: "x", takes: 99, cap: -1 })).toEqual({ service: "wavespeed", quality: "standard", takes: 3, cap: 10, length: "song" });
     expect(() => saveCreationDefaults(wsDir, null)).toThrow();
   });
 });
@@ -246,6 +254,20 @@ describe("singing lines (lip sync, 21 Nov 2026)", () => {
     expect(singingPiece({ shownMs: 4500, sungEndMs: 7000 }, downbeats, 60_000)).toEqual({ fromMs: 3500, toMs: 11_000, seconds: 8, usd: 0.48 });
     expect(singingPiece({ shownMs: 300, sungEndMs: 600 }, downbeats, 60_000).fromMs).toBe(0);
     expect(singingPiece({ shownMs: 58_000, sungEndMs: 59_500 }, [], 60_000)).toEqual({ fromMs: 55_500, toMs: 60_000, seconds: 5, usd: 0.3 });
+  });
+  it("the singer's little script goes to InfiniteTalk with the voice (its optional prompt)", async () => {
+    const bodies: unknown[] = [];
+    const f = (async (url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({ data: { id: "s1" } });
+    }) as typeof fetch;
+    const t = infiniteTalkTransport("KEY", f);
+    await t.submit({ image: "https://cdn/p.png", audio: "https://cdn/v.wav", prompt: "turns to the sea, soft smile" });
+    await t.submit({ image: "https://cdn/p.png", audio: "https://cdn/v.wav" });
+    expect(bodies).toEqual([
+      { image: "https://cdn/p.png", audio: "https://cdn/v.wav", prompt: "turns to the sea, soft smile", resolution: "720p", seed: -1 },
+      { image: "https://cdn/p.png", audio: "https://cdn/v.wav", resolution: "720p", seed: -1 },
+    ]);
   });
   it("lines in a row with the same picture are one take; another picture, a skipped line or a long pause starts a new one", () => {
     const l = (number: number, shownMs: number, sungEndMs: number) => ({ number, shownMs, sungEndMs });

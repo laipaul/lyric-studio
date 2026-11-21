@@ -14,7 +14,8 @@
 // The vocal piece runs from just before the downbeat before the line to two bars after it is sung, so the cut and the
 // hold that follow always have footage, and the lips sing what the song sings there.
 // The song and the stem are only read (FFmpeg decodes a piece into a temporary file). Requests are never retried.
-// Settings: <song folder>\pictures\singer.json { "lines": { "<line>": "<Creation file>" } }.
+// Settings: <song folder>\pictures\singer.json { "lines": { "<line>": "<Creation file>" }, "scripts": { "<first line of a block>": "what the
+// singer does" } }: the little script goes to InfiniteTalk with the voice (its optional prompt: expression and pose).
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -42,13 +43,15 @@ const LEAD_MS = 500; // the piece starts this long before the downbeat the shot 
 const TAIL_BARS = 2; // and runs two bars past the line's sung end (the shot holds until the next regular cut)
 export const RUN_GAP_MS = 8000; // lines in a row with the same picture and at most this pause between them: one take
 
-export type SingerSettings = { lines: Record<string, string> };
+export type SingerSettings = { lines: Record<string, string>; scripts?: Record<string, string> };
+export const SCRIPT_MAX = 200;
 export type Piece = { fromMs: number; toMs: number; seconds: number; usd: number };
 export type SingerLine = {
   number: number;
   text: string;
   source: string | null; // the Creation file sung from (null: not ticked)
   piece: Piece; // what would be sent for this line's run (the same on every line of a run)
+  script: string; // the block's little script (what the singer does; on every line of the block)
   run: { first: number; last: number } | null; // the run of lines in a row sung from the same source, in one take
   take: (Take & { file?: string }) | null; // the newest singing take of this line's run from its source
   needed: boolean; // ticked and without a finished or running take of this source and piece (only on a run's first line)
@@ -67,7 +70,7 @@ export type SingerView = {
 export function readSinger(dir: string): SingerSettings {
   try {
     const raw = JSON.parse(readFileSync(path.join(dir, SINGER_FILE), "utf8")) as Partial<SingerSettings>;
-    return { lines: raw.lines && typeof raw.lines === "object" ? raw.lines : {} };
+    return { lines: raw.lines && typeof raw.lines === "object" ? raw.lines : {}, ...(raw.scripts && typeof raw.scripts === "object" ? { scripts: raw.scripts } : {}) };
   } catch {
     return { lines: {} };
   }
@@ -132,7 +135,7 @@ export function singingRuns(lines: readonly { number: number; shownMs: number; s
   }
   return runs.map(({ source, first, last }) => ({ source, first, last }));
 }
-const covers = (t: Take | null, piece: Piece) => !!t && (t.status === "running" || t.status === "done" || t.status === "interrupted") && t.sync_ms === piece.fromMs && t.to_ms === piece.toMs;
+const covers = (t: Take | null, piece: Piece, script: string) => !!t && (t.status === "running" || t.status === "done" || t.status === "interrupted") && t.sync_ms === piece.fromMs && t.to_ms === piece.toMs && (t.prompt ?? "") === script;
 
 export async function singerView(ws: Workspace, projectId: string, env: NodeJS.ProcessEnv = process.env): Promise<SingerView> {
   const c = await context(ws, projectId);
@@ -154,7 +157,8 @@ export async function singerView(ws: Workspace, projectId: string, env: NodeJS.P
     const last = run ? byNumber.get(run.last)! : l;
     const piece = singingPiece({ shownMs: first.shownMs, sungEndMs: last.sungEndMs }, c.downbeats, c.songMs);
     const take = source && run ? newestTake(c.dir, source, run.first, run.last) : null;
-    return { number: l.number, text: l.text, source, piece, run: run ? { first: run.first, last: run.last } : null, take, needed: !!source && run?.first === l.number && !covers(take, piece) };
+    const script = run ? (settings.scripts?.[String(run.first)] ?? "") : "";
+    return { number: l.number, text: l.text, source, piece, script, run: run ? { first: run.first, last: run.last } : null, take, needed: !!source && run?.first === l.number && !covers(take, piece, script) };
   }) ?? null;
   const toMake = (lines ?? []).filter((l) => l.needed);
   return {
@@ -191,6 +195,22 @@ export function setSingerLine(ws: Workspace, projectId: string, line: unknown, s
   return s;
 }
 
+// The little script of the block that starts on `line` (what the singer does: "turns to the sea, soft smile"); empty
+// removes it. A block already made is made again only when Paul presses Make singing clips (the cost shows first).
+export function setSingerScript(ws: Workspace, projectId: string, line: unknown, text: unknown): SingerSettings {
+  const { dir } = songFolder(ws, projectId);
+  const n = Number(line);
+  if (!Number.isInteger(n) || n < 1) throw new Error("Choose a line.");
+  const clean = String(text ?? "").replace(/\s+/g, " ").trim().slice(0, SCRIPT_MAX);
+  const s = readSinger(dir);
+  const scripts = { ...(s.scripts ?? {}) };
+  if (clean) scripts[String(n)] = clean;
+  else delete scripts[String(n)];
+  const next = { ...s, scripts };
+  writeSinger(dir, next);
+  return next;
+}
+
 // The voice sent to the model: the vocal stem (lined up on the song by the stem check) when it follows the song, else
 // the song itself.
 type Voice = { kind: "stem"; file: string; offsetMs: number; speed?: number } | { kind: "song" };
@@ -220,7 +240,7 @@ export function cutVoice(voice: Voice, songFile: string, piece: { fromMs: number
 
 export type SingTransport = {
   upload: (file: string) => Promise<string>;
-  submit: (o: { image?: string; video?: string; audio: string }) => Promise<{ id: string }>;
+  submit: (o: { image?: string; video?: string; audio: string; prompt?: string }) => Promise<{ id: string }>;
   poll: (id: string) => Promise<{ status: "running" } | { status: "done"; url: string } | { status: "failed"; error: string }>;
   download: (url: string, file: string) => Promise<void>;
 };
@@ -231,7 +251,7 @@ export function infiniteTalkTransport(key: string, f: typeof fetch = (...a) => g
     upload: (file) => waveSpeedUpload(key, file, f),
     submit: async (o) => {
       const model = o.video ? "wavespeed-ai/infinitetalk/video-to-video" : "wavespeed-ai/infinitetalk";
-      const body = { ...(o.video ? { video: o.video } : { image: o.image }), audio: o.audio, resolution: LIPSYNC_RESOLUTION, seed: -1 };
+      const body = { ...(o.video ? { video: o.video } : { image: o.image }), audio: o.audio, ...(o.prompt ? { prompt: o.prompt } : {}), resolution: LIPSYNC_RESOLUTION, seed: -1 };
       const b = data(await json(await f(`${WAVESPEED}/${model}`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify(body) }), "WaveSpeed InfiniteTalk"));
       if (typeof b.id !== "string") throw new Error("WaveSpeed: no request id in the answer");
       return { id: b.id };
@@ -306,7 +326,7 @@ export async function startSinging(ws: Workspace, projectId: string, o: { capUsd
   for (const l of todo) {
     update(dir, l.source!, (p) => {
       const n = p.takes.reduce((m, t) => Math.max(m, t.n), 0) + 1;
-      p.takes.push({ n, kind: "lipsync", line: l.number, ...(l.run && l.run.last > l.number ? { through: l.run.last } : {}), sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, service: "wavespeed", quality: "best", model: LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: l.piece.usd, pid: process.pid });
+      p.takes.push({ n, kind: "lipsync", line: l.number, ...(l.run && l.run.last > l.number ? { through: l.run.last } : {}), sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, ...(l.script ? { prompt: l.script } : {}), service: "wavespeed", quality: "best", model: LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: l.piece.usd, pid: process.pid });
       jobs.push({ source: l.source!, n });
     });
   }
@@ -361,7 +381,7 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
           } catch (error) {
             throw Object.assign(new Error(`The picture or the voice could not be put online: ${errorText(error)}`), { unsent: true });
           }
-          const sent = await transport.submit(BOARD_VIDEO_FILE.test(j.source) ? { video: media, audio } : { image: media, audio }); // never retried
+          const sent = await transport.submit({ ...(BOARD_VIDEO_FILE.test(j.source) ? { video: media } : { image: media }), audio, ...(t.prompt ? { prompt: t.prompt } : {}) }); // never retried
           id = sent.id;
           setTake(dir, j.source, j.n, { request_id: id });
         }

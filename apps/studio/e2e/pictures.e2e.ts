@@ -85,6 +85,7 @@ async function main() {
     check(((await page.textContent(`${vtile} [data-source]`)) ?? "").includes("Midjourney · video"), "a Midjourney video is labelled Midjourney");
     check(!(await page.isVisible(`${vtile} [data-picture-animate]`)), "a video has no Animate (only pictures animate)");
     check(((await page.textContent(`${tile} [data-picture-cost]`)) ?? "").includes("3 × 5 s · about $3.24"), "the cost of 3 takes shows before anything is sent");
+    check((await page.inputValue("[data-default-length]")) === "song" && ((await page.textContent("[data-default-length]")) ?? "").includes("5 s until the beats are found"), "take length: Fit the song by default (5 s while the song has no beats)");
     // Rename: a short name instead of the long file name (the file keeps its name).
     await page.click(`${vtile} [data-name-field]`);
     await page.fill(`${vtile} [data-name-input]`, "Bride walks");

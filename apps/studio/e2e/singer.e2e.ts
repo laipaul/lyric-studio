@@ -94,6 +94,11 @@ async function main() {
     check(/1 line where the singer shows · to make: 1 take \(\d+ s of voice, about \$\d+\.\d\d\)/.test(summary), `the cost shows before anything is sent (${summary})`);
     check(((await page.textContent("[data-singer]")) ?? "").includes("the song itself"), "without a vocal stem, the song itself is the voice (said plainly)");
 
+    // The block's little script (what the singer does): saved, sent with the voice.
+    await page.fill("[data-singer-script='2']", "turns to the sea, soft smile");
+    await page.press("[data-singer-script='2']", "Enter");
+    for (let i = 0; i < 20 && !(JSON.parse(readFileSync(path.join(pictures, "singer.json"), "utf8")) as { scripts?: Record<string, string> }).scripts?.["2"]; i++) await page.waitForTimeout(200);
+    check((JSON.parse(readFileSync(path.join(pictures, "singer.json"), "utf8")) as { scripts?: Record<string, string> }).scripts?.["2"] === "turns to the sea, soft smile", "the singer's little script is saved for the block (pictures\\singer.json)");
     await page.click("[data-singer-make]");
     await page.waitForSelector("[data-singer-line='2'] [data-singer-status=done]", { timeout: 90_000 });
     check(true, "the singing clip is made");
@@ -105,6 +110,8 @@ async function main() {
     const labels = (JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8")) as { clips: Record<string, { label?: string }> }).clips;
     check(labels["singer close sings line 2.mp4"]?.label === "Close up sings line 2", "the clip carries a short name into the Storyboard (Close up sings line 2)");
     const take = path.join(pictures, "takes", "singer close sings line 2.mp4");
+    const sung = (JSON.parse(readFileSync(path.join(pictures, "pictures.json"), "utf8")) as { pictures: Record<string, { takes: { kind?: string; prompt?: string }[] }> }).pictures["singer close.png"].takes.find((t) => t.kind === "lipsync");
+    check(sung?.prompt === "turns to the sea, soft smile", "the script went with the voice (the take records it)");
     check(existsSync(take) && !(await probeMedia(take)).hasAudio, "it is in Creation, without sound (the voice is never kept)");
     const landed = await page.waitForFunction(() => document.querySelector("tr[data-line='2'] [data-anchor-cell]")?.textContent?.includes("Close up sings line 2"), null, { timeout: 15_000 }).then(() => true).catch(() => false);
     check(landed, `the line's Lands on shows the singing clip by its short name (${await page.textContent("tr[data-line='2'] [data-anchor-cell]")})`);

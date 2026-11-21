@@ -23,7 +23,8 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFile
 import os from "node:os";
 import path from "node:path";
 
-import { ffmpegBin, ffprobeBin, probeMedia, uniqueFileName, type Workspace } from "@lyric/db";
+import { beat as beatTable, ffmpegBin, ffprobeBin, probeMedia, uniqueFileName, type Workspace } from "@lyric/db";
+import { eq } from "drizzle-orm";
 
 import { importSongClips } from "./assets";
 import { cleanLabel, setClipLabel } from "./clip-edits";
@@ -38,7 +39,11 @@ export const PICTURE_FILE = /\.(jpe?g|png|webp)$/i;
 export const BOARD_VIDEO_FILE = /\.(mp4|m4v|mov|webm)$/i;
 const BOARD_FILE = /\.(jpe?g|png|webp|mp4|m4v|mov|webm)$/i;
 const MAX_LINK_BYTES = 1024 * 1024 * 1024; // a file from a link: at most 1 GB
-export const TAKE_SECONDS = 5; // the app's choice: long enough for the beat cuts, the services' minimum is 4
+export const TAKE_SECONDS = 5; // "Short" takes, and a song without beats yet; the services' minimum is 4
+export const MIN_TAKE_SECONDS = 4; // Seedance 2.5 (Flash): any whole number of seconds from 4 to 30
+export const MAX_TAKE_SECONDS = 30;
+export const PHRASE_BARS = 4; // "Fit the song": a take as long as one musical phrase of this song (4 bars)
+export type TakeLength = "song" | "short";
 export const RESOLUTION = "720p";
 export const DEFAULT_TAKES = 3;
 export const MAX_TAKES = 6;
@@ -96,6 +101,8 @@ export type Take = {
   clip?: string; // (21 Nov 2026 first build: takes went to the clips by themselves; read as `sent`)
   error?: string;
   pid?: number;
+  seconds?: number; // how long the take was asked to be (4 to 30 s; before 21 Nov 2026: 5)
+  prompt?: string; // lipsync: the singer's little script sent with the voice (what the singer does)
   label?: string; // the user's short name for this take ("Bride smile"); shown instead of "Take N"
   playable?: boolean; // the file was checked (and if needed re-made) to play in the browser: H.264, yuv420p, fast start
 };
@@ -104,9 +111,9 @@ export type PicturesFile = { _help?: string; pictures: Record<string, PictureRec
 // source: where it came from, a small label ("Added by you", "Midjourney", "From higgsfield.ai"). kind: only a picture can be animated.
 export type PictureView = { file: string; label: string | null; url: string; kind: "picture" | "video"; source: string; mood: string; takes: Take[]; width: number | null; height: number | null; sent: string | null };
 // Paul's own defaults for Animate (Creation → Defaults), for every song: the service and model, how many takes, the cap.
-export type CreationDefaults = { service: ServiceId; quality: Quality; takes: number; cap: number };
+export type CreationDefaults = { service: ServiceId; quality: Quality; takes: number; cap: number; length: TakeLength }; // length: "song" = one phrase of the song, "short" = 5 s
 export const CREATION_FILE = "creation.json"; // in the workspace folder
-const FACTORY: CreationDefaults = { service: "wavespeed", quality: "standard", takes: DEFAULT_TAKES, cap: DEFAULT_CAP_USD };
+const FACTORY: CreationDefaults = { service: "wavespeed", quality: "standard", takes: DEFAULT_TAKES, cap: DEFAULT_CAP_USD, length: "song" };
 
 export function readCreationDefaults(wsDir: string): CreationDefaults {
   const file = path.join(wsDir, CREATION_FILE);
@@ -123,12 +130,30 @@ function checkDefaults(raw: Partial<CreationDefaults>): CreationDefaults {
   const quality: Quality = raw.quality && s.models[raw.quality] ? raw.quality : s.models.standard ? "standard" : "best";
   const takes = Number.isInteger(raw.takes) && raw.takes! >= 1 && raw.takes! <= MAX_TAKES ? raw.takes! : DEFAULT_TAKES;
   const cap = typeof raw.cap === "number" && raw.cap > 0 && raw.cap <= 1000 ? raw.cap : DEFAULT_CAP_USD;
-  return { service, quality, takes, cap };
+  const length: TakeLength = raw.length === "short" ? "short" : "song";
+  return { service, quality, takes, cap, length };
+}
+
+// How long a take is (whole seconds): "song" = one musical phrase of this song (4 bars at its tempo, rounded up), so a
+// take covers a phrase and the beat cuts have room; "short" or no beats yet = 5 s. Always 4 to 30 s.
+export function phraseSeconds(downbeats: readonly number[]): number | null {
+  const gaps = downbeats.slice(1).map((d, i) => d - downbeats[i]).filter((g) => g > 0).sort((a, b) => a - b);
+  if (gaps.length < 2) return null;
+  const bar = gaps[Math.floor(gaps.length / 2)];
+  return Math.min(MAX_TAKE_SECONDS, Math.max(MIN_TAKE_SECONDS, Math.ceil((bar * PHRASE_BARS) / 1000 - 0.05)));
+}
+function songPhraseSeconds(ws: Workspace, projectId: string): number | null {
+  // The bar length does not depend on which beat starts a bar (the downbeat offset): the stored downbeats are enough.
+  const downbeats = ws.db.select().from(beatTable).where(eq(beatTable.project_id, projectId)).all().filter((b) => b.is_downbeat).map((b) => b.time_ms).sort((a, b) => a - b);
+  return phraseSeconds(downbeats);
+}
+export function songTakeSeconds(ws: Workspace, projectId: string, length: TakeLength): number {
+  return length === "short" ? TAKE_SECONDS : (songPhraseSeconds(ws, projectId) ?? TAKE_SECONDS);
 }
 export function saveCreationDefaults(wsDir: string, raw: unknown): CreationDefaults {
   if (!raw || typeof raw !== "object") throw new Error("The defaults must be an object.");
   const d = checkDefaults(raw as Partial<CreationDefaults>);
-  writeFileSync(path.join(wsDir, CREATION_FILE), `${JSON.stringify({ _help: "Your defaults for Creation → Animate (every song): service, quality (standard / best), takes, cap (US$ per Animate).", ...d }, null, 2)}\n`);
+  writeFileSync(path.join(wsDir, CREATION_FILE), `${JSON.stringify({ _help: "Your defaults for Creation → Animate (every song): service, quality (standard / best), takes, cap (US$ per Animate), length (song = one phrase of the song, short = 5 s).", ...d }, null, 2)}\n`);
   return d;
 }
 
@@ -136,7 +161,8 @@ export type PicturesView = {
   defaults: CreationDefaults;
   pictures: PictureView[];
   services: { id: ServiceId; label: string; ready: boolean; keyName: string; qualities: { id: Quality; label: string; usdPerSecond: number; priceNote: string }[] }[];
-  takeSeconds: number;
+  takeSeconds: number; // this song's take length (your default length: one phrase of the song, or 5 s)
+  phraseSeconds: number | null; // one phrase of this song (null: no beats yet)
   defaultTakes: number;
   maxTakes: number;
   defaultCap: number;
@@ -321,7 +347,8 @@ export async function picturesView(ws: Workspace, projectId: string, env: NodeJS
       ready: stub || !!keyFor(s.id, env),
       qualities: (Object.entries(s.models) as [Quality, Model][]).map(([id, m]) => ({ id, label: m.label, usdPerSecond: m.usdPerSecond, priceNote: m.priceNote })),
     })),
-    takeSeconds: TAKE_SECONDS,
+    takeSeconds: songTakeSeconds(ws, projectId, readCreationDefaults(ws.dir).length),
+    phraseSeconds: songPhraseSeconds(ws, projectId),
     defaultTakes: DEFAULT_TAKES,
     maxTakes: MAX_TAKES,
     defaultCap: DEFAULT_CAP_USD,
@@ -380,17 +407,17 @@ export function motionPrompt(mood?: string): string {
 }
 
 export type Estimate = { takes: number; seconds: number; usdPerTake: number; usd: number; model: string; priceNote: string };
-export function estimate(service: ServiceId, quality: Quality, takes: number): Estimate {
+export function estimate(service: ServiceId, quality: Quality, takes: number, seconds = TAKE_SECONDS): Estimate {
   const s = SERVICES[service];
   const m = s.models[quality] ?? s.models.best!;
-  const usdPerTake = Math.round(m.usdPerSecond * TAKE_SECONDS * 100) / 100;
-  return { takes, seconds: TAKE_SECONDS, usdPerTake, usd: Math.round(usdPerTake * takes * 100) / 100, model: m.label, priceNote: m.priceNote };
+  const usdPerTake = Math.round(m.usdPerSecond * seconds * 100) / 100;
+  return { takes, seconds, usdPerTake, usd: Math.round(usdPerTake * takes * 100) / 100, model: m.label, priceNote: m.priceNote };
 }
 
 // One service's calls. `download` writes the finished video to a file.
 export type Transport = {
   upload: (file: string) => Promise<string>; // a public URL of the picture
-  submit: (imageUrl: string, prompt: string) => Promise<{ id: string; pollUrl?: string }>;
+  submit: (imageUrl: string, prompt: string, seconds?: number) => Promise<{ id: string; pollUrl?: string }>;
   poll: (id: string, pollUrl?: string) => Promise<{ status: "running" } | { status: "done"; url: string } | { status: "failed"; error: string }>;
   download: (url: string, file: string) => Promise<void>;
 };
@@ -433,8 +460,8 @@ export function waveSpeedTransport(key: string, model: string, f: typeof fetch =
   const auth = { Authorization: `Bearer ${key}` };
   return {
     upload: (file) => waveSpeedUpload(key, file, f),
-    submit: async (image, prompt) => {
-      const b = data(await json(await f(`${WAVESPEED}/${model}`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ image, prompt, duration: TAKE_SECONDS, resolution: RESOLUTION, generate_audio: false, output_format: "mp4" }) }), "WaveSpeed"));
+    submit: async (image, prompt, seconds = TAKE_SECONDS) => {
+      const b = data(await json(await f(`${WAVESPEED}/${model}`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ image, prompt, duration: seconds, resolution: RESOLUTION, generate_audio: false, output_format: "mp4" }) }), "WaveSpeed"));
       if (typeof b.id !== "string") throw new Error("WaveSpeed: no request id in the answer");
       return { id: b.id };
     },
@@ -468,8 +495,8 @@ export function higgsfieldTransport(key: string, model: string, env: NodeJS.Proc
       const client = createFalClient({ credentials: fal, suppressLocalCredentialsWarning: true });
       return client.storage.upload(new Blob([readFileSync(file)], { type: MIME[path.extname(file).toLowerCase()] ?? "image/jpeg" }));
     },
-    submit: async (image, prompt) => {
-      const b = await json(await f(`${HIGGSFIELD}/${model}`, { method: "POST", headers: { ...auth, "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ image_url: image, prompt, duration: TAKE_SECONDS, resolution: RESOLUTION, generate_audio: false }) }), "Higgsfield");
+    submit: async (image, prompt, seconds = TAKE_SECONDS) => {
+      const b = await json(await f(`${HIGGSFIELD}/${model}`, { method: "POST", headers: { ...auth, "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ image_url: image, prompt, duration: seconds, resolution: RESOLUTION, generate_audio: false }) }), "Higgsfield");
       if (typeof b.request_id !== "string") throw new Error("Higgsfield: no request id in the answer");
       return { id: b.request_id, pollUrl: typeof b.status_url === "string" ? b.status_url : undefined };
     },
@@ -494,6 +521,7 @@ export function higgsfieldTransport(key: string, model: string, env: NodeJS.Proc
 // nothing sent anywhere. LYRIC_GENERATE_STUB=fail makes every take fail.
 export function stubTransport(mode: string): Transport {
   const pictures = new Map<string, string>();
+  const lengths = new Map<string, number>(); // picture url -> the asked length (s)
   let n = 0;
   return {
     upload: async (file) => {
@@ -501,15 +529,16 @@ export function stubTransport(mode: string): Transport {
       pictures.set(url, file);
       return url;
     },
-    submit: async (image) => {
+    submit: async (image, _prompt, seconds = TAKE_SECONDS) => {
       if (mode === "fail") throw new Error("stand-in: the service refused the request");
+      lengths.set(image, seconds);
       return { id: `stub-${image.slice(7)}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, pollUrl: image };
     },
     poll: async (_id, pollUrl) => ({ status: "done", url: pollUrl ?? "" }),
     download: async (url, file) => {
       const picture = pictures.get(url);
       if (!picture) throw new Error("stand-in: unknown picture");
-      execFileSync(ffmpegBin(), ["-y", "-v", "error", "-loop", "1", "-i", picture, "-t", String(TAKE_SECONDS), "-r", "30", "-vf", `scale=trunc(iw/2)*2:trunc(ih/2)*2,noise=alls=12:allf=t:all_seed=${Math.floor(Math.random() * 1e6)},format=yuv420p`, "-c:v", "libx264", "-preset", "ultrafast", file]);
+      execFileSync(ffmpegBin(), ["-y", "-v", "error", "-loop", "1", "-i", picture, "-t", String(lengths.get(url) ?? TAKE_SECONDS), "-r", "30", "-vf", `scale=trunc(iw/2)*2:trunc(ih/2)*2,noise=alls=12:allf=t:all_seed=${Math.floor(Math.random() * 1e6)},format=yuv420p`, "-c:v", "libx264", "-preset", "ultrafast", file]);
     },
   };
 }
@@ -525,7 +554,7 @@ export function transportFor(service: ServiceId, quality: Quality, env: NodeJS.P
 
 // ---------------------------------------------------------------- animate
 
-export type AnimateOptions = { service: ServiceId; quality?: Quality; takes?: number; capUsd?: number };
+export type AnimateOptions = { service: ServiceId; quality?: Quality; takes?: number; capUsd?: number; seconds?: number }; // seconds: this song's take length unless given
 
 // Checks a press of Animate and records its takes as running; returns them (the caller starts runTakes without waiting).
 export function startAnimate(ws: Workspace, projectId: string, file: string, o: AnimateOptions, env: NodeJS.ProcessEnv = process.env): { takes: Take[]; estimate: Estimate } {
@@ -539,15 +568,17 @@ export function startAnimate(ws: Workspace, projectId: string, file: string, o: 
   const takes = Math.round(Number(o.takes ?? DEFAULT_TAKES));
   if (!Number.isFinite(takes) || takes < 1 || takes > MAX_TAKES) throw new Error(`Make 1 to ${MAX_TAKES} takes at a time.`);
   if (!env.LYRIC_GENERATE_STUB && !keyFor(o.service, env)) transportFor(o.service, quality, env); // throws the plain-words message
-  const e = estimate(o.service, quality, takes);
+  const wanted = Math.round(Number(o.seconds ?? songTakeSeconds(ws, projectId, readCreationDefaults(ws.dir).length)));
+  const seconds = Number.isFinite(wanted) ? Math.min(MAX_TAKE_SECONDS, Math.max(MIN_TAKE_SECONDS, wanted)) : TAKE_SECONDS;
+  const e = estimate(o.service, quality, takes, seconds);
   const cap = Number(o.capUsd ?? DEFAULT_CAP_USD);
   if (!Number.isFinite(cap) || cap <= 0) throw new Error("Set a spending cap above $0.");
-  if (e.usd > cap) throw new Error(`${takes} takes cost about $${e.usd.toFixed(2)}, above your cap of $${cap.toFixed(2)}: make fewer takes or raise the cap. Nothing was sent.`);
+  if (e.usd > cap) throw new Error(`${takes} takes of ${seconds} s cost about $${e.usd.toFixed(2)}, above your cap of $${cap.toFixed(2)}: make fewer takes or raise the cap. Nothing was sent.`);
   const now = new Date().toISOString();
   let made: Take[] = [];
   update(dir, name, (p) => {
     const first = p.takes.reduce((m, t) => Math.max(m, t.n), 0) + 1;
-    made = Array.from({ length: takes }, (_, i) => ({ n: first + i, service: o.service, quality, model: e.model, status: "running" as const, started_at: now, cost_usd: e.usdPerTake, pid: process.pid }));
+    made = Array.from({ length: takes }, (_, i) => ({ n: first + i, service: o.service, quality, model: e.model, status: "running" as const, started_at: now, cost_usd: e.usdPerTake, seconds, pid: process.pid }));
     p.takes.push(...made);
   });
   return { takes: made, estimate: e };
@@ -606,7 +637,7 @@ export async function runTakes(openWs: () => Workspace, projectId: string, file:
         setTake(dir, file, t.n, { status: "running", pid: process.pid, error: undefined });
         if (!id) {
           if (!imageUrl) return;
-          const sent = await transport.submit(imageUrl, motionPrompt(mood)); // never retried: a retry could be billed twice
+          const sent = await transport.submit(imageUrl, motionPrompt(mood), t.seconds ?? TAKE_SECONDS); // never retried: a retry could be billed twice
           id = sent.id;
           pollUrl = sent.pollUrl;
           setTake(dir, file, t.n, { request_id: id, poll_url: pollUrl });
