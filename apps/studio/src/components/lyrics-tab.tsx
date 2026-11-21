@@ -250,6 +250,9 @@ export function LyricsTab({ projectId }: { projectId: string }) {
       text: gapOrder !== undefined ? `Gap order: ${gapOrder ?? "default"} (saved to song.json).` : anchor ? `Line ${line} lands on ${(take ? data?.anchors.clips.find((c) => c.take?.picture === take.picture && c.take.n === take.n)?.label : null) ?? anchor.clip}${anchor.transition === "dissolve" ? " (dissolve)" : ""}: saved to song.json. The next video uses it.` : `Line ${line}: anchor removed (song.json).`,
     });
     await load();
+    // The server may have taken the singer off this line's group: "Who sings" must say so too (its in-use change calls
+    // reloadAnchors once more; that load changes nothing, so it stops there).
+    await singer.reload();
   }
 
   const lines = useMemo(() => data?.lines ?? [], [data]);

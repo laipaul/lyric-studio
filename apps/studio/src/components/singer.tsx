@@ -39,6 +39,7 @@ export type Singer = {
   play: (source: string, t: GroupTake | null) => void;
   panel: number | null; // the line whose takes show in the takes panel (opened by Make, Retake or Takes)
   showTakes: (line: number | null) => void;
+  reload: () => Promise<void>; // read the singing lines again (the Lyrics tab changed an anchor: the take may no longer be in use)
 };
 
 // `onMade`: called when a take lands on (or is switched onto) its lines (the Lyrics tab reloads its anchors).
@@ -106,6 +107,7 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
     playing,
     panel,
     showTakes: setPanel,
+    reload: load,
     setLine: (line, source) => attempt(async () => {
       await post({ action: "line", line, source });
       await load();

@@ -189,6 +189,23 @@ async function main() {
     const unsent = (JSON.parse(readFileSync(path.join(pictures, "pictures.json"), "utf8")) as { pictures: Record<string, { takes: { n: number; sent?: string }[] }> }).pictures["singer close.png"].takes.find((t) => t.n === 1);
     check(!unsent?.sent, "dismissing the question sent nothing to the Storyboard");
 
+    // Accepting the question: the singing clip leaves line 2, and Who sings follows at once (no page reload): the take is
+    // no longer In use and offers Use this take; pressing it brings the singer back.
+    const inUseTake = await page.getAttribute("[data-singer-line='2'] [data-singer-take-state='in-use']", "data-singer-take");
+    await page.click("tr[data-line='2'] [data-anchor-pick]");
+    await page.waitForSelector("[data-anchor-picker] [data-anchor-clip]");
+    page.once("dialog", (d) => { void d.accept(); });
+    await page.locator("[data-anchor-picker] [data-anchor-clip]:not([data-anchor-clip^='creation:'])").first().dblclick();
+    await page.waitForFunction(() => !document.querySelector("[data-anchor-picker]"), null, { timeout: 15_000 });
+    await page.waitForSelector(`[data-singer-line='2'] [data-singer-take='${inUseTake}'] [data-singer-take-use]`, { timeout: 15_000 });
+    const inUseAfter = await page.locator("[data-singer-line='2'] [data-singer-take-state='in-use']").count();
+    const offAnchor = (JSON.parse(readFileSync(paths.recipe!, "utf8")) as { anchors?: { line: number; sync?: number }[] }).anchors?.find((x) => x.line === 2);
+    check(inUseAfter === 0 && offAnchor?.sync === undefined, `after a plain clip replaces the singer on line 2, Who sings shows no take In use and offers Use this take for take ${inUseTake} (in use ${inUseAfter})`);
+    await page.click(`[data-singer-line='2'] [data-singer-take='${inUseTake}'] [data-singer-take-use]`);
+    await page.waitForSelector(`[data-singer-line='2'] [data-singer-take='${inUseTake}'][data-singer-take-state='in-use']`, { timeout: 15_000 });
+    const backAnchor = (JSON.parse(readFileSync(paths.recipe!, "utf8")) as { anchors?: { line: number; sync?: number }[] }).anchors?.find((x) => x.line === 2);
+    check(backAnchor?.sync !== undefined, "Use this take puts the singing clip back on line 2 (song.json)");
+
     // Show a take, not a clip (Paul, 21 Nov 2026): the picker lists Creation's takes as takes; singing takes are not offered;
     // a take not in the Storyboard yet is sent there and placed in one step.
     await page.click("tr[data-line='1'] [data-anchor-pick]");

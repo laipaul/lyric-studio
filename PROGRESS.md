@@ -4,6 +4,14 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Fix: Who sings showed a take "In use" after a plain clip replaced it ✅ (to verify on the PC)
+- Paul (21 Nov 2026, line 32): Who sings said "Take 1 · In use" while Shows clip had TheEnding · Take 3. Saving a
+  clip on a line reloaded only the Shows clip column; the singing column kept its old view. A line holds one thing:
+  the plain clip had replaced the singer. Now Who sings reads again after every clip saved or removed on a line, so
+  it shows "Use this take" at once.
+- Tests: browser singer (+3: accept the question, the singer column follows without a reload, Use this take brings
+  the singer back), lyrics-tab pass.
+
 ### Show a take, not a clip: Creation's takes in the line's clip panel; the Creation card says where each take shows ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "that's confusing, I want to show the take, not the clip" / "the app is confused now". The
   "Show a clip" panel listed anonymous clip files (studio-swea… 12.6 s, 11.2 s, 5.0 s); singing takes looked like
