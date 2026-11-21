@@ -222,8 +222,8 @@ export function anglePrompt(a: (typeof ANGLES)[number], props?: string): string 
 
 // ---- the image models (fal endpoints, inputs and prices checked on fal.ai on 17 Nov 2026) ----
 
-export type ModelId = "nano-pro" | "nano2" | "seedream" | "gpt";
-export const MODEL_IDS: readonly ModelId[] = ["nano-pro", "nano2", "seedream", "gpt"];
+export type ModelId = "nano-pro" | "nano2" | "seedream" | "gpt" | "gemini";
+export const MODEL_IDS: readonly ModelId[] = ["nano-pro", "nano2", "seedream", "gpt", "gemini"];
 // Default after the first bride test (18 Nov 2026, Paul): Seedream 4.5 gave the closest face (0.74), kept the reference's
 // look and is the cheapest. The others stay available with --models.
 export const DEFAULT_MODELS: readonly ModelId[] = ["seedream"];
@@ -234,6 +234,7 @@ export type ImageModel = {
   endpoint: string;
   perImageUsd: number; // the estimate per image, from fal's price
   priceNote: string;
+  provider?: "fal" | "gemini"; // gemini: Google directly, on the user's own GEMINI_API_KEY (default fal)
   input(prompt: string, refs: string[], aspect: Aspect, seed: number): Record<string, unknown>;
 };
 
@@ -275,6 +276,17 @@ export const MODELS: Record<ModelId, ImageModel> = {
     perImageUsd: 0.24,
     priceNote: "about $0.24 per image (high quality 1024x1536 $0.20 + input image tokens)",
     input: (prompt, refs, _aspect, _seed) => ({ prompt, image_urls: refs, image_size: "1024x1536", quality: "high", input_fidelity: "high", num_images: 1, output_format: "png" }),
+  },
+  // Paul's own Gemini key (21 Nov 2026): Nano Banana Pro straight from Google, billed to his Google account. Google's
+  // list price for a 1K / 2K picture is about $0.134 (an estimate here: his Google bill is the real figure).
+  gemini: {
+    id: "gemini",
+    name: "Gemini · Nano Banana Pro (your key)",
+    endpoint: `gemini/${process.env.GEMINI_IMAGE_MODEL?.trim() || "gemini-3-pro-image"}`,
+    perImageUsd: 0.14,
+    priceNote: "about $0.14 per image at 2K, on your own Google bill",
+    provider: "gemini",
+    input: (prompt, refs, aspect, _seed) => ({ prompt, image_urls: refs, aspect_ratio: aspect, image_size: "2K" }),
   },
 };
 

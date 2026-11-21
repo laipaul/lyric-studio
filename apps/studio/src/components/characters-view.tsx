@@ -479,9 +479,9 @@ export function CardPage({ id }: { id: string }) {
               </div>
               {draft ? (
                 <div className="flex items-center gap-2">
-                  <select data-card-model value={version.model} onChange={(e) => save({ model: e.target.value })} className="bg-background rounded-md border px-2 py-1 text-xs" title="The image model (Seedream 4.5 won the first test)">
+                  <select data-card-model value={version.model} onChange={(e) => save({ model: e.target.value })} className="bg-background rounded-md border px-2 py-1 text-xs" title="The image model (Seedream 4.5 won the first test; Gemini runs on your own Google key)">
                     {d.models.map((m) => (
-                      <option key={m.id} value={m.id}>
+                      <option key={m.id} value={m.id} title={m.price}>
                         {m.name}
                       </option>
                     ))}
@@ -505,7 +505,7 @@ export function CardPage({ id }: { id: string }) {
                       </Button>
                     </span>
                   ) : (
-                    <Button size="sm" disabled={!!running || !!busy} onClick={() => setConfirm("pack")} data-make-pack>
+                    <Button size="sm" disabled={!!running || !!busy || !!d.geminiMissing} onClick={() => setConfirm("pack")} data-make-pack>
                       <Wand2 /> {items.length ? "Make the pack again" : "Make pack"}
                     </Button>
                   )}
@@ -532,6 +532,11 @@ export function CardPage({ id }: { id: string }) {
             ) : lastJob && lastJob.message ? (
               <p className={cn("text-xs", lastJob.status === "failed" ? "text-red-300" : "text-muted-foreground")} data-last-job={lastJob.status}>
                 {lastJob.label}: {lastJob.message}
+              </p>
+            ) : null}
+            {d.geminiMissing ? (
+              <p className="text-xs text-amber-300" data-gemini-missing>
+                {d.geminiMissing}
               </p>
             ) : null}
             {busy === "own" ? <p className="text-muted-foreground text-xs">Checking your pictures… (free, on this PC)</p> : null}

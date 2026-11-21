@@ -3587,3 +3587,55 @@ D. ✅ (built 29 Oct, to verify) **Title opening** (items 1-8 below).
 - **"Remake the full-body views (front, then back)"** on a draft: only those two, the face views are kept.
 - Tests: characters-cards (17) and characters-prompts (9, new) pass; the Characters browser test (32 checks) and the
   shot list browser test pass.
+
+### Recast spike: the main character in place of the person in Storyboard clips ✅ (to run on the Windows PC)
+- `spikes/recast/` (like spikes/lipsync; nothing in the app changes), `pnpm recast …`:
+  - `check` reads fal's own description of each endpoint (fields, price) before anything is sent; every request is built
+    from those fields (fal.ai was out of reach from the cloud session, so the IDs and fields are verified on the PC).
+  - `"<song>" --list` shows the Storyboard cards with their numbers.
+  - `--character "Bride No 2" --clips 7,9,10 --keyframe-clips 7 --max-cost 10`: the estimate per clip and method,
+    then `--yes` sends it; 3 jobs at a time; request IDs saved as they come; `fetch "<run folder>"` gets a result that
+    did not download (free).
+- Methods: **A** Wan 2.2 Animate Replace (720p), **B** MiniMax H3 Max Recast (768P), **C** Keyframe + Seedance (first
+  frame → depth map → Seedream 4.5 depth-guided first frame with the character in the same layout → Seedance reference
+  video-to-video with the original clip as motion reference; 480p draft; card 7 only in the first run). **D** Runway
+  Aleph and **E** Higgsfield Genjutsu are stubs (D: no key yet).
+- Pictures sent: the card's close-up, 3/4 face and reference picture (latest locked version); never the full-body views.
+- Each result is fitted back to the clip's exact size, fps and length; outputs go to
+  `workspace\recast\<song>\<date-time>\` (never into the clips folder): comparison.mp4 (Original | A | B | C per clip),
+  report.md / report.json (verdict in plain words, checks, cost, request IDs).
+- Local judge (services/audio/app/recast_judge.py, MediaPipe + SFace, free): **face** (share of frames matching the
+  character, weakest moment, the original person's face still visible), **scene kept** (people masked out; background
+  SSIM + colour histogram → "Repainted scene"), **motion kept** (pose normalised to the body, optical-flow agreement).
+  Thresholds are first guesses, every number is in report.json.
+- Prices: fal's price list is read with your key; until then the estimate uses prices seen on other sites (marked
+  "not confirmed"): Wan ~$0.08/s at 720p, H3 ~$0.30/s at 768P, Seedream $0.04, Seedance ~$0.12/s at 480p.
+- Tests: recast spike (11, stand-ins for fal and the judge), recast judge (6, Python). Found and fixed while testing:
+  the first motion measure called identical movement "not following" (0.14); it now compares flow fields over 0.1 s
+  (identical 1.00, same movement in other colours 0.77).
+- Fix (18 Nov 2026, Paul's first run): PowerShell hands an unquoted `--clips 7,9,10` over as "7 9 10" ("No clip
+  \"7 9 10\""); card numbers now split on commas and spaces (file names still on commas only), `--methods` too.
+- **First paid run (18 Nov 2026, cards 7, 9, 10): nothing usable.** Causes found in fal's current docs:
+  - MiniMax H3 takes ONE photo per new person; the spike sent 3, so the original woman mostly stayed (0–82%).
+  - Wan takes one picture and works in 9:16: it got only the close-up (invented clothes, a different-looking woman),
+    and 26% was cropped back off.
+  - Seedance refuses "likenesses of real people" (its safety rule): removed.
+  - The Seedream "new first frame" came back almost unchanged (depth map as a 5th picture, long prompt).
+  - Prices: H3 is ~$1.13–1.57 per 5 s clip, not $0.05; Seedance tokens were counted once. The first run cost about
+    $5.50 against an estimate of $2.08.
+- **Round 2 (18 Nov 2026):**
+  - Methods:
+    - A Wan: the clip padded to 9:16, the padding removed after; nothing lost.
+    - B H3: one photo, enhance_realism, 1080P; clips under 5 s are skipped.
+    - C Keyframe + Kling O1 edit: the clip scaled to ≥720 px; the character as an element, the keyframe as an image.
+    - F Keyframe + Wan (new): the keyframe as Wan's picture, padded like the clip.
+  - The keyframe: 3 pictures (frame, close-up, 3/4), a short "replace this person" prompt, Nano Banana Pro by default
+    (`--keyframe-model`), made once when C and F both run.
+  - A free face gate before any video is paid for: a keyframe that still looks like the original person (or shows no
+    face) is tried once more, then its video step is not sent.
+  - `--keyframe-only`: the keyframes alone, for a few cents each.
+  - Prices from fal's docs per endpoint (formulas); an unknown unit stops the run before anything is uploaded.
+  - report.md is saved with a BOM, so PowerShell shows it correctly.
+  - Tests: recast spike (29). The gate's Python side was not run in the cloud (no face models there).
+- Before the run (Paul, in the app): Bride No 2 v2 (New version → Remake front, then back → lock). The spike uses the
+  latest locked version's close-up, 3/4 face and reference (v1 until v2 is locked).

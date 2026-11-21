@@ -173,6 +173,11 @@ async function main() {
     await page.waitForSelector("[data-describe-note]");
     check(((await page.inputValue("[data-card-description]")) ?? "").includes("A woman") && (await page.isEnabled("[data-lock]")), "the description is drafted (about $0.01) and Lock is possible");
 
+    // Gemini on your own key as the pack's model: the estimate says it is billed by Google (the stand-in has a key).
+    await page.selectOption("[data-card-model]", "gemini");
+    await page.waitForFunction(() => document.querySelector("[data-card-pack]")?.textContent?.includes("your own Google bill"));
+    check(!(await page.$("[data-gemini-missing]")) && (await page.isEnabled("[data-make-pack]")), "Gemini · Nano Banana Pro (your key) can be chosen; the estimate says it is on your own Google bill");
+
     // Pick a frame from a video: a new character's picture taken from a clip (the video itself is only read).
     const clip = path.join(pics, "singer clip.mp4");
     ffmpeg("-f", "lavfi", "-i", "testsrc=s=320x240:d=6:r=25", "-pix_fmt", "yuv420p", clip);

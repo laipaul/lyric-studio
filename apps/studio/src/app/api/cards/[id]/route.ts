@@ -11,7 +11,7 @@ import { connection } from "next/server";
 
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import {
-  calibrationSongs, cardFace, draftDescription, moveOwnPicture, cardTools, ensureSplit, splitNeeded, cardJobsFor, cardRoot, cardThresholds, checkCardPicture, cropCardToFace, currentVersion, enqueueCardJob, getCard, lockCard, lockProblems,
+  calibrationSongs, cardFace, draftDescription, hasGeminiKey, moveOwnPicture, GEMINI_KEY_MISSING, cardTools, ensureSplit, splitNeeded, cardJobsFor, cardRoot, cardThresholds, checkCardPicture, cropCardToFace, currentVersion, enqueueCardJob, getCard, lockCard, lockProblems,
   MODELS, newVersion, usableVersion, versionByNumber, packEstimate, readCardFile, readReport, repickLegacy, buildSheet, runCardJob, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId,
 } from "@lyric/video/characters";
 
@@ -48,6 +48,8 @@ function detail(id: string, message: string | null = null, n: number | null = nu
       thresholds: cardThresholds(root),
       jobs: cardJobsFor(ws, id),
       models: Object.values(MODELS).map((m) => ({ id: m.id, name: m.name, price: m.priceNote })),
+      // The "gemini" model runs on the user's own key: without it, the plain note and no Make pack.
+      geminiMissing: v.model === "gemini" && !hasGeminiKey() ? GEMINI_KEY_MISSING : null,
       songs: row.kind === "character" ? calibrationSongs(ws) : [],
     };
   });

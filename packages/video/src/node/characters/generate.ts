@@ -13,6 +13,7 @@ import type { FalClient } from "@fal-ai/client";
 import { cardRoot, cardThresholds, currentVersion, getCard, readCardFile, referenceFiles, versionDir, writeCardFile, type CardFile } from "./cards";
 import type { FaceTool } from "./face";
 import { callModel, download, errorText, firstImageUrl, type Attempt } from "./fal";
+import { GEMINI_KEY_MISSING } from "./gemini";
 import { makeSplit, splitNeeded } from "./split";
 import {
   angleNote, anglePrompt, ANGLES, Budget, classify, DESCRIPTION_PROMPT, imageSize, MODELS, money, SCENE_DESCRIPTION_PROMPT, TEXT_MODEL, VIEWS, viewPrompt, VISION,
@@ -35,6 +36,7 @@ export type VersionReport = { updated_at: string; model: string; endpoint: strin
 
 export type GenDeps = {
   fal: FalClient;
+  gemini?: FalClient | null; // Gemini on the user's own key (the "gemini" model), same shape as fal
   face: FaceTool;
   log?: (m: string) => void;
   progress?: (done: number, total: number, current: string) => void;
@@ -161,12 +163,15 @@ export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps,
     } else log("outfit split skipped: the cost cap was reached");
   }
 
+  // The pictures come from fal, or from Google on the user's own Gemini key; the outfit split and description stay on fal.
+  const img = m.provider === "gemini" ? deps.gemini : deps.fal;
+  if (!img) throw new Error(GEMINI_KEY_MISSING);
   const refs = referenceFiles(root, file);
   const refFile = refs[0];
   const mime = (f: string) => (/\.png$/i.test(f) ? "image/png" : /\.webp$/i.test(f) ? "image/webp" : "image/jpeg");
-  log("Uploading the picture to fal storage…");
+  log(m.provider === "gemini" ? "Preparing the picture for Gemini…" : "Uploading the picture to fal storage…");
   const refUrls: string[] = [];
-  for (const f of refs) refUrls.push(await deps.fal.storage.upload(new File([readFileSync(f)], path.basename(f), { type: mime(f) })));
+  for (const f of refs) refUrls.push(await img.storage.upload(new File([readFileSync(f)], path.basename(f), { type: mime(f) })));
 
   type Job = { id: string; label: string; kind: "view" | "angle"; prompt: string; aspect: "3:4" | "2:3" };
   const all: Job[] =
@@ -180,7 +185,11 @@ export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps,
   let descriptionP: Promise<void> = Promise.resolve();
   if (!o.only?.length && !v.description && budget.canSpend(VISION.perCallUsd)) {
     budget.spend(VISION.perCallUsd);
-    descriptionP = callModel(deps.fal, VISION.endpoint, { prompt: file.kind === "character" ? DESCRIPTION_PROMPT : SCENE_DESCRIPTION_PROMPT, image_urls: [refUrls[0]], model: VISION.model }, callOpts)
+    const describe = async () => {
+      const url = img === deps.fal ? refUrls[0] : await deps.fal.storage.upload(new File([readFileSync(refFile)], path.basename(refFile), { type: mime(refFile) }));
+      return callModel(deps.fal, VISION.endpoint, { prompt: file.kind === "character" ? DESCRIPTION_PROMPT : SCENE_DESCRIPTION_PROMPT, image_urls: [url], model: VISION.model }, callOpts);
+    };
+    descriptionP = describe()
       .then((r) => {
         report.request_ids.push(r.requestId);
         report.description_request = r.requestId;
@@ -213,13 +222,13 @@ export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps,
       const front = report.items.find((i) => i.id === "body_front");
       const chosen = front && front.chosen !== null ? front.tries[front.chosen] : null;
       const full = chosen?.file ? path.join(dir, chosen.file.replace(/\.png$/i, "_full.png")) : frontFile;
-      if (existsSync(full)) frontUrl = await deps.fal.storage.upload(new File([readFileSync(full)], "front.png", { type: "image/png" }));
+      if (existsSync(full)) frontUrl = await img.storage.upload(new File([readFileSync(full)], "front.png", { type: "image/png" }));
     }
     // The front view also gets the chosen close-up of the same version (neckline, shoulders, veil), after the card references.
     let closeupUrl: string | null = null;
     if (job.id === "body_front" && file.kind === "character") {
       const cu = path.join(dir, "closeup.png");
-      if (existsSync(cu)) closeupUrl = await deps.fal.storage.upload(new File([readFileSync(cu)], "closeup.png", { type: "image/png" }));
+      if (existsSync(cu)) closeupUrl = await img.storage.upload(new File([readFileSync(cu)], "closeup.png", { type: "image/png" }));
     }
     let item = report.items.find((i) => i.id === job.id);
     if (!item) {
@@ -242,7 +251,7 @@ export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps,
         log(`${m.name} · ${job.label}${n > 1 ? ` (try ${n})` : ""}…`);
         const prompt = job.id === "body_back" && frontUrl ? `${job.prompt} ${BACK_FROM_FRONT}` : job.id === "body_front" && closeupUrl ? `${job.prompt} ${FRONT_FROM_CLOSEUP}` : job.prompt;
         const extraRefs = job.id === "body_back" && frontUrl ? [frontUrl] : job.id === "body_front" && closeupUrl ? [closeupUrl] : [];
-        const r = await callModel(deps.fal, m.endpoint, m.input(prompt, file.kind === "character" ? [...refUrls, ...extraRefs] : [refUrls[0]], job.aspect, seed), callOpts);
+        const r = await callModel(img, m.endpoint, m.input(prompt, file.kind === "character" ? [...refUrls, ...extraRefs] : [refUrls[0]], job.aspect, seed), callOpts);
         t.attempts = r.attempts;
         t.request_id = r.requestId;
         report.request_ids.push(r.requestId);

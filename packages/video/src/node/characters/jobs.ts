@@ -1,6 +1,7 @@
 // A card's background work (Make pack, Remake a view, Get missing pictures), queued in the card_job table and run in
 // the studio's own process: it mostly waits on fal.ai, so it does not need the render worker. The Tasks menu lists
 // these jobs next to the Make runs. A job whose process is gone (the studio was stopped) shows as interrupted.
+import { geminiClient } from "./gemini";
 import { writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 
@@ -86,12 +87,16 @@ export function cardFace(env: NodeJS.ProcessEnv = process.env): FaceTool {
 }
 
 // fal and the face checks: the real ones, or the browser tests' stand-ins (LYRIC_CARDS_STUB).
-export function cardTools(env: NodeJS.ProcessEnv = process.env): { fal: FalClient; face: FaceTool } | { error: string } {
-  if (env.LYRIC_CARDS_STUB) return { fal: stubFal(env.LYRIC_CARDS_STUB), face: stubFace() };
+export function cardTools(env: NodeJS.ProcessEnv = process.env): { fal: FalClient; face: FaceTool; gemini?: FalClient | null } | { error: string } {
+  if (env.LYRIC_CARDS_STUB) return { fal: stubFal(env.LYRIC_CARDS_STUB), face: stubFace(), gemini: stubFal(env.LYRIC_CARDS_STUB) };
   const key = env.FAL_KEY?.trim();
   if (!key) return { error: "No FAL_KEY in .env: add a line FAL_KEY=<your key from fal.ai → Dashboard → API keys> to D:\\videomaker\\.env, then restart Lyric Studio." };
-  return { fal: createFalClient({ credentials: key, suppressLocalCredentialsWarning: true }), face: localFaceTool() };
+  const g = env.GEMINI_API_KEY?.trim();
+  return { fal: createFalClient({ credentials: key, suppressLocalCredentialsWarning: true }), face: localFaceTool(), gemini: g ? geminiClient(g) : null };
 }
+
+// Is Gemini usable for a pack (the user's own key in .env, or the browser tests' stand-in)?
+export const hasGeminiKey = (env: NodeJS.ProcessEnv = process.env) => !!(env.LYRIC_CARDS_STUB || env.GEMINI_API_KEY?.trim());
 
 // Calibration needs only the local face checks (no fal key).
 export function toolsFor(kind: CardJobKind, env: NodeJS.ProcessEnv = process.env): { fal: FalClient; face: FaceTool } | { error: string } {
@@ -100,7 +105,7 @@ export function toolsFor(kind: CardJobKind, env: NodeJS.ProcessEnv = process.env
 }
 
 // Runs one queued job to the end (called right after it is queued; the HTTP request does not wait for it).
-export async function runCardJob(openWs: () => Workspace, jobId: string, tools: { fal: FalClient; face: FaceTool } | { error: string } = cardTools()): Promise<void> {
+export async function runCardJob(openWs: () => Workspace, jobId: string, tools: { fal: FalClient; face: FaceTool; gemini?: FalClient | null } | { error: string } = cardTools()): Promise<void> {
   const ws = openWs();
   const set = (v: Partial<CardJob>) => ws.db.update(cardJob).set(v).where(eq(cardJob.id, jobId)).run();
   try {
