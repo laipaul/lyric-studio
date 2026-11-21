@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Crop, ImagePlus, Lock, Plus, RefreshCw, RotateCcw, Square, Wand2 } from "lucide-react";
+import { ArrowLeft, Crop, Film, ImagePlus, Lock, Plus, RefreshCw, RotateCcw, Square, Wand2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -9,6 +9,7 @@ import type { CardSummary } from "@lyric/video/characters";
 
 import type { CardDetail } from "@/app/api/cards/[id]/route";
 import { Button } from "@/components/ui/button";
+import { FramePicker } from "@/components/frame-picker";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
@@ -134,6 +135,7 @@ function NewCardDialog({ kind, initialFile, onClose, onCreated }: { kind: "chara
   };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [frames, setFrames] = useState(false);
   const create = async () => {
     if (!kind || !file) return;
     setBusy(true);
@@ -187,6 +189,12 @@ function NewCardDialog({ kind, initialFile, onClose, onCreated }: { kind: "chara
             </span>
             <input data-card-picture type="file" accept=".jpg,.jpeg,.png,.webp" className="sr-only" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           </label>
+          {kind === "character" ? (
+            <Button type="button" variant="ghost" size="sm" className="w-fit" disabled={busy} onClick={() => setFrames(true)} data-card-from-video>
+              <Film /> Or pick a frame from a video
+            </Button>
+          ) : null}
+          <FramePicker open={frames} onOpenChange={setFrames} onPick={(f) => setFile(f)} use="Use as the picture" />
           {busy ? <p className="text-muted-foreground text-xs">Checking the picture… The first time, the face checks install themselves (about a minute).</p> : null}
           {error ? <p className="text-xs text-red-300" data-card-error>{error}</p> : null}
           <Button data-create-card disabled={!file || busy} onClick={create}>
@@ -245,6 +253,7 @@ export function CardPage({ id }: { id: string }) {
     }
   };
   const second = useRef<HTMLInputElement>(null);
+  const [frames, setFrames] = useState(false);
   const addSecond = async (file: File) => {
     setBusy("second");
     setError(null);
@@ -349,6 +358,10 @@ export function CardPage({ id }: { id: string }) {
                     <ImagePlus /> {file.reference2 ? "Replace second picture" : "Add a second picture"}
                   </Button>
                   <input ref={second} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={(e) => e.target.files?.[0] && addSecond(e.target.files[0])} data-second-input />
+                  <Button size="sm" variant="outline" disabled={!!busy} onClick={() => setFrames(true)} data-second-from-video>
+                    <Film /> Second picture from a video
+                  </Button>
+                  <FramePicker open={frames} onOpenChange={setFrames} onPick={(f) => addSecond(f)} use="Use as the second picture" />
                 </>
               ) : null}
             </div>

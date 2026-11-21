@@ -253,3 +253,13 @@ def test_neck_line_nothing_to_cut():
     assert face.neck_line(1000, None, _pose(p11=(40, 30, 0.9), p12=(70, 30, 0.9))) is None  # already cropped
     # back view: no face, ears and shoulders from the pose
     assert face.neck_line(1000, None, _pose(p7=(40, 90, 0.4), p8=(60, 92, 0.4), p11=(30, 200, 0.9), p12=(80, 200, 0.9))) == int(92 + 0.55 * 108)
+
+
+def test_frame_score_prefers_a_ready_big_sharp_frontal_open_eyed_face():
+    good = face.frame_score(measures(), "Ready")
+    assert good > face.frame_score(measures(), "Usable with fix") > face.frame_score(measures(), "Not suitable")
+    assert good > face.frame_score(measures(face_px=200), "Ready")
+    assert good > face.frame_score(measures(sharpness=20.0), "Ready")
+    assert good > face.frame_score(measures(pose={"yaw": 50.0, "pitch": 0.0, "roll": 0.0}), "Ready")
+    assert good > face.frame_score(measures(expression={"mouth_open": 0.0, "eyes_closed": True, "eye_blink": [0.9, 0.9]}), "Ready")
+    assert face.frame_score(measures(faces=0), "Not suitable") == 0.0

@@ -3547,3 +3547,25 @@ D. ✅ (built 29 Oct, to verify) **Title opening** (items 1-8 below).
 - Old pictures (made before the framing check) are measured from the file when a card opens (once), so a
   full-length "close-up" turns red instead of staying green.
 - Tests: characters-cards (17) and the Characters browser test pass.
+
+### Characters C2: Shot list import — planned slots in the story line ✅ (verified by Paul, 18 Nov 2026: "C2 works")
+- **Prepare → Storyboard → Import shot list** (next to "Add clips & photos"): drop or choose your shot list (.json).
+  The app checks it first, in plain words, slot by slot: an unknown character or scene ("did you mean Bride No 2?"),
+  a wrong shot type, a lyric line that does not exist, a missing "shows" sentence, an id used twice → errors (Import
+  stays off); a card not locked yet, an unknown field, two slots on one line → warnings. Then "N slots ready · 2 new ·
+  1 changed · 1 taken out" and Import. Nothing is spent (no fal.ai calls). "Show an example shot list" in the dialog.
+- **Fields per slot:** id, order (its place in the story line, 1 = first), shows (one sentence: what happens; C3 makes
+  the picture from it), characters and scene (card names from the Characters page), shot (close-up / medium / wide /
+  detail / motion), line (as numbered in the Lyrics tab), and optional outfit (for this slot only), tag and animate
+  (else the default for the shot type: close-up → omnihuman, the others → kling; used in C5).
+- **Slot cards in the story line** (dashed): the cards' pictures, "No picture yet", what it shows, shot type,
+  characters, scene, the line's words, #tag; a card not locked yet is flagged; ⋯ shows the details. Drag like a clip.
+- **Videos are unchanged:** Make and Shape skip slots until they have a picture (C3). A slot's line becomes a story
+  anchor only then.
+- **Re-import** updates slots by id, adds new ones and takes out the ones no longer in the file; your "order" places
+  them again. The previous shot list is kept in Prepare → Assets → Replaced files, with a Restore.
+- Terminal: `pnpm shotlist "<song>" <file.json>` (add `--check` to only check).
+- Stored: `<song folder>\shotlist.json`; in clips.json "order" each slot is "slot:<id>". Code: src/node/shotlist.ts,
+  story-line.ts; studio: components/shotlist-import.tsx, assets-tab.tsx, api/songs/[id]/shotlist.
+- Tests: shotlist (8). Browser: shotlist (16 checks). Unchanged and passing: story-line, collections, storyboard-edit,
+  clip-notes and collections browser tests.

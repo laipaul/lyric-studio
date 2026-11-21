@@ -67,6 +67,12 @@ export function stubFace(): FaceTool {
       copyFileSync(image, out);
       return { file: out };
     },
+    // The browser tests' stand-in: the middle frames rank best (a face, sharp); the first and last have no face.
+    rankFrames: async (files) => ({
+      frames: files
+        .map((f, i) => ({ file: f, verdict: i === 0 || i === files.length - 1 ? "No face" : "Ready", score: i === 0 || i === files.length - 1 ? 0 : 40 - Math.abs(i - files.length / 2), reasons: [] as string[] }))
+        .sort((a, b) => b.score - a.score),
+    }),
     cropBody: async (image, out) => {
       copyFileSync(image, out);
       return { file: out, cropped: true, cut_y: 10 };

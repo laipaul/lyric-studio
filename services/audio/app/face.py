@@ -499,6 +499,39 @@ def check_reference(kit: FaceKit, path: str) -> dict:
     return {"file": str(path), "measures": m, "verdict": verdict(reasons), "reasons": reasons, "fixes": fixes}
 
 
+VERDICT_POINTS = {"Ready": 3.0, "Usable with fix": 2.0, "Not suitable": 0.0}
+
+
+def frame_score(m: dict, verdict_text: str) -> float:
+    """How good a video frame is as a character's picture (Pick a frame from a video): the reference verdict first,
+    then a bigger, sharper, more frontal face with the eyes open. No face: 0."""
+    if not m.get("faces"):
+        return 0.0
+    s = VERDICT_POINTS.get(verdict_text, 0.0) * 10
+    s += min(5.0, (m.get("face_px") or 0) / 120)
+    s += min(3.0, (m.get("sharpness") or 0.0) / 60)
+    pose = m.get("pose") or {}
+    s += max(0.0, 2.0 * (1 - abs(pose.get("yaw", 60.0)) / 60))
+    if (m.get("expression") or {}).get("eyes_closed"):
+        s -= 6.0
+    if m.get("hand_over_mouth"):
+        s -= 4.0
+    if (m.get("second_face_ratio") or 0.0) > 0.5:
+        s -= 2.0
+    return round(s, 2)
+
+
+def rank_frames(kit: "FaceKit", files: list[str]) -> dict:
+    """Every frame checked as a reference picture, best first (one model load for all)."""
+    out = []
+    for f in files:
+        r = check_reference(kit, f)
+        m = r["measures"]
+        out.append({"file": f, "verdict": r["verdict"] if m.get("faces") else "No face", "score": frame_score(m, r["verdict"]), "reasons": [x["text"] for x in r["reasons"] if x["level"] in ("fix", "bad")][:2]})
+    out.sort(key=lambda x: -x["score"])
+    return {"frames": out}
+
+
 def _hand_over_mouth(body: list, L: dict, f: Face, min_vis: float = 0.8) -> bool:
     """A confident hand at the mouth: a wrist and at least 2 of its finger points (visibility >= 0.8) within half a
     face height of the mouth. The pose model also guesses hands it cannot see (e.g. at a hat or hair), with medium
@@ -802,6 +835,8 @@ def main(argv: list[str]) -> int:
     a.add_argument("reference")
     a.add_argument("others", nargs="+")
     a.add_argument("--her", action="append", default=[])
+    a = sub.add_parser("rank-frames")
+    a.add_argument("files", nargs="+")
     a = sub.add_parser("crop")
     a.add_argument("image")
     a.add_argument("out")
@@ -826,6 +861,8 @@ def main(argv: list[str]) -> int:
             result = compare(kit, args.reference, args.files)
         elif args.cmd == "calibrate":
             result = calibrate(kit, args.reference, args.others, args.her)
+        elif args.cmd == "rank-frames":
+            result = rank_frames(kit, args.files)
         elif args.cmd == "crop-body":
             result = crop_body(kit, args.image, args.out)
         else:

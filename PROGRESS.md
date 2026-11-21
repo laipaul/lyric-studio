@@ -4,6 +4,13 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Pick a frame from a video for a character's picture ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "can you add that to my app". Characters → New character → "Or pick a frame from a video", and
+  on a card "Second picture from a video"; also in Prepare → Creation ("Pick a frame from a video"). Drop a video:
+  24 frames are taken, the local face check (free) puts the best faces first (big, sharp, facing the camera, eyes
+  open), Paul clicks one and uses it. His video is only read; the app's copy is deleted at once, frames kept a day.
+- Tests: pytest face (+1 frame score), vitest characters-frames (3), browser characters (+5) and pictures pass.
+
 ### Remove planned slots from the Storyboard ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "why can't I remove 2 and 6 from my Storyboard". The "No picture yet" cards are planned slots
   from his 18 Nov shot list; their ⋯ menu only showed details. Now ⋯ → "Remove this planned slot", and "Remove all
@@ -228,28 +235,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - **"Remake the full-body views (front, then back)"** on a draft: only those two, the face views are kept.
 - Tests: characters-cards (17) and characters-prompts (9, new) pass; the Characters browser test (32 checks) and the
   shot list browser test pass.
-
-### Characters C2: Shot list import — planned slots in the story line ✅ (verified by Paul, 18 Nov 2026: "C2 works")
-- **Prepare → Storyboard → Import shot list** (next to "Add clips & photos"): drop or choose your shot list (.json).
-  The app checks it first, in plain words, slot by slot: an unknown character or scene ("did you mean Bride No 2?"),
-  a wrong shot type, a lyric line that does not exist, a missing "shows" sentence, an id used twice → errors (Import
-  stays off); a card not locked yet, an unknown field, two slots on one line → warnings. Then "N slots ready · 2 new ·
-  1 changed · 1 taken out" and Import. Nothing is spent (no fal.ai calls). "Show an example shot list" in the dialog.
-- **Fields per slot:** id, order (its place in the story line, 1 = first), shows (one sentence: what happens; C3 makes
-  the picture from it), characters and scene (card names from the Characters page), shot (close-up / medium / wide /
-  detail / motion), line (as numbered in the Lyrics tab), and optional outfit (for this slot only), tag and animate
-  (else the default for the shot type: close-up → omnihuman, the others → kling; used in C5).
-- **Slot cards in the story line** (dashed): the cards' pictures, "No picture yet", what it shows, shot type,
-  characters, scene, the line's words, #tag; a card not locked yet is flagged; ⋯ shows the details. Drag like a clip.
-- **Videos are unchanged:** Make and Shape skip slots until they have a picture (C3). A slot's line becomes a story
-  anchor only then.
-- **Re-import** updates slots by id, adds new ones and takes out the ones no longer in the file; your "order" places
-  them again. The previous shot list is kept in Prepare → Assets → Replaced files, with a Restore.
-- Terminal: `pnpm shotlist "<song>" <file.json>` (add `--check` to only check).
-- Stored: `<song folder>\shotlist.json`; in clips.json "order" each slot is "slot:<id>". Code: src/node/shotlist.ts,
-  story-line.ts; studio: components/shotlist-import.tsx, assets-tab.tsx, api/songs/[id]/shotlist.
-- Tests: shotlist (8). Browser: shotlist (16 checks). Unchanged and passing: story-line, collections, storyboard-edit,
-  clip-notes and collections browser tests.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

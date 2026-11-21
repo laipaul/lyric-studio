@@ -28,6 +28,7 @@ export interface FaceTool {
   crop(image: string, out: string): Promise<{ file: string }>;
   cropBody(image: string, out: string): Promise<{ file: string; cropped: boolean; cut_y: number | null }>;
   sheet(spec: SheetSpec): Promise<{ file: string }>;
+  rankFrames?(files: string[]): Promise<{ frames: { file: string; verdict: string; score: number; reasons: string[] }[] }>; // best first
 }
 
 function runFace<T>(args: string[]): Promise<T> {
@@ -68,6 +69,7 @@ export function localFaceTool(): FaceTool {
     compare: (reference, files) => runFace(["compare", reference, ...files]),
     calibrate: (reference, others, her = []) => runFace(["calibrate", ...her.flatMap((h) => ["--her", h]), reference, ...others]),
     crop: (image, out) => runFace(["crop", image, out]),
+    rankFrames: (files) => runFace(["rank-frames", ...files]),
     cropBody: (image, out) => runFace(["crop-body", image, out]),
     async sheet(spec) {
       const dir = mkdtempSync(path.join(os.tmpdir(), "sheet-"));

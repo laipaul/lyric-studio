@@ -148,6 +148,26 @@ async function main() {
     await page.goto(`${base}/characters`);
     await page.waitForSelector("[data-card='bridal room']");
     check(((await page.getAttribute("[data-card=bride] img", "src")) ?? "").includes("closeup.png"), "the list shows the close-up as the character's picture");
+
+    // Pick a frame from a video: a new character's picture taken from a clip (the video itself is only read).
+    const clip = path.join(pics, "singer clip.mp4");
+    ffmpeg("-f", "lavfi", "-i", "testsrc=s=320x240:d=6:r=25", "-pix_fmt", "yuv420p", clip);
+    const clipBytes = readFileSync(clip);
+    await page.click("[data-new-card=character]");
+    await page.click("[data-card-from-video]");
+    await page.setInputFiles("[data-frame-video]", clip);
+    await page.waitForSelector("[data-frame-grid] [data-frame]", { timeout: 30_000 });
+    const shown = await page.$$("[data-frame-grid] [data-frame]");
+    check(shown.length === 12 && ((await page.textContent("[data-frame-grid] [data-frame]:first-child")) ?? "").includes("Best · Ready"), "the video gives 12 frames, the best face first");
+    check(((await page.textContent("[data-frame-note]")) ?? "").includes("Best faces first"), "the picker says the best faces come first");
+    await page.click("[data-frame-use]");
+    await page.waitForSelector("[data-card-preview]");
+    check(((await page.inputValue("[data-card-name]")) ?? "").startsWith("singer clip frame"), "the chosen frame becomes the new card's picture, named after the video");
+    await page.fill("[data-card-name]", "singer");
+    await page.click("[data-create-card]");
+    await page.waitForSelector("[data-card-page=singer]");
+    check(existsSync(path.join(wsDir, "characters", "singer", "reference.jpg")) || readdirSync(path.join(wsDir, "characters", "singer")).some((f) => f.startsWith("reference")), "workspace\\characters\\singer\\ holds the frame as its picture");
+    check(readFileSync(clip).equals(clipBytes) && !readdirSync(path.join(wsDir, "frames")).some((d) => readdirSync(path.join(wsDir, "frames", d)).some((f) => f.startsWith("source"))), "the video is untouched and the app's copy of it is gone");
     await browser.close();
   } finally {
     server.kill();
