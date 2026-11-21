@@ -9,6 +9,7 @@ import { openWorkspace, resolveWorkspaceDir, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { findOrCreateSongProject, readClipEdits, songPathsById } from "../src/node";
+import { nextTakeN, removeTakes, restoreTake } from "../src/node/animate";
 import { addFromLink, addPictures, phraseSeconds, readCreationDefaults, saveCreationDefaults, sourceLabel, sendToStoryboard, estimate, higgsfieldTransport, motionPrompt, picturesView, readPictures, runTakes, setMood, startAnimate, startResume, stubTransport, waveSpeedTransport } from "../src/node/animate";
 import { clearFinishedGenerateTasks, listGenerateTasks, RECENT_MS } from "../src/node/generate-tasks";
 import { takeFacts } from "../src/take-facts";
@@ -446,5 +447,49 @@ describe("takes play in the browser (Paul, 21 Nov 2026: a real take did not play
     await picturesView(ws, id, STUB);
     expect(probe(path.join(takes, "old take.mp4"))).toBe("h264,yuv420p");
     expect(readPictures(pics).pictures["bride by the sea.png"].takes.find((t) => t.n === 90)!.playable).toBe(true);
+  });
+});
+
+describe("Clean up takes (Paul, 21 Nov 2026): put aside, never deleted, with Restore", () => {
+  it("puts aside failed and not-chosen takes only; in use, on a line, in the Storyboard, running or collectable stay", async () => {
+    ffmpeg("-f", "lavfi", "-i", "color=c=green:s=96x160", "-frames:v", "1", path.join(root, "tidy.png"));
+    await addPictures(ws, id, [{ file: path.join(root, "tidy.png"), name: "tidy.png" }]);
+    mkdirSync(path.join(pics, "takes"), { recursive: true });
+    for (const n of [3, 4, 5, 6, 7]) writeFileSync(path.join(pics, "takes", `tidy take ${n}.mp4`), `take ${n}`);
+    const paths = songPathsById(ws, id);
+    const recipe = JSON.parse(readFileSync(paths.recipe!, "utf8")) as { anchors?: unknown[] };
+    writeFileSync(paths.recipe!, JSON.stringify({ ...recipe, anchors: [...(recipe.anchors ?? []), { line: 30, clip: "tidy take 6.mp4" }, { line: 31, clip: "tidy sings 7.mp4", sync: 12 }] }));
+    const at = new Date().toISOString();
+    const base = { service: "wavespeed" as const, quality: "standard" as const, model: "x", started_at: at, cost_usd: 1 };
+    update(pics, "tidy.png", (p) => {
+      p.takes = [
+        { ...base, n: 1, status: "failed", error: "no credits" },
+        { ...base, n: 2, status: "interrupted", request_id: "r2" }, // still collectable
+        { ...base, n: 3, status: "done", file: "takes/tidy take 3.mp4" }, // never sent: not chosen
+        { ...base, n: 4, status: "done", file: "takes/tidy take 4.mp4", sent: "tidy take 4.mp4" }, // plays in the Storyboard
+        { ...base, n: 5, status: "running", file: "takes/tidy take 5.mp4", pid: process.pid },
+        { ...base, n: 6, status: "done", file: "takes/tidy take 6.mp4", sent: "tidy take 6.mp4" }, // on line 30
+        { ...base, n: 7, kind: "lipsync", line: 31, sync_ms: 12_000, to_ms: 15_000, status: "done", file: "takes/tidy take 7.mp4", sent: "tidy sings 7.mp4" }, // in use
+      ];
+    });
+    const card = (await picturesView(ws, id, STUB, () => true)).pictures.find((p) => p.file === "tidy.png")!;
+    expect(card.cleanable).toEqual([1, 3]);
+    expect(() => removeTakes(ws, id, "tidy.png", [7])).toThrow(/in use, on a line or in your Storyboard: it stays/);
+    expect(() => removeTakes(ws, id, "tidy.png", [2])).toThrow(/still to collect/);
+    expect(removeTakes(ws, id, "tidy.png", null)).toEqual({ removed: [1, 3] });
+    const rec = readPictures(pics).pictures["tidy.png"];
+    expect(rec.takes.map((t) => t.n)).toEqual([2, 4, 5, 6, 7]);
+    expect(rec.removedTakes!.map((t) => [t.n, t.file])).toEqual([[1, undefined], [3, "takes/_removed/tidy take 3.mp4"]]);
+    expect(existsSync(path.join(pics, "takes", "_removed", "tidy take 3.mp4"))).toBe(true);
+    expect(existsSync(path.join(pics, "takes", "tidy take 3.mp4"))).toBe(false);
+    const after = (await picturesView(ws, id, STUB, () => true)).pictures.find((p) => p.file === "tidy.png")!;
+    expect([after.cleanable, after.removed.map((r) => [r.n, r.label])]).toEqual([[], [[1, "Take 1"], [3, "Take 3"]]]);
+    // Numbers keep counting past the removed takes; Restore brings a take and its file back.
+    expect(nextTakeN(rec)).toBe(8);
+    expect(restoreTake(ws, id, "tidy.png", 3)).toEqual({ restored: 3 });
+    const back = readPictures(pics).pictures["tidy.png"];
+    expect(back.takes.find((t) => t.n === 3)!.file).toBe("takes/tidy take 3.mp4");
+    expect(readFileSync(path.join(pics, "takes", "tidy take 3.mp4"), "utf8")).toBe("take 3");
+    expect(back.removedTakes!.map((t) => t.n)).toEqual([1]);
   });
 });

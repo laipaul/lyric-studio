@@ -1,4 +1,5 @@
 // Prepare → Creation (G2): the song's creation space: pictures and videos from anywhere, and the takes animated here.
+// POST { action: "cleanup", file, n? }: put aside the takes not chosen or failed (or take n); { action: "restore", file, n }.
 // GET: the pictures with their takes, the services (ready = a key in .env), prices, defaults, what was spent.
 // POST multipart (pictures=<files>): adds pictures and videos under their own names; { action: "link", url }: adds the
 //   picture or video a link leads to (any outside source).
@@ -12,7 +13,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
-import { addFromLink, addPictures, picturesView, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, startAnimate, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
+import { addFromLink, addPictures, picturesView, removeTakes, restoreTake, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, startAnimate, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
 import { runSinging, withSongStarts } from "@lyric/video/singer";
 import { connection } from "next/server";
 
@@ -70,6 +71,12 @@ export async function POST(request: Request, { params }: Params) {
       return Response.json(started);
     }
     if (body.action === "defaults") return Response.json({ defaults: saveCreationDefaults(resolveWorkspaceDir(), (body as { defaults?: unknown }).defaults) });
+    // Clean up (no n: every take not chosen or failed) or Remove one take (n): put aside with Restore, never deleted.
+    if (body.action === "cleanup") {
+      const n = (body as { n?: unknown }).n;
+      return Response.json(withWorkspace((ws) => removeTakes(ws, id, file, n === undefined || n === null ? null : [Number(n)])));
+    }
+    if (body.action === "restore") return Response.json(withWorkspace((ws) => restoreTake(ws, id, file, (body as { n?: unknown }).n)));
     if (body.action === "send") {
       const n = body.n === undefined || body.n === null ? null : Number(body.n);
       return Response.json(await withWorkspaceAsync((ws) => sendToStoryboard(ws, id, file, n)));

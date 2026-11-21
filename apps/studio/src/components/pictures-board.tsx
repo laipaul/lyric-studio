@@ -7,7 +7,7 @@
 // Paul may add a few words of mood. His own defaults (model, takes, cap) apply to every song; each picture can override
 // them. The cost shows before sending and a press above the cap is refused. Each item shows where it came from. Paul
 // sends his favourites with "Send to Storyboard" (the end of his story line, marked ✓).
-import { Check, Film, ImagePlus, Link2, Loader2, Play, RotateCw, Send, Sparkles, UserRound } from "lucide-react";
+import { Check, Film, ImagePlus, Link2, Loader2, Play, RotateCw, Send, Sparkles, UserRound, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { CreationDefaults, PictureView, PicturesView, Quality, ServiceId, Take } from "@lyric/video/animate";
@@ -339,6 +339,31 @@ function PictureTile({
     }
   }
 
+  // Clean up (n null: every take not chosen or failed) or Remove one take: put aside, never deleted (Restore below).
+  async function cleanUp(n: number | null) {
+    const which = (n === null ? p.cleanable : [n]).map((k) => {
+      const t = p.takes.find((x) => x.n === k);
+      return `${t?.label ?? `Take ${k}`}${t?.status === "failed" ? " (failed)" : ""}`;
+    });
+    if (!window.confirm(`Move ${which.length === 1 ? "this take" : `${which.length} takes`} of ${p.label ?? p.file} aside: ${which.join(", ")}? They leave this card and Lyrics Sync; Removed takes → Restore brings any of them back.`)) return;
+    try {
+      const d = (await post({ action: "cleanup", file: p.file, ...(n === null ? {} : { n }) })) as { removed: number[] };
+      setNotice({ ok: true, text: `${d.removed.length} take${d.removed.length === 1 ? "" : "s"} of ${p.label ?? p.file} put aside (Removed takes → Restore).` });
+      await reload();
+    } catch (e) {
+      setNotice({ ok: false, text: (e as Error).message });
+    }
+  }
+  async function restore(n: number, label: string) {
+    try {
+      await post({ action: "restore", file: p.file, n });
+      setNotice({ ok: true, text: `${label} of ${p.label ?? p.file} is back.` });
+      await reload();
+    } catch (e) {
+      setNotice({ ok: false, text: (e as Error).message });
+    }
+  }
+
   async function animate() {
     setBusy(true);
     try {
@@ -423,6 +448,11 @@ function PictureTile({
           </span>
         </>
       )}
+      {p.cleanable.length ? (
+        <button type="button" data-takes-cleanup={p.cleanable.length} onClick={() => void cleanUp(null)} className="hover:bg-accent self-start rounded border px-1.5 py-0.5 text-[11px]" title="Puts aside the failed takes and the ones you did not choose (not in use, on no line, not playing in your Storyboard). Nothing is deleted: Removed takes → Restore.">
+          Clean up {p.cleanable.length} take{p.cleanable.length === 1 ? "" : "s"}
+        </button>
+      ) : null}
       {p.takes.length ? (
         <ul className="flex flex-col gap-1" data-picture-takes-list>
           {[...p.takes].reverse().map((t) => (
@@ -432,15 +462,32 @@ function PictureTile({
             }} source={`${board.services.find((s) => s.id === t.service)?.label ?? t.service} · ${t.model}${t.kind === "lipsync" ? ` · lip sync, ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` : ""}`} url={takeUrl(t)} onPlay={(url) => {
               play(url, `${p.file} · Take ${t.n}`, { fromS: t.songFromMs !== undefined ? t.songFromMs / 1000 : null, clipInS: t.clipInS ?? 0, why: t.songWhy ?? null });
               if (t.fresh) void singer({ action: "seen", n: t.n }).then(reload).catch(() => undefined);
-            }} onSend={() => void send(t.n, t.label ?? `Take ${t.n}`)} onUse={() => void chooseTake(t)} onResume={() => void post({ action: "resume", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message }))} />
+            }} onSend={() => void send(t.n, t.label ?? `Take ${t.n}`)} onUse={() => void chooseTake(t)} onRemove={p.cleanable.includes(t.n) ? () => void cleanUp(t.n) : undefined} onResume={() => void post({ action: "resume", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message }))} />
           ))}
         </ul>
+      ) : null}
+      {p.removed.length ? (
+        <details data-takes-removed={p.removed.length} className="text-muted-foreground text-[11px]">
+          <summary className="cursor-pointer">Removed takes ({p.removed.length})</summary>
+          <ul className="mt-1 flex flex-col gap-1">
+            {p.removed.map((r) => (
+              <li key={r.n} className="flex items-center gap-2" data-take-removed={r.n}>
+                <span className="min-w-0 flex-1 truncate">
+                  {r.label} · {r.why}
+                </span>
+                <button type="button" data-take-restore={r.n} onClick={() => void restore(r.n, r.label)} className="hover:bg-accent text-foreground shrink-0 rounded border px-1.5 py-0.5">
+                  Restore
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
       ) : null}
     </div>
   );
 }
 
-function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onResume }: { t: Take & { inUse?: boolean; onLines?: string }; source: string; url: string | null; onPlay: (url: string) => void; onRename: (label: string) => Promise<void>; onSend: () => void; onUse: () => void; onResume: () => void }) {
+function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onRemove, onResume }: { t: Take & { inUse?: boolean; onLines?: string }; source: string; url: string | null; onPlay: (url: string) => void; onRename: (label: string) => Promise<void>; onSend: () => void; onUse: () => void; onRemove?: () => void; onResume: () => void }) {
   const label = `Take ${t.n}`;
   return (
     <li data-take={t.n} data-take-status={t.status} className="flex items-center gap-2 text-[11px]">
@@ -501,6 +548,11 @@ function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onResume }: 
       {t.status === "interrupted" && t.request_id ? (
         <button type="button" data-take-resume onClick={onResume} className="hover:bg-accent flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5">
           <RotateCw className="size-3" /> Get result
+        </button>
+      ) : null}
+      {onRemove ? (
+        <button type="button" data-take-remove onClick={onRemove} className="text-muted-foreground hover:text-foreground shrink-0 rounded p-0.5" aria-label={`Remove take ${t.n}`} title="Put this take aside (Removed takes → Restore brings it back)">
+          <X className="size-3.5" />
         </button>
       ) : null}
     </li>

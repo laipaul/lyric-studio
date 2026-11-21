@@ -5,7 +5,7 @@
 // cost shows before sending; "Make singing clips" makes the clip, which comes back into Creation (no sound), the end
 // of the Storyboard, and onto line 2 as an anchor locked to the song (song.json "sync"); nothing is made twice.
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -279,6 +279,20 @@ async function main() {
     const onLine = (await page.textContent("[data-take-player] [data-with-song-why]")) ?? "";
     check(/with the song from 1:0\d\.\d, where line 1 cuts to it/.test(onLine), `an Animate take on a line plays with the song from that line's cut (${onLine})`);
     await page.keyboard.press("Escape");
+    // Clean up (Paul, 21 Nov 2026): the singing takes not in use go aside (asked first); the take on line 1 stays; Restore.
+    const cleanupLabel = (await page.textContent("[data-picture='singer close.png'] [data-takes-cleanup]")) ?? "";
+    let cleanupAsked = "";
+    page.once("dialog", (d) => { cleanupAsked = d.message(); void d.accept(); });
+    await page.click("[data-picture='singer close.png'] [data-takes-cleanup]");
+    await page.waitForSelector("[data-picture='singer close.png'] [data-takes-removed='3']", { timeout: 15_000 });
+    const rows = await page.$$eval("[data-picture='singer close.png'] [data-take]", (es: Element[]) => es.map((e) => e.getAttribute("data-take")));
+    const aside = readdirSync(path.join(pictures, "takes", "_removed"));
+    check(cleanupLabel.includes("Clean up 3 takes") && cleanupAsked.includes("aside") && rows.join() === "1" && aside.length === 3, `Clean up puts the 3 singing takes not in use aside, after asking; the take on line 1 stays (${cleanupLabel}; rows ${rows.join()}; ${aside.join(", ")})`);
+    await page.click("[data-picture='singer close.png'] [data-takes-removed] summary");
+    const first = await page.getAttribute("[data-picture='singer close.png'] [data-take-removed]", "data-take-removed");
+    await page.click(`[data-picture='singer close.png'] [data-take-restore='${first}']`);
+    await page.waitForSelector(`[data-picture='singer close.png'] [data-take='${first}']`, { timeout: 15_000 });
+    check(readdirSync(path.join(pictures, "takes", "_removed")).length === 2, `Restore brings take ${first} back with its file`);
     await browser.close();
   } finally {
     server.kill();

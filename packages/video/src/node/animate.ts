@@ -27,7 +27,7 @@ import { beat as beatTable, ffmpegBin, ffprobeBin, probeMedia, uniqueFileName, t
 import { eq } from "drizzle-orm";
 
 import { importSongClips } from "./assets";
-import { cleanLabel, setClipLabel } from "./clip-edits";
+import { cleanLabel, isOmitted, readClipEdits, setClipLabel } from "./clip-edits";
 import { download, errorText } from "./characters/fal";
 import { processAlive } from "./jobs";
 import { readRecipe } from "./recipe";
@@ -111,10 +111,15 @@ export type Take = {
   resolution?: string; // lipsync: the resolution asked of InfiniteTalk ("480p" | "720p"; before 21 Nov 2026 always 720p)
   fresh?: boolean; // lipsync: a later take of lines that already had a take in use: waits for Paul ("New — compare"), never placed by itself
 };
-export type PictureRecord = { label?: string; source?: string; mood?: string; takes: Take[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string }; // sent: the picture itself sent to the Storyboard (its clip name)
+// removedTakes: takes put aside by Clean up / Remove (their files in pictures\takes\_removed\), with Restore; nothing is
+// ever deleted. Every screen reads `takes` only, so they are out of sight; take numbers keep counting past them.
+export type RemovedTake = Take & { removed_at: string };
+export type PictureRecord = { label?: string; source?: string; mood?: string; takes: Take[]; removedTakes?: RemovedTake[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string }; // sent: the picture itself sent to the Storyboard (its clip name)
 export type PicturesFile = { _help?: string; pictures: Record<string, PictureRecord> };
 // source: where it came from, a small label ("Added by you", "Midjourney", "From higgsfield.ai"). kind: only a picture can be animated.
-export type PictureView = { file: string; label: string | null; url: string; kind: "picture" | "video"; source: string; mood: string; takes: (Take & { inUse?: boolean; onLines?: string; songFromMs?: number; clipInS?: number; songWhy?: string })[]; width: number | null; height: number | null; sent: string | null };
+// cleanable: the takes Clean up would put aside (failed, or not chosen: not in use, on no line, not playing in the
+// Storyboard). removed: the takes put aside, newest first (Restore).
+export type PictureView = { file: string; label: string | null; url: string; kind: "picture" | "video"; source: string; mood: string; cleanable: number[]; removed: { n: number; label: string; why: string; at: string }[]; takes: (Take & { inUse?: boolean; onLines?: string; songFromMs?: number; clipInS?: number; songWhy?: string })[]; width: number | null; height: number | null; sent: string | null };
 // Paul's own defaults for Animate (Creation → Defaults), for every song: the service and model, how many takes, the cap.
 export type CreationDefaults = { service: ServiceId; quality: Quality; takes: number; cap: number; length: TakeLength }; // length: "song" = one phrase of the song, "short" = 5 s
 export const CREATION_FILE = "creation.json"; // in the workspace folder
@@ -338,6 +343,7 @@ export async function picturesView(ws: Workspace, projectId: string, env: NodeJS
   const rel = path.relative(ws.dir, dir).split(path.sep).join("/");
   const recipeFile = songPathsById(ws, projectId).recipe;
   const songAnchors = recipeFile ? (readRecipe(recipeFile).anchors ?? []) : [];
+  const use = takeUse(ws, projectId);
   const singingAnchors = new Set(songAnchors.filter((a) => a.sync !== undefined).map((a) => `${a.line}:${a.through ?? a.line}:${a.clip.toLowerCase()}`));
   // Where a take shows now (Paul, 21 Nov 2026: the card said only "In Storyboard"): "line 15", "lines 15-16", "lines 3, 9".
   const onLines = (clip: string | undefined): string | undefined => {
@@ -350,7 +356,9 @@ export async function picturesView(ws: Workspace, projectId: string, env: NodeJS
     const rec = all.pictures[f];
     // A singing take is "in use" while its clip is the singing anchor on its lines (song.json).
     const takes = (rec?.takes ?? []).map((t) => (t.clip && !t.sent ? { ...t, sent: t.clip } : t)).map((t) => (t.kind === "lipsync" ? { ...t, inUse: !!t.sent && singingAnchors.has(`${t.line}:${t.through ?? t.line}:${t.sent.toLowerCase()}`) } : { ...t, onLines: onLines(t.sent) }));
-    pictures.push({ file: f, label: rec?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? "picture" : "video", source: sourceLabel(f, rec?.source), mood: rec?.mood ?? "", takes, width: info?.width ?? null, height: info?.height ?? null, sent: rec?.sent ?? null });
+    const cleanable = (rec?.takes ?? []).filter((t) => use.cleanable(t)).map((t) => t.n);
+    const removed = [...(rec?.removedTakes ?? [])].sort((a, b) => b.removed_at.localeCompare(a.removed_at)).map((t) => ({ n: t.n, label: t.label ?? `Take ${t.n}`, why: t.kind === "lipsync" ? `lip sync, ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` : t.status === "failed" ? "failed" : t.model, at: t.removed_at }));
+    pictures.push({ file: f, label: rec?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? "picture" : "video", source: sourceLabel(f, rec?.source), mood: rec?.mood ?? "", cleanable, removed, takes, width: info?.width ?? null, height: info?.height ?? null, sent: rec?.sent ?? null });
   }
   const stub = !!env.LYRIC_GENERATE_STUB;
   return {
@@ -368,7 +376,7 @@ export async function picturesView(ws: Workspace, projectId: string, env: NodeJS
     defaultTakes: DEFAULT_TAKES,
     maxTakes: MAX_TAKES,
     defaultCap: DEFAULT_CAP_USD,
-    spentUsd: Math.round(Object.values(all.pictures).flatMap((p) => p.takes).filter((t) => t.request_id && t.status !== "failed").reduce((s, t) => s + t.cost_usd, 0) * 100) / 100,
+    spentUsd: Math.round(Object.values(all.pictures).flatMap((p) => [...p.takes, ...(p.removedTakes ?? [])]).filter((t) => t.request_id && t.status !== "failed").reduce((s, t) => s + t.cost_usd, 0) * 100) / 100,
   };
 }
 
@@ -593,7 +601,7 @@ export function startAnimate(ws: Workspace, projectId: string, file: string, o: 
   const now = new Date().toISOString();
   let made: Take[] = [];
   update(dir, name, (p) => {
-    const first = p.takes.reduce((m, t) => Math.max(m, t.n), 0) + 1;
+    const first = nextTakeN(p);
     made = Array.from({ length: takes }, (_, i) => ({ n: first + i, service: o.service, quality, model: e.model, status: "running" as const, started_at: now, cost_usd: e.usdPerTake, seconds, pid: process.pid }));
     p.takes.push(...made);
   });
@@ -778,4 +786,91 @@ export async function sendToStoryboard(ws: Workspace, projectId: string, file: s
     }
   });
   return { clip, already: !r.added.length };
+}
+
+// ---------------------------------------------------------------- Clean up (Paul, 21 Nov 2026: "a cleanup button for the takes")
+
+// The next take number of a picture: past every take, the removed ones too (a restored take never meets a new one).
+export const nextTakeN = (p: PictureRecord) => [...p.takes, ...(p.removedTakes ?? [])].reduce((m, t) => Math.max(m, t.n), 0) + 1;
+
+// What a take is used for now: a singing take in use (its clip is the singing anchor on its lines), a take shown on a
+// line, a clip set to Omit in the Storyboard. cleanable: a take Clean up may put aside: failed; stopped before it was
+// sent (nothing to collect); or finished and not chosen: a singing take not in use (never sent, or its clip on Omit:
+// it never plays), an Animate take never sent to the Storyboard. Never: running, collectable (Get result), in use, on
+// a line, or a clip that plays in the Storyboard.
+export function takeUse(ws: Workspace, projectId: string): { cleanable: (t: Take) => boolean } {
+  const { root } = songFolder(ws, projectId);
+  const recipeFile = songPathsById(ws, projectId).recipe;
+  const anchors = recipeFile ? (readRecipe(recipeFile).anchors ?? []) : [];
+  const edits = readClipEdits(root);
+  const onALine = (clip: string) => anchors.some((a) => a.clip.toLowerCase() === clip.toLowerCase());
+  return {
+    cleanable: (t) => {
+      if (t.status === "running") return false;
+      if (t.status === "failed") return true;
+      if (t.status === "interrupted") return !t.request_id;
+      const sent = t.sent ?? t.clip;
+      if (!sent) return true;
+      if (onALine(sent)) return false;
+      return t.kind === "lipsync" && isOmitted(edits, sent);
+    },
+  };
+}
+
+// Clean up (ns null: every take Clean up may put aside) or Remove one take (ns [n]): the takes move to removedTakes and
+// their files to pictures\takes\_removed\. A take that is in use, on a line, playing in the Storyboard, being made or
+// still collectable is refused in plain words. Its Storyboard clip, if any (on Omit), stays as it is.
+export function removeTakes(ws: Workspace, projectId: string, file: unknown, ns: number[] | null): { removed: number[] } {
+  const { dir } = songFolder(ws, projectId);
+  const name = path.basename(String(file ?? ""));
+  const rec = readPictures(dir).pictures[name];
+  if (!rec) throw new Error(`No ${name} in this song's Creation space.`);
+  const use = takeUse(ws, projectId);
+  const wanted = ns ?? rec.takes.filter((t) => use.cleanable(t)).map((t) => t.n);
+  for (const n of wanted) {
+    const t = rec.takes.find((x) => x.n === n);
+    if (!t) throw new Error(`No take ${n} of ${name}.`);
+    if (!use.cleanable(t)) throw new Error(`${t.label ?? `Take ${n}`} is ${t.status === "running" ? "being made" : t.status === "interrupted" ? "still to collect (Get result)" : "in use, on a line or in your Storyboard"}: it stays.`);
+  }
+  const removedDir = path.join(dir, TAKES_DIR, "_removed");
+  const now = new Date().toISOString();
+  update(dir, name, (p) => {
+    for (const n of wanted) {
+      const i = p.takes.findIndex((x) => x.n === n);
+      if (i < 0) continue;
+      const [t] = p.takes.splice(i, 1);
+      let moved = t.file;
+      if (t.file && existsSync(path.join(dir, t.file))) {
+        mkdirSync(removedDir, { recursive: true });
+        const target = uniqueFileName(removedDir, path.basename(t.file));
+        renameSync(path.join(dir, t.file), path.join(removedDir, target));
+        moved = `${TAKES_DIR}/_removed/${target}`;
+      }
+      (p.removedTakes ??= []).push({ ...t, ...(moved ? { file: moved } : {}), removed_at: now, cleared: true });
+    }
+  });
+  return { removed: wanted };
+}
+
+// Restore: the take is back on its card (its file back in pictures\takes\), as it was.
+export function restoreTake(ws: Workspace, projectId: string, file: unknown, n: unknown): { restored: number } {
+  const { dir } = songFolder(ws, projectId);
+  const name = path.basename(String(file ?? ""));
+  const num = Number(n);
+  const t = readPictures(dir).pictures[name]?.removedTakes?.find((x) => x.n === num);
+  if (!t) throw new Error(`No removed take ${n} of ${name}.`);
+  update(dir, name, (p) => {
+    p.removedTakes = (p.removedTakes ?? []).filter((x) => x.n !== num);
+    if (!p.removedTakes.length) delete p.removedTakes;
+    const { removed_at: _gone, ...back } = t;
+    void _gone;
+    if (t.file && existsSync(path.join(dir, t.file))) {
+      const target = uniqueFileName(path.join(dir, TAKES_DIR), path.basename(t.file));
+      renameSync(path.join(dir, t.file), path.join(dir, TAKES_DIR, target));
+      back.file = `${TAKES_DIR}/${target}`;
+    }
+    p.takes.push(back);
+    p.takes.sort((a, b) => a.n - b.n);
+  });
+  return { restored: num };
 }

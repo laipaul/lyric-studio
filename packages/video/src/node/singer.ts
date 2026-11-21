@@ -26,6 +26,7 @@ import { eq } from "drizzle-orm";
 
 import { applyDownbeatOffset } from "../beats";
 import { type PicturesView } from "./animate";
+import { nextTakeN } from "./animate";
 import { BOARD_VIDEO_FILE, itemLabel, makePlayable, PICTURE_FILE, POLL_MS, TAKES_DIR, TIMEOUT_MS, WAVESPEED, data, json, keyFor, readPictures, setTake, sleepMs, songFolder, update, waveSpeedUpload, type Take } from "./animate";
 import { importSongClips } from "./assets";
 import { setClipLabel, setClipOmit } from "./clip-edits";
@@ -412,7 +413,7 @@ export async function startSinging(ws: Workspace, projectId: string, o: { capUsd
 function recordTake(dir: string, l: SingerLine, resolution: LipsyncResolution, now: string): SingJob {
   let n = 0;
   update(dir, l.source!, (p) => {
-    n = p.takes.reduce((m, t) => Math.max(m, t.n), 0) + 1;
+    n = nextTakeN(p);
     p.takes.push({ n, kind: "lipsync", line: l.number, ...(l.run && l.run.last > l.number ? { through: l.run.last } : {}), sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, ...(l.script ? { prompt: l.script } : {}), style: SINGING_STYLE, resolution, service: "wavespeed", quality: "best", model: LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: l.piece.usd, pid: process.pid });
   });
   return { source: l.source!, n };

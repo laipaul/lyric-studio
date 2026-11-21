@@ -4,6 +4,20 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Clean up takes: put aside, never deleted, with Restore ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "I need a cleanup button for the takes".
+- Creation card: **Clean up N takes** puts aside, after asking, the failed takes and the takes not chosen: a singing
+  take not in use (never sent, or its Storyboard clip on Omit: it never plays), an Animate take never sent. A small ✕
+  on such a take does it for one take. **Never touched:** the take in use, takes on a line, takes playing in the
+  Storyboard, takes being made, a take still to collect (Get result).
+- Put-aside takes leave the card and Lyrics Sync; their files move to pictures\takes\_removed\ (a Storyboard clip on
+  Omit stays as it is). **Removed takes (N) → Restore** brings any back with its file. Take numbers keep counting past
+  them. Nothing is deleted.
+- Code: animate.ts takeUse / removeTakes / restoreTake / nextTakeN, pictures.json "removedTakes"; POST
+  /api/songs/[id]/pictures { action: "cleanup", file, n? } / { action: "restore", file, n }.
+- Tests: vitest animate (+1: the rules, files moved, numbers, Restore); browser singer (+2: Clean up after asking,
+  Restore), pictures pass.
+
 ### Creation's player plays a take with the song ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "why can't I hear in Animate both the song and video, it'd be easier to check" / "else I need to
   juggle back to Shape". Takes stay silent files (the music is never changed, the vocal never kept); the player now
