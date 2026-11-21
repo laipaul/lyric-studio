@@ -111,7 +111,7 @@ async function main() {
     check(labels["singer close sings line 2.mp4"]?.label === "Close up sings line 2", "the clip carries a short name into the Storyboard (Close up sings line 2)");
     const take = path.join(pictures, "takes", "singer close sings line 2.mp4");
     const sung = (JSON.parse(readFileSync(path.join(pictures, "pictures.json"), "utf8")) as { pictures: Record<string, { takes: { kind?: string; prompt?: string }[] }> }).pictures["singer close.png"].takes.find((t) => t.kind === "lipsync");
-    check(sung?.prompt === "turns to the sea, soft smile", "the script went with the voice (the take records it)");
+    check(sung?.prompt === "turns to the sea, soft smile" && (sung as { style?: number }).style === 1, "the script went with the voice, after the singing cue (the take records it)");
     check(existsSync(take) && !(await probeMedia(take)).hasAudio, "it is in Creation, without sound (the voice is never kept)");
     const landed = await page.waitForFunction(() => document.querySelector("tr[data-line='2'] [data-anchor-cell]")?.textContent?.includes("Close up sings line 2"), null, { timeout: 15_000 }).then(() => true).catch(() => false);
     check(landed, `the line's Lands on shows the singing clip by its short name (${await page.textContent("tr[data-line='2'] [data-anchor-cell]")})`);

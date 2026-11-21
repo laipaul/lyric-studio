@@ -12,7 +12,7 @@ import { findOrCreateSongProject, readClipEdits, songPathsById } from "../src/no
 import { addFromLink, addPictures, phraseSeconds, readCreationDefaults, saveCreationDefaults, sourceLabel, sendToStoryboard, estimate, higgsfieldTransport, motionPrompt, picturesView, readPictures, runTakes, setMood, startAnimate, startResume, stubTransport, waveSpeedTransport } from "../src/node/animate";
 import { clearFinishedGenerateTasks, listGenerateTasks, RECENT_MS } from "../src/node/generate-tasks";
 import { takeFacts } from "../src/take-facts";
-import { infiniteTalkTransport, runSinging, singingPiece, singingRuns, stubSingTransport } from "../src/node/singer";
+import { infiniteTalkTransport, runSinging, singingPrompt, SINGING_CUE, singingPiece, singingRuns, stubSingTransport } from "../src/node/singer";
 import { makePlayable, update } from "../src/node/animate";
 import { execFileSync } from "node:child_process";
 import { probeMedia } from "@lyric/db";
@@ -270,6 +270,11 @@ describe("singing lines (lip sync, 21 Nov 2026)", () => {
       { image: "https://cdn/p.png", audio: "https://cdn/v.wav", prompt: "turns to the sea, soft smile", resolution: "720p", seed: -1 },
       { image: "https://cdn/p.png", audio: "https://cdn/v.wav", resolution: "720p", seed: -1 },
     ]);
+  });
+  it("every singing take asks the model to sing, not talk; Paul's script follows the cue", () => {
+    expect(singingPrompt("")).toBe(SINGING_CUE);
+    expect(SINGING_CUE).toMatch(/singing/);
+    expect(singingPrompt("turns to the sea")).toBe(`${SINGING_CUE}. turns to the sea`);
   });
   it("lines in a row with the same picture are one take; another picture, a skipped line or a long pause starts a new one", () => {
     const l = (number: number, shownMs: number, sungEndMs: number) => ({ number, shownMs, sungEndMs });

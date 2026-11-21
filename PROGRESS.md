@@ -14,6 +14,9 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   Animate open the menu. Clear finished hides finished takes (the takes stay). Every take row in Creation shows the
   same facts ("9 s · about $1.94 · 21 Nov, 13:42").
 - Tests: vitest animate (+2), browser singer (+1), pictures (+1) pass.
+- Then: Paul's first block came back "talking" (a calm portrait). Every singing take now opens InfiniteTalk's prompt with a
+  singing cue (open mouth on held notes, lips following the melody, breathing between phrases, eyes closing on long
+  notes, moving with the rhythm), then his script. Blocks made before show "make again to sing" (only on Make, cost first).
 
 ### Singer script per block; B-roll takes as long as a phrase of the song ✅ (to verify on the PC)
 - Paul (21 Nov 2026, "Build both"). **Script:** under the first line of a singing block, "What the singer does

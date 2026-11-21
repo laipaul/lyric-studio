@@ -168,7 +168,7 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
         <span data-singer-status={t.status} className={cn(t.status === "done" ? "text-emerald-300" : t.status === "running" ? "text-muted-foreground" : "text-amber-200")}>
           {t.status === "done" ? (
             <>
-              <Check className="inline size-3" /> {l.needed ? "made for an earlier timing: make again" : inRun ? `singing clip on lines ${l.run!.first}-${l.run!.last}` : "singing clip on this line"}
+              <Check className="inline size-3" /> {l.needed ? "made before (an earlier timing or the talking style): make again to sing" : inRun ? `singing clip on lines ${l.run!.first}-${l.run!.last}` : "singing clip on this line"}
             </>
           ) : t.status === "running" ? (
             <>

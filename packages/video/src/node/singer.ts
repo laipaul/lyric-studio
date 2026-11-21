@@ -45,6 +45,12 @@ export const RUN_GAP_MS = 8000; // lines in a row with the same picture and at m
 
 export type SingerSettings = { lines: Record<string, string>; scripts?: Record<string, string> };
 export const SCRIPT_MAX = 200;
+// Every singing take asks InfiniteTalk to SING, not talk (Paul, 21 Nov 2026: a calm portrait came back "talking"):
+// this cue opens the prompt, then Paul's own script. SINGING_STYLE marks takes made with it; a block made before it
+// shows as to make again (only made when Paul presses Make singing clips, cost first).
+export const SINGING_CUE = "A person singing a song with deep emotion, like a live music performance: wide open mouth on sustained notes, expressive lips and jaw following the melody, visible breathing between phrases, eyes closing on long notes, natural head and shoulder movement with the rhythm";
+export const SINGING_STYLE = 1;
+export const singingPrompt = (script: string) => (script ? `${SINGING_CUE}. ${script}` : SINGING_CUE);
 export type Piece = { fromMs: number; toMs: number; seconds: number; usd: number };
 export type SingerLine = {
   number: number;
@@ -135,7 +141,7 @@ export function singingRuns(lines: readonly { number: number; shownMs: number; s
   }
   return runs.map(({ source, first, last }) => ({ source, first, last }));
 }
-const covers = (t: Take | null, piece: Piece, script: string) => !!t && (t.status === "running" || t.status === "done" || t.status === "interrupted") && t.sync_ms === piece.fromMs && t.to_ms === piece.toMs && (t.prompt ?? "") === script;
+const covers = (t: Take | null, piece: Piece, script: string) => !!t && (t.status === "running" || t.status === "done" || t.status === "interrupted") && t.sync_ms === piece.fromMs && t.to_ms === piece.toMs && (t.prompt ?? "") === script && t.style === SINGING_STYLE;
 
 export async function singerView(ws: Workspace, projectId: string, env: NodeJS.ProcessEnv = process.env): Promise<SingerView> {
   const c = await context(ws, projectId);
@@ -326,7 +332,7 @@ export async function startSinging(ws: Workspace, projectId: string, o: { capUsd
   for (const l of todo) {
     update(dir, l.source!, (p) => {
       const n = p.takes.reduce((m, t) => Math.max(m, t.n), 0) + 1;
-      p.takes.push({ n, kind: "lipsync", line: l.number, ...(l.run && l.run.last > l.number ? { through: l.run.last } : {}), sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, ...(l.script ? { prompt: l.script } : {}), service: "wavespeed", quality: "best", model: LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: l.piece.usd, pid: process.pid });
+      p.takes.push({ n, kind: "lipsync", line: l.number, ...(l.run && l.run.last > l.number ? { through: l.run.last } : {}), sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, ...(l.script ? { prompt: l.script } : {}), style: SINGING_STYLE, service: "wavespeed", quality: "best", model: LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: l.piece.usd, pid: process.pid });
       jobs.push({ source: l.source!, n });
     });
   }
@@ -381,7 +387,7 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
           } catch (error) {
             throw Object.assign(new Error(`The picture or the voice could not be put online: ${errorText(error)}`), { unsent: true });
           }
-          const sent = await transport.submit({ ...(BOARD_VIDEO_FILE.test(j.source) ? { video: media } : { image: media }), audio, ...(t.prompt ? { prompt: t.prompt } : {}) }); // never retried
+          const sent = await transport.submit({ ...(BOARD_VIDEO_FILE.test(j.source) ? { video: media } : { image: media }), audio, prompt: t.style === SINGING_STYLE ? singingPrompt(t.prompt ?? "") : (t.prompt ?? "") || undefined }); // never retried
           id = sent.id;
           setTake(dir, j.source, j.n, { request_id: id });
         }

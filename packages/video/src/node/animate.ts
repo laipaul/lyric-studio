@@ -102,6 +102,7 @@ export type Take = {
   error?: string;
   pid?: number;
   seconds?: number; // how long the take was asked to be (4 to 30 s; before 21 Nov 2026: 5)
+  style?: number; // lipsync: 1 = sent with the singing cue (singer.ts SINGING_CUE)
   prompt?: string; // lipsync: the singer's little script sent with the voice (what the singer does)
   label?: string; // the user's short name for this take ("Bride smile"); shown instead of "Take N"
   cleared?: boolean; // hidden from the Tasks menu (Clear finished); the take itself stays
