@@ -226,6 +226,20 @@ export function LyricsTab({ projectId }: { projectId: string }) {
       );
       if (!ok) return; // the picker stays open
     }
+    // A Creation take not in the Storyboard yet: sent first (it joins the end of the story line), then placed.
+    const wanted = anchor?.clip;
+    const take = wanted ? data?.anchors.clips.find((c) => c.name === wanted && c.take && !c.take.sent)?.take : undefined;
+    if (anchor && take) {
+      try {
+        const r = await api(`/api/songs/${projectId}/pictures`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", file: take.picture, n: take.n }) });
+        const d = (await r.json()) as { clip?: string; error?: string };
+        if (!r.ok || !d.clip) throw new Error(d.error ?? `The studio answered ${r.status}`);
+        anchor = { ...anchor, clip: d.clip };
+      } catch (e) {
+        setNotice({ ok: false, text: `The take could not be sent to the Storyboard: ${(e as Error).message}` });
+        return;
+      }
+    }
     const list = (data?.anchors.list ?? []).filter((a) => a.line !== line && a !== singing);
     if (anchor) list.push(anchor);
     const result = await post({ action: "anchors", anchors: list, ...(gapOrder !== undefined ? { gapOrder } : {}) });
@@ -233,7 +247,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
     setPicking(null);
     setNotice({
       ok: true,
-      text: gapOrder !== undefined ? `Gap order: ${gapOrder ?? "default"} (saved to song.json).` : anchor ? `Line ${line} lands on ${anchor.clip}${anchor.transition === "dissolve" ? " (dissolve)" : ""}: saved to song.json. The next video uses it.` : `Line ${line}: anchor removed (song.json).`,
+      text: gapOrder !== undefined ? `Gap order: ${gapOrder ?? "default"} (saved to song.json).` : anchor ? `Line ${line} lands on ${(take ? data?.anchors.clips.find((c) => c.take?.picture === take.picture && c.take.n === take.n)?.label : null) ?? anchor.clip}${anchor.transition === "dissolve" ? " (dissolve)" : ""}: saved to song.json. The next video uses it.` : `Line ${line}: anchor removed (song.json).`,
     });
     await load();
   }
@@ -584,7 +598,9 @@ function AnchorPicker({
   const [clip, setClip] = useState(current?.clip ?? "");
   const [clipIn, setClipIn] = useState(current?.clipIn ? String(current.clipIn) : "");
   const [transition, setTransition] = useState<"cut" | "dissolve">(current?.transition ?? "cut");
-  const groups = [...new Set(clips.map((c) => c.from))];
+  // Creation's takes first (as takes), then the song's other clips, then each collection; singing takes are never offered
+  // here (they belong on their own lines: Who sings → Use this take).
+  const groups = [...new Set(clips.map((c) => c.from))].filter((g) => g !== "singing").sort((a, b) => (a === "creation" ? -1 : b === "creation" ? 1 : a === "song" ? -1 : b === "song" ? 1 : 0));
   const chosen = clips.find((c) => c.name === clip);
   const lineMs = (line.sungEndMs ?? line.screen.leaveMs) - line.screen.readableMs;
   const left = chosen && chosen.kind === "video" ? chosen.durationMs - (Number(clipIn) || 0) * 1000 : null;
@@ -632,7 +648,9 @@ function AnchorPicker({
       <p className="text-muted-foreground text-[11px]">Click a clip, then Save (or double-click it).</p>
       {groups.map((g) => (
         <div key={g} className="flex flex-col gap-1">
-          <span className="text-muted-foreground text-[11px]">{g === "song" ? "This song's clips" : `Collection ${g}`}</span>
+          <span className="text-muted-foreground text-[11px]" data-anchor-group={g}>
+            {g === "creation" ? "From Creation: your takes (a take not in the Storyboard yet is sent there when you save)" : g === "song" ? (groups.includes("creation") ? "Your other clips" : "This song's clips") : `Collection ${g}`}
+          </span>
           <div className="flex flex-wrap gap-2">
             {clips
               .filter((c) => c.from === g)
@@ -650,9 +668,19 @@ function AnchorPicker({
                     {c.thumb ? (
                       // eslint-disable-next-line @next/next/no-img-element -- a local thumbnail served by /api/files
                       <img src={`/api/files/${c.thumb}`} alt="" className="size-full object-cover" />
+                    ) : c.video ? (
+                      // A take not in the Storyboard yet: its own file (plays on hover)
+                      <video src={`/api/files/${c.video.split("/").map(encodeURIComponent).join("/")}#t=0.1`} muted loop playsInline preload="metadata" onMouseEnter={(e) => void e.currentTarget.play().catch(() => undefined)} onMouseLeave={(e) => e.currentTarget.pause()} className="size-full object-cover" />
                     ) : null}
                   </div>
-                  <span className="w-full truncate">{c.label ?? c.name}</span>
+                  {c.take && c.label ? (
+                    <>
+                      <span className="w-full truncate font-semibold" data-anchor-take={`${c.take.picture}#${c.take.n}`}>{c.label.split(" · ").at(-1)}</span>
+                      <span className="text-muted-foreground w-full truncate">{c.label.split(" · ").slice(0, -1).join(" · ")}</span>
+                    </>
+                  ) : (
+                    <span className="w-full truncate">{c.label ?? c.name}</span>
+                  )}
                   <span className="text-muted-foreground">{c.kind === "photo" ? "photo" : `${(c.durationMs / 1000).toFixed(1)} s`}</span>
                 </button>
               ))}

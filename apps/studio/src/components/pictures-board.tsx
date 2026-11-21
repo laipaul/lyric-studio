@@ -433,7 +433,7 @@ function PictureTile({
   );
 }
 
-function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onResume }: { t: Take & { inUse?: boolean }; source: string; url: string | null; onPlay: (url: string) => void; onRename: (label: string) => Promise<void>; onSend: () => void; onUse: () => void; onResume: () => void }) {
+function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onResume }: { t: Take & { inUse?: boolean; onLines?: string }; source: string; url: string | null; onPlay: (url: string) => void; onRename: (label: string) => Promise<void>; onSend: () => void; onUse: () => void; onResume: () => void }) {
   const label = `Take ${t.n}`;
   return (
     <li data-take={t.n} data-take-status={t.status} className="flex items-center gap-2 text-[11px]">
@@ -462,7 +462,7 @@ function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onResume }: 
         // A singing take belongs on its lines (elsewhere its lips are out of time): In use, or Use this take.
         t.inUse ? (
           <span data-take-badge="in-use" className="flex shrink-0 items-center gap-1 rounded bg-emerald-400/15 px-1.5 py-0.5 text-emerald-300" title={t.sent ? `On its lines as ${t.sent}` : undefined}>
-            <Check className="size-3" /> In use
+            <Check className="size-3" /> In use · {t.through && t.through > (t.line ?? 0) ? `lines ${t.line}-${t.through}` : `line ${t.line}`}
           </span>
         ) : (
           <span className="flex shrink-0 items-center gap-1">
@@ -476,10 +476,14 @@ function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onResume }: 
             </button>
           </span>
         )
+      ) : t.status === "done" && t.onLines ? (
+        <span data-take-on={t.onLines} className="flex shrink-0 items-center gap-1 rounded bg-emerald-400/15 px-1.5 py-0.5 text-emerald-300" title={t.sent ? `Shown on ${t.onLines} as ${t.sent} (Lyrics Sync → Shows clip)` : undefined}>
+          <Check className="size-3" /> On {t.onLines}
+        </span>
       ) : t.status === "done" ? (
         t.sent ? (
           <span data-take-sent className="flex shrink-0 items-center gap-1 text-emerald-300" title={`In your Storyboard as ${t.sent}`}>
-            <Check className="size-3" /> In Storyboard
+            <Check className="size-3" /> In Storyboard, on no line
           </span>
         ) : (
           <button type="button" data-take-send onClick={onSend} className="hover:bg-accent flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5">

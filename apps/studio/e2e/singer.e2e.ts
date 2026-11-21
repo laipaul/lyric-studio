@@ -55,6 +55,10 @@ async function main() {
   const pictures = path.join(paths.root, "pictures");
   mkdirSync(pictures, { recursive: true });
   ffmpeg("-f", "lavfi", "-i", "color=c=pink:s=216x384", "-frames:v", "1", path.join(pictures, "singer close.png"));
+  // A finished Animate take of that picture, not sent to the Storyboard yet (Take 1).
+  mkdirSync(path.join(pictures, "takes"), { recursive: true });
+  ffmpeg("-f", "lavfi", "-i", "testsrc2=s=216x384:r=30:d=5", "-pix_fmt", "yuv420p", path.join(pictures, "takes", "singer close take 1.mp4"));
+  writeFileSync(path.join(pictures, "pictures.json"), JSON.stringify({ pictures: { "singer close.png": { takes: [{ n: 1, service: "wavespeed", quality: "standard", model: "Seedance 2.5 Flash", status: "done", started_at: new Date().toISOString(), ended_at: new Date().toISOString(), cost_usd: 1.08, seconds: 5, file: "takes/singer close take 1.mp4", playable: true }] } } }));
   ws.close();
 
   const server = spawn(process.execPath, [path.join(path.dirname(require.resolve("next/package.json")), "dist", "bin", "next"), "start", "-p", String(port), "-H", "127.0.0.1"], {
@@ -182,6 +186,23 @@ async function main() {
     check(asked.includes("removes the singer") && stillSinging?.sync !== undefined && (await page.locator("[data-anchor-picker]").count()) === 1, `a plain clip on a singing line asks first; dismissing keeps the singer (${asked.slice(0, 60)})`);
     await page.click("[data-anchor-picker] button:has-text('Cancel')");
     await page.waitForFunction(() => !document.querySelector("[data-anchor-picker]"));
+    const unsent = (JSON.parse(readFileSync(path.join(pictures, "pictures.json"), "utf8")) as { pictures: Record<string, { takes: { n: number; sent?: string }[] }> }).pictures["singer close.png"].takes.find((t) => t.n === 1);
+    check(!unsent?.sent, "dismissing the question sent nothing to the Storyboard");
+
+    // Show a take, not a clip (Paul, 21 Nov 2026): the picker lists Creation's takes as takes; singing takes are not offered;
+    // a take not in the Storyboard yet is sent there and placed in one step.
+    await page.click("tr[data-line='1'] [data-anchor-pick]");
+    await page.waitForSelector("[data-anchor-picker] [data-anchor-group='creation']");
+    const tile = (await page.textContent("[data-anchor-picker] [data-anchor-clip='creation:singer close.png#1']")) ?? "";
+    const groupsShown = await page.$$eval("[data-anchor-picker] [data-anchor-group]", (es: Element[]) => es.map((e) => e.getAttribute("data-anchor-group")));
+    const singingOffered = await page.$$eval("[data-anchor-picker] [data-anchor-clip]", (es: Element[]) => es.map((e) => e.getAttribute("data-anchor-clip") ?? "").filter((n) => / sings /.test(n)));
+    check(tile.includes("Take 1") && tile.includes("Close up") && groupsShown[0] === "creation" && !singingOffered.length, `the picker shows Creation's takes first, as takes (${tile}; groups ${groupsShown.join(", ")}); no singing take is offered (${singingOffered.join(", ")})`);
+    await page.dblclick("[data-anchor-picker] [data-anchor-clip='creation:singer close.png#1']");
+    await page.waitForFunction(() => document.querySelector("tr[data-line='1'] [data-anchor-cell]")?.textContent?.includes("Take 1"), null, { timeout: 15_000 });
+    const placed = (JSON.parse(readFileSync(paths.recipe!, "utf8")) as { anchors?: { line: number; clip: string; sync?: number }[] }).anchors?.find((x) => x.line === 1);
+    const sentNow = (JSON.parse(readFileSync(path.join(pictures, "pictures.json"), "utf8")) as { pictures: Record<string, { takes: { n: number; sent?: string }[] }> }).pictures["singer close.png"].takes.find((t) => t.n === 1)?.sent;
+    check(placed?.clip === "singer close take 1.mp4" && placed.sync === undefined && sentNow === "singer close take 1.mp4" && existsSync(path.join(paths.clips!, "singer close take 1.mp4")), `choosing the take sends it to the Storyboard and puts it on line 1 (${JSON.stringify(placed)})`);
+    check(((await page.textContent("tr[data-line='1'] [data-anchor-cell]")) ?? "").includes("Close up · Take 1"), "the line names it as a take: Close up · Take 1");
     await page.selectOption("[data-singer-resolution]", "720p");
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
     // A block: the same picture on line 3 too -> one take over lines 2-3; it replaces the line-2 take by itself.
@@ -225,7 +246,8 @@ async function main() {
     check(((await page.textContent("[data-picture='singer close.png'] [data-take-source]")) ?? "").includes("lip sync, line"), "Creation labels it: lip sync, line …");
     // The picture card shows every take (line 2 now has no singer, so none is in use: each can be chosen again).
     const card = await page.$$eval("[data-picture='singer close.png'] [data-take]", (rows: Element[]) => rows.map((r) => `${r.getAttribute("data-take")}:${r.querySelector("[data-take-badge]")?.getAttribute("data-take-badge") ?? "-"}:${r.querySelector("[data-take-use]") ? "use" : "-"}`));
-    check(card.length === 3 && card.every((c) => c.endsWith(":-:use")), `the Creation card lists all takes with In use / Use this take (${card.join(", ")})`);
+    check(card.length === 4 && card.filter((c) => c.endsWith(":-:use")).length === 3, `the Creation card lists all takes with In use / Use this take (${card.join(", ")})`);
+    check(((await page.textContent("[data-picture='singer close.png'] [data-take='1'] [data-take-on]")) ?? "").includes("On line 1"), "the Creation card says where a take shows: On line 1");
     await browser.close();
   } finally {
     server.kill();

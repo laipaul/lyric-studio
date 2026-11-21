@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { absPath, beat as beatTable, project as projectTable, type Workspace } from "@lyric/db";
+import { absPath, beat as beatTable, probeMedia, project as projectTable, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
 import { clockText } from "../section";
@@ -28,6 +28,7 @@ import { keepReplaced, rememberedCollection } from "./project-settings";
 import { setClipOmit } from "./clip-edits";
 import { readRecipe, writeRecipe } from "./recipe";
 import { songPathsById } from "./song-folder";
+import { itemLabel, readPictures, songFolder } from "./animate";
 import { dismissHandReset, noteHandTimesSaved, readHandRecord, resetAllHandTimes, resetHandTimesMadeBeforeStem, undoHandReset, type HandReset } from "./hand-reset";
 import { DEMUCS, resolveVoiceSource, voiceKey } from "./voice-source";
 import { readTextboard, writeTextboard } from "./textboard";
@@ -132,7 +133,12 @@ async function storedAlignment(ws: Workspace, projectId: string): Promise<{ alig
 
 // Story anchors in the Lyrics tab: the song.json list, the clips it can choose from (the song's own and
 // its collections, with thumbnails) and what will clash, per line.
-export type AnchorClip = { name: string; label?: string | null; thumb: string | null; kind: "video" | "photo"; durationMs: number; orientation: string; from: string }; // from: "song" or the collection
+// from: "song" (the song's own clips), "creation" (Creation's Animate takes, as takes), "singing" (singing takes: named on
+// their lines, never offered as a plain clip: out of their lines their lips are out of time) or the collection.
+// take: a Creation take ("studio-sweater · Take 6"); with sent null it is not in the Storyboard yet and `name` is
+// "creation:<picture>#<n>" (choosing it sends it first). video: its file (workspace-relative) when there is no thumbnail.
+export type AnchorClip = { name: string; label?: string | null; thumb: string | null; kind: "video" | "photo"; durationMs: number; orientation: string; from: string; take?: { picture: string; n: number; sent: string | null }; video?: string | null };
+export const CREATION_CLIP = /^creation:(.+)#(\d+)$/;
 export type AnchorsView = { list: AnchorSpec[]; gapOrder: GapOrder | null; clips: AnchorClip[]; problems: { line: number; problem: string }[]; collections: string[] };
 
 export async function anchorClips(ws: Workspace, projectId: string): Promise<{ clips: AnchorClip[]; collections: string[] }> {
@@ -141,7 +147,32 @@ export async function anchorClips(ws: Workspace, projectId: string): Promise<{ c
   const remembered = rememberedCollection(ws, projectId);
   const collections = recipe.collections ?? (remembered ? [remembered.name] : []);
   const own = await songAssets(ws, projectId);
-  const clips: AnchorClip[] = own.clips.filter((c) => !c.duplicateOf).map((c) => ({ name: c.name, label: c.label ?? null, thumb: c.thumb, kind: c.kind, durationMs: c.durationMs, orientation: c.orientation, from: "song" }));
+  // Creation's takes (Paul, 21 Nov 2026: "I want to show the take, not the clip"): an Animate take is offered as a take of
+  // its picture, sent or not; a singing take is named but not offered. The song's other clips stay "song".
+  const { dir: pictures } = songFolder(ws, projectId);
+  const board = existsSync(pictures) ? readPictures(pictures).pictures : {};
+  const fromTake = new Map<string, { picture: string; n: number; singing: boolean; label: string }>();
+  const unsent: AnchorClip[] = [];
+  for (const [picture, rec] of Object.entries(board)) {
+    for (const t of rec.takes) {
+      const label = `${rec.label ?? path.parse(picture).name} · ${t.label ?? `Take ${t.n}`}`;
+      const sent = t.sent ?? t.clip;
+      if (sent) fromTake.set(sent.toLowerCase(), { picture, n: t.n, singing: t.kind === "lipsync", label: t.kind === "lipsync" ? (itemLabel(rec, t.n) ?? label) : label });
+      else if (t.kind !== "lipsync" && t.status === "done" && t.file && existsSync(path.join(pictures, t.file))) {
+        const info = await probeMedia(path.join(pictures, t.file)).catch(() => null);
+        const w = info?.width ?? 9;
+        const h = info?.height ?? 16;
+        unsent.push({ name: `creation:${picture}#${t.n}`, label, thumb: null, video: path.relative(ws.dir, path.join(pictures, t.file)).split(path.sep).join("/"), kind: "video", durationMs: info?.durationMs ?? (t.seconds ?? 5) * 1000, orientation: Math.abs(w - h) <= Math.max(w, h) * 0.02 ? "square" : h > w ? "vertical" : "horizontal", from: "creation", take: { picture, n: t.n, sent: null } });
+      }
+    }
+  }
+  const clips: AnchorClip[] = own.clips.filter((c) => !c.duplicateOf).map((c) => {
+    const t = fromTake.get(c.name.toLowerCase());
+    const base: AnchorClip = { name: c.name, label: c.label ?? null, thumb: c.thumb, kind: c.kind, durationMs: c.durationMs, orientation: c.orientation, from: "song" };
+    if (!t) return base;
+    return t.singing ? { ...base, label: c.label ?? t.label, from: "singing" } : { ...base, label: t.label, from: "creation", take: { picture: t.picture, n: t.n, sent: c.name } };
+  });
+  clips.push(...unsent);
   for (const name of collections) {
     try {
       const sync = await syncCollection(ws, { name, prepare: false, ...(remembered?.name === name && remembered.folder ? { folder: remembered.folder } : {}) });
