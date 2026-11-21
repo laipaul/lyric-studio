@@ -62,7 +62,7 @@ async function main() {
     const items = await page.$$eval("[data-todo-item]", (e: Element[]) => e.map((x) => x.getAttribute("data-todo-item")));
     check(JSON.stringify(items) === JSON.stringify(["clips", "vocals", "cover", "labels"]), `to-do: clips, vocal stem (a suggestion), cover, labels (${items.join(", ")})`);
     const tabs = async () => page.$$eval("[role=tab]", (e: Element[]) => e.map((x) => x.textContent?.trim()));
-    check(JSON.stringify(await tabs()) === JSON.stringify(["Assets", "Lyrics Sync", "Song Details", "Storyboard"]), `Prepare's tabs: Assets, Lyrics Sync, Song Details, Storyboard (${(await tabs()).join(", ")})`);
+    check(JSON.stringify(await tabs()) === JSON.stringify(["Assets", "Lyrics Sync", "Song Details", "Storyboard", "Production"]), `Prepare's tabs: Assets, Lyrics Sync, Song Details, Storyboard, Production (${(await tabs()).join(", ")})`);
     // Prepare regrouped (11 Nov 2026): Assets = the files the user provides; Lyrics Sync = timing; Song Details = words and links.
     await page.click("[data-todo-item=clips] button");
     await page.waitForSelector("[data-assets=clips] [data-story-line]");
@@ -391,7 +391,7 @@ async function main() {
     check(!(await page.$("[data-style-block=collections]")) && !!(await page.$("[data-story-card=wedding]")), "Prepare → Storyboard: the collections are in the story line, not a list of checkboxes");
     // N1 polish: the same stage line on every stage, one distinct icon per tab, and each stage opens on its last tab.
     const icons = await page.$$eval("[role=tab] svg", (e: Element[]) => e.map((x) => x.getAttribute("class")?.match(/lucide-[a-z0-9-]+/)?.[0] ?? ""));
-    check(new Set(icons).size === icons.length && icons.length === 4, `Prepare's tabs: four distinct icons (${icons.join(", ")})`);
+    check(new Set(icons).size === icons.length && icons.length === 5, `Prepare's tabs: five distinct icons (${icons.join(", ")})`);
     check(((await page.textContent("[data-work-status=prepare]")) ?? "").startsWith("Prepare · "), `Prepare's stage line (${await page.textContent("[data-work-status=prepare]")})`);
     // The selected stage and tab in the app's pink (as the play button), the same in all four stages (10 Nov 2026).
     const PINK = "rgb(232, 163, 181)";

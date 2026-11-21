@@ -4,6 +4,25 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### G1 Prepare → Production: cast from the shared library, story bible, Song brief for Claude ✅ (to verify on the PC)
+- Paul's workflow (21 Nov 2026): build the song's assets in the app → generate the clips on WaveSpeed (or Higgsfield) →
+  assemble in the app. G1 is the first part; G2 shot scripts per slot and G3 sending + takes in slots follow.
+- **Prepare → Production** (a fifth Prepare tab after Storyboard), four sections; cast and bible are optional:
+  1. **Cast:** character and scene cards picked from the ONE shared library (Characters page) with a searchable picker;
+     linked by id (production\production.json), never copied: a newly locked version reaches every song.
+  2. **Story bible:** this song's own, or the EP's (shared by the EP's songs; workspace\eps\<EP>\bible.md). An earlier
+     text goes to Assets → Replaced files ("the story bible", Restore).
+  3. **Ask Claude:** **Copy Song brief** (one click) or Save as file: lyrics with times and instrumental parts, length,
+     tempo, picture sizes from the song's platforms, "no sound", the cast's locked descriptions and outfits, the bible,
+     and the exact shot list format. **Paste Claude's answer:** a shot list (also inside a ```json block) → the C2
+     check and import; other text → "Use as the story bible".
+  4. **Shot list:** how many slots are in the Storyboard; Import shot list file; Open Storyboard. The shot list's
+     characters missing from the cast: "Add to the cast".
+- The Storyboard's story idea and story notes stay the user's own and are never read. Nothing is spent (no AI calls).
+- Checked for G3 (21 Nov 2026): WaveSpeed and Higgsfield both offer Seedance 2.5 through their own API keys
+  (Higgsfield now has a self-serve API).
+- Tests: production (10). Browser: production (17 checks); shotlist and song-stages (now five Prepare tabs) pass.
+
 ### Recast spike: the main character in place of the person in Storyboard clips ✅ (to run on the Windows PC)
 - `spikes/recast/` (like spikes/lipsync; nothing in the app changes), `pnpm recast …`:
   - `check` reads fal's own description of each endpoint (fields, price) before anything is sent; every request is built
@@ -128,19 +147,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - The latest Make or Remake wins: the best try of the newest run; older tries only if every new one is red. Cards
   made before this are picked again once, free, when their page opens (newest try), with the contact sheet rebuilt.
 - Tests: characters-cards (12) and the Characters browser test pass.
-
-### Characters, C1 fixes after Paul's first test ("Bride No 1") ✅ (verified by Paul, 18 Nov 2026)
-- The **back view** gets the chosen front view as an extra reference: the same outfit seen from behind (in the
-  test, the front was a jumper and trousers and the back a knitted dress).
-- **Make pack warns when the outfit is empty** ("the model will invent it… Add it above first?" → Make it anyway / Cancel).
-- **Face views** ask for eyebrows exactly as in the reference (soft, individual hairs, not drawn or sharpened) and
-  natural hair with no net / mesh pattern (the test's close-up had both problems).
-- **Calibrating judges the views already made again** (every try, the best one chosen again), free, on a draft.
-- Plain words: "Not made yet: Close-up face, 3/4 face, Full body, front, Full body, back"; no double brackets in
-  the face-check line.
-- Tests: characters-cards (9) and the Characters browser test (23 checks) pass. The other unit-test failures are the
-  known ones below. Note: in the cloud check, librosa crashed until numba's stale cache files (*.nbi / *.nbc in the
-  .venv) were cleared; this only affects the cloud machine.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -293,6 +299,17 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   mix has different timing, use Generate -> advanced -> re-align.
 
 ## Next
+
+**Song creation workflow (Paul, 21 Nov 2026; approved plan, one step each, tested on one song):** build the song's
+assets in the app → generate the clips on WaveSpeed / Higgsfield → assemble with Shape and Make.
+- ✅ (built 21 Nov, to verify) **G1 Prepare → Production:** cast from the shared library, optional story bible (song or
+  EP), one-click Song brief for Claude (Joey's Story Bible Builder / Shotcaller), paste the answer back.
+- **G2 Shot scripts:** each slot becomes a ready script (Paul's idea + cast + scene + lyric line; the app sets the length
+  from the lyric timing, 9:16 / 16:9, no sound); editable; "Copy script" for the services' websites.
+- **G3 Send and takes:** WaveSpeed (and Higgsfield) from the app with the user's own key in .env, cost per shot and
+  total with a cap before sending; each clip lands in its slot as "s01 take 1.mp4"; Try again / Use this take; earlier
+  takes kept; a clip made by hand can be dropped on a slot (keeps its file name). Text-to-video first; the locked
+  character picture as first frame after that.
 
 **Order from here (changed by Paul, 18 Nov 2026, after C2 worked):** his real workflow builds the storyboard from
 Midjourney clips, so replacing the person in each clip with his main character comes first:

@@ -3,7 +3,7 @@
 // Prepare → Storyboard → Import shot list (C2): choose (or drop) a shot list file, see the check in plain words
 // (what is wrong, slot by slot; what changes), then import. Nothing is spent: no fal.ai calls happen here.
 import { FileJson } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { ShotListCheck } from "@lyric/video/shotlist";
 
@@ -25,7 +25,8 @@ export const SHOTLIST_EXAMPLE = `{
 const changes = (c: ShotListCheck["changes"]) =>
   [c.added.length ? `${c.added.length} new` : "", c.updated.length ? `${c.updated.length} changed` : "", c.removed.length ? `${c.removed.length} taken out (${c.removed.join(", ")})` : "", c.unchanged.length ? `${c.unchanged.length} unchanged` : ""].filter(Boolean).join(" · ");
 
-export function ShotListImport({ projectId, open, onOpenChange, onImported }: { projectId: string; open: boolean; onOpenChange: (o: boolean) => void; onImported: (text: string) => void }) {
+// `preset`: a shot list pasted elsewhere (Prepare → Production → Paste Claude's answer), checked as soon as the dialog opens.
+export function ShotListImport({ projectId, open, onOpenChange, onImported, preset }: { projectId: string; open: boolean; onOpenChange: (o: boolean) => void; onImported: (text: string) => void; preset?: { name: string; text: string } | null }) {
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<{ name: string; text: string } | null>(null);
   const [check, setCheck] = useState<ShotListCheck | null>(null);
@@ -33,6 +34,15 @@ export function ShotListImport({ projectId, open, onOpenChange, onImported }: { 
   const [busy, setBusy] = useState(false);
   const [over, setOver] = useState(false);
   const [example, setExample] = useState(false);
+
+  useEffect(() => {
+    if (!open || !preset) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a pasted shot list is checked once the dialog opens with it
+    setFile(preset);
+    setCheck(null);
+    void post(preset.text, preset.name, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, preset]);
 
   function reset() {
     setFile(null);

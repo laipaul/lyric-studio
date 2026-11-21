@@ -16,6 +16,7 @@ import { AssetsTab } from "@/components/assets-tab";
 import { GeneratePanel } from "@/components/generate-panel";
 import { LyricsTab } from "@/components/lyrics-tab";
 import { PostTab } from "@/components/post-tab";
+import { ProductionTab } from "@/components/production-tab";
 import { StatusBadge } from "@/components/status-badge";
 import { ShapePage } from "@/components/shape-page";
 import { SongTitle } from "@/components/song-title";
@@ -40,7 +41,7 @@ import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 // Videos (exports grid, marks, compare, each run's settings next to the recipe) and Post (the approved
 // videos with their captions and files). ?tab= opens a tab. The tabs are grouped in four stages
 // (Prepare -> Shape -> Make -> Review & Post) with the Prepare to-do list and "Make release pack".
-const TABS = ["assets", "lyrics", "details", "clips", "shape", "generate", "videos", "post"];
+const TABS = ["assets", "lyrics", "details", "clips", "production", "shape", "generate", "videos", "post"];
 const OLD_TABS: Record<string, string> = { style: "shape", storyboard: "shape", audio: "assets", files: "assets", sync: "lyrics", texts: "details", "song-details": "details" }; // links from before Style and Storyboard became one Shape page (?tab=storyboard: still Shape; Prepare's Storyboard tab is ?tab=clips); audio / files: Prepare → Assets; sync / texts / song-details: Lyrics Sync / Song Details (the ids stay lyrics / details)
 type Search = Promise<{ tab?: string; from?: string; panel?: string; edit?: string; part?: string }>; // panel: a Shape panel to open (theme, clips, …); edit: a theme to open in the Theme editor
 
@@ -198,6 +199,9 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
           <div className="flex flex-col gap-4">
             <AssetsTab projectId={song.id} part="clips" />
           </div>
+        </TabsContent>
+        <TabsContent value="production">
+          <ProductionTab projectId={song.id} />
         </TabsContent>
         <TabsContent value="shape">
           <ShapePage projectId={song.id} />

@@ -56,3 +56,4 @@ line) and endText (default "Stream {title} on Spotify"; {title}, {artist}). Plan
 Shorts as TextCardProps type "hook" / "end" (off: true while the theme has them off); manifest
 settings.extra_cards [{type, text, start_s, style}] for the ones drawn.
 
+- **Production (G1, 21 Nov 2026):** `<song folder>\production\production.json` ({ "cast": [card ids from the card table], "bible": "song" | "ep" }) and `production\bible.md` (the song's own story bible); an EP's shared bible is `workspace\eps\<EP>\bible.md` (its earlier text in `eps\<EP>\.studio\replaced\`). A song's replaced bible.md is in its Replaced files (role "bible", Restore).

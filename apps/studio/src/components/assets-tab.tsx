@@ -22,7 +22,7 @@ const win = (rel: string) => rel.split("/").join("\\");
 const ACCEPT: Record<AssetKind, string> = { song: ".wav,.mp3", lyrics: ".txt", cover: ".jpg,.jpeg,.png,.webp", hints: ".lrc", vocals: ".wav", backingVocals: ".wav" };
 const ROLE_NAME: Record<string, string> = { lyrics: "the lyrics", vocals: "the vocal stem", backingVocals: "the backing vocals", notUsed: "not used" };
 const base = (rel: string) => rel.split("/").pop() ?? rel;
-const REPLACED_ROLE: Record<string, string> = { song: "the song file", lyrics: "the lyrics", vocals: "the vocal stem", backingVocals: "the backing vocals", cover: "the cover", hints: "the hints (tapped times)", shotlist: "the shot list" };
+const REPLACED_ROLE: Record<string, string> = { song: "the song file", lyrics: "the lyrics", vocals: "the vocal stem", backingVocals: "the backing vocals", cover: "the cover", hints: "the hints (tapped times)", shotlist: "the shot list", bible: "the story bible" };
 // What a Replace changes, in plain words, before it happens.
 function replaceWarning(kind: AssetKind, current: string, next: string): string {
   const kept = `The current one (${current}) is kept under Replaced files at the bottom of this page; Restore brings it back.`;
@@ -161,7 +161,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
 
   async function restoreFile(f: ReplacedFile) {
     const what = REPLACED_ROLE[f.role ?? ""] ?? "the file";
-    const now = f.role && f.role !== "shotlist" ? currentName(f.role) : f.role === "shotlist" ? "shotlist.json" : null;
+    const now = f.role && f.role !== "shotlist" && f.role !== "bible" ? currentName(f.role) : f.role === "shotlist" ? "shotlist.json" : f.role === "bible" ? "bible.md" : null;
     if (!window.confirm(`Make ${f.original} ${what} again?${now ? ` The one in use now (${now}) is kept under Replaced files.` : ""}${f.role === "song" || f.role === "lyrics" || f.role === "vocals" ? " New videos use it; videos already made stay as they are." : ""}`)) return;
     setBusy(true);
     setNotice(null);

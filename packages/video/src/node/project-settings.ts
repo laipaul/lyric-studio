@@ -113,7 +113,7 @@ export function keepReplaced(songRoot: string, file: string, copy = false): stri
 }
 
 // What a kept file was for (Assets → Replaced files restores it as that again).
-export type ReplacedRole = FileRole | "cover" | "hints" | "shotlist";
+export type ReplacedRole = FileRole | "cover" | "hints" | "shotlist" | "bible";
 export type ReplacedNote = { file: string; original: string; role: ReplacedRole | null; at: string };
 export const replacedIndexFile = (songRoot: string) => path.join(songRoot, STUDIO_DIR, "replaced-index.json");
 
@@ -125,6 +125,7 @@ export function replacedRoleOf(songRoot: string, name: string): ReplacedRole | n
   if (/^cover\.(jpe?g|png|webp)$/i.test(name)) return "cover";
   if (name === "hints.lrc") return "hints";
   if (name === "shotlist.json") return "shotlist";
+  if (name === "bible.md") return "bible"; // Prepare → Production's story bible (production\bible.md)
   return null;
 }
 
