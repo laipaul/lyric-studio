@@ -73,7 +73,7 @@ async function main() {
       await sleep(500);
     }
     const browser = await playwright.chromium.launch();
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
     const pageErrors: string[] = [];
     page.on("pageerror", (e: Error) => pageErrors.push(e.message));
     await page.goto(`${base}/songs/${sp.project.id}?tab=storyboard`); // an old link: opens the Shape page
@@ -400,6 +400,17 @@ async function main() {
       const slow = await strip();
       check(slow[0] === "01_a.mp4" && JSON.stringify(slow) === JSON.stringify(clipsJson().order), `Shape opened while the order was still saving ends with the saved order (${slow.join(", ")})`);
       await page.unroute("**/api/songs/*/assets");
+      // Paul (21 Nov 2026): Storyboard in another tab, Shape left open here: Shape follows without a reload.
+      const other = await page.context().newPage();
+      await other.goto(`${base}/songs/${sp.project.id}?tab=clips`);
+      await other.waitForSelector("[data-clip='02_b.mp4']", { timeout: 60_000 });
+      await other.dragAndDrop("[data-clip='02_b.mp4']", "[data-clip='01_a.mp4']", { targetPosition: { x: 10, y: 10 } });
+      await page.waitForFunction((want: string) => [...document.querySelectorAll("[data-story-clip]")][0]?.getAttribute("data-story-clip") === want, "02_b.mp4", { timeout: 60_000 }).catch(() => null);
+      await sleep(500);
+      const crossTab = await strip();
+      const savedNow = (clipsJson().order as string[]).filter((e) => crossTab.includes(e));
+      check(crossTab[0] === "02_b.mp4" && JSON.stringify(crossTab) === JSON.stringify(savedNow), `Shape open in one tab follows a Storyboard change made in another tab (${crossTab.join(", ")}; saved: ${savedNow.join(", ")})`);
+      await other.close();
       await page.request.put(`${base}/api/songs/${sp.project.id}/assets`, { data: { story: order } });
       await page.reload();
       await page.waitForSelector("[data-shot='1']", { timeout: 180_000 });

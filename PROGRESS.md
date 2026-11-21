@@ -10,6 +10,9 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   planned slots" next to Import shot list. shotlist.json is kept under Replaced files first (Restore brings the slots
   back); the clips and their order stay.
 - Tests: vitest shotlist (+1), browser shotlist (+2), storyboard pass.
+- Also: Shape plans again after any saved change to the song's Storyboard, clips, slots, singing lines or anchors
+  (lib/api.ts storyChanged), also when that change is made in another browser tab, and whenever the Shape page is
+  shown again (window focus / tab visible). Browser storyboard (+1: Storyboard in one tab, Shape in another) passes.
 
 ### Online takes in the Tasks menu; length, cost and time on every take ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "when the video is being made, add it to the task in the queue" and "does it give the time,

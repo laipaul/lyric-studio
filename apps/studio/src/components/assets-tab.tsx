@@ -15,7 +15,7 @@ import { ShotListImport } from "@/components/shotlist-import";
 import { NameField } from "@/components/name-field";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { api, STORY_ORDER_SAVED } from "@/lib/api";
+import { api } from "@/lib/api";
 
 const clock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
@@ -240,8 +240,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
       if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
       setNotice({ ok: true, text: done });
       router.refresh();
-      // Shape may already be open (the order shows at once, the save takes a moment): it plans again with the saved order.
-      window.dispatchEvent(new Event(STORY_ORDER_SAVED));
+      // Shape may already be open: api() tells it (and Shape in other tabs) to plan again with the saved order.
     } catch (e) {
       setData(before);
       setNotice({ ok: false, text: `The order was not saved: ${(e as Error).message}` });

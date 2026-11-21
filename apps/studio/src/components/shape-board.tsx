@@ -31,7 +31,7 @@ import { useGoToTab, useSetShapeStatus, useShapePanel, useShapeVideo, useThemeLo
 import { ThemeReachBadge } from "@/components/theme-reach-badge";
 import { TransportBar } from "@/components/transport-bar";
 import { Button } from "@/components/ui/button";
-import { api, STORY_ORDER_SAVED } from "@/lib/api";
+import { api, STORY_CHANNEL, STORY_ORDER_SAVED } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const clock = (ms: number) => `${Math.floor(ms / 60_000)}:${((ms % 60_000) / 1000).toFixed(1).padStart(4, "0")}`;
@@ -223,12 +223,34 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   // with it, keeping the selection and the playhead (one clip order, shown the same in both places).
   const latest = useRef({ source, show });
   latest.current = { source, show };
+  // Also when the Storyboard changed in another tab, and whenever this page is shown again (back to this tab or
+  // window): Shape always shows the saved Storyboard (Paul, 21 Nov 2026: "my Shape is not updated").
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const again = () => {
-      if (latest.current.source) void latest.current.show(latest.current.source, true);
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (latest.current.source) void latest.current.show(latest.current.source, true);
+      }, 250);
     };
+    const shown = () => document.visibilityState === "visible" && again();
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel(STORY_CHANNEL);
+      channel.onmessage = again;
+    } catch {
+      channel = null;
+    }
     window.addEventListener(STORY_ORDER_SAVED, again);
-    return () => window.removeEventListener(STORY_ORDER_SAVED, again);
+    window.addEventListener("focus", again);
+    document.addEventListener("visibilitychange", shown);
+    return () => {
+      clearTimeout(timer);
+      channel?.close();
+      window.removeEventListener(STORY_ORDER_SAVED, again);
+      window.removeEventListener("focus", again);
+      document.removeEventListener("visibilitychange", shown);
+    };
   }, []);
 
   // "Use automatic" next to a typed length the app could not end cleanly near: the song's length and this
