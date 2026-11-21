@@ -4,6 +4,16 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Fixes: the line's clip picker always in view; a plain clip on a singing line asks first ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "from here I don't see all my takes" / "I can't see take 6". The Lyrics Sync "Show a clip" picker
+  opened as a row inside the lines table, which scrolls on its own: near the bottom, the clip rows (Take 6 was the last
+  one) were hidden below. It now opens as a panel over the page, always fully in view; its clips scroll inside it.
+- Saving a plain clip on a line of a singing group took the singer off the whole group without a word (Take 4, lines
+  25-27). It now asks first: "Line 25 is sung by a singing clip on lines 25-27. Showing this clip removes the singer
+  from lines 25-27 (… set to Omit; it stays in Creation, and "Use this take" in Who sings brings it back). Continue?"
+  A clip on a later line of a group (e.g. 26) no longer leaves two clips on one line.
+- Tests: browser singer (+2: picker inside the window, asks first and No keeps the singer), lyrics-tab pass.
+
 ### Lip-sync takes panel; Jump to Creation; lights-dim ending ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "a pop up window when we press Make lipsync like what we see in Creation" and "end the reel
   [with] her whispering and fading with the studio light going to dim".

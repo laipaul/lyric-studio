@@ -169,6 +169,19 @@ async function main() {
     const clipsNow = (JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8")) as { clips: Record<string, { omit?: boolean }> }).clips;
     const lipsyncCount = (JSON.parse(readFileSync(path.join(pictures, "pictures.json"), "utf8")) as { pictures: Record<string, { takes: { kind?: string }[] }> }).pictures["singer close.png"].takes.filter((t) => t.kind === "lipsync").length;
     check(switched?.clip !== "singer close sings line 2.mp4" && switched?.sync === a?.sync && clipsNow["singer close sings line 2.mp4"]?.omit === true && lipsyncCount === 2, `Use this take puts it on the line at once, in time with the song; the other goes to Omit; nothing new is made (${JSON.stringify(switched)})`);
+    // The clip picker opens in a dialog that is fully in view, and a plain clip on a singing line asks first (dismissed: the singer stays).
+    await page.click("tr[data-line='2'] [data-anchor-pick]");
+    await page.waitForSelector("[data-anchor-picker] [data-anchor-clip]");
+    const pickBox = await page.$eval("[data-anchor-picker]", (e: Element) => { const r = e.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, h: window.innerHeight }; });
+    check(pickBox.top >= 0 && pickBox.bottom <= pickBox.h, `the clip picker is fully inside the window (${JSON.stringify(pickBox)})`);
+    let asked = "";
+    page.once("dialog", (d) => { asked = d.message(); void d.dismiss(); });
+    await page.locator("[data-anchor-picker] [data-anchor-clip]").first().dblclick();
+    await page.waitForTimeout(500);
+    const stillSinging = (JSON.parse(readFileSync(paths.recipe!, "utf8")) as { anchors?: { line: number; sync?: number }[] }).anchors?.find((x) => x.line === 2);
+    check(asked.includes("removes the singer") && stillSinging?.sync !== undefined && (await page.locator("[data-anchor-picker]").count()) === 1, `a plain clip on a singing line asks first; dismissing keeps the singer (${asked.slice(0, 60)})`);
+    await page.click("[data-anchor-picker] button:has-text('Cancel')");
+    await page.waitForFunction(() => !document.querySelector("[data-anchor-picker]"));
     await page.selectOption("[data-singer-resolution]", "720p");
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
     // A block: the same picture on line 3 too -> one take over lines 2-3; it replaces the line-2 take by itself.

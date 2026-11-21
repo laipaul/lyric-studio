@@ -9,6 +9,7 @@ import type { AnchorClip, LyricsLine, LyricsView } from "@lyric/video/lyrics-vie
 
 import { SingerBar, SingerCell, useSinger } from "@/components/singer";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -215,7 +216,17 @@ export function LyricsTab({ projectId }: { projectId: string }) {
 
   type Anchor = LyricsView["anchors"]["list"][number];
   async function saveAnchor(line: number, anchor: Anchor | null, gapOrder?: "story" | "shuffle" | null) {
-    const list = (data?.anchors.list ?? []).filter((a) => a.line !== line);
+    // A plain clip on a line a singing clip covers takes the singer off its whole group: ask first, in plain words.
+    const singing = anchor && anchor.sync === undefined ? (data?.anchors.list ?? []).find((a) => a.sync !== undefined && a.line <= line && line <= (a.through ?? a.line)) : undefined;
+    if (singing) {
+      const through = singing.through ?? singing.line;
+      const covered = through > singing.line ? `lines ${singing.line}-${through}` : `line ${singing.line}`;
+      const ok = window.confirm(
+        `Line ${line} is sung by a singing clip on ${covered}. Showing this clip removes the singer from ${covered} (the singing clip is set to Omit; it stays in Creation, and "Use this take" in Who sings brings it back). Continue?`,
+      );
+      if (!ok) return; // the picker stays open
+    }
+    const list = (data?.anchors.list ?? []).filter((a) => a.line !== line && a !== singing);
     if (anchor) list.push(anchor);
     const result = await post({ action: "anchors", anchors: list, ...(gapOrder !== undefined ? { gapOrder } : {}) });
     if (!result) return;
@@ -485,13 +496,6 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                           ))}
                         </td>
                       </tr>
-                      {picking === l.number ? (
-                        <tr className="bg-muted/30 border-b" data-anchor-picker>
-                          <td colSpan={9} className="px-3 py-3">
-                            <AnchorPicker line={l} clips={data.anchors.clips} current={anchor} busy={busy} onSave={(a) => saveAnchor(l.number, a)} onCancel={() => setPicking(null)} />
-                          </td>
-                        </tr>
-                      ) : null}
                       </Fragment>
                     );
                   })}
@@ -519,6 +523,28 @@ export function LyricsTab({ projectId }: { projectId: string }) {
           </p>
         ) : null}
       </section>
+
+      {/* The picker sits in a dialog, so its clips are always fully in view (the table scrolls on its own). */}
+      <Dialog open={picking !== null} onOpenChange={(o) => !o && setPicking(null)}>
+        <DialogContent className="w-[min(64rem,95vw)] max-w-none" data-anchor-picker>
+          {(() => {
+            const pl = lines.find((x) => x.number === picking);
+            if (!pl) return null;
+            const current = data.anchors.list.find((a) => a.line === pl.number) ?? null;
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle>Show a clip on line {pl.number}</DialogTitle>
+                  <DialogDescription>Pick one of the clips below; the app cuts it in on the beat.</DialogDescription>
+                </DialogHeader>
+                <div className="max-h-[80vh] overflow-auto pr-1">
+                  <AnchorPicker line={pl} clips={data.anchors.clips} current={current} busy={busy} onSave={(a) => saveAnchor(pl.number, a)} onCancel={() => setPicking(null)} />
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
 
       <LyricsText key={data.lyricsText} data={data} onSaved={load} post={post} busy={busy} setNotice={setNotice} />
     </div>
