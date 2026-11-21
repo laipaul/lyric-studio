@@ -29,7 +29,7 @@ export const BACK_FROM_FRONT =
 export const FRONT_FROM_CLOSEUP =
   "The last reference picture is a close-up of this same outfit: the neckline, shoulders and veil must match it exactly; ignore its framing and face.";
 
-export type Try = { file: string | null; url?: string; request_id: string | null; score: number | null; face_px?: number; frame_h?: number; yaw?: number | null; run?: number; light: Light | null; text: string; attempts: Attempt[]; seed: number };
+export type Try = { file: string | null; url?: string; request_id: string | null; score: number | null; face_px?: number; frame_h?: number; yaw?: number | null; run?: number; light: Light | null; text: string; attempts: Attempt[]; seed: number; own?: string }; // own: the user's own picture (its file name)
 export type Item = { id: string; label: string; kind: "view" | "angle"; tries: Try[]; chosen: number | null; light: Light | null; text: string; angle_note?: string | null };
 export type VersionReport = { updated_at: string; model: string; endpoint: string; thresholds: Thresholds; items: Item[]; request_ids: string[]; spent_usd: number; description_request?: string | null; picked?: number };
 
@@ -54,7 +54,7 @@ export function readReport(dir: string): VersionReport | null {
   }
 }
 
-function writeReport(dir: string, r: VersionReport): void {
+export function writeReport(dir: string, r: VersionReport): void {
   writeFileSync(reportFile(dir), `${JSON.stringify({ ...r, updated_at: new Date().toISOString() }, null, 2)}\n`);
 }
 
@@ -82,7 +82,7 @@ export function choose(item: Item, dir: string): void {
       });
       return b;
     };
-    best = pick((t, k) => runOf(t, k) === latest && t.light !== "red") ?? pick(() => true);
+    best = pick((t, k) => runOf(t, k) === latest && (t.light !== "red" || !!t.own)) ?? pick(() => true);
   }
   item.chosen = best;
   if (best === null) return;
@@ -93,7 +93,7 @@ export function choose(item: Item, dir: string): void {
 }
 
 // Body views are cropped at the neck here, whatever the model drew: faces only ever come from the face views.
-async function finishPicture(face: FaceTool, kind: "view" | "angle", id: string, file: string): Promise<void> {
+export async function finishPicture(face: FaceTool, kind: "view" | "angle", id: string, file: string): Promise<void> {
   const view = VIEWS.find((v) => v.id === id);
   if (kind === "view" && view && !view.face) {
     const full = file.replace(/\.png$/i, "_full.png");
@@ -102,7 +102,7 @@ async function finishPicture(face: FaceTool, kind: "view" | "angle", id: string,
   }
 }
 
-async function judge(face: FaceTool, refFile: string, item: Item, t: Try, file: string, th: Thresholds): Promise<{ regenerate: boolean }> {
+export async function judge(face: FaceTool, refFile: string, item: Item, t: Try, file: string, th: Thresholds): Promise<{ regenerate: boolean }> {
   if (item.kind === "angle") {
     t.light = "grey";
     t.text = "Location: judge by eye (no face check).";

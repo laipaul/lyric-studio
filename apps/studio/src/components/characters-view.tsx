@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Crop, Film, ImagePlus, Lock, Plus, RefreshCw, RotateCcw, Square, Wand2 } from "lucide-react";
+import { ArrowLeft, Crop, Film, ImagePlus, Lock, Plus, RefreshCw, RotateCcw, Square, Upload, Wand2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -254,6 +254,50 @@ export function CardPage({ id }: { id: string }) {
   };
   const second = useRef<HTMLInputElement>(null);
   const [frames, setFrames] = useState(false);
+  // Your own pictures into the pack (free): "Add my pack" (several, sorted into their places) or one place.
+  const ownInput = useRef<HTMLInputElement>(null);
+  const [ownSlot, setOwnSlot] = useState<string | null>(null);
+  const [packNote, setPackNote] = useState<string | null>(null);
+  const [descNote, setDescNote] = useState<string | null>(null);
+  const chooseOwn = (slot: string | null) => {
+    setOwnSlot(slot);
+    if (ownInput.current) {
+      ownInput.current.multiple = !slot;
+      ownInput.current.value = "";
+      ownInput.current.click();
+    }
+  };
+  const addOwn = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setBusy("own");
+    setError(null);
+    setPackNote(null);
+    try {
+      const form = new FormData();
+      for (const f of Array.from(files)) form.append("picture", f);
+      if (ownSlot) form.set("slot", ownSlot);
+      const r = await call<{ summary: string }>(`/api/cards/${id}/own`, { method: "POST", body: form });
+      setPackNote(r.summary);
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const quiet = async (what: string, body: Record<string, unknown>, note: (m: string | null) => void) => {
+    setBusy(what);
+    setError(null);
+    try {
+      const r = await call<CardDetail>(`/api/cards/${id}`, { method: "POST", ...json(body) });
+      note(r.message);
+      setD({ ...r, message: null });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
   const addSecond = async (file: File) => {
     setBusy("second");
     setError(null);
@@ -465,6 +509,10 @@ export function CardPage({ id }: { id: string }) {
                       <Wand2 /> {items.length ? "Make the pack again" : "Make pack"}
                     </Button>
                   )}
+                  <Button size="sm" variant="outline" disabled={!!running || !!busy} onClick={() => chooseOwn(null)} data-own-pack title="Pictures you made elsewhere (Gemini, Midjourney …): free, nothing sent online">
+                    <Upload /> {character ? "Add my pack" : "Add my angles"}
+                  </Button>
+                  <input ref={ownInput} type="file" accept=".png,.jpg,.jpeg,.webp" hidden onChange={(e) => void addOwn(e.target.files)} data-own-input />
                 </div>
               ) : null}
             </div>
@@ -484,6 +532,12 @@ export function CardPage({ id }: { id: string }) {
             ) : lastJob && lastJob.message ? (
               <p className={cn("text-xs", lastJob.status === "failed" ? "text-red-300" : "text-muted-foreground")} data-last-job={lastJob.status}>
                 {lastJob.label}: {lastJob.message}
+              </p>
+            ) : null}
+            {busy === "own" ? <p className="text-muted-foreground text-xs">Checking your pictures… (free, on this PC)</p> : null}
+            {packNote ? (
+              <p className="text-xs text-emerald-200" data-own-note>
+                {packNote}
               </p>
             ) : null}
             {character && draft && items.some((i) => i.id === "body_front" || i.id === "body_back") ? (
@@ -514,10 +568,36 @@ export function CardPage({ id }: { id: string }) {
                       {t?.score !== null && t?.score !== undefined ? <span className="text-muted-foreground tabular-nums">{t.score.toFixed(2)}</span> : null}
                     </div>
                     {it?.text ? <p className="text-muted-foreground text-[11px] leading-snug">{it.text}{it.angle_note ? ` Angle: ${it.angle_note}.` : ""}</p> : null}
-                    {draft && items.length ? (
-                      <Button size="sm" variant="ghost" className="w-fit" disabled={!!running || !!busy} onClick={() => act("remake", { action: "remake", only: [vid], cap })} data-remake={vid}>
-                        <RefreshCw /> Remake
-                      </Button>
+                    {draft ? (
+                      <div className="flex flex-wrap items-center gap-1">
+                        {items.length ? (
+                          <Button size="sm" variant="ghost" className="w-fit" disabled={!!running || !!busy} onClick={() => act("remake", { action: "remake", only: [vid], cap })} data-remake={vid}>
+                            <RefreshCw /> Remake
+                          </Button>
+                        ) : null}
+                        <Button size="sm" variant="ghost" className="w-fit" disabled={!!running || !!busy} onClick={() => chooseOwn(vid)} data-own={vid}>
+                          <Upload /> Use my own picture
+                        </Button>
+                        {t?.own ? (
+                          <select
+                            data-own-move={vid}
+                            value=""
+                            disabled={!!running || !!busy}
+                            onChange={(e) => e.target.value && void quiet("move", { action: "own-move", from: vid, to: e.target.value }, setPackNote)}
+                            className="bg-background text-muted-foreground rounded border px-1 py-0.5 text-[11px]"
+                            title="Your picture is in the wrong place? Move it"
+                          >
+                            <option value="">Move to…</option>
+                            {order
+                              .filter((o) => o !== vid)
+                              .map((o) => (
+                                <option key={o} value={o}>
+                                  {labels[o]}
+                                </option>
+                              ))}
+                          </select>
+                        ) : null}
+                      </div>
                     ) : null}
                   </li>
                 );
@@ -535,7 +615,7 @@ export function CardPage({ id }: { id: string }) {
             <label className="text-sm font-medium" htmlFor="card-description">
               Description
             </label>
-            <p className="text-muted-foreground text-xs">Drafted from your picture when the pack is made; edit it, then lock it with the pictures. It goes into every later prompt for this {KIND_LABEL[card.kind]}.</p>
+            <p className="text-muted-foreground text-xs">Drafted from your picture when the pack is made (with your own pictures: write it, or draft it below); edit it, then lock it with the pictures. It goes into every later prompt for this {KIND_LABEL[card.kind]}.</p>
             <textarea
               id="card-description"
               data-card-description
@@ -546,6 +626,16 @@ export function CardPage({ id }: { id: string }) {
               onBlur={(e) => e.target.value !== (version.description ?? "") && save({ description: e.target.value })}
               className="bg-background rounded-md border px-3 py-2 text-sm"
             />
+            {draft && !version.description?.trim() ? (
+              <Button size="sm" variant="outline" className="w-fit" disabled={!!running || !!busy} onClick={() => void quiet("describe", { action: "describe" }, setDescNote)} data-describe>
+                <Wand2 /> {busy === "describe" ? "Drafting…" : "Draft it from the pictures (about $0.01)"}
+              </Button>
+            ) : null}
+            {descNote ? (
+              <p className="text-muted-foreground text-xs" data-describe-note>
+                {descNote}
+              </p>
+            ) : null}
           </section>
 
           {/* Approve and lock / new version */}

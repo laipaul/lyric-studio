@@ -4,6 +4,14 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Your own character pack: Add my pack, Use my own picture, Move to, draft the description ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "if I have my character pack then I don't need to create it in my app?", "yes, that will save me
+  money since I am happy with Gemini". A card's pack places now take his own pictures: "Add my pack" (4 at once,
+  sorted by file name or, for Gemini's nameless files, by the face check) or "Use my own picture" on one place.
+  Free, nothing sent online, his files only read. Same face checks, neck crop for the body views, "Move to…" to fix
+  a wrong place, and "Draft it from the pictures (about $0.01)" for the description. Then Lock as usual.
+- Tests: vitest characters-own (4), browser characters (+5), characters-cards, extra-cards, frames pass.
+
 ### Pick a frame from a video for a character's picture ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "can you add that to my app". Characters → New character → "Or pick a frame from a video", and
   on a card "Second picture from a video"; also in Prepare → Creation ("Pick a frame from a video"). Drop a video:
@@ -217,24 +225,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   - Tests: recast spike (29). The gate's Python side was not run in the cloud (no face models there).
 - Before the run (Paul, in the app): Bride No 2 v2 (New version → Remake front, then back → lock). The spike uses the
   latest locked version's close-up, 3/4 face and reference (v1 until v2 is locked).
-
-### Characters: pack fixes (buttons, neckline, veil), New version keeps v1 in use, Remake the full-body views ✅ (to verify on the Windows PC)
-- Seen on Bride No 2 v1 (locked; faces good: close-up 0.67, 3/4 0.58): the front full-body view had a row of buttons
-  down the front bodice and a sweetheart-like neckline; the veil was missing in both full-body views and the 3/4.
-- **Per-view rules from the outfit split:** a detail only in "Back shows" (buttons, bow, lacing, zipper, cut-out,
-  keyhole, open back, V-back, train) becomes a negative on the front ("No buttons on the front."). The neckline in
-  "Close-ups show" is required on the front ("Neckline: bateau neckline, exactly as in the close-ups; not sweetheart,
-  V-neck, …"). A veil named in the outfit gets its own sentence in every view ("Sheer ivory tulle veil falling behind
-  their shoulders, visible …", back: "… falling down their back, clearly visible."). The front view also gets the
-  chosen close-up as an extra reference (neckline, shoulders, veil).
-- Two contradictions removed: the front no longer lists the veil as a back-only detail, and the back is no longer
-  told that "the gown (front text) is not visible from behind".
-- **New version** on a locked card: a v2 draft with the same picture, outfit, outfit split, description and pictures.
-  v1 stays read-only **and in use** (Storyboard slots, later recasts) until v2 is locked; the list shows
-  "Locked v1 · v2 draft"; the version chips open v1 read-only.
-- **"Remake the full-body views (front, then back)"** on a draft: only those two, the face views are kept.
-- Tests: characters-cards (17) and characters-prompts (9, new) pass; the Characters browser test (32 checks) and the
-  shot list browser test pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

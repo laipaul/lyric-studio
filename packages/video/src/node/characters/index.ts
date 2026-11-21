@@ -8,3 +8,4 @@ export { ANGLES, DEFAULT_MODELS, MODEL_IDS, minFaceFor, MODELS, VIEWS, money, ty
 export * from "./split";
 export { splitIsCurrent, type OutfitSplit } from "./plan";
 export * from "./frames";
+export * from "./own";

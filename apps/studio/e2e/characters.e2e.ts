@@ -6,7 +6,7 @@
 // app (the model's picture kept); the drafted description; Remake one view; Approve and lock (read-only); New
 // version; a scene card with its key props and 3 angles.
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -149,10 +149,35 @@ async function main() {
     await page.waitForSelector("[data-card='bridal room']");
     check(((await page.getAttribute("[data-card=bride] img", "src")) ?? "").includes("closeup.png"), "the list shows the close-up as the character's picture");
 
+    // Add my pack: four pictures made elsewhere (Gemini), free, sorted into their places by their names.
+    await page.click("[data-new-card=character]");
+    await page.setInputFiles("[data-card-picture]", path.join(pics, "default.png"));
+    await page.fill("[data-card-name]", "gemini bride");
+    await page.click("[data-create-card]");
+    await page.waitForSelector("[data-card-page='gemini bride']");
+    const own = [["bride closeup.png", "closeup"], ["bride 3-4 face.png", "three_quarter"], ["full body front.png", "body_front"], ["full body back.png", "body_back"]] as const;
+    for (const [n, from] of own) copyFileSync(path.join(pics, `${from}.png`), path.join(pics, n));
+    const chooser = page.waitForEvent("filechooser");
+    await page.click("[data-own-pack]");
+    await (await chooser).setFiles(own.map(([n]) => path.join(pics, n)));
+    await page.waitForSelector("[data-own-note]", { timeout: 20_000 });
+    check(((await page.textContent("[data-own-note]")) ?? "").includes("bride 3-4 face.png → 3/4 face (by its name)") && ((await page.textContent("[data-own-note]")) ?? "").includes("Free, nothing sent online"), "Add my pack: each picture goes to its place by its name, free");
+    await page.waitForSelector("[data-view=closeup][data-light=green]");
+    check(((await page.textContent("[data-view=closeup]")) ?? "").includes("Your picture (bride closeup.png)"), "your own close-up is face-checked like a made one");
+    check(["closeup", "three_quarter", "body_front", "body_back"].every((v) => existsSync(path.join(wsDir, "characters", "gemini bride", "v1", `${v}.png`))), "the four places are filled in workspace\\characters\\gemini bride\\v1\\");
+    check(((await page.textContent("[data-lock-problems]")) ?? "").includes("description") && !((await page.textContent("[data-lock-problems]")) ?? "").includes("Not made yet"), "only the description is missing before Lock");
+    await page.selectOption("[data-own-move=closeup]", "three_quarter");
+    await page.waitForFunction(() => document.querySelector("[data-view=three_quarter]")?.textContent?.includes("bride closeup.png"));
+    check(true, "Move to: the close-up goes to the 3/4 place (and the 3/4 to the close-up)");
+    await page.click("[data-describe]");
+    await page.waitForSelector("[data-describe-note]");
+    check(((await page.inputValue("[data-card-description]")) ?? "").includes("A woman") && (await page.isEnabled("[data-lock]")), "the description is drafted (about $0.01) and Lock is possible");
+
     // Pick a frame from a video: a new character's picture taken from a clip (the video itself is only read).
     const clip = path.join(pics, "singer clip.mp4");
     ffmpeg("-f", "lavfi", "-i", "testsrc=s=320x240:d=6:r=25", "-pix_fmt", "yuv420p", clip);
     const clipBytes = readFileSync(clip);
+    await page.goto(`${base}/characters`);
     await page.click("[data-new-card=character]");
     await page.click("[data-card-from-video]");
     await page.setInputFiles("[data-frame-video]", clip);

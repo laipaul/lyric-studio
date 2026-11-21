@@ -4,13 +4,14 @@
 //   (close-ups / front / back) with the cheap text model; without a fal key the outfit is still saved and `message` says so.
 // POST { action }: "check" (the picture again) · "crop" (crop to face) · "pack" { cap } · "remake" { only, cap } ·
 //   "calibrate" { songId, her } (the face-check lines on a song's clips, local and free) ·
-//   "fetch" (get missing pictures, free) · "lock" · "new-version" · "stop" { job }.
+//   "fetch" (get missing pictures, free) · "lock" · "new-version" · "stop" { job } ·
+//   "own-move" { from, to } (move your own picture to another slot, free) · "describe" (draft the description, about $0.01).
 // Make pack / Remake / Get missing pictures are queued and run in the studio's process (the Tasks menu shows them).
 import { connection } from "next/server";
 
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import {
-  calibrationSongs, cardFace, cardTools, ensureSplit, splitNeeded, cardJobsFor, cardRoot, cardThresholds, checkCardPicture, cropCardToFace, currentVersion, enqueueCardJob, getCard, lockCard, lockProblems,
+  calibrationSongs, cardFace, draftDescription, moveOwnPicture, cardTools, ensureSplit, splitNeeded, cardJobsFor, cardRoot, cardThresholds, checkCardPicture, cropCardToFace, currentVersion, enqueueCardJob, getCard, lockCard, lockProblems,
   MODELS, newVersion, usableVersion, versionByNumber, packEstimate, readCardFile, readReport, repickLegacy, buildSheet, runCardJob, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId,
 } from "@lyric/video/characters";
 
@@ -94,7 +95,8 @@ function start(jobId: string, kind: CardJobKind) {
 export async function POST(request: Request, { params }: Params) {
   try {
     const { id } = await params;
-    const body = (await request.json()) as { action: string; cap?: number; only?: string[]; job?: string; songId?: string; her?: string[] };
+    const body = (await request.json()) as { action: string; cap?: number; only?: string[]; job?: string; songId?: string; her?: string[]; from?: string; to?: string };
+    let message: string | null = null;
     switch (body.action) {
       case "check":
         await withWorkspaceAsync((ws) => checkCardPicture(ws, id, cardFace()));
@@ -124,10 +126,20 @@ export async function POST(request: Request, { params }: Params) {
       case "stop":
         withWorkspace((ws) => stopCardJob(ws, String(body.job)));
         break;
+      case "own-move":
+        message = (await withWorkspaceAsync((ws) => moveOwnPicture(ws, id, cardFace(), String(body.from), String(body.to)))).summary;
+        break;
+      case "describe": {
+        const tools = cardTools();
+        if ("error" in tools) throw new Error(tools.error);
+        const r = await withWorkspaceAsync((ws) => draftDescription(ws, id, tools.fal));
+        message = `Description drafted from your pictures (about $${r.usd.toFixed(2)}): read it and change anything that is not right.`;
+        break;
+      }
       default:
         throw new Error(`Unknown action "${body.action}".`);
     }
-    return Response.json(detail(id));
+    return Response.json(detail(id, message));
   } catch (error) {
     return fail(error);
   }
