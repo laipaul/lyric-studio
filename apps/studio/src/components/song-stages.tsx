@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderOpen, ChevronRight, Clapperboard, Eye, Info, ScrollText, Send, SlidersHorizontal, SwatchBook, Type, Film, type LucideIcon } from "lucide-react";
+import { FolderOpen, ChevronRight, Clapperboard, Eye, Image as ImageIcon, Info, Send, SlidersHorizontal, SwatchBook, Type, Film, type LucideIcon } from "lucide-react";
 import { createContext, useContext, useEffect, useState } from "react";
 
 import type { TodoItem } from "@lyric/video/song-stages";
@@ -25,9 +25,9 @@ export const STAGES = [
 export type StageId = (typeof STAGES)[number]["id"];
 export type StageStatus = { text: string; tone: "done" | "todo" | "blocked" | "muted" | "busy" };
 
-// Prepare (11 Nov 2026): Assets · Lyrics Sync · Song Details · Storyboard; Production (21 Nov 2026: cast, story bible, Song brief, shot list). The ids stay ("assets", "lyrics", "details", "clips")
+// Prepare (11 Nov 2026): Assets · Lyrics Sync · Song Details · Storyboard; Pictures (id "production"; 21 Nov 2026: the picture board and Animate, then the optional story tools). The ids stay ("assets", "lyrics", "details", "clips")
 // so every old link opens the right tab; ?tab=storyboard still means Shape (links from before 31 Oct).
-const TAB_LABEL: Record<string, string> = { assets: "Assets", lyrics: "Lyrics Sync", details: "Song Details", clips: "Storyboard", production: "Production", shape: "Shape", generate: "Make", videos: "Videos", post: "Post" };
+const TAB_LABEL: Record<string, string> = { assets: "Assets", lyrics: "Lyrics Sync", details: "Song Details", clips: "Storyboard", production: "Pictures", shape: "Shape", generate: "Make", videos: "Videos", post: "Post" };
 const stageOf = (tab: string): StageId => STAGES.find((s) => (s.tabs as readonly string[]).includes(tab))?.id ?? "prepare";
 const TONE: Record<StageStatus["tone"], string> = {
   done: "text-emerald-300",
@@ -128,7 +128,7 @@ const TAB_ICON: Record<string, { icon: LucideIcon; colour: string }> = {
   lyrics: { icon: Type, colour: FEATURE.lyrics.colour },
   details: { icon: Info, colour: "" },
   clips: { icon: Film, colour: FEATURE.clips.colour },
-  production: { icon: ScrollText, colour: "" },
+  production: { icon: ImageIcon, colour: "" },
   videos: { icon: Eye, colour: "" },
   post: { icon: Send, colour: "" },
 };

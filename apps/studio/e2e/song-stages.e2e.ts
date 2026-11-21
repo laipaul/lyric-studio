@@ -62,7 +62,7 @@ async function main() {
     const items = await page.$$eval("[data-todo-item]", (e: Element[]) => e.map((x) => x.getAttribute("data-todo-item")));
     check(JSON.stringify(items) === JSON.stringify(["clips", "vocals", "cover", "labels"]), `to-do: clips, vocal stem (a suggestion), cover, labels (${items.join(", ")})`);
     const tabs = async () => page.$$eval("[role=tab]", (e: Element[]) => e.map((x) => x.textContent?.trim()));
-    check(JSON.stringify(await tabs()) === JSON.stringify(["Assets", "Lyrics Sync", "Song Details", "Storyboard", "Production"]), `Prepare's tabs: Assets, Lyrics Sync, Song Details, Storyboard, Production (${(await tabs()).join(", ")})`);
+    check(JSON.stringify(await tabs()) === JSON.stringify(["Assets", "Lyrics Sync", "Song Details", "Storyboard", "Pictures"]), `Prepare's tabs: Assets, Lyrics Sync, Song Details, Storyboard, Pictures (${(await tabs()).join(", ")})`);
     // Prepare regrouped (11 Nov 2026): Assets = the files the user provides; Lyrics Sync = timing; Song Details = words and links.
     await page.click("[data-todo-item=clips] button");
     await page.waitForSelector("[data-assets=clips] [data-story-line]");

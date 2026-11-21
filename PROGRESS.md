@@ -4,6 +4,27 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### G2 Prepare → Pictures: picture board and Animate (WaveSpeed / Higgsfield), takes at the end of the clips ✅ (to verify on the PC)
+- Paul's real flow (21 Nov 2026): Midjourney pictures → clips at random → play with the order against the song until it
+  feels right; no preset storyboard. So the path is **pictures, then clips, then play with the order**; the G1 story
+  tools stay, folded under "Story tools (optional)". G2 shot scripts are dropped.
+- **Prepare → Pictures** (the tab G1 called Production): drop pictures (own names, `pictures\`); per picture a few
+  optional mood words, 1–6 takes (default 3), Standard / Best, **Animate**.
+- **The app decides the technical part:** Seedance 2.5 image-to-video, 5 s, 720p, the picture's own shape, no sound,
+  a gentle-motion prompt that keeps the picture as it is ("Mood: …" added when given). Requests are never retried on
+  submit (a retry could be billed twice).
+- **Money:** your own key in .env (WAVESPEED_API_KEY; HIGGSFIELD_API_KEY as "id:secret"); the cost shows before
+  sending ("3 × 5 s · about $3.24": WaveSpeed Flash $0.216/s, Seedance 2.5 $0.324/s at 720p); a press above the
+  spending cap (default $10) is refused; "Sent for this song so far". Higgsfield's price is not in its docs: WaveSpeed's
+  is shown, marked "(estimate)". Higgsfield needs the picture online: it goes up through WaveSpeed's upload (or fal's
+  storage with FAL_KEY).
+- **Takes:** made at the same time; each finished take joins the END of the song's clips as "<picture> take N.mp4", in
+  take order, never placed anywhere else (Paul's order rule). A take the studio lost mid-way: "Get result" (free).
+- Not tested against the real services from the cloud (no keys here): the requests follow WaveSpeed's and
+  Higgsfield's docs as read on 21 Nov 2026; the first real run on the PC confirms them.
+- Tests: animate (12, with stand-ins for both services). Browser: pictures (11 checks, LYRIC_GENERATE_STUB),
+  production (story tools folded), song-stages, shotlist pass.
+
 ### G1 Prepare → Production: cast from the shared library, story bible, Song brief for Claude ✅ (to verify on the PC)
 - Paul's workflow (21 Nov 2026): build the song's assets in the app → generate the clips on WaveSpeed (or Higgsfield) →
   assemble in the app. G1 is the first part; G2 shot scripts per slot and G3 sending + takes in slots follow.
@@ -134,19 +155,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   show", "Front shows" and "Back shows", shown on the card and correctable. Each view gets only its part, and front
   and back are told what belongs only to the other side. Without a key or on failure: the outfit text as before.
 - Tests: characters-cards (15) and the Characters browser test pass.
-
-### Characters, C1 fixes 2: face views are real close-ups, the latest Make wins ✅ (verified by Paul, 18 Nov 2026)
-- Seen on the groom and Bride No 1 / No 2: the close-up and 3/4 came out as full-length shots from a high wide
-  angle (the whole outfit, shoes included, went into the face prompts), and "Make the pack again" still showed the
-  old pictures (the best try of all runs was kept; body views tied, so the oldest won).
-- Face views get only the part of the outfit inside a head-and-shoulders frame, plus firm framing (eye level,
-  portrait lens, no full-length, no high or wide angle).
-- New check: a face view whose face is under 20% of the picture's height is red ("Not a close-up: …") and is made
-  again automatically within the cap.
-- The back view leaves out what is pinned on the front only (boutonnière, brooch, corsage).
-- The latest Make or Remake wins: the best try of the newest run; older tries only if every new one is red. Cards
-  made before this are picked again once, free, when their page opens (newest try), with the contact sheet rebuilt.
-- Tests: characters-cards (12) and the Characters browser test pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -300,16 +308,15 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 
 ## Next
 
-**Song creation workflow (Paul, 21 Nov 2026; approved plan, one step each, tested on one song):** build the song's
-assets in the app → generate the clips on WaveSpeed / Higgsfield → assemble with Shape and Make.
-- ✅ (built 21 Nov, to verify) **G1 Prepare → Production:** cast from the shared library, optional story bible (song or
-  EP), one-click Song brief for Claude (Joey's Story Bible Builder / Shotcaller), paste the answer back.
-- **G2 Shot scripts:** each slot becomes a ready script (Paul's idea + cast + scene + lyric line; the app sets the length
-  from the lyric timing, 9:16 / 16:9, no sound); editable; "Copy script" for the services' websites.
-- **G3 Send and takes:** WaveSpeed (and Higgsfield) from the app with the user's own key in .env, cost per shot and
-  total with a cap before sending; each clip lands in its slot as "s01 take 1.mp4"; Try again / Use this take; earlier
-  takes kept; a clip made by hand can be dropped on a slot (keeps its file name). Text-to-video first; the locked
-  character picture as first frame after that.
+**Song creation workflow (Paul, 21 Nov 2026):** pictures, then clips, then play with the order (his real flow: no
+preset storyboard, discovery against the music).
+- ✅ (built 21 Nov, to verify) **G1 Story tools** (optional, folded away in Prepare → Pictures): cast from the shared
+  library, story bible (song or EP), Song brief for Claude, paste the answer back.
+- ✅ (built 21 Nov, to verify) **G2 Pictures + Animate:** picture board, WaveSpeed / Higgsfield image-to-video with
+  his own key, cost first and a cap, 3 takes by default, takes at the end of the clips.
+- ~~Shot scripts per slot~~ dropped by Paul on 21 Nov 2026 (not his way of working).
+- Possible next (not agreed): the character's locked picture as a reference so faces stay the same; a quick
+  "try it against the song" preview of the newest takes.
 
 **Order from here (changed by Paul, 18 Nov 2026, after C2 worked):** his real workflow builds the storyboard from
 Midjourney clips, so replacing the person in each clip with his main character comes first:

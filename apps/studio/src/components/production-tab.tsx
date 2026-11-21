@@ -1,6 +1,8 @@
 "use client";
 
-// Prepare → Production (G1, 21 Nov 2026): what this song's clips are made from, in the order Paul works.
+// Prepare → Pictures (tab id "production"). G2 (21 Nov 2026, Paul's picture-first flow): the picture board comes first
+// (pictures-board.tsx); the G1 story tools below are optional and folded away.
+// G1 (21 Nov 2026): what this song's clips are made from.
 // 1 Cast (optional): character and scene cards linked from the shared library (Characters page), never copied.
 // 2 Story bible (optional): the song's own, or its EP's (shared by the EP's songs).
 // 3 Ask Claude: one click copies the Song brief (lyrics with times, sizes, cast, bible, the shot list format) for
@@ -14,6 +16,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { CastCard, ProductionData } from "@lyric/video/production";
 
+import { PicturesBoard } from "@/components/pictures-board";
 import { PickedChip, SearchPicker } from "@/components/search-picker";
 import { ShotListImport } from "@/components/shotlist-import";
 import { useGoToTab } from "@/components/song-stages";
@@ -144,10 +147,12 @@ export function ProductionTab({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div data-production className="flex max-w-4xl flex-col gap-4">
-      <p className="text-muted-foreground text-sm">
-        Build what this song&apos;s clips are made from. The cast and the story bible are optional: a quick song can go straight to the shot list. Nothing here costs anything.
-      </p>
+    <div data-production className="flex flex-col gap-4">
+      <p className="text-muted-foreground text-sm">Drop your pictures, animate the ones you like, then arrange the takes against the song. No story needed.</p>
+      <PicturesBoard projectId={projectId} />
+      <details data-story-tools className="max-w-4xl">
+        <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm">Story tools (optional): cast, story bible, Song brief for Claude, shot list</summary>
+        <div className="mt-3 flex flex-col gap-4">
       {notice ? (
         <p data-production-notice={notice.ok ? "ok" : "error"} className={cn("rounded-md border p-2 text-sm", notice.ok ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-red-400/30 bg-red-400/10 text-red-200")}>
           {notice.text}
@@ -361,6 +366,8 @@ export function ProductionTab({ projectId }: { projectId: string }) {
           ) : null}
         </div>
       </Section>
+        </div>
+      </details>
 
       <ShotListImport
         projectId={projectId}

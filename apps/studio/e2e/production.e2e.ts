@@ -70,6 +70,8 @@ async function main() {
     const page = await context.newPage();
     await page.goto(`${base}/songs/${id}?tab=production`);
     await page.waitForSelector("[data-production]");
+    check(!(await page.isVisible("[data-production-section=cast]")), "the story tools are folded away (the picture board comes first)");
+    await page.click("[data-story-tools] summary");
     check(!!(await page.$("[data-production-section=cast]")) && !!(await page.$("[data-production-section=bible]")) && !!(await page.$("[data-production-section=brief]")) && !!(await page.$("[data-production-section=shotlist]")), "Prepare → Production shows Cast, Story bible, Ask Claude and Shot list");
     check(((await page.textContent("[data-production-section=cast]")) ?? "").includes("optional") && ((await page.textContent("[data-production-section=bible]")) ?? "").includes("optional"), "the cast and the bible are optional");
 

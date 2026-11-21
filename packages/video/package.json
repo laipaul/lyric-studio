@@ -96,6 +96,7 @@
     "./story-line": "./src/node/story-line.ts",
     "./shotlist": "./src/node/shotlist.ts",
     "./production": "./src/node/production.ts",
+    "./animate": "./src/node/animate.ts",
     "./replaced-files": "./src/node/replaced-files.ts",
     "./collections": "./src/node/collections.ts",
     "./migrate": "./src/node/migrate.ts",

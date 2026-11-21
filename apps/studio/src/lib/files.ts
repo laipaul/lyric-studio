@@ -8,6 +8,8 @@ export const COVER_FILE = new RegExp(`^(?:projects/${UUID}/audio|songs/[^/]+/[^/
 export const EXPORT_FILE = new RegExp(`^${SONG}/exports/${RUN}/(?:[a-z0-9-]+/)?(v\\d+\\.(mp4|srt|qa\\.txt|manifest\\.json)|thumbnail\\.jpg|publish\\.txt|[^/]+\\.lrc)$`, "i");
 export const VIDEO_FILE = new RegExp(`^${SONG}/exports/${RUN}/(?:[a-z0-9-]+/)?v\\d+\\.mp4$`, "i");
 export const SONG_CLIP_FILE = /^songs\/[^/]+\/[^/]+\/clips\/[^/]+\.(mp4|m4v|mov|webm|jpe?g|png|webp)$/i;
+// A song's picture board (Prepare → Pictures): the pictures its clips are animated from.
+export const SONG_PICTURE_FILE = /^songs\/[^/]+\/[^/]+\/pictures\/[^/]+\.(jpe?g|png|webp)$/i;
 // A shared collection's clips (the Collections page plays them on hover).
 export const COLLECTION_CLIP_FILE = /^(?:collections|clips)\/[^/]+\/[^/]+\.(mp4|m4v|mov|webm|jpe?g|png|webp)$/i;
 // A theme's own picture (Themes page → Theme cover).
@@ -24,5 +26,5 @@ export const TEMPLATE_FILE = /^brand\/(?:[^/]+\/)?publish-[a-z-]+\.txt$/;
 
 export function allowedFile(relative: string, isSongAudio?: (relative: string) => boolean): boolean {
   if (relative.split("/").some((part) => part === ".." || part === "." || part.startsWith(".studio"))) return false;
-  return COVER_FILE.test(relative) || EXPORT_FILE.test(relative) || SONG_CLIP_FILE.test(relative) || COLLECTION_CLIP_FILE.test(relative) || THEME_COVER_FILE.test(relative) || THUMB_FILE.test(relative) || SONG_AUDIO_FILE.test(relative) || (!!isSongAudio && SONG_FOLDER_AUDIO.test(relative) && isSongAudio(relative));
+  return COVER_FILE.test(relative) || EXPORT_FILE.test(relative) || SONG_CLIP_FILE.test(relative) || SONG_PICTURE_FILE.test(relative) || COLLECTION_CLIP_FILE.test(relative) || THEME_COVER_FILE.test(relative) || THUMB_FILE.test(relative) || SONG_AUDIO_FILE.test(relative) || (!!isSongAudio && SONG_FOLDER_AUDIO.test(relative) && isSongAudio(relative));
 }

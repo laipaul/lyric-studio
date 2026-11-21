@@ -3514,3 +3514,16 @@ D. ✅ (built 29 Oct, to verify) **Title opening** (items 1-8 below).
 - Tests: characters-cards (9) and the Characters browser test (23 checks) pass. The other unit-test failures are the
   known ones below. Note: in the cloud check, librosa crashed until numba's stale cache files (*.nbi / *.nbc in the
   .venv) were cleared; this only affects the cloud machine.
+
+### Characters, C1 fixes 2: face views are real close-ups, the latest Make wins ✅ (verified by Paul, 18 Nov 2026)
+- Seen on the groom and Bride No 1 / No 2: the close-up and 3/4 came out as full-length shots from a high wide
+  angle (the whole outfit, shoes included, went into the face prompts), and "Make the pack again" still showed the
+  old pictures (the best try of all runs was kept; body views tied, so the oldest won).
+- Face views get only the part of the outfit inside a head-and-shoulders frame, plus firm framing (eye level,
+  portrait lens, no full-length, no high or wide angle).
+- New check: a face view whose face is under 20% of the picture's height is red ("Not a close-up: …") and is made
+  again automatically within the cap.
+- The back view leaves out what is pinned on the front only (boutonnière, brooch, corsage).
+- The latest Make or Remake wins: the best try of the newest run; older tries only if every new one is red. Cards
+  made before this are picked again once, free, when their page opens (newest try), with the contact sheet rebuilt.
+- Tests: characters-cards (12) and the Characters browser test pass.
