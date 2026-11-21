@@ -4,6 +4,24 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### G2b Prepare → Creation: a messy creation space for pictures and videos from anywhere, your own defaults ✅ (to verify on the PC)
+- Paul (21 Nov 2026): keep it apart from the Storyboard, "a creation messy space from which I can pick my favourites";
+  call it **Creation**; "I can add Midjourney videos manually, use the API of WaveSpeed, or import them from outside
+  sources: I need flexibility".
+- **Creation** (the tab first called Pictures) takes three sources, side by side: pictures and videos added by hand
+  (drop or choose; .jpg .png .webp .mp4 .mov .webm; own names), takes made here with Animate, and **a pasted link** to a
+  picture or video anywhere (downloaded once, up to 1 GB). Each item has a small label of where it came from: "Added
+  by you", "Midjourney" (a "midjourney" name or Midjourney's download name with the job id, or a midjourney link),
+  "From <site>", and each take its service and model. Only pictures can be animated.
+- **Takes stay in Creation** (`pictures\takes\<picture> take N.mp4`); nothing goes to the Storyboard by itself.
+  **Send to Storyboard** on a take, a picture or a video copies it to the END of the story line (his order rule) and
+  marks it "✓ In Storyboard"; sending again does nothing.
+- **Your defaults (every song):** Model (WaveSpeed · Seedance 2.5 Flash / WaveSpeed · Seedance 2.5 / Higgsfield ·
+  Seedance 2.5), Takes (1–6) and the spending cap, saved in `workspace\creation.json`; each picture can choose another
+  model or number of takes for itself.
+- Tests: animate (17: sources, a Midjourney video, a link, defaults). Browser: pictures (19 checks), song-stages,
+  production pass.
+
 ### G2 Prepare → Pictures: picture board and Animate (WaveSpeed / Higgsfield), takes at the end of the clips ✅ (to verify on the PC)
 - Paul's real flow (21 Nov 2026): Midjourney pictures → clips at random → play with the order against the song until it
   feels right; no preset storyboard. So the path is **pictures, then clips, then play with the order**; the G1 story
@@ -147,18 +165,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Old pictures (made before the framing check) are measured from the file when a card opens (once), so a
   full-length "close-up" turns red instead of staying green.
 - Tests: characters-cards (17) and the Characters browser test pass.
-
-### Characters, C1 fixes 3: eye-level framing, a real 3/4, the outfit split per view ✅ (verified by Paul, 18 Nov 2026)
-- Paul's review of Bride No 2: close-up from above showing the whole body, 3/4 mostly from behind, the front view
-  with the back's V-neck and buttons.
-- All four views: camera at eye level, no high angle, no top-down view. Close-up straight on, face about half the
-  frame; 3/4 turned about 45° toward the camera, both eyes visible.
-- Checks (red, made again within the cap): close-up face < 35% of the picture's height, 3/4 < 30%; a face turned
-  more than 70° ("Turned away").
-- The outfit is split by the cheap text model (about $0.01, only when the outfit text changes) into "Close-ups
-  show", "Front shows" and "Back shows", shown on the card and correctable. Each view gets only its part, and front
-  and back are told what belongs only to the other side. Without a key or on failure: the outfit text as before.
-- Tests: characters-cards (15) and the Characters browser test pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
@@ -317,7 +323,8 @@ preset storyboard, discovery against the music).
 - ✅ (built 21 Nov, to verify) **G1 Story tools** (optional, folded away in Prepare → Pictures): cast from the shared
   library, story bible (song or EP), Song brief for Claude, paste the answer back.
 - ✅ (built 21 Nov, to verify) **G2 Pictures + Animate:** picture board, WaveSpeed / Higgsfield image-to-video with
-  his own key, cost first and a cap, 3 takes by default, takes at the end of the clips.
+  his own key, cost first and a cap, 3 takes by default. G2b (21 Nov): renamed **Creation**, takes stay there and
+  favourites are sent to the Storyboard; pictures and videos from anywhere (by hand, a link); your own defaults.
 - ~~Shot scripts per slot~~ dropped by Paul on 21 Nov 2026 (not his way of working).
 - Possible next (not agreed): the character's locked picture as a reference so faces stay the same; a quick
   "try it against the song" preview of the newest takes.

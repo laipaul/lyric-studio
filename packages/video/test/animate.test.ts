@@ -1,5 +1,5 @@
 // G2 Prepare → Pictures: the picture board, Animate (cost first, the cap, takes), the two services' requests as their
-// docs describe them (21 Nov 2026), finished takes at the END of the song's clips under "<picture> take N.mp4",
+// docs describe them (21 Nov 2026), takes kept on the board (pictures\takes\), Send to Storyboard (the END of the clips),
 // failures in plain words (nothing spent when nothing was sent), interrupted takes and Get result.
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -9,7 +9,7 @@ import { openWorkspace, resolveWorkspaceDir, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { findOrCreateSongProject, readClipEdits, songPathsById } from "../src/node";
-import { addPictures, estimate, higgsfieldTransport, motionPrompt, picturesView, readPictures, runTakes, setMood, startAnimate, startResume, stubTransport, waveSpeedTransport } from "../src/node/animate";
+import { addFromLink, addPictures, readCreationDefaults, saveCreationDefaults, sourceLabel, sendToStoryboard, estimate, higgsfieldTransport, motionPrompt, picturesView, readPictures, runTakes, setMood, startAnimate, startResume, stubTransport, waveSpeedTransport } from "../src/node/animate";
 import { ffmpeg, makeClip, makeSong } from "./media-helpers";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-animate-"));
@@ -51,7 +51,7 @@ describe("the picture board", () => {
       { file: path.join(root, "notes.txt"), name: "notes.txt" },
     ]);
     expect(r.added).toEqual(["bride by the sea.png", "rain street.jpg"]);
-    expect(r.skipped.map((s) => s.reason)).toEqual(["already on the board as bride by the sea.png", "not a picture (.jpg, .png or .webp)"]);
+    expect(r.skipped.map((s) => s.reason)).toEqual(["already on the board as bride by the sea.png", "not a picture or video (.jpg, .png, .webp, .mp4, .mov, .webm)"]);
     const v = await picturesView(ws, id, {});
     expect(v.pictures.map((p) => [p.file, p.width, p.height])).toEqual([["bride by the sea.png", 96, 160], ["rain street.jpg", 96, 160]]);
     expect(v.services.map((s) => [s.id, s.ready])).toEqual([["wavespeed", false], ["higgsfield", false]]);
@@ -123,26 +123,40 @@ describe("animate", () => {
     expect(() => startAnimate(ws, id, "nope.png", { service: "wavespeed" }, STUB)).toThrow(/No picture nope\.png/);
     expect(readPictures(pics).pictures["bride by the sea.png"].takes).toEqual([]);
   });
-  it("3 takes become 3 clips at the END of the song's clip order, named after the picture", async () => {
+  it("3 takes stay on the board (pictures\\takes\\); the Storyboard is not touched", async () => {
     const { takes, estimate: e } = startAnimate(ws, id, "bride by the sea.png", { service: "wavespeed", takes: 3 }, STUB);
     expect(takes.map((t) => [t.n, t.status, t.cost_usd])).toEqual([[1, "running", 1.08], [2, "running", 1.08], [3, "running", 1.08]]);
     expect(e.usd).toBe(3.24);
+    const paths = songPathsById(ws, id);
+    const before = readClipEdits(paths.root).order;
     await runTakes(open, id, "bride by the sea.png", [1, 2, 3], { env: STUB, sleep: now });
     const done = readPictures(pics).pictures["bride by the sea.png"].takes;
-    expect(done.map((t) => [t.status, t.clip])).toEqual([["done", "bride by the sea take 1.mp4"], ["done", "bride by the sea take 2.mp4"], ["done", "bride by the sea take 3.mp4"]]);
-    const paths = songPathsById(ws, id);
-    for (const t of done) expect(existsSync(path.join(paths.clips!, t.clip!))).toBe(true);
-    expect(readClipEdits(paths.root).order).toEqual(["01_mine.mp4", "bride by the sea take 1.mp4", "bride by the sea take 2.mp4", "bride by the sea take 3.mp4"]);
+    expect(done.map((t) => [t.status, t.file, t.sent])).toEqual([1, 2, 3].map((n) => ["done", `takes/bride by the sea take ${n}.mp4`, undefined]));
+    for (const t of done) expect(existsSync(path.join(pics, t.file!))).toBe(true);
+    expect(readClipEdits(paths.root).order).toEqual(before);
+    expect(existsSync(path.join(paths.clips!, "bride by the sea take 1.mp4"))).toBe(false);
     expect(existsSync(path.join(pics, "bride by the sea.png"))).toBe(true); // the picture stays as it was
     expect((await picturesView(ws, id, STUB)).spentUsd).toBe(3.24);
   });
-  it("Animate again: the next takes are numbered on (4, 5) and join the end, after any reordering by the user", async () => {
+  it("Send to Storyboard: the chosen takes and pictures join the END of the clips in the order sent, marked as sent", async () => {
     const paths = songPathsById(ws, id);
-    const edits = readClipEdits(paths.root);
-    writeFileSync(path.join(paths.root, "clips.json"), JSON.stringify({ ...edits, order: ["bride by the sea take 2.mp4", "01_mine.mp4", "bride by the sea take 1.mp4", "bride by the sea take 3.mp4"] }));
+    expect(await sendToStoryboard(ws, id, "bride by the sea.png", 2)).toEqual({ clip: "bride by the sea take 2.mp4", already: false });
+    expect(await sendToStoryboard(ws, id, "rain street.jpg")).toEqual({ clip: "rain street.jpg", already: false });
+    expect(await sendToStoryboard(ws, id, "bride by the sea.png", 2)).toEqual({ clip: "bride by the sea take 2.mp4", already: true }); // once
+    const order = readClipEdits(paths.root).order;
+    expect(order.slice(-2)).toEqual(["bride by the sea take 2.mp4", "rain street.jpg"]);
+    const v = await picturesView(ws, id, STUB);
+    const bride = v.pictures.find((p) => p.file === "bride by the sea.png")!;
+    expect(bride.takes.map((t) => t.sent ?? null)).toEqual([null, "bride by the sea take 2.mp4", null]);
+    expect(v.pictures.find((p) => p.file === "rain street.jpg")!.sent).toBe("rain street.jpg");
+    expect(existsSync(path.join(pics, "takes", "bride by the sea take 2.mp4"))).toBe(true); // the board keeps its copy
+    await expect(sendToStoryboard(ws, id, "bride by the sea.png", 42)).rejects.toThrow(/No such take/);
+  });
+  it("Animate again: the next takes are numbered on (4, 5)", async () => {
     const { takes } = startAnimate(ws, id, "bride by the sea.png", { service: "wavespeed", takes: 2 }, STUB);
+    expect(takes.map((t) => t.n)).toEqual([4, 5]);
     await runTakes(open, id, "bride by the sea.png", takes.map((t) => t.n), { env: STUB, sleep: now });
-    expect(readClipEdits(paths.root).order).toEqual(["bride by the sea take 2.mp4", "01_mine.mp4", "bride by the sea take 1.mp4", "bride by the sea take 3.mp4", "bride by the sea take 4.mp4", "bride by the sea take 5.mp4"]);
+    expect(readPictures(pics).pictures["bride by the sea.png"].takes.map((t) => t.file)).toContain("takes/bride by the sea take 5.mp4");
   });
   it("a refused request fails in plain words; nothing was spent", async () => {
     const { takes } = startAnimate(ws, id, "rain street.jpg", { service: "higgsfield", takes: 1 }, { LYRIC_GENERATE_STUB: "fail" });
@@ -167,8 +181,8 @@ describe("animate", () => {
     await runTakes(open, id, "rain street.jpg", [sent.n], { env: STUB, transport: counting, sleep: now });
     const back = readPictures(pics).pictures["rain street.jpg"].takes.find((t) => t.n === sent.n)!;
     expect(submits).toBe(1); // not sent again
-    expect([back.status, back.clip]).toEqual(["done", `rain street take ${sent.n}.mp4`]);
-    expect(() => startResume(ws, id, "rain street.jpg", sent.n)).toThrow(/already in your clips/);
+    expect([back.status, back.file]).toEqual(["done", `takes/rain street take ${sent.n}.mp4`]);
+    expect(() => startResume(ws, id, "rain street.jpg", sent.n)).toThrow(/already finished/);
   });
   it("a take left running by a studio that is gone shows as interrupted", async () => {
     const f = path.join(pics, "pictures.json");
@@ -179,5 +193,44 @@ describe("animate", () => {
     const t = v.pictures.find((p) => p.file === "rain street.jpg")!.takes.find((x) => x.n === 99)!;
     expect(t.status).toBe("interrupted");
     expect(t.error).toMatch(/before this take was sent: nothing was spent/);
+  });
+});
+
+describe("Creation takes anything, from anywhere (Paul, 21 Nov 2026)", () => {
+  const MJ = "paul_bride_walks_0b1c2d3e-1111-2222-3333-444455556666_0.mp4";
+  it("labels where a file came from: Midjourney by its download name, else Added by you, or the link's site", () => {
+    expect(sourceLabel(MJ)).toBe("Midjourney");
+    expect(sourceLabel("midjourney sunset.png")).toBe("Midjourney");
+    expect(sourceLabel("my sunset.png")).toBe("Added by you");
+    expect(sourceLabel("x.png", "From higgsfield.ai")).toBe("From higgsfield.ai");
+  });
+  it("a Midjourney video added by hand keeps its name, cannot be animated, and can be sent to the Storyboard", async () => {
+    makeClip(path.join(root, MJ), 1, "green");
+    expect((await addPictures(ws, id, [{ file: path.join(root, MJ), name: MJ }])).added).toEqual([MJ]);
+    const v = (await picturesView(ws, id, STUB)).pictures.find((p) => p.file === MJ)!;
+    expect([v.kind, v.source]).toEqual(["video", "Midjourney"]);
+    expect(() => startAnimate(ws, id, MJ, { service: "wavespeed" }, STUB)).toThrow(/already a video: only a picture can be animated/);
+    const r = await sendToStoryboard(ws, id, MJ);
+    expect(r.clip).toBe(MJ);
+    expect(readClipEdits(songPathsById(ws, id).root).order?.at(-1)).toBe(MJ);
+  });
+  it("Add from a link: downloads a picture once, labelled with its site; a dead link says what to do", async () => {
+    // a different picture than the ones on the board
+    ffmpeg("-f", "lavfi", "-i", "color=c=orange:s=96x160", "-frames:v", "1", path.join(root, "orange.png"));
+    const png = readFileSync(path.join(root, "orange.png"));
+    const fake = (async () => new Response(png, { headers: { "content-type": "image/png" } })) as unknown as typeof fetch;
+    const r = await addFromLink(ws, id, "https://www.example.com/files/get?id=42", fake);
+    expect(r.added).toEqual(["get.png"]);
+    expect((await picturesView(ws, id, STUB)).pictures.find((p) => p.file === "get.png")!.source).toBe("From example.com");
+    const gone = (async () => new Response("no", { status: 403 })) as unknown as typeof fetch;
+    await expect(addFromLink(ws, id, "https://cdn.example.com/a.png", gone)).rejects.toThrow(/answered 403.*drop it here/);
+    await expect(addFromLink(ws, id, "not a link", gone)).rejects.toThrow(/full link/);
+  });
+  it("Paul's defaults (model, takes, cap) are saved for every song; bad values fall back to safe ones", () => {
+    expect(readCreationDefaults(wsDir)).toEqual({ service: "wavespeed", quality: "standard", takes: 3, cap: 10 });
+    expect(saveCreationDefaults(wsDir, { service: "higgsfield", quality: "standard", takes: 5, cap: 20 })).toEqual({ service: "higgsfield", quality: "best", takes: 5, cap: 20 });
+    expect(readCreationDefaults(wsDir)).toEqual({ service: "higgsfield", quality: "best", takes: 5, cap: 20 });
+    expect(saveCreationDefaults(wsDir, { service: "x", takes: 99, cap: -1 })).toEqual({ service: "wavespeed", quality: "standard", takes: 3, cap: 10 });
+    expect(() => saveCreationDefaults(wsDir, null)).toThrow();
   });
 });

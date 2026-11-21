@@ -1,6 +1,6 @@
 "use client";
 
-// Prepare → Pictures (tab id "production"). G2 (21 Nov 2026, Paul's picture-first flow): the picture board comes first
+// Prepare → Creation (tab id "production"). G2 (21 Nov 2026, Paul's picture-first flow): the picture board comes first
 // (pictures-board.tsx); the G1 story tools below are optional and folded away.
 // G1 (21 Nov 2026): what this song's clips are made from.
 // 1 Cast (optional): character and scene cards linked from the shared library (Characters page), never copied.
@@ -148,7 +148,7 @@ export function ProductionTab({ projectId }: { projectId: string }) {
 
   return (
     <div data-production className="flex flex-col gap-4">
-      <p className="text-muted-foreground text-sm">Drop your pictures, animate the ones you like, then arrange the takes against the song. No story needed.</p>
+      <p className="text-muted-foreground text-sm">Your creation space: drop pictures and videos from anywhere, animate the pictures you like, then send your favourites to the Storyboard. No story needed.</p>
       <PicturesBoard projectId={projectId} />
       <details data-story-tools className="max-w-4xl">
         <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm">Story tools (optional): cast, story bible, Song brief for Claude, shot list</summary>

@@ -1,15 +1,18 @@
-// Prepare → Pictures (G2): the song's picture board and the clips animated from it.
+// Prepare → Creation (G2): the song's creation space: pictures and videos from anywhere, and the takes animated here.
 // GET: the pictures with their takes, the services (ready = a key in .env), prices, defaults, what was spent.
-// POST multipart (pictures=<files>): adds pictures to the board under their own names.
+// POST multipart (pictures=<files>): adds pictures and videos under their own names; { action: "link", url }: adds the
+//   picture or video a link leads to (any outside source).
 // POST JSON { action: "animate", file, service, quality, takes, cap }: checks the cost against the cap, records the
 //   takes and starts them (the request does not wait); { action: "mood", file, mood }; { action: "resume", file, n }:
-//   fetches a take that was sent but did not come back (free).
+//   fetches a take that was sent but did not come back (free); { action: "send", file, n? }: Send to Storyboard (the
+//   picture, or its take n): a copy joins the end of the song's clips; { action: "defaults", defaults }: Paul's own
+//   defaults for every song (service, quality, takes, cap: workspace\creation.json).
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
-import { addPictures, picturesView, runTakes, setMood, startAnimate, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
+import { addFromLink, addPictures, picturesView, runTakes, saveCreationDefaults, sendToStoryboard, setMood, startAnimate, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
 import { connection } from "next/server";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
@@ -35,7 +38,7 @@ export async function POST(request: Request, { params }: Params) {
     if ((request.headers.get("content-type") ?? "").startsWith("multipart/form-data")) {
       const form = await request.formData();
       const files = form.getAll("pictures").filter((v): v is File => v instanceof File && v.size > 0);
-      if (!files.length) throw new Error("Drop one or more pictures.");
+      if (!files.length) throw new Error("Drop one or more pictures or videos.");
       const tmp = path.join(resolveWorkspaceDir(), "cache", "uploads", randomUUID());
       mkdirSync(tmp, { recursive: true });
       try {
@@ -53,11 +56,17 @@ export async function POST(request: Request, { params }: Params) {
     }
     const body = (await request.json().catch(() => ({}))) as { action?: unknown; file?: unknown; service?: unknown; quality?: unknown; takes?: unknown; cap?: unknown; mood?: unknown; n?: unknown };
     const file = String(body.file ?? "");
+    if (body.action === "link") return Response.json(await withWorkspaceAsync((ws) => addFromLink(ws, id, (body as { url?: unknown }).url)));
     if (body.action === "mood") return Response.json({ mood: withWorkspace((ws) => setMood(ws, id, file, body.mood)) });
     if (body.action === "animate") {
       const started = withWorkspace((ws) => startAnimate(ws, id, file, { service: body.service as ServiceId, quality: body.quality as Quality, takes: Number(body.takes), capUsd: Number(body.cap) }));
       void runTakes(open, id, path.basename(file), started.takes.map((t) => t.n));
       return Response.json(started);
+    }
+    if (body.action === "defaults") return Response.json({ defaults: saveCreationDefaults(resolveWorkspaceDir(), (body as { defaults?: unknown }).defaults) });
+    if (body.action === "send") {
+      const n = body.n === undefined || body.n === null ? null : Number(body.n);
+      return Response.json(await withWorkspaceAsync((ws) => sendToStoryboard(ws, id, file, n)));
     }
     if (body.action === "resume") {
       const n = Number(body.n);

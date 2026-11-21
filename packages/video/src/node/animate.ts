@@ -1,4 +1,4 @@
-// Prepare → Pictures (G2, 21 Nov 2026, decided with Paul: "pictures, then clips, then play with the order"). Paul makes
+// Prepare → Creation (G2, 21 Nov 2026; first called Pictures, decided with Paul: "pictures, then clips, then play with the order"). Paul makes
 // clips from Midjourney pictures at random and finds the video by arranging them against the song; there is no story or
 // shot list in this path. So:
 //   - a picture board per song: <song folder>\pictures\ (his pictures under their own names);
@@ -6,9 +6,15 @@
 //     .env; the app chooses the length, size (the picture's own shape), resolution, a gentle-motion prompt and no sound;
 //     Paul may add a few words of mood. Several takes at once (3 by default), so surprises happen;
 //   - the cost is shown before anything is sent, and a press is refused above its cap;
-//   - each finished take goes into the song's clips (clips\<picture> take N.mp4) at the END of the clip order, like
-//     any dropped clip: Paul orders them himself (Prepare → Storyboard or Shape), never the app.
-// State: pictures\pictures.json (each picture's mood and takes: service, request id, status, cost, the clip made).
+//   - Pictures is a messy creation space, kept apart from the Storyboard (Paul, 21 Nov 2026): every take stays on the
+//     board (pictures\takes\<picture> take N.mp4). Paul picks his favourites, takes or the pictures themselves, and
+//     sends each with "Send to Storyboard": a copy joins the END of the song's clips (his order rule), marked as sent.
+//   - Creation takes everything Paul makes, from anywhere (Paul, 21 Nov 2026: "I need flexibility"): pictures and
+//     videos he adds by hand (Midjourney videos too, under their own names), takes made here through the APIs, and files
+//     from a link (any outside source). They all sit together; each shows where it came from as a small label. Only a
+//     picture can be animated; anything can be sent to the Storyboard.
+// State: pictures\pictures.json (each picture's mood, what was sent, and its takes: service, request id, status, cost,
+// the take's file, the clip it was sent as).
 // A take whose studio stopped mid-way is "interrupted"; with a request id its result can still be fetched (free).
 // The picture is never changed. Requests are never retried on submit (a retry could be billed twice).
 // No rendering code is imported here, so the studio's server can use it.
@@ -26,7 +32,11 @@ import { songPathsById } from "./song-folder";
 
 export const PICTURES_DIR = "pictures";
 export const PICTURES_FILE = "pictures.json";
+export const TAKES_DIR = "takes";
 export const PICTURE_FILE = /\.(jpe?g|png|webp)$/i;
+export const BOARD_VIDEO_FILE = /\.(mp4|m4v|mov|webm)$/i;
+const BOARD_FILE = /\.(jpe?g|png|webp|mp4|m4v|mov|webm)$/i;
+const MAX_LINK_BYTES = 1024 * 1024 * 1024; // a file from a link: at most 1 GB
 export const TAKE_SECONDS = 5; // the app's choice: long enough for the beat cuts, the services' minimum is 4
 export const RESOLUTION = "720p";
 export const DEFAULT_TAKES = 3;
@@ -75,14 +85,47 @@ export type Take = {
   request_id?: string;
   poll_url?: string;
   cost_usd: number; // the estimate (the services bill what they bill)
-  clip?: string; // the clip it became in the song's clips folder
+  file?: string; // the finished video, in pictures\ ("takes/<picture> take N.mp4")
+  sent?: string; // "Send to Storyboard": the clip it became in the song's clips folder
+  clip?: string; // (21 Nov 2026 first build: takes went to the clips by themselves; read as `sent`)
   error?: string;
   pid?: number;
 };
-export type PictureRecord = { mood?: string; takes: Take[]; upload?: { service: ServiceId; url: string; at: string } };
+export type PictureRecord = { source?: string; mood?: string; takes: Take[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string }; // sent: the picture itself sent to the Storyboard (its clip name)
 export type PicturesFile = { _help?: string; pictures: Record<string, PictureRecord> };
-export type PictureView = { file: string; url: string; mood: string; takes: Take[]; width: number | null; height: number | null };
+// source: where it came from, a small label ("Added by you", "Midjourney", "From higgsfield.ai"). kind: only a picture can be animated.
+export type PictureView = { file: string; url: string; kind: "picture" | "video"; source: string; mood: string; takes: Take[]; width: number | null; height: number | null; sent: string | null };
+// Paul's own defaults for Animate (Creation → Defaults), for every song: the service and model, how many takes, the cap.
+export type CreationDefaults = { service: ServiceId; quality: Quality; takes: number; cap: number };
+export const CREATION_FILE = "creation.json"; // in the workspace folder
+const FACTORY: CreationDefaults = { service: "wavespeed", quality: "standard", takes: DEFAULT_TAKES, cap: DEFAULT_CAP_USD };
+
+export function readCreationDefaults(wsDir: string): CreationDefaults {
+  const file = path.join(wsDir, CREATION_FILE);
+  if (!existsSync(file)) return { ...FACTORY };
+  try {
+    return checkDefaults(JSON.parse(readFileSync(file, "utf8")) as Partial<CreationDefaults>);
+  } catch {
+    return { ...FACTORY };
+  }
+}
+function checkDefaults(raw: Partial<CreationDefaults>): CreationDefaults {
+  const service: ServiceId = raw.service === "higgsfield" ? "higgsfield" : "wavespeed";
+  const s = SERVICES[service];
+  const quality: Quality = raw.quality && s.models[raw.quality] ? raw.quality : s.models.standard ? "standard" : "best";
+  const takes = Number.isInteger(raw.takes) && raw.takes! >= 1 && raw.takes! <= MAX_TAKES ? raw.takes! : DEFAULT_TAKES;
+  const cap = typeof raw.cap === "number" && raw.cap > 0 && raw.cap <= 1000 ? raw.cap : DEFAULT_CAP_USD;
+  return { service, quality, takes, cap };
+}
+export function saveCreationDefaults(wsDir: string, raw: unknown): CreationDefaults {
+  if (!raw || typeof raw !== "object") throw new Error("The defaults must be an object.");
+  const d = checkDefaults(raw as Partial<CreationDefaults>);
+  writeFileSync(path.join(wsDir, CREATION_FILE), `${JSON.stringify({ _help: "Your defaults for Creation → Animate (every song): service, quality (standard / best), takes, cap (US$ per Animate).", ...d }, null, 2)}\n`);
+  return d;
+}
+
 export type PicturesView = {
+  defaults: CreationDefaults;
   pictures: PictureView[];
   services: { id: ServiceId; label: string; ready: boolean; keyName: string; qualities: { id: Quality; label: string; usdPerSecond: number; priceNote: string }[] }[];
   takeSeconds: number;
@@ -94,7 +137,7 @@ export type PicturesView = {
 
 const HELP =
   "This song's pictures (Prepare → Pictures) and the clips animated from them: per picture, the mood words and every take " +
-  "(service, request id, status, the estimated cost, the clip it became in clips\\). Written by the app.";
+  "(service, request id, status, the estimated cost, the take's file in takes\\, the clip it was sent to the Storyboard as). Written by the app.";
 
 // ---------------------------------------------------------------- files
 
@@ -134,23 +177,32 @@ function setTake(dir: string, file: string, n: number, patch: Partial<Take>): vo
   });
 }
 
-// Pictures dropped on the board: copied into pictures\ under their own names (a free name when one is taken; the same
-// content twice is not copied again).
-export async function addPictures(ws: Workspace, projectId: string, files: readonly { file: string; name: string }[]): Promise<{ added: string[]; skipped: { name: string; reason: string }[] }> {
+// Where a file added by hand came from, guessed from its name: Midjourney's downloads end with the job's id
+// ("user_words_<uuid>_0.png", or "...<uuid>.mp4"); anything else is "Added by you".
+const MJ_NAME = /(midjourney|_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(_\d+)?\.\w+$)/i;
+export function sourceLabel(name: string, from?: string): string {
+  if (from) return from;
+  return MJ_NAME.test(name) ? "Midjourney" : "Added by you";
+}
+
+// Pictures and videos dropped on the board: copied into pictures\ under their own names (a free name when one is taken;
+// the same content twice is not copied again). `from`: the source label for all of them (a link's site).
+export async function addPictures(ws: Workspace, projectId: string, files: readonly { file: string; name: string }[], from?: string): Promise<{ added: string[]; skipped: { name: string; reason: string }[] }> {
   const { dir } = songFolder(ws, projectId);
   mkdirSync(dir, { recursive: true });
   const added: string[] = [];
   const skipped: { name: string; reason: string }[] = [];
-  const existing = readdirSync(dir).filter((f) => PICTURE_FILE.test(f));
+  const existing = readdirSync(dir).filter((f) => BOARD_FILE.test(f));
   for (const f of files) {
     const name = path.basename(f.name);
-    if (!PICTURE_FILE.test(name)) {
-      skipped.push({ name, reason: "not a picture (.jpg, .png or .webp)" });
+    if (!BOARD_FILE.test(name)) {
+      skipped.push({ name, reason: "not a picture or video (.jpg, .png, .webp, .mp4, .mov, .webm)" });
       continue;
     }
+    const video = BOARD_VIDEO_FILE.test(name);
     const info = await probeMedia(f.file).catch(() => null);
-    if (!info?.width || !info.height) {
-      skipped.push({ name, reason: "no picture found in the file" });
+    if (!info?.width || !info.height || (video && !info.hasVideo)) {
+      skipped.push({ name, reason: video ? "no video found in the file" : "no picture found in the file" });
       continue;
     }
     const bytes = readFileSync(f.file);
@@ -163,8 +215,46 @@ export async function addPictures(ws: Workspace, projectId: string, files: reado
     copyFileSync(f.file, path.join(dir, target));
     existing.push(target);
     added.push(target);
+    const source = sourceLabel(name, from);
+    update(dir, target, (p) => {
+      p.source = source;
+    });
   }
   return { added, skipped };
+}
+
+// "Add from a link" (any outside source: a Midjourney, Higgsfield or WaveSpeed download link, a shared file): the file
+// is downloaded once and added like a dropped one, labelled with the site it came from.
+export async function addFromLink(ws: Workspace, projectId: string, link: unknown, f: typeof fetch = (...a) => globalThis.fetch(...a)): Promise<{ added: string[]; skipped: { name: string; reason: string }[] }> {
+  let url: URL;
+  try {
+    url = new URL(String(link ?? "").trim());
+  } catch {
+    throw new Error("Paste a full link, starting with https://");
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error("Paste a full link, starting with https://");
+  const host = url.hostname.replace(/^www\./, "");
+  const res = await f(url.toString());
+  if (!res.ok) throw new Error(`${host} answered ${res.status}: the link may have expired or need a sign-in. Download the file and drop it here instead.`);
+  const type = (res.headers.get("content-type") ?? "").toLowerCase();
+  const ext = type.includes("png") ? ".png" : type.includes("webp") ? ".webp" : type.includes("jpeg") || type.includes("jpg") ? ".jpg" : type.includes("quicktime") ? ".mov" : type.includes("webm") ? ".webm" : type.includes("mp4") ? ".mp4" : "";
+  let name = decodeURIComponent(path.posix.basename(url.pathname)).replace(/[^\w.\- ()]/g, "_") || "download";
+  if (!BOARD_FILE.test(name)) {
+    if (!ext) throw new Error(`The link does not lead to a picture or video (${type || "unknown type"}): open it, download the file and drop it here.`);
+    name = `${name.replace(/\.[^.]*$/, "")}${ext}`;
+  }
+  const size = Number(res.headers.get("content-length") ?? 0);
+  if (size > MAX_LINK_BYTES) throw new Error("That file is over 1 GB: download it and drop it here instead.");
+  const bytes = Buffer.from(await res.arrayBuffer());
+  if (bytes.length > MAX_LINK_BYTES) throw new Error("That file is over 1 GB: download it and drop it here instead.");
+  const tmp = mkdtempSync(path.join(os.tmpdir(), "lyric-link-"));
+  try {
+    const file = path.join(tmp, name);
+    writeFileSync(file, bytes);
+    return await addPictures(ws, projectId, [{ file, name }], /midjourney/i.test(host) ? "Midjourney" : `From ${host}`);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
 }
 
 export function setMood(ws: Workspace, projectId: string, file: string, mood: unknown): string {
@@ -199,17 +289,19 @@ export async function picturesView(ws: Workspace, projectId: string, env: NodeJS
   const { dir } = songFolder(ws, projectId);
   if (existsSync(dir)) markInterrupted(dir, isAlive);
   const all = readPictures(dir);
-  const files = existsSync(dir) ? readdirSync(dir).filter((f) => PICTURE_FILE.test(f) && statSync(path.join(dir, f)).isFile()) : [];
+  const files = existsSync(dir) ? readdirSync(dir).filter((f) => BOARD_FILE.test(f) && statSync(path.join(dir, f)).isFile()) : [];
   files.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
   const rel = path.relative(ws.dir, dir).split(path.sep).join("/");
   const pictures: PictureView[] = [];
   for (const f of files) {
     const info = await probeMedia(path.join(dir, f)).catch(() => null);
     const rec = all.pictures[f];
-    pictures.push({ file: f, url: `${rel}/${f}`, mood: rec?.mood ?? "", takes: rec?.takes ?? [], width: info?.width ?? null, height: info?.height ?? null });
+    const takes = (rec?.takes ?? []).map((t) => (t.clip && !t.sent ? { ...t, sent: t.clip } : t));
+    pictures.push({ file: f, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? "picture" : "video", source: sourceLabel(f, rec?.source), mood: rec?.mood ?? "", takes, width: info?.width ?? null, height: info?.height ?? null, sent: rec?.sent ?? null });
   }
   const stub = !!env.LYRIC_GENERATE_STUB;
   return {
+    defaults: readCreationDefaults(ws.dir),
     pictures,
     services: (Object.values(SERVICES) as Service[]).map((s) => ({
       id: s.id,
@@ -390,6 +482,7 @@ export type AnimateOptions = { service: ServiceId; quality?: Quality; takes?: nu
 export function startAnimate(ws: Workspace, projectId: string, file: string, o: AnimateOptions, env: NodeJS.ProcessEnv = process.env): { takes: Take[]; estimate: Estimate } {
   const { dir } = songFolder(ws, projectId);
   const name = path.basename(String(file ?? ""));
+  if (BOARD_VIDEO_FILE.test(name)) throw new Error(`${name} is already a video: only a picture can be animated. Send it to the Storyboard as it is.`);
   if (!name || !existsSync(path.join(dir, name)) || !PICTURE_FILE.test(name)) throw new Error(`No picture ${file} on this song's board.`);
   if (!(o.service in SERVICES)) throw new Error("Choose WaveSpeed or Higgsfield.");
   const s = SERVICES[o.service];
@@ -456,14 +549,8 @@ export async function runTakes(openWs: () => Workspace, projectId: string, file:
     }
   }
   const mood = readPictures(dir).pictures[file]?.mood;
-  // The takes are made at the same time, but join the clips in their own order (take 1, 2, 3), whichever comes back first.
-  const turns = takes.map(() => {
-    let done!: () => void;
-    const p = new Promise<void>((r) => (done = r));
-    return { p, done };
-  });
   await Promise.all(
-    takes.map(async (t, k) => {
+    takes.map(async (t) => {
       let id = t.request_id;
       let pollUrl = t.poll_url;
       try {
@@ -487,28 +574,21 @@ export async function runTakes(openWs: () => Workspace, projectId: string, file:
           if (Date.now() - t0 > (o.timeoutMs ?? TIMEOUT_MS)) throw new Error(`no answer within ${Math.round((o.timeoutMs ?? TIMEOUT_MS) / 60000)} min: get its result later (free)`);
           await sleep(o.pollMs ?? POLL_MS);
         }
+        // The take stays on the board (pictures\takes\): Paul sends the ones he likes to the Storyboard himself.
         const tmp = mkdtempSync(path.join(os.tmpdir(), "lyric-take-"));
         try {
-          const base = path.parse(file).name;
-          const out = path.join(tmp, `${base} take ${t.n}.mp4`);
+          const out = path.join(tmp, "take.mp4");
           await transport.download(url, out);
-          if (k > 0) await turns[k - 1].p;
-          const w = openWs();
-          try {
-            const r = await importSongClips(w, projectId, [{ file: out, name: path.basename(out) }]);
-            const clip = r.added[0] ?? r.duplicates[0]?.sameAs;
-            if (!clip) throw new Error(r.skipped[0]?.reason ?? "the clip could not be added");
-            setTake(dir, file, t.n, { status: "done", clip, ended_at: new Date().toISOString(), pid: undefined });
-          } finally {
-            w.close();
-          }
+          const takesDir = path.join(dir, TAKES_DIR);
+          mkdirSync(takesDir, { recursive: true });
+          const name = uniqueFileName(takesDir, `${path.parse(file).name} take ${t.n}.mp4`);
+          copyFileSync(out, path.join(takesDir, name));
+          setTake(dir, file, t.n, { status: "done", file: `${TAKES_DIR}/${name}`, ended_at: new Date().toISOString(), pid: undefined });
         } finally {
           rmSync(tmp, { recursive: true, force: true });
         }
       } catch (error) {
         setTake(dir, file, t.n, { status: id ? "interrupted" : "failed", error: id ? `${errorText(error)} (sent: get its result later, free)` : `${errorText(error)}. Nothing was spent.`, ended_at: new Date().toISOString(), pid: undefined });
-      } finally {
-        turns[k].done();
       }
     }),
   );
@@ -522,7 +602,41 @@ export function startResume(ws: Workspace, projectId: string, file: string, n: n
   if (!t) throw new Error("No such take.");
   if (t.status === "running") throw new Error("This take is still being made.");
   if (!t.request_id) throw new Error("This take was never sent: animate the picture again.");
-  if (t.status === "done") throw new Error("This take is already in your clips.");
+  if (t.status === "done") throw new Error("This take is already finished.");
   setTake(dir, name, n, { status: "running", pid: process.pid, error: undefined });
   return t;
+}
+
+// "Send to Storyboard": a picture or one of its finished takes is copied into the song's clips and joins the END of the
+// story line (like any dropped clip; Paul orders it there). The board keeps its own copy, marked as sent.
+export async function sendToStoryboard(ws: Workspace, projectId: string, file: string, n?: number | null): Promise<{ clip: string; already: boolean }> {
+  const { dir } = songFolder(ws, projectId);
+  const name = path.basename(String(file ?? ""));
+  const rec = readPictures(dir).pictures[name];
+  if (!name || !existsSync(path.join(dir, name)) || !BOARD_FILE.test(name)) throw new Error(`No ${file} in this song's Creation space.`);
+  let source: string;
+  let as: string;
+  if (n === undefined || n === null) {
+    if (rec?.sent) return { clip: rec.sent, already: true };
+    source = path.join(dir, name);
+    as = name;
+  } else {
+    const t = rec?.takes.find((x) => x.n === n);
+    if (!t) throw new Error("No such take.");
+    if (t.sent ?? t.clip) return { clip: (t.sent ?? t.clip)!, already: true };
+    if (t.status !== "done" || !t.file || !existsSync(path.join(dir, t.file))) throw new Error("This take is not finished yet.");
+    source = path.join(dir, t.file);
+    as = path.basename(t.file);
+  }
+  const r = await importSongClips(ws, projectId, [{ file: source, name: as }]);
+  const clip = r.added[0] ?? r.duplicates[0]?.sameAs;
+  if (!clip) throw new Error(r.skipped[0]?.reason ?? "It could not be added to the Storyboard.");
+  update(dir, name, (p) => {
+    if (n === undefined || n === null) p.sent = clip;
+    else {
+      const t = p.takes.find((x) => x.n === n);
+      if (t) t.sent = clip;
+    }
+  });
+  return { clip, already: !r.added.length };
 }

@@ -1,11 +1,12 @@
-// Browser test of G2 Prepare → Pictures (needs a studio build, FFmpeg and Playwright; the services are stand-ins:
+// Browser test of G2 Prepare → Creation (needs a studio build, FFmpeg and Playwright; the services are stand-ins:
 // LYRIC_GENERATE_STUB, nothing is sent anywhere):
 //   npx tsx apps/studio/e2e/pictures.e2e.ts
-// The Pictures tab; pictures dropped on the board; the cost of 3 takes shown before Animate; a cap below it refuses;
-// Animate makes 3 takes that join the END of the song's clips under "<picture> take N.mp4"; the Storyboard shows them
-// after the song's own clips.
+// The Creation tab; pictures and a Midjourney video dropped together, each with its source label; Paul's defaults (model,
+// takes, cap) saved for every song and a per-picture override; the cost shown before Animate; a cap below it refuses;
+// takes stay in Creation (the clips are untouched); "Send to Storyboard" on a take and on the video puts each at the END
+// of the story line, marked as sent.
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -47,6 +48,8 @@ async function main() {
   const picB = path.join(root, "rain street.jpg");
   ffmpeg("-f", "lavfi", "-i", "color=c=white:s=180x320", "-frames:v", "1", picA);
   ffmpeg("-f", "lavfi", "-i", "color=c=blue:s=180x320", "-frames:v", "1", picB);
+  const mjVideo = path.join(root, "paul_bride_walks_away_0b1c2d3e-1111-2222-3333-444455556666_0.mp4");
+  ffmpeg("-f", "lavfi", "-i", "color=c=green:s=180x320:r=24:d=2", "-pix_fmt", "yuv420p", mjVideo);
 
   const server = spawn(process.execPath, [path.join(path.dirname(require.resolve("next/package.json")), "dist", "bin", "next"), "start", "-p", String(port), "-H", "127.0.0.1"], {
     cwd: path.resolve(__dirname, ".."),
@@ -70,37 +73,62 @@ async function main() {
     await page.goto(`${base}/songs/${id}?tab=production`);
     await page.waitForSelector("[data-pictures-drop]");
     const tabs = await page.$$eval("[data-stage-header] [role=tab]", (e: Element[]) => e.map((x) => (x.textContent ?? "").trim()));
-    check(tabs.includes("Pictures"), `Prepare has a Pictures tab (${tabs.join(", ")})`);
+    check(tabs.includes("Creation"), `Prepare has a Creation tab (${tabs.join(", ")})`);
 
-    await page.setInputFiles("[data-pictures-input]", [picA, picB]);
-    await page.waitForSelector("[data-picture='rain street.jpg']");
-    check(((await page.textContent("[data-pictures-notice]")) ?? "").includes("2 pictures added"), "2 pictures added to the board under their own names");
-    check(existsSync(path.join(paths.root, "pictures", "bride by the sea.png")), "the pictures are in the song folder (pictures\\)");
+    await page.setInputFiles("[data-pictures-input]", [picA, picB, mjVideo]);
+    await page.waitForSelector(`[data-picture='${path.basename(mjVideo)}']`);
+    check(((await page.textContent("[data-pictures-notice]")) ?? "").includes("3 files added"), "2 pictures and a video added under their own names");
+    check(existsSync(path.join(paths.root, "pictures", "bride by the sea.png")), "they are in the song folder (pictures\\)");
     const tile = "[data-picture='bride by the sea.png']";
+    const vtile = `[data-picture='${path.basename(mjVideo)}']`;
+    check(((await page.textContent(`${tile} [data-source]`)) ?? "").trim() === "Added by you", "a picture added by hand says so");
+    check(((await page.textContent(`${vtile} [data-source]`)) ?? "").includes("Midjourney · video"), "a Midjourney video is labelled Midjourney");
+    check(!(await page.isVisible(`${vtile} [data-picture-animate]`)), "a video has no Animate (only pictures animate)");
     check(((await page.textContent(`${tile} [data-picture-cost]`)) ?? "").includes("3 × 5 s · about $3.24"), "the cost of 3 takes shows before anything is sent");
+
+    // Paul's defaults, for every song: the best model.
+    await page.selectOption("[data-animate-service]", "wavespeed:best");
+    await page.waitForFunction((t: string) => document.querySelector(`${t} [data-picture-cost]`)?.textContent?.includes("$4.86"), tile);
+    const saved = JSON.parse(readFileSync(path.join(wsDir, "creation.json"), "utf8")) as { service: string; quality: string; takes: number };
+    check(saved.service === "wavespeed" && saved.quality === "best" && saved.takes === 3, "the default model is saved for every song (workspace\\creation.json)");
+    // This picture only: 2 takes.
+    await page.selectOption(`${tile} [data-picture-takes]`, "2");
+    check(((await page.textContent(`${tile} [data-picture-cost]`)) ?? "").includes("2 × 5 s · about $3.24"), "a picture can override the default takes");
+    check(((await page.textContent("[data-picture='rain street.jpg'] [data-picture-cost]")) ?? "").includes("3 × 5 s"), "other pictures keep the defaults");
 
     // The cap: below the cost, Animate is off.
     await page.fill("[data-animate-cap]", "2");
+    await page.click(`${tile} [data-picture-mood]`); // leaves the cap field: saved
     await page.waitForFunction((t: string) => document.querySelector(`${t} [data-picture-cost]`)?.textContent?.includes("above your cap"), tile);
     check(await page.isDisabled(`${tile} [data-picture-animate]`), "a cap below the cost turns Animate off");
     await page.fill("[data-animate-cap]", "10");
-
     await page.fill(`${tile} [data-picture-mood]`, "quiet, longing");
+    await page.waitForFunction((t: string) => !document.querySelector(`${t} [data-picture-cost]`)?.textContent?.includes("above your cap"), tile);
+
     await page.click(`${tile} [data-picture-animate]`);
-    await page.waitForFunction((t: string) => document.querySelectorAll(`${t} [data-take-status=done]`).length === 3, tile, { timeout: 60000 });
-    check(true, "Animate makes 3 takes, each shown as in your clips");
-    const clips = readFileSync(path.join(paths.root, "clips.json"), "utf8");
-    const order = (JSON.parse(clips) as { order: string[] }).order;
-    check(JSON.stringify(order) === JSON.stringify(["01_blue.mp4", "02_red.mp4", "bride by the sea take 1.mp4", "bride by the sea take 2.mp4", "bride by the sea take 3.mp4"]), `the takes join the END of the clips (${order.join(", ")})`);
+    await page.waitForFunction((t: string) => document.querySelectorAll(`${t} [data-take-status=done]`).length === 2, tile, { timeout: 60000 });
+    check(true, "Animate makes the 2 takes");
+    check(((await page.textContent(`${tile} [data-take='1'] [data-take-source]`)) ?? "").includes("WaveSpeed · Seedance 2.5"), "each take shows where it came from");
+    // The story line: clips.json's order once there is one; before that, the clips by file name.
+    const order = () => (existsSync(path.join(paths.root, "clips.json")) ? (JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8")) as { order: string[] }).order : readdirSync(paths.clips!).sort());
+    check(JSON.stringify(order()) === JSON.stringify(["01_blue.mp4", "02_red.mp4"]), `the takes stay in Creation: the clips are untouched (${order().join(", ")})`);
     const json = JSON.parse(readFileSync(path.join(paths.root, "pictures", "pictures.json"), "utf8")) as { pictures: Record<string, { mood?: string }> };
     check(json.pictures["bride by the sea.png"].mood === "quiet, longing", "the mood words are kept with the picture");
     check(((await page.textContent("[data-animate-spent]")) ?? "").includes("$3.24"), "what was sent for the song is shown ($3.24)");
+
+    await page.click(`${tile} [data-take='2'] [data-take-send]`);
+    await page.waitForSelector(`${tile} [data-take='2'] [data-take-sent]`);
+    await page.click(`${vtile} [data-picture-send]`);
+    await page.waitForSelector(`${vtile} [data-picture-sent]`);
+    const want = ["01_blue.mp4", "02_red.mp4", "bride by the sea take 2.mp4", path.basename(mjVideo)];
+    check(JSON.stringify(order()) === JSON.stringify(want), `Send to Storyboard puts each at the END of the story line (${order().join(", ")})`);
+    check(!(await page.isVisible(`${tile} [data-take='1'] [data-take-sent]`)), "a take not sent stays only in Creation");
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
 
     await page.goto(`${base}/songs/${id}?tab=clips`);
-    await page.waitForSelector("[data-clip='bride by the sea take 3.mp4']");
+    await page.waitForSelector(`[data-clip='${path.basename(mjVideo)}']`);
     const line = await page.$$eval("[data-position]", (e: Element[]) => e.map((x) => x.getAttribute("data-clip")));
-    check(JSON.stringify(line) === JSON.stringify(["01_blue.mp4", "02_red.mp4", "bride by the sea take 1.mp4", "bride by the sea take 2.mp4", "bride by the sea take 3.mp4"]), "the Storyboard shows the takes after the song's own clips, ready to be dragged");
+    check(JSON.stringify(line) === JSON.stringify(want), "the Storyboard shows what was sent after the song's own clips, ready to be dragged");
     await browser.close();
   } finally {
     server.kill();

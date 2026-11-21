@@ -8,8 +8,8 @@ export const COVER_FILE = new RegExp(`^(?:projects/${UUID}/audio|songs/[^/]+/[^/
 export const EXPORT_FILE = new RegExp(`^${SONG}/exports/${RUN}/(?:[a-z0-9-]+/)?(v\\d+\\.(mp4|srt|qa\\.txt|manifest\\.json)|thumbnail\\.jpg|publish\\.txt|[^/]+\\.lrc)$`, "i");
 export const VIDEO_FILE = new RegExp(`^${SONG}/exports/${RUN}/(?:[a-z0-9-]+/)?v\\d+\\.mp4$`, "i");
 export const SONG_CLIP_FILE = /^songs\/[^/]+\/[^/]+\/clips\/[^/]+\.(mp4|m4v|mov|webm|jpe?g|png|webp)$/i;
-// A song's picture board (Prepare → Pictures): the pictures its clips are animated from.
-export const SONG_PICTURE_FILE = /^songs\/[^/]+\/[^/]+\/pictures\/[^/]+\.(jpe?g|png|webp)$/i;
+// A song's Creation space (Prepare → Creation): pictures and videos from anywhere, and the takes animated here.
+export const SONG_PICTURE_FILE = /^songs\/[^/]+\/[^/]+\/pictures\/(?:[^/]+\.(jpe?g|png|webp|mp4|m4v|mov|webm)|takes\/[^/]+\.mp4)$/i;
 // A shared collection's clips (the Collections page plays them on hover).
 export const COLLECTION_CLIP_FILE = /^(?:collections|clips)\/[^/]+\/[^/]+\.(mp4|m4v|mov|webm|jpe?g|png|webp)$/i;
 // A theme's own picture (Themes page → Theme cover).
