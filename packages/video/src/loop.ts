@@ -389,6 +389,7 @@ function picturePoint(firstClip: string | null, lastClip: string | null, shots: 
 
 // ---------------------------------------------------------------- the check
 
+export const ABRUPT_FADE_S = 0.5; // a fade shorter than this over a level jump is heard as the music stopping dead
 export function loopFlows(o: {
   lengthMs: number; // the video's length
   bpm: number;
@@ -417,7 +418,14 @@ export function loopFlows(o: {
     picturePoint(o.firstClip, o.lastClip, o.shots, o.continues),
   ];
   const gentle = o.ending && o.ending.kind !== "loop";
-  if (gentle) {
+  // A fade shorter than half a second does not soften a jump: the music still stops dead (Paul, 21 Nov 2026: "ends too
+  // brutally"). It stays a WARN that names the creative fix (a ring-out did not fit and the last word runs to the end).
+  const abrupt = gentle && o.ending!.kind !== "song-end" && o.ending!.fadeOutS < ABRUPT_FADE_S;
+  if (abrupt) {
+    for (const p of points) {
+      if (p.point === "sound" && !p.ok) p.detail = `${p.detail.split(" at the loop point")[0]}, and the music stops in ${o.ending!.fadeOutS.toFixed(1)} s: end the part a bar after the last sung word, or let the app choose it (Automatic)`;
+    }
+  } else if (gentle) {
     const how = o.ending!.kind === "song-end" ? "the song's own ending" : `a ${o.ending!.fadeOutS.toFixed(1)} s fade${o.ending!.kind === "ring-out" ? " after a ring-out bar" : ""}`;
     for (const p of points) {
       if (p.point === "sound" && !p.ok) Object.assign(p, { ok: true, detail: `${p.detail.split(" at the loop point")[0]}, softened by ${how}: the loop starts the song again gently` });

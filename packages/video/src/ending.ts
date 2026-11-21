@@ -6,7 +6,9 @@
 //   fade      a soft fade over the room after the last sung word, starting at the earliest halfway into a
 //             held last note (at least 0.6 s long; never on the words themselves) (at most one bar, at most 3 s), when the
 //             end would not flow back (e.g. a loud chorus into a quiet pickup): the loop restarts the song
-//             gently instead of with a sudden drop;
+//             gently instead of with a sudden drop. Never shorter than half a bar (at most 1 s; Paul, 21 Nov 2026:
+//             "the sound at the end of the reel ends too brutally") when that much fits after the start of the
+//             last word: with no room, the fade takes the tail of the last word rather than a 0.3 s drop;
 //   ring-out  when there is little room after the last word: the last chord sounds one more bar (the next
 //             detected bar line, still whole bars, no sung line in it, inside the platform's length) and
 //             fades over that bar;
@@ -22,6 +24,7 @@ export type EndingKind = "loop" | "fade" | "ring-out" | "song-end";
 
 export const ENDING_FADE_MAX_MS = 3000; // the longest fade-out
 export const ENDING_FADE_MIN_MS = 300; // a fade shorter than this is a cut, not a fade
+export const SOFT_FADE_FLOOR_MS = 1000; // a soft fade lasts at least half a bar, and this at most (see fade)
 const ROOM_FOR_FADE = 0.75; // of a bar: room after the last word for a soft fade (else ring out)
 const HELD_NOTE_MS = 600;
 const FRAME_MS = 34; // one video frame at 30 fps (rounded up)
@@ -70,9 +73,12 @@ export function chooseEnding(o: {
   const ringEnd = next !== undefined && nextFree && next <= o.maxEndMs + EDGE_MS ? Math.min(next, o.songMs) : null;
 
   const loop = (why: string): Ending => ({ ...base, kind: "loop", endMs: o.endMs, fadeOutS: o.loopFadeS, text: `Ending: a tight loop on the bar — ${why}.` });
+  // How far back a fade may reach: into the last word (its tail), never into an earlier word.
+  const lastWord = lastLine?.lastWordStartMs !== undefined ? Math.max(0, Math.min(lastLine.sungEndMs, o.endMs) - lastLine.lastWordStartMs) : 0;
   const fade = (why: string): Ending => {
-    const ms = Math.max(ENDING_FADE_MIN_MS, Math.min(room + tail, barMs, ENDING_FADE_MAX_MS));
-    const inNote = ms > room + 20 && tail > 0;
+    const floor = Math.min(barMs / 2, SOFT_FADE_FLOOR_MS, room + Math.max(tail, lastWord));
+    const ms = Math.max(ENDING_FADE_MIN_MS, Math.min(Math.max(room + tail, floor), barMs, ENDING_FADE_MAX_MS));
+    const inNote = ms > room + 20 && (tail > 0 || lastWord > 0);
     return { ...base, kind: "fade", endMs: o.endMs, fadeOutS: round2(ms), text: `Ending: a soft fade over the last ${s1(ms)}${inNote ? ", from the tail of the last held note" : ""} — ${why}, so the loop starts the song again gently.` };
   };
   const ringOut = (why: string): Ending => {

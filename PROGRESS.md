@@ -4,6 +4,22 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Softer Reel endings: a ring-out bar on a hand-chosen part, longer soft fades, QA for an abrupt stop ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "the sound at the end of the reel ends too brutally". The part was chosen by hand (0:48.9 –
+  2:27.7) and ends on loud music. The app never changes the music's volume; it only fades where it cuts the song. A
+  hand-chosen end could not move, so with a word sung up to the end the fade fell to 0.3 s (or 0.12 s for a loop).
+- **Ring-out on a hand-chosen part:** when there is little room after the last word, the last chord now rings out one
+  more bar and fades over it, as for an automatic part (only a bar with no sung words, within the platform's length:
+  Reels up to 120 s). Shape's plan says "+ one ring-out bar to …".
+- **Longer soft fades:** a soft fade is now at least half a bar (at most 1 s). With no room after the words it takes the
+  tail of the last word, never an earlier word, rather than a 0.3 s drop.
+- **QA "Loop flows":** a loud-to-quiet jump with a fade under 0.5 s stays a WARN, with the creative fix in plain words
+  ("end the part a bar after the last sung word, or let the app choose it (Automatic)").
+- A tight loop (the end flows straight back into the start) keeps the short 0.12 s fade: there the music does not stop.
+- Tests: vitest ending (+3: fade from the last word's tail, hand-chosen part may ring out within the length, abrupt
+  fade stays a WARN), loop pass. pnpm make could not run in the cloud: Python crashes in this container (audio
+  analysis), the same before this step; the full make path is checked on the PC.
+
 ### Singing takes: Retake, compare, choose; resolution; mood hint; two fixes; running badge ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "InfiniteTalk takes vary a lot in articulation. I make several takes per sung group and pick the
   best. Today a new take of the same lines can land on its line by itself and replace the one in use."
@@ -162,24 +178,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   2026 (the video-to-video fields from its model page).
 - Tests: anchors (+4 singing clips), animate (+3: the piece, a clip back without sound onto its line, a refusal).
   Browser: singer (new, 13 checks), pictures, lyrics-tab, storyboard pass.
-
-### G2b Prepare → Creation: a messy creation space for pictures and videos from anywhere, your own defaults ✅ (to verify on the PC)
-- Paul (21 Nov 2026): keep it apart from the Storyboard, "a creation messy space from which I can pick my favourites";
-  call it **Creation**; "I can add Midjourney videos manually, use the API of WaveSpeed, or import them from outside
-  sources: I need flexibility".
-- **Creation** (the tab first called Pictures) takes three sources, side by side: pictures and videos added by hand
-  (drop or choose; .jpg .png .webp .mp4 .mov .webm; own names), takes made here with Animate, and **a pasted link** to a
-  picture or video anywhere (downloaded once, up to 1 GB). Each item has a small label of where it came from: "Added
-  by you", "Midjourney" (a "midjourney" name or Midjourney's download name with the job id, or a midjourney link),
-  "From <site>", and each take its service and model. Only pictures can be animated.
-- **Takes stay in Creation** (`pictures\takes\<picture> take N.mp4`); nothing goes to the Storyboard by itself.
-  **Send to Storyboard** on a take, a picture or a video copies it to the END of the story line (his order rule) and
-  marks it "✓ In Storyboard"; sending again does nothing.
-- **Your defaults (every song):** Model (WaveSpeed · Seedance 2.5 Flash / WaveSpeed · Seedance 2.5 / Higgsfield ·
-  Seedance 2.5), Takes (1–6) and the spending cap, saved in `workspace\creation.json`; each picture can choose another
-  model or number of takes for itself.
-- Tests: animate (17: sources, a Midjourney video, a link, defaults). Browser: pictures (19 checks), song-stages,
-  production pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
