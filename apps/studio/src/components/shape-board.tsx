@@ -1675,6 +1675,11 @@ function StoryStrip({ clips, busy, onOpen, onOmit, current }: { clips: Storyboar
                   {c.speed !== null && c.speed < 1 ? ` · ${c.speed}x` : ""}
                   {c.bestFrom === "clip editor" ? " · ★ yours" : ""}
                 </p>
+                {c.notIn ? (
+                  <p className="mt-0.5 text-[10px] leading-tight text-amber-200" data-story-notin>
+                    {c.notIn.charAt(0).toUpperCase() + c.notIn.slice(1)}.
+                  </p>
+                ) : null}
               </div>
             </button>
             <button

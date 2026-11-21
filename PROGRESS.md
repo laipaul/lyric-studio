@@ -4,6 +4,17 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Shape says why a clip is not in the video ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "the storyboard still doesn't match the Shape … the boat doesn't appear". The Reel (101 s) runs
+  out of time before the boat's turn (21st in the story order; the line-32 singing take holds the last 17 s).
+- Shape → Shots, clip list: a clip that is not omitted but gets no shot now says why in amber: "Not in this video:
+  this part of the song ends before its turn in the story order. Move it earlier in Storyboard, or put it on a line
+  (Lyrics Sync → Show a clip)", or "…it is on line N, outside this video's part of the song".
+- Correction: a clip in the Storyboard on no line does play as a shot in story order (I had said otherwise); Omit is
+  the way to keep it out.
+- Code: storyboard.ts notInReason, StoryboardClip.notIn (data-story-notin). Tests: vitest story-not-in (2). The Shape
+  browser test cannot plan in the cloud container (the audio analysis crashes there, the same before this step).
+
 ### Clean up takes: put aside, never deleted, with Restore ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "I need a cleanup button for the takes".
 - Creation card: **Clean up N takes** puts aside, after asking, the failed takes and the takes not chosen: a singing

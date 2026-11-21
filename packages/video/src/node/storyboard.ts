@@ -105,6 +105,7 @@ export type StoryboardClip = {
   bestFrom: "clip editor" | "auto" | null;
   autoBestS: number | null; // the automatic one (the strongest 2 s)
   shots: number; // shots it gets in this video
+  notIn: string | null; // not omitted, yet no shot in this video: why, in plain words, with what would bring it in
 };
 
 export type StoryboardChoices = {
@@ -248,6 +249,18 @@ function tryOf(songRoot: string, tryId: string): SbTry {
 }
 const tryOptions = (t: SbTry): Partial<MakeOptions> => (t.kind === "theme" && t.theme ? { theme: t.theme } : t.kind === "fonts" && t.pairing ? { pairings: t.pairing } : t.kind === "pictures" && t.clipSet ? { pictures: t.clipSet } : {});
 
+// Why a clip (not omitted) gets no shot in a video (Paul, 21 Nov 2026: "the boat doesn't appear"): it is on a line
+// outside this video's part of the song, or its turn in the story order comes after the part ends. Plain words, with what
+// would bring it in.
+export function notInReason(name: string, anchors: readonly { line: number; clip: string; through?: number }[]): string {
+  const on = anchors.filter((a) => a.clip.toLowerCase() === name.toLowerCase());
+  if (on.length) {
+    const lines = on.map((a) => (a.through && a.through > a.line ? `${a.line}-${a.through}` : String(a.line))).join(", ");
+    return `not in this video: it is on line ${lines}, outside this video's part of the song`;
+  }
+  return "not in this video: this part of the song ends before its turn in the story order. Move it earlier in Storyboard, or put it on a line (Lyrics Sync → Show a clip)";
+}
+
 // Shape's view of one planned video: its shots, lines, notes, assessment (and the props it plays).
 async function planView(ws: Workspace, projectId: string, p: { name: string; label: string; warnings: string[] }, plan: PlatformPlan, v: VideoPlan, picture: string | null): Promise<{ shown: StoryboardView; numbers: (number | null)[] }> {
   const paths = songPathsById(ws, projectId);
@@ -265,13 +278,16 @@ async function planView(ws: Workspace, projectId: string, p: { name: string; lab
   });
   const auto = await bestMoments(ws.dir, plan.clips.filter((c) => c.kind === "video").map((c) => absPath(ws, c.path)));
   const storyOrder = [...plan.clips].sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
-  const canvasChoice = paths.recipe && existsSync(paths.recipe) ? (readRecipe(paths.recipe).canvas ?? null) : null;
+  const recipe = paths.recipe && existsSync(paths.recipe) ? readRecipe(paths.recipe) : null;
+  const canvasChoice = recipe?.canvas ?? null;
+  const notIn = (name: string) => notInReason(name, recipe?.anchors ?? []);
   const storyboardClips: StoryboardClip[] = storyOrder.map((c) => ({
     canvas: canvasChoice && canvasChoice.clip.toLowerCase() === c.name.toLowerCase() ? { at: canvasChoice.at ?? null } : null,
     name: c.name, src: c.path, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, ranked: c.rank !== null, omit: c.omit === true,
     inS: c.inMs === null ? null : c.inMs / 1000, outS: c.outMs === null ? null : c.outMs / 1000, speed: c.speed, transition: c.transition,
     bestS: c.bestMs === null ? null : c.bestMs / 1000, bestFrom: c.bestFrom, autoBestS: c.kind === "video" ? (auto.get(absPath(ws, c.path)) ?? null) : null,
     shots: v.props.shots.filter((s) => s.src === c.path).length,
+    notIn: c.omit !== true && !v.props.shots.some((s) => s.src === c.path) ? notIn(c.name) : null,
   }));
   const overview = await songOverview(ws, projectId, p.name, paths.audio, plan.analysis, plan.lines);
   const shown = withTimeline(ws, projectId, await view(ws, {
