@@ -123,7 +123,7 @@ async function main() {
     // A block: the same picture on line 3 too -> one take over lines 2-3; it replaces the line-2 take by itself.
     await page.click("[data-singer-line='3'] [data-singer-source]");
     await page.click("[data-singer-picker='3'] [data-singer-option='singer close.png']");
-    await page.waitForFunction(() => document.querySelector("[data-singer-line='3']")?.textContent?.includes("one take with line 2"), null, { timeout: 15_000 });
+    await page.waitForFunction(() => document.querySelector("[data-singer-line='3']")?.textContent?.includes("sung with line 2 take"), null, { timeout: 15_000 });
     check(((await page.textContent("[data-singer-summary]")) ?? "").includes("to make: 1 take"), "lines in a row with the same picture: one take to make");
     await page.click("[data-singer-make]");
     await page.waitForFunction(() => document.querySelector("tr[data-line='3'] [data-anchor-continues='2']"), null, { timeout: 60_000 });

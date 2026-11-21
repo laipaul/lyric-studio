@@ -22,7 +22,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Paul (21 Nov 2026): "select a scene where the singer will perform the whole lines I pick, then move on to the B-roll".
   Pick the same picture in "Who sings" on lines in a row (e.g. 9 to 12): they become ONE singing take, from just before
   the first line to two bars after the last (one WaveSpeed request, one cost shown on the first line; the others say
-  "one take with line 9"). It lands on the first line with "through" (song.json) and stays on screen, lips in time,
+  "sung with line 9 take"). It lands on the first line with "through" (song.json) and stays on screen, lips in time,
   until the last line is sung; then the B-roll takes over on the beat. A skipped line, another picture or more than
   8 s of music between two lines starts a new take. A line picked alone works as before.
 - Tests: vitest anchors (+1) and animate (+1, the runs); browser singer, lyrics-tab, pictures pass.

@@ -160,7 +160,7 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
       {l.source && !later ? <ScriptField key={l.script} line={number} value={l.script} onSave={(text) => singer.setScript(number, text)} /> : null}
       {l.source && later ? (
         <span className="text-muted-foreground" data-singer-status="run">
-          one take with line {l.run!.first}
+          sung with line {l.run!.first} take
           {t?.status === "done" && !l.needed ? " · made" : ""}
         </span>
       ) : l.source && t ? (
