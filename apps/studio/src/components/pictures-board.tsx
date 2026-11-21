@@ -145,7 +145,7 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
       </div>
       {!svc.ready ? (
         <p data-animate-nokey className="rounded-md border border-amber-400/30 bg-amber-400/10 p-2 text-xs text-amber-200">
-          To animate with {svc.label}, add a line <code>{svc.keyName}=…</code> with your own key to <code>D:\videomaker\.env</code>
+          No {svc.label} key yet: Animate stays off and nothing is sent. To use it, add a line <code>{svc.keyName}=…</code> with your own key to the file <code>D:\videomaker\.env</code> (not <code>.env.example</code>, which comes from GitHub)
           {svc.id === "higgsfield" ? ' (from open.higgsfield.ai, written as "key id:key secret")' : " (from wavespeed.ai → API keys)"}, then restart Lyric Studio. You pay {svc.label} directly.
         </p>
       ) : null}
