@@ -62,6 +62,17 @@ function roleOf(p: PromptPerson): string {
   return "the person";
 }
 
+// Midjourney settings written into a text (a Film look's words often end with "--ar 9:16 --style raw --stylize 100"):
+// the words without them, and the settings in order (name -> value, "" for a switch). Pure.
+export function splitParams(text: string): { words: string; params: [string, string][] } {
+  const params: [string, string][] = [];
+  const at = text.search(/(^|\s)--[a-z]/i);
+  if (at < 0) return { words: text.trim(), params };
+  const tail = text.slice(at);
+  for (const m of tail.matchAll(/--([a-z]+)((?:\s+(?!--)[^\s]+)*)/gi)) params.push([m[1].toLowerCase(), m[2].trim()]);
+  return { words: text.slice(0, at).trim(), params };
+}
+
 export function shotPrompt(i: ShotPromptInput): string {
   let shows = i.shows.trim();
   for (const p of i.people) if (p.name.trim()) shows = shows.replace(new RegExp(`\\b${p.name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi"), roleOf(p));
@@ -82,7 +93,17 @@ export function shotPrompt(i: ShotPromptInput): string {
     if (s.text) parts.push(`the place: ${s.text.charAt(0).toLowerCase()}${s.text.slice(1)}`);
   }
   if ((i.tag ?? "").toLowerCase() === "memory" || /^memory:/i.test(i.shows.trim())) parts.push("a nostalgic memory, slightly faded colours, soft haze");
-  if (i.filmLook?.trim()) parts.push(tidy(i.filmLook));
-  const unique = [...new Set(no.map((n) => n.toLowerCase()))];
-  return `${parts.map(tidy).filter(Boolean).join(", ")} --ar ${i.aspect} --style raw${unique.length ? ` --no ${unique.join(", ")}` : ""}`;
+  // The Film look's own settings join the shot's, each once: the shape is the song's (--ar), --style raw stays, its
+  // others (e.g. --stylize 100) are kept, and its --no items join the shot's.
+  const film = splitParams(i.filmLook ?? "");
+  if (film.words) parts.push(tidy(film.words));
+  const settings = new Map<string, string>([["ar", i.aspect], ["style", "raw"]]);
+  for (const [k, v] of film.params) {
+    if (k === "no") no.push(...v.split(/,\s*/).filter(Boolean));
+    else if (k === "ar" || k === "aspect") continue;
+    else if (!settings.has(k)) settings.set(k, v);
+  }
+  const unique = [...new Set(no.map((n) => n.toLowerCase().trim()).filter(Boolean))];
+  if (unique.length) settings.set("no", unique.join(", "));
+  return `${parts.map(tidy).filter(Boolean).join(", ")} ${[...settings].map(([k, v]) => (v ? `--${k} ${v}` : `--${k}`)).join(" ")}`;
 }

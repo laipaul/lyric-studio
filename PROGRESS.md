@@ -33,6 +33,8 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   --style raw; "Never …" sentences become --no; reference-model instructions ("Preserve…", "Match … reference
   image") and behaviour sentences ("resting expression…") are left out; two people are labelled. Copy prompt +
   Show prompt on each shot. Tests: vitest shot-prompt (5), browser creation-production (+2 checks).
+  Fix the same day: a Film look's own Midjourney settings (--ar 9:16 --style raw --stylize 100) were added twice; now
+  merged, each once (the song's --ar wins, its others kept, its --no items joined). vitest shot-prompt (6).
 - Part 2 (next): a look per shot with warnings, cost so far / to go.
 - Code: node/shot-production.ts (productionView, setPictureShot, useForShot, sectionsOfShots), shotlist.ts (filled),
   animate.ts (pictures.json "slot"), API /api/songs/<id>/pictures (production, slot, shot, use-shot),

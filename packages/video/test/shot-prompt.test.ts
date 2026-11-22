@@ -40,6 +40,12 @@ describe("shotPrompt", () => {
     expect(p).toContain("the man: He has thick black hair. wearing: a charcoal wool suit");
     expect(p).not.toMatch(/sees the bride|reference image/);
   });
+  it("a Film look with its own Midjourney settings: each setting once, the song's shape wins, its others kept", () => {
+    const p = shotPrompt({ shows: "A sunlit chapel", shot: "wide", people: [bride], scene: null, filmLook: "35mm film, Kodak Portra 400, fine film grain --ar 16:9 --style raw --stylize 100 --no text, watermark", aspect: "9:16" });
+    expect(p.endsWith("35mm film, Kodak Portra 400, fine film grain --ar 9:16 --style raw --stylize 100 --no pale porcelain or tanned skin, heavy makeup, crystal or statement earrings, text, watermark")).toBe(true);
+    expect(p.match(/--ar/g)).toHaveLength(1);
+    expect(p.match(/--style/g)).toHaveLength(1);
+  });
   it("a shot without people", () => {
     expect(shotPrompt({ shows: "Petals drift through a beam of light", shot: "detail", people: [], scene: null, filmLook: null, aspect: "9:16" })).toBe("cinematic extreme close-up detail shot: Petals drift through a beam of light --ar 9:16 --style raw");
   });
