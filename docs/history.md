@@ -4,6 +4,25 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### G3 Singing lines: tick lines in Lyrics Sync, WaveSpeed lip sync, placed in time on their line ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "I decide the singing lines and the clips attached to them, I place them in my Storyboard order,
+  and the app does the hard part: assembling them to the beat and the cuts."
+- **Lyrics Sync → Singer column:** on each line where the singer shows, choose a picture or video from Creation. The
+  Singer bar shows what is left to make, its seconds of voice and cost (InfiniteTalk 720p, $0.06/s, at least 3 s),
+  refused above the Creation cap; **Make singing clips**.
+- **What the app does:** cuts the line's vocal (the vocal stem lined up on the song; else the song itself) from just
+  before the downbeat before the line to two bars after it is sung, sends it with the picture (InfiniteTalk) or video
+  (InfiniteTalk video-to-video) to WaveSpeed, removes the voice from the result, and puts the clip into Creation
+  ("lip sync, line N"), the end of the Storyboard and onto its line (song.json anchor with "sync"). A line already
+  made is never paid for twice; a lost one: Get result (free) in Creation.
+- **In every video:** a singing clip cuts in on the beat, plays at normal speed from the frame that matches the song
+  (always in time), with a hard cut, and never fills other shots; the other clips keep the story order. QA "Singer in
+  time" names the lines.
+- Not tested against WaveSpeed itself (no key in the cloud): requests follow its InfiniteTalk docs as read on 21 Nov
+  2026 (the video-to-video fields from its model page).
+- Tests: anchors (+4 singing clips), animate (+3: the piece, a clip back without sound onto its line, a refusal).
+  Browser: singer (new, 13 checks), pictures, lyrics-tab, storyboard pass.
+
 ### G2b Prepare → Creation: a messy creation space for pictures and videos from anywhere, your own defaults ✅ (to verify on the PC)
 - Paul (21 Nov 2026): keep it apart from the Storyboard, "a creation messy space from which I can pick my favourites";
   call it **Creation**; "I can add Midjourney videos manually, use the API of WaveSpeed, or import them from outside

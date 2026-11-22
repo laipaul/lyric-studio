@@ -14,6 +14,8 @@ export const SONG_PICTURE_FILE = /^songs\/[^/]+\/[^/]+\/pictures\/(?:[^/]+\.(jpe
 export const COLLECTION_CLIP_FILE = /^(?:collections|clips)\/[^/]+\/[^/]+\.(mp4|m4v|mov|webm|jpe?g|png|webp)$/i;
 // A theme's own picture (Themes page → Theme cover).
 export const THEME_COVER_FILE = /^themes\/[^/]+\/(?:cover\.(jpg|png|webp)|cover-video\.(mp4|mov|m4v|webm))$/i;
+// A Film look's reference still (Film looks page).
+export const FILM_LOOK_STILL_FILE = /^film-looks\/[^/_][^/]*\/still\.(jpg|png|webp)$/i;
 // "Pick a frame from a video": the frames pulled out for picking (workspace\frames\<session>\, kept a day).
 export const FRAME_FILE = /^frames\/[0-9a-f-]{36}\/frame_\d+\.jpg$/i;
 export const THUMB_FILE = new RegExp(`^thumbs/${UUID}\\.jpg$`, "i");
@@ -28,5 +30,5 @@ export const TEMPLATE_FILE = /^brand\/(?:[^/]+\/)?publish-[a-z-]+\.txt$/;
 
 export function allowedFile(relative: string, isSongAudio?: (relative: string) => boolean): boolean {
   if (relative.split("/").some((part) => part === ".." || part === "." || part.startsWith(".studio"))) return false;
-  return COVER_FILE.test(relative) || EXPORT_FILE.test(relative) || SONG_CLIP_FILE.test(relative) || SONG_PICTURE_FILE.test(relative) || COLLECTION_CLIP_FILE.test(relative) || THEME_COVER_FILE.test(relative) || THUMB_FILE.test(relative) || FRAME_FILE.test(relative) || SONG_AUDIO_FILE.test(relative) || (!!isSongAudio && SONG_FOLDER_AUDIO.test(relative) && isSongAudio(relative));
+  return COVER_FILE.test(relative) || EXPORT_FILE.test(relative) || SONG_CLIP_FILE.test(relative) || SONG_PICTURE_FILE.test(relative) || COLLECTION_CLIP_FILE.test(relative) || THEME_COVER_FILE.test(relative) || FILM_LOOK_STILL_FILE.test(relative) || THUMB_FILE.test(relative) || FRAME_FILE.test(relative) || SONG_AUDIO_FILE.test(relative) || (!!isSongAudio && SONG_FOLDER_AUDIO.test(relative) && isSongAudio(relative));
 }

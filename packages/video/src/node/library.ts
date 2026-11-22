@@ -42,6 +42,7 @@ export type SongCard = {
   artist: string;
   ep: string | null;
   theme: string | null; // the song's theme (song.json "theme")
+  filmLook: string | null; // the song's Film look (song.json "filmLook")
   cover: string | null; // workspace-relative
   durationMs: number | null;
   createdAt: string;
@@ -108,6 +109,7 @@ export function songCard(ws: Workspace, p: typeof projectTable.$inferSelect, lab
     artist: p.artist,
     ep: songEp(ws, p.id) ?? null,
     theme: songTheme(ws, p.id),
+    filmLook: songFilmLook(ws, p.id),
     cover: p.cover_path && existsSync(absPath(ws, p.cover_path)) ? p.cover_path : null,
     durationMs: p.duration_ms ?? null,
     createdAt: p.created_at.toISOString(),
@@ -117,6 +119,14 @@ export function songCard(ws: Workspace, p: typeof projectTable.$inferSelect, lab
     sameCover: [],
     wanted: songPlatforms(ws, p.id),
   };
+}
+
+function songFilmLook(ws: Workspace, projectId: string): string | null {
+  try {
+    return readRecipe(songPathsById(ws, projectId).recipe).filmLook ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function songTheme(ws: Workspace, projectId: string): string | null {

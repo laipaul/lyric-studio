@@ -99,9 +99,19 @@ export function SongCard({ song }: { song: Song }) {
             {song.ep ? ` · ${song.ep}` : ""}
             {length ? ` · ${length}` : ""}
           </p>
-          {song.theme ? (
-            <p data-card-theme={song.theme} className="text-muted-foreground mt-0.5 flex items-center gap-1 truncate text-[11px]" title={`Theme: ${song.theme} (Shape → Theme to change it)`}>
-              <FeatureIcon feature="theme" className="size-3" /> {song.theme}
+          {song.theme || song.filmLook ? (
+            <p className="text-muted-foreground mt-0.5 flex items-center gap-1 truncate text-[11px]">
+              {song.theme ? (
+                <span data-card-theme={song.theme} className="flex min-w-0 items-center gap-1 truncate" title={`Theme: ${song.theme} (Shape → Theme to change it)`}>
+                  <FeatureIcon feature="theme" className="size-3 shrink-0" /> <span className="truncate">{song.theme}</span>
+                </span>
+              ) : null}
+              {song.filmLook ? (
+                <span data-card-film-look={song.filmLook} className="flex min-w-0 items-center gap-1 truncate" title={`Film look: ${song.filmLook} (Prepare → Creation to change it)`}>
+                  {song.theme ? <span aria-hidden>·</span> : null}
+                  <FeatureIcon feature="filmLook" className="size-3 shrink-0" /> <span className="truncate">{song.filmLook}</span>
+                </span>
+              ) : null}
             </p>
           ) : null}
         </Link>

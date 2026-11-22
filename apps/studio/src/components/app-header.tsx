@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 const NAV: { href: string; label: string; feature: Feature }[] = [
   { href: "/", label: "Library", feature: "song" },
   { href: "/themes", label: "Themes", feature: "theme" },
+  { href: "/film-looks", label: "Film looks", feature: "filmLook" },
   { href: "/collections", label: "Collections", feature: "collection" },
   { href: "/characters", label: "Characters", feature: "character" },
   { href: "/releases", label: "Releases", feature: "post" },

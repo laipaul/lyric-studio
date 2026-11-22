@@ -17,6 +17,7 @@ import { useGoToTab } from "@/components/song-stages";
 import { takeFacts } from "@lyric/video/take-facts";
 
 import { CharacterPicker } from "@/components/character-picker";
+import { FilmLookPicker } from "@/components/film-look-picker";
 import { FramePicker } from "@/components/frame-picker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -129,6 +130,7 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
 
   return (
     <div data-pictures className="flex flex-col gap-3">
+      <FilmLookPicker projectId={projectId} />
       <div data-creation-defaults className="bg-card/40 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border p-2 text-xs">
         <span className="font-medium">Your defaults (every song)</span>
         <label className="flex items-center gap-1.5">

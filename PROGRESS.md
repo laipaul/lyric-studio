@@ -4,6 +4,28 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Film look: one camera, grain and grade for every clip of a song ✅ (to verify on the PC)
+- Paul (22 Nov 2026), from Rourke's ShotDeck "global look" tip: "the global look is correct like the Theme". Clips feel
+  like one film only when every generation shares the same camera, lens, grain and grade.
+- **Film looks** in the top menu (next to Themes; called "Film look" because "Looks" are Wardrobe outfits): **New film
+  look** (name first), drop a **still** (a ShotDeck screenshot with its data block, a Midjourney frame or a photo),
+  **Write it from the still**: the app writes the look line ("35mm film grain, ARRI Alexa 35 look, warm tungsten …")
+  and the **Midjourney words** (Copy), on Paul's GEMINI_API_KEY (less than a cent; FAL_KEY if there is no Gemini key).
+  The words can be changed. Saving a look several songs use says "Update all N songs", with **Save as new** next to it;
+  a rename takes the songs along; Delete only when no song uses it (to film-looks\_removed\, with Restore).
+- A song picks its look in **Prepare → Creation** (the Film look dropdown at the top); the Library card shows it next
+  to the theme.
+- The line goes into **every Animate take** (after the app's own words, before the mood) and **every singing take**
+  (after the singing cue and the script). Each take keeps the look it was sent with (take "filmLook" and "look"), so
+  changing the look later remakes nothing and spends nothing. The picture still decides colour and light (Animate is
+  image-to-video); the line keeps grain, depth of field and camera feel the same from clip to clip.
+- Data: workspace\film-looks\<name>\look.json + still.<ext>; song.json "filmLook". Code: film-looks.ts (filmLookFor is
+  the one place that picks a take's look, ready for Scenes), film-look-writer.ts; API /api/film-looks,
+  /api/film-looks/still, /api/songs/<id>/film-look.
+- Part 2 (the character sheet sent as a Seedance reference) waits until Scenes exist and a test clip proves it.
+- Tests: vitest film-looks (10), animate, themes, library pass; browser film-looks (11 checks), pictures, singer,
+  library pass.
+
 ### Film grain (Look) ✅ (to verify on the PC)
 - Paul (22 Nov 2026), from Joey's finishing step: "overlay real film grain to unify AI textures". Shape → Settings →
   Look → **Film grain**: Off (default: videos as before) / Light / Medium; per song or in a theme.
@@ -283,24 +305,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   replaced by a new one on its line is set to Omit the same way.
 - Tests: browser pictures (+6), singer (+5), lyrics-tab and storyboard pass.
 
-### G3 Singing lines: tick lines in Lyrics Sync, WaveSpeed lip sync, placed in time on their line ✅ (to verify on the PC)
-- Paul (21 Nov 2026): "I decide the singing lines and the clips attached to them, I place them in my Storyboard order,
-  and the app does the hard part: assembling them to the beat and the cuts."
-- **Lyrics Sync → Singer column:** on each line where the singer shows, choose a picture or video from Creation. The
-  Singer bar shows what is left to make, its seconds of voice and cost (InfiniteTalk 720p, $0.06/s, at least 3 s),
-  refused above the Creation cap; **Make singing clips**.
-- **What the app does:** cuts the line's vocal (the vocal stem lined up on the song; else the song itself) from just
-  before the downbeat before the line to two bars after it is sung, sends it with the picture (InfiniteTalk) or video
-  (InfiniteTalk video-to-video) to WaveSpeed, removes the voice from the result, and puts the clip into Creation
-  ("lip sync, line N"), the end of the Storyboard and onto its line (song.json anchor with "sync"). A line already
-  made is never paid for twice; a lost one: Get result (free) in Creation.
-- **In every video:** a singing clip cuts in on the beat, plays at normal speed from the frame that matches the song
-  (always in time), with a hard cut, and never fills other shots; the other clips keep the story order. QA "Singer in
-  time" names the lines.
-- Not tested against WaveSpeed itself (no key in the cloud): requests follow its InfiniteTalk docs as read on 21 Nov
-  2026 (the video-to-video fields from its model page).
-- Tests: anchors (+4 singing clips), animate (+3: the piece, a clip back without sound onto its line, a refusal).
-  Browser: singer (new, 13 checks), pictures, lyrics-tab, storyboard pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

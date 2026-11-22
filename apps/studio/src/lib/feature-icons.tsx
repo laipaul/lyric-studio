@@ -1,4 +1,4 @@
-import { CircleCheckBig, Clapperboard, Diamond, Eye, Film, Layers, Music, Palette, Send, Type, UserRound, Wand2, type LucideIcon } from "lucide-react";
+import { Aperture, CircleCheckBig, Clapperboard, Diamond, Eye, Film, Layers, Music, Palette, Send, Type, UserRound, Wand2, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 export const FEATURE = {
   song: { icon: Music, colour: "text-white" },
   theme: { icon: Palette, colour: "text-brand" },
+  filmLook: { icon: Aperture, colour: "text-orange-300" }, // a song's Film look (camera, grain, grade), 22 Nov 2026
   clips: { icon: Film, colour: "text-teal-300" },
   collection: { icon: Layers, colour: "text-teal-300" },
   character: { icon: UserRound, colour: "text-violet-300" }, // characters and scene cards (C1)

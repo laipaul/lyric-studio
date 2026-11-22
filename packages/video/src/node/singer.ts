@@ -32,6 +32,7 @@ import { importSongClips } from "./assets";
 import { setClipLabel, setClipOmit } from "./clip-edits";
 import { download, errorText } from "./characters/fal";
 import { lyricsView, saveAnchors } from "./lyrics-view";
+import { filmLookFor } from "./film-looks";
 import { readRecipe } from "./recipe";
 import { songPaths, songPathsById } from "./song-folder";
 import { storedStemCheck } from "./voice-source";
@@ -58,7 +59,9 @@ export const SCRIPT_MAX = 200;
 // shows as to make again (only made when Paul presses Make singing clips, cost first).
 export const SINGING_CUE = "A person singing a song with deep emotion, like a live music performance: wide open mouth on sustained notes, expressive lips and jaw following the melody, visible breathing between phrases, eyes closing on long notes, natural head and shoulder movement with the rhythm";
 export const SINGING_STYLE = 1;
-export const singingPrompt = (script: string) => (script ? `${SINGING_CUE}. ${script}` : SINGING_CUE);
+// The song's Film look line (film-looks.ts), as the take was recorded with it, closes the prompt.
+export const singingPrompt = (script: string, look?: string) =>
+  [SINGING_CUE, script.trim().replace(/\.$/, ""), look ? `Film look, the same in every shot: ${look.trim().replace(/\.$/, "")}` : ""].filter(Boolean).join(". ");
 // parts: a vocal piece longer than PART_MAX_MS is made in parts of about PART_TARGET_MS (Joey's 4-10 s rule, Paul 22 Nov
 // 2026: "6 to 8 s the lips are not in sync"), each its own request, chained from the last frame of the one before and
 // joined into one take; seconds / usd are then the parts' (each billed at least 3 s, whole seconds).
@@ -434,16 +437,17 @@ export async function startSinging(ws: Workspace, projectId: string, o: { capUsd
   if (usd > cap) throw new Error(`${todo.length} singing line${todo.length === 1 ? "" : "s"} (${seconds} s of voice) cost about $${usd.toFixed(2)}, above your cap of $${cap.toFixed(2)}: tick fewer lines or raise the cap. Nothing was sent.`);
   const { dir } = songFolder(ws, projectId);
   const now = new Date().toISOString();
-  const jobs = todo.map((l) => recordTake(dir, l, view.resolution, now));
+  const look = filmLookFor(ws, projectId);
+  const jobs = todo.map((l) => recordTake(dir, l, view.resolution, now, look));
   return { jobs, usd, seconds };
 }
 
 // A new running take of a group (its picture, its lines, its vocal piece, the mood text and resolution of now).
-function recordTake(dir: string, l: SingerLine, resolution: LipsyncResolution, now: string): SingJob {
+function recordTake(dir: string, l: SingerLine, resolution: LipsyncResolution, now: string, look: { name: string; line: string } | null): SingJob {
   let n = 0;
   update(dir, l.source!, (p) => {
     n = nextTakeN(p);
-    p.takes.push({ n, kind: "lipsync", line: l.number, ...(l.run && l.run.last > l.number ? { through: l.run.last } : {}), sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, ...(l.piece.parts ? { parts: l.piece.parts.map((x) => ({ ...x })) } : {}), ...(l.script ? { prompt: l.script } : {}), style: SINGING_STYLE, resolution, service: "wavespeed", quality: "best", model: LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: l.piece.usd, pid: process.pid });
+    p.takes.push({ n, kind: "lipsync", line: l.number, ...(l.run && l.run.last > l.number ? { through: l.run.last } : {}), sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, ...(l.piece.parts ? { parts: l.piece.parts.map((x) => ({ ...x })) } : {}), ...(l.script ? { prompt: l.script } : {}), style: SINGING_STYLE, ...(look ? { filmLook: look.name, look: look.line } : {}), resolution, service: "wavespeed", quality: "best", model: LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: l.piece.usd, pid: process.pid });
   });
   return { source: l.source!, n };
 }
@@ -463,7 +467,7 @@ export async function startRetake(ws: Workspace, projectId: string, o: { capUsd:
   if (!Number.isFinite(cap) || cap <= 0) throw new Error("Set a spending cap above $0.");
   if (l.piece.usd > cap) throw new Error(`A retake (${l.piece.seconds} s of voice) costs about $${l.piece.usd.toFixed(2)}, above your cap of $${cap.toFixed(2)}: raise the cap in Creation → Your defaults. Nothing was sent.`);
   const { dir } = songFolder(ws, projectId);
-  return { jobs: [recordTake(dir, l, view.resolution, new Date().toISOString())], usd: l.piece.usd, seconds: l.piece.seconds };
+  return { jobs: [recordTake(dir, l, view.resolution, new Date().toISOString(), filmLookFor(ws, projectId))], usd: l.piece.usd, seconds: l.piece.seconds };
 }
 
 // The finished take's clip in the Storyboard (added once; a later take waits outside it until it is chosen).
@@ -543,7 +547,7 @@ async function singInParts(c: { dir: string; source: string; n: number; take: Ta
         throw Object.assign(new Error(`Part ${i + 1}: the picture or the voice could not be put online: ${errorText(error)}`), { unsent: i === 0 });
       }
       const t = c.take;
-      rid = (await c.transport.submit({ image, audio, prompt: t.style === SINGING_STYLE ? singingPrompt(t.prompt ?? "") : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION })).id; // never retried
+      rid = (await c.transport.submit({ image, audio, prompt: t.style === SINGING_STYLE ? singingPrompt(t.prompt ?? "", t.look) : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION })).id; // never retried
       const sent = rid;
       update(c.dir, c.source, (p) => {
         const tk = p.takes.find((x) => x.n === c.n);
@@ -644,7 +648,7 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
             } catch (error) {
               throw Object.assign(new Error(`The picture or the voice could not be put online: ${errorText(error)}`), { unsent: true });
             }
-            const sent = await transport.submit({ ...(BOARD_VIDEO_FILE.test(j.source) ? { video: media } : { image: media }), audio, prompt: t.style === SINGING_STYLE ? singingPrompt(t.prompt ?? "") : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION }); // never retried
+            const sent = await transport.submit({ ...(BOARD_VIDEO_FILE.test(j.source) ? { video: media } : { image: media }), audio, prompt: t.style === SINGING_STYLE ? singingPrompt(t.prompt ?? "", t.look) : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION }); // never retried
             id = sent.id;
             setTake(dir, j.source, j.n, { request_id: id });
           }

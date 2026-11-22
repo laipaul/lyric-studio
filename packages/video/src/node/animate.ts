@@ -30,6 +30,7 @@ import { importSongClips } from "./assets";
 import { cleanLabel, isOmitted, readClipEdits, setClipLabel } from "./clip-edits";
 import { download, errorText } from "./characters/fal";
 import { processAlive } from "./jobs";
+import { filmLookFor } from "./film-looks";
 import { readRecipe } from "./recipe";
 import { songPathsById } from "./song-folder";
 
@@ -110,6 +111,8 @@ export type Take = {
   playable?: boolean; // the file was checked (and if needed re-made) to play in the browser: H.264, yuv420p, fast start
   resolution?: string; // lipsync: the resolution asked of InfiniteTalk ("480p" | "720p"; before 21 Nov 2026 always 720p)
   parts?: { fromMs: number; toMs: number; request_id?: string }[]; // lipsync: made in parts (singer.ts singingParts), each its own request, joined
+  filmLook?: string; // the song's Film look when the take was sent (film-looks.ts), its name
+  look?: string; // and its line, as sent: a later change of the look remakes nothing
   fresh?: boolean; // lipsync: a later take of lines that already had a take in use: waits for Paul ("New — compare"), never placed by itself
 };
 // removedTakes: takes put aside by Clean up / Remove (their files in pictures\takes\_removed\), with Restore; nothing is
@@ -421,14 +424,16 @@ function repairTakes(dir: string): void {
 
 // ---------------------------------------------------------------- the request
 
-// The app's prompt: gentle, natural motion that keeps the picture as it is; Paul's mood words, if any, at the end.
-export function motionPrompt(mood?: string): string {
+// The app's prompt: gentle, natural motion that keeps the picture as it is; the song's Film look line (film-looks.ts),
+// so every clip shares one camera, grain and grade; Paul's mood words, if any, at the end.
+export function motionPrompt(mood?: string, look?: string): string {
   const base =
     "Bring this picture to life with gentle, natural motion: a light breeze, hair and fabric moving softly, small natural movements of the people, " +
     "soft shifts in the light, and a slow, subtle camera drift. Keep the people, faces, clothes, colours, light and composition exactly as in the picture. " +
     "One continuous shot, no cuts, no text, no subtitles, no logos.";
+  const l = look?.replace(/\s+/g, " ").trim().replace(/\.$/, "");
   const m = mood?.replace(/\s+/g, " ").trim();
-  return m ? `${base} Mood: ${m}.` : base;
+  return `${base}${l ? ` Film look, the same in every shot: ${l}.` : ""}${m ? ` Mood: ${m}.` : ""}`;
 }
 
 export type Estimate = { takes: number; seconds: number; usdPerTake: number; usd: number; model: string; priceNote: string };
@@ -601,9 +606,10 @@ export function startAnimate(ws: Workspace, projectId: string, file: string, o: 
   if (e.usd > cap) throw new Error(`${takes} takes of ${seconds} s cost about $${e.usd.toFixed(2)}, above your cap of $${cap.toFixed(2)}: make fewer takes or raise the cap. Nothing was sent.`);
   const now = new Date().toISOString();
   let made: Take[] = [];
+  const look = filmLookFor(ws, projectId);
   update(dir, name, (p) => {
     const first = nextTakeN(p);
-    made = Array.from({ length: takes }, (_, i) => ({ n: first + i, service: o.service, quality, model: e.model, status: "running" as const, started_at: now, cost_usd: e.usdPerTake, seconds, pid: process.pid }));
+    made = Array.from({ length: takes }, (_, i) => ({ n: first + i, service: o.service, quality, model: e.model, status: "running" as const, started_at: now, cost_usd: e.usdPerTake, seconds, ...(look ? { filmLook: look.name, look: look.line } : {}), pid: process.pid }));
     p.takes.push(...made);
   });
   return { takes: made, estimate: e };
@@ -662,7 +668,7 @@ export async function runTakes(openWs: () => Workspace, projectId: string, file:
         setTake(dir, file, t.n, { status: "running", pid: process.pid, error: undefined });
         if (!id) {
           if (!imageUrl) return;
-          const sent = await transport.submit(imageUrl, motionPrompt(mood), t.seconds ?? TAKE_SECONDS); // never retried: a retry could be billed twice
+          const sent = await transport.submit(imageUrl, motionPrompt(mood, t.look), t.seconds ?? TAKE_SECONDS); // never retried: a retry could be billed twice
           id = sent.id;
           pollUrl = sent.pollUrl;
           setTake(dir, file, t.n, { request_id: id, poll_url: pollUrl });

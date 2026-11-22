@@ -28,6 +28,8 @@ export * from "./canvas";
 export * from "./effects-preview";
 export * from "./project-settings";
 export * from "./library";
+export * from "./film-looks";
+export * from "./film-look-writer";
 export * from "./app-icons";
 export * from "./jobs";
 export * from "./exports";
