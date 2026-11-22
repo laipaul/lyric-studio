@@ -56,6 +56,36 @@ export function ProductionTab({ projectId }: { projectId: string }) {
   const [pasted, setPasted] = useState<Pasted | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [preset, setPreset] = useState<{ name: string; text: string } | null>(null);
+  // Two folders (C3 Part 1, 22 Nov 2026, decided with Paul): Story room (the guiding line: Film look, defaults, cast,
+  // bible, brief, shot list) and Production (the engine room: each Storyboard item's picture and takes). Remembered per song.
+  const folderKey = `lyric-studio:creation-folder:${projectId}`;
+  const [folder, setFolderState] = useState<"story" | "production" | null>(null);
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem(folderKey);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the folder chosen last time on this song
+      if (v === "story" || v === "production") setFolderState(v);
+    } catch {
+      // storage off: the default below
+    }
+  }, [folderKey]);
+  // No folder remembered: decided once, when the tab opens (a shot list: Production, else Story room); after that only
+  // a click changes it (importing a shot list keeps you in Story room, where its missing cast is named).
+  const opened = data !== null;
+  const hasShots = !!data?.shotlist;
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the first folder, once the tab's data is there
+    if (opened) setFolderState((f) => f ?? (hasShots ? "production" : "story"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the data first arrives
+  }, [opened]);
+  const setFolder = (f: "story" | "production") => {
+    setFolderState(f);
+    try {
+      window.localStorage.setItem(folderKey, f);
+    } catch {
+      // not remembered
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -148,11 +178,40 @@ export function ProductionTab({ projectId }: { projectId: string }) {
     }
   }
 
+  // A Mini film, or any song with a shot list: the two folders. Other songs: the creation space as before.
+  const folders = film || !!data.shotlist;
+  const shown = folder ?? (data.shotlist ? "production" : "story"); // until the first folder is set (one render)
+  const storyTools = !folders || shown === "story";
   return (
     <div data-production className="flex flex-col gap-4">
-      <p className="text-muted-foreground text-sm">Your creation space: drop pictures and videos from anywhere, animate the pictures you like, then send your favourites to the Storyboard. No story needed.</p>
-      <PicturesBoard projectId={projectId} />
-      <details data-story-tools className="max-w-4xl" open={film || undefined}>
+      {folders ? (
+        <div role="tablist" aria-label="Creation" data-creation-folders className="flex flex-wrap items-center gap-2">
+          {(
+            [
+              ["story", "Story room", "the guiding line: look, cast, bible, brief, shot list"],
+              ["production", "Production", data.shotlist ? `make each shot: ${data.shotlist.slots} in the shot list` : "make the pictures and takes"],
+            ] as const
+          ).map(([id, label, hint]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              data-creation-folder={id}
+              aria-selected={shown === id}
+              onClick={() => setFolder(id)}
+              className={cn("flex flex-col items-start rounded-lg border px-3 py-1.5 text-left", shown === id ? "border-brand bg-brand/10" : "hover:border-foreground/40")}
+            >
+              <span className="text-sm font-medium">{label}</span>
+              <span className="text-muted-foreground text-[11px]">{hint}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="text-muted-foreground text-sm">Your creation space: drop pictures and videos from anywhere, animate the pictures you like, then send your favourites to the Storyboard. No story needed.</p>
+      )}
+      {folders ? <PicturesBoard key={shown} projectId={projectId} part={shown === "story" ? "settings" : "production"} /> : <PicturesBoard projectId={projectId} />}
+      {storyTools ? (
+      <details data-story-tools className="max-w-4xl" open={folders || film || undefined}>
         <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm">{film ? "Story tools (Mini film): cast, story bible, Song brief for Claude, shot list" : "Story tools (optional): cast, story bible, Song brief for Claude, shot list"}</summary>
         <div className="mt-3 flex flex-col gap-4">
       {notice ? (
@@ -387,6 +446,7 @@ export function ProductionTab({ projectId }: { projectId: string }) {
       </Section>
         </div>
       </details>
+      ) : null}
 
       <ShotListImport
         projectId={projectId}

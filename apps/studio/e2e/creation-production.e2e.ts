@@ -1,0 +1,149 @@
+// Browser test of Creation → Story room | Production (C3 Part 1, 22 Nov 2026; needs a studio build, FFmpeg and
+// Playwright with Chromium; takes are made locally by LYRIC_GENERATE_STUB, nothing is sent anywhere):
+//   npx tsx apps/studio/e2e/creation-production.e2e.ts
+// A Mini film song with a shot list opens Creation on Production: the shots in story order with their sections and
+// lines. A picture dropped on shot 2 belongs to it; Animate makes its takes there; "Use for shot 2" fills the item:
+// in its place in the story line and on its lyric line. Story room holds the Film look, the defaults and the story tools.
+import { execFileSync, spawn } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import { openWorkspace, project } from "@lyric/db";
+import { ensureAlignment, findOrCreateSongProject, readClipEdits, readRecipe, songPathsById, writeRecipe, type AlignRunner } from "@lyric/video/node";
+import { importShotList } from "@lyric/video/shotlist";
+import { eq } from "drizzle-orm";
+
+const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-creation-production-"));
+const wsDir = path.join(root, "workspace");
+const port = 3205;
+const base = `http://127.0.0.1:${port}`;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const ffmpeg = (...args: string[]) => execFileSync(process.env.FFMPEG_PATH ?? "ffmpeg", ["-y", "-v", "error", ...args]);
+let failures = 0;
+const check = (ok: boolean, what: string) => {
+  console.log(`${ok ? "ok  " : "FAIL"} ${what}`);
+  if (!ok) failures += 1;
+};
+const TEXTS = ["Verse one here", "Hold on to me", "Through the night", "Verse two here", "Hold on to me", "Into the light"];
+const STARTS = [1000, 2500, 4000, 5500, 7000, 11_000];
+const stamp = (ms: number) => `${String(Math.floor(ms / 60_000)).padStart(2, "0")}:${((ms % 60_000) / 1000).toFixed(2).padStart(5, "0")}`;
+
+async function main() {
+  process.env.WORKSPACE_DIR = wsDir;
+  const songFile = path.join(root, "Something About Us.wav");
+  ffmpeg("-f", "lavfi", "-i", "aevalsrc='0.5*sin(2*PI*1200*t)*exp(-60*mod(t-0.25,0.5))*gte(t,0.25)+0.9*sin(2*PI*55*t)*exp(-12*mod(t-0.25,2))*gte(t,0.25)':s=44100:d=14", "-ac", "2", songFile);
+  const ws = openWorkspace(wsDir);
+  const sp = await findOrCreateSongProject(ws, songFile);
+  const id = sp.project.id;
+  const paths = songPathsById(ws, id);
+  writeFileSync(paths.lyricsTxt, `${TEXTS.map((t, i) => (i === 1 || i === 4 ? `* ${t}` : t)).join("\n")}\n`);
+  mkdirSync(paths.clips!, { recursive: true });
+  ffmpeg("-f", "lavfi", "-i", "testsrc2=s=216x384:r=30:d=4", "-c:v", "libx264", "-pix_fmt", "yuv420p", path.join(paths.clips!, "01_own.mp4"));
+  writeRecipe(paths.recipe!, { platforms: ["reels"], songStyle: "film" });
+  const lrc = TEXTS.map((t, i) => `[${stamp(STARTS[i])}]${t.split(" ").map((w, k) => `<${stamp(STARTS[i] + k * 300)}>${w}`).join(" ")} <${stamp(STARTS[i] + 1200)}>`).join("\n");
+  const aligner: AlignRunner = async (a) => {
+    writeFileSync(a.out, `${lrc}\n[00:13.00]\n`);
+    writeFileSync(a.report, JSON.stringify({ model: "fake", lang: "en", low_confidence: 0.5, lines: TEXTS.map((text, i) => ({ number: i + 1, text, is_hook: i === 1 || i === 4, start_ms: STARTS[i], end_ms: STARTS[i] + 1200, confidence: 0.9, low_confidence: false })) }));
+  };
+  const p = ws.db.select().from(project).where(eq(project.id, id)).get()!;
+  await ensureAlignment(ws, { ...sp, project: p }, { lyricsTxt: paths.lyricsTxt, durationMs: 14_000, align: aligner });
+  await importShotList(
+    ws,
+    id,
+    {
+      slots: [
+        { id: "s01", order: 1, shows: "The empty chapel in morning light", characters: [], scene: null, shot: "wide" },
+        { id: "s02", order: 2, shows: "She walks in on her father's arm", characters: [], scene: null, shot: "medium", line: 1 },
+        { id: "s03", order: 3, shows: "Close on her smile", characters: [], scene: null, shot: "close-up", line: 3 },
+      ],
+    },
+    "shots.json",
+  );
+  const pic = path.join(root, "s02 walk in.png");
+  ffmpeg("-f", "lavfi", "-i", "color=c=pink:s=540x960", "-frames:v", "1", pic);
+
+  const server = spawn(process.execPath, [path.join(path.dirname(require.resolve("next/package.json")), "dist", "bin", "next"), "start", "-p", String(port), "-H", "127.0.0.1"], {
+    cwd: path.resolve(__dirname, ".."),
+    env: { ...process.env, WORKSPACE_DIR: wsDir, NEXT_TELEMETRY_DISABLED: "1", LYRIC_VOICE_MAP: "off", LYRIC_GENERATE_STUB: "1" },
+    stdio: "ignore",
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let playwright: any;
+  try {
+    playwright = require("playwright"); // eslint-disable-line @typescript-eslint/no-require-imports -- found through NODE_PATH, not a dependency
+  } catch {
+    throw new Error("Playwright is not installed here: this browser test runs in the cloud check.");
+  }
+  try {
+    for (let i = 0; i < 120; i++) {
+      if (await fetch(`${base}/api/health`).then((r) => r.ok).catch(() => false)) break;
+      await sleep(500);
+    }
+    const browser = await playwright.chromium.launch();
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
+    page.on("pageerror", (e: Error) => console.log(`page error: ${e.message}\n${(e.stack ?? "").split("\n").slice(0, 6).join("\n")}`));
+    await page.goto(`${base}/songs/${id}?tab=production`);
+    await page.waitForSelector("[data-creation-folders]", { timeout: 60_000 }).catch(async () => {
+      if (process.env.PRODUCTION_SHOT) await page.screenshot({ path: process.env.PRODUCTION_SHOT.replace(".png", "-debug.png"), fullPage: true });
+      throw new Error(`no folders: ${((await page.textContent("main").catch(() => "")) ?? "").slice(0, 600)}`);
+    });
+    check((await page.getAttribute("[data-creation-folder=production]", "aria-selected")) === "true", "a song with a shot list opens Creation on Production");
+    await page.waitForSelector("[data-shot]");
+    const shots = await page.$$eval("[data-shot]", (e: Element[]) => e.map((x) => `${x.getAttribute("data-shot-number")}:${x.getAttribute("data-shot")}:${x.getAttribute("data-shot-state")}`));
+    check(JSON.stringify(shots) === JSON.stringify(["1:s01:empty", "2:s02:empty", "3:s03:empty"]), `the shots in story order, none made yet (${shots.join(", ")})`);
+    check(((await page.textContent("[data-shot=s02] [data-shot-line]")) ?? "").includes("line 1: “Verse one here”"), "each shot shows its lyric line");
+    check(((await page.textContent("[data-shots-progress]")) ?? "").includes("0 of 3 shots filled"), "the progress line");
+    check(!!(await page.$("[data-production-defaults]")) && !(await page.$("[data-story-tools]")), "Production: the defaults in one line, no story tools");
+
+    await page.click("[data-creation-folder=story]");
+    await page.waitForSelector("[data-pictures=settings] [data-creation-defaults]");
+    check(!!(await page.$("[data-story-tools]")) && !(await page.$("[data-shot]")), "Story room: Film look, defaults and the story tools, no shots");
+    await page.click("[data-creation-folder=production]");
+    await page.waitForSelector("[data-shot=s02] [data-shot-input]", { state: "attached" });
+
+    // Shot 2: drop its picture, Animate (the stand-in), Use for shot 2.
+    await page.setInputFiles("[data-shot-input=s02]", pic);
+    await page.waitForSelector("[data-shot=s02] [data-picture]");
+    check((await page.getAttribute("[data-shot=s02]", "data-shot-state")) === "picture", "the dropped picture belongs to shot 2");
+    check(!(await page.$("[data-loose-heading] ~ div [data-picture]")), "it is not among the loose pictures");
+    await page.click("[data-shot=s02] [data-picture-animate]");
+    await page.waitForSelector("[data-shot=s02] [data-take-use-shot]", { timeout: 90_000 });
+    await page.click("[data-shot=s02] [data-take-use-shot] >> nth=0");
+    await page.waitForSelector("[data-shot=s02][data-shot-state=filled]", { timeout: 30_000 });
+    const notice = (await page.textContent("[data-pictures-notice]")) ?? "";
+    check(notice.includes("Shot 2 is filled and shows on line 1"), `Use for shot 2 (${notice.trim()})`);
+    check(((await page.textContent("[data-shots-progress]")) ?? "").includes("1 of 3 shots filled"), "the progress line counts it");
+    check(!!(await page.$("[data-shot=s02] [data-take-shot-used]")), "the take says it is shot 2");
+    if (process.env.PRODUCTION_SHOT) await page.screenshot({ path: process.env.PRODUCTION_SHOT, fullPage: true });
+
+    // In the song: its place in the story line and its lyric line.
+    const order = readClipEdits(paths.root).order;
+    const clip = (readRecipe(paths.recipe!).anchors ?? []).find((a) => a.line === 1)?.clip;
+    check(!!clip && order.indexOf(clip) === order.indexOf("slot:s01") + 1 && !order.includes("slot:s02"), `the clip takes shot 2's place in the story line (${order.join(", ")})`);
+    check(JSON.parse(readFileSync(path.join(paths.root, "shotlist.json"), "utf8")).filled?.s02 === clip, "the shot list remembers it");
+    await page.goto(`${base}/songs/${id}?tab=clips`);
+    await page.waitForFunction(() => (document.body.textContent ?? "").includes("The empty chapel"), null, { timeout: 60_000 }).catch(() => {});
+    await sleep(500);
+    const story = (await page.evaluate(() => document.body.innerText)) as string;
+    if (process.env.PRODUCTION_SHOT) await page.screenshot({ path: process.env.PRODUCTION_SHOT.replace(".png", "-storyboard.png") });
+    check(story.includes("The empty chapel") && story.includes("Close on her smile") && !story.includes("She walks in on her father"), `the Storyboard shows shot 2 as its clip, the others still planned (chapel ${story.includes("The empty chapel")}, smile ${story.includes("Close on her smile")}, walk ${story.includes("She walks in on her father")})`);
+    await browser.close();
+  } finally {
+    server.kill();
+    ws.close();
+  }
+}
+
+main()
+  .then(() => {
+    console.log(failures ? `\n${failures} check(s) failed` : "\nAll browser checks passed");
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+    process.exit(failures ? 1 : 0);
+  })
+  .catch((error) => {
+    console.error(error);
+    console.log("\n1 check(s) failed");
+    rmSync(root, { recursive: true, force: true });
+    process.exit(1);
+  });

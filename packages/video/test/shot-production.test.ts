@@ -1,0 +1,127 @@
+// Creation → Production (C3 Part 1, 22 Nov 2026): the shot list's items in story order and grouped by section; a
+// Creation picture belongs to an item; "Use this take" fills the item in its place in the story line and on its lyric
+// line; a second take replaces the first there (Omit, never deleted); a re-import keeps filled items filled; "Remove all
+// planned slots" takes out the empty ones only.
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import { card as cardTable, openWorkspace, type Workspace } from "@lyric/db";
+import { eq } from "drizzle-orm";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { findOrCreateSongProject, readClipEdits, readRecipe, songPathsById } from "../src/node";
+import { addPictures, picturesView } from "../src/node/animate";
+import { createCard } from "../src/node/characters/cards";
+import { productionView, sectionsOfShots, setPictureShot, useForShot } from "../src/node/shot-production";
+import { importShotList, readShotList, removeSlots, slotKey } from "../src/node/shotlist";
+import { LYRICS, ffmpeg, makeClip, makeSong } from "./media-helpers";
+
+const root = mkdtempSync(path.join(os.tmpdir(), "lyric-shot-production-"));
+const wsDir = path.join(root, "workspace");
+let ws: Workspace;
+let id: string;
+let songRoot: string;
+const previousWorkspace = process.env.WORKSPACE_DIR;
+
+const list = {
+  slots: [
+    { id: "s01", order: 1, shows: "The empty chapel in morning light", characters: [], scene: null, shot: "wide" },
+    { id: "s02", order: 2, shows: "She walks in on her father's arm", characters: ["Bride"], scene: null, shot: "medium", line: 1 },
+    { id: "s03", order: 3, shows: "Close on her smile", characters: ["Bride"], scene: null, shot: "close-up", line: 3 },
+    { id: "s04", order: 4, shows: "Petals in the light", characters: [], scene: null, shot: "detail" },
+  ],
+};
+
+beforeAll(async () => {
+  process.env.WORKSPACE_DIR = wsDir;
+  ws = openWorkspace(wsDir);
+  const song = path.join(root, "Production Song.wav");
+  makeSong(song, 6);
+  id = (await findOrCreateSongProject(ws, song)).project.id;
+  const paths = songPathsById(ws, id);
+  songRoot = paths.root;
+  writeFileSync(paths.lyricsTxt, `${LYRICS.join("\n")}\n`);
+  mkdirSync(paths.clips!, { recursive: true });
+  makeClip(path.join(paths.clips!, "01_own.mp4"), 1, "red");
+  const pic = path.join(root, "p.png");
+  ffmpeg("-f", "lavfi", "-i", "color=c=white:s=60x80", "-frames:v", "1", pic);
+  createCard(ws, { kind: "character", name: "Bride", picture: readFileSync(pic), fileName: "p.png" });
+  ws.db.update(cardTable).set({ status: "locked" }).where(eq(cardTable.name, "Bride")).run();
+  await importShotList(ws, id, list, "shots.json");
+  // Three Creation items: two short videos (used as they are) and a picture.
+  for (const [n, c] of [["walk-in.mp4", "blue"], ["walk-in v2.mp4", "green"]] as const) makeClip(path.join(root, n), 1, c);
+  await addPictures(ws, id, [
+    { file: path.join(root, "walk-in.mp4"), name: "walk-in.mp4" },
+    { file: path.join(root, "walk-in v2.mp4"), name: "walk-in v2.mp4" },
+    { file: pic, name: "smile.png" },
+  ]);
+}, 120_000);
+afterAll(() => {
+  ws?.close();
+  process.env.WORKSPACE_DIR = previousWorkspace;
+  rmSync(root, { recursive: true, force: true });
+});
+
+describe("sections of shots", () => {
+  it("a shot without a line follows the shot before it; before any line: Intro; after the last line: Ending", () => {
+    const named = [
+      { line: 1, kind: "verse" as const, name: "Verse 1", lastLine: 2 },
+      { line: 3, kind: "chorus" as const, name: "Chorus", lastLine: 4 },
+    ];
+    expect(sectionsOfShots([{ line: null }, { line: 1 }, { line: null }, { line: 3 }, { line: 4 }, { line: null }], named, 4)).toEqual(["Intro", "Verse 1", "Verse 1", "Chorus", "Chorus", "Ending"]);
+  });
+});
+
+describe("Creation → Production", () => {
+  it("lists the shot list's items in order, numbered, with their line text and no pictures yet", () => {
+    const v = productionView(ws, id);
+    expect(v.shots.map((s) => [s.number, s.id, s.line, s.filled])).toEqual([[1, "s01", null, null], [2, "s02", 1, null], [3, "s03", 3, null], [4, "s04", null, null]]);
+    expect(v.shots[1].lineText).toBe(LYRICS[0]);
+    expect(v.shots[0].section).toBe("Intro");
+    expect(v.shots.every((s) => s.pictures.length === 0)).toBe(true);
+  });
+
+  it("a picture belongs to a shot (and can be taken off it); an unknown shot is refused", async () => {
+    setPictureShot(ws, id, "walk-in.mp4", "s02");
+    setPictureShot(ws, id, "smile.png", "s03");
+    expect(productionView(ws, id).shots.map((s) => s.pictures)).toEqual([[], ["walk-in.mp4"], ["smile.png"], []]);
+    expect((await picturesView(ws, id)).pictures.find((p) => p.file === "walk-in.mp4")?.slot).toBe("s02");
+    expect(() => setPictureShot(ws, id, "walk-in.mp4", "s99")).toThrow(/not in this song's shot list/);
+    setPictureShot(ws, id, "smile.png", null);
+    expect(productionView(ws, id).shots[2].pictures).toEqual([]);
+  });
+
+  it("Use this take fills the item: in the slot's place in the story line and on its lyric line", async () => {
+    const used = await useForShot(ws, id, { file: "walk-in.mp4", slot: "s02" });
+    expect(used).toMatchObject({ shot: 2, line: 1, replaced: null, note: null });
+    const order = readClipEdits(songRoot).order;
+    expect(order).not.toContain(slotKey("s02"));
+    expect(order.indexOf(used.clip)).toBe(order.indexOf(slotKey("s01")) + 1); // right after shot 1, where shot 2 was
+    expect(readRecipe(songPathsById(ws, id).recipe!).anchors).toEqual([{ line: 1, clip: used.clip }]);
+    expect(productionView(ws, id).shots[1].filled).toBe(used.clip);
+    expect(readShotList(ws, id)?.filled).toEqual({ s02: used.clip });
+  });
+
+  it("another take for the same item replaces the first there (set to Omit, kept)", async () => {
+    const first = readShotList(ws, id)!.filled!.s02;
+    const second = await useForShot(ws, id, { file: "walk-in v2.mp4", slot: "s02" });
+    expect(second.replaced).toBe(first);
+    const edits = readClipEdits(songRoot);
+    expect(edits.order.indexOf(second.clip)).toBe(edits.order.indexOf(slotKey("s01")) + 1);
+    expect(Object.entries(edits.clips).find(([c]) => c.toLowerCase() === first.toLowerCase())?.[1].omit).toBe(true);
+    expect(readRecipe(songPathsById(ws, id).recipe!).anchors).toEqual([{ line: 1, clip: second.clip }]);
+  });
+
+  it("a re-import keeps filled items filled; Remove all planned slots takes out the empty ones only", async () => {
+    const clip = readShotList(ws, id)!.filled!.s02;
+    await importShotList(ws, id, list, "shots.json");
+    expect(readShotList(ws, id)?.filled).toEqual({ s02: clip });
+    const order = readClipEdits(songRoot).order;
+    expect(order).not.toContain(slotKey("s02"));
+    expect(order.filter((e) => e.startsWith("slot:"))).toEqual(["slot:s01", "slot:s03", "slot:s04"]);
+    expect(removeSlots(ws, id, null)).toBe(3);
+    expect(readShotList(ws, id)?.slots.map((s) => s.id)).toEqual(["s02"]);
+    expect(readClipEdits(songRoot).order).toContain(clip);
+  });
+});

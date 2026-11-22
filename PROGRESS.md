@@ -4,6 +4,28 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Creation: Story room | Production, each Storyboard item made in its place (C3 Part 1) ✅ (to verify on the PC)
+- Paul (22 Nov 2026), Something About You And Me: "Creation should be creating the pictures and video takes for each
+  Storyboard item", with the story tools as the guiding line and "another folder for the actual production engine room".
+- A Mini film song, or any song with a shot list: Prepare → Creation has two folders. **Story room**: Film look, your
+  defaults, cast, story bible, Song brief, shot list. **Production**: the shot list's items in story order, grouped by
+  the song's sections (Intro, Verse 1, Chorus...), each with its number, line and words, people, what happens, and
+  "To make" / "Filled". Drop a picture on a shot (or pick one already in Creation): it belongs to that shot. Animate
+  there as usual; **Use for shot N** fills the Storyboard item: the take takes the slot's place in the story line and
+  goes on its lyric line (a line a singing take covers keeps its singer). Another take for the same shot replaces it
+  there (the earlier one set to Omit, kept). "N of M shots filled" at the top; loose pictures below. Opens on Production
+  when the song has a shot list; the last folder is remembered per song. Other songs: Creation exactly as before.
+- A re-import of the shot list keeps filled shots filled (shotlist.json "filled"); Remove all planned slots takes out
+  the empty ones only.
+- Part 2 (next): Copy prompt per shot (the app writes the Midjourney first-frame prompt), a look per shot with warnings,
+  cost so far / to go.
+- Code: node/shot-production.ts (productionView, setPictureShot, useForShot, sectionsOfShots), shotlist.ts (filled),
+  animate.ts (pictures.json "slot"), API /api/songs/<id>/pictures (production, slot, shot, use-shot),
+  pictures-board.tsx (part: all | settings | production; ShotItems, ShotRow, Use for shot), production-tab.tsx (folders).
+- Tests: vitest shot-production (6); shotlist, animate, line-only, story-line, production, no-remotion pass. Browser
+  creation-production (14 checks, in test:e2e); pictures, production, shotlist, singer, song-style, song-stages pass.
+  Studio build passes.
+
 ### Fix: "Lower third" really sits low ✅ (to verify on the PC)
 - Paul (22 Nov 2026), The House My Heart Built and Wedding Day: with the theme's Text layout on Lower third the lyrics
   still sat in the middle, across the faces. Cause: "lower" put the block's centre at 0.68 of the area left by the
@@ -364,13 +386,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   (Production → Cast; used in the Song brief). Creation → "From a character" adds a look's picture to animate or
   to sing with. Recast will use the chosen look when it is built.
 - Tests: vitest characters-looks (2), production (+1), browser characters (+5), production and pictures pass.
-
-### Gemini (Nano Banana Pro) on your own key as a pack model ✅ (to verify on the PC, needs GEMINI_API_KEY in .env)
-- Paul (21 Nov 2026): yes to "Gemini in the app, on your own Gemini bill". Characters → Pack → model
-  "Gemini · Nano Banana Pro (your key)": the 4 views come from Google on GEMINI_API_KEY (.env only), about $0.14 a
-  picture shown first, same face checks, retries and cap. Without the key: a plain note, no Make pack.
-- Tests: vitest characters-gemini (3, fetch replaced: nothing sent to Google), browser characters (+1).
-- Not tried against Google itself from the cloud (no key here): Paul's first pack is the real test.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

@@ -8,6 +8,9 @@
 //   fetches a take that was sent but did not come back (free); { action: "send", file, n?, forLine? }: Send to Storyboard (the
 //   picture, or its take n): a copy joins the end of the song's clips (forLine: true, from Lyrics Sync: only for a line, not a story moment); { action: "defaults", defaults }: Paul's own
 //   defaults for every song (service, quality, takes, cap: workspace\creation.json).
+// Production (C3 Part 1): GET also returns "production" (the shot list's items, shot-production.ts); multipart with
+//   slot=<id>: the added pictures belong to that shot; { action: "shot", file, slot }: a picture belongs to a shot
+//   (slot null: to none); { action: "use-shot", file, n?, slot }: Use this take for that shot (its place and its line).
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -15,6 +18,7 @@ import { randomUUID } from "node:crypto";
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import { addFromLink, addPictures, picturesView, removeTakes, restoreTake, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, startAnimate, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
 import { runSinging, withSongStarts } from "@lyric/video/singer";
+import { productionView, setPictureShot, useForShot } from "@lyric/video/shot-production";
 import { connection } from "next/server";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
@@ -29,7 +33,18 @@ export async function GET(_request: Request, { params }: Params) {
   const { id } = await params;
   try {
     // Each finished take with the song second its first frame belongs to (Creation plays it with the song).
-    return Response.json({ board: await withWorkspaceAsync(async (ws) => withSongStarts(ws, id, await picturesView(ws, id))) });
+    return Response.json(
+      await withWorkspaceAsync(async (ws) => {
+        const board = await withSongStarts(ws, id, await picturesView(ws, id));
+        let production = null;
+        try {
+          production = productionView(ws, id);
+        } catch {
+          // a song without a folder yet: no shot list
+        }
+        return { board, production };
+      }),
+    );
   } catch (error) {
     return fail(error);
   }
@@ -52,7 +67,14 @@ export async function POST(request: Request, { params }: Params) {
             return { file, name: f.name };
           }),
         );
-        return Response.json(await withWorkspaceAsync((ws) => addPictures(ws, id, saved)));
+        const slot = form.get("slot");
+        return Response.json(
+          await withWorkspaceAsync(async (ws) => {
+            const r = await addPictures(ws, id, saved);
+            if (typeof slot === "string" && slot) for (const f of r.added) setPictureShot(ws, id, f, slot);
+            return r;
+          }),
+        );
       } finally {
         rmSync(tmp, { recursive: true, force: true });
       }
@@ -81,6 +103,8 @@ export async function POST(request: Request, { params }: Params) {
       const n = body.n === undefined || body.n === null ? null : Number(body.n);
       return Response.json(await withWorkspaceAsync((ws) => sendToStoryboard(ws, id, file, n, { forLine: (body as { forLine?: unknown }).forLine === true })));
     }
+    if (body.action === "shot") return Response.json({ slot: withWorkspace((ws) => setPictureShot(ws, id, file, (body as { slot?: unknown }).slot)) });
+    if (body.action === "use-shot") return Response.json(await withWorkspaceAsync((ws) => useForShot(ws, id, { file, n: body.n, slot: (body as { slot?: unknown }).slot })));
     if (body.action === "resume") {
       const n = Number(body.n);
       const take = withWorkspace((ws) => startResume(ws, id, file, n));

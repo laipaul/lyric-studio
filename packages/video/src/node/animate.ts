@@ -39,7 +39,7 @@ export const PICTURES_FILE = "pictures.json";
 export const TAKES_DIR = "takes";
 export const PICTURE_FILE = /\.(jpe?g|png|webp)$/i;
 export const BOARD_VIDEO_FILE = /\.(mp4|m4v|mov|webm)$/i;
-const BOARD_FILE = /\.(jpe?g|png|webp|mp4|m4v|mov|webm)$/i;
+export const BOARD_FILE = /\.(jpe?g|png|webp|mp4|m4v|mov|webm)$/i;
 const MAX_LINK_BYTES = 1024 * 1024 * 1024; // a file from a link: at most 1 GB
 export const TAKE_SECONDS = 5; // "Short" takes, and a song without beats yet; the services' minimum is 4
 export const MIN_TAKE_SECONDS = 4; // Seedance 2.5 (Flash): any whole number of seconds from 4 to 30
@@ -118,12 +118,12 @@ export type Take = {
 // removedTakes: takes put aside by Clean up / Remove (their files in pictures\takes\_removed\), with Restore; nothing is
 // ever deleted. Every screen reads `takes` only, so they are out of sight; take numbers keep counting past them.
 export type RemovedTake = Take & { removed_at: string };
-export type PictureRecord = { label?: string; source?: string; mood?: string; takes: Take[]; removedTakes?: RemovedTake[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string }; // sent: the picture itself sent to the Storyboard (its clip name)
+export type PictureRecord = { slot?: string; label?: string; source?: string; mood?: string; takes: Take[]; removedTakes?: RemovedTake[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string }; // sent: the picture itself sent to the Storyboard (its clip name)
 export type PicturesFile = { _help?: string; pictures: Record<string, PictureRecord> };
 // source: where it came from, a small label ("Added by you", "Midjourney", "From higgsfield.ai"). kind: only a picture can be animated.
 // cleanable: the takes Clean up would put aside (failed, or not chosen: not in use, on no line, not playing in the
 // Storyboard). removed: the takes put aside, newest first (Restore).
-export type PictureView = { file: string; label: string | null; url: string; kind: "picture" | "video"; source: string; mood: string; cleanable: number[]; removed: { n: number; label: string; why: string; at: string }[]; takes: (Take & { inUse?: boolean; onLines?: string; songFromMs?: number; clipInS?: number; songWhy?: string })[]; width: number | null; height: number | null; sent: string | null };
+export type PictureView = { file: string; slot: string | null; label: string | null; url: string; kind: "picture" | "video"; source: string; mood: string; cleanable: number[]; removed: { n: number; label: string; why: string; at: string }[]; takes: (Take & { inUse?: boolean; onLines?: string; songFromMs?: number; clipInS?: number; songWhy?: string })[]; width: number | null; height: number | null; sent: string | null };
 // Paul's own defaults for Animate (Creation → Defaults), for every song: the service and model, how many takes, the cap.
 export type CreationDefaults = { service: ServiceId; quality: Quality; takes: number; cap: number; length: TakeLength }; // length: "song" = one phrase of the song, "short" = 5 s
 export const CREATION_FILE = "creation.json"; // in the workspace folder
@@ -365,7 +365,7 @@ export async function picturesView(ws: Workspace, projectId: string, env: NodeJS
     const takes = (rec?.takes ?? []).map((t) => (t.clip && !t.sent ? { ...t, sent: t.clip } : t)).map((t) => (t.kind !== "lipsync" && t.sent && !stillThere(t.sent) ? { ...t, sent: undefined } : t)).map((t) => (t.kind === "lipsync" ? { ...t, inUse: !!t.sent && singingAnchors.has(`${t.line}:${t.through ?? t.line}:${t.sent.toLowerCase()}`) } : { ...t, onLines: onLines(t.sent) }));
     const cleanable = (rec?.takes ?? []).filter((t) => use.cleanable(t)).map((t) => t.n);
     const removed = [...(rec?.removedTakes ?? [])].sort((a, b) => b.removed_at.localeCompare(a.removed_at)).map((t) => ({ n: t.n, label: t.label ?? `Take ${t.n}`, why: t.kind === "lipsync" ? `lip sync, ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` : t.status === "failed" ? "failed" : t.model, at: t.removed_at }));
-    pictures.push({ file: f, label: rec?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? "picture" : "video", source: sourceLabel(f, rec?.source), mood: rec?.mood ?? "", cleanable, removed, takes, width: info?.width ?? null, height: info?.height ?? null, sent: stillThere(rec?.sent) ? rec!.sent! : null });
+    pictures.push({ file: f, slot: rec?.slot ?? null, label: rec?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? "picture" : "video", source: sourceLabel(f, rec?.source), mood: rec?.mood ?? "", cleanable, removed, takes, width: info?.width ?? null, height: info?.height ?? null, sent: stillThere(rec?.sent) ? rec!.sent! : null });
   }
   const stub = !!env.LYRIC_GENERATE_STUB;
   return {

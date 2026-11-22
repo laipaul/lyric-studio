@@ -8,9 +8,10 @@
 // them. The cost shows before sending and a press above the cap is refused. Each item shows where it came from. Paul
 // sends his favourites with "Send to Storyboard" (the end of his story line, marked ✓).
 import { Check, Film, ImagePlus, Link2, Loader2, Play, RotateCw, Send, Sparkles, UserRound, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { CreationDefaults, PictureView, PicturesView, Quality, ServiceId, Take } from "@lyric/video/animate";
+import type { ProductionShot, ProductionView } from "@lyric/video/shot-production";
 
 import { NameField } from "@/components/name-field";
 import { useGoToTab } from "@/components/song-stages";
@@ -32,9 +33,13 @@ const modelOptions = (services: Svc[]) => services.flatMap((s) => s.qualities.ma
 const splitModel = (v: string) => v.split(":") as [ServiceId, Quality];
 const fileUrl = (rel: string) => `/api/files/${rel.split("/").map(encodeURIComponent).join("/")}`;
 
-export function PicturesBoard({ projectId }: { projectId: string }) {
+// part (C3 Part 1, 22 Nov 2026): "all" = the board as before (songs without a shot list); "settings" = the Film look and
+// the defaults only (Creation → Story room); "production" = the shot list's items with their pictures and takes, then
+// the loose pictures (Creation → Production).
+export function PicturesBoard({ projectId, part = "all" }: { projectId: string; part?: "all" | "settings" | "production" }) {
   const goTo = useGoToTab();
   const [board, setBoard] = useState<PicturesView | null>(null);
+  const [production, setProduction] = useState<ProductionView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [over, setOver] = useState(false);
@@ -49,9 +54,10 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
   const load = useCallback(async () => {
     try {
       const r = await api(`/api/songs/${projectId}/pictures`);
-      const d = (await r.json()) as { board?: PicturesView; error?: string };
+      const d = (await r.json()) as { board?: PicturesView; production?: ProductionView | null; error?: string };
       if (!r.ok || !d.board) throw new Error(d.error ?? `The studio answered ${r.status}`);
       setBoard(d.board);
+      setProduction(d.production ?? null);
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -75,13 +81,14 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
   }
   const [frames, setFrames] = useState(false);
   const [people, setPeople] = useState(false);
-  async function add(files: FileList | File[] | null | undefined) {
+  async function add(files: FileList | File[] | null | undefined, slot?: string) {
     const list = Array.from(files ?? []);
     if (!list.length) return;
     setAdding(true);
     try {
       const form = new FormData();
       for (const f of list) form.append("pictures", f);
+      if (slot) form.append("slot", slot);
       const r = await api(`/api/songs/${projectId}/pictures`, { method: "POST", body: form });
       const d = (await r.json()) as { added?: string[]; skipped?: { name: string; reason: string }[]; error?: string };
       if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
@@ -128,9 +135,32 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
   const defSvc = board.services.find((s) => s.id === defaults.service) ?? board.services[0];
   const models = modelOptions(board.services);
 
+  const settings = part !== "production";
+  const shots = part === "production" ? (production?.shots ?? []) : [];
+  const loose = part === "production" ? board.pictures.filter((p) => !p.slot || !shots.some((s) => s.id === p.slot)) : board.pictures;
+  async function useShot(file: string, n: number | null, shot: ProductionShot) {
+    try {
+      const d = (await post({ action: "use-shot", file, n, slot: shot.id })) as { clip: string; line: number | null; note: string | null; replaced: string | null };
+      setNotice({ ok: true, text: `Shot ${shot.number} is filled${d.line !== null && !d.note ? ` and shows on line ${d.line}` : ""}.${d.replaced ? " The take it had before is set to Omit (still in the Storyboard)." : ""}${d.note ? ` ${d.note}` : ""}` });
+      await load();
+    } catch (e) {
+      setNotice({ ok: false, text: (e as Error).message });
+    }
+  }
+  async function attach(file: string, shot: ProductionShot) {
+    try {
+      await post({ action: "shot", file, slot: shot.id });
+      setNotice({ ok: true, text: `${file} now belongs to shot ${shot.number}.` });
+      await load();
+    } catch (e) {
+      setNotice({ ok: false, text: (e as Error).message });
+    }
+  }
+
   return (
-    <div data-pictures className="flex flex-col gap-3">
-      <FilmLookPicker projectId={projectId} />
+    <div data-pictures={part} className="flex flex-col gap-3">
+      {settings ? <FilmLookPicker projectId={projectId} /> : null}
+      {settings ? (
       <div data-creation-defaults className="bg-card/40 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border p-2 text-xs">
         <span className="font-medium">Your defaults (every song)</span>
         <label className="flex items-center gap-1.5">
@@ -188,6 +218,11 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
           Sent for this song so far: about {money(board.spentUsd)}
         </span>
       </div>
+      ) : (
+        <p data-production-defaults className="text-muted-foreground text-xs">
+          Animate with {defSvc.label} · {defSvc.qualities.find((x) => x.id === defaults.quality)?.label ?? defaults.quality} · {defaults.takes} take{defaults.takes === 1 ? "" : "s"} · cap {money(defaults.cap)} · sent for this song so far about {money(board.spentUsd)} (change them in Story room).
+        </p>
+      )}
       {!defSvc.ready ? (
         <p data-animate-nokey className="rounded-md border border-amber-400/30 bg-amber-400/10 p-2 text-xs text-amber-200">
           No {defSvc.label} key yet: Animate with {defSvc.label} stays off and nothing is sent. Adding your own pictures and videos works without a key. To animate here, add a line <code>{defSvc.keyName}=…</code> with your own key to the file{" "}
@@ -195,14 +230,37 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
           {defSvc.id === "higgsfield" ? ' (from open.higgsfield.ai, written as "key id:key secret")' : " (from wavespeed.ai → API keys)"}, then restart Lyric Studio. You pay {defSvc.label} directly.
         </p>
       ) : null}
+      {part === "settings" && notice ? (
+        <p data-pictures-notice={notice.ok ? "ok" : "error"} className={cn("rounded-md border p-2 text-sm", notice.ok ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-red-400/30 bg-red-400/10 text-red-200")}>
+          {notice.text}
+        </p>
+      ) : null}
+      {part === "settings" ? null : (
+      <>
       {notice ? (
         <p data-pictures-notice={notice.ok ? "ok" : "error"} className={cn("rounded-md border p-2 text-sm", notice.ok ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-red-400/30 bg-red-400/10 text-red-200")}>
           {notice.text}
         </p>
       ) : null}
 
+      {shots.length ? (
+        <ShotItems
+          shots={shots}
+          pictures={board.pictures}
+          loose={loose}
+          adding={adding}
+          onDrop={(files, s) => void add(files, s.id)}
+          onAttach={(file, s) => void attach(file, s)}
+          tile={(p, s) => <PictureTile key={p.file} projectId={projectId} p={p} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title, take) => setPlaying({ url, title, take })} shot={s} useShot={(n) => void useShot(p.file, n, s)} />}
+        />
+      ) : null}
+      {shots.length ? (
+        <h3 data-loose-heading className="mt-2 text-sm font-semibold">
+          Loose pictures <span className="text-muted-foreground font-normal">· not in a shot: inspiration, extra B-roll, or drop one on a shot above</span>
+        </h3>
+      ) : null}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-        {board.pictures.map((p) => (
+        {loose.map((p) => (
           <PictureTile key={p.file} projectId={projectId} p={p} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title, take) => setPlaying({ url, title, take })} />
         ))}
         <div className="flex min-h-48 flex-col gap-2">
@@ -276,6 +334,120 @@ export function PicturesBoard({ projectId }: { projectId: string }) {
           .
         </p>
       ) : null}
+      </>
+      )}
+    </div>
+  );
+}
+
+// The shot list's items (C3 Part 1), grouped by the song's sections in story order: each with its number, line, people
+// and what happens, its pictures (and their takes), and a drop zone for its picture.
+function ShotItems({
+  shots,
+  pictures,
+  loose,
+  adding,
+  onDrop,
+  onAttach,
+  tile,
+}: {
+  shots: ProductionShot[];
+  pictures: PictureView[];
+  loose: PictureView[];
+  adding: boolean;
+  onDrop: (files: FileList, s: ProductionShot) => void;
+  onAttach: (file: string, s: ProductionShot) => void;
+  tile: (p: PictureView, s: ProductionShot) => ReactNode;
+}) {
+  const filled = shots.filter((s) => s.filled).length;
+  // Sections in story order (a name that comes back, e.g. a second chorus, is its own group again).
+  const groups: { name: string; shots: ProductionShot[] }[] = [];
+  for (const s of shots) {
+    const last = groups[groups.length - 1];
+    if (last && last.name === s.section) last.shots.push(s);
+    else groups.push({ name: s.section, shots: [s] });
+  }
+  return (
+    <div data-shots className="flex flex-col gap-4">
+      <p data-shots-progress className="text-sm">
+        <span className="font-medium">
+          {filled} of {shots.length} shots filled
+        </span>{" "}
+        <span className="text-muted-foreground">· drop each shot&apos;s picture on it, Animate, then “Use for shot” puts the take in its place in the story, on its line.</span>
+      </p>
+      {groups.map((g, gi) => (
+        <section key={`${g.name}-${gi}`} data-shot-section={g.name} className="flex flex-col gap-2">
+          <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">{g.name}</h3>
+          {g.shots.map((s) => (
+            <ShotRow key={s.id} s={s} pictures={pictures.filter((p) => p.slot === s.id)} loose={loose} adding={adding} onDrop={onDrop} onAttach={onAttach} tile={tile} />
+          ))}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile }: { s: ProductionShot; pictures: PictureView[]; loose: PictureView[]; adding: boolean; onDrop: (files: FileList, s: ProductionShot) => void; onAttach: (file: string, s: ProductionShot) => void; tile: (p: PictureView, s: ProductionShot) => ReactNode }) {
+  const [over, setOver] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <div data-shot={s.id} data-shot-number={s.number} data-shot-state={s.filled ? "filled" : pictures.length ? "picture" : "empty"} className={cn("bg-card/40 flex flex-col gap-2 rounded-lg border p-3", s.filled && "border-emerald-400/30")}>
+      <div className="flex flex-wrap items-start gap-2 text-sm">
+        <span className="bg-brand text-brand-foreground flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums">{s.number}</span>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="font-medium">{s.shows}</span>
+          <span className="text-muted-foreground text-xs">
+            <span className="bg-muted rounded px-1">{s.shot}</span>
+            {s.characters.length ? ` · ${s.characters.join(", ")}` : ""}
+            {s.scene ? ` · ${s.scene}` : ""}
+            {s.outfit ? ` · wears: ${s.outfit}` : ""}
+            {s.line !== null ? <span data-shot-line={s.line}>{` · line ${s.line}: “${s.lineText ?? ""}”`}</span> : " · no line (music only)"}
+            {s.tag ? ` · #${s.tag}` : ""}
+          </span>
+        </div>
+        {s.filled ? (
+          <span data-shot-filled={s.filled} className="flex shrink-0 items-center gap-1 rounded bg-emerald-400/15 px-1.5 py-0.5 text-xs text-emerald-300" title={`In the Storyboard as ${s.filled}`}>
+            <Check className="size-3" /> Filled
+          </span>
+        ) : (
+          <span className="text-muted-foreground shrink-0 text-xs">To make</span>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+        {pictures.map((p) => tile(p, s))}
+        <div className="flex min-h-32 flex-col gap-1.5">
+          <button
+            type="button"
+            data-shot-drop={s.id}
+            onClick={() => input.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setOver(true);
+            }}
+            onDragLeave={() => setOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setOver(false);
+              onDrop(e.dataTransfer.files, s);
+            }}
+            className={cn("flex flex-1 flex-col items-center justify-center gap-1 rounded-lg border border-dashed p-3 text-center text-xs transition-colors", over ? "border-brand bg-brand/10" : "hover:border-brand/60")}
+          >
+            {adding ? <Loader2 className="text-brand size-5 animate-spin" /> : <ImagePlus className="text-brand size-5" />}
+            <span>{pictures.length ? "Another picture for this shot" : `Drop the picture for shot ${s.number}`}</span>
+          </button>
+          {loose.length ? (
+            <select data-shot-attach={s.id} value="" onChange={(e) => e.target.value && onAttach(e.target.value, s)} className="bg-background rounded-md border px-1.5 py-1 text-xs" aria-label={`A picture from Creation for shot ${s.number}`}>
+              <option value="">or one from Creation…</option>
+              {loose.map((p) => (
+                <option key={p.file} value={p.file}>
+                  {p.label ?? p.file}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          <input ref={input} type="file" multiple accept=".jpg,.jpeg,.png,.webp,.mp4,.m4v,.mov,.webm,image/*,video/*" className="hidden" data-shot-input={s.id} onChange={(e) => e.target.files && onDrop(e.target.files, s)} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -288,10 +460,14 @@ function PictureTile({
   reload,
   setNotice,
   play,
+  shot,
+  useShot,
 }: {
   projectId: string;
   p: PictureView;
   board: PicturesView;
+  shot?: ProductionShot; // on a shot (Production): its takes are used for that shot
+  useShot?: (n: number | null) => void;
   play: (url: string, title: string, take?: { fromS: number | null; clipInS: number; why: string | null }) => void;
   post: (b: Record<string, unknown>) => Promise<unknown>;
   reload: () => Promise<void>;
@@ -402,7 +578,17 @@ function PictureTile({
           await post({ action: "label", file: p.file, label }).catch((e: Error) => setNotice({ ok: false, text: e.message }));
           await reload();
         }} />
-        {p.sent ? (
+        {shot && video && useShot ? (
+          p.sent && shot.filled && p.sent.toLowerCase() === shot.filled.toLowerCase() ? (
+            <span data-picture-shot-used className="flex shrink-0 items-center gap-1 text-emerald-300">
+              <Check className="size-3" /> Shot {shot.number}
+            </span>
+          ) : (
+            <button type="button" data-picture-use-shot={shot.id} onClick={() => useShot(null)} className="hover:bg-accent flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[11px]" title={`This video fills shot ${shot.number}${shot.line !== null ? `, on line ${shot.line}` : ""}`}>
+              <Check className="size-3" /> Use for shot {shot.number}
+            </button>
+          )
+        ) : p.sent ? (
           <span data-picture-sent className="flex shrink-0 items-center gap-1 text-emerald-300" title={`In your Storyboard as ${p.sent}`}>
             <Check className="size-3" /> In Storyboard
           </span>
@@ -464,7 +650,7 @@ function PictureTile({
             }} source={`${board.services.find((s) => s.id === t.service)?.label ?? t.service} · ${t.model}${t.kind === "lipsync" ? ` · lip sync, ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` : ""}`} url={takeUrl(t)} onPlay={(url) => {
               play(url, `${p.file} · Take ${t.n}`, { fromS: t.songFromMs !== undefined ? t.songFromMs / 1000 : null, clipInS: t.clipInS ?? 0, why: t.songWhy ?? null });
               if (t.fresh) void singer({ action: "seen", n: t.n }).then(reload).catch(() => undefined);
-            }} onSend={() => void send(t.n, t.label ?? `Take ${t.n}`)} onUse={() => void chooseTake(t)} onRemove={p.cleanable.includes(t.n) ? () => void cleanUp(t.n) : undefined} onResume={() => void post({ action: "resume", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message }))} />
+            }} onSend={() => void send(t.n, t.label ?? `Take ${t.n}`)} onUse={() => void chooseTake(t)} shot={shot && useShot ? { number: shot.number, used: !!(t.sent && shot.filled && t.sent.toLowerCase() === shot.filled.toLowerCase()), use: () => useShot(t.n) } : undefined} onRemove={p.cleanable.includes(t.n) ? () => void cleanUp(t.n) : undefined} onResume={() => void post({ action: "resume", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message }))} />
           ))}
         </ul>
       ) : null}
@@ -489,7 +675,7 @@ function PictureTile({
   );
 }
 
-function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onRemove, onResume }: { t: Take & { inUse?: boolean; onLines?: string }; source: string; url: string | null; onPlay: (url: string) => void; onRename: (label: string) => Promise<void>; onSend: () => void; onUse: () => void; onRemove?: () => void; onResume: () => void }) {
+function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onRemove, onResume, shot }: { t: Take & { inUse?: boolean; onLines?: string }; source: string; url: string | null; onPlay: (url: string) => void; onRename: (label: string) => Promise<void>; onSend: () => void; onUse: () => void; onRemove?: () => void; onResume: () => void; shot?: { number: number; used: boolean; use: () => void } }) {
   const label = `Take ${t.n}`;
   return (
     <li data-take={t.n} data-take-status={t.status} className="flex items-center gap-2 text-[11px]">
@@ -531,6 +717,17 @@ function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onRemove, on
               Use this take
             </button>
           </span>
+        )
+      ) : t.status === "done" && shot ? (
+        // Production: this take fills its shot (its place in the story, on its line).
+        shot.used ? (
+          <span data-take-shot-used className="flex shrink-0 items-center gap-1 rounded bg-emerald-400/15 px-1.5 py-0.5 text-emerald-300">
+            <Check className="size-3" /> Shot {shot.number}
+          </span>
+        ) : (
+          <button type="button" data-take-use-shot onClick={shot.use} className="hover:bg-accent flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5" title={`This take fills shot ${shot.number} (its place in the story, and its line)`}>
+            <Check className="size-3" /> Use for shot {shot.number}
+          </button>
         )
       ) : t.status === "done" && t.onLines ? (
         <span data-take-on={t.onLines} className="flex shrink-0 items-center gap-1 rounded bg-emerald-400/15 px-1.5 py-0.5 text-emerald-300" title={t.sent ? `Shown on ${t.onLines} as ${t.sent} (Lyrics Sync → Shows clip)` : undefined}>

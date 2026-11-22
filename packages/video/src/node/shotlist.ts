@@ -37,7 +37,8 @@ export type Slot = {
   tag?: string;
   animate?: string; // given in the file; else ANIMATE_DEFAULTS[shot]
 };
-export type ShotListFile = { _help?: string; imported_at: string; source: string; slots: Slot[] };
+// filled: slot id -> the clip that fills it (Creation → Production, "Use this take"); a filled slot is no longer in the order.
+export type ShotListFile = { _help?: string; imported_at: string; source: string; slots: Slot[]; filled?: Record<string, string> };
 export type Problem = { slot: string | null; level: "error" | "warn"; text: string };
 export type ShotListCheck = {
   slots: Slot[];
@@ -237,8 +238,11 @@ export async function importShotList(ws: Workspace, projectId: string, input: un
   if (!check.ok) throw new Error(`The shot list cannot be imported yet: ${check.problems.filter((p) => p.level === "error").map((p) => (p.slot ? `${p.slot}: ${p.text}` : p.text)).join(" ")}`);
   const root = songRoot(ws, projectId);
   const file = path.join(root, SHOTLIST_FILE);
+  // Shots already filled in Creation stay filled (by id) and keep their clip's place in the story line.
+  const before = readShotListFile(file)?.filled ?? {};
+  const filled = Object.fromEntries(Object.entries(before).filter(([id]) => check.slots.some((x) => x.id === id)));
   if (existsSync(file)) keepReplaced(root, file);
-  const out: ShotListFile = { _help: HELP, imported_at: new Date().toISOString(), source: path.win32.basename(source), slots: check.slots };
+  const out: ShotListFile = { _help: HELP, imported_at: new Date().toISOString(), source: path.win32.basename(source), slots: check.slots, ...(Object.keys(filled).length ? { filled } : {}) };
   writeFileSync(file, `${JSON.stringify(out, null, 2)}\n`);
   // Every own clip gets its place in the order first (clips never moved follow in file-name order), so "order"
   // counts the story line as it is shown.
@@ -246,7 +250,7 @@ export async function importShotList(ws: Workspace, projectId: string, input: un
   const own = clipsDir && existsSync(clipsDir) ? (await folderClips(ws, clipsDir, songClipsCollection(projectId))).clips.map((c) => c.name) : [];
   let edits = readClipEdits(root);
   edits = withSongOrder(edits, own, inClipOrder(edits, own));
-  writeClipEdits(root, { ...edits, order: placeSlots(edits.order, check.slots) });
+  writeClipEdits(root, { ...edits, order: placeSlots(edits.order, check.slots.filter((x) => !filled[x.id])) });
   return check;
 }
 
@@ -259,14 +263,17 @@ export function removeSlots(ws: Workspace, projectId: string, ids: readonly stri
   const current = readShotListFile(file);
   const edits = readClipEdits(root);
   const inOrder = edits.order.map(slotOf).filter((x): x is string => x !== null);
-  const gone = new Set(ids ?? [...(current?.slots ?? []).map((s) => s.id), ...inOrder]);
+  // "Remove all planned slots" takes out the empty ones only: a shot filled in Creation is part of the film now.
+  const empty = (current?.slots ?? []).filter((s) => !(current?.filled ?? {})[s.id]).map((s) => s.id);
+  const gone = new Set(ids ?? [...empty, ...inOrder]);
   if (ids && ids.some((id) => !(current?.slots ?? []).some((s) => s.id === id) && !inOrder.includes(id))) throw new Error("That planned slot is not in this song's Storyboard.");
   const removed = new Set([...(current?.slots ?? []).map((s) => s.id), ...inOrder].filter((id) => gone.has(id)));
   if (!removed.size) return 0;
   if (existsSync(file)) {
     keepReplaced(root, file);
     const left = (current?.slots ?? []).filter((s) => !gone.has(s.id));
-    if (left.length) writeFileSync(file, `${JSON.stringify({ ...current, slots: left }, null, 2)}\n`);
+    const filled = Object.fromEntries(Object.entries(current?.filled ?? {}).filter(([id]) => !gone.has(id))); // their clips stay in the Storyboard
+    if (left.length) writeFileSync(file, `${JSON.stringify({ ...current, slots: left, filled: Object.keys(filled).length ? filled : undefined }, null, 2)}\n`);
   }
   writeClipEdits(root, { ...edits, order: edits.order.filter((e) => { const id = slotOf(e); return id === null || !gone.has(id); }) });
   return removed.size;

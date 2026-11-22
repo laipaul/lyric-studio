@@ -4,6 +4,13 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Gemini (Nano Banana Pro) on your own key as a pack model ✅ (to verify on the PC, needs GEMINI_API_KEY in .env)
+- Paul (21 Nov 2026): yes to "Gemini in the app, on your own Gemini bill". Characters → Pack → model
+  "Gemini · Nano Banana Pro (your key)": the 4 views come from Google on GEMINI_API_KEY (.env only), about $0.14 a
+  picture shown first, same face checks, retries and cap. Without the key: a plain note, no Make pack.
+- Tests: vitest characters-gemini (3, fetch replaced: nothing sent to Google), browser characters (+1).
+- Not tried against Google itself from the cloud (no key here): Paul's first pack is the real test.
+
 ### Your own character pack: Add my pack, Use my own picture, Move to, draft the description ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "if I have my character pack then I don't need to create it in my app?", "yes, that will save me
   money since I am happy with Gemini". A card's pack places now take his own pictures: "Add my pack" (4 at once,
