@@ -29,6 +29,7 @@ const LOGO_FADE_FRAMES = 15; // 0.5 s
 import { cinematicBarHeight, DEFAULT_FORMAT, DEFAULT_LYRIC_AREA, DEFAULT_SAFE_ZONE, type Format, type LyricArea, type SafeZone } from "./platform";
 import { mediaUrl, type LyricLineProps, type LyricVideoProps, type ShotProps, type StyleProps } from "./props";
 import { fallbackBackground, gradeLook, vignetteBackground } from "./picture";
+import { GrainOverlay } from "./Grain";
 
 const cover: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };
 const cover_ = cover;
@@ -472,6 +473,7 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
       </AbsoluteFill>
       {grade.veil && (shots.length || props.layout === "stills") ? <AbsoluteFill data-grade={picture?.grade} style={{ pointerEvents: "none", backgroundColor: grade.veil.colour, mixBlendMode: grade.veil.blend }} /> : null}
       {vignette ? <AbsoluteFill data-vignette={picture?.vignette} style={{ pointerEvents: "none", background: vignette }} /> : null}
+      <GrainOverlay grain={picture?.grain} />
       {props.dips?.length ? <DipOverlay dips={props.dips} /> : null}
 
       {audio ? (

@@ -104,3 +104,18 @@ describe("the composition", () => {
     expect(hfTiming(props)[0].words.map((w) => w.start)).toEqual([1, 1.666667, 2.066667, 2.5]);
   });
 });
+
+describe("film grain (22 Nov 2026)", () => {
+  it("draws the same grain layer as the current renderer, moved on every frame by the same function, nothing fetched", () => {
+    const picture = { grade: "natural" as const, vignette: "soft" as const, grain: "light" as const, backing: "none" as const, fallback: "gradient" as const, fallbackColour: "#101014", accent: "#E8A3B5" };
+    const { html } = compileHyperframes(base({ picture }));
+    const layer = html.match(/<div id="grain"[^>]*>/)?.[0] ?? "";
+    expect(layer).toContain('data-grain="light"');
+    expect(layer).toContain("mix-blend-mode:soft-light");
+    expect(layer).toContain("data:image/svg+xml,%3Csvg");
+    expect(html.indexOf('id="vignette"')).toBeLessThan(html.indexOf('id="grain"')); // over the vignette, under the words
+    expect(html).toContain("const grainAt = function grainOffset(frame, tile = 200)");
+    expect(html).toMatch(/grainEl\.style\.backgroundPosition = grainAt\(Math\.round\(grainClock\.f\)\)/);
+    expect(compileHyperframes(base({ picture: { ...picture, grain: undefined } })).html).not.toContain('id="grain"');
+  });
+});

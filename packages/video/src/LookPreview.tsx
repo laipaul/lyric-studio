@@ -12,6 +12,7 @@ import { LOOK_BAR_FRAMES, type TriedAddOns, type TriedBreathe } from "./look-pre
 import { LyricBacking } from "./LyricBacking";
 import { LyricScene } from "./LyricScene";
 import { fallbackBackground, gradeLook, vignetteBackground, type PictureProps } from "./picture";
+import { GrainOverlay } from "./Grain";
 import { DEFAULT_LYRIC_AREA, type LyricArea } from "./platform";
 import type { LyricLineProps } from "./props";
 import { areaForLayout, BIG_HOOK_SCALE, type TextLayout } from "./text-layout";
@@ -53,6 +54,7 @@ export function LookPreview(p: LookPreviewProps) {
       {p.background ? <Img src={p.background} style={{ width: "100%", height: "100%", objectFit: "cover", filter: grade.filter }} /> : null}
       {p.background && grade.veil ? <AbsoluteFill data-grade={p.picture?.grade} style={{ backgroundColor: grade.veil.colour, mixBlendMode: grade.veil.blend }} /> : null}
       {vignette && !p.transparent ? <AbsoluteFill data-vignette={p.picture?.vignette} style={{ background: vignette }} /> : null}
+      {!p.transparent ? <GrainOverlay grain={p.picture?.grain} /> : null}
       {p.backing || p.picture?.backing === "band" ? <LyricBacking area={area} height={1920} /> : null}
       <LyricScene
         lyrics={p.lyrics}

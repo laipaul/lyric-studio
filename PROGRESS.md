@@ -4,6 +4,15 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Film grain (Look) ✅ (to verify on the PC)
+- Paul (22 Nov 2026), from Joey's finishing step: "overlay real film grain to unify AI textures". Shape → Settings →
+  Look → **Film grain**: Off (default: videos as before) / Light / Medium; per song or in a theme.
+- A fine noise tile drawn in the page (an SVG noise filter as a data URI: no file, no network), in soft-light over
+  the clips, grade and vignette, under the words (the lyrics stay sharp); it moves to another place on every frame
+  (picture.ts grainOffset, deterministic). The same layer in the preview, the Remotion render (Grain.tsx) and the
+  HyperFrames composition (hf/compile.ts, moved per frame by the same function). Manifest settings.picture.grain.
+- Tests: vitest picture (+2), hf-compile (+1), hf-network, look-preview, look-patch pass; browser song-stages pass.
+
 ### Hide a moment of a singing take ✅ (to verify on the PC)
 - Paul (22 Nov 2026): "the first 5 s are perfect, then 6 to 8 the lips are not in sync, then they get perfect".
 - Lyrics Sync → Shows clip, under a singing clip: **Hide a moment** opens the clip panel with *Hide from __ to __ s of
@@ -371,6 +380,9 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   reactivity; it saves versioned, data-only presets to the effects library. Not scheduled yet.
 
 ## Known issues
+- **Two stale browser tests (found 22 Nov 2026, not caused by the latest steps):** themes.e2e expects the top menu
+  "Library · Themes · Collections · Releases" (Characters was added since); style-lock.e2e looks for
+  [data-edit='titleOpening-default'], a row the Look panel no longer shows. Update both tests in a bug-fix pass.
 - **`next build` stops after compiling** with a "SecurityFatalError". The studio's Next.js version (16.4.3) has a
   known vulnerability, so the build stops to recommend an upgrade. The build files are complete, so the studio runs.
   Upgrading Next.js is its own step, to agree with Paul (found 18 Nov 2026, during C1).

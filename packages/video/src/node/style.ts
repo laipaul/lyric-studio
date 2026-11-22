@@ -75,6 +75,7 @@ export const FIELD_LABELS: Record<RecipeField, string> = {
   textColour: "Text colour",
   grade: "Colour grade",
   vignette: "Vignette",
+  grain: "Film grain",
   textBacking: "Behind the words",
   textLayout: "Text layout",
   lineShape: "Line shape",

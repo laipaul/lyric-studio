@@ -2,6 +2,9 @@
 //   grade        one colour grade on every clip (natural = the clips as they are), so mixed footage looks
 //                like one film
 //   vignette     the edges darkened (off | soft | strong)
+//   grain        film grain over everything but the words (off | light | medium; Joey's finishing step, 22 Nov 2026):
+//                one look over Midjourney, Seedance and InfiniteTalk clips; a fine noise drawn in the page (no file,
+//                no network), moved on every frame by grainOffset (the same in the preview and both renderers)
 //   textBacking  behind the words: none (the light shadow every video has) | shadow | glow (in the accent) |
 //                band (the soft dark band, always) | box (a dark rounded box behind each line)
 //   fallback     what shows where there is no clip (a song without clips, a slot waiting for one):
@@ -16,6 +19,8 @@ export const GRADES = ["natural", "warm", "cool", "faded", "mono", "moody"] as c
 export type Grade = (typeof GRADES)[number];
 export const VIGNETTES = ["off", "soft", "strong"] as const;
 export type Vignette = (typeof VIGNETTES)[number];
+export const GRAINS = ["off", "light", "medium"] as const;
+export type Grain = (typeof GRAINS)[number];
 export const TEXT_BACKINGS = ["none", "shadow", "glow", "band", "box"] as const;
 export type TextBacking = (typeof TEXT_BACKINGS)[number];
 export const FALLBACKS = ["gradient", "colour", "cover"] as const;
@@ -30,6 +35,7 @@ export type Fallback = (typeof FALLBACKS)[number];
 
 export const GRADE_LABELS: Record<Grade, string> = { natural: "Natural", warm: "Warm", cool: "Cool", faded: "Faded film", mono: "Black & white", moody: "Moody" };
 export const VIGNETTE_LABELS: Record<Vignette, string> = { off: "Off", soft: "Soft", strong: "Strong" };
+export const GRAIN_LABELS: Record<Grain, string> = { off: "Off", light: "Light", medium: "Medium" };
 export const BACKING_LABELS: Record<TextBacking, string> = { none: "None", shadow: "Soft shadow", glow: "Glow", band: "Dark band", box: "Box" };
 export const FALLBACK_LABELS: Record<Fallback, string> = { gradient: "Gradient", colour: "Plain colour", cover: "Blurred cover" };
 
@@ -38,6 +44,7 @@ export const FALLBACK_LABELS: Record<Fallback, string> = { gradient: "Gradient",
 export type PictureProps = {
   grade: Grade;
   vignette: Vignette;
+  grain?: Grain; // absent: off
   backing: TextBacking;
   fallback: Fallback;
   fallbackColour: string; // #RRGGBB
@@ -75,6 +82,23 @@ export function vignetteBackground(v: Vignette | undefined): string | null {
   return null;
 }
 
+// Film grain: a 200 px tile of fine grey noise (an SVG noise filter as a data URI: drawn by the browser, no file, no
+// network), laid over the picture in soft-light (it adds texture, the colours and the light stay), at the strength's
+// opacity. The tile jumps to another place on every frame (grainOffset), as real grain changes every frame.
+const GRAIN_TILE = 200;
+const GRAIN_SVG = `<svg xmlns='http://www.w3.org/2000/svg' width='${GRAIN_TILE}' height='${GRAIN_TILE}'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(#g)'/></svg>`;
+export function grainLayer(g: Grain | undefined): { background: string; opacity: number; blend: "soft-light"; size: number } | null {
+  if (g !== "light" && g !== "medium") return null;
+  return { background: `url("data:image/svg+xml,${encodeURIComponent(GRAIN_SVG).replace(/'/g, "%27")}")`, opacity: g === "light" ? 0.32 : 0.55, blend: "soft-light", size: GRAIN_TILE };
+}
+// Where the tile sits on `frame`: a fixed pseudo-random place per frame (deterministic: the same frame, the same grain).
+// Self-contained (no outside names): the HyperFrames page gets this very function as text.
+export function grainOffset(frame: number, tile = 200): string {
+  let h = (Math.imul(frame | 0, 2654435761) ^ 0x9e3779b9) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 2246822507) >>> 0;
+  return `${h % tile}px ${(h >>> 8) % tile}px`;
+}
+
 // "#E8A3B5" + alpha -> "rgba(232,163,181,0.5)"
 export function hexRgba(hex: string, alpha: number): string {
   const n = Number.parseInt(hex.replace("#", ""), 16);
@@ -103,7 +127,7 @@ export const BOX_STYLE: React.CSSProperties = { background: "rgba(0,0,0,0.72)", 
 
 // The theme's picture fields as props (recipe values; the Canvas without the grade when gradeCanvas is off).
 export function pictureOf(
-  v: { grade?: string; vignette?: string; textBacking?: string; fallback?: string; fallbackColour?: string; gradeCanvas?: string; accentColour?: string; titleStyle?: string; titleWarp?: string },
+  v: { grade?: string; vignette?: string; grain?: string; textBacking?: string; fallback?: string; fallbackColour?: string; gradeCanvas?: string; accentColour?: string; titleStyle?: string; titleWarp?: string },
   opts: { canvas?: boolean; coverSrc?: string | null } = {},
 ): PictureProps {
   const pick = <T extends string>(list: readonly T[], x: string | undefined, d: T): T => ((list as readonly string[]).includes(x ?? "") ? (x as T) : d);
@@ -111,6 +135,7 @@ export function pictureOf(
   return {
     grade: opts.canvas && v.gradeCanvas === "off" ? "natural" : grade,
     vignette: pick(VIGNETTES, v.vignette, "off"),
+    ...(v.grain === "light" || v.grain === "medium" ? { grain: v.grain } : {}),
     backing: pick(TEXT_BACKINGS, v.textBacking, "none"),
     fallback: pick(FALLBACKS, v.fallback, "gradient"),
     fallbackColour: /^#[0-9a-fA-F]{6}$/.test(v.fallbackColour ?? "") ? v.fallbackColour! : DEFAULT_PICTURE.fallbackColour,

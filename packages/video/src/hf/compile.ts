@@ -19,7 +19,7 @@ import { dipOpacity } from "../transitions";
 import type { FontFileRef } from "../font-files";
 import { applyTextCase } from "../lyrics";
 import type { KenBurns } from "../photo";
-import { fallbackBackground, gradeLook, vignetteBackground } from "../picture";
+import { fallbackBackground, grainLayer, grainOffset, gradeLook, vignetteBackground } from "../picture";
 import { DEFAULT_LYRIC_AREA } from "../platform";
 import type { LyricVideoProps, ShotProps } from "../props";
 
@@ -179,6 +179,12 @@ export function compileHyperframes(props: Props, o: { gsapSrc?: string } = {}): 
     if (grade.veil && props.shots.length) body.push(`      <div id="veil" data-grade="${picture?.grade}" style="${full}background-color:${grade.veil.colour};mix-blend-mode:${grade.veil.blend};z-index:${z++}"></div>`);
     const vignette = vignetteBackground(picture?.vignette);
     if (vignette) body.push(`      <div id="vignette" style="${full}background:${vignette};z-index:${z++}"></div>`);
+    // Film grain: the same tile as the current renderer, moved to the same place on every frame (grainOffset).
+    const grain = grainLayer(picture?.grain);
+    if (grain) {
+      body.push(`      <div id="grain" data-grain="${picture?.grain}" style="${full}background-image:${grain.background.replace(/"/g, "&quot;")};background-size:${grain.size}px ${grain.size}px;background-repeat:repeat;opacity:${grain.opacity};mix-blend-mode:${grain.blend};z-index:${z++}"></div>`);
+      script.push(`const grainAt = ${grainOffset.toString()};\n      const grainEl = document.getElementById("grain"), grainClock = { f: 0 };\n      tl.to(grainClock, { f: ${props.durationInFrames}, duration: ${durationS}, ease: "none", onUpdate: () => { grainEl.style.backgroundPosition = grainAt(Math.round(grainClock.f)); } }, 0);`);
+    }
     if (props.dips?.length) {
       body.push(`      <div id="dip" class="clip" data-start="0" data-duration="${durationS}" data-track-index="1" style="${full}background:#000;opacity:0;z-index:${z++}"></div>`);
       // The same triangle as the current renderer: darkest on the dip's frame.

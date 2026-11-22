@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { backingShadow, BASE_TEXT_SHADOW, fallbackBackground, gradeLook, pictureOf, titleStyleCss, vignetteBackground, warpLetter } from "../src/picture";
+import { backingShadow, BASE_TEXT_SHADOW, fallbackBackground, gradeLook, grainLayer, grainOffset, pictureOf, titleStyleCss, vignetteBackground, warpLetter } from "../src/picture";
 import { patchLook } from "../src/look-patch";
 import { defaultLyricVideoProps } from "../src/props";
 import { checkRecipe, LIBRARY_RECIPE } from "../src/node/recipe";
@@ -11,6 +11,30 @@ describe("the theme's picture", () => {
     expect(gradeLook("natural")).toEqual({});
     for (const g of ["warm", "cool", "faded", "mono", "moody"] as const) expect(gradeLook(g).filter).toBeTruthy();
     expect(gradeLook("mono").filter).toContain("grayscale(1)");
+  });
+  it("film grain (22 Nov 2026): off draws nothing; light and medium a noise tile drawn in the page, soft-light, no file", () => {
+    expect(grainLayer("off")).toBeNull();
+    expect(grainLayer(undefined)).toBeNull();
+    const light = grainLayer("light")!;
+    const medium = grainLayer("medium")!;
+    const svg = decodeURIComponent(light.background.replace(/^url\("data:image\/svg\+xml,/, "").replace(/"\)$/, ""));
+    expect(svg).toMatch(/^<svg .*feTurbulence/);
+    expect(svg.match(/https?:\/\/[^'"]+/g)).toEqual(["http://www.w3.org/2000/svg"]); // a name, nothing fetched
+    expect(light.background).not.toMatch(/[<>']/); // safe inside any HTML attribute or CSS value
+    expect([light.blend, light.opacity < medium.opacity]).toEqual(["soft-light", true]);
+    expect(pictureOf({ grain: "light" }).grain).toBe("light");
+    expect(pictureOf({ grain: "heavy" }).grain).toBeUndefined();
+    expect(checkRecipe({ grain: "medium" }).problems).toEqual([]);
+    expect(checkRecipe({ grain: "heavy" }).problems[0]).toMatch(/grain must be off, light, medium/);
+    expect(THEME_FIELDS).toContain("grain");
+    expect(LIBRARY_RECIPE.grain).toBe("off");
+  });
+  it("the grain moves on every frame, the same way every time; the frame function stands alone (HyperFrames gets it as text)", () => {
+    expect(grainOffset(12)).toBe(grainOffset(12));
+    expect(new Set(Array.from({ length: 30 }, (_, f) => grainOffset(f))).size).toBeGreaterThan(25);
+    for (let f = 0; f < 100; f++) expect(grainOffset(f)).toMatch(/^(1?\d{1,2})px (1?\d{1,2})px$/);
+    const copy = new Function(`return (${grainOffset.toString()})`)() as (f: number) => string;
+    expect([copy(0), copy(41), copy(900)]).toEqual([grainOffset(0), grainOffset(41), grainOffset(900)]);
   });
   it("vignette off draws nothing; soft and strong darken the edges", () => {
     expect(vignetteBackground("off")).toBeNull();

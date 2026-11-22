@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { isFinalHook, isLineBuild, isLineShape, LINE_BUILD_HINTS, LINE_BUILD_LABELS, LINE_BUILDS, LINE_SHAPE_HINTS, LINE_SHAPE_LABELS, LINE_SHAPES, type FinalHook, type LineBuild, type LineShape } from "@lyric/video";
-import { BACKING_LABELS, effectTitle, themeReach, isTextLayout, parseColourRef, TEXT_LAYOUT_HINTS, TEXT_LAYOUT_LABELS, TEXT_LAYOUTS, type TextLayout, FALLBACK_LABELS, GRADE_LABELS, patchChoice, pictureOf, TITLE_STYLE_LABELS, TITLE_WARP_LABELS, titleStyleCss, VIGNETTE_LABELS, warpLetter, type TitleStyle, type TitleWarp, previewBacking, previewFace, previewLyrics, type LookPatch, type LookPreviewProps, type PatchFace, type Readability } from "@lyric/video";
+import { BACKING_LABELS, effectTitle, themeReach, isTextLayout, parseColourRef, TEXT_LAYOUT_HINTS, TEXT_LAYOUT_LABELS, TEXT_LAYOUTS, type TextLayout, FALLBACK_LABELS, GRADE_LABELS, patchChoice, pictureOf, TITLE_STYLE_LABELS, TITLE_WARP_LABELS, titleStyleCss, VIGNETTE_LABELS, GRAIN_LABELS, warpLetter, type TitleStyle, type TitleWarp, previewBacking, previewFace, previewLyrics, type LookPatch, type LookPreviewProps, type PatchFace, type Readability } from "@lyric/video";
 import type { PairingCard, PairingsView } from "@lyric/video/pairings";
 import type { StyleData, StyleField, StyleFont, StyleTheme } from "@lyric/video/style";
 import { cardFit } from "@lyric/video/card-layout";
@@ -48,7 +48,7 @@ const show = (v: unknown) => (v === null ? "preset" : Array.isArray(v) ? (v.leng
 // demo: an effect just pointed at or picked in Motion: the viewer shows its name moving in it over the
 // video's frame, until the user plays (then the song plays with the effect on the real lyrics).
 export type ShapeLook = { patch: LookPatch | null; fallback: LookPreviewProps; caption: string; previewing: string | null; demo?: { key: string; input: LookPreviewProps } | null }; // previewing: the pairing pointed at
-const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "emphasis", "accentColour", "textColour", "grade", "vignette", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp", "hookCard", "hookCardStyle", "endCard", "endCardStyle", "textLayout", "lineShape", "lineBuild", "finalHook"]);
+const LOOK_FIELDS_PATCHED = new Set(["verseFont", "verseWeight", "verseItalic", "hookFont", "hookWeight", "hookItalic", "verseEffect", "hookEffect", "breathe", "heldGlow", "chorusLift", "shine", "emphasis", "accentColour", "textColour", "grade", "vignette", "grain", "textBacking", "fallback", "fallbackColour", "gradeCanvas", "titleStyle", "titleWarp", "hookCard", "hookCardStyle", "endCard", "endCardStyle", "textLayout", "lineShape", "lineBuild", "finalHook"]);
 
 // The Shape page's tool panels (the song's recipe, song.json), one at a time as chosen in the rail: Fonts
 // (font pairing, the fonts line with Fine-tune), Effects (Set effect with its Verses / Choruses switch),
@@ -1274,7 +1274,7 @@ function lookOf(data: StyleData, s: { dirty: boolean; hovered: PairingCard | nul
   const addOns = { heldGlow: fx.heldGlow, chorusLift: fx.chorusLift, shine: fx.shine, emphasis: fx.emphasis };
   const accent = String(value("accentColour") ?? "#E8A3B5");
   const colour = String(value("textColour") ?? s.pairView?.colour ?? "#FFFFFF");
-  const picture = pictureOf({ grade: str(value("grade")), vignette: str(value("vignette")), textBacking: str(value("textBacking")), fallback: str(value("fallback")), fallbackColour: str(value("fallbackColour")), titleStyle: str(value("titleStyle")), titleWarp: str(value("titleWarp")), accentColour: accent });
+  const picture = pictureOf({ grade: str(value("grade")), vignette: str(value("vignette")), grain: str(value("grain")), textBacking: str(value("textBacking")), fallback: str(value("fallback")), fallbackColour: str(value("fallbackColour")), titleStyle: str(value("titleStyle")), titleWarp: str(value("titleWarp")), accentColour: accent });
   const cards = { hook: value("hookCard") === "on", hookStyle: (str(value("hookCardStyle")) ?? "plain") as TitleStyle, end: value("endCard") === "on", endStyle: (str(value("endCardStyle")) ?? "label") as TitleStyle };
   const textLayout: TextLayout = isTextLayout(value("textLayout")) ? (value("textLayout") as TextLayout) : "centre";
   const lineShape: LineShape = isLineShape(value("lineShape")) ? (value("lineShape") as LineShape) : "subtitle";
@@ -1892,6 +1892,7 @@ function PictureControls({ value, onSet }: { value: (field: string) => unknown; 
   const groups: { field: string; label: string; hint: string; options: Record<string, string> }[] = [
     { field: "grade", label: "Colour grade", hint: "One look on every clip, so mixed footage feels like one film. Your clips themselves are never changed.", options: GRADE_LABELS },
     { field: "vignette", label: "Vignette", hint: "Darker edges draw the eye to the middle.", options: VIGNETTE_LABELS },
+    { field: "grain", label: "Film grain", hint: "A fine moving film texture over the picture (not the words): clips from Midjourney, Seedance and lip sync look like one film.", options: GRAIN_LABELS },
     { field: "textBacking", label: "Behind the words", hint: "The app still adds a soft band by itself when a clip is too bright to read the lyrics.", options: BACKING_LABELS },
     { field: "fallback", label: "Background without a clip", hint: "For a song without clips, or a slot waiting for one.", options: FALLBACK_LABELS },
   ];

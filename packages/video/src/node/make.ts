@@ -163,7 +163,7 @@ export type MakeOptions = {
   titleOpening?: "off" | "on"; // Reels / TikTok / Shorts: title, byline and tagline before the first hook
   // The theme's picture (src/picture.ts; recipe textColour, grade, vignette, textBacking, fallback,
   // fallbackColour, gradeCanvas). Absent (pnpm make without a song.json): the videos as before.
-  picture?: Pick<RecipeValues, "textColour" | "grade" | "vignette" | "textBacking" | "fallback" | "fallbackColour" | "gradeCanvas" | "titleStyle" | "titleWarp" | "hookCard" | "hookCardStyle" | "endCard" | "endCardStyle" | "hookText" | "endText">;
+  picture?: Pick<RecipeValues, "textColour" | "grade" | "vignette" | "grain" | "textBacking" | "fallback" | "fallbackColour" | "gradeCanvas" | "titleStyle" | "titleWarp" | "hookCard" | "hookCardStyle" | "endCard" | "endCardStyle" | "hookText" | "endText">;
   transitions?: TransitionStyle; // between shots: "auto" (default: from the music), "crisp" (cuts), "flowing" (dissolves)
   ending?: EndingChoice; // Reels / TikTok / Shorts: "auto" (default: the app chooses tight loop, soft fade or ring-out) or one of them
   tempo?: number; // the song's real BPM (song.json "tempo"): the beats are re-tracked around it
@@ -1029,7 +1029,7 @@ function forPlatform(sh: Shared, base: PlatformPreset): { sh: Shared; preset: Pl
 
 // The theme's picture fields of a recipe (MakeOptions.picture).
 function pictureFields(v: RecipeValues): NonNullable<MakeOptions["picture"]> {
-  return { textColour: v.textColour, grade: v.grade, vignette: v.vignette, textBacking: v.textBacking, fallback: v.fallback, fallbackColour: v.fallbackColour, gradeCanvas: v.gradeCanvas, titleStyle: v.titleStyle, titleWarp: v.titleWarp, hookCard: v.hookCard, hookCardStyle: v.hookCardStyle, endCard: v.endCard, endCardStyle: v.endCardStyle, hookText: v.hookText, endText: v.endText };
+  return { textColour: v.textColour, grade: v.grade, vignette: v.vignette, grain: v.grain, textBacking: v.textBacking, fallback: v.fallback, fallbackColour: v.fallbackColour, gradeCanvas: v.gradeCanvas, titleStyle: v.titleStyle, titleWarp: v.titleWarp, hookCard: v.hookCard, hookCardStyle: v.hookCardStyle, endCard: v.endCard, endCardStyle: v.endCardStyle, hookText: v.hookText, endText: v.endText };
 }
 
 // Where the title opening's first lyric line(s) are drawn, for the overlap check: the same measuring as QA
@@ -2253,7 +2253,7 @@ function buildManifest(c: {
     settings: {
       cut_rate: spec.rate ?? c.options.rate ?? "1x",
       theme: c.options.theme ?? null, // the song's theme (or --theme / Compare themes for this run)
-      picture: c.props.picture ? { grade: c.props.picture.grade, vignette: c.props.picture.vignette, text_backing: c.props.picture.backing, fallback: c.props.picture.fallback, text_colour: c.props.colour } : null, // the theme's picture (src/picture.ts)
+      picture: c.props.picture ? { grade: c.props.picture.grade, vignette: c.props.picture.vignette, grain: c.props.picture.grain ?? "off", text_backing: c.props.picture.backing, fallback: c.props.picture.fallback, text_colour: c.props.colour } : null, // the theme's picture (src/picture.ts)
       // The theme's hook / end card as drawn (src/extra-cards.ts): only the ones switched on.
       extra_cards: (c.props.textCards ?? []).filter((t) => (t.type === "hook" || t.type === "end") && !t.off).map((t) => ({ type: t.type, text: t.text, start_s: Math.round((t.startFrame / VIDEO.fps) * 100) / 100, style: t.cardStyle ?? "plain" })),
       gap_order: c.gapOrder ?? null, // "story": every video in story order (story anchors)
