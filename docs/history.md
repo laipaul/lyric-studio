@@ -4,6 +4,20 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Singer script per block; B-roll takes as long as a phrase of the song ✅ (to verify on the PC)
+- Paul (21 Nov 2026, "Build both"). **Script:** under the first line of a singing block, "What the singer does
+  (optional)": a few words ("turns to the sea, soft smile") sent with the voice as InfiniteTalk's prompt (expression
+  and pose; same price). A block already made is made again only when you press Make singing clips (cost first).
+- **Take length follows the song:** Creation → Your defaults → Length: "Fit the song" (default) = one musical phrase
+  of this song, 4 bars at its tempo rounded up to whole seconds (4 to 30 s; e.g. 9 s at 116 BPM), or "Short (5 s)".
+  The cost per take follows the length and shows before anything is sent (Seedance 2.5 Flash 720p: $0.216/s).
+- Checked on WaveSpeed's pages: Seedance Talking Avatar ($0.27/s; "the generated audio can differ from the original
+  recording") and Reference To Video (audio as style only, 30 s) are not used for singing; InfiniteTalk stays.
+- Tests: vitest animate (+2), browser singer (+2), pictures (+1) pass.
+- Then (Paul's block 9-14): a block take replaces an earlier one-line take on its first line by itself (the old clip
+  set to Omit, placed once; checked in the browser test). The ✕ in "Shows clip" now only takes the singing clip off
+  the line; Who sings stays as it is (it used to also remove the line from its block).
+
 ### Singing blocks: lines in a row with the same picture are one continuous take ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "select a scene where the singer will perform the whole lines I pick, then move on to the B-roll".
   Pick the same picture in "Who sings" on lines in a row (e.g. 9 to 12): they become ONE singing take, from just before

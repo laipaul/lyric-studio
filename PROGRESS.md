@@ -4,6 +4,23 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Soft fade into singing takes ✅ (to verify on the PC)
+- Paul (22 Nov 2026): in Wedding Day's Reel the transitions into clips 4 and 16 felt "a bit hard", only at the
+  start of the lip sync, not at its end. Both are singing takes ("sings lines 15-16", "sings lines 25-27"): the app
+  always hard-cut INTO a singing take (rule from G3, to protect lip sync); every other transition dissolved.
+- Now a singing take fades in (about 1.5 s, the automatic dissolve length) over its own lead-in: the frames the take
+  has before its shot starts (a take is made from 0.5 s before the downbeat before its line). The take is never moved
+  or slowed, so the lips stay in sync to the frame, and the whole fade lies before the cut: the singer is fully there
+  when the cut comes. Less than 0.2 s of lead-in: still a hard cut, with the note "a hard cut into this singing take
+  (the take starts right on the line)". Still a cut when the clip's own "comes in with: cut", the crisp style or an
+  all-cuts variation says so. A take returning after a hidden moment does not fade (its lead-in is out of sync).
+  Out of a singing take: unchanged.
+- Code: src/handles.ts (HandleShot.fadeInBeforeCut, MIN_FADE_IN_FRAMES 6), compose.ts; plan fingerprint v 3 (make.ts):
+  saved shot plans are planned again once (the old one kept as .previous.json).
+- Tests: vitest handles (+4), anchors (lip sync exact on every frame of the fade, no frame past the clip's end, cut
+  choices win, short lead-in); handles, anchors, compose, transition-notes, storyboard-file pass. Full suite: the same
+  7 tests fail with and without this change (they need network / tools the cloud session lacks). Studio build passes.
+
 ### Fix: Studio build failed ("Failed to collect page data for /api/songs/[id]/assets") ✅ (to verify on the PC)
 - Paul (22 Nov 2026): `pnpm --filter @lyric/studio build` failed after d81d436 (on Linux too, not only Windows).
 - Cause: d81d436 made story-line.ts (used by the Assets tab's API route) import node/transition-notes.ts, which imported
@@ -343,20 +360,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Then: Paul's first block came back "talking" (a calm portrait). Every singing take now opens InfiniteTalk's prompt with a
   singing cue (open mouth on held notes, lips following the melody, breathing between phrases, eyes closing on long
   notes, moving with the rhythm), then his script. Blocks made before show "make again to sing" (only on Make, cost first).
-
-### Singer script per block; B-roll takes as long as a phrase of the song ✅ (to verify on the PC)
-- Paul (21 Nov 2026, "Build both"). **Script:** under the first line of a singing block, "What the singer does
-  (optional)": a few words ("turns to the sea, soft smile") sent with the voice as InfiniteTalk's prompt (expression
-  and pose; same price). A block already made is made again only when you press Make singing clips (cost first).
-- **Take length follows the song:** Creation → Your defaults → Length: "Fit the song" (default) = one musical phrase
-  of this song, 4 bars at its tempo rounded up to whole seconds (4 to 30 s; e.g. 9 s at 116 BPM), or "Short (5 s)".
-  The cost per take follows the length and shows before anything is sent (Seedance 2.5 Flash 720p: $0.216/s).
-- Checked on WaveSpeed's pages: Seedance Talking Avatar ($0.27/s; "the generated audio can differ from the original
-  recording") and Reference To Video (audio as style only, 30 s) are not used for singing; InfiniteTalk stays.
-- Tests: vitest animate (+2), browser singer (+2), pictures (+1) pass.
-- Then (Paul's block 9-14): a block take replaces an earlier one-line take on its first line by itself (the old clip
-  set to Omit, placed once; checked in the browser test). The ✕ in "Shows clip" now only takes the singing clip off
-  the line; Who sings stays as it is (it used to also remove the line from its block).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
