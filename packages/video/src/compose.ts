@@ -312,8 +312,23 @@ export function composeProps(
   // the dissolve, so no frame is ever frozen.
   const bar = barFrames(base.beats ?? []);
   const wanted = new Map<number, number>();
-  for (const [index, a] of anchorPlan?.shots ?? []) {
-    const transition = a.syncMs != null ? "cut" : choices.transitions === "cut" || choices.transitions === "dissolve" ? choices.transitions : a.transition;
+  // A dissolve INTO a singing take (22 Nov 2026): wanted ~1.5 s, made only of the take's own lead-in and lying wholly before the
+  // cut (fadeInBeforeCut), so lip sync stays frame-exact and the singer is fully there from the cut. Not when the variation,
+  // the crisp style or the clip's own "comes in with: cut" says cut. The first shot of a take only (not its return from a hidden moment).
+  const fadeIn = new Set<number>();
+  const seenTakes = new Set<unknown>();
+  const singingCuts = choices.transitions === "cut" || base.transitions?.style === "crisp";
+  for (const [index, a] of [...(anchorPlan?.shots ?? [])].sort((x, y) => x[0] - y[0])) {
+    if (a.syncMs != null) {
+      const first = !seenTakes.has(a);
+      seenTakes.add(a);
+      if (first && !singingCuts && base.transitions?.byClip?.[a.clipId] !== "cut" && index > 0 && shots[index] && shots[index - 1]) {
+        fadeIn.add(index);
+        wanted.set(index, autoDissolveFrames(bar));
+      }
+      continue;
+    }
+    const transition = choices.transitions === "cut" || choices.transitions === "dissolve" ? choices.transitions : a.transition;
     if (transition === "dissolve" && index > 0 && shots[index] && shots[index - 1]) wanted.set(index, bar);
   }
   let transitionPlan: { text: string; kinds: TransitionKind[] } | null = null;
@@ -351,6 +366,7 @@ export function composeProps(
           lo,
           hi,
           fixed: exact.has(i) || !!assigned[i].loop || (loops && i === 0),
+          ...(fadeIn.has(i) ? { fadeInBeforeCut: true } : {}),
         };
       }),
       wanted,
@@ -367,7 +383,7 @@ export function composeProps(
     ? {
         uses: anchorPlan.uses.map((u) => {
           const s = u.shot !== null ? assigned[u.shot] : undefined;
-          const transition = u.lipsync ? "cut" : choices.transitions === "cut" || choices.transitions === "dissolve" ? choices.transitions : u.transition;
+          const transition = u.lipsync ? (u.shot !== null && fadeIn.has(u.shot) && !!shots[u.shot]?.dissolve?.before ? "dissolve" : "cut") : choices.transitions === "cut" || choices.transitions === "dissolve" ? choices.transitions : u.transition;
           return { ...u, transition, ...(s && s.playback_rate < 1 ? { playback_rate: s.playback_rate } : {}) };
         }),
         conflicts: anchorPlan.conflicts,

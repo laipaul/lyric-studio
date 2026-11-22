@@ -21,6 +21,10 @@ export type HandleShot = {
   lo: number; // the first clip frame it may use (the user's in point)
   hi: number; // one past the last clip frame it may use: min(the user's out point, the clip's real length)
   fixed?: boolean; // must not slide (singing, loop)
+  // Incoming singing take (lip sync): its dissolve lies wholly BEFORE the cut (the previous shot gets no tail), made only of
+  // the take's own lead-in (the frames before its clip start, the take is never slid or slowed). Under MIN_FADE_IN_FRAMES
+  // of lead-in it stays a hard cut. Use with `fixed`.
+  fadeInBeforeCut?: boolean;
 };
 
 export type HandleNote = { shot: number; text: string };
@@ -28,6 +32,9 @@ export type FittedShot = { clipStartFrame: number; playbackRate: number; dissolv
 
 // Below this a dissolve is not worth it: a hard cut.
 export const MIN_DISSOLVE_FRAMES = 4;
+// A fade into a singing take needs at least this much lead-in (0.2 s at 30 fps), else a hard cut.
+export const MIN_FADE_IN_FRAMES = 6;
+export const SINGING_CUT_NOTE = "a hard cut into this singing take (the take starts right on the line)";
 // The most a clip is slowed to make room for a dissolve (0.9 = 10% slower), and never below this speed.
 export const MAX_SLOWDOWN = 0.9;
 const MIN_RATE = 0.75; // storyboard.ts CHOPPY_RATE: slower than this a 30 fps clip repeats frames visibly
@@ -78,7 +85,8 @@ export function fitHandles(
     const cur = shots[k];
     const p = k - 1;
     // The outgoing shot: picture after what it already plays (its own dissolve in included).
-    const halfWant = Math.min(Math.floor(want / 2), Math.floor(cur.duration / 2));
+    const fadeIn = !!cur.fadeInBeforeCut;
+    const halfWant = fadeIn ? 0 : Math.min(Math.floor(want / 2), Math.floor(cur.duration / 2));
     let prevRoom: number;
     if (!prev.video) prevRoom = Infinity;
     else if (free[p]) {
@@ -96,11 +104,12 @@ export function fitHandles(
     } else curRoom = cur.holdLastFrame ? 0 : Math.max(0, Math.floor((start[k] - cur.lo) / rate[k]));
     let a = a0;
     let b = Math.min(bWant, curRoom);
-    if (a + b < MIN_DISSOLVE_FRAMES) {
+    if (a + b < (fadeIn ? MIN_FADE_IN_FRAMES : MIN_DISSOLVE_FRAMES)) {
       a = 0;
       b = 0;
+      if (fadeIn) notes.push({ shot: k, text: SINGING_CUT_NOTE });
     }
-    if (want - (a + b) > NOTE_SLIDE_FRAMES) {
+    if (!fadeIn && want - (a + b) > NOTE_SLIDE_FRAMES) {
       notes.push({ shot: k, text: a + b === 0 ? `a hard cut into this clip instead of a ${secs(want, fps)} dissolve (the clips have no spare frames)` : `dissolve into this clip shortened to ${secs(a + b, fps)} (the clips have no more spare frames)` });
     }
 

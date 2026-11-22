@@ -1677,7 +1677,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   );
   // 2e-1: what each video's plan is made from (its fingerprint) and which Try other looks it is.
   const keyOptions = Object.fromEntries(Object.entries(options).filter(([k, v]) => !PLAN_KEY_SKIP.has(k) && v !== undefined && v !== false && typeof v !== "function"));
-  const keyBase = { v: 2, options: keyOptions, preset, song: sh.sp.project.audio_hash ?? null, lrc: alignment.lrcHash, leadMs, lyricsOffsetMs, edits, clips: prepared.clips.map((c) => [c.name, c.hash]), anchors: sh.anchors, canvas: sh.canvasChoice, board: sh.textboard.board, picture: sh.picture ?? null };
+  const keyBase = { v: 3, options: keyOptions, preset, song: sh.sp.project.audio_hash ?? null, lrc: alignment.lrcHash, leadMs, lyricsOffsetMs, edits, clips: prepared.clips.map((c) => [c.name, c.hash]), anchors: sh.anchors, canvas: sh.canvasChoice, board: sh.textboard.board, picture: sh.picture ?? null };
   const planKeyOf = (spec: VariationSpec) => createHash("sha256").update(JSON.stringify({ ...keyBase, spec })).digest("hex");
   const tryOf = (spec: VariationSpec): SbTry | null =>
     sh.picture

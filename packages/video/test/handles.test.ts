@@ -1,7 +1,7 @@
 // Transition handles (22 Nov 2026): a dissolve never freezes a frame (src/handles.ts).
 import { describe, expect, it } from "vitest";
 
-import { fitHandles, MIN_DISSOLVE_FRAMES, type HandleShot } from "../src/handles";
+import { fitHandles, MIN_DISSOLVE_FRAMES, SINGING_CUT_NOTE, type HandleShot } from "../src/handles";
 
 const video = (o: Partial<HandleShot> & { duration: number; clipStartFrame: number; hi: number }): HandleShot => ({
   video: true, playbackRate: 1, holdLastFrame: false, lo: 0, ...o,
@@ -134,5 +134,41 @@ describe("composeProps: dissolves never freeze a frame", () => {
       expect(s.clipStartFrame).toBeGreaterThanOrEqual(30);
       expect(s.clipStartFrame + Math.ceil(((s.dissolve?.before ?? 0) + s.duration + (s.tail ?? 0) - 1) * s.playbackRate - 1e-9) + 1).toBeLessThanOrEqual(180);
     }
+  });
+
+  describe("a dissolve into a singing take (fadeInBeforeCut)", () => {
+    const take = (lead: number, extra: Partial<HandleShot> = {}) =>
+      video({ duration: 120, clipStartFrame: lead, lo: 0, hi: 400, fixed: true, fadeInBeforeCut: true, ...extra });
+    it("20 lead-in frames, 46 wanted: the take starts 20 frames early at the same speed, the previous shot has no tail", () => {
+      const shots = [video({ duration: 150, clipStartFrame: 0, hi: 300 }), take(20)];
+      const fit = fitHandles(shots, new Map([[1, 46]]));
+      expect(fit.shots[1].dissolve).toEqual({ before: 20, after: 0 }); // min(46, 150/2, 20)
+      expect(fit.shots[1].clipStartFrame).toBe(0); // 20 - 20: no slide, same picture on the cut
+      expect(fit.shots[1].playbackRate).toBe(1);
+      expect(fit.shots[0].tail).toBeUndefined();
+      expect(fit.notes).toEqual([]); // shorter than wanted is expected for a take
+      noFreeze(shots, fit);
+    });
+    it("a long lead-in gives the whole wanted dissolve, limited by half the previous shot", () => {
+      const fit = fitHandles([video({ duration: 150, clipStartFrame: 0, hi: 300 }), take(100)], new Map([[1, 46]]));
+      expect(fit.shots[1].dissolve).toEqual({ before: 46, after: 0 });
+      expect(fit.shots[1].clipStartFrame).toBe(54);
+      const short = fitHandles([video({ duration: 60, clipStartFrame: 0, hi: 300 }), take(100)], new Map([[1, 46]]));
+      expect(short.shots[1].dissolve).toEqual({ before: 30, after: 0 });
+    });
+    it("3 lead-in frames: a hard cut, with the note", () => {
+      const shots = [video({ duration: 150, clipStartFrame: 0, hi: 300 }), take(3)];
+      const fit = fitHandles(shots, new Map([[1, 46]]));
+      expect(fit.shots[1].dissolve).toBeUndefined();
+      expect(fit.shots[1].clipStartFrame).toBe(3);
+      expect(fit.notes).toEqual([{ shot: 1, text: SINGING_CUT_NOTE }]);
+      expect(SINGING_CUT_NOTE).toBe("a hard cut into this singing take (the take starts right on the line)");
+    });
+    it("uses only frames after the user's in point; a take that leaves less than 6 stays a cut", () => {
+      const shots = [video({ duration: 150, clipStartFrame: 0, hi: 300 }), take(20, { lo: 15, hi: 140 })];
+      const fit = fitHandles(shots, new Map([[1, 46]]));
+      expect(fit.shots[1].dissolve).toBeUndefined(); // 5 lead-in frames < 6: a cut
+      expect(fit.notes[0].text).toBe(SINGING_CUT_NOTE);
+    });
   });
 });
