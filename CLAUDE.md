@@ -65,6 +65,8 @@ Payments, credits, user accounts, login, multi-user, cloud hosting, cloud render
 - After each step: tell me exactly which command to run, what I should see, and how to check it works.
 - Write a small automated test for any core logic (beat cuts, shuffle, timing).
 - Commit to git at the end of each step with a clear message.
+- Before every push, run `pnpm --filter @lyric/studio build` and push only if it passes (tests alone do not catch a
+  broken build: 22 Nov 2026, d81d436 broke it). If Next.js stops the build to show a security notice, run it again.
 - Never install global tools or delete files outside this project without asking me.
 - If something fails, explain the cause in plain words, then fix it.
 - Keep `PROGRESS.md` updated: steps done, what works, known issues.
