@@ -13,6 +13,7 @@ import { nextTakeN, removeTakes, restoreTake } from "../src/node/animate";
 import { addFromLink, addPictures, phraseSeconds, readCreationDefaults, saveCreationDefaults, sourceLabel, sendToStoryboard, estimate, higgsfieldTransport, motionPrompt, picturesView, readPictures, runTakes, setMood, startAnimate, startResume, stubTransport, waveSpeedTransport } from "../src/node/animate";
 import { clearFinishedGenerateTasks, listGenerateTasks, RECENT_MS } from "../src/node/generate-tasks";
 import { takeFacts } from "../src/take-facts";
+import { singingParts, PART_MAX_MS, PART_MIN_MS } from "../src/node/singer";
 import { chooseSingingTake, infiniteTalkTransport, LIPSYNC_USD_PER_SECOND_AT, runSinging, seenSingingTake, singingPrompt, SINGING_CUE, singingPiece, singingRuns, stubSingTransport, type SingTransport } from "../src/node/singer";
 import { makePlayable, update } from "../src/node/animate";
 import { execFileSync } from "node:child_process";
@@ -491,5 +492,46 @@ describe("Clean up takes (Paul, 21 Nov 2026): put aside, never deleted, with Res
     expect(back.takes.find((t) => t.n === 3)!.file).toBe("takes/tidy take 3.mp4");
     expect(readFileSync(path.join(pics, "takes", "tidy take 3.mp4"), "utf8")).toBe("take 3");
     expect(back.removedTakes!.map((t) => t.n)).toEqual([1]);
+  });
+});
+
+describe("long singing takes in parts of about 8 s (Joey's 4-10 s rule; Paul 22 Nov 2026)", () => {
+  const downbeats = Array.from({ length: 40 }, (_, i) => i * 2000); // a bar every 2 s
+  it("a piece up to 10 s stays one request; a longer one is cut on downbeats into parts of 4-10 s, pauses first", () => {
+    const short = { fromMs: 1500, toMs: 10_500, seconds: 9, usd: 0.54 };
+    expect(singingParts(short, downbeats, [])).toBe(short);
+    // Line 32: 23 s of voice; a pause between sung lines at 15.5-16.5 s.
+    const lines = [{ shownMs: 1_500, sungEndMs: 15_500 }, { shownMs: 16_500, sungEndMs: 24_000 }];
+    const p = singingParts({ fromMs: 1500, toMs: 24_500, seconds: 23, usd: 1.38 }, downbeats, lines, 0.06);
+    const parts = p.parts!;
+    expect(parts[0].fromMs).toBe(1500);
+    expect(parts.at(-1)!.toMs).toBe(24_500);
+    for (let i = 1; i < parts.length; i++) expect(parts[i].fromMs).toBe(parts[i - 1].toMs); // back to back
+    for (const x of parts) {
+      expect(x.toMs - x.fromMs).toBeGreaterThanOrEqual(PART_MIN_MS);
+      expect(x.toMs - x.fromMs).toBeLessThanOrEqual(PART_MAX_MS);
+    }
+    expect(parts.slice(0, -1).every((x) => downbeats.includes(x.toMs))).toBe(true); // cut on downbeats
+    expect(parts.map((x) => x.toMs)).toContain(16_000); // the downbeat in the pause between the lines
+    expect(p.seconds).toBe(parts.reduce((n, x) => n + Math.max(3, Math.ceil((x.toMs - x.fromMs) / 1000)), 0));
+    expect(p.usd).toBe(Math.round(p.seconds * 0.06 * 100) / 100);
+  });
+  it("a take in parts: part 2 starts from the last frame of part 1, each is cut to its song length, joined into one silent take", async () => {
+    const uploaded: string[] = [];
+    const stub = stubSingTransport("1");
+    const spy: SingTransport = { ...stub, upload: (f) => (uploaded.push(path.basename(f)), stub.upload(f)) };
+    let n = 0;
+    update(pics, "rain street.jpg", (p) => {
+      n = nextTakeN(p);
+      p.takes.push({ n, kind: "lipsync", line: 40, sync_ms: 0, to_ms: 3800, parts: [{ fromMs: 0, toMs: 1900 }, { fromMs: 1900, toMs: 3800 }], style: 1, service: "wavespeed", quality: "best", model: "InfiniteTalk", status: "running", started_at: new Date().toISOString(), cost_usd: 0.36, pid: process.pid });
+    });
+    await runSinging(open, id, [{ source: "rain street.jpg", n }], { transport: spy, sleep: now0 });
+    const t = readPictures(pics).pictures["rain street.jpg"].takes.find((x) => x.n === n)!;
+    expect(t.status).toBe("done");
+    expect(uploaded).toEqual(["rain street.jpg", "voice-1.wav", "from-2.png", "voice-2.wav"]);
+    expect(t.parts!.every((x) => !!x.request_id) && t.request_id === t.parts![0].request_id).toBe(true);
+    const info = await probeMedia(path.join(pics, t.file!));
+    expect(info.hasAudio).toBe(false);
+    expect(Math.abs(info.durationMs - 3800)).toBeLessThan(80);
   });
 });

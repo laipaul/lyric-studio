@@ -59,7 +59,13 @@ export const SCRIPT_MAX = 200;
 export const SINGING_CUE = "A person singing a song with deep emotion, like a live music performance: wide open mouth on sustained notes, expressive lips and jaw following the melody, visible breathing between phrases, eyes closing on long notes, natural head and shoulder movement with the rhythm";
 export const SINGING_STYLE = 1;
 export const singingPrompt = (script: string) => (script ? `${SINGING_CUE}. ${script}` : SINGING_CUE);
-export type Piece = { fromMs: number; toMs: number; seconds: number; usd: number };
+// parts: a vocal piece longer than PART_MAX_MS is made in parts of about PART_TARGET_MS (Joey's 4-10 s rule, Paul 22 Nov
+// 2026: "6 to 8 s the lips are not in sync"), each its own request, chained from the last frame of the one before and
+// joined into one take; seconds / usd are then the parts' (each billed at least 3 s, whole seconds).
+export type Piece = { fromMs: number; toMs: number; seconds: number; usd: number; parts?: { fromMs: number; toMs: number }[] };
+export const PART_MAX_MS = 10_000; // a piece up to this long is one request
+export const PART_TARGET_MS = 8_000; // else parts of about this long
+export const PART_MIN_MS = 4_000; // and never shorter than this
 // A take of a group (the same picture or video, the same lines), as Lyrics Sync lists it under the group.
 // inUse: its clip is the singing anchor on those lines now. fresh: a later take not chosen yet ("New — compare").
 export type GroupTake = Take & { inUse: boolean; fresh: boolean };
@@ -115,6 +121,27 @@ export function singingPiece(line: { shownMs: number; sungEndMs: number }, downb
   }
   const seconds = Math.max(LIPSYNC_MIN_SECONDS, Math.ceil((toMs - fromMs) / 1000));
   return { fromMs, toMs, seconds, usd: Math.round(seconds * usdPerSecond * 100) / 100 };
+}
+
+// The parts of a long vocal piece: cut on a downbeat near every PART_TARGET_MS (between PART_MIN_MS and PART_MAX_MS from
+// the last cut, leaving at least PART_MIN_MS), a downbeat in a pause between sung lines first. Short pieces: one part.
+export function singingParts(piece: Piece, downbeats: readonly number[], lines: readonly { shownMs: number; sungEndMs: number }[], usdPerSecond = LIPSYNC_USD_PER_SECOND): Piece {
+  if (piece.toMs - piece.fromMs <= PART_MAX_MS) return piece;
+  const parts: { fromMs: number; toMs: number }[] = [];
+  const sung = (t: number) => lines.some((l) => l.shownMs <= t && t <= l.sungEndMs);
+  let start = piece.fromMs;
+  while (piece.toMs - start > PART_MAX_MS) {
+    const lo = start + PART_MIN_MS;
+    const hi = Math.min(start + PART_MAX_MS, piece.toMs - PART_MIN_MS);
+    const near = (list: number[]) => list.sort((a, b) => Math.abs(a - (start + PART_TARGET_MS)) - Math.abs(b - (start + PART_TARGET_MS)))[0];
+    const inWindow = downbeats.filter((d) => d >= lo && d <= hi);
+    const cut = near(inWindow.filter((d) => !sung(d))) ?? near(inWindow) ?? Math.min(hi, start + PART_TARGET_MS);
+    parts.push({ fromMs: start, toMs: Math.round(cut) });
+    start = Math.round(cut);
+  }
+  parts.push({ fromMs: start, toMs: piece.toMs });
+  const seconds = parts.reduce((n, x) => n + Math.max(LIPSYNC_MIN_SECONDS, Math.ceil((x.toMs - x.fromMs) / 1000)), 0);
+  return { ...piece, seconds, usd: Math.round(seconds * usdPerSecond * 100) / 100, parts };
 }
 
 type Ctx = { root: string; dir: string; songRel: string | null; songFile: string; songMs: number; lines: { number: number; text: string; shownMs: number; sungEndMs: number }[] | null; why: string | null; downbeats: number[] };
@@ -190,7 +217,9 @@ export async function singerView(ws: Workspace, projectId: string, env: NodeJS.P
     const run = runs.find((r) => r.first <= l.number && l.number <= r.last) ?? null;
     const first = run ? byNumber.get(run.first)! : l;
     const last = run ? byNumber.get(run.last)! : l;
-    const piece = singingPiece({ shownMs: first.shownMs, sungEndMs: last.sungEndMs }, c.downbeats, c.songMs, usdPerSecond);
+    // A picture's long piece is made in parts (a video source stays one request: its motion cannot be chained).
+    const whole = singingPiece({ shownMs: first.shownMs, sungEndMs: last.sungEndMs }, c.downbeats, c.songMs, usdPerSecond);
+    const piece = source && BOARD_VIDEO_FILE.test(source) ? whole : singingParts(whole, c.downbeats, c.lines ?? [], usdPerSecond);
     const all = source && run ? groupTakes(c.dir, source, run.first, run.last) : [];
     const take = all.at(-1) ?? null;
     const script = run ? (settings.scripts?.[String(run.first)] ?? "") : "";
@@ -414,7 +443,7 @@ function recordTake(dir: string, l: SingerLine, resolution: LipsyncResolution, n
   let n = 0;
   update(dir, l.source!, (p) => {
     n = nextTakeN(p);
-    p.takes.push({ n, kind: "lipsync", line: l.number, ...(l.run && l.run.last > l.number ? { through: l.run.last } : {}), sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, ...(l.script ? { prompt: l.script } : {}), style: SINGING_STYLE, resolution, service: "wavespeed", quality: "best", model: LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: l.piece.usd, pid: process.pid });
+    p.takes.push({ n, kind: "lipsync", line: l.number, ...(l.run && l.run.last > l.number ? { through: l.run.last } : {}), sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, ...(l.piece.parts ? { parts: l.piece.parts.map((x) => ({ ...x })) } : {}), ...(l.script ? { prompt: l.script } : {}), style: SINGING_STYLE, resolution, service: "wavespeed", quality: "best", model: LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: l.piece.usd, pid: process.pid });
   });
   return { source: l.source!, n };
 }
@@ -491,6 +520,76 @@ export function seenSingingTake(ws: Workspace, projectId: string, source: unknow
   if (readPictures(dir).pictures[file]?.takes.some((x) => x.n === Number(n) && x.fresh)) setTake(dir, file, Number(n), { fresh: undefined });
 }
 
+
+// A take in parts (singingParts): part 1 from the picture, every next part from the last frame of the part before (no jump
+// where they meet: Joey's "extend from the last frame"), each with its own piece of the voice; each part cut to its exact
+// song length (a frame short or long would put the next part's lips out of time), then joined into one silent take.
+// A part already sent (its request id kept in the take) is only fetched again (free).
+async function singInParts(c: { dir: string; source: string; n: number; take: Take; tmp: string; voice: Voice; songFile: string; transport: SingTransport; picture: Promise<string>; sleep: (ms: number) => Promise<void>; pollMs?: number; timeoutMs?: number; onSent: (id: string) => void }, out: string): Promise<void> {
+  const parts = c.take.parts!;
+  const files: string[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const part = readPictures(c.dir).pictures[c.source]?.takes.find((x) => x.n === c.n)?.parts?.[i] ?? parts[i];
+    let rid = part.request_id;
+    if (!rid) {
+      const voiceFile = path.join(c.tmp, `voice-${i + 1}.wav`);
+      cutVoice(c.voice, c.songFile, part, voiceFile);
+      let image: string;
+      let audio: string;
+      try {
+        image = i === 0 ? await c.picture : await c.transport.upload(lastFrame(files[i - 1], path.join(c.tmp, `from-${i + 1}.png`)));
+        audio = await c.transport.upload(voiceFile);
+      } catch (error) {
+        throw Object.assign(new Error(`Part ${i + 1}: the picture or the voice could not be put online: ${errorText(error)}`), { unsent: i === 0 });
+      }
+      const t = c.take;
+      rid = (await c.transport.submit({ image, audio, prompt: t.style === SINGING_STYLE ? singingPrompt(t.prompt ?? "") : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION })).id; // never retried
+      const sent = rid;
+      update(c.dir, c.source, (p) => {
+        const tk = p.takes.find((x) => x.n === c.n);
+        if (!tk?.parts?.[i]) return;
+        tk.parts[i].request_id = sent;
+        tk.request_id ??= sent;
+      });
+      c.onSent(rid);
+    }
+    const t0 = Date.now();
+    let url: string;
+    for (;;) {
+      const st = await c.transport.poll(rid);
+      if (st.status === "done") {
+        url = st.url;
+        break;
+      }
+      if (st.status === "failed") throw new Error(`WaveSpeed, part ${i + 1}: ${st.error}`);
+      if (Date.now() - t0 > (c.timeoutMs ?? TIMEOUT_MS * 3)) throw new Error(`part ${i + 1}: no answer within an hour: get its result later (free)`);
+      await c.sleep(c.pollMs ?? POLL_MS);
+    }
+    const raw = path.join(c.tmp, `part-${i + 1}-raw.mp4`);
+    await c.transport.download(url, raw);
+    makePlayable(raw, false); // the voice removed
+    const fitted = path.join(c.tmp, `part-${i + 1}.mp4`);
+    fitLength(raw, fitted, part.toMs - part.fromMs);
+    files.push(fitted);
+  }
+  joinParts(files, out, path.join(c.tmp, "parts.txt"));
+}
+
+// The last frame of a part (the next part starts from it).
+function lastFrame(file: string, png: string): string {
+  execFileSync(ffmpegBin(), ["-y", "-v", "error", "-sseof", "-0.1", "-i", file, "-frames:v", "1", "-update", "1", png]);
+  return png;
+}
+// A part at exactly its song length, 30 fps (its last frame held if the model's clip is a little short).
+export function fitLength(file: string, out: string, ms: number): void {
+  execFileSync(ffmpegBin(), ["-y", "-v", "error", "-i", file, "-vf", "tpad=stop_mode=clone:stop_duration=3,fps=30,format=yuv420p", "-t", (ms / 1000).toFixed(3), "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", out]);
+}
+// The parts one after another, as one file (they are encoded alike, so nothing is encoded again).
+export function joinParts(files: string[], out: string, list: string): void {
+  writeFileSync(list, files.map((f) => `file '${f.replace(/'/g, "'\\''")}'`).join("\n"));
+  execFileSync(ffmpegBin(), ["-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", "-movflags", "+faststart", out]);
+}
+
 // Makes the singing clips (in parallel). Each: the picture or video and its piece of voice go online, the request is
 // sent once, polled, downloaded; the sound is removed; the clip goes to Creation, the Storyboard and onto its line.
 // `resume`: takes that already have a request id are only polled and fetched (free).
@@ -527,38 +626,44 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
       const tmp = mkdtempSync(path.join(os.tmpdir(), "lyric-sing-"));
       try {
         setTake(dir, j.source, j.n, { status: "running", pid: process.pid, error: undefined });
-        if (!id) {
-          const src = path.join(dir, j.source);
-          if (!uploads.has(j.source)) uploads.set(j.source, transport.upload(src));
-          const voiceFile = path.join(tmp, "voice.wav");
-          cutVoice(voice, songFile, { fromMs: t.sync_ms, toMs: t.to_ms }, voiceFile);
-          let media: string;
-          let audio: string;
-          try {
-            [media, audio] = await Promise.all([uploads.get(j.source)!, transport.upload(voiceFile)]);
-          } catch (error) {
-            throw Object.assign(new Error(`The picture or the voice could not be put online: ${errorText(error)}`), { unsent: true });
-          }
-          const sent = await transport.submit({ ...(BOARD_VIDEO_FILE.test(j.source) ? { video: media } : { image: media }), audio, prompt: t.style === SINGING_STYLE ? singingPrompt(t.prompt ?? "") : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION }); // never retried
-          id = sent.id;
-          setTake(dir, j.source, j.n, { request_id: id });
-        }
-        const t0 = Date.now();
-        let url: string;
-        for (;;) {
-          const s = await transport.poll(id);
-          if (s.status === "done") {
-            url = s.url;
-            break;
-          }
-          if (s.status === "failed") throw new Error(`WaveSpeed: ${s.error}`);
-          if (Date.now() - t0 > (o.timeoutMs ?? TIMEOUT_MS * 3)) throw new Error("no answer within an hour: get its result later (free)");
-          await sleep(o.pollMs ?? POLL_MS);
-        }
         const got = path.join(tmp, "sings.mp4");
-        await transport.download(url, got);
-        // The model's copy carries the vocal: only the picture is kept (the vocal never goes into any file of ours).
-        makePlayable(got, false); // the voice removed; browser-ready H.264
+        if (t.parts && t.parts.length > 1 && !BOARD_VIDEO_FILE.test(j.source)) {
+          // In parts (a long piece): each from the last frame of the one before, joined into one take.
+          if (!uploads.has(j.source)) uploads.set(j.source, transport.upload(path.join(dir, j.source)));
+          await singInParts({ dir, source: j.source, n: j.n, take: t, tmp, voice, songFile, transport, picture: uploads.get(j.source)!, sleep, pollMs: o.pollMs, timeoutMs: o.timeoutMs, onSent: (rid) => (id ??= rid) }, got);
+        } else {
+          if (!id) {
+            const src = path.join(dir, j.source);
+            if (!uploads.has(j.source)) uploads.set(j.source, transport.upload(src));
+            const voiceFile = path.join(tmp, "voice.wav");
+            cutVoice(voice, songFile, { fromMs: t.sync_ms, toMs: t.to_ms }, voiceFile);
+            let media: string;
+            let audio: string;
+            try {
+              [media, audio] = await Promise.all([uploads.get(j.source)!, transport.upload(voiceFile)]);
+            } catch (error) {
+              throw Object.assign(new Error(`The picture or the voice could not be put online: ${errorText(error)}`), { unsent: true });
+            }
+            const sent = await transport.submit({ ...(BOARD_VIDEO_FILE.test(j.source) ? { video: media } : { image: media }), audio, prompt: t.style === SINGING_STYLE ? singingPrompt(t.prompt ?? "") : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION }); // never retried
+            id = sent.id;
+            setTake(dir, j.source, j.n, { request_id: id });
+          }
+          const t0 = Date.now();
+          let url: string;
+          for (;;) {
+            const s = await transport.poll(id);
+            if (s.status === "done") {
+              url = s.url;
+              break;
+            }
+            if (s.status === "failed") throw new Error(`WaveSpeed: ${s.error}`);
+            if (Date.now() - t0 > (o.timeoutMs ?? TIMEOUT_MS * 3)) throw new Error("no answer within an hour: get its result later (free)");
+            await sleep(o.pollMs ?? POLL_MS);
+          }
+          await transport.download(url, got);
+          // The model's copy carries the vocal: only the picture is kept (the vocal never goes into any file of ours).
+          makePlayable(got, false); // the voice removed; browser-ready H.264
+        }
         const silent = got;
         const takesDir = path.join(dir, TAKES_DIR);
         mkdirSync(takesDir, { recursive: true });

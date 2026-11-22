@@ -4,6 +4,20 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Long singing takes in parts of about 8 s ✅ (to verify on the PC)
+- Paul (22 Nov 2026), from Joey's pipeline ("cut vocals into exact clips between 4 and 10 seconds"): the line 32 take
+  (23 s) drifted at 6-8 s. A group's piece of voice longer than 10 s is now made in **parts of about 8 s** (4-10 s),
+  cut on a downbeat, a pause between sung lines first. Each part is its own InfiniteTalk request with its own short
+  vocal; part 2 starts from **the last frame of part 1** (no jump where they meet), and so on; each part is cut to its
+  exact song length and they are joined into **one take**, locked to the song as before (Retake, compare, Use this
+  take, ▶ with the song unchanged).
+- The cost says it before sending: "23 s · 720p · about $1.44 · in 3 parts of about 8 s" (each part billed at least
+  3 s, whole seconds); a take says "3 parts". A video source in Who sings stays one request (its motion cannot be
+  chained). A part already sent is fetched again for free if the studio stops.
+- Code: singer.ts singingParts / singInParts / fitLength / joinParts; take "parts" (each with its request id).
+- Tests: vitest animate (+2: the cuts, the chain from the last frame and the exact joined length); browser singer
+  (+2: "in 2 parts" with the cost, the take made in 2 parts at its exact length), lyrics-tab pass.
+
 ### Shape says why a clip is not in the video ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "the storyboard still doesn't match the Shape … the boat doesn't appear". The Reel (101 s) runs
   out of time before the boat's turn (21st in the story order; the line-32 singing take holds the last 17 s).

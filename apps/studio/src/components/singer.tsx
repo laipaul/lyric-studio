@@ -370,7 +370,7 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
             )}
           </span>
           {!l.needed && l.takes.some((x) => x.status === "done" || x.status === "running") ? (
-            <button type="button" data-singer-retake={number} disabled={singer.busy || !v.ready || l.piece.usd > singer.cap} onClick={() => void singer.retake(number)} className="hover:bg-accent flex items-center gap-1 rounded border px-1.5 py-0.5 disabled:opacity-50" title={`The same picture and piece of the vocal again, with the mood text and resolution of now (${v.resolution}): ${l.piece.seconds} s · about ${money(l.piece.usd)}. Earlier takes stay.`}>
+            <button type="button" data-singer-retake={number} disabled={singer.busy || !v.ready || l.piece.usd > singer.cap} onClick={() => void singer.retake(number)} className="hover:bg-accent flex items-center gap-1 rounded border px-1.5 py-0.5 disabled:opacity-50" title={`The same picture and piece of the vocal again, with the mood text and resolution of now (${v.resolution}): ${l.piece.seconds} s${l.piece.parts ? ` in ${l.piece.parts.length} parts of about ${Math.round((l.piece.toMs - l.piece.fromMs) / l.piece.parts.length / 1000)} s` : ""} · about ${money(l.piece.usd)}. Earlier takes stay.`}>
               <RefreshCw className="size-3" /> Retake
             </button>
           ) : null}
@@ -384,6 +384,11 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
         <span className="text-muted-foreground" data-singer-status="todo">
           {inRun ? `lines ${l.run!.first}-${l.run!.last} in one take · ` : ""}
           {l.piece.seconds} s · {v.resolution} · about {money(l.piece.usd)}
+          {l.piece.parts ? (
+            <span data-singer-parts={l.piece.parts.length} title="A long piece of singing is made in parts of about 8 s (the lips stay in time better), each from the last frame of the one before, joined into one take">
+              {" "}· in {l.piece.parts.length} parts of about {Math.round((l.piece.toMs - l.piece.fromMs) / l.piece.parts.length / 1000)} s
+            </span>
+          ) : null}
         </span>
       ) : null}
       {l.source && l.takes.length ? <TakesList singer={singer} source={l.source} takes={l.takes} /> : null}
@@ -449,7 +454,7 @@ function TakesList({ singer, source, takes }: { singer: Singer; source: string; 
               ) : null}
             </div>
             <span className="text-muted-foreground pl-5" data-singer-take-facts>
-              {[takeWhen(t), t.status === "running" ? "being made…" : t.status === "done" || t.request_id ? `about ${money(t.cost_usd)}` : "nothing spent", t.resolution ?? "720p"].filter(Boolean).join(" · ")}
+              {[takeWhen(t), t.status === "running" ? "being made…" : t.status === "done" || t.request_id ? `about ${money(t.cost_usd)}` : "nothing spent", t.resolution ?? "720p", t.parts && t.parts.length > 1 ? `${t.parts.length} parts` : ""].filter(Boolean).join(" · ")}
               {t.status === "failed" || t.status === "interrupted" ? <span className={t.status === "failed" ? "text-red-300" : "text-amber-300"}> · {t.error}</span> : null}
             </span>
           </li>

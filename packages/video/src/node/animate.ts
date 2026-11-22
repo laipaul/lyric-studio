@@ -109,6 +109,7 @@ export type Take = {
   cleared?: boolean; // hidden from the Tasks menu (Clear finished); the take itself stays
   playable?: boolean; // the file was checked (and if needed re-made) to play in the browser: H.264, yuv420p, fast start
   resolution?: string; // lipsync: the resolution asked of InfiniteTalk ("480p" | "720p"; before 21 Nov 2026 always 720p)
+  parts?: { fromMs: number; toMs: number; request_id?: string }[]; // lipsync: made in parts (singer.ts singingParts), each its own request, joined
   fresh?: boolean; // lipsync: a later take of lines that already had a take in use: waits for Paul ("New — compare"), never placed by itself
 };
 // removedTakes: takes put aside by Clean up / Remove (their files in pictures\takes\_removed\), with Restore; nothing is

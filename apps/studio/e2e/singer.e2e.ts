@@ -102,6 +102,8 @@ async function main() {
     const summary = (await page.textContent("[data-singer-summary]")) ?? "";
     check(/1 line where the singer shows · to make: 1 take \(\d+ s of voice at 720p, about \$\d+\.\d\d\)/.test(summary), `the cost shows before anything is sent (${summary})`);
     check(((await page.textContent("[data-singer]")) ?? "").includes("the song itself"), "without a vocal stem, the song itself is the voice (said plainly)");
+    // Line 2's piece of voice is 11 s: made in parts of about 8 s at most 10 s (Joey's rule), said before anything is sent.
+    check(((await page.textContent("[data-singer-line='2'] [data-singer-parts]").catch(() => "")) ?? "").includes("in 2 parts"), "a piece of voice longer than 10 s is made in parts (said with the cost)");
 
     check(((await page.textContent("[data-singer-line='2'] [data-singer-mood-hint]")) ?? "").includes("Describe the face and mouth, not the voice"), "the mood box says what to write (the face and mouth, not the voice)");
     check((await page.inputValue("[data-singer-resolution]")) === "720p" && summary.includes("at 720p"), "singing clips are made at 720p unless chosen otherwise; the cost says so");
@@ -135,6 +137,9 @@ async function main() {
     const sung = (JSON.parse(readFileSync(path.join(pictures, "pictures.json"), "utf8")) as { pictures: Record<string, { takes: { kind?: string; prompt?: string }[] }> }).pictures["singer close.png"].takes.find((t) => t.kind === "lipsync");
     check(sung?.prompt === "turns to the sea, soft smile" && (sung as { style?: number }).style === 1, "the script went with the voice, after the singing cue (the take records it)");
     check(existsSync(take) && !(await probeMedia(take)).hasAudio, "it is in Creation, without sound (the voice is never kept)");
+    const madeTake = (JSON.parse(readFileSync(path.join(pictures, "pictures.json"), "utf8")) as { pictures: Record<string, { takes: { kind?: string; parts?: { request_id?: string }[]; sync_ms?: number; to_ms?: number }[] }> }).pictures["singer close.png"].takes.find((t) => t.kind === "lipsync")!;
+    const madeLength = (await probeMedia(take)).durationMs;
+    check(madeTake.parts?.length === 2 && madeTake.parts.every((x) => !!x.request_id) && Math.abs(madeLength - (madeTake.to_ms! - madeTake.sync_ms!)) < 100, `the take was made in 2 parts and joined at its exact song length (${madeLength} ms)`);
     const landed = await page.waitForFunction(() => document.querySelector("tr[data-line='2'] [data-anchor-cell]")?.textContent?.includes("Close up sings line 2"), null, { timeout: 15_000 }).then(() => true).catch(() => false);
     check(landed, `the line's Lands on shows the singing clip by its short name (${await page.textContent("tr[data-line='2'] [data-anchor-cell]")})`);
     check(((await page.textContent("[data-singer-summary]")) ?? "").includes("all made"), "nothing left to make: a line is never paid for twice");
@@ -159,7 +164,7 @@ async function main() {
     check(kept?.clip === "singer close sings line 2.mp4", `the retake does not replace the take in use (${kept?.clip})`);
     check(((await page.textContent("[data-singer-line='2'] [data-singer-take-state='new']")) ?? "").includes("New — compare") && ((await page.textContent("[data-singer-summary]")) ?? "").includes("all made"), "it is marked New — compare; nothing is left to make (the count follows the take sent)");
     const facts = (await page.textContent(`[data-singer-line='2'] [data-singer-take='${retake.n}'] [data-singer-take-facts]`)) ?? "";
-    check(/\d\d:\d\d.* · about \$\d+\.\d\d · 480p$/.test(facts), `each take shows its date, cost and resolution (${facts})`);
+    check(/\d\d:\d\d.* · about \$\d+\.\d\d · 480p( · \d parts)?$/.test(facts), `each take shows its date, cost and resolution (${facts})`);
     // ▶ plays the take with the song from the group's start.
     await page.click(`[data-singer-line='2'] [data-singer-take='${retake.n}'] [data-singer-take-play]`);
     await page.waitForSelector("[data-singer-player] video");
