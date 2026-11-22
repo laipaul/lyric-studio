@@ -17,8 +17,14 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   when the song has a shot list; the last folder is remembered per song. Other songs: Creation exactly as before.
 - A re-import of the shot list keeps filled shots filled (shotlist.json "filled"); Remove all planned slots takes out
   the empty ones only.
-- Part 2 (next): Copy prompt per shot (the app writes the Midjourney first-frame prompt), a look per shot with warnings,
-  cost so far / to go.
+- **Copy prompt** (Part 2a, same day; Paul: "that doesn't give me the prompt for MJ"): every shot has its Midjourney
+  first-frame prompt, written by the app (src/shot-prompt.ts): framing + what happens (names replaced by "the woman" /
+  "the man"), each person's locked description and the outfit of the look they wear (or the shot's own outfit), the
+  scene card, a memory's softer feel (#memory), the Film look's Midjourney words, --ar from the song's platforms,
+  --style raw; "Never …" sentences become --no; reference-model instructions ("Preserve…", "Match … reference
+  image") and behaviour sentences ("resting expression…") are left out; two people are labelled. Copy prompt +
+  Show prompt on each shot. Tests: vitest shot-prompt (5), browser creation-production (+2 checks).
+- Part 2 (next): a look per shot with warnings, cost so far / to go.
 - Code: node/shot-production.ts (productionView, setPictureShot, useForShot, sectionsOfShots), shotlist.ts (filled),
   animate.ts (pictures.json "slot"), API /api/songs/<id>/pictures (production, slot, shot, use-shot),
   pictures-board.tsx (part: all | settings | production; ShotItems, ShotRow, Use for shot), production-tab.tsx (folders).

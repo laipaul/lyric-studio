@@ -95,6 +95,12 @@ async function main() {
     check(((await page.textContent("[data-shot=s02] [data-shot-line]")) ?? "").includes("line 1: “Verse one here”"), "each shot shows its lyric line");
     check(((await page.textContent("[data-shots-progress]")) ?? "").includes("0 of 3 shots filled"), "the progress line");
     check(!!(await page.$("[data-production-defaults]")) && !(await page.$("[data-story-tools]")), "Production: the defaults in one line, no story tools");
+    // Copy prompt (C3 Part 2a): each shot's Midjourney prompt, written by the app.
+    const prompt = ((await page.textContent("[data-shot-prompt=s01]")) ?? "").trim();
+    check(prompt === "cinematic wide establishing shot: The empty chapel in morning light --ar 9:16 --style raw", `each shot has its Midjourney prompt (${prompt})`);
+    await page.click("[data-shot-copy-prompt=s01]");
+    await page.waitForFunction(() => document.querySelector("[data-shot-copy-prompt=s01]")?.textContent?.includes("Copied"), null, { timeout: 5000 }).catch(() => {});
+    check(((await page.textContent("[data-shot-copy-prompt=s01]")) ?? "").includes("Copied"), "Copy prompt copies it");
 
     await page.click("[data-creation-folder=story]");
     await page.waitForSelector("[data-pictures=settings] [data-creation-defaults]");

@@ -11,8 +11,11 @@ import path from "node:path";
 import type { Workspace } from "@lyric/db";
 
 import { nameSections, sectionOfLine, type NamedSection } from "../sections";
+import { shotPrompt, type ShotPromptInput } from "../shot-prompt";
 import { readPictures, sendToStoryboard, songFolder, update, BOARD_FILE } from "./animate";
 import { readClipEdits, setClipOmit, writeClipEdits } from "./clip-edits";
+import { filmLookFor, readFilmLook } from "./film-looks";
+import { productionData, type CastCard } from "./production";
 import { saveAnchors } from "./lyrics-view";
 import { readRecipe } from "./recipe";
 import { SHOTLIST_FILE, readShotListFile, slotKey, type Slot } from "./shotlist";
@@ -26,6 +29,7 @@ export type ProductionShot = Slot & {
   section: string; // "Intro", "Verse 1", "Chorus" … (the song's sections; a shot without a line follows the shot before it)
   filled: string | null; // the clip that fills it ("Use this take"), else null
   pictures: string[]; // the Creation pictures that belong to it
+  prompt: string; // its Midjourney first-frame prompt (src/shot-prompt.ts), "Copy prompt"
 };
 export type ProductionView = { shots: ProductionShot[]; sections: string[] };
 
@@ -72,6 +76,28 @@ export function productionView(ws: Workspace, projectId: string): ProductionView
   const { dir } = songFolder(ws, projectId);
   const pics = readPictures(dir).pictures;
   const clipsDir = songPathsById(ws, projectId).clips;
+  // What the prompts are made of: the cast (locked descriptions, the look each wears here), the Film look, the shape.
+  const data = productionData(ws, projectId);
+  const card = (name: string): CastCard | null => (data.cast.find((c) => !("missing" in c && c.missing) && c.name.toLowerCase() === name.toLowerCase()) as CastCard | undefined) ?? null;
+  const film = filmLookFor(ws, projectId);
+  const mj = film ? readFilmLook(ws.dir, film.name)?.midjourney?.trim() || film.line : null;
+  const aspect: ShotPromptInput["aspect"] = data.sizes.some((z) => z.ratio === "9:16") || !data.sizes.length ? "9:16" : "16:9";
+  const promptOf = (s: Slot) => {
+    const scene = s.scene ? card(s.scene) : null;
+    return shotPrompt({
+      shows: s.shows,
+      shot: s.shot,
+      tag: s.tag,
+      outfit: s.outfit,
+      people: s.characters.map((n) => {
+        const c = card(n);
+        return { name: n, description: c?.description ?? null, outfit: c?.outfit ?? null };
+      }),
+      scene: s.scene ? { name: s.scene, description: scene?.description ?? scene?.outfit ?? null } : null,
+      filmLook: mj,
+      aspect,
+    });
+  };
   const shots = slots.map((s, i): ProductionShot => {
     const clip = filled[s.id];
     return {
@@ -84,6 +110,7 @@ export function productionView(ws: Workspace, projectId: string): ProductionView
         .filter(([f, p]) => p.slot === s.id && existsSync(path.join(dir, f)))
         .map(([f]) => f)
         .sort(),
+      prompt: promptOf(s),
     };
   });
   return { shots, sections: [...new Set(secs)] };

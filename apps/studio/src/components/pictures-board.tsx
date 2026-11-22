@@ -7,7 +7,7 @@
 // Paul may add a few words of mood. His own defaults (model, takes, cap) apply to every song; each picture can override
 // them. The cost shows before sending and a press above the cap is refused. Each item shows where it came from. Paul
 // sends his favourites with "Send to Storyboard" (the end of his story line, marked ✓).
-import { Check, Film, ImagePlus, Link2, Loader2, Play, RotateCw, Send, Sparkles, UserRound, X } from "lucide-react";
+import { Check, Copy, Film, ImagePlus, Link2, Loader2, Play, RotateCw, Send, Sparkles, UserRound, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { CreationDefaults, PictureView, PicturesView, Quality, ServiceId, Take } from "@lyric/video/animate";
@@ -389,7 +389,23 @@ function ShotItems({
 
 function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile }: { s: ProductionShot; pictures: PictureView[]; loose: PictureView[]; adding: boolean; onDrop: (files: FileList, s: ProductionShot) => void; onAttach: (file: string, s: ProductionShot) => void; tile: (p: PictureView, s: ProductionShot) => ReactNode }) {
   const [over, setOver] = useState(false);
+  const [copied, setCopied] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  // Copy prompt (C3 Part 2a): the shot's Midjourney first-frame prompt, written by the app (src/shot-prompt.ts).
+  async function copyPrompt() {
+    try {
+      await navigator.clipboard.writeText(s.prompt);
+    } catch {
+      const t = document.createElement("textarea");
+      t.value = s.prompt;
+      document.body.appendChild(t);
+      t.select();
+      document.execCommand("copy");
+      t.remove();
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  }
   return (
     <div data-shot={s.id} data-shot-number={s.number} data-shot-state={s.filled ? "filled" : pictures.length ? "picture" : "empty"} className={cn("bg-card/40 flex flex-col gap-2 rounded-lg border p-3", s.filled && "border-emerald-400/30")}>
       <div className="flex flex-wrap items-start gap-2 text-sm">
@@ -412,6 +428,17 @@ function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile }: { s: Pr
         ) : (
           <span className="text-muted-foreground shrink-0 text-xs">To make</span>
         )}
+      </div>
+      <div className="flex flex-wrap items-start gap-2 text-xs">
+        <button type="button" data-shot-copy-prompt={s.id} onClick={() => void copyPrompt()} className="hover:bg-accent flex shrink-0 items-center gap-1 rounded border px-2 py-1" title="The Midjourney prompt for this shot's first frame: paste it into Midjourney">
+          {copied ? <Check className="size-3 text-emerald-300" /> : <Copy className="size-3" />} {copied ? "Copied" : "Copy prompt"}
+        </button>
+        <details className="text-muted-foreground min-w-0 flex-1">
+          <summary className="cursor-pointer py-1">Show prompt</summary>
+          <p data-shot-prompt={s.id} className="bg-background/60 mt-1 rounded border p-2 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap select-all">
+            {s.prompt}
+          </p>
+        </details>
       </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
         {pictures.map((p) => tile(p, s))}
