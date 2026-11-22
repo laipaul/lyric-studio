@@ -9,8 +9,10 @@ import type { CutMove, Slip } from "../timeline-edits";
 
 // transition: how this clip comes in (absent: the app chooses). omit: the user set the clip to Omit (Assets
 // or Shape): it keeps its place in the order but Make does not use it.
+// lineOnly: the clip is in clips\ only so a Lyrics Sync line (anchor) or a hidden-moment cover can use it; it is not a story moment
+// (not listed in the Storyboard, never gap fill). A normal "Send to Storyboard" from Creation clears it.
 // label (21 Nov 2026): a short name the user gives the clip ("Bride smile"); shown instead of the file name, which stays.
-export type ClipEdit = { in?: number; out?: number; speed?: number; best?: number; transition?: "cut" | "dissolve"; omit?: true; label?: string };
+export type ClipEdit = { in?: number; out?: number; speed?: number; best?: number; transition?: "cut" | "dissolve"; omit?: true; label?: string; lineOnly?: true };
 export const LABEL_MAX = 60;
 // A short name as typed: spaces tidied, at most 60 characters ("" = no name).
 export const cleanLabel = (raw: unknown) => String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, LABEL_MAX);
@@ -26,7 +28,7 @@ export const CLIP_EDITS_FILE = "clips.json";
 
 const HELP =
   'The story order and clip edits of this song (Prepare → Storyboard writes the order, Shape the clip edits). "order": clip file names in the story order ' +
-  "(clips not listed follow in file-name order). \"clips\": per clip \"label\" (a short name shown instead of the file name), \"omit\": true (set to Omit: not used by Make), \"in\" / \"out\" (the part used, seconds), \"speed\" (0.5-1, slow motion) and " +
+  "(clips not listed follow in file-name order). \"clips\": per clip \"label\" (a short name shown instead of the file name), \"omit\": true (set to Omit: not used by Make), \"lineOnly\": true (only for a Lyrics Sync line or a hidden-moment cover: not a story moment, never fills gaps), \"in\" / \"out\" (the part used, seconds), \"speed\" (0.5-1, slow motion) and " +
   '"best" (the best moment, seconds; wins over the automatic one) and "transition" ("cut" or "dissolve": how the clip comes in; left out, the app chooses). ' +
   '"cuts": cuts moved on the Shape timeline (song seconds: the planned cut at "from" goes to "to", on the beat unless "free"). ' +
   '"slips": shots that play another part of their clip ("at": the shot\'s start in the song, "clip", "in": seconds into the clip). ' +
@@ -63,6 +65,10 @@ export function checkClipEdits(raw: unknown): { edits: ClipEdits; problems: stri
         if (v?.omit !== undefined && v?.omit !== null && v?.omit !== false) {
           if (v.omit === true) e.omit = true;
           else problems.push(`clips["${name}"].omit must be true (or left out: the clip is used)`);
+        }
+        if (v?.lineOnly !== undefined && v?.lineOnly !== null && v?.lineOnly !== false) {
+          if (v.lineOnly === true) e.lineOnly = true;
+          else problems.push(`clips["${name}"].lineOnly must be true (or left out: the clip is a story moment)`);
         }
         if (v?.label !== undefined && v?.label !== null) {
           if (typeof v.label === "string") {
@@ -176,6 +182,20 @@ export function setClipOmit(songRoot: string, name: string, omit: boolean): Clip
   const { omit: _old, ...rest } = edits.clips[key] ?? {};
   const clips = Object.fromEntries(Object.entries(edits.clips).filter(([n]) => n !== key));
   const next: ClipEdit = omit ? { ...rest, omit: true } : rest;
+  if (Object.keys(next).length) clips[key] = next;
+  return writeClipEdits(songRoot, { ...edits, clips });
+}
+
+// lineOnly on / off for one clip (Send to Storyboard from a Lyrics Sync line / from Creation). Nothing else about the clip changes.
+export function isLineOnly(edits: ClipEdits, name: string): boolean {
+  return editOf(edits, name).lineOnly === true;
+}
+export function setClipLineOnly(songRoot: string, name: string, lineOnly: boolean): ClipEdits {
+  const edits = readClipEdits(songRoot);
+  const key = Object.keys(edits.clips).find((n) => n.toLowerCase() === name.toLowerCase()) ?? name;
+  const { lineOnly: _old, ...rest } = edits.clips[key] ?? {};
+  const clips = Object.fromEntries(Object.entries(edits.clips).filter(([n]) => n !== key));
+  const next: ClipEdit = lineOnly ? { ...rest, lineOnly: true } : rest;
   if (Object.keys(next).length) clips[key] = next;
   return writeClipEdits(songRoot, { ...edits, clips });
 }

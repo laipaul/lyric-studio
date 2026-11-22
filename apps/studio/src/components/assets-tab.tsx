@@ -447,9 +447,14 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
             {/* The Storyboard tab's one line (10 Nov 2026): what this tab is for. */}
             <p data-story-line className="text-sm">Your story line: drag to set the order.</p>
             <p data-usable className="text-muted-foreground text-xs">
-              {data.clips.length} in this song&apos;s clips folder · 9:16 platforms can use {data.usable.vertical} · YouTube (16:9) can use {data.usable.horizontal}
+              {data.clips.filter((c) => (c.role ?? "story") === "story").length} in this song&apos;s clips folder · 9:16 platforms can use {data.usable.vertical} · YouTube (16:9) can use {data.usable.horizontal}
               {fromCollections ? ` · ${fromCollections} from shared collections` : ""}
             </p>
+            {data.singing?.length ? (
+              <p data-singing-lines className="text-muted-foreground text-xs">
+                Singing on {data.singing.length > 1 || data.singing[0].through > data.singing[0].line ? "lines" : "line"} {data.singing.map((s) => (s.through > s.line ? `${s.line}–${s.through}` : String(s.line))).join(", ")}: set in Lyrics Sync
+              </p>
+            ) : null}
             {data.story.length > 1 ? <p data-order-hint className="text-muted-foreground text-xs">
                 Drag the clips into the order you want: Shape shows the same order and every video follows it. Omit leaves a clip out of the videos (it keeps its place). New clips go at the end.{" "}
                 <button type="button" data-sort-by-name disabled={busy} onClick={sortByName} className="hover:text-foreground underline underline-offset-2">

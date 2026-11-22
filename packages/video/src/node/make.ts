@@ -1272,7 +1272,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
           barMs: medianBarMs(downbeatTimes, analysis.bpm),
           shift: options.paceShift ?? 0,
           clipMs: prepared.clips
-            .filter((c) => c.kind !== "photo" && !isOmitted(edits, c.name))
+            .filter((c) => c.kind !== "photo" && !isOmitted(edits, c.name) && !editOf(edits, c.name).lineOnly)
             .map((c) => {
               const e = editOf(edits, c.name);
               const from = (e.in ?? 0) * 1000;
@@ -1305,6 +1305,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     return {
       id: c.clip.id, name: c.name, duration_ms: c.durationMs, path: c.path, durationFrames: c.durationFrames, kind: c.kind, fit: c.fit,
       ...(rank !== undefined ? { rank } : {}),
+      ...(e.lineOnly ? { lineOnly: true } : {}),
       ...(e.in !== undefined ? { in_ms: Math.round(e.in * 1000) } : {}),
       ...(e.out !== undefined ? { out_ms: Math.round(e.out * 1000) } : {}),
       ...(e.speed !== undefined ? { speed: e.speed } : {}),

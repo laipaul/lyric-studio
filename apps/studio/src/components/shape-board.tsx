@@ -836,7 +836,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
       </div>
       <div className="flex flex-col gap-3" data-clips-panel>
         {view?.editable && view.clips.length ? (
-          <StoryStrip clips={view.clips} busy={saving || loading} onOpen={openClip} onOmit={(clip, omit) => void edit({ action: "omit", clip, omit })} current={shot?.clip ?? null} />
+          <StoryStrip clips={view.clips.filter((c) => (c.role ?? "story") === "story")} busy={saving || loading} onOpen={openClip} onOmit={(clip, omit) => void edit({ action: "omit", clip, omit })} current={shot?.clip ?? null} />
         ) : (
           <p className="text-muted-foreground text-xs">{view && !view.editable ? "A past run: its clips cannot be changed." : "The clips show once the video is planned."}</p>
         )}

@@ -3,6 +3,7 @@
 // (its manifests). Adds the song's waveform (cached), the beats, the clips' thumbnails and best moments
 // (the clip editor's, else the strongest 2 s by motion, colour and contrast, as the Spotify Canvas picks
 // them; cached).
+import { clipRoles } from "./clip-roles";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -94,6 +95,7 @@ export type StoryboardClip = {
   thumb: string | null;
   durationMs: number;
   kind: "video" | "photo";
+  role?: "story" | "singing" | "lineOnly"; // clip-roles.ts: the clip strip lists only "story" clips
   ranked: boolean; // placed by the story order in clips.json (else by its file name)
   omit: boolean; // set to Omit (Assets / Shape): keeps its place, never shown
   inS: number | null;
@@ -281,9 +283,10 @@ async function planView(ws: Workspace, projectId: string, p: { name: string; lab
   const recipe = paths.recipe && existsSync(paths.recipe) ? readRecipe(paths.recipe) : null;
   const canvasChoice = recipe?.canvas ?? null;
   const notIn = (name: string) => notInReason(name, recipe?.anchors ?? []);
+  const roles = clipRoles(paths.root, paths.recipe, plan.clips.map((c) => c.name));
   const storyboardClips: StoryboardClip[] = storyOrder.map((c) => ({
     canvas: canvasChoice && canvasChoice.clip.toLowerCase() === c.name.toLowerCase() ? { at: canvasChoice.at ?? null } : null,
-    name: c.name, src: c.path, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, ranked: c.rank !== null, omit: c.omit === true,
+    name: c.name, src: c.path, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, role: roles.get(c.name) ?? "story", ranked: c.rank !== null, omit: c.omit === true,
     inS: c.inMs === null ? null : c.inMs / 1000, outS: c.outMs === null ? null : c.outMs / 1000, speed: c.speed, transition: c.transition,
     bestS: c.bestMs === null ? null : c.bestMs / 1000, bestFrom: c.bestFrom, autoBestS: c.kind === "video" ? (auto.get(absPath(ws, c.path)) ?? null) : null,
     shots: v.props.shots.filter((s) => s.src === c.path).length,

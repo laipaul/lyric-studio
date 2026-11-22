@@ -5,8 +5,8 @@
 //   picture or video a link leads to (any outside source).
 // POST JSON { action: "animate", file, service, quality, takes, cap }: checks the cost against the cap, records the
 //   takes and starts them (the request does not wait); { action: "mood", file, mood }; { action: "resume", file, n }:
-//   fetches a take that was sent but did not come back (free); { action: "send", file, n? }: Send to Storyboard (the
-//   picture, or its take n): a copy joins the end of the song's clips; { action: "defaults", defaults }: Paul's own
+//   fetches a take that was sent but did not come back (free); { action: "send", file, n?, forLine? }: Send to Storyboard (the
+//   picture, or its take n): a copy joins the end of the song's clips (forLine: true, from Lyrics Sync: only for a line, not a story moment); { action: "defaults", defaults }: Paul's own
 //   defaults for every song (service, quality, takes, cap: workspace\creation.json).
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -79,7 +79,7 @@ export async function POST(request: Request, { params }: Params) {
     if (body.action === "restore") return Response.json(withWorkspace((ws) => restoreTake(ws, id, file, (body as { n?: unknown }).n)));
     if (body.action === "send") {
       const n = body.n === undefined || body.n === null ? null : Number(body.n);
-      return Response.json(await withWorkspaceAsync((ws) => sendToStoryboard(ws, id, file, n)));
+      return Response.json(await withWorkspaceAsync((ws) => sendToStoryboard(ws, id, file, n, { forLine: (body as { forLine?: unknown }).forLine === true })));
     }
     if (body.action === "resume") {
       const n = Number(body.n);

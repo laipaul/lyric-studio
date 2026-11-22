@@ -11,6 +11,7 @@ import { eq } from "drizzle-orm";
 import { isHandTimeLine } from "../hand-times";
 import { notesForClips, readClipNotes, setClipNote, readStoryIdea, setStoryIdea } from "./clip-notes";
 import { HOOK_MARKER, normalizeLyric } from "../lrc";
+import { clipRoles, songSingingLines, type ClipRole, type SingingLine } from "./clip-roles";
 import { inClipOrder, isOmitted, readClipEdits, saveSongClipOrder, setClipLabel, setClipOmit, type ClipEdits } from "./clip-edits";
 
 const labelOf = (edits: ClipEdits, name: string) => Object.entries(edits.clips).find(([n]) => n.toLowerCase() === name.toLowerCase())?.[1].label ?? null;
@@ -41,6 +42,7 @@ export type ClipAsset = {
   hash: string; // the content's fingerprint (story notes are keyed by it)
   note?: string | null; // the user's story note on this clip (Prepare → Clips; clip-notes.ts): shown, never used by the app
   omit?: boolean; // a song's clip set to Omit (clips.json): keeps its place in the order, Make does not use it
+  role?: ClipRole; // story: a story moment; singing: a singing take (plays on its Lyrics Sync lines); lineOnly: a Creation take only for a line / hidden moment (clip-roles.ts)
   label?: string | null; // the user's short name for the clip (clips.json "label"), shown instead of the file name
 };
 
@@ -58,7 +60,8 @@ export type SongAssets = {
   backingVocals: string | null; // the backing vocals (any name; never used for timing)
   // Files put into the song folder by hand that the app could not place: the Assets tab asks "What is this file?" once.
   unassigned: UnassignedFile[];
-  clips: ClipAsset[];
+  clips: ClipAsset[]; // every file of clips\; the Storyboard lists only role "story"
+  singing: SingingLine[]; // the Lyrics Sync lines singing takes sit on now (song.json anchors with sync, for clips that are here)
   removed: string[]; // in clips\_removed\
   usable: { vertical: number; horizontal: number }; // for 9:16 and 16:9 platforms
   storyIdea?: string | null; // Prepare → Storyboard's one sentence for the whole video (clip-notes.ts): for the user only
@@ -79,7 +82,7 @@ export async function songAssets(ws: Workspace, projectId: string, options: { ch
   const recognized = await recognizeSongFiles(ws, projectId, options);
   const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get()!;
   const paths = songPathsById(ws, projectId);
-  const out: SongAssets = { folder: paths.legacy ? null : paths.rel, folderPath: paths.legacy ? null : paths.root, song: null, lyrics: null, instrumental: paths.instrumental, cover: null, hints: null, vocals: null, backingVocals: null, unassigned: [], clips: [], removed: [], usable: { vertical: 0, horizontal: 0 } };
+  const out: SongAssets = { folder: paths.legacy ? null : paths.rel, folderPath: paths.legacy ? null : paths.root, song: null, lyrics: null, instrumental: paths.instrumental, cover: null, hints: null, vocals: null, backingVocals: null, unassigned: [], clips: [], singing: [], removed: [], usable: { vertical: 0, horizontal: 0 } };
   if (paths.audio && existsSync(paths.audio)) out.song = { name: path.basename(paths.audio), file: rel(ws, paths.audio), durationMs: p.duration_ms ?? null, bpm: p.bpm ?? null };
   if (existsSync(paths.lyricsTxt)) out.lyrics = { file: rel(ws, paths.lyricsTxt), lines: readFileSync(paths.lyricsTxt, "utf8").split(/\r?\n/).filter((l) => l.replace(/^\*\s+/, "").trim()).length };
   if (paths.cover && existsSync(paths.cover)) out.cover = rel(ws, paths.cover);
@@ -109,6 +112,10 @@ export async function songAssets(ws: Workspace, projectId: string, options: { ch
     c.omit = isOmitted(edits, c.name);
     c.label = labelOf(edits, c.name);
   }
+  const roles = clipRoles(paths.root, paths.recipe, listed.clips.map((c) => c.name));
+  for (const c of listed.clips) c.role = roles.get(c.name) ?? "story";
+  const here = new Set(listed.clips.map((c) => c.name.toLowerCase()));
+  out.singing = songSingingLines(paths.recipe).filter((a) => here.has(a.clip.toLowerCase()) && !isOmitted(edits, a.clip)).map(({ line, through }) => ({ line, through })).sort((a, b) => a.line - b.line);
   // The user's story notes (Prepare → Clips): only shown there, never read by the planner or Make.
   const notes = notesForClips(readClipNotes(paths.root), listed.clips);
   for (const c of listed.clips) c.note = notes.get(c.name) ?? null;
@@ -251,14 +258,15 @@ export type ImportResult = { added: string[]; duplicates: { name: string; sameAs
 
 // Clips dropped on the Assets tab: copied into the song's clips\ (a free name when one is taken).
 // A file whose content is already there is not copied again (named in `duplicates`).
-export async function importSongClips(ws: Workspace, projectId: string, files: readonly { file: string; name: string }[]): Promise<ImportResult> {
+// `inOrder: false` (a take only for a Lyrics Sync line): the clip does not join the story order.
+export async function importSongClips(ws: Workspace, projectId: string, files: readonly { file: string; name: string }[], options: { inOrder?: boolean } = {}): Promise<ImportResult> {
   const paths = songPathsById(ws, projectId);
   if (!paths.clips) throw new Error("This song has no folder yet: run the migration first (pnpm songs:migrate).");
   const result = await importClipsInto(ws, paths.clips, songClipsCollection(projectId), files);
   // New clips go at the end of the order, sorted among themselves by file name (clips named "01_...",
   // "02_..." keep that order; any other names can simply be dragged into place).
   const byName = [...result.added].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
-  if (result.added.length) keepSongClipOrder(paths.root, paths.clips, { last: byName });
+  if (result.added.length && options.inOrder !== false) keepSongClipOrder(paths.root, paths.clips, { last: byName });
   return result;
 }
 
@@ -314,6 +322,13 @@ export function restoreSongClip(ws: Workspace, projectId: string, name: string):
   const restored = restoreClipTo(ws, paths.clips, name);
   keepSongClipOrder(paths.root, paths.clips, { last: [path.basename(restored)] }); // back at the end of the order
   return restored;
+}
+
+// A clip that was only for a Lyrics Sync line becomes a story moment (Send to Storyboard in Creation): the END of the order.
+export function moveSongClipToEnd(ws: Workspace, projectId: string, name: string): void {
+  const paths = songPathsById(ws, projectId);
+  if (!paths.clips) throw new Error("This song has no folder yet.");
+  keepSongClipOrder(paths.root, paths.clips, { last: [name] });
 }
 
 // A clip of a folder moves to its _removed\ (never deleted).

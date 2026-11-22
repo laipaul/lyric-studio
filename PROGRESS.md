@@ -4,6 +4,20 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Storyboard shows only story moments ✅ (to verify on the PC)
+- Paul (22 Nov 2026): "the storyboard is confusing, why has the app duplicated the singing part in so many pages".
+  Singing takes and Creation takes picked in Lyrics Sync were listed as loose Storyboard cards and filled gaps.
+- Rule: a Creation take stays in Creation until "Send to Storyboard" is pressed there. A singing take belongs to its
+  Lyrics Sync line and plays only there. Neither is a Storyboard card.
+- clips.json `lineOnly` (a take copied only for a line or a hidden-moment cover): Lyrics Sync's pick sends it with
+  `forLine` (not in the order); a later Send from Creation makes it a story moment at the END of the order. A sent clip
+  you removed counts as not sent (Send restores it from _removed, no duplicate). The planner never uses it as gap fill.
+- Storyboard and Shape's clip strip list only story clips; one line says "Singing on lines 15-16, 25-27, 32: set in
+  Lyrics Sync". Saving the order keeps the hidden clips' entries in clips.json.
+- Code: node/clip-roles.ts, animate.ts sendToStoryboard, assets.ts (role, singing, importSongClips inOrder),
+  story-line.ts, storyboard.ts, compose.ts anchorOnly, make.ts, lyrics-view.ts, pictures route, assets-tab, lyrics-tab.
+- Tests: vitest line-only (7), plus animate, clip-order, story-line, compose, shots, lyrics-view, song-files pass.
+
 ### Sections in Lyrics Sync (Mini film) ✅ (to verify on the PC)
 - Step 2 of the Scenes plan (Paul, 22 Nov 2026). On a **Mini film** song, Lyrics Sync shows the song's sections:
   a **Sections** bar above the lines (Verse 1 · Chorus · Verse 2 · ... with start time and lines) and a row above

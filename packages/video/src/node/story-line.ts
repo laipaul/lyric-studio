@@ -11,6 +11,7 @@ import path from "node:path";
 import type { Workspace } from "@lyric/db";
 
 import { folderClips, songClipsCollection, type ClipAsset } from "./assets";
+import { clipRoles } from "./clip-roles";
 import { cardKey, cardOf, inClipOrder, isOmitted, readClipEdits, setClipOmit, withSongOrder, writeClipEdits, type ClipEdits } from "./clip-edits";
 import { notesForClips, readClipNotes, setClipNote } from "./clip-notes";
 import { collectionFolder } from "./collections";
@@ -81,8 +82,11 @@ async function migrate(ws: Workspace, projectId: string, ownFiles: readonly stri
 }
 
 // The story line as Prepare → Storyboard shows it (own clips come from songAssets; this adds the rest in place).
-export async function songStory(ws: Workspace, projectId: string, own: readonly ClipAsset[]): Promise<SongStory> {
-  const { root } = songRoot(ws, projectId);
+export async function songStory(ws: Workspace, projectId: string, ownAll: readonly ClipAsset[]): Promise<SongStory> {
+  const { root, recipe } = songRoot(ws, projectId);
+  // Singing takes and clips only for a Lyrics Sync line are not story moments: they never show here (their entries in clips.json stay).
+  const roles = clipRoles(root, recipe, ownAll.map((c) => c.name));
+  const own = ownAll.filter((c) => (roles.get(c.name) ?? "story") === "story");
   const ownNames = own.map((c) => c.name);
   const edits = await migrate(ws, projectId, ownNames);
   const notes = readClipNotes(root);
@@ -215,7 +219,12 @@ export async function setStoryOrder(ws: Workspace, projectId: string, keys: unkn
   if (unknown.length) throw new Error(`Not in this song's story line: ${unknown.join(", ")}. Reload the page and try again.`);
   const missing = known.filter((n) => !keys.some((k) => same(k, n)));
   const edits = readClipEdits(root);
-  writeClipEdits(root, { ...edits, order: [...new Set([...keys, ...missing])] });
+  const next = [...new Set([...keys, ...missing])];
+  // Hidden clips (singing takes, clips only for a line) keep the entries they have, at the places they have.
+  const roles = clipRoles(root, songRoot(ws, projectId).recipe, own.map((c) => c.name));
+  const hidden = edits.order.map((e, i) => ({ e, i })).filter(({ e }) => own.some((c) => same(c.name, e) && roles.get(c.name) !== "story"));
+  for (const { e, i } of hidden) next.splice(Math.min(i, next.length), 0, e);
+  writeClipEdits(root, { ...edits, order: [...new Set(next)] });
   return [...keys, ...missing];
 }
 

@@ -156,7 +156,9 @@ export async function anchorClips(ws: Workspace, projectId: string): Promise<{ c
   for (const [picture, rec] of Object.entries(board)) {
     for (const t of rec.takes) {
       const label = `${rec.label ?? path.parse(picture).name} · ${t.label ?? `Take ${t.n}`}`;
-      const sent = t.sent ?? t.clip;
+      // A sent clip that is no longer in the song's clips (removed) counts as not sent (an Animate take only).
+      const sentName = t.sent ?? t.clip;
+      const sent = sentName && (t.kind === "lipsync" || own.clips.some((c) => c.name.toLowerCase() === sentName.toLowerCase())) ? sentName : undefined;
       if (sent) fromTake.set(sent.toLowerCase(), { picture, n: t.n, singing: t.kind === "lipsync", label: t.kind === "lipsync" ? (itemLabel(rec, t.n) ?? label) : label });
       else if (t.kind !== "lipsync" && t.status === "done" && t.file && existsSync(path.join(pictures, t.file))) {
         const info = await probeMedia(path.join(pictures, t.file)).catch(() => null);

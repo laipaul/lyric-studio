@@ -265,7 +265,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
     const take = data?.anchors.clips.find((c) => c.name === name && c.take && !c.take.sent)?.take;
     if (!take) return name;
     try {
-      const r = await api(`/api/songs/${projectId}/pictures`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", file: take.picture, n: take.n }) });
+      const r = await api(`/api/songs/${projectId}/pictures`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", file: take.picture, n: take.n, forLine: true }) });
       const d = (await r.json()) as { clip?: string; error?: string };
       if (!r.ok || !d.clip) throw new Error(d.error ?? `The studio answered ${r.status}`);
       return d.clip;

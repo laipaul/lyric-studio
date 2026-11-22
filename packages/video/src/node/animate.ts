@@ -26,8 +26,8 @@ import path from "node:path";
 import { beat as beatTable, ffmpegBin, ffprobeBin, probeMedia, uniqueFileName, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
-import { importSongClips } from "./assets";
-import { cleanLabel, isOmitted, readClipEdits, setClipLabel } from "./clip-edits";
+import { importSongClips, moveSongClipToEnd, REMOVED_DIR, restoreClipTo, restoreSongClip } from "./assets";
+import { cleanLabel, isLineOnly, isOmitted, readClipEdits, setClipLabel, setClipLineOnly } from "./clip-edits";
 import { download, errorText } from "./characters/fal";
 import { processAlive } from "./jobs";
 import { filmLookFor } from "./film-looks";
@@ -354,15 +354,18 @@ export async function picturesView(ws: Workspace, projectId: string, env: NodeJS
     const at = clip ? songAnchors.filter((a) => a.clip.toLowerCase() === clip.toLowerCase()).map((a) => (a.through && a.through > a.line ? `${a.line}-${a.through}` : String(a.line))) : [];
     return at.length ? `${at.length > 1 || at[0].includes("-") ? "lines" : "line"} ${at.join(", ")}` : undefined;
   };
+  // A clip sent to the Storyboard that is no longer in the song's clips (the user removed it) counts as not sent.
+  const clipsDir = songPathsById(ws, projectId).clips;
+  const stillThere = (c: string | undefined) => !!c && !!clipsDir && existsSync(path.join(clipsDir, c));
   const pictures: PictureView[] = [];
   for (const f of files) {
     const info = await probeMedia(path.join(dir, f)).catch(() => null);
     const rec = all.pictures[f];
     // A singing take is "in use" while its clip is the singing anchor on its lines (song.json).
-    const takes = (rec?.takes ?? []).map((t) => (t.clip && !t.sent ? { ...t, sent: t.clip } : t)).map((t) => (t.kind === "lipsync" ? { ...t, inUse: !!t.sent && singingAnchors.has(`${t.line}:${t.through ?? t.line}:${t.sent.toLowerCase()}`) } : { ...t, onLines: onLines(t.sent) }));
+    const takes = (rec?.takes ?? []).map((t) => (t.clip && !t.sent ? { ...t, sent: t.clip } : t)).map((t) => (t.kind !== "lipsync" && t.sent && !stillThere(t.sent) ? { ...t, sent: undefined } : t)).map((t) => (t.kind === "lipsync" ? { ...t, inUse: !!t.sent && singingAnchors.has(`${t.line}:${t.through ?? t.line}:${t.sent.toLowerCase()}`) } : { ...t, onLines: onLines(t.sent) }));
     const cleanable = (rec?.takes ?? []).filter((t) => use.cleanable(t)).map((t) => t.n);
     const removed = [...(rec?.removedTakes ?? [])].sort((a, b) => b.removed_at.localeCompare(a.removed_at)).map((t) => ({ n: t.n, label: t.label ?? `Take ${t.n}`, why: t.kind === "lipsync" ? `lip sync, ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` : t.status === "failed" ? "failed" : t.model, at: t.removed_at }));
-    pictures.push({ file: f, label: rec?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? "picture" : "video", source: sourceLabel(f, rec?.source), mood: rec?.mood ?? "", cleanable, removed, takes, width: info?.width ?? null, height: info?.height ?? null, sent: rec?.sent ?? null });
+    pictures.push({ file: f, label: rec?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? "picture" : "video", source: sourceLabel(f, rec?.source), mood: rec?.mood ?? "", cleanable, removed, takes, width: info?.width ?? null, height: info?.height ?? null, sent: stillThere(rec?.sent) ? rec!.sent! : null });
   }
   const stub = !!env.LYRIC_GENERATE_STUB;
   return {
@@ -760,39 +763,73 @@ export function setItemLabel(ws: Workspace, projectId: string, file: string, n: 
 
 // "Send to Storyboard": a picture or one of its finished takes is copied into the song's clips and joins the END of the
 // story line (like any dropped clip; Paul orders it there). The board keeps its own copy, marked as sent.
-export async function sendToStoryboard(ws: Workspace, projectId: string, file: string, n?: number | null): Promise<{ clip: string; already: boolean }> {
-  const { dir } = songFolder(ws, projectId);
+// forLine (Lyrics Sync picked a take for a line or as a hidden moment's cover): the copy is marked lineOnly in clips.json and
+// does not join the story line: it stays in Creation as far as the Storyboard goes. A later normal Send makes it a story
+// moment (end of the order). A sent clip that is no longer in clips\ counts as not sent: it is put back from clips\_removed\
+// when it is there, else copied again.
+export async function sendToStoryboard(ws: Workspace, projectId: string, file: string, n?: number | null, options: { forLine?: boolean } = {}): Promise<{ clip: string; already: boolean }> {
+  const { dir, root } = songFolder(ws, projectId);
+  const clipsDir = songPathsById(ws, projectId).clips;
+  const forLine = options.forLine === true;
   const name = path.basename(String(file ?? ""));
   const rec = readPictures(dir).pictures[name];
   if (!name || !existsSync(path.join(dir, name)) || !BOARD_FILE.test(name)) throw new Error(`No ${file} in this song's Creation space.`);
+  const here = (c: string) => !!clipsDir && existsSync(path.join(clipsDir, c));
+  const markSent = (clip: string) =>
+    update(dir, name, (p) => {
+      if (n === undefined || n === null) p.sent = clip;
+      else {
+        const t = p.takes.find((x) => x.n === n);
+        if (t) t.sent = clip;
+      }
+    });
+  // A clip that was only for a line, sent from Creation now: a story moment at the END of the order.
+  const joinStory = (clip: string): { clip: string; already: boolean } => {
+    if (!forLine && isLineOnly(readClipEdits(root), clip)) {
+      setClipLineOnly(root, clip, false);
+      moveSongClipToEnd(ws, projectId, clip);
+      return { clip, already: false };
+    }
+    return { clip, already: true };
+  };
   let source: string;
   let as: string;
+  let known: string | undefined;
   if (n === undefined || n === null) {
-    if (rec?.sent) return { clip: rec.sent, already: true };
+    known = rec?.sent;
     source = path.join(dir, name);
     as = name;
   } else {
     const t = rec?.takes.find((x) => x.n === n);
     if (!t) throw new Error("No such take.");
-    if (t.sent ?? t.clip) return { clip: (t.sent ?? t.clip)!, already: true };
-    if (t.status !== "done" || !t.file || !existsSync(path.join(dir, t.file))) throw new Error("This take is not finished yet.");
-    source = path.join(dir, t.file);
-    as = path.basename(t.file);
+    known = t.sent ?? t.clip;
+    if (!known || !here(known)) {
+      if (t.status !== "done" || !t.file || !existsSync(path.join(dir, t.file))) throw new Error("This take is not finished yet.");
+    }
+    source = path.join(dir, t.file ?? "");
+    as = path.basename(t.file ?? "");
   }
-  const r = await importSongClips(ws, projectId, [{ file: source, name: as }]);
+  if (known && here(known)) return joinStory(known);
+  // Sent before, but the clip is gone from clips\: put it back from clips\_removed\ when it is there (no duplicate).
+  if (known && clipsDir && existsSync(path.join(clipsDir, REMOVED_DIR, known))) {
+    let clip: string;
+    if (forLine) clip = path.basename(restoreClipTo(ws, clipsDir, known));
+    else clip = path.basename(restoreSongClip(ws, projectId, known));
+    if (forLine) setClipLineOnly(root, clip, true);
+    else if (isLineOnly(readClipEdits(root), clip)) setClipLineOnly(root, clip, false);
+    markSent(clip);
+    return { clip, already: false };
+  }
+  const r = await importSongClips(ws, projectId, [{ file: source, name: as }], { inOrder: !forLine });
   const clip = r.added[0] ?? r.duplicates[0]?.sameAs;
   if (!clip) throw new Error(r.skipped[0]?.reason ?? "It could not be added to the Storyboard.");
   // Its short name goes with it (the Storyboard and the pickers show it).
   const label = itemLabel(rec, n);
-  if (label && r.added.length) setClipLabel(songFolder(ws, projectId).root, clip, label);
-  update(dir, name, (p) => {
-    if (n === undefined || n === null) p.sent = clip;
-    else {
-      const t = p.takes.find((x) => x.n === n);
-      if (t) t.sent = clip;
-    }
-  });
-  return { clip, already: !r.added.length };
+  if (label && r.added.length) setClipLabel(root, clip, label);
+  if (forLine && r.added.length) setClipLineOnly(root, clip, true);
+  markSent(clip);
+  if (!r.added.length) return joinStory(clip);
+  return { clip, already: false };
 }
 
 // ---------------------------------------------------------------- Clean up (Paul, 21 Nov 2026: "a cleanup button for the takes")

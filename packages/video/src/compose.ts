@@ -36,6 +36,7 @@ export type PreparedClip = {
   speed?: number;
   best_ms?: number;
   best_from?: "clip editor" | "auto";
+  lineOnly?: boolean; // clips.json lineOnly: only for a Lyrics Sync line or a hidden-moment cover, never gap fill
 };
 
 // Size and safe zones of the platform (default: 1080x1920 "standard").
@@ -217,7 +218,7 @@ export function composeProps(
   const notes: string[] = [];
   const clipStarts = new Map<number, number>();
   const exact = new Set<number>(); // singing clips' shots (lip sync): normal speed from the frame that matches the song
-  const anchorOnly = new Set((base.anchors ?? []).filter((a) => a.syncMs != null).map((a) => a.clipId));
+  const anchorOnly = new Set([...(base.anchors ?? []).filter((a) => a.syncMs != null).map((a) => a.clipId), ...base.clips.filter((c) => c.lineOnly).map((c) => c.id)]);
   for (const [shot, a] of anchorPlan?.shots ?? []) {
     // The anchor wins over a pin on the same shot.
     const pinned = byShot.get(shot);
