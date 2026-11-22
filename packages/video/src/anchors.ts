@@ -18,11 +18,16 @@ import type { Beat } from "./beats";
 import { cutPointAt, type CutPlan, type CutPoint } from "./cuts";
 
 export type AnchorTransition = "cut" | "dissolve";
-export type AnchorSpec = { line: number; clip: string; clipIn?: number; transition?: AnchorTransition; sync?: number; through?: number }; // song.json (sync: song seconds of the clip's first frame; through: the last line a singing take covers)
+// hide (singing clips only, Paul 22 Nov 2026: "6 to 8 s the lips are not in sync"): moments of the take covered by another
+// clip: from / to in seconds of the take, clip shown meanwhile (clipIn: from where in it). The song plays on; the singer
+// comes back in time.
+export type HideSpec = { from: number; to: number; clip: string; clipIn?: number };
+export type AnchorSpec = { line: number; clip: string; clipIn?: number; transition?: AnchorTransition; sync?: number; through?: number; hide?: HideSpec[] }; // song.json (sync: song seconds of the clip's first frame; through: the last line a singing take covers)
 export type GapOrder = "story" | "shuffle";
 
 // An anchor whose clip was found; `lyric` is the line's index in the render's lyric list.
-export type ResolvedAnchor = { line: number; text: string; lyric: number; clipId: string; clipName: string; clipInMs: number | null; transition: AnchorTransition; syncMs?: number | null; throughLyric?: number | null }; // throughLyric: a singing take over several lines, the last one's index
+export type ResolvedHide = { fromMs: number; toMs: number; clipId: string; clipName: string; clipInMs: number | null }; // song ms
+export type ResolvedAnchor = { line: number; text: string; lyric: number; clipId: string; clipName: string; clipInMs: number | null; transition: AnchorTransition; syncMs?: number | null; throughLyric?: number | null; hides?: ResolvedHide[] }; // throughLyric: a singing take over several lines, the last one's index
 
 export type AnchorUse = {
   line: number;
@@ -151,7 +156,42 @@ export function planAnchors(
   // Regular cuts inside an anchored shot (or too close before it) give way; an anchor's shot lasts until
   // the first regular cut after its line ends (or the next anchor).
   const regular = plan.cuts.filter((c) => !placed.some((p) => c.frame > p.frame - minShot && c.frame < p.hold));
-  const cuts = [...regular, ...placed.flatMap((p) => (p.cut ? [p.cut] : []))].sort((x, y) => x.frame - y.frame);
+  // Hidden moments of a singing take: away to the cover clip on the beat at or before the moment, back to the singer on
+  // the beat at or after it (the singer's frame is the song's: the lips are in time again). Within the take's shot.
+  const hideCuts: { cut: CutPoint; a: ResolvedAnchor }[] = [];
+  for (const p of placed) {
+    if (p.a.syncMs == null || !p.a.hides?.length) continue;
+    const next = placed.find((q) => q.frame > p.frame)?.frame ?? end;
+    const last = Math.min(next, Math.max(p.hold, ...plan.cuts.filter((c) => c.frame >= p.hold).slice(0, 1).map((c) => c.frame)));
+    let earliest = p.frame + minShot;
+    const beatCuts = beats.map((_, i) => cutPointAt(beats, i, fps, early));
+    for (const h of p.a.hides) {
+      const from = Math.round((h.fromMs * fps) / 1000);
+      const to = Math.round((h.toMs * fps) / 1000);
+      const span = `${clock(h.fromMs - p.a.syncMs)}–${clock(h.toMs - p.a.syncMs)} of the take`;
+      if (to <= p.frame || from >= last) {
+        notes.push(`line ${p.a.line}: ${span} is outside this video's part of the take: nothing to hide`);
+        continue;
+      }
+      const away = [...beatCuts].reverse().find((c) => c.frame <= from && c.frame >= earliest) ?? beatCuts.find((c) => c.frame >= earliest && c.frame < to);
+      if (!away || away.frame > last - minShot) {
+        conflicts.push(`line ${p.a.line}: ${span} cannot be hidden: too close to the start of the singing shot (or to another hidden moment)`);
+        continue;
+      }
+      const back = beatCuts.find((c) => c.frame >= Math.max(to - early, away.frame + minShot)); // (cuts come `early` frames before their beat)
+      const cover: ResolvedAnchor = { line: p.a.line, text: p.a.text, lyric: p.a.lyric, clipId: h.clipId, clipName: h.clipName, clipInMs: h.clipInMs, transition: "cut" };
+      hideCuts.push({ cut: away, a: cover });
+      if (back && back.frame <= last - minShot) {
+        hideCuts.push({ cut: back, a: p.a });
+        earliest = back.frame + minShot;
+        notes.push(`line ${p.a.line}: ${span} hidden by ${h.clipName} (${clock(away.time_ms)}–${clock(back.time_ms)}); the singer comes back in time`);
+      } else {
+        earliest = last;
+        notes.push(`line ${p.a.line}: ${span} hidden by ${h.clipName} from ${clock(away.time_ms)} to the end of the singing shot`);
+      }
+    }
+  }
+  const cuts = [...regular, ...placed.flatMap((p) => (p.cut ? [p.cut] : [])), ...hideCuts.map((h) => h.cut)].sort((x, y) => x.frame - y.frame);
   const merged = cuts.filter((c, i) => i === 0 || c.frame !== cuts[i - 1].frame);
   const bounds = [start, ...merged.map((c) => c.frame)];
   const shots = new Map<number, ResolvedAnchor>();
@@ -160,6 +200,7 @@ export function planAnchors(
     p.use.shot = index;
     shots.set(index, p.a);
   }
+  for (const h of hideCuts) shots.set(bounds.indexOf(h.cut.frame), h.a);
   const outside = uses.filter((u) => !u.used && u.why === "outside this section");
   if (outside.length) notes.push(`not in this section: ${outside.map((u) => `line ${u.line} (${u.clip})`).join(", ")}`);
   return { plan: { ...plan, cuts: merged }, shots, uses: uses.sort((x, y) => x.line - y.line), conflicts, notes };
@@ -257,7 +298,20 @@ export function checkAnchors(raw: unknown): { anchors: AnchorSpec[]; problems: s
     if (a.transition !== undefined && a.transition !== "cut" && a.transition !== "dissolve") return problems.push(`${at}: transition must be "cut" or "dissolve"`);
     if (a.sync !== undefined && (typeof a.sync !== "number" || !Number.isFinite(a.sync) || a.sync < 0)) return problems.push(`${at}: sync must be the song second of the singing clip's first frame (0 or more)`);
     if (a.through !== undefined && (!Number.isInteger(a.through) || (a.through as number) < (a.line as number))) return problems.push(`${at}: through must be the last line the singing clip covers (${a.line} or later)`);
-    anchors.push({ line: a.line as number, clip: (a.clip as string).trim(), ...(a.clipIn !== undefined ? { clipIn: a.clipIn as number } : {}), ...(a.transition ? { transition: a.transition as AnchorTransition } : {}), ...(a.sync !== undefined ? { sync: a.sync as number } : {}), ...(a.through !== undefined && (a.through as number) > (a.line as number) ? { through: a.through as number } : {}) });
+    let hide: HideSpec[] | undefined;
+    if (a.hide !== undefined) {
+      if (a.sync === undefined) return problems.push(`${at}: hide is only for a singing clip (with sync)`);
+      if (!Array.isArray(a.hide)) return problems.push(`${at}: hide must be a list like [{ "from": 6, "to": 8, "clip": "rain.mp4" }]`);
+      hide = [];
+      for (const [k, h] of (a.hide as Record<string, unknown>[]).entries()) {
+        const ok = h && typeof h === "object" && typeof h.from === "number" && typeof h.to === "number" && Number.isFinite(h.from) && Number.isFinite(h.to) && h.from >= 0 && h.to > h.from && typeof h.clip === "string" && !!h.clip.trim() && (h.clipIn === undefined || (typeof h.clipIn === "number" && Number.isFinite(h.clipIn) && h.clipIn >= 0));
+        if (!ok) return problems.push(`${at}.hide[${k}]: from and to are seconds of the take (to after from), clip a clip file name`);
+        hide.push({ from: h.from as number, to: h.to as number, clip: (h.clip as string).trim(), ...(h.clipIn !== undefined ? { clipIn: h.clipIn as number } : {}) });
+      }
+      hide.sort((x, y) => x.from - y.from);
+      if (hide.some((h, k) => k > 0 && h.from < hide![k - 1].to)) return problems.push(`${at}: two hidden moments overlap`);
+    }
+    anchors.push({ line: a.line as number, clip: (a.clip as string).trim(), ...(a.clipIn !== undefined ? { clipIn: a.clipIn as number } : {}), ...(a.transition ? { transition: a.transition as AnchorTransition } : {}), ...(a.sync !== undefined ? { sync: a.sync as number } : {}), ...(a.through !== undefined && (a.through as number) > (a.line as number) ? { through: a.through as number } : {}), ...(hide?.length ? { hide } : {}) });
   });
   return { anchors, problems };
 }

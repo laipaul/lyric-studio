@@ -1,12 +1,13 @@
 "use client";
 
-import { AlertTriangle, Clapperboard, Ear, Pause, Play, RotateCcw, Save, Star, Undo2, X } from "lucide-react";
+import { AlertTriangle, Clapperboard, Ear, EyeOff, Pause, Play, RotateCcw, Save, Star, Undo2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { clockTenths, linesInVideo } from "@lyric/video";
 import type { AnchorClip, LyricsLine, LyricsView } from "@lyric/video/lyrics-view";
 
+import { HidePreview } from "@/components/hide-preview";
 import { SingerBar, SingerCell, useSinger } from "@/components/singer";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -59,6 +60,8 @@ export function LyricsTab({ projectId }: { projectId: string }) {
   const [busy, setBusy] = useState(false);
   const [playing, setPlaying] = useState<number | null>(null);
   const [picking, setPicking] = useState<number | null>(null); // the line whose "lands on" picker is open
+  const [hiding, setHiding] = useState<number | null>(null); // the singing line whose "Hide a moment" picker is open
+  const [previewing, setPreviewing] = useState<number | null>(null); // the singing line whose hidden moments play
   const audio = useRef<HTMLAudioElement>(null);
   const stopAt = useRef<number | null>(null);
   // Which part of the song the Reel (TikTok, Shorts) uses: planned like the Shape page, after the lines load.
@@ -230,15 +233,9 @@ export function LyricsTab({ projectId }: { projectId: string }) {
     const wanted = anchor?.clip;
     const take = wanted ? data?.anchors.clips.find((c) => c.name === wanted && c.take && !c.take.sent)?.take : undefined;
     if (anchor && take) {
-      try {
-        const r = await api(`/api/songs/${projectId}/pictures`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", file: take.picture, n: take.n }) });
-        const d = (await r.json()) as { clip?: string; error?: string };
-        if (!r.ok || !d.clip) throw new Error(d.error ?? `The studio answered ${r.status}`);
-        anchor = { ...anchor, clip: d.clip };
-      } catch (e) {
-        setNotice({ ok: false, text: `The take could not be sent to the Storyboard: ${(e as Error).message}` });
-        return;
-      }
+      const clip = await sendTake(anchor.clip);
+      if (!clip) return;
+      anchor = { ...anchor, clip };
     }
     const list = (data?.anchors.list ?? []).filter((a) => a.line !== line && a !== singing);
     if (anchor) list.push(anchor);
@@ -253,6 +250,43 @@ export function LyricsTab({ projectId }: { projectId: string }) {
     // The server may have taken the singer off this line's group: "Who sings" must say so too (its in-use change calls
     // reloadAnchors once more; that load changes nothing, so it stops there).
     await singer.reload();
+  }
+
+  // The clip a picker choice stands for: a Creation take not in the Storyboard yet is sent there first (null: it failed).
+  async function sendTake(name: string): Promise<string | null> {
+    const take = data?.anchors.clips.find((c) => c.name === name && c.take && !c.take.sent)?.take;
+    if (!take) return name;
+    try {
+      const r = await api(`/api/songs/${projectId}/pictures`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", file: take.picture, n: take.n }) });
+      const d = (await r.json()) as { clip?: string; error?: string };
+      if (!r.ok || !d.clip) throw new Error(d.error ?? `The studio answered ${r.status}`);
+      return d.clip;
+    } catch (e) {
+      setNotice({ ok: false, text: `The take could not be sent to the Storyboard: ${(e as Error).message}` });
+      return null;
+    }
+  }
+
+  // Hide a moment of a singing take (Paul, 22 Nov 2026): seconds of the take covered by another clip; the song plays on
+  // and the singer comes back in time. Saved on the singing anchor (song.json "hide"); k: remove that one.
+  async function saveHide(line: number, h: { from: number; to: number; clip: string; clipIn?: number } | { remove: number }) {
+    const singing = (data?.anchors.list ?? []).find((a) => a.sync !== undefined && a.line === line);
+    if (!singing) return;
+    let hide = [...(singing.hide ?? [])];
+    if ("remove" in h) hide.splice(h.remove, 1);
+    else {
+      if (hide.some((x) => h.from < x.to && x.from < h.to)) return setNotice({ ok: false, text: `${h.from}–${h.to} s overlaps a moment already hidden on line ${line}: remove that one first.` });
+      const clip = await sendTake(h.clip);
+      if (!clip) return;
+      hide = [...hide, { ...h, clip }].sort((x, y) => x.from - y.from);
+    }
+    const next = { ...singing, hide: hide.length ? hide : undefined };
+    const list = (data?.anchors.list ?? []).map((a) => (a === singing ? next : a));
+    const result = await post({ action: "anchors", anchors: list });
+    if (!result) return;
+    setHiding(null);
+    setNotice({ ok: true, text: "remove" in h ? `Line ${line}: that moment shows the singer again.` : `Line ${line}: ${h.from}–${h.to} s of the singing take is hidden by ${data?.anchors.clips.find((c) => c.name === h.clip)?.label ?? h.clip}. The video cuts away and back on the beats nearest these times; the song plays on and the singer comes back in time. The next video uses it.` });
+    await load();
   }
 
   const lines = useMemo(() => data?.lines ?? [], [data]);
@@ -498,6 +532,30 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                               </button>
                             </div>
                           ) : null}
+                          {anchor && anchor.sync !== undefined ? (
+                            <div className="mt-1 flex flex-col gap-0.5 text-[11px]" data-hides={anchor.hide?.length ?? 0}>
+                              {(anchor.hide ?? []).map((h, k) => (
+                                <div key={`${h.from}-${h.to}`} className="flex items-center gap-1" data-hide={`${h.from}-${h.to}`}>
+                                  <span className="min-w-0 flex-1 truncate" title={`${h.from}–${h.to} s of the take: ${h.clip} shows meanwhile`}>
+                                    {h.from}–{h.to} s hidden by {data.anchors.clips.find((c) => c.name.toLowerCase() === h.clip.toLowerCase())?.label ?? h.clip}
+                                  </span>
+                                  <button type="button" disabled={busy} onClick={() => void saveHide(l.number, { remove: k })} className="text-muted-foreground hover:text-foreground shrink-0 rounded p-0.5" aria-label={`Show the singer again at ${h.from}–${h.to} s`} data-hide-remove>
+                                    <X className="size-3" />
+                                  </button>
+                                </div>
+                              ))}
+                              <div className="flex gap-1">
+                                <button type="button" disabled={busy} onClick={() => setHiding(l.number)} className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-md border px-2 py-0.5 whitespace-nowrap" title="A few seconds where the lips are off: another clip shows meanwhile; the song plays on and the singer comes back in time" data-hide-add>
+                                  <EyeOff className="size-3" /> Hide a moment
+                                </button>
+                                {anchor.hide?.length ? (
+                                  <button type="button" onClick={() => setPreviewing(previewing === l.number ? null : l.number)} className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-md border px-2 py-0.5" title="Plays the take with the song, the hidden moments covered" data-hide-preview>
+                                    <Play className="size-3" /> Preview
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          ) : null}
                           {sungWith ? (
                             <div className="text-muted-foreground text-[11px]" data-anchor-continues={sungWith.line}>
                               the singer from line {sungWith.line} continues (one take)
@@ -542,12 +600,26 @@ export function LyricsTab({ projectId }: { projectId: string }) {
       </section>
 
       {/* The picker sits in a dialog, so its clips are always fully in view (the table scrolls on its own). */}
-      <Dialog open={picking !== null} onOpenChange={(o) => !o && setPicking(null)}>
+      <Dialog open={picking !== null || hiding !== null} onOpenChange={(o) => !o && (setPicking(null), setHiding(null))}>
         <DialogContent className="w-[min(64rem,95vw)] max-w-none" data-anchor-picker>
           {(() => {
-            const pl = lines.find((x) => x.number === picking);
+            const pl = lines.find((x) => x.number === (hiding ?? picking));
             if (!pl) return null;
             const current = data.anchors.list.find((a) => a.line === pl.number) ?? null;
+            if (hiding !== null && current?.sync !== undefined) {
+              const takeClip = data.anchors.clips.find((c) => c.name.toLowerCase() === current.clip.toLowerCase());
+              return (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Hide a moment of the singing take on line {pl.number}</DialogTitle>
+                    <DialogDescription>Where the lips are off: another clip shows meanwhile. The song plays on and the singer comes back in time.</DialogDescription>
+                  </DialogHeader>
+                  <div className="max-h-[80vh] overflow-auto pr-1">
+                    <AnchorPicker line={pl} clips={data.anchors.clips} current={null} busy={busy} hide={{ takeS: takeClip ? takeClip.durationMs / 1000 : null }} onSave={(a, m) => m && void saveHide(pl.number, { from: m.from, to: m.to, clip: a.clip, ...(a.clipIn ? { clipIn: a.clipIn } : {}) })} onCancel={() => setHiding(null)} />
+                  </div>
+                </>
+              );
+            }
             return (
               <>
                 <DialogHeader>
@@ -562,6 +634,16 @@ export function LyricsTab({ projectId }: { projectId: string }) {
           })()}
         </DialogContent>
       </Dialog>
+
+      {previewing !== null
+        ? (() => {
+            const a = data.anchors.list.find((x) => x.line === previewing && x.sync !== undefined);
+            const takeClip = a ? data.anchors.clips.find((c) => c.name.toLowerCase() === a.clip.toLowerCase()) : undefined;
+            if (!a?.hide?.length || !takeClip?.video || !data.song) return null;
+            const covers = a.hide.map((h) => ({ fromS: h.from, toS: h.to, clipInS: h.clipIn ?? 0, video: data.anchors.clips.find((c) => c.name.toLowerCase() === h.clip.toLowerCase())?.video ?? null }));
+            return <HidePreview key={previewing} title={`Line ${previewing}: the take with its hidden moments`} take={takeClip.video} song={data.song} syncS={a.sync!} hides={covers} onClose={() => setPreviewing(null)} />;
+          })()
+        : null}
 
       <LyricsText key={data.lyricsText} data={data} onSaved={load} post={post} busy={busy} setNotice={setNotice} />
     </div>
@@ -590,13 +672,15 @@ function AnchorPicker({
   busy,
   onSave,
   onCancel,
+  hide,
 }: {
   line: LyricsLine;
   clips: AnchorClip[];
   current: LyricsView["anchors"]["list"][number] | null;
   busy: boolean;
-  onSave: (a: LyricsView["anchors"]["list"][number]) => void;
+  onSave: (a: LyricsView["anchors"]["list"][number], moment?: { from: number; to: number }) => void;
   onCancel: () => void;
+  hide?: { takeS: number | null }; // "Hide a moment": from / to in seconds of the singing take (its length when known)
 }) {
   const [clip, setClip] = useState(current?.clip ?? "");
   const [clipIn, setClipIn] = useState(current?.clipIn ? String(current.clipIn) : "");
@@ -605,15 +689,27 @@ function AnchorPicker({
   // here (they belong on their own lines: Who sings → Use this take).
   const groups = [...new Set(clips.map((c) => c.from))].filter((g) => g !== "singing").sort((a, b) => (a === "creation" ? -1 : b === "creation" ? 1 : a === "song" ? -1 : b === "song" ? 1 : 0));
   const chosen = clips.find((c) => c.name === clip);
-  const lineMs = (line.sungEndMs ?? line.screen.leaveMs) - line.screen.readableMs;
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const moment = hide && from !== "" && to !== "" && Number(to) > Number(from) && Number(from) >= 0 && (hide.takeS === null || Number(from) < hide.takeS) ? { from: Math.round(Number(from) * 10) / 10, to: Math.round(Math.min(Number(to), hide.takeS ?? Infinity) * 10) / 10 } : null;
+  const lineMs = moment ? (moment.to - moment.from) * 1000 : (line.sungEndMs ?? line.screen.leaveMs) - line.screen.readableMs;
   const left = chosen && chosen.kind === "video" ? chosen.durationMs - (Number(clipIn) || 0) * 1000 : null;
   const save = (name: string) => {
-    if (!name || busy) return;
-    onSave({ line: line.number, clip: name, ...(Number(clipIn) > 0 ? { clipIn: Number(clipIn) } : {}), ...(transition === "dissolve" ? { transition } : {}) });
+    if (!name || busy || (hide && !moment)) return;
+    onSave({ line: line.number, clip: name, ...(Number(clipIn) > 0 ? { clipIn: Number(clipIn) } : {}), ...(transition === "dissolve" && !hide ? { transition } : {}) }, moment ?? undefined);
   };
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs">
+      {hide ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs" data-hide-times>
+          <strong>Hide from</strong>
+          <input type="number" min={0} step={0.1} value={from} onChange={(e) => setFrom(e.target.value)} placeholder="6" className="bg-background w-16 rounded-md border px-1.5 py-0.5" data-hide-from />
+          <strong>to</strong>
+          <input type="number" min={0} step={0.1} value={to} onChange={(e) => setTo(e.target.value)} placeholder="8" className="bg-background w-16 rounded-md border px-1.5 py-0.5" data-hide-to />
+          <span>s of the take{hide.takeS ? ` (it lasts ${hide.takeS.toFixed(1)} s)` : ""}: the seconds the take&apos;s own player shows. Then pick the clip that shows meanwhile.</span>
+        </div>
+      ) : null}
+      <p className="text-xs" hidden={!!hide}>
         <strong>Show this clip on line {line.number} (no singing).</strong> Line {line.number} &quot;{line.text}&quot; lands on a clip: it cuts in on the downbeat at or just before the line ({(lineMs / 1000).toFixed(1)} s on screen) and stays until the line ends.
       </p>
       <div className="bg-background sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b py-2 text-xs" data-anchor-controls>
@@ -640,7 +736,7 @@ function AnchorPicker({
           </Button>
           <Button
             size="sm"
-            disabled={!clip || busy}
+            disabled={!clip || busy || (!!hide && !moment)}
             onClick={() => save(clip)}
             data-anchor-save
           >

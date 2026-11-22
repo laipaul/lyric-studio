@@ -205,6 +205,27 @@ describe("singing clips (lip sync, 21 Nov 2026): locked to the song", () => {
     expect(anchors!.uses[0]).toMatchObject({ line: 5, used: true, transition: "cut", lipsync: true });
     expect(anchors!.uses[0].playback_rate).toBeUndefined();
   });
+  it("hide a moment (Paul, 22 Nov 2026): away to the cover clip on the beat, back to the singer on the beat, lips in time again", () => {
+    const long = { id: "run.mp4", name: "run.mp4", duration_ms: 25_000, path: "cache/run.mp4", durationFrames: 750 };
+    // The take starts at song 13.5 s; 6-8 s of the take (song 19.5-21.5 s) hidden by hands.mp4.
+    const a = anchor(1, "run.mp4", { clipInMs: null, syncMs: 13_500, throughLyric: 4, hides: [{ fromMs: 19_500, toMs: 21_500, clipId: "hands.mp4", clipName: "hands.mp4", clipInMs: null }] });
+    const { props, anchors } = composeProps(base(10_500, 40_500, [a], { clips: [...clips, long] }), { seed: 1, style: "simple", order: "story" });
+    const i = props.shots.findIndex((s) => s.src === "cache/run.mp4");
+    const [singer, cover, back] = props.shots.slice(i, i + 3);
+    expect([singer.src, cover.src, back.src]).toEqual(["cache/run.mp4", "cache/hands.mp4", "cache/run.mp4"]);
+    expect(cover.start).toBe(rel(19_500)); // on the beat at the moment's start
+    expect(back.start).toBe(rel(21_500)); // on the beat at its end
+    // The singer's frame is the song's: song frame of the cut minus the take's first frame.
+    expect(back.clipStartFrame).toBe(Math.round((21_500 * 30) / 1000) - 2 - Math.round((13_500 * 30) / 1000));
+    expect(back.playbackRate).toBe(1);
+    expect(anchors!.notes.some((n) => /line 5: 0:06\.0–0:08\.0 of the take hidden by hands\.mp4 .*the singer comes back in time/.test(n))).toBe(true);
+  });
+  it("hide: song.json is checked (singing clips only, to after from, no overlaps)", () => {
+    expect(checkAnchors([{ line: 5, clip: "s.mp4", sync: 13.5, hide: [{ from: 6, to: 8, clip: "hands.mp4" }] }])).toEqual({ anchors: [{ line: 5, clip: "s.mp4", sync: 13.5, hide: [{ from: 6, to: 8, clip: "hands.mp4" }] }], problems: [] });
+    expect(checkAnchors([{ line: 5, clip: "s.mp4", hide: [{ from: 6, to: 8, clip: "h.mp4" }] }]).problems[0]).toMatch(/only for a singing clip/);
+    expect(checkAnchors([{ line: 5, clip: "s.mp4", sync: 1, hide: [{ from: 8, to: 6, clip: "h.mp4" }] }]).problems[0]).toMatch(/to after from/);
+    expect(checkAnchors([{ line: 5, clip: "s.mp4", sync: 1, hide: [{ from: 6, to: 9, clip: "h.mp4" }, { from: 8, to: 10, clip: "h.mp4" }] }]).problems[0]).toMatch(/overlap/);
+  });
   it("is never used to fill the other shots; the others keep the story order", () => {
     const a = anchor(1, "sings.mp4", { clipInMs: null, syncMs: 13_500 });
     const names = composeProps(withSinger([a]), { seed: 1, style: "simple", order: "story" }).props.shots.map((s) => s.src.replace("cache/", ""));

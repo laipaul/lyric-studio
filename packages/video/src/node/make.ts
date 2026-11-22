@@ -1397,7 +1397,18 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         anchorMissing.push(`slot: line ${a.line} "${lines[i].text}" needs a clip (${a.clip} is not among this video's clips: ${sh.picture?.label ?? "the song's clips and its collections"}, ${prepared.kind} for ${preset.label})`);
         anchorSlots.push({ line: a.line, text: lines[i].text, clip: a.clip });
       }
-      else anchors.push({ line: a.line, text: lines[i].text, lyric: shown.indexOf(i), clipId: clip.id, clipName: clip.name, clipInMs: a.clipIn !== undefined ? Math.round(a.clipIn * 1000) : null, transition: a.sync !== undefined ? "cut" : (a.transition ?? "cut"), ...(a.sync !== undefined ? { syncMs: Math.round(a.sync * 1000) } : {}), ...(a.sync !== undefined && a.through !== undefined && lines[a.through - 1] && shown.indexOf(a.through - 1) >= 0 ? { throughLyric: shown.indexOf(a.through - 1) } : {}) });
+      else {
+        // Hidden moments of a singing take (song.json "hide": seconds of the take): their cover clips among this video's.
+        const hides = (a.sync !== undefined ? (a.hide ?? []) : []).flatMap((h) => {
+          const cover = usedClips.find((c) => c.name.toLowerCase() === h.clip.toLowerCase()) ?? usedClips.find((c) => stem(c.name) === stem(h.clip));
+          if (!cover) {
+            anchorMissing.push(`line ${a.line}: ${h.from}–${h.to} s of the singing take is not hidden: ${h.clip} is not among this video's clips (set to Omit, or removed)`);
+            return [];
+          }
+          return [{ fromMs: Math.round((a.sync! + h.from) * 1000), toMs: Math.round((a.sync! + h.to) * 1000), clipId: cover.id, clipName: cover.name, clipInMs: h.clipIn !== undefined ? Math.round(h.clipIn * 1000) : null }];
+        });
+        anchors.push({ line: a.line, text: lines[i].text, lyric: shown.indexOf(i), clipId: clip.id, clipName: clip.name, clipInMs: a.clipIn !== undefined ? Math.round(a.clipIn * 1000) : null, transition: a.sync !== undefined ? "cut" : (a.transition ?? "cut"), ...(a.sync !== undefined ? { syncMs: Math.round(a.sync * 1000) } : {}), ...(a.sync !== undefined && a.through !== undefined && lines[a.through - 1] && shown.indexOf(a.through - 1) >= 0 ? { throughLyric: shown.indexOf(a.through - 1) } : {}), ...(hides.length ? { hides } : {}) });
+      }
     }
   }
   // Lyric readability (src/readability.ts): "auto" (default) adds the soft dark band behind the lyrics

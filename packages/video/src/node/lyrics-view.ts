@@ -168,7 +168,7 @@ export async function anchorClips(ws: Workspace, projectId: string): Promise<{ c
   }
   const clips: AnchorClip[] = own.clips.filter((c) => !c.duplicateOf).map((c) => {
     const t = fromTake.get(c.name.toLowerCase());
-    const base: AnchorClip = { name: c.name, label: c.label ?? null, thumb: c.thumb, kind: c.kind, durationMs: c.durationMs, orientation: c.orientation, from: "song" };
+    const base: AnchorClip = { name: c.name, label: c.label ?? null, thumb: c.thumb, kind: c.kind, durationMs: c.durationMs, orientation: c.orientation, from: "song", video: c.kind === "video" ? c.file : null };
     if (!t) return base;
     return t.singing ? { ...base, label: c.label ?? t.label, from: "singing" } : { ...base, label: t.label, from: "creation", take: { picture: t.picture, n: t.n, sent: c.name } };
   });
