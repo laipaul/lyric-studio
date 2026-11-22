@@ -8,7 +8,7 @@ import path from "node:path";
 import { openWorkspace, seedStylePresets, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { checkRunRequest, findOrCreateSongProject, generateOptions, makeVideos, readRecipe, runRecipe, songPathsById, storyboardChoices, studioCounts, STUDIO_PLATFORMS, videoCount, writeRecipe, type RenderOptions } from "../src/node";
+import { checkRunRequest, findOrCreateSongProject, generateOptions, makeVideos, readRecipe, runRecipe, songPathsById, savedPlanCounts, storyboardChoices, studioCounts, STUDIO_PLATFORMS, videoCount, writeRecipe, type RenderOptions } from "../src/node";
 import { fakeAlign, ffmpeg, LYRICS, makeClip, makeSong } from "./media-helpers";
 
 describe("the counts rule", () => {
@@ -97,4 +97,18 @@ describe("the same counts in Make, Shape's list and pnpm make", () => {
     expect(await run({ platforms: "reels", variationsBy: { reels: counts.reels } })).toEqual(["reels/v1", "reels/v2"]);
     expect(await run({ platforms: "reels" })).toEqual(["reels/v1", "reels/v2"]); // pnpm make: the song's count wins over the preset
   }, 600_000);
+
+  it("Shape lists a platform switched off in Make while it has a saved shot plan (22 Nov 2026)", () => {
+    const recipe = songPathsById(ws, id).recipe!;
+    writeRecipe(recipe, { ...readRecipe(recipe), platforms: ["youtube"], variations: {} }); // Make: YouTube only
+    const plans = path.join(songPathsById(ws, id).root, "storyboards");
+    rmSync(plans, { recursive: true, force: true }); // the runs above saved their own plans: start from these files only
+    mkdirSync(plans, { recursive: true });
+    for (const f of ["reels-1.json", "reels-2.json", "reels-3.previous.json", "reels-1~theme-night-drive.json", "canvas-1.json", "tiktok-notes.txt"]) writeFileSync(path.join(plans, f), "{}");
+    expect([...savedPlanCounts(songPathsById(ws, id).root)].sort()).toEqual([["canvas", 1], ["reels", 2]]);
+    const choices = storyboardChoices(ws, id).platforms;
+    expect(choices.map((p) => [p.name, p.videos, !!p.notInMake])).toEqual([["youtube", ["v1"], false], ["reels", ["v1", "v2"], true]]); // Make's first; never the Canvas
+    writeRecipe(recipe, { ...readRecipe(recipe), platforms: ["reels", "youtube"] }); // Reels back on in Make: Make's count, no mark
+    expect(storyboardChoices(ws, id).platforms.map((p) => [p.name, p.videos.length, !!p.notInMake])).toEqual([["reels", 1], ["youtube", 1]].map(([n, c]) => [n, c, false]));
+  });
 });

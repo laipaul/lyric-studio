@@ -112,7 +112,9 @@ export type StoryboardClip = {
 };
 
 export type StoryboardChoices = {
-  platforms: { name: string; label: string; videos: string[] }[]; // plan: the recipe's platforms and video counts
+  // plan: the recipe's platforms and video counts (Make's chips), then every other platform with a saved shot plan
+  // (22 Nov 2026), marked notInMake: Shape still shows and edits it, Make does not make it until its chip is on.
+  platforms: { name: string; label: string; videos: string[]; notInMake?: boolean }[];
   runs: { folder: string; time: string | null; platforms: { name: string; label: string; videos: string[] }[] }[];
   ready: boolean; // the song has lyrics and a song file
   why: string | null;
@@ -139,10 +141,15 @@ export function storyboardChoices(ws: Workspace, projectId: string): StoryboardC
   // The same platforms and counts as Make's chips (recipe.ts studioCounts): v1..vN of each (not the Canvas: its own loops).
   const counts = studioCounts(r, Object.keys(all).filter((n) => all[n]?.available && all[n].layout !== "canvas"));
   const names = Object.keys(counts);
-  const platforms = names.map((n) => {
+  const platforms: StoryboardChoices["platforms"] = names.map((n) => {
     const count = counts[n];
     return { name: n, label: SHORT_LABELS[n] ?? all[n].label, videos: Array.from({ length: count }, (_, i) => `v${i + 1}`) };
   });
+  // A platform switched off in Make keeps showing in Shape while it has a saved shot plan (its videos as saved).
+  for (const [n, count] of savedPlanCounts(paths.root)) {
+    if (n in counts || !all[n]?.available || all[n].layout === "canvas") continue;
+    platforms.push({ name: n, label: SHORT_LABELS[n] ?? all[n].label, videos: Array.from({ length: count }, (_, i) => `v${i + 1}`), notInMake: true });
+  }
   const runs = songRuns(ws, projectId).map((run) => ({
     folder: run.folder,
     time: run.time,
@@ -155,6 +162,25 @@ export function storyboardChoices(ws: Workspace, projectId: string): StoryboardC
     pictures: { songClips: hasOwn, collections: sharedCollections(ws), recipe: { songClips: hasOwn, collections: songCollections(ws, projectId) } },
     tries: shotPlanTries(paths.root),
   };
+}
+
+// The saved shot plans of a song's own videos (storyboards\<platform>-<n>.json; not a Try other looks plan, not a
+// .previous one): per platform, the highest video number saved.
+export function savedPlanCounts(songRoot: string): Map<string, number> {
+  const out = new Map<string, number>();
+  let files: string[] = [];
+  try {
+    files = readdirSync(path.join(songRoot, STORYBOARD_DIR));
+  } catch {
+    return out;
+  }
+  for (const f of files) {
+    const m = /^([a-z]+)-(\d+)\.json$/i.exec(f);
+    if (!m) continue;
+    const n = m[1].toLowerCase();
+    out.set(n, Math.max(out.get(n) ?? 0, Number(m[2])));
+  }
+  return out;
 }
 
 // The Try other looks shot plans of a song (storyboards\<platform>-<n>~<kind>-<name>.json), newest first.
@@ -187,7 +213,8 @@ export async function storyboardPlan(ws: Workspace, projectId: string, platform:
     ...(paths.hints && existsSync(paths.hints) ? { hint: paths.hints } : {}),
     platforms: platform,
     // As many videos as Make makes for it (the counts rule), so the plan's video list is the one Shape shows.
-    variationsBy: { [platform]: studioCounts(resolveRecipe(recipeInputFor(ws, projectId).input).values, [platform])[platform] ?? 1 },
+    // A platform switched off in Make (shown for its saved shot plans): as many videos as it has saved.
+    variationsBy: { [platform]: studioCounts(resolveRecipe(recipeInputFor(ws, projectId).input).values, [platform])[platform] ?? Math.max(1, savedPlanCounts(paths.root).get(platform) ?? 0) },
     ...(clipSet && !t ? { clipSet } : {}),
     ...(t ? tryOptions(t) : {}),
     dryRun: true,

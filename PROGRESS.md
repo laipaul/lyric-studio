@@ -4,6 +4,17 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Shape shows every platform with a saved shot plan ✅ (to verify on the PC)
+- Paul (22 Nov 2026): after choosing only YouTube in Make, Shape's platform list had YouTube only, so the Reel
+  could not be opened in Shape. Shape's list followed Make's chips.
+- Now Shape lists Make's platforms first, then every other platform that has a saved shot plan for the song
+  (storyboards\<platform>-<n>.json; not Try other looks or .previous plans, never the Canvas), marked
+  "Reels · not selected in Make" (Make does not make it until its chip is on). It opens and edits as usual, with as
+  many videos as it has saved plans. Make is unchanged.
+- Code: node/storyboard.ts (savedPlanCounts, storyboardChoices notInMake, storyboardPlan's count), shape-board.tsx.
+- Tests: vitest video-counts (+1); browser shape-platforms (4 checks, in test:e2e). make.test's 2 failures are the
+  same as before this change (they need network / real rendering). Studio build passes.
+
 ### Same look on every platform (themes) ✅ (to verify on the PC)
 - Paul (22 Nov 2026): the YouTube video looked different from the Reel. Cause: the theme Midnight Highway gave
   YouTube its own verse effect (cinematic-fade; typewriter:15 everywhere else), set through a hidden "Per platform..."
@@ -354,13 +365,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   Free, nothing sent online, his files only read. Same face checks, neck crop for the body views, "Move to…" to fix
   a wrong place, and "Draft it from the pictures (about $0.01)" for the description. Then Lock as usual.
 - Tests: vitest characters-own (4), browser characters (+5), characters-cards, extra-cards, frames pass.
-
-### Pick a frame from a video for a character's picture ✅ (to verify on the PC)
-- Paul (21 Nov 2026): "can you add that to my app". Characters → New character → "Or pick a frame from a video", and
-  on a card "Second picture from a video"; also in Prepare → Creation ("Pick a frame from a video"). Drop a video:
-  24 frames are taken, the local face check (free) puts the best faces first (big, sharp, facing the camera, eyes
-  open), Paul clicks one and uses it. His video is only read; the app's copy is deleted at once, frames kept a day.
-- Tests: pytest face (+1 frame score), vitest characters-frames (3), browser characters (+5) and pictures pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

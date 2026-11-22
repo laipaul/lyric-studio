@@ -4,6 +4,13 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Pick a frame from a video for a character's picture ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "can you add that to my app". Characters → New character → "Or pick a frame from a video", and
+  on a card "Second picture from a video"; also in Prepare → Creation ("Pick a frame from a video"). Drop a video:
+  24 frames are taken, the local face check (free) puts the best faces first (big, sharp, facing the camera, eyes
+  open), Paul clicks one and uses it. His video is only read; the app's copy is deleted at once, frames kept a day.
+- Tests: pytest face (+1 frame score), vitest characters-frames (3), browser characters (+5) and pictures pass.
+
 ### Remove planned slots from the Storyboard ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "why can't I remove 2 and 6 from my Storyboard". The "No picture yet" cards are planned slots
   from his 18 Nov shot list; their ⋯ menu only showed details. Now ⋯ → "Remove this planned slot", and "Remove all

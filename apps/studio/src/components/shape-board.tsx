@@ -1107,8 +1107,9 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
               <span className="text-muted-foreground sr-only text-xs">Platform</span>
               <select className={select} data-storyboard-platform value={source?.platform ?? ""} onChange={(e) => source && setSource({ ...source, platform: e.target.value, video: platforms.find((p) => p.name === e.target.value)?.videos[0] ?? "v1", ...(source.kind === "plan" ? { try: undefined } : {}) })}>
                 {platforms.map((p) => (
-                  <option key={p.name} value={p.name}>
+                  <option key={p.name} value={p.name} {...("notInMake" in p && p.notInMake ? { "data-not-in-make": p.name, title: "Make does not make this one until you turn it on in Make → Make" } : {})}>
                     {p.label}
+                    {"notInMake" in p && p.notInMake ? " · not selected in Make" : ""}
                   </option>
                 ))}
               </select>
