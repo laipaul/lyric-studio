@@ -19,6 +19,7 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - song-folder.ts: the "whole project traced" warning is silenced (/*turbopackIgnore: true*/). 16 similar warnings
   remain in 9 other files (open-folder route, db workspace.ts, animate, captions, file-links, library, migrate,
   pairings): only warnings; the paths come from the workspace folder at run time, so they cannot be scoped.
+- Next.js 16.4.3 -> 16.4.6 (security patch; next and eslint-config-next in apps/studio/package.json). Build passes.
 - Tests: vitest no-remotion-in-routes (5: follows the runtime imports of story-line, transition-notes, assets and
   fails on any path to Remotion); transition-notes, story-line, storyboard-file pass. `pnpm --filter @lyric/studio build` passes.
 
