@@ -348,7 +348,7 @@ export function adoptIntoSongFolder(ws: Workspace, projectId: string, songFile?:
 
 function removeOldProjectDirs(ws: Workspace, projectId: string): void {
   const old = absPath(ws, `projects/${projectId}`);
-  for (const sub of ["audio", "exports"]) removeEmptyDirs(path.join(old, sub), absPath(ws, "projects"));
+  for (const sub of ["audio", "exports"]) removeEmptyDirs(path.join(/*turbopackIgnore: true*/ old, sub), absPath(ws, "projects")); // a workspace folder, never part of the app bundle
 }
 
 // songs/<artist>/<title>/ holding `songFile`, when no song owns that folder yet.

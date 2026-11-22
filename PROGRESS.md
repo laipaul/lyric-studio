@@ -4,6 +4,24 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Fix: Studio build failed ("Failed to collect page data for /api/songs/[id]/assets") ✅ (to verify on the PC)
+- Paul (22 Nov 2026): `pnpm --filter @lyric/studio build` failed after d81d436 (on Linux too, not only Windows).
+- Cause: d81d436 made story-line.ts (used by the Assets tab's API route) import node/transition-notes.ts, which imported
+  readStoryboard from node/storyboard-file.ts. That file imports manifest.ts, which loads Remotion. In a Next.js API
+  route React has no createContext, so loading Remotion there makes the build stop ("Remotion requires
+  React.createContext"). The route itself did nothing at import time.
+- Fix: readStoryboard moved to node/storyboard-read.ts (only reads the JSON; storyboard-file.ts re-exports it, so other
+  code is unchanged); transition-notes.ts imports it from there. No other API route reaches Remotion (all 55 traced;
+  the pages that do only through their "use client" player components, as intended).
+- `export const dynamic` / `runtime` were tried on the route and NOT added: with `cacheComponents: true` (next.config)
+  Next 16 refuses both ("Route segment config ... is not compatible with nextConfig.cacheComponents"). The route is
+  already dynamic (GET awaits connection(); POST/PUT/DELETE are never cached) and Node is the default runtime.
+- song-folder.ts: the "whole project traced" warning is silenced (/*turbopackIgnore: true*/). 16 similar warnings
+  remain in 9 other files (open-folder route, db workspace.ts, animate, captions, file-links, library, migrate,
+  pairings): only warnings; the paths come from the workspace folder at run time, so they cannot be scoped.
+- Tests: vitest no-remotion-in-routes (5: follows the runtime imports of story-line, transition-notes, assets and
+  fails on any path to Remotion); transition-notes, story-line, storyboard-file pass. `pnpm --filter @lyric/studio build` passes.
+
 ### Dissolves never freeze a frame; dissolves of about 1.5 s ✅ (to verify on the PC)
 - Paul (22 Nov 2026): "a little pause at scene transitions (frozen frame)", Wedding Day Storyboard clip 2 (mirror, 0.9 s
   to the end of the file) into clip 3. Cause: a dissolve starts the incoming clip early (it fades in over the outgoing
@@ -338,15 +356,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Then (Paul's block 9-14): a block take replaces an earlier one-line take on its first line by itself (the old clip
   set to Omit, placed once; checked in the browser test). The ✕ in "Shows clip" now only takes the singing clip off
   the line; Who sings stays as it is (it used to also remove the line from its block).
-
-### Singing blocks: lines in a row with the same picture are one continuous take ✅ (to verify on the PC)
-- Paul (21 Nov 2026): "select a scene where the singer will perform the whole lines I pick, then move on to the B-roll".
-  Pick the same picture in "Who sings" on lines in a row (e.g. 9 to 12): they become ONE singing take, from just before
-  the first line to two bars after the last (one WaveSpeed request, one cost shown on the first line; the others say
-  "sung with line 9 take"). It lands on the first line with "through" (song.json) and stays on screen, lips in time,
-  until the last line is sung; then the B-roll takes over on the beat. A skipped line, another picture or more than
-  8 s of music between two lines starts a new take. A line picked alone works as before.
-- Tests: vitest anchors (+1) and animate (+1, the runs); browser singer, lyrics-tab, pictures pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

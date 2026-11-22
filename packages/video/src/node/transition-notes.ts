@@ -4,7 +4,7 @@
 import { readdirSync } from "node:fs";
 import path from "node:path";
 
-import { readStoryboard } from "./storyboard-file";
+import { readStoryboard } from "./storyboard-read"; // not ./storyboard-file: that one loads Remotion
 
 const PLATFORM_LABEL: Record<string, string> = { reels: "Reel", tiktok: "TikTok", shorts: "Short", youtube: "YouTube", canvas: "Canvas", standard: "Video" };
 

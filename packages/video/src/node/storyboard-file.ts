@@ -30,14 +30,8 @@ export const shotPlanId = (platform: string, video: string, t: SbTry | null | un
 export const previousFile = (file: string) => file.replace(/\.json$/, ".previous.json");
 export const storyboardFile = (songRoot: string, id: string) => path.join(songRoot, STORYBOARD_DIR, `${id}.json`);
 
-export function readStoryboard(file: string): StoryboardFile | null {
-  try {
-    const sb = JSON.parse(readFileSync(file, "utf8")) as StoryboardFile;
-    return sb && sb.schemaVersion === STORYBOARD_SCHEMA && Array.isArray(sb.shots) ? sb : null;
-  } catch {
-    return null;
-  }
-}
+import { readStoryboard } from "./storyboard-read";
+export { readStoryboard };
 
 export function writeStoryboard(file: string, sb: StoryboardFile): void {
   mkdirSync(path.dirname(file), { recursive: true });
