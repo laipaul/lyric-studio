@@ -4,6 +4,15 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Wardrobe: one face, many looks ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "other apps added the full wardrobe with different looks", "go". On a character card, the
+  pack is the main look; "Add look" (e.g. Travel coat) with its own outfit, full body front and back and an optional
+  close-up in it, made by the app (Seedream or Gemini, cost first) or from his own pictures (free), locked on its
+  own. Existing cards are "face + main look" with nothing moved. A song picks the look each cast character wears
+  (Production → Cast; used in the Song brief). Creation → "From a character" adds a look's picture to animate or
+  to sing with. Recast will use the chosen look when it is built.
+- Tests: vitest characters-looks (2), production (+1), browser characters (+5), production and pictures pass.
+
 ### Gemini (Nano Banana Pro) on your own key as a pack model ✅ (to verify on the PC, needs GEMINI_API_KEY in .env)
 - Paul (21 Nov 2026): yes to "Gemini in the app, on your own Gemini bill". Characters → Pack → model
   "Gemini · Nano Banana Pro (your key)": the 4 views come from Google on GEMINI_API_KEY (.env only), about $0.14 a

@@ -7,7 +7,9 @@
 //      The edited file is kept as .env.example.mine-<date> (ignored by git), and .env.example is put back as GitHub has it.
 //   2. git pull --ff-only (other files changed on this PC: it stops and says which, nothing is lost).
 //   3. pnpm install, then Start Lyric Studio.cmd (it rebuilds the new code and restarts the app).
-// Nothing is ever committed or pushed from here.
+// Nothing is ever committed from here. "Get Latest Lyric Studio.cmd" (22 Nov 2026) runs it with --from lyric --copy-to
+// origin: the newest code comes from the lyric-studio copy on GitHub (where Claude pushes), and once it is here it is
+// sent on to the usual copy (origin, videomaker) so both match; a copy that fails is said and the update goes on.
 import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync, copyFileSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -78,21 +80,48 @@ export function rescueEnvExample(cwd = ROOT, now = new Date()) {
   return said;
 }
 
+export const LYRIC_REPO = "https://github.com/laipaul/lyric-studio.git";
+
+// --from <remote> (pull from it, its main branch) and --copy-to <remote> (push main there afterwards). Pure.
+export function updateArgs(argv) {
+  const at = (flag) => {
+    const i = argv.indexOf(flag);
+    return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : null;
+  };
+  return { from: at("--from"), copyTo: at("--copy-to") };
+}
+
 function run(cmd, args) {
   execFileSync(cmd, args, { cwd: ROOT, stdio: "inherit", shell: process.platform === "win32" });
 }
 
 async function main() {
-  console.log("Lyric Studio: updating...");
+  const { from, copyTo } = updateArgs(process.argv.slice(2));
+  console.log(from ? `Lyric Studio: getting the newest version from GitHub (${from})...` : "Lyric Studio: updating...");
   for (const line of rescueEnvExample()) console.log(`  ${line}`);
+  if (from === "lyric") {
+    try {
+      git(["remote", "get-url", "lyric"], ROOT);
+    } catch {
+      run("git", ["remote", "add", "lyric", LYRIC_REPO]); // the first time on this PC
+    }
+  }
   try {
-    run("git", ["pull", "--ff-only"]);
+    run("git", from ? ["pull", "--ff-only", from, "main"] : ["pull", "--ff-only"]);
   } catch {
     const files = git(["status", "--porcelain"], ROOT).trim();
     console.log("\nThe update stopped: files of the app were changed on this PC, and git will not overwrite them (nothing is lost).");
     if (files) console.log(`Changed files:\n${files}`);
     console.log('Send this window to Claude, or put a file back as GitHub has it with:  git checkout -- "<file>"');
     process.exit(1);
+  }
+  if (copyTo) {
+    try {
+      console.log(`\nCopying it to your other GitHub copy (${copyTo}) so both match...`);
+      run("git", ["push", copyTo, "HEAD:main"]);
+    } catch {
+      console.log(`Could not copy it to ${copyTo} (no internet, or GitHub asked to sign in). The app still updates; it is copied the next time.`);
+    }
   }
   run("pnpm", ["install"]);
   console.log("\nStarting the new version...");

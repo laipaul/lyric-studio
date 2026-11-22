@@ -9,7 +9,7 @@ import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 // @ts-expect-error -- a plain .mjs script
-import { keysToMove, rescueEnvExample, settings } from "../../../scripts/update.mjs";
+import { keysToMove, rescueEnvExample, settings, updateArgs } from "../../../scripts/update.mjs";
 
 const dirs: string[] = [];
 afterAll(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
@@ -61,5 +61,13 @@ describe("the update script", () => {
     const d = repo(BASE);
     expect(rescueEnvExample(d)).toEqual([]);
     expect(readdirSync(d).some((f) => f.startsWith(".env.example.mine-"))).toBe(false);
+  });
+});
+
+describe("Get Latest Lyric Studio.cmd (22 Nov 2026)", () => {
+  it("--from lyric --copy-to origin: pull from the lyric-studio copy, then copy to the usual one; no options: as before", () => {
+    expect(updateArgs(["--from", "lyric", "--copy-to", "origin"])).toEqual({ from: "lyric", copyTo: "origin" });
+    expect(updateArgs([])).toEqual({ from: null, copyTo: null });
+    expect(updateArgs(["--from", "--copy-to", "origin"])).toEqual({ from: null, copyTo: "origin" });
   });
 });
