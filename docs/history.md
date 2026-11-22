@@ -4,6 +4,18 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Short names for clips; Singer fixes ✅ (to verify on the PC)
+- Paul (21 Nov 2026): the long Midjourney file names are hard to recognise. **Rename** (click the name, pencil) on
+  every picture, video and take in Creation and on every Storyboard card: a short name ("Bride smile") shown instead
+  of the file name; the file keeps its own name (clips.json "label", pictures.json "label"). It goes with a clip sent
+  to the Storyboard (a take without its own name: "<picture name> take N" / "sings line N"), and shows in the Singer
+  picker (now with thumbnails, searchable past 6) and Lyrics Sync → Choose a clip.
+- Singer fixes (Paul's first singing line): the Singer column sits before "Lands on" and a long clip name is cut short,
+  so it is always in view; "— no singer on this line" (or ✕ in Lands on) takes the singing clip off its line and sets it
+  to Omit (kept in Creation and the Storyboard): out of its line its lips would be out of time. A singing clip
+  replaced by a new one on its line is set to Omit the same way.
+- Tests: browser pictures (+6), singer (+5), lyrics-tab and storyboard pass.
+
 ### G3 Singing lines: tick lines in Lyrics Sync, WaveSpeed lip sync, placed in time on their line ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "I decide the singing lines and the clips attached to them, I place them in my Storyboard order,
   and the app does the hard part: assembling them to the beat and the cuts."

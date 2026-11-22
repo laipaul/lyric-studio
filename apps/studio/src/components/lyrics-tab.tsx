@@ -6,9 +6,11 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 
 import { clockTenths, linesInVideo } from "@lyric/video";
 import type { AnchorClip, LyricsLine, LyricsView } from "@lyric/video/lyrics-view";
+import { showsSinging } from "@lyric/video/song-style";
 
 import { HidePreview } from "@/components/hide-preview";
 import { SingerBar, SingerCell, useSinger } from "@/components/singer";
+import { useSongStyle } from "@/components/song-style";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
@@ -133,6 +135,8 @@ export function LyricsTab({ projectId }: { projectId: string }) {
   loadRef.current = load;
   const reloadAnchors = useCallback(() => void loadRef.current(), []);
   const singer = useSinger(projectId, reloadAnchors);
+  // Song style (song-style.ts): Who sings shows for Add singing and Mini film, and on any song that has singing lines.
+  const style = useSongStyle(projectId);
 
   const change = (update: (p: Pending) => void) => {
     setHistory((h) => [...h, pending]);
@@ -299,6 +303,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
 
   if (error) return <p className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{error}</p>;
   if (!data) return <p className="text-muted-foreground text-sm">Loading the lyrics…</p>;
+  const withSinging = showsSinging(style?.style ?? "singing", data.anchors.list.filter((x) => x.sync !== undefined).length);
 
   return (
     <div className="flex flex-col gap-8 pb-24" data-lyrics-tab>
@@ -362,7 +367,9 @@ export function LyricsTab({ projectId }: { projectId: string }) {
               <span>The other shots follow the song&apos;s clip order (Prepare → Storyboard) in every video.</span>
               {!data.anchors.clips.length ? <span className="text-amber-200">No clips to choose from: add clips and photos or a collection in Prepare → Storyboard.</span> : null}
             </div>
-            <SingerBar singer={singer} />
+            {withSinging ? <SingerBar singer={singer} /> : (
+              <p className="text-muted-foreground text-xs" data-singing-off>Who sings is hidden: this song&apos;s style is Cut to the song. Choose Add singing in Song Details to put the singer on lines.</p>
+            )}
             {partPlatforms?.length ? (
               <div className="bg-card/60 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs" data-reel-part title={part?.section.reason ?? undefined}>
                 <span className="text-muted-foreground">Part of the song in</span>
@@ -398,7 +405,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">On screen</th>
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Confidence</th>
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Adjust</th>
-                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap" title="The lines where the singer shows, each with a picture or video from Creation">Who sings (lip-sync)</th>
+                    {withSinging ? <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap" title="The lines where the singer shows, each with a picture or video from Creation">Who sings (lip-sync)</th> : null}
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap min-w-36">Shows clip (no singing)</th>
                   </tr>
                 </thead>
@@ -513,9 +520,11 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                             ) : null}
                           </div>
                         </td>
-                        <td className="px-3 py-2" data-singer-cell>
-                          <SingerCell singer={singer} number={l.number} />
-                        </td>
+                        {withSinging ? (
+                          <td className="px-3 py-2" data-singer-cell>
+                            <SingerCell singer={singer} number={l.number} />
+                          </td>
+                        ) : null}
                         <td className="w-60 max-w-60 min-w-36 px-3 py-2" data-anchor-cell>
                           {anchor ? (
                             <div className="flex max-w-56 min-w-0 items-center gap-2" data-anchor={anchor.clip}>

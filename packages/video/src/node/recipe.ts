@@ -18,6 +18,7 @@ import { TRANSITION_STYLES, type TransitionStyle } from "../transitions";
 import { READABILITY_VALUES, type Readability } from "../readability";
 import { FALLBACKS, GRADES, GRAINS, TEXT_BACKINGS, TITLE_STYLES, TITLE_WARPS, VIGNETTES, type Fallback, type Grade, type Grain, type TextBacking, type TitleStyle, type TitleWarp, type Vignette } from "../picture";
 import { checkLinks, type SongLink } from "../song-links";
+import { isSongStyle, type SongStyle } from "../song-style";
 import { TEXT_LAYOUTS, type TextLayout } from "../text-layout";
 import { FINAL_HOOKS, LINE_BUILDS, LINE_SHAPES, type FinalHook, type LineBuild, type LineShape } from "../line-shape";
 import { choiceText, DEFAULT_HOOK_EFFECT, DEFAULT_VERSE_EFFECT, parseEffectChoice } from "../effects/names";
@@ -87,7 +88,7 @@ export { isPlatformField, isWeight, ITALIC_FIELDS, PLATFORM_FIELDS, WEIGHT_FIELD
 // outside Reset / Lock.
 // canvas: the clip (and moment, seconds) chosen for the Spotify Canvas (the clip editor's "Use for Canvas").
 // theme: the song's theme (themes\<name>\theme.json): its fonts, effects, accent colour and add-ons.
-export type SongRecipe = Partial<RecipeValues> & { theme?: string; filmLook?: string; perPlatform?: PerPlatform; locked?: RecipeField[]; anchors?: AnchorSpec[]; gapOrder?: GapOrder; canvas?: { clip: string; at?: number }; instrumental?: boolean; links?: SongLink[]; postLinks?: Record<string, string[]>; tags?: string[] }; // tags: the song's YouTube tags (Song Details; song-tags.ts)
+export type SongRecipe = Partial<RecipeValues> & { theme?: string; filmLook?: string; songStyle?: SongStyle; perPlatform?: PerPlatform; locked?: RecipeField[]; anchors?: AnchorSpec[]; gapOrder?: GapOrder; canvas?: { clip: string; at?: number }; instrumental?: boolean; links?: SongLink[]; postLinks?: Record<string, string[]>; tags?: string[] }; // tags: the song's YouTube tags (Song Details; song-tags.ts)
 // library | artist | artist:<platform> | song | song:<platform> | run
 export type RecipeSource = string;
 
@@ -99,7 +100,7 @@ export type ResolvedRecipe = {
 };
 
 export const RECIPE_HELP =
-  'The recipe of this song. "theme": the name of the song\'s theme (themes\\<name>\\theme.json), which sets its fonts, lyric effects, accent colour and add-ons; pick or edit it in the studio (Shape → Theme). "filmLook": the song\'s Film look (film-looks\\<name>\\look.json), the camera, grain and grade words added to every Animate and singing take; pick it in Prepare → Creation. ' +
+  'The recipe of this song. "theme": the name of the song\'s theme (themes\\<name>\\theme.json), which sets its fonts, lyric effects, accent colour and add-ons; pick or edit it in the studio (Shape → Theme). "filmLook": the song\'s Film look (film-looks\\<name>\\look.json), the camera, grain and grade words added to every Animate and singing take; pick it in Prepare → Creation. "songStyle": how this song is made ("cut" = Cut to the song, "singing" = Add singing, "film" = Mini film); it only decides which tools the studio shows (Song Details). ' +
   "The other settings: A setting that is not here is inherited from the artist's brand (brand.json) " +
   "or the library defaults; a setting here is this song's own. \"locked\": settings that keep this song's value " +
   "(a brand change does not reach them, and Generate cannot change them for one run). Fields: verseEffect, hookEffect " +
@@ -253,6 +254,8 @@ export function checkRecipe(raw: unknown): { recipe: SongRecipe; problems: strin
   if (r.filmLook !== undefined && r.filmLook !== null) {
     if (typeof r.filmLook === "string" && r.filmLook.trim()) recipe.filmLook = r.filmLook.trim();
   }
+  // The song's style (Song Details, song-style.ts): a known value; a wrong one is left out (never blocks the song).
+  if (r.songStyle !== undefined && r.songStyle !== null && isSongStyle(r.songStyle)) recipe.songStyle = r.songStyle;
   if (r.gapOrder !== undefined) {
     if (r.gapOrder === "story" || r.gapOrder === "shuffle") recipe.gapOrder = r.gapOrder;
     else problems.push('gapOrder must be "story" or "shuffle"');
@@ -295,6 +298,7 @@ export function recipeJson(recipe: SongRecipe): string {
   if (recipe.instrumental) ordered.instrumental = true;
   if (recipe.theme) ordered.theme = recipe.theme;
   if (recipe.filmLook) ordered.filmLook = recipe.filmLook;
+  if (recipe.songStyle) ordered.songStyle = recipe.songStyle;
   for (const k of RECIPE_FIELDS) if (recipe[k] !== undefined) ordered[k] = recipe[k];
   if (recipe.perPlatform && Object.keys(recipe.perPlatform).length) ordered.perPlatform = recipe.perPlatform;
   if (recipe.locked?.length) ordered.locked = recipe.locked;

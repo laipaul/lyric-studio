@@ -59,6 +59,8 @@ async function main() {
   mkdirSync(path.join(pictures, "takes"), { recursive: true });
   ffmpeg("-f", "lavfi", "-i", "testsrc2=s=216x384:r=30:d=5", "-pix_fmt", "yuv420p", path.join(pictures, "takes", "singer close take 1.mp4"));
   writeFileSync(path.join(pictures, "pictures.json"), JSON.stringify({ pictures: { "singer close.png": { takes: [{ n: 1, service: "wavespeed", quality: "standard", model: "Seedance 2.5 Flash", status: "done", started_at: new Date().toISOString(), ended_at: new Date().toISOString(), cost_usd: 1.08, seconds: 5, file: "takes/singer close take 1.mp4", playable: true }] } } }));
+  // Song style Add singing (song-style.ts): a song with no singing lines yet is Cut to the song, which hides Who sings.
+  writeFileSync(paths.recipe!, JSON.stringify({ ...(existsSync(paths.recipe!) ? JSON.parse(readFileSync(paths.recipe!, "utf8")) : {}), songStyle: "singing" }));
   ws.close();
 
   const server = spawn(process.execPath, [path.join(path.dirname(require.resolve("next/package.json")), "dist", "bin", "next"), "start", "-p", String(port), "-H", "127.0.0.1"], {

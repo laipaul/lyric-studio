@@ -7,6 +7,7 @@ import { useState } from "react";
 import type { SongCard as Song } from "@lyric/video/library";
 import { CHIP_TITLE, chipCount, chipState, songSummary, type ChipState } from "@lyric/video/library-status";
 
+import { SongStyleBadge } from "@/components/song-style";
 import { StatusBadge } from "@/components/status-badge";
 import { api } from "@/lib/api";
 import { FeatureIcon, PlatformMark } from "@/lib/feature-icons";
@@ -99,8 +100,11 @@ export function SongCard({ song }: { song: Song }) {
             {song.ep ? ` · ${song.ep}` : ""}
             {length ? ` · ${length}` : ""}
           </p>
-          {song.theme || song.filmLook ? (
+          {/* Song style (song-style.ts), always named: Paul's three levels; then the theme and Film look. */}
+          {song.songStyle ? (
             <p className="text-muted-foreground mt-0.5 flex items-center gap-1 truncate text-[11px]">
+              <SongStyleBadge style={song.songStyle} className={song.songStyle === "film" ? "text-sky-300" : song.songStyle === "singing" ? "text-violet-300" : ""} />
+              {song.theme || song.filmLook ? <span aria-hidden>·</span> : null}
               {song.theme ? (
                 <span data-card-theme={song.theme} className="flex min-w-0 items-center gap-1 truncate" title={`Theme: ${song.theme} (Shape → Theme to change it)`}>
                   <FeatureIcon feature="theme" className="size-3 shrink-0" /> <span className="truncate">{song.theme}</span>

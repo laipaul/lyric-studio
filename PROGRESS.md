@@ -4,6 +4,21 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Song style: Cut to the song, Add singing, Mini film ✅ (to verify on the PC)
+- Paul (22 Nov 2026): his three ways of making a song, named in the app. Step 1 of the Scenes plan (song-first
+  "Mini film": Sections, Scenes in the Storyboard, Reel / YouTube view, scene brief for Claude, still then clip).
+- Prepare → Song Details → **Song style**, three choices: **Cut to the song** (clips cut to the beat and the lyrics),
+  **Add singing** (plus the singer on picked lines), **Mini film** (the song planned as scenes; Creation's story tools
+  open). It only decides which tools show; change it any time, nothing is lost. song.json "songStyle"
+  ("cut" | "singing" | "film"); not chosen yet: Add singing when the song has singing lines, else Cut to the song.
+- Cut to the song hides Lyrics Sync's Who sings column and Singer bar (a line says why), except on a song that still
+  has singing lines (they play in its videos, so they stay visible). Every Library card names the song's style.
+- Code: song-style.ts (pure), node/song-style.ts, GET/PUT /api/songs/[id]/style, components/song-style.tsx
+  (SongStyleField, SongStyleBadge, useSongStyle); recipe.ts songStyle; library.ts SongCard.songStyle.
+- Tests: vitest song-style (2); browser song-style (7 checks); singer.e2e now sets Add singing; lyrics-tab, singer,
+  production, library, song-links pass. Unchanged on main and still failing in the cloud: make, make-reference,
+  render, migrate, song-stages, textboard-make (audio / render setup).
+
 ### Film look: one camera, grain and grade for every clip of a song ✅ (to verify on the PC)
 - Paul (22 Nov 2026), from Rourke's ShotDeck "global look" tip: "the global look is correct like the Theme". Clips feel
   like one film only when every generation shares the same camera, lens, grain and grade.
@@ -292,18 +307,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - The two side-by-side columns are easier to tell apart: "Who sings (lip-sync)" (was Singer; its picker is titled
   "Who sings this line?") and "Shows clip (no singing)" (was Lands on; button "Show a clip").
 - Tests: browser lyrics-tab (+1 double-click check) and singer pass.
-
-### Short names for clips; Singer fixes ✅ (to verify on the PC)
-- Paul (21 Nov 2026): the long Midjourney file names are hard to recognise. **Rename** (click the name, pencil) on
-  every picture, video and take in Creation and on every Storyboard card: a short name ("Bride smile") shown instead
-  of the file name; the file keeps its own name (clips.json "label", pictures.json "label"). It goes with a clip sent
-  to the Storyboard (a take without its own name: "<picture name> take N" / "sings line N"), and shows in the Singer
-  picker (now with thumbnails, searchable past 6) and Lyrics Sync → Choose a clip.
-- Singer fixes (Paul's first singing line): the Singer column sits before "Lands on" and a long clip name is cut short,
-  so it is always in view; "— no singer on this line" (or ✕ in Lands on) takes the singing clip off its line and sets it
-  to Omit (kept in Creation and the Storyboard): out of its line its lips would be out of time. A singing clip
-  replaced by a new one on its line is set to Omit the same way.
-- Tests: browser pictures (+6), singer (+5), lyrics-tab and storyboard pass.
 
 
 ## What works

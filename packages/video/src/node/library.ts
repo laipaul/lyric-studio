@@ -22,6 +22,8 @@ import { isRemovedSong, moveEntry, relocatePaths, removeEmptyDirs, REMOVED_SONGS
 import { presetLengthText, recipeInputFor } from "./style";
 import { ensureAllThemes, listThemes, themeCover, themeUsers } from "./themes";
 import { findOrCreateSongProject, storeProjectHint } from "./song-project";
+import { styleOfRecipe } from "./song-style";
+import type { SongStyle } from "../song-style";
 
 export type PlatformStatus = "PASS" | "WARN" | "FAILED" | "interrupted" | "Rendering" | "none";
 export type PlatformCount = {
@@ -43,6 +45,7 @@ export type SongCard = {
   ep: string | null;
   theme: string | null; // the song's theme (song.json "theme")
   filmLook: string | null; // the song's Film look (song.json "filmLook")
+  songStyle: SongStyle; // how the song is made (song.json "songStyle", or from what it has: song-style.ts)
   cover: string | null; // workspace-relative
   durationMs: number | null;
   createdAt: string;
@@ -110,6 +113,7 @@ export function songCard(ws: Workspace, p: typeof projectTable.$inferSelect, lab
     ep: songEp(ws, p.id) ?? null,
     theme: songTheme(ws, p.id),
     filmLook: songFilmLook(ws, p.id),
+    songStyle: songStyleOf(ws, p.id),
     cover: p.cover_path && existsSync(absPath(ws, p.cover_path)) ? p.cover_path : null,
     durationMs: p.duration_ms ?? null,
     createdAt: p.created_at.toISOString(),
@@ -119,6 +123,14 @@ export function songCard(ws: Workspace, p: typeof projectTable.$inferSelect, lab
     sameCover: [],
     wanted: songPlatforms(ws, p.id),
   };
+}
+
+function songStyleOf(ws: Workspace, projectId: string): SongStyle {
+  try {
+    return styleOfRecipe(readRecipe(songPathsById(ws, projectId).recipe)).style;
+  } catch {
+    return "cut";
+  }
 }
 
 function songFilmLook(ws: Workspace, projectId: string): string | null {

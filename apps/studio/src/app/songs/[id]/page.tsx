@@ -17,6 +17,7 @@ import { GeneratePanel } from "@/components/generate-panel";
 import { LyricsTab } from "@/components/lyrics-tab";
 import { PostTab } from "@/components/post-tab";
 import { ProductionTab } from "@/components/production-tab";
+import { SongStyleField } from "@/components/song-style";
 import { StatusBadge } from "@/components/status-badge";
 import { ShapePage } from "@/components/shape-page";
 import { SongTitle } from "@/components/song-title";
@@ -190,6 +191,7 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
         </TabsContent>
         <TabsContent value="details">
           <div className="flex max-w-3xl flex-col gap-4">
+            <SongStyleField projectId={song.id} />
             <SongSettings projectId={song.id} only="details" />
             <TagsField projectId={song.id} />
             <LinksField projectId={song.id} />
