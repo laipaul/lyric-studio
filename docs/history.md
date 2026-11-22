@@ -4,6 +4,16 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Remove planned slots from the Storyboard ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "why can't I remove 2 and 6 from my Storyboard". The "No picture yet" cards are planned slots
+  from his 18 Nov shot list; their ⋯ menu only showed details. Now ⋯ → "Remove this planned slot", and "Remove all
+  planned slots" next to Import shot list. shotlist.json is kept under Replaced files first (Restore brings the slots
+  back); the clips and their order stay.
+- Tests: vitest shotlist (+1), browser shotlist (+2), storyboard pass.
+- Also: Shape plans again after any saved change to the song's Storyboard, clips, slots, singing lines or anchors
+  (lib/api.ts storyChanged), also when that change is made in another browser tab, and whenever the Shape page is
+  shown again (window focus / tab visible). Browser storyboard (+1: Storyboard in one tab, Shape in another) passes.
+
 ### Online takes in the Tasks menu; length, cost and time on every take ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "when the video is being made, add it to the task in the queue" and "does it give the time,
   costs and model used?". The header's Tasks menu lists every singing take and Animate take of every song while it is

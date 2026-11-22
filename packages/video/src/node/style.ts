@@ -37,6 +37,7 @@ import { readTextboard, TITLE_SIZE_VERTICAL } from "./textboard";
 import { isRemovedSong, sharedCollections, songPathsById } from "./song-folder";
 import { brandThemes, ensureAllThemes, ensureSongTheme, isThemeField, listThemes, loadTheme, plainSongThemeNames, removedThemes, setThemeLook, themeCover, themeCoverVideo, themeLayer, type RemovedTheme, type ThemeLook } from "./themes";
 import { SHORT_LABELS } from "./exports";
+import { platformDifferences, platformsThatDiffer } from "../theme-platforms";
 
 // The characters the font preview checks (French accents).
 export const ACCENT_CHECK = ["é", "è", "ç", "à", "ô", "É", "È", "Ç", "À", "Ô"];
@@ -96,7 +97,7 @@ export const FIELD_LABELS: Record<RecipeField, string> = {
 
 export type StyleValue = { value: unknown; source: string; own: boolean };
 // A theme as the Theme panel shows it: name, the look (default and per platform), how many songs use it.
-export type StyleTheme = { name: string; description: string; look: ThemeLook; perPlatform: Record<string, Partial<ThemeLook>>; users: string[]; problems: string[]; preview: boolean; cover?: string | null }; // cover: the Theme cover (workspace-relative, ?v=mtime)
+export type StyleTheme = { name: string; description: string; look: ThemeLook; perPlatform: Record<string, Partial<ThemeLook>>; users: string[]; problems: string[]; preview: boolean; cover?: string | null; differsOn?: string[] }; // cover: the Theme cover (workspace-relative, ?v=mtime); differsOn: the platforms the theme gives their own look ("Differs on YouTube")
 export type StyleField = StyleValue & {
   field: RecipeField;
   label: string;
@@ -457,6 +458,7 @@ export function themesPageData(ws: Workspace): ThemesPageData {
       description: t.theme.description,
       look: t.theme.look,
       perPlatform: t.theme.perPlatform,
+      differsOn: platformsThatDiffer(platformDifferences(t.theme.look, t.theme.perPlatform), (p) => SHORT_LABELS[p] ?? p),
       users: users.map((u) => u.title),
       songs: users.map((u) => ({ id: u.id, title: u.title })),
       problems: t.problems,

@@ -45,6 +45,7 @@ export function SetEffect({
   onSet,
   onBrandAll,
   perPlatformOpen,
+  perPlatformHidden,
   onPerPlatform,
   onTry,
 }: {
@@ -57,6 +58,7 @@ export function SetEffect({
   onSet: (field: Field, value: string) => void;
   onBrandAll?: () => void; // themes: absent (a theme is shared by choosing it for other songs)
   perPlatformOpen: boolean;
+  perPlatformHidden?: boolean; // theme editor, "Same look on every platform" on: no Per platform… here
   onPerPlatform: () => void;
   onTry?: (field: Field, value: string | null) => void; // a tile under the pointer: the big viewer plays it (null: back)
 }) {
@@ -97,7 +99,7 @@ export function SetEffect({
           menuId="effects"
           items={[
             ...(onBrandAll ? [{ key: "brand", label: "Use Breathe and add-ons for all my songs…", onSelect: () => setAsking(true), attrs: { "data-brand-all": "effects" } }] : []),
-            { key: "platform", label: perPlatformOpen ? "Hide the per-platform values" : "Per platform…", onSelect: onPerPlatform, attrs: { "data-effects-per-platform": true } },
+            ...(perPlatformHidden ? [] : [{ key: "platform", label: perPlatformOpen ? "Hide the per-platform values" : "Per platform…", onSelect: onPerPlatform, attrs: { "data-effects-per-platform": true } }]),
           ]}
         />
       </div>

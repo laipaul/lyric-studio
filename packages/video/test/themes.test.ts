@@ -39,6 +39,8 @@ import {
   restoreTheme,
   saveTheme,
   saveThemeAs,
+  dropsPlatformValues,
+  themesPageData,
   setThemeLook,
   songPathsById,
   styleData,
@@ -158,6 +160,28 @@ describe("songs and themes", () => {
     expect(() => applyStyleAction(ws, ids.Third, { action: "lock", field: "hookEffect" })).toThrow(/part of the song's theme/);
     expect(() => applyStyleAction(ws, ids.Third, { action: "set", field: "accentColour", value: "pink" })).toThrow(/accentColour/);
     expect(readRecipe(songPathsById(ws, ids.Third).recipe!).hookEffect).toBeUndefined();
+  });
+
+  it("Same look on every platform: a Save that drops YouTube's own look keeps the theme as it was in _replaced", () => {
+    const catalog = loadFontCatalog(wsDir);
+    writeTheme(wsDir, { ...loadTheme(wsDir, "Life Lyrics"), name: "Highway" }); // edited from the Themes page: the song keeps its theme
+    const look = { ...loadTheme(wsDir, "Highway").look, verseEffect: "typewriter:15" };
+    saveTheme(ws, { projectId: ids.Third, theme: "Highway", look, perPlatform: { youtube: { verseEffect: "cinematic-fade" } }, catalog });
+    const replaced = path.join(wsDir, "themes", "Highway", "_replaced");
+    expect(existsSync(replaced)).toBe(false); // adding a platform value takes nothing away
+    expect(themesPageData(ws).themes.find((t) => t.name === "Highway")?.differsOn).toEqual(["YouTube"]);
+    saveTheme(ws, { projectId: ids.Third, theme: "Highway", look, perPlatform: {}, catalog }); // the switch on, then Save
+    expect(loadTheme(wsDir, "Highway").perPlatform).toEqual({});
+    const kept = readdirSync(replaced).filter((f) => /^theme-.*\.json$/.test(f));
+    expect(kept).toHaveLength(1);
+    expect(JSON.parse(readFileSync(path.join(replaced, kept[0]), "utf8")).perPlatform).toEqual({ youtube: { verseEffect: "cinematic-fade" } });
+    expect(themesPageData(ws).themes.find((t) => t.name === "Highway")?.differsOn).toEqual([]);
+    saveTheme(ws, { projectId: ids.Third, theme: "Highway", look: { ...look, accentColour: "#00FFAA" }, perPlatform: {}, catalog });
+    expect(readdirSync(replaced)).toHaveLength(1); // nothing dropped: no new copy
+    expect(dropsPlatformValues({ youtube: { verseEffect: "glide" } }, { youtube: { verseEffect: "ink" } })).toBe(false);
+    expect(dropsPlatformValues({ youtube: { verseEffect: "glide", hookEffect: "ink" } }, { youtube: { verseEffect: "glide" } })).toBe(true);
+    expect(readRecipe(songPathsById(ws, ids.Third).recipe!).theme).not.toBe("Highway");
+    rmSync(path.join(wsDir, "themes", "Highway"), { recursive: true, force: true }); // test only: leave the workspace as it was
   });
 
   it("the editor: New theme (named first), Save for every song, Save as new theme, Delete and Restore", () => {

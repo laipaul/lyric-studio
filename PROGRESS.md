@@ -4,6 +4,22 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Same look on every platform (themes) ✅ (to verify on the PC)
+- Paul (22 Nov 2026): the YouTube video looked different from the Reel. Cause: the theme Midnight Highway gave
+  YouTube its own verse effect (cinematic-fade; typewriter:15 everywhere else), set through a hidden "Per platform..."
+  menu; changing it back took four screens. Decided: themes look the same on every platform unless asked otherwise.
+- Shape -> Look -> Edit theme: a switch **Same look on every platform** under the save bar. On (every theme without
+  platform differences): the Per platform... options are hidden. A theme that differs shows it off with the
+  difference in words ("Different on YouTube: verse effect cinematic-fade (typewriter:15 everywhere else)");
+  switching on asks once ("YouTube: verse effect becomes typewriter:15" · Make them the same / Keep the differences);
+  Save then makes every platform follow the theme. Switching off brings Per platform... back.
+- Nothing is lost: a Save that takes platform values away keeps theme.json as it was in the theme's
+  `_replaced\theme-<date>.json` (node/themes.ts keepThemeAsItWas). Themes page: a tile says "Differs on YouTube".
+- Code: src/theme-platforms.ts (pure: platformDifferences, differenceLines, platformsThatDiffer), node/themes.ts
+  saveTheme, node/style.ts (ThemeCard differsOn), shape-tools.tsx SamePlatformsSwitch, set-effect.tsx, themes-view.tsx.
+- Tests: vitest theme-platforms (3), themes (+1: the backup, differsOn); browser same-platforms (14 checks, in
+  test:e2e); song-stages (207) pass; themes.e2e passes except its out-of-date top-menu check. Studio build passes.
+
 ### Fix: theme names cut off on the Themes page ✅ (to verify on the PC)
 - Paul (22 Nov 2026): tiles showed "Midnight Hi...", "Mou...", "Paper ..." because the badge ("Shared by 2 songs",
   "Only Tea with the monk test") shared the name's line and never shrank.
@@ -345,16 +361,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   24 frames are taken, the local face check (free) puts the best faces first (big, sharp, facing the camera, eyes
   open), Paul clicks one and uses it. His video is only read; the app's copy is deleted at once, frames kept a day.
 - Tests: pytest face (+1 frame score), vitest characters-frames (3), browser characters (+5) and pictures pass.
-
-### Remove planned slots from the Storyboard ✅ (to verify on the PC)
-- Paul (21 Nov 2026): "why can't I remove 2 and 6 from my Storyboard". The "No picture yet" cards are planned slots
-  from his 18 Nov shot list; their ⋯ menu only showed details. Now ⋯ → "Remove this planned slot", and "Remove all
-  planned slots" next to Import shot list. shotlist.json is kept under Replaced files first (Restore brings the slots
-  back); the clips and their order stay.
-- Tests: vitest shotlist (+1), browser shotlist (+2), storyboard pass.
-- Also: Shape plans again after any saved change to the song's Storyboard, clips, slots, singing lines or anchors
-  (lib/api.ts storyChanged), also when that change is made in another browser tab, and whenever the Shape page is
-  shown again (window focus / tab visible). Browser storyboard (+1: Storyboard in one tab, Shape in another) passes.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

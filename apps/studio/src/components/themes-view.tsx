@@ -201,7 +201,7 @@ function CoverPlayer({ theme, input, gradeFilter, durationInFrames }: { theme: P
 // One tall tile: the theme on two lyric lines over a dark frame in its accent; pointing at it plays it. Also
 // Shape's theme picker (Look → Change): there with the song's own lines, a "Selected" / "Previewing" label in
 // place of the credit line, and its own data attributes.
-type TileTheme = Pick<ThemeCard, "name" | "look" | "users"> & Partial<Pick<ThemeCard, "author" | "brandDefault" | "background" | "backgroundVideo">>;
+type TileTheme = Pick<ThemeCard, "name" | "look" | "users"> & Partial<Pick<ThemeCard, "author" | "brandDefault" | "background" | "backgroundVideo" | "differsOn">>;
 export function ThemeTile({ theme, data, onOpen, label, pressed, attrs }: { theme: TileTheme; data: Pick<ThemesPageData, "fonts" | "sampleLines">; onOpen: () => void; label?: ReactNode; pressed?: boolean; attrs?: Record<string, string> }) {
   const [playing, setPlaying] = useState(false);
   const v = theme.look as Record<string, unknown>;
@@ -242,6 +242,12 @@ export function ThemeTile({ theme, data, onOpen, label, pressed, attrs }: { them
       <span className="flex w-full min-w-0 flex-col items-start gap-1">
         <span className="line-clamp-2 w-full text-sm font-medium break-words" title={theme.name}>{theme.name}</span>
         {label === undefined ? <ThemeReachBadge users={theme.users} /> : null}
+        {label === undefined && theme.differsOn?.length ? (
+          // "Same look on every platform" (22 Nov 2026): a theme that gives a platform its own look says so.
+          <span data-theme-differs={theme.differsOn.join(",")} title="This theme looks different on these platforms. Edit theme → Same look on every platform makes them match." className="text-[11px] text-amber-200">
+            Differs on {theme.differsOn.join(", ")}
+          </span>
+        ) : null}
       </span>
       {label === undefined ? (
         <span className="text-muted-foreground -mt-1 truncate text-[11px]">

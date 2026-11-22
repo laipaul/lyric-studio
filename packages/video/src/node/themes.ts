@@ -540,8 +540,28 @@ export function saveTheme(ws: Workspace, o: { projectId: string; theme?: string;
   const name = o.theme || song.theme;
   if (!name) throw new Error("This song has no theme yet.");
   const base = loadTheme(ws.dir, name, o.catalog);
-  writeTheme(ws.dir, lookFrom(ws, base.name, base, o.look, o.perPlatform, o.catalog));
+  const next = lookFrom(ws, base.name, base, o.look, o.perPlatform, o.catalog);
+  if (dropsPlatformValues(base.perPlatform, next.perPlatform)) keepThemeAsItWas(ws.dir, base.name);
+  writeTheme(ws.dir, next);
   return base.name;
+}
+
+// "Same look on every platform" (22 Nov 2026): a Save that takes away platform values the theme had keeps the theme
+// as it was in its _replaced\ folder first (theme-<date>.json), so nothing the user made is lost.
+export function dropsPlatformValues(before: Theme["perPlatform"], after: Theme["perPlatform"]): boolean {
+  return Object.entries(before).some(([platform, values]) => Object.keys(values ?? {}).some((field) => !(field in (after[platform] ?? {}))));
+}
+
+export function keepThemeAsItWas(workspaceDir: string, name: string): string | null {
+  const file = path.join(themeFolder(workspaceDir, name), "theme.json");
+  if (!existsSync(file)) return null;
+  const dir = path.join(themeFolder(workspaceDir, name), "_replaced");
+  mkdirSync(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*$/, "").replace("T", "-");
+  let to = path.join(dir, `theme-${stamp}.json`);
+  for (let n = 2; existsSync(to); n++) to = path.join(dir, `theme-${stamp}-${n}.json`);
+  copyFileSync(file, to);
+  return to;
 }
 
 // "Save as new theme": the editor's look as a new theme (named first); the theme it came from stays as it

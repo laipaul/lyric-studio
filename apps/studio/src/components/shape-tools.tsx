@@ -11,6 +11,7 @@ import { BACKING_LABELS, effectTitle, themeReach, isTextLayout, parseColourRef, 
 import type { PairingCard, PairingsView } from "@lyric/video/pairings";
 import type { StyleData, StyleField, StyleFont, StyleTheme } from "@lyric/video/style";
 import { cardFit } from "@lyric/video/card-layout";
+import { differenceLines, platformDifferences } from "@lyric/video/theme-platforms";
 import type { CardFitSpec } from "@lyric/video/style";
 
 import { PairingsRow, type DraftFonts } from "@/components/pairings-row";
@@ -110,6 +111,11 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
   const [draft, setDraft] = useState<Draft | null>(null);
   const data = useMemo(() => (saved && draft ? withDraft(saved, draft) : saved), [saved, draft]); // what the tools and the viewer show
   const editingTheme = draft && saved ? (saved.themes.find((t) => t.name === draft.name) ?? null) : null;
+  // "Same look on every platform" (22 Nov 2026): in the theme editor the Per platform… options only show once the
+  // switch is off, so a platform never ends up looking different by accident.
+  const platformDiffs = useMemo(() => (draft ? platformDifferences(draft.look, draft.perPlatform) : []), [draft]);
+  const samePlatforms = !!draft && !draft.split && platformDiffs.length === 0;
+  const [askSame, setAskSame] = useState(false);
   // Unsaved changes are kept in this browser (per song) until Save or Cancel: leaving the editor without
   // saving loses nothing; the next "Edit theme" brings them back with a note.
   const draftKey = `lyric-studio:theme-draft:${projectId}`;
@@ -705,10 +711,10 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
   const sampleStyle = (role: "verse" | "hook") => ({ fontFamily: `"${String(valueOf(`${role}Font`))} preview", serif`, fontWeight: Number(valueOf(`${role}Weight`) ?? 400), fontStyle: valueOf(`${role}Italic`) === true ? "italic" : "normal" });
   const face = (role: "verse" | "hook") => `${String(valueOf(`${role}Font`))} ${String(valueOf(`${role}Weight`))}${valueOf(`${role}Italic`) === true ? " italic" : ""}`;
 
-  const menuFor = (f: StyleField, differsPerPlatform: boolean): RowMenuItem[] => LOOK_FIELDS_PATCHED.has(f.field) ? (f.perPlatform && !differsPerPlatform
+  const menuFor = (f: StyleField, differsPerPlatform: boolean): RowMenuItem[] => LOOK_FIELDS_PATCHED.has(f.field) ? (f.perPlatform && !differsPerPlatform && !samePlatforms
       ? [{ key: "platform", label: open[f.field] ? "Hide the per-platform values" : "Per platform…", onSelect: () => setOpen((o) => ({ ...o, [f.field]: !o[f.field] })), attrs: { "data-per-platform": f.field } }]
       : []) : [
-    ...(f.perPlatform && !differsPerPlatform
+    ...(f.perPlatform && !differsPerPlatform && !samePlatforms
       ? [{ key: "platform", label: open[f.field] ? "Hide the per-platform values" : "Per platform…", onSelect: () => setOpen((o) => ({ ...o, [f.field]: !o[f.field] })), attrs: { "data-per-platform": f.field } }]
       : []),
     ...(f.own && !f.locked ? [{ key: "reset", label: "Back to the inherited value", onSelect: () => void act({ action: "reset", field: f.field }), attrs: { "data-reset": f.field } }] : []),
@@ -971,6 +977,24 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
                 {editingTheme.users.length > 1 && savingAs === null ? <p className="text-muted-foreground text-[11px]">Used by {editingTheme.users.join(", ")}. “Save as new theme” keeps it as it is for them.</p> : null}
               </div>
 
+              <SamePlatformsSwitch
+                same={samePlatforms}
+                lines={differenceLines(platformDiffs, {
+                  platform: (p) => data.platforms.find((x) => x.name === p)?.label ?? p,
+                  field: (f) => data.fields.find((x) => x.field === f)?.label ?? f,
+                  show,
+                })}
+                becomes={platformDiffs.map((d) => `${data.platforms.find((x) => x.name === d.platform)?.label ?? d.platform}: ${(data.fields.find((x) => x.field === d.field)?.label ?? d.field).toLowerCase()} becomes ${show(d.base)}`)}
+                asking={askSame && platformDiffs.length > 0}
+                onAsk={setAskSame}
+                onSame={() => {
+                  setAskSame(false);
+                  setEffectPlatforms(false);
+                  setDraft((d) => (d ? { ...d, perPlatform: {}, split: false, changed: d.changed || Object.keys(d.perPlatform).length > 0 } : d));
+                }}
+                onSplit={() => setDraft((d) => (d ? { ...d, split: true } : d))}
+              />
+
               <EditorSection id="cards" title="Cards">
                 <p className="text-muted-foreground -mt-1 text-[11px]">
                   How the cards look, for every song on this theme. Their words (title, tagline, Hook and End card text) are this song&apos;s:{" "}
@@ -1035,13 +1059,14 @@ export function ShapeTools({ projectId, onLook, onSaved, planned, only }: { proj
                   }}
                   onTry={(field, value) => setHoverEffect(value ? { field, value, at: Date.now() } : null)}
                   perPlatformOpen={effectPlatforms}
+                  perPlatformHidden={samePlatforms}
                   onPerPlatform={() => {
                     const next = !effectPlatforms;
                     setEffectPlatforms(next);
                     setOpen((o) => ({ ...o, ...Object.fromEntries(EFFECT_FIELDS.map((k) => [k, next])) }));
                   }}
                 />
-                {effectPlatforms ? <div data-effect-platform-rows className="border-l pl-3">{rows(pick(EFFECT_FIELDS))}</div> : null}
+                {effectPlatforms && !samePlatforms ? <div data-effect-platform-rows className="border-l pl-3">{rows(pick(EFFECT_FIELDS))}</div> : null}
               </EditorSection>
 
               <EditorSection id="colours" title="Colours">
@@ -1580,7 +1605,7 @@ function FontEditor({ fonts, value, font, look, previewLine, onChange, testId }:
 }
 
 // ---- The theme editor's draft (nothing saved until Save) ----
-type Draft = { name: string; look: Record<string, unknown>; perPlatform: Record<string, Record<string, unknown>>; changed: boolean }; // name: the theme being edited
+type Draft = { name: string; look: Record<string, unknown>; perPlatform: Record<string, Record<string, unknown>>; changed: boolean; split?: boolean }; // name: the theme being edited; split: "Same look on every platform" switched off (the Per platform… options shown)
 
 const draftOf = (t: StyleTheme): Draft => ({ name: t.name, look: { ...(t.look as Record<string, unknown>) }, perPlatform: JSON.parse(JSON.stringify(t.perPlatform ?? {})) as Draft["perPlatform"], changed: false });
 
@@ -1630,6 +1655,61 @@ function withDraft(data: StyleData, d: Draft): StyleData {
       };
     }),
   };
+}
+
+// "Same look on every platform" (22 Nov 2026, decided with the user): on, the theme looks the same on every platform
+// and the Per platform… options are hidden; a theme that differs says where, and switching on asks once, then makes
+// every platform follow the theme (saved with Save; the theme as it was is kept in its _replaced\ folder).
+function SamePlatformsSwitch({ same, lines, becomes, asking, onAsk, onSame, onSplit }: { same: boolean; lines: string[]; becomes: string[]; asking: boolean; onAsk: (on: boolean) => void; onSame: () => void; onSplit: () => void }) {
+  const differs = lines.length > 0;
+  return (
+    <div data-same-platforms={same ? "on" : "off"} className="bg-card flex flex-col gap-2 rounded-lg border px-3 py-2.5 text-sm">
+      <div className="flex items-center gap-2">
+        <span className="flex-1 font-medium">Same look on every platform</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={same}
+          data-same-platforms-switch
+          title={same ? "Click to give one platform its own look (Per platform… on each setting)" : "Click to make every platform look the same"}
+          onClick={() => (same ? onSplit() : differs ? onAsk(true) : onSame())}
+          className={cn("relative h-5 w-9 shrink-0 rounded-full border transition-colors", same ? "bg-brand border-brand" : "bg-muted")}
+        >
+          <span className={cn("absolute top-0.5 size-3.5 rounded-full bg-white transition-all", same ? "left-[18px]" : "left-0.5")} />
+        </button>
+      </div>
+      {same ? (
+        <p className="text-muted-foreground text-xs">Reels, TikTok, Shorts and YouTube all show this theme the same way.</p>
+      ) : differs ? (
+        <ul data-same-platforms-differences className="flex flex-col gap-0.5 text-xs text-amber-200">
+          {lines.map((l) => (
+            <li key={l}>Different on {l}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-muted-foreground text-xs">Each setting now has Per platform… in its ⋯ menu, to give one platform its own value.</p>
+      )}
+      {asking ? (
+        <div data-same-platforms-ask className="flex flex-col gap-2 rounded-md border border-amber-300/40 bg-amber-300/10 px-2.5 py-2 text-xs text-amber-100">
+          <p>Use the same look everywhere?</p>
+          <ul className="flex flex-col gap-0.5">
+            {becomes.map((b) => (
+              <li key={b}>{b}</li>
+            ))}
+          </ul>
+          <div className="flex items-center gap-2">
+            <button type="button" data-same-platforms-confirm onClick={onSame} className="bg-brand text-brand-foreground rounded-md px-3 py-1 font-medium">
+              Make them the same
+            </button>
+            <button type="button" data-same-platforms-keep onClick={() => onAsk(false)} className="text-muted-foreground underline underline-offset-2">
+              Keep the differences
+            </button>
+          </div>
+          <p className="text-amber-100/70">Nothing is saved until Save. The theme as it was is kept in its _replaced folder.</p>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 // One titled section of the theme editor (Cards, Text, Motion, Colours, Picture: in the order a design is made).
