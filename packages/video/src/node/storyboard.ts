@@ -254,11 +254,19 @@ const tryOptions = (t: SbTry): Partial<MakeOptions> => (t.kind === "theme" && t.
 // Why a clip (not omitted) gets no shot in a video (Paul, 21 Nov 2026: "the boat doesn't appear"): it is on a line
 // outside this video's part of the song, or its turn in the story order comes after the part ends. Plain words, with what
 // would bring it in.
-export function notInReason(name: string, anchors: readonly { line: number; clip: string; through?: number }[]): string {
+// ending (Paul, 22 Nov 2026: "the boat never shows"): the video's last shot is a singing clip that plays to the end, so
+// no story turn is left after the clip before it; the reason names the singing line, where it starts and the way in.
+export function notInReason(name: string, anchors: readonly { line: number; clip: string; through?: number }[], ending?: { line: number; through?: number; fromMs: number; after: string | null } | null): string {
   const on = anchors.filter((a) => a.clip.toLowerCase() === name.toLowerCase());
+  const lines = (a: { line: number; through?: number }) => (a.through && a.through > a.line ? `lines ${a.line}-${a.through}` : `line ${a.line}`);
   if (on.length) {
-    const lines = on.map((a) => (a.through && a.through > a.line ? `${a.line}-${a.through}` : String(a.line))).join(", ");
-    return `not in this video: it is on line ${lines}, outside this video's part of the song`;
+    const list = on.map((a) => (a.through && a.through > a.line ? `${a.line}-${a.through}` : String(a.line))).join(", ");
+    return `not in this video: it is on line ${list}, outside this video's part of the song`;
+  }
+  if (ending) {
+    const s = Math.round(ending.fromMs / 100) / 10;
+    const at = `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
+    return `not in this video: the singing on ${lines(ending)} plays from ${at} to the end of this video, so no turn is left for it${ending.after ? ` after ${ending.after}` : ""}. Move it earlier in Storyboard, or show it during the singing (Lyrics Sync → ${lines(ending)} → Hide a moment)`;
   }
   return "not in this video: this part of the song ends before its turn in the story order. Move it earlier in Storyboard, or put it on a line (Lyrics Sync → Show a clip)";
 }
@@ -282,7 +290,15 @@ async function planView(ws: Workspace, projectId: string, p: { name: string; lab
   const storyOrder = [...plan.clips].sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
   const recipe = paths.recipe && existsSync(paths.recipe) ? readRecipe(paths.recipe) : null;
   const canvasChoice = recipe?.canvas ?? null;
-  const notIn = (name: string) => notInReason(name, recipe?.anchors ?? []);
+  // A singing clip as the video's last shot holds to the end: the story clips after the one before it get no turn.
+  const shotsByStart = [...v.props.shots].sort((a, b) => a.start - b.start);
+  const lastShot = shotsByStart[shotsByStart.length - 1];
+  const nameOf = (src: string | undefined) => plan.clips.find((c) => c.path === src)?.name ?? null;
+  const lastName = nameOf(lastShot?.src);
+  const endAnchor = lastName ? (recipe?.anchors ?? []).find((a) => a.sync !== undefined && a.clip.toLowerCase() === lastName.toLowerCase()) : undefined;
+  const before = [...shotsByStart].reverse().find((s) => s.src !== lastShot?.src);
+  const ending = endAnchor && lastShot ? { line: endAnchor.line, ...(endAnchor.through ? { through: endAnchor.through } : {}), fromMs: startMs + frameMs(lastShot.start), after: (() => { const n = nameOf(before?.src); return n ? (editOf(readClipEdits(paths.root), n).label ?? n) : null; })() } : null;
+  const notIn = (name: string) => notInReason(name, recipe?.anchors ?? [], ending);
   const roles = clipRoles(paths.root, paths.recipe, plan.clips.map((c) => c.name));
   const storyboardClips: StoryboardClip[] = storyOrder.map((c) => ({
     canvas: canvasChoice && canvasChoice.clip.toLowerCase() === c.name.toLowerCase() ? { at: canvasChoice.at ?? null } : null,

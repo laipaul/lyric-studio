@@ -11,3 +11,11 @@ describe("a clip with no shot in a video says why", () => {
     expect(notInReason("Boat.mp4", [{ line: 3, clip: "boat.mp4" }, { line: 40, clip: "BOAT.mp4", through: 42 }])).toBe("not in this video: it is on line 3, 40-42, outside this video's part of the song");
   });
 });
+
+describe("a singing clip that plays to the end leaves no turn after it (Paul, 22 Nov 2026: the boat never shows)", () => {
+  it("names the singing line, where it starts, the clip before it and the way in", () => {
+    expect(notInReason("boat.mp4", [{ line: 32, clip: "TheEnding sings line 32.mp4" }], { line: 32, fromMs: 132867, after: "BeautifulBride2.mp4" })).toBe(
+      "not in this video: the singing on line 32 plays from 2:12.9 to the end of this video, so no turn is left for it after BeautifulBride2.mp4. Move it earlier in Storyboard, or show it during the singing (Lyrics Sync → line 32 → Hide a moment)",
+    );
+  });
+});

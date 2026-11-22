@@ -16,6 +16,8 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   Lyrics Sync". Saving the order keeps the hidden clips' entries in clips.json.
 - Code: node/clip-roles.ts, animate.ts sendToStoryboard, assets.ts (role, singing, importSongClips inOrder),
   story-line.ts, storyboard.ts, compose.ts anchorOnly, make.ts, lyrics-view.ts, pictures route, assets-tab, lyrics-tab.
+- Shape's "not in this video" names the real reason when a singing clip plays to the end (e.g. "the singing on line 32
+  plays from 2:12.9 to the end ... Lyrics Sync → line 32 → Hide a moment"), not "the part ends before its turn".
 - Tests: vitest line-only (7), plus animate, clip-order, story-line, compose, shots, lyrics-view, song-files pass.
 
 ### Sections in Lyrics Sync (Mini film) ✅ (to verify on the PC)
