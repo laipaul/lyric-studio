@@ -1,10 +1,10 @@
 // Draws the lyric scene (src/effects/scene.ts) for the current frame: up to three lines (leaving,
 // active, waiting next), each with its effect's look, words as separate spans for word effects.
 import { measureText } from "@remotion/layout-utils";
-import { useMemo, type CSSProperties } from "react";
+import { useMemo, useRef, type CSSProperties } from "react";
 import { useCurrentFrame, useVideoConfig } from "remotion";
 
-import { effectExtents, lyricScene, restWidth, sceneTimeline, wordTimings } from "./effects/scene";
+import { effectExtents, lyricScene, restWidth, sceneTimeline, wordTimings, type SceneTimeline } from "./effects/scene";
 import { kineticAt, kineticGroups } from "./effects/trending";
 import { dustLetter } from "./effects/slides";
 import { EMPHASIS_SCALE, emphasisWord } from "./effects/accents";
@@ -12,7 +12,7 @@ import { ascendLetter } from "./effects/ascend";
 import { inkMask } from "./effects/ink";
 import { choiceAmount } from "./effects/types";
 import { applyTextCase, layoutLyric, type LyricLayout } from "./lyrics";
-import type { LyricArea } from "./platform";
+import { lyricCenterY, type LyricArea } from "./platform";
 import { backingShadow, BOX_STYLE, type TextBacking } from "./picture";
 import { lineScale } from "./text-layout";
 import { breathsOf, buildRows } from "./line-shape";
@@ -65,9 +65,17 @@ export function LyricScene(props: {
       : l.isHook && props.hookFont
         ? { family: props.hookFont.font, weight: props.hookFont.weight, italic: props.hookFont.italic === true }
         : { family: style.font, weight: style.weight, italic: style.italic === true };
-  const placeOf = (l: LyricLineProps): LyricArea => {
+  // Where line i's block sits. A bottom-anchored area (text layout "lower") puts the block's lowest drawn row (its last
+  // row, the waiting next line under it, a text box's padding) on the area's bottom margin, so rows grow upward; a
+  // textboard card's own place wins, and the others use the area's centre. Pure: src/platform.ts lyricCenterY.
+  const placeAt = (i: number, layouts: readonly LyricLayout[] | null, tl: SceneTimeline | null): LyricArea => {
+    const l = lyrics[i];
     const a = areaFor(l);
-    return l.card?.centerY !== undefined ? { ...a, centerY: l.card.centerY } : a;
+    if (l.card?.centerY !== undefined) return { ...a, centerY: l.card.centerY, anchor: undefined };
+    if (a.anchor !== "bottom" || !layouts) return a;
+    const rows = (k: number) => layouts[k].lines.length * layouts[k].fontSize * areaFor(lyrics[k]).lineHeight;
+    const below = tl && i + 1 < lyrics.length && tl.waits(i + 1) ? textSize * 0.35 + props.nextScale * rows(i + 1) : 0;
+    return { ...a, centerY: lyricCenterY(a, rows(i), below, props.backing === "box" ? 0.06 * layouts[i].fontSize : 0) };
   };
 
   const layouts = useMemo(
@@ -90,6 +98,7 @@ export function LyricScene(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [ready, lyrics, style, props.hookFont, textSize, effects.hookScale, effects.hook, effects.verse, effects.breathe, effects.chorusLift, effects.lineShape, fps],
   );
+  const live = useRef<{ place: typeof placeAt; layouts: readonly LyricLayout[] | null; tl: SceneTimeline | null }>({ place: placeAt, layouts, tl: null });
   const timeline = useMemo(
     () =>
       layouts
@@ -101,7 +110,12 @@ export function LyricScene(props: {
             showNext: props.showNext,
             nextScale: props.nextScale,
             gapPx: textSize * 0.35,
-            height: (i) => layouts[i].lines.length * layouts[i].fontSize * placeOf(lyrics[i]).lineHeight,
+            height: (i) => layouts[i].lines.length * layouts[i].fontSize * areaFor(lyrics[i]).lineHeight,
+            // A glide's waiting line starts under the line before it, which may sit at another height (bottom anchoring).
+            shift: (i) => {
+              const { place, layouts: ls, tl } = live.current; // read at draw time: this render's lines, area and timeline
+              return i > 0 && tl ? place(i - 1, ls, tl).centerY - place(i, ls, tl).centerY : 0;
+            },
             wordCount: (i) => layouts[i].lines.join(" ").split(" ").length,
             wordLetters: (i) => layouts[i].lines.join(" ").split(" ").map((w) => [...w].length),
             breathe: effects.breathe ?? null,
@@ -111,6 +125,7 @@ export function LyricScene(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [layouts, lyrics, fps, durationInFrames, effects, props.showNext, props.nextScale, textSize],
   );
+  live.current = { place: placeAt, layouts, tl: timeline };
   if (!layouts || !timeline) return null;
 
   // Kinetic stack: one or two big words at a time (each on its own row), popping in on the voice.
@@ -144,7 +159,7 @@ export function LyricScene(props: {
         const line = lyrics[item.index];
         const layout = layouts[item.index];
         // A waiting line sits under the line before it (in that line's area).
-        const area = placeOf(item.role === "next" ? lyrics[item.index - 1] : line);
+        const area = placeAt(item.role === "next" ? item.index - 1 : item.index, layouts, timeline);
         const font = fontOf(line);
         const { look } = item;
         const shadows = [style.effect !== "none" && SHADOWS[style.effect] ? SHADOWS[style.effect] : backingShadow(props.backing, effects.accent)];

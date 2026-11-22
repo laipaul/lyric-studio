@@ -4,6 +4,14 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Your own character pack: Add my pack, Use my own picture, Move to, draft the description ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "if I have my character pack then I don't need to create it in my app?", "yes, that will save me
+  money since I am happy with Gemini". A card's pack places now take his own pictures: "Add my pack" (4 at once,
+  sorted by file name or, for Gemini's nameless files, by the face check) or "Use my own picture" on one place.
+  Free, nothing sent online, his files only read. Same face checks, neck crop for the body views, "Move to…" to fix
+  a wrong place, and "Draft it from the pictures (about $0.01)" for the description. Then Lock as usual.
+- Tests: vitest characters-own (4), browser characters (+5), characters-cards, extra-cards, frames pass.
+
 ### Pick a frame from a video for a character's picture ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "can you add that to my app". Characters → New character → "Or pick a frame from a video", and
   on a card "Second picture from a video"; also in Prepare → Creation ("Pick a frame from a video"). Drop a video:

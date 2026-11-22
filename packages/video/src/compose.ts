@@ -195,7 +195,7 @@ export function composeProps(
   const platform = base.platform ?? { format: DEFAULT_FORMAT, safeZone: DEFAULT_SAFE_ZONE, lyricsAt: 0.45, textScale: 1 };
   const bars = choices.cinematicBars ?? base.cinematicBars;
   const layoutOf = platform.lyricSafeZone ? undefined : platform.textLayout;
-  const area = areaForLayout(lyricArea(platform.format, platform.lyricSafeZone ?? platform.safeZone, platform.lyricsAt, bars), layoutOf, platform.lyricsAt);
+  const area = areaForLayout(lyricArea(platform.format, platform.lyricSafeZone ?? platform.safeZone, platform.lyricsAt, bars), layoutOf, platform.lyricsAt, platform.format.height);
   const timed = lyricFrames(base, choices.leadMs ?? DEFAULT_LEAD_MS, choices.lyricsOffsetMs ?? 0, !!choices.effects, choices.effects?.gap);
   // Each line with its textboard card (the card's look; without a textboard: unchanged).
   const allLines = base.cards

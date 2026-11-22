@@ -41,6 +41,7 @@ export type SceneOptions = {
   nextScale: number;
   gapPx: number; // space between the active line and the waiting next line
   height: (index: number) => number; // a line's text block height at full size, px
+  shift?: (index: number) => number; // px: line i-1's centre minus line i's (lines in a bottom-anchored area sit at different heights)
   wordCount: (index: number) => number; // words as laid out (for word effects)
   wordLetters?: (index: number) => number[]; // each word's letters as laid out (the letter-by-letter typewriter)
   breathe?: BreatheProps | null; // the "breathe" add-on (recipe breathe gentle / beat)
@@ -108,7 +109,7 @@ function baseLook(t: SceneTimeline, i: number, f: number): { role: SceneItem["ro
     if (t.kind(i) === "glide") {
       const p = m.ease(clamp01((f - enterStart[i]) / D[i]));
       const from = t.stacked(i)
-        ? { y: H(i - 1) / 2 + o.gapPx + (o.nextScale * H(i)) / 2, scale: o.nextScale, opacity: t.waits(i) ? NEXT_OPACITY : 0 }
+        ? { y: (o.shift?.(i) ?? 0) + H(i - 1) / 2 + o.gapPx + (o.nextScale * H(i)) / 2, scale: o.nextScale, opacity: t.waits(i) ? NEXT_OPACITY : 0 }
         : { y: GLIDE_LIFT_PX * m.amount, scale: 0.92, opacity: 0 }; // after a pause: rises in on its own
       return { role: "active", look: { ...REST, y: lerp(from.y, 0, p), scale: lerp(from.scale, 1, p), opacity: lerp(from.opacity, 1, p) } };
     }

@@ -4,6 +4,20 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Fix: "Lower third" really sits low ✅ (to verify on the PC)
+- Paul (22 Nov 2026), The House My Heart Built and Wedding Day: with the theme's Text layout on Lower third the lyrics
+  still sat in the middle, across the faces. Cause: "lower" put the block's centre at 0.68 of the area left by the
+  platform's safe zone; Reels keeps its bottom 35% clear (Instagram's guidance), so that was 49% of the screen
+  (TikTok 51%, Shorts 55%, YouTube 63%).
+- Now "lower" puts the block's bottom edge (its last row, the waiting next line, a text box's padding) 1.75% of the
+  frame above the safe-zone line; lines of 1-3 rows grow upward. Block bottom: Reels ~63%, TikTok ~68%, Shorts ~73%,
+  YouTube ~88% of the screen. Centred and Big hook unchanged. Preview and render share the same code (LyricScene).
+- Code: platform.ts (LyricArea anchor, lyricCenterY), text-layout.ts (LOWER_MARGIN), LyricScene.tsx, effects/scene.ts
+  (a glide's waiting line keeps its place), qa.ts / node/qa-check.ts (the safe-zone check measures the real block).
+- Tests: vitest text-layout (7: every platform, 1-3 rows, Big hook, next-line preview), 280 related tests pass; browser
+  title-opening and textboard pass. Full suite: only the 7 known failures (network / real rendering). Build passes.
+- Known: hook and end cards that share the lyrics' place use a typical block height, so they can sit a few px off.
+
 ### Shape shows every platform with a saved shot plan ✅ (to verify on the PC)
 - Paul (22 Nov 2026): after choosing only YouTube in Make, Shape's platform list had YouTube only, so the Reel
   could not be opened in Shape. Shape's list followed Make's chips.
@@ -357,14 +371,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   picture shown first, same face checks, retries and cap. Without the key: a plain note, no Make pack.
 - Tests: vitest characters-gemini (3, fetch replaced: nothing sent to Google), browser characters (+1).
 - Not tried against Google itself from the cloud (no key here): Paul's first pack is the real test.
-
-### Your own character pack: Add my pack, Use my own picture, Move to, draft the description ✅ (to verify on the PC)
-- Paul (21 Nov 2026): "if I have my character pack then I don't need to create it in my app?", "yes, that will save me
-  money since I am happy with Gemini". A card's pack places now take his own pictures: "Add my pack" (4 at once,
-  sorted by file name or, for Gemini's nameless files, by the face check) or "Use my own picture" on one place.
-  Free, nothing sent online, his files only read. Same face checks, neck crop for the body views, "Move to…" to fix
-  a wrong place, and "Draft it from the pictures (about $0.01)" for the description. Then Lock as usual.
-- Tests: vitest characters-own (4), browser characters (+5), characters-cards, extra-cards, frames pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

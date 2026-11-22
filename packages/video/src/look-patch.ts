@@ -78,7 +78,7 @@ export function patchLook(props: LyricVideoProps, patch: LookPatch | null, barFr
   }
   // The text layout: the lyric area moves (not on YouTube's cover / stills, which place the lyrics themselves).
   if (patch.textLayout && next.lyricArea && next.layout !== "cover" && next.layout !== "stills") {
-    next = { ...next, lyricArea: areaForLayout(next.lyricArea, patch.textLayout, next.lyricsAt ?? 0.45), textLayout: patch.textLayout };
+    next = { ...next, lyricArea: areaForLayout(next.lyricArea, patch.textLayout, next.lyricsAt ?? 0.45, next.format?.height), textLayout: patch.textLayout };
   }
   const fx = props.lyricEffects;
   if (fx) {

@@ -1416,7 +1416,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   // when at least a quarter of this video's clips are too bright behind them for the lyric colour or the
   // hook accent (thin strokes need more); "strong" / "normal" are the user's overrides. The clips are
   // measured at the moment their first shot is centred on (cached).
-  const readabilityArea = ytLayout ? lyricAreaFor(ytLayout, preset) : areaForLayout(lyricArea(format, preset.safeZone, preset.lyricsAt), options.textLayout, preset.lyricsAt);
+  const readabilityArea = ytLayout ? lyricAreaFor(ytLayout, preset) : areaForLayout(lyricArea(format, preset.safeZone, preset.lyricsAt), options.textLayout, preset.lyricsAt, format.height);
   // The theme's picture (src/picture.ts): the grade and vignette over the clips, what is behind the words,
   // the background where there is no clip (the cover blurred in advance for "cover"). The Canvas keeps the
   // clips' own colours when the theme says gradeCanvas "off".
@@ -1524,7 +1524,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   );
   for (const style of ["simple", "bold"] as const) {
     const s = styles[style];
-    const area = ytLayout ? lyricAreaFor(ytLayout, preset) : areaForLayout(lyricArea(format, preset.safeZone, preset.lyricsAt), options.textLayout, preset.lyricsAt);
+    const area = ytLayout ? lyricAreaFor(ytLayout, preset) : areaForLayout(lyricArea(format, preset.safeZone, preset.lyricsAt), options.textLayout, preset.lyricsAt, format.height);
     const textSize = Math.round(s.entry.textSize * preset.textScale * (ytLayout === "cover" ? COVER_TEXT_SCALE : 1));
     for (const l of tooLongLines(visible.map((i) => lines[i]), { main: s.main, hook: s.hook, textCase: s.entry.style.textCase, textSize, area, ...(options.lineShape === "stacked" ? { lineShape: "stacked" as const } : {}) })) {
       const n = numbers[lines.indexOf(l)] || lines.indexOf(l) + 1;

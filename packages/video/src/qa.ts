@@ -2,7 +2,7 @@
 // analysis (FFmpeg) and text measuring happen in Node and are passed in.
 import { AUDIO_ENVELOPE_TOLERANCE_DB, AUDIO_LENGTH_TOLERANCE_S, AUDIO_LEVEL_TOLERANCE_DB, type AudioMatch } from "./audio";
 import { VIDEO } from "./config";
-import { cinematicBarHeight, DEFAULT_FORMAT, DEFAULT_LYRIC_AREA, DEFAULT_SAFE_ZONE, type Format, type LyricArea, type SafeZone } from "./platform";
+import { cinematicBarHeight, DEFAULT_FORMAT, lyricCenterY, DEFAULT_LYRIC_AREA, DEFAULT_SAFE_ZONE, type Format, type LyricArea, type SafeZone } from "./platform";
 import type { AnchorReport } from "./compose";
 import type { LoopResult } from "./loop";
 import { MAX_LINES } from "./lyrics";
@@ -58,11 +58,15 @@ const frameTime = (frame: number) => t(frame / VIDEO.fps);
 
 // The area the text block covers: centred in the lyric area at area.centerY, scaled by the
 // animation's largest scale (the pop animation overshoots slightly).
-export function lyricBox(lineCount: number, fontSize: number, widestPx: number, maxScale = 1, area: LyricArea = DEFAULT_LYRIC_AREA): Box {
+// A bottom-anchored area (text layout "lower") puts the unscaled block's bottom (plus belowPx: the waiting next line)
+// on the area's bottom margin; the scale grows it around that centre, as the composition does.
+export function lyricBox(lineCount: number, fontSize: number, widestPx: number, maxScale = 1, area: LyricArea = DEFAULT_LYRIC_AREA, belowPx = 0): Box {
   const cx = area.left + (area.right - area.left) / 2;
-  const height = lineCount * fontSize * area.lineHeight * maxScale;
+  const own = lineCount * fontSize * area.lineHeight;
+  const height = own * maxScale;
   const width = widestPx * maxScale;
-  return { left: cx - width / 2, right: cx + width / 2, top: area.centerY - height / 2, bottom: area.centerY + height / 2 };
+  const cy = lyricCenterY(area, own, belowPx);
+  return { left: cx - width / 2, right: cx + width / 2, top: cy - height / 2, bottom: cy + height / 2 };
 }
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;

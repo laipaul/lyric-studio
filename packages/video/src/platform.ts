@@ -61,7 +61,17 @@ export const STANDARD = "standard";
 
 // Lyric block geometry on a frame: horizontally inside the usable width, vertically centred on
 // centerY = top of the usable area + lyricsAt x its height ("slightly above middle" with 0.45).
-export type LyricArea = { left: number; right: number; centerY: number; top: number; bottom: number; minScale: number; lineHeight: number };
+// anchor "bottom" (text layout "lower", src/text-layout.ts): the block's BOTTOM edge sits bottomMargin px above
+// `bottom`, whatever its height (rows grow upward); centerY is then only the typical block's centre (where cards that
+// share the lyrics' place go). Every renderer and the QA box take the real centre from lyricCenterY().
+export type LyricArea = { left: number; right: number; centerY: number; top: number; bottom: number; minScale: number; lineHeight: number; anchor?: "bottom"; bottomMargin?: number };
+
+// The centre (px) of a lyric block of blockHeight px in this area; belowHeight = what hangs under it (the waiting next
+// line and its gap), padBottom = the backing's room under the last row (a text box). Pure; the one place the rule lives.
+export function lyricCenterY(area: LyricArea, blockHeight: number, belowHeight = 0, padBottom = 0): number {
+  if (area.anchor !== "bottom") return area.centerY;
+  return area.bottom - (area.bottomMargin ?? 0) - padBottom - belowHeight - blockHeight / 2;
+}
 
 export const LYRIC_LAYOUT = { minScale: 0.75, lineHeight: 1.15, leftMargin: 64 / 1080, rightMargin: 32 / 1080, barShare: 0.1 } as const;
 
