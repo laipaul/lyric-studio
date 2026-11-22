@@ -4,6 +4,20 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Online takes in the Tasks menu; length, cost and time on every take ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "when the video is being made, add it to the task in the queue" and "does it give the time,
+  costs and model used?". The header's Tasks menu lists every singing take and Animate take of every song while it is
+  being made and for a day after: the song (a link to Lyrics Sync or Creation), "Singing · lines 9-14 · <picture>" or
+  "Animate · <picture> · take N", the model, its length, its cost ("nothing spent" when it never reached the service)
+  and when; being made / done / failed / interrupted. It is read from each song's pictures.json, so it survives a
+  restart (a take cut off by a restart shows interrupted: Get result, free, in Creation). Make singing clips and
+  Animate open the menu. Clear finished hides finished takes (the takes stay). Every take row in Creation shows the
+  same facts ("9 s · about $1.94 · 21 Nov, 13:42").
+- Tests: vitest animate (+2), browser singer (+1), pictures (+1) pass.
+- Then: Paul's first block came back "talking" (a calm portrait). Every singing take now opens InfiniteTalk's prompt with a
+  singing cue (open mouth on held notes, lips following the melody, breathing between phrases, eyes closing on long
+  notes, moving with the rhythm), then his script. Blocks made before show "make again to sing" (only on Make, cost first).
+
 ### Singer script per block; B-roll takes as long as a phrase of the song ✅ (to verify on the PC)
 - Paul (21 Nov 2026, "Build both"). **Script:** under the first line of a singing block, "What the singer does
   (optional)": a few words ("turns to the sea, soft smile") sent with the voice as InfiniteTalk's prompt (expression

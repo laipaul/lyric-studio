@@ -4,6 +4,15 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Fix: theme names cut off on the Themes page ✅ (to verify on the PC)
+- Paul (22 Nov 2026): tiles showed "Midnight Hi...", "Mou...", "Paper ..." because the badge ("Shared by 2 songs",
+  "Only Tea with the monk test") shared the name's line and never shrank.
+- Now the full name is shown (up to 2 lines, the full name on hover), the badge on its own line below it; a badge
+  wider than the tile ends in "..." (full text on hover). Tiles and grid unchanged. Code: themes-view.tsx ThemeTile,
+  theme-reach-badge.tsx (also used in Shape -> Theme: looks the same for normal badges).
+- Checked in a browser at 1850 and 1280 px. Studio build passes. Known: apps/studio/e2e/themes.e2e.ts "the top menu"
+  check is out of date (expects Library · Themes · Collections · Releases; the menu also has Film looks and Characters).
+
 ### Soft fade into singing takes ✅ (to verify on the PC)
 - Paul (22 Nov 2026): in Wedding Day's Reel the transitions into clips 4 and 16 felt "a bit hard", only at the
   start of the lip sync, not at its end. Both are singing takes ("sings lines 15-16", "sings lines 25-27"): the app
@@ -346,20 +355,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Also: Shape plans again after any saved change to the song's Storyboard, clips, slots, singing lines or anchors
   (lib/api.ts storyChanged), also when that change is made in another browser tab, and whenever the Shape page is
   shown again (window focus / tab visible). Browser storyboard (+1: Storyboard in one tab, Shape in another) passes.
-
-### Online takes in the Tasks menu; length, cost and time on every take ✅ (to verify on the PC)
-- Paul (21 Nov 2026): "when the video is being made, add it to the task in the queue" and "does it give the time,
-  costs and model used?". The header's Tasks menu lists every singing take and Animate take of every song while it is
-  being made and for a day after: the song (a link to Lyrics Sync or Creation), "Singing · lines 9-14 · <picture>" or
-  "Animate · <picture> · take N", the model, its length, its cost ("nothing spent" when it never reached the service)
-  and when; being made / done / failed / interrupted. It is read from each song's pictures.json, so it survives a
-  restart (a take cut off by a restart shows interrupted: Get result, free, in Creation). Make singing clips and
-  Animate open the menu. Clear finished hides finished takes (the takes stay). Every take row in Creation shows the
-  same facts ("9 s · about $1.94 · 21 Nov, 13:42").
-- Tests: vitest animate (+2), browser singer (+1), pictures (+1) pass.
-- Then: Paul's first block came back "talking" (a calm portrait). Every singing take now opens InfiniteTalk's prompt with a
-  singing cue (open mouth on held notes, lips following the melody, breathing between phrases, eyes closing on long
-  notes, moving with the rhythm), then his script. Blocks made before show "make again to sing" (only on Make, cost first).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

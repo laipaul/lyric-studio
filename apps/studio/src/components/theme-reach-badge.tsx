@@ -9,8 +9,8 @@ const TONE = { shared: "border-amber-300/40 bg-amber-300/10 text-amber-200", sin
 export function ThemeReachBadge({ users, thisSong, className }: { users: string[]; thisSong?: string | null; className?: string }) {
   const r = themeReach(users, thisSong);
   return (
-    <span data-theme-reach={r.tone} title={users.join(", ") || undefined} className={cn("inline-flex shrink-0 items-center rounded-full border px-1.5 py-px text-[10px] font-medium whitespace-nowrap", TONE[r.tone], className)}>
-      {r.badge}
+    <span data-theme-reach={r.tone} title={users.join(", ") || undefined} className={cn("inline-flex max-w-full shrink-0 items-center rounded-full border px-1.5 py-px text-[10px] font-medium whitespace-nowrap", TONE[r.tone], className)}>
+      <span className="truncate">{r.badge}</span>
     </span>
   );
 }

@@ -239,8 +239,8 @@ export function ThemeTile({ theme, data, onOpen, label, pressed, attrs }: { them
         {/* always on top: the pointer stays on the same element while the player takes the tile's place, so a click opens the detail view */}
         <span className="absolute inset-0" aria-hidden />
       </div>
-      <span className="flex min-w-0 items-center gap-1.5">
-        <span className="truncate text-sm font-medium">{theme.name}</span>
+      <span className="flex w-full min-w-0 flex-col items-start gap-1">
+        <span className="line-clamp-2 w-full text-sm font-medium break-words" title={theme.name}>{theme.name}</span>
         {label === undefined ? <ThemeReachBadge users={theme.users} /> : null}
       </span>
       {label === undefined ? (
