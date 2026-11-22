@@ -35,6 +35,12 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   Show prompt on each shot. Tests: vitest shot-prompt (5), browser creation-production (+2 checks).
   Fix the same day: a Film look's own Midjourney settings (--ar 9:16 --style raw --stylize 100) were added twice; now
   merged, each once (the song's --ar wins, its others kept, its --no items joined). vitest shot-prompt (6).
+  Fix the same evening (Paul: "all your prompts are being rejected by MJ"): the person descriptions (age, ethnicity,
+  build, lips, skin) made Midjourney's moderator refuse the prompts. Now the prompt has NO face or body words, only
+  what happens, each person's outfit (the look they wear, or the shot's own), the place, the memory feel and the Film
+  look; the face comes from the person's locked picture as Midjourney's Omni Reference: each shot shows it next to
+  Copy prompt (the look's close-up, else its front view, else the card's picture; click copies the picture to paste
+  into Midjourney). Paul's test prompt without descriptions passed. Tests: shot-prompt (6), creation-production (+2).
 - Part 2 (next): a look per shot with warnings, cost so far / to go.
 - Code: node/shot-production.ts (productionView, setPictureShot, useForShot, sectionsOfShots), shotlist.ts (filled),
   animate.ts (pictures.json "slot"), API /api/songs/<id>/pictures (production, slot, shot, use-shot),

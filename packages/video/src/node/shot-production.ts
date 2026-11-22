@@ -16,6 +16,8 @@ import { readPictures, sendToStoryboard, songFolder, update, BOARD_FILE } from "
 import { readClipEdits, setClipOmit, writeClipEdits } from "./clip-edits";
 import { filmLookFor, readFilmLook } from "./film-looks";
 import { productionData, type CastCard } from "./production";
+import { cardRoot, listCards } from "./characters/cards";
+import { LOOKS_DIR, MAIN_LOOK } from "./characters/looks";
 import { saveAnchors } from "./lyrics-view";
 import { readRecipe } from "./recipe";
 import { SHOTLIST_FILE, readShotListFile, slotKey, type Slot } from "./shotlist";
@@ -30,6 +32,8 @@ export type ProductionShot = Slot & {
   filled: string | null; // the clip that fills it ("Use this take"), else null
   pictures: string[]; // the Creation pictures that belong to it
   prompt: string; // its Midjourney first-frame prompt (src/shot-prompt.ts), "Copy prompt"
+  // The locked pictures of the people and place in it (the look each wears in this song): Midjourney's Omni Reference.
+  refs: { name: string; card: string; file: string }[]; // file: inside the card's folder (/api/cards/<card>/file/<file>)
 };
 export type ProductionView = { shots: ProductionShot[]; sections: string[] };
 
@@ -98,6 +102,16 @@ export function productionView(ws: Workspace, projectId: string): ProductionView
       aspect,
     });
   };
+  const folders = new Map(listCards(ws).map((c) => [c.id, c.folder] as const));
+  // A person's picture in the look they wear here (its close-up, else its front view), else the card's own picture.
+  const refOf = (c: CastCard): ProductionShot["refs"][number] => {
+    const root = folders.get(c.id) ? cardRoot(ws, { folder: folders.get(c.id)! }) : null;
+    if (root && c.kind === "character" && c.look && c.look !== MAIN_LOOK) {
+      for (const f of ["closeup.png", "body_front.png"]) if (existsSync(path.join(root, LOOKS_DIR, c.look, f))) return { name: c.name, card: c.id, file: `${LOOKS_DIR}/${c.look}/${f}` };
+    }
+    return { name: c.name, card: c.id, file: c.thumbnail };
+  };
+  const refsOf = (s: Slot) => [...s.characters, ...(s.scene ? [s.scene] : [])].map(card).filter((c): c is CastCard => !!c).map(refOf);
   const shots = slots.map((s, i): ProductionShot => {
     const clip = filled[s.id];
     return {
@@ -111,6 +125,7 @@ export function productionView(ws: Workspace, projectId: string): ProductionView
         .map(([f]) => f)
         .sort(),
       prompt: promptOf(s),
+      refs: refsOf(s),
     };
   });
   return { shots, sections: [...new Set(secs)] };

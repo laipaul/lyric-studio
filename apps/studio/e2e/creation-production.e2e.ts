@@ -12,6 +12,8 @@ import path from "node:path";
 import { openWorkspace, project } from "@lyric/db";
 import { ensureAlignment, findOrCreateSongProject, readClipEdits, readRecipe, songPathsById, writeRecipe, type AlignRunner } from "@lyric/video/node";
 import { importShotList } from "@lyric/video/shotlist";
+import { createCard } from "@lyric/video/characters";
+import { setCast } from "@lyric/video/production";
 import { eq } from "drizzle-orm";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-creation-production-"));
@@ -48,13 +50,18 @@ async function main() {
   };
   const p = ws.db.select().from(project).where(eq(project.id, id)).get()!;
   await ensureAlignment(ws, { ...sp, project: p }, { lyricsTxt: paths.lyricsTxt, durationMs: 14_000, align: aligner });
+  // A character in the cast (shot 2): its picture is the shot's Omni Reference for Midjourney.
+  const face = path.join(root, "bride.png");
+  ffmpeg("-f", "lavfi", "-i", "color=c=0xE8A3B5:s=300x400", "-frames:v", "1", face);
+  const bride = createCard(ws, { kind: "character", name: "Bride", picture: readFileSync(face), fileName: "bride.png" });
+  setCast(ws, id, [bride.id]);
   await importShotList(
     ws,
     id,
     {
       slots: [
         { id: "s01", order: 1, shows: "The empty chapel in morning light", characters: [], scene: null, shot: "wide" },
-        { id: "s02", order: 2, shows: "She walks in on her father's arm", characters: [], scene: null, shot: "medium", line: 1 },
+        { id: "s02", order: 2, shows: "She walks in on her father's arm", characters: ["Bride"], scene: null, shot: "medium", line: 1 },
         { id: "s03", order: 3, shows: "Close on her smile", characters: [], scene: null, shot: "close-up", line: 3 },
       ],
     },
@@ -101,6 +108,10 @@ async function main() {
     await page.click("[data-shot-copy-prompt=s01]");
     await page.waitForFunction(() => document.querySelector("[data-shot-copy-prompt=s01]")?.textContent?.includes("Copied"), null, { timeout: 5000 }).catch(() => {});
     check(((await page.textContent("[data-shot-copy-prompt=s01]")) ?? "").includes("Copied"), "Copy prompt copies it");
+    const p2 = ((await page.textContent("[data-shot-prompt=s02]")) ?? "").trim();
+    check(p2.startsWith("cinematic medium shot: She walks in on her father's arm") && !/Bride|young|slender|lips|skin/i.test(p2), `a person's prompt has no name and no face or body words (${p2})`);
+    const refOk = await page.$eval("[data-shot-refs=s02] [data-shot-ref=Bride] img", (img: Element) => (img as HTMLImageElement).complete && (img as HTMLImageElement).naturalWidth > 0).catch(() => false);
+    check(refOk, "the shot shows the person's picture to use as Omni Reference");
 
     await page.click("[data-creation-folder=story]");
     await page.waitForSelector("[data-pictures=settings] [data-creation-defaults]");

@@ -433,6 +433,14 @@ function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile }: { s: Pr
         <button type="button" data-shot-copy-prompt={s.id} onClick={() => void copyPrompt()} className="hover:bg-accent flex shrink-0 items-center gap-1 rounded border px-2 py-1" title="The Midjourney prompt for this shot's first frame: paste it into Midjourney">
           {copied ? <Check className="size-3 text-emerald-300" /> : <Copy className="size-3" />} {copied ? "Copied" : "Copy prompt"}
         </button>
+        {s.refs.length ? (
+          <span data-shot-refs={s.id} className="flex items-center gap-1.5" title="Midjourney keeps a face from a picture, not from words: copy a picture, paste it into Midjourney's prompt bar (Ctrl+V) and choose Omni Reference">
+            <span className="text-muted-foreground">Omni Reference:</span>
+            {s.refs.map((r) => (
+              <RefPicture key={`${r.card}-${r.file}`} r={r} />
+            ))}
+          </span>
+        ) : null}
         <details className="text-muted-foreground min-w-0 flex-1">
           <summary className="cursor-pointer py-1">Show prompt</summary>
           <p data-shot-prompt={s.id} className="bg-background/60 mt-1 rounded border p-2 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap select-all">
@@ -476,6 +484,49 @@ function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile }: { s: Pr
         </div>
       </div>
     </div>
+  );
+}
+
+// A person's (or place's) locked picture for Midjourney's Omni Reference: click copies the picture itself (PNG) to paste
+// into Midjourney's prompt bar; the link opens it (to save or drag it).
+function RefPicture({ r }: { r: ProductionShot["refs"][number] }) {
+  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
+  const url = `/api/cards/${r.card}/file/${r.file.split("/").map(encodeURIComponent).join("/")}`;
+  async function copy() {
+    try {
+      const blob = await (await fetch(url)).blob();
+      let png = blob;
+      if (blob.type !== "image/png") {
+        const bmp = await createImageBitmap(blob);
+        const c = document.createElement("canvas");
+        c.width = bmp.width;
+        c.height = bmp.height;
+        c.getContext("2d")!.drawImage(bmp, 0, 0);
+        png = await new Promise<Blob>((ok, no) => c.toBlob((b) => (b ? ok(b) : no(new Error("no picture"))), "image/png"));
+      }
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+      setState("copied");
+    } catch {
+      setState("failed");
+      window.open(url, "_blank");
+    }
+    setTimeout(() => setState("idle"), 2500);
+  }
+  return (
+    <span className="flex items-center gap-1">
+      <button type="button" data-shot-ref={r.name} onClick={() => void copy()} className="hover:border-brand relative size-9 shrink-0 overflow-hidden rounded border" title={`${r.name}: click to copy the picture, then paste it into Midjourney (Ctrl+V) as Omni Reference`}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- a card picture served by /api/cards */}
+        <img src={url} alt={r.name} className="size-full object-cover" />
+        {state === "copied" ? (
+          <span className="absolute inset-0 flex items-center justify-center bg-black/60">
+            <Check className="size-4 text-emerald-300" />
+          </span>
+        ) : null}
+      </button>
+      <a href={url} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-foreground underline underline-offset-2">
+        {state === "copied" ? "copied" : state === "failed" ? "opened" : r.name}
+      </a>
+    </span>
   );
 }
 

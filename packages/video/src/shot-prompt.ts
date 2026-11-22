@@ -2,11 +2,14 @@
 // MJ"). Written by the app from what it already knows, so Paul never writes or asks for one: the shot's framing and
 // what happens, each person's locked description and the outfit of the look they wear (or the shot's own outfit), the
 // scene card, a memory's softer feel, the song's Film look in Midjourney words, the picture shape. No names (the bible's
-// rule: models drift on names): a person is their description. Midjourney reads "never X" as "X", so the "Never …"
-// sentences become its --no list, and instructions meant for reference-image models ("Preserve …", "Match … the
-// reference image") are left out. Pure.
+// rule: models drift on names). Midjourney reads "never X" as "X", so the "Never …" sentences become its --no list, and
+// instructions meant for reference-image models ("Preserve …", "Match … the reference image") are left out.
+// No face or body description (Paul, 22 Nov 2026: "all your prompts are being rejected by MJ"): age, ethnicity, build,
+// lips and skin sentences made Midjourney's moderator refuse them, and Midjourney keeps a face better from a picture
+// than from words. The face comes from the person's locked picture given as Midjourney's Omni Reference (Production
+// shows it next to Copy prompt); the words say what happens, the outfit, the place and the look. Pure.
 
-export type PromptPerson = { name: string; description: string | null; outfit: string | null };
+export type PromptPerson = { name: string; description: string | null; outfit: string | null }; // description: only to tell "the woman" from "the man"
 export type ShotPromptInput = {
   shows: string;
   shot: "close-up" | "medium" | "wide" | "detail" | "motion";
@@ -80,12 +83,12 @@ export function shotPrompt(i: ShotPromptInput): string {
   const no: string[] = [];
   const parts = [`${FRAMING[i.shot]}: ${shows}`];
   for (const p of i.people) {
-    const d = forMidjourney(p.description);
     const o = forMidjourney(i.outfit ?? p.outfit);
-    no.push(...d.no, ...o.no);
-    const who = [d.text, o.text ? `wearing: ${o.text.charAt(0).toLowerCase()}${o.text.slice(1)}` : ""].filter(Boolean).join(". ");
-    // Two or more people: each one labelled, so their features do not mix.
-    if (who) parts.push(i.people.length > 1 ? `${roleOf(p)}: ${who}` : who);
+    no.push(...o.no);
+    if (!o.text) continue;
+    const wear = `${o.text.charAt(0).toLowerCase()}${o.text.slice(1)}`;
+    // Two or more people: each one's outfit named for them, so they do not mix.
+    parts.push(i.people.length > 1 ? `${roleOf(p)} wearing ${wear}` : `wearing ${wear}`);
   }
   if (i.scene) {
     const s = forMidjourney(i.scene.description);
