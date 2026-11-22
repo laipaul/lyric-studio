@@ -4,6 +4,20 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Sections in Lyrics Sync (Mini film) ✅ (to verify on the PC)
+- Step 2 of the Scenes plan (Paul, 22 Nov 2026). On a **Mini film** song, Lyrics Sync shows the song's sections:
+  a **Sections** bar above the lines (Verse 1 · Chorus · Verse 2 · ... with start time and lines) and a row above
+  each section's first line with its kind (dropdown: Intro, Verse, Pre-chorus, Chorus, Bridge, Outro) and ✕ (join it
+  to the section before). **+** next to a line number starts a section there. Other song styles: nothing changes.
+- Suggested by the app until changed: stanzas = blocks of lyrics.txt between blank lines; a stanza with a hook line
+  ("* ") is a chorus (no hooks marked: a stanza whose words come back); a returning stanza that leads into a chorus is
+  a pre-chorus; the first other stanza after the 2nd chorus with a chorus still to come is the bridge; after the last
+  chorus, the outro; the rest verses. **Keep these** saves the suggestion; any change saves the whole list in
+  song.json "sections" [{ line, kind }]; **Back to the suggestion** forgets it. lyrics.txt is never changed.
+- Code: sections.ts (pure: suggestSections, cleanSections, nameSections, sectionOfLine), node/song-sections.ts,
+  GET/PUT /api/songs/[id]/sections, components/sections-ui.tsx; recipe.ts "sections".
+- Tests: vitest sections (3); browser sections (8 checks); lyrics-tab, singer, song-style pass.
+
 ### Song style: Cut to the song, Add singing, Mini film ✅ (to verify on the PC)
 - Paul (22 Nov 2026): his three ways of making a song, named in the app. Step 1 of the Scenes plan (song-first
   "Mini film": Sections, Scenes in the Storyboard, Reel / YouTube view, scene brief for Claude, still then clip).
@@ -299,14 +313,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   kept it. Now a saved order tells an open Shape to plan again (selection and playhead kept). A singing clip still
   opens its own line wherever it sits in the order (it plays in time with the words); "No picture yet" slots are skipped.
 - Tests: browser storyboard (+4, incl. a slow save), song-stages, pictures pass.
-
-### Lyrics Sync clip picker: double-click saves; clearer column names ✅ (to verify on the PC)
-- Paul (21 Nov 2026): "I can't select the clip, I double click and nothing happens". The click did select it, but
-  Save sat below all the clips, off screen. Now Save ("Save: <name>"), start-in-clip and transition sit at the top of
-  the picker and stay in view; a double-click on a clip saves it at once.
-- The two side-by-side columns are easier to tell apart: "Who sings (lip-sync)" (was Singer; its picker is titled
-  "Who sings this line?") and "Shows clip (no singing)" (was Lands on; button "Show a clip").
-- Tests: browser lyrics-tab (+1 double-click check) and singer pass.
 
 
 ## What works

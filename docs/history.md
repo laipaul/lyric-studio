@@ -4,6 +4,14 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Lyrics Sync clip picker: double-click saves; clearer column names ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "I can't select the clip, I double click and nothing happens". The click did select it, but
+  Save sat below all the clips, off screen. Now Save ("Save: <name>"), start-in-clip and transition sit at the top of
+  the picker and stay in view; a double-click on a clip saves it at once.
+- The two side-by-side columns are easier to tell apart: "Who sings (lip-sync)" (was Singer; its picker is titled
+  "Who sings this line?") and "Shows clip (no singing)" (was Lands on; button "Show a clip").
+- Tests: browser lyrics-tab (+1 double-click check) and singer pass.
+
 ### Short names for clips; Singer fixes ✅ (to verify on the PC)
 - Paul (21 Nov 2026): the long Midjourney file names are hard to recognise. **Rename** (click the name, pencil) on
   every picture, video and take in Creation and on every Storyboard card: a short name ("Bride smile") shown instead
