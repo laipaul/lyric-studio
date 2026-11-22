@@ -7,7 +7,7 @@
 // (never replaces the take in use) until Paul chooses it with "Use this take" (21 Nov 2026). Every take plays with the
 // song from its first frame. API: /api/songs/[id]/singer.
 import { Check, Loader2, Mic, Pause, Play, RefreshCw, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { GroupTake, SingerLine, SingerView } from "@lyric/video/singer";
 import { takeWhen } from "@lyric/video/take-facts";
@@ -471,19 +471,34 @@ function ScriptField({ line, value, onSave }: { line: number; value: string; onS
     const next = text.replace(/\s+/g, " ").trim();
     if (next !== value) void onSave(next);
   };
+  const area = useRef<HTMLTextAreaElement>(null);
+  // Grow with the text so a long mood is shown whole; an empty one stays a single row.
+  useLayoutEffect(() => {
+    const el = area.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [text]);
   return (
-    <div className="flex w-44 flex-col gap-0.5">
-    <input
-      data-singer-script={line}
-      value={text}
-      maxLength={200}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={save}
-      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-      placeholder="Mood (optional)"
-      title="Sent to InfiniteTalk as its prompt, after the singing cue. A new mood is used by the next Retake."
-      className="bg-background w-44 rounded-md border px-1.5 py-0.5"
-    />
+    <div className="flex w-56 flex-col gap-0.5">
+      <textarea
+        ref={area}
+        rows={1}
+        data-singer-script={line}
+        value={text}
+        maxLength={200}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+        }}
+        placeholder="Mood (optional)"
+        title="Sent to InfiniteTalk as its prompt, after the singing cue. A new mood is used by the next Retake."
+        className="bg-background w-56 resize-none overflow-hidden rounded-md border px-1.5 py-0.5 leading-snug"
+      />
       <span data-singer-mood-hint className="text-muted-foreground text-[10px] leading-tight">
         {MOOD_HINT}
       </span>
