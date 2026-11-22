@@ -54,6 +54,7 @@ import { autoSection, clockText, titleLeadMs, finishedBeforeStart, SECTION_TARGE
 import { loopFit, loopFlows, loopSuggestions, type LoopAudio, type LoopResult, type LoopSuggestion } from "../loop";
 import { chooseEnding, endDimSeconds, type Ending, type EndingChoice } from "../ending";
 import { choosePace, songFeel, type Pace } from "../pace";
+import type { BlendNote } from "../blend";
 import type { TransitionStyle } from "../transitions";
 import { anchorsInside, type AnchorSpec, type GapOrder, type ResolvedAnchor } from "../anchors";
 import type { AnchorReport, AnchorTransitions } from "../compose";
@@ -272,6 +273,7 @@ export type VideoPlan = {
   anchors: (AnchorReport & { missing: string[] }) | null;
   loop: LoopResult | null; // loop platforms: does the wrap-around flow (as QA "Loop flows" checks it)
   decisions: string[]; // the app's technical choices in plain words (pacing, transitions)
+  blendNotes: BlendNote[]; // where a transition was shortened or a clip moved earlier in its file so no frame freezes (src/blend.ts)
   // 2e-1: a fingerprint of everything this video's plan is made from (the song, its lyric timing, the clips and their
   // edits, the song's settings for this platform, the variation), and the Try other looks it is (else null).
   planKey: string;
@@ -1694,6 +1696,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
             spec, props: composed.props, anchors: anchors.length || anchorMissing.length ? { ...(composed.anchors ?? { uses: [], conflicts: [], notes: [] }), missing: anchorMissing } : null,
             loop: loops ? loopResult(composed.props, prepared.clips, { bpm: analysis.bpm, downbeats: downbeatTimes, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers, ending, titleLeadMs: titleLead }) : null,
             decisions: [chosen.lengthText, pace?.text, composed.transitions?.text, ...(cardNotesBySpec.get(spec.name) ?? [])].filter((x): x is string => !!x),
+            blendNotes: composed.blendNotes,
             planKey: planKeyOf(spec),
             try: tryOf(spec),
           };

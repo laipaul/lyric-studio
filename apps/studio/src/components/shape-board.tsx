@@ -1675,6 +1675,11 @@ function StoryStrip({ clips, busy, onOpen, onOmit, current }: { clips: Storyboar
                   {c.speed !== null && c.speed < 1 ? ` · ${c.speed}x` : ""}
                   {c.bestFrom === "clip editor" ? " · ★ yours" : ""}
                 </p>
+                {c.transitionNotes?.length ? (
+                  <p className="text-muted-foreground mt-0.5 text-[10px] leading-tight" data-story-transition>
+                    {c.transitionNotes.map((t) => `${t}.`).join(" ")}
+                  </p>
+                ) : null}
                 {c.notIn ? (
                   <p className="mt-0.5 text-[10px] leading-tight text-amber-200" data-story-notin>
                     {c.notIn.charAt(0).toUpperCase() + c.notIn.slice(1)}.

@@ -35,6 +35,7 @@ export * from "./transitions";
 export * from "./assess";
 export * from "./loop";
 export * from "./anchors";
+export * from "./blend";
 export * from "./storyboard";
 export * from "./textboard";
 export * from "./hf/compile";

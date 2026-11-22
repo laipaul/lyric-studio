@@ -4,6 +4,31 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Fix: a transition never freezes a frame ✅ (to verify on the PC)
+- Paul (22 Nov 2026): at some cuts the outgoing clip seems to freeze for a moment before the transition ends (Wedding Day:
+  "Bride Infront of mirrorReplaced.mp4", source 0.9-5.2 s, the very end of the file, into the next clip; mid-transition the
+  picture looked half washed to white).
+- Cause, in plain words: the automatic dissolve is half a bar long and centred on the cut. The incoming clip starts fading in
+  before the cut and the outgoing clip keeps playing after it ("tail"). The planner worked out how many frames the outgoing
+  clip had left, but forgot the extra frames that clip itself plays at its own start when it was dissolved into (so it ran out
+  that many frames early), and a clip that already had to hold its last frame was still dissolved over the frozen picture.
+  The incoming clip was also started early without checking that its file had frames for it. A clip used to the end of its
+  file therefore froze under the transition. (An out point past the real length was already clamped by the shot planner.)
+  The "white" is most likely not the app: the app only cross-fades two pictures (no white layer; a grade veil is constant).
+  Half-way through a dissolve between two bright clips, or one that starts with a bright frame, reads as washed out; the
+  frozen frame made it linger.
+- Changed (shared planner, so preview, Remotion render and HyperFrames render get the same props): new `src/blend.ts`
+  (`blendInto`) used by `composeProps` for both anchored and automatic dissolves, in shot order. The incoming clip starts
+  earlier in its file (inside your part, then at most a little before your in point) or plays on from its start; a clip that
+  ends with its file is moved earlier in its file (same slot, same cut on the beat) to leave frames after the cut; what the
+  file cannot give is taken off the dissolve, down to a hard cut. A clip that holds its last frame and a singing clip get
+  a hard cut (singing clips are never moved). Shape's clip list says it in plain words ("Transition shortened to 0.2 s: the
+  clip ends here", "Starts 0.5 s earlier to blend into the next clip", "Hard cut here: ..."); `transitionNotes` on the
+  Storyboard clips of the plan (the Storyboard tab under Prepare has no plan, so it shows nothing there).
+- Tests: `test/blend.test.ts` (9): clip used to the end of its file gets handles, no frames past the file; no spare frames =
+  hard cut; partial handle; held shot = cut; photos; singing shots untouched; composed Wedding-Day-like clips; out point past
+  the file clamped.
+
 ### Storyboard shows only story moments ✅ (to verify on the PC)
 - Paul (22 Nov 2026): "the storyboard is confusing, why has the app duplicated the singing part in so many pages".
   Singing takes and Creation takes picked in Lyrics Sync were listed as loose Storyboard cards and filled gaps.

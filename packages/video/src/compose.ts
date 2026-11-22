@@ -1,7 +1,8 @@
 // Turns a prepared render "base" (cuts, clips, lyrics, audio, fonts, pins) plus the choices that
 // change often (seed, order, style, lyric timing) into LyricVideo props. Pure: the /preview page runs
 // it in the browser and "pnpm render:test" runs it in Node, so the same choices give identical props.
-import { dissolveFrames, planAnchors, type AnchorUse, type ResolvedAnchor } from "./anchors";
+import { planAnchors, type AnchorUse, type ResolvedAnchor } from "./anchors";
+import { blendInto, type BlendNote } from "./blend";
 import type { Beat } from "./beats";
 import { VIDEO } from "./config";
 import type { CutPlan } from "./cuts";
@@ -189,7 +190,7 @@ export function rawLyric(l: { text: string; start_ms: number; end_ms: number; is
 export function composeProps(
   base: RenderBase,
   choices: ComposeChoices,
-): { props: Omit<LyricVideoProps, "mediaBaseUrl">; warnings: string[]; anchors: AnchorReport | null; transitions: { text: string; kinds: TransitionKind[] } | null } {
+): { props: Omit<LyricVideoProps, "mediaBaseUrl">; warnings: string[]; anchors: AnchorReport | null; transitions: { text: string; kinds: TransitionKind[] } | null; blendNotes: BlendNote[] } {
   let plan = choices.plan ?? base.plan;
   const platform = base.platform ?? { format: DEFAULT_FORMAT, safeZone: DEFAULT_SAFE_ZONE, lyricsAt: 0.45, textScale: 1 };
   const bars = choices.cinematicBars ?? base.cinematicBars;
@@ -306,25 +307,22 @@ export function composeProps(
   });
 
   // Dissolves into anchored shots (~1 bar centred on the cut): the shot starts `before` frames early
-  // over the previous one, which keeps playing `after` frames into it.
+  // over the previous one, which keeps playing `after` frames into it. Applied together with the automatic
+  // dissolves below, in shot order (src/blend.ts: a dissolve never shows a frozen frame).
   const bar = barFrames(base.beats ?? []);
+  const blends: { index: number; bar: number; floor: (clipId: string) => number }[] = [];
   for (const [index, a] of anchorPlan?.shots ?? []) {
     const transition = a.syncMs != null ? "cut" : choices.transitions === "cut" || choices.transitions === "dissolve" ? choices.transitions : a.transition;
     if (transition !== "dissolve" || index === 0 || !shots[index] || !shots[index - 1]) continue;
-    const prev = shots[index - 1];
-    const prevLeft = prev.kind === "photo" ? Infinity : Math.floor((prev.clipDurationFrames - 1 - prev.clipStartFrame) / prev.playbackRate) - prev.duration;
-    const d = dissolveFrames(bar, prev.duration, shots[index].duration, prev.holdLastFrame ? 0 : prevLeft);
-    if (!d.before && !d.after) continue;
-    const shot = shots[index];
-    const back = Math.round(d.before * shot.playbackRate);
-    shots[index] = { ...shot, dissolve: d, ...(shot.kind !== "photo" && shot.clipStartFrame >= back ? { clipStartFrame: shot.clipStartFrame - back } : {}) };
-    shots[index - 1] = { ...prev, tail: d.after };
+    blends.push({ index, bar, floor: () => 0 });
   }
 
   // Automatic transitions between the other shots: dissolves of about half a bar, dips to black into a
   // chorus, cuts (anchored shots keep their own).
   let transitionPlan: { text: string; kinds: TransitionKind[] } | null = null;
   const dips: { frame: number; frames: number }[] = [];
+  let plannedKinds: Map<number, TransitionKind> | null = null;
+  let plannedText = "";
   if (base.transitions && shots.length > 1) {
     const t = base.transitions;
     const anchored = new Set(anchorPlan?.shots.keys() ?? []);
@@ -337,18 +335,19 @@ export function composeProps(
     for (const [index, kind] of planned.kinds) {
       if (kind === "dip") dips.push({ frame: shots[index].start, frames: Math.min(18, Math.max(8, Math.round(bar / 2))) });
       if (kind !== "dissolve") continue;
-      const prev = shots[index - 1];
-      const prevLeft = prev.kind === "photo" ? Infinity : Math.floor((prev.clipDurationFrames - 1 - prev.clipStartFrame) / prev.playbackRate) - prev.duration;
-      const d = dissolveFrames(Math.round(bar / 2), prev.duration, shots[index].duration, prev.holdLastFrame ? 0 : prevLeft);
-      if (!d.before && !d.after) continue;
-      const shot = shots[index];
-      const back = Math.round(d.before * shot.playbackRate);
-      // The shot starts `back` clip frames earlier when the clip has them before its in point (clips.json).
-      const inFrame = Math.round(((byId.get(assigned[index].clip_id)?.in_ms ?? 0) * VIDEO.fps) / 1000);
-      shots[index] = { ...shot, dissolve: d, ...(shot.kind !== "photo" && shot.clipStartFrame - back >= inFrame ? { clipStartFrame: shot.clipStartFrame - back } : {}) };
-      shots[index - 1] = { ...prev, tail: d.after };
+      // The shot may start earlier in its clip as far as the user's in point (clips.json).
+      blends.push({ index, bar: Math.round(bar / 2), floor: (clipId) => Math.round(((byId.get(clipId)?.in_ms ?? 0) * VIDEO.fps) / 1000) });
     }
-    transitionPlan = { text: planned.text, kinds: shots.map((_, i) => (i === 0 ? "cut" : (planned.kinds.get(i) ?? (shots[i].dissolve ? "dissolve" : "cut")))) };
+    plannedKinds = planned.kinds;
+    plannedText = planned.text;
+  }
+  const blendNotes: BlendNote[] = [];
+  for (const b of blends.sort((x, y) => x.index - y.index)) {
+    blendNotes.push(...blendInto(shots, b.index, { bar: b.bar, floor: b.floor(assigned[b.index].clip_id), locked: exact.has(b.index), prevLocked: exact.has(b.index - 1) }));
+  }
+  if (plannedKinds) {
+    const kinds = plannedKinds;
+    transitionPlan = { text: plannedText, kinds: shots.map((_, i) => (i === 0 ? "cut" : kinds.get(i) === "dissolve" || !kinds.has(i) ? (shots[i].dissolve ? "dissolve" : "cut") : kinds.get(i)!)) };
   }
   const anchors: AnchorReport | null = anchorPlan
     ? {
@@ -391,6 +390,7 @@ export function composeProps(
     warnings,
     anchors,
     transitions: transitionPlan,
+    blendNotes,
   };
 }
 
