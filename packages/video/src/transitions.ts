@@ -2,7 +2,7 @@
 // music (guiding principle: a technical decision; the user's creative choice is per clip, in the clip
 // editor: "comes in with cut / dissolve").
 //   cut       a hard cut on the beat: hooks (choruses), driving songs, sung passages of mid-paced songs;
-//   dissolve  a soft cross-fade of about half a bar, centred on the downbeat: the verses, intros and
+//   dissolve  a soft cross-fade of about 1.5 s in whole beats (compose.ts autoDissolveFrames), centred on the cut: the verses, intros and
 //             instrumental passages of calm songs, and instrumental passages of mid-paced songs;
 //   dip       a short dip to black (about half a bar, the cut at its darkest) where a verse opens into a
 //             chorus: the "big moment" (calm and mid-paced songs; driving songs cut).

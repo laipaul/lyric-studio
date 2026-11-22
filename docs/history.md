@@ -4,6 +4,13 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Shape follows a new Storyboard order without a reload ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "when I update the Storyboard sequence it doesn't show in Shape". The Storyboard shows a new
+  order at once but saves it a moment later; a Shape opened before the save finished planned with the old order and
+  kept it. Now a saved order tells an open Shape to plan again (selection and playhead kept). A singing clip still
+  opens its own line wherever it sits in the order (it plays in time with the words); "No picture yet" slots are skipped.
+- Tests: browser storyboard (+4, incl. a slow save), song-stages, pictures pass.
+
 ### Lyrics Sync clip picker: double-click saves; clearer column names ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "I can't select the clip, I double click and nothing happens". The click did select it, but
   Save sat below all the clips, off screen. Now Save ("Save: <name>"), start-in-clip and transition sit at the top of

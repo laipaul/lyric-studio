@@ -709,6 +709,17 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                           {clipProblem(c)}
                         </p>
                       ) : null}
+                      {c.transitions?.length ? (
+                        // What the app changed so a dissolve with this clip never freezes a frame (22 Nov 2026): calm, for information only.
+                        <p data-clip-transitions={c.name} title={c.transitions.join("\n")} className="text-muted-foreground text-[10px] leading-snug">
+                          {c.transitions.slice(0, 2).map((t) => (
+                            <span key={t} className="block">
+                              {t}
+                            </span>
+                          ))}
+                          {c.transitions.length > 2 ? <span className="block">and {c.transitions.length - 2} more</span> : null}
+                        </p>
+                      ) : null}
                       <div data-card-actions className="mt-auto flex items-center justify-between gap-1 pt-0.5">
                         <div data-use-omit={c.name} role="group" aria-label={`Use or omit ${c.name}`} className="flex w-fit overflow-hidden rounded-md border text-[11px]">
                           <button type="button" data-use={c.name} aria-pressed={!c.omit} disabled={busy} onClick={() => c.omit && void setOmit(c.name, false)} className={cn("px-2 py-0.5", !c.omit ? "bg-brand/20 text-brand" : "hover:bg-accent")}>

@@ -4,30 +4,30 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### Fix: a transition never freezes a frame ✅ (to verify on the PC)
-- Paul (22 Nov 2026): at some cuts the outgoing clip seems to freeze for a moment before the transition ends (Wedding Day:
-  "Bride Infront of mirrorReplaced.mp4", source 0.9-5.2 s, the very end of the file, into the next clip; mid-transition the
-  picture looked half washed to white).
-- Cause, in plain words: the automatic dissolve is half a bar long and centred on the cut. The incoming clip starts fading in
-  before the cut and the outgoing clip keeps playing after it ("tail"). The planner worked out how many frames the outgoing
-  clip had left, but forgot the extra frames that clip itself plays at its own start when it was dissolved into (so it ran out
-  that many frames early), and a clip that already had to hold its last frame was still dissolved over the frozen picture.
-  The incoming clip was also started early without checking that its file had frames for it. A clip used to the end of its
-  file therefore froze under the transition. (An out point past the real length was already clamped by the shot planner.)
-  The "white" is most likely not the app: the app only cross-fades two pictures (no white layer; a grade veil is constant).
-  Half-way through a dissolve between two bright clips, or one that starts with a bright frame, reads as washed out; the
-  frozen frame made it linger.
-- Changed (shared planner, so preview, Remotion render and HyperFrames render get the same props): new `src/blend.ts`
-  (`blendInto`) used by `composeProps` for both anchored and automatic dissolves, in shot order. The incoming clip starts
-  earlier in its file (inside your part, then at most a little before your in point) or plays on from its start; a clip that
-  ends with its file is moved earlier in its file (same slot, same cut on the beat) to leave frames after the cut; what the
-  file cannot give is taken off the dissolve, down to a hard cut. A clip that holds its last frame and a singing clip get
-  a hard cut (singing clips are never moved). Shape's clip list says it in plain words ("Transition shortened to 0.2 s: the
-  clip ends here", "Starts 0.5 s earlier to blend into the next clip", "Hard cut here: ..."); `transitionNotes` on the
-  Storyboard clips of the plan (the Storyboard tab under Prepare has no plan, so it shows nothing there).
-- Tests: `test/blend.test.ts` (9): clip used to the end of its file gets handles, no frames past the file; no spare frames =
-  hard cut; partial handle; held shot = cut; photos; singing shots untouched; composed Wedding-Day-like clips; out point past
-  the file clamped.
+### Dissolves never freeze a frame; dissolves of about 1.5 s ✅ (to verify on the PC)
+- Paul (22 Nov 2026): "a little pause at scene transitions (frozen frame)", Wedding Day Storyboard clip 2 (mirror, 0.9 s
+  to the end of the file) into clip 3. Cause: a dissolve starts the incoming clip early (it fades in over the outgoing
+  one). The app moved the clip's start back only if ALL the frames were there before its in point; else it started
+  early from the same frame and so ran past its last frame: the last frame held up to 1.1 s. In Wedding Day's Reel
+  13 of 19 shots ended on a held frame (0.2-1.1 s); Familiar Strangers 19 of 24. The out point was not the problem
+  (5.2 s is the file's real end; the planner already clamps out points to the file).
+- Now (src/handles.ts fitHandles, called by compose.ts for anchored and automatic dissolves): the app (1) slides a
+  clip inside the part the user kept (their in / out: handles never show trimmed-off frames), (2) slows it a little,
+  at most 10% (Paul's Canva trick; never a singing clip, a loop shot or a clip already held), (3) else shortens that
+  dissolve, down to a hard cut. The cut stays on the beat and every shot keeps its length on screen. No clip plays
+  past its last frame.
+- Automatic dissolves are now about 1.5 s (Paul's length in Canva) in whole beats (compose.ts autoDissolveFrames: 3
+  beats = 1.55 s at 116 BPM; was half a bar, 1.07 s). Dissolves into an anchored line keep one bar.
+- Prepare → Storyboard: a small grey line on the clip card says what was changed, per video, e.g. "Reel, 0:53:
+  slowed to 90%, starts 0.1 s earlier in the clip to fit the dissolve" or "dissolve into this clip shortened to 1.3 s
+  (the clips have no more spare frames)" (ShotProps.fitNotes in the shot plan; node/transition-notes.ts).
+- Preview and export draw the same saved shot plan. The plan fingerprint changed (make.ts keyBase v 2), so each saved
+  plan is planned again once (the old one kept as .previous.json, the change named in Tasks).
+- Supersedes the first fix pushed earlier the same day (2c2c863, src/blend.ts: no slow-down, half-bar dissolves, saved
+  plans kept as they were); its line in Shape's clip list stays and now shows these notes.
+- Tests: vitest handles (8: Wedding Day 1-2-3, trims, singing, photos, 116 BPM and 80 BPM songs end to end) and
+  transition-notes (1), blend (2: composed 5.04 s clips used to the end; an out point past the file); anchors, compose, pace-transitions, storyboard, storyboard-file, timeline-edits pass. Checked
+  against Paul's saved Reel plans: Wedding Day and Familiar Strangers go from 13 and 19 frozen ends to none.
 
 ### Storyboard shows only story moments ✅ (to verify on the PC)
 - Paul (22 Nov 2026): "the storyboard is confusing, why has the app duplicated the singing part in so many pages".
@@ -347,14 +347,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   until the last line is sung; then the B-roll takes over on the beat. A skipped line, another picture or more than
   8 s of music between two lines starts a new take. A line picked alone works as before.
 - Tests: vitest anchors (+1) and animate (+1, the runs); browser singer, lyrics-tab, pictures pass.
-
-### Shape follows a new Storyboard order without a reload ✅ (to verify on the PC)
-- Paul (21 Nov 2026): "when I update the Storyboard sequence it doesn't show in Shape". The Storyboard shows a new
-  order at once but saves it a moment later; a Shape opened before the save finished planned with the old order and
-  kept it. Now a saved order tells an open Shape to plan again (selection and playhead kept). A singing clip still
-  opens its own line wherever it sits in the order (it plays in time with the words); "No picture yet" slots are skipped.
-- Tests: browser storyboard (+4, incl. a slow save), song-stages, pictures pass.
-
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

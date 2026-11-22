@@ -3,7 +3,6 @@
 // (its manifests). Adds the song's waveform (cached), the beats, the clips' thumbnails and best moments
 // (the clip editor's, else the strongest 2 s by motion, colour and contrast, as the Spotify Canvas picks
 // them; cached).
-import type { BlendNote } from "../blend";
 import { clipRoles } from "./clip-roles";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -108,7 +107,7 @@ export type StoryboardClip = {
   bestFrom: "clip editor" | "auto" | null;
   autoBestS: number | null; // the automatic one (the strongest 2 s)
   shots: number; // shots it gets in this video
-  transitionNotes: string[]; // where the plan shortened a transition or moved this clip earlier in its file so no frame freezes, in plain words
+  transitionNotes: string[]; // what the plan changed so a dissolve with this clip never freezes a frame (src/handles.ts), in plain words
   notIn: string | null; // not omitted, yet no shot in this video: why, in plain words, with what would bring it in
 };
 
@@ -273,17 +272,6 @@ export function notInReason(name: string, anchors: readonly { line: number; clip
   return "not in this video: this part of the song ends before its turn in the story order. Move it earlier in Storyboard, or put it on a line (Lyrics Sync → Show a clip)";
 }
 
-// The plan's transition changes on one clip, in plain words (src/blend.ts), one line each kind.
-export function blendText(notes: readonly BlendNote[], src: string): string[] {
-  const secs = (s: number) => `${s.toFixed(1)} s`;
-  const out = new Set<string>();
-  for (const n of notes) {
-    if (n.src !== src) continue;
-    if (n.kind === "shortened") out.add(n.seconds > 0 ? `Transition shortened to ${secs(n.seconds)}: the clip ${n.side === "ends" ? "ends" : "starts"} here` : `Hard cut here: the clip ${n.side === "ends" ? "has no frames left after its end" : "has no frames before its start"} to blend`);
-    else out.add(n.into === "next" ? `Starts ${secs(n.seconds)} earlier to blend into the next clip` : `Starts ${secs(n.seconds)} earlier to blend in from the previous clip`);
-  }
-  return [...out];
-}
 // Shape's view of one planned video: its shots, lines, notes, assessment (and the props it plays).
 async function planView(ws: Workspace, projectId: string, p: { name: string; label: string; warnings: string[] }, plan: PlatformPlan, v: VideoPlan, picture: string | null): Promise<{ shown: StoryboardView; numbers: (number | null)[] }> {
   const paths = songPathsById(ws, projectId);
@@ -319,7 +307,7 @@ async function planView(ws: Workspace, projectId: string, p: { name: string; lab
     inS: c.inMs === null ? null : c.inMs / 1000, outS: c.outMs === null ? null : c.outMs / 1000, speed: c.speed, transition: c.transition,
     bestS: c.bestMs === null ? null : c.bestMs / 1000, bestFrom: c.bestFrom, autoBestS: c.kind === "video" ? (auto.get(absPath(ws, c.path)) ?? null) : null,
     shots: v.props.shots.filter((s) => s.src === c.path).length,
-    transitionNotes: blendText(v.blendNotes ?? [], c.path),
+    transitionNotes: [...new Set(v.props.shots.filter((s) => s.src === c.path).flatMap((s) => s.fitNotes ?? []))],
     notIn: c.omit !== true && !v.props.shots.some((s) => s.src === c.path) ? notIn(c.name) : null,
   }));
   const overview = await songOverview(ws, projectId, p.name, paths.audio, plan.analysis, plan.lines);

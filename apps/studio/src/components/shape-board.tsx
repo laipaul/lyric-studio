@@ -1677,7 +1677,7 @@ function StoryStrip({ clips, busy, onOpen, onOmit, current }: { clips: Storyboar
                 </p>
                 {c.transitionNotes?.length ? (
                   <p className="text-muted-foreground mt-0.5 text-[10px] leading-tight" data-story-transition>
-                    {c.transitionNotes.map((t) => `${t}.`).join(" ")}
+                    {c.transitionNotes.map((t) => `${t.charAt(0).toUpperCase()}${t.slice(1)}.`).join(" ")}
                   </p>
                 ) : null}
                 {c.notIn ? (

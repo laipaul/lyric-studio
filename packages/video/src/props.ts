@@ -30,6 +30,9 @@ export type ShotProps = {
   // playing `after` frames into this one: its `tail`). Without them: a hard cut.
   dissolve?: { before: number; after: number };
   tail?: number;
+  // What the app changed so a dissolve never freezes a frame (src/handles.ts), in plain words: "slowed to 97% to fit
+  // the dissolve", "dissolve shortened to 0.5 s ...". For the user (Storyboard cards, Shape); the renderer ignores it.
+  fitNotes?: string[];
 };
 
 export type LyricLineProps = {

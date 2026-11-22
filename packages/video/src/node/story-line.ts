@@ -21,12 +21,14 @@ import { listCards } from "./characters/cards";
 import { animateFor, readShotListFile, SHOTLIST_FILE, slotOf, type Slot } from "./shotlist";
 import { sharedCollections, songPathsById } from "./song-folder";
 import { songText } from "./textboard";
+import { transitionNotes } from "./transition-notes";
 
 export type StoryCard = { collection: string; clips: number; thumbs: string[] }; // "Flowers · app picks · N clips"
 // A planned slot from the shot list (C2): its picture is made later (C3); Make skips it until then.
 export type SlotCard = { id: string; name: string; thumb: string | null; locked: boolean } | { id: null; name: string; thumb: null; locked: false };
 export type StorySlot = Slot & { animateWith: string; animateIsDefault: boolean; cast: SlotCard[]; place: SlotCard | null; lineText: string | null };
-export type StoryItem = { key: string; clip?: ClipAsset & { collection?: string }; card?: StoryCard; slot?: StorySlot };
+// transitions: what the app changed so a dissolve with this clip never freezes a frame (node/transition-notes.ts).
+export type StoryItem = { key: string; clip?: ClipAsset & { collection?: string; transitions?: string[] }; card?: StoryCard; slot?: StorySlot };
 export type SongStory = { items: StoryItem[]; collections: string[] };
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -90,6 +92,8 @@ export async function songStory(ws: Workspace, projectId: string, ownAll: readon
   const ownNames = own.map((c) => c.name);
   const edits = await migrate(ws, projectId, ownNames);
   const notes = readClipNotes(root);
+  const fits = transitionNotes(root);
+  const withFits = <T extends { name: string }>(c: T) => (fits.has(c.name.toLowerCase()) ? { ...c, transitions: fits.get(c.name.toLowerCase())! } : c);
   const byCollection = new Map<string, ClipAsset[]>();
   const clipsOfCollection = async (c: string) => {
     if (!byCollection.has(c)) byCollection.set(c, await collectionClips(ws, c));
@@ -119,7 +123,7 @@ export async function songStory(ws: Workspace, projectId: string, ownAll: readon
     if (shown.has(e.toLowerCase())) continue;
     const mine = own.find((c) => same(c.name, e));
     if (mine) {
-      items.push({ key: mine.name, clip: mine });
+      items.push({ key: mine.name, clip: withFits(mine) });
       shown.add(e.toLowerCase());
       continue;
     }
@@ -128,7 +132,7 @@ export async function songStory(ws: Workspace, projectId: string, ownAll: readon
     const asset = (await clipsOfCollection(from)).find((x) => same(x.name, e));
     if (!asset) continue; // removed from the collection since
     const note = notesForClips(notes, [asset]).get(asset.name) ?? null;
-    items.push({ key: asset.name, clip: { ...asset, collection: from, omit: isOmitted(edits, asset.name), note } });
+    items.push({ key: asset.name, clip: withFits({ ...asset, collection: from, omit: isOmitted(edits, asset.name), note }) });
     shown.add(e.toLowerCase());
   }
   return { items, collections: songCollections(ws, projectId) };

@@ -54,7 +54,6 @@ import { autoSection, clockText, titleLeadMs, finishedBeforeStart, SECTION_TARGE
 import { loopFit, loopFlows, loopSuggestions, type LoopAudio, type LoopResult, type LoopSuggestion } from "../loop";
 import { chooseEnding, endDimSeconds, type Ending, type EndingChoice } from "../ending";
 import { choosePace, songFeel, type Pace } from "../pace";
-import type { BlendNote } from "../blend";
 import type { TransitionStyle } from "../transitions";
 import { anchorsInside, type AnchorSpec, type GapOrder, type ResolvedAnchor } from "../anchors";
 import type { AnchorReport, AnchorTransitions } from "../compose";
@@ -273,7 +272,6 @@ export type VideoPlan = {
   anchors: (AnchorReport & { missing: string[] }) | null;
   loop: LoopResult | null; // loop platforms: does the wrap-around flow (as QA "Loop flows" checks it)
   decisions: string[]; // the app's technical choices in plain words (pacing, transitions)
-  blendNotes: BlendNote[]; // where a transition was shortened or a clip moved earlier in its file so no frame freezes (src/blend.ts)
   // 2e-1: a fingerprint of everything this video's plan is made from (the song, its lyric timing, the clips and their
   // edits, the song's settings for this platform, the variation), and the Try other looks it is (else null).
   planKey: string;
@@ -1679,7 +1677,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   );
   // 2e-1: what each video's plan is made from (its fingerprint) and which Try other looks it is.
   const keyOptions = Object.fromEntries(Object.entries(options).filter(([k, v]) => !PLAN_KEY_SKIP.has(k) && v !== undefined && v !== false && typeof v !== "function"));
-  const keyBase = { v: 1, options: keyOptions, preset, song: sh.sp.project.audio_hash ?? null, lrc: alignment.lrcHash, leadMs, lyricsOffsetMs, edits, clips: prepared.clips.map((c) => [c.name, c.hash]), anchors: sh.anchors, canvas: sh.canvasChoice, board: sh.textboard.board, picture: sh.picture ?? null };
+  const keyBase = { v: 2, options: keyOptions, preset, song: sh.sp.project.audio_hash ?? null, lrc: alignment.lrcHash, leadMs, lyricsOffsetMs, edits, clips: prepared.clips.map((c) => [c.name, c.hash]), anchors: sh.anchors, canvas: sh.canvasChoice, board: sh.textboard.board, picture: sh.picture ?? null };
   const planKeyOf = (spec: VariationSpec) => createHash("sha256").update(JSON.stringify({ ...keyBase, spec })).digest("hex");
   const tryOf = (spec: VariationSpec): SbTry | null =>
     sh.picture
@@ -1696,7 +1694,6 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
             spec, props: composed.props, anchors: anchors.length || anchorMissing.length ? { ...(composed.anchors ?? { uses: [], conflicts: [], notes: [] }), missing: anchorMissing } : null,
             loop: loops ? loopResult(composed.props, prepared.clips, { bpm: analysis.bpm, downbeats: downbeatTimes, startMs: chosen.start_ms, audio: loopSong, lines: sh.sectionLines, numbers, ending, titleLeadMs: titleLead }) : null,
             decisions: [chosen.lengthText, pace?.text, composed.transitions?.text, ...(cardNotesBySpec.get(spec.name) ?? [])].filter((x): x is string => !!x),
-            blendNotes: composed.blendNotes,
             planKey: planKeyOf(spec),
             try: tryOf(spec),
           };

@@ -2,7 +2,6 @@
 // change often (seed, order, style, lyric timing) into LyricVideo props. Pure: the /preview page runs
 // it in the browser and "pnpm render:test" runs it in Node, so the same choices give identical props.
 import { planAnchors, type AnchorUse, type ResolvedAnchor } from "./anchors";
-import { blendInto, type BlendNote } from "./blend";
 import type { Beat } from "./beats";
 import { VIDEO } from "./config";
 import type { CutPlan } from "./cuts";
@@ -17,6 +16,7 @@ import type { PictureProps } from "./picture";
 import { assignClips, BEST_WINDOW_MS, type ClipOrder } from "./shots";
 import { applyCutMoves, slipFor, type TimelineEdits } from "./timeline-edits";
 import { withCard, type CardStyle } from "./textboard";
+import { fitHandles } from "./handles";
 import { planTransitions, type TransitionKind, type TransitionStyle } from "./transitions";
 import type { Feel } from "./pace";
 
@@ -190,7 +190,7 @@ export function rawLyric(l: { text: string; start_ms: number; end_ms: number; is
 export function composeProps(
   base: RenderBase,
   choices: ComposeChoices,
-): { props: Omit<LyricVideoProps, "mediaBaseUrl">; warnings: string[]; anchors: AnchorReport | null; transitions: { text: string; kinds: TransitionKind[] } | null; blendNotes: BlendNote[] } {
+): { props: Omit<LyricVideoProps, "mediaBaseUrl">; warnings: string[]; anchors: AnchorReport | null; transitions: { text: string; kinds: TransitionKind[] } | null } {
   let plan = choices.plan ?? base.plan;
   const platform = base.platform ?? { format: DEFAULT_FORMAT, safeZone: DEFAULT_SAFE_ZONE, lyricsAt: 0.45, textScale: 1 };
   const bars = choices.cinematicBars ?? base.cinematicBars;
@@ -306,23 +306,18 @@ export function composeProps(
     } as LyricVideoProps["shots"][number];
   });
 
-  // Dissolves into anchored shots (~1 bar centred on the cut): the shot starts `before` frames early
-  // over the previous one, which keeps playing `after` frames into it. Applied together with the automatic
-  // dissolves below, in shot order (src/blend.ts: a dissolve never shows a frozen frame).
+  // Dissolves: into anchored shots about a bar (centred on the cut), automatic ones about 1.5 s in whole beats; dips to black
+  // into a chorus; cuts. First what each cut wants, then fitHandles (src/handles.ts) fits every dissolve to the
+  // frames the clips really have: it slides a clip inside the part the user kept, slows it a little, or shortens
+  // the dissolve, so no frame is ever frozen.
   const bar = barFrames(base.beats ?? []);
-  const blends: { index: number; bar: number; floor: (clipId: string) => number }[] = [];
+  const wanted = new Map<number, number>();
   for (const [index, a] of anchorPlan?.shots ?? []) {
     const transition = a.syncMs != null ? "cut" : choices.transitions === "cut" || choices.transitions === "dissolve" ? choices.transitions : a.transition;
-    if (transition !== "dissolve" || index === 0 || !shots[index] || !shots[index - 1]) continue;
-    blends.push({ index, bar, floor: () => 0 });
+    if (transition === "dissolve" && index > 0 && shots[index] && shots[index - 1]) wanted.set(index, bar);
   }
-
-  // Automatic transitions between the other shots: dissolves of about half a bar, dips to black into a
-  // chorus, cuts (anchored shots keep their own).
   let transitionPlan: { text: string; kinds: TransitionKind[] } | null = null;
   const dips: { frame: number; frames: number }[] = [];
-  let plannedKinds: Map<number, TransitionKind> | null = null;
-  let plannedText = "";
   if (base.transitions && shots.length > 1) {
     const t = base.transitions;
     const anchored = new Set(anchorPlan?.shots.keys() ?? []);
@@ -334,21 +329,40 @@ export function composeProps(
     const planned = planTransitions({ style: t.style, feel: t.feel, cuts, hooks: t.hooks, sung: t.sung, barMs: (bar * 1000) / VIDEO.fps });
     for (const [index, kind] of planned.kinds) {
       if (kind === "dip") dips.push({ frame: shots[index].start, frames: Math.min(18, Math.max(8, Math.round(bar / 2))) });
-      if (kind !== "dissolve") continue;
-      // The shot may start earlier in its clip as far as the user's in point (clips.json).
-      blends.push({ index, bar: Math.round(bar / 2), floor: (clipId) => Math.round(((byId.get(clipId)?.in_ms ?? 0) * VIDEO.fps) / 1000) });
+      if (kind === "dissolve") wanted.set(index, autoDissolveFrames(bar));
     }
-    plannedKinds = planned.kinds;
-    plannedText = planned.text;
+    transitionPlan = { text: planned.text, kinds: [] };
   }
-  const blendNotes: BlendNote[] = [];
-  for (const b of blends.sort((x, y) => x.index - y.index)) {
-    blendNotes.push(...blendInto(shots, b.index, { bar: b.bar, floor: b.floor(assigned[b.index].clip_id), locked: exact.has(b.index), prevLocked: exact.has(b.index - 1) }));
+  if (wanted.size) {
+    const loops = assigned.some((s) => s.loop) || !!base.loopInto;
+    const toFrames = (ms: number) => Math.floor((ms * VIDEO.fps) / 1000);
+    const fitted = fitHandles(
+      shots.map((sh, i) => {
+        const clip = byId.get(assigned[i].clip_id);
+        const total = Math.min(sh.clipDurationFrames, clip ? toFrames(clip.duration_ms) || sh.clipDurationFrames : sh.clipDurationFrames);
+        const lo = Math.min(sh.clipStartFrame, Math.max(0, toFrames(clip?.in_ms ?? 0)));
+        const hi = Math.min(total, clip?.out_ms !== undefined ? Math.max(lo + 1, toFrames(clip.out_ms)) : total);
+        return {
+          video: sh.kind !== "photo",
+          duration: sh.duration,
+          clipStartFrame: sh.clipStartFrame,
+          playbackRate: sh.playbackRate,
+          holdLastFrame: sh.holdLastFrame,
+          lo,
+          hi,
+          fixed: exact.has(i) || !!assigned[i].loop || (loops && i === 0),
+        };
+      }),
+      wanted,
+      VIDEO.fps,
+    );
+    fitted.shots.forEach((f, i) => {
+      const { dissolve: _d, tail: _t, ...rest } = shots[i];
+      shots[i] = { ...rest, clipStartFrame: f.clipStartFrame, playbackRate: f.playbackRate, ...(f.dissolve ? { dissolve: f.dissolve } : {}), ...(f.tail ? { tail: f.tail } : {}) };
+    });
+    for (const n of fitted.notes) shots[n.shot] = { ...shots[n.shot], fitNotes: [...(shots[n.shot].fitNotes ?? []), n.text] };
   }
-  if (plannedKinds) {
-    const kinds = plannedKinds;
-    transitionPlan = { text: plannedText, kinds: shots.map((_, i) => (i === 0 ? "cut" : kinds.get(i) === "dissolve" || !kinds.has(i) ? (shots[i].dissolve ? "dissolve" : "cut") : kinds.get(i)!)) };
-  }
+  if (transitionPlan) transitionPlan.kinds = shots.map((s, i) => (i === 0 ? "cut" : dips.some((d) => d.frame === s.start) ? "dip" : s.dissolve ? "dissolve" : "cut"));
   const anchors: AnchorReport | null = anchorPlan
     ? {
         uses: anchorPlan.uses.map((u) => {
@@ -390,8 +404,14 @@ export function composeProps(
     warnings,
     anchors,
     transitions: transitionPlan,
-    blendNotes,
   };
+}
+
+// An automatic dissolve: about 1.5 s (Paul's own length in Canva, 22 Nov 2026), in whole beats so it stays in time.
+export const AUTO_DISSOLVE_SECONDS = 1.5;
+export function autoDissolveFrames(barFrames: number): number {
+  const beat = barFrames / 4;
+  return Math.round(Math.max(1, Math.round((AUTO_DISSOLVE_SECONDS * VIDEO.fps) / beat)) * beat);
 }
 
 // One bar in frames: the median gap between downbeats (2 s at 120 BPM without beats).
