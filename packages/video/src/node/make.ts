@@ -566,8 +566,17 @@ export function chooseSection(
 export function isWholeStory(ws: Workspace, projectId: string, recipe: SongRecipe, instrumental: boolean): boolean {
   if (instrumental) return false;
   if (effectiveSongStyle(recipe.songStyle, (recipe.anchors ?? []).filter((a) => a.sync !== undefined).length) === "film") return true;
-  const onLines = (readShotList(ws, projectId)?.slots ?? []).some((x) => typeof x.line === "number" && x.line >= 1);
+  const onLines = (shotListOf(ws, projectId)?.slots ?? []).some((x) => typeof x.line === "number" && x.line >= 1);
   return onLines && recipe.songStyle !== "cut";
+}
+
+// The song's shot list, or null (none, or a song still in the old folder layout, which has no song folder).
+function shotListOf(ws: Workspace, projectId: string): ReturnType<typeof readShotList> {
+  try {
+    return readShotList(ws, projectId);
+  } catch {
+    return null;
+  }
 }
 
 // "3, 5-9, 12" from shot numbers.
@@ -1368,7 +1377,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   let filmShots: string[] | null = null;
   const standIns: { path: string; name: string }[] = []; // Shape names the stand-in shots by these
   if (sh.wholeStory && usesClips && !canvas) {
-    const items = filmItems(storyOrder.order, usedClips.map((c) => c.name), readShotList(ws, project.id), sh.anchors);
+    const items = filmItems(storyOrder.order, usedClips.map((c) => c.name), shotListOf(ws, project.id), sh.anchors);
     if (items.length) {
       const gridLines = lines.map((l, i) => ({ number: i + 1, text: l.text, startMs: l.start_ms - leadMs + lyricsOffsetMs, endMs: null }));
       const film = filmCuts(items, gridLines, analysis.beats, { startFrame: plan.start_frame, endFrame: plan.end_frame, fps: VIDEO.fps, songEndMs: analysis.duration_ms });
@@ -1751,7 +1760,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   );
   // 2e-1: what each video's plan is made from (its fingerprint) and which Try other looks it is.
   const keyOptions = Object.fromEntries(Object.entries(options).filter(([k, v]) => !PLAN_KEY_SKIP.has(k) && v !== undefined && v !== false && typeof v !== "function"));
-  const keyBase = { v: 3, options: keyOptions, preset, song: sh.sp.project.audio_hash ?? null, lrc: alignment.lrcHash, leadMs, lyricsOffsetMs, edits, clips: prepared.clips.map((c) => [c.name, c.hash]), anchors: sh.anchors, film: sh.wholeStory ? readShotList(ws, project.id) : null, canvas: sh.canvasChoice, board: sh.textboard.board, picture: sh.picture ?? null };
+  const keyBase = { v: 3, options: keyOptions, preset, song: sh.sp.project.audio_hash ?? null, lrc: alignment.lrcHash, leadMs, lyricsOffsetMs, edits, clips: prepared.clips.map((c) => [c.name, c.hash]), anchors: sh.anchors, film: sh.wholeStory ? shotListOf(ws, project.id) : null, canvas: sh.canvasChoice, board: sh.textboard.board, picture: sh.picture ?? null };
   const planKeyOf = (spec: VariationSpec) => createHash("sha256").update(JSON.stringify({ ...keyBase, spec })).digest("hex");
   const tryOf = (spec: VariationSpec): SbTry | null =>
     sh.picture
