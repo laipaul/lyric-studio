@@ -176,7 +176,7 @@ export function SongRange({ song, window: w, drag, platformLabel, editable, busy
         {drag ? (drag.clean ? " · ends after a sung line" : " · on the bar") : song.own ? " · chosen by you" : " · automatic"}
       </span>
       {song.own && editable && !song.locked ? (
-        <button type="button" disabled={busy} onClick={onAutomatic} className="hover:bg-accent shrink-0 rounded border px-1 py-px" data-soundtrack-auto title="Let the app choose the part of the song again (starts just before the first chorus, or at the first shot of a Mini film; ends on a finished phrase near the platform's length)">
+        <button type="button" disabled={busy} onClick={onAutomatic} className="hover:bg-accent shrink-0 rounded border px-1 py-px" data-soundtrack-auto title="Let the app choose the part of the song again (starts just before the first chorus, or at the start of the song for a Mini film; ends on a finished phrase near the platform's length)">
           Automatic
         </button>
       ) : null}

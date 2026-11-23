@@ -229,31 +229,12 @@ describe("Creation → Production", () => {
     expect(v.pictures.find((p) => p.file.startsWith("chapel_"))?.mjLink).toBe("https://www.midjourney.com/jobs/5813efa3-57ba-409f-8aa1-09b60e1b9c83?index=2");
   });
 
-  it("a Mini film's (or a shot list's) story starts at its first lyric line; Cut to the song and instrumentals: the hook (null)", () => {
+  it("a Mini film (or a song with a shot list on lines) starts its Reel at the song's start; Cut to the song and instrumentals: the hook (null)", () => {
     const recipe = readRecipe(songPathsById(ws, id).recipe!);
+    expect(storyStartOf(ws, id, { ...recipe, songStyle: "film" }, false)).toBe(0);
+    expect(storyStartOf(ws, id, { ...recipe, songStyle: undefined }, false)).toBe(0);
+    expect(storyStartOf(ws, id, { ...recipe, songStyle: "singing" }, false)).toBe(0);
     expect(storyStartOf(ws, id, { ...recipe, songStyle: "cut" }, false)).toBeNull();
-    expect(storyStartOf(ws, id, { ...recipe, songStyle: "film" }, false)).toBe(Math.min(...readShotList(ws, id)!.slots.flatMap((x) => (x.line ? [x.line] : []))));
     expect(storyStartOf(ws, id, { ...recipe, songStyle: "film" }, true)).toBeNull();
-    // A shot list on lines tells a story without the style chosen too (or with Add singing).
-    expect(storyStartOf(ws, id, { ...recipe, songStyle: undefined }, false)).toBe(1);
-    expect(storyStartOf(ws, id, { ...recipe, songStyle: "singing" }, false)).toBe(1);
-    // The story opens with an intro shot (no line): from the song's start.
-    const file = path.join(songRoot, "shotlist.json");
-    const saved = readFileSync(file, "utf8");
-    const withIntro = JSON.parse(saved);
-    withIntro.slots = [{ id: "s00", order: 0, shows: "The chapel, empty", characters: [], scene: null, shot: "wide", line: null }, ...withIntro.slots];
-    writeFileSync(file, JSON.stringify(withIntro));
-    const orderFile = path.join(songRoot, "clips.json");
-    const savedOrder = readFileSync(orderFile, "utf8");
-    // The story line decides: its first item is still the shot on line 1, so it starts there.
-    expect(storyStartOf(ws, id, { ...recipe, songStyle: "film" }, false)).toBe(1);
-    const edits = JSON.parse(savedOrder);
-    writeFileSync(orderFile, JSON.stringify({ ...edits, order: ["slot:s00", ...edits.order] }));
-    expect(storyStartOf(ws, id, { ...recipe, songStyle: "film" }, false)).toBe(0);
-    // A clip on no line first in the story line: the same.
-    writeFileSync(orderFile, JSON.stringify({ ...edits, order: ["chapel-empty.mp4", ...edits.order] }));
-    expect(storyStartOf(ws, id, { ...recipe, songStyle: "film" }, false)).toBe(0);
-    writeFileSync(orderFile, savedOrder);
-    writeFileSync(file, saved);
   });
 });
