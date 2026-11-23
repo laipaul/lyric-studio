@@ -5,6 +5,11 @@
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
 ### A Mini film is the whole song on every platform ✅ (to verify on the PC)
+- **Where am I** (same day, Paul: "then how do I know where I am?"): every stage's header now names the song style
+  next to the stage, e.g. **"Shape · Mini film · whole song · Reels v1 planned"** (or "Cut to the song", "Add singing");
+  a click opens Prepare → Song Details, where it is set. song-style.tsx SongStyleChip; song-style.e2e.ts checks it.
+  Note: storyboard.e2e.ts "the last shot is marked as the Reels loop ending" fails in the cloud; its song has no shot
+  list and no Mini film, so this change does not touch it (to look at separately).
 - Paul (23 Nov 2026): "the shots are not in order in Shape now". The Reel opened on shot 7: a Reel's automatic part of
   the song starts just before the first chorus, so shots 1-6 were before it. Then, decided by Paul: "the mini film is the
   equivalent of me wanting to create a video for the whole song … I pick the format Reel, YT, etc and I want the whole

@@ -5,6 +5,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 
 import type { TodoItem } from "@lyric/video/song-stages";
 
+import { SongStyleChip } from "@/components/song-style";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FEATURE, FeatureIcon, PlatformMark } from "@/lib/feature-icons";
@@ -352,7 +353,13 @@ export function SongStages({
               <p className="text-muted-foreground ml-auto flex flex-col items-end text-right text-xs" data-work-status={stage}>
                 {/* The stage line is the page's title: a size up from the rest (10 Nov 2026). */}
                 <span className="text-sm leading-5">
-                  <span className="text-foreground text-base leading-5 font-semibold">{current.name}</span> · <span className={TONE[status.tone]}>{status.text}</span>
+                  <span className="text-foreground text-base leading-5 font-semibold">{current.name}</span> ·{" "}
+                  {projectId ? (
+                    <>
+                      <SongStyleChip projectId={projectId} onOpen={() => setTab("details")} /> ·{" "}
+                    </>
+                  ) : null}
+                  <span className={TONE[status.tone]}>{status.text}</span>
                 </span>
                 {SAVED_AT_ONCE.includes(stage) ? <span data-saved-at-once>Every change is saved for this song at once.</span> : null}
               </p>

@@ -86,6 +86,12 @@ async function main() {
     await page.goto(`${base}/songs/${sp.project.id}?tab=production`);
     await page.waitForSelector("[data-story-tools][open]", { timeout: 15_000 }).catch(() => null);
     check((await page.$("[data-story-tools][open]")) !== null, "Mini film: Creation's story tools are open");
+    // Where am I (23 Nov 2026): the stage header names the song style; a click opens Song Details.
+    const chip = ((await page.textContent("[data-work-status] [data-song-style-chip=film]")) ?? "").trim();
+    check(chip.includes("Mini film") && chip.includes("whole song"), `the stage header says Mini film · whole song (${chip})`);
+    await page.click("[data-work-status] [data-song-style-chip]");
+    await page.waitForSelector("[data-song-style=film]");
+    check(true, "clicking it opens Song Details");
     await page.goto(`${base}/`);
     await page.waitForSelector("[data-song-style-badge]");
     check((await page.getAttribute("[data-song-style-badge]", "data-song-style-badge")) === "film" && ((await page.textContent("[data-song-style-badge]")) ?? "").includes("Mini film"), "the Library card says Mini film");

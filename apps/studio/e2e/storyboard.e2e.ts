@@ -107,7 +107,7 @@ async function main() {
     const chip = await (await page.$("[data-song-header] [data-analysis-chip]"))?.boundingBox();
     check(!!chip && chip.y + chip.height <= fit9.v!.y && !(await page.$("[data-next-make]")) && !(await page.$("[data-verdict]:not([data-analysis-chip])")), "the Analysis chip in the song header; no verdict badge or Next: Make on the page");
     const shapeLine = (await page.textContent("[data-work-status=shape]")) ?? "";
-    check(/^Shape · Reels v\d+ planned/.test(shapeLine) && shapeLine.includes("Every change is saved for this song at once."), `N1 polish: the same stage line as every stage (${shapeLine})`);
+    check(/^Shape ·\s+(Cut to the song|Add singing|Mini film\s*· whole song) · Reels v\d+ planned/.test(shapeLine) && shapeLine.includes("Every change is saved for this song at once."), `N1 polish: the same stage line as every stage (${shapeLine})`);
     check(!(await page.isVisible("[data-analysis-panel]")), "the analysis stays closed until the chip is clicked");
     await page.setViewportSize({ width: 1366, height: 768 });
     await sleep(400);
