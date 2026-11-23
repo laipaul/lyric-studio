@@ -4,6 +4,41 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Singing takes: Retake, compare, choose; resolution; mood hint; two fixes; running badge ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "InfiniteTalk takes vary a lot in articulation. I make several takes per sung group and pick the
+  best. Today a new take of the same lines can land on its line by itself and replace the one in use."
+- **Retake** (Lyrics Sync → Who sings, next to "singing clip on lines X–Y"): the same group again as a new take (same
+  picture or video, same piece of the vocal, the mood text and resolution of now; cost against the cap). Earlier
+  takes are never deleted or replaced.
+- **No silent replacement:** the first take of a group still goes into the Storyboard and onto its lines by itself. A
+  later take of the same lines arrives as **"New — compare"** and stays out of the Storyboard until chosen. **"Use this
+  take"** switches the lines at once (nothing is made or rendered again; the take it replaces goes to Omit, the chosen
+  one comes out of Omit). A take of other lines (e.g. line 9 alone before the block 9–11) still gives way to the block's
+  first take, as before. A new mood text or resolution no longer marks a group "to make": Retake is how they are tried.
+- **Compare in place:** under each group, every take (Take N, or its short name) with ▶, date, cost, resolution and
+  In use / New — compare. ▶ plays the take with the song from the take's first frame (the group's start), kept in step,
+  in a small player at the bottom right; watching a "New — compare" take takes the mark off. The Creation picture card
+  shows the same labels; for a singing take "Use this take" replaces "Send to Storyboard" (out of its line its lips
+  would be out of time).
+- **Resolution:** Singer bar → Resolution 480p ($0.03/s) / 720p ($0.06/s), default 720p, saved per video in
+  pictures\singer.json; the cost estimate says "… s of voice at 720p"; every take records and shows its resolution.
+  Checked in code: **until now every singing clip was sent to WaveSpeed InfiniteTalk at 720p** (a fixed
+  `resolution: "720p"` in node/singer.ts, both the picture and the video model; seed −1, so every take differs).
+- **Mood box:** the hint under it: "Describe the face and mouth, not the voice — e.g. singing clearly, precise lip
+  shapes, gentle head sway." (it is InfiniteTalk's prompt, after the singing cue).
+- **Fix: "N lines to check by ear" did not update** when a line was marked Checked by ear. The banner is built by the
+  page on the server and was never read again; the page now refreshes it after Checked by ear and after Save.
+- **Fix: "to make: N take(s)" did not update after sending.** Typing a mood and pressing Make right away sent the take
+  with the old words while the new words were saved, so the group looked unmade. Make and Retake now wait for the mood
+  to be saved, and the count no longer depends on the mood text.
+- **Running badge:** a spinner and a count on the Creation and Lyrics Sync tabs while singing clips are being made
+  (from the Tasks menu's own list, no extra polling); a click opens Tasks. The Singer bar says "N being made".
+- Tests: vitest animate (+8: resolution price and request, first take placed, later take New — compare and not
+  placed, seen, Use this take and back, unfinished take refused, facts). Browser: singer (+12: banner refresh, mood
+  hint, resolution, Retake with the mood from the box, take in use kept, New — compare, all made, facts, ▶ with the
+  song, Use this take, Creation labels), lyrics-tab, pictures, production, song-stages pass. The other vitest failures
+  in the cloud (renders reaching remotion.media, audio analysis) are the same without this step.
+
 ### Wardrobe: one face, many looks ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "other apps added the full wardrobe with different looks", "go". On a character card, the
   pack is the main look; "Add look" (e.g. Travel coat) with its own outfit, full body front and back and an optional

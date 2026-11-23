@@ -20,6 +20,7 @@ import { shotLooks } from "../src/node/shot-looks";
 import { addLook, LOOKS_DIR } from "../src/node/characters/looks";
 import { cardRoot, listCards } from "../src/node/characters/cards";
 import { songStory } from "../src/node/story-line";
+import { storyStartOf } from "../src/node/make";
 import { folderClips, songClipsCollection } from "../src/node/assets";
 import { LYRICS, ffmpeg, makeClip, makeSong } from "./media-helpers";
 
@@ -226,5 +227,15 @@ describe("Creation → Production", () => {
     const v = await picturesView(ws, id);
     expect(v.pictures.find((p) => p.file === "s03 close on her.png")?.slot).toBe("s03");
     expect(v.pictures.find((p) => p.file.startsWith("chapel_"))?.mjLink).toBe("https://www.midjourney.com/jobs/5813efa3-57ba-409f-8aa1-09b60e1b9c83?index=2");
+  });
+
+  it("a Mini film's (or a shot list's) story starts at its first lyric line; Cut to the song and instrumentals: the hook (null)", () => {
+    const recipe = readRecipe(songPathsById(ws, id).recipe!);
+    expect(storyStartOf(ws, id, { ...recipe, songStyle: "cut" }, false)).toBeNull();
+    expect(storyStartOf(ws, id, { ...recipe, songStyle: "film" }, false)).toBe(Math.min(...readShotList(ws, id)!.slots.flatMap((x) => (x.line ? [x.line] : []))));
+    expect(storyStartOf(ws, id, { ...recipe, songStyle: "film" }, true)).toBeNull();
+    // A shot list on lines tells a story without the style chosen too (or with Add singing).
+    expect(storyStartOf(ws, id, { ...recipe, songStyle: undefined }, false)).toBe(1);
+    expect(storyStartOf(ws, id, { ...recipe, songStyle: "singing" }, false)).toBe(1);
   });
 });

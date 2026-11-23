@@ -56,6 +56,8 @@ import { chooseEnding, endDimSeconds, type Ending, type EndingChoice } from "../
 import { choosePace, songFeel, type Pace } from "../pace";
 import type { TransitionStyle } from "../transitions";
 import { anchorsInside, type AnchorSpec, type GapOrder, type ResolvedAnchor } from "../anchors";
+import { effectiveSongStyle } from "../song-style";
+import { readShotList } from "./shotlist";
 import type { AnchorReport, AnchorTransitions } from "../compose";
 import { RECENT_WINDOW, type ClipOrder } from "../shots";
 import { lyricCardStyle } from "../textboard";
@@ -66,7 +68,7 @@ import { artistBrandFile } from "./captions";
 import { readProjectSettings, rememberCollection, rememberedCollection, updateProjectSettings } from "./project-settings";
 import { PLATFORM_FIELDS, type PlatformField } from "./per-platform";
 import { pickedLinks, type SongLink } from "../song-links";
-import { artistRecipe, LIBRARY_RECIPE, readRecipe, recipeSummary, recipeText, resolveRecipe, runRecipe, videoCount, writeRecipe, type RecipeField, type RecipeInput, type RecipeValues, type ResolvedRecipe } from "./recipe";
+import { artistRecipe, LIBRARY_RECIPE, readRecipe, recipeSummary, recipeText, resolveRecipe, runRecipe, videoCount, writeRecipe, type RecipeField, type RecipeInput, type RecipeValues, type ResolvedRecipe, type SongRecipe } from "./recipe";
 import { renameSongFolder, songPathsById, STORY_FILE } from "./song-folder";
 import { ensureSongTheme, loadTheme, themeLayer } from "./themes";
 import { barStarts, rmsLevel, strongestStretch } from "../story";
@@ -515,6 +517,7 @@ function chooseSection(
   kept?: (startMs: number, endMs: number) => { kept: number; total: number; missing: number[] }, // story anchors: the end that keeps most
   titleLead = false, // the title opening: up to 2 bars before the hook
   musicStartMs?: number, // an instrumental: the strongest stretch of the music
+  storyStartLine?: number, // a Mini film: from the story's first shot, not the hook
 ): SectionChoiceOut {
   if (mode === "auto" && preset?.length.mode === "full") mode = "full";
   if (mode === "auto") {
@@ -528,6 +531,7 @@ function chooseSection(
       anchorMode: preset?.anchor ?? "lead-in",
       ...(titleLead ? { titleLead: true } : {}),
       ...(musicStartMs !== undefined ? { musicStartMs } : {}),
+      ...(storyStartLine !== undefined ? { storyStartLine } : {}),
       endOn: preset?.endOn ?? "bar",
       ...(fit ? { loopFit: fit } : {}),
       ...(kept ? { anchorsKept: kept } : {}),
@@ -546,6 +550,18 @@ function chooseSection(
   if (requested.end_ms - start < 1000) throw new Error("The section is shorter than 1 second.");
   const cuts = sectionCuts(lines, start, requested.end_ms).filter((c) => !(mode === "full" && c.at === "end" && requested.end_ms >= durationMs));
   return { mode, start_ms: start, end_ms: requested.end_ms, requested, reason, warnings: cuts.map((c) => `The section ${c.at} (${clockText(c.time_ms)}) cuts line ${c.line} "${c.text}" while it is sung.`), cuts };
+}
+
+// A Mini film, or a song with a shot list not set to "Cut to the song" (23 Nov 2026): its story starts at the first shot of its shot list on a lyric line (else its first story
+// anchor). The automatic part of a Reel / TikTok / Short starts there instead of at the hook. Other songs: null.
+export function storyStartOf(ws: Workspace, projectId: string, recipe: SongRecipe, instrumental: boolean): number | null {
+  if (instrumental) return null;
+  const slotLines = (readShotList(ws, projectId)?.slots ?? []).flatMap((x) => (typeof x.line === "number" && x.line >= 1 ? [x.line] : []));
+  const film = effectiveSongStyle(recipe.songStyle, (recipe.anchors ?? []).filter((a) => a.sync !== undefined).length) === "film";
+  // A shot list on lyric lines tells a story too, unless the song is set to "Cut to the song".
+  if (!film && !(slotLines.length && recipe.songStyle !== "cut")) return null;
+  const lines = slotLines.length ? slotLines : (recipe.anchors ?? []).map((a) => a.line);
+  return lines.length ? Math.min(...lines) : null;
 }
 
 export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
@@ -849,6 +865,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       sectionLines, instrumental, collection, collectionNames: runCollections, collectionRemembered, ep, tool, rootDir, getProject: () => project,
       loopAudio: () => (songAudio ??= readLoopAudio(sp.songFile)),
       anchors: songRecipe.anchors ?? [],
+      storyStartLine: storyStartOf(ws, sp.project.id, songRecipe, instrumental),
       canvasChoice: songRecipe.canvas ?? null,
       youtubeLinks: pickedLinks(songRecipe.links ?? [], songRecipe.postLinks, "youtube"),
       gapOrder: songRecipe.gapOrder ?? null,
@@ -937,6 +954,7 @@ type Shared = {
   getProject: () => { id: string; title: string; artist: string };
   loopAudio: () => Promise<LoopAudio | null>; // the song decoded once per run, for the loop checks
   anchors: AnchorSpec[]; // song.json: story anchors
+  storyStartLine: number | null; // a Mini film: the lyric line of its first shot (the automatic short-form part starts there)
   canvasChoice: { clip: string; at?: number } | null; // song.json "canvas": the clip chosen for the Canvas
   youtubeLinks: SongLink[]; // song.json "links" picked for YouTube (publish.txt)
   gapOrder: GapOrder | null; // song.json (null: story with anchors, else v1 story and the others shuffled)
@@ -1189,7 +1207,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     : chooseSection(options.section ?? "auto", sh.sectionLines, analysis.beats, analysis.duration_ms, leadMs - lyricsOffsetMs, preset,
       loops ? (startMs, endMs) => loopFit(loopSong, analysis.bpm, startMs, endMs, downbeatTimes) : undefined,
       anchorLines.length && preset.lyrics ? (startMs, endMs) => anchorsInside(anchorLines, startMs, endMs) : undefined,
-      titleOpeningOn, musicStart);
+      titleOpeningOn, musicStart, sh.storyStartLine ?? undefined);
   // Automatic ending (Reels, TikTok, Shorts; src/ending.ts): a tight loop only when the end flows back into
   // the start, else a soft fade after the last sung word, or the last chord ringing out one more bar.
   const loopLines = sh.sectionLines.map((l, i) => ({ number: numbers[i] || i + 1, text: l.text, sungStartMs: sungStart(l), sungEndMs: sungEnd(l), ...(l.words?.length ? { lastWordStartMs: l.words.at(-1)!.start_ms } : {}) }));

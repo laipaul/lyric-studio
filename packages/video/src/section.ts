@@ -53,6 +53,9 @@ export type AutoSectionOptions = {
   // Instrumentals: no line to start on; the section starts on this bar (the strongest stretch of the
   // music, src/story.ts), moved back to the bar before a story sentence it would cut.
   musicStartMs?: number;
+  // A Mini film (23 Nov 2026, Paul: "the shots are not in order in Shape now"): its shots tell a story line by line,
+  // so the part starts one bar before the story's first shot (its lyric line, 1-based), not at the hook.
+  storyStartLine?: number;
   endOn?: "bar" | "beat"; // beat: when no bar is clean, any beat may end the section (bars still preferred)
   // Loop platforms: how well an end flows back into the start (lower score flows better).
   loopFit?: (startMs: number, endMs: number) => { score: number; ok: boolean; text: string };
@@ -63,7 +66,7 @@ export type AutoSectionOptions = {
 export type SectionChoice = {
   start_ms: number;
   end_ms: number;
-  anchor: { kind: "hook" | "repeat" | "first-line" | "music" | "none"; line: number | null }; // line: 1-based
+  anchor: { kind: "hook" | "repeat" | "first-line" | "story" | "music" | "none"; line: number | null }; // line: 1-based
   endKind: "chorus-line" | "line" | "shorter" | "instrumental" | "extended" | "song-end" | "cuts-line";
   cuts: SectionCut[]; // sung lines cut at the start or the end (empty when both are clean)
   reason: string;
@@ -155,7 +158,8 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
   const shortestMs = options.shortestMs ?? minMs;
   const leadMs = options.leadMs ?? 250;
   const duration = options.durationMs;
-  const hookFirst = options.anchorMode === "hook-first";
+  const story = options.musicStartMs === undefined && options.storyStartLine !== undefined && !!lines[options.storyStartLine - 1] ? options.storyStartLine : null;
+  const hookFirst = options.anchorMode === "hook-first" && story === null;
   const warnings: string[] = [];
 
   const downbeats = beats.filter((b) => b.is_downbeat).map((b) => b.time_ms).sort((a, b) => a - b);
@@ -196,6 +200,12 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
       anchor = { kind: "none", line: null };
       anchorText = "the first bar (no lyrics)";
     }
+  }
+
+  // A Mini film: from the story's first shot (the chorus lines above still decide the ending).
+  if (story !== null) {
+    anchor = { kind: "story", line: story };
+    anchorText = `one bar before the story's first shot (line ${story}, "${lines[story - 1].text}"): a Mini film tells its story in order`;
   }
 
   // Which line (if any) is being sung at `t`: after its first word starts and before its last word ends.

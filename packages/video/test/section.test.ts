@@ -200,5 +200,19 @@ describe("auto section", () => {
     expect(s.endKind).toBe("extended");
     expect(s.reason).toContain('line 20 "You’re gone, but still — you’re here with me."');
   });
-});
 
+  it("a Mini film starts one bar before its story's first shot, not at the hook (23 Nov 2026)", () => {
+    const ls = songWithHooks(1200);
+    const hook = autoSection(ls, beats, { durationMs, anchorMode: "hook-first" });
+    expect(hook.anchor.kind).toBe("hook");
+    const film = autoSection(ls, beats, { durationMs, anchorMode: "hook-first", storyStartLine: 3 });
+    expect(film.anchor).toEqual({ kind: "story", line: 3 });
+    // Line 3 appears at 8.25 s (8.5 s - lead): one bar before it, 6 s.
+    expect(film.start_ms).toBe(6_000);
+    expect(film.reason).toContain("the story's first shot (line 3");
+    // Shot 1 on line 1 (sung at 0.5 s): from the song's start.
+    expect(autoSection(ls, beats, { durationMs, anchorMode: "hook-first", storyStartLine: 1 }).start_ms).toBe(0);
+    // A line that does not exist: the hook as usual.
+    expect(autoSection(ls, beats, { durationMs, anchorMode: "hook-first", storyStartLine: 99 }).anchor.kind).toBe("hook");
+  });
+});
