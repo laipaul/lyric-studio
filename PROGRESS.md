@@ -79,6 +79,12 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   the prompt keeps only the part of an outfit the framing shows (shot-prompt.ts outfitFor): detail = sleeves, cuffs,
   gloves, rings, bracelets, watch, bouquet; close-up = no skirt, train, trousers or shoes; medium / wide / motion =
   all of it. The action stays first. vitest shot-prompt (+2).
+- 23 Nov 2026 (Paul: "the pictures and videos from MJ are still the best"; both asked for): **Open in Midjourney ↗**
+  on every picture or video whose name holds a Midjourney job id (animate.ts midjourneyLink:
+  midjourney.com/jobs/<id>?index=<n>). **Bulk drop by shot**: files dropped anywhere in Creation whose name starts with
+  their shot ("s05 …", "S05_", "s5", "shot 5 …", "Shot1Chapel…") land on that shot (shot-production.ts
+  shotForFileName / placeByName); others stay loose; dropping on a shot still wins; the notice says where each went.
+  Tests: shot-production (14), creation-production (+2 checks), pictures.e2e passes.
 - Part 2 (next): cost so far / to go.
 - Code: node/shot-production.ts (productionView, setPictureShot, useForShot, sectionsOfShots), shotlist.ts (filled),
   animate.ts (pictures.json "slot"), API /api/songs/<id>/pictures (production, slot, shot, use-shot),

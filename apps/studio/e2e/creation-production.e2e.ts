@@ -70,6 +70,11 @@ async function main() {
   );
   const pic = path.join(root, "s02 walk in.png");
   ffmpeg("-f", "lavfi", "-i", "color=c=pink:s=540x960", "-frames:v", "1", pic);
+  // Bulk drop by shot: named after shot 3; and a Midjourney download (its job id in the name).
+  const byName = path.join(root, "s03 smile.png");
+  ffmpeg("-f", "lavfi", "-i", "color=c=0x445566:s=540x960", "-frames:v", "1", byName);
+  const mj = path.join(root, "lifelyrics_bride_5813efa3-57ba-409f-8aa1-09b60e1b9c83_1.png");
+  ffmpeg("-f", "lavfi", "-i", "color=c=0x665544:s=540x960", "-frames:v", "1", mj);
 
   const server = spawn(process.execPath, [path.join(path.dirname(require.resolve("next/package.json")), "dist", "bin", "next"), "start", "-p", String(port), "-H", "127.0.0.1"], {
     cwd: path.resolve(__dirname, ".."),
@@ -164,6 +169,13 @@ async function main() {
     await page.click("[data-picture-restore]");
     await page.waitForFunction(() => !document.querySelector("[data-pictures-removed]"), null, { timeout: 15_000 });
     check(!!(await page.$("[data-loose-heading] ~ div [data-picture]")), "Restore brings it back");
+
+    // Dropped in the loose area: the file named after shot 3 lands on shot 3, the Midjourney one stays loose with its link.
+    await page.setInputFiles("[data-pictures-input]", [byName, mj]);
+    await page.waitForSelector("[data-shot=s03] [data-picture='s03 smile.png']", { timeout: 20_000 });
+    const placedNotice = (await page.textContent("[data-pictures-notice]")) ?? "";
+    check(placedNotice.includes("s03 smile.png → shot 3") && placedNotice.includes("1 loose"), `a file named after its shot lands on it (${placedNotice.trim()})`);
+    check((await page.getAttribute(`[data-picture-mj='${path.basename(mj)}']`, "href")) === "https://www.midjourney.com/jobs/5813efa3-57ba-409f-8aa1-09b60e1b9c83?index=1", "a Midjourney download links to its original");
 
     // The look per shot (23 Nov 2026): shot 3's Bride in Autumn City; the prompt follows.
     await page.selectOption("[data-shot-look='s03-Bride']", "Autumn City");

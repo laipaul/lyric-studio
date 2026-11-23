@@ -13,7 +13,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { findOrCreateSongProject, readClipEdits, readRecipe, songPathsById } from "../src/node";
 import { addPictures, picturesView, removePicture, restorePicture } from "../src/node/animate";
 import { createCard } from "../src/node/characters/cards";
-import { productionView, sectionsOfShots, setPictureShot, useForShot, withLineStarts } from "../src/node/shot-production";
+import { placeByName, productionView, sectionsOfShots, setPictureShot, shotForFileName, useForShot, withLineStarts } from "../src/node/shot-production";
+import { midjourneyLink } from "../src/node/animate";
 import { importShotList, readShotList, removeSlots, setShotLook, slotKey } from "../src/node/shotlist";
 import { shotLooks } from "../src/node/shot-looks";
 import { addLook, LOOKS_DIR } from "../src/node/characters/looks";
@@ -82,6 +83,20 @@ describe("withLineStarts (Compare plays the song from the shot's line)", () => {
   it("a shot on a timed line gets its start; a music-only shot or an untimed line gets null", () => {
     const view = { sections: [], shots: [{ line: 1 }, { line: null }, { line: 4 }] } as unknown as Parameters<typeof withLineStarts>[0];
     expect(withLineStarts(view, [{ number: 1, startMs: 15100 }, { number: 4, startMs: null }]).shots.map((s) => s.lineStartMs)).toEqual([15100, null, null]);
+  });
+});
+
+describe("file names (23 Nov 2026): Open in Midjourney, and bulk drop by shot", () => {
+  it("a Midjourney download links to its job and image", () => {
+    expect(midjourneyLink("lifelyrics_Ultra-realistic_bridal_5813efa3-57ba-409f-8aa1-09b60e1b9c83_1.mp4")).toBe("https://www.midjourney.com/jobs/5813efa3-57ba-409f-8aa1-09b60e1b9c83?index=1");
+    expect(midjourneyLink("x_5813EFA3-57BA-409F-8AA1-09B60E1B9C83.png")).toBe("https://www.midjourney.com/jobs/5813efa3-57ba-409f-8aa1-09b60e1b9c83");
+    expect(midjourneyLink("x_5813efa3-57ba-409f-8aa1-09b60e1b9c83_0 (2).png")).toBe("https://www.midjourney.com/jobs/5813efa3-57ba-409f-8aa1-09b60e1b9c83?index=0");
+    expect(midjourneyLink("Shot1Chapel.png")).toBeNull();
+  });
+  it("a file named after its shot: s05, S05_, s5, shot 5, Shot1Chapel; others stay loose", () => {
+    const shots = Array.from({ length: 12 }, (_, i) => ({ id: `s${String(i + 1).padStart(2, "0")}`, number: i + 1 }));
+    expect(["s05 bride veil.png", "S05_bride.png", "s5.png", "shot 5 veil.jpg", "Shot-05.mp4", "Shot1Chapel.png", "s12.png"].map((n) => shotForFileName(n, shots))).toEqual(["s05", "s05", "s05", "s05", "s05", "s01", "s12"]);
+    expect(["sunset.png", "summer2024.png", "lifelyrics_x.png", "s99.png", "shots.png", "s051.png"].map((n) => shotForFileName(n, shots))).toEqual([null, null, null, null, null, null]);
   });
 });
 
@@ -200,5 +215,16 @@ describe("Creation → Production", () => {
     const check = await importShotList(ws, id, { slots: [{ ...list.slots[1], looks: { bride: "AUTUMN CITY" } }, { ...list.slots[2], looks: { Bride: "Gala", Nobody: "x" } }] }, "shots.json");
     expect(readShotList(ws, id)?.slots.find((x) => x.id === "s02")?.looks).toEqual({ Bride: "Autumn City" });
     expect(check.problems.map((p) => p.text).join(" | ")).toMatch(/no look "Gala".*\| .*Nobody, who is not among/);
+  });
+
+  it("placeByName: the files just added named after a shot belong to it", async () => {
+    const pic = path.join(root, "s03-new.png");
+    ffmpeg("-f", "lavfi", "-i", "color=c=0x334455:s=60x80", "-frames:v", "1", pic);
+    makeClip(path.join(root, "mj.mp4"), 1, "purple");
+    await addPictures(ws, id, [{ file: pic, name: "s03 close on her.png" }, { file: path.join(root, "mj.mp4"), name: "chapel_5813efa3-57ba-409f-8aa1-09b60e1b9c83_2.mp4" }]);
+    expect(placeByName(ws, id, ["s03 close on her.png", "chapel_5813efa3-57ba-409f-8aa1-09b60e1b9c83_2.mp4"])).toEqual({ "s03 close on her.png": 2 }); // slot s03 is the 2nd shot of the list imported just before (s02, s03)
+    const v = await picturesView(ws, id);
+    expect(v.pictures.find((p) => p.file === "s03 close on her.png")?.slot).toBe("s03");
+    expect(v.pictures.find((p) => p.file.startsWith("chapel_"))?.mjLink).toBe("https://www.midjourney.com/jobs/5813efa3-57ba-409f-8aa1-09b60e1b9c83?index=2");
   });
 });

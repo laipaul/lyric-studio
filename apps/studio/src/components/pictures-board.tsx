@@ -76,9 +76,13 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
     return () => clearInterval(t);
   }, [running, load]);
 
-  function added(d: { added?: string[]; skipped?: { name: string; reason: string }[] }) {
+  function added(d: { added?: string[]; skipped?: { name: string; reason: string }[]; placed?: Record<string, number> }) {
     const skipped = d.skipped?.length ? ` Skipped: ${d.skipped.map((s) => `${s.name} (${s.reason})`).join(", ")}.` : "";
-    setNotice({ ok: !!d.added?.length, text: `${d.added?.length ?? 0} file${d.added?.length === 1 ? "" : "s"} added.${skipped}` });
+    // Bulk drop by shot: where each file named after a shot went, and how many stay loose.
+    const placed = Object.entries(d.placed ?? {});
+    const loose = (d.added?.length ?? 0) - placed.length;
+    const where = placed.length ? ` ${placed.map(([f, n]) => `${f} → shot ${n}`).join(", ")}${loose > 0 ? `; ${loose} loose` : ""}.` : "";
+    setNotice({ ok: !!d.added?.length, text: `${d.added?.length ?? 0} file${d.added?.length === 1 ? "" : "s"} added.${where}${skipped}` });
   }
   const [frames, setFrames] = useState(false);
   const [people, setPeople] = useState(false);
@@ -91,7 +95,7 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
       for (const f of list) form.append("pictures", f);
       if (slot) form.append("slot", slot);
       const r = await api(`/api/songs/${projectId}/pictures`, { method: "POST", body: form });
-      const d = (await r.json()) as { added?: string[]; skipped?: { name: string; reason: string }[]; error?: string };
+      const d = (await r.json()) as { added?: string[]; skipped?: { name: string; reason: string }[]; placed?: Record<string, number>; error?: string };
       if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
       added(d);
       await load();
@@ -909,6 +913,12 @@ function PictureTile({
           {p.source}
           {video ? " · video" : ""}
         </span>
+        {p.mjLink ? (
+          // The original on midjourney.com (its job id is in the file's name): vary, upscale or animate it again there.
+          <a data-picture-mj={p.file} href={p.mjLink} target="_blank" rel="noreferrer" className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white hover:bg-black/80" title="Open the original in Midjourney">
+            Open in Midjourney ↗
+          </a>
+        ) : null}
         {/* ✕ (23 Nov 2026): on a shot, the picture goes back to the loose pictures; a loose picture is put aside (Restore below). */}
         <button
           type="button"

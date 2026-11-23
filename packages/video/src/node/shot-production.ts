@@ -149,6 +149,35 @@ export function withLineStarts(view: ProductionView, timed: readonly { number: n
   return { ...view, shots: view.shots.map((s) => ({ ...s, lineStartMs: s.line !== null ? (timed?.find((l) => l.number === s.line)?.startMs ?? null) : null })) };
 }
 
+// Bulk drop by shot (23 Nov 2026): a file named after its shot lands on it: "s05 …" / "S05_…" (a slot id, also without
+// the leading zero) or "shot 5 …" / "Shot1Chapel…" (the shot's number). Null: no shot in the name. Pure.
+export function shotForFileName(name: string, shots: readonly { id: string; number: number }[]): string | null {
+  const base = name.replace(/\.[^.]+$/, "").trim();
+  const byShot = /^shot[\s_-]*0*(\d{1,3})(?!\d)/i.exec(base);
+  if (byShot) return shots.find((s) => s.number === Number(byShot[1]))?.id ?? null;
+  const bySlot = /^s[\s_-]?0*(\d{1,3})(?!\d)/i.exec(base);
+  if (bySlot) {
+    const n = Number(bySlot[1]);
+    return shots.find((s) => s.id.toLowerCase() === `s${String(n).padStart(2, "0")}` || s.id.toLowerCase() === `s${n}`)?.id ?? shots.find((s) => s.number === n)?.id ?? null;
+  }
+  return null;
+}
+
+// The files just added: each one named after a shot belongs to it. Returns file -> shot number.
+export function placeByName(ws: Workspace, projectId: string, files: readonly string[]): Record<string, number> {
+  const list = readShotListFile(shotListFile(ws, projectId));
+  if (!list?.slots.length) return {};
+  const shots = [...list.slots].sort((a, b) => a.order - b.order).map((s, i) => ({ id: s.id, number: i + 1 }));
+  const placed: Record<string, number> = {};
+  for (const f of files) {
+    const id = shotForFileName(f, shots);
+    if (!id) continue;
+    setPictureShot(ws, projectId, f, id);
+    placed[f] = shots.find((s) => s.id === id)!.number;
+  }
+  return placed;
+}
+
 // A Creation picture belongs to a shot (or to none: null).
 export function setPictureShot(ws: Workspace, projectId: string, file: unknown, slot: unknown): string | null {
   const name = path.basename(String(file ?? ""));

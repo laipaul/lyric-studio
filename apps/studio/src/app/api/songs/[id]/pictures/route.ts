@@ -19,7 +19,7 @@ import { randomUUID } from "node:crypto";
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import { addFromLink, addPictures, picturesView, removePicture, removeTakes, restorePicture, restoreTake, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, startAnimate, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
 import { runSinging, withSongStarts } from "@lyric/video/singer";
-import { productionView, setPictureShot, useForShot, withLineStarts } from "@lyric/video/shot-production";
+import { placeByName, productionView, setPictureShot, useForShot, withLineStarts } from "@lyric/video/shot-production";
 import { timedLines } from "@lyric/video/production";
 import { setShotLook } from "@lyric/video/shotlist";
 import { connection } from "next/server";
@@ -75,8 +75,18 @@ export async function POST(request: Request, { params }: Params) {
         return Response.json(
           await withWorkspaceAsync(async (ws) => {
             const r = await addPictures(ws, id, saved);
-            if (typeof slot === "string" && slot) for (const f of r.added) setPictureShot(ws, id, f, slot);
-            return r;
+            // Dropped on a shot: they belong to it. Dropped anywhere else: a file named after its shot goes to that shot.
+            if (typeof slot === "string" && slot) {
+              for (const f of r.added) setPictureShot(ws, id, f, slot);
+              return r;
+            }
+            let placed: Record<string, number> = {};
+            try {
+              placed = placeByName(ws, id, r.added);
+            } catch {
+              // a song without a folder yet: nothing to place
+            }
+            return { ...r, placed };
           }),
         );
       } finally {
