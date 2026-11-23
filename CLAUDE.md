@@ -24,6 +24,16 @@ Screens: **Library** (start page), **Song page** (four numbered stages, each wit
   (e.g. "a clip of at least 9 s for the Canvas"), never which technical knob to turn.
 - Every new feature and fix is checked against this: if it hands the user a technical decision, rethink it.
 
+## The app's purpose — never forget (decided by the user, 23 Nov 2026)
+- Lyric Studio does NOT compete with Higgsfield, Midjourney, WaveSpeed or any generation platform. It is the ONE place
+  where all of Paul's assets come together and are managed: songs, lyrics, characters and looks, scene cards, Film
+  looks, pictures and clips from anywhere (Midjourney, Higgsfield, WaveSpeed, his own), story bibles and shot lists
+  (often written in Claude chats), takes, videos and posts, instead of being dispersed across several platforms.
+- So: bringing assets IN from any platform and keeping them organised (where each came from, which prompt and look made
+  it, which song and shot uses it, what it cost) comes before generating inside the app. Generation features are
+  conveniences that send work to those platforms and file the result here; never a reason to rebuild what they do.
+- Every new feature is checked against this: does it help gather, find, connect or reuse Paul's assets in one place?
+
 ## Out of scope — never build these
 Payments, credits, user accounts, login, multi-user, cloud hosting, cloud rendering, social posting, analytics.
 
