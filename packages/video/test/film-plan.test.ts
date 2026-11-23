@@ -18,16 +18,26 @@ const slot = (id: string, order: number, line: number | null): Slot => ({ id, or
 describe("the film's shots (pure)", () => {
   const list = { imported_at: "", source: "", slots: [slot("s01", 1, null), slot("s02", 2, 1), slot("s03", 3, null), slot("s04", 4, 3), slot("s05", 5, 4)], filled: { s02: "a.mp4", s04: "c.mp4" } };
 
-  it("the story line as shots: taken shots by their clip, planned ones as stand-ins, other clips after; each once", () => {
+  it("the story line as shots: a planned shot is one card (its take, else a stand-in), other clips their own, each once", () => {
     const items = filmItems(["slot:s01", "a.mp4", "slot:s03", "c.mp4", "slot:s05", "A.MP4"], ["a.mp4", "b.mp4", "c.mp4"], list, [{ line: 2, clip: "b.mp4" }]);
     expect(items.map((x) => [x.key, x.clip, x.line])).toEqual([
       ["slot:s01", null, null],
-      ["a.mp4", "a.mp4", 1],
+      ["slot:s02", "a.mp4", 1],
       ["slot:s03", null, null],
-      ["c.mp4", "c.mp4", 3],
+      ["slot:s04", "c.mp4", 3],
       ["slot:s05", null, 4],
       ["b.mp4", "b.mp4", 2], // never placed in the order: at the end, its anchor's line
     ]);
+  });
+
+  it("the two films: each shot's vertical take in the Film 9:16, its landscape take in the Film 16:9, else a stand-in", () => {
+    const both = { ...list, filledWide: { s02: "a-wide.mp4", s03: "s03-wide.mp4" } };
+    const order = ["slot:s01", "a.mp4", "slot:s03", "c.mp4", "slot:s05"];
+    const tall = filmItems(order, ["a.mp4", "c.mp4"], both, []);
+    const wide = filmItems(order, ["a-wide.mp4", "s03-wide.mp4"], both, []);
+    expect(tall.map((x) => x.clip)).toEqual([null, "a.mp4", null, "c.mp4", null]);
+    expect(wide.map((x) => x.clip)).toEqual([null, "a-wide.mp4", "s03-wide.mp4", null, null]);
+    expect(wide.map((x) => x.key)).toEqual(tall.map((x) => x.key)); // the same cards, the same timing
   });
 
   it("cuts on the beat at or just before each line; shots without a line share the time before the next", () => {
@@ -47,7 +57,7 @@ describe("the film's shots (pure)", () => {
     const items = filmItems(["slot:s01", "a.mp4", "slot:s03", "c.mp4", "slot:s05"], ["a.mp4", "c.mp4"], list, []);
     // The part 7.0-13.0 s (frames 210-390): s03 (6.1-10.1 s) is playing at its start, then c.mp4 on line 3 (10.1 s).
     const part = filmCuts(items, lines, beats, { startFrame: 210, endFrame: 390, fps: 30, songEndMs: 20_000 });
-    expect(part.kept.map((x) => x.key)).toEqual(["slot:s03", "c.mp4"]);
+    expect(part.kept.map((x) => x.key)).toEqual(["slot:s03", "slot:s04"]);
     expect(part.cuts.map((c) => c.frame)).toEqual([298]);
     expect(part.notes).toEqual([]);
   });
@@ -75,6 +85,7 @@ describe("a Mini film planned and made", () => {
   let ws: Workspace;
   let id: string;
   const rendered: RenderOptions["props"][] = [];
+  let result: Awaited<ReturnType<typeof makeVideos>>;
 
   beforeAll(async () => {
     process.env.WORKSPACE_DIR = wsDir;
@@ -89,13 +100,13 @@ describe("a Mini film planned and made", () => {
     writeFileSync(paths.lyricsTxt, `${LYRICS.join("\n")}\n`);
     mkdirSync(paths.clips!, { recursive: true });
     for (const [i, c] of ["blue", "yellow", "red", "green"].entries()) makeClip(path.join(paths.clips!, `0${i + 1}_${c}.mp4`), 6, c);
-    writeRecipe(paths.recipe!, { ...readRecipe(paths.recipe!), songStyle: "film", platforms: ["reels"], variations: { reels: 2 } });
+    writeRecipe(paths.recipe!, { ...readRecipe(paths.recipe!), songStyle: "film", platforms: ["reels"], variations: { film: 2 } }); // "reels": a Mini film makes its films instead
     // The shot list: an intro shot, line 1 (blue), line 3 (yellow), line 5 (no take yet). Red and green are set to Omit.
     writeFileSync(path.join(paths.root, "shotlist.json"), JSON.stringify({ imported_at: "", source: "t", slots: [slot("s01", 1, null), slot("s02", 2, 1), slot("s03", 3, 3), slot("s04", 4, 5)], filled: { s02: "01_blue.mp4", s03: "02_yellow.mp4" } }));
     writeFileSync(path.join(paths.root, "clips.json"), JSON.stringify({ order: ["slot:s01", "01_blue.mp4", "02_yellow.mp4", "slot:s04"], clips: { "03_red.mp4": { omit: true }, "04_green.mp4": { omit: true } } }));
-    await makeVideos({
+    result = await makeVideos({
       workspaceDir: wsDir, song: paths.audio!, lyrics: paths.lyricsTxt, platforms: "reels", align: fakeAlign, frameCheck: false, platform: "win32",
-      renderer: async (o: RenderOptions) => (rendered.push(o.props), copyFileSync(sample, o.outFile), o.outFile),
+      renderer: async (o: RenderOptions) => (o.outFile.includes(`${path.sep}film${path.sep}`) && rendered.push(o.props), copyFileSync(sample, o.outFile), o.outFile),
       thumbnailRenderer: async (o) => (copyFileSync(still, o.outFile), o.outFile),
     });
   }, 300_000);
@@ -104,6 +115,12 @@ describe("a Mini film planned and made", () => {
     if (previous === undefined) delete process.env.WORKSPACE_DIR;
     else process.env.WORKSPACE_DIR = previous;
     rmSync(root, { recursive: true, force: true });
+  });
+
+  it("a Mini film makes its two films, never Reels; the Film 16:9 without landscape takes is all stand-ins", () => {
+    expect(result.platforms.map((p) => [p.name, p.error ?? null])).toEqual([["film", null], ["film-wide", null]]);
+    const wide = result.platforms.find((p) => p.name === "film-wide")!;
+    expect(wide.warnings.join(" ")).toMatch(/Mini film: 4 of 4 shots have no take yet/);
   });
 
   it("every video: the whole song, one shot per card in story order, each take once, stand-ins for the empty shots", () => {

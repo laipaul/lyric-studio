@@ -92,6 +92,11 @@ async function main() {
     await page.click("[data-work-status] [data-song-style-chip]");
     await page.waitForSelector("[data-song-style=film]");
     check(true, "clicking it opens Song Details");
+    // A Mini film makes only its two films (23 Nov 2026): Make offers Film 9:16 and Film 16:9, both on; no Reels.
+    await page.goto(`${base}/songs/${sp.project.id}?tab=generate`);
+    await page.waitForSelector("[data-make-chips]");
+    const chips = await page.$$eval("[data-make-chip]", (els) => els.map((e) => `${e.getAttribute("data-make-chip")}:${e.getAttribute("data-count")}`));
+    check(JSON.stringify(chips) === JSON.stringify(["film:1", "film-wide:1"]), `Make offers only the two films, both on (${chips.join(", ")})`);
     await page.goto(`${base}/`);
     await page.waitForSelector("[data-song-style-badge]");
     check((await page.getAttribute("[data-song-style-badge]", "data-song-style-badge")) === "film" && ((await page.textContent("[data-song-style-badge]")) ?? "").includes("Mini film"), "the Library card says Mini film");

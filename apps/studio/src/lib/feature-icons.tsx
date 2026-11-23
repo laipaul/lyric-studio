@@ -37,6 +37,9 @@ export const PLATFORM_MARK: Record<string, { shape: "square" | "rounded" | "circ
   shorts: { shape: "tall", colour: "#ff4e45" },
   youtube: { shape: "play", colour: "#ff0033" },
   canvas: { shape: "ring", colour: "#1db954" },
+  // A Mini film's two films (sky blue, the Mini film colour): tall for Instagram, wide for YouTube.
+  film: { shape: "tall", colour: "#7dd3fc" },
+  "film-wide": { shape: "play", colour: "#7dd3fc" },
 };
 
 export function PlatformMark({ platform, className }: { platform: string; className?: string }) {

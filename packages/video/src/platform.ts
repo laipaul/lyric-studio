@@ -281,3 +281,14 @@ export function sourceFit(width: number, height: number, format: Format, allowFi
   if (matches || bigEnough) return "cover";
   return allowFill ? "fill" : null;
 }
+
+// The Mini film's two films (23 Nov 2026, Paul: "if I start with a mini film there is no option to make reels, shorts
+// etc because this is against the whole purpose … I plan to release the mini films both on IG and YT"): a song in the
+// style Mini film makes only these (the ones asked, else both); every other song never makes them.
+export const FILM_PLATFORMS = ["film", "film-wide"] as const;
+export const isFilmPlatform = (name: string): boolean => (FILM_PLATFORMS as readonly string[]).includes(name);
+export function platformsForStyle(names: readonly string[], film: boolean): string[] {
+  if (!film) return names.filter((n) => !isFilmPlatform(n));
+  const asked = names.filter(isFilmPlatform);
+  return asked.length ? [...new Set(asked)] : [...FILM_PLATFORMS];
+}

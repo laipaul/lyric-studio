@@ -10,6 +10,7 @@ import {
   assignClips,
   autoSection,
   choosePlatforms,
+  platformsForStyle,
   cleanLrc,
   getCutPoints,
   kenBurns,
@@ -36,7 +37,10 @@ const vertical = Object.values(presets).filter((p) => p.layout === "vertical");
 
 describe("presets file", () => {
   it("has the standard preset and the platforms with the approved defaults", () => {
-    expect(Object.keys(presets)).toEqual(["standard", "reels", "tiktok", "shorts", "youtube", "canvas"]);
+    expect(Object.keys(presets)).toEqual(["standard", "reels", "tiktok", "shorts", "youtube", "film", "film-wide", "canvas"]);
+    // A Mini film's two films (23 Nov 2026): the whole song, vertical for Instagram, landscape for YouTube.
+    expect(presets.film).toMatchObject({ width: 1080, height: 1920, length: { mode: "full" }, loops: false, safeZone: presets.reels.safeZone });
+    expect(presets["film-wide"]).toMatchObject({ width: 1920, height: 1080, length: { mode: "full" }, loops: false, safeZone: presets.youtube.safeZone });
     expect(presets.standard).toMatchObject({ width: 1080, height: 1920, variations: 6, length: { mode: "range", min: 45, max: 60, hardMax: 65 }, fadeOutSeconds: 0.5 });
     expect(presets.reels).toMatchObject({ variations: 3, anchor: "hook-first", loopEnding: true, length: { seconds: 90, tolerance: 0.15 }, safeZone: { top: 0.14, bottom: 0.35, right: 0.12 } });
     expect(presets.reels.fadeOutSeconds).toBeGreaterThanOrEqual(0.1);
@@ -107,10 +111,14 @@ describe("presets file", () => {
   it("--platforms: names, all, unknown and not-yet-available platforms", () => {
     expect(choosePlatforms(undefined, presets)).toEqual({ names: ["standard"], skipped: [] });
     expect(choosePlatforms("reels, tiktok", presets).names).toEqual(["reels", "tiktok"]);
-    expect(choosePlatforms("all", presets)).toEqual({ names: ["reels", "tiktok", "shorts", "youtube", "canvas"], skipped: [] });
+    expect(choosePlatforms("all", presets)).toEqual({ names: ["reels", "tiktok", "shorts", "youtube", "film", "film-wide", "canvas"], skipped: [] });
+    // The song style decides: a Mini film makes its films (those asked, else both); other songs never them.
+    expect(platformsForStyle(["reels", "youtube", "film-wide"], true)).toEqual(["film-wide"]);
+    expect(platformsForStyle(["reels", "youtube"], true)).toEqual(["film", "film-wide"]);
+    expect(platformsForStyle(["reels", "film", "film-wide", "youtube"], false)).toEqual(["reels", "youtube"]);
     expect(() => choosePlatforms("reels,instagram", presets)).toThrow(/Unknown platform\(s\): instagram/);
     const later = { ...presets, canvas: { ...presets.canvas, available: false, note: "comes later" } };
-    expect(choosePlatforms("all", later)).toEqual({ names: ["reels", "tiktok", "shorts", "youtube"], skipped: ["canvas"] });
+    expect(choosePlatforms("all", later)).toEqual({ names: ["reels", "tiktok", "shorts", "youtube", "film", "film-wide"], skipped: ["canvas"] });
     expect(() => choosePlatforms("canvas", later)).toThrow(/canvas: comes later/);
   });
 });

@@ -475,22 +475,24 @@ function ShotLength({ span }: { span: { startMs: number; endMs: number } }) {
 
 function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare, candidates, onLook }: { s: ProductionShot; pictures: PictureView[]; loose: PictureView[]; adding: boolean; onDrop: (files: FileList, s: ProductionShot) => void; onAttach: (file: string, s: ProductionShot) => void; tile: (p: PictureView, s: ProductionShot) => ReactNode; onCompare: () => void; candidates: number; onLook: (character: string, look: string) => void }) {
   const [over, setOver] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"tall" | "wide" | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const film = s.promptWide !== undefined; // a Mini film: two films (9:16 for Instagram, 16:9 for YouTube)
   // Copy prompt (C3 Part 2a): the shot's Midjourney first-frame prompt, written by the app (src/shot-prompt.ts).
-  async function copyPrompt() {
+  async function copyPrompt(which: "tall" | "wide" = "tall") {
+    const text = which === "wide" ? (s.promptWide ?? s.prompt) : s.prompt;
     try {
-      await navigator.clipboard.writeText(s.prompt);
+      await navigator.clipboard.writeText(text);
     } catch {
       const t = document.createElement("textarea");
-      t.value = s.prompt;
+      t.value = text;
       document.body.appendChild(t);
       t.select();
       document.execCommand("copy");
       t.remove();
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    setCopied(which);
+    setTimeout(() => setCopied(null), 2500);
   }
   return (
     <div data-shot={s.id} data-shot-number={s.number} data-shot-state={s.filled ? "filled" : pictures.length ? "picture" : "empty"} className={cn("bg-card/40 flex flex-col gap-2 rounded-lg border p-3", s.filled && "border-emerald-400/30")}>
@@ -534,7 +536,16 @@ function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare
             {s.people.flatMap((w) => (w.problem ? [w.problem] : [])).join(" ")}
           </span>
         ) : null}
-        {s.filled ? (
+        {film ? (
+          // A Mini film: a take for each film (a vertical take goes to the 9:16 film, a landscape take to the 16:9 one).
+          <span className="flex shrink-0 items-center gap-1 text-xs">
+            {([["tall", "9:16", s.filled, "Instagram"], ["wide", "16:9", s.filledWide ?? null, "YouTube"]] as const).map(([k, label, clip, where]) => (
+              <span key={k} data-shot-film={k} data-shot-film-take={clip ?? ""} className={cn("flex items-center gap-1 rounded px-1.5 py-0.5", clip ? "bg-emerald-400/15 text-emerald-300" : "bg-muted text-muted-foreground")} title={clip ? `The ${label} film (${where}) uses ${clip}` : `No ${label} take yet: the ${label} film (${where}) shows a stand-in here. Make one with Copy prompt ${label}, then Use for shot ${s.number}.`}>
+                {clip ? <Check className="size-3" /> : null} {label}
+              </span>
+            ))}
+          </span>
+        ) : s.filled ? (
           <span data-shot-filled={s.filled} className="flex shrink-0 items-center gap-1 rounded bg-emerald-400/15 px-1.5 py-0.5 text-xs text-emerald-300" title={`In the Storyboard as ${s.filled}`}>
             <Check className="size-3" /> Filled
           </span>
@@ -543,9 +554,14 @@ function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare
         )}
       </div>
       <div className="flex flex-wrap items-start gap-2 text-xs">
-        <button type="button" data-shot-copy-prompt={s.id} onClick={() => void copyPrompt()} className="hover:bg-accent flex shrink-0 items-center gap-1 rounded border px-2 py-1" title="The Midjourney prompt for this shot's first frame: paste it into Midjourney">
-          {copied ? <Check className="size-3 text-emerald-300" /> : <Copy className="size-3" />} {copied ? "Copied" : "Copy prompt"}
+        <button type="button" data-shot-copy-prompt={s.id} onClick={() => void copyPrompt("tall")} className="hover:bg-accent flex shrink-0 items-center gap-1 rounded border px-2 py-1" title={film ? "The Midjourney prompt for this shot in 9:16 (the Instagram film): paste it into Midjourney" : "The Midjourney prompt for this shot's first frame: paste it into Midjourney"}>
+          {copied === "tall" ? <Check className="size-3 text-emerald-300" /> : <Copy className="size-3" />} {copied === "tall" ? "Copied" : film ? "Copy prompt 9:16" : "Copy prompt"}
         </button>
+        {film ? (
+          <button type="button" data-shot-copy-prompt-wide={s.id} onClick={() => void copyPrompt("wide")} className="hover:bg-accent flex shrink-0 items-center gap-1 rounded border px-2 py-1" title="The same shot in 16:9 (the YouTube film): paste it into Midjourney">
+            {copied === "wide" ? <Check className="size-3 text-emerald-300" /> : <Copy className="size-3" />} {copied === "wide" ? "Copied" : "Copy prompt 16:9"}
+          </button>
+        ) : null}
         {candidates >= 2 ? (
           <button type="button" data-shot-compare-open={s.id} onClick={onCompare} className="hover:bg-accent border-brand/50 text-brand flex shrink-0 items-center gap-1 rounded border px-2 py-1" title="Play every candidate of this shot side by side, together, with the song from its line">
             <Play className="size-3" /> Compare {candidates}

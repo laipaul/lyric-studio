@@ -229,12 +229,12 @@ describe("Creation → Production", () => {
     expect(v.pictures.find((p) => p.file.startsWith("chapel_"))?.mjLink).toBe("https://www.midjourney.com/jobs/5813efa3-57ba-409f-8aa1-09b60e1b9c83?index=2");
   });
 
-  it("a Mini film (or a song with a shot list on lines) is the whole song on every platform; Cut to the song and instrumentals are not", () => {
+  it("only a Mini film is the whole story (its two films); a shot list alone, Cut to the song, Add singing and instrumentals are not", () => {
     const recipe = readRecipe(songPathsById(ws, id).recipe!);
-    expect(isWholeStory(ws, id, { ...recipe, songStyle: "film" }, false)).toBe(true);
-    expect(isWholeStory(ws, id, { ...recipe, songStyle: undefined }, false)).toBe(true);
-    expect(isWholeStory(ws, id, { ...recipe, songStyle: "singing" }, false)).toBe(true);
-    expect(isWholeStory(ws, id, { ...recipe, songStyle: "cut" }, false)).toBe(false);
-    expect(isWholeStory(ws, id, { ...recipe, songStyle: "film" }, true)).toBe(false);
+    expect(isWholeStory({ ...recipe, songStyle: "film" }, false)).toBe(true);
+    expect(isWholeStory({ ...recipe, songStyle: undefined }, false)).toBe(false);
+    expect(isWholeStory({ ...recipe, songStyle: "singing" }, false)).toBe(false);
+    expect(isWholeStory({ ...recipe, songStyle: "cut" }, false)).toBe(false);
+    expect(isWholeStory({ ...recipe, songStyle: "film" }, true)).toBe(false);
   });
 });

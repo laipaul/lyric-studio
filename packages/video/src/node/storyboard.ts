@@ -14,7 +14,8 @@ import type { AnchorUse } from "../anchors";
 import { assessVideo, type Assessment } from "../assess";
 import { VIDEO } from "../config";
 import type { LoopResult, LoopSuggestion } from "../loop";
-import { parsePresets } from "../platform";
+import { parsePresets, platformsForStyle } from "../platform";
+import { isWholeStory } from "./song-style";
 import type { LyricVideoProps } from "../props";
 import { clockText } from "../section";
 import { clipEdit, hookSections, peaks, storyLines, storyShots, storyTitleCards, type StoryClip, type StoryLine, type StoryShot } from "../storyboard";
@@ -139,7 +140,10 @@ export function storyboardChoices(ws: Workspace, projectId: string): StoryboardC
   const { input } = recipeInputFor(ws, projectId);
   const r = resolveRecipe(input).values;
   // The same platforms and counts as Make's chips (recipe.ts studioCounts): v1..vN of each (not the Canvas: its own loops).
-  const counts = studioCounts(r, Object.keys(all).filter((n) => all[n]?.available && all[n].layout !== "canvas"));
+  // A Mini film: only its two films (both when song.json names none of them); other songs never them.
+  const film = isWholeStory(readRecipe(paths.recipe), false);
+  const offered = platformsForStyle(Object.keys(all).filter((n) => all[n]?.available && all[n].layout !== "canvas" && n !== "standard"), film);
+  const counts = film ? Object.fromEntries(platformsForStyle(r.platforms ?? [], true).map((n) => [n, Math.max(1, (r.variations as Record<string, number> | undefined)?.[n] ?? 1)])) : studioCounts(r, offered);
   const names = Object.keys(counts);
   const platforms: StoryboardChoices["platforms"] = names.map((n) => {
     const count = counts[n];
@@ -147,7 +151,7 @@ export function storyboardChoices(ws: Workspace, projectId: string): StoryboardC
   });
   // A platform switched off in Make keeps showing in Shape while it has a saved shot plan (its videos as saved).
   for (const [n, count] of savedPlanCounts(paths.root)) {
-    if (n in counts || !all[n]?.available || all[n].layout === "canvas") continue;
+    if (n in counts || !all[n]?.available || all[n].layout === "canvas" || !offered.includes(n)) continue;
     platforms.push({ name: n, label: SHORT_LABELS[n] ?? all[n].label, videos: Array.from({ length: count }, (_, i) => `v${i + 1}`), notInMake: true });
   }
   const runs = songRuns(ws, projectId).map((run) => ({

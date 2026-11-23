@@ -17,7 +17,7 @@ import { assignVersions, versionKey } from "./versions";
 import { reactionsFor, type Reaction } from "../reactions-list";
 
 export const RUN_FOLDER = /^(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(-\d+)?$/;
-export const SHORT_LABELS: Record<string, string> = { standard: "Standard", reels: "Reels", tiktok: "TikTok", shorts: "Shorts", youtube: "YouTube", canvas: "Canvas" };
+export const SHORT_LABELS: Record<string, string> = { standard: "Standard", reels: "Reels", tiktok: "TikTok", shorts: "Shorts", youtube: "YouTube", canvas: "Canvas", film: "Film 9:16", "film-wide": "Film 16:9" };
 
 export type QaProblem = { check: string; details: string[] };
 export type QaResult = { status: "PASS" | "WARN" | null; problems: QaProblem[] };

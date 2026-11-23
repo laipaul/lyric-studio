@@ -1,5 +1,5 @@
 {
-  "_help": "Platform presets for pnpm make --platforms. Edit the values; pnpm make checks this file and names any wrong entry. Safe zones are fractions of the frame (0.35 = 35%) covered by the platform's buttons and captions; lyrics stay outside them. lyricsAt: where the lyrics sit inside the usable area (0 = top, 0.5 = middle). length: target = seconds +- tolerance (if no clean line end is in there: up to 25% shorter is preferred, then up to 30% longer; auto = the Automatic length, the default: the app picks the finished phrase nearest seconds anywhere from auto.min to auto.max), range = min/max/hardMax seconds, full = whole song, loop = min/max seconds. anchor: hook-first = start at most 1 bar before the first hook line; lead-in = one bar before it (earlier if a line is still being sung). endOn: bar = end on a bar start; beat = end on any beat when no bar is clean (bars preferred). showNextLine: the next lyric line waits small underneath (true/false). loops: the platform plays the video in a loop (true for reels, tiktok, shorts): QA \"Loop flows\" and an auto section end that flows back into its start. This file is format only: lyric effects, fonts and colours per platform go in brand.json \"perPlatform\" (or a song's Style tab).",
+  "_help": "Platform presets for pnpm make --platforms. Edit the values; pnpm make checks this file and names any wrong entry. Safe zones are fractions of the frame (0.35 = 35%) covered by the platform's buttons and captions; lyrics stay outside them. lyricsAt: where the lyrics sit inside the usable area (0 = top, 0.5 = middle). length: target = seconds +- tolerance (if no clean line end is in there: up to 25% shorter is preferred, then up to 30% longer; auto = the Automatic length, the default: the app picks the finished phrase nearest seconds anywhere from auto.min to auto.max), range = min/max/hardMax seconds, full = whole song, loop = min/max seconds. anchor: hook-first = start at most 1 bar before the first hook line; lead-in = one bar before it (earlier if a line is still being sung). endOn: bar = end on a bar start; beat = end on any beat when no bar is clean (bars preferred). showNextLine: the next lyric line waits small underneath (true/false). loops: the platform plays the video in a loop (true for reels, tiktok, shorts): QA \"Loop flows\" and an auto section end that flows back into its start. This file is format only: lyric effects, fonts and colours per platform go in brand.json \"perPlatform\" (or a song's Style tab). film / film-wide: the Mini film's two films (song style \"Mini film\" makes only these; other songs never): the whole song shot by shot, vertical for Instagram and landscape for YouTube; layout \"vertical\" means clips with lyrics over them, in either shape.",
   "platforms": {
     "standard": {
       "label": "Standard (no --platforms)",
@@ -8,10 +8,20 @@
       "aspect": "9:16",
       "layout": "vertical",
       "showNextLine": true,
-      "length": { "mode": "range", "min": 45, "max": 60, "hardMax": 65 },
+      "length": {
+        "mode": "range",
+        "min": 45,
+        "max": 60,
+        "hardMax": 65
+      },
       "anchor": "lead-in",
       "variations": 6,
-      "safeZone": { "top": 0.1, "bottom": 0.2, "left": 0, "right": 0.12 },
+      "safeZone": {
+        "top": 0.1,
+        "bottom": 0.2,
+        "left": 0,
+        "right": 0.12
+      },
       "lyricsAt": 0.45,
       "textScale": 1,
       "videoBitrate": null,
@@ -24,10 +34,23 @@
       "aspect": "9:16",
       "layout": "vertical",
       "showNextLine": true,
-      "length": { "mode": "target", "seconds": 90, "tolerance": 0.15, "auto": { "min": 45, "max": 120 } },
+      "length": {
+        "mode": "target",
+        "seconds": 90,
+        "tolerance": 0.15,
+        "auto": {
+          "min": 45,
+          "max": 120
+        }
+      },
       "anchor": "hook-first",
       "variations": 3,
-      "safeZone": { "top": 0.14, "bottom": 0.35, "left": 0, "right": 0.12 },
+      "safeZone": {
+        "top": 0.14,
+        "bottom": 0.35,
+        "left": 0,
+        "right": 0.12
+      },
       "lyricsAt": 0.45,
       "textScale": 1,
       "videoBitrate": "10M",
@@ -42,11 +65,24 @@
       "aspect": "9:16",
       "layout": "vertical",
       "showNextLine": true,
-      "length": { "mode": "target", "seconds": 25, "tolerance": 0.15, "auto": { "min": 15, "max": 45 } },
+      "length": {
+        "mode": "target",
+        "seconds": 25,
+        "tolerance": 0.15,
+        "auto": {
+          "min": 15,
+          "max": 45
+        }
+      },
       "anchor": "hook-first",
       "endOn": "beat",
       "variations": 3,
-      "safeZone": { "top": 0.1, "bottom": 0.3, "left": 0, "right": 0.15 },
+      "safeZone": {
+        "top": 0.1,
+        "bottom": 0.3,
+        "left": 0,
+        "right": 0.15
+      },
       "lyricsAt": 0.45,
       "textScale": 1,
       "videoBitrate": "10M",
@@ -60,11 +96,24 @@
       "aspect": "9:16",
       "layout": "vertical",
       "showNextLine": true,
-      "length": { "mode": "target", "seconds": 50, "tolerance": 0.15, "auto": { "min": 30, "max": 75 } },
+      "length": {
+        "mode": "target",
+        "seconds": 50,
+        "tolerance": 0.15,
+        "auto": {
+          "min": 30,
+          "max": 75
+        }
+      },
       "anchor": "hook-first",
       "endOn": "beat",
       "variations": 2,
-      "safeZone": { "top": 0.12, "bottom": 0.25, "left": 0, "right": 0.15 },
+      "safeZone": {
+        "top": 0.12,
+        "bottom": 0.25,
+        "left": 0,
+        "right": 0.15
+      },
       "lyricsAt": 0.45,
       "textScale": 1,
       "videoBitrate": "12M",
@@ -78,22 +127,84 @@
       "aspect": "16:9",
       "layout": "youtube",
       "showNextLine": true,
-      "length": { "mode": "full" },
+      "length": {
+        "mode": "full"
+      },
       "anchor": "lead-in",
       "variations": 1,
-      "safeZone": { "top": 0.06, "bottom": 0.1, "left": 0.04, "right": 0.04 },
+      "safeZone": {
+        "top": 0.06,
+        "bottom": 0.1,
+        "left": 0.04,
+        "right": 0.04
+      },
       "lyricsAt": 0.45,
       "textScale": 1,
       "videoBitrate": "16M",
       "fadeOutSeconds": 1.5,
       "youtube": {
         "defaultLayout": "cover",
-        "endScreen": { "seconds": 20, "clear": { "left": 0.5, "top": 0.35 } },
+        "endScreen": {
+          "seconds": 20,
+          "clear": {
+            "left": 0.5,
+            "top": 0.35
+          }
+        },
         "grain": true,
         "glow": true,
-        "coverZoom": [1, 1.08],
+        "coverZoom": [
+          1,
+          1.08
+        ],
         "titleSeconds": 4
       }
+    },
+    "film": {
+      "label": "Film 9:16 (Instagram, whole song)",
+      "width": 1080,
+      "height": 1920,
+      "aspect": "9:16",
+      "layout": "vertical",
+      "showNextLine": true,
+      "length": {
+        "mode": "full"
+      },
+      "anchor": "lead-in",
+      "variations": 1,
+      "safeZone": {
+        "top": 0.14,
+        "bottom": 0.35,
+        "left": 0,
+        "right": 0.12
+      },
+      "lyricsAt": 0.45,
+      "textScale": 1,
+      "videoBitrate": "12M",
+      "fadeOutSeconds": 1.5
+    },
+    "film-wide": {
+      "label": "Film 16:9 (YouTube, whole song)",
+      "width": 1920,
+      "height": 1080,
+      "aspect": "16:9",
+      "layout": "vertical",
+      "showNextLine": true,
+      "length": {
+        "mode": "full"
+      },
+      "anchor": "lead-in",
+      "variations": 1,
+      "safeZone": {
+        "top": 0.06,
+        "bottom": 0.1,
+        "left": 0.04,
+        "right": 0.04
+      },
+      "lyricsAt": 0.45,
+      "textScale": 1,
+      "videoBitrate": "16M",
+      "fadeOutSeconds": 1.5
     },
     "canvas": {
       "label": "Spotify Canvas (loop, no lyrics, no audio)",
@@ -101,10 +212,19 @@
       "height": 1920,
       "aspect": "9:16",
       "layout": "canvas",
-      "length": { "mode": "loop", "min": 3, "max": 8 },
+      "length": {
+        "mode": "loop",
+        "min": 3,
+        "max": 8
+      },
       "anchor": "lead-in",
       "variations": 1,
-      "safeZone": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+      "safeZone": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      },
       "textScale": 1,
       "videoBitrate": "10M",
       "fadeOutSeconds": 0,

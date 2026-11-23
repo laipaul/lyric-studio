@@ -21,7 +21,7 @@ import { slotSpans, type GridLine } from "../shot-grid";
 import type { ShotListFile, Slot } from "./shotlist";
 
 export type FilmItem = {
-  key: string; // the story line entry: a clip name, or "slot:<id>" for a planned shot without a take
+  key: string; // "slot:<id>" for a planned shot (with or without a take), else the clip's name
   clip: string | null; // the take (clip name); null: a stand-in
   slot: Slot | null; // the planned shot it belongs to (when it came from the shot list)
   line: number | null; // the lyric line it starts on
@@ -31,7 +31,10 @@ export type FilmItem = {
 const SLOT = "slot:";
 
 // The story line as the film's shots. `order`: clips.json "order" (collection cards already expanded); `used`: the clip
-// names this video may show (Omit left out), in file-name order; clips never placed in the order follow at the end.
+// names this video may show (Omit left out, and only those that suit its shape), in file-name order. A planned shot is
+// one card whichever of its takes the order holds: its take for this film is the one among `used` (the vertical take,
+// shotlist "filled", for the Film 9:16; the landscape one, "filledWide", for the Film 16:9), else a stand-in. Clips that
+// belong to no shot keep their own card; those never placed in the order follow at the end.
 export function filmItems(
   order: readonly string[],
   used: readonly string[],
@@ -41,29 +44,30 @@ export function filmItems(
   const lower = (s: string) => s.toLowerCase();
   const usedSet = new Map(used.map((n) => [lower(n), n]));
   const slots = new Map((list?.slots ?? []).map((s) => [s.id, s]));
-  const slotOfClip = new Map(Object.entries(list?.filled ?? {}).map(([id, clip]) => [lower(String(clip)), id]));
+  const slotOfClip = new Map<string, string>();
+  for (const m of [list?.filledWide ?? {}, list?.filled ?? {}]) for (const [id, clip] of Object.entries(m)) slotOfClip.set(lower(String(clip)), id);
+  const takeFor = (id: string) => [list?.filled?.[id], list?.filledWide?.[id]].map((c) => (c ? usedSet.get(lower(String(c))) : undefined)).find((c) => c !== undefined) ?? null;
   const anchorLine = (clip: string) => anchors.find((a) => a.sync === undefined && lower(a.clip) === lower(clip))?.line ?? null;
   const seen = new Set<string>();
   const out: Omit<FilmItem, "number">[] = [];
+  const addSlot = (id: string) => {
+    const slot = slots.get(id);
+    if (!slot || seen.has(`${SLOT}${id}`)) return;
+    seen.add(`${SLOT}${id}`);
+    const take = takeFor(id);
+    if (take) seen.add(lower(take));
+    out.push({ key: `${SLOT}${id}`, clip: take, slot, line: slot.line });
+  };
   const addClip = (name: string) => {
-    if (seen.has(lower(name))) return;
+    const id = slotOfClip.get(lower(name));
+    if (id && slots.has(id)) return addSlot(id);
+    if (seen.has(lower(name)) || !usedSet.has(lower(name))) return;
     seen.add(lower(name));
-    const slotId = slotOfClip.get(lower(name));
-    const slot = slotId ? (slots.get(slotId) ?? null) : null;
-    out.push({ key: name, clip: name, slot, line: slot?.line ?? anchorLine(name) });
+    out.push({ key: name, clip: usedSet.get(lower(name))!, slot: null, line: anchorLine(name) });
   };
   for (const entry of order) {
-    if (entry.startsWith(SLOT)) {
-      const slot = slots.get(entry.slice(SLOT.length));
-      if (!slot || seen.has(lower(entry))) continue;
-      seen.add(lower(entry));
-      const take = list?.filled?.[slot.id];
-      if (take && usedSet.has(lower(String(take)))) addClip(usedSet.get(lower(String(take)))!);
-      else out.push({ key: entry, clip: null, slot, line: slot.line });
-      continue;
-    }
-    const name = usedSet.get(lower(entry));
-    if (name) addClip(name);
+    if (entry.startsWith(SLOT)) addSlot(entry.slice(SLOT.length));
+    else addClip(entry);
   }
   for (const name of used) addClip(name);
   return out.map((x, i) => ({ ...x, number: i + 1 }));

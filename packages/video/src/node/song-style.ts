@@ -28,3 +28,11 @@ export function setSongStyle(ws: Workspace, projectId: string, raw: unknown): So
   writeRecipe(file, { ...recipe, songStyle: raw });
   return styleOfRecipe({ ...recipe, songStyle: raw });
 }
+
+// A Mini film (song style "film", 23 Nov 2026): it makes only its two films (Film 9:16 for Instagram, Film 16:9 for
+// YouTube), each the whole song shot by shot (film-plan.ts); a part chosen by hand still wins. Instrumentals and other
+// songs: false.
+export function isWholeStory(recipe: SongRecipe, instrumental: boolean): boolean {
+  return !instrumental && styleOfRecipe(recipe).style === "film";
+}
+

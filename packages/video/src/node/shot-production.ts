@@ -8,7 +8,8 @@
 import { existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import type { Workspace } from "@lyric/db";
+import { probeMedia, type Workspace } from "@lyric/db";
+import { isWholeStory } from "./song-style";
 
 import { nameSections, sectionOfLine, type NamedSection } from "../sections";
 import { shotPrompt, type ShotPromptInput } from "../shot-prompt";
@@ -34,6 +35,9 @@ export type ProductionShot = Slot & {
   filled: string | null; // the clip that fills it ("Use this take"), else null
   pictures: string[]; // the Creation pictures that belong to it
   prompt: string; // its Midjourney first-frame prompt (src/shot-prompt.ts), "Copy prompt"
+  // A Mini film (23 Nov 2026): its two films. filledWide: the landscape take (Film 16:9); promptWide: the prompt in 16:9.
+  filledWide?: string | null;
+  promptWide?: string;
   // The locked pictures of the people and place in it (the look each wears in this song): Midjourney's Omni Reference.
   refs: { name: string; card: string; file: string }[]; // file: inside the card's folder (/api/cards/<card>/file/<file>)
   lineStartMs?: number | null; // when its line is sung (Compare plays the song from there); null: no line or not timed yet
@@ -92,7 +96,9 @@ export function productionView(ws: Workspace, projectId: string): ProductionView
   const mj = film ? readFilmLook(ws.dir, film.name)?.midjourney?.trim() || film.line : null;
   const aspect: ShotPromptInput["aspect"] = data.sizes.some((z) => z.ratio === "9:16") || !data.sizes.length ? "9:16" : "16:9";
   const wornIn = shotLooks(ws, projectId);
-  const promptOf = (s: Slot, worn: WornLook[]) => {
+  const twoFilms = isWholeStory(readRecipe(songPathsById(ws, projectId).recipe), false);
+  const filledWide = list.filledWide ?? {};
+  const promptOf = (s: Slot, worn: WornLook[], shape: ShotPromptInput["aspect"] = twoFilms ? "9:16" : aspect) => {
     const scene = s.scene ? card(s.scene) : null;
     return shotPrompt({
       shows: s.shows,
@@ -108,7 +114,7 @@ export function productionView(ws: Workspace, projectId: string): ProductionView
       }),
       scene: s.scene ? { name: s.scene, description: scene?.description ?? scene?.outfit ?? null } : null,
       filmLook: mj,
-      aspect,
+      aspect: shape,
     });
   };
   const folders = new Map(listCards(ws).map((c) => [c.id, c.folder] as const));
@@ -139,6 +145,7 @@ export function productionView(ws: Workspace, projectId: string): ProductionView
         .map(([f]) => f)
         .sort(),
       prompt: promptOf(s, worn),
+      ...(twoFilms ? { filledWide: filledWide[s.id] && clipsDir && existsSync(path.join(clipsDir, filledWide[s.id])) ? filledWide[s.id] : null, promptWide: promptOf(s, worn, "16:9") } : {}),
       refs: refsOf(s, worn),
       people: worn,
     };
@@ -196,7 +203,7 @@ export function setPictureShot(ws: Workspace, projectId: string, file: unknown, 
   return id;
 }
 
-export type UseForShot = { clip: string; shot: number; line: number | null; replaced: string | null; note: string | null };
+export type UseForShot = { clip: string; shot: number; line: number | null; replaced: string | null; note: string | null; wide?: boolean }; // wide: the Film 16:9's take
 
 // "Use this take" on a shot: the take (or the picture itself, n null) fills that Storyboard item, in its place and on its line.
 export async function useForShot(ws: Workspace, projectId: string, o: { file: unknown; n?: unknown; slot: unknown }): Promise<UseForShot> {
@@ -208,6 +215,21 @@ export async function useForShot(ws: Workspace, projectId: string, o: { file: un
   const name = path.basename(String(o.file ?? ""));
   const { clip } = await sendToStoryboard(ws, projectId, name, n);
   const root = songPathsById(ws, projectId).root;
+  // A landscape take (23 Nov 2026) is the shot's take for the Film 16:9 (YouTube): remembered as such; the story line,
+  // the vertical take and the lyric line stay as they are.
+  const clipsDir = songPathsById(ws, projectId).clips;
+  const info = clipsDir ? await probeMedia(path.join(clipsDir, clip)).catch(() => null) : null;
+  if (info?.width && info.height && info.width > info.height && isWholeStory(readRecipe(songPathsById(ws, projectId).recipe), false)) {
+    const wideBefore = (list.filledWide ?? {})[slot.id] ?? null;
+    if (wideBefore && !same(wideBefore, clip)) setClipOmitSafe(root, wideBefore, true); // kept, out of the films
+    setClipOmitSafe(root, clip, false);
+    const fresh = readShotListFile(file)!;
+    writeFileSync(file, `${JSON.stringify({ ...fresh, filledWide: { ...(fresh.filledWide ?? {}), [slot.id]: clip } }, null, 2)}\n`);
+    const { dir } = songFolder(ws, projectId);
+    if (readPictures(dir).pictures[name]) update(dir, name, (p) => void (p.slot ??= slot.id));
+    const shot = [...list.slots].sort((a, b) => a.order - b.order).findIndex((s) => s.id === slot.id) + 1;
+    return { clip, shot, line: slot.line, replaced: wideBefore && !same(wideBefore, clip) ? wideBefore : null, note: "A landscape take: it is this shot's take in the Film 16:9 (YouTube); the vertical film keeps its own.", wide: true };
+  }
   const before = (list.filled ?? {})[slot.id] ?? null;
   const replaced = before && !same(before, clip) ? before : null;
 

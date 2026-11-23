@@ -8,7 +8,8 @@ import path from "node:path";
 import { REPO_ROOT, absPath, project as projectTable, safeName, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
-import { parsePresets } from "../platform";
+import { parsePresets, platformsForStyle } from "../platform";
+import { isWholeStory } from "./song-style";
 import { EFFECT_NAMES, effectOptionLabel } from "../effects/names";
 import { brandDir, DEFAULT_ARTIST, loadBrand } from "./brand";
 import { loadFontCatalog } from "./font-catalog";
@@ -347,7 +348,11 @@ export type GeneratePanelData = {
 // What the song page's Generate panel offers, with this song's defaults.
 export function generatePanelData(ws: Workspace, p: typeof projectTable.$inferSelect): GeneratePanelData {
   const file = path.join(REPO_ROOT, "presets", "platforms.json");
-  const presets = Object.values(parsePresets(JSON.parse(readFileSync(file, "utf8")), file)).filter((x) => x.available);
+  // A Mini film offers only its two films; other songs never offer them (platform.ts platformsForStyle).
+  const film = isWholeStory(readRecipe(songPathsById(ws, p.id).recipe), false);
+  const all = Object.values(parsePresets(JSON.parse(readFileSync(file, "utf8")), file)).filter((x) => x.available);
+  const keep = new Set(platformsForStyle(all.map((x) => x.name), film));
+  const presets = all.filter((x) => keep.has(x.name) && (!film || x.name !== "standard"));
   const collections = sharedCollections(ws);
   const chosen = songCollections(ws, p.id);
   for (const c of [...chosen].reverse()) if (!collections.includes(c)) collections.unshift(c);
@@ -389,7 +394,10 @@ export function generatePanelData(ws: Workspace, p: typeof projectTable.$inferSe
     verseEffect: resolved.values.verseEffect,
     hookEffect: resolved.values.hookEffect,
     // Make's chips (11 Nov 2026): the song's platforms with their counts, by the one counts rule (recipe.ts).
-    counts: studioCounts(resolved.values, presets.filter((x) => x.name !== "standard").map((x) => x.name)),
+    // A Mini film: its two films, both on until the song names one of them (Shape plans the same).
+    counts: film
+      ? Object.fromEntries(platformsForStyle(resolved.values.platforms ?? [], true).map((n) => [n, Math.max(1, (resolved.values.variations as Record<string, number> | undefined)?.[n] ?? 1)]))
+      : studioCounts(resolved.values, presets.filter((x) => x.name !== "standard").map((x) => x.name)),
     recipe: {
       platforms: resolved.values.platforms,
       variations: resolved.values.variations,

@@ -39,7 +39,8 @@ export type Slot = {
   animate?: string; // given in the file; else ANIMATE_DEFAULTS[shot]
 };
 // filled: slot id -> the clip that fills it (Creation → Production, "Use this take"); a filled slot is no longer in the order.
-export type ShotListFile = { _help?: string; imported_at: string; source: string; slots: Slot[]; filled?: Record<string, string> };
+// filledWide (23 Nov 2026, a Mini film's two films): slot id -> its landscape take (Film 16:9); `filled` holds the vertical one.
+export type ShotListFile = { _help?: string; imported_at: string; source: string; slots: Slot[]; filled?: Record<string, string>; filledWide?: Record<string, string> };
 export type Problem = { slot: string | null; level: "error" | "warn"; text: string };
 export type ShotListCheck = {
   slots: Slot[];
@@ -264,11 +265,12 @@ export async function importShotList(ws: Workspace, projectId: string, input: un
   const previousList = readShotListFile(file); // read before it is kept in Replaced files
   const before = previousList?.filled ?? {};
   const filled = Object.fromEntries(Object.entries(before).filter(([id]) => check.slots.some((x) => x.id === id)));
+  const filledWide = Object.fromEntries(Object.entries(previousList?.filledWide ?? {}).filter(([id]) => check.slots.some((x) => x.id === id)));
   if (existsSync(file)) keepReplaced(root, file);
   // Looks chosen per shot in Production stay when the new file names none for that shot.
   const before2 = previousList?.slots ?? [];
   const slotsOut = check.slots.map((x) => (x.looks ? x : (() => { const p = before2.find((b) => b.id === x.id)?.looks; return p ? { ...x, looks: p } : x; })()));
-  const out: ShotListFile = { _help: HELP, imported_at: new Date().toISOString(), source: path.win32.basename(source), slots: slotsOut, ...(Object.keys(filled).length ? { filled } : {}) };
+  const out: ShotListFile = { _help: HELP, imported_at: new Date().toISOString(), source: path.win32.basename(source), slots: slotsOut, ...(Object.keys(filled).length ? { filled } : {}), ...(Object.keys(filledWide).length ? { filledWide } : {}) };
   writeFileSync(file, `${JSON.stringify(out, null, 2)}\n`);
   // Every own clip gets its place in the order first (clips never moved follow in file-name order), so "order"
   // counts the story line as it is shown.
@@ -317,7 +319,8 @@ export function removeSlots(ws: Workspace, projectId: string, ids: readonly stri
     keepReplaced(root, file);
     const left = (current?.slots ?? []).filter((s) => !gone.has(s.id));
     const filled = Object.fromEntries(Object.entries(current?.filled ?? {}).filter(([id]) => !gone.has(id))); // their clips stay in the Storyboard
-    if (left.length) writeFileSync(file, `${JSON.stringify({ ...current, slots: left, filled: Object.keys(filled).length ? filled : undefined }, null, 2)}\n`);
+    const filledWide = Object.fromEntries(Object.entries(current?.filledWide ?? {}).filter(([id]) => !gone.has(id)));
+    if (left.length) writeFileSync(file, `${JSON.stringify({ ...current, slots: left, filled: Object.keys(filled).length ? filled : undefined, filledWide: Object.keys(filledWide).length ? filledWide : undefined }, null, 2)}\n`);
   }
   writeClipEdits(root, { ...edits, order: edits.order.filter((e) => { const id = slotOf(e); return id === null || !gone.has(id); }) });
   return removed.size;

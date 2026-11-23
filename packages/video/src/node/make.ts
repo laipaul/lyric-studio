@@ -36,7 +36,7 @@ import { choiceText, parseEffectChoice, type EffectChoice } from "../effects";
 import { cleanLrc } from "../lrc";
 import { areaForLayout, BIG_HOOK_SCALE, type TextLayout } from "../text-layout";
 import { finalHookScales, type FinalHook, type LineBuild, type LineShape } from "../line-shape";
-import { choosePlatforms, lyricArea, parsePresets, sectionWindow, STANDARD, type LyricArea, type PlatformPreset } from "../platform";
+import { choosePlatforms, platformsForStyle, lyricArea, parsePresets, sectionWindow, STANDARD, type LyricArea, type PlatformPreset } from "../platform";
 import { VIDEO } from "../config";
 import { getCutPoints, type CutRate, type Energy, type ShotLength } from "../cuts";
 import { bestMoments } from "./best-moment";
@@ -56,7 +56,8 @@ import { chooseEnding, endDimSeconds, type Ending, type EndingChoice } from "../
 import { choosePace, songFeel, type Pace } from "../pace";
 import type { TransitionStyle } from "../transitions";
 import { anchorsInside, type AnchorSpec, type GapOrder, type ResolvedAnchor } from "../anchors";
-import { effectiveSongStyle } from "../song-style";
+import { isWholeStory } from "./song-style";
+export { isWholeStory } from "./song-style";
 import { readShotList } from "./shotlist";
 import { filmCuts, filmItems, standInPicture } from "./film-plan";
 import { shotLooks } from "./shot-looks";
@@ -560,16 +561,6 @@ export function chooseSection(
   return { mode, start_ms: start, end_ms: requested.end_ms, requested, reason, warnings: cuts.map((c) => `The section ${c.at} (${clockText(c.time_ms)}) cuts line ${c.line} "${c.text}" while it is sung.`), cuts };
 }
 
-// A Mini film, or a song with a shot list on lyric lines not set to "Cut to the song" (23 Nov 2026, Paul: "the mini film
-// is the equivalent of me wanting to create a video for the whole song"): every platform picked plays the whole song,
-// not a part of it (a part chosen by hand still wins; Canvas keeps its loop). Instrumentals and other songs: false.
-export function isWholeStory(ws: Workspace, projectId: string, recipe: SongRecipe, instrumental: boolean): boolean {
-  if (instrumental) return false;
-  if (effectiveSongStyle(recipe.songStyle, (recipe.anchors ?? []).filter((a) => a.sync !== undefined).length) === "film") return true;
-  const onLines = (shotListOf(ws, projectId)?.slots ?? []).some((x) => typeof x.line === "number" && x.line >= 1);
-  return onLines && recipe.songStyle !== "cut";
-}
-
 // The song's shot list, or null (none, or a song still in the old folder layout, which has no song folder).
 function shotListOf(ws: Workspace, projectId: string): ReturnType<typeof readShotList> {
   try {
@@ -688,7 +679,10 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
     if (effective.lineEffect) parseEffectChoice(effective.lineEffect, "song.json verseEffect");
     if (effective.hookEffect) parseEffectChoice(effective.hookEffect, "song.json hookEffect");
     if (own("accentColour")) brand = { ...brand, brand: { ...brand.brand, accentColour: recipe.values.accentColour } };
-    const chosenPlatforms = choosePlatforms(effective.platforms, presets);
+    // A Mini film makes only its two films; other songs never make them (platform.ts platformsForStyle).
+    const asked = choosePlatforms(effective.platforms, presets);
+    const chosenPlatforms = { ...asked, names: platformsForStyle(asked.names, isWholeStory(songRecipe, false)) };
+    if (!chosenPlatforms.names.length) throw new Error('Film 9:16 and Film 16:9 are made for Mini film songs only (Prepare → Song Details → Song style). Choose Reels, TikTok, Shorts or YouTube for this song.');
     // The counts rule (recipe.ts videoCount): the run's or the song's count, else the preset's (pnpm make only: the
     // studio always sends its counts).
     const variationsFor = (preset: PlatformPreset) => videoCount(recipe.values.variations, preset.name, preset.variations);
@@ -892,7 +886,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       sectionLines, instrumental, collection, collectionNames: runCollections, collectionRemembered, ep, tool, rootDir, getProject: () => project,
       loopAudio: () => (songAudio ??= readLoopAudio(sp.songFile)),
       anchors: songRecipe.anchors ?? [],
-      wholeStory: isWholeStory(ws, sp.project.id, songRecipe, instrumental),
+      wholeStory: isWholeStory(songRecipe, instrumental),
       canvasChoice: songRecipe.canvas ?? null,
       youtubeLinks: pickedLinks(songRecipe.links ?? [], songRecipe.postLinks, "youtube"),
       gapOrder: songRecipe.gapOrder ?? null,
@@ -1291,7 +1285,9 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     }
   }
   const usesClips = ytLayout === null || ytLayout === "clips";
-  if (usesClips && !prepared.clips.length) {
+  // A Mini film with a shot list never lacks pictures: its shots without a take of this shape show stand-ins.
+  const filmStandIns = sh.wholeStory && !canvas && (shotListOf(ws, project.id)?.slots.length ?? 0) > 0;
+  if (usesClips && !prepared.clips.length && !filmStandIns) {
     throw new Error(
       `${preset.name}: none of the ${sh.collection.sources.length} source(s) in "${sh.collection.collection.name}" is ${prepared.kind} ` +
         `(${format.width}x${format.height}); add ${prepared.kind} clips or photos, or use --allow-fill`,
@@ -1360,7 +1356,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
 
   // Use / Omit (Prepare → Storyboard or Shape → Shots): omitted clips keep their place in the order but are never shown.
   const usedClips = preparedClips.filter((c) => !isOmitted(edits, c.name));
-  if (usesClips && preparedClips.length && !usedClips.length) {
+  if (usesClips && preparedClips.length && !usedClips.length && !filmStandIns) {
     throw new Error(`${preset.name}: every clip is set to Omit. Set at least one clip to Use (Prepare → Storyboard or Shape → Shots).`);
   }
   const omittedCount = preparedClips.length - usedClips.length;
