@@ -27,6 +27,8 @@ import { readRecipe, studioCounts } from "./recipe";
 import { readShotListFile, SHOT_TYPES, SHOTLIST_FILE } from "./shotlist";
 import { songPathsById } from "./song-folder";
 import { songText } from "./textboard";
+import { gridText, shotGrid, TAKE } from "../shot-grid";
+import { songSections } from "./song-sections";
 
 export const PRODUCTION_DIR = "production";
 export const PRODUCTION_FILE = "production.json";
@@ -272,8 +274,9 @@ export function songBrief(ws: Workspace, projectId: string, timed: TimedLine[] |
   out.push("## What I need from you", "");
   out.push(
     "Use the Story Bible Builder skill (only if there is no story bible below) and the Shotcaller skill to plan the clips of this lyric video.",
-    "Every clip is made with Seedance 2.5 (text or image to video, 4 to 10 s each, one continuous shot, no cuts, no text on screen).",
+    "Every clip is one video take (Midjourney video: 5 s, extendable by about 4 s; or Seedance: 4 to 10 s), one continuous shot, no cuts, no text on screen.",
     "My app sets the length, size and sound of each clip itself, so please do not put those in the shot list.",
+    "My app has already cut the whole song into shot moments on the music (the **Shot grid** below): plan **one shot per moment**, with the same id, order and line, so every shot fits one take and the story covers the whole song. You may join two moments or split one when the story needs it, but keep each shot between 3 and 8 s.",
     "",
     "Answer with **only** the shot list as JSON (one code block), in this format:",
     "",
@@ -286,7 +289,7 @@ export function songBrief(ws: Workspace, projectId: string, timed: TimedLine[] |
     "```",
     "",
     `- **id**: s01, s02, … (keep the same id when you change a shot later). **order**: its place in the video, 1 = first.`,
-    `- **shot**: one of ${SHOT_TYPES.join(", ")}. **line**: the lyric line number below where the shot starts (one shot per line at most; leave it out for an instrumental part).`,
+    `- **shot**: one of ${SHOT_TYPES.join(", ")}. **line**: the lyric line number where the shot starts, as in the Shot grid (one shot per line at most; leave it out for the intro, an instrumental part and the second or third part of a long line: those follow the shot before).`,
     `- **characters** and **scene**: only names from the cast below, spelled exactly as written.${cast.length ? "" : " (The cast is empty: leave them out, or tell me which characters to make first.)"}`,
     `- Optional: **looks** (which look of their wardrobe each character wears in this shot, by name, e.g. { "Jennifer": "Wedding Dress" }; without it, the look they wear in this song), **outfit** (a change for this shot only, when no look fits), **tag** (a word to group shots, e.g. "chorus").`,
     "- If you also write a story bible, give it to me as a second, separate Markdown answer.",
@@ -305,6 +308,15 @@ export function songBrief(ws: Workspace, projectId: string, timed: TimedLine[] |
     }
     if (d.timed && p.duration_ms && p.duration_ms - prevEnd >= 4000) out.push(`- (instrumental ${clock(prevEnd)}–${clock(p.duration_ms)}, end of the song)`);
   }
+  out.push("");
+  // The shot grid (23 Nov 2026): the whole song cut into shot moments on the music.
+  const songMs = Math.max(p.duration_ms ?? 0, ...lines.map((l) => l.endMs ?? l.startMs ?? 0)); // at least to the last sung line
+  const grid = d.timed && songMs ? shotGrid(lines, songMs, { bpm: p.bpm, sections: (() => { try { return songSections(ws, projectId).sections; } catch { return []; } })() }) : [];
+  out.push("## Shot grid (the song's timing, from my app)", "");
+  if (grid.length) {
+    out.push(`${grid.length} shots for the whole song (${clock(0)}–${clock(songMs)}), each about ${TAKE.idealMs / 1000} s (at most ${TAKE.maxMs / 1000} s), cut on the bars:`, "");
+    out.push(...gridText(grid, lines));
+  } else out.push("(Not available yet: time the lyrics in Lyrics Sync first, then copy this brief again.)");
   out.push("");
   out.push("## Cast (from my character library)", "");
   out.push(cast.length ? cast.map(cardBlock).join("\n") : "(No cast chosen yet.)", "");

@@ -5,6 +5,7 @@
 import { connection } from "next/server";
 
 import { checkSongShotList, importShotList, readShotList, removeSlots } from "@lyric/video/shotlist";
+import { withTiming } from "@lyric/video/shot-timing";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
@@ -33,8 +34,8 @@ export async function POST(request: Request, { params }: Params) {
     if (typeof body.text !== "string" || !body.text.trim()) throw new Error("Choose a shot list file (.json).");
     const text = body.text;
     const source = typeof body.source === "string" && body.source.trim() ? body.source : "shot list";
-    if (body.import === true) return Response.json({ check: await withWorkspaceAsync((ws) => importShotList(ws, id, text, source)), imported: true });
-    return Response.json({ check: withWorkspace((ws) => checkSongShotList(ws, id, text)), imported: false });
+    if (body.import === true) return Response.json({ check: await withWorkspaceAsync(async (ws) => withTiming(ws, id, await importShotList(ws, id, text, source))), imported: true });
+    return Response.json({ check: await withWorkspaceAsync((ws) => withTiming(ws, id, checkSongShotList(ws, id, text))), imported: false });
   } catch (error) {
     return fail(error);
   }

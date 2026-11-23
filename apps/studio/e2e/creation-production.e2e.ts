@@ -106,6 +106,9 @@ async function main() {
     const shots = await page.$$eval("[data-shot]", (e: Element[]) => e.map((x) => `${x.getAttribute("data-shot-number")}:${x.getAttribute("data-shot")}:${x.getAttribute("data-shot-state")}`));
     check(JSON.stringify(shots) === JSON.stringify(["1:s01:empty", "2:s02:empty", "3:s03:empty"]), `the shots in story order, none made yet (${shots.join(", ")})`);
     check(((await page.textContent("[data-shot=s02] [data-shot-line]")) ?? "").includes("line 1: “Verse one here”"), "each shot shows its lyric line");
+    // The shot grid (23 Nov 2026): how long each shot's take must last on the song.
+    const length = ((await page.textContent("[data-shot=s02] [data-shot-length]")) ?? "").trim();
+    check(/needs (a \d+\.\d s take|\d+\.\d s: extend)|only \d+\.\d s/.test(length), `each shot says how long its take must be (${length})`);
     check(((await page.textContent("[data-shots-progress]")) ?? "").includes("0 of 3 shots filled"), "the progress line");
     check(!!(await page.$("[data-production-defaults]")) && !(await page.$("[data-story-tools]")), "Production: the defaults in one line, no story tools");
     // Copy prompt (C3 Part 2a): each shot's Midjourney prompt, written by the app.

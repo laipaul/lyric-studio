@@ -61,3 +61,4 @@ export * from "./theme-moods";
 export * from "./storyboard-file";
 export * from "./song-tags";
 export * from "./video-names";
+export * from "./shot-grid";

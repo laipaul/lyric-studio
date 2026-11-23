@@ -10,6 +10,7 @@ import { connection } from "next/server";
 
 import { productionData, readPasted, saveBible, setBibleSource, setCast, setCastLook, songBrief, timedLines } from "@lyric/video/production";
 import { checkSongShotList } from "@lyric/video/shotlist";
+import { withTiming } from "@lyric/video/shot-timing";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
@@ -44,7 +45,7 @@ export async function POST(request: Request, { params }: Params) {
       case "paste": {
         const pasted = readPasted(typeof body.text === "string" ? body.text : "");
         if (pasted.kind !== "shotlist") return Response.json({ pasted });
-        return Response.json({ pasted, check: withWorkspace((ws) => checkSongShotList(ws, id, pasted.json)) });
+        return Response.json({ pasted, check: await withWorkspaceAsync((ws) => withTiming(ws, id, checkSongShotList(ws, id, pasted.json))) });
       }
       default:
         throw new Error("Unknown action.");

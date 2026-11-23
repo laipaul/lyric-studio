@@ -133,9 +133,15 @@ describe("the Song brief", () => {
     expect(b).toContain('"characters": ["Bride No 2"], "scene": "Beach path"');
     expect(b).toContain("First bible.");
     expect(b).toContain("No sound in the clips");
+    // The shot grid (23 Nov 2026): the whole song in shot moments, one shot per moment asked for.
+    expect(b).toContain("## Shot grid (the song's timing, from my app)");
+    expect(b).toMatch(/- \*\*s01\*\* · 0:00\.0–0:06\.0 · 6\.0 s · Intro/);
+    expect(b).toContain("plan **one shot per moment**");
+    expect(b).not.toContain("Seedance 2.5 (text or image");
   });
   it("without timing: the lines in order, said so", () => {
     expect(songBrief(ws, id, null)).toContain("(The lines are not timed yet: use the order of the lines.)");
+    expect(songBrief(ws, id, null)).toContain("(Not available yet: time the lyrics in Lyrics Sync first, then copy this brief again.)");
   });
   it("never reads the Storyboard's story idea (the user's own)", () => {
     expect(readFileSync(path.join(__dirname, "../src/node/production.ts"), "utf8")).not.toMatch(/readStoryIdea|clip-notes/);

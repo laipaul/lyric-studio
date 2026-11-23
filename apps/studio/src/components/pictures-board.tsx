@@ -16,6 +16,7 @@ import type { ProductionShot, ProductionView } from "@lyric/video/shot-productio
 import { NameField } from "@/components/name-field";
 import { useGoToTab } from "@/components/song-stages";
 import { takeFacts } from "@lyric/video/take-facts";
+import { TAKE } from "@lyric/video";
 
 import { CharacterPicker } from "@/components/character-picker";
 import { FilmLookPicker } from "@/components/film-look-picker";
@@ -456,6 +457,22 @@ function ShotItems({
   );
 }
 
+// How long the shot lasts on the song (23 Nov 2026): the length its take must have. Longer than one take or only a
+// flash: said in amber, with the creative fix.
+function ShotLength({ span }: { span: { startMs: number; endMs: number } }) {
+  const ms = span.endMs - span.startMs;
+  const s1 = (x: number) => `${(x / 1000).toFixed(1)} s`;
+  const clock = (x: number) => `${Math.floor(x / 60_000)}:${((x % 60_000) / 1000).toFixed(1).padStart(4, "0")}`;
+  const long = ms > TAKE.maxMs;
+  const short = ms < TAKE.minMs;
+  return (
+    <span data-shot-length={Math.round(ms)} className={long || short ? "text-amber-300" : ""} title={`On the song ${clock(span.startMs)}–${clock(span.endMs)}`}>
+      {` · ${clock(span.startMs)} · `}
+      <b className="font-medium">{long ? `needs ${s1(ms)}: extend the take, or add a shot after it` : short ? `only ${s1(ms)}: join it with a neighbour` : `needs a ${s1(ms)} take`}</b>
+    </span>
+  );
+}
+
 function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare, candidates, onLook }: { s: ProductionShot; pictures: PictureView[]; loose: PictureView[]; adding: boolean; onDrop: (files: FileList, s: ProductionShot) => void; onAttach: (file: string, s: ProductionShot) => void; tile: (p: PictureView, s: ProductionShot) => ReactNode; onCompare: () => void; candidates: number; onLook: (character: string, look: string) => void }) {
   const [over, setOver] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -509,6 +526,7 @@ function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare
             {s.outfit ? ` · wears: ${s.outfit}` : ""}
             {s.line !== null ? <span data-shot-line={s.line}>{` · line ${s.line}: “${s.lineText ?? ""}”`}</span> : " · no line (music only)"}
             {s.tag ? ` · #${s.tag}` : ""}
+            {s.span ? <ShotLength span={s.span} /> : null}
           </span>
         </div>
         {s.people.some((w) => w.problem) ? (

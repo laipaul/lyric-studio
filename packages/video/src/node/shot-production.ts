@@ -12,6 +12,7 @@ import type { Workspace } from "@lyric/db";
 
 import { nameSections, sectionOfLine, type NamedSection } from "../sections";
 import { shotPrompt, type ShotPromptInput } from "../shot-prompt";
+import { slotSpans } from "../shot-grid";
 import { readPictures, sendToStoryboard, songFolder, update, BOARD_FILE } from "./animate";
 import { readClipEdits, setClipOmit, writeClipEdits } from "./clip-edits";
 import { filmLookFor, readFilmLook } from "./film-looks";
@@ -36,6 +37,7 @@ export type ProductionShot = Slot & {
   // The locked pictures of the people and place in it (the look each wears in this song): Midjourney's Omni Reference.
   refs: { name: string; card: string; file: string }[]; // file: inside the card's folder (/api/cards/<card>/file/<file>)
   lineStartMs?: number | null; // when its line is sung (Compare plays the song from there); null: no line or not timed yet
+  span?: { startMs: number; endMs: number } | null; // its time on the song (shot-grid.ts slotSpans): how long its take must last
   people: WornLook[]; // each character with the look they wear in this shot (shot-looks.ts)
 };
 export type ProductionView = { shots: ProductionShot[]; sections: string[] };
@@ -145,8 +147,10 @@ export function productionView(ws: Workspace, projectId: string): ProductionView
 }
 
 // Each shot's line start in the song (withLineStarts, for Compare). Pure.
-export function withLineStarts(view: ProductionView, timed: readonly { number: number; startMs: number | null }[] | null): ProductionView {
-  return { ...view, shots: view.shots.map((s) => ({ ...s, lineStartMs: s.line !== null ? (timed?.find((l) => l.number === s.line)?.startMs ?? null) : null })) };
+export function withLineStarts(view: ProductionView, timed: readonly { number: number; startMs: number | null }[] | null, durationMs?: number | null): ProductionView {
+  // How long each shot lasts on the song (23 Nov 2026: "needs about 5 s"): from the timed lines and the song's length.
+  const spans = timed && durationMs ? slotSpans(view.shots, timed.map((l) => ({ number: l.number, text: "", startMs: l.startMs, endMs: null })), durationMs) : null;
+  return { ...view, shots: view.shots.map((s) => ({ ...s, lineStartMs: s.line !== null ? (timed?.find((l) => l.number === s.line)?.startMs ?? null) : null, span: spans?.get(s.id) ?? null })) };
 }
 
 // Bulk drop by shot (23 Nov 2026): a file named after its shot lands on it: "s05 …" / "S05_…" (a slot id, also without

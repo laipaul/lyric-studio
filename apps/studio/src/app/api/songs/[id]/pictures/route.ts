@@ -16,11 +16,12 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
-import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
+import { openWorkspace, project as projectTable, resolveWorkspaceDir } from "@lyric/db";
 import { addFromLink, addPictures, picturesView, removePicture, removeTakes, restorePicture, restoreTake, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, startAnimate, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
 import { runSinging, withSongStarts } from "@lyric/video/singer";
 import { placeByName, productionView, setPictureShot, useForShot, withLineStarts } from "@lyric/video/shot-production";
 import { timedLines } from "@lyric/video/production";
+import { eq } from "drizzle-orm";
 import { setShotLook } from "@lyric/video/shotlist";
 import { connection } from "next/server";
 
@@ -42,7 +43,8 @@ export async function GET(_request: Request, { params }: Params) {
         let production = null;
         try {
           production = productionView(ws, id);
-          if (production.shots.some((s) => s.line !== null)) production = withLineStarts(production, await timedLines(ws, id).catch(() => null));
+          const duration = ws.db.select().from(projectTable).where(eq(projectTable.id, id)).get()?.duration_ms ?? null;
+          if (production.shots.some((s) => s.line !== null)) production = withLineStarts(production, await timedLines(ws, id).catch(() => null), duration);
         } catch {
           // a song without a folder yet: no shot list
         }

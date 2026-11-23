@@ -4,6 +4,30 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Step A: the shot grid: the song decides the timing, the story fills it ✅ (to verify on the PC)
+- Paul (23 Nov 2026): "suppose we had to start again. You need to analyse the full song and plan each shot list
+  according to the length of the song". The Mini film showed takes repeating and drifting off their lines because the
+  shot list did not fit the song's timing (a 14 s intro with one shot, long lines with one 5 s take).
+- **Shot grid** (src/shot-grid.ts shotGrid, pure): the whole song, 0:00 to its end, cut into shot moments: the intro,
+  every lyric line (until the next line starts), instrumental breaks of 4 s or more, the ending. A moment under 2 s
+  joins its neighbour; one over 8 s (one take) is split into parts of about 5 s on whole bars. Each moment has its id
+  (s01…), time, length, section (Intro, Verse 1, Chorus, Instrumental, Ending) and lyric line(s).
+- **Song brief for Claude** (Creation → Story room) now has a "Shot grid" section and asks for one shot per moment,
+  same id, order and line (the second part of a long line has no line: it follows the shot before). The take line
+  says Midjourney video (5 s, extendable) or Seedance (4-10 s), no longer only Seedance.
+- **Checking or importing a shot list** (Story room paste, Storyboard → Import shot list) adds warnings in plain words:
+  "s01: lasts 14.0 s (the intro): one take is about 5 s. Extend its take to 14.0 s, or add 2 shots after it (without a
+  line)", or "only 1.2 s: a flash, join it with a neighbour". Never blocking (node/shot-timing.ts withTiming).
+- **Production**: every shot says how long its take must be on the song, "0:14.0 · needs a 4.8 s take", in amber when
+  it is longer than one take ("needs 10.4 s: extend the take, or add a shot after it") or a flash (slotSpans: a shot
+  on a line lasts until the next shot on a line; shots without a line share the time of the one before them).
+- Tests: shot-grid.test.ts (8), production.test.ts (the brief's grid), creation-production e2e (the length), shotlist
+  and production e2e still pass.
+- On the PC: Creation → Production on "Something About You And Me": each shot shows its length; the amber ones are the
+  shots to extend or split. Story room → Copy Song brief: the "Shot grid" section lists the moments for Claude.
+- Next (Step B, agreed): Shape and Make play a Mini film shot by shot: each take once, on its own shot, no cycling;
+  an empty shot shows a stand-in.
+
 ### A Mini film is the whole song on every platform ✅ (to verify on the PC)
 - **Where am I** (same day, Paul: "then how do I know where I am?"): every stage's header now names the song style
   next to the stage, e.g. **"Shape · Mini film · whole song · Reels v1 planned"** (or "Cut to the song", "Add singing");
@@ -414,22 +438,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Tests: packages/video test/end-dim.test.ts (new, 4); apps/studio e2e/singer.e2e.ts extended (panel, Esc, Takes,
   Jump to Creation; not run here: it needs a fresh studio build). Note: test/make-reference.test.ts fails on this PC
   with and without this change (normalised clip names differ): not caused by it.
-
-### Softer Reel endings: a ring-out bar on a hand-chosen part, longer soft fades, QA for an abrupt stop ✅ (to verify on the PC)
-- Paul (21 Nov 2026): "the sound at the end of the reel ends too brutally". The part was chosen by hand (0:48.9 –
-  2:27.7) and ends on loud music. The app never changes the music's volume; it only fades where it cuts the song. A
-  hand-chosen end could not move, so with a word sung up to the end the fade fell to 0.3 s (or 0.12 s for a loop).
-- **Ring-out on a hand-chosen part:** when there is little room after the last word, the last chord now rings out one
-  more bar and fades over it, as for an automatic part (only a bar with no sung words, within the platform's length:
-  Reels up to 120 s). Shape's plan says "+ one ring-out bar to …".
-- **Longer soft fades:** a soft fade is now at least half a bar (at most 1 s). With no room after the words it takes the
-  tail of the last word, never an earlier word, rather than a 0.3 s drop.
-- **QA "Loop flows":** a loud-to-quiet jump with a fade under 0.5 s stays a WARN, with the creative fix in plain words
-  ("end the part a bar after the last sung word, or let the app choose it (Automatic)").
-- A tight loop (the end flows straight back into the start) keeps the short 0.12 s fade: there the music does not stop.
-- Tests: vitest ending (+3: fade from the last word's tail, hand-chosen part may ring out within the length, abrupt
-  fade stays a WARN), loop pass. pnpm make could not run in the cloud: Python crashes in this container (audio
-  analysis), the same before this step; the full make path is checked on the PC.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

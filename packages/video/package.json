@@ -100,6 +100,7 @@
     "./assets": "./src/node/assets.ts",
     "./story-line": "./src/node/story-line.ts",
     "./shotlist": "./src/node/shotlist.ts",
+    "./shot-timing": "./src/node/shot-timing.ts",
     "./shot-production": "./src/node/shot-production.ts",
     "./production": "./src/node/production.ts",
     "./animate": "./src/node/animate.ts",

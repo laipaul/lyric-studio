@@ -41,7 +41,7 @@ function pathToRemotion(start: string): string[] | null {
 }
 
 describe("modules used by API routes never load Remotion", () => {
-  for (const m of ["node/story-line.ts", "node/transition-notes.ts", "node/storyboard-read.ts", "node/assets.ts", "node/shot-production.ts"]) {
+  for (const m of ["node/story-line.ts", "node/transition-notes.ts", "node/storyboard-read.ts", "node/assets.ts", "node/shot-production.ts", "node/shot-timing.ts", "node/production.ts"]) {
     it(m, () => expect(pathToRemotion(path.join(SRC, m))).toBeNull());
   }
   it("the check itself finds a real path (node/storyboard-file.ts -> manifest.ts -> remotion)", () => {
