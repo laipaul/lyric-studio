@@ -13,7 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { findOrCreateSongProject, readClipEdits, readRecipe, songPathsById } from "../src/node";
 import { addPictures, picturesView, removePicture, restorePicture } from "../src/node/animate";
 import { createCard } from "../src/node/characters/cards";
-import { productionView, sectionsOfShots, setPictureShot, useForShot } from "../src/node/shot-production";
+import { productionView, sectionsOfShots, setPictureShot, useForShot, withLineStarts } from "../src/node/shot-production";
 import { importShotList, readShotList, removeSlots, slotKey } from "../src/node/shotlist";
 import { songStory } from "../src/node/story-line";
 import { folderClips, songClipsCollection } from "../src/node/assets";
@@ -72,6 +72,13 @@ describe("sections of shots", () => {
       { line: 3, kind: "chorus" as const, name: "Chorus", lastLine: 4 },
     ];
     expect(sectionsOfShots([{ line: null }, { line: 1 }, { line: null }, { line: 3 }, { line: 4 }, { line: null }], named, 4)).toEqual(["Intro", "Verse 1", "Verse 1", "Chorus", "Chorus", "Ending"]);
+  });
+});
+
+describe("withLineStarts (Compare plays the song from the shot's line)", () => {
+  it("a shot on a timed line gets its start; a music-only shot or an untimed line gets null", () => {
+    const view = { sections: [], shots: [{ line: 1 }, { line: null }, { line: 4 }] } as unknown as Parameters<typeof withLineStarts>[0];
+    expect(withLineStarts(view, [{ number: 1, startMs: 15100 }, { number: 4, startMs: null }]).shots.map((s) => s.lineStartMs)).toEqual([15100, null, null]);
   });
 });
 

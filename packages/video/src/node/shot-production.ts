@@ -34,6 +34,7 @@ export type ProductionShot = Slot & {
   prompt: string; // its Midjourney first-frame prompt (src/shot-prompt.ts), "Copy prompt"
   // The locked pictures of the people and place in it (the look each wears in this song): Midjourney's Omni Reference.
   refs: { name: string; card: string; file: string }[]; // file: inside the card's folder (/api/cards/<card>/file/<file>)
+  lineStartMs?: number | null; // when its line is sung (Compare plays the song from there); null: no line or not timed yet
 };
 export type ProductionView = { shots: ProductionShot[]; sections: string[] };
 
@@ -129,6 +130,11 @@ export function productionView(ws: Workspace, projectId: string): ProductionView
     };
   });
   return { shots, sections: [...new Set(secs)] };
+}
+
+// Each shot's line start in the song (withLineStarts, for Compare). Pure.
+export function withLineStarts(view: ProductionView, timed: readonly { number: number; startMs: number | null }[] | null): ProductionView {
+  return { ...view, shots: view.shots.map((s) => ({ ...s, lineStartMs: s.line !== null ? (timed?.find((l) => l.number === s.line)?.startMs ?? null) : null })) };
 }
 
 // A Creation picture belongs to a shot (or to none: null).

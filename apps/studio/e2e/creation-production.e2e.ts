@@ -133,6 +133,22 @@ async function main() {
     check(notice.includes("Shot 2 is filled and shows on line 1"), `Use for shot 2 (${notice.trim()})`);
     check(((await page.textContent("[data-shots-progress]")) ?? "").includes("1 of 3 shots filled"), "the progress line counts it");
     check(!!(await page.$("[data-shot=s02] [data-take-shot-used]")), "the take says it is shot 2");
+
+    // Compare (like Midjourney): clicking one candidate plays all of the shot's candidates together, with the song.
+    check(((await page.textContent("[data-shot-compare-open=s02]")) ?? "").includes("Compare 4"), "the shot offers Compare 4 (the picture and its 3 takes)");
+    await page.click("[data-shot=s02] [data-take='2'] [data-take-play]");
+    await page.waitForSelector("[data-shot-compare=s02]");
+    check((await page.$$("[data-shot-compare=s02] [data-compare-tile]")).length === 4, "clicking one take opens all 4 candidates side by side");
+    await sleep(1500);
+    const playingNow = await page.$$eval("[data-shot-compare=s02] video", (vs: Element[]) => vs.filter((v) => !(v as HTMLVideoElement).paused).length);
+    check(playingNow === 3, `the 3 takes play together (${playingNow} playing)`);
+    check(!!(await page.$("[data-shot-compare=s02] audio")) && (await page.isChecked("[data-compare-song]")), "with the song from line 1");
+    if (process.env.PRODUCTION_SHOT) await page.screenshot({ path: process.env.PRODUCTION_SHOT.replace(".png", "-compare.png") });
+    const pick = await page.getAttribute("[data-shot-compare=s02] [data-compare-use] >> nth=0", "data-compare-use");
+    await page.click("[data-shot-compare=s02] [data-compare-use] >> nth=0");
+    await page.waitForFunction((k: string) => !!document.querySelector(`[data-compare-tile="${k}"] [data-compare-used]`), pick, { timeout: 15_000 });
+    check(true, `Use for shot 2 from the comparison (${pick})`);
+    await page.keyboard.press("Escape");
     if (process.env.PRODUCTION_SHOT) await page.screenshot({ path: process.env.PRODUCTION_SHOT, fullPage: true });
 
     // ✕ on a shot's picture: back to the loose pictures; ✕ there: put aside; Restore brings it back.

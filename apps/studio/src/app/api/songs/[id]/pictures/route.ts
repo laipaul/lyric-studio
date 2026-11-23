@@ -19,7 +19,8 @@ import { randomUUID } from "node:crypto";
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import { addFromLink, addPictures, picturesView, removePicture, removeTakes, restorePicture, restoreTake, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, startAnimate, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
 import { runSinging, withSongStarts } from "@lyric/video/singer";
-import { productionView, setPictureShot, useForShot } from "@lyric/video/shot-production";
+import { productionView, setPictureShot, useForShot, withLineStarts } from "@lyric/video/shot-production";
+import { timedLines } from "@lyric/video/production";
 import { connection } from "next/server";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
@@ -40,6 +41,7 @@ export async function GET(_request: Request, { params }: Params) {
         let production = null;
         try {
           production = productionView(ws, id);
+          if (production.shots.some((s) => s.line !== null)) production = withLineStarts(production, await timedLines(ws, id).catch(() => null));
         } catch {
           // a song without a folder yet: no shot list
         }

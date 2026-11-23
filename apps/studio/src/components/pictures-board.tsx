@@ -40,6 +40,7 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
   const goTo = useGoToTab();
   const [board, setBoard] = useState<PicturesView | null>(null);
   const [production, setProduction] = useState<ProductionView | null>(null);
+  const [comparing, setComparing] = useState<string | null>(null); // Compare: the shot whose candidates play together
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [over, setOver] = useState(false);
@@ -147,6 +148,26 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
       setNotice({ ok: false, text: (e as Error).message });
     }
   }
+  // Compare: every candidate of a shot (its videos, its finished takes, its pictures as stills).
+  const candidatesOf = (shot: ProductionShot): Candidate[] => {
+    const same = (a?: string | null, b?: string | null) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
+    return board.pictures
+      .filter((p) => p.slot === shot.id)
+      .flatMap((p): Candidate[] => [
+        { key: p.file, label: p.label ?? p.file, url: fileUrl(p.url), kind: p.kind, used: same(p.sent, shot.filled), use: () => void useShot(p.file, null, shot) },
+        ...p.takes
+          .filter((t) => t.status === "done" && t.kind !== "lipsync" && (t.file || t.clip))
+          .map((t): Candidate => ({
+            key: `${p.file}#${t.n}`,
+            label: `${p.label ?? p.file} · ${t.label ?? `Take ${t.n}`}`,
+            url: t.file ? fileUrl(p.url.replace(/[^/]+$/, t.file)) : fileUrl(p.url.replace(/pictures\/[^/]+$/, `clips/${t.clip}`)),
+            kind: "video",
+            used: same(t.sent, shot.filled),
+            use: () => void useShot(p.file, t.n, shot),
+          })),
+      ]);
+  };
+  const comparedShot = comparing ? shots.find((s) => s.id === comparing) ?? null : null;
   async function attach(file: string, shot: ProductionShot) {
     try {
       await post({ action: "shot", file, slot: shot.id });
@@ -251,9 +272,12 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
           adding={adding}
           onDrop={(files, s) => void add(files, s.id)}
           onAttach={(file, s) => void attach(file, s)}
-          tile={(p, s) => <PictureTile key={p.file} projectId={projectId} p={p} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title, take) => setPlaying({ url, title, take })} shot={s} useShot={(n) => void useShot(p.file, n, s)} />}
+          onCompare={(s) => setComparing(s.id)}
+          compareCount={(s) => candidatesOf(s).length}
+          tile={(p, s) => <PictureTile key={p.file} projectId={projectId} p={p} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title, take) => setPlaying({ url, title, take })} shot={s} useShot={(n) => void useShot(p.file, n, s)} openCompare={candidatesOf(s).length >= 2 ? () => setComparing(s.id) : undefined} />}
         />
       ) : null}
+      {comparedShot ? <ShotCompare key={comparedShot.id} shot={comparedShot} candidates={candidatesOf(comparedShot)} song={board.song ? fileUrl(board.song) : null} onClose={() => setComparing(null)} /> : null}
       {shots.length ? (
         <h3 data-loose-heading className="mt-2 text-sm font-semibold">
           Loose pictures <span className="text-muted-foreground font-normal">· not in a shot: inspiration, extra B-roll, or drop one on a shot above</span>
@@ -373,8 +397,12 @@ function ShotItems({
   adding,
   onDrop,
   onAttach,
+  onCompare,
+  compareCount,
   tile,
 }: {
+  onCompare: (s: ProductionShot) => void;
+  compareCount: (s: ProductionShot) => number;
   shots: ProductionShot[];
   pictures: PictureView[];
   loose: PictureView[];
@@ -403,7 +431,7 @@ function ShotItems({
         <section key={`${g.name}-${gi}`} data-shot-section={g.name} className="flex flex-col gap-2">
           <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">{g.name}</h3>
           {g.shots.map((s) => (
-            <ShotRow key={s.id} s={s} pictures={pictures.filter((p) => p.slot === s.id)} loose={loose} adding={adding} onDrop={onDrop} onAttach={onAttach} tile={tile} />
+            <ShotRow key={s.id} s={s} pictures={pictures.filter((p) => p.slot === s.id)} loose={loose} adding={adding} onDrop={onDrop} onAttach={onAttach} tile={tile} onCompare={() => onCompare(s)} candidates={compareCount(s)} />
           ))}
         </section>
       ))}
@@ -411,7 +439,7 @@ function ShotItems({
   );
 }
 
-function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile }: { s: ProductionShot; pictures: PictureView[]; loose: PictureView[]; adding: boolean; onDrop: (files: FileList, s: ProductionShot) => void; onAttach: (file: string, s: ProductionShot) => void; tile: (p: PictureView, s: ProductionShot) => ReactNode }) {
+function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare, candidates }: { s: ProductionShot; pictures: PictureView[]; loose: PictureView[]; adding: boolean; onDrop: (files: FileList, s: ProductionShot) => void; onAttach: (file: string, s: ProductionShot) => void; tile: (p: PictureView, s: ProductionShot) => ReactNode; onCompare: () => void; candidates: number }) {
   const [over, setOver] = useState(false);
   const [copied, setCopied] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -457,6 +485,11 @@ function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile }: { s: Pr
         <button type="button" data-shot-copy-prompt={s.id} onClick={() => void copyPrompt()} className="hover:bg-accent flex shrink-0 items-center gap-1 rounded border px-2 py-1" title="The Midjourney prompt for this shot's first frame: paste it into Midjourney">
           {copied ? <Check className="size-3 text-emerald-300" /> : <Copy className="size-3" />} {copied ? "Copied" : "Copy prompt"}
         </button>
+        {candidates >= 2 ? (
+          <button type="button" data-shot-compare-open={s.id} onClick={onCompare} className="hover:bg-accent border-brand/50 text-brand flex shrink-0 items-center gap-1 rounded border px-2 py-1" title="Play every candidate of this shot side by side, together, with the song from its line">
+            <Play className="size-3" /> Compare {candidates}
+          </button>
+        ) : null}
         {s.refs.length ? (
           <span data-shot-refs={s.id} className="flex items-center gap-1.5" title="Midjourney keeps a face from a picture, not from words: copy a picture, paste it into Midjourney's prompt bar (Ctrl+V) and choose Omni Reference">
             <span className="text-muted-foreground">Omni Reference:</span>
@@ -508,6 +541,151 @@ function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile }: { s: Pr
         </div>
       </div>
     </div>
+  );
+}
+
+// Compare a shot (23 Nov 2026, Paul: "a viewer that automatically plays all shot 1 takes at once so it's easy to
+// compare"): every candidate of one shot side by side (videos, animated takes, pictures as stills), started together
+// and looped in sync; on a shot with a lyric line the song plays from that line, so each one is judged against the
+// same words and beat. One set of controls (space: play / pause); "Use for shot N" under each tile.
+type Candidate = { key: string; label: string; url: string; kind: "video" | "picture"; used: boolean; use: () => void };
+
+function ShotCompare({ shot, candidates, song, onClose }: { shot: ProductionShot; candidates: Candidate[]; song: string | null; onClose: () => void }) {
+  const videos = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const audio = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [songOn, setSongOn] = useState(true);
+  const fromS = shot.lineStartMs !== null && shot.lineStartMs !== undefined ? Math.max(0, shot.lineStartMs / 1000 - 0.5) : null; // a breath before the line
+  const withSong = !!song && fromS !== null;
+  const loopS = () => Math.max(3, ...[...videos.current.values()].map((v) => (Number.isFinite(v.duration) ? v.duration : 0)));
+  const started = useRef(0);
+  function restart(play = true) {
+    for (const v of videos.current.values()) {
+      v.currentTime = 0;
+      if (play) void v.play().catch(() => undefined);
+    }
+    if (audio.current && withSong) {
+      audio.current.currentTime = fromS!;
+      if (play && songOn) void audio.current.play().catch(() => undefined);
+    }
+    started.current = performance.now();
+    setPlaying(play);
+  }
+  function pause() {
+    for (const v of videos.current.values()) v.pause();
+    audio.current?.pause();
+    setPlaying(false);
+  }
+  function toggle() {
+    if (playing) pause();
+    else {
+      for (const v of videos.current.values()) void v.play().catch(() => undefined);
+      if (audio.current && withSong && songOn) void audio.current.play().catch(() => undefined);
+      setPlaying(true);
+    }
+  }
+  // Every candidate starts again together when the longest one ends (and the song goes back to the line).
+  useEffect(() => {
+    if (!playing) return;
+    const t = setInterval(() => {
+      const first = [...videos.current.values()][0];
+      const at = first ? first.currentTime : (performance.now() - started.current) / 1000;
+      if (at >= loopS() - 0.05 || (first && first.ended)) restart(true);
+    }, 100);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, songOn]);
+  useEffect(() => {
+    const t = setTimeout(() => restart(true), 300); // all loaded: start together
+    const key = (e: KeyboardEvent) => {
+      if (e.code === "Space" && !(e.target instanceof HTMLInputElement)) {
+        e.preventDefault();
+        toggle();
+      }
+    };
+    window.addEventListener("keydown", key);
+    return () => (clearTimeout(t), window.removeEventListener("keydown", key));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const cols = candidates.length <= 2 ? "grid-cols-2" : candidates.length === 3 ? "grid-cols-3" : "grid-cols-2 md:grid-cols-4";
+  return (
+    <Dialog open onOpenChange={(o) => !o && (pause(), onClose())}>
+      <DialogContent data-shot-compare={shot.id} className="w-[min(72rem,96vw)] max-w-none">
+        <DialogHeader>
+          <DialogTitle>
+            Compare shot {shot.number}: {candidates.length} candidates
+          </DialogTitle>
+          <DialogDescription>
+            {shot.shows}
+            {shot.line !== null ? ` · line ${shot.line}: “${shot.lineText ?? ""}”` : " · no line (music only)"}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <Button type="button" size="sm" data-compare-play onClick={toggle}>
+            {playing ? "Pause" : "Play"} all
+          </Button>
+          <Button type="button" size="sm" variant="outline" data-compare-restart onClick={() => restart(true)}>
+            <RotateCw /> From the start
+          </Button>
+          {withSong ? (
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                data-compare-song
+                checked={songOn}
+                onChange={(e) => {
+                  setSongOn(e.target.checked);
+                  if (!e.target.checked) audio.current?.pause();
+                  else restart(true);
+                }}
+              />
+              With the song from line {shot.line}
+            </label>
+          ) : (
+            <span className="text-muted-foreground">{shot.line === null ? "Music-only shot: the videos play without the song." : "The line is not timed yet: the videos play without the song."}</span>
+          )}
+          <span className="text-muted-foreground">Space: play / pause · they loop together</span>
+        </div>
+        <div className={cn("grid max-h-[70vh] gap-3 overflow-y-auto", cols)}>
+          {candidates.map((c) => (
+            <div key={c.key} data-compare-tile={c.key} className={cn("flex flex-col gap-1.5 rounded-lg border p-1.5", c.used && "border-emerald-400/50")}>
+              <div className="relative aspect-[9/16] overflow-hidden rounded bg-black">
+                {c.kind === "video" ? (
+                  <video
+                    ref={(el) => {
+                      if (el) videos.current.set(c.key, el);
+                      else videos.current.delete(c.key);
+                    }}
+                    src={c.url}
+                    muted
+                    playsInline
+                    preload="auto"
+                    className="absolute inset-0 size-full object-cover"
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element -- a local picture served by /api/files
+                  <img src={c.url} alt="" className="absolute inset-0 size-full object-cover" />
+                )}
+                {c.kind === "picture" ? <span className="absolute top-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">picture (as a still)</span> : null}
+              </div>
+              <span className="truncate text-[11px]" title={c.label}>
+                {c.label}
+              </span>
+              {c.used ? (
+                <span data-compare-used className="flex items-center gap-1 text-xs text-emerald-300">
+                  <Check className="size-3" /> Shot {shot.number}
+                </span>
+              ) : (
+                <Button type="button" size="sm" variant="outline" data-compare-use={c.key} onClick={c.use}>
+                  <Check /> Use for shot {shot.number}
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+        {withSong ? <audio ref={audio} src={song!} preload="auto" /> : null}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -564,7 +742,9 @@ function PictureTile({
   play,
   shot,
   useShot,
+  openCompare,
 }: {
+  openCompare?: () => void; // a shot with 2+ candidates: clicking one plays them all side by side (like Midjourney)
   projectId: string;
   p: PictureView;
   board: PicturesView;
@@ -679,7 +859,7 @@ function PictureTile({
     <div data-picture={p.file} data-kind={p.kind} className="bg-card/40 flex flex-col gap-2 rounded-lg border p-2">
       <div className="relative">
         {video ? (
-          <button type="button" data-picture-play onClick={() => play(fileUrl(p.url), p.file)} className="block w-full cursor-pointer" title="Click to watch it big">
+          <button type="button" data-picture-play onClick={() => (openCompare ? openCompare() : play(fileUrl(p.url), p.file))} className="block w-full cursor-pointer" title={openCompare ? "Click to play every candidate of this shot together" : "Click to watch it big"}>
             <video src={`${fileUrl(p.url)}#t=0.1`} muted loop playsInline preload="metadata" onMouseEnter={(e) => void e.currentTarget.play().catch(() => undefined)} onMouseLeave={(e) => e.currentTarget.pause()} className="bg-muted h-48 w-full rounded object-contain" />
           </button>
         ) : (
@@ -779,6 +959,7 @@ function PictureTile({
               await post({ action: "label", file: p.file, n: t.n, label }).catch((e: Error) => setNotice({ ok: false, text: e.message }));
               await reload();
             }} source={`${board.services.find((s) => s.id === t.service)?.label ?? t.service} · ${t.model}${t.kind === "lipsync" ? ` · lip sync, ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` : ""}`} url={takeUrl(t)} onPlay={(url) => {
+              if (openCompare && t.kind !== "lipsync") return openCompare();
               play(url, `${p.file} · Take ${t.n}`, { fromS: t.songFromMs !== undefined ? t.songFromMs / 1000 : null, clipInS: t.clipInS ?? 0, why: t.songWhy ?? null });
               if (t.fresh) void singer({ action: "seen", n: t.n }).then(reload).catch(() => undefined);
             }} onSend={() => void send(t.n, t.label ?? `Take ${t.n}`)} onUse={() => void chooseTake(t)} shot={shot && useShot ? { number: shot.number, used: !!(t.sent && shot.filled && t.sent.toLowerCase() === shot.filled.toLowerCase()), use: () => useShot(t.n) } : undefined} onRemove={p.cleanable.includes(t.n) ? () => void cleanUp(t.n) : undefined} onResume={() => void post({ action: "resume", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message }))} />

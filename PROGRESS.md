@@ -57,6 +57,13 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   pictures\_removed\, its record (takes, mood, shot) stays; **Put-aside pictures → Restore** brings it back on its
   shot. Clips already in the Storyboard stay. Nothing is deleted. animate.ts removePicture / restorePicture, API
   remove-picture / restore-picture. Tests: shot-production (8), creation-production (+3 checks); pictures.e2e passes.
+- 23 Nov 2026 (Paul: "a viewer that automatically plays all shot 1 takes at once", "like in MJ, clicking one video
+  plays all 4"): **Compare a shot**. A shot with 2+ candidates has "Compare N", and clicking any of its videos or takes
+  opens the same viewer: every candidate side by side (videos and finished takes playing, pictures as stills),
+  started together and looped in sync when the longest ends; on a timed lyric line the song plays from half a second
+  before the line (switchable); Play / Pause all, From the start, Space; "Use for shot N" under each tile, ✓ on the
+  one in use. pictures-board.tsx ShotCompare; shot-production.ts withLineStarts (API adds lineStartMs). Tests:
+  shot-production (+1), creation-production (+4 checks).
 - Part 2 (next): a look per shot with warnings, cost so far / to go.
 - Code: node/shot-production.ts (productionView, setPictureShot, useForShot, sectionsOfShots), shotlist.ts (filled),
   animate.ts (pictures.json "slot"), API /api/songs/<id>/pictures (production, slot, shot, use-shot),
