@@ -54,7 +54,8 @@ export type AutoSectionOptions = {
   // music, src/story.ts), moved back to the bar before a story sentence it would cut.
   musicStartMs?: number;
   // A Mini film (23 Nov 2026, Paul: "the shots are not in order in Shape now"): its shots tell a story line by line,
-  // so the part starts one bar before the story's first shot (its lyric line, 1-based), not at the hook.
+  // so the part starts one bar before the story's first shot (its lyric line, 1-based), not at the hook. 0: the story
+  // opens with shots before the first sung line (the intro): from the song's start.
   storyStartLine?: number;
   endOn?: "bar" | "beat"; // beat: when no bar is clean, any beat may end the section (bars still preferred)
   // Loop platforms: how well an end flows back into the start (lower score flows better).
@@ -158,7 +159,7 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
   const shortestMs = options.shortestMs ?? minMs;
   const leadMs = options.leadMs ?? 250;
   const duration = options.durationMs;
-  const story = options.musicStartMs === undefined && options.storyStartLine !== undefined && !!lines[options.storyStartLine - 1] ? options.storyStartLine : null;
+  const story = options.musicStartMs === undefined && options.storyStartLine !== undefined && (options.storyStartLine === 0 || !!lines[options.storyStartLine - 1]) ? options.storyStartLine : null;
   const hookFirst = options.anchorMode === "hook-first" && story === null;
   const warnings: string[] = [];
 
@@ -203,7 +204,10 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
   }
 
   // A Mini film: from the story's first shot (the chorus lines above still decide the ending).
-  if (story !== null) {
+  if (story === 0) {
+    anchor = { kind: "story", line: null };
+    anchorText = "the song's start: the story opens with shots before the first sung line (the intro), and a Mini film tells its story in order";
+  } else if (story !== null) {
     anchor = { kind: "story", line: story };
     anchorText = `one bar before the story's first shot (line ${story}, "${lines[story - 1].text}"): a Mini film tells its story in order`;
   }
@@ -232,6 +236,8 @@ export function autoSection(lines: readonly SectionLine[], beats: readonly Beat[
         start = earlier;
       }
     }
+  } else if (story === 0) {
+    start = 0; // the song's own start: nothing is cut, no fade in
   } else if (anchor.line === null) {
     start = downbeats[0] ?? 0;
   } else if (hookFirst) {

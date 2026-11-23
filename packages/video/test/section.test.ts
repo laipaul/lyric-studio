@@ -212,6 +212,10 @@ describe("auto section", () => {
     expect(film.reason).toContain("the story's first shot (line 3");
     // Shot 1 on line 1 (sung at 0.5 s): from the song's start.
     expect(autoSection(ls, beats, { durationMs, anchorMode: "hook-first", storyStartLine: 1 }).start_ms).toBe(0);
+    // Intro shots first (0): from the song's very start.
+    const intro = autoSection(ls, beats, { durationMs, anchorMode: "hook-first", storyStartLine: 0 });
+    expect([intro.start_ms, intro.anchor.kind]).toEqual([0, "story"]);
+    expect(intro.reason).toContain("the intro");
     // A line that does not exist: the hook as usual.
     expect(autoSection(ls, beats, { durationMs, anchorMode: "hook-first", storyStartLine: 99 }).anchor.kind).toBe("hook");
   });

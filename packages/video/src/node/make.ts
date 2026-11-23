@@ -43,7 +43,7 @@ import { bestMoments } from "./best-moment";
 import { clipBandLuminances } from "./lyric-band";
 import { isThinFace, lyricBackingFor, type BackingDecision, type Readability } from "../readability";
 import { pictureOf } from "../picture";
-import { editOf, expandCards, isOmitted, rankOf, readClipEdits, storyPick } from "./clip-edits";
+import { cardOf, editOf, expandCards, isOmitted, rankOf, readClipEdits, storyPick } from "./clip-edits";
 import { boardForRun, cardFont, cardMeasure, overrideCount, TITLE_MIN_S, TITLE_SIZE_VERTICAL, titleCards, type RunBoard } from "./textboard";
 import { extraCards, fillCardText } from "../extra-cards";
 import { matchPinClips, parsePins } from "../pins";
@@ -553,13 +553,24 @@ function chooseSection(
 }
 
 // A Mini film, or a song with a shot list not set to "Cut to the song" (23 Nov 2026): its story starts at the first shot of its shot list on a lyric line (else its first story
-// anchor). The automatic part of a Reel / TikTok / Short starts there instead of at the hook. Other songs: null.
+// anchor); 0 when it opens with intro shots (no line): from the song's start. The automatic part of a Reel / TikTok / Short starts there instead of at the hook. Other songs: null.
 export function storyStartOf(ws: Workspace, projectId: string, recipe: SongRecipe, instrumental: boolean): number | null {
   if (instrumental) return null;
-  const slotLines = (readShotList(ws, projectId)?.slots ?? []).flatMap((x) => (typeof x.line === "number" && x.line >= 1 ? [x.line] : []));
+  const slots = [...(readShotList(ws, projectId)?.slots ?? [])].sort((x, y) => x.order - y.order);
+  const hasLine = (x: { line?: number | null }) => typeof x.line === "number" && x.line >= 1;
+  const slotLines = slots.flatMap((x) => (hasLine(x) ? [x.line as number] : []));
   const film = effectiveSongStyle(recipe.songStyle, (recipe.anchors ?? []).filter((a) => a.sync !== undefined).length) === "film";
   // A shot list on lyric lines tells a story too, unless the song is set to "Cut to the song".
   if (!film && !(slotLines.length && recipe.songStyle !== "cut")) return null;
+  // The story opens with shots before the first sung line (intro shots, no line): from the song's start (0). The story
+  // line (clips.json order) decides when there is one: its first item is a shot with no line, or a clip on no line.
+  const edits = readClipEdits(songPathsById(ws, projectId).root);
+  const first = edits.order.find((e) => cardOf(e) !== null || !isOmitted(edits, e)); // a collection card first: its clips come first
+  if (first) {
+    const slot = first.startsWith("slot:") ? slots.find((x) => x.id === first.slice(5)) : undefined;
+    const anchored = (recipe.anchors ?? []).some((a) => a.clip.toLowerCase() === first.toLowerCase());
+    if (slot ? !hasLine(slot) : !first.startsWith("slot:") && !anchored && (slotLines.length || (recipe.anchors ?? []).length)) return 0;
+  } else if (slotLines.length && !hasLine(slots[0])) return 0;
   const lines = slotLines.length ? slotLines : (recipe.anchors ?? []).map((a) => a.line);
   return lines.length ? Math.min(...lines) : null;
 }

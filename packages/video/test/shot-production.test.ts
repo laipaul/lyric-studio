@@ -237,5 +237,23 @@ describe("Creation → Production", () => {
     // A shot list on lines tells a story without the style chosen too (or with Add singing).
     expect(storyStartOf(ws, id, { ...recipe, songStyle: undefined }, false)).toBe(1);
     expect(storyStartOf(ws, id, { ...recipe, songStyle: "singing" }, false)).toBe(1);
+    // The story opens with an intro shot (no line): from the song's start.
+    const file = path.join(songRoot, "shotlist.json");
+    const saved = readFileSync(file, "utf8");
+    const withIntro = JSON.parse(saved);
+    withIntro.slots = [{ id: "s00", order: 0, shows: "The chapel, empty", characters: [], scene: null, shot: "wide", line: null }, ...withIntro.slots];
+    writeFileSync(file, JSON.stringify(withIntro));
+    const orderFile = path.join(songRoot, "clips.json");
+    const savedOrder = readFileSync(orderFile, "utf8");
+    // The story line decides: its first item is still the shot on line 1, so it starts there.
+    expect(storyStartOf(ws, id, { ...recipe, songStyle: "film" }, false)).toBe(1);
+    const edits = JSON.parse(savedOrder);
+    writeFileSync(orderFile, JSON.stringify({ ...edits, order: ["slot:s00", ...edits.order] }));
+    expect(storyStartOf(ws, id, { ...recipe, songStyle: "film" }, false)).toBe(0);
+    // A clip on no line first in the story line: the same.
+    writeFileSync(orderFile, JSON.stringify({ ...edits, order: ["chapel-empty.mp4", ...edits.order] }));
+    expect(storyStartOf(ws, id, { ...recipe, songStyle: "film" }, false)).toBe(0);
+    writeFileSync(orderFile, savedOrder);
+    writeFileSync(file, saved);
   });
 });

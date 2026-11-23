@@ -13,6 +13,9 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   the song's start when that line is near it). The end follows the usual rules (a finished phrase near the platform's
   length, keeping the most story anchors). The plan's reason says "one bar before the story's first shot (line N …): a
   Mini film tells its story in order". A part you chose by hand (the pink window) still wins; "Automatic" gives it back.
+- Same day (Paul: "in shape it still shows a different beginning"): when the story line opens with a shot that has no
+  lyric line (an intro shot), or a clip on no line, the part starts at the **song's very start**, so the intro shots play
+  over the intro (no fade: the song's own start).
 - Code: section.ts storyStartLine (anchor kind "story"), make.ts storyStartOf. Tests: section.test.ts,
   shot-production.test.ts.
 - On the PC: open Shape on "Something About You And Me" (Reels). If the readout says "chosen by you", press Automatic.
