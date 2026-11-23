@@ -48,7 +48,7 @@ export function SongStyleBadge({ style, className }: { style: SongStyle; classNa
 export function SongStyleChip({ projectId, onOpen }: { projectId: string; onOpen: () => void }) {
   const view = useSongStyle(projectId);
   if (!view) return null;
-  const what = view.style === "film" ? "every video plays the whole song" : view.style === "singing" ? "singing takes on their lines" : "short videos start at the chorus";
+  const what = view.style === "film" ? "every video plays the whole song, except the Spotify Canvas, which stays a short loop" : view.style === "singing" ? "singing takes on their lines" : "short videos start at the chorus";
   return (
     <button type="button" onClick={onOpen} data-song-style-chip={view.style} className={cn("hover:bg-accent inline-flex items-center rounded px-1 align-middle", view.style === "film" ? "text-sky-300" : view.style === "singing" ? "text-violet-300" : "")} title={`Song style: ${SONG_STYLE_LABEL[view.style]}: ${what}. Click to change it (Prepare → Song Details).`}>
       <SongStyleBadge style={view.style} />
