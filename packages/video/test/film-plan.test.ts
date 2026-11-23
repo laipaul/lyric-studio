@@ -41,6 +41,17 @@ describe("the film's shots (pure)", () => {
     expect(cuts.map((c) => c.frame)).toEqual([58, 178, 298, 418]);
   });
 
+  it("a part of the song (the pink window): only the cards inside it, the one playing at its start opens it; nothing said about the others", () => {
+    const beats = grid(120, 40, 0);
+    const lines = [1, 2, 3, 4].map((n) => ({ number: n, text: `L${n}`, startMs: 2000 + (n - 1) * 4000 + 100, endMs: null }));
+    const items = filmItems(["slot:s01", "a.mp4", "slot:s03", "c.mp4", "slot:s05"], ["a.mp4", "c.mp4"], list, []);
+    // The part 7.0-13.0 s (frames 210-390): s03 (6.1-10.1 s) is playing at its start, then c.mp4 on line 3 (10.1 s).
+    const part = filmCuts(items, lines, beats, { startFrame: 210, endFrame: 390, fps: 30, songEndMs: 20_000 });
+    expect(part.kept.map((x) => x.key)).toEqual(["slot:s03", "c.mp4"]);
+    expect(part.cuts.map((c) => c.frame)).toEqual([298]);
+    expect(part.notes).toEqual([]);
+  });
+
   it("a shot with no room of its own is said, not silently dropped; a shot on a line wins over one without", () => {
     const beats = grid(120, 40, 0);
     const lines = [{ number: 1, text: "L1", startMs: 2000, endMs: null }, { number: 2, text: "L2", startMs: 2100, endMs: null }];

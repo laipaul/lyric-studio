@@ -1371,7 +1371,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     const items = filmItems(storyOrder.order, usedClips.map((c) => c.name), readShotList(ws, project.id), sh.anchors);
     if (items.length) {
       const gridLines = lines.map((l, i) => ({ number: i + 1, text: l.text, startMs: l.start_ms - leadMs + lyricsOffsetMs, endMs: null }));
-      const film = filmCuts(items, gridLines, analysis.beats, { startFrame: plan.start_frame, endFrame: plan.end_frame, fps: VIDEO.fps });
+      const film = filmCuts(items, gridLines, analysis.beats, { startFrame: plan.start_frame, endFrame: plan.end_frame, fps: VIDEO.fps, songEndMs: analysis.duration_ms });
       const worn = shotLooks(ws, project.id);
       const cards = listCards(ws);
       const ids: string[] = [];

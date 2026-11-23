@@ -19,6 +19,9 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
     have no take yet (shots 7-45): they show a stand-in until you use a take for them in Creation → Production";
   - a card with no room of its own (too close to the one before, or to the end) is left out and said; a card on a line
     wins over a card without one just before it.
+  - a **part of the song chosen by hand** (the pink window, e.g. a 60 s chorus Reel) plays only the cards inside it, in
+    order; the card already playing when the part starts opens it (Paul: "I still can use my mini film and create a
+    normal reel right").
 - Code: node/film-plan.ts (filmItems, filmCuts, standInPicture), make.ts (the film block: the plan's cuts, stand-in
   clips, no anchors / gap filling / loop blend), compose.ts (RenderBase.filmShots), storyboard.ts (stand-in names).
   The plan cache key includes the shot list. Singing takes (lip sync) in a Mini film are placed as ordinary shots for

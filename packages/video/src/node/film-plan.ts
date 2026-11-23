@@ -76,14 +76,21 @@ export function filmCuts(
   items: readonly FilmItem[],
   lines: readonly GridLine[],
   beats: readonly Beat[],
-  section: { startFrame: number; endFrame: number; fps: number; early?: number; minShotMs?: number },
+  section: { startFrame: number; endFrame: number; fps: number; early?: number; minShotMs?: number; songEndMs?: number }, // songEndMs: the whole song (the spans), when the video is a part of it
 ): { cuts: CutPoint[]; kept: FilmItem[]; notes: string[] } {
   const { startFrame, endFrame, fps } = section;
   const early = section.early ?? 2;
   const minShot = Math.round(((section.minShotMs ?? 700) * fps) / 1000);
   const ms = (frame: number) => Math.round((frame * 1000) / fps);
   const timedLine = (n: number | null) => n !== null && lines.some((l) => l.number === n && l.startMs !== null);
-  const spans = slotSpans(items.map((x) => ({ id: x.key, line: timedLine(x.line) ? x.line : null })), lines, ms(endFrame));
+  const songEnd = section.songEndMs ?? ms(endFrame);
+  const spans = slotSpans(items.map((x) => ({ id: x.key, line: timedLine(x.line) ? x.line : null })), lines, songEnd);
+  // A part of the song (the pink window): only the cards whose moment is inside it; the card already playing when the
+  // part starts opens it. The others are simply outside this video (not "without room").
+  const inside = items.filter((x) => {
+    const span = spans.get(x.key);
+    return !span || (span.endMs > ms(startFrame) + 1 && span.startMs < ms(endFrame) - 1);
+  });
   const beatCuts = beats.map((_, i) => cutPointAt(beats, i, fps, early));
   const cuts: CutPoint[] = [];
   const kept: FilmItem[] = [];
@@ -103,7 +110,7 @@ export function filmCuts(
     return cut && cut.frame <= endFrame - minShot && cut.frame >= startFrame + minShot && cut.frame - wantFrame <= late ? cut : null;
   };
   const leftOut = (item: FilmItem, why: string) => notes.push(`shot ${item.number}${item.slot ? ` (${item.slot.id})` : ""} ${why}: it is left out of this video`);
-  for (const item of items) {
+  for (const item of inside) {
     if (!kept.length) {
       kept.push(item); // the first shot opens the video
       continue;
