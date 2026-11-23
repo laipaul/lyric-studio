@@ -4,19 +4,21 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
-### A Mini film's Reel starts at the start of the song ✅ (to verify on the PC)
+### A Mini film is the whole song on every platform ✅ (to verify on the PC)
 - Paul (23 Nov 2026): "the shots are not in order in Shape now". The Reel opened on shot 7: a Reel's automatic part of
-  the song starts just before the first chorus (line 8, sung right after line 7), so shots 1-6 were before it.
-- Decided by Paul the same day: "the rule for Mini film: it should start at the start of the song". A story song (song
-  style **Mini film**, or a song with a shot list on lyric lines that is not set to "Cut to the song") starts the
-  automatic part of a Reel / TikTok / Short at **0:00**: the story plays from its beginning, intro shots included (no
-  fade: the song's own start). The end follows the usual rules (a finished phrase near the platform's length, keeping
-  the most story anchors). The plan's reason says so. A part chosen by hand (the pink window) still wins; "Automatic"
-  gives it back. Cut to the song and Add singing songs without a shot list keep the hook-first start.
-- Code: make.ts storyStartOf (0 = the song's start), section.ts storyStartLine (anchor kind "story"; a line number
-  still works for later use). Tests: section.test.ts, shot-production.test.ts.
-- On the PC: Shape on "Something About You And Me" (Reels): the readout says "Song Reels: 0:00.0 – …"; the timeline
-  starts with the first card of your story line. If it says "chosen by you", press Automatic.
+  the song starts just before the first chorus, so shots 1-6 were before it. Then, decided by Paul: "the mini film is the
+  equivalent of me wanting to create a video for the whole song … I pick the format Reel, YT, etc and I want the whole
+  song, don't limit me, I decide".
+- Now a story song (song style **Mini film**, or a song with a shot list on lyric lines that is not set to "Cut to the
+  song") plays the **whole song, 0:00 to its own end, on every platform picked** (Reels, TikTok, Shorts, YouTube), with
+  no platform length: no fade at either end (the song's own start and end). The plan's reason says "whole song … (a
+  Mini film: the whole story on every platform)". A part chosen by hand (the pink window) still wins; "Automatic" gives
+  it back. Spotify Canvas keeps its short loop. Cut to the song and Add singing songs without a shot list keep the
+  hook-first part.
+- Code: make.ts isWholeStory, chooseSection (wholeStory). Tests: whole-story.test.ts, shot-production.test.ts.
+- On the PC: Shape on "Something About You And Me" (Reels): the readout says "Song Reels: 0:00.0 – <song length>"; if
+  it says "chosen by you", press Automatic. Note: Instagram and YouTube Shorts accept up to 3 min per video; a longer
+  song is yours to decide (post it, or drag the pink window to a part).
 
 ### Get Latest Lyric Studio: one double-click to update ✅ (to verify on the PC)
 - Paul (22 Nov 2026): "can u create a shortcut I can double click instead of doing manually" (git pull lyric main,

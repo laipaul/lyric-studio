@@ -499,7 +499,7 @@ export function ringOutLimitMs(section: { start_ms: number; end_ms: number }, wi
   return window ? Math.max(section.end_ms, section.start_ms + window.hardMaxMs) : section.end_ms;
 }
 
-type SectionChoiceOut = {
+export type SectionChoiceOut = {
   mode: string;
   start_ms: number;
   end_ms: number;
@@ -511,15 +511,20 @@ type SectionChoiceOut = {
   lengthAdvice?: boolean; // a typed length the app could not end cleanly near
 };
 
-function chooseSection(
+export function chooseSection(
   mode: string, lines: SectionLine[], beats: Beat[], durationMs: number, leadMs: number, preset?: PlatformPreset,
   fit?: (startMs: number, endMs: number) => { score: number; ok: boolean; text: string }, // loop platforms: the end that flows back best
   kept?: (startMs: number, endMs: number) => { kept: number; total: number; missing: number[] }, // story anchors: the end that keeps most
   titleLead = false, // the title opening: up to 2 bars before the hook
   musicStartMs?: number, // an instrumental: the strongest stretch of the music
-  storyStartLine?: number, // a Mini film: from the story's first shot, not the hook
+  wholeStory = false, // a Mini film: the whole song on every platform
 ): SectionChoiceOut {
   if (mode === "auto" && preset?.length.mode === "full") mode = "full";
+  // A Mini film (23 Nov 2026, Paul: "when I pick Mini film … I want the whole song, don't limit me, I decide"): the whole
+  // song from 0:00 to its own end on every platform picked, whatever the platform's usual length (Canvas keeps its loop).
+  if (mode === "auto" && wholeStory) {
+    return { mode: "full", start_ms: 0, end_ms: durationMs, requested: null, reason: `whole song: 0:00 - ${clockText(durationMs)} (a Mini film: the whole story on every platform)`, warnings: [], cuts: [] };
+  }
   if (mode === "auto") {
     const window = preset ? sectionWindow(preset) : null;
     const s = autoSection(lines, beats, {
@@ -531,7 +536,6 @@ function chooseSection(
       anchorMode: preset?.anchor ?? "lead-in",
       ...(titleLead ? { titleLead: true } : {}),
       ...(musicStartMs !== undefined ? { musicStartMs } : {}),
-      ...(storyStartLine !== undefined ? { storyStartLine } : {}),
       endOn: preset?.endOn ?? "bar",
       ...(fit ? { loopFit: fit } : {}),
       ...(kept ? { anchorsKept: kept } : {}),
@@ -552,14 +556,14 @@ function chooseSection(
   return { mode, start_ms: start, end_ms: requested.end_ms, requested, reason, warnings: cuts.map((c) => `The section ${c.at} (${clockText(c.time_ms)}) cuts line ${c.line} "${c.text}" while it is sung.`), cuts };
 }
 
-// A Mini film, or a song with a shot list on lyric lines not set to "Cut to the song" (23 Nov 2026, Paul: "the rule for
-// Mini film: it should start at the start of the song"): the automatic part of a Reel / TikTok / Short starts at the
-// song's start (0), so the story plays from its beginning, intro shots included, not from the hook. Other songs: null.
-export function storyStartOf(ws: Workspace, projectId: string, recipe: SongRecipe, instrumental: boolean): number | null {
-  if (instrumental) return null;
-  if (effectiveSongStyle(recipe.songStyle, (recipe.anchors ?? []).filter((a) => a.sync !== undefined).length) === "film") return 0;
+// A Mini film, or a song with a shot list on lyric lines not set to "Cut to the song" (23 Nov 2026, Paul: "the mini film
+// is the equivalent of me wanting to create a video for the whole song"): every platform picked plays the whole song,
+// not a part of it (a part chosen by hand still wins; Canvas keeps its loop). Instrumentals and other songs: false.
+export function isWholeStory(ws: Workspace, projectId: string, recipe: SongRecipe, instrumental: boolean): boolean {
+  if (instrumental) return false;
+  if (effectiveSongStyle(recipe.songStyle, (recipe.anchors ?? []).filter((a) => a.sync !== undefined).length) === "film") return true;
   const onLines = (readShotList(ws, projectId)?.slots ?? []).some((x) => typeof x.line === "number" && x.line >= 1);
-  return onLines && recipe.songStyle !== "cut" ? 0 : null;
+  return onLines && recipe.songStyle !== "cut";
 }
 
 export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
@@ -863,7 +867,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       sectionLines, instrumental, collection, collectionNames: runCollections, collectionRemembered, ep, tool, rootDir, getProject: () => project,
       loopAudio: () => (songAudio ??= readLoopAudio(sp.songFile)),
       anchors: songRecipe.anchors ?? [],
-      storyStartLine: storyStartOf(ws, sp.project.id, songRecipe, instrumental),
+      wholeStory: isWholeStory(ws, sp.project.id, songRecipe, instrumental),
       canvasChoice: songRecipe.canvas ?? null,
       youtubeLinks: pickedLinks(songRecipe.links ?? [], songRecipe.postLinks, "youtube"),
       gapOrder: songRecipe.gapOrder ?? null,
@@ -952,7 +956,7 @@ type Shared = {
   getProject: () => { id: string; title: string; artist: string };
   loopAudio: () => Promise<LoopAudio | null>; // the song decoded once per run, for the loop checks
   anchors: AnchorSpec[]; // song.json: story anchors
-  storyStartLine: number | null; // a Mini film: the lyric line of its first shot (the automatic short-form part starts there)
+  wholeStory: boolean; // a Mini film: the whole song on every platform (an automatic part of the song only)
   canvasChoice: { clip: string; at?: number } | null; // song.json "canvas": the clip chosen for the Canvas
   youtubeLinks: SongLink[]; // song.json "links" picked for YouTube (publish.txt)
   gapOrder: GapOrder | null; // song.json (null: story with anchors, else v1 story and the others shuffled)
@@ -1205,7 +1209,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     : chooseSection(options.section ?? "auto", sh.sectionLines, analysis.beats, analysis.duration_ms, leadMs - lyricsOffsetMs, preset,
       loops ? (startMs, endMs) => loopFit(loopSong, analysis.bpm, startMs, endMs, downbeatTimes) : undefined,
       anchorLines.length && preset.lyrics ? (startMs, endMs) => anchorsInside(anchorLines, startMs, endMs) : undefined,
-      titleOpeningOn, musicStart, sh.storyStartLine ?? undefined);
+      titleOpeningOn, musicStart, sh.wholeStory);
   // Automatic ending (Reels, TikTok, Shorts; src/ending.ts): a tight loop only when the end flows back into
   // the start, else a soft fade after the last sung word, or the last chord ringing out one more bar.
   const loopLines = sh.sectionLines.map((l, i) => ({ number: numbers[i] || i + 1, text: l.text, sungStartMs: sungStart(l), sungEndMs: sungEnd(l), ...(l.words?.length ? { lastWordStartMs: l.words.at(-1)!.start_ms } : {}) }));

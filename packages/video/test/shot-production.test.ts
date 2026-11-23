@@ -20,7 +20,7 @@ import { shotLooks } from "../src/node/shot-looks";
 import { addLook, LOOKS_DIR } from "../src/node/characters/looks";
 import { cardRoot, listCards } from "../src/node/characters/cards";
 import { songStory } from "../src/node/story-line";
-import { storyStartOf } from "../src/node/make";
+import { isWholeStory } from "../src/node/make";
 import { folderClips, songClipsCollection } from "../src/node/assets";
 import { LYRICS, ffmpeg, makeClip, makeSong } from "./media-helpers";
 
@@ -229,12 +229,12 @@ describe("Creation → Production", () => {
     expect(v.pictures.find((p) => p.file.startsWith("chapel_"))?.mjLink).toBe("https://www.midjourney.com/jobs/5813efa3-57ba-409f-8aa1-09b60e1b9c83?index=2");
   });
 
-  it("a Mini film (or a song with a shot list on lines) starts its Reel at the song's start; Cut to the song and instrumentals: the hook (null)", () => {
+  it("a Mini film (or a song with a shot list on lines) is the whole song on every platform; Cut to the song and instrumentals are not", () => {
     const recipe = readRecipe(songPathsById(ws, id).recipe!);
-    expect(storyStartOf(ws, id, { ...recipe, songStyle: "film" }, false)).toBe(0);
-    expect(storyStartOf(ws, id, { ...recipe, songStyle: undefined }, false)).toBe(0);
-    expect(storyStartOf(ws, id, { ...recipe, songStyle: "singing" }, false)).toBe(0);
-    expect(storyStartOf(ws, id, { ...recipe, songStyle: "cut" }, false)).toBeNull();
-    expect(storyStartOf(ws, id, { ...recipe, songStyle: "film" }, true)).toBeNull();
+    expect(isWholeStory(ws, id, { ...recipe, songStyle: "film" }, false)).toBe(true);
+    expect(isWholeStory(ws, id, { ...recipe, songStyle: undefined }, false)).toBe(true);
+    expect(isWholeStory(ws, id, { ...recipe, songStyle: "singing" }, false)).toBe(true);
+    expect(isWholeStory(ws, id, { ...recipe, songStyle: "cut" }, false)).toBe(false);
+    expect(isWholeStory(ws, id, { ...recipe, songStyle: "film" }, true)).toBe(false);
   });
 });
