@@ -85,7 +85,17 @@ export function platformState(pr: PlatformRun): { status: Exclude<PlatformStatus
 export function songCard(ws: Workspace, p: typeof projectTable.$inferSelect, labels = platformLabels()): SongCard {
   const runs = songRuns(ws, p.id, Object.fromEntries(labels.map((l) => [l.name, l.label])));
   const rendering = renderingPlatforms(ws, p.id);
-  const platforms = labels.map(({ name, label }): PlatformCount => {
+  // The song style decides the platforms shown: a Mini film its two films, other songs the rest; a platform with a
+  // run of its own always shows (nothing made disappears from the card).
+  let film = false;
+  try {
+    film = isWholeStory(readRecipe(songPathsById(ws, p.id).recipe), false);
+  } catch {
+    film = false; // a song still in the old folder layout
+  }
+  const offered = new Set(platformsForStyle(labels.map((l) => l.name), film));
+  const shown = labels.filter((l) => (offered.has(l.name) && !(film && l.name === "standard")) || runs.some((r) => r.platforms.some((x) => x.name === l.name)));
+  const platforms = shown.map(({ name, label }): PlatformCount => {
     const withIt = runs.map((r) => ({ run: r, pr: r.platforms.find((x) => x.name === name) })).filter((x) => x.pr);
     const latest = withIt[withIt.length - 1];
     const approved = withIt.reduce((n, x) => n + (x.pr?.videos.filter((v) => v.mark.status === "approved").length ?? 0), 0);
