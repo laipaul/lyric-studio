@@ -41,6 +41,11 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   look; the face comes from the person's locked picture as Midjourney's Omni Reference: each shot shows it next to
   Copy prompt (the look's close-up, else its front view, else the card's picture; click copies the picture to paste
   into Midjourney). Paul's test prompt without descriptions passed. Tests: shot-prompt (6), creation-production (+2).
+  23 Nov 2026: still refused on the navy cocktail look ("nude pointed heels", "thin straps", "cowl neckline"):
+  outfit and action words now go through a Midjourney-safe pass (shot-prompt.ts mjSafe: nude -> soft beige, sheer ->
+  delicate, thin straps -> delicate straps, slip dress -> satin dress, corset -> structured, off one shoulder ->
+  off-shoulder, open to the waist -> open; sentences about makeup, lips, skin, body, and "Barefoot." left out).
+  vitest shot-prompt (7).
 - Part 2 (next): a look per shot with warnings, cost so far / to go.
 - Code: node/shot-production.ts (productionView, setPictureShot, useForShot, sectionsOfShots), shotlist.ts (filled),
   animate.ts (pictures.json "slot"), API /api/songs/<id>/pictures (production, slot, shot, use-shot),

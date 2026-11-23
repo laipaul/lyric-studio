@@ -2,7 +2,7 @@
 // without their name, the scene, a memory's feel, the Film look, the shape; "never" phrases go to --no.
 import { describe, expect, it } from "vitest";
 
-import { forMidjourney, shotPrompt } from "../src/shot-prompt";
+import { forMidjourney, mjSafe, shotPrompt } from "../src/shot-prompt";
 
 const bride = {
   name: "Jennifer",
@@ -17,10 +17,19 @@ describe("forMidjourney", () => {
   });
 });
 
+describe("mjSafe (Midjourney's moderator, 23 Nov 2026)", () => {
+  it("the navy cocktail look Midjourney refused, in safe words; makeup, lips and skin sentences out", () => {
+    const navy = "A midnight-navy satin cocktail dress with a softly draped cowl neckline, thin straps and a bias-cut skirt falling just below the knee. Simple nude pointed heels and a small navy satin clutch. Small gold stud earrings. Polished evening makeup with soft smoky eyes and a rose lip.";
+    const out = mjSafe(navy);
+    expect(out).toBe("A midnight-navy satin cocktail dress with a softly draped neckline, delicate straps and a bias-cut skirt falling just below the knee. Simple soft beige pointed heels and a small navy satin clutch. Small gold stud earrings.");
+    expect(mjSafe("An oatmeal cardigan worn open and slipping off one shoulder. Barefoot. The back is open to the waist with small buttons.")).toBe("An oatmeal cardigan worn open and off-shoulder. The back is open with small buttons.");
+  });
+});
+
 describe("shotPrompt", () => {
   it("a ceremony close-up: framing, action without the name, the look's outfit, Film look, shape, --no; no face or body words", () => {
     const p = shotPrompt({ shows: "Jennifer smiles under her veil", shot: "close-up", people: [bride], scene: null, filmLook: "shot on 35mm film, Kodak Portra 400 tones", aspect: "9:16" });
-    expect(p).toBe("cinematic close-up portrait: the woman smiles under her veil, wearing an ivory wedding gown with sheer illusion long sleeves, shot on 35mm film, Kodak Portra 400 tones --ar 9:16 --style raw --no crystal or statement earrings");
+    expect(p).toBe("cinematic close-up portrait: the woman smiles under her veil, wearing an ivory wedding gown with delicate illusion long sleeves, shot on 35mm film, Kodak Portra 400 tones --ar 9:16 --style raw --no crystal or statement earrings");
     expect(p).not.toMatch(/Jennifer|young|East Asian|slender|lips|skin|Preserve|never/i);
   });
   it("a memory: the shot's own outfit instead of the look's, and the memory feel; a scene card", () => {
@@ -34,7 +43,7 @@ describe("shotPrompt", () => {
   it("two people are labelled by their own card's words (a groom's card may mention the bride)", () => {
     const groom = { name: "Bridegroom", description: "Match the groom in the reference image. He has thick black hair. When he sees the bride, his eyes soften.", outfit: "A charcoal wool suit." };
     const p = shotPrompt({ shows: "Jennifer and Bridegroom kiss at the altar", shot: "medium", people: [bride, groom], scene: null, filmLook: null, aspect: "9:16" });
-    expect(p).toContain("cinematic medium shot: the woman and the man kiss at the altar, the woman wearing an ivory wedding gown with sheer illusion long sleeves, the man wearing a charcoal wool suit");
+    expect(p).toContain("cinematic medium shot: the woman and the man kiss at the altar, the woman wearing an ivory wedding gown with delicate illusion long sleeves, the man wearing a charcoal wool suit");
     expect(p).not.toMatch(/sees the bride|reference image|thick black hair/);
   });
   it("a Film look with its own Midjourney settings: each setting once, the song's shape wins, its others kept", () => {

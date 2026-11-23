@@ -53,6 +53,40 @@ export function forMidjourney(text: string | null | undefined): { text: string; 
   return { text: keep.join(". "), no };
 }
 
+// Midjourney's moderator refuses ordinary fashion words when people are in the picture (Paul, 23 Nov 2026: "nude
+// pointed heels", "thin straps", "cowl neckline"). The outfit and the shot's words are said in safe words; sentences
+// about makeup, lips or skin, and bare feet, are left out (the face comes from the Omni Reference picture). Pure.
+const SAFE: [RegExp, string][] = [
+  [/\bnude\b/gi, "soft beige"],
+  [/\bsheer\b/gi, "delicate"],
+  [/\bthin straps\b/gi, "delicate straps"],
+  [/\bspaghetti straps\b/gi, "delicate straps"],
+  [/\bslip dress\b/gi, "satin dress"],
+  [/\bcorset\b/gi, "structured"],
+  [/\bcowl\s+/gi, ""],
+  [/\b(worn )?(slipping|falling) (slightly )?off one shoulder\b/gi, "off-shoulder"],
+  [/\bopen to the waist\b/gi, "open"],
+  [/\b(low-cut|plunging|cleavage|bralette|lingerie|underwear)\b/gi, ""],
+  [/\bbare (feet|legs|shoulders|skin|back)\b/gi, ""],
+  [/\bbarefoot\b/gi, ""],
+  [/\bcropped\b/gi, "short"],
+];
+const UNSAFE_SENTENCE = /\b(makeup|make-up|lipstick|lip|lips|eyeliner|skin|body|curves?|figure|sexy|seductive)\b/i;
+
+export function mjSafe(text: string): string {
+  const safe = (sentence: string) => {
+    let out = sentence;
+    for (const [re, to] of SAFE) out = out.replace(re, to);
+    return out.replace(/\s+,/g, ",").replace(/,\s*,/g, ",").replace(/\(\s*\)/g, "").replace(/\s{2,}/g, " ").replace(/\s+\./g, ".").trim();
+  };
+  // Sentence by sentence: an unsafe one is left out, and one left with no words (e.g. "Barefoot.") goes too.
+  return sentences(text)
+    .filter((s) => !UNSAFE_SENTENCE.test(s))
+    .map(safe)
+    .filter((s) => /\p{L}/u.test(s))
+    .join(" ");
+}
+
 // What a person is called in the shot's words instead of their name.
 // By the card's own words: who it says "she / her / woman" of, or "he / his / man" (a groom's card may mention the bride).
 function roleOf(p: PromptPerson): string {
@@ -79,11 +113,11 @@ export function splitParams(text: string): { words: string; params: [string, str
 export function shotPrompt(i: ShotPromptInput): string {
   let shows = i.shows.trim();
   for (const p of i.people) if (p.name.trim()) shows = shows.replace(new RegExp(`\\b${p.name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi"), roleOf(p));
-  shows = tidy(shows.replace(/^memory:\s*/i, ""));
+  shows = tidy(mjSafe(shows.replace(/^memory:\s*/i, "")));
   const no: string[] = [];
   const parts = [`${FRAMING[i.shot]}: ${shows}`];
   for (const p of i.people) {
-    const o = forMidjourney(i.outfit ?? p.outfit);
+    const o = forMidjourney(mjSafe(i.outfit ?? p.outfit ?? ""));
     no.push(...o.no);
     if (!o.text) continue;
     const wear = `${o.text.charAt(0).toLowerCase()}${o.text.slice(1)}`;
