@@ -124,6 +124,7 @@ async function main() {
     await page.waitForSelector("[data-shot=s02] [data-picture]");
     check((await page.getAttribute("[data-shot=s02]", "data-shot-state")) === "picture", "the dropped picture belongs to shot 2");
     check(!(await page.$("[data-loose-heading] ~ div [data-picture]")), "it is not among the loose pictures");
+    check(!(await page.$("[data-shot=s02] [data-picture-send]")) && ((await page.textContent("[data-shot=s02] [data-picture-use-shot]")) ?? "").includes("Use picture for shot 2"), "on a shot there is no Send: only Use picture for shot 2");
     await page.click("[data-shot=s02] [data-picture-animate]");
     await page.waitForSelector("[data-shot=s02] [data-take-use-shot]", { timeout: 90_000 });
     await page.click("[data-shot=s02] [data-take-use-shot] >> nth=0");
@@ -144,7 +145,10 @@ async function main() {
     await sleep(500);
     const story = (await page.evaluate(() => document.body.innerText)) as string;
     if (process.env.PRODUCTION_SHOT) await page.screenshot({ path: process.env.PRODUCTION_SHOT.replace(".png", "-storyboard.png") });
-    check(story.includes("The empty chapel") && story.includes("Close on her smile") && !story.includes("She walks in on her father"), `the Storyboard shows shot 2 as its clip, the others still planned (chapel ${story.includes("The empty chapel")}, smile ${story.includes("Close on her smile")}, walk ${story.includes("She walks in on her father")})`);
+    check(story.includes("The empty chapel") && story.includes("Close on her smile"), "the other shots are still planned");
+    check(!(await page.$("[data-story-slot=s02]")), "shot 2 is no longer a planned card");
+    const filledCard = ((await page.textContent("[data-clip-shot=s02]").catch(() => "")) ?? "").trim();
+    check(filledCard.includes("She walks in on her father's arm") && filledCard.includes("Shot 2") && filledCard.includes("line 1"), `the filled card keeps the shot's story (${filledCard})`);
     await browser.close();
   } finally {
     server.kill();

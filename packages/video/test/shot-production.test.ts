@@ -15,6 +15,8 @@ import { addPictures, picturesView } from "../src/node/animate";
 import { createCard } from "../src/node/characters/cards";
 import { productionView, sectionsOfShots, setPictureShot, useForShot } from "../src/node/shot-production";
 import { importShotList, readShotList, removeSlots, slotKey } from "../src/node/shotlist";
+import { songStory } from "../src/node/story-line";
+import { folderClips, songClipsCollection } from "../src/node/assets";
 import { LYRICS, ffmpeg, makeClip, makeSong } from "./media-helpers";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-shot-production-"));
@@ -101,6 +103,10 @@ describe("Creation → Production", () => {
     expect(readRecipe(songPathsById(ws, id).recipe!).anchors).toEqual([{ line: 1, clip: used.clip }]);
     expect(productionView(ws, id).shots[1].filled).toBe(used.clip);
     expect(readShotList(ws, id)?.filled).toEqual({ s02: used.clip });
+    // The Storyboard card keeps the shot's story (23 Nov 2026: "once I move the shot it loses the story line").
+    const own = (await folderClips(ws, songPathsById(ws, id).clips!, songClipsCollection(id))).clips;
+    const card = (await songStory(ws, id, own)).items.find((x) => x.key === used.clip);
+    expect([card?.shot?.id, card?.shot?.number, card?.shot?.shows, card?.shot?.line]).toEqual(["s02", 2, "She walks in on her father's arm", 1]);
   });
 
   it("another take for the same item replaces the first there (set to Omit, kept)", async () => {
@@ -113,15 +119,26 @@ describe("Creation → Production", () => {
     expect(readRecipe(songPathsById(ws, id).recipe!).anchors).toEqual([{ line: 1, clip: second.clip }]);
   });
 
+  it("Use picture for shot: a still picture fills its shot as a photo, in its place and on its line", async () => {
+    setPictureShot(ws, id, "smile.png", "s03");
+    const used = await useForShot(ws, id, { file: "smile.png", slot: "s03" });
+    expect(used).toMatchObject({ shot: 3, line: 3 });
+    const order = readClipEdits(songRoot).order;
+    expect(order).not.toContain(slotKey("s03"));
+    expect(order.indexOf(used.clip)).toBe(order.indexOf(readShotList(ws, id)!.filled!.s02) + 1);
+    expect((readRecipe(songPathsById(ws, id).recipe!).anchors ?? []).find((a) => a.line === 3)?.clip).toBe(used.clip);
+  });
+
   it("a re-import keeps filled items filled; Remove all planned slots takes out the empty ones only", async () => {
     const clip = readShotList(ws, id)!.filled!.s02;
+    const photo = readShotList(ws, id)!.filled!.s03;
     await importShotList(ws, id, list, "shots.json");
-    expect(readShotList(ws, id)?.filled).toEqual({ s02: clip });
+    expect(readShotList(ws, id)?.filled).toEqual({ s02: clip, s03: photo });
     const order = readClipEdits(songRoot).order;
     expect(order).not.toContain(slotKey("s02"));
-    expect(order.filter((e) => e.startsWith("slot:"))).toEqual(["slot:s01", "slot:s03", "slot:s04"]);
-    expect(removeSlots(ws, id, null)).toBe(3);
-    expect(readShotList(ws, id)?.slots.map((s) => s.id)).toEqual(["s02"]);
+    expect(order.filter((e) => e.startsWith("slot:"))).toEqual(["slot:s01", "slot:s04"]);
+    expect(removeSlots(ws, id, null)).toBe(2);
+    expect(readShotList(ws, id)?.slots.map((s) => s.id)).toEqual(["s02", "s03"]);
     expect(readClipEdits(songRoot).order).toContain(clip);
   });
 });

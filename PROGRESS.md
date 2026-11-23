@@ -46,6 +46,12 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   delicate, thin straps -> delicate straps, slip dress -> satin dress, corset -> structured, off one shoulder ->
   off-shoulder, open to the waist -> open; sentences about makeup, lips, skin, body, and "Barefoot." left out).
   vitest shot-prompt (7).
+- 23 Nov 2026 (Paul: "once I move the shot it loses the story line"; "we have to be careful when sending a shot to the
+  storyboard"): a filled Storyboard card keeps its shot's story (what happens, Shot N, type, people, line, #tag;
+  story-line.ts StoryItem.shot, assets-tab data-clip-shot). On a shot in Production there is no Send any more: a
+  still picture has **Use picture for shot N** (it fills the shot as a photo), a video or take **Use for shot N**, both
+  in the shot's place; Send to Storyboard stays on the loose pictures only. Tests: shot-production (7),
+  creation-production (+2 checks).
 - Part 2 (next): a look per shot with warnings, cost so far / to go.
 - Code: node/shot-production.ts (productionView, setPictureShot, useForShot, sectionsOfShots), shotlist.ts (filled),
   animate.ts (pictures.json "slot"), API /api/songs/<id>/pictures (production, slot, shot, use-shot),

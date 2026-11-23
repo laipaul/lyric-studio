@@ -656,14 +656,16 @@ function PictureTile({
           await post({ action: "label", file: p.file, label }).catch((e: Error) => setNotice({ ok: false, text: e.message }));
           await reload();
         }} />
-        {shot && video && useShot ? (
+        {shot && useShot ? (
+          // On a shot (Production) there is no "Send": a picture or video only ever fills its own shot, in its place in the
+          // story (23 Nov 2026: a Send here added a loose copy at the end and changed the Storyboard's order).
           p.sent && shot.filled && p.sent.toLowerCase() === shot.filled.toLowerCase() ? (
             <span data-picture-shot-used className="flex shrink-0 items-center gap-1 text-emerald-300">
               <Check className="size-3" /> Shot {shot.number}
             </span>
           ) : (
-            <button type="button" data-picture-use-shot={shot.id} onClick={() => useShot(null)} className="hover:bg-accent flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[11px]" title={`This video fills shot ${shot.number}${shot.line !== null ? `, on line ${shot.line}` : ""}`}>
-              <Check className="size-3" /> Use for shot {shot.number}
+            <button type="button" data-picture-use-shot={shot.id} onClick={() => useShot(null)} className="hover:bg-accent flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[11px]" title={video ? `This video fills shot ${shot.number}${shot.line !== null ? `, on line ${shot.line}` : ""}` : `This picture fills shot ${shot.number} as a photo (with a gentle move)${shot.line !== null ? `, on line ${shot.line}` : ""}; or Animate it and use a take`}>
+              <Check className="size-3" /> {video ? `Use for shot ${shot.number}` : `Use picture for shot ${shot.number}`}
             </button>
           )
         ) : p.sent ? (

@@ -28,7 +28,8 @@ export type StoryCard = { collection: string; clips: number; thumbs: string[] };
 export type SlotCard = { id: string; name: string; thumb: string | null; locked: boolean } | { id: null; name: string; thumb: null; locked: false };
 export type StorySlot = Slot & { animateWith: string; animateIsDefault: boolean; cast: SlotCard[]; place: SlotCard | null; lineText: string | null };
 // transitions: what the app changed so a dissolve with this clip never freezes a frame (node/transition-notes.ts).
-export type StoryItem = { key: string; clip?: ClipAsset & { collection?: string; transitions?: string[] }; card?: StoryCard; slot?: StorySlot };
+// shot: the shot list item this clip fills (Creation → Production "Use for shot", 23 Nov 2026): the card keeps its story.
+export type StoryItem = { key: string; clip?: ClipAsset & { collection?: string; transitions?: string[] }; card?: StoryCard; slot?: StorySlot; shot?: StorySlot & { number: number } };
 export type SongStory = { items: StoryItem[]; collections: string[] };
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -101,8 +102,16 @@ export async function songStory(ws: Workspace, projectId: string, ownAll: readon
   };
   const items: StoryItem[] = [];
   const shown = new Set<string>();
-  const slots = readShotListFile(path.join(root, SHOTLIST_FILE))?.slots ?? [];
+  const shotList = readShotListFile(path.join(root, SHOTLIST_FILE));
+  const slots = shotList?.slots ?? [];
   const slotView = slots.length ? slotViews(ws, projectId) : null;
+  // A clip that fills a shot keeps that shot's story (what happens, people, line, #tag) and its number.
+  const numbered = [...slots].sort((a, b) => a.order - b.order);
+  const shotOf = (clip: string): StoryItem["shot"] => {
+    const id = Object.entries(shotList?.filled ?? {}).find(([, c]) => same(c, clip))?.[0];
+    const slot = id ? slots.find((x) => x.id === id) : undefined;
+    return slot && slotView ? { ...slotView(slot), number: numbered.indexOf(slot) + 1 } : undefined;
+  };
   const ownInOrder = inClipOrder(edits, ownNames);
   // Own clips without a place yet follow at the end (as Make plays them).
   for (const e of [...edits.order, ...ownInOrder.filter((n) => !edits.order.some((o) => same(o, n)))]) {
@@ -123,7 +132,8 @@ export async function songStory(ws: Workspace, projectId: string, ownAll: readon
     if (shown.has(e.toLowerCase())) continue;
     const mine = own.find((c) => same(c.name, e));
     if (mine) {
-      items.push({ key: mine.name, clip: withFits(mine) });
+      const shot = shotOf(mine.name);
+      items.push({ key: mine.name, clip: withFits(mine), ...(shot ? { shot } : {}) });
       shown.add(e.toLowerCase());
       continue;
     }

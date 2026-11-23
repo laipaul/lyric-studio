@@ -681,6 +681,35 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                     {/* The card reads as a story (11 Nov 2026): the note is its title; the file name, duration, size and Remove sit
                         in its ⋯ menu; a warning shows only when something is wrong. */}
                     <div className="flex flex-1 flex-col gap-1 p-2 text-xs">
+                      {item.shot ? (
+                        // A clip that fills a shot of the shot list keeps that shot's story (Creation → Production, "Use for shot").
+                        <div data-clip-shot={item.shot.id} className="flex flex-col gap-1">
+                          <p className="line-clamp-3 text-sm leading-snug font-medium" title={item.shot.shows}>
+                            {item.shot.shows}
+                          </p>
+                          <p className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            <span className="rounded bg-emerald-400/15 px-1 text-emerald-300">Shot {item.shot.number}</span>
+                            <span className="bg-brand/15 text-brand rounded px-1">{item.shot.shot}</span>
+                            {item.shot.cast.length ? (
+                              <span className="flex items-center gap-0.5">
+                                <UserRound className="size-3" /> {item.shot.cast.map((x) => x.name).join(", ")}
+                              </span>
+                            ) : null}
+                            {item.shot.place ? (
+                              <span className="flex items-center gap-0.5">
+                                <MapPin className="size-3" /> {item.shot.place.name}
+                              </span>
+                            ) : null}
+                          </p>
+                          {item.shot.line !== null ? (
+                            <p data-clip-shot-line className="text-muted-foreground truncate" title={item.shot.lineText ?? undefined}>
+                              line {item.shot.line}
+                              {item.shot.lineText ? `: “${item.shot.lineText}”` : ""}
+                            </p>
+                          ) : null}
+                          {item.shot.tag ? <p className="text-muted-foreground">#{item.shot.tag}</p> : null}
+                        </div>
+                      ) : null}
                       {!c.collection ? (
                         <NameField
                           id={c.name}
