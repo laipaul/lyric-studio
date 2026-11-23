@@ -75,6 +75,10 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   warned), a re-import keeps looks chosen in Production, the Song brief lists each character's wardrobe and the field.
   Tests: shot-production (11), shotlist / production / story-line / shot-prompt pass; browser creation-production
   (+4 checks), shotlist and production pass.
+- 23 Nov 2026 (Paul: "the father's hand shot is not very good": Midjourney drew the back of the gown and an embrace):
+  the prompt keeps only the part of an outfit the framing shows (shot-prompt.ts outfitFor): detail = sleeves, cuffs,
+  gloves, rings, bracelets, watch, bouquet; close-up = no skirt, train, trousers or shoes; medium / wide / motion =
+  all of it. The action stays first. vitest shot-prompt (+2).
 - Part 2 (next): cost so far / to go.
 - Code: node/shot-production.ts (productionView, setPictureShot, useForShot, sectionsOfShots), shotlist.ts (filled),
   animate.ts (pictures.json "slot"), API /api/songs/<id>/pictures (production, slot, shot, use-shot),

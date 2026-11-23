@@ -87,6 +87,18 @@ export function mjSafe(text: string): string {
     .join(" ");
 }
 
+// Only the part of an outfit the framing shows (23 Nov 2026: a hands shot got the whole gown, so Midjourney framed the
+// back of the dress and drew an embrace). detail: what is seen up close of hands (sleeves, cuffs, gloves, rings,
+// bracelets, a watch, the bouquet); close-up: the outfit without what is below the waist (skirt, train, trousers,
+// shoes); medium, wide, motion: all of it. Pure.
+const DETAIL_PART = /[^,.;]*\b(sleeves?|cuffs?|gloves?|rings?|bracelets?|watch|bouquet|manicure)\b[^,.;]*/gi;
+const BELOW_WAIST = /\b(skirt|train|trousers|jeans|shorts|heels|shoes|boots|sneakers|flats|sandals|legs?|hem|knee|ankle|floor-length)\b/i;
+export function outfitFor(shot: ShotPromptInput["shot"], outfit: string): string {
+  if (shot === "detail") return [...new Set((outfit.match(DETAIL_PART) ?? []).map((x) => x.trim().replace(/^(and|with)\s+/i, "")))].filter(Boolean).join(", ");
+  if (shot === "close-up") return sentences(outfit).filter((x) => !BELOW_WAIST.test(x)).join(" ");
+  return outfit;
+}
+
 // What a person is called in the shot's words instead of their name.
 // By the card's own words: who it says "she / her / woman" of, or "he / his / man" (a groom's card may mention the bride).
 function roleOf(p: PromptPerson): string {
@@ -117,7 +129,7 @@ export function shotPrompt(i: ShotPromptInput): string {
   const no: string[] = [];
   const parts = [`${FRAMING[i.shot]}: ${shows}`];
   for (const p of i.people) {
-    const o = forMidjourney(mjSafe(i.outfit ?? p.outfit ?? ""));
+    const o = forMidjourney(outfitFor(i.shot, mjSafe(i.outfit ?? p.outfit ?? "")));
     no.push(...o.no);
     if (!o.text) continue;
     const wear = `${o.text.charAt(0).toLowerCase()}${o.text.slice(1)}`;

@@ -2,7 +2,7 @@
 // without their name, the scene, a memory's feel, the Film look, the shape; "never" phrases go to --no.
 import { describe, expect, it } from "vitest";
 
-import { forMidjourney, mjSafe, shotPrompt } from "../src/shot-prompt";
+import { forMidjourney, mjSafe, outfitFor, shotPrompt } from "../src/shot-prompt";
 
 const bride = {
   name: "Jennifer",
@@ -23,6 +23,20 @@ describe("mjSafe (Midjourney's moderator, 23 Nov 2026)", () => {
     const out = mjSafe(navy);
     expect(out).toBe("A midnight-navy satin cocktail dress with a softly draped neckline, delicate straps and a bias-cut skirt falling just below the knee. Simple soft beige pointed heels and a small navy satin clutch. Small gold stud earrings.");
     expect(mjSafe("An oatmeal cardigan worn open and slipping off one shoulder. Barefoot. The back is open to the waist with small buttons.")).toBe("An oatmeal cardigan worn open and off-shoulder. The back is open with small buttons.");
+  });
+});
+
+describe("outfitFor (only what the framing shows, 23 Nov 2026)", () => {
+  const gown = "A modern ivory wedding gown with delicate illusion long sleeves scattered with delicate floral lace appliqués, a soft sweetheart neckline, and a fitted lace bodice. The back is open with a row of small covered buttons. A flowing tulle A-line skirt with a long soft train. A long delicate cathedral veil falls from a sleek low bun. Small pearl drop earrings, no necklace. She holds a loose bouquet of white roses and ranunculus.";
+  it("a detail shot of hands: the sleeves and the bouquet, never the back, skirt or veil", () => {
+    expect(outfitFor("detail", gown)).toBe("A modern ivory wedding gown with delicate illusion long sleeves scattered with delicate floral lace appliqués, She holds a loose bouquet of white roses and ranunculus");
+  });
+  it("a close-up: everything but what is below the waist; medium: all of it", () => {
+    const close = outfitFor("close-up", gown);
+    expect(close).toContain("sweetheart neckline");
+    expect(close).toContain("cathedral veil");
+    expect(close).not.toMatch(/skirt|train/);
+    expect(outfitFor("medium", gown)).toBe(gown);
   });
 });
 
