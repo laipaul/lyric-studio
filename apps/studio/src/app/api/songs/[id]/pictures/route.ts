@@ -11,12 +11,13 @@
 // Production (C3 Part 1): GET also returns "production" (the shot list's items, shot-production.ts); multipart with
 //   slot=<id>: the added pictures belong to that shot; { action: "shot", file, slot }: a picture belongs to a shot
 //   (slot null: to none); { action: "use-shot", file, n?, slot }: Use this take for that shot (its place and its line).
+// { action: "remove-picture", file }: Put aside (to pictures\_removed\, Restore); { action: "restore-picture", file }.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
-import { addFromLink, addPictures, picturesView, removeTakes, restoreTake, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, startAnimate, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
+import { addFromLink, addPictures, picturesView, removePicture, removeTakes, restorePicture, restoreTake, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, startAnimate, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
 import { runSinging, withSongStarts } from "@lyric/video/singer";
 import { productionView, setPictureShot, useForShot } from "@lyric/video/shot-production";
 import { connection } from "next/server";
@@ -103,6 +104,8 @@ export async function POST(request: Request, { params }: Params) {
       const n = body.n === undefined || body.n === null ? null : Number(body.n);
       return Response.json(await withWorkspaceAsync((ws) => sendToStoryboard(ws, id, file, n, { forLine: (body as { forLine?: unknown }).forLine === true })));
     }
+    if (body.action === "remove-picture") return Response.json(withWorkspace((ws) => removePicture(ws, id, file)));
+    if (body.action === "restore-picture") return Response.json(withWorkspace((ws) => restorePicture(ws, id, file)));
     if (body.action === "shot") return Response.json({ slot: withWorkspace((ws) => setPictureShot(ws, id, file, (body as { slot?: unknown }).slot)) });
     if (body.action === "use-shot") return Response.json(await withWorkspaceAsync((ws) => useForShot(ws, id, { file, n: body.n, slot: (body as { slot?: unknown }).slot })));
     if (body.action === "resume") {

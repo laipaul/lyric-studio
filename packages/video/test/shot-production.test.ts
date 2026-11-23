@@ -2,7 +2,7 @@
 // Creation picture belongs to an item; "Use this take" fills the item in its place in the story line and on its lyric
 // line; a second take replaces the first there (Omit, never deleted); a re-import keeps filled items filled; "Remove all
 // planned slots" takes out the empty ones only.
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -11,7 +11,7 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { findOrCreateSongProject, readClipEdits, readRecipe, songPathsById } from "../src/node";
-import { addPictures, picturesView } from "../src/node/animate";
+import { addPictures, picturesView, removePicture, restorePicture } from "../src/node/animate";
 import { createCard } from "../src/node/characters/cards";
 import { productionView, sectionsOfShots, setPictureShot, useForShot } from "../src/node/shot-production";
 import { importShotList, readShotList, removeSlots, slotKey } from "../src/node/shotlist";
@@ -140,5 +140,20 @@ describe("Creation → Production", () => {
     expect(removeSlots(ws, id, null)).toBe(2);
     expect(readShotList(ws, id)?.slots.map((s) => s.id)).toEqual(["s02", "s03"]);
     expect(readClipEdits(songRoot).order).toContain(clip);
+  });
+
+  it("✕ Put aside: the picture leaves Creation (file to pictures\\_removed\\), Restore brings it back with its shot", async () => {
+    setPictureShot(ws, id, "walk-in.mp4", "s02");
+    removePicture(ws, id, "walk-in.mp4");
+    let v = await picturesView(ws, id);
+    expect(v.pictures.map((p) => p.file)).not.toContain("walk-in.mp4");
+    expect(v.removedPictures.map((r) => [r.file, r.slot])).toEqual([["walk-in.mp4", "s02"]]);
+    expect(existsSync(path.join(songRoot, "pictures", "_removed", "walk-in.mp4"))).toBe(true);
+    expect(productionView(ws, id).shots.find((x) => x.id === "s02")?.pictures).not.toContain("walk-in.mp4");
+    restorePicture(ws, id, "walk-in.mp4");
+    v = await picturesView(ws, id);
+    expect(v.pictures.find((p) => p.file === "walk-in.mp4")?.slot).toBe("s02");
+    expect(v.removedPictures).toEqual([]);
+    expect(() => restorePicture(ws, id, "walk-in.mp4")).toThrow(/not among the pictures put aside/);
   });
 });

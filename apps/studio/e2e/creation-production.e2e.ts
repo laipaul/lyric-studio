@@ -135,6 +135,19 @@ async function main() {
     check(!!(await page.$("[data-shot=s02] [data-take-shot-used]")), "the take says it is shot 2");
     if (process.env.PRODUCTION_SHOT) await page.screenshot({ path: process.env.PRODUCTION_SHOT, fullPage: true });
 
+    // ✕ on a shot's picture: back to the loose pictures; ✕ there: put aside; Restore brings it back.
+    page.on("dialog", (d: { accept: () => Promise<void> }) => void d.accept());
+    await page.click("[data-shot=s02] [data-picture-remove]");
+    await page.waitForFunction(() => !document.querySelector("[data-shot=s02] [data-picture]"), null, { timeout: 15_000 });
+    check(!!(await page.$("[data-loose-heading] ~ div [data-picture]")), "✕ on a shot: the picture goes back to the loose pictures");
+    await page.click("[data-loose-heading] ~ div [data-picture] [data-picture-remove]");
+    await page.waitForSelector("[data-pictures-removed]", { timeout: 15_000 });
+    check(!(await page.$("[data-loose-heading] ~ div [data-picture]")), "✕ on a loose picture: put aside");
+    await page.click("[data-pictures-removed] summary");
+    await page.click("[data-picture-restore]");
+    await page.waitForFunction(() => !document.querySelector("[data-pictures-removed]"), null, { timeout: 15_000 });
+    check(!!(await page.$("[data-loose-heading] ~ div [data-picture]")), "Restore brings it back");
+
     // In the song: its place in the story line and its lyric line.
     const order = readClipEdits(paths.root).order;
     const clip = (readRecipe(paths.recipe!).anchors ?? []).find((a) => a.line === 1)?.clip;

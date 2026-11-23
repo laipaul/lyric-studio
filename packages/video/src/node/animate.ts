@@ -118,7 +118,9 @@ export type Take = {
 // removedTakes: takes put aside by Clean up / Remove (their files in pictures\takes\_removed\), with Restore; nothing is
 // ever deleted. Every screen reads `takes` only, so they are out of sight; take numbers keep counting past them.
 export type RemovedTake = Take & { removed_at: string };
-export type PictureRecord = { slot?: string; label?: string; source?: string; mood?: string; takes: Take[]; removedTakes?: RemovedTake[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string }; // sent: the picture itself sent to the Storyboard (its clip name)
+// removed: the picture put aside (Creation ✕ → Put aside, 23 Nov 2026), its file moved to pictures\_removed\ (file:
+// that path); the record stays, so Restore brings it back with its takes, mood and shot. Nothing is ever deleted.
+export type PictureRecord = { removed?: { at: string; file: string }; slot?: string; label?: string; source?: string; mood?: string; takes: Take[]; removedTakes?: RemovedTake[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string }; // sent: the picture itself sent to the Storyboard (its clip name)
 export type PicturesFile = { _help?: string; pictures: Record<string, PictureRecord> };
 // source: where it came from, a small label ("Added by you", "Midjourney", "From higgsfield.ai"). kind: only a picture can be animated.
 // cleanable: the takes Clean up would put aside (failed, or not chosen: not in use, on no line, not playing in the
@@ -173,6 +175,7 @@ export function saveCreationDefaults(wsDir: string, raw: unknown): CreationDefau
 
 // song (with songStarts, singer.ts): the song file, so a take plays with the song from the second its first frame belongs to.
 export type PicturesView = {
+  removedPictures: { file: string; label: string | null; at: string; slot: string | null }[]; // put aside (✕), newest first: Restore
   song?: string | null;
   defaults: CreationDefaults;
   pictures: PictureView[];
@@ -188,6 +191,40 @@ export type PicturesView = {
 const HELP =
   "This song's pictures (Prepare → Pictures) and the clips animated from them: per picture, the mood words and every take " +
   "(service, request id, status, the estimated cost, the take's file in takes\\, the clip it was sent to the Storyboard as). Written by the app.";
+
+// ---------------------------------------------------------------- put aside / restore a picture (23 Nov 2026)
+
+export const REMOVED_PICTURES_DIR = "_removed";
+
+// ✕ → Put aside: the picture (or video) leaves Creation; its file goes to pictures\_removed\, its record (takes, mood,
+// shot) stays for Restore. A picture with a take being made is refused. Its clips already in the Storyboard stay.
+export function removePicture(ws: Workspace, projectId: string, file: unknown): { file: string } {
+  const { dir } = songFolder(ws, projectId);
+  const name = path.basename(String(file ?? ""));
+  if (!name || !BOARD_FILE.test(name) || !existsSync(path.join(dir, name))) throw new Error(`No ${String(file)} in this song's Creation space.`);
+  const rec = readPictures(dir).pictures[name];
+  if (rec?.takes.some((t) => t.status === "running")) throw new Error(`${name} has a take being made: wait for it, then put the picture aside.`);
+  const into = path.join(dir, REMOVED_PICTURES_DIR);
+  mkdirSync(into, { recursive: true });
+  const ext = path.extname(name);
+  let target = name;
+  for (let n = 2; existsSync(path.join(into, target)); n++) target = `${path.basename(name, ext)} (${n})${ext}`;
+  renameSync(path.join(dir, name), path.join(into, target));
+  update(dir, name, (p) => void (p.removed = { at: new Date().toISOString(), file: `${REMOVED_PICTURES_DIR}/${target}` }));
+  return { file: name };
+}
+
+// Restore: the picture comes back under its own name, with its takes, mood and shot.
+export function restorePicture(ws: Workspace, projectId: string, file: unknown): { file: string } {
+  const { dir } = songFolder(ws, projectId);
+  const name = path.basename(String(file ?? ""));
+  const rec = readPictures(dir).pictures[name];
+  if (!rec?.removed || !existsSync(path.join(dir, rec.removed.file))) throw new Error(`${name} is not among the pictures put aside.`);
+  if (existsSync(path.join(dir, name))) throw new Error(`A picture called ${name} is in Creation already: rename that one first.`);
+  renameSync(path.join(dir, rec.removed.file), path.join(dir, name));
+  update(dir, name, (p) => void delete p.removed);
+  return { file: name };
+}
 
 // ---------------------------------------------------------------- files
 
@@ -368,7 +405,12 @@ export async function picturesView(ws: Workspace, projectId: string, env: NodeJS
     pictures.push({ file: f, slot: rec?.slot ?? null, label: rec?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? "picture" : "video", source: sourceLabel(f, rec?.source), mood: rec?.mood ?? "", cleanable, removed, takes, width: info?.width ?? null, height: info?.height ?? null, sent: stillThere(rec?.sent) ? rec!.sent! : null });
   }
   const stub = !!env.LYRIC_GENERATE_STUB;
+  const removedPictures = Object.entries(all.pictures)
+    .filter(([, r]) => r.removed && existsSync(path.join(dir, r.removed.file)))
+    .map(([f, r]) => ({ file: f, label: r.label ?? null, at: r.removed!.at, slot: r.slot ?? null }))
+    .sort((a, b) => b.at.localeCompare(a.at));
   return {
+    removedPictures,
     defaults: readCreationDefaults(ws.dir),
     pictures,
     services: (Object.values(SERVICES) as Service[]).map((s) => ({

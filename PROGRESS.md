@@ -52,6 +52,11 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   still picture has **Use picture for shot N** (it fills the shot as a photo), a video or take **Use for shot N**, both
   in the shot's place; Send to Storyboard stays on the loose pictures only. Tests: shot-production (7),
   creation-production (+2 checks).
+- 23 Nov 2026 (Paul: "how can I remove a picture here"): **✕ on every Creation picture**. On a shot: "not for this
+  shot", the picture goes back to the loose pictures. On a loose picture: **Put aside** (confirm): its file moves to
+  pictures\_removed\, its record (takes, mood, shot) stays; **Put-aside pictures → Restore** brings it back on its
+  shot. Clips already in the Storyboard stay. Nothing is deleted. animate.ts removePicture / restorePicture, API
+  remove-picture / restore-picture. Tests: shot-production (8), creation-production (+3 checks); pictures.e2e passes.
 - Part 2 (next): a look per shot with warnings, cost so far / to go.
 - Code: node/shot-production.ts (productionView, setPictureShot, useForShot, sectionsOfShots), shotlist.ts (filled),
   animate.ts (pictures.json "slot"), API /api/songs/<id>/pictures (production, slot, shot, use-shot),

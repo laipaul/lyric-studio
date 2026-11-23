@@ -307,6 +307,30 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
           <CharacterPicker open={people} onOpenChange={setPeople} onPick={(f) => add([f])} />
         </div>
       </div>
+      {board.removedPictures?.length ? (
+        <details data-pictures-removed={board.removedPictures.length} className="text-muted-foreground text-xs">
+          <summary className="cursor-pointer">Put-aside pictures ({board.removedPictures.length})</summary>
+          <ul className="mt-1 flex flex-col gap-1">
+            {board.removedPictures.map((r) => (
+              <li key={r.file} className="flex items-center gap-2" data-picture-removed={r.file}>
+                <span className="min-w-0 flex-1 truncate">{r.label ?? r.file}</span>
+                <button
+                  type="button"
+                  data-picture-restore={r.file}
+                  onClick={() =>
+                    void post({ action: "restore-picture", file: r.file })
+                      .then(() => (setNotice({ ok: true, text: `${r.label ?? r.file} is back${r.slot ? " on its shot" : ""}.` }), load()))
+                      .catch((e: Error) => setNotice({ ok: false, text: e.message }))
+                  }
+                  className="hover:bg-accent text-foreground shrink-0 rounded border px-1.5 py-0.5"
+                >
+                  Restore
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
       <input ref={input} type="file" multiple accept=".jpg,.jpeg,.png,.webp,.mp4,.m4v,.mov,.webm,image/*,video/*" className="hidden" data-pictures-input onChange={(e) => void add(e.target.files)} />
       <Dialog open={!!playing} onOpenChange={(o) => !o && setPlaying(null)}>
         <DialogContent data-take-player className="w-[min(40rem,95vw)] max-w-none">
@@ -620,6 +644,22 @@ function PictureTile({
     }
   }
 
+  async function takeAway() {
+    try {
+      if (shot) {
+        await post({ action: "shot", file: p.file, slot: null });
+        setNotice({ ok: true, text: `${p.label ?? p.file} is no longer for shot ${shot.number}: it is with the loose pictures (below).` });
+      } else {
+        if (!window.confirm(`Put ${p.label ?? p.file} aside? It leaves Creation (its clips already in the Storyboard stay). Put-aside pictures → Restore brings it back with its takes.`)) return;
+        await post({ action: "remove-picture", file: p.file });
+        setNotice({ ok: true, text: `${p.label ?? p.file} is put aside (Put-aside pictures → Restore).` });
+      }
+      await reload();
+    } catch (e) {
+      setNotice({ ok: false, text: (e as Error).message });
+    }
+  }
+
   async function animate() {
     setBusy(true);
     try {
@@ -650,6 +690,17 @@ function PictureTile({
           {p.source}
           {video ? " · video" : ""}
         </span>
+        {/* ✕ (23 Nov 2026): on a shot, the picture goes back to the loose pictures; a loose picture is put aside (Restore below). */}
+        <button
+          type="button"
+          data-picture-remove={p.file}
+          onClick={() => void takeAway()}
+          className="absolute top-1 right-1 rounded bg-black/60 p-1 text-white hover:bg-black/80"
+          aria-label={shot ? `Take ${p.file} off shot ${shot.number}` : `Put ${p.file} aside`}
+          title={shot ? `Not for this shot: it goes back to the loose pictures (nothing is lost)` : "Put aside: it leaves Creation; Put-aside pictures → Restore brings it back"}
+        >
+          <X className="size-3.5" />
+        </button>
       </div>
       <span className="flex items-center justify-between gap-2 text-xs">
         <NameField id={p.file} name={p.label} file={p.file} onSave={async (label) => {
