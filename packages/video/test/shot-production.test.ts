@@ -14,7 +14,10 @@ import { findOrCreateSongProject, readClipEdits, readRecipe, songPathsById } fro
 import { addPictures, picturesView, removePicture, restorePicture } from "../src/node/animate";
 import { createCard } from "../src/node/characters/cards";
 import { productionView, sectionsOfShots, setPictureShot, useForShot, withLineStarts } from "../src/node/shot-production";
-import { importShotList, readShotList, removeSlots, slotKey } from "../src/node/shotlist";
+import { importShotList, readShotList, removeSlots, setShotLook, slotKey } from "../src/node/shotlist";
+import { shotLooks } from "../src/node/shot-looks";
+import { addLook, LOOKS_DIR } from "../src/node/characters/looks";
+import { cardRoot, listCards } from "../src/node/characters/cards";
 import { songStory } from "../src/node/story-line";
 import { folderClips, songClipsCollection } from "../src/node/assets";
 import { LYRICS, ffmpeg, makeClip, makeSong } from "./media-helpers";
@@ -162,5 +165,40 @@ describe("Creation → Production", () => {
     expect(v.pictures.find((p) => p.file === "walk-in.mp4")?.slot).toBe("s02");
     expect(v.removedPictures).toEqual([]);
     expect(() => restorePicture(ws, id, "walk-in.mp4")).toThrow(/not among the pictures put aside/);
+  });
+
+  it("the look each person wears in a shot: named by the shot, else the song's; its outfit, picture and problems", async () => {
+    const bride = listCards(ws).find((c) => c.name === "Bride")!;
+    const autumn = addLook(ws, bride.id, { name: "Autumn City", outfit: "A long camel wool coat over a cream turtleneck." });
+    const root = cardRoot(ws, bride);
+    mkdirSync(path.join(root, LOOKS_DIR, autumn.id), { recursive: true });
+    writeFileSync(path.join(root, LOOKS_DIR, autumn.id, "closeup.png"), readFileSync(path.join(songRoot, "pictures", "smile.png")));
+    const worn = shotLooks(ws, id);
+    const plain = worn({ characters: ["Bride"] })[0];
+    expect([plain.look, plain.fromShot, plain.looks]).toEqual(["Main look", false, ["Main look", "Autumn City"]]);
+    const inAutumn = worn({ characters: ["bride"], looks: { BRIDE: "autumn city" } })[0];
+    expect([inAutumn.look, inAutumn.fromShot, inAutumn.outfit, inAutumn.picture]).toEqual(["Autumn City", true, "A long camel wool coat over a cream turtleneck.", `${LOOKS_DIR}/${autumn.id}/closeup.png`]);
+    expect(inAutumn.problem).toMatch(/not locked yet/);
+    expect(worn({ characters: ["Bride"], looks: { Bride: "Gala" } })[0].problem).toMatch(/no look "Gala"/);
+
+    // Chosen in Production for shot 2: its prompt and reference picture follow; a re-import keeps it.
+    setShotLook(ws, id, "s02", "Bride", "Autumn City");
+    const shot2 = productionView(ws, id).shots.find((x) => x.id === "s02")!;
+    expect(shot2.people[0].look).toBe("Autumn City");
+    expect(shot2.prompt).toContain("wearing a long camel wool coat over a cream turtleneck");
+    expect(shot2.refs[0].file).toBe(`${LOOKS_DIR}/${autumn.id}/closeup.png`);
+    await importShotList(ws, id, list, "shots.json");
+    expect(readShotList(ws, id)?.slots.find((x) => x.id === "s02")?.looks).toEqual({ Bride: "Autumn City" });
+    // A look chosen for the shot wins over the shot's own outfit text (that text is for people without such a look).
+    expect(shotLooks(ws, id)({ characters: ["Bride"], looks: { Bride: "Autumn City" } })[0].fromShot).toBe(true);
+    setShotLook(ws, id, "s02", "Bride", null);
+    expect(readShotList(ws, id)?.slots.find((x) => x.id === "s02")?.looks).toBeUndefined();
+    expect(() => setShotLook(ws, id, "s02", "Groom", "Main look")).toThrow(/not in this shot/);
+  });
+
+  it("a shot list can name the looks: checked against the wardrobe, saved as the card spells them", async () => {
+    const check = await importShotList(ws, id, { slots: [{ ...list.slots[1], looks: { bride: "AUTUMN CITY" } }, { ...list.slots[2], looks: { Bride: "Gala", Nobody: "x" } }] }, "shots.json");
+    expect(readShotList(ws, id)?.slots.find((x) => x.id === "s02")?.looks).toEqual({ Bride: "Autumn City" });
+    expect(check.problems.map((p) => p.text).join(" | ")).toMatch(/no look "Gala".*\| .*Nobody, who is not among/);
   });
 });

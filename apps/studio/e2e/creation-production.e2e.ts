@@ -12,7 +12,7 @@ import path from "node:path";
 import { openWorkspace, project } from "@lyric/db";
 import { ensureAlignment, findOrCreateSongProject, readClipEdits, readRecipe, songPathsById, writeRecipe, type AlignRunner } from "@lyric/video/node";
 import { importShotList } from "@lyric/video/shotlist";
-import { createCard } from "@lyric/video/characters";
+import { addLook, createCard } from "@lyric/video/characters";
 import { setCast } from "@lyric/video/production";
 import { eq } from "drizzle-orm";
 
@@ -55,6 +55,7 @@ async function main() {
   ffmpeg("-f", "lavfi", "-i", "color=c=0xE8A3B5:s=300x400", "-frames:v", "1", face);
   const bride = createCard(ws, { kind: "character", name: "Bride", picture: readFileSync(face), fileName: "bride.png" });
   setCast(ws, id, [bride.id]);
+  addLook(ws, bride.id, { name: "Autumn City", outfit: "A long camel wool coat over a cream turtleneck." });
   await importShotList(
     ws,
     id,
@@ -62,7 +63,7 @@ async function main() {
       slots: [
         { id: "s01", order: 1, shows: "The empty chapel in morning light", characters: [], scene: null, shot: "wide" },
         { id: "s02", order: 2, shows: "She walks in on her father's arm", characters: ["Bride"], scene: null, shot: "medium", line: 1 },
-        { id: "s03", order: 3, shows: "Close on her smile", characters: [], scene: null, shot: "close-up", line: 3 },
+        { id: "s03", order: 3, shows: "Close on her smile", characters: ["Bride"], scene: null, shot: "close-up", line: 3 },
       ],
     },
     "shots.json",
@@ -164,6 +165,12 @@ async function main() {
     await page.waitForFunction(() => !document.querySelector("[data-pictures-removed]"), null, { timeout: 15_000 });
     check(!!(await page.$("[data-loose-heading] ~ div [data-picture]")), "Restore brings it back");
 
+    // The look per shot (23 Nov 2026): shot 3's Bride in Autumn City; the prompt follows.
+    await page.selectOption("[data-shot-look='s03-Bride']", "Autumn City");
+    await page.waitForFunction(() => document.querySelector("[data-shot-prompt=s03]")?.textContent?.includes("camel wool coat"), null, { timeout: 15_000 });
+    check(true, "choosing a look for shot 3: its prompt describes that outfit");
+    check(!!(await page.$("[data-shot=s03] [data-shot-look-problem]")), "a look not locked yet is said on the shot");
+
     // In the song: its place in the story line and its lyric line.
     const order = readClipEdits(paths.root).order;
     const clip = (readRecipe(paths.recipe!).anchors ?? []).find((a) => a.line === 1)?.clip;
@@ -176,6 +183,8 @@ async function main() {
     if (process.env.PRODUCTION_SHOT) await page.screenshot({ path: process.env.PRODUCTION_SHOT.replace(".png", "-storyboard.png") });
     check(story.includes("The empty chapel") && story.includes("Close on her smile"), "the other shots are still planned");
     check(!(await page.$("[data-story-slot=s02]")), "shot 2 is no longer a planned card");
+    check((await page.getAttribute("[data-story-slot=s03] [data-slot-person=Bride]", "data-slot-look")) === "Autumn City", "the planned card of shot 3 shows the Bride in Autumn City");
+    check(((await page.textContent("[data-story-slot=s03] [data-slot-people]")) ?? "").includes("Bride · Autumn City"), "and names the look in its people line");
     const filledCard = ((await page.textContent("[data-clip-shot=s02]").catch(() => "")) ?? "").trim();
     check(filledCard.includes("She walks in on her father's arm") && filledCard.includes("Shot 2") && filledCard.includes("line 1"), `the filled card keeps the shot's story (${filledCard})`);
     await browser.close();

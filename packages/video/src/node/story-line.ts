@@ -19,13 +19,15 @@ import { songCollections } from "./project-settings";
 import { readRecipe, writeRecipe } from "./recipe";
 import { listCards } from "./characters/cards";
 import { animateFor, readShotListFile, SHOTLIST_FILE, slotOf, type Slot } from "./shotlist";
+import { shotLooks } from "./shot-looks";
 import { sharedCollections, songPathsById } from "./song-folder";
 import { songText } from "./textboard";
 import { transitionNotes } from "./transition-notes";
 
 export type StoryCard = { collection: string; clips: number; thumbs: string[] }; // "Flowers · app picks · N clips"
 // A planned slot from the shot list (C2): its picture is made later (C3); Make skips it until then.
-export type SlotCard = { id: string; name: string; thumb: string | null; locked: boolean } | { id: null; name: string; thumb: null; locked: false };
+// look: the look a character wears in this shot (shot-looks.ts), its picture as thumb; lookProblem: in plain words.
+export type SlotCard = { id: string; name: string; thumb: string | null; locked: boolean; look?: string; lookProblem?: string | null } | { id: null; name: string; thumb: null; locked: false; look?: string; lookProblem?: string | null };
 export type StorySlot = Slot & { animateWith: string; animateIsDefault: boolean; cast: SlotCard[]; place: SlotCard | null; lineText: string | null };
 // transitions: what the app changed so a dissolve with this clip never freezes a frame (node/transition-notes.ts).
 // shot: the shot list item this clip fills (Creation → Production "Use for shot", 23 Nov 2026): the card keeps its story.
@@ -152,6 +154,7 @@ export async function songStory(ws: Workspace, projectId: string, ownAll: readon
 // as just the name), the lyric line's words and the animation model (named, or the default for the shot type).
 function slotViews(ws: Workspace, projectId: string): (slot: Slot) => StorySlot {
   const cards = listCards(ws);
+  const wornIn = shotLooks(ws, projectId);
   const lines = songText(ws, projectId).lines;
   const find = (kind: "character" | "scene", name: string): SlotCard => {
     const c = cards.find((x) => x.kind === kind && same(x.name, name));
@@ -161,7 +164,15 @@ function slotViews(ws: Workspace, projectId: string): (slot: Slot) => StorySlot 
     ...slot,
     animateWith: animateFor(slot),
     animateIsDefault: !slot.animate,
-    cast: slot.characters.map((n) => find("character", n)),
+    // Each character in the look they wear in this shot (its picture and name; 23 Nov 2026).
+    cast: (() => {
+      const worn = wornIn(slot);
+      return slot.characters.map((n): SlotCard => {
+        const c = find("character", n);
+        const w = worn.find((x) => same(x.character, n));
+        return c.id && w ? { ...c, thumb: w.picture ?? c.thumb, locked: w.locked, look: w.look, lookProblem: w.problem } : c;
+      });
+    })(),
     place: slot.scene ? find("scene", slot.scene) : null,
     lineText: slot.line !== null ? (lines.find((l) => l.number === slot.line)?.text ?? null) : null,
   });

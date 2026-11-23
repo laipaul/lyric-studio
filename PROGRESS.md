@@ -64,7 +64,18 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   before the line (switchable); Play / Pause all, From the start, Space; "Use for shot N" under each tile, ✓ on the
   one in use. pictures-board.tsx ShotCompare; shot-production.ts withLineStarts (API adds lineStartMs). Tests:
   shot-production (+1), creation-production (+4 checks).
-- Part 2 (next): a look per shot with warnings, cost so far / to go.
+- 23 Nov 2026 (Paul: "on the storyboard I should see the right wardrobe of each character"): **a look per shot**.
+  One helper (node/shot-looks.ts) decides which look each person wears in a shot: shotlist.json slot "looks"
+  ({ "Jennifer": "Wedding Dress" }, from the shot list or chosen in Production), else the song's cast look, else the
+  main look. The Storyboard's planned cards show each person's picture in that look with its name on the tile, the
+  people line reads "Jennifer · Wedding Dress", 5+ people show 3 and "+N"; Production has a look dropdown per person
+  per shot; the Midjourney prompt's outfit and the Omni Reference picture follow (a look chosen for the shot wins over
+  the shot's "outfit" text, which then applies to people without one). Problems said on the shot and the card (no
+  such look, look not locked). The shot list check accepts "looks" (names as the card spells them; unknown looks
+  warned), a re-import keeps looks chosen in Production, the Song brief lists each character's wardrobe and the field.
+  Tests: shot-production (11), shotlist / production / story-line / shot-prompt pass; browser creation-production
+  (+4 checks), shotlist and production pass.
+- Part 2 (next): cost so far / to go.
 - Code: node/shot-production.ts (productionView, setPictureShot, useForShot, sectionsOfShots), shotlist.ts (filled),
   animate.ts (pictures.json "slot"), API /api/songs/<id>/pictures (production, slot, shot, use-shot),
   pictures-board.tsx (part: all | settings | production; ShotItems, ShotRow, Use for shot), production-tab.tsx (folders).

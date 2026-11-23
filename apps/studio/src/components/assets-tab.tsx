@@ -590,23 +590,40 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                   // A planned slot from the shot list (C2): its picture is made later (C3); Make skips it until then.
                   const sl = item.slot;
                   const cardImg = (x: { id: string | null; thumb: string | null }) => (x.id && x.thumb ? `/api/cards/${x.id}/file/${x.thumb.split("/").map(encodeURIComponent).join("/")}` : null);
-                  const faces = [...sl.cast, ...(sl.place ? [sl.place] : [])];
-                  const unlocked = faces.filter((x) => !x.locked).map((x) => (x.id ? `${x.name} (not locked yet)` : `${x.name} (no card any more)`));
+                  // Each person in the look they wear in this shot (23 Nov 2026); 5 or more: the first 3 and "+N".
+                  const all = [...sl.cast, ...(sl.place ? [sl.place] : [])];
+                  const faces = all.length > 4 ? all.slice(0, 3) : all;
+                  const more = all.length - faces.length;
+                  const unlocked = all.map((x) => x.lookProblem ?? (!x.locked ? (x.id ? `${x.name} (not locked yet)` : `${x.name} (no card any more)`) : null)).filter((x): x is string => !!x);
                   return (
                     <li key={k} data-story-slot={sl.id} data-position={i + 1} {...dragProps} className={cn(frame, "border-brand/50 border-dashed")} title={sl.shows}>
                       <div data-slot-frame className="relative grid aspect-[9/16] grid-cols-2 gap-px overflow-hidden bg-black/60">
                         {faces.length ? (
-                          faces.map((x) => {
-                            const src = cardImg(x);
-                            return src ? (
-                              // eslint-disable-next-line @next/next/no-img-element -- a card picture served by /api/cards
-                              <img key={`${x.name}`} src={src} alt={x.name} title={x.name} draggable={false} className={cn("size-full min-h-0 object-cover opacity-60", faces.length === 1 && "col-span-2")} />
-                            ) : (
-                              <span key={x.name} className={cn("text-muted-foreground flex items-center justify-center p-1 text-center text-[10px]", faces.length === 1 && "col-span-2")}>
-                                {x.name}
+                          <>
+                            {faces.map((x) => {
+                              const src = cardImg(x);
+                              return (
+                                <span key={`${x.name}`} data-slot-person={x.name} data-slot-look={x.look ?? ""} className={cn("relative min-h-0", faces.length === 1 && more === 0 && "col-span-2")}>
+                                  {src ? (
+                                    // eslint-disable-next-line @next/next/no-img-element -- a card picture served by /api/cards
+                                    <img src={src} alt={x.name} title={x.look ? `${x.name} · ${x.look}` : x.name} draggable={false} className="size-full object-cover opacity-60" />
+                                  ) : (
+                                    <span className="text-muted-foreground flex size-full items-center justify-center p-1 text-center text-[10px]">{x.name}</span>
+                                  )}
+                                  {x.look ? (
+                                    <span className={cn("absolute top-9 left-1 max-w-[90%] truncate rounded bg-black/70 px-1 py-px text-[9px]", x.lookProblem ? "text-amber-300" : "text-white")} title={x.lookProblem ?? x.look}>
+                                      {x.look}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              );
+                            })}
+                            {more > 0 ? (
+                              <span className="text-muted-foreground flex items-center justify-center bg-black/40 text-sm" title={all.slice(3).map((x) => x.name).join(", ")}>
+                                +{more}
                               </span>
-                            );
-                          })
+                            ) : null}
+                          </>
                         ) : (
                           <span className="text-muted-foreground col-span-2 flex items-center justify-center text-[10px]">no card</span>
                         )}
@@ -623,7 +640,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                           <span data-slot-shot className="bg-brand/15 text-brand rounded px-1">{sl.shot}</span>
                           {sl.cast.length ? (
                             <span className="flex items-center gap-0.5">
-                              <UserRound className="size-3" /> {sl.cast.map((x) => x.name).join(", ")}
+                              <UserRound className="size-3" /> <span data-slot-people>{sl.cast.map((x) => (x.look ? `${x.name} · ${x.look}` : x.name)).join(", ")}</span>
                             </span>
                           ) : null}
                           {sl.place ? (

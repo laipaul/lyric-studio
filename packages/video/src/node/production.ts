@@ -251,6 +251,8 @@ function cardBlock(c: CastCard): string {
   if (c.description) parts.push(`  - Looks: ${c.description.replace(/\s+/g, " ").trim()}`);
   if (c.outfit) parts.push(`  - Outfit${c.lookName ? ` (look: ${c.lookName})` : ""}: ${c.outfit.replace(/\s+/g, " ").trim()}`);
   if (c.props) parts.push(`  - Props that must not change: ${c.props.replace(/\s+/g, " ").trim()}`);
+  // The wardrobe (23 Nov 2026): the looks a shot can name in "looks".
+  if (c.kind === "character" && c.looks.length > 1) parts.push(`  - Wardrobe (for "looks"): ${c.looks.map((l) => `${l.name}${l.locked ? "" : " (not locked)"}`).join(", ")}`);
   return parts.join("\n");
 }
 
@@ -286,7 +288,7 @@ export function songBrief(ws: Workspace, projectId: string, timed: TimedLine[] |
     `- **id**: s01, s02, … (keep the same id when you change a shot later). **order**: its place in the video, 1 = first.`,
     `- **shot**: one of ${SHOT_TYPES.join(", ")}. **line**: the lyric line number below where the shot starts (one shot per line at most; leave it out for an instrumental part).`,
     `- **characters** and **scene**: only names from the cast below, spelled exactly as written.${cast.length ? "" : " (The cast is empty: leave them out, or tell me which characters to make first.)"}`,
-    `- Optional: **outfit** (a change for this shot only), **tag** (a word to group shots, e.g. "chorus").`,
+    `- Optional: **looks** (which look of their wardrobe each character wears in this shot, by name, e.g. { "Jennifer": "Wedding Dress" }; without it, the look they wear in this song), **outfit** (a change for this shot only, when no look fits), **tag** (a word to group shots, e.g. "chorus").`,
     "- If you also write a story bible, give it to me as a second, separate Markdown answer.",
     "",
   );

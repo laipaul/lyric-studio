@@ -34,6 +34,7 @@ export type Slot = {
   shot: ShotType;
   line: number | null; // the Lyrics tab's line number
   outfit?: string; // a change for this slot only (else the card's locked outfit)
+  looks?: Record<string, string>; // character → the look of their wardrobe they wear in this shot (shot-looks.ts); else the song's look
   tag?: string;
   animate?: string; // given in the file; else ANIMATE_DEFAULTS[shot]
 };
@@ -56,7 +57,7 @@ export const animateFor = (s: Pick<Slot, "animate" | "shot">) => s.animate ?? AN
 const HELP =
   "Planned slots of this song (Prepare → Storyboard → Import shot list). Written by the import: change your own shot list file and import it again. " +
   '"slot:<id>" in clips.json "order" is each slot\'s place in the story line. Slots are skipped by Make until they have a picture (C3).';
-const FIELDS = ["id", "order", "shows", "characters", "scene", "shot", "line", "outfit", "tag", "animate"];
+const FIELDS = ["id", "order", "shows", "characters", "scene", "shot", "line", "outfit", "looks", "tag", "animate"];
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 function distance(a: string, b: string): number {
@@ -78,7 +79,7 @@ export function closest(name: string, names: readonly string[]): string | null {
 }
 
 export type CheckContext = {
-  cards: { name: string; kind: "character" | "scene"; status: string }[];
+  cards: { name: string; kind: "character" | "scene"; status: string; looks?: string[] }[]; // looks: the wardrobe's look names
   lines: { number: number; text: string }[];
   previous: Slot[];
 };
@@ -178,7 +179,28 @@ export function checkShotList(input: unknown, ctx: CheckContext): ShotListCheck 
     const tag = text("tag");
     const animate = text("animate")?.toLowerCase();
     if (outfit && !chars.length) warn(label, '"outfit" is for a character, but the slot has none: it is kept but not used.');
-    slots.push({ id: id || `#${k + 1}`, order, shows, characters: chars, scene, shot, line, ...(outfit ? { outfit } : {}), ...(tag ? { tag } : {}), ...(animate ? { animate } : {}) });
+    // "looks": { "<character>": "<look name>" }: which look of their wardrobe each one wears in this shot.
+    const looks: Record<string, string> = {};
+    if (r.looks !== undefined && r.looks !== null) {
+      if (typeof r.looks !== "object" || Array.isArray(r.looks)) err(label, '"looks" must be like { "Jennifer": "Wedding Dress" }.');
+      else
+        for (const [who, look] of Object.entries(r.looks as Record<string, unknown>)) {
+          const c = chars.find((x) => same(x, who));
+          if (!c) {
+            warn(label, `"looks" names ${who}, who is not among this slot's characters: left out.`);
+            continue;
+          }
+          if (typeof look !== "string" || !look.trim()) {
+            err(label, `the look of ${c} must be the name of one of their looks.`);
+            continue;
+          }
+          const wardrobe = ctx.cards.find((x) => x.kind === "character" && same(x.name, c))?.looks ?? [];
+          const named = wardrobe.find((x) => same(x, look));
+          if (wardrobe.length && !named) warn(label, `${c} has no look "${look.trim()}" (looks: ${wardrobe.join(", ")}): the song's look is used until it exists.`);
+          looks[c] = named ?? look.trim();
+        }
+    }
+    slots.push({ id: id || `#${k + 1}`, order, shows, characters: chars, scene, shot, line, ...(outfit ? { outfit } : {}), ...(Object.keys(looks).length ? { looks } : {}), ...(tag ? { tag } : {}), ...(animate ? { animate } : {}) });
   });
   slots.sort((a, b) => a.order - b.order);
   const lineTwice = new Map<number, string[]>();
@@ -215,7 +237,7 @@ export const readShotList = (ws: Workspace, projectId: string): ShotListFile | n
 
 function context(ws: Workspace, projectId: string): CheckContext {
   return {
-    cards: listCards(ws).map((c) => ({ name: c.name, kind: c.kind, status: c.status })),
+    cards: listCards(ws).map((c) => ({ name: c.name, kind: c.kind, status: c.status, looks: c.kind === "character" ? (c.looks.length ? c.looks : ["Main look"]) : undefined })),
     lines: songText(ws, projectId).lines.map((l) => ({ number: l.number, text: l.text })),
     previous: readShotList(ws, projectId)?.slots ?? [],
   };
@@ -239,10 +261,14 @@ export async function importShotList(ws: Workspace, projectId: string, input: un
   const root = songRoot(ws, projectId);
   const file = path.join(root, SHOTLIST_FILE);
   // Shots already filled in Creation stay filled (by id) and keep their clip's place in the story line.
-  const before = readShotListFile(file)?.filled ?? {};
+  const previousList = readShotListFile(file); // read before it is kept in Replaced files
+  const before = previousList?.filled ?? {};
   const filled = Object.fromEntries(Object.entries(before).filter(([id]) => check.slots.some((x) => x.id === id)));
   if (existsSync(file)) keepReplaced(root, file);
-  const out: ShotListFile = { _help: HELP, imported_at: new Date().toISOString(), source: path.win32.basename(source), slots: check.slots, ...(Object.keys(filled).length ? { filled } : {}) };
+  // Looks chosen per shot in Production stay when the new file names none for that shot.
+  const before2 = previousList?.slots ?? [];
+  const slotsOut = check.slots.map((x) => (x.looks ? x : (() => { const p = before2.find((b) => b.id === x.id)?.looks; return p ? { ...x, looks: p } : x; })()));
+  const out: ShotListFile = { _help: HELP, imported_at: new Date().toISOString(), source: path.win32.basename(source), slots: slotsOut, ...(Object.keys(filled).length ? { filled } : {}) };
   writeFileSync(file, `${JSON.stringify(out, null, 2)}\n`);
   // Every own clip gets its place in the order first (clips never moved follow in file-name order), so "order"
   // counts the story line as it is shown.
@@ -252,6 +278,24 @@ export async function importShotList(ws: Workspace, projectId: string, input: un
   edits = withSongOrder(edits, own, inClipOrder(edits, own));
   writeClipEdits(root, { ...edits, order: placeSlots(edits.order, check.slots.filter((x) => !filled[x.id])) });
   return check;
+}
+
+// A look for one character in one shot (Creation → Production), or back to the song's look (look null).
+export function setShotLook(ws: Workspace, projectId: string, slotId: unknown, character: unknown, look: unknown): Slot {
+  const root = songRoot(ws, projectId);
+  const file = path.join(root, SHOTLIST_FILE);
+  const list = readShotListFile(file);
+  const slot = list?.slots.find((x) => x.id === String(slotId ?? ""));
+  if (!list || !slot) throw new Error("That shot is not in this song's shot list.");
+  const who = slot.characters.find((c) => same(c, String(character ?? "")));
+  if (!who) throw new Error(`${String(character)} is not in this shot.`);
+  const looks = { ...(slot.looks ?? {}) };
+  if (look === null || look === undefined || look === "") delete looks[who];
+  else looks[who] = String(look).trim();
+  const next = { ...slot, ...(Object.keys(looks).length ? { looks } : {}) };
+  if (!Object.keys(looks).length) delete next.looks;
+  writeFileSync(file, `${JSON.stringify({ ...list, slots: list.slots.map((x) => (x.id === slot.id ? next : x)) }, null, 2)}\n`);
+  return next;
 }
 
 // Remove planned slots (Paul, 21 Nov 2026: "why can't I remove 2 and 6 from my Storyboard"): the slots leave the story

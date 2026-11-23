@@ -18,6 +18,7 @@ import { filmLookFor, readFilmLook } from "./film-looks";
 import { productionData, type CastCard } from "./production";
 import { cardRoot, listCards } from "./characters/cards";
 import { LOOKS_DIR, MAIN_LOOK } from "./characters/looks";
+import { shotLooks, type WornLook } from "./shot-looks";
 import { saveAnchors } from "./lyrics-view";
 import { readRecipe } from "./recipe";
 import { SHOTLIST_FILE, readShotListFile, slotKey, type Slot } from "./shotlist";
@@ -35,6 +36,7 @@ export type ProductionShot = Slot & {
   // The locked pictures of the people and place in it (the look each wears in this song): Midjourney's Omni Reference.
   refs: { name: string; card: string; file: string }[]; // file: inside the card's folder (/api/cards/<card>/file/<file>)
   lineStartMs?: number | null; // when its line is sung (Compare plays the song from there); null: no line or not timed yet
+  people: WornLook[]; // each character with the look they wear in this shot (shot-looks.ts)
 };
 export type ProductionView = { shots: ProductionShot[]; sections: string[] };
 
@@ -87,16 +89,20 @@ export function productionView(ws: Workspace, projectId: string): ProductionView
   const film = filmLookFor(ws, projectId);
   const mj = film ? readFilmLook(ws.dir, film.name)?.midjourney?.trim() || film.line : null;
   const aspect: ShotPromptInput["aspect"] = data.sizes.some((z) => z.ratio === "9:16") || !data.sizes.length ? "9:16" : "16:9";
-  const promptOf = (s: Slot) => {
+  const wornIn = shotLooks(ws, projectId);
+  const promptOf = (s: Slot, worn: WornLook[]) => {
     const scene = s.scene ? card(s.scene) : null;
     return shotPrompt({
       shows: s.shows,
       shot: s.shot,
       tag: s.tag,
-      outfit: s.outfit,
+      // Each person's outfit: a look chosen for this shot wins; else the shot's own "outfit" text (e.g. a memory's
+      // everyday clothes for someone with no such look); else the look they wear in this song.
       people: s.characters.map((n) => {
         const c = card(n);
-        return { name: n, description: c?.description ?? null, outfit: c?.outfit ?? null };
+        const w = worn.find((x) => x.character.toLowerCase() === n.toLowerCase());
+        const outfit = w?.fromShot ? w.outfit : (s.outfit ?? w?.outfit ?? c?.outfit ?? null);
+        return { name: n, description: c?.description ?? null, outfit };
       }),
       scene: s.scene ? { name: s.scene, description: scene?.description ?? scene?.outfit ?? null } : null,
       filmLook: mj,
@@ -112,9 +118,14 @@ export function productionView(ws: Workspace, projectId: string): ProductionView
     }
     return { name: c.name, card: c.id, file: c.thumbnail };
   };
-  const refsOf = (s: Slot) => [...s.characters, ...(s.scene ? [s.scene] : [])].map(card).filter((c): c is CastCard => !!c).map(refOf);
+  // The Omni Reference pictures: each person in this shot's look, then the scene card.
+  const refsOf = (s: Slot, worn: WornLook[]): ProductionShot["refs"] => [
+    ...worn.filter((w) => w.card && w.picture).map((w) => ({ name: w.character, card: w.card!, file: w.picture! })),
+    ...(s.scene && card(s.scene) ? [refOf(card(s.scene)!)] : []),
+  ];
   const shots = slots.map((s, i): ProductionShot => {
     const clip = filled[s.id];
+    const worn = wornIn(s);
     return {
       ...s,
       number: i + 1,
@@ -125,8 +136,9 @@ export function productionView(ws: Workspace, projectId: string): ProductionView
         .filter(([f, p]) => p.slot === s.id && existsSync(path.join(dir, f)))
         .map(([f]) => f)
         .sort(),
-      prompt: promptOf(s),
-      refs: refsOf(s),
+      prompt: promptOf(s, worn),
+      refs: refsOf(s, worn),
+      people: worn,
     };
   });
   return { shots, sections: [...new Set(secs)] };

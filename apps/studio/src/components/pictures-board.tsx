@@ -168,6 +168,16 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
       ]);
   };
   const comparedShot = comparing ? shots.find((s) => s.id === comparing) ?? null : null;
+  // The look a person wears in one shot (its prompt, reference picture and Storyboard card follow).
+  async function setLook(shot: ProductionShot, character: string, look: string) {
+    try {
+      await post({ action: "shot-look", slot: shot.id, character, look });
+      setNotice({ ok: true, text: `Shot ${shot.number}: ${character} wears ${look}. Its prompt, reference picture and Storyboard card follow.` });
+      await load();
+    } catch (e) {
+      setNotice({ ok: false, text: (e as Error).message });
+    }
+  }
   async function attach(file: string, shot: ProductionShot) {
     try {
       await post({ action: "shot", file, slot: shot.id });
@@ -273,6 +283,7 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
           onDrop={(files, s) => void add(files, s.id)}
           onAttach={(file, s) => void attach(file, s)}
           onCompare={(s) => setComparing(s.id)}
+          onLook={(s, character, look) => void setLook(s, character, look)}
           compareCount={(s) => candidatesOf(s).length}
           tile={(p, s) => <PictureTile key={p.file} projectId={projectId} p={p} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title, take) => setPlaying({ url, title, take })} shot={s} useShot={(n) => void useShot(p.file, n, s)} openCompare={candidatesOf(s).length >= 2 ? () => setComparing(s.id) : undefined} />}
         />
@@ -399,8 +410,10 @@ function ShotItems({
   onAttach,
   onCompare,
   compareCount,
+  onLook,
   tile,
 }: {
+  onLook: (s: ProductionShot, character: string, look: string) => void;
   onCompare: (s: ProductionShot) => void;
   compareCount: (s: ProductionShot) => number;
   shots: ProductionShot[];
@@ -431,7 +444,7 @@ function ShotItems({
         <section key={`${g.name}-${gi}`} data-shot-section={g.name} className="flex flex-col gap-2">
           <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">{g.name}</h3>
           {g.shots.map((s) => (
-            <ShotRow key={s.id} s={s} pictures={pictures.filter((p) => p.slot === s.id)} loose={loose} adding={adding} onDrop={onDrop} onAttach={onAttach} tile={tile} onCompare={() => onCompare(s)} candidates={compareCount(s)} />
+            <ShotRow key={s.id} s={s} pictures={pictures.filter((p) => p.slot === s.id)} loose={loose} adding={adding} onDrop={onDrop} onAttach={onAttach} tile={tile} onCompare={() => onCompare(s)} candidates={compareCount(s)} onLook={(character, look) => onLook(s, character, look)} />
           ))}
         </section>
       ))}
@@ -439,7 +452,7 @@ function ShotItems({
   );
 }
 
-function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare, candidates }: { s: ProductionShot; pictures: PictureView[]; loose: PictureView[]; adding: boolean; onDrop: (files: FileList, s: ProductionShot) => void; onAttach: (file: string, s: ProductionShot) => void; tile: (p: PictureView, s: ProductionShot) => ReactNode; onCompare: () => void; candidates: number }) {
+function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare, candidates, onLook }: { s: ProductionShot; pictures: PictureView[]; loose: PictureView[]; adding: boolean; onDrop: (files: FileList, s: ProductionShot) => void; onAttach: (file: string, s: ProductionShot) => void; tile: (p: PictureView, s: ProductionShot) => ReactNode; onCompare: () => void; candidates: number; onLook: (character: string, look: string) => void }) {
   const [over, setOver] = useState(false);
   const [copied, setCopied] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -466,13 +479,39 @@ function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare
           <span className="font-medium">{s.shows}</span>
           <span className="text-muted-foreground text-xs">
             <span className="bg-muted rounded px-1">{s.shot}</span>
-            {s.characters.length ? ` · ${s.characters.join(", ")}` : ""}
+            {s.people.map((w) => (
+              <span key={w.character} className="ml-1.5 inline-flex items-center gap-1">
+                · {w.character}
+                {w.looks.length > 1 ? (
+                  <select
+                    data-shot-look={`${s.id}-${w.character}`}
+                    value={w.look}
+                    onChange={(e) => onLook(w.character, e.target.value)}
+                    className={cn("bg-background rounded border px-1 py-0 text-[11px]", w.problem ? "border-amber-400/60 text-amber-200" : w.fromShot ? "border-brand/60" : "")}
+                    title={w.problem ?? (w.fromShot ? "The look chosen for this shot" : "The song's look (Story room → Cast); choose another for this shot")}
+                  >
+                    {w.looks.map((l) => (
+                      <option key={l} value={l}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+                ) : w.look ? (
+                  <span className="text-muted-foreground">({w.look})</span>
+                ) : null}
+              </span>
+            ))}
             {s.scene ? ` · ${s.scene}` : ""}
             {s.outfit ? ` · wears: ${s.outfit}` : ""}
             {s.line !== null ? <span data-shot-line={s.line}>{` · line ${s.line}: “${s.lineText ?? ""}”`}</span> : " · no line (music only)"}
             {s.tag ? ` · #${s.tag}` : ""}
           </span>
         </div>
+        {s.people.some((w) => w.problem) ? (
+          <span data-shot-look-problem className="basis-full text-[11px] text-amber-300">
+            {s.people.flatMap((w) => (w.problem ? [w.problem] : [])).join(" ")}
+          </span>
+        ) : null}
         {s.filled ? (
           <span data-shot-filled={s.filled} className="flex shrink-0 items-center gap-1 rounded bg-emerald-400/15 px-1.5 py-0.5 text-xs text-emerald-300" title={`In the Storyboard as ${s.filled}`}>
             <Check className="size-3" /> Filled

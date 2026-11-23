@@ -21,6 +21,7 @@ import { addFromLink, addPictures, picturesView, removePicture, removeTakes, res
 import { runSinging, withSongStarts } from "@lyric/video/singer";
 import { productionView, setPictureShot, useForShot, withLineStarts } from "@lyric/video/shot-production";
 import { timedLines } from "@lyric/video/production";
+import { setShotLook } from "@lyric/video/shotlist";
 import { connection } from "next/server";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
@@ -108,6 +109,10 @@ export async function POST(request: Request, { params }: Params) {
     }
     if (body.action === "remove-picture") return Response.json(withWorkspace((ws) => removePicture(ws, id, file)));
     if (body.action === "restore-picture") return Response.json(withWorkspace((ws) => restorePicture(ws, id, file)));
+    if (body.action === "shot-look") {
+      const b = body as { slot?: unknown; character?: unknown; look?: unknown };
+      return Response.json({ slot: withWorkspace((ws) => setShotLook(ws, id, b.slot, b.character, b.look)) });
+    }
     if (body.action === "shot") return Response.json({ slot: withWorkspace((ws) => setPictureShot(ws, id, file, (body as { slot?: unknown }).slot)) });
     if (body.action === "use-shot") return Response.json(await withWorkspaceAsync((ws) => useForShot(ws, id, { file, n: body.n, slot: (body as { slot?: unknown }).slot })));
     if (body.action === "resume") {
