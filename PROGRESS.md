@@ -4,6 +4,29 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Step B: a Mini film plays shot by shot ✅ (to verify on the PC)
+- Paul (23 Nov 2026): "the shots no longer match the lyrics … maybe because we don't have the full 38 shots it goes in
+  circle and fills in the gaps". For a music Reel the app cycles the clips over beat cuts; a Mini film is a story.
+- Now, for a story song (Mini film, or a shot list on lyric lines not set to "Cut to the song"), on every platform
+  except Canvas, **every card of the story line (Prepare → Storyboard) is ONE shot**, in that order:
+  - a card on a lyric line (its shot's line, else the line its clip is anchored on) starts when the line appears, cut
+    on the beat at or just before it (at most 0.2 s after it); cards without a line share the time of the card before
+    them (before the first line: the intro): the shot grid's rule;
+  - **each take plays once, on its own card**: no cycling, no repeats, no take filling another card's moment; the
+    variations (v2, v3) keep the same cuts (they differ in look and transitions);
+  - a planned shot **with no take yet shows a stand-in**: its first person's reference picture, dimmed and softened
+    (else a dark frame), named "Shot N · no take yet" on the Shape timeline; the plan says "Mini film: 39 of 45 shots
+    have no take yet (shots 7-45): they show a stand-in until you use a take for them in Creation → Production";
+  - a card with no room of its own (too close to the one before, or to the end) is left out and said; a card on a line
+    wins over a card without one just before it.
+- Code: node/film-plan.ts (filmItems, filmCuts, standInPicture), make.ts (the film block: the plan's cuts, stand-in
+  clips, no anchors / gap filling / loop blend), compose.ts (RenderBase.filmShots), storyboard.ts (stand-in names).
+  The plan cache key includes the shot list. Singing takes (lip sync) in a Mini film are placed as ordinary shots for
+  now (not frame-locked to the song): to look at when a Mini film uses one.
+- Tests: film-plan.test.ts (pure rules, a real plan and Make with 2 variations, Shape's shot names).
+- On the PC: Shape on "Something About You And Me": shots 1-6 play your six takes, each once, on its line; from shot 7
+  the stand-ins (Jennifer / the Bridegroom dimmed) follow the 45 cards; the Analysis lists the shots without a take.
+
 ### Step A: the shot grid: the song decides the timing, the story fills it ✅ (to verify on the PC)
 - Paul (23 Nov 2026): "suppose we had to start again. You need to analyse the full song and plan each shot list
   according to the length of the song". The Mini film showed takes repeating and drifting off their lines because the
@@ -422,22 +445,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   from lines 25-27 (… set to Omit; it stays in Creation, and "Use this take" in Who sings brings it back). Continue?"
   A clip on a later line of a group (e.g. 26) no longer leaves two clips on one line.
 - Tests: browser singer (+2: picker inside the window, asks first and No keeps the singer), lyrics-tab pass.
-
-### Lip-sync takes panel; Jump to Creation; lights-dim ending ✅ (to verify on the PC)
-- Paul (21 Nov 2026): "a pop up window when we press Make lipsync like what we see in Creation" and "end the reel
-  [with] her whispering and fading with the studio light going to dim".
-- Lyrics Sync: Make singing clips, Retake and a line's new **Takes** button open a takes panel (top right): the
-  picture, "being made" while a take runs, every take with ▶ (with the song) and Use this take, and **Jump to
-  Creation** (opens Creation on the picture card). Esc / ✕ close it. Under a line's takes the same link as a note.
-- Lights-dim ending: a Reel / TikTok / Short that ends on a fade or ring-out now also takes the picture to black
-  over the same frames as the music fade; the lyrics stay on top, so the last word is the last thing seen. Loops are
-  unchanged. QA does not count that black as a fault.
-- Wedding Day: Reel section end 2:27.7 → 2:30.0 (her whispered "too" fades out by 2:29.7); line 37 "I've spent so
-  long wondering" hand-set to 2:30.85 (the aligner had put it on the whisper at 2:29.0, so the old end cut it).
-  The plan now ends on "And today is yours too" with a 1.9 s fade of music and picture.
-- Tests: packages/video test/end-dim.test.ts (new, 4); apps/studio e2e/singer.e2e.ts extended (panel, Esc, Takes,
-  Jump to Creation; not run here: it needs a fresh studio build). Note: test/make-reference.test.ts fails on this PC
-  with and without this change (normalised clip names differ): not caused by it.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

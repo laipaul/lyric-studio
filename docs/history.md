@@ -4,6 +4,22 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Lip-sync takes panel; Jump to Creation; lights-dim ending ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "a pop up window when we press Make lipsync like what we see in Creation" and "end the reel
+  [with] her whispering and fading with the studio light going to dim".
+- Lyrics Sync: Make singing clips, Retake and a line's new **Takes** button open a takes panel (top right): the
+  picture, "being made" while a take runs, every take with ▶ (with the song) and Use this take, and **Jump to
+  Creation** (opens Creation on the picture card). Esc / ✕ close it. Under a line's takes the same link as a note.
+- Lights-dim ending: a Reel / TikTok / Short that ends on a fade or ring-out now also takes the picture to black
+  over the same frames as the music fade; the lyrics stay on top, so the last word is the last thing seen. Loops are
+  unchanged. QA does not count that black as a fault.
+- Wedding Day: Reel section end 2:27.7 → 2:30.0 (her whispered "too" fades out by 2:29.7); line 37 "I've spent so
+  long wondering" hand-set to 2:30.85 (the aligner had put it on the whisper at 2:29.0, so the old end cut it).
+  The plan now ends on "And today is yours too" with a 1.9 s fade of music and picture.
+- Tests: packages/video test/end-dim.test.ts (new, 4); apps/studio e2e/singer.e2e.ts extended (panel, Esc, Takes,
+  Jump to Creation; not run here: it needs a fresh studio build). Note: test/make-reference.test.ts fails on this PC
+  with and without this change (normalised clip names differ): not caused by it.
+
 ### Softer Reel endings: a ring-out bar on a hand-chosen part, longer soft fades, QA for an abrupt stop ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "the sound at the end of the reel ends too brutally". The part was chosen by hand (0:48.9 –
   2:27.7) and ends on loud music. The app never changes the music's volume; it only fades where it cuts the song. A

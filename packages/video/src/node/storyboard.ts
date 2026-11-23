@@ -306,6 +306,8 @@ async function planView(ws: Workspace, projectId: string, p: { name: string; lab
   const notes: string[] = [...p.warnings];
   // The best moments the planner used (the clip editor's, else the strongest 2 s).
   const clips = new Map<string, StoryClip>(plan.clips.map((c) => [c.path, { name: c.name, thumb: c.thumb, durationMs: c.durationMs, kind: c.kind, bestAtS: c.bestMs === null ? null : c.bestMs / 1000, bestFrom: c.bestFrom, edit: clipEdit(c.durationMs, { in: c.inMs === null ? null : c.inMs / 1000, out: c.outMs === null ? null : c.outMs / 1000, speed: c.speed }) }]));
+  // A Mini film's stand-ins (shots without a take yet): named "Shot N · no take yet" on the timeline.
+  for (const x of plan.standIns ?? []) clips.set(x.path, { name: x.name, thumb: null, durationMs: 0, kind: "photo", bestAtS: null, bestFrom: null });
   const startMs = v.props.audio ? frameMs(v.props.audio.startFrame) : plan.section.start_ms;
   // The props' lyric lines with their numbers (the Lyrics tab's), matched by text and time.
   const numbered = v.props.lyrics.map((l) => {

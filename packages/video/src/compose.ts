@@ -67,6 +67,9 @@ export type StyleEntry = {
 
 export type RenderBase = {
   plan: CutPlan;
+  // A Mini film (node/film-plan.ts): the clip of every shot, in order (the plan's cuts are the film's shots). Each take
+  // plays once on its own shot; no variation changes the cuts and nothing fills a shot with another clip.
+  filmShots?: string[];
   clips: PreparedClip[];
   audio: LyricVideoProps["audio"];
   durationInFrames: number;
@@ -191,7 +194,7 @@ export function composeProps(
   base: RenderBase,
   choices: ComposeChoices,
 ): { props: Omit<LyricVideoProps, "mediaBaseUrl">; warnings: string[]; anchors: AnchorReport | null; transitions: { text: string; kinds: TransitionKind[] } | null } {
-  let plan = choices.plan ?? base.plan;
+  let plan = base.filmShots ? base.plan : (choices.plan ?? base.plan);
   const platform = base.platform ?? { format: DEFAULT_FORMAT, safeZone: DEFAULT_SAFE_ZONE, lyricsAt: 0.45, textScale: 1 };
   const bars = choices.cinematicBars ?? base.cinematicBars;
   const layoutOf = platform.lyricSafeZone ? undefined : platform.textLayout;
@@ -216,6 +219,12 @@ export function composeProps(
   if (base.timeline?.cuts.length && base.beats?.length) plan = applyCutMoves(plan, base.beats, base.timeline.cuts).plan;
   const bounds = [0, ...plan.cuts.map((c) => c.frame - plan.start_frame), base.durationInFrames];
   const { byShot, warnings } = pinsToShots(base.pins, allLines, bounds);
+  if (base.filmShots) {
+    byShot.clear();
+    base.filmShots.forEach((id, i) => {
+      if (i < bounds.length - 1) byShot.set(i, id);
+    });
+  }
   const notes: string[] = [];
   const clipStarts = new Map<number, number>();
   const exact = new Set<number>(); // singing clips' shots (lip sync): normal speed from the frame that matches the song

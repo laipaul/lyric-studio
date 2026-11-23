@@ -58,6 +58,9 @@ import type { TransitionStyle } from "../transitions";
 import { anchorsInside, type AnchorSpec, type GapOrder, type ResolvedAnchor } from "../anchors";
 import { effectiveSongStyle } from "../song-style";
 import { readShotList } from "./shotlist";
+import { filmCuts, filmItems, standInPicture } from "./film-plan";
+import { shotLooks } from "./shot-looks";
+import { cardRoot, listCards } from "./characters/cards";
 import type { AnchorReport, AnchorTransitions } from "../compose";
 import { RECENT_WINDOW, type ClipOrder } from "../shots";
 import { lyricCardStyle } from "../textboard";
@@ -291,6 +294,7 @@ export type PlatformPlan = {
     transition: "cut" | "dissolve" | null; // how the clip comes in (clips.json), null: the app chooses
     omit: boolean; // set to Omit (Assets / Shape): listed in the order, never shown
   }[];
+  standIns: { path: string; name: string }[]; // a Mini film's stand-ins for shots without a take (film-plan.ts)
   section: { mode: string; start_ms: number; end_ms: number; reason: string };
   clipFiles: { name: string; sha256: string }[]; // 2e-1: the clip files this platform could use (name, content)
   analysis: { bpm: number; beats: Beat[]; duration_ms: number };
@@ -564,6 +568,18 @@ export function isWholeStory(ws: Workspace, projectId: string, recipe: SongRecip
   if (effectiveSongStyle(recipe.songStyle, (recipe.anchors ?? []).filter((a) => a.sync !== undefined).length) === "film") return true;
   const onLines = (readShotList(ws, projectId)?.slots ?? []).some((x) => typeof x.line === "number" && x.line >= 1);
   return onLines && recipe.songStyle !== "cut";
+}
+
+// "3, 5-9, 12" from shot numbers.
+function shotRanges(numbers: readonly number[]): string {
+  const out: string[] = [];
+  for (let i = 0; i < numbers.length; ) {
+    let j = i;
+    while (j + 1 < numbers.length && numbers[j + 1] === numbers[j] + 1) j++;
+    out.push(j > i ? `shots ${numbers[i]}-${numbers[j]}` : `shot ${numbers[i]}`);
+    i = j + 1;
+  }
+  return out.join(", ");
 }
 
 export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
@@ -1312,7 +1328,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
       // An instrumental's story: each sentence starts with a new shot (on the bar it appears on).
       ...(sh.instrumental && preset.lyrics ? { cutAtMs: lines.map((l) => l.start_ms - leadMs + lyricsOffsetMs) } : {}),
     });
-  const plan = planFor(options.rate ?? "1x");
+  let plan = planFor(options.rate ?? "1x");
   if (pace) log(`${preset.name}: ${pace.text} ${plan.cuts.length + 1} shots`);
   if (shotLength) log(`${preset.name}: shot length ${shotLength === "story" ? "story (2 bars on hooks, 4 on verses, never under 3 s)" : `${shotLength} bar${shotLength > 1 ? "s" : ""}`}: ${plan.cuts.length + 1} shots`);
   // Each clip's best moment (the editor's, else the strongest 2 s): a clip's first shot is centred on it.
@@ -1347,6 +1363,43 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     ...chosen.warnings.map((w) => `${preset.name}: ${w}`),
     ...ytWarnings,
   ];
+  // A Mini film (node/film-plan.ts, 23 Nov 2026): every card of the story line is one shot, on its lyric line, each
+  // take once; a planned shot with no take yet shows a stand-in. Replaces the cut rate and the gap filling.
+  let filmShots: string[] | null = null;
+  const standIns: { path: string; name: string }[] = []; // Shape names the stand-in shots by these
+  if (sh.wholeStory && usesClips && !canvas) {
+    const items = filmItems(storyOrder.order, usedClips.map((c) => c.name), readShotList(ws, project.id), sh.anchors);
+    if (items.length) {
+      const gridLines = lines.map((l, i) => ({ number: i + 1, text: l.text, startMs: l.start_ms - leadMs + lyricsOffsetMs, endMs: null }));
+      const film = filmCuts(items, gridLines, analysis.beats, { startFrame: plan.start_frame, endFrame: plan.end_frame, fps: VIDEO.fps });
+      const worn = shotLooks(ws, project.id);
+      const cards = listCards(ws);
+      const ids: string[] = [];
+      const empty: number[] = [];
+      for (const item of film.kept) {
+        const take = item.clip ? usedClips.find((c) => c.name.toLowerCase() === item.clip!.toLowerCase()) : undefined;
+        if (take) {
+          ids.push(take.id);
+          continue;
+        }
+        const who = item.slot ? worn(item.slot).find((w) => w.picture && w.card) : undefined;
+        const card = who ? cards.find((c) => c.id === who.card) : undefined;
+        const picture = who?.picture && card ? path.join(cardRoot(ws, card), who.picture) : null;
+        const id = `standin-${item.slot?.id ?? item.number}`;
+        const rel = await standInPicture(ws, picture, format, id);
+        const name = `Shot ${item.number} · no take yet`;
+        usedClips.push({ id, name, duration_ms: 0, path: rel, durationFrames: 0, kind: "photo", fit: "cover" });
+        standIns.push({ path: rel, name });
+        ids.push(id);
+        empty.push(item.number);
+      }
+      plan = { ...plan, cuts: film.cuts, requested_grid_beats: null, grid_beats: null };
+      filmShots = ids;
+      log(`${preset.name}: Mini film: ${film.kept.length} shots in story order, each on its own moment${empty.length ? `; ${empty.length} without a take yet (stand-ins)` : ""}`);
+      warnings.push(...film.notes.map((n) => `${preset.name}: ${n}`));
+      if (empty.length) warnings.push(`${preset.name}: Mini film: ${empty.length} of ${film.kept.length} shots have no take yet (${shotRanges(empty)}): they show a stand-in until you use a take for them in Creation → Production`);
+    }
+  }
   let pins: RenderBase["pins"] = [];
   if (options.pins) {
     const parsed = parsePins(readFileSync(options.pins, "utf8"));
@@ -1402,7 +1455,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   const anchors: ResolvedAnchor[] = [];
   const anchorMissing: string[] = [];
   const anchorSlots: { line: number; text: string; clip: string }[] = [];
-  if (usesClips && !canvas && preset.lyrics) {
+  if (usesClips && !canvas && preset.lyrics && !filmShots) {
     const stem = (n: string) => n.toLowerCase().replace(/\.[^.]+$/, "");
     for (const a of sh.anchors) {
       const i = lines[a.line - 1] ? a.line - 1 : -1;
@@ -1481,6 +1534,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   };
   const base: RenderBase = {
     plan,
+    ...(filmShots ? { filmShots } : {}),
     clips: usesClips ? usedClips : [],
     audio: preset.audio ? audio : null,
     durationInFrames: plan.end_frame - plan.start_frame,
@@ -1498,7 +1552,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
     ...(backing.backing && preset.lyrics ? { lyricBacking: true } : {}),
     // Loop platforms: the last frames blend into the first shot's opening when the last shot cannot
     // continue into it (about the ending's fade, 0.4-1 s).
-    ...(loops && usesClips ? { loopInto: Math.max(12, Math.min(30, Math.round((ending?.fadeOutS ?? 0.5) * VIDEO.fps))) } : {}),
+    ...(loops && usesClips && !filmShots ? { loopInto: Math.max(12, Math.min(30, Math.round((ending?.fadeOutS ?? 0.5) * VIDEO.fps))) } : {}),
     // A fade or ring-out ending: the picture dims to black with the music (the lights-dim ending, src/ending.ts).
     ...(endDimSeconds(ending) > 0 ? { endDim: { frames: Math.round(endDimSeconds(ending) * VIDEO.fps) } } : {}),
     // Automatic transitions (src/transitions.ts): from the song's feel, its hooks and sung stretches; a
@@ -1697,7 +1751,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   );
   // 2e-1: what each video's plan is made from (its fingerprint) and which Try other looks it is.
   const keyOptions = Object.fromEntries(Object.entries(options).filter(([k, v]) => !PLAN_KEY_SKIP.has(k) && v !== undefined && v !== false && typeof v !== "function"));
-  const keyBase = { v: 3, options: keyOptions, preset, song: sh.sp.project.audio_hash ?? null, lrc: alignment.lrcHash, leadMs, lyricsOffsetMs, edits, clips: prepared.clips.map((c) => [c.name, c.hash]), anchors: sh.anchors, canvas: sh.canvasChoice, board: sh.textboard.board, picture: sh.picture ?? null };
+  const keyBase = { v: 3, options: keyOptions, preset, song: sh.sp.project.audio_hash ?? null, lrc: alignment.lrcHash, leadMs, lyricsOffsetMs, edits, clips: prepared.clips.map((c) => [c.name, c.hash]), anchors: sh.anchors, film: sh.wholeStory ? readShotList(ws, project.id) : null, canvas: sh.canvasChoice, board: sh.textboard.board, picture: sh.picture ?? null };
   const planKeyOf = (spec: VariationSpec) => createHash("sha256").update(JSON.stringify({ ...keyBase, spec })).digest("hex");
   const tryOf = (spec: VariationSpec): SbTry | null =>
     sh.picture
@@ -1741,6 +1795,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
             omit: isOmitted(edits, c.name),
           };
         }),
+        standIns,
         section: { mode: chosen.mode, start_ms: chosen.start_ms, end_ms: chosen.end_ms, reason: chosen.reason },
         analysis: { bpm: analysis.bpm, beats: analysis.beats, duration_ms: analysis.duration_ms },
         lines: lines.map((l, i) => ({ number: i + 1, text: l.text, isHook: l.isHook, start_ms: l.start_ms, end_ms: l.end_ms, sung_end_ms: sh.sectionLines[i].sung_end_ms ?? l.sung_end_ms ?? null })),
