@@ -245,7 +245,10 @@ describe("Creation → Production", () => {
     const refs = shotReferences(ws, shot);
     expect(refs.map((r) => r.name)).toEqual([`Bride · ${shot.people[0].look}`]);
     const prompt = referencePrompt(shot, refs);
-    expect(prompt).toMatch(/^@Image 1 is Bride, wearing their ".+" look\. Keep each person's face, hair and outfit exactly as in their picture/);
+    expect(prompt).toMatch(/^@Image 1 is Bride, in their ".+" look: their face, hair and makeup\. Keep each person's face, hair and outfit exactly as in their pictures/);
+    // A look with a full-length view: sent next to the close-up, as the complete outfit (the dress comes from a picture).
+    const withOutfit = referencePrompt(shot, [refs[0], { name: `${refs[0].name} (full outfit)`, file: refs[0].file, who: "Bride", role: "outfit" }]);
+    expect(withOutfit).toMatch(/@Image 2 is Bride's complete outfit \(".+"\), head to toe: wear exactly this/);
     expect(prompt).not.toMatch(/--ar|--style|--no/);
     // A shot that is not in the list (the earlier tests left s02 and s03): said in plain words, nothing recorded.
     expect(() => startShotReferences(ws, id, { slot: "s01" }, { LYRIC_GENERATE_STUB: "1" })).toThrow(/not in this song's shot list/);
@@ -263,5 +266,16 @@ describe("Creation → Production", () => {
     expect(item.source).toBe("Character references");
     expect(item.takes.map((t) => [t.status, t.refNames])).toEqual([["done", refs.map((r) => r.name)], ["done", refs.map((r) => r.name)]]);
     expect(item.takes[0].prompt).toBe(prompt);
+
+    // With a camera guide (a video of the shot): sent as @Video 1, its name kept on the take; not a video: refused.
+    const guided = startShotReferences(ws, id, { slot: "s03", guide: "walk-in.mp4", takes: 1 }, { LYRIC_GENERATE_STUB: "1" });
+    expect(guided.guide).toBe("walk-in.mp4");
+    expect(guided.takes[0].guideFile).toMatch(/pictures\/walk-in\.mp4$/);
+    expect(guided.takes[0].prompt).toContain("Follow the camera movement, framing, lighting and atmosphere of @Video 1");
+    expect(() => startShotReferences(ws, id, { slot: "s03", guide: "smile.png" }, { LYRIC_GENERATE_STUB: "1" })).toThrow(/not one of this song's videos/);
+    expect(() => startShotReferences(ws, id, { slot: "s03", guide: "../song.json" }, { LYRIC_GENERATE_STUB: "1" })).toThrow(/not one of this song's videos/);
+    await runTakes(() => openWorkspace(wsDir), id, guided.file, guided.takes.map((t) => t.n), { env: { LYRIC_GENERATE_STUB: "1" }, sleep: async () => {} });
+    const after = (await picturesView(ws, id, { LYRIC_GENERATE_STUB: "1" })).pictures.find((p) => p.file === guided.file)!;
+    expect(after.takes.at(-1)?.status).toBe("done");
   });
 });

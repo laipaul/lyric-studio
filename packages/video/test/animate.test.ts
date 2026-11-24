@@ -123,6 +123,9 @@ describe("the request", () => {
     expect(await t.submitRefs!(["https://cdn/a.png", "https://cdn/b.png"], "@Image 1 is Jennifer.", 6, "16:9")).toEqual({ id: "pred-r" });
     expect(calls[0].url).toBe("https://api.wavespeed.ai/api/v3/bytedance/seedance-2.5/reference-to-video");
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({ prompt: "@Image 1 is Jennifer.", reference_images: ["https://cdn/a.png", "https://cdn/b.png"], aspect_ratio: "16:9", resolution: "720p", duration: 6, generate_audio: false });
+    // A camera guide: reference_videos.
+    await t.submitRefs!(["https://cdn/a.png"], "@Image 1 … @Video 1", 5, "9:16", ["https://cdn/mj.mp4"]);
+    expect(JSON.parse(String(calls[1].init?.body)).reference_videos).toEqual(["https://cdn/mj.mp4"]);
   });
   it("Higgsfield: Key id:secret, image_url, no sound; status_url polled; nsfw in plain words; a bad key says where to look", async () => {
     const calls: { url: string; init?: RequestInit }[] = [];

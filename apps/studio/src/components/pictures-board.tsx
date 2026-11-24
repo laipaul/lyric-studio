@@ -42,6 +42,7 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
   const [board, setBoard] = useState<PicturesView | null>(null);
   const [production, setProduction] = useState<ProductionView | null>(null);
   const [comparing, setComparing] = useState<string | null>(null); // Compare: the shot whose candidates play together
+  const [guides, setGuides] = useState<Record<string, string>>({}); // Make with references: each shot's camera guide
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [over, setOver] = useState(false);
@@ -159,7 +160,7 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
     return board.pictures
       .filter((p) => p.slot === shot.id)
       .flatMap((p): Candidate[] => [
-        { key: p.file, label: p.label ?? p.file, url: fileUrl(p.url), kind: p.kind, used: same(p.sent, shot.filled), use: () => void useShot(p.file, null, shot) },
+        ...(p.source === "Character references" ? [] : [{ key: p.file, label: p.label ?? p.file, url: fileUrl(p.url), kind: p.kind, used: same(p.sent, shot.filled), use: () => void useShot(p.file, null, shot) }]),
         ...p.takes
           .filter((t) => t.status === "done" && t.kind !== "lipsync" && (t.file || t.clip))
           .map((t): Candidate => ({
@@ -175,14 +176,24 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
   const comparedShot = comparing ? shots.find((s) => s.id === comparing) ?? null : null;
   // The look a person wears in one shot (its prompt, reference picture and Storyboard card follow).
   // Make with references (24 Nov 2026): the shot sent with its people's and place's pictures (Seedance reference-to-video).
+  // The camera guide of each shot (24 Nov 2026): one of its videos (a Midjourney take), sent as @Video 1 with the pictures.
+  const guidesOf = (shot: ProductionShot): { value: string; label: string }[] =>
+    board.pictures
+      .filter((p) => p.slot === shot.id && p.source !== "Character references")
+      .flatMap((p) => [
+        ...(p.kind === "video" ? [{ value: p.file, label: p.label ?? p.file }] : []),
+        ...p.takes.filter((t) => t.status === "done" && t.file && t.kind !== "lipsync").map((t) => ({ value: t.file!, label: `${p.label ?? p.file} · ${t.label ?? `Take ${t.n}`}` })),
+      ]);
+  const guideOf = (shot: ProductionShot) => guides[shot.id] ?? guidesOf(shot)[0]?.value ?? "";
   async function makeWithReferences(shot: ProductionShot, shape: "9:16" | "16:9") {
+    const guide = guideOf(shot);
     const seconds = shot.span ? Math.min(30, Math.max(4, Math.ceil((shot.span.endMs - shot.span.startMs) / 1000))) : 5;
     const usd = Math.round(0.324 * seconds * defaults.takes * 100) / 100;
     const who = shot.refs.map((r) => r.name).join(", ");
-    if (!window.confirm(`Make ${defaults.takes} take${defaults.takes === 1 ? "" : "s"} of shot ${shot.number} (${shape}, ${seconds} s) with references (${who}) on WaveSpeed, Seedance 2.5? About $${usd.toFixed(2)} (estimate).`)) return;
+    if (!window.confirm(`Make ${defaults.takes} take${defaults.takes === 1 ? "" : "s"} of shot ${shot.number} (${shape}, ${seconds} s) with references (${who})${guide ? `, following the camera of ${guide}` : ""} on WaveSpeed, Seedance 2.5? About $${usd.toFixed(2)} (estimate).`)) return;
     try {
-      const d = (await post({ action: "references", slot: shot.id, shape, seconds })) as { takes: { n: number }[]; references: string[]; estimate: { usd: number } };
-      setNotice({ ok: true, text: `Shot ${shot.number}: ${d.takes.length} take${d.takes.length === 1 ? "" : "s"} sent with ${d.references.join(", ")} (about $${d.estimate.usd.toFixed(2)}). They appear on the shot when ready (Tasks menu).` });
+      const d = (await post({ action: "references", slot: shot.id, shape, seconds, ...(guide ? { guide } : {}) })) as { takes: { n: number }[]; references: string[]; estimate: { usd: number }; guide?: string };
+      setNotice({ ok: true, text: `Shot ${shot.number}: ${d.takes.length} take${d.takes.length === 1 ? "" : "s"} sent with ${d.references.join(", ")}${d.guide ? `, following the camera of ${d.guide}` : ""} (about $${d.estimate.usd.toFixed(2)}). They appear on the shot when ready (Tasks menu).` });
       await load();
     } catch (e) {
       setNotice({ ok: false, text: (e as Error).message });
@@ -304,6 +315,7 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
           onCompare={(s) => setComparing(s.id)}
           onLook={(s, character, look) => void setLook(s, character, look)}
           onReferences={(s, shape) => void makeWithReferences(s, shape)}
+          guidesFor={(s) => ({ options: guidesOf(s), value: guideOf(s), set: (v: string) => setGuides((g) => ({ ...g, [s.id]: v })) })}
           compareCount={(s) => candidatesOf(s).length}
           tile={(p, s) => <PictureTile key={p.file} projectId={projectId} p={p} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title, take) => setPlaying({ url, title, take })} shot={s} useShot={(n) => void useShot(p.file, n, s)} openCompare={candidatesOf(s).length >= 2 ? () => setComparing(s.id) : undefined} />}
         />
@@ -432,8 +444,10 @@ function ShotItems({
   compareCount,
   onLook,
   onReferences,
+  guidesFor,
   tile,
 }: {
+  guidesFor: (s: ProductionShot) => Guides;
   onLook: (s: ProductionShot, character: string, look: string) => void;
   onReferences: (s: ProductionShot, shape: "9:16" | "16:9") => void;
   onCompare: (s: ProductionShot) => void;
@@ -466,7 +480,7 @@ function ShotItems({
         <section key={`${g.name}-${gi}`} data-shot-section={g.name} className="flex flex-col gap-2">
           <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">{g.name}</h3>
           {g.shots.map((s) => (
-            <ShotRow key={s.id} s={s} pictures={pictures.filter((p) => p.slot === s.id)} loose={loose} adding={adding} onDrop={onDrop} onAttach={onAttach} tile={tile} onCompare={() => onCompare(s)} candidates={compareCount(s)} onLook={(character, look) => onLook(s, character, look)} onReferences={(shape) => onReferences(s, shape)} />
+            <ShotRow key={s.id} s={s} pictures={pictures.filter((p) => p.slot === s.id)} loose={loose} adding={adding} onDrop={onDrop} onAttach={onAttach} tile={tile} onCompare={() => onCompare(s)} candidates={compareCount(s)} onLook={(character, look) => onLook(s, character, look)} onReferences={(shape) => onReferences(s, shape)} guides={guidesFor(s)} />
           ))}
         </section>
       ))}
@@ -490,7 +504,8 @@ function ShotLength({ span }: { span: { startMs: number; endMs: number } }) {
   );
 }
 
-function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare, candidates, onLook, onReferences }: { s: ProductionShot; pictures: PictureView[]; loose: PictureView[]; adding: boolean; onDrop: (files: FileList, s: ProductionShot) => void; onAttach: (file: string, s: ProductionShot) => void; tile: (p: PictureView, s: ProductionShot) => ReactNode; onCompare: () => void; candidates: number; onLook: (character: string, look: string) => void; onReferences: (shape: "9:16" | "16:9") => void }) {
+type Guides = { options: { value: string; label: string }[]; value: string; set: (v: string) => void };
+function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare, candidates, onLook, onReferences, guides }: { s: ProductionShot; pictures: PictureView[]; loose: PictureView[]; adding: boolean; onDrop: (files: FileList, s: ProductionShot) => void; onAttach: (file: string, s: ProductionShot) => void; tile: (p: PictureView, s: ProductionShot) => ReactNode; onCompare: () => void; candidates: number; onLook: (character: string, look: string) => void; onReferences: (shape: "9:16" | "16:9") => void; guides: Guides }) {
   const [over, setOver] = useState(false);
   const [copied, setCopied] = useState<"tall" | "wide" | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -578,6 +593,19 @@ function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare
           <button type="button" data-shot-copy-prompt-wide={s.id} onClick={() => void copyPrompt("wide")} className="hover:bg-accent flex shrink-0 items-center gap-1 rounded border px-2 py-1" title="The same shot in 16:9 (the YouTube film): paste it into Midjourney">
             {copied === "wide" ? <Check className="size-3 text-emerald-300" /> : <Copy className="size-3" />} {copied === "wide" ? "Copied" : "Copy prompt 16:9"}
           </button>
+        ) : null}
+        {s.refs.length && guides.options.length ? (
+          <label className="flex shrink-0 items-center gap-1" title="Seedance follows this video's camera movement, framing, light and mood; the people and their clothes come from their pictures">
+            <span className="text-muted-foreground">Camera guide</span>
+            <select data-shot-guide={s.id} value={guides.value} onChange={(e) => guides.set(e.target.value)} className="bg-background max-w-48 rounded border px-1 py-0.5 text-[11px]">
+              <option value="">None</option>
+              {guides.options.map((g) => (
+                <option key={g.value} value={g.value}>
+                  {g.label}
+                </option>
+              ))}
+            </select>
+          </label>
         ) : null}
         {s.refs.length ? (
           // Make with references: the video platform gets the people's and place's pictures, so the characters stay the same.
@@ -995,7 +1023,9 @@ function PictureTile({
           await post({ action: "label", file: p.file, label }).catch((e: Error) => setNotice({ ok: false, text: e.message }));
           await reload();
         }} />
-        {shot && useShot ? (
+        {p.source === "Character references" ? (
+          <span className="text-muted-foreground text-[11px]" title="The pictures sent with Make with references; its takes are below">pictures sent</span>
+        ) : shot && useShot ? (
           // On a shot (Production) there is no "Send": a picture or video only ever fills its own shot, in its place in the
           // story (23 Nov 2026: a Send here added a loose copy at the end and changed the Storyboard's order).
           p.sent && shot.filled && p.sent.toLowerCase() === shot.filled.toLowerCase() ? (
@@ -1017,7 +1047,7 @@ function PictureTile({
           </button>
         )}
       </span>
-      {video ? null : (
+      {video || p.source === "Character references" ? null : (
         <>
           <input
             data-picture-mood

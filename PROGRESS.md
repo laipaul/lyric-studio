@@ -22,6 +22,14 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   "references", pictures-board.tsx. Also fixed: a take whose picture could not be put online stayed "running".
 - Tests: shot-production.test.ts (refs, prompt, cap, a stand-in run end to end), animate.test.ts (the exact request),
   creation-production e2e (the button, the reference item on the shot).
+- First real run (Paul, 24 Nov 2026, shot 5): the face was Jennifer's, but "the dress is not the same anymore". Fixed the
+  same day: each person now goes as **two pictures**, the look's close-up (face, hair, makeup) and its full-length front
+  view (body_front: "complete outfit, head to toe: wear exactly this … never change or invent clothing").
+- **Camera guide** (same day; Paul: "MJ as a reference video will certainly help Seedance quality"): each shot has a
+  "Camera guide" choice (its videos and finished takes, the first one by default, or None); it goes as @Video 1
+  (reference_videos; over 15 s: its first 15 s): "Follow the camera movement, framing, lighting and atmosphere of
+  @Video 1, but the people and their clothes must look exactly like their pictures". The take records it (guideFile).
+- The reference item ("pictures sent") has no Use / Animate of its own and is not a Compare candidate; its takes are.
 - On the PC (first real run): one shot, 1 take (Creation → Defaults), check the face against the card. If WaveSpeed
   refuses the request, send me its message: the route's exact fields could not be read from WaveSpeed's own docs here.
 

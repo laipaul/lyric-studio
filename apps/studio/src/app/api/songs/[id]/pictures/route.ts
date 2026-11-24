@@ -106,7 +106,7 @@ export async function POST(request: Request, { params }: Params) {
     if (body.action === "mood") return Response.json({ mood: withWorkspace((ws) => setMood(ws, id, file, body.mood)) });
     // Make with references (24 Nov 2026): the shot with its people's and place's pictures, Seedance reference-to-video.
     if (body.action === "references") {
-      const started = withWorkspace((ws) => startShotReferences(ws, id, { slot: body.slot, shape: body.shape, seconds: body.seconds }));
+      const started = withWorkspace((ws) => startShotReferences(ws, id, { slot: body.slot, shape: body.shape, seconds: body.seconds, guide: (body as { guide?: unknown }).guide }));
       void runTakes(open, id, started.file, started.takes.map((t) => t.n));
       return Response.json(started);
     }

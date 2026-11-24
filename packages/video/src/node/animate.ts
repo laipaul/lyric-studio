@@ -126,6 +126,8 @@ export type Take = {
   refFiles?: string[]; // references: the pictures sent, workspace-relative, in @Image order
   refNames?: string[]; // references: who / what each one is ("Jennifer · Wedding Dress", "Chapel")
   aspect?: "9:16" | "16:9"; // references: the shape asked for
+  guideFile?: string; // references: the camera guide video sent as @Video 1 (workspace-relative), e.g. a Midjourney take
+  guideName?: string; // and its name as shown on the shot
 };
 // removedTakes: takes put aside by Clean up / Remove (their files in pictures\takes\_removed\), with Restore; nothing is
 // ever deleted. Every screen reads `takes` only, so they are out of sight; take numbers keep counting past them.
@@ -514,7 +516,7 @@ export type Transport = {
   upload: (file: string) => Promise<string>; // a public URL of the picture
   submit: (imageUrl: string, prompt: string, seconds?: number) => Promise<{ id: string; pollUrl?: string }>;
   // Reference-to-video (WaveSpeed only): the pictures' public URLs in @Image order.
-  submitRefs?: (imageUrls: string[], prompt: string, seconds: number, aspect: "9:16" | "16:9") => Promise<{ id: string; pollUrl?: string }>;
+  submitRefs?: (imageUrls: string[], prompt: string, seconds: number, aspect: "9:16" | "16:9", videoUrls?: string[]) => Promise<{ id: string; pollUrl?: string }>;
   poll: (id: string, pollUrl?: string) => Promise<{ status: "running" } | { status: "done"; url: string } | { status: "failed"; error: string }>;
   download: (url: string, file: string) => Promise<void>;
 };
@@ -562,8 +564,8 @@ export function waveSpeedTransport(key: string, model: string, f: typeof fetch =
       if (typeof b.id !== "string") throw new Error("WaveSpeed: no request id in the answer");
       return { id: b.id };
     },
-    submitRefs: async (images, prompt, seconds, aspect) => {
-      const b = data(await json(await f(`${WAVESPEED}/${REFERENCE_MODEL.path}`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ prompt, reference_images: images, aspect_ratio: aspect, resolution: RESOLUTION, duration: seconds, generate_audio: false }) }), "WaveSpeed"));
+    submitRefs: async (images, prompt, seconds, aspect, videos = []) => {
+      const b = data(await json(await f(`${WAVESPEED}/${REFERENCE_MODEL.path}`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ prompt, reference_images: images, ...(videos.length ? { reference_videos: videos } : {}), aspect_ratio: aspect, resolution: RESOLUTION, duration: seconds, generate_audio: false }) }), "WaveSpeed"));
       if (typeof b.id !== "string") throw new Error("WaveSpeed: no request id in the answer");
       return { id: b.id };
     },
@@ -722,12 +724,14 @@ export async function runTakes(openWs: () => Workspace, projectId: string, file:
   // Make with references: every reference picture online once (in @Image order), shared by the takes.
   const refTakes = takes.filter((t) => t.kind === "references" && !t.request_id);
   let refUrls: string[] | null = null;
+  let guideUrls: string[] = []; // the camera guide video (@Video 1), when the takes have one
   if (refTakes.length) {
     try {
       if (!transport.submitRefs) throw new Error(`${SERVICES[service].label} cannot make a take with references`);
       refUrls = [];
       for (const f of refTakes[0].refFiles ?? []) refUrls.push(await transport.upload(path.join(wsDir, f)));
       if (!refUrls.length) throw new Error("no reference picture");
+      if (refTakes[0].guideFile) guideUrls = [await transport.upload(path.join(wsDir, refTakes[0].guideFile))];
     } catch (error) {
       refUrls = null;
       for (const t of refTakes) setTake(dir, file, t.n, { status: "failed", error: `The reference pictures could not be put online: ${errorText(error)}. Nothing was spent.`, ended_at: new Date().toISOString(), pid: undefined });
@@ -762,7 +766,7 @@ export async function runTakes(openWs: () => Workspace, projectId: string, file:
         setTake(dir, file, t.n, { status: "running", pid: process.pid, error: undefined });
         if (!id && t.kind === "references") {
           if (!refUrls || !transport.submitRefs) return;
-          const sent = await transport.submitRefs(refUrls, t.prompt ?? "", t.seconds ?? TAKE_SECONDS, t.aspect ?? "9:16"); // never retried: billed once
+          const sent = await transport.submitRefs(refUrls, t.prompt ?? "", t.seconds ?? TAKE_SECONDS, t.aspect ?? "9:16", t.guideFile ? guideUrls : []); // never retried: billed once
           id = sent.id;
           pollUrl = sent.pollUrl;
           setTake(dir, file, t.n, { request_id: id, poll_url: pollUrl });

@@ -7,19 +7,23 @@
 //   The shot's reference item: a strip of the pictures sent ("s05 references 9x16.png" in the song's pictures), its
 //   own item on the shot so the takes have a home and the inputs stay visible.
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
-import { ffmpegBin, type Workspace } from "@lyric/db";
+import { ffmpegBin, ffprobeBin, type Workspace } from "@lyric/db";
 
 import { estimate, MAX_REFERENCES, MAX_TAKE_SECONDS, MAX_TAKES, MIN_TAKE_SECONDS, nextTakeN, readCreationDefaults, REFERENCE_MODEL, songFolder, transportFor, update, type Estimate, type Take } from "./animate";
 import { cardRoot, listCards } from "./characters/cards";
 import { productionView, type ProductionShot } from "./shot-production";
 
-export type ReferencePicture = { name: string; file: string }; // file: absolute
+// role: "face" (the look's close-up), "outfit" (the look's full-length front view: the whole dress, 24 Nov 2026, Paul:
+// "the dress is not the same anymore": a close-up alone leaves everything below the neckline to the model), "place".
+export type ReferencePicture = { name: string; file: string; who: string | null; role: "face" | "outfit" | "place" }; // file: absolute
 export type Shape = "9:16" | "16:9";
 
-// The pictures of a shot, in @Image order: its people (each in this shot's look), then its scene card.
+const OUTFIT_VIEWS = ["body_front.png", "body_front.jpg"];
+
+// The pictures of a shot, in @Image order: each person's face and full outfit in this shot's look, then its scene card.
 export function shotReferences(ws: Workspace, shot: ProductionShot): ReferencePicture[] {
   const folders = new Map(listCards(ws).map((c) => [c.id, c.folder] as const));
   const out: ReferencePicture[] = [];
@@ -29,27 +33,49 @@ export function shotReferences(ws: Workspace, shot: ProductionShot): ReferencePi
     const file = path.join(cardRoot(ws, { folder }), r.file);
     if (!existsSync(file)) continue;
     const worn = shot.people.find((w) => w.card === r.card);
-    out.push({ name: worn ? `${worn.character}${worn.look ? ` · ${worn.look}` : ""}` : r.name, file });
+    if (!worn) {
+      out.push({ name: r.name, file, who: null, role: "place" });
+      continue;
+    }
+    const name = `${worn.character}${worn.look ? ` · ${worn.look}` : ""}`;
+    out.push({ name, file, who: worn.character, role: "face" });
+    // The same look's full-length view, next to its close-up (when the picture sent is not already it).
+    const outfit = OUTFIT_VIEWS.map((v) => path.join(path.dirname(file), v)).find((f) => existsSync(f) && path.resolve(f) !== path.resolve(file));
+    if (outfit) out.push({ name: `${name} (full outfit)`, file: outfit, who: worn.character, role: "outfit" });
   }
   return out.slice(0, MAX_REFERENCES);
 }
 
 // The prompt: who each picture is, the rule to keep them, then what happens (the shot's own prompt without Midjourney's
 // --parameters, which a video model does not read). Pure.
-export function referencePrompt(shot: Pick<ProductionShot, "prompt" | "people" | "scene">, refs: readonly ReferencePicture[]): string {
+export function referencePrompt(shot: Pick<ProductionShot, "prompt" | "people" | "scene">, refs: readonly ReferencePicture[], guide = false): string {
+  const lookOf = (who: string) => shot.people.find((w) => w.character === who)?.look ?? "";
   const who = refs.map((r, i) => {
-    const person = shot.people.find((w) => r.name === w.character || r.name.startsWith(`${w.character} · `));
-    if (person) return `@Image ${i + 1} is ${person.character}${person.look ? `, wearing their "${person.look}" look` : ""}.`;
-    return `@Image ${i + 1} is the place${shot.scene ? ` "${shot.scene}"` : ""}.`;
+    const tag = `@Image ${i + 1}`;
+    if (r.role === "face" && r.who) return `${tag} is ${r.who}${lookOf(r.who) ? `, in their "${lookOf(r.who)}" look` : ""}: their face, hair and makeup.`;
+    if (r.role === "outfit" && r.who) return `${tag} is ${r.who}'s complete outfit${lookOf(r.who) ? ` ("${lookOf(r.who)}")` : ""}, head to toe: wear exactly this, the same cut, neckline, sleeves, fabric and details.`;
+    return `${tag} is the place${shot.scene ? ` "${shot.scene}"` : ""}.`;
   });
-  const keep = refs.some((r) => shot.people.some((w) => r.name === w.character || r.name.startsWith(`${w.character} · `)))
-    ? "Keep each person's face, hair and outfit exactly as in their picture, the same person throughout the shot."
-    : "";
+  const people = refs.some((r) => r.who);
+  const keep = people ? "Keep each person's face, hair and outfit exactly as in their pictures, the same person and the same clothes throughout the shot; never change or invent clothing." : "";
   const action = shot.prompt.replace(/\s+--\w[\s\S]*$/, "").trim();
-  return [...who, keep, action].filter(Boolean).join(" ");
+  // A camera guide (a Midjourney take of this shot): its camera, framing, light and mood; the people stay the pictures'.
+  const follow = guide ? "Follow the camera movement, framing, lighting and atmosphere of @Video 1, but the people and their clothes must look exactly like their pictures, not like the people in @Video 1." : "";
+  return [...who, keep, follow, action].filter(Boolean).join(" ");
 }
 
-export type ReferenceStart = { file: string; takes: Take[]; estimate: Estimate; references: string[] };
+export type ReferenceStart = { file: string; takes: Take[]; estimate: Estimate; references: string[]; guide?: string };
+export const GUIDE_MAX_S = 15; // Seedance: reference videos 15 s at most (together)
+
+function probeSeconds(file: string): number | null {
+  try {
+    const out = execFileSync(ffprobeBin(), ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file], { encoding: "utf8", windowsHide: true });
+    const n = Number(out.trim());
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
 
 // Checks a press of "Make with references" and records its takes as running on the shot's reference item; the caller
 // starts runTakes without waiting (as Animate). `seconds`: the shot's length on the song (4-30 s), else the song's take
@@ -57,7 +83,7 @@ export type ReferenceStart = { file: string; takes: Take[]; estimate: Estimate; 
 export function startShotReferences(
   ws: Workspace,
   projectId: string,
-  o: { slot: unknown; shape?: unknown; seconds?: unknown; takes?: unknown; capUsd?: unknown },
+  o: { slot: unknown; shape?: unknown; seconds?: unknown; takes?: unknown; capUsd?: unknown; guide?: unknown },
   env: NodeJS.ProcessEnv = process.env,
 ): ReferenceStart {
   const shot = productionView(ws, projectId).shots.find((s) => s.id === String(o.slot ?? ""));
@@ -65,6 +91,16 @@ export function startShotReferences(
   const refs = shotReferences(ws, shot);
   if (!refs.length) throw new Error(`Shot ${shot.number} has no character or scene card with a picture: add its people or place to the cast (Story room), then try again.`);
   const shape: Shape = o.shape === "16:9" ? "16:9" : "9:16";
+  // The camera guide: one of the shot's videos (a Midjourney take dropped on it, or a take made here), at most 15 s
+  // (Seedance's limit for reference videos: a longer one is cut to its first 15 s, in the song's pictures\takes).
+  const { dir: picturesDir } = songFolder(ws, projectId);
+  let guide: { file: string; name: string } | null = null;
+  if (o.guide !== undefined && o.guide !== null && o.guide !== "") {
+    const rel = String(o.guide).replace(/\\/g, "/");
+    const abs = path.resolve(picturesDir, rel);
+    if (!abs.startsWith(path.resolve(picturesDir)) || !/\.(mp4|mov|m4v|webm)$/i.test(abs) || !existsSync(abs)) throw new Error(`The camera guide ${rel} is not one of this song's videos.`);
+    guide = { file: abs, name: path.basename(rel) };
+  }
   if (!env.LYRIC_GENERATE_STUB) transportFor("wavespeed", "best", env); // no key: the plain-words message, nothing recorded
   const defaults = readCreationDefaults(ws.dir);
   const takes = Math.round(Number(o.takes ?? defaults.takes));
@@ -86,7 +122,16 @@ export function startShotReferences(
   const stack = refs.length > 1 ? `;${refs.map((_, i) => `[r${i}]`).join("")}hstack=inputs=${refs.length}[out]` : "";
   execFileSync(ffmpegBin(), ["-y", "-v", "error", ...inputs, "-filter_complex", `${scale}${stack}`, "-map", refs.length > 1 ? "[out]" : "[r0]", "-frames:v", "1", path.join(dir, file)], { windowsHide: true });
 
-  const prompt = referencePrompt(shot, refs);
+  if (guide) {
+    const length = probeSeconds(guide.file);
+    if (length !== null && length > GUIDE_MAX_S) {
+      const cut = path.join(picturesDir, "takes", `${path.parse(guide.name).name} (first ${GUIDE_MAX_S} s).mp4`);
+      mkdirSync(path.dirname(cut), { recursive: true });
+      if (!existsSync(cut)) execFileSync(ffmpegBin(), ["-y", "-v", "error", "-i", guide.file, "-t", String(GUIDE_MAX_S), "-an", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", cut], { windowsHide: true });
+      guide = { file: cut, name: guide.name };
+    }
+  }
+  const prompt = referencePrompt(shot, refs, !!guide);
   const now = new Date().toISOString();
   let made: Take[] = [];
   update(dir, file, (p) => {
@@ -97,8 +142,9 @@ export function startShotReferences(
     made = Array.from({ length: takes }, (_, i): Take => ({
       n: first + i, service: "wavespeed", quality: "best", model: REFERENCE_MODEL.label, status: "running", started_at: now, cost_usd: usdPerTake, seconds,
       kind: "references", prompt, aspect: shape, refFiles: refs.map((r) => path.relative(ws.dir, r.file).split(path.sep).join("/")), refNames: refs.map((r) => r.name), pid: process.pid,
+      ...(guide ? { guideFile: path.relative(ws.dir, guide.file).split(path.sep).join("/"), guideName: guide.name } : {}),
     }));
     p.takes.push(...made);
   });
-  return { file, takes: made, estimate: e, references: refs.map((r) => r.name) };
+  return { file, takes: made, estimate: e, references: refs.map((r) => r.name), ...(guide ? { guide: guide.name } : {}) };
 }
