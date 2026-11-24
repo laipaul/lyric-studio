@@ -174,6 +174,20 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
   };
   const comparedShot = comparing ? shots.find((s) => s.id === comparing) ?? null : null;
   // The look a person wears in one shot (its prompt, reference picture and Storyboard card follow).
+  // Make with references (24 Nov 2026): the shot sent with its people's and place's pictures (Seedance reference-to-video).
+  async function makeWithReferences(shot: ProductionShot, shape: "9:16" | "16:9") {
+    const seconds = shot.span ? Math.min(30, Math.max(4, Math.ceil((shot.span.endMs - shot.span.startMs) / 1000))) : 5;
+    const usd = Math.round(0.324 * seconds * defaults.takes * 100) / 100;
+    const who = shot.refs.map((r) => r.name).join(", ");
+    if (!window.confirm(`Make ${defaults.takes} take${defaults.takes === 1 ? "" : "s"} of shot ${shot.number} (${shape}, ${seconds} s) with references (${who}) on WaveSpeed, Seedance 2.5? About $${usd.toFixed(2)} (estimate).`)) return;
+    try {
+      const d = (await post({ action: "references", slot: shot.id, shape, seconds })) as { takes: { n: number }[]; references: string[]; estimate: { usd: number } };
+      setNotice({ ok: true, text: `Shot ${shot.number}: ${d.takes.length} take${d.takes.length === 1 ? "" : "s"} sent with ${d.references.join(", ")} (about $${d.estimate.usd.toFixed(2)}). They appear on the shot when ready (Tasks menu).` });
+      await load();
+    } catch (e) {
+      setNotice({ ok: false, text: (e as Error).message });
+    }
+  }
   async function setLook(shot: ProductionShot, character: string, look: string) {
     try {
       await post({ action: "shot-look", slot: shot.id, character, look });
@@ -289,6 +303,7 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
           onAttach={(file, s) => void attach(file, s)}
           onCompare={(s) => setComparing(s.id)}
           onLook={(s, character, look) => void setLook(s, character, look)}
+          onReferences={(s, shape) => void makeWithReferences(s, shape)}
           compareCount={(s) => candidatesOf(s).length}
           tile={(p, s) => <PictureTile key={p.file} projectId={projectId} p={p} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title, take) => setPlaying({ url, title, take })} shot={s} useShot={(n) => void useShot(p.file, n, s)} openCompare={candidatesOf(s).length >= 2 ? () => setComparing(s.id) : undefined} />}
         />
@@ -416,9 +431,11 @@ function ShotItems({
   onCompare,
   compareCount,
   onLook,
+  onReferences,
   tile,
 }: {
   onLook: (s: ProductionShot, character: string, look: string) => void;
+  onReferences: (s: ProductionShot, shape: "9:16" | "16:9") => void;
   onCompare: (s: ProductionShot) => void;
   compareCount: (s: ProductionShot) => number;
   shots: ProductionShot[];
@@ -449,7 +466,7 @@ function ShotItems({
         <section key={`${g.name}-${gi}`} data-shot-section={g.name} className="flex flex-col gap-2">
           <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">{g.name}</h3>
           {g.shots.map((s) => (
-            <ShotRow key={s.id} s={s} pictures={pictures.filter((p) => p.slot === s.id)} loose={loose} adding={adding} onDrop={onDrop} onAttach={onAttach} tile={tile} onCompare={() => onCompare(s)} candidates={compareCount(s)} onLook={(character, look) => onLook(s, character, look)} />
+            <ShotRow key={s.id} s={s} pictures={pictures.filter((p) => p.slot === s.id)} loose={loose} adding={adding} onDrop={onDrop} onAttach={onAttach} tile={tile} onCompare={() => onCompare(s)} candidates={compareCount(s)} onLook={(character, look) => onLook(s, character, look)} onReferences={(shape) => onReferences(s, shape)} />
           ))}
         </section>
       ))}
@@ -473,7 +490,7 @@ function ShotLength({ span }: { span: { startMs: number; endMs: number } }) {
   );
 }
 
-function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare, candidates, onLook }: { s: ProductionShot; pictures: PictureView[]; loose: PictureView[]; adding: boolean; onDrop: (files: FileList, s: ProductionShot) => void; onAttach: (file: string, s: ProductionShot) => void; tile: (p: PictureView, s: ProductionShot) => ReactNode; onCompare: () => void; candidates: number; onLook: (character: string, look: string) => void }) {
+function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare, candidates, onLook, onReferences }: { s: ProductionShot; pictures: PictureView[]; loose: PictureView[]; adding: boolean; onDrop: (files: FileList, s: ProductionShot) => void; onAttach: (file: string, s: ProductionShot) => void; tile: (p: PictureView, s: ProductionShot) => ReactNode; onCompare: () => void; candidates: number; onLook: (character: string, look: string) => void; onReferences: (shape: "9:16" | "16:9") => void }) {
   const [over, setOver] = useState(false);
   const [copied, setCopied] = useState<"tall" | "wide" | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -561,6 +578,14 @@ function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare
           <button type="button" data-shot-copy-prompt-wide={s.id} onClick={() => void copyPrompt("wide")} className="hover:bg-accent flex shrink-0 items-center gap-1 rounded border px-2 py-1" title="The same shot in 16:9 (the YouTube film): paste it into Midjourney">
             {copied === "wide" ? <Check className="size-3 text-emerald-300" /> : <Copy className="size-3" />} {copied === "wide" ? "Copied" : "Copy prompt 16:9"}
           </button>
+        ) : null}
+        {s.refs.length ? (
+          // Make with references: the video platform gets the people's and place's pictures, so the characters stay the same.
+          (film ? (["9:16", "16:9"] as const) : ([s.prompt.includes("--ar 16:9") ? "16:9" : "9:16"] as const)).map((shape) => (
+            <button key={shape} type="button" data-shot-references={`${s.id}-${shape}`} onClick={() => onReferences(shape)} className="hover:bg-accent border-brand/50 flex shrink-0 items-center gap-1 rounded border px-2 py-1" title={`Send this shot to Seedance 2.5 on WaveSpeed with the pictures of ${s.refs.map((r) => r.name).join(", ")} (reference-to-video): the characters stay as on their cards. The takes come back on this shot.`}>
+              <Sparkles className="size-3" /> Make with references{film ? ` ${shape}` : ""}
+            </button>
+          ))
         ) : null}
         {candidates >= 2 ? (
           <button type="button" data-shot-compare-open={s.id} onClick={onCompare} className="hover:bg-accent border-brand/50 text-brand flex shrink-0 items-center gap-1 rounded border px-2 py-1" title="Play every candidate of this shot side by side, together, with the song from its line">

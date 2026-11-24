@@ -20,6 +20,8 @@ import { shotLooks } from "../src/node/shot-looks";
 import { addLook, LOOKS_DIR } from "../src/node/characters/looks";
 import { cardRoot, listCards } from "../src/node/characters/cards";
 import { songStory } from "../src/node/story-line";
+import { referencePrompt, shotReferences, startShotReferences } from "../src/node/shot-references";
+import { runTakes } from "../src/node/animate";
 import { isWholeStory } from "../src/node/make";
 import { folderClips, songClipsCollection } from "../src/node/assets";
 import { LYRICS, ffmpeg, makeClip, makeSong } from "./media-helpers";
@@ -236,5 +238,30 @@ describe("Creation → Production", () => {
     expect(isWholeStory({ ...recipe, songStyle: "singing" }, false)).toBe(false);
     expect(isWholeStory({ ...recipe, songStyle: "cut" }, false)).toBe(false);
     expect(isWholeStory({ ...recipe, songStyle: "film" }, true)).toBe(false);
+  });
+
+  it("Make with references: the shot's people (in this shot's look) and place go to reference-to-video; the takes come back on the shot", async () => {
+    const shot = productionView(ws, id).shots.find((x) => x.id === "s03")!;
+    const refs = shotReferences(ws, shot);
+    expect(refs.map((r) => r.name)).toEqual([`Bride · ${shot.people[0].look}`]);
+    const prompt = referencePrompt(shot, refs);
+    expect(prompt).toMatch(/^@Image 1 is Bride, wearing their ".+" look\. Keep each person's face, hair and outfit exactly as in their picture/);
+    expect(prompt).not.toMatch(/--ar|--style|--no/);
+    // A shot that is not in the list (the earlier tests left s02 and s03): said in plain words, nothing recorded.
+    expect(() => startShotReferences(ws, id, { slot: "s01" }, { LYRIC_GENERATE_STUB: "1" })).toThrow(/not in this song's shot list/);
+    // Above the cap: refused, nothing sent.
+    expect(() => startShotReferences(ws, id, { slot: "s03", seconds: 30, takes: 6, capUsd: 1 }, { LYRIC_GENERATE_STUB: "1" })).toThrow(/above your cap/);
+
+    const started = startShotReferences(ws, id, { slot: "s03", shape: "16:9", seconds: 4.2, takes: 2 }, { LYRIC_GENERATE_STUB: "1" });
+    expect(started.file).toBe("s03 references 16x9.png");
+    expect(started.takes.map((t) => [t.kind, t.aspect, t.seconds, t.status])).toEqual([["references", "16:9", 5, "running"], ["references", "16:9", 5, "running"]]);
+    expect(started.takes[0].refFiles?.[0]).toMatch(/^characters\//);
+    await runTakes(() => openWorkspace(wsDir), id, started.file, started.takes.map((t) => t.n), { env: { LYRIC_GENERATE_STUB: "1" }, sleep: async () => {} });
+    const v = await picturesView(ws, id, { LYRIC_GENERATE_STUB: "1" });
+    const item = v.pictures.find((p) => p.file === started.file)!;
+    expect(item.slot).toBe("s03");
+    expect(item.source).toBe("Character references");
+    expect(item.takes.map((t) => [t.status, t.refNames])).toEqual([["done", refs.map((r) => r.name)], ["done", refs.map((r) => r.name)]]);
+    expect(item.takes[0].prompt).toBe(prompt);
   });
 });

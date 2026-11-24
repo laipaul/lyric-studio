@@ -102,6 +102,7 @@
     "./shotlist": "./src/node/shotlist.ts",
     "./shot-timing": "./src/node/shot-timing.ts",
     "./shot-production": "./src/node/shot-production.ts",
+    "./shot-references": "./src/node/shot-references.ts",
     "./production": "./src/node/production.ts",
     "./animate": "./src/node/animate.ts",
     "./singer": "./src/node/singer.ts",

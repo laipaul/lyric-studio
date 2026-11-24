@@ -81,6 +81,15 @@ export const SERVICES: Record<ServiceId, Service> = {
   },
 };
 
+// Make with references (24 Nov 2026, Paul: "I need to provide to the video platform my character sheets in order to
+// create the video with constant characters"): Seedance 2.5 reference-to-video on WaveSpeed takes the people's and the
+// place's pictures (up to 30), named in the prompt as @Image 1, @Image 2 …, and makes the shot with them. Its request:
+// { prompt, reference_images: [urls], aspect_ratio, resolution, duration (4-30 s), generate_audio } (WaveSpeed's v3 API,
+// as public integrations call it; the exact price of this route is not published where we could read it: the 720p
+// image-to-video price is used as the estimate).
+export const REFERENCE_MODEL = { label: "Seedance 2.5 · with references", path: "bytedance/seedance-2.5/reference-to-video", usdPerSecond: 0.324, priceNote: "estimate: WaveSpeed's Seedance 2.5 720p price (21 Nov 2026); the reference route may differ" } as const;
+export const MAX_REFERENCES = 30;
+
 export type TakeStatus = "running" | "done" | "failed" | "interrupted";
 export type Take = {
   n: number;
@@ -95,7 +104,7 @@ export type Take = {
   cost_usd: number; // the estimate (the services bill what they bill)
   file?: string; // the finished video, in pictures\ ("takes/<picture> take N.mp4")
   sent?: string; // "Send to Storyboard": the clip it became in the song's clips folder
-  kind?: "lipsync"; // a singing clip (Lyrics Sync → Singer): made from this picture or video and the vocal of one line
+  kind?: "lipsync" | "references"; // references: made by reference-to-video from refFiles (Make with references); lipsync: a singing clip (Lyrics Sync → Singer): made from this picture or video and the vocal of one line
   line?: number; // lipsync: the lyric line (Lyrics tab number); with `through`: the first line of the run
   through?: number; // lipsync: the last line of a run of lines in a row sung from the same picture (one continuous take)
   sync_ms?: number; // lipsync: the song time of the take's first frame (the vocal piece started there)
@@ -114,6 +123,9 @@ export type Take = {
   filmLook?: string; // the song's Film look when the take was sent (film-looks.ts), its name
   look?: string; // and its line, as sent: a later change of the look remakes nothing
   fresh?: boolean; // lipsync: a later take of lines that already had a take in use: waits for Paul ("New — compare"), never placed by itself
+  refFiles?: string[]; // references: the pictures sent, workspace-relative, in @Image order
+  refNames?: string[]; // references: who / what each one is ("Jennifer · Wedding Dress", "Chapel")
+  aspect?: "9:16" | "16:9"; // references: the shape asked for
 };
 // removedTakes: takes put aside by Clean up / Remove (their files in pictures\takes\_removed\), with Restore; nothing is
 // ever deleted. Every screen reads `takes` only, so they are out of sight; take numbers keep counting past them.
@@ -501,6 +513,8 @@ export function estimate(service: ServiceId, quality: Quality, takes: number, se
 export type Transport = {
   upload: (file: string) => Promise<string>; // a public URL of the picture
   submit: (imageUrl: string, prompt: string, seconds?: number) => Promise<{ id: string; pollUrl?: string }>;
+  // Reference-to-video (WaveSpeed only): the pictures' public URLs in @Image order.
+  submitRefs?: (imageUrls: string[], prompt: string, seconds: number, aspect: "9:16" | "16:9") => Promise<{ id: string; pollUrl?: string }>;
   poll: (id: string, pollUrl?: string) => Promise<{ status: "running" } | { status: "done"; url: string } | { status: "failed"; error: string }>;
   download: (url: string, file: string) => Promise<void>;
 };
@@ -545,6 +559,11 @@ export function waveSpeedTransport(key: string, model: string, f: typeof fetch =
     upload: (file) => waveSpeedUpload(key, file, f),
     submit: async (image, prompt, seconds = TAKE_SECONDS) => {
       const b = data(await json(await f(`${WAVESPEED}/${model}`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ image, prompt, duration: seconds, resolution: RESOLUTION, generate_audio: false, output_format: "mp4" }) }), "WaveSpeed"));
+      if (typeof b.id !== "string") throw new Error("WaveSpeed: no request id in the answer");
+      return { id: b.id };
+    },
+    submitRefs: async (images, prompt, seconds, aspect) => {
+      const b = data(await json(await f(`${WAVESPEED}/${REFERENCE_MODEL.path}`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ prompt, reference_images: images, aspect_ratio: aspect, resolution: RESOLUTION, duration: seconds, generate_audio: false }) }), "WaveSpeed"));
       if (typeof b.id !== "string") throw new Error("WaveSpeed: no request id in the answer");
       return { id: b.id };
     },
@@ -617,6 +636,11 @@ export function stubTransport(mode: string): Transport {
       lengths.set(image, seconds);
       return { id: `stub-${image.slice(7)}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, pollUrl: image };
     },
+    submitRefs: async (images, _prompt, seconds) => {
+      if (mode === "fail") throw new Error("stand-in: the service refused the request");
+      lengths.set(images[0], seconds);
+      return { id: `stub-refs-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, pollUrl: images[0] };
+    },
     poll: async (_id, pollUrl) => ({ status: "done", url: pollUrl ?? "" }),
     download: async (url, file) => {
       const picture = pictures.get(url);
@@ -677,6 +701,7 @@ export async function runTakes(openWs: () => Workspace, projectId: string, file:
   const sleep = o.sleep ?? sleepMs;
   const ws = openWs();
   let dir: string;
+  const wsDir = ws.dir;
   try {
     dir = songFolder(ws, projectId).dir;
   } finally {
@@ -694,9 +719,23 @@ export async function runTakes(openWs: () => Workspace, projectId: string, file:
     for (const t of takes) setTake(dir, file, t.n, { status: "failed", error: errorText(error), ended_at: new Date().toISOString(), pid: undefined });
     return;
   }
+  // Make with references: every reference picture online once (in @Image order), shared by the takes.
+  const refTakes = takes.filter((t) => t.kind === "references" && !t.request_id);
+  let refUrls: string[] | null = null;
+  if (refTakes.length) {
+    try {
+      if (!transport.submitRefs) throw new Error(`${SERVICES[service].label} cannot make a take with references`);
+      refUrls = [];
+      for (const f of refTakes[0].refFiles ?? []) refUrls.push(await transport.upload(path.join(wsDir, f)));
+      if (!refUrls.length) throw new Error("no reference picture");
+    } catch (error) {
+      refUrls = null;
+      for (const t of refTakes) setTake(dir, file, t.n, { status: "failed", error: `The reference pictures could not be put online: ${errorText(error)}. Nothing was spent.`, ended_at: new Date().toISOString(), pid: undefined });
+    }
+  }
   // The picture's public URL: made once and reused while the service keeps it.
   let imageUrl: string | null = null;
-  const needsUpload = takes.some((t) => !t.request_id);
+  const needsUpload = takes.some((t) => !t.request_id && t.kind !== "references");
   if (needsUpload) {
     const known = readPictures(dir).pictures[file]?.upload;
     if (known && known.service === service && Date.now() - Date.parse(known.at) < UPLOAD_KEEP_MS && !env.LYRIC_GENERATE_STUB && !o.transport) imageUrl = known.url;
@@ -717,8 +756,17 @@ export async function runTakes(openWs: () => Workspace, projectId: string, file:
     takes.map(async (t) => {
       let id = t.request_id;
       let pollUrl = t.poll_url;
+      // A take already marked failed above (its picture could not be put online) stays failed.
+      if (readPictures(dir).pictures[file]?.takes.find((x) => x.n === t.n)?.status === "failed") return;
       try {
         setTake(dir, file, t.n, { status: "running", pid: process.pid, error: undefined });
+        if (!id && t.kind === "references") {
+          if (!refUrls || !transport.submitRefs) return;
+          const sent = await transport.submitRefs(refUrls, t.prompt ?? "", t.seconds ?? TAKE_SECONDS, t.aspect ?? "9:16"); // never retried: billed once
+          id = sent.id;
+          pollUrl = sent.pollUrl;
+          setTake(dir, file, t.n, { request_id: id, poll_url: pollUrl });
+        }
         if (!id) {
           if (!imageUrl) return;
           const sent = await transport.submit(imageUrl, motionPrompt(mood, t.look), t.seconds ?? TAKE_SECONDS); // never retried: a retry could be billed twice

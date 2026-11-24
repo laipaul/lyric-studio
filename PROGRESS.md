@@ -4,6 +4,27 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Make with references: the character sheets go to the video platform ✅ (to verify on the PC, needs WAVESPEED_API_KEY)
+- Paul (24 Nov 2026): "I need to provide to the video platform my character sheets in order to create the video with
+  constant characters. Currently I can't do that in Midjourney" (Midjourney's Omni Reference is one picture, images only).
+- Creation → Production: every shot with people or a place has **Make with references** (a Mini film: "9:16" and
+  "16:9"). It sends the shot to **Seedance 2.5 reference-to-video on WaveSpeed** with the pictures of the people in the
+  look they wear in this shot (wardrobe close-up, else front view, else the card's picture) and the scene card, named in
+  the prompt "@Image 1 is Jennifer, wearing their "Wedding Dress" look. … Keep each person's face, hair and outfit exactly
+  as in their picture." followed by the shot's own prompt (without Midjourney's --parameters). Length: the shot's time on
+  the song (4-30 s); takes and cap: Creation's defaults; a confirm shows the estimate.
+- The takes come back on the shot like every take (Tasks menu, Get result, Compare, Use for shot N), on the shot's
+  **reference item** "s05 references 9x16.png" (the pictures sent, side by side); each take records its pictures
+  (refFiles, refNames), prompt and shape. Request (WaveSpeed v3): { prompt, reference_images, aspect_ratio, resolution
+  720p, duration, generate_audio: false } at bytedance/seedance-2.5/reference-to-video, as public integrations call it
+  (WaveSpeed's own pages cannot be read from the cloud). Price: the 720p Seedance 2.5 price ($0.324/s) as the estimate.
+- Code: node/shot-references.ts, animate.ts (REFERENCE_MODEL, Transport.submitRefs, runTakes), pictures route action
+  "references", pictures-board.tsx. Also fixed: a take whose picture could not be put online stayed "running".
+- Tests: shot-production.test.ts (refs, prompt, cap, a stand-in run end to end), animate.test.ts (the exact request),
+  creation-production e2e (the button, the reference item on the shot).
+- On the PC (first real run): one shot, 1 take (Creation → Defaults), check the face against the card. If WaveSpeed
+  refuses the request, send me its message: the route's exact fields could not be read from WaveSpeed's own docs here.
+
 ### A Mini film makes its two films: Film 9:16 (Instagram) and Film 16:9 (YouTube) ✅ (to verify on the PC)
 - Paul (23 Nov 2026): "if I start with a mini film then there is no option to make reels, shorts etc because this is
   against the whole purpose … I plan to release the mini films both on IG and YT … Mini film is by default the song's
@@ -448,20 +469,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   it shows "Use this take" at once.
 - Tests: browser singer (+3: accept the question, the singer column follows without a reload, Use this take brings
   the singer back), lyrics-tab pass.
-
-### Show a take, not a clip: Creation's takes in the line's clip panel; the Creation card says where each take shows ✅ (to verify on the PC)
-- Paul (21 Nov 2026): "that's confusing, I want to show the take, not the clip" / "the app is confused now". The
-  "Show a clip" panel listed anonymous clip files (studio-swea… 12.6 s, 11.2 s, 5.0 s); singing takes looked like
-  Take 6; a take had to be sent from Creation first.
-- **From Creation, first in the panel:** every finished Animate take as a take ("Take 6" over "studio-sweater-v2-2k"),
-  sent or not (an unsent one plays on hover). Choosing one not in the Storyboard yet sends it and puts it on the line
-  in one step (after the singer question, if any: Cancel sends nothing). **Singing takes are not offered** (they go on
-  their own lines through Who sings → Use this take). The rest is "Your other clips", then the collections.
-- **On the line** the "Shows clip" column names it as a take ("studio-sweater-v2-2k · Take 6").
-- **Creation card:** each take says where it shows: "On line 15" (Animate take on a line), "In use · lines 15-16"
-  (singing take), "In Storyboard, on no line", or Send to Storyboard.
-- Tests: browser singer (+5: takes first and named, no singing take offered, unsent take sent and placed in one step,
-  dismissing sends nothing, the card says On line 1), lyrics-tab, pictures pass; vitest animate, ending pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

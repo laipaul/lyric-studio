@@ -21,6 +21,7 @@ import { addFromLink, addPictures, picturesView, removePicture, removeTakes, res
 import { runSinging, withSongStarts } from "@lyric/video/singer";
 import { placeByName, productionView, setPictureShot, useForShot, withLineStarts } from "@lyric/video/shot-production";
 import { timedLines } from "@lyric/video/production";
+import { startShotReferences } from "@lyric/video/shot-references";
 import { eq } from "drizzle-orm";
 import { setShotLook } from "@lyric/video/shotlist";
 import { connection } from "next/server";
@@ -95,7 +96,7 @@ export async function POST(request: Request, { params }: Params) {
         rmSync(tmp, { recursive: true, force: true });
       }
     }
-    const body = (await request.json().catch(() => ({}))) as { action?: unknown; file?: unknown; service?: unknown; quality?: unknown; takes?: unknown; cap?: unknown; mood?: unknown; n?: unknown };
+    const body = (await request.json().catch(() => ({}))) as { action?: unknown; file?: unknown; service?: unknown; quality?: unknown; takes?: unknown; cap?: unknown; mood?: unknown; n?: unknown; slot?: unknown; shape?: unknown; seconds?: unknown };
     const file = String(body.file ?? "");
     if (body.action === "link") return Response.json(await withWorkspaceAsync((ws) => addFromLink(ws, id, (body as { url?: unknown }).url)));
     if (body.action === "label") {
@@ -103,6 +104,12 @@ export async function POST(request: Request, { params }: Params) {
       return Response.json({ label: withWorkspace((ws) => setItemLabel(ws, id, file, n, (body as { label?: unknown }).label)) });
     }
     if (body.action === "mood") return Response.json({ mood: withWorkspace((ws) => setMood(ws, id, file, body.mood)) });
+    // Make with references (24 Nov 2026): the shot with its people's and place's pictures, Seedance reference-to-video.
+    if (body.action === "references") {
+      const started = withWorkspace((ws) => startShotReferences(ws, id, { slot: body.slot, shape: body.shape, seconds: body.seconds }));
+      void runTakes(open, id, started.file, started.takes.map((t) => t.n));
+      return Response.json(started);
+    }
     if (body.action === "animate") {
       const started = withWorkspace((ws) => startAnimate(ws, id, file, { service: body.service as ServiceId, quality: body.quality as Quality, takes: Number(body.takes), capUsd: Number(body.cap) }));
       void runTakes(open, id, path.basename(file), started.takes.map((t) => t.n));

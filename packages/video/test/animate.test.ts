@@ -112,6 +112,18 @@ describe("the request", () => {
     expect(await t.poll("pred-1")).toEqual({ status: "running" });
     expect(await t.poll("pred-1")).toEqual({ status: "done", url: "https://cdn/v.mp4" });
   });
+  it("WaveSpeed with references (24 Nov 2026): Seedance 2.5 reference-to-video, the pictures in @Image order, the shape, no sound", async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    const f = (async (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      if (url.endsWith("/reference-to-video")) return Response.json({ code: 200, data: { id: "pred-r" } });
+      throw new Error(`unexpected ${url}`);
+    }) as typeof fetch;
+    const t = waveSpeedTransport("KEY", "bytedance/seedance-2.5/image-to-video", f);
+    expect(await t.submitRefs!(["https://cdn/a.png", "https://cdn/b.png"], "@Image 1 is Jennifer.", 6, "16:9")).toEqual({ id: "pred-r" });
+    expect(calls[0].url).toBe("https://api.wavespeed.ai/api/v3/bytedance/seedance-2.5/reference-to-video");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ prompt: "@Image 1 is Jennifer.", reference_images: ["https://cdn/a.png", "https://cdn/b.png"], aspect_ratio: "16:9", resolution: "720p", duration: 6, generate_audio: false });
+  });
   it("Higgsfield: Key id:secret, image_url, no sound; status_url polled; nsfw in plain words; a bad key says where to look", async () => {
     const calls: { url: string; init?: RequestInit }[] = [];
     const f = (async (url: string, init?: RequestInit) => {

@@ -186,6 +186,14 @@ async function main() {
     check(true, "choosing a look for shot 3: its prompt describes that outfit");
     check(!!(await page.$("[data-shot=s03] [data-shot-look-problem]")), "a look not locked yet is said on the shot");
 
+    // Make with references (24 Nov 2026): shot 3 goes to reference-to-video with the Bride's picture; its takes come
+    // back on the shot (the stand-in makes them locally), on the shot's reference item.
+    await page.click("[data-shot-references='s03-9:16']");
+    await page.waitForFunction(() => document.querySelector("[data-pictures-notice]")?.textContent?.includes("sent with Bride"), null, { timeout: 15_000 });
+    check(true, "Make with references sends the shot with the Bride's picture");
+    await page.waitForSelector("[data-shot=s03] [data-picture='s03 references 9x16.png']", { timeout: 20_000 });
+    check(true, "the shot's reference item (the pictures sent) is on shot 3");
+
     // In the song: its place in the story line and its lyric line.
     const order = readClipEdits(paths.root).order;
     const clip = (readRecipe(paths.recipe!).anchors ?? []).find((a) => a.line === 1)?.clip;

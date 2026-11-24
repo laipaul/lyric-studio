@@ -4,6 +4,20 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Show a take, not a clip: Creation's takes in the line's clip panel; the Creation card says where each take shows ✅ (to verify on the PC)
+- Paul (21 Nov 2026): "that's confusing, I want to show the take, not the clip" / "the app is confused now". The
+  "Show a clip" panel listed anonymous clip files (studio-swea… 12.6 s, 11.2 s, 5.0 s); singing takes looked like
+  Take 6; a take had to be sent from Creation first.
+- **From Creation, first in the panel:** every finished Animate take as a take ("Take 6" over "studio-sweater-v2-2k"),
+  sent or not (an unsent one plays on hover). Choosing one not in the Storyboard yet sends it and puts it on the line
+  in one step (after the singer question, if any: Cancel sends nothing). **Singing takes are not offered** (they go on
+  their own lines through Who sings → Use this take). The rest is "Your other clips", then the collections.
+- **On the line** the "Shows clip" column names it as a take ("studio-sweater-v2-2k · Take 6").
+- **Creation card:** each take says where it shows: "On line 15" (Animate take on a line), "In use · lines 15-16"
+  (singing take), "In Storyboard, on no line", or Send to Storyboard.
+- Tests: browser singer (+5: takes first and named, no singing take offered, unsent take sent and placed in one step,
+  dismissing sends nothing, the card says On line 1), lyrics-tab, pictures pass; vitest animate, ending pass.
+
 ### Fixes: the line's clip picker always in view; a plain clip on a singing line asks first ✅ (to verify on the PC)
 - Paul (21 Nov 2026): "from here I don't see all my takes" / "I can't see take 6". The Lyrics Sync "Show a clip" picker
   opened as a row inside the lines table, which scrolls on its own: near the bottom, the clip rows (Take 6 was the last
