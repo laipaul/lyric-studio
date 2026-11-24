@@ -44,7 +44,7 @@ export type ProductionShot = Slot & {
   span?: { startMs: number; endMs: number } | null; // its time on the song (shot-grid.ts slotSpans): how long its take must last
   people: WornLook[]; // each character with the look they wear in this shot (shot-looks.ts)
 };
-export type ProductionView = { shots: ProductionShot[]; sections: string[] };
+export type ProductionView = { shots: ProductionShot[]; sections: string[]; places?: string[] }; // places: the cast's scene cards (each shot's Place)
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
@@ -150,7 +150,7 @@ export function productionView(ws: Workspace, projectId: string): ProductionView
       people: worn,
     };
   });
-  return { shots, sections: [...new Set(secs)] };
+  return { shots, sections: [...new Set(secs)], places: data.cast.flatMap((c) => (!("missing" in c && c.missing) && c.kind === "scene" ? [c.name] : [])) };
 }
 
 // Each shot's line start in the song (withLineStarts, for Compare). Pure.

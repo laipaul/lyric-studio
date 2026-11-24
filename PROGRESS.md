@@ -30,6 +30,10 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   (reference_videos; over 15 s: its first 15 s): "Follow the camera movement, framing, lighting and atmosphere of
   @Video 1, but the people and their clothes must look exactly like their pictures". The take records it (guideFile).
 - The reference item ("pictures sent") has no Use / Animate of its own and is not a Compare candidate; its takes are.
+- **Place per shot** (same day; Paul: "we have scene cards already simply not used yet"): Production shows "Place" on
+  every shot (the cast's scene cards, or None) and "all of <section>" to give the whole section that place. The scene
+  card's picture then goes with the shot: the prompt's place, the Omni Reference, Make with references ("@Image N is
+  the place …"). A re-import that names no place keeps the one chosen (shotlist.ts setShotScene; route "shot-scene").
 - On the PC (first real run): one shot, 1 take (Creation → Defaults), check the face against the card. If WaveSpeed
   refuses the request, send me its message: the route's exact fields could not be read from WaveSpeed's own docs here.
 

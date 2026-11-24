@@ -15,7 +15,8 @@ import { addPictures, picturesView, removePicture, restorePicture } from "../src
 import { createCard } from "../src/node/characters/cards";
 import { placeByName, productionView, sectionsOfShots, setPictureShot, shotForFileName, useForShot, withLineStarts } from "../src/node/shot-production";
 import { midjourneyLink } from "../src/node/animate";
-import { importShotList, readShotList, removeSlots, setShotLook, slotKey } from "../src/node/shotlist";
+import { importShotList, readShotList, removeSlots, setShotLook, setShotScene, slotKey } from "../src/node/shotlist";
+import { productionData, setCast } from "../src/node/production";
 import { shotLooks } from "../src/node/shot-looks";
 import { addLook, LOOKS_DIR } from "../src/node/characters/looks";
 import { cardRoot, listCards } from "../src/node/characters/cards";
@@ -277,5 +278,26 @@ describe("Creation → Production", () => {
     await runTakes(() => openWorkspace(wsDir), id, guided.file, guided.takes.map((t) => t.n), { env: { LYRIC_GENERATE_STUB: "1" }, sleep: async () => {} });
     const after = (await picturesView(ws, id, { LYRIC_GENERATE_STUB: "1" })).pictures.find((p) => p.file === guided.file)!;
     expect(after.takes.at(-1)?.status).toBe("done");
+  });
+
+  it("the Place of a shot (24 Nov 2026): a scene card of the cast, for a shot or its section; it goes with the shot and survives a re-import", async () => {
+    const pic = path.join(root, "p.png");
+    const chapel = createCard(ws, { kind: "scene", name: "Chapel", picture: readFileSync(pic), fileName: "chapel.png" });
+    setCast(ws, id, [...productionData(ws, id).cast.filter((c) => !("missing" in c && c.missing)).map((c) => c.id), chapel.id]);
+    expect(productionView(ws, id).places).toEqual(["Chapel"]);
+    expect(setShotScene(ws, id, ["s02", "s03"], "chapel")).toBe(2);
+    const shot = productionView(ws, id).shots.find((x) => x.id === "s03")!;
+    expect(shot.scene).toBe("Chapel");
+    expect(shot.refs.map((r) => r.name)).toContain("Chapel");
+    expect(shotReferences(ws, shot).map((r) => r.role)).toContain("place");
+    expect(referencePrompt(shot, shotReferences(ws, shot))).toMatch(/@Image \d is the place "Chapel"/);
+    // A re-import that names no place keeps the one chosen here.
+    const current = readShotList(ws, id)!;
+    await importShotList(ws, id, { slots: current.slots.map((x) => ({ ...x, scene: null })) }, "shots.json");
+    expect(readShotList(ws, id)?.slots.find((x) => x.id === "s03")?.scene).toBe("Chapel");
+    expect(setShotScene(ws, id, "s03", null)).toBe(1);
+    expect(readShotList(ws, id)?.slots.find((x) => x.id === "s03")?.scene).toBeNull();
+    expect(() => setShotScene(ws, id, "s03", "Beach")).toThrow(/not one of your scene cards/);
+    expect(() => setShotScene(ws, id, "s99", "Chapel")).toThrow(/not in this song's shot list/);
   });
 });

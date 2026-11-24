@@ -269,7 +269,10 @@ export async function importShotList(ws: Workspace, projectId: string, input: un
   if (existsSync(file)) keepReplaced(root, file);
   // Looks chosen per shot in Production stay when the new file names none for that shot.
   const before2 = previousList?.slots ?? [];
-  const slotsOut = check.slots.map((x) => (x.looks ? x : (() => { const p = before2.find((b) => b.id === x.id)?.looks; return p ? { ...x, looks: p } : x; })()));
+  const slotsOut = check.slots
+    .map((x) => (x.looks ? x : (() => { const p = before2.find((b) => b.id === x.id)?.looks; return p ? { ...x, looks: p } : x; })()))
+    // A place chosen per shot in Production stays when the new file names none for that shot (24 Nov 2026).
+    .map((x) => (x.scene ? x : (() => { const p = before2.find((b) => b.id === x.id)?.scene; return p ? { ...x, scene: p } : x; })()));
   const out: ShotListFile = { _help: HELP, imported_at: new Date().toISOString(), source: path.win32.basename(source), slots: slotsOut, ...(Object.keys(filled).length ? { filled } : {}), ...(Object.keys(filledWide).length ? { filledWide } : {}) };
   writeFileSync(file, `${JSON.stringify(out, null, 2)}\n`);
   // Every own clip gets its place in the order first (clips never moved follow in file-name order), so "order"
@@ -280,6 +283,33 @@ export async function importShotList(ws: Workspace, projectId: string, input: un
   edits = withSongOrder(edits, own, inClipOrder(edits, own));
   writeClipEdits(root, { ...edits, order: placeSlots(edits.order, check.slots.filter((x) => !filled[x.id])) });
   return check;
+}
+
+// The place of shots (Creation → Production, 24 Nov 2026; Paul: "we have scene cards already simply not used yet"): a
+// scene card of the song's cast (spelled as the card is), or none (scene null). Its picture then goes with the shot:
+// the prompt's place, the Omni Reference, Make with references. Returns how many shots changed.
+export function setShotScene(ws: Workspace, projectId: string, slotIds: unknown, scene: unknown): number {
+  const root = songRoot(ws, projectId);
+  const file = path.join(root, SHOTLIST_FILE);
+  const list = readShotListFile(file);
+  if (!list) throw new Error("This song has no shot list yet.");
+  const ids = (Array.isArray(slotIds) ? slotIds : [slotIds]).map(String);
+  if (!ids.length || ids.some((id) => !list.slots.some((x) => x.id === id))) throw new Error("That shot is not in this song's shot list.");
+  let name: string | null = null;
+  if (scene !== null && scene !== undefined && scene !== "") {
+    const places = context(ws, projectId).cards.filter((c) => c.kind === "scene");
+    const card = places.find((c) => same(c.name, String(scene)));
+    if (!card) throw new Error(`"${String(scene)}" is not one of your scene cards (Characters → Scene cards).`);
+    name = card.name;
+  }
+  let changed = 0;
+  const slots = list.slots.map((x) => {
+    if (!ids.includes(x.id) || x.scene === name) return x;
+    changed++;
+    return { ...x, scene: name };
+  });
+  if (changed) writeFileSync(file, `${JSON.stringify({ ...list, slots }, null, 2)}\n`);
+  return changed;
 }
 
 // A look for one character in one shot (Creation → Production), or back to the song's look (look null).

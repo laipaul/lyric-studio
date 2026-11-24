@@ -199,6 +199,17 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
       setNotice({ ok: false, text: (e as Error).message });
     }
   }
+  // The place of a shot, or of every shot in its section (24 Nov 2026): a scene card of the cast, or none.
+  async function setPlace(shot: ProductionShot, scene: string, whole: boolean) {
+    const ids = whole ? shots.filter((x) => x.section === shot.section).map((x) => x.id) : [shot.id];
+    try {
+      const d = (await post({ action: "shot-scene", slots: ids, scene: scene || null })) as { changed: number };
+      setNotice({ ok: true, text: whole ? `${shot.section}: ${d.changed} shot${d.changed === 1 ? "" : "s"} now ${scene ? `in ${scene}` : "without a place"}.` : `Shot ${shot.number}: ${scene ? `in ${scene}` : "no place"}. Its prompt, Omni Reference and Make with references follow.` });
+      await load();
+    } catch (e) {
+      setNotice({ ok: false, text: (e as Error).message });
+    }
+  }
   async function setLook(shot: ProductionShot, character: string, look: string) {
     try {
       await post({ action: "shot-look", slot: shot.id, character, look });
@@ -315,6 +326,8 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
           onCompare={(s) => setComparing(s.id)}
           onLook={(s, character, look) => void setLook(s, character, look)}
           onReferences={(s, shape) => void makeWithReferences(s, shape)}
+          places={production?.places ?? []}
+          onPlace={(s, scene, whole) => void setPlace(s, scene, whole)}
           guidesFor={(s) => ({ options: guidesOf(s), value: guideOf(s), set: (v: string) => setGuides((g) => ({ ...g, [s.id]: v })) })}
           compareCount={(s) => candidatesOf(s).length}
           tile={(p, s) => <PictureTile key={p.file} projectId={projectId} p={p} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title, take) => setPlaying({ url, title, take })} shot={s} useShot={(n) => void useShot(p.file, n, s)} openCompare={candidatesOf(s).length >= 2 ? () => setComparing(s.id) : undefined} />}
@@ -445,8 +458,12 @@ function ShotItems({
   onLook,
   onReferences,
   guidesFor,
+  places,
+  onPlace,
   tile,
 }: {
+  places: string[];
+  onPlace: (s: ProductionShot, scene: string, whole: boolean) => void;
   guidesFor: (s: ProductionShot) => Guides;
   onLook: (s: ProductionShot, character: string, look: string) => void;
   onReferences: (s: ProductionShot, shape: "9:16" | "16:9") => void;
@@ -480,7 +497,7 @@ function ShotItems({
         <section key={`${g.name}-${gi}`} data-shot-section={g.name} className="flex flex-col gap-2">
           <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">{g.name}</h3>
           {g.shots.map((s) => (
-            <ShotRow key={s.id} s={s} pictures={pictures.filter((p) => p.slot === s.id)} loose={loose} adding={adding} onDrop={onDrop} onAttach={onAttach} tile={tile} onCompare={() => onCompare(s)} candidates={compareCount(s)} onLook={(character, look) => onLook(s, character, look)} onReferences={(shape) => onReferences(s, shape)} guides={guidesFor(s)} />
+            <ShotRow key={s.id} s={s} pictures={pictures.filter((p) => p.slot === s.id)} loose={loose} adding={adding} onDrop={onDrop} onAttach={onAttach} tile={tile} onCompare={() => onCompare(s)} candidates={compareCount(s)} onLook={(character, look) => onLook(s, character, look)} onReferences={(shape) => onReferences(s, shape)} guides={guidesFor(s)} places={places} onPlace={(scene, whole) => onPlace(s, scene, whole)} />
           ))}
         </section>
       ))}
@@ -505,7 +522,7 @@ function ShotLength({ span }: { span: { startMs: number; endMs: number } }) {
 }
 
 type Guides = { options: { value: string; label: string }[]; value: string; set: (v: string) => void };
-function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare, candidates, onLook, onReferences, guides }: { s: ProductionShot; pictures: PictureView[]; loose: PictureView[]; adding: boolean; onDrop: (files: FileList, s: ProductionShot) => void; onAttach: (file: string, s: ProductionShot) => void; tile: (p: PictureView, s: ProductionShot) => ReactNode; onCompare: () => void; candidates: number; onLook: (character: string, look: string) => void; onReferences: (shape: "9:16" | "16:9") => void; guides: Guides }) {
+function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare, candidates, onLook, onReferences, guides, places, onPlace }: { s: ProductionShot; pictures: PictureView[]; loose: PictureView[]; adding: boolean; onDrop: (files: FileList, s: ProductionShot) => void; onAttach: (file: string, s: ProductionShot) => void; tile: (p: PictureView, s: ProductionShot) => ReactNode; onCompare: () => void; candidates: number; onLook: (character: string, look: string) => void; onReferences: (shape: "9:16" | "16:9") => void; guides: Guides; places: string[]; onPlace: (scene: string, whole: boolean) => void }) {
   const [over, setOver] = useState(false);
   const [copied, setCopied] = useState<"tall" | "wide" | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -556,7 +573,27 @@ function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare
                 ) : null}
               </span>
             ))}
-            {s.scene ? ` · ${s.scene}` : ""}
+            {places.length ? (
+              // The shot's place: a scene card of the cast (its picture goes with the shot), for this shot or its whole section.
+              <span className="ml-1.5 inline-flex items-center gap-1">
+                · Place
+                <select data-shot-place={s.id} value={s.scene ?? ""} onChange={(e) => onPlace(e.target.value, false)} className={cn("bg-background rounded border px-1 py-0 text-[11px]", s.scene ? "border-brand/60" : "")} title="The place of this shot: its scene card's picture goes with the prompt, Omni Reference and Make with references">
+                  <option value="">None</option>
+                  {[...new Set([...places, ...(s.scene ? [s.scene] : [])])].map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" data-shot-place-section={s.id} onClick={() => onPlace(s.scene ?? "", true)} className="text-muted-foreground hover:text-foreground underline-offset-2 hover:underline" title={`Give every shot of ${s.section} this place (${s.scene ?? "none"})`}>
+                  all of {s.section}
+                </button>
+              </span>
+            ) : s.scene ? (
+              ` · ${s.scene}`
+            ) : (
+              ""
+            )}
             {s.outfit ? ` · wears: ${s.outfit}` : ""}
             {s.line !== null ? <span data-shot-line={s.line}>{` · line ${s.line}: “${s.lineText ?? ""}”`}</span> : " · no line (music only)"}
             {s.tag ? ` · #${s.tag}` : ""}

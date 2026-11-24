@@ -23,7 +23,7 @@ import { placeByName, productionView, setPictureShot, useForShot, withLineStarts
 import { timedLines } from "@lyric/video/production";
 import { startShotReferences } from "@lyric/video/shot-references";
 import { eq } from "drizzle-orm";
-import { setShotLook } from "@lyric/video/shotlist";
+import { setShotLook, setShotScene } from "@lyric/video/shotlist";
 import { connection } from "next/server";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
@@ -128,6 +128,10 @@ export async function POST(request: Request, { params }: Params) {
     }
     if (body.action === "remove-picture") return Response.json(withWorkspace((ws) => removePicture(ws, id, file)));
     if (body.action === "restore-picture") return Response.json(withWorkspace((ws) => restorePicture(ws, id, file)));
+    if (body.action === "shot-scene") {
+      const b = body as { slots?: unknown; scene?: unknown };
+      return Response.json({ changed: withWorkspace((ws) => setShotScene(ws, id, b.slots, b.scene)) });
+    }
     if (body.action === "shot-look") {
       const b = body as { slot?: unknown; character?: unknown; look?: unknown };
       return Response.json({ slot: withWorkspace((ws) => setShotLook(ws, id, b.slot, b.character, b.look)) });
