@@ -21,6 +21,7 @@ import { shotLooks } from "../src/node/shot-looks";
 import { addLook, LOOKS_DIR } from "../src/node/characters/looks";
 import { cardRoot, listCards } from "../src/node/characters/cards";
 import { songStory } from "../src/node/story-line";
+import { shotListScript } from "../src/node/shot-script";
 import { referencePrompt, shotReferences, startShotReferences } from "../src/node/shot-references";
 import { runTakes } from "../src/node/animate";
 import { isWholeStory } from "../src/node/make";
@@ -301,5 +302,21 @@ describe("Creation → Production", () => {
     expect(readShotList(ws, id)?.slots.find((x) => x.id === "s03")?.scene).toBeNull();
     expect(() => setShotScene(ws, id, "s03", "Beach")).toThrow(/not one of your scene cards/);
     expect(() => setShotScene(ws, id, "s99", "Chapel")).toThrow(/not in this song's shot list/);
+  });
+
+  it("the shot list as a readable script (for a platform that takes a script): cast and looks, places, shots by section; never JSON", async () => {
+    const script = await shotListScript(ws, id);
+    expect(script).toMatch(/^# Production Song: shot list\n/);
+    expect(script).toContain("## Cast");
+    expect(script).toMatch(/### Bride\n/);
+    expect(script).toMatch(/- Look ".+": /);
+    expect(script).toContain("## Places");
+    expect(script).toContain("- **Chapel**");
+    expect(script).toContain("## Shots");
+    expect(script).toMatch(/\*\*Shot 1\*\* · medium/);
+    expect(script).toContain("Close on her smile");
+    expect(script).toMatch(/People: Bride \(.+\)/);
+    expect(script).toMatch(/Lyric: ".+"/);
+    expect(script).not.toMatch(/"slots"|"order":|\{ "id"/);
   });
 });

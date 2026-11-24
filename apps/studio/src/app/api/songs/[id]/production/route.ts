@@ -11,6 +11,7 @@ import { connection } from "next/server";
 import { productionData, readPasted, saveBible, setBibleSource, setCast, setCastLook, songBrief, timedLines } from "@lyric/video/production";
 import { checkSongShotList } from "@lyric/video/shotlist";
 import { withTiming } from "@lyric/video/shot-timing";
+import { shotListScript } from "@lyric/video/shot-script";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
@@ -40,6 +41,8 @@ export async function POST(request: Request, { params }: Params) {
         return Response.json({ source: withWorkspace((ws) => setBibleSource(ws, id, body.source)) });
       case "bible":
         return Response.json(withWorkspace((ws) => saveBible(ws, id, body.text)));
+      case "script": // the shot list as a readable script (Markdown), e.g. for Higgsfield's Short Drama
+        return Response.json({ script: await withWorkspaceAsync((ws) => shotListScript(ws, id)) });
       case "brief":
         return Response.json({ brief: await withWorkspaceAsync(async (ws) => songBrief(ws, id, await timedLines(ws, id))) });
       case "paste": {

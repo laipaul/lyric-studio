@@ -154,6 +154,20 @@ export function ProductionTab({ projectId }: { projectId: string }) {
       setBusy(false);
     }
   }
+  // The shot list as a readable script (.md), for a platform that turns a script into scenes (e.g. Higgsfield's Short Drama).
+  async function saveScriptFile() {
+    try {
+      const { script } = await post<{ script: string }>({ action: "script" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([script], { type: "text/markdown" }));
+      a.download = `${data!.title} - shot list script.md`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      setNotice({ ok: true, text: "The shot list is saved as a script (.md): the cast and their looks, the places, the story and every shot with its time, lyric and people. Upload it where a script is asked for." });
+    } catch (e) {
+      setNotice({ ok: false, text: (e as Error).message });
+    }
+  }
   async function saveBriefFile() {
     try {
       const { brief } = await post<{ brief: string }>({ action: "brief" });
@@ -437,6 +451,11 @@ export function ProductionTab({ projectId }: { projectId: string }) {
           >
             <FileJson /> Import shot list file
           </Button>
+          {data.shotlist ? (
+            <Button type="button" size="sm" variant="outline" data-shotlist-script onClick={() => void saveScriptFile()} title="The shot list as a readable script (Markdown): cast and looks, places, story, every shot. For a platform that turns a script into scenes, e.g. Higgsfield's Short Drama.">
+              <Download /> Save as script (.md)
+            </Button>
+          ) : null}
           {data.shotlist ? (
             <Button type="button" size="sm" variant="ghost" onClick={() => goTo("clips")}>
               Open Storyboard
