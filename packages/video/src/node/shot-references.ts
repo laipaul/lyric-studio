@@ -60,12 +60,16 @@ export function referencePrompt(shot: Pick<ProductionShot, "prompt" | "people" |
   const keep = people ? "Keep each person's face, hair and outfit exactly as in their pictures, the same person and the same clothes throughout the shot; never change or invent clothing." : "";
   const action = shot.prompt.replace(/\s+--\w[\s\S]*$/, "").trim();
   // A camera guide (a Midjourney take of this shot): its camera, framing, light and mood; the people stay the pictures'.
-  const follow = guide ? "Follow the camera movement, framing, lighting and atmosphere of @Video 1, but the people and their clothes must look exactly like their pictures, not like the people in @Video 1." : "";
+  const follow = guide
+    ? "@Video 1 is a deliberately blurred guide for the camera only: follow its camera movement, framing, lighting, colours and atmosphere. It shows no one to copy: every person's face, body and clothes come only from their pictures."
+    : "";
   return [...who, keep, follow, action].filter(Boolean).join(" ");
 }
 
 export type ReferenceStart = { file: string; takes: Take[]; estimate: Estimate; references: string[]; guide?: string };
 export const GUIDE_MAX_S = 15; // Seedance: reference videos 15 s at most (together)
+export const GUIDE_BLUR = 24; // the camera guide's blur radius (px at 720p): no face survives it, the movement and light do
+const GUIDE_VERSION = 1; // a new blur: a new file
 
 function probeSeconds(file: string): number | null {
   try {
@@ -123,13 +127,16 @@ export function startShotReferences(
   execFileSync(ffmpegBin(), ["-y", "-v", "error", ...inputs, "-filter_complex", `${scale}${stack}`, "-map", refs.length > 1 ? "[out]" : "[r0]", "-frames:v", "1", path.join(dir, file)], { windowsHide: true });
 
   if (guide) {
-    const length = probeSeconds(guide.file);
-    if (length !== null && length > GUIDE_MAX_S) {
-      const cut = path.join(picturesDir, "takes", `${path.parse(guide.name).name} (first ${GUIDE_MAX_S} s).mp4`);
-      mkdirSync(path.dirname(cut), { recursive: true });
-      if (!existsSync(cut)) execFileSync(ffmpegBin(), ["-y", "-v", "error", "-i", guide.file, "-t", String(GUIDE_MAX_S), "-an", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", cut], { windowsHide: true });
-      guide = { file: cut, name: guide.name };
+    // Sent blurred (24 Nov 2026, Paul's test on shot 5: with the Midjourney take as it is, Seedance copied Midjourney's
+    // woman instead of Jennifer): a strong blur keeps the camera movement, framing, light and colour, and leaves no face
+    // to copy, so the people come only from their pictures. At most its first 15 s, no sound.
+    const sent = path.join(picturesDir, "takes", `${path.parse(guide.name).name} (camera guide v${GUIDE_VERSION}).mp4`);
+    mkdirSync(path.dirname(sent), { recursive: true });
+    if (!existsSync(sent)) {
+      const length = probeSeconds(guide.file);
+      execFileSync(ffmpegBin(), ["-y", "-v", "error", "-i", guide.file, ...(length !== null && length > GUIDE_MAX_S ? ["-t", String(GUIDE_MAX_S)] : []), "-an", "-vf", `scale=-2:'min(720,ih)',boxblur=${GUIDE_BLUR}:2,format=yuv420p`, "-c:v", "libx264", "-preset", "veryfast", sent], { windowsHide: true });
     }
+    guide = { file: sent, name: guide.name };
   }
   const prompt = referencePrompt(shot, refs, !!guide);
   const now = new Date().toISOString();

@@ -271,8 +271,10 @@ describe("Creation → Production", () => {
     // With a camera guide (a video of the shot): sent as @Video 1, its name kept on the take; not a video: refused.
     const guided = startShotReferences(ws, id, { slot: "s03", guide: "walk-in.mp4", takes: 1 }, { LYRIC_GENERATE_STUB: "1" });
     expect(guided.guide).toBe("walk-in.mp4");
-    expect(guided.takes[0].guideFile).toMatch(/pictures\/walk-in\.mp4$/);
-    expect(guided.takes[0].prompt).toContain("Follow the camera movement, framing, lighting and atmosphere of @Video 1");
+    // Sent blurred (no face to copy): its own file next to the takes.
+    expect(guided.takes[0].guideFile).toMatch(/pictures\/takes\/walk-in \(camera guide v1\)\.mp4$/);
+    expect(existsSync(path.join(wsDir, guided.takes[0].guideFile!))).toBe(true);
+    expect(guided.takes[0].prompt).toContain("@Video 1 is a deliberately blurred guide for the camera only");
     expect(() => startShotReferences(ws, id, { slot: "s03", guide: "smile.png" }, { LYRIC_GENERATE_STUB: "1" })).toThrow(/not one of this song's videos/);
     expect(() => startShotReferences(ws, id, { slot: "s03", guide: "../song.json" }, { LYRIC_GENERATE_STUB: "1" })).toThrow(/not one of this song's videos/);
     await runTakes(() => openWorkspace(wsDir), id, guided.file, guided.takes.map((t) => t.n), { env: { LYRIC_GENERATE_STUB: "1" }, sleep: async () => {} });

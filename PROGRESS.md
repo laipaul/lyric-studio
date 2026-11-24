@@ -29,6 +29,9 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   "Camera guide" choice (its videos and finished takes, the first one by default, or None); it goes as @Video 1
   (reference_videos; over 15 s: its first 15 s): "Follow the camera movement, framing, lighting and atmosphere of
   @Video 1, but the people and their clothes must look exactly like their pictures". The take records it (guideFile).
+- Second real run (Paul, shot 5): with the Midjourney take as camera guide, Seedance copied Midjourney's woman, not
+  Jennifer. Fixed: the guide is sent **blurred** (boxblur 24 at 720p, "<name> (camera guide v1).mp4" in pictures\takes):
+  camera movement, framing, light and colour survive, no face does; the prompt says it shows no one to copy.
 - The reference item ("pictures sent") has no Use / Animate of its own and is not a Compare candidate; its takes are.
 - **Place per shot** (same day; Paul: "we have scene cards already simply not used yet"): Production shows "Place" on
   every shot (the cast's scene cards, or None) and "all of <section>" to give the whole section that place. The scene
