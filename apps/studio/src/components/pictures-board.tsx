@@ -192,8 +192,8 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
     const who = shot.refs.map((r) => r.name).join(", ");
     if (!window.confirm(`Make ${defaults.takes} take${defaults.takes === 1 ? "" : "s"} of shot ${shot.number} (${shape}, ${seconds} s) with references (${who})${guide ? `, following the camera of ${guide}` : ""} on WaveSpeed, Seedance 2.5? About $${usd.toFixed(2)} (estimate).`)) return;
     try {
-      const d = (await post({ action: "references", slot: shot.id, shape, seconds, ...(guide ? { guide } : {}) })) as { takes: { n: number }[]; references: string[]; estimate: { usd: number }; guide?: string };
-      setNotice({ ok: true, text: `Shot ${shot.number}: ${d.takes.length} take${d.takes.length === 1 ? "" : "s"} sent with ${d.references.join(", ")}${d.guide ? `, following the camera of ${d.guide}` : ""} (about $${d.estimate.usd.toFixed(2)}). They appear on the shot when ready (Tasks menu).` });
+      const d = (await post({ action: "references", slot: shot.id, shape, seconds, ...(guide ? { guide } : {}) })) as { takes: { n: number }[]; references: string[]; estimate: { usd: number }; guide?: string; note?: string };
+      setNotice({ ok: true, text: `Shot ${shot.number}: ${d.takes.length} take${d.takes.length === 1 ? "" : "s"} sent with ${d.references.join(", ")}${d.guide ? `, following the camera of ${d.guide}` : ""} (about $${d.estimate.usd.toFixed(2)}). They appear on the shot when ready (Tasks menu).${d.note ? ` ${d.note}` : ""}` });
       await load();
     } catch (e) {
       setNotice({ ok: false, text: (e as Error).message });

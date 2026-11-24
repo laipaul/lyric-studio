@@ -3,7 +3,7 @@
 
 // ---- what is generated ----
 
-export type ViewId = "closeup" | "three_quarter" | "body_front" | "body_back";
+export type ViewId = "closeup" | "three_quarter" | "body_front" | "body_back" | "closeup_teeth";
 export type AngleId = "wide_left" | "wide_right" | "detail";
 export type Aspect = "3:4" | "2:3";
 
@@ -52,6 +52,21 @@ export const VIEWS: View[] = [
     prompt: "A full-length photograph of this person's body seen from behind, standing naturally, camera at eye level (no high angle, no top-down view), the back of the outfit (and veil, train or hair falling on the back) fully visible down to the shoes. The frame is CROPPED AT THE NECK: the top edge of the picture cuts at the nape, so the head is out of frame. Anything pinned or worn on the front only (a boutonnière, brooch, corsage, front buttons) is not visible from behind: do not show it at the shoulder or anywhere on the back.",
   },
 ];
+
+// Extra views (25 Nov 2026): made only when asked, also on a locked version (they add a picture next to its views and
+// change none of them). The teeth close-up (the "teeth rule" from Paul's character tutorials): the same close-up with a
+// gentle smile, lips slightly parted, the upper teeth visible, so a singing character keeps the same teeth in every
+// shot instead of the video model inventing new ones. Its file: closeup_teeth.png in the version's folder.
+export const EXTRA_VIEWS: View[] = [
+  {
+    ...VIEWS[0],
+    id: "closeup_teeth",
+    label: "Close-up, smiling (teeth)",
+    prompt: VIEWS[0].prompt.replace("relaxed neutral expression, mouth gently closed", "a gentle natural smile, lips slightly parted, the upper teeth visible with their natural shape, size and alignment"),
+  },
+];
+export const ALL_VIEWS: View[] = [...VIEWS, ...EXTRA_VIEWS];
+export const isExtraView = (id: string): boolean => EXTRA_VIEWS.some((v) => v.id === id);
 
 // Setting (decided 18 Nov 2026): a neutral, empty outdoor place in soft daylight. Grey studio backdrops gave plastic skin.
 export const PACK_STYLE =
@@ -340,13 +355,13 @@ export type Light = "green" | "amber" | "red" | "grey";
 export type FaceResult = { score: number | null; face_px?: number; yaw?: number | null; note?: string };
 
 // A face view is a close-up: the face is at least this fraction of the picture's height (per view: View.minFace).
-export const minFaceFor = (view: ViewId): number | null => VIEWS.find((x) => x.id === view)?.minFace ?? null;
+export const minFaceFor = (view: ViewId): number | null => ALL_VIEWS.find((x) => x.id === view)?.minFace ?? null;
 // A face turned more than this far (degrees) is not a face view any more: both eyes should be visible.
 export const MAX_YAW = 70;
 export const MIN_JUDGED_FACE_PX = 64; // smaller faces (e.g. in a full-body view) give unreliable scores
 
 export function classify(view: ViewId, r: FaceResult, t: Thresholds, frame_h?: number | null): { light: Light; text: string; regenerate: boolean } {
-  const v = VIEWS.find((x) => x.id === view)!;
+  const v = ALL_VIEWS.find((x) => x.id === view)!;
   if (!v.face) {
     // A neck-cropped body view must show no face: faces come only from the close-up.
     if (r.score !== null && (r.face_px ?? 0) >= 40) return { light: "red", text: "A face is visible: the view should be cropped at the neck.", regenerate: true };

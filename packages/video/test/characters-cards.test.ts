@@ -15,7 +15,7 @@ import {
   calibrationSongs, cardRoot, cardThresholds, createCard, currentVersion, enqueueCardJob, fetchMissing, getCard, listCardJobs, listCards, lockCard, lockProblems, makePictures, newVersion, usableVersion, versionByNumber,
   packEstimate, readCardFile, readReport, rescore, repickLegacy, runCardJob, updateDraft, versionDir, ensureSplit, makeSplit, parseSplit,
 } from "../src/node/characters";
-import { anglePrompt, ANGLES, classify, DEFAULT_THRESHOLDS, DESCRIPTION_PROMPT, PACK_STYLE, imageSize, MAX_YAW, minFaceFor, VIEWS, viewPrompt } from "../src/node/characters/plan";
+import { anglePrompt, ANGLES, classify, DEFAULT_THRESHOLDS, EXTRA_VIEWS, DESCRIPTION_PROMPT, PACK_STYLE, imageSize, MAX_YAW, minFaceFor, VIEWS, viewPrompt } from "../src/node/characters/plan";
 import { outfitSplitPrompt } from "../src/node/characters/split";
 import { stubFace, stubFal } from "../src/node/characters/stub";
 
@@ -322,6 +322,25 @@ describe("cards", () => {
     expect(() => updateDraft(ws, c.id, { outfit: "A-line gown, sheer ivory tulle veil" })).not.toThrow();
     expect(readCardFile(cardRoot(ws, c)).versions[0].outfit).toMatch(/A-line gown/);
     expect(readCardFile(cardRoot(ws, c)).versions[0].outfit).not.toMatch(/tulle/);
+  });
+
+  test("the teeth close-up (25 Nov 2026): an extra view, also on a locked card; the locked views stay as they are", async () => {
+    expect(EXTRA_VIEWS[0].prompt).toMatch(/lips slightly parted, the upper teeth visible/);
+    expect(EXTRA_VIEWS[0].prompt).not.toMatch(/mouth gently closed/);
+    const c = createCard(ws, { kind: "character", name: "singer", picture: readFileSync(path.join(pics, "default.png")), fileName: "singer.png" });
+    await makePictures(ws, c.id, { ...tools(), sleep: async () => {} }, { cap: 3 });
+    lockCard(ws, c.id);
+    const dir = versionDir(cardRoot(ws, getCard(ws, c.id)), 1);
+    const before = readFileSync(path.join(dir, "closeup.png"));
+    expect(() => enqueueCardJob(ws, c.id, "view", { only: ["closeup"] })).toThrow(/locked/);
+    const job = enqueueCardJob(ws, c.id, "view", { only: ["closeup_teeth"] });
+    expect(job.label).toMatch(/Remake Close-up, smiling \(teeth\)/);
+    ws.db.delete(cardJob).where(eq(cardJob.id, job.id)).run();
+    await makePictures(ws, c.id, { ...tools(), sleep: async () => {} }, { cap: 3, only: ["closeup_teeth"] });
+    expect(existsSync(path.join(dir, "closeup_teeth.png"))).toBe(true);
+    expect(readFileSync(path.join(dir, "closeup.png")).equals(before)).toBe(true);
+    expect(getCard(ws, c.id).status).toBe("locked");
+    await expect(makePictures(ws, c.id, { ...tools(), sleep: async () => {} }, { cap: 3, only: ["closeup", "closeup_teeth"] })).rejects.toThrow(/locked/);
   });
 
   test("scene cards: 3 angles with the key props named; the cost estimate and the cap", () => {

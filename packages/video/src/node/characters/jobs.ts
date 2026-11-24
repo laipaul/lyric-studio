@@ -14,7 +14,7 @@ import { cardRoot, cardThresholds, currentVersion, getCard, packEstimate, readCa
 import { localFaceTool, type FaceTool } from "./face";
 import { errorText } from "./fal";
 import { buildSheet, fetchMissing, makePictures, readReport, rescore, type GenDeps } from "./generate";
-import { money, VIEWS, ANGLES } from "./plan";
+import { ALL_VIEWS, ANGLES, isExtraView, money, VIEWS } from "./plan";
 import { stubFace, stubFal } from "./stub";
 
 import { createFalClient, type FalClient } from "@fal-ai/client";
@@ -61,7 +61,7 @@ export const DEFAULT_CAP = 3;
 
 export function jobLabel(name: string, kind: CardJobKind, o: CardJobOptions, lookName?: string): string {
   if (lookName) return `${name} · ${kind === "pack" ? `Make look "${lookName}"` : `Remake ${lookName}: ${o.only?.map((id) => VIEWS.find((x) => x.id === id)?.label ?? id).join(", ")}`}`;
-  const what = kind === "pack" ? "Make pack" : kind === "view" ? `Remake ${o.only?.map((id) => [...VIEWS, ...ANGLES].find((x) => x.id === id)?.label ?? id).join(", ")}` : kind === "fetch" ? "Get missing pictures" : "Calibrate";
+  const what = kind === "pack" ? "Make pack" : kind === "view" ? `Remake ${o.only?.map((id) => [...ALL_VIEWS, ...ANGLES].find((x) => x.id === id)?.label ?? id).join(", ")}` : kind === "fetch" ? "Get missing pictures" : "Calibrate";
   return `${name} · ${what}`;
 }
 
@@ -72,7 +72,8 @@ export function enqueueCardJob(ws: Workspace, cardId: string, kind: CardJobKind,
   const file = readCardFile(cardRoot(ws, row));
   const look = o.look ? getLook(file, o.look) : null;
   if (look && look.status === "locked") throw new Error(`"${look.name}" is locked: press "Change this look" first.`);
-  if (!look && kind !== "fetch" && kind !== "calibrate" && currentVersion(file).status === "locked") throw new Error("This version is locked: start a new version to change it.");
+  const extrasOnly = kind === "view" && !look && !!o.only?.length && o.only.every(isExtraView); // e.g. the teeth close-up on a locked card
+  if (!look && kind !== "fetch" && kind !== "calibrate" && !extrasOnly && currentVersion(file).status === "locked") throw new Error("This version is locked: start a new version to change it.");
   const cap = o.cap ?? DEFAULT_CAP;
   if (kind === "pack" && look) {
     const e = lookEstimate(look);

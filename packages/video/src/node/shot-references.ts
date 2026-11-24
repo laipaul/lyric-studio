@@ -7,30 +7,50 @@
 //   The shot's reference item: a strip of the pictures sent ("s05 references 9x16.png" in the song's pictures), its
 //   own item on the shot so the takes have a home and the inputs stay visible.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { ffmpegBin, ffprobeBin, type Workspace } from "@lyric/db";
 
 import { estimate, MAX_REFERENCES, MAX_TAKE_SECONDS, MAX_TAKES, MIN_TAKE_SECONDS, nextTakeN, readCreationDefaults, REFERENCE_MODEL, songFolder, transportFor, update, type Estimate, type Take } from "./animate";
 import { cardRoot, listCards } from "./characters/cards";
+import { LOOKS_DIR, MAIN_LOOK } from "./characters/looks";
 import { productionView, type ProductionShot } from "./shot-production";
 
-// role: "face" (the look's close-up), "outfit" (the look's full-length front view: the whole dress, 24 Nov 2026, Paul:
-// "the dress is not the same anymore": a close-up alone leaves everything below the neckline to the model), "place".
-export type ReferencePicture = { name: string; file: string; who: string | null; role: "face" | "outfit" | "place" }; // file: absolute
+// Per person two reference sheets (25 Nov 2026; Paul's two tutorials and their comments agree: "a headless outfit plus the
+// face beats complex character sheets", and the model invents what a reference does not show): a FACE sheet (the look's
+// close-up, the card's 3/4 face, and its teeth close-up when there is one: only sharp faces, side by side) and an OUTFIT
+// sheet (the look's front and back, cropped at the neck: no second, smaller face to copy). Each is one picture, so three
+// people still fit Seedance's reference limit. Made from the card's own views (never from words), kept in
+// workspace\cache\refsheets (a new view: a new sheet).
+export type ReferencePicture = { name: string; file: string; who: string | null; role: "face" | "outfit" | "place"; panels?: string[] }; // file: absolute; panels: what the sheet shows
 export type Shape = "9:16" | "16:9";
 
-const OUTFIT_VIEWS = ["body_front.png", "body_front.jpg"];
+export const TEETH_VIEW = "closeup_teeth.png"; // the card's close-up with the lips slightly parted (Characters → Teeth close-up)
+const SHEET_HEIGHT = 1024;
 
-// The pictures of a shot, in @Image order: each person's face and full outfit in this shot's look, then its scene card.
+function sheet(ws: Workspace, panels: readonly string[]): string {
+  if (panels.length === 1) return panels[0];
+  const key = createHash("sha256").update(JSON.stringify(panels.map((f) => [f, statSync(f).mtimeMs]))).digest("hex").slice(0, 20);
+  const out = path.join(ws.dir, "cache", "refsheets", `${key}.png`);
+  if (existsSync(out)) return out;
+  mkdirSync(path.dirname(out), { recursive: true });
+  const scale = panels.map((_, i) => `[${i}:v]scale=-2:${SHEET_HEIGHT},setsar=1[p${i}]`).join(";");
+  execFileSync(ffmpegBin(), ["-y", "-v", "error", ...panels.flatMap((f) => ["-i", f]), "-filter_complex", `${scale};${panels.map((_, i) => `[p${i}]`).join("")}hstack=inputs=${panels.length}[out]`, "-map", "[out]", "-frames:v", "1", out], { windowsHide: true });
+  return out;
+}
+
+// The pictures of a shot, in @Image order: each person's face sheet and outfit sheet in this shot's look, then its place.
 export function shotReferences(ws: Workspace, shot: ProductionShot): ReferencePicture[] {
-  const folders = new Map(listCards(ws).map((c) => [c.id, c.folder] as const));
+  const cards = new Map(listCards(ws).map((c) => [c.id, c] as const));
   const out: ReferencePicture[] = [];
+  const existing = (files: string[]) => [...new Set(files.filter((f) => existsSync(f)).map((f) => path.resolve(f)))];
   for (const r of shot.refs) {
-    const folder = folders.get(r.card);
-    if (!folder || !r.file) continue;
-    const file = path.join(cardRoot(ws, { folder }), r.file);
+    const card = cards.get(r.card);
+    if (!card || !r.file) continue;
+    const root = cardRoot(ws, card);
+    const file = path.join(root, r.file);
     if (!existsSync(file)) continue;
     const worn = shot.people.find((w) => w.card === r.card);
     if (!worn) {
@@ -38,10 +58,14 @@ export function shotReferences(ws: Workspace, shot: ProductionShot): ReferencePi
       continue;
     }
     const name = `${worn.character}${worn.look ? ` · ${worn.look}` : ""}`;
-    out.push({ name, file, who: worn.character, role: "face" });
-    // The same look's full-length view, next to its close-up (when the picture sent is not already it).
-    const outfit = OUTFIT_VIEWS.map((v) => path.join(path.dirname(file), v)).find((f) => existsSync(f) && path.resolve(f) !== path.resolve(file));
-    if (outfit) out.push({ name: `${name} (full outfit)`, file: outfit, who: worn.character, role: "outfit" });
+    const version = path.join(root, path.dirname(card.thumbnail)); // v<n>\ (the card's views)
+    const look = worn.lookId && worn.lookId !== MAIN_LOOK ? path.join(root, LOOKS_DIR, worn.lookId) : version;
+    const face = existing([path.join(look, "closeup.png"), path.join(version, "closeup.png"), file]).slice(0, 1);
+    const faces = existing([...face, path.join(version, "three_quarter.png"), path.join(version, TEETH_VIEW)]);
+    const outfit = existing([path.join(look, "body_front.png"), path.join(look, "body_back.png")]);
+    const label = (f: string) => ({ "closeup.png": "close-up", "three_quarter.png": "3/4", [TEETH_VIEW]: "smiling, teeth visible", "body_front.png": "front", "body_back.png": "back" })[path.basename(f)] ?? "picture";
+    if (faces.length) out.push({ name, file: sheet(ws, faces), who: worn.character, role: "face", panels: faces.map(label) });
+    if (outfit.length) out.push({ name: `${name} (outfit)`, file: sheet(ws, outfit), who: worn.character, role: "outfit", panels: outfit.map(label) });
   }
   return out.slice(0, MAX_REFERENCES);
 }
@@ -50,14 +74,15 @@ export function shotReferences(ws: Workspace, shot: ProductionShot): ReferencePi
 // --parameters, which a video model does not read). Pure.
 export function referencePrompt(shot: Pick<ProductionShot, "prompt" | "people" | "scene">, refs: readonly ReferencePicture[], guide = false): string {
   const lookOf = (who: string) => shot.people.find((w) => w.character === who)?.look ?? "";
+  const list = (panels?: string[]) => (panels && panels.length > 1 ? ` (left to right: ${panels.join(", ")})` : "");
   const who = refs.map((r, i) => {
     const tag = `@Image ${i + 1}`;
-    if (r.role === "face" && r.who) return `${tag} is ${r.who}${lookOf(r.who) ? `, in their "${lookOf(r.who)}" look` : ""}: their face, hair and makeup.`;
-    if (r.role === "outfit" && r.who) return `${tag} is ${r.who}'s complete outfit${lookOf(r.who) ? ` ("${lookOf(r.who)}")` : ""}, head to toe: wear exactly this, the same cut, neckline, sleeves, fabric and details.`;
+    if (r.role === "face" && r.who) return `${tag} is ${r.who}'s face reference sheet${list(r.panels)}: the same face, hair and makeup from different angles${lookOf(r.who) ? `, as in their "${lookOf(r.who)}" look` : ""}.`;
+    if (r.role === "outfit" && r.who) return `${tag} is ${r.who}'s outfit reference sheet${lookOf(r.who) ? ` ("${lookOf(r.who)}")` : ""}${list(r.panels)}, cropped at the neck: wear exactly this, the same cut, neckline, sleeves, fabric and details.`;
     return `${tag} is the place${shot.scene ? ` "${shot.scene}"` : ""}.`;
   });
   const people = refs.some((r) => r.who);
-  const keep = people ? "Keep each person's face, hair and outfit exactly as in their pictures, the same person and the same clothes throughout the shot; never change or invent clothing." : "";
+  const keep = people ? "Keep each person's face, hair and outfit exactly as in their sheets, the same person and the same clothes throughout the shot; never change or invent clothing." : "";
   const action = shot.prompt.replace(/\s+--\w[\s\S]*$/, "").trim();
   // A camera guide (a Midjourney take of this shot): its camera, framing, light and mood; the people stay the pictures'.
   const follow = guide
@@ -66,7 +91,7 @@ export function referencePrompt(shot: Pick<ProductionShot, "prompt" | "people" |
   return [...who, keep, follow, action].filter(Boolean).join(" ");
 }
 
-export type ReferenceStart = { file: string; takes: Take[]; estimate: Estimate; references: string[]; guide?: string };
+export type ReferenceStart = { file: string; takes: Take[]; estimate: Estimate; references: string[]; guide?: string; note?: string };
 export const GUIDE_MAX_S = 15; // Seedance: reference videos 15 s at most (together)
 export const GUIDE_BLUR = 24; // the camera guide's blur radius (px at 720p): no face survives it, the movement and light do
 const GUIDE_VERSION = 1; // a new blur: a new file
@@ -153,5 +178,6 @@ export function startShotReferences(
     }));
     p.takes.push(...made);
   });
-  return { file, takes: made, estimate: e, references: refs.map((r) => r.name), ...(guide ? { guide: guide.name } : {}) };
+  const crowd = new Set(refs.flatMap((r) => (r.who ? [r.who] : []))).size;
+  return { file, takes: made, estimate: e, references: refs.map((r) => r.name), ...(guide ? { guide: guide.name } : {}), ...(crowd >= 3 ? { note: `${crowd} people in one shot: the likeness of each may be weaker; a framing where one or two faces are clearly seen keeps them best.` } : {}) };
 }

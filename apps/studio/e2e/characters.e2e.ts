@@ -109,6 +109,12 @@ async function main() {
     await page.waitForSelector("[data-card-status=locked]");
     check(await page.isDisabled("[data-card-words]"), "locked: read-only");
     check(!(await page.$("[data-make-pack]")) && !(await page.$("[data-remake=closeup]")), "locked: no Make pack, no Remake");
+    // The teeth close-up (25 Nov 2026): an extra picture, also on a locked card.
+    check((await page.getAttribute("[data-teeth]", "data-teeth")) === "none", "a locked card offers the teeth close-up");
+    await page.click("[data-make-teeth]");
+    await page.waitForSelector("[data-teeth=made]", { timeout: 60_000 });
+    check(existsSync(path.join(dir, "v1", "closeup_teeth.png")), "the teeth close-up is made next to the locked views (v1\\closeup_teeth.png)");
+    check(!!(await page.$("[data-card-status=locked]")), "the card stays locked");
     await page.click("[data-new-version]");
     await page.waitForSelector("[data-card-status=draft]");
     check(((await page.textContent("[data-card-status]")) ?? "").includes("Draft v2") && existsSync(path.join(dir, "v2", "closeup.png")), "New version: v2 is a draft, starting from v1's pictures");

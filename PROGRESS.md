@@ -4,6 +4,26 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Reference sheets per person, and the teeth close-up ✅ (to verify on the PC)
+- Paul (25 Nov 2026), after comparing two character-consistency tutorials and their comments ("headless outfit + face
+  beats complex character sheets", "the model invents what a reference does not show", "the teeth rule"):
+- **Make with references now sends two sheets per person**, made from the card's own views (never from words), each
+  one picture (workspace\cache\refsheets): a **face sheet** (the look's close-up, the card's 3/4 face, and the teeth
+  close-up when there is one) and an **outfit sheet** (the look's front and back, cropped at the neck: no second,
+  smaller face). The prompt names each panel ("@Image 1 is Jennifer's face reference sheet (left to right: close-up,
+  3/4, smiling, teeth visible) … @Image 2 is Jennifer's outfit reference sheet ("Wedding Dress") (left to right: front,
+  back), cropped at the neck: wear exactly this …"). Three people or more in one shot: the notice says the likeness may
+  be weaker and that a framing with one or two clear faces keeps them best.
+- **Teeth close-up** (Characters → a character card): "Make the teeth close-up": the card's close-up with a gentle smile,
+  lips slightly parted, the upper teeth visible; an extra view (plan.ts EXTRA_VIEWS), made only when asked, **also on a
+  locked card** (v<n>\closeup_teeth.png next to the locked views, which do not change; the face check judges it like
+  the close-up). It joins the face sheet automatically.
+- Code: shot-references.ts (sheets, prompt), characters/plan.ts (EXTRA_VIEWS, ALL_VIEWS), generate.ts and jobs.ts
+  (extras on a locked version), characters-view.tsx. Tests: shot-production.test.ts (the sheets' panels and size),
+  characters-cards.test.ts (teeth on a locked card), characters e2e, creation-production e2e.
+- On the PC: Characters → Jennifer → Make the teeth close-up (one picture, a few cents); then shot 5 → Make with
+  references 9:16, camera guide None, 1 take: compare with the earlier takes (face and dress).
+
 ### Shot list → "Save as script (.md)" ✅ (to verify on the PC)
 - Paul (24 Nov 2026), for Higgsfield's Short Drama ("Upload your script: PDF, DOCX, FDX, TXT or MD"): Story room → 4 Shot
   list → **Save as script (.md)** writes the shot list as a readable script, never the app's JSON: the cast (each person's
@@ -484,14 +504,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   components/with-song.tsx.
 - Tests: browser singer (+2: a singing take plays with the song from its first frame, an Animate take on a line from
   its cut), pictures pass.
-
-### Fix: Who sings showed a take "In use" after a plain clip replaced it ✅ (to verify on the PC)
-- Paul (21 Nov 2026, line 32): Who sings said "Take 1 · In use" while Shows clip had TheEnding · Take 3. Saving a
-  clip on a line reloaded only the Shows clip column; the singing column kept its old view. A line holds one thing:
-  the plain clip had replaced the singer. Now Who sings reads again after every clip saved or removed on a line, so
-  it shows "Use this take" at once.
-- Tests: browser singer (+3: accept the question, the singer column follows without a reload, Use this take brings
-  the singer back), lyrics-tab pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

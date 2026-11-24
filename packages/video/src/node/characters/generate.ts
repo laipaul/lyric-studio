@@ -17,7 +17,7 @@ import { GEMINI_KEY_MISSING } from "./gemini";
 import { getLook, lookDir, lookViews } from "./looks";
 import { makeSplit, splitNeeded } from "./split";
 import {
-  angleNote, anglePrompt, ANGLES, Budget, classify, DESCRIPTION_PROMPT, imageSize, MODELS, money, SCENE_DESCRIPTION_PROMPT, TEXT_MODEL, VIEWS, viewPrompt, VISION,
+  ALL_VIEWS, angleNote, anglePrompt, ANGLES, Budget, EXTRA_VIEWS, isExtraView, classify, DESCRIPTION_PROMPT, imageSize, MODELS, money, SCENE_DESCRIPTION_PROMPT, TEXT_MODEL, VIEWS, viewPrompt, VISION,
   type Light, type Thresholds, type ViewId,
 } from "./plan";
 
@@ -97,7 +97,7 @@ export function choose(item: Item, dir: string): void {
 
 // Body views are cropped at the neck here, whatever the model drew: faces only ever come from the face views.
 export async function finishPicture(face: FaceTool, kind: "view" | "angle", id: string, file: string): Promise<void> {
-  const view = VIEWS.find((v) => v.id === id);
+  const view = ALL_VIEWS.find((v) => v.id === id);
   if (kind === "view" && view && !view.face) {
     const full = file.replace(/\.png$/i, "_full.png");
     copyFileSync(file, full);
@@ -119,7 +119,7 @@ export async function judge(face: FaceTool, refFile: string, item: Item, t: Try,
   t.yaw = fr.yaw ?? null;
   t.light = c.light;
   t.text = c.text;
-  const view = VIEWS.find((v) => v.id === item.id)!;
+  const view = ALL_VIEWS.find((v) => v.id === item.id)!;
   item.angle_note = angleNote(view, fr.yaw);
   return { regenerate: c.regenerate };
 }
@@ -136,7 +136,8 @@ export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps,
   let v = currentVersion(file);
   let look = o.look ? getLook(file, o.look) : null;
   if (look?.status === "locked") throw new Error(`"${look.name}" is locked: press "Change this look" first.`);
-  if (!look && v.status === "locked") throw new Error(`Version ${v.n} is locked: start a new version to change it.`);
+  const extrasOnly = !look && !!o.only?.length && o.only.every(isExtraView); // an extra view: allowed on a locked version
+  if (!look && v.status === "locked" && !extrasOnly) throw new Error(`Version ${v.n} is locked: start a new version to change it.`);
   const dir = look ? lookDir(root, look.id) : versionDir(root, v.n);
   mkdirSync(dir, { recursive: true });
   const modelId = look ? look.model : v.model;
@@ -185,7 +186,7 @@ export async function makePictures(ws: Workspace, cardId: string, deps: GenDeps,
   type Job = { id: string; label: string; kind: "view" | "angle"; prompt: string; aspect: "3:4" | "2:3" };
   const all: Job[] =
     file.kind === "character"
-      ? VIEWS.filter((x) => !look || lookViews(look).includes(x.id)).map((x) => ({ id: x.id, label: x.label, kind: "view" as const, prompt: viewPrompt(x, wear().outfit, wear().split), aspect: x.aspect }))
+      ? [...VIEWS.filter((x) => !look || lookViews(look).includes(x.id)), ...(look ? [] : EXTRA_VIEWS.filter((x) => o.only?.includes(x.id)))].map((x) => ({ id: x.id, label: x.label, kind: "view" as const, prompt: viewPrompt(x, wear().outfit, wear().split), aspect: x.aspect }))
       : ANGLES.map((a) => ({ id: a.id, label: a.label, kind: "angle" as const, prompt: anglePrompt(a, v.props), aspect: "3:4" as const }));
   const jobs = o.only?.length ? all.filter((j) => o.only!.includes(j.id)) : all;
   if (!jobs.length) throw new Error("Nothing to make.");

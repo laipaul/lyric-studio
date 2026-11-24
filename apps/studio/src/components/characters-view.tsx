@@ -554,6 +554,28 @@ export function CardPage({ id }: { id: string }) {
                 {packNote}
               </p>
             ) : null}
+            {character && items.some((i) => i.id === "closeup" && i.chosen !== null) ? (
+              // The teeth close-up (25 Nov 2026): an extra picture, also on a locked card; it changes none of the views.
+              (() => {
+                const teeth = items.find((i) => i.id === "closeup_teeth");
+                const made = !!teeth && teeth.chosen !== null;
+                return (
+                  <div data-teeth={made ? "made" : "none"} className="bg-card/40 flex items-center gap-3 rounded-md border p-2 text-xs">
+                    {made ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- a generated view
+                      <img src={fileUrl(card.id, `v${version.n}/closeup_teeth.png`, stamp)} alt="" className="h-20 rounded border object-cover" />
+                    ) : null}
+                    <div className="flex flex-col gap-1">
+                      <span className="font-medium">Teeth close-up{made && teeth?.text ? ` · ${teeth.text}` : ""}</span>
+                      <span className="text-muted-foreground">For a character who sings or speaks: a smile with the teeth visible, so the video keeps the same teeth in every shot. One picture from this card; the views above do not change.</span>
+                      <Button size="sm" variant="outline" className="w-fit" disabled={!!running || !!busy} onClick={() => act("remake", { action: "remake", only: ["closeup_teeth"], cap })} data-make-teeth>
+                        <RefreshCw /> {made ? "Make it again" : "Make the teeth close-up"}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })()
+            ) : null}
             {character && draft && items.some((i) => i.id === "body_front" || i.id === "body_back") ? (
               <Button size="sm" variant="outline" className="w-fit" disabled={!!running || !!busy} onClick={() => act("remake", { action: "remake", only: ["body_front", "body_back"], cap })} data-remake-body>
                 <RefreshCw /> Remake the full-body views (front, then back)

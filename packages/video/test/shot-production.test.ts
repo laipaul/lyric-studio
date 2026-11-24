@@ -2,6 +2,7 @@
 // Creation picture belongs to an item; "Use this take" fills the item in its place in the story line and on its lyric
 // line; a second take replaces the first there (Omit, never deleted); a re-import keeps filled items filled; "Remove all
 // planned slots" takes out the empty ones only.
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -247,10 +248,10 @@ describe("Creation → Production", () => {
     const refs = shotReferences(ws, shot);
     expect(refs.map((r) => r.name)).toEqual([`Bride · ${shot.people[0].look}`]);
     const prompt = referencePrompt(shot, refs);
-    expect(prompt).toMatch(/^@Image 1 is Bride, in their ".+" look: their face, hair and makeup\. Keep each person's face, hair and outfit exactly as in their pictures/);
-    // A look with a full-length view: sent next to the close-up, as the complete outfit (the dress comes from a picture).
-    const withOutfit = referencePrompt(shot, [refs[0], { name: `${refs[0].name} (full outfit)`, file: refs[0].file, who: "Bride", role: "outfit" }]);
-    expect(withOutfit).toMatch(/@Image 2 is Bride's complete outfit \(".+"\), head to toe: wear exactly this/);
+    expect(prompt).toMatch(/^@Image 1 is Bride's face reference sheet: the same face, hair and makeup from different angles, as in their ".+" look\. Keep each person's face, hair and outfit exactly as in their sheets/);
+    // An outfit sheet: named as such, cropped at the neck.
+    const withOutfit = referencePrompt(shot, [refs[0], { name: `${refs[0].name} (outfit)`, file: refs[0].file, who: "Bride", role: "outfit", panels: ["front", "back"] }]);
+    expect(withOutfit).toMatch(/@Image 2 is Bride's outfit reference sheet \(".+"\) \(left to right: front, back\), cropped at the neck: wear exactly this/);
     expect(prompt).not.toMatch(/--ar|--style|--no/);
     // A shot that is not in the list (the earlier tests left s02 and s03): said in plain words, nothing recorded.
     expect(() => startShotReferences(ws, id, { slot: "s01" }, { LYRIC_GENERATE_STUB: "1" })).toThrow(/not in this song's shot list/);
@@ -318,5 +319,28 @@ describe("Creation → Production", () => {
     expect(script).toMatch(/People: Bride \(.+\)/);
     expect(script).toMatch(/Lyric: ".+"/);
     expect(script).not.toMatch(/"slots"|"order":|\{ "id"/);
+  });
+
+  it("reference sheets (25 Nov 2026): per person a face sheet (close-up, 3/4, teeth) and an outfit sheet (front, back), each one picture", async () => {
+    const bride = listCards(ws).find((c) => c.name === "Bride")!;
+    const root = cardRoot(ws, bride);
+    const versionDir = path.join(root, path.dirname(bride.thumbnail));
+    const look = readShotList(ws, id)!.slots.find((x) => x.id === "s03")!;
+    // Shot 3 in the Autumn City look (its close-up exists): add the card's 3/4 face and teeth close-up, and the look's front and back.
+    setShotLook(ws, id, "s03", "Bride", "Autumn City");
+    const autumn = productionView(ws, id).shots.find((x) => x.id === "s03")!.people[0].lookId;
+    const color = (c: string, f: string) => ffmpeg("-f", "lavfi", "-i", `color=c=${c}:s=300x400`, "-frames:v", "1", f);
+    color("blue", path.join(versionDir, "three_quarter.png"));
+    color("green", path.join(versionDir, "closeup_teeth.png"));
+    color("red", path.join(root, LOOKS_DIR, autumn, "body_front.png"));
+    color("yellow", path.join(root, LOOKS_DIR, autumn, "body_back.png"));
+    const shot = productionView(ws, id).shots.find((x) => x.id === look.id)!;
+    const refs = shotReferences(ws, shot);
+    expect(refs.map((r) => [r.role, r.panels])).toEqual([["face", ["close-up", "3/4", "smiling, teeth visible"]], ["outfit", ["front", "back"]]]);
+    for (const r of refs) expect(r.file).toMatch(/cache[\\/]refsheets[\\/][0-9a-f]+\.png$/);
+    const size = (f: string) => execFileSync("ffprobe", ["-v", "error", "-show_entries", "stream=width,height", "-of", "csv=p=0", f], { encoding: "utf8" }).trim();
+    expect(size(refs[0].file)).toBe(`${Math.round(1024 * 0.75) * 3},1024`); // three 3:4 panels, 1024 high
+    expect(referencePrompt(shot, refs)).toMatch(/@Image 1 is Bride's face reference sheet \(left to right: close-up, 3\/4, smiling, teeth visible\)/);
+    expect(referencePrompt(shot, refs)).toMatch(/@Image 2 is Bride's outfit reference sheet \("Autumn City"\) \(left to right: front, back\)/);
   });
 });
