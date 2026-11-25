@@ -32,6 +32,8 @@ import { download, errorText } from "./characters/fal";
 import { processAlive } from "./jobs";
 import { feelFor, filmLookFor } from "./film-looks";
 import { realismRules, type Feel } from "./realism";
+import { cleanFeeling, feelingWords } from "../feelings";
+import { feelingForSlot } from "./section-feelings";
 import { readRecipe } from "./recipe";
 import { songPathsById } from "./song-folder";
 
@@ -128,6 +130,8 @@ export type Take = {
   finalOf?: number; // Make final (final.ts): this take is the upscaled final of draft take finalOf
   final?: number; // a Draft take: the number of its final
   feel?: Feel; // the realism rules it was sent with (realism.ts); absent on takes made before 25 Nov 2026 (old prompt)
+  feeling?: string; // the feeling of its section when it was sent (feelings.ts): a later change remakes nothing
+  feelingTo?: string; // and the one it turns to, when the take runs into a section that feels different
   fresh?: boolean; // lipsync: a later take of lines that already had a take in use: waits for Paul ("New — compare"), never placed by itself
   refFiles?: string[]; // references: the pictures sent, workspace-relative, in @Image order
   refNames?: string[]; // references: who / what each one is ("Jennifer · Wedding Dress", "Chapel")
@@ -140,12 +144,12 @@ export type Take = {
 export type RemovedTake = Take & { removed_at: string };
 // removed: the picture put aside (Creation ✕ → Put aside, 23 Nov 2026), its file moved to pictures\_removed\ (file:
 // that path); the record stays, so Restore brings it back with its takes, mood and shot. Nothing is ever deleted.
-export type PictureRecord = { removed?: { at: string; file: string }; slot?: string; label?: string; source?: string; mood?: string; takes: Take[]; removedTakes?: RemovedTake[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string }; // sent: the picture itself sent to the Storyboard (its clip name)
+export type PictureRecord = { removed?: { at: string; file: string }; slot?: string; label?: string; source?: string; mood?: string; feeling?: string; takes: Take[]; removedTakes?: RemovedTake[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string }; // sent: the picture itself sent to the Storyboard (its clip name)
 export type PicturesFile = { _help?: string; pictures: Record<string, PictureRecord> };
 // source: where it came from, a small label ("Added by you", "Midjourney", "From higgsfield.ai"). kind: only a picture can be animated.
 // cleanable: the takes Clean up would put aside (failed, or not chosen: not in use, on no line, not playing in the
 // Storyboard). removed: the takes put aside, newest first (Restore).
-export type PictureView = { file: string; mjLink: string | null; slot: string | null; label: string | null; url: string; kind: "picture" | "video"; source: string; mood: string; cleanable: number[]; removed: { n: number; label: string; why: string; at: string }[]; takes: (Take & { inUse?: boolean; onLines?: string; songFromMs?: number; clipInS?: number; songWhy?: string })[]; width: number | null; height: number | null; sent: string | null };
+export type PictureView = { file: string; mjLink: string | null; slot: string | null; label: string | null; url: string; kind: "picture" | "video"; source: string; mood: string; feeling: string; sectionFeeling: string | null; cleanable: number[]; removed: { n: number; label: string; why: string; at: string }[]; takes: (Take & { inUse?: boolean; onLines?: string; songFromMs?: number; clipInS?: number; songWhy?: string })[]; width: number | null; height: number | null; sent: string | null };
 // Paul's own defaults for Animate (Creation → Defaults), for every song: the service and model, how many takes, the cap.
 export type CreationDefaults = { service: ServiceId; quality: Quality; takes: number; cap: number; length: TakeLength }; // length: "song" = one phrase of the song, "short" = 5 s
 export const CREATION_FILE = "creation.json"; // in the workspace folder
@@ -372,6 +376,17 @@ export async function addFromLink(ws: Workspace, projectId: string, link: unknow
   }
 }
 
+// Feeling (feelings.ts) chosen on the picture itself: wins over its shot's section; "" or null: back to the section's.
+export function setPictureFeeling(ws: Workspace, projectId: string, file: string, feeling: unknown): string {
+  const { dir } = songFolder(ws, projectId);
+  if (!existsSync(path.join(dir, path.basename(file)))) throw new Error(`No picture ${file} on this song's board.`);
+  const f = cleanFeeling(feeling);
+  update(dir, path.basename(file), (p) => {
+    p.feeling = f;
+  });
+  return f ?? "";
+}
+
 export function setMood(ws: Workspace, projectId: string, file: string, mood: unknown): string {
   const { dir } = songFolder(ws, projectId);
   if (!existsSync(path.join(dir, path.basename(file)))) throw new Error(`No picture ${file} on this song's board.`);
@@ -430,7 +445,7 @@ export async function picturesView(ws: Workspace, projectId: string, env: NodeJS
     const takes = (rec?.takes ?? []).map((t) => (t.clip && !t.sent ? { ...t, sent: t.clip } : t)).map((t) => (t.kind !== "lipsync" && t.sent && !stillThere(t.sent) ? { ...t, sent: undefined } : t)).map((t) => (t.kind === "lipsync" ? { ...t, inUse: !!t.sent && singingAnchors.has(`${t.line}:${t.through ?? t.line}:${t.sent.toLowerCase()}`) } : { ...t, onLines: onLines(t.sent) }));
     const cleanable = (rec?.takes ?? []).filter((t) => use.cleanable(t)).map((t) => t.n);
     const removed = [...(rec?.removedTakes ?? [])].sort((a, b) => b.removed_at.localeCompare(a.removed_at)).map((t) => ({ n: t.n, label: t.label ?? `Take ${t.n}`, why: t.kind === "lipsync" ? `lip sync, ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` : t.status === "failed" ? "failed" : t.model, at: t.removed_at }));
-    pictures.push({ file: f, mjLink: midjourneyLink(f), slot: rec?.slot ?? null, label: rec?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? "picture" : "video", source: sourceLabel(f, rec?.source), mood: rec?.mood ?? "", cleanable, removed, takes, width: info?.width ?? null, height: info?.height ?? null, sent: stillThere(rec?.sent) ? rec!.sent! : null });
+    pictures.push({ file: f, mjLink: midjourneyLink(f), slot: rec?.slot ?? null, label: rec?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? "picture" : "video", source: sourceLabel(f, rec?.source), mood: rec?.mood ?? "", feeling: rec?.feeling ?? "", sectionFeeling: feelingForSlot(ws, projectId, rec?.slot).feeling ?? null, cleanable, removed, takes, width: info?.width ?? null, height: info?.height ?? null, sent: stillThere(rec?.sent) ? rec!.sent! : null });
   }
   const stub = !!env.LYRIC_GENERATE_STUB;
   const removedPictures = Object.entries(all.pictures)
@@ -499,15 +514,16 @@ function repairTakes(dir: string): void {
 
 // The app's prompt: gentle, natural motion that keeps the picture as it is; the realism rules of the take's feel
 // (realism.ts); the song's Film look line (film-looks.ts), so every clip shares one camera, grain and grade; Paul's
-// mood words, if any, at the end.
-export function motionPrompt(mood?: string, look?: string, feel?: Feel): string {
+// mood words, if any, at the end. The feeling of the shot's section (feelings.ts) follows the realism rules.
+export function motionPrompt(mood?: string, look?: string, feel?: Feel, feeling?: string, feelingTo?: string): string {
   const base =
     "Bring this picture to life with gentle, natural motion: a light breeze, hair and fabric moving softly, small natural movements of the people, " +
     "soft shifts in the light, and a slow, subtle camera drift. Keep the people, faces, clothes, colours, light and composition exactly as in the picture. " +
     "One continuous shot, no cuts, no text, no subtitles, no logos.";
   const l = look?.replace(/\s+/g, " ").trim().replace(/\.$/, "");
   const m = mood?.replace(/\s+/g, " ").trim();
-  return `${base}${feel ? ` ${realismRules(feel)}` : ""}${l ? ` Film look, the same in every shot: ${l}.` : ""}${m ? ` Mood: ${m}.` : ""}`;
+  const fw = feelingWords(feeling, feelingTo);
+  return `${base}${feel ? ` ${realismRules(feel)}` : ""}${fw ? ` ${fw}.` : ""}${l ? ` Film look, the same in every shot: ${l}.` : ""}${m ? ` Mood: ${m}.` : ""}`;
 }
 
 export type Estimate = { takes: number; seconds: number; usdPerTake: number; usd: number; model: string; priceNote: string };
@@ -694,9 +710,11 @@ export function startAnimate(ws: Workspace, projectId: string, file: string, o: 
   let made: Take[] = [];
   const look = filmLookFor(ws, projectId);
   const feel = feelFor(ws, projectId);
+  const rec = readPictures(dir).pictures[name];
+  const feeling = rec?.feeling ? { feeling: rec.feeling } : feelingForSlot(ws, projectId, rec?.slot); // its own choice, else its shot's section; a loose picture: none
   update(dir, name, (p) => {
     const first = nextTakeN(p);
-    made = Array.from({ length: takes }, (_, i) => ({ n: first + i, service: o.service, quality, model: e.model, status: "running" as const, started_at: now, cost_usd: e.usdPerTake, seconds, ...(look ? { filmLook: look.name, look: look.line } : {}), feel, pid: process.pid }));
+    made = Array.from({ length: takes }, (_, i) => ({ n: first + i, service: o.service, quality, model: e.model, status: "running" as const, started_at: now, cost_usd: e.usdPerTake, seconds, ...(look ? { filmLook: look.name, look: look.line } : {}), feel, ...feeling, pid: process.pid }));
     p.takes.push(...made);
   });
   return { takes: made, estimate: e };
@@ -781,7 +799,7 @@ export async function runTakes(openWs: () => Workspace, projectId: string, file:
         }
         if (!id) {
           if (!imageUrl) return;
-          const sent = await transport.submit(imageUrl, motionPrompt(mood, t.look, t.feel), t.seconds ?? TAKE_SECONDS); // never retried: a retry could be billed twice
+          const sent = await transport.submit(imageUrl, motionPrompt(mood, t.look, t.feel, t.feeling, t.feelingTo), t.seconds ?? TAKE_SECONDS); // never retried: a retry could be billed twice
           id = sent.id;
           pollUrl = sent.pollUrl;
           setTake(dir, file, t.n, { request_id: id, poll_url: pollUrl });

@@ -10,7 +10,7 @@ import { Check, Loader2, Mic, Pause, Play, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { GroupTake, SingerLine, SingerView } from "@lyric/video/singer";
-import { takeWhen } from "@lyric/video/take-facts";
+import { takeFeeling, takeWhen } from "@lyric/video/take-facts";
 
 import { useGoToTab } from "@/components/song-stages";
 import { Button } from "@/components/ui/button";
@@ -454,7 +454,7 @@ function TakesList({ singer, source, takes }: { singer: Singer; source: string; 
               ) : null}
             </div>
             <span className="text-muted-foreground pl-5" data-singer-take-facts>
-              {[takeWhen(t), t.status === "running" ? "being made…" : t.status === "done" || t.request_id ? `about ${money(t.cost_usd)}` : "nothing spent", t.resolution ?? "720p", t.parts && t.parts.length > 1 ? `${t.parts.length} parts` : ""].filter(Boolean).join(" · ")}
+              {[takeWhen(t), t.status === "running" ? "being made…" : t.status === "done" || t.request_id ? `about ${money(t.cost_usd)}` : "nothing spent", t.resolution ?? "720p", takeFeeling(t), t.parts && t.parts.length > 1 ? `${t.parts.length} parts` : ""].filter(Boolean).join(" · ")}
               {t.status === "failed" || t.status === "interrupted" ? <span className={t.status === "failed" ? "text-red-300" : "text-amber-300"}> · {t.error}</span> : null}
             </span>
           </li>

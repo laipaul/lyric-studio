@@ -4,10 +4,13 @@
 // app's suggestion until one is changed or kept), a header row above each section's first line (its kind, a dropdown,
 // and ✕ to join it to the one before), and "Start a section here" on every other line. Every change saves the whole
 // list at once (song.json "sections"); "Back to the suggestion" forgets the saved list.
+// Feeling (25 Nov 2026, feelings.ts): a dropdown on each section's row (tender, longing... or your own word); Animate on
+// a shot of that section and its singing clips are sent with it as small changes of the face.
 import { ListTree, Plus, RotateCcw, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { clockTenths } from "@lyric/video";
+import { FEELINGS, MAX_FEELING } from "@lyric/video/feelings";
 import { SECTION_KINDS, SECTION_KIND_LABEL, type NamedSection, type SectionKind, type SongSection } from "@lyric/video/sections";
 import type { SectionsView } from "@lyric/video/song-sections";
 
@@ -20,6 +23,7 @@ export type Sections = {
   error: string | null;
   save: (list: SongSection[] | null) => Promise<void>;
   setKind: (line: number, kind: SectionKind) => void;
+  setFeeling: (line: number, feeling: string | null) => void;
   start: (line: number) => void;
   join: (line: number) => void;
 };
@@ -56,13 +60,14 @@ export function useSections(projectId: string, on: boolean): Sections {
     },
     [projectId],
   );
-  const list = (): SongSection[] => (view?.sections ?? []).map(({ line, kind }) => ({ line, kind }));
+  const list = (): SongSection[] => (view?.sections ?? []).map(({ line, kind, feeling }) => ({ line, kind, ...(feeling ? { feeling } : {}) }));
   return {
     view,
     busy,
     error,
     save,
-    setKind: (line, kind) => void save(list().map((s) => (s.line === line ? { line, kind } : s))),
+    setKind: (line, kind) => void save(list().map((s) => (s.line === line ? { ...s, kind } : s))),
+    setFeeling: (line, feeling) => void save(list().map((s) => (s.line === line ? { line: s.line, kind: s.kind, ...(feeling ? { feeling } : {}) } : s))),
     start: (line) => void save([...list(), { line, kind: "verse" as SectionKind }].sort((a, b) => a.line - b.line)),
     join: (line) => void save(list().filter((s) => s.line !== line)),
   };
@@ -92,7 +97,7 @@ export function SectionsBar({ sections, startMs }: { sections: Sections; startMs
             : "Suggested from the blank lines, the repeats and the hooks of your lyrics. Change any of them, or keep them as they are."}
         </span>
         {!view.saved && view.sections.length ? (
-          <button type="button" disabled={busy} onClick={() => void sections.save(view.sections.map(({ line, kind }) => ({ line, kind })))} className="border-brand text-brand rounded-md border px-2 py-0.5" data-sections-keep>
+          <button type="button" disabled={busy} onClick={() => void sections.save(view.sections.map(({ line, kind, feeling }) => ({ line, kind, ...(feeling ? { feeling } : {}) })))} className="border-brand text-brand rounded-md border px-2 py-0.5" data-sections-keep>
             Keep these
           </button>
         ) : null}
@@ -109,6 +114,7 @@ export function SectionsBar({ sections, startMs }: { sections: Sections; startMs
             return (
               <li key={s.line} data-section-chip={s.kind} className="rounded-md border px-2 py-0.5">
                 <span className={cn("font-medium", KIND_COLOUR[s.kind])}>{s.name}</span>{" "}
+                {s.feeling ? <span className="text-amber-200/90" data-section-chip-feeling>{s.feeling} </span> : null}
                 <span className="text-muted-foreground tabular-nums">
                   {ms !== null ? clockTenths(ms) : null} · {s.line === s.lastLine ? `line ${s.line}` : `lines ${s.line}–${s.lastLine}`}
                 </span>
@@ -147,6 +153,7 @@ export function SectionHeaderRow({ section, sections, colSpan }: { section: Name
               </option>
             ))}
           </select>
+          <FeelingPicker section={section} sections={sections} />
           <span className="text-muted-foreground">{section.line === section.lastLine ? `line ${section.line}` : `lines ${section.line}–${section.lastLine}`}</span>
           {section.line !== 1 ? (
             <button type="button" disabled={sections.busy} onClick={() => sections.join(section.line)} className="text-muted-foreground hover:text-foreground ml-auto rounded p-0.5" aria-label={`Join ${section.name} to the section before`} title="Join this section to the one before" data-section-join>
@@ -164,5 +171,61 @@ export function StartSectionButton({ line, sections }: { line: number; sections:
     <button type="button" disabled={sections.busy} onClick={() => sections.start(line)} className="text-muted-foreground hover:text-foreground invisible rounded p-0.5 group-hover:visible focus:visible" aria-label={`Start a section on line ${line}`} title="Start a section on this line" data-section-start={line}>
       <Plus className="size-3" />
     </button>
+  );
+}
+
+// A section's feeling (its row in Lyrics Sync).
+function FeelingPicker({ section, sections }: { section: NamedSection; sections: Sections }) {
+  return <FeelingSelect value={section.feeling ?? ""} name={section.name} busy={sections.busy} onChange={(f) => sections.setFeeling(section.line, f || null)} data="section" />;
+}
+
+// A feeling: one of the list, "none" (or, with inherited, its section's), or "Your own word…" (a small box; Enter or
+// leaving it saves). Also on each Creation picture (pictures-board.tsx), where "" means "as its section".
+const OWN = "__own";
+export function FeelingSelect({ value, name, busy, onChange, inherited, data }: { value: string; name: string; busy?: boolean; onChange: (feeling: string) => void; inherited?: string | null; data: "section" | "picture" }) {
+  const known = !value || (FEELINGS as readonly string[]).includes(value);
+  const [own, setOwn] = useState<string | null>(null);
+  const saveOwn = (text: string) => {
+    setOwn(null);
+    const t = text.trim();
+    if (t && t !== value) onChange(t);
+  };
+  if (own !== null)
+    return (
+      <input
+        autoFocus
+        value={own}
+        maxLength={MAX_FEELING}
+        placeholder="your word, e.g. wonder"
+        onChange={(e) => setOwn(e.target.value)}
+        onBlur={() => saveOwn(own)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") saveOwn(own);
+          if (e.key === "Escape") setOwn(null);
+        }}
+        aria-label={`Your own feeling for ${name}`}
+        className="bg-background w-36 rounded border px-1 py-0.5"
+        {...{ [`data-${data}-feeling-own`]: "" }}
+      />
+    );
+  return (
+    <select
+      aria-label={`Feeling of ${name}`}
+      title={data === "section" ? "The feeling of this section: clips animated for its shots and its singing clips show it in small changes of the face" : "The feeling this picture's clips show, in small changes of the face (on a shot: its section's, unless you choose one here)"}
+      value={value}
+      disabled={busy}
+      onChange={(e) => (e.target.value === OWN ? setOwn(known ? "" : value) : onChange(e.target.value))}
+      className={cn("bg-background rounded border px-1 py-0.5", value || inherited ? "text-amber-200" : "text-muted-foreground")}
+      {...{ [`data-${data}-feeling`]: "" }}
+    >
+      <option value="">{inherited ? `Feeling: ${inherited} (its section)` : "Feeling: none"}</option>
+      {FEELINGS.map((f) => (
+        <option key={f} value={f}>
+          Feeling: {f}
+        </option>
+      ))}
+      {!known ? <option value={value}>Feeling: {value}</option> : null}
+      <option value={OWN}>Your own word…</option>
+    </select>
   );
 }

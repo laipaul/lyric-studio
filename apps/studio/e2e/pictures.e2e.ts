@@ -91,7 +91,7 @@ async function main() {
     await page.fill(`${vtile} [data-name-input]`, "Bride walks");
     await page.keyboard.press("Enter");
     await page.waitForFunction((t: string) => document.querySelector(`${t} [data-name-field]`)?.textContent?.includes("Bride walks"), vtile);
-    const pj = () => JSON.parse(readFileSync(path.join(paths.root, "pictures", "pictures.json"), "utf8")) as { pictures: Record<string, { label?: string; takes: { n: number; label?: string }[] }> };
+    const pj = () => JSON.parse(readFileSync(path.join(paths.root, "pictures", "pictures.json"), "utf8")) as { pictures: Record<string, { label?: string; feeling?: string; takes: { n: number; label?: string; feeling?: string }[] }> };
     check(pj().pictures[path.basename(mjVideo)].label === "Bride walks" && existsSync(path.join(paths.root, "pictures", path.basename(mjVideo))), "a video gets a short name; its file keeps its own name");
 
     // Paul's defaults, for every song: the best model.
@@ -113,11 +113,18 @@ async function main() {
     await page.fill(`${tile} [data-picture-mood]`, "quiet, longing");
     await page.waitForFunction((t: string) => !document.querySelector(`${t} [data-picture-cost]`)?.textContent?.includes("above your cap"), tile);
 
+    // Feeling (25 Nov 2026): a loose picture has none until chosen here; the takes are sent with it.
+    check((await page.textContent(`${tile} [data-picture-feeling] option[value='']`)) === "Feeling: none", "a loose picture: Feeling none");
+    await page.selectOption(`${tile} [data-picture-feeling]`, "tender");
+    for (let i = 0; i < 50 && Object.values(pj().pictures).every((r) => r.feeling !== "tender"); i++) await sleep(100);
+    check(Object.values(pj().pictures).some((r) => r.feeling === "tender"), "the picture's feeling is saved");
+
     await page.click(`${tile} [data-picture-animate]`);
     await page.waitForFunction((t: string) => document.querySelectorAll(`${t} [data-take-status=done]`).length === 2, tile, { timeout: 60000 });
     check(true, "Animate makes the 2 takes");
+    check(((await page.textContent(`${tile} [data-take='1'] [data-take-facts]`)) ?? "").includes("tender"), "each take shows the feeling it was sent with");
     check(((await page.textContent(`${tile} [data-take='1'] [data-take-source]`)) ?? "").includes("WaveSpeed · Seedance 2.5"), "each take shows where it came from");
-    check(/^\d+ s · about \$\d+\.\d\d · .*\d\d?:\d\d/.test(((await page.textContent(`${tile} [data-take='1'] [data-take-facts]`)) ?? "").trim()), `each take shows its length, cost and when it was made (${await page.textContent(`${tile} [data-take='1'] [data-take-facts]`)})`);
+    check(/^\d+ s · (tender · )?about \$\d+\.\d\d · .*\d\d?:\d\d/.test(((await page.textContent(`${tile} [data-take='1'] [data-take-facts]`)) ?? "").trim()), `each take shows its length, cost and when it was made (${await page.textContent(`${tile} [data-take='1'] [data-take-facts]`)})`);
     await page.click(`${tile} [data-take='1'] [data-take-play]`);
     await page.waitForSelector("[data-take-player] video");
     const playable = await page.waitForFunction(() => { const v = document.querySelector("[data-take-player] video") as HTMLVideoElement | null; return !!v && v.readyState >= 2 && v.videoWidth > 0; }, null, { timeout: 15_000 }).then(() => true).catch(() => false);

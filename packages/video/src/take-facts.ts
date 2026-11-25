@@ -1,6 +1,6 @@
 // A take's facts in plain words, the same in Creation and the Tasks menu (Paul, 21 Nov 2026: "does it give the time,
 // costs and model used?"): its length, what it cost (nothing when it was never sent) and when it was made.
-export type TakeFactsInput = { status: string; started_at: string; ended_at?: string; request_id?: string; cost_usd: number; kind?: string; sync_ms?: number; to_ms?: number; seconds?: number; resolution?: string };
+export type TakeFactsInput = { status: string; started_at: string; ended_at?: string; request_id?: string; cost_usd: number; kind?: string; sync_ms?: number; to_ms?: number; seconds?: number; resolution?: string; feeling?: string; feelingTo?: string };
 
 export function takeSeconds(t: TakeFactsInput): number {
   if (t.kind === "lipsync" && t.sync_ms !== undefined && t.to_ms !== undefined) return Math.max(3, Math.ceil((t.to_ms - t.sync_ms) / 1000));
@@ -22,7 +22,10 @@ export function takeWhen(t: { started_at: string; ended_at?: string | null }, lo
   return `${d.toLocaleDateString(locale, { day: "numeric", month: "short" })}, ${d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}`;
 }
 
+// "longing", "longing → hope" (feelings.ts): the feeling the take was sent with, if any.
+export const takeFeeling = (t: Pick<TakeFactsInput, "feeling" | "feelingTo">) => (t.feelingTo && t.feelingTo !== t.feeling ? `${t.feeling ?? "no feeling"} → ${t.feelingTo}` : (t.feeling ?? ""));
+
 export function takeFacts(t: TakeFactsInput, locale?: string): string {
   const when = takeWhen(t, locale);
-  return [`${takeSeconds(t)} s`, ...(t.kind === "lipsync" && t.resolution ? [t.resolution] : []), takeCost(t), t.status === "running" ? `sent ${when}` : when].filter(Boolean).join(" · ");
+  return [`${takeSeconds(t)} s`, ...(t.kind === "lipsync" && t.resolution ? [t.resolution] : []), takeFeeling(t), takeCost(t), t.status === "running" ? `sent ${when}` : when].filter(Boolean).join(" · ");
 }

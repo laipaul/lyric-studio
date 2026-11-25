@@ -9,13 +9,14 @@
 //   - outro: what comes after the last chorus; the rest are verses (numbered: Verse 1, Verse 2...).
 //   Stanzas of the same kind in a row are one section. Without blank lines: hook runs are choruses, the rest verses.
 // Pure: the studio's pages and the scenes use it too.
+import { cleanFeeling } from "./feelings";
 import { normalizeLyric } from "./lrc";
 
 export const SECTION_KINDS = ["intro", "verse", "pre-chorus", "chorus", "bridge", "outro"] as const;
 export type SectionKind = (typeof SECTION_KINDS)[number];
 export const SECTION_KIND_LABEL: Record<SectionKind, string> = { intro: "Intro", verse: "Verse", "pre-chorus": "Pre-chorus", chorus: "Chorus", bridge: "Bridge", outro: "Outro" };
 
-export type SongSection = { line: number; kind: SectionKind };
+export type SongSection = { line: number; kind: SectionKind; feeling?: string }; // feeling: feelings.ts (25 Nov 2026)
 export type NamedSection = SongSection & { name: string; lastLine: number };
 
 const HOOK = /^\s*\*\s*/;
@@ -94,13 +95,14 @@ export function suggestSections(lyricsText: string): SongSection[] {
 // Problems are said in plain words (a wrong entry is left out, never blocks the song).
 export function cleanSections(raw: unknown, lineCount?: number): SongSection[] {
   if (!Array.isArray(raw)) return [];
-  const byLine = new Map<number, SectionKind>();
-  for (const r of raw as { line?: unknown; kind?: unknown }[]) {
+  const byLine = new Map<number, SongSection>();
+  for (const r of raw as { line?: unknown; kind?: unknown; feeling?: unknown }[]) {
     if (!r || typeof r.line !== "number" || !Number.isInteger(r.line) || r.line < 1 || !isSectionKind(r.kind)) continue;
     if (lineCount !== undefined && r.line > lineCount) continue;
-    byLine.set(r.line, r.kind);
+    const feeling = cleanFeeling(r.feeling);
+    byLine.set(r.line, { line: r.line, kind: r.kind, ...(feeling ? { feeling } : {}) });
   }
-  const out = [...byLine.entries()].sort((a, b) => a[0] - b[0]).map(([line, kind]) => ({ line, kind }));
+  const out = [...byLine.values()].sort((a, b) => a.line - b.line);
   if (out.length && out[0].line !== 1) out[0] = { ...out[0], line: 1 };
   return out;
 }

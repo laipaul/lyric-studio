@@ -57,7 +57,7 @@ async function main() {
     }
     const browser = await playwright.chromium.launch();
     const page = await (await browser.newContext({ viewport: { width: 1400, height: 1000 } })).newPage();
-    const saved = () => (JSON.parse(readFileSync(paths.recipe!, "utf8")) as { sections?: { line: number; kind: string }[] }).sections;
+    const saved = () => (JSON.parse(readFileSync(paths.recipe!, "utf8")) as { sections?: { line: number; kind: string; feeling?: string }[] }).sections;
     const put = (r: { url(): string; request(): { method(): string } }) => r.url().includes("/sections") && r.request().method() === "PUT";
     const kinds = () => page.$$eval("[data-section-chip]", (els: Element[]) => els.map((e) => e.getAttribute("data-section-chip")).join(","));
     const rows = () => page.$$eval("[data-section-row]", (els: Element[]) => els.map((e) => e.getAttribute("data-section-row")).join(","));
@@ -89,6 +89,17 @@ async function main() {
     await Promise.all([page.waitForResponse(put), page.click("[data-section-start='3']")]);
     await page.waitForSelector("[data-section-row='3']");
     check((await rows()) === "1,2,3,4" && (await page.$eval("[data-section-row='3'] [data-section-kind]", (e: Element) => (e as HTMLSelectElement).value)) === "verse", "Start a section on line 3 adds a verse there");
+    // Feeling (25 Nov 2026): chosen on the row, kept with a later change of kind; your own word too.
+    await Promise.all([page.waitForResponse(put), page.selectOption("[data-section-row='2'] [data-section-feeling]", "longing")]);
+    await page.waitForSelector("[data-section-chip-feeling]");
+    await Promise.all([page.waitForResponse(put), page.selectOption("[data-section-row='2'] [data-section-kind]", "bridge")]);
+    await page.waitForSelector("[data-sections=saved] [data-section-chip=bridge]");
+    check(JSON.stringify(saved()?.[1]) === JSON.stringify({ line: 2, kind: "bridge", feeling: "longing" }), `the feeling is saved and kept when the kind changes (${JSON.stringify(saved()?.[1])})`);
+    await page.selectOption("[data-section-row='4'] [data-section-feeling]", "__own");
+    await page.fill("[data-section-feeling-own]", "Quiet wonder");
+    await Promise.all([page.waitForResponse(put), page.press("[data-section-feeling-own]", "Enter")]);
+    await page.waitForFunction(() => (document.querySelector("[data-section-row='4'] [data-section-feeling]") as HTMLSelectElement | null)?.value === "quiet wonder");
+    check(saved()?.[3]?.feeling === "quiet wonder", `your own word is saved (${JSON.stringify(saved()?.[3])})`);
     if (process.env.SECTIONS_SHOT) await (await page.$("[data-sections]"))!.screenshot({ path: process.env.SECTIONS_SHOT });
     if (process.env.SECTIONS_SHOT) await (await page.$("[data-lines-scroll]"))!.screenshot({ path: process.env.SECTIONS_SHOT.replace(".png", "-rows.png") });
 

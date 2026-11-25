@@ -89,6 +89,7 @@
     "./theme-platforms": "./src/theme-platforms.ts",
     "./song-style-node": "./src/node/song-style.ts",
     "./sections": "./src/sections.ts",
+    "./feelings": "./src/feelings.ts",
     "./song-sections": "./src/node/song-sections.ts",
     "./video-names": "./src/video-names.ts",
     "./card-layout": "./src/card-layout.ts",

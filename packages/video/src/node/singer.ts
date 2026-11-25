@@ -34,6 +34,8 @@ import { download, errorText } from "./characters/fal";
 import { lyricsView, saveAnchors } from "./lyrics-view";
 import { feelFor, filmLookFor } from "./film-looks";
 import { singingRealism, type Feel } from "./realism";
+import { feelingWords } from "../feelings";
+import { feelingForLines, type TakeFeeling } from "./section-feelings";
 import { readRecipe } from "./recipe";
 import { songPaths, songPathsById } from "./song-folder";
 import { storedStemCheck } from "./voice-source";
@@ -62,8 +64,9 @@ export const SINGING_CUE = "A person singing a song with deep emotion, like a li
 export const SINGING_STYLE = 1;
 // The song's Film look line (film-looks.ts), as the take was recorded with it, closes the prompt.
 // The realism rules of the take's feel (realism.ts) follow the cue; a take made before them (no feel) keeps its old prompt.
-export const singingPrompt = (script: string, look?: string, feel?: Feel) =>
-  [SINGING_CUE, feel ? singingRealism(feel) : "", script.trim().replace(/\.$/, ""), look ? `Film look, the same in every shot: ${look.trim().replace(/\.$/, "")}` : ""].filter(Boolean).join(". ");
+// Then the feeling of the lines' section (feelings.ts), changing over the take when its lines run into another section.
+export const singingPrompt = (script: string, look?: string, feel?: Feel, feeling?: string, feelingTo?: string) =>
+  [SINGING_CUE, feel ? singingRealism(feel) : "", feelingWords(feeling, feelingTo), script.trim().replace(/\.$/, ""), look ? `Film look, the same in every shot: ${look.trim().replace(/\.$/, "")}` : ""].filter(Boolean).join(". ");
 // parts: a vocal piece longer than PART_MAX_MS is made in parts of about PART_TARGET_MS (Joey's 4-10 s rule, Paul 22 Nov
 // 2026: "6 to 8 s the lips are not in sync"), each its own request, chained from the last frame of the one before and
 // joined into one take; seconds / usd are then the parts' (each billed at least 3 s, whole seconds).
@@ -441,16 +444,16 @@ export async function startSinging(ws: Workspace, projectId: string, o: { capUsd
   const now = new Date().toISOString();
   const look = filmLookFor(ws, projectId);
   const feel = feelFor(ws, projectId);
-  const jobs = todo.map((l) => recordTake(dir, l, view.resolution, now, look, feel));
+  const jobs = todo.map((l) => recordTake(dir, l, view.resolution, now, look, feel, feelingForLines(ws, projectId, l.number, l.run?.last)));
   return { jobs, usd, seconds };
 }
 
 // A new running take of a group (its picture, its lines, its vocal piece, the mood text and resolution of now).
-function recordTake(dir: string, l: SingerLine, resolution: LipsyncResolution, now: string, look: { name: string; line: string } | null, feel: Feel): SingJob {
+function recordTake(dir: string, l: SingerLine, resolution: LipsyncResolution, now: string, look: { name: string; line: string } | null, feel: Feel, feeling: TakeFeeling = {}): SingJob {
   let n = 0;
   update(dir, l.source!, (p) => {
     n = nextTakeN(p);
-    p.takes.push({ n, kind: "lipsync", line: l.number, ...(l.run && l.run.last > l.number ? { through: l.run.last } : {}), sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, ...(l.piece.parts ? { parts: l.piece.parts.map((x) => ({ ...x })) } : {}), ...(l.script ? { prompt: l.script } : {}), style: SINGING_STYLE, ...(look ? { filmLook: look.name, look: look.line } : {}), feel, resolution, service: "wavespeed", quality: "best", model: LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: l.piece.usd, pid: process.pid });
+    p.takes.push({ n, kind: "lipsync", line: l.number, ...(l.run && l.run.last > l.number ? { through: l.run.last } : {}), sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, ...(l.piece.parts ? { parts: l.piece.parts.map((x) => ({ ...x })) } : {}), ...(l.script ? { prompt: l.script } : {}), style: SINGING_STYLE, ...(look ? { filmLook: look.name, look: look.line } : {}), feel, ...feeling, resolution, service: "wavespeed", quality: "best", model: LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: l.piece.usd, pid: process.pid });
   });
   return { source: l.source!, n };
 }
@@ -470,7 +473,7 @@ export async function startRetake(ws: Workspace, projectId: string, o: { capUsd:
   if (!Number.isFinite(cap) || cap <= 0) throw new Error("Set a spending cap above $0.");
   if (l.piece.usd > cap) throw new Error(`A retake (${l.piece.seconds} s of voice) costs about $${l.piece.usd.toFixed(2)}, above your cap of $${cap.toFixed(2)}: raise the cap in Creation → Your defaults. Nothing was sent.`);
   const { dir } = songFolder(ws, projectId);
-  return { jobs: [recordTake(dir, l, view.resolution, new Date().toISOString(), filmLookFor(ws, projectId), feelFor(ws, projectId))], usd: l.piece.usd, seconds: l.piece.seconds };
+  return { jobs: [recordTake(dir, l, view.resolution, new Date().toISOString(), filmLookFor(ws, projectId), feelFor(ws, projectId), feelingForLines(ws, projectId, l.number, l.run.last))], usd: l.piece.usd, seconds: l.piece.seconds };
 }
 
 // The finished take's clip in the Storyboard (added once; a later take waits outside it until it is chosen).
@@ -550,7 +553,7 @@ async function singInParts(c: { dir: string; source: string; n: number; take: Ta
         throw Object.assign(new Error(`Part ${i + 1}: the picture or the voice could not be put online: ${errorText(error)}`), { unsent: i === 0 });
       }
       const t = c.take;
-      rid = (await c.transport.submit({ image, audio, prompt: t.style === SINGING_STYLE ? singingPrompt(t.prompt ?? "", t.look, t.feel) : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION })).id; // never retried
+      rid = (await c.transport.submit({ image, audio, prompt: t.style === SINGING_STYLE ? singingPrompt(t.prompt ?? "", t.look, t.feel, t.feeling, t.feelingTo) : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION })).id; // never retried
       const sent = rid;
       update(c.dir, c.source, (p) => {
         const tk = p.takes.find((x) => x.n === c.n);
@@ -651,7 +654,7 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
             } catch (error) {
               throw Object.assign(new Error(`The picture or the voice could not be put online: ${errorText(error)}`), { unsent: true });
             }
-            const sent = await transport.submit({ ...(BOARD_VIDEO_FILE.test(j.source) ? { video: media } : { image: media }), audio, prompt: t.style === SINGING_STYLE ? singingPrompt(t.prompt ?? "", t.look, t.feel) : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION }); // never retried
+            const sent = await transport.submit({ ...(BOARD_VIDEO_FILE.test(j.source) ? { video: media } : { image: media }), audio, prompt: t.style === SINGING_STYLE ? singingPrompt(t.prompt ?? "", t.look, t.feel, t.feeling, t.feelingTo) : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION }); // never retried
             id = sent.id;
             setTake(dir, j.source, j.n, { request_id: id });
           }

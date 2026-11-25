@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { FeelingSelect } from "@/components/sections-ui";
 import { WithSong } from "@/components/with-song";
 
 const money = (usd: number) => `$${usd.toFixed(2)}`;
@@ -923,6 +924,7 @@ function PictureTile({
   setNotice: (n: { ok: boolean; text: string }) => void;
 }) {
   const [mood, setMood] = useState(p.mood);
+  const [feeling, setFeeling] = useState(p.feeling);
   // This picture's own choice; until Paul changes it, his defaults apply.
   const [model, setModel] = useState<string | null>(null);
   const [takesOwn, setTakes] = useState<number | null>(null);
@@ -1086,6 +1088,18 @@ function PictureTile({
       </span>
       {video || p.source === "Character references" ? null : (
         <>
+          <div className="flex items-center gap-1.5 text-xs">
+            <FeelingSelect
+              value={feeling}
+              name={p.label ?? p.file}
+              inherited={p.sectionFeeling}
+              data="picture"
+              onChange={(f) => {
+                setFeeling(f);
+                void post({ action: "feeling", file: p.file, feeling: f }).catch((e) => setNotice({ ok: false, text: (e as Error).message }));
+              }}
+            />
+          </div>
           <input
             data-picture-mood
             value={mood}

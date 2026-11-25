@@ -4,6 +4,19 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Feeling per section (realism plan step 3) ✅ (to verify on the PC)
+- Lyrics Sync (Mini film songs): each section row gets **Feeling**: none, tender, longing, hope, joy, pride, defiance,
+  grief, calm, or your own word. Saved with the sections in song.json; the chips show it.
+- Prepare → Creation: each picture gets the same **Feeling** choice above its mood words (Paul, 25 Nov 2026: "what about
+  my workflow"): loose Midjourney pictures get a feeling too. On a shot it shows its section's until you choose another.
+- The app turns the word into small true-to-life face changes (eyes, brows, breath, chin), sent after the realism rules
+  with every Animate take (the picture's own feeling, else its shot's section) and singing clip (its lines' section). A
+  singing run that crosses into a section with another feeling turns halfway ("starts longing, then turns to hope").
+- Each take records `feeling` / `feelingTo` and shows it in its facts ("5 s · longing → hope · about $0.54"); a later
+  change remakes nothing; "none" sends exactly what was sent before.
+- Tests: packages/video/test/feelings.test.ts (10), sections.e2e.ts and pictures.e2e.ts (feeling checks).
+- Next (when Paul says): step 4, Scenes with automatic continuity references.
+
 ### Draft takes and Make final ✅ (to verify on the PC)
 - Paul's draft test (25 Nov 2026, BridetestUpscale.png): the draft upscaled with Video Upscaler Pro was "very close" to a
   full-quality take, and sharper in the face and lace, at $0.74 instead of $1.62 for 5 s. Paul picked it.
@@ -537,17 +550,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   /api/songs/[id]/pictures { action: "cleanup", file, n? } / { action: "restore", file, n }.
 - Tests: vitest animate (+1: the rules, files moved, numbers, Restore); browser singer (+2: Clean up after asking,
   Restore), pictures pass.
-
-### Creation's player plays a take with the song ✅ (to verify on the PC)
-- Paul (21 Nov 2026): "why can't I hear in Animate both the song and video, it'd be easier to check" / "else I need to
-  juggle back to Shape". Takes stay silent files (the music is never changed, the vocal never kept); the player now
-  plays the song file with them: a singing take from its own first frame (where its vocal starts), an Animate take
-  shown on a line from the downbeat that line cuts to it. Play, pause, seeking and the end keep them together (a drift
-  above 80 ms is set right). "With the song" switch (on by default); a take on no line plays alone with a note.
-- Code: singer.ts withSongStarts (songFromMs / clipInS / songWhy per take, added by GET /api/songs/[id]/pictures);
-  components/with-song.tsx.
-- Tests: browser singer (+2: a singing take plays with the song from its first frame, an Animate take on a line from
-  its cut), pictures pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

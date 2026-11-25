@@ -43,6 +43,8 @@ export function startFinal(ws: Workspace, projectId: string, file: string, n: un
       ...(draft.label ? { label: `${draft.label} final` } : {}),
       ...(draft.filmLook ? { filmLook: draft.filmLook, look: draft.look } : {}),
       ...(draft.feel ? { feel: draft.feel } : {}),
+      ...(draft.feeling ? { feeling: draft.feeling } : {}),
+      ...(draft.feelingTo ? { feelingTo: draft.feelingTo } : {}),
       pid: process.pid,
     };
     p.takes.push(made);

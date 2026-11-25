@@ -4,7 +4,7 @@
 // POST multipart (pictures=<files>): adds pictures and videos under their own names; { action: "link", url }: adds the
 //   picture or video a link leads to (any outside source).
 // POST JSON { action: "animate", file, service, quality, takes, cap }: checks the cost against the cap, records the
-//   takes and starts them (the request does not wait); { action: "mood", file, mood }; { action: "resume", file, n }:
+//   takes and starts them (the request does not wait); { action: "mood", file, mood }; { action: "feeling", file, feeling } (feelings.ts; "" = its section's); { action: "resume", file, n }:
 //   fetches a take that was sent but did not come back (free); { action: "send", file, n?, forLine? }: Send to Storyboard (the
 //   picture, or its take n): a copy joins the end of the song's clips (forLine: true, from Lyrics Sync: only for a line, not a story moment); { action: "defaults", defaults }: Paul's own
 //   defaults for every song (service, quality, takes, cap: workspace\creation.json).
@@ -18,7 +18,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { openWorkspace, project as projectTable, resolveWorkspaceDir } from "@lyric/db";
-import { addFromLink, addPictures, picturesView, removePicture, removeTakes, restorePicture, restoreTake, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, startAnimate, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
+import { addFromLink, addPictures, picturesView, removePicture, removeTakes, restorePicture, restoreTake, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, setPictureFeeling, startAnimate, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
 import { runFinal, startFinal } from "@lyric/video/final";
 import { runSinging, withSongStarts } from "@lyric/video/singer";
 import { placeByName, productionView, setPictureShot, useForShot, withLineStarts } from "@lyric/video/shot-production";
@@ -98,13 +98,14 @@ export async function POST(request: Request, { params }: Params) {
         rmSync(tmp, { recursive: true, force: true });
       }
     }
-    const body = (await request.json().catch(() => ({}))) as { action?: unknown; file?: unknown; service?: unknown; quality?: unknown; takes?: unknown; cap?: unknown; mood?: unknown; n?: unknown; slot?: unknown; shape?: unknown; seconds?: unknown };
+    const body = (await request.json().catch(() => ({}))) as { action?: unknown; file?: unknown; service?: unknown; quality?: unknown; takes?: unknown; cap?: unknown; mood?: unknown; feeling?: unknown; n?: unknown; slot?: unknown; shape?: unknown; seconds?: unknown };
     const file = String(body.file ?? "");
     if (body.action === "link") return Response.json(await withWorkspaceAsync((ws) => addFromLink(ws, id, (body as { url?: unknown }).url)));
     if (body.action === "label") {
       const n = body.n === undefined || body.n === null ? null : Number(body.n);
       return Response.json({ label: withWorkspace((ws) => setItemLabel(ws, id, file, n, (body as { label?: unknown }).label)) });
     }
+    if (body.action === "feeling") return Response.json({ feeling: withWorkspace((ws) => setPictureFeeling(ws, id, file, body.feeling)) });
     if (body.action === "mood") return Response.json({ mood: withWorkspace((ws) => setMood(ws, id, file, body.mood)) });
     // Make with references (24 Nov 2026): the shot with its people's and place's pictures, Seedance reference-to-video.
     if (body.action === "references") {
