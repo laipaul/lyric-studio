@@ -65,8 +65,10 @@ export const SINGING_STYLE = 1;
 // The song's Film look line (film-looks.ts), as the take was recorded with it, closes the prompt.
 // The realism rules of the take's feel (realism.ts) follow the cue; a take made before them (no feel) keeps its old prompt.
 // Then the feeling of the lines' section (feelings.ts), changing over the take when its lines run into another section.
-export const singingPrompt = (script: string, look?: string, feel?: Feel, feeling?: string, feelingTo?: string) =>
-  [SINGING_CUE, feel ? singingRealism(feel) : "", feelingWords(feeling, feelingTo), script.trim().replace(/\.$/, ""), look ? `Film look, the same in every shot: ${look.trim().replace(/\.$/, "")}` : ""].filter(Boolean).join(". ");
+// rests (breathing room): the voice sent is quiet between lines, and the prompt says what happens there.
+export const BREATHING = "Between sung lines the mouth closes and the singer takes a natural breath, a small pause before singing again";
+export const singingPrompt = (script: string, look?: string, feel?: Feel, feeling?: string, feelingTo?: string, rests = false) =>
+  [SINGING_CUE, feel ? singingRealism(feel) : "", rests ? BREATHING : "", feelingWords(feeling, feelingTo), script.trim().replace(/\.$/, ""), look ? `Film look, the same in every shot: ${look.trim().replace(/\.$/, "")}` : ""].filter(Boolean).join(". ");
 // parts: a vocal piece longer than PART_MAX_MS is made in parts of about PART_TARGET_MS (Joey's 4-10 s rule, Paul 22 Nov
 // 2026: "6 to 8 s the lips are not in sync"), each its own request, chained from the last frame of the one before and
 // joined into one take; seconds / usd are then the parts' (each billed at least 3 s, whole seconds).
@@ -84,6 +86,7 @@ export type SingerLine = {
   piece: Piece; // what would be sent for this line's run (the same on every line of a run)
   script: string; // the block's little script (what the singer does; on every line of the block)
   run: { first: number; last: number } | null; // the run of lines in a row sung from the same source, in one take
+  rests?: { fromMs: number; toMs: number }[]; // breathing room: where the voice sent is quieted (singingRests)
   take: (Take & { file?: string }) | null; // the newest singing take of this line's run from its source
   takes: GroupTake[]; // every singing take of this group (its source, its lines), oldest first (only on a run's first line)
   needed: boolean; // ticked and without a finished or running take of this source and piece (only on a run's first line)
@@ -129,6 +132,37 @@ export function singingPiece(line: { shownMs: number; sungEndMs: number }, downb
   }
   const seconds = Math.max(LIPSYNC_MIN_SECONDS, Math.ceil((toMs - fromMs) / 1000));
   return { fromMs, toMs, seconds, usd: Math.round(seconds * usdPerSecond * 100) / 100 };
+}
+
+// Breathing room (25 Nov 2026, realism plan): in the voice SENT to the lip-sync model (never the song or the video's
+// sound), everything outside the take's own sung lines is quieted, with soft fades: the lead-in, the gaps between its
+// lines, the tail (and any line someone else sings in it). Breaths, reverb tails and backing vocals there made the lips
+// keep mumbling; now the mouth closes and the singer breathes. A line's words: from REST_PAD_MS before it is shown to
+// REST_PAD_MS after its sung end; a rest shorter than REST_MIN_MS is left as it is. Song time, ms.
+export const REST_PAD_MS = 200;
+export const REST_MIN_MS = 500;
+export const REST_FADE_MS = 120;
+export function singingRests(sung: readonly { shownMs: number; sungEndMs: number }[], piece: { fromMs: number; toMs: number }): { fromMs: number; toMs: number }[] {
+  const keep = [...sung].sort((a, b) => a.shownMs - b.shownMs).map((l) => ({ from: l.shownMs - REST_PAD_MS, to: l.sungEndMs + REST_PAD_MS }));
+  if (!keep.length) return [];
+  const out: { fromMs: number; toMs: number }[] = [];
+  let at = piece.fromMs;
+  for (const k of keep) {
+    if (k.from - at >= REST_MIN_MS) out.push({ fromMs: Math.round(at), toMs: Math.round(Math.min(k.from, piece.toMs)) });
+    at = Math.max(at, k.to);
+  }
+  if (piece.toMs - at >= REST_MIN_MS) out.push({ fromMs: Math.round(at), toMs: piece.toMs });
+  return out.filter((r) => r.toMs > r.fromMs);
+}
+
+// The ffmpeg gain for a voice piece starting at song time fromMs: 0 inside each rest, soft fades at its edges.
+export function restGain(rests: readonly { fromMs: number; toMs: number }[], fromMs: number, toMs = Infinity): string | null {
+  const inPiece = rests.map((r) => ({ a: (r.fromMs - fromMs) / 1000, b: (r.toMs - fromMs) / 1000 })).filter((r) => r.b > 0);
+  if (!inPiece.length) return null;
+  const f = REST_FADE_MS / 1000;
+  // Each rest: 1 - clip(min((t-a)/f, (b-t)/f), 0, 1); the edge at the piece's own start or end does not fade in.
+  const end = (toMs - fromMs) / 1000;
+  return inPiece.map((r) => `(1-clip(min((t-${r.a.toFixed(3)})/${f}+${r.a <= 0 ? 99 : 0},(${r.b.toFixed(3)}-t)/${f}+${r.b >= end ? 99 : 0}),0,1))`).join("*");
 }
 
 // The parts of a long vocal piece: cut on a downbeat near every PART_TARGET_MS (between PART_MIN_MS and PART_MAX_MS from
@@ -232,7 +266,9 @@ export async function singerView(ws: Workspace, projectId: string, env: NodeJS.P
     const take = all.at(-1) ?? null;
     const script = run ? (settings.scripts?.[String(run.first)] ?? "") : "";
     const takes: GroupTake[] = run?.first === l.number ? all.map((t) => ({ ...t, inUse: t.status === "done" && anchors.has(inUseKey(t)), fresh: !!t.fresh && t.status === "done" })) : [];
-    return { number: l.number, text: l.text, source, piece, script, run: run ? { first: run.first, last: run.last } : null, take, takes, needed: !!source && run?.first === l.number && !all.some((t) => covers(t, piece)) };
+    const own = (c.lines ?? []).filter((x) => x.number >= first.number && x.number <= last.number);
+    const rests = singingRests(own, whole);
+    return { number: l.number, text: l.text, source, piece, script, run: run ? { first: run.first, last: run.last } : null, rests, take, takes, needed: !!source && run?.first === l.number && !all.some((t) => covers(t, piece)) };
   }) ?? null;
   const toMake = (lines ?? []).filter((l) => l.needed);
   return {
@@ -312,14 +348,18 @@ async function voiceFor(ws: Workspace, projectId: string, project?: typeof proje
 }
 
 // A piece of the voice as a WAV (song time fromMs → toMs; the stem's offset and speed applied).
-export function cutVoice(voice: Voice, songFile: string, piece: { fromMs: number; toMs: number }, out: string): void {
+// rests (breathing room, singingRests): quieted in this copy only.
+export function cutVoice(voice: Voice, songFile: string, piece: { fromMs: number; toMs: number }, out: string, rests: readonly { fromMs: number; toMs: number }[] = []): void {
   const durS = (piece.toMs - piece.fromMs) / 1000;
+  const gain = restGain(rests, piece.fromMs, piece.toMs);
+  const quiet = gain ? [`volume='${gain}':eval=frame`] : [];
   if (voice.kind === "stem") {
     const speed = voice.speed ?? 1;
     const startS = Math.max(0, (voice.offsetMs + speed * piece.fromMs) / 1000);
-    execFileSync(ffmpegBin(), ["-y", "-v", "error", "-ss", startS.toFixed(3), "-t", (durS * speed).toFixed(3), "-i", voice.file, ...(speed !== 1 ? ["-af", `atempo=${speed}`] : []), "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", out]);
+    const af = [...(speed !== 1 ? [`atempo=${speed}`] : []), ...quiet];
+    execFileSync(ffmpegBin(), ["-y", "-v", "error", "-ss", startS.toFixed(3), "-t", (durS * speed).toFixed(3), "-i", voice.file, ...(af.length ? ["-af", af.join(",")] : []), "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", out]);
   } else {
-    execFileSync(ffmpegBin(), ["-y", "-v", "error", "-ss", (piece.fromMs / 1000).toFixed(3), "-t", durS.toFixed(3), "-i", songFile, "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", out]);
+    execFileSync(ffmpegBin(), ["-y", "-v", "error", "-ss", (piece.fromMs / 1000).toFixed(3), "-t", durS.toFixed(3), "-i", songFile, ...(quiet.length ? ["-af", quiet[0]] : []), "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", out]);
   }
 }
 
@@ -453,7 +493,7 @@ function recordTake(dir: string, l: SingerLine, resolution: LipsyncResolution, n
   let n = 0;
   update(dir, l.source!, (p) => {
     n = nextTakeN(p);
-    p.takes.push({ n, kind: "lipsync", line: l.number, ...(l.run && l.run.last > l.number ? { through: l.run.last } : {}), sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, ...(l.piece.parts ? { parts: l.piece.parts.map((x) => ({ ...x })) } : {}), ...(l.script ? { prompt: l.script } : {}), style: SINGING_STYLE, ...(look ? { filmLook: look.name, look: look.line } : {}), feel, ...feeling, resolution, service: "wavespeed", quality: "best", model: LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: l.piece.usd, pid: process.pid });
+    p.takes.push({ n, kind: "lipsync", line: l.number, ...(l.run && l.run.last > l.number ? { through: l.run.last } : {}), sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, ...(l.piece.parts ? { parts: l.piece.parts.map((x) => ({ ...x })) } : {}), ...(l.script ? { prompt: l.script } : {}), style: SINGING_STYLE, ...(look ? { filmLook: look.name, look: look.line } : {}), feel, ...feeling, ...(l.rests ? { rests: l.rests.map((r) => ({ ...r })) } : {}), resolution, service: "wavespeed", quality: "best", model: LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: l.piece.usd, pid: process.pid });
   });
   return { source: l.source!, n };
 }
@@ -543,7 +583,7 @@ async function singInParts(c: { dir: string; source: string; n: number; take: Ta
     let rid = part.request_id;
     if (!rid) {
       const voiceFile = path.join(c.tmp, `voice-${i + 1}.wav`);
-      cutVoice(c.voice, c.songFile, part, voiceFile);
+      cutVoice(c.voice, c.songFile, part, voiceFile, c.take.rests);
       let image: string;
       let audio: string;
       try {
@@ -553,7 +593,7 @@ async function singInParts(c: { dir: string; source: string; n: number; take: Ta
         throw Object.assign(new Error(`Part ${i + 1}: the picture or the voice could not be put online: ${errorText(error)}`), { unsent: i === 0 });
       }
       const t = c.take;
-      rid = (await c.transport.submit({ image, audio, prompt: t.style === SINGING_STYLE ? singingPrompt(t.prompt ?? "", t.look, t.feel, t.feeling, t.feelingTo) : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION })).id; // never retried
+      rid = (await c.transport.submit({ image, audio, prompt: t.style === SINGING_STYLE ? singingPrompt(t.prompt ?? "", t.look, t.feel, t.feeling, t.feelingTo, !!t.rests) : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION })).id; // never retried
       const sent = rid;
       update(c.dir, c.source, (p) => {
         const tk = p.takes.find((x) => x.n === c.n);
@@ -646,7 +686,7 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
             const src = path.join(dir, j.source);
             if (!uploads.has(j.source)) uploads.set(j.source, transport.upload(src));
             const voiceFile = path.join(tmp, "voice.wav");
-            cutVoice(voice, songFile, { fromMs: t.sync_ms, toMs: t.to_ms }, voiceFile);
+            cutVoice(voice, songFile, { fromMs: t.sync_ms, toMs: t.to_ms }, voiceFile, t.rests);
             let media: string;
             let audio: string;
             try {
@@ -654,7 +694,7 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
             } catch (error) {
               throw Object.assign(new Error(`The picture or the voice could not be put online: ${errorText(error)}`), { unsent: true });
             }
-            const sent = await transport.submit({ ...(BOARD_VIDEO_FILE.test(j.source) ? { video: media } : { image: media }), audio, prompt: t.style === SINGING_STYLE ? singingPrompt(t.prompt ?? "", t.look, t.feel, t.feeling, t.feelingTo) : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION }); // never retried
+            const sent = await transport.submit({ ...(BOARD_VIDEO_FILE.test(j.source) ? { video: media } : { image: media }), audio, prompt: t.style === SINGING_STYLE ? singingPrompt(t.prompt ?? "", t.look, t.feel, t.feeling, t.feelingTo, !!t.rests) : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION }); // never retried
             id = sent.id;
             setTake(dir, j.source, j.n, { request_id: id });
           }

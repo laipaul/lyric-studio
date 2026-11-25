@@ -4,7 +4,7 @@ export * from "./cards";
 export * from "./face";
 export * from "./generate";
 export * from "./jobs";
-export { ANGLES, DEFAULT_MODELS, MODEL_IDS, minFaceFor, MODELS, VIEWS, money, type ModelId, type Light } from "./plan";
+export { geminiPackPrompt, ALL_VIEWS, ANGLES, DEFAULT_MODELS, MODEL_IDS, minFaceFor, MODELS, VIEWS, money, type ModelId, type Light } from "./plan";
 export * from "./split";
 export { splitIsCurrent, type OutfitSplit } from "./plan";
 export * from "./frames";

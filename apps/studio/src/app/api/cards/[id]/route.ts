@@ -16,7 +16,7 @@ import { connection } from "next/server";
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import {
   calibrationSongs, cardFace, draftDescription, hasGeminiKey, moveOwnPicture, GEMINI_KEY_MISSING, addLook, getLook, listLooks, lookDir, lookEstimate, lookProblems, setLookLocked, updateLook, MAIN_LOOK, cardTools, ensureSplit, splitNeeded, cardJobsFor, cardRoot, cardThresholds, checkCardPicture, cropCardToFace, currentVersion, enqueueCardJob, getCard, lockCard, lockProblems,
-  MODELS, newVersion, usableVersion, versionByNumber, packEstimate, readCardFile, readReport, repickLegacy, buildSheet, characterSheet, runCardJob, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId,
+  MODELS, newVersion, usableVersion, versionByNumber, packEstimate, readCardFile, readReport, repickLegacy, buildSheet, characterSheet, geminiPackPrompt, lookViews, runCardJob, VIEWS, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId,
 } from "@lyric/video/characters";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
@@ -64,9 +64,13 @@ function detail(id: string, message: string | null = null, n: number | null = nu
           estimate: look ? lookEstimate(look) : null,
           problems: look ? lookProblems(root, look) : [],
           geminiMissing: look?.model === "gemini" && !hasGeminiKey() ? GEMINI_KEY_MISSING : null,
+          // Copy the Gemini prompt: the look's views as the app would send them (outdoors, natural skin).
+          geminiPrompt: row.kind === "character" ? geminiPackPrompt(look ? VIEWS.filter((x) => lookViews(look).includes(x.id)) : VIEWS, look ? look.outfit : v.outfit, look ? look.outfit_split : v.outfit_split) : null,
         };
       }),
       songs: row.kind === "character" ? calibrationSongs(ws) : [],
+      // Copy the Gemini prompt for Add my pack (plan.ts geminiPackPrompt): the four views, outdoors, natural skin.
+      geminiPrompt: row.kind === "character" ? geminiPackPrompt(VIEWS, v.outfit, v.outfit_split) : null,
       // The Character sheet (character-sheet.ts): the views side by side in one picture, file relative to the card.
       characterSheet: (() => {
         if (row.kind !== "character") return null;

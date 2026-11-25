@@ -161,10 +161,19 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
   // Compare: every candidate of a shot (its videos, its finished takes, its pictures as stills).
   const candidatesOf = (shot: ProductionShot): Candidate[] => {
     const same = (a?: string | null, b?: string | null) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
+    // A video dropped on the shot that is a copy of a take made here (e.g. the draft test's takes): that take's tag.
+    const takeOfFile = (name: string) => {
+      for (const q of board.pictures) for (const t of q.takes) if (t.file && same(t.file.split("/").pop(), name)) return t;
+      return null;
+    };
+    const ownTag = (p: PictureView) => {
+      const t = p.kind === "video" ? takeOfFile(p.file) : null;
+      return t ? { tag: takeTag(t), details: takeDetails(t) } : { tag: p.kind === "video" ? `Your video · ${p.source}` : `Picture · ${p.source}` };
+    };
     return board.pictures
       .filter((p) => p.slot === shot.id)
       .flatMap((p): Candidate[] => [
-        ...(p.source === "Character references" ? [] : [{ key: p.file, label: p.label ?? p.file, url: fileUrl(p.url), kind: p.kind, used: same(p.sent, shot.filled), use: () => void useShot(p.file, null, shot) }]),
+        ...(p.source === "Character references" ? [] : [{ key: p.file, label: p.label ?? p.file, url: fileUrl(p.url), kind: p.kind, used: same(p.sent, shot.filled), use: () => void useShot(p.file, null, shot), ...ownTag(p) }]),
         ...p.takes
           .filter((t) => t.status === "done" && t.kind !== "lipsync" && (t.file || t.clip))
           .map((t): Candidate => ({

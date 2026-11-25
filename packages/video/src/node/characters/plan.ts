@@ -252,6 +252,16 @@ export function viewPrompt(v: View, outfit?: string, split?: OutfitSplit | null)
   return `${v.prompt}${wear}${extra.length ? ` ${extra.join(" ")}` : ""} ${PACK_STYLE}`;
 }
 
+// Copy the Gemini prompt (25 Nov 2026, Paul makes packs himself in Gemini): the exact words the app sends for each view
+// (outdoors in soft daylight, natural skin, eyebrows and hair kept, body views cropped at the neck), numbered, to paste
+// into Gemini with the reference picture, one picture per view. Then "Add my pack" sorts the results into their places.
+export function geminiPackPrompt(views: readonly View[], outfit?: string, split?: OutfitSplit | null): string {
+  return [
+    "Attach the reference picture, then make ONE picture per prompt below (a new message for each).",
+    ...views.map((v, i) => `${i + 1}. ${v.label} (${v.aspect}):\n${viewPrompt(v, outfit, split)}`),
+  ].join("\n\n");
+}
+
 export type ViewSet = "all" | "face" | "body";
 export function viewsFor(set: ViewSet): View[] {
   return VIEWS.filter((v) => set === "all" || (set === "face" ? v.face : !v.face));

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Crop, Download, Film, ImagePlus, Lock, Plus, RefreshCw, RotateCcw, Square, Upload, Wand2 } from "lucide-react";
+import { ArrowLeft, Copy, Crop, Download, Film, ImagePlus, Lock, Plus, RefreshCw, RotateCcw, Square, Upload, Wand2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -529,6 +529,7 @@ export function CardPage({ id }: { id: string }) {
                     <Upload /> {character ? "Add my pack" : "Add my angles"}
                   </Button>
                   <input ref={ownInput} type="file" accept=".png,.jpg,.jpeg,.webp" hidden onChange={(e) => void addOwn(e.target.files)} data-own-input />
+                  {d.geminiPrompt ? <CopyGemini text={d.geminiPrompt} data="pack" /> : null}
                 </div>
               ) : null}
             </div>
@@ -919,6 +920,7 @@ function Wardrobe({ d, id, cap, running, onChanged, reload }: { d: CardDetail; i
                 <Upload /> Add my pictures
               </Button>
               <input ref={input} type="file" accept=".png,.jpg,.jpeg,.webp" hidden onChange={(e) => void addOwn(e.target.files)} data-look-own-input />
+              {look.geminiPrompt ? <CopyGemini text={look.geminiPrompt} data="look" /> : null}
             </div>
           ) : null}
           {look.geminiMissing ? <p className="text-xs text-amber-300">{look.geminiMissing}</p> : null}
@@ -1024,5 +1026,30 @@ function Calibration({ d, disabled, onStart }: { d: CardDetail; disabled: boolea
         )}
       </div>
     </details>
+  );
+}
+
+// Copy the Gemini prompt (25 Nov 2026): the app's own words for each view (outdoors in soft daylight, natural skin), for
+// the packs Paul makes himself in Gemini; then Add my pack / Add my pictures sorts them into their places.
+function CopyGemini({ text, data }: { text: string; data: "pack" | "look" }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      title="Copies the prompts the app would send, one per view (outdoors in soft daylight, natural skin): paste them into Gemini with your reference picture, then add the pictures here"
+      onClick={() =>
+        void navigator.clipboard
+          .writeText(text)
+          .then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          })
+          .catch(() => undefined)
+      }
+      {...{ [`data-copy-gemini-${data}`]: "" }}
+    >
+      <Copy /> {copied ? "Copied" : "Copy the Gemini prompt"}
+    </Button>
   );
 }

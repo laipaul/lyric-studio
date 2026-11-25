@@ -150,7 +150,8 @@ async function main() {
     check((await page.$$("[data-shot-compare=s02] [data-compare-tile]")).length === 4, "clicking one take opens all 4 candidates side by side");
     // Each take's tag (25 Nov 2026): name, what made it, cost and when, in full.
     const tags = await page.$$eval("[data-shot-compare=s02] [data-compare-tag]", (es: Element[]) => es.map((e) => e.textContent ?? ""));
-    check(tags.length === 3 && tags.every((t) => /^Take \d+ · .+ · (\$\d+\.\d\d|nothing spent) · .*\d\d?:\d\d/.test(t)), `each take is tagged: name · model · cost · time (${tags[0]})`);
+    const takeTags = tags.filter((t) => t.startsWith("Take "));
+    check(tags.length === 4 && tags[0] === "Picture · Added by you" && takeTags.length === 3 && takeTags.every((t) => /^Take \d+ · .+ · (\$\d+\.\d\d|nothing spent) · .*\d\d?:\d\d/.test(t)), `every candidate is tagged; each take: name · model · cost · time (${tags.join(" | ")})`);
     if (process.env.COMPARE_SHOT) await (await page.$("[data-shot-compare=s02]"))!.screenshot({ path: process.env.COMPARE_SHOT });
     await sleep(1500);
     const playingNow = await page.$$eval("[data-shot-compare=s02] video", (vs: Element[]) => vs.filter((v) => !(v as HTMLVideoElement).paused).length);

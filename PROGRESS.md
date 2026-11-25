@@ -4,6 +4,17 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Breathing room in singing clips; Copy the Gemini prompt; tags on every Compare tile ✅ (to verify on the PC)
+- Breathing room (realism plan): the voice SENT to the lip-sync model is quiet outside the take's own sung lines (lead-in,
+  gaps of 0.5 s or more between its lines, the tail), with 120 ms fades; the song and the video's sound are never touched.
+  The singing prompt adds "Between sung lines the mouth closes and the singer takes a natural breath". Each new take
+  records its rests (Take.rests); older takes are sent as before. singer.ts singingRests / restGain / cutVoice.
+- Copy the Gemini prompt (Characters: next to Add my pack, and on each Wardrobe look): the app's own words per view
+  (outdoors in soft daylight, natural skin, neck-cropped body views), numbered, for the packs Paul makes in Gemini.
+- Compare: a video dropped on the shot that is a copy of a take (the draft test's "BridetestUpscale draft upscaled
+  pro.mp4" …) shows that take's tag; any other video or picture says "Your video · <source>" / "Picture · <source>".
+- Tests: test/breathing.test.ts; creation-production, singer, characters e2e.
+
 ### Readable take tags in Compare and Creation ✅ (to verify on the PC)
 - Paul (25 Nov 2026): "how do I distinguish which take and run was it?" … "add timestamp".
 - Every take gets one short tag, written by the app (take-facts.ts takeTag): its name (Paul's own name or the draft

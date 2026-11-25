@@ -131,6 +131,7 @@ export type Take = {
   final?: number; // a Draft take: the number of its final
   feel?: Feel; // the realism rules it was sent with (realism.ts); absent on takes made before 25 Nov 2026 (old prompt)
   feeling?: string; // the feeling of its section when it was sent (feelings.ts): a later change remakes nothing
+  rests?: { fromMs: number; toMs: number }[]; // lipsync: breathing room (singer.ts singingRests): where the voice sent was quieted, song ms
   feelingTo?: string; // and the one it turns to, when the take runs into a section that feels different
   fresh?: boolean; // lipsync: a later take of lines that already had a take in use: waits for Paul ("New — compare"), never placed by itself
   refFiles?: string[]; // references: the pictures sent, workspace-relative, in @Image order
