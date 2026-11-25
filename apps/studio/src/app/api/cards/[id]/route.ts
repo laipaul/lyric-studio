@@ -6,6 +6,8 @@
 //   "calibrate" { songId, her } (the face-check lines on a song's clips, local and free) ·
 //   "fetch" (get missing pictures, free) · "lock" · "new-version" · "stop" { job } ·
 //   "own-move" { from, to, look? } (move your own picture to another slot, free) · "describe" (draft the description, about $0.01).
+// Clean-up (cleanup.ts, nothing deleted): "aside" { view } (✕: the picture out of the pack, kept) · "aside-restore" { file } ·
+//   "reference-restore" { at } (an earlier card picture back) · "remove" (the whole card to _removed; answers { removed }).
 // The Wardrobe: "look-add" { name, outfit?, closeup? } · "look-save" { look, name?, outfit?, outfit_split?, model?, closeup? } ·
 //   "look-make" { look, cap } · "look-remake" { look, only, cap } (queued, like Make pack) · "look-lock" / "look-unlock" { look }.
 // Make pack / Remake / Get missing pictures are queued and run in the studio's process (the Tasks menu shows them).
@@ -15,7 +17,7 @@ import { connection } from "next/server";
 
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import {
-  calibrationSongs, cardFace, draftDescription, hasGeminiKey, moveOwnPicture, GEMINI_KEY_MISSING, addLook, getLook, listLooks, lookDir, lookEstimate, lookProblems, setLookLocked, updateLook, MAIN_LOOK, cardTools, ensureSplit, splitNeeded, cardJobsFor, cardRoot, cardThresholds, checkCardPicture, cropCardToFace, currentVersion, enqueueCardJob, getCard, lockCard, lockProblems,
+  asidePictures, putAsideView, removeCard, restoreReference, restoreView, calibrationSongs, cardFace, draftDescription, hasGeminiKey, moveOwnPicture, GEMINI_KEY_MISSING, addLook, getLook, listLooks, lookDir, lookEstimate, lookProblems, setLookLocked, updateLook, MAIN_LOOK, cardTools, ensureSplit, splitNeeded, cardJobsFor, cardRoot, cardThresholds, checkCardPicture, cropCardToFace, currentVersion, enqueueCardJob, getCard, lockCard, lockProblems,
   MODELS, newVersion, usableVersion, versionByNumber, packEstimate, readCardFile, readReport, repickLegacy, buildSheet, characterSheet, geminiPackPrompt, lookViews, runCardJob, VIEWS, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId,
 } from "@lyric/video/characters";
 
@@ -69,6 +71,9 @@ function detail(id: string, message: string | null = null, n: number | null = nu
         };
       }),
       songs: row.kind === "character" ? calibrationSongs(ws) : [],
+      // Clean-up: the pictures put aside (✕) in the current version, and the card's earlier pictures (Replace picture).
+      aside: latest ? asidePictures(root, file) : [],
+      replaced: ((file as { replaced?: { at: string; folder: string; reference: string }[] }).replaced ?? []).map((r) => ({ at: r.at, rel: `${r.folder}/${r.reference}` })).reverse(),
       // Copy the Gemini prompt for Add my pack (plan.ts geminiPackPrompt): the four views, outdoors, natural skin.
       geminiPrompt: row.kind === "character" ? geminiPackPrompt(VIEWS, v.outfit, v.outfit_split) : null,
       // The Character sheet (character-sheet.ts): the views side by side in one picture, file relative to the card.
@@ -124,7 +129,7 @@ export async function POST(request: Request, { params }: Params) {
   try {
     const { id } = await params;
     const body = (await request.json()) as {
-      action: string; cap?: number; only?: string[]; job?: string; songId?: string; her?: string[]; from?: string; to?: string;
+      action: string; view?: string; file?: string; at?: string; cap?: number; only?: string[]; job?: string; songId?: string; her?: string[]; from?: string; to?: string;
       look?: string; name?: string; outfit?: string; outfit_split?: { closeups?: string; front?: string; back?: string }; model?: ModelId; closeup?: boolean;
     };
     let message: string | null = null;
@@ -148,6 +153,23 @@ export async function POST(request: Request, { params }: Params) {
         start(job.id, "calibrate");
         break;
       }
+      case "aside":
+        message = withWorkspace((ws) => putAsideView(ws, id, String(body.view))).summary;
+        break;
+      case "aside-restore":
+        message = withWorkspace((ws) => restoreView(ws, id, String(body.file))).summary;
+        break;
+      case "reference-restore":
+        withWorkspace((ws) => restoreReference(ws, id, String(body.at)));
+        try {
+          await withWorkspaceAsync((ws) => checkCardPicture(ws, id, cardFace()));
+        } catch {
+          // the picture is back; "Check again" on the page
+        }
+        message = "The earlier picture is the card's picture again (the one before it is kept under Earlier pictures).";
+        break;
+      case "remove":
+        return Response.json({ removed: withWorkspace((ws) => removeCard(ws, id)).summary });
       case "lock":
         withWorkspace((ws) => lockCard(ws, id));
         break;

@@ -4,6 +4,22 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Card clean-up: ✕ on a picture, Replace picture, Remove card; own pictures for the extra views ✅ (to verify on the PC)
+- Paul: "why can't I delete an old picture" / "I need a delete option". Nothing is ever deleted: each one is kept with
+  a Restore (node/characters/cleanup.ts).
+- ✕ on a pack picture (and Remove on an extra view): out of the card, kept in `v<n>\_aside\`; "Put aside (N)" under
+  the pack with Restore (a picture now in that place is put aside in its turn). A locked version keeps its pack; its
+  extra views can still change.
+- Replace picture (draft): a new picture for the card, checked at once; the old one kept in `<card>\_replaced\<time>\`,
+  "Earlier pictures" with Restore.
+- Remove card (top right of a card): the folder moves to `characters\_removed\<name> <time>\` (or scenes); "Removed
+  cards" on the Characters page with Restore (same id; refused while the name is taken).
+- Side profile, full body with face and teeth close-up take "Use my own picture"; Add my pack takes up to 7 and puts
+  "side profile", "full body with face", "teeth" pictures there by name (Paul's five Aiko views now go in one go).
+  A picture with no place left gets a clear message, shown next to Add my pack (it was at the top, out of sight).
+- Pack pictures are shown whole (full body no longer loses its feet in the 3:4 tile).
+- Tests: characters-cleanup.test.ts (5), characters-own; characters e2e (+6 checks).
+
 ### Fix: pictures stay on their shot cards ✅ (to verify on the PC)
 - Paul: "my pictures have stopped being saved at each card". From his song's files: (1) a picture dropped on a shot that
   was already in Creation (same bytes) was skipped as "already on the board" and never tied to the shot; (2) shots 4 and
@@ -590,17 +606,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Code: singer.ts singingParts / singInParts / fitLength / joinParts; take "parts" (each with its request id).
 - Tests: vitest animate (+2: the cuts, the chain from the last frame and the exact joined length); browser singer
   (+2: "in 2 parts" with the cost, the take made in 2 parts at its exact length), lyrics-tab pass.
-
-### Shape says why a clip is not in the video ✅ (to verify on the PC)
-- Paul (21 Nov 2026): "the storyboard still doesn't match the Shape … the boat doesn't appear". The Reel (101 s) runs
-  out of time before the boat's turn (21st in the story order; the line-32 singing take holds the last 17 s).
-- Shape → Shots, clip list: a clip that is not omitted but gets no shot now says why in amber: "Not in this video:
-  this part of the song ends before its turn in the story order. Move it earlier in Storyboard, or put it on a line
-  (Lyrics Sync → Show a clip)", or "…it is on line N, outside this video's part of the song".
-- Correction: a clip in the Storyboard on no line does play as a shot in story order (I had said otherwise); Omit is
-  the way to keep it out.
-- Code: storyboard.ts notInReason, StoryboardClip.notIn (data-story-notin). Tests: vitest story-not-in (2). The Shape
-  browser test cannot plan in the cloud container (the audio analysis crashes there, the same before this step).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

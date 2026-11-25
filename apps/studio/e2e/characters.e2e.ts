@@ -190,6 +190,24 @@ async function main() {
     await page.waitForSelector("[data-describe-note]");
     check(((await page.inputValue("[data-card-description]")) ?? "").includes("A woman") && (await page.isEnabled("[data-lock]")), "the description is drafted (about $0.01) and Lock is possible");
 
+    // Clean-up (26 Nov 2026): ✕ puts a picture aside (kept, Restore); Replace picture keeps the old one (Restore).
+    const brideV1 = path.join(wsDir, "characters", "gemini bride", "v1");
+    await page.click("[data-aside=body_back]");
+    await page.waitForSelector("[data-aside-picture=body_back]", { state: "attached" });
+    check(!existsSync(path.join(brideV1, "body_back.png")) && readdirSync(path.join(brideV1, "_aside")).some((f) => f.startsWith("body_back ")), "✕ puts the back view aside: kept in v1\\_aside\\, the place is empty");
+    await page.click("[data-aside-list] summary");
+    await page.click("[data-restore-aside=body_back]");
+    await page.waitForFunction(() => !document.querySelector("[data-aside-list]"));
+    check(existsSync(path.join(brideV1, "body_back.png")), "Restore puts it back in its place");
+    await page.setInputFiles("[data-replace-input]", path.join(pics, "closeup.png"));
+    await page.waitForSelector("[data-earlier-pictures]");
+    const brideCard = JSON.parse(readFileSync(path.join(wsDir, "characters", "gemini bride", "card.json"), "utf8")) as { reference: string; replaced: { folder: string; reference: string }[] };
+    check(brideCard.replaced.length === 1 && existsSync(path.join(wsDir, "characters", "gemini bride", brideCard.replaced[0].folder, brideCard.replaced[0].reference)), "Replace picture: the new picture is checked, the old one kept under Earlier pictures");
+    await page.click("[data-earlier-pictures] summary");
+    await page.click("[data-restore-picture]");
+    await page.waitForFunction(() => document.querySelectorAll("[data-earlier-picture]").length === 1 && !!document.querySelector("[data-check-verdict]"));
+    check((JSON.parse(readFileSync(path.join(wsDir, "characters", "gemini bride", "card.json"), "utf8")) as { reference: string }).reference === "reference.png", "Restore: the earlier picture is the card's picture again");
+
     // The Wardrobe: a second look from your own pictures, locked on its own; the list shows the looks.
     await page.waitForSelector("[data-wardrobe] [data-look-tab=main]");
     await page.fill("[data-look-new-name]", "Travel coat");
@@ -213,6 +231,18 @@ async function main() {
     await page.goto(`${base}/characters`);
     await page.waitForSelector("[data-card='gemini bride'] [data-card-looks]");
     check(((await page.textContent("[data-card='gemini bride'] [data-card-looks]")) ?? "") === "Main lookTravel coat", "the list shows the character's looks");
+
+    // Remove card: the whole card to scenes\_removed\ (kept), off the list; Restore on the Characters page.
+    await page.click("[data-card='bridal room']");
+    await page.waitForSelector("[data-card-page='bridal room']");
+    await page.click("[data-remove-card]");
+    await page.click("[data-remove-yes]");
+    await page.waitForSelector("[data-removed-card='bridal room']", { state: "attached" });
+    check(!(await page.$("[data-card='bridal room']")) && !existsSync(path.join(wsDir, "scenes", "bridal room")) && readdirSync(path.join(wsDir, "scenes", "_removed")).some((f) => f.startsWith("bridal room ")), "Remove card: off the list, kept in scenes\\_removed\\");
+    await page.click("[data-removed-cards] summary");
+    await page.click("[data-restore-card='bridal room']");
+    await page.waitForSelector("[data-card='bridal room']");
+    check(existsSync(path.join(wsDir, "scenes", "bridal room", "card.json")), "Restore: the card is back in its folder and the list");
     await page.click("[data-card='gemini bride']");
     await page.waitForSelector("[data-card-page='gemini bride']");
 

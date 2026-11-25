@@ -101,6 +101,8 @@ test("nameless Gemini pictures all get a place of their own; one picture to a ch
   expect(one.placed).toMatchObject([{ slot: "body_back", by: "you" }]);
   const dir = versionDir(cardRoot(ws, getCard(ws, c.id)), 1);
   expect(readReport(dir)!.items.find((i) => i.id === "body_back")!.tries.length).toBe(2); // the earlier one is kept as a try
-  await expect(useOwnPictures(ws, c.id, stubFace(), [...files, files[0]].map((f) => own(f)))).rejects.toThrow(/pack has 4/);
+  await expect(useOwnPictures(ws, c.id, stubFace(), [...files, files[0]].map((f) => own(f)))).rejects.toThrow(/No place left for Gemini_Generated_Image_a1\.png.*pack has 4 places/);
+  const eight = Array.from({ length: 8 }, (_, k) => own(files[k % 4]));
+  await expect(useOwnPictures(ws, c.id, stubFace(), eight)).rejects.toThrow(/A character has 7 places/);
   await expect(useOwnPictures(ws, c.id, stubFace(), [{ name: "notes.txt", bytes: Buffer.from("x") }])).rejects.toThrow(/not a picture/);
 });

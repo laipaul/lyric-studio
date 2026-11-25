@@ -21,13 +21,16 @@ Workspace folder layout (Step 6.2c): one folder per song `workspace/songs/<artis
 - **Shot plans** (`<song folder>\storyboards\`, Theme v2 2d / 2e-1; on screen "shot plan"): `<platform>-<n>.json` per video (src/storyboard-file.ts; since 2e-1 each shot also holds `render`, the exact detail the renderer draws: where playback starts in the clip, its length there, a photo's move, dissolve, loop blend; `output.audio` the fades; `inputs.media` the clip files (name, sha256) and `inputs.planKey`, a fingerprint of everything the plan is made from: the song, its lyric timing, the clips and clips.json, the song's settings for that platform, the variation). `<id>.previous.json`: the plan before the last one that was replaced (one step back). `<platform>-<n>~<kind>-<name>.json`: a Try other looks video (kind theme / fonts / pictures; `output.try` = { kind, label, theme | pairing | clipSet }), never the video's own. Make settles each video's plan before making it (node/storyboard-file.ts settleShotPlan: new / same / replanned (saved again, the old one kept as .previous) / kept (same fingerprint but the app would plan it differently now: the saved plan is made)) and compiles the props from it (compileShotPlan: shots, cuts, part of the song, fades and lyric timing from the file; the look from the song now); a run keeps a copy next to each video (`<name>.shotplan.json`) and the manifest says which plan and what happened (`shot_plan`: id, file, copy, status, note). A plan saved again, or kept as saved, is named in the run's message in Tasks.
 
 Characters and scene cards (C1, 18 Nov 2026; packages/video src/node/characters/*):
-- **Folders:** `workspace/characters/<name>/` and `workspace/scenes/<name>/` (Windows-safe names). Each holds:
+- **Folders:** `workspace/characters/<name>/` and `workspace/scenes/<name>/` (Windows-safe names). A removed card
+  (Remove card, 26 Nov 2026) moves to `characters/_removed/<name> <time>/` (or scenes); its card.json `removed`
+  {id, at, scope_kind, scope_value, folder} brings it back with Restore (same id); its database row goes meanwhile. Each holds:
   - `card.json`: version 1, kind, name, created_at, reference (the picture sent to the models: the upload, or
     `reference_cropped.jpg` after Crop to face), original, reference2?, check? / check2? (the reference or location
     check), and versions [{n, status draft | locked, created_at, locked_at?, model, outfit?, props?, description?}];
     the Wardrobe (21 Nov 2026): main_look? (the pack's own outfit's name, default "Main look") and looks? [{id, name,
     outfit?, outfit_split?, model, closeup (also a close-up in the look), status draft | locked, created_at, locked_at?}].
-  - the picture(s);
+  - the picture(s); `_replaced/<time>/` the card's earlier pictures (Replace picture, 26 Nov 2026; card.json
+    `replaced` [{at, folder, reference, original, check?}], Restore swaps them back);
   - `calibration.json` (characters: the face-check lines on a song's clips);
   - one folder per version, `v1/`, `v2/` …, holding:
     - each try `<id>_t<k>.png` (body views also `<id>_t<k>_full.png`, the model's own picture before the app's
@@ -38,6 +41,8 @@ Characters and scene cards (C1, 18 Nov 2026; packages/video src/node/characters/
       request_ids, spent_usd);
     - `sheet.jpg` (the contact sheet, with scores); `character_sheet.png` (the Character sheet: the views side by side,
       no captions; made again when a view is newer; 25 Nov 2026);
+    - `_aside/` (26 Nov 2026, cleanup.ts): pictures taken off the card with ✕, as `<id> <time>.png` (+ ` full.png`),
+      listed in `_aside/aside.json` [{file, id, label, at, full?, chosen, light, text}] for Restore;
     - your own pictures (Add my pack / Use my own picture): tries with `own` (the file name), also kept as given in
       `<id>_t<k>_own.png` (for Move to);
   - `looks/<look id>/` (characters, the Wardrobe): the look's tries and chosen `body_front.png`, `body_back.png`

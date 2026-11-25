@@ -17,14 +17,16 @@ import type { FaceTool } from "./face";
 import { callModel, errorText } from "./fal";
 import { buildSheet, finishPicture, judge, readReport, writeReport, type Item, type Try, type VersionReport } from "./generate";
 import { getLook, lookDir, lookViews, MAIN_LOOK } from "./looks";
-import { ANGLES, DESCRIPTION_PROMPT, imageSize, SCENE_DESCRIPTION_PROMPT, VIEWS, VISION } from "./plan";
+import { ANGLES, DESCRIPTION_PROMPT, EXTRA_VIEWS, imageSize, SCENE_DESCRIPTION_PROMPT, VIEWS, VISION } from "./plan";
 
 export type OwnPicture = { name: string; bytes: Buffer; slot?: string | null };
 export type Placed = { name: string; slot: string; label: string; light: string | null; by: "you" | "name" | "face" | "order" };
 
 const IMAGE = /\.(png|jpe?g|webp)$/i;
-const labelOf = (id: string) => [...VIEWS, ...ANGLES].find((x) => x.id === id)?.label.replace(/ \(cropped at the neck\)/, "") ?? id;
+const labelOf = (id: string) => [...VIEWS, ...EXTRA_VIEWS, ...ANGLES].find((x) => x.id === id)?.label.replace(/ \(cropped at the neck\)/, "") ?? id;
 export const slotsFor = (kind: string) => (kind === "character" ? VIEWS.map((v) => v.id) : ANGLES.map((a) => a.id)) as string[];
+// The extra views (side profile, full body with face, teeth close-up) also take the user's own picture (26 Nov 2026).
+export const extraSlotsFor = (kind: string) => (kind === "character" ? EXTRA_VIEWS.map((v) => v.id) : []) as string[];
 
 // The slot a file name points to, or null (Gemini's and Midjourney's own names say nothing).
 export function slotFromName(name: string, kind: string): string | null {
@@ -39,6 +41,9 @@ export function slotFromName(name: string, kind: string): string | null {
   }
   if (has("¾", "threequarter", "threequarters", "34") || pair("3", "4") || pair("three", "quarter") || pair("three", "quarters")) return "three_quarter";
   if (has("back", "rear", "behind", "backside")) return "body_back";
+  if (has("profile", "side")) return "profile";
+  if (has("teeth", "smile", "smiling")) return "closeup_teeth";
+  if (has("face", "head") && (has("full", "fullbody", "body") || pair("head", "to"))) return "body_full";
   if (has("closeup", "portrait", "headshot", "face", "head") || pair("close", "up")) return "closeup";
   if (has("front", "body", "fullbody", "full")) return "body_front";
   return null;
@@ -69,13 +74,18 @@ export async function useOwnPictures(ws: Workspace, cardId: string, face: FaceTo
   const v = currentVersion(file);
   const look = lookId && lookId !== MAIN_LOOK ? getLook(file, lookId) : null;
   if (look?.status === "locked") throw new Error(`"${look.name}" is locked: press "Change this look" first.`);
-  if (!look && v.status === "locked") throw new Error(`Version ${v.n} is locked: start a new version to change it.`);
   const slots = look ? lookViews(look) : slotsFor(row.kind);
+  const extras = look ? [] : extraSlotsFor(row.kind);
+  const all = [...slots, ...extras];
   const pics = pictures.filter((p) => p.bytes.length);
   if (!pics.length) throw new Error("Choose a picture.");
   for (const p of pics) if (!IMAGE.test(p.name)) throw new Error(`${p.name} is not a picture (.png, .jpg, .webp).`);
-  if (pics.length > slots.length) throw new Error(`${look ? `"${look.name}" has ${slots.length}` : row.kind === "character" ? "A pack has 4" : "A scene has 3"} pictures: you chose ${pics.length}.`);
-  for (const p of pics) if (p.slot && !slots.includes(p.slot)) throw new Error(`Unknown place "${p.slot}".`);
+  if (pics.length > all.length)
+    throw new Error(`${look ? `"${look.name}" has ${slots.length}` : row.kind === "character" ? `A character has ${all.length} places (the pack's 4, side profile, full body with face, teeth close-up)` : "A scene has 3"} pictures: you chose ${pics.length}.`);
+  for (const p of pics) if (p.slot && !all.includes(p.slot)) throw new Error(`Unknown place "${p.slot}".`);
+  // A locked version keeps its pack; the extra views can still take a picture (as they can still be made).
+  if (!look && v.status === "locked" && !pics.every((p) => (p.slot ?? slotFromName(p.name, row.kind)) && extras.includes((p.slot ?? slotFromName(p.name, row.kind))!)))
+    throw new Error(`Version ${v.n} is locked: start a new version to change its pack (the side profile, full body with face and teeth close-up can still take your picture).`);
   const dir = look ? lookDir(root, look.id) : versionDir(root, v.n);
   mkdirSync(dir, { recursive: true });
   const th = cardThresholds(root);
@@ -101,7 +111,7 @@ export async function useOwnPictures(ws: Workspace, cardId: string, face: FaceTo
     const taken = new Map<string, number>();
     const where: { slot: string; by: Placed["by"] }[] = incoming.map(() => ({ slot: "", by: "order" as const }));
     const claim = (k: number, slot: string | null, by: Placed["by"]) => {
-      if (!slot || taken.has(slot)) return false;
+      if (!slot || taken.has(slot) || !all.includes(slot)) return false;
       taken.set(slot, k);
       where[k] = { slot, by };
       return true;
@@ -118,6 +128,10 @@ export async function useOwnPictures(ws: Workspace, cardId: string, face: FaceTo
       }
     }
     for (const k of incoming.keys()) if (!where[k].slot) claim(k, slots.find((s) => !taken.has(s)) ?? null, "order");
+    // The extra places take a picture only by its name (side profile, full body with face, teeth) or by choice.
+    const lost = incoming.filter((_, k) => !where[k].slot).map((p) => p.name);
+    if (lost.length)
+      throw new Error(`No place left for ${lost.join(", ")}: the pack has 4 places. For the extra views, name the picture "side profile", "full body with face" or "teeth", or use "Use my own picture" on that view.`);
 
     const run = Math.max(0, ...report.items.flatMap((i) => i.tries.map((t) => t.run ?? 0))) + 1;
     const placed: Placed[] = [];
@@ -139,7 +153,7 @@ export async function useOwnPictures(ws: Workspace, cardId: string, face: FaceTo
       pickOwn(item, n - 1, dir);
       placed.push({ name: path.basename(p.name), slot: id, label: labelOf(id), light: item.light, by: where[k].by });
     }
-    report.items.sort((a, b) => slots.indexOf(a.id) - slots.indexOf(b.id));
+    report.items.sort((a, b) => (all.indexOf(a.id) + 99) % 99 - (all.indexOf(b.id) + 99) % 99);
     writeReport(dir, report);
     if (!look) await buildSheet(face, root, readCardFile(root), report);
     const how = (b: Placed["by"]) => (b === "name" ? " (by its name)" : b === "face" ? " (by the face check)" : b === "order" ? " (first free place)" : "");

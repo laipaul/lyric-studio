@@ -1,8 +1,9 @@
 // The Characters page. GET: every character and scene card. POST (form: kind, name, picture): a new card from one
-// picture; its reference check (or location check) runs at once, locally and for free.
+// picture; its reference check (or location check) runs at once, locally and for free. POST JSON { restore: folder }:
+// a removed card back in the list (cleanup.ts). GET also lists the removed cards (`removed`) for their Restore.
 import { connection } from "next/server";
 
-import { cardFace, checkCardPicture, createCard, listCards } from "@lyric/video/characters";
+import { cardFace, checkCardPicture, createCard, listCards, listRemovedCards, restoreCard } from "@lyric/video/characters";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
@@ -11,7 +12,7 @@ const fail = (error: unknown) => Response.json({ error: (error as Error).message
 export async function GET() {
   await connection();
   try {
-    return Response.json(withWorkspace((ws) => ({ cards: listCards(ws) })), { headers: { "Cache-Control": "no-store" } });
+    return Response.json(withWorkspace((ws) => ({ cards: listCards(ws), removed: listRemovedCards(ws) })), { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return fail(error);
   }
@@ -19,6 +20,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    if ((request.headers.get("content-type") ?? "").includes("application/json")) {
+      const body = (await request.json()) as { restore?: string };
+      const row = withWorkspace((ws) => restoreCard(ws, String(body.restore ?? "")));
+      return Response.json({ id: row.id, name: row.name });
+    }
     const form = await request.formData();
     const kind = form.get("kind") === "scene" ? "scene" : "character";
     const picture = form.get("picture");

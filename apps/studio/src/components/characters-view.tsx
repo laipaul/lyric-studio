@@ -1,11 +1,11 @@
 "use client";
 
-import { ArrowLeft, Copy, Crop, Download, Film, ImagePlus, Lock, Plus, RefreshCw, RotateCcw, Square, Upload, Wand2 } from "lucide-react";
+import { ArrowLeft, Copy, Crop, Download, Film, ImagePlus, Lock, Plus, RefreshCw, RotateCcw, Square, Trash2, Upload, Wand2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { CardSummary } from "@lyric/video/characters";
+import type { CardSummary, RemovedCard } from "@lyric/video/characters";
 
 import type { CardDetail } from "@/app/api/cards/[id]/route";
 import { Button } from "@/components/ui/button";
@@ -52,11 +52,26 @@ export function CharactersList() {
   const [creating, setCreating] = useState<"character" | "scene" | null>(null);
   const [dropped, setDropped] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState<"character" | "scene" | null>(null);
+  const [removed, setRemoved] = useState<RemovedCard[]>([]);
+  const reload = useCallback(
+    () =>
+      call<{ cards: CardSummary[]; removed: RemovedCard[] }>("/api/cards")
+        .then((d) => (setCards(d.cards), setRemoved(d.removed ?? [])))
+        .catch((e: Error) => setError(e.message)),
+    [],
+  );
   useEffect(() => {
-    call<{ cards: CardSummary[] }>("/api/cards")
-      .then((d) => setCards(d.cards))
-      .catch((e: Error) => setError(e.message));
-  }, []);
+    void reload();
+  }, [reload]);
+  const restore = async (folder: string) => {
+    setError(null);
+    try {
+      await call("/api/cards", { method: "POST", ...json({ restore: folder }) });
+      await reload();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
 
   const section = (kind: "character" | "scene", title: string, hint: string) => (
     <section className="flex flex-col gap-3" data-cards-section={kind}>
@@ -132,6 +147,25 @@ export function CharactersList() {
       {!cards ? <p className="text-muted-foreground text-sm">Loading…</p> : null}
       {cards ? section("character", "Characters", "A face view close-up, a 3/4 face, and the full body front and back (cropped at the neck, so faces only come from the close-up).") : null}
       {cards ? section("scene", "Scene cards", "A place from one picture: three more angles of the same room or location, its key props kept.") : null}
+      {removed.length ? (
+        // Removed cards (Remove card on a card's page): kept in characters\_removed\ or scenes\_removed\, with Restore.
+        <details className="text-xs" data-removed-cards>
+          <summary className="text-muted-foreground cursor-pointer">Removed cards ({removed.length})</summary>
+          <ul className="mt-2 flex flex-col gap-1">
+            {removed.map((r) => (
+              <li key={r.folder} className="flex items-center gap-2" data-removed-card={r.name}>
+                <span className="font-medium">{r.name}</span>
+                <span className="text-muted-foreground">
+                  {KIND_LABEL[r.kind]}, removed {r.at ? new Date(r.at).toLocaleString() : ""} · kept in {r.folder.replace(/\//g, "\\")}
+                </span>
+                <Button size="sm" variant="ghost" onClick={() => void restore(r.folder)} data-restore-card={r.name}>
+                  <RotateCcw /> Restore
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
       <NewCardDialog key={`${creating}-${dropped?.name ?? ""}`} kind={creating} initialFile={dropped} onClose={() => (setCreating(null), setDropped(null))} onCreated={(id) => router.push(`/characters/${id}`)} />
     </div>
   );
@@ -275,6 +309,37 @@ export function CardPage({ id }: { id: string }) {
   const [ownSlot, setOwnSlot] = useState<string | null>(null);
   const [packNote, setPackNote] = useState<string | null>(null);
   const [descNote, setDescNote] = useState<string | null>(null);
+  const [ownError, setOwnError] = useState<string | null>(null);
+  const router = useRouter();
+  const [removing, setRemoving] = useState(false);
+  const replaceInput = useRef<HTMLInputElement>(null);
+  const replacePicture = async (f: File) => {
+    setBusy("replace");
+    setError(null);
+    try {
+      const form = new FormData();
+      form.set("picture", f);
+      form.set("replace", "reference");
+      const r = await call<{ checkError?: string }>(`/api/cards/${id}/picture`, { method: "POST", body: form });
+      if (r.checkError) setError(r.checkError);
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const removeThisCard = async () => {
+    setBusy("remove");
+    setError(null);
+    try {
+      await call(`/api/cards/${id}`, { method: "POST", ...json({ action: "remove" }) });
+      router.push("/characters");
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(null);
+    }
+  };
   const chooseOwn = (slot: string | null) => {
     setOwnSlot(slot);
     if (ownInput.current) {
@@ -287,6 +352,7 @@ export function CardPage({ id }: { id: string }) {
     if (!files?.length) return;
     setBusy("own");
     setError(null);
+    setOwnError(null);
     setPackNote(null);
     try {
       const form = new FormData();
@@ -296,7 +362,7 @@ export function CardPage({ id }: { id: string }) {
       setPackNote(r.summary);
       await load();
     } catch (e) {
-      setError((e as Error).message);
+      setOwnError((e as Error).message); // next to Add my pack, where Paul looks (26 Nov 2026)
     } finally {
       setBusy(null);
     }
@@ -366,6 +432,26 @@ export function CardPage({ id }: { id: string }) {
             ))}
           </span>
         ) : null}
+        {/* Remove card (cleanup.ts): the whole card to characters\_removed\ (or scenes\_removed\), Restore on the list page. */}
+        <span className="ml-auto flex items-center gap-1 text-xs">
+          {removing ? (
+            <>
+              <span className="text-muted-foreground" data-remove-note>
+                Remove {card.name}? It is kept, with Restore on the Characters page; songs and shot lists will not find it until then.
+              </span>
+              <Button size="sm" variant="destructive" disabled={!!busy || !!running} onClick={() => void removeThisCard()} data-remove-yes>
+                Remove
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setRemoving(false)}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" variant="ghost" className="text-muted-foreground" disabled={!!busy || !!running} onClick={() => setRemoving(true)} data-remove-card>
+              <Trash2 /> Remove card
+            </Button>
+          )}
+        </span>
       </div>
       {version.n !== d.latest ? (
         <p className="text-muted-foreground rounded-md border px-4 py-2 text-xs" data-old-version>
@@ -404,6 +490,10 @@ export function CardPage({ id }: { id: string }) {
           )}
           {draft ? (
             <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" disabled={!!busy || !!running} onClick={() => replaceInput.current?.click()} data-replace-picture title="A new picture for this card; the old one is kept under Earlier pictures">
+                <ImagePlus /> Replace picture
+              </Button>
+              <input ref={replaceInput} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={(e) => (e.target.files?.[0] && void replacePicture(e.target.files[0]), (e.target.value = ""))} data-replace-input />
               <Button size="sm" variant="outline" disabled={!!busy} onClick={() => act("check", { action: "check" })} data-check-again>
                 <RefreshCw /> Check again
               </Button>
@@ -427,8 +517,24 @@ export function CardPage({ id }: { id: string }) {
             </div>
           ) : null}
           {file.check2 ? <p className="text-muted-foreground text-xs">Second picture: {file.check2.verdict}</p> : null}
+          {d.replaced.length && draft ? (
+            <details className="text-xs" data-earlier-pictures>
+              <summary className="text-muted-foreground cursor-pointer">Earlier pictures ({d.replaced.length})</summary>
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {d.replaced.map((r) => (
+                  <li key={r.at} className="flex flex-col items-start gap-1" data-earlier-picture={r.at}>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- an earlier picture of this card */}
+                    <img src={fileUrl(card.id, r.rel)} alt="" className="h-24 rounded border object-cover" />
+                    <Button size="sm" variant="ghost" disabled={!!busy || !!running} onClick={() => act("reference-restore", { action: "reference-restore", at: r.at })} data-restore-picture>
+                      <RotateCcw /> Restore
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
           {character ? <Calibration d={d} disabled={!!running || !!busy} onStart={(songId, her) => act("calibrate", { action: "calibrate", songId, her })} /> : null}
-          {busy && ["check", "crop", "second"].includes(busy) ? <p className="text-muted-foreground text-xs">Checking…</p> : null}
+          {busy && ["check", "crop", "second", "replace"].includes(busy) ? <p className="text-muted-foreground text-xs">Checking…</p> : null}
         </section>
 
         <div className="flex flex-col gap-6">
@@ -557,6 +663,11 @@ export function CardPage({ id }: { id: string }) {
               </p>
             ) : null}
             {busy === "own" ? <p className="text-muted-foreground text-xs">Checking your pictures… (free, on this PC)</p> : null}
+            {ownError ? (
+              <p className="text-xs text-amber-200" data-own-error>
+                {ownError}
+              </p>
+            ) : null}
             {packNote ? (
               <p className="text-xs text-emerald-200" data-own-note>
                 {packNote}
@@ -581,9 +692,19 @@ export function CardPage({ id }: { id: string }) {
                           {made && it?.text ? ` · ${it.text}` : ""}
                         </span>
                         <span className="text-muted-foreground">{x.why}</span>
-                        <Button size="sm" variant="outline" className="w-fit" disabled={!!running || !!busy} onClick={() => act("remake", { action: "remake", only: [x.id], cap })} {...(x.id === "closeup_teeth" ? { "data-make-teeth": "" } : {})} data-make-extra={x.id}>
-                          <RefreshCw /> {made ? "Make it again" : x.make}
-                        </Button>
+                        <span className="flex flex-wrap items-center gap-1">
+                          <Button size="sm" variant="outline" className="w-fit" disabled={!!running || !!busy} onClick={() => act("remake", { action: "remake", only: [x.id], cap })} {...(x.id === "closeup_teeth" ? { "data-make-teeth": "" } : {})} data-make-extra={x.id}>
+                            <RefreshCw /> {made ? "Make it again" : x.make}
+                          </Button>
+                          <Button size="sm" variant="ghost" className="w-fit" disabled={!!running || !!busy} onClick={() => chooseOwn(x.id)} data-own={x.id} title="Your own picture here: free, nothing sent online">
+                            <Upload /> Use my own picture
+                          </Button>
+                          {made ? (
+                            <Button size="sm" variant="ghost" className="text-muted-foreground w-fit" disabled={!!running || !!busy} onClick={() => quiet("aside", { action: "aside", view: x.id }, setPackNote)} data-aside={x.id} title="Take this picture off the card (kept under Put aside, with Restore)">
+                              <X /> Remove
+                            </Button>
+                          ) : null}
+                        </span>
                       </div>
                     </div>
                   );
@@ -622,8 +743,23 @@ export function CardPage({ id }: { id: string }) {
                 return (
                   <li key={vid} className="flex flex-col gap-1.5" data-view={vid} data-light={it?.light ?? "none"}>
                     {t ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- a generated view
-                      <img src={fileUrl(card.id, `v${version.n}/${vid}.png`, stamp)} alt="" className="aspect-[3/4] w-full rounded-md border object-cover" />
+                      // The whole picture (26 Nov 2026: a tall full body lost its feet in a 3:4 crop); ✕ puts it aside.
+                      <div className="relative">
+                        {/* eslint-disable-next-line @next/next/no-img-element -- a generated view */}
+                        <img src={fileUrl(card.id, `v${version.n}/${vid}.png`, stamp)} alt="" className="bg-muted/30 aspect-[3/4] w-full rounded-md border object-contain" />
+                        {draft ? (
+                          <button
+                            type="button"
+                            disabled={!!running || !!busy}
+                            onClick={() => void quiet("aside", { action: "aside", view: vid }, setPackNote)}
+                            className="absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 disabled:opacity-50"
+                            title="Take this picture off the card (kept under Put aside, with Restore)"
+                            data-aside={vid}
+                          >
+                            <X className="size-4" />
+                          </button>
+                        ) : null}
+                      </div>
                     ) : (
                       <div className="text-muted-foreground flex aspect-[3/4] w-full items-center justify-center rounded-md border border-dashed text-xs">not made yet</div>
                     )}
@@ -668,6 +804,23 @@ export function CardPage({ id }: { id: string }) {
                 );
               })}
             </ul>
+            {d.aside.length ? (
+              <details className="text-xs" data-aside-list>
+                <summary className="text-muted-foreground cursor-pointer">Put aside ({d.aside.length})</summary>
+                <ul className="mt-2 flex flex-wrap gap-3">
+                  {d.aside.map((a) => (
+                    <li key={a.file} className="flex flex-col items-start gap-1" data-aside-picture={a.id}>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- a picture put aside */}
+                      <img src={fileUrl(card.id, a.rel)} alt="" className="h-28 rounded border object-contain" />
+                      <span className="text-muted-foreground">{a.label}</span>
+                      <Button size="sm" variant="ghost" disabled={!!running || !!busy || (!draft && !["profile", "body_full", "closeup_teeth"].includes(a.id))} onClick={() => quiet("restore", { action: "aside-restore", file: a.file }, setPackNote)} data-restore-aside={a.id}>
+                        <RotateCcw /> Restore
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
             {items.length ? (
               <a href={fileUrl(card.id, `v${version.n}/sheet.jpg`, stamp)} target="_blank" rel="noreferrer" className="text-muted-foreground w-fit text-xs hover:underline" data-sheet>
                 Open the contact sheet
