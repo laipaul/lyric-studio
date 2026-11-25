@@ -123,7 +123,7 @@ async function main() {
     await page.waitForFunction((t: string) => document.querySelectorAll(`${t} [data-take-status=done]`).length === 2, tile, { timeout: 60000 });
     check(true, "Animate makes the 2 takes");
     check(((await page.textContent(`${tile} [data-take='1'] [data-take-facts]`)) ?? "").includes("tender"), "each take shows the feeling it was sent with");
-    check(((await page.textContent(`${tile} [data-take='1'] [data-take-source]`)) ?? "").includes("WaveSpeed · Seedance 2.5"), "each take shows where it came from");
+    check(((await page.getAttribute(`${tile} [data-take='1'] [data-take-source]`, "title")) ?? "").includes("WaveSpeed · Seedance 2.5") && /720p|480p/.test((await page.textContent(`${tile} [data-take='1'] [data-take-source]`)) ?? ""), "each take shows what made it (the full source on hover)");
     check(/^\d+ s · (tender · )?about \$\d+\.\d\d · .*\d\d?:\d\d/.test(((await page.textContent(`${tile} [data-take='1'] [data-take-facts]`)) ?? "").trim()), `each take shows its length, cost and when it was made (${await page.textContent(`${tile} [data-take='1'] [data-take-facts]`)})`);
     await page.click(`${tile} [data-take='1'] [data-take-play]`);
     await page.waitForSelector("[data-take-player] video");

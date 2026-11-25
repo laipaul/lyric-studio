@@ -4,6 +4,15 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Readable take tags in Compare and Creation ✅ (to verify on the PC)
+- Paul (25 Nov 2026): "how do I distinguish which take and run was it?" … "add timestamp".
+- Every take gets one short tag, written by the app (take-facts.ts takeTag): its name (Paul's own name or the draft
+  test's label first), what made it, its feeling, its cost and when: "Take 3 · Draft 480p · joy · $0.54 · 25 Nov, 11:06",
+  "Take 4 · final of 3 · 1080p · $0.20 · …", "Take 5 · Jennifer's face · $1.62 · …", "singing, lines 9-11 · 480p".
+- Compare shows it in full under each video (data-compare-tag), the picture's name smaller below; Creation's take row
+  shows what made it (data-take-source) above its facts. Hover: service and model, facts, Film look, Feel, pictures sent.
+- Tests: test/take-tag.test.ts; creation-production, pictures and singer e2e.
+
 ### Character sheet: side profile, full body with face, one picture of the views ✅ (to verify on the PC)
 - Paul (25 Nov 2026, from the tutorial's worksheet: "several shots in one character picture"; "characters only").
 - Characters → a character card gets two more extra views next to the teeth close-up, each one picture made from the

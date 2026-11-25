@@ -148,6 +148,10 @@ async function main() {
     await page.click("[data-shot=s02] [data-take='2'] [data-take-play]");
     await page.waitForSelector("[data-shot-compare=s02]");
     check((await page.$$("[data-shot-compare=s02] [data-compare-tile]")).length === 4, "clicking one take opens all 4 candidates side by side");
+    // Each take's tag (25 Nov 2026): name, what made it, cost and when, in full.
+    const tags = await page.$$eval("[data-shot-compare=s02] [data-compare-tag]", (es: Element[]) => es.map((e) => e.textContent ?? ""));
+    check(tags.length === 3 && tags.every((t) => /^Take \d+ · .+ · (\$\d+\.\d\d|nothing spent) · .*\d\d?:\d\d/.test(t)), `each take is tagged: name · model · cost · time (${tags[0]})`);
+    if (process.env.COMPARE_SHOT) await (await page.$("[data-shot-compare=s02]"))!.screenshot({ path: process.env.COMPARE_SHOT });
     await sleep(1500);
     const playingNow = await page.$$eval("[data-shot-compare=s02] video", (vs: Element[]) => vs.filter((v) => !(v as HTMLVideoElement).paused).length);
     check(playingNow === 3, `the 3 takes play together (${playingNow} playing)`);

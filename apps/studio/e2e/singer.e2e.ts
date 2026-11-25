@@ -285,7 +285,7 @@ async function main() {
 
     await page.goto(`${base}/songs/${sp.project.id}?tab=production`);
     await page.waitForSelector("[data-take-source]");
-    check(((await page.textContent("[data-picture='singer close.png'] [data-take-source]")) ?? "").includes("lip sync, line"), "Creation labels it: lip sync, line …");
+    check(((await page.textContent("[data-picture='singer close.png'] [data-take-source]")) ?? "").includes("singing, line"), "Creation labels it: singing, line …");
     // The picture card shows every take (line 2 now has no singer, so none is in use: each can be chosen again).
     const card = await page.$$eval("[data-picture='singer close.png'] [data-take]", (rows: Element[]) => rows.map((r) => `${r.getAttribute("data-take")}:${r.querySelector("[data-take-badge]")?.getAttribute("data-take-badge") ?? "-"}:${r.querySelector("[data-take-use]") ? "use" : "-"}`));
     check(card.length === 4 && card.filter((c) => c.endsWith(":-:use")).length === 3, `the Creation card lists all takes with In use / Use this take (${card.join(", ")})`);

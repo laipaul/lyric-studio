@@ -18,7 +18,7 @@ import type { ProductionShot, ProductionView } from "@lyric/video/shot-productio
 
 import { NameField } from "@/components/name-field";
 import { useGoToTab } from "@/components/song-stages";
-import { takeFacts } from "@lyric/video/take-facts";
+import { takeDetails, takeFacts, takeKind, takeTag } from "@lyric/video/take-facts";
 import { TAKE } from "@lyric/video";
 
 import { CharacterPicker } from "@/components/character-picker";
@@ -169,7 +169,9 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
           .filter((t) => t.status === "done" && t.kind !== "lipsync" && (t.file || t.clip))
           .map((t): Candidate => ({
             key: `${p.file}#${t.n}`,
-            label: `${p.label ?? p.file} · ${t.label ?? `Take ${t.n}`}`,
+            label: p.label ?? p.file,
+            tag: takeTag(t),
+            details: takeDetails(t),
             url: t.file ? fileUrl(p.url.replace(/[^/]+$/, t.file)) : fileUrl(p.url.replace(/pictures\/[^/]+$/, `clips/${t.clip}`)),
             kind: "video",
             used: same(t.sent, shot.filled),
@@ -719,7 +721,7 @@ function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare
 // compare"): every candidate of one shot side by side (videos, animated takes, pictures as stills), started together
 // and looped in sync; on a shot with a lyric line the song plays from that line, so each one is judged against the
 // same words and beat. One set of controls (space: play / pause); "Use for shot N" under each tile.
-type Candidate = { key: string; label: string; url: string; kind: "video" | "picture"; used: boolean; use: () => void };
+type Candidate = { key: string; label: string; url: string; kind: "video" | "picture"; used: boolean; use: () => void; tag?: string; details?: string }; // tag: the take's short tag (takeTag), label then the picture
 
 function ShotCompare({ shot, candidates, song, onClose }: { shot: ProductionShot; candidates: Candidate[]; song: string | null; onClose: () => void }) {
   const videos = useRef<Map<string, HTMLVideoElement>>(new Map());
@@ -839,7 +841,12 @@ function ShotCompare({ shot, candidates, song, onClose }: { shot: ProductionShot
                 )}
                 {c.kind === "picture" ? <span className="absolute top-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">picture (as a still)</span> : null}
               </div>
-              <span className="truncate text-[11px]" title={c.label}>
+              {c.tag ? (
+                <span data-compare-tag className="text-[11px] leading-tight font-medium" title={c.details}>
+                  {c.tag}
+                </span>
+              ) : null}
+              <span className="text-muted-foreground truncate text-[10px]" title={c.label}>
                 {c.label}
               </span>
               {c.used ? (
@@ -1228,8 +1235,8 @@ function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onRemove, on
       )}
       <span className="min-w-0 flex-1">
         <NameField id={`take-${t.n}`} name={t.label ?? null} file={label} className="inline-flex max-w-full font-bold" onSave={onRename} />{" "}
-        <span data-take-source className="text-muted-foreground">
-          {source}
+        <span data-take-source className="text-muted-foreground" title={`${source}\n${takeDetails(t)}`}>
+          {takeKind(t)}
         </span>
         {t.status === "running" ? " · being made…" : null}
         <span data-take-facts className="text-muted-foreground block">
