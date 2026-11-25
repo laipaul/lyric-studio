@@ -234,7 +234,7 @@ describe("Creation → Production", () => {
     expect(v.pictures.find((p) => p.file.startsWith("chapel_"))?.mjLink).toBe("https://www.midjourney.com/jobs/5813efa3-57ba-409f-8aa1-09b60e1b9c83?index=2");
   });
 
-  it("only a Mini film is the whole story (its two films); a shot list alone, Cut to the song, Add singing and instrumentals are not", () => {
+  it("only a Mini film is the whole story (its two films); a shot list alone, Cut to the song, Add lip sync and instrumentals are not", () => {
     const recipe = readRecipe(songPathsById(ws, id).recipe!);
     expect(isWholeStory({ ...recipe, songStyle: "film" }, false)).toBe(true);
     expect(isWholeStory({ ...recipe, songStyle: undefined }, false)).toBe(false);

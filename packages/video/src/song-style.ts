@@ -2,7 +2,7 @@
 // Details); it only decides which tools the studio shows, never what a video looks like, and nothing is lost when it
 // changes. Each style builds on the one before:
 //   cut      Cut to the song: your clips cut to the beat and the lyrics (level 1).
-//   singing  Add singing: the same, plus the singer on the lines you pick (level 2: Lyrics Sync → Who sings).
+//   singing  Add lip sync: the same, plus the singer on the lines you pick (level 2: Lyrics Sync → Who sings).
 //   film     Mini film: the song planned as scenes, a Reel or the whole song on YouTube (level 3: Creation's story
 //            tools open; Scenes come next).
 // song.json "songStyle". Not chosen yet: "singing" when the song already has singing lines, else "cut", so a tool
@@ -10,10 +10,10 @@
 export const SONG_STYLES = ["cut", "singing", "film"] as const;
 export type SongStyle = (typeof SONG_STYLES)[number];
 
-export const SONG_STYLE_LABEL: Record<SongStyle, string> = { cut: "Cut to the song", singing: "Add singing", film: "Mini film" };
+export const SONG_STYLE_LABEL: Record<SongStyle, string> = { cut: "Cut to the song", singing: "Add lip sync", film: "Mini film" };
 export const SONG_STYLE_HINT: Record<SongStyle, string> = {
   cut: "Your clips cut to the beat and the lyrics.",
-  singing: "The same, plus the singer on the lines you pick (Lyrics Sync → Who sings).",
+  singing: "The same, plus your singer lip-synced on the lines you pick (Lyrics Sync → Who sings).",
   film: "The whole song as a short film, shot by shot: Film 9:16 (Instagram) and Film 16:9 (YouTube). For a Reel, switch to Cut to the song.",
 };
 

@@ -62,7 +62,7 @@ async function main() {
     const kinds = () => page.$$eval("[data-section-chip]", (els: Element[]) => els.map((e) => e.getAttribute("data-section-chip")).join(","));
     const rows = () => page.$$eval("[data-section-row]", (els: Element[]) => els.map((e) => e.getAttribute("data-section-row")).join(","));
 
-    // Add singing: no sections.
+    // Add lip sync: no sections.
     await page.goto(`${base}/songs/${sp.project.id}?tab=lyrics`);
     await page.waitForSelector("[data-lines-scroll] th");
     await sleep(1000);

@@ -1,6 +1,6 @@
 // Browser test (needs a studio build, FFmpeg and Playwright, as videos-post.e2e.ts): Song style (22 Nov 2026, Paul's
 // three levels). Song Details → Song style saves song.json "songStyle"; Cut to the song hides Who sings in Lyrics
-// Sync, Add singing shows it; Mini film opens Creation's story tools; the Library card names the style.
+// Sync, Add lip sync shows it; Mini film opens Creation's story tools; the Library card names the style.
 import { execFileSync, spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -67,7 +67,7 @@ async function main() {
     await page.waitForSelector("[data-singing-off]");
     check((await page.$$("[data-singer-cell]")).length === 0, "Cut to the song: Who sings is hidden in Lyrics Sync, with a line saying why");
 
-    // Add singing: saved, and Who sings is back.
+    // Add lip sync: saved, and Who sings is back.
     await page.goto(`${base}/songs/${sp.project.id}?tab=details`);
     await page.waitForSelector("[data-song-style-option=singing]");
     await Promise.all([page.waitForResponse(put), page.click("[data-song-style-option=singing]")]);
@@ -75,7 +75,7 @@ async function main() {
     check(saved() === "singing", `song.json "songStyle" is singing (${saved()})`);
     await page.goto(`${base}/songs/${sp.project.id}?tab=lyrics`);
     await page.waitForSelector("[data-singer-cell]");
-    check((await page.$("[data-singing-off]")) === null && (await page.$$("[data-singer-cell]")).length === 2, "Add singing: Who sings shows on every line");
+    check((await page.$("[data-singing-off]")) === null && (await page.$$("[data-singer-cell]")).length === 2, "Add lip sync: Who sings shows on every line");
 
     // Mini film: Creation's story tools open; the Library card names it.
     await page.goto(`${base}/songs/${sp.project.id}?tab=details`);

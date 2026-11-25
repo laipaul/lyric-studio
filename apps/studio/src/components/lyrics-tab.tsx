@@ -136,7 +136,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
   loadRef.current = load;
   const reloadAnchors = useCallback(() => void loadRef.current(), []);
   const singer = useSinger(projectId, reloadAnchors);
-  // Song style (song-style.ts): Who sings shows for Add singing and Mini film, and on any song that has singing lines.
+  // Song style (song-style.ts): Who sings shows for Add lip sync and Mini film, and on any song that has singing lines.
   const style = useSongStyle(projectId);
   // Mini film: the song's sections (sections-ui.tsx), above the lines and as a row before each section.
   const film = !!style && showsFilm(style.style);
@@ -373,7 +373,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
             </div>
             {film ? <SectionsBar sections={sections} startMs={(n) => data.lines?.find((x) => x.number === n)?.startMs ?? null} /> : null}
             {withSinging ? <SingerBar singer={singer} /> : (
-              <p className="text-muted-foreground text-xs" data-singing-off>Who sings is hidden: this song&apos;s style is Cut to the song. Choose Add singing in Song Details to put the singer on lines.</p>
+              <p className="text-muted-foreground text-xs" data-singing-off>Who sings is hidden: this song&apos;s style is Cut to the song. Choose Add lip sync in Song Details to put the singer on lines.</p>
             )}
             {partPlatforms?.length ? (
               <div className="bg-card/60 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs" data-reel-part title={part?.section.reason ?? undefined}>
