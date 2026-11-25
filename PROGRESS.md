@@ -4,6 +4,15 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Fix: a song opens where you left it, not on an empty Review ✅ (to verify on the PC)
+- Before: any finished run opened the song on 4 Review, even when all its videos were discarded ("Something About You":
+  Reels 0, "No video to show with these filters"), and Review remembered one platform for every song.
+- Now: without ?tab= in the link, the song opens on the tab last used for THAT song (cookie ls-tab-<song id>, read on the
+  server, so no flash). A first visit opens Review only when the song has a kept video; otherwise the Prepare to-do, else
+  Make. Review opens on a platform that has videos (remembered per song); a platform you click still shows, even empty.
+- Code: apps/studio/src/lib/opening-tab.ts (chooseOpeningTab, chooseReviewPlatform); test packages/video/test/opening-tab.test.ts;
+  e2e song-stages (opens again on Make) and videos-post updated.
+
 ### Breathing room in singing clips; Copy the Gemini prompt; tags on every Compare tile ✅ (to verify on the PC)
 - Breathing room (realism plan): the voice SENT to the lip-sync model is quiet outside the take's own sung lines (lead-in,
   gaps of 0.5 s or more between its lines, the tail), with 120 ms fades; the song and the video's sound are never touched.
@@ -574,20 +583,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   the way to keep it out.
 - Code: storyboard.ts notInReason, StoryboardClip.notIn (data-story-notin). Tests: vitest story-not-in (2). The Shape
   browser test cannot plan in the cloud container (the audio analysis crashes there, the same before this step).
-
-### Clean up takes: put aside, never deleted, with Restore ✅ (to verify on the PC)
-- Paul (21 Nov 2026): "I need a cleanup button for the takes".
-- Creation card: **Clean up N takes** puts aside, after asking, the failed takes and the takes not chosen: a singing
-  take not in use (never sent, or its Storyboard clip on Omit: it never plays), an Animate take never sent. A small ✕
-  on such a take does it for one take. **Never touched:** the take in use, takes on a line, takes playing in the
-  Storyboard, takes being made, a take still to collect (Get result).
-- Put-aside takes leave the card and Lyrics Sync; their files move to pictures\takes\_removed\ (a Storyboard clip on
-  Omit stays as it is). **Removed takes (N) → Restore** brings any back with its file. Take numbers keep counting past
-  them. Nothing is deleted.
-- Code: animate.ts takeUse / removeTakes / restoreTake / nextTakeN, pictures.json "removedTakes"; POST
-  /api/songs/[id]/pictures { action: "cleanup", file, n? } / { action: "restore", file, n }.
-- Tests: vitest animate (+1: the rules, files moved, numbers, Restore); browser singer (+2: Clean up after asking,
-  Restore), pictures pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

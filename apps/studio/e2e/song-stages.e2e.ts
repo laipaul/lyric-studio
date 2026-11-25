@@ -265,6 +265,7 @@ async function main() {
     };
     video(path.join(exportsDir, "2026-10-28_1000", "reels"), "v1", "x\nSummary: PASS\n");
     video(path.join(exportsDir, "2026-10-29_1000", "reels"), "v2", "x\n[WARN] Clips repeated within 3 shots\nSummary: WARN - Clips repeated within 3 shots\n");
+    await page.context().clearCookies(); // a first visit: no tab remembered for this song (25 Nov 2026)
     await page.goto(`${base}/songs/${id}`);
     await page.waitForSelector("[data-stages]");
     check(((await page.textContent("[data-stage=make] [data-stage-status]")) ?? "").includes("2 videos made"), "Make counts every kept video of the song, all runs (2)");
@@ -696,6 +697,10 @@ async function main() {
     await page.click("[data-stage=make]");
     await page.waitForSelector("[data-make-chips]");
     check((await page.getAttribute("[data-stage=make]", "aria-current")) === "step", '"Next: Make" opens Make');
+    // 25 Nov 2026: the song opens again where it was left (Make), not on Review, though it has videos.
+    await page.goto(`${base}/songs/${id}`);
+    await page.waitForSelector("[data-stages]");
+    check((await page.getAttribute("[data-stage=make]", "aria-current")) === "step", "opened again: the stage last used for this song (Make), not Review");
     ws2.close();
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
     await browser.close();

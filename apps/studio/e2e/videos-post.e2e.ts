@@ -435,6 +435,8 @@ async function main() {
     const discardedStored = () => stored().filter((m) => m.video.includes("2026-10-22_1000/tiktok/") && m.status === "discarded").length;
     check(discardedStored() === 6, `all six marks stored (${discardedStored()})`);
     await page.reload();
+    // 25 Nov 2026: a platform with nothing left no longer opens by itself; its tab still shows it.
+    await showTab("tiktok");
     await page.waitForSelector("[data-review-platform=tiktok]");
     check((await tilesLeft()) === 0, "after a reload they are still hidden");
     // Mixed quick clicks on the discarded ones: restore three, favourite one, approve one.

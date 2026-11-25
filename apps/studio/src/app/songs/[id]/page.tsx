@@ -1,5 +1,6 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
@@ -33,6 +34,7 @@ const SHAPE_PANEL_IDS = ["settings", "look", "part", "pace", "shots", "theme"]; 
 const OLD_PANELS: Record<string, { tab: string; panel?: ShapePanelId }> = { clips: { tab: "shape", panel: "shots" }, shot: { tab: "shape", panel: "shots" }, auto: { tab: "shape", panel: "part" }, song: { tab: "details" }, make: { tab: "generate" } };
 const MAKE_PARTS = ["videos", "looks"]; // ?part=options (before 11 Nov 2026) opens Make: Advanced is there now
 import { TabsContent } from "@/components/ui/tabs";
+import { chooseOpeningTab, OPEN_TAB_COOKIE } from "@/lib/opening-tab";
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
 // The song page: header, then tabs: Assets (the song folder's files and clips), Lyrics (every line's
@@ -129,11 +131,14 @@ async function Song({ params, searchParams }: { params: Promise<{ id: string }>;
   const old = search.panel ? OLD_PANELS[search.panel] : undefined;
   const asked = old && (!search.tab || OLD_TABS[search.tab] === "shape" || search.tab === "shape") ? old.tab : search.tab ? (OLD_TABS[search.tab] ?? search.tab) : undefined;
   const askedPanel: ShapePanelId | null = old?.panel ?? (SHAPE_PANEL_IDS.includes(search.panel ?? "") ? (search.panel as ShapePanelId) : null);
-  const tab = asked && TABS.includes(asked) ? asked : runs.length ? "videos" : todo.length ? (blocking ?? todo[0]).tab : "generate";
+  // 25 Nov 2026: without ?tab= the page opens on the tab last used for this song (cookie ls-tab-<id>, written by SongStages);
+  // a first visit opens Review only when the song has a kept video (a run of discarded videos does not count).
+  const made = runs.reduce((n, r) => n + r.platforms.reduce((m, p) => m + p.videos.filter((v) => v.mark.status !== "discarded").length, 0), 0); // every kept video, all runs
+  const remembered = (await cookies()).get(OPEN_TAB_COOKIE(id))?.value ?? null;
+  const tab = chooseOpeningTab({ asked, remembered, tabs: TABS, keptVideos: made, todoTab: todo.length ? (blocking ?? todo[0]).tab : null });
 
   // Each stage's status line.
   const chips = song.platforms.map((p) => ({ ...p, state: chipState(p) }));
-  const made = runs.reduce((n, r) => n + r.platforms.reduce((m, p) => m + p.videos.filter((v) => v.mark.status !== "discarded").length, 0), 0); // every kept video, all runs
   const toReview = chips.reduce((n, p) => n + (p.state === "review" ? p.videos : 0), 0);
   const approvedCount = chips.reduce((n, p) => n + p.approved, 0);
   const rendering = chips.some((p) => p.state === "rendering");

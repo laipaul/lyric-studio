@@ -9,6 +9,7 @@ import { SongStyleChip } from "@/components/song-style";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FEATURE, FeatureIcon, PlatformMark } from "@/lib/feature-icons";
+import { chooseReviewPlatform, OPEN_TAB_COOKIE, OPEN_TAB_MAX_AGE } from "@/lib/opening-tab";
 import { cn } from "@/lib/utils";
 import { openTasks, useRunningTakes } from "@/lib/tasks-state";
 
@@ -114,6 +115,17 @@ function lastTab(stage: StageId): string | null {
     return null; // no browser storage: the first tab
   }
 }
+// The review platform is remembered per song (25 Nov 2026; before, one key for every song).
+const REVIEW_KEY = (projectId?: string) => (projectId ? `lyric-studio:last-tab:review:${projectId}` : LAST_TAB_KEY("review"));
+// The tab last used for this song, in a cookie, so the server opens the page on it with no flash (25 Nov 2026).
+function rememberSongTab(projectId: string | undefined, tab: string) {
+  if (!projectId) return;
+  try {
+    document.cookie = `${OPEN_TAB_COOKIE(projectId)}=${encodeURIComponent(tab)}; path=/; max-age=${OPEN_TAB_MAX_AGE}; SameSite=Lax`;
+  } catch {
+    // not remembered
+  }
+}
 function rememberTab(stage: StageId, tab: string) {
   try {
     window.localStorage.setItem(LAST_TAB_KEY(stage), tab);
@@ -179,7 +191,11 @@ export function SongStages({
   projectId?: string; // the song (the running-task badge on Creation and Lyrics Sync)
   children: React.ReactNode; // the TabsContent of every tab
 }) {
-  const [tab, setTabState] = useState(initialTab);
+  const [tab, setTabRaw] = useState(initialTab);
+  const setTabState = (t: string) => {
+    setTabRaw(t);
+    rememberSongTab(projectId, t); // every change of the active tab
+  };
   const singing = useRunningTakes(projectId, "singing"); // singing clips being made for this song (the Tasks menu's list)
   // Shape: the tab (always one), what its panel shows for a moment (Text, Theme, Analysis) and whether it is collapsed.
   const [shapeTab, setShapeTab] = useState<ShapeTabId>(isShapeTab(initialPanel) ? initialPanel : "settings");
@@ -188,12 +204,18 @@ export function SongStages({
   const [collapsed, setCollapsed] = useState(false);
   const [part, setPartState] = useState<MakePart>(initialPart ?? "videos");
   const [platform, setPlatform] = useState<string | null>(null);
-  const [reviewPlatform, setReviewPlatformState] = useState<string | null>(null);
+  const [reviewPlatform, setReviewPlatformState] = useState<string | null>(null); // clicked now: always shown
+  const [reviewRemembered, setReviewRemembered] = useState<string | null>(null); // from this song's last visit
   const setReviewPlatform = (p: string) => {
     setReviewPlatformState(p);
-    rememberTab("review", `videos:${p}`);
+    try {
+      window.localStorage.setItem(REVIEW_KEY(projectId), `videos:${p}`);
+    } catch {
+      // not remembered
+    }
   };
-  const reviewShown = reviewPlatforms.find((r) => r.name === reviewPlatform)?.name ?? reviewPlatforms[0]?.name ?? null;
+  // A remembered platform with no videos left does not show an empty page: the first platform with videos does.
+  const reviewShown = reviewPlatforms.find((r) => r.name === reviewPlatform)?.name ?? chooseReviewPlatform(reviewRemembered, reviewPlatforms);
   const [themeMode, setThemeMode] = useState<ThemeMode | null>(null);
   const [themeNow, setThemeNow] = useState<ThemeNow | null>(null);
   const [shapeStatus, setShapeStatus] = useState<StageStatus | null>(null);
@@ -231,8 +253,13 @@ export function SongStages({
     else if (!initialPanel && isSettingsSection(shapeLast)) setShapeTab("settings"); // remembered before Settings | Shots
     const makeLast = lastTab("make");
     if (!initialPart && MAKE_PARTS.some((m) => m.id === makeLast)) setPartState(makeLast as MakePart);
-    const reviewLast = lastTab("review");
-    if (reviewLast?.startsWith("videos:")) setReviewPlatformState(reviewLast.slice(7));
+    let reviewLast: string | null = null;
+    try {
+      reviewLast = window.localStorage.getItem(REVIEW_KEY(projectId));
+    } catch {
+      // no browser storage
+    }
+    if (reviewLast?.startsWith("videos:")) setReviewRemembered(reviewLast.slice(7));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const openStage = (s: (typeof STAGES)[number]) => {
     const last = s.id === "review" ? (lastTab(s.id)?.replace(/^videos:.*/, "videos") ?? null) : lastTab(s.id);
