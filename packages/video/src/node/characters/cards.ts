@@ -105,7 +105,7 @@ export function listCards(ws: Workspace): CardSummary[] {
       const file = readCardFile(root);
       const v = currentVersion(file);
       const vdir = versionDir(root, v.n);
-      const views = existsSync(vdir) ? readdirSync(vdir).filter((f) => IMAGE_EXT.test(f) && !/_full|_try\d/.test(f) && !/^sheet/.test(f)) : [];
+      const views = existsSync(vdir) ? readdirSync(vdir).filter((f) => IMAGE_EXT.test(f) && !/_full|_try\d/.test(f) && !/^(character_)?sheet/.test(f)) : [];
       const main = row.kind === "character" ? "closeup.png" : "wide_left.png";
       const thumbnail = views.includes(main) ? `v${v.n}/${main}` : file.reference;
       const used = usableVersion(file);

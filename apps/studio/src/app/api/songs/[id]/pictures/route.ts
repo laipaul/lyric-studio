@@ -4,7 +4,7 @@
 // POST multipart (pictures=<files>): adds pictures and videos under their own names; { action: "link", url }: adds the
 //   picture or video a link leads to (any outside source).
 // POST JSON { action: "animate", file, service, quality, takes, cap }: checks the cost against the cap, records the
-//   takes and starts them (the request does not wait); { action: "mood", file, mood }; { action: "feeling", file, feeling } (feelings.ts; "" = its section's); { action: "resume", file, n }:
+//   takes and starts them (the request does not wait); { action: "mood", file, mood }; { action: "who", file, who: <card id> | null } (picture-character.ts: Animate then keeps that character's face); { action: "feeling", file, feeling } (feelings.ts; "" = its section's); { action: "resume", file, n }:
 //   fetches a take that was sent but did not come back (free); { action: "send", file, n?, forLine? }: Send to Storyboard (the
 //   picture, or its take n): a copy joins the end of the song's clips (forLine: true, from Lyrics Sync: only for a line, not a story moment); { action: "defaults", defaults }: Paul's own
 //   defaults for every song (service, quality, takes, cap: workspace\creation.json).
@@ -18,7 +18,9 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { openWorkspace, project as projectTable, resolveWorkspaceDir } from "@lyric/db";
-import { addFromLink, addPictures, picturesView, removePicture, removeTakes, restorePicture, restoreTake, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, setPictureFeeling, startAnimate, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
+import { characterChoices, setPictureWho, startPictureAnimate } from "@lyric/video/picture-character";
+import { REFERENCE_MODEL } from "@lyric/video/animate";
+import { addFromLink, addPictures, picturesView, removePicture, removeTakes, restorePicture, restoreTake, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, setPictureFeeling, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
 import { runFinal, startFinal } from "@lyric/video/final";
 import { runSinging, withSongStarts } from "@lyric/video/singer";
 import { placeByName, productionView, setPictureShot, useForShot, withLineStarts } from "@lyric/video/shot-production";
@@ -51,7 +53,7 @@ export async function GET(_request: Request, { params }: Params) {
         } catch {
           // a song without a folder yet: no shot list
         }
-        return { board, production };
+        return { board: { ...board, characters: characterChoices(ws), faceUsdPerSecond: REFERENCE_MODEL.usdPerSecond }, production }; // characters: "Who is this" (picture-character.ts)
       }),
     );
   } catch (error) {
@@ -105,6 +107,7 @@ export async function POST(request: Request, { params }: Params) {
       const n = body.n === undefined || body.n === null ? null : Number(body.n);
       return Response.json({ label: withWorkspace((ws) => setItemLabel(ws, id, file, n, (body as { label?: unknown }).label)) });
     }
+    if (body.action === "who") return Response.json({ who: withWorkspace((ws) => setPictureWho(ws, id, file, (body as { who?: unknown }).who)) });
     if (body.action === "feeling") return Response.json({ feeling: withWorkspace((ws) => setPictureFeeling(ws, id, file, body.feeling)) });
     if (body.action === "mood") return Response.json({ mood: withWorkspace((ws) => setMood(ws, id, file, body.mood)) });
     // Make with references (24 Nov 2026): the shot with its people's and place's pictures, Seedance reference-to-video.
@@ -114,7 +117,7 @@ export async function POST(request: Request, { params }: Params) {
       return Response.json(started);
     }
     if (body.action === "animate") {
-      const started = withWorkspace((ws) => startAnimate(ws, id, file, { service: body.service as ServiceId, quality: body.quality as Quality, takes: Number(body.takes), capUsd: Number(body.cap) }));
+      const started = withWorkspace((ws) => startPictureAnimate(ws, id, file, { service: body.service as ServiceId, quality: body.quality as Quality, takes: Number(body.takes), capUsd: Number(body.cap) }));
       void runTakes(open, id, path.basename(file), started.takes.map((t) => t.n));
       return Response.json(started);
     }

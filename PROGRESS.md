@@ -15,7 +15,12 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   with **Save** (for Midjourney or Higgsfield). The contact sheet with scores stays as it was.
 - Make with references: the face sheet now includes the side profile when it is made.
 - Tests: characters-cards.test.ts (views, check, sheet), characters.e2e.ts (make both, the sheet, Save).
-- Next: Creation: "Who is this" on a picture, so Animate keeps that character's face (agreed, being built).
+- Creation: **Who is this** on each picture (Who: nobody / one of the characters with a close-up). With a character,
+  Animate sends the picture AND that character's face sheet (close-up, side profile, 3/4, teeth) to Seedance 2.5
+  reference-to-video: "@Image 1 is the picture to bring to life … @Image 2 is Jennifer's face reference sheet … never
+  change the clothes", then the usual prompt (realism rules, Feeling, Film look, mood). The model line shows "Seedance 2.5 ·
+  with Jennifer's face" and the cost uses its price (about $1.62 for 5 s; no Draft for this route yet). Nobody: as before.
+  picture-character.ts; pictures.json "who" (the card id); test/picture-character.test.ts.
 
 ### Feeling per section (realism plan step 3) ✅ (to verify on the PC)
 - Lyrics Sync (Mini film songs): each section row gets **Feeling**: none, tender, longing, hope, joy, pride, defiance,

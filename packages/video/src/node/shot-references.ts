@@ -41,6 +41,17 @@ function sheet(ws: Workspace, panels: readonly string[]): string {
   return out;
 }
 
+// A character's face sheet (close-up, side profile, 3/4, teeth): its main look's close-up, else the card's picture.
+// root: the card's folder; version: its views' folder (v<n>); lookDir: a Wardrobe look's folder (its close-up first).
+// fallback: the picture standing in for a missing close-up (the card's own picture, in a shot).
+export function faceSheet(ws: Workspace, version: string, name: string, who: string = name, lookDir: string = version, fallback?: string): ReferencePicture | null {
+  const existing = (files: string[]) => [...new Set(files.filter((f) => existsSync(f)).map((f) => path.resolve(f)))];
+  const face = existing([path.join(lookDir, "closeup.png"), path.join(version, "closeup.png"), ...(fallback ? [fallback] : [])]).slice(0, 1);
+  const faces = existing([...face, path.join(version, "profile.png"), path.join(version, "three_quarter.png"), path.join(version, TEETH_VIEW)]); // profile: the Character sheet's side view (25 Nov 2026)
+  return faces.length ? { name, file: sheet(ws, faces), who, role: "face", panels: faces.map(viewLabel) } : null;
+}
+const viewLabel = (f: string) => ({ "closeup.png": "close-up", "profile.png": "side profile", "three_quarter.png": "3/4", [TEETH_VIEW]: "smiling, teeth visible", "body_front.png": "front", "body_back.png": "back" })[path.basename(f)] ?? "picture";
+
 // The pictures of a shot, in @Image order: each person's face sheet and outfit sheet in this shot's look, then its place.
 export function shotReferences(ws: Workspace, shot: ProductionShot): ReferencePicture[] {
   const cards = new Map(listCards(ws).map((c) => [c.id, c] as const));
@@ -60,12 +71,10 @@ export function shotReferences(ws: Workspace, shot: ProductionShot): ReferencePi
     const name = `${worn.character}${worn.look ? ` · ${worn.look}` : ""}`;
     const version = path.join(root, path.dirname(card.thumbnail)); // v<n>\ (the card's views)
     const look = worn.lookId && worn.lookId !== MAIN_LOOK ? path.join(root, LOOKS_DIR, worn.lookId) : version;
-    const face = existing([path.join(look, "closeup.png"), path.join(version, "closeup.png"), file]).slice(0, 1);
-    const faces = existing([...face, path.join(version, "profile.png"), path.join(version, "three_quarter.png"), path.join(version, TEETH_VIEW)]); // profile: the Character sheet's side view (25 Nov 2026)
+    const faces = faceSheet(ws, version, name, worn.character, look, file);
     const outfit = existing([path.join(look, "body_front.png"), path.join(look, "body_back.png")]);
-    const label = (f: string) => ({ "closeup.png": "close-up", "profile.png": "side profile", "three_quarter.png": "3/4", [TEETH_VIEW]: "smiling, teeth visible", "body_front.png": "front", "body_back.png": "back" })[path.basename(f)] ?? "picture";
-    if (faces.length) out.push({ name, file: sheet(ws, faces), who: worn.character, role: "face", panels: faces.map(label) });
-    if (outfit.length) out.push({ name: `${name} (outfit)`, file: sheet(ws, outfit), who: worn.character, role: "outfit", panels: outfit.map(label) });
+    if (faces) out.push(faces);
+    if (outfit.length) out.push({ name: `${name} (outfit)`, file: sheet(ws, outfit), who: worn.character, role: "outfit", panels: outfit.map(viewLabel) });
   }
   return out.slice(0, MAX_REFERENCES);
 }

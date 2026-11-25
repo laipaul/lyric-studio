@@ -105,6 +105,7 @@
     "./shot-production": "./src/node/shot-production.ts",
     "./shot-script": "./src/node/shot-script.ts",
     "./shot-references": "./src/node/shot-references.ts",
+    "./picture-character": "./src/node/picture-character.ts",
     "./production": "./src/node/production.ts",
     "./animate": "./src/node/animate.ts",
     "./singer": "./src/node/singer.ts",

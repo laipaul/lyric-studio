@@ -10,7 +10,10 @@
 import { Check, Copy, Film, ImagePlus, Link2, Loader2, Play, RotateCw, Send, Sparkles, UserRound, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-import type { CreationDefaults, PictureView, PicturesView, Quality, ServiceId, Take } from "@lyric/video/animate";
+import type { CreationDefaults, PictureView, PicturesView as BoardView, Quality, ServiceId, Take } from "@lyric/video/animate";
+
+// characters: "Who is this" (picture-character.ts); faceUsdPerSecond: Animate with a character's face sheet.
+type PicturesView = BoardView & { characters?: { id: string; name: string }[]; faceUsdPerSecond?: number };
 import type { ProductionShot, ProductionView } from "@lyric/video/shot-production";
 
 import { NameField } from "@/components/name-field";
@@ -925,6 +928,7 @@ function PictureTile({
 }) {
   const [mood, setMood] = useState(p.mood);
   const [feeling, setFeeling] = useState(p.feeling);
+  const [who, setWho] = useState(p.who ?? "");
   // This picture's own choice; until Paul changes it, his defaults apply.
   const [model, setModel] = useState<string | null>(null);
   const [takesOwn, setTakes] = useState<number | null>(null);
@@ -935,9 +939,11 @@ function PictureTile({
   const q = svc.qualities.find((x) => x.id === quality) ?? svc.qualities[0];
   const takes = takesOwn ?? defaults.takes;
   const capUsd = defaults.cap;
-  const perTake = Math.round(q.usdPerSecond * takeSeconds * 100) / 100;
+  const whoName = board.characters?.find((c) => c.id === who)?.name ?? null; // Animate keeps this character's face
+  const perTake = Math.round((whoName ? (board.faceUsdPerSecond ?? 0.324) : q.usdPerSecond) * takeSeconds * 100) / 100;
   const total = Math.round(perTake * takes * 100) / 100;
   const over = total > capUsd;
+  const ready = whoName ? !!board.services.find((x) => x.id === "wavespeed")?.ready : svc.ready; // with a face: WaveSpeed
   const video = p.kind === "video";
   // A take's video (pictures/takes/…); a take from the first build (21 Nov 2026) is only in the clips.
   const takeUrl = (t: Take) => (t.file ? fileUrl(p.url.replace(/[^/]+$/, t.file)) : t.clip ? fileUrl(p.url.replace(/pictures\/[^/]+$/, `clips/${t.clip}`)) : null);
@@ -1014,7 +1020,7 @@ function PictureTile({
     try {
       if (mood !== p.mood) await post({ action: "mood", file: p.file, mood });
       await post({ action: "animate", file: p.file, service: svc.id, quality: q.id, takes, cap: capUsd });
-      setNotice({ ok: true, text: `${p.file}: ${takes} take${takes === 1 ? "" : "s"} sent to ${svc.label} · ${q.label} (about ${money(total)}). They stay here: send your favourites to the Storyboard; follow them in Tasks.` });
+      setNotice({ ok: true, text: `${p.file}: ${takes} take${takes === 1 ? "" : "s"} sent to ${whoName ? `WaveSpeed · Seedance 2.5 with ${whoName}'s face sheet` : `${svc.label} · ${q.label}`} (about ${money(total)}). They stay here: send your favourites to the Storyboard; follow them in Tasks.` });
       window.dispatchEvent(new Event("lyric-tasks-changed")); // the Tasks menu opens with them
       await reload();
     } catch (e) {
@@ -1099,6 +1105,27 @@ function PictureTile({
                 void post({ action: "feeling", file: p.file, feeling: f }).catch((e) => setNotice({ ok: false, text: (e as Error).message }));
               }}
             />
+            {board.characters?.length ? (
+              <select
+                data-picture-who
+                aria-label="Who is this"
+                title="Who is in this picture: Animate then sends that character's face sheet (close-up, side profile, 3/4) so the face stays the same in every clip"
+                value={who}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setWho(v);
+                  void post({ action: "who", file: p.file, who: v || null }).catch((err) => setNotice({ ok: false, text: (err as Error).message }));
+                }}
+                className={cn("bg-background max-w-40 rounded border px-1 py-0.5", who ? "text-sky-200" : "text-muted-foreground")}
+              >
+                <option value="">Who: nobody</option>
+                {board.characters.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    Who: {c.name}
+                  </option>
+                ))}
+              </select>
+            ) : null}
           </div>
           <input
             data-picture-mood
@@ -1110,13 +1137,19 @@ function PictureTile({
             className="bg-background rounded-md border px-2 py-1 text-xs"
           />
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
-            <select data-picture-model value={`${svc.id}:${q.id}`} onChange={(e) => setModel(e.target.value)} className="bg-background max-w-full rounded-md border px-1.5 py-1" aria-label="Model">
-              {modelOptions(board.services).map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
+            {whoName ? (
+              <span data-picture-face-model className="bg-background rounded-md border px-1.5 py-1" title="With a character, Animate uses Seedance 2.5 with references (WaveSpeed): the picture and the face sheet">
+                Seedance 2.5 · with {whoName}&apos;s face
+              </span>
+            ) : (
+              <select data-picture-model value={`${svc.id}:${q.id}`} onChange={(e) => setModel(e.target.value)} className="bg-background max-w-full rounded-md border px-1.5 py-1" aria-label="Model">
+                {modelOptions(board.services).map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            )}
             <select data-picture-takes value={takes} onChange={(e) => setTakes(Number(e.target.value))} className="bg-background rounded-md border px-1.5 py-1" aria-label="Takes">
               {Array.from({ length: maxTakes }, (_, i) => i + 1).map((n) => (
                 <option key={n} value={n}>
@@ -1124,7 +1157,7 @@ function PictureTile({
                 </option>
               ))}
             </select>
-            <Button type="button" size="sm" data-picture-animate disabled={busy || !svc.ready || over} onClick={() => void animate()} title={!svc.ready ? `No ${svc.label} key yet` : over ? `Above your cap of ${money(capUsd)}` : undefined}>
+            <Button type="button" size="sm" data-picture-animate disabled={busy || !ready || over} onClick={() => void animate()} title={!ready ? `No ${whoName ? "WaveSpeed" : svc.label} key yet` : over ? `Above your cap of ${money(capUsd)}` : undefined}>
               {busy ? <Loader2 className="animate-spin" /> : <Sparkles />} Animate
             </Button>
           </div>
