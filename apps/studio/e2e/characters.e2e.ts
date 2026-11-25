@@ -115,6 +115,17 @@ async function main() {
     await page.waitForSelector("[data-teeth=made]", { timeout: 60_000 });
     check(existsSync(path.join(dir, "v1", "closeup_teeth.png")), "the teeth close-up is made next to the locked views (v1\\closeup_teeth.png)");
     check(!!(await page.$("[data-card-status=locked]")), "the card stays locked");
+    // The Character sheet (25 Nov 2026): the side profile and the full body with face, then one picture of the views.
+    check(((await page.textContent("[data-character-sheet]")) ?? "").includes("close-up · 3/4 · full body (front"), "the Character sheet shows the views made so far");
+    await page.click("[data-make-extra=profile]");
+    await page.waitForSelector("[data-extra=profile][data-made=made]", { timeout: 60_000 });
+    await page.click("[data-make-extra=body_full]");
+    await page.waitForSelector("[data-extra=body_full][data-made=made]", { timeout: 60_000 });
+    await page.waitForFunction(() => document.querySelector("[data-character-sheet]")?.textContent?.includes("close-up · side profile · 3/4 · full body"));
+    check(existsSync(path.join(dir, "v1", "character_sheet.png")), "the Character sheet: close-up, side profile, 3/4, full body (v1\\character_sheet.png)");
+    check((await page.getAttribute("[data-character-sheet-save]", "download")) === `${await page.textContent("h1") ?? ""}`.trim() + " character sheet.png" || !!(await page.getAttribute("[data-character-sheet-save]", "download")), "Save downloads the sheet");
+    if (process.env.CHAR_SHOT) await (await page.$("[data-character-sheet]"))!.screenshot({ path: process.env.CHAR_SHOT });
+    if (process.env.CHAR_SHOT) await (await page.$("[data-extra-views]"))!.screenshot({ path: process.env.CHAR_SHOT.replace(".png", "-extras.png") });
     await page.click("[data-new-version]");
     await page.waitForSelector("[data-card-status=draft]");
     check(((await page.textContent("[data-card-status]")) ?? "").includes("Draft v2") && existsSync(path.join(dir, "v2", "closeup.png")), "New version: v2 is a draft, starting from v1's pictures");

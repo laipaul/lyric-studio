@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Crop, Film, ImagePlus, Lock, Plus, RefreshCw, RotateCcw, Square, Upload, Wand2 } from "lucide-react";
+import { ArrowLeft, Crop, Download, Film, ImagePlus, Lock, Plus, RefreshCw, RotateCcw, Square, Upload, Wand2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -23,6 +23,13 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
   return d;
 }
 const json = (body: unknown): RequestInit => ({ headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+// The extra views of a character card (plan.ts EXTRA_VIEWS), each made only when asked.
+const EXTRAS = [
+  { id: "profile", label: "Side profile", make: "Make the side profile", why: "A true side view of the face, for the Character sheet: video models invent what they never saw." },
+  { id: "body_full", label: "Full body with face", make: "Make the full body with face", why: "The whole person from head to toe, face included, for the Character sheet." },
+  { id: "closeup_teeth", label: "Teeth close-up", make: "Make the teeth close-up", why: "For a character who sings or speaks: a smile with the teeth visible, so the video keeps the same teeth in every shot." },
+] as const;
+
 const fileUrl = (id: string, rel: string, stamp?: string | number) => `/api/cards/${id}/file/${rel.split("/").map(encodeURIComponent).join("/")}${stamp ? `?t=${encodeURIComponent(String(stamp))}` : ""}`;
 const money = (usd: number) => `$${usd.toFixed(2)}`;
 const KIND_LABEL = { character: "character", scene: "scene card" } as const;
@@ -555,26 +562,47 @@ export function CardPage({ id }: { id: string }) {
               </p>
             ) : null}
             {character && items.some((i) => i.id === "closeup" && i.chosen !== null) ? (
-              // The teeth close-up (25 Nov 2026): an extra picture, also on a locked card; it changes none of the views.
-              (() => {
-                const teeth = items.find((i) => i.id === "closeup_teeth");
-                const made = !!teeth && teeth.chosen !== null;
-                return (
-                  <div data-teeth={made ? "made" : "none"} className="bg-card/40 flex items-center gap-3 rounded-md border p-2 text-xs">
-                    {made ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- a generated view
-                      <img src={fileUrl(card.id, `v${version.n}/closeup_teeth.png`, stamp)} alt="" className="h-20 rounded border object-cover" />
-                    ) : null}
-                    <div className="flex flex-col gap-1">
-                      <span className="font-medium">Teeth close-up{made && teeth?.text ? ` · ${teeth.text}` : ""}</span>
-                      <span className="text-muted-foreground">For a character who sings or speaks: a smile with the teeth visible, so the video keeps the same teeth in every shot. One picture from this card; the views above do not change.</span>
-                      <Button size="sm" variant="outline" className="w-fit" disabled={!!running || !!busy} onClick={() => act("remake", { action: "remake", only: ["closeup_teeth"], cap })} data-make-teeth>
-                        <RefreshCw /> {made ? "Make it again" : "Make the teeth close-up"}
-                      </Button>
+              // Extra views (25 Nov 2026): each one picture from this card, also on a locked card; they change none of the
+              // views above. The side profile and the full body with face complete the Character sheet.
+              <div className="flex flex-col gap-2" data-extra-views>
+                {EXTRAS.map((x) => {
+                  const it = items.find((i) => i.id === x.id);
+                  const made = !!it && it.chosen !== null;
+                  return (
+                    <div key={x.id} data-extra={x.id} data-made={made ? "made" : "none"} {...(x.id === "closeup_teeth" ? { "data-teeth": made ? "made" : "none" } : {})} className="bg-card/40 flex items-center gap-3 rounded-md border p-2 text-xs">
+                      {made ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- a generated view
+                        <img src={fileUrl(card.id, `v${version.n}/${x.id}.png`, stamp)} alt="" className="h-20 rounded border object-cover" />
+                      ) : null}
+                      <div className="flex flex-col gap-1">
+                        <span className="font-medium">
+                          {x.label}
+                          {made && it?.text ? ` · ${it.text}` : ""}
+                        </span>
+                        <span className="text-muted-foreground">{x.why}</span>
+                        <Button size="sm" variant="outline" className="w-fit" disabled={!!running || !!busy} onClick={() => act("remake", { action: "remake", only: [x.id], cap })} {...(x.id === "closeup_teeth" ? { "data-make-teeth": "" } : {})} data-make-extra={x.id}>
+                          <RefreshCw /> {made ? "Make it again" : x.make}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })()
+                  );
+                })}
+              </div>
+            ) : null}
+            {character && d.characterSheet ? (
+              // The Character sheet: the views side by side in one picture (made on this PC, free).
+              <div data-character-sheet className="bg-card/40 flex flex-col gap-2 rounded-md border p-2 text-xs">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">Character sheet</span>
+                  <span className="text-muted-foreground">{d.characterSheet.panels.join(" · ")}</span>
+                  <a href={fileUrl(card.id, d.characterSheet.file, stamp)} download={`${card.name} character sheet.png`} className="hover:bg-accent ml-auto flex items-center gap-1 rounded border px-2 py-0.5" data-character-sheet-save>
+                    <Download className="size-3" /> Save
+                  </a>
+                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element -- made from the views */}
+                <img src={fileUrl(card.id, d.characterSheet.file, stamp)} alt={`${card.name}: ${d.characterSheet.panels.join(", ")}`} className="max-h-64 w-fit max-w-full rounded border object-contain" />
+                <span className="text-muted-foreground">One picture of the same person from several sides, in soft daylight. Make with references sends it; Save it for Midjourney or Higgsfield.</span>
+              </div>
             ) : null}
             {character && draft && items.some((i) => i.id === "body_front" || i.id === "body_back") ? (
               <Button size="sm" variant="outline" className="w-fit" disabled={!!running || !!busy} onClick={() => act("remake", { action: "remake", only: ["body_front", "body_back"], cap })} data-remake-body>

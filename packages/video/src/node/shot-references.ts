@@ -61,9 +61,9 @@ export function shotReferences(ws: Workspace, shot: ProductionShot): ReferencePi
     const version = path.join(root, path.dirname(card.thumbnail)); // v<n>\ (the card's views)
     const look = worn.lookId && worn.lookId !== MAIN_LOOK ? path.join(root, LOOKS_DIR, worn.lookId) : version;
     const face = existing([path.join(look, "closeup.png"), path.join(version, "closeup.png"), file]).slice(0, 1);
-    const faces = existing([...face, path.join(version, "three_quarter.png"), path.join(version, TEETH_VIEW)]);
+    const faces = existing([...face, path.join(version, "profile.png"), path.join(version, "three_quarter.png"), path.join(version, TEETH_VIEW)]); // profile: the Character sheet's side view (25 Nov 2026)
     const outfit = existing([path.join(look, "body_front.png"), path.join(look, "body_back.png")]);
-    const label = (f: string) => ({ "closeup.png": "close-up", "three_quarter.png": "3/4", [TEETH_VIEW]: "smiling, teeth visible", "body_front.png": "front", "body_back.png": "back" })[path.basename(f)] ?? "picture";
+    const label = (f: string) => ({ "closeup.png": "close-up", "profile.png": "side profile", "three_quarter.png": "3/4", [TEETH_VIEW]: "smiling, teeth visible", "body_front.png": "front", "body_back.png": "back" })[path.basename(f)] ?? "picture";
     if (faces.length) out.push({ name, file: sheet(ws, faces), who: worn.character, role: "face", panels: faces.map(label) });
     if (outfit.length) out.push({ name: `${name} (outfit)`, file: sheet(ws, outfit), who: worn.character, role: "outfit", panels: outfit.map(label) });
   }

@@ -1,5 +1,5 @@
 // One character or scene card.
-// GET (?v=n to view an older, read-only version): the card, its current version (or version n), the version in use, the pictures' report, the cost of Make pack, what is missing before Lock, jobs.
+// GET (?v=n to view an older, read-only version): the card, its Character sheet (one picture of its views), its current version (or version n), the version in use, the pictures' report, the cost of Make pack, what is missing before Lock, jobs.
 // PATCH { outfit?, outfit_split?, props?, description?, model? }: the draft's texts (refused on a locked version). A changed outfit is split per view
 //   (close-ups / front / back) with the cheap text model; without a fal key the outfit is still saved and `message` says so.
 // POST { action }: "check" (the picture again) · "crop" (crop to face) · "pack" { cap } · "remake" { only, cap } ·
@@ -9,12 +9,14 @@
 // The Wardrobe: "look-add" { name, outfit?, closeup? } · "look-save" { look, name?, outfit?, outfit_split?, model?, closeup? } ·
 //   "look-make" { look, cap } · "look-remake" { look, only, cap } (queued, like Make pack) · "look-lock" / "look-unlock" { look }.
 // Make pack / Remake / Get missing pictures are queued and run in the studio's process (the Tasks menu shows them).
+import path from "node:path";
+
 import { connection } from "next/server";
 
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import {
   calibrationSongs, cardFace, draftDescription, hasGeminiKey, moveOwnPicture, GEMINI_KEY_MISSING, addLook, getLook, listLooks, lookDir, lookEstimate, lookProblems, setLookLocked, updateLook, MAIN_LOOK, cardTools, ensureSplit, splitNeeded, cardJobsFor, cardRoot, cardThresholds, checkCardPicture, cropCardToFace, currentVersion, enqueueCardJob, getCard, lockCard, lockProblems,
-  MODELS, newVersion, usableVersion, versionByNumber, packEstimate, readCardFile, readReport, repickLegacy, buildSheet, runCardJob, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId,
+  MODELS, newVersion, usableVersion, versionByNumber, packEstimate, readCardFile, readReport, repickLegacy, buildSheet, characterSheet, runCardJob, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId,
 } from "@lyric/video/characters";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
@@ -65,6 +67,12 @@ function detail(id: string, message: string | null = null, n: number | null = nu
         };
       }),
       songs: row.kind === "character" ? calibrationSongs(ws) : [],
+      // The Character sheet (character-sheet.ts): the views side by side in one picture, file relative to the card.
+      characterSheet: (() => {
+        if (row.kind !== "character") return null;
+        const sh = characterSheet(versionDir(root, v.n));
+        return sh ? { file: path.relative(root, sh.file).split(path.sep).join("/"), panels: sh.panels } : null;
+      })(),
     };
   });
 }

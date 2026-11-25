@@ -4,6 +4,19 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Character sheet: side profile, full body with face, one picture of the views ✅ (to verify on the PC)
+- Paul (25 Nov 2026, from the tutorial's worksheet: "several shots in one character picture"; "characters only").
+- Characters → a character card gets two more extra views next to the teeth close-up, each one picture made from the
+  card on its model (Gemini on Paul's key), outdoors in soft daylight like every view, also on a locked card:
+  **Side profile** (a true side view) and **Full body with face** (head to toe, not cropped at the neck). Their face
+  check only informs ("judge by eye"); they are never made again for it.
+- **Character sheet**: the card's views side by side in one clean picture (close-up, side profile, 3/4, full body;
+  the neck-cropped front until the full body with face is made), made on the PC with FFmpeg (free), v<n>\character_sheet.png,
+  with **Save** (for Midjourney or Higgsfield). The contact sheet with scores stays as it was.
+- Make with references: the face sheet now includes the side profile when it is made.
+- Tests: characters-cards.test.ts (views, check, sheet), characters.e2e.ts (make both, the sheet, Save).
+- Next: Creation: "Who is this" on a picture, so Animate keeps that character's face (agreed, being built).
+
 ### Feeling per section (realism plan step 3) ✅ (to verify on the PC)
 - Lyrics Sync (Mini film songs): each section row gets **Feeling**: none, tender, longing, hope, joy, pride, defiance,
   grief, calm, or your own word. Saved with the sections in song.json; the chips show it.

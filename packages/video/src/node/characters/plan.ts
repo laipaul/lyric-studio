@@ -3,7 +3,7 @@
 
 // ---- what is generated ----
 
-export type ViewId = "closeup" | "three_quarter" | "body_front" | "body_back" | "closeup_teeth";
+export type ViewId = "closeup" | "three_quarter" | "body_front" | "body_back" | "closeup_teeth" | "profile" | "body_full";
 export type AngleId = "wide_left" | "wide_right" | "detail";
 export type Aspect = "3:4" | "2:3";
 
@@ -12,7 +12,9 @@ export type Aspect = "3:4" | "2:3";
 // on the face views only; a body view that shows a face anyway is made again.
 // minFace: the face is at least this fraction of the picture's height (a face view is a close-up; Seedream once sent
 // high-angle full-length shots). Null for the body views.
-export type View = { id: ViewId; label: string; aspect: Aspect; face: boolean; expectYaw: [number, number] | null; minFace: number | null; prompt: string };
+// looseCheck (extra views for the Character sheet): the face check informs only, never makes the view again (a true
+// profile is too turned for it; a full-length face is small).
+export type View = { id: ViewId; label: string; aspect: Aspect; face: boolean; expectYaw: [number, number] | null; minFace: number | null; prompt: string; looseCheck?: boolean };
 export const EYE_LEVEL = "Camera at eye level, level with their face: no high angle, no top-down view.";
 export const VIEWS: View[] = [
   {
@@ -63,6 +65,32 @@ export const EXTRA_VIEWS: View[] = [
     id: "closeup_teeth",
     label: "Close-up, smiling (teeth)",
     prompt: VIEWS[0].prompt.replace("relaxed neutral expression, mouth gently closed", "a gentle natural smile, lips slightly parted, the upper teeth visible with their natural shape, size and alignment"),
+  },
+  // The Character sheet (25 Nov 2026, Paul: one picture of the same person from several sides, as in the tutorials):
+  // a true side profile and a full-length view WITH the face. Made from the card like every view, outdoors.
+  {
+    ...VIEWS[0],
+    id: "profile",
+    label: "Side profile",
+    expectYaw: [70, 95],
+    minFace: null,
+    looseCheck: true,
+    prompt: VIEWS[0].prompt
+      .replace(
+        "straight on, facing the camera and looking into the lens, relaxed neutral expression, mouth gently closed",
+        "in a true side profile: the head turned 90 degrees, seen exactly from the side, one eye visible, the line of the forehead, nose, lips and chin clear, relaxed neutral expression, mouth gently closed",
+      )
+      .replace("the face filling about half the frame", "the head filling about half the frame"),
+  },
+  {
+    id: "body_full",
+    label: "Full body with face",
+    aspect: "2:3",
+    face: false,
+    expectYaw: null,
+    minFace: null,
+    looseCheck: true,
+    prompt: "A full-length photograph of this person from head to toe, standing naturally and facing the camera, arms relaxed, the face clearly visible and exactly the same as in the reference, the whole outfit and shoes visible, the person filling most of the picture's height, camera at eye level (no high angle, no top-down view), a 50 mm lens. Natural skin texture, no retouching. The same hairstyle as in the reference picture.",
   },
 ];
 export const ALL_VIEWS: View[] = [...VIEWS, ...EXTRA_VIEWS];
@@ -182,7 +210,7 @@ const cap1 = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 export function veilSentence(viewId: ViewId, phrase: string | null): string | null {
   if (!phrase) return null;
   const p = cap1(phrase);
-  if (viewId === "body_front") return `${p} falling behind their shoulders, visible at both sides of the shoulders and arms.`;
+  if (viewId === "body_front" || viewId === "body_full") return `${p} falling behind their shoulders, visible at both sides of the shoulders and arms.`;
   if (viewId === "body_back") return `${p} falling down their back, clearly visible.`;
   return `${p} falling behind their shoulders, visible in this picture.`;
 }
@@ -197,7 +225,7 @@ export function viewPrompt(v: View, outfit?: string, split?: OutfitSplit | null)
   let wear: string;
   if (sp) {
     if (v.face) wear = ` Outfit (only the part inside this head-and-shoulders frame: neckline, collar, shoulders, earrings, hair): ${sp.closeups.trim() || "as in the reference picture"}. ${frame}`;
-    else if (v.id === "body_front") {
+    else if (v.id === "body_front" || v.id === "body_full") {
       {
         // The veil is seen from the front too (behind the shoulders): it is never listed as a back-only detail.
         const backOnly = withoutVeil(sp.back);
@@ -362,6 +390,13 @@ export const MIN_JUDGED_FACE_PX = 64; // smaller faces (e.g. in a full-body view
 
 export function classify(view: ViewId, r: FaceResult, t: Thresholds, frame_h?: number | null): { light: Light; text: string; regenerate: boolean } {
   const v = ALL_VIEWS.find((x) => x.id === view)!;
+  if (v.looseCheck) {
+    // Shown, never made again for the check: a true profile is too turned to compare, a full-length face is small.
+    if (r.score === null) return { light: "grey", text: "Judge the face by eye (too turned or too small for the face check).", regenerate: false };
+    const s = r.score.toFixed(2);
+    if (r.score >= t.green_from) return { light: "green", text: `Same person (${s}).`, regenerate: false };
+    return { light: "amber", text: `Face check ${s}: judge by eye.`, regenerate: false };
+  }
   if (!v.face) {
     // A neck-cropped body view must show no face: faces come only from the close-up.
     if (r.score !== null && (r.face_px ?? 0) >= 40) return { light: "red", text: "A face is visible: the view should be cropped at the neck.", regenerate: true };

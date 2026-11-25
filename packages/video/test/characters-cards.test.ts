@@ -18,6 +18,7 @@ import {
 import { anglePrompt, ANGLES, classify, DEFAULT_THRESHOLDS, EXTRA_VIEWS, DESCRIPTION_PROMPT, PACK_STYLE, imageSize, MAX_YAW, minFaceFor, VIEWS, viewPrompt } from "../src/node/characters/plan";
 import { outfitSplitPrompt } from "../src/node/characters/split";
 import { stubFace, stubFal } from "../src/node/characters/stub";
+import { characterSheet } from "../src/node/characters/character-sheet";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-cards-"));
 const wsDir = path.join(root, "workspace");
@@ -341,6 +342,34 @@ describe("cards", () => {
     expect(readFileSync(path.join(dir, "closeup.png")).equals(before)).toBe(true);
     expect(getCard(ws, c.id).status).toBe("locked");
     await expect(makePictures(ws, c.id, { ...tools(), sleep: async () => {} }, { cap: 3, only: ["closeup", "closeup_teeth"] })).rejects.toThrow(/locked/);
+  });
+
+  test("the Character sheet (25 Nov 2026): side profile and full body with face as extra views; one clean picture of the views", async () => {
+    const profile = EXTRA_VIEWS.find((v) => v.id === "profile")!;
+    const full = EXTRA_VIEWS.find((v) => v.id === "body_full")!;
+    expect(profile.prompt).toMatch(/true side profile/);
+    expect(profile.prompt).not.toMatch(/facing the camera and looking into the lens/);
+    expect(viewPrompt(full)).toMatch(/face clearly visible/);
+    expect(viewPrompt(full)).not.toMatch(/CROPPED AT THE NECK/);
+    expect(viewPrompt(full)).toMatch(/outdoor place/); // the tutorial's outdoors trick, as every view
+    // The face check only informs: a turned or small face is never made again.
+    expect(classify("profile", { score: null }, DEFAULT_THRESHOLDS)).toMatchObject({ light: "grey", regenerate: false });
+    expect(classify("profile", { score: 0.1, face_px: 300, yaw: 88 }, DEFAULT_THRESHOLDS)).toMatchObject({ light: "amber", regenerate: false });
+    expect(classify("body_full", { score: 0.5, face_px: 80 }, DEFAULT_THRESHOLDS)).toMatchObject({ light: "green", regenerate: false });
+
+    const c = createCard(ws, { kind: "character", name: "sheet bride", picture: readFileSync(path.join(pics, "default.png")), fileName: "bride.png" });
+    await makePictures(ws, c.id, { ...tools(), sleep: async () => {} }, { cap: 3 });
+    lockCard(ws, c.id);
+    const dir = versionDir(cardRoot(ws, getCard(ws, c.id)), 1);
+    const before = characterSheet(dir)!;
+    expect(before.panels).toEqual(["close-up", "3/4", "full body (front, cropped at the neck)"]);
+    await makePictures(ws, c.id, { ...tools(), sleep: async () => {} }, { cap: 3, only: ["profile", "body_full"] }); // allowed on a locked card
+    expect(existsSync(path.join(dir, "body_full.png"))).toBe(true);
+    expect(existsSync(path.join(dir, "body_full_full.png"))).toBe(false); // not cropped at the neck
+    const sheet = characterSheet(dir)!;
+    expect(sheet.panels).toEqual(["close-up", "side profile", "3/4", "full body"]);
+    expect(path.basename(sheet.file)).toBe("character_sheet.png");
+    expect(imageSize(readFileSync(sheet.file))!.height).toBe(1024);
   });
 
   test("scene cards: 3 angles with the key props named; the cost estimate and the cap", () => {

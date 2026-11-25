@@ -98,7 +98,7 @@ export function choose(item: Item, dir: string): void {
 // Body views are cropped at the neck here, whatever the model drew: faces only ever come from the face views.
 export async function finishPicture(face: FaceTool, kind: "view" | "angle", id: string, file: string): Promise<void> {
   const view = ALL_VIEWS.find((v) => v.id === id);
-  if (kind === "view" && view && !view.face) {
+  if (kind === "view" && view && !view.face && view.id !== "body_full") { // the full body with face keeps its face
     const full = file.replace(/\.png$/i, "_full.png");
     copyFileSync(file, full);
     await face.cropBody(full, file);

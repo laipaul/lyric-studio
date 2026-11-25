@@ -32,11 +32,12 @@ Characters and scene cards (C1, 18 Nov 2026; packages/video src/node/characters/
   - one folder per version, `v1/`, `v2/` …, holding:
     - each try `<id>_t<k>.png` (body views also `<id>_t<k>_full.png`, the model's own picture before the app's
       neck crop);
-    - the chosen one copied to `<id>.png` (ids closeup, three_quarter, body_front, body_back; scenes wide_left,
-      wide_right, detail);
+    - the chosen one copied to `<id>.png` (ids closeup, three_quarter, body_front, body_back; the extra views made only
+      when asked: closeup_teeth, profile, body_full (not cropped at the neck); scenes wide_left, wide_right, detail);
     - `report.json` (model, endpoint, thresholds, items with every try's request ID, URL, score, light and text,
       request_ids, spent_usd);
-    - `sheet.jpg`;
+    - `sheet.jpg` (the contact sheet, with scores); `character_sheet.png` (the Character sheet: the views side by side,
+      no captions; made again when a view is newer; 25 Nov 2026);
     - your own pictures (Add my pack / Use my own picture): tries with `own` (the file name), also kept as given in
       `<id>_t<k>_own.png` (for Move to);
   - `looks/<look id>/` (characters, the Wardrobe): the look's tries and chosen `body_front.png`, `body_back.png`
