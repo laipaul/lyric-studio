@@ -14,7 +14,7 @@ export const SONG_STYLE_LABEL: Record<SongStyle, string> = { cut: "Cut to the so
 export const SONG_STYLE_HINT: Record<SongStyle, string> = {
   cut: "Your clips cut to the beat and the lyrics.",
   singing: "The same, plus the singer on the lines you pick (Lyrics Sync → Who sings).",
-  film: "The song planned as scenes, for a Reel or the whole song on YouTube. Creation's story tools open.",
+  film: "The whole song as a short film, shot by shot: Film 9:16 (Instagram) and Film 16:9 (YouTube). For a Reel, switch to Cut to the song.",
 };
 
 export function isSongStyle(x: unknown): x is SongStyle {
