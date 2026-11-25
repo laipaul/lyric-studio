@@ -56,8 +56,8 @@ export const TIMEOUT_MS = 20 * 60 * 1000;
 const UPLOAD_KEEP_MS = 5 * 24 * 3600 * 1000; // WaveSpeed keeps uploads 7 days: reused for 5
 
 export type ServiceId = "wavespeed" | "higgsfield";
-export type Quality = "standard" | "best";
-type Model = { label: string; path: string; usdPerSecond: number; priceNote: string };
+export type Quality = "draft" | "standard" | "best";
+type Model = { label: string; path: string; usdPerSecond: number; priceNote: string; resolution?: string }; // resolution: asked of the service (else RESOLUTION)
 export type Service = { id: ServiceId; label: string; keyName: string; models: Partial<Record<Quality, Model>> };
 
 // Prices per second at 720p, without sound (WaveSpeed's model pages, 21 Nov 2026). Higgsfield's docs do not list
@@ -68,6 +68,8 @@ export const SERVICES: Record<ServiceId, Service> = {
     label: "WaveSpeed",
     keyName: "WAVESPEED_API_KEY",
     models: {
+      // Draft (25 Nov 2026, Paul's draft test): a cheap 480p preview; "Make final" upscales the take Paul keeps (final.ts).
+      draft: { label: "Draft (cheap preview)", path: "bytedance/seedance-2.5-flash/image-to-video", usdPerSecond: 0.108, priceNote: "WaveSpeed price list, 25 Nov 2026 (480p)", resolution: "480p" },
       standard: { label: "Seedance 2.5 Flash", path: "bytedance/seedance-2.5-flash/image-to-video", usdPerSecond: 0.216, priceNote: "WaveSpeed price list, 21 Nov 2026" },
       best: { label: "Seedance 2.5", path: "bytedance/seedance-2.5/image-to-video", usdPerSecond: 0.324, priceNote: "WaveSpeed price list, 21 Nov 2026" },
     },
@@ -123,6 +125,8 @@ export type Take = {
   parts?: { fromMs: number; toMs: number; request_id?: string }[]; // lipsync: made in parts (singer.ts singingParts), each its own request, joined
   filmLook?: string; // the song's Film look when the take was sent (film-looks.ts), its name
   look?: string; // and its line, as sent: a later change of the look remakes nothing
+  finalOf?: number; // Make final (final.ts): this take is the upscaled final of draft take finalOf
+  final?: number; // a Draft take: the number of its final
   feel?: Feel; // the realism rules it was sent with (realism.ts); absent on takes made before 25 Nov 2026 (old prompt)
   fresh?: boolean; // lipsync: a later take of lines that already had a take in use: waits for Paul ("New — compare"), never placed by itself
   refFiles?: string[]; // references: the pictures sent, workspace-relative, in @Image order
@@ -558,12 +562,12 @@ export async function waveSpeedUpload(key: string, file: string, f: typeof fetch
   return url;
 }
 
-export function waveSpeedTransport(key: string, model: string, f: typeof fetch = (...a) => globalThis.fetch(...a)): Transport {
+export function waveSpeedTransport(key: string, model: string, f: typeof fetch = (...a) => globalThis.fetch(...a), resolution: string = RESOLUTION): Transport {
   const auth = { Authorization: `Bearer ${key}` };
   return {
     upload: (file) => waveSpeedUpload(key, file, f),
     submit: async (image, prompt, seconds = TAKE_SECONDS) => {
-      const b = data(await json(await f(`${WAVESPEED}/${model}`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ image, prompt, duration: seconds, resolution: RESOLUTION, generate_audio: false, output_format: "mp4" }) }), "WaveSpeed"));
+      const b = data(await json(await f(`${WAVESPEED}/${model}`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ image, prompt, duration: seconds, resolution, generate_audio: false, output_format: "mp4" }) }), "WaveSpeed"));
       if (typeof b.id !== "string") throw new Error("WaveSpeed: no request id in the answer");
       return { id: b.id };
     },
@@ -660,8 +664,8 @@ export function transportFor(service: ServiceId, quality: Quality, env: NodeJS.P
   const key = keyFor(service, env);
   const s = SERVICES[service];
   if (!key) throw new Error(`No ${s.keyName} in .env: add a line ${s.keyName}=<your key from ${service === "wavespeed" ? "wavespeed.ai → API keys" : 'open.higgsfield.ai → API keys, written as "key id:key secret"'}> to D:\\videomaker\\.env, then restart Lyric Studio.`);
-  const model = (s.models[quality] ?? s.models.best!).path;
-  return service === "wavespeed" ? waveSpeedTransport(key, model) : higgsfieldTransport(key, model, env);
+  const m = s.models[quality] ?? s.models.best!;
+  return service === "wavespeed" ? waveSpeedTransport(key, m.path, undefined, m.resolution) : higgsfieldTransport(key, m.path, env);
 }
 
 // ---------------------------------------------------------------- animate

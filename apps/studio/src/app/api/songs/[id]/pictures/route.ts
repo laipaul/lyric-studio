@@ -11,6 +11,7 @@
 // Production (C3 Part 1): GET also returns "production" (the shot list's items, shot-production.ts); multipart with
 //   slot=<id>: the added pictures belong to that shot; { action: "shot", file, slot }: a picture belongs to a shot
 //   (slot null: to none); { action: "use-shot", file, n?, slot }: Use this take for that shot (its place and its line).
+// { action: "final", file, n }: Make final: draft take n upscaled to 1080p (final.ts), a new take right after it.
 // { action: "remove-picture", file }: Put aside (to pictures\_removed\, Restore); { action: "restore-picture", file }.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -18,6 +19,7 @@ import { randomUUID } from "node:crypto";
 
 import { openWorkspace, project as projectTable, resolveWorkspaceDir } from "@lyric/db";
 import { addFromLink, addPictures, picturesView, removePicture, removeTakes, restorePicture, restoreTake, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, startAnimate, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
+import { runFinal, startFinal } from "@lyric/video/final";
 import { runSinging, withSongStarts } from "@lyric/video/singer";
 import { placeByName, productionView, setPictureShot, useForShot, withLineStarts } from "@lyric/video/shot-production";
 import { timedLines } from "@lyric/video/production";
@@ -115,6 +117,11 @@ export async function POST(request: Request, { params }: Params) {
       void runTakes(open, id, path.basename(file), started.takes.map((t) => t.n));
       return Response.json(started);
     }
+    if (body.action === "final") {
+      const take = withWorkspace((ws) => startFinal(ws, id, file, body.n));
+      void runFinal(open, id, path.basename(file), take.n);
+      return Response.json({ take });
+    }
     if (body.action === "defaults") return Response.json({ defaults: saveCreationDefaults(resolveWorkspaceDir(), (body as { defaults?: unknown }).defaults) });
     // Clean up (no n: every take not chosen or failed) or Remove one take (n): put aside with Restore, never deleted.
     if (body.action === "cleanup") {
@@ -141,7 +148,8 @@ export async function POST(request: Request, { params }: Params) {
     if (body.action === "resume") {
       const n = Number(body.n);
       const take = withWorkspace((ws) => startResume(ws, id, file, n));
-      if (take.kind === "lipsync") void runSinging(open, id, [{ source: path.basename(file), n: take.n }]);
+      if (take.finalOf) void runFinal(open, id, path.basename(file), take.n);
+      else if (take.kind === "lipsync") void runSinging(open, id, [{ source: path.basename(file), n: take.n }]);
       else void runTakes(open, id, path.basename(file), [take.n]);
       return Response.json({ take });
     }

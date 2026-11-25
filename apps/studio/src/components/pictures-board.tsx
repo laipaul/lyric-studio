@@ -1137,7 +1137,7 @@ function PictureTile({
               if (openCompare && t.kind !== "lipsync") return openCompare();
               play(url, `${p.file} · Take ${t.n}`, { fromS: t.songFromMs !== undefined ? t.songFromMs / 1000 : null, clipInS: t.clipInS ?? 0, why: t.songWhy ?? null });
               if (t.fresh) void singer({ action: "seen", n: t.n }).then(reload).catch(() => undefined);
-            }} onSend={() => void send(t.n, t.label ?? `Take ${t.n}`)} onUse={() => void chooseTake(t)} shot={shot && useShot ? { number: shot.number, used: !!(t.sent && shot.filled && t.sent.toLowerCase() === shot.filled.toLowerCase()), use: () => useShot(t.n) } : undefined} onRemove={p.cleanable.includes(t.n) ? () => void cleanUp(t.n) : undefined} onResume={() => void post({ action: "resume", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message }))} />
+            }} onSend={() => void send(t.n, t.label ?? `Take ${t.n}`)} onUse={() => void chooseTake(t)} shot={shot && useShot ? { number: shot.number, used: !!(t.sent && shot.filled && t.sent.toLowerCase() === shot.filled.toLowerCase()), use: () => useShot(t.n) } : undefined} onRemove={p.cleanable.includes(t.n) ? () => void cleanUp(t.n) : undefined} onResume={() => void post({ action: "resume", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message }))} onFinal={t.quality === "draft" && t.status === "done" && !p.takes.some((x) => x.finalOf === t.n && x.status !== "failed") ? () => void post({ action: "final", file: p.file, n: t.n }).then(reload).catch((e: Error) => setNotice({ ok: false, text: e.message })) : undefined} />
           ))}
         </ul>
       ) : null}
@@ -1162,8 +1162,11 @@ function PictureTile({
   );
 }
 
-function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onRemove, onResume, shot }: { t: Take & { inUse?: boolean; onLines?: string }; source: string; url: string | null; onPlay: (url: string) => void; onRename: (label: string) => Promise<void>; onSend: () => void; onUse: () => void; onRemove?: () => void; onResume: () => void; shot?: { number: number; used: boolean; use: () => void } }) {
-  const label = `Take ${t.n}`;
+// Make final (25 Nov 2026): a Draft take upscaled with Video Upscaler Pro to 1080p, $0.04 a second (at least 3 s).
+const finalUsd = (seconds: number | undefined) => Math.max(3, Math.ceil(seconds ?? 5)) * 0.04;
+
+function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onRemove, onResume, onFinal, shot }: { t: Take & { inUse?: boolean; onLines?: string }; source: string; url: string | null; onPlay: (url: string) => void; onRename: (label: string) => Promise<void>; onSend: () => void; onUse: () => void; onRemove?: () => void; onResume: () => void; onFinal?: () => void; shot?: { number: number; used: boolean; use: () => void } }) {
+  const label = t.finalOf ? `Take ${t.finalOf} final` : `Take ${t.n}`;
   return (
     <li data-take={t.n} data-take-status={t.status} className="flex items-center gap-2 text-[11px]">
       {t.status === "done" && url ? (
@@ -1230,6 +1233,11 @@ function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onRemove, on
             <Send className="size-3" /> Send to Storyboard
           </button>
         )
+      ) : null}
+      {onFinal ? (
+        <button type="button" data-take-final onClick={onFinal} className="border-brand/60 text-brand hover:bg-brand/10 flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5" title="Upscales this exact take to 1080p (Video Upscaler Pro): the same movement, full quality. The draft stays.">
+          <Sparkles className="size-3" /> Make final · about ${finalUsd(t.seconds).toFixed(2)}
+        </button>
       ) : null}
       {t.status === "interrupted" && t.request_id ? (
         <button type="button" data-take-resume onClick={onResume} className="hover:bg-accent flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5">

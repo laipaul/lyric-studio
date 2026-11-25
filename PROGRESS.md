@@ -4,6 +4,21 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Draft takes and Make final ✅ (to verify on the PC)
+- Paul's draft test (25 Nov 2026, BridetestUpscale.png): the draft upscaled with Video Upscaler Pro was "very close" to a
+  full-quality take, and sharper in the face and lace, at $0.74 instead of $1.62 for 5 s. Paul picked it.
+- Creation's model list gets "WaveSpeed · Draft (cheap preview)": Seedance 2.5 Flash at 480p, $0.108 a second (about
+  $0.54 for 5 s), with the same prompt as every take (realism rules, Film look, mood). Paul's saved default is unchanged.
+- A finished Draft take shows **Make final · about $0.20**: the take's own file goes to Video Upscaler Pro at 1080p
+  ($0.04 a second, at least 3 s). WaveSpeed's Seedance has no seed, so a re-run would move differently; the upscale
+  keeps exactly the take Paul chose. The final is its own take ("Take N final", finalOf = the draft's number; the draft
+  gets final = its number). The draft stays. One final per draft; a failed one can be made again; an interrupted one
+  has Get result (free).
+- Code: src/node/final.ts (new; startFinal, runFinal, finalUsd), animate.ts (Quality "draft", Model.resolution,
+  waveSpeedTransport resolution, Take.finalOf / final), /api/songs/<id>/pictures action "final" (resume → runFinal),
+  pictures-board.tsx (Make final button, data-take-final). In the stand-in mode the draft itself stands in for the final.
+- Tests: vitest final (4: draft price and 480p, final filed once per draft, refused upscale, price). Studio build passes.
+
 ### Draft test: is an upscaled cheap draft good enough? ✅ (Paul to run on the PC, about $2.40)
 - Paul (25 Nov 2026) approved spending about $3 to decide how "Draft, then Make final" should work. WaveSpeed's
   Seedance pages (read 25 Nov) have no seed, so a full-quality re-run never matches a draft: Make final can only be an
