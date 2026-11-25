@@ -30,7 +30,8 @@ import { importSongClips, moveSongClipToEnd, REMOVED_DIR, restoreClipTo, restore
 import { cleanLabel, isLineOnly, isOmitted, readClipEdits, setClipLabel, setClipLineOnly } from "./clip-edits";
 import { download, errorText } from "./characters/fal";
 import { processAlive } from "./jobs";
-import { filmLookFor } from "./film-looks";
+import { feelFor, filmLookFor } from "./film-looks";
+import { realismRules, type Feel } from "./realism";
 import { readRecipe } from "./recipe";
 import { songPathsById } from "./song-folder";
 
@@ -122,6 +123,7 @@ export type Take = {
   parts?: { fromMs: number; toMs: number; request_id?: string }[]; // lipsync: made in parts (singer.ts singingParts), each its own request, joined
   filmLook?: string; // the song's Film look when the take was sent (film-looks.ts), its name
   look?: string; // and its line, as sent: a later change of the look remakes nothing
+  feel?: Feel; // the realism rules it was sent with (realism.ts); absent on takes made before 25 Nov 2026 (old prompt)
   fresh?: boolean; // lipsync: a later take of lines that already had a take in use: waits for Paul ("New — compare"), never placed by itself
   refFiles?: string[]; // references: the pictures sent, workspace-relative, in @Image order
   refNames?: string[]; // references: who / what each one is ("Jennifer · Wedding Dress", "Chapel")
@@ -491,16 +493,17 @@ function repairTakes(dir: string): void {
 
 // ---------------------------------------------------------------- the request
 
-// The app's prompt: gentle, natural motion that keeps the picture as it is; the song's Film look line (film-looks.ts),
-// so every clip shares one camera, grain and grade; Paul's mood words, if any, at the end.
-export function motionPrompt(mood?: string, look?: string): string {
+// The app's prompt: gentle, natural motion that keeps the picture as it is; the realism rules of the take's feel
+// (realism.ts); the song's Film look line (film-looks.ts), so every clip shares one camera, grain and grade; Paul's
+// mood words, if any, at the end.
+export function motionPrompt(mood?: string, look?: string, feel?: Feel): string {
   const base =
     "Bring this picture to life with gentle, natural motion: a light breeze, hair and fabric moving softly, small natural movements of the people, " +
     "soft shifts in the light, and a slow, subtle camera drift. Keep the people, faces, clothes, colours, light and composition exactly as in the picture. " +
     "One continuous shot, no cuts, no text, no subtitles, no logos.";
   const l = look?.replace(/\s+/g, " ").trim().replace(/\.$/, "");
   const m = mood?.replace(/\s+/g, " ").trim();
-  return `${base}${l ? ` Film look, the same in every shot: ${l}.` : ""}${m ? ` Mood: ${m}.` : ""}`;
+  return `${base}${feel ? ` ${realismRules(feel)}` : ""}${l ? ` Film look, the same in every shot: ${l}.` : ""}${m ? ` Mood: ${m}.` : ""}`;
 }
 
 export type Estimate = { takes: number; seconds: number; usdPerTake: number; usd: number; model: string; priceNote: string };
@@ -686,9 +689,10 @@ export function startAnimate(ws: Workspace, projectId: string, file: string, o: 
   const now = new Date().toISOString();
   let made: Take[] = [];
   const look = filmLookFor(ws, projectId);
+  const feel = feelFor(ws, projectId);
   update(dir, name, (p) => {
     const first = nextTakeN(p);
-    made = Array.from({ length: takes }, (_, i) => ({ n: first + i, service: o.service, quality, model: e.model, status: "running" as const, started_at: now, cost_usd: e.usdPerTake, seconds, ...(look ? { filmLook: look.name, look: look.line } : {}), pid: process.pid }));
+    made = Array.from({ length: takes }, (_, i) => ({ n: first + i, service: o.service, quality, model: e.model, status: "running" as const, started_at: now, cost_usd: e.usdPerTake, seconds, ...(look ? { filmLook: look.name, look: look.line } : {}), feel, pid: process.pid }));
     p.takes.push(...made);
   });
   return { takes: made, estimate: e };
@@ -773,7 +777,7 @@ export async function runTakes(openWs: () => Workspace, projectId: string, file:
         }
         if (!id) {
           if (!imageUrl) return;
-          const sent = await transport.submit(imageUrl, motionPrompt(mood, t.look), t.seconds ?? TAKE_SECONDS); // never retried: a retry could be billed twice
+          const sent = await transport.submit(imageUrl, motionPrompt(mood, t.look, t.feel), t.seconds ?? TAKE_SECONDS); // never retried: a retry could be billed twice
           id = sent.id;
           pollUrl = sent.pollUrl;
           setTake(dir, file, t.n, { request_id: id, poll_url: pollUrl });

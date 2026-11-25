@@ -18,6 +18,7 @@ import path from "node:path";
 
 import { project as projectTable, safeName, type Workspace } from "@lyric/db";
 
+import { DEFAULT_FEEL, isFeel, type Feel } from "./realism";
 import { readRecipe, writeRecipe } from "./recipe";
 import { isRemovedSong, songPathsById } from "./song-folder";
 
@@ -33,6 +34,7 @@ export type FilmLook = {
   line: string; // the words added to every video prompt of a song with this look
   midjourney: string; // the same look for Midjourney, to copy (Paul's pictures start in the look)
   still: string | null; // the reference still in the folder ("still.jpg")
+  feel: Feel; // the realism rules every take is sent with (realism.ts): natural (default) or dreamy
   createdAt: string;
 };
 export type FilmLookInfo = FilmLook & { folder: string; stillPath: string | null; songs: { id: string; title: string }[] };
@@ -51,6 +53,7 @@ export function checkFilmLook(raw: unknown, fallbackName = ""): FilmLook {
     line: clean(r.line, LOOK_LINE_MAX),
     midjourney: clean(r.midjourney, MIDJOURNEY_MAX),
     still: typeof r.still === "string" && STILL_FILE.test(r.still) ? path.basename(r.still) : null,
+    feel: isFeel(r.feel) ? r.feel : DEFAULT_FEEL,
     createdAt: typeof r.createdAt === "string" ? r.createdAt : "",
   };
 }
@@ -111,11 +114,11 @@ function freeName(workspaceDir: string, wanted: string): string {
 }
 
 // "New film look": a name first; the line can be written from the still afterwards.
-export function createFilmLook(workspaceDir: string, o: { name: unknown; line?: unknown; midjourney?: unknown }): FilmLook {
+export function createFilmLook(workspaceDir: string, o: { name: unknown; line?: unknown; midjourney?: unknown; feel?: unknown }): FilmLook {
   const wanted = clean(o.name, 80);
   if (!wanted) throw new Error("Give the Film look a name first (e.g. Warm wedding film).");
   if (existsSync(filmLookFolder(workspaceDir, wanted))) throw new Error(`There is already a Film look called "${wanted}": pick another name.`);
-  const look: FilmLook = { version: FILM_LOOK_VERSION, name: wanted, line: clean(o.line, LOOK_LINE_MAX), midjourney: clean(o.midjourney, MIDJOURNEY_MAX), still: null, createdAt: new Date().toISOString() };
+  const look: FilmLook = { version: FILM_LOOK_VERSION, name: wanted, line: clean(o.line, LOOK_LINE_MAX), midjourney: clean(o.midjourney, MIDJOURNEY_MAX), still: null, feel: isFeel(o.feel) ? o.feel : DEFAULT_FEEL, createdAt: new Date().toISOString() };
   writeLook(workspaceDir, look);
   return look;
 }
@@ -123,10 +126,10 @@ export function createFilmLook(workspaceDir: string, o: { name: unknown; line?: 
 // Edits on the Film looks page. scope "all": the look itself, for every song that uses it ("Update all N songs");
 // "new": a copy under a new name, the songs stay on the old one ("Save as new"). A new name on scope "all" renames
 // the look and every song follows it.
-export function saveFilmLook(ws: Workspace, name: string, o: { name?: unknown; line?: unknown; midjourney?: unknown; scope?: "all" | "new" }): FilmLook {
+export function saveFilmLook(ws: Workspace, name: string, o: { name?: unknown; line?: unknown; midjourney?: unknown; feel?: unknown; scope?: "all" | "new" }): FilmLook {
   const look = readFilmLook(ws.dir, name);
   if (!look) throw new Error(`No Film look "${name}".`);
-  const next: FilmLook = { ...look, line: o.line !== undefined ? clean(o.line, LOOK_LINE_MAX) : look.line, midjourney: o.midjourney !== undefined ? clean(o.midjourney, MIDJOURNEY_MAX) : look.midjourney };
+  const next: FilmLook = { ...look, line: o.line !== undefined ? clean(o.line, LOOK_LINE_MAX) : look.line, midjourney: o.midjourney !== undefined ? clean(o.midjourney, MIDJOURNEY_MAX) : look.midjourney, feel: isFeel(o.feel) ? o.feel : look.feel };
   const wanted = o.name !== undefined ? clean(o.name, 80) : look.name;
   if (!wanted) throw new Error("A Film look needs a name.");
   if (o.scope === "new") {
@@ -196,6 +199,17 @@ export function filmLookFor(ws: Workspace, projectId: string): { name: string; l
   if (!name) return null;
   const look = readFilmLook(ws.dir, name);
   return look?.line ? { name: look.name, line: look.line } : null;
+}
+
+// The realism feel a song's next take is sent with (realism.ts): its Film look's, else natural. Unlike filmLookFor it
+// does not need the look's words: a look with only a still and a feel still sets the feel.
+export function feelFor(ws: Workspace, projectId: string): Feel {
+  try {
+    const name = readRecipe(songPathsById(ws, projectId).recipe).filmLook;
+    return (name && readFilmLook(ws.dir, name)?.feel) || DEFAULT_FEEL;
+  } catch {
+    return DEFAULT_FEEL;
+  }
 }
 
 const pad2 = (n: number) => String(n).padStart(2, "0");

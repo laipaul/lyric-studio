@@ -28,6 +28,7 @@
     "storyboards": "tsx packages/video/scripts/storyboards.ts",
     "versions": "tsx packages/video/scripts/versions.ts",
     "shotlist": "tsx packages/video/scripts/shotlist.ts",
+    "draft-test": "tsx packages/video/scripts/draft-test.ts",
     "lipsync": "tsx spikes/lipsync/lipsync.ts",
     "lipsync:test": "tsx --test spikes/lipsync/test/lipsync.test.ts",
     "characters": "tsx spikes/characters/characters.ts",

@@ -117,6 +117,7 @@
     "./style": "./src/node/style.ts",
     "./themes": "./src/node/themes.ts",
     "./film-looks": "./src/node/film-looks.ts",
+    "./realism": "./src/node/realism.ts",
     "./film-look-writer": "./src/node/film-look-writer.ts",
     "./run-settings": "./src/node/run-settings.ts",
     "./lyrics-view": "./src/node/lyrics-view.ts",

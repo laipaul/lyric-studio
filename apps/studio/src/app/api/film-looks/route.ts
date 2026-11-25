@@ -1,6 +1,6 @@
 // The Film looks page (film-looks.ts). GET: every look, the removed ones and whether the app can write a line from a
 // still. POST { action, ... } (answers with the same data):
-//   create { name, line?, midjourney? }: "New film look";  save { name, newName?, line?, midjourney?, scope }: scope
+//   create { name, line?, midjourney? }: "New film look";  save { name, newName?, line?, midjourney?, feel?, scope }: scope
 //   "all" changes the look for every song that uses it (a new name renames it, the songs follow), "new" saves a copy;
 //   write { name }: the app writes the line and the Midjourney words from the still (the user's Gemini key; saved
 //   straight away, every song with the look gets it on its next take);  remove { name } (to _removed\, refused while a
@@ -23,7 +23,7 @@ export async function GET() {
   }
 }
 
-type Body = { action?: string; name?: string; newName?: string; line?: string; midjourney?: string; scope?: string; folder?: string };
+type Body = { action?: string; name?: string; newName?: string; line?: string; midjourney?: string; feel?: string; scope?: string; folder?: string };
 
 export async function POST(request: Request) {
   const body = ((await request.json().catch(() => null)) ?? {}) as Body;
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     }
     withWorkspace((ws) => {
       if (body.action === "create") createFilmLook(ws.dir, { name, line: body.line, midjourney: body.midjourney });
-      else if (body.action === "save") saveFilmLook(ws, name, { name: body.newName, line: body.line, midjourney: body.midjourney, scope: body.scope === "new" ? "new" : "all" });
+      else if (body.action === "save") saveFilmLook(ws, name, { name: body.newName, line: body.line, midjourney: body.midjourney, feel: body.feel, scope: body.scope === "new" ? "new" : "all" });
       else if (body.action === "remove") removeFilmLook(ws, name);
       else if (body.action === "restore") restoreFilmLook(ws.dir, String(body.folder ?? ""));
       else throw new Error("Unknown action.");

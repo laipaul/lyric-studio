@@ -9,10 +9,11 @@ import { openWorkspace, resolveWorkspaceDir, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { addPictures, motionPrompt, readPictures, runTakes, startAnimate, type Transport } from "../src/node/animate";
-import { chooseFilmLook, createFilmLook, filmLookFor, filmLookFolder, filmLooksPage, filmLookUsers, listFilmLooks, readFilmLook, removedFilmLooks, removeFilmLook, restoreFilmLook, saveFilmLook, setFilmLookStill } from "../src/node/film-looks";
+import { chooseFilmLook, createFilmLook, feelFor, filmLookFor, filmLookFolder, filmLooksPage, filmLookUsers, listFilmLooks, readFilmLook, removedFilmLooks, removeFilmLook, restoreFilmLook, saveFilmLook, setFilmLookStill } from "../src/node/film-looks";
 import { LOOK_WRITER_PROMPT, parseWritten, writeLookFromStill, writerReady } from "../src/node/film-look-writer";
 import { findOrCreateSongProject, readRecipe, songPathsById } from "../src/node";
 import { SINGING_CUE, singingPrompt } from "../src/node/singer";
+import { realismRules, singingRealism } from "../src/node/realism";
 import { ffmpeg, makeSong } from "./media-helpers";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-filmlook-"));
@@ -49,6 +50,15 @@ describe("the prompts", () => {
     expect(singingPrompt("")).toBe(SINGING_CUE);
     expect(singingPrompt("turns to the sea", LINE)).toBe(`${SINGING_CUE}. turns to the sea. Film look, the same in every shot: ${LINE}`);
     expect(singingPrompt("", LINE)).toBe(`${SINGING_CUE}. Film look, the same in every shot: ${LINE}`);
+  });
+  it("realism rules (25 Nov 2026): after the app's words and before the look; old takes (no feel) keep the old prompt", () => {
+    expect(motionPrompt("quiet", LINE, "natural")).toMatch(new RegExp(`no logos\\. True to life.*Avoid: exaggerated.*plastic.*Film look, the same in every shot: ${LINE}\\. Mood: quiet\\.$`));
+    expect(motionPrompt(undefined, undefined, "dreamy")).toMatch(/dreamlike.*Avoid: exaggerated/);
+    expect(motionPrompt(undefined, undefined, "dreamy")).not.toMatch(/plastic/);
+    expect(motionPrompt()).not.toMatch(/Avoid/);
+    expect(singingPrompt("smiles", LINE, "natural")).toBe(`${SINGING_CUE}. ${singingRealism("natural")}. smiles. Film look, the same in every shot: ${LINE}`);
+    expect(singingRealism("natural")).not.toMatch(/subtle/); // the singing cue wants big singing mouths
+    expect(singingRealism("dreamy")).toMatch(/captions/);
   });
 });
 
@@ -109,8 +119,8 @@ describe("takes", () => {
   it("an Animate take is sent with the song's look and keeps the line it was sent with", async () => {
     await addPictures(ws, ids[0], [{ file: path.join(root, "still.png"), name: "bride.png" }]);
     const { takes } = startAnimate(ws, ids[0], "bride.png", { service: "wavespeed", takes: 1 }, STUB);
-    expect(takes[0]).toMatchObject({ filmLook: "Golden hour film", look: LINE });
-    saveFilmLook(ws, "Golden hour film", { line: "black and white, high contrast" }); // a later change: the take keeps its line
+    expect(takes[0]).toMatchObject({ filmLook: "Golden hour film", look: LINE, feel: "natural" });
+    saveFilmLook(ws, "Golden hour film", { line: "black and white, high contrast", feel: "dreamy" }); // a later change: the take keeps its line and feel
     const prompts: string[] = [];
     const out = path.join(root, "take.mp4");
     ffmpeg("-f", "lavfi", "-i", "color=c=red:s=96x160:d=1", "-r", "30", "-pix_fmt", "yuv420p", out);
@@ -123,6 +133,11 @@ describe("takes", () => {
     await runTakes(() => openWorkspace(resolveWorkspaceDir()), ids[0], "bride.png", [takes[0].n], { transport, sleep: async () => undefined });
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain(`Film look, the same in every shot: ${LINE}.`);
+    expect(prompts[0]).toContain(realismRules("natural"));
+    expect(prompts[0]).not.toMatch(/dreamlike/);
+    expect(readFilmLook(wsDir, "Golden hour film")?.feel).toBe("dreamy");
+    expect(feelFor(ws, ids[0])).toBe("dreamy");
+    expect(feelFor(ws, ids[1])).toBe("natural"); // a song without a Film look
     const dir = songPathsById(ws, ids[0]).root;
     expect(readPictures(path.join(dir, "pictures")).pictures["bride.png"].takes[0]).toMatchObject({ status: "done", look: LINE });
   });

@@ -4,6 +4,35 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Draft test: is an upscaled cheap draft good enough? ✅ (Paul to run on the PC, about $2.40)
+- Paul (25 Nov 2026) approved spending about $3 to decide how "Draft, then Make final" should work. WaveSpeed's
+  Seedance pages (read 25 Nov) have no seed, so a full-quality re-run never matches a draft: Make final can only be an
+  upscale of the draft. Video Upscaler costs $0.005/s at 1080p, Video Upscaler Pro $0.04/s.
+- `pnpm draft-test "<song>" "<picture>" [--yes]` (scripts/draft-test.ts, src/node/draft-test.ts): without --yes it only
+  lists the four takes and their cost. With --yes, one picture becomes four takes in Creation, each with the normal
+  Animate prompt (realism rules, Film look, mood): "Draft" (Seedance 2.5 Flash 480p, 5 s, $0.54), "Draft upscaled"
+  (Video Upscaler 1080p, $0.03), "Draft upscaled Pro" (Video Upscaler Pro 1080p, $0.20), "Full quality" (Seedance 2.5
+  720p, $1.62). Each request is sent once; a refused draft sends no upscale.
+- Tests: vitest draft-test (3, a stand-in WaveSpeed, no network).
+- Next: Paul compares the four; then build Draft, then Make final with the winning upscaler.
+
+### Realism rules in every clip request; Feel on the Film look ✅ (to verify on the PC)
+- Paul (25 Nov 2026) chose step 1 of the realism plan (doc "AI realism workflow vs Lyric Studio", from two AI-realism
+  tutorials): the app, not Paul, adds what makes a clip look filmed instead of generated.
+- Every Animate take now also asks for real skin texture, natural light, subtle believable expressions (eyes, brow,
+  breath) and a camera with real weight, and avoids exaggerated or cartoonish expressions, plastic or CGI skin,
+  morphing faces or hands, extra people appearing, fast or shaky camera moves and sudden zooms. Every singing take gets
+  the same look rules plus "no text, captions, subtitles, logos" (frame stays clean for the lyrics), but never
+  "subtle expressions": the singing cue keeps its big singing mouths.
+- Film looks page: a **Feel** choice per look, Natural (true to life, default) or Dreamy (soft, poetic, true to the
+  picture's own style, for Midjourney art). A song without a Film look uses Natural. Each take keeps the feel it was
+  sent with; takes made before this change keep their old prompt.
+- Code: src/node/realism.ts (new), film-looks.ts (feel, feelFor), animate.ts (motionPrompt, Take.feel), singer.ts
+  (singingPrompt), studio film-looks-view.tsx + /api/film-looks. Cost: none (words only).
+- Tests: vitest film-looks (+1, takes test checks feel kept as sent), animate pass. render / textboard-make fail the same
+  way without this change (they need the audio service and network the cloud session lacks). Studio build passes.
+- Next: Draft, then Make final (step 2), after a two-take test on Wedding Day (about $3) that Paul approves first.
+
 ### Reference sheets per person, and the teeth close-up ✅ (to verify on the PC)
 - Paul (25 Nov 2026), after comparing two character-consistency tutorials and their comments ("headless outfit + face
   beats complex character sheets", "the model invents what a reference does not show", "the teeth rule"):

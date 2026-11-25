@@ -9,6 +9,7 @@ import { ImagePlus, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { FilmLooksPage } from "@lyric/video/film-looks";
+import { FEEL_LABEL, FEELS } from "@lyric/video/realism";
 
 import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
@@ -127,6 +128,7 @@ function LookCard({ look, stamp, writer, act, onStill }: { look: Look; stamp: nu
   const [name, setName] = useState(look.name);
   const [line, setLine] = useState(look.line);
   const [mj, setMj] = useState(look.midjourney);
+  const [feel, setFeel] = useState(look.feel);
   const [writing, setWriting] = useState(false);
   const [over, setOver] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -136,11 +138,12 @@ function LookCard({ look, stamp, writer, act, onStill }: { look: Look; stamp: nu
     setName(look.name);
     setLine(look.line);
     setMj(look.midjourney);
-  }, [look.name, look.line, look.midjourney]);
+    setFeel(look.feel);
+  }, [look.name, look.line, look.midjourney, look.feel]);
 
-  const changed = name.trim() !== look.name || line.trim() !== look.line || mj.trim() !== look.midjourney;
+  const changed = name.trim() !== look.name || line.trim() !== look.line || mj.trim() !== look.midjourney || feel !== look.feel;
   const songs = look.songs.length;
-  const save = (scope: "all" | "new") => act({ action: "save", name: look.name, newName: name, line, midjourney: mj, scope });
+  const save = (scope: "all" | "new") => act({ action: "save", name: look.name, newName: name, line, midjourney: mj, feel, scope });
 
   return (
     <div data-film-look-card={look.name} className="bg-card flex flex-col gap-2 rounded-lg border p-3 text-sm">
@@ -200,6 +203,16 @@ function LookCard({ look, stamp, writer, act, onStill }: { look: Look; stamp: nu
         {mj ? <CopyButton text={mj} label="Copy" /> : null}
       </div>
       <textarea data-film-look-midjourney aria-label="For Midjourney" rows={2} className={field} value={mj} onChange={(e) => setMj(e.target.value)} />
+      <label className="text-muted-foreground flex items-center justify-between gap-2 text-xs" title="How real the clips should feel. The app adds its realism rules to every clip: natural skin and light, subtle expressions, a calm camera, no plastic faces.">
+        Feel
+        <select data-film-look-feel aria-label="Feel" className={cn(field, "w-auto")} value={feel} onChange={(e) => setFeel(e.target.value as Look["feel"])}>
+          {FEELS.map((f) => (
+            <option key={f} value={f}>
+              {FEEL_LABEL[f]}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <p className="text-muted-foreground text-xs" data-film-look-songs>
         {songs ? `Used by ${look.songs.map((s) => s.title).join(", ")}` : "Not used by a song yet"}
@@ -222,6 +235,7 @@ function LookCard({ look, stamp, writer, act, onStill }: { look: Look; stamp: nu
                 setName(look.name);
                 setLine(look.line);
                 setMj(look.midjourney);
+                setFeel(look.feel);
               }}
             >
               Cancel
