@@ -7,7 +7,7 @@
 //   "Full quality"        Seedance 2.5, 720p, 5 s (today's take)  about $1.62
 // All with the same prompt as a normal Animate take (the realism rules, the Film look, the mood). Prices: WaveSpeed's
 // model pages, read 25 Nov 2026. Each request is sent once and never retried (a retry could be billed twice).
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -31,12 +31,13 @@ export type DraftTestResult = { label: string; file?: string; error?: string }[]
 
 export function checkDraftTestPicture(ws: Workspace, projectId: string, picture: string): { dir: string; name: string } {
   const { dir } = songFolder(ws, projectId);
-  const name = path.basename(picture);
-  if (!PICTURE_FILE.test(name) || !existsSync(path.join(dir, name))) {
-    const have = Object.keys(readPictures(dir).pictures).filter((p) => PICTURE_FILE.test(p));
-    throw new Error(`No picture "${name}" in this song's Creation.${have.length ? ` Pictures there: ${have.join(", ")}` : " Add one in Prepare → Creation first."}`);
-  }
-  return { dir, name };
+  const have = existsSync(dir) ? readdirSync(dir).filter((f) => PICTURE_FILE.test(f)) : [];
+  const want = path.basename(picture);
+  if (have.includes(want)) return { dir, name: want };
+  // The start of a name is enough when only one picture starts that way (long Midjourney names).
+  const starts = have.filter((f) => f.toLowerCase().startsWith(want.toLowerCase()));
+  if (want && starts.length === 1) return { dir, name: starts[0] };
+  throw new Error(`No picture "${want}" in this song's Creation${starts.length > 1 ? " (several start that way)" : ""}.${have.length ? ` Pictures there: ${have.join(", ")}` : " Add one in Prepare → Creation first."}`);
 }
 
 export async function runDraftTest(ws: Workspace, projectId: string, picture: string, deps: DraftTestDeps): Promise<DraftTestResult> {

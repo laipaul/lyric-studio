@@ -67,6 +67,7 @@ describe("draft test", () => {
   it("costs about $2.40; an unknown picture is refused with the ones that exist", () => {
     expect(draftTestUsd()).toBeCloseTo(2.39, 2);
     expect(() => checkDraftTestPicture(ws, id, "nope.png")).toThrow(/No picture "nope.png".*bride\.png/);
+    expect(checkDraftTestPicture(ws, id, "Bri").name).toBe("bride.png"); // the start of a name is enough
   });
 
   it("sends the draft at 480p and the full take at 720p with the realism prompt; upscales the draft's own video", async () => {
