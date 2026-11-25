@@ -3,12 +3,13 @@
 // Song style (22 Nov 2026, Paul's three levels): Prepare → Song Details → Song style, three clear choices. It only
 // decides which tools the song shows (song-style.ts); changing it never removes anything. useSongStyle: the other
 // tabs (Lyrics Sync, Creation) read it to show or hide their tools.
-import { Clapperboard, Mic, Scissors, type LucideIcon } from "lucide-react";
+import { ArrowRight, Clapperboard, Mic, Scissors, type LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { SONG_STYLES, SONG_STYLE_HINT, SONG_STYLE_LABEL, type SongStyle } from "@lyric/video/song-style";
 import type { SongStyleView } from "@lyric/video/song-style-node";
 
+import { useGoToTab } from "@/components/song-stages";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -59,6 +60,7 @@ export function SongStyleChip({ projectId, onOpen }: { projectId: string; onOpen
 
 export function SongStyleField({ projectId }: { projectId: string }) {
   const view = useSongStyle(projectId);
+  const goTo = useGoToTab();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [shown, setShown] = useState<SongStyleView | null>(null);
@@ -114,6 +116,20 @@ export function SongStyleField({ projectId }: { projectId: string }) {
         <p className="text-xs text-amber-200" data-song-style-note>
           This song still has {current.singingLines === 1 ? "a singing line" : `${current.singingLines} singing lines`}, and they play in its videos, so Lyrics Sync keeps showing Who sings. Choose no singer there to take them out.
         </p>
+      ) : null}
+      {current.style === "singing" ? (
+        // How to add the lip sync (25 Nov 2026, Paul: "not clear from there how I add the lipsync"): the three steps, one click.
+        <div data-lipsync-how className="flex flex-col gap-1.5 rounded-md border border-violet-400/30 bg-violet-400/10 px-3 py-2 text-xs">
+          <span className="font-medium text-violet-200">How to add the lip sync</span>
+          <ol className="text-muted-foreground list-decimal pl-4">
+            <li>Have a picture of your singer in Creation (a close, front-facing face works best).</li>
+            <li>In Lyrics Sync, column <b>Who sings (lip-sync)</b>: choose that picture on each line where the singer shows (lines in a row become one clip).</li>
+            <li>Press <b>Make singing clips</b> in the bar above the lines: the cost shows first; each clip lands on its lines.</li>
+          </ol>
+          <button type="button" data-lipsync-open onClick={() => goTo("lyrics")} className="hover:bg-accent flex items-center gap-1 self-start rounded border px-2 py-0.5 text-foreground">
+            Open Lyrics Sync → Who sings <ArrowRight className="size-3" />
+          </button>
+        </div>
       ) : null}
       {!current.chosen ? <p className="text-muted-foreground text-xs" data-song-style-default>Not chosen yet: the studio uses {SONG_STYLE_LABEL[current.style]}, from what this song already has.</p> : null}
       {error ? <p className="text-xs text-red-300">{error}</p> : null}

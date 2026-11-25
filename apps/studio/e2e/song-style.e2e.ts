@@ -73,6 +73,11 @@ async function main() {
     await Promise.all([page.waitForResponse(put), page.click("[data-song-style-option=singing]")]);
     await page.waitForSelector("[data-song-style=singing]");
     check(saved() === "singing", `song.json "songStyle" is singing (${saved()})`);
+    // How to add the lip sync (25 Nov 2026): the steps under the choice, and one click to Lyrics Sync → Who sings.
+    check(((await page.textContent("[data-lipsync-how]")) ?? "").includes("Make singing clips"), "Add lip sync: the steps show under the choice");
+    await page.click("[data-lipsync-open]");
+    await page.waitForSelector("[data-singer-cell]");
+    check(true, "Open Lyrics Sync → Who sings: one click");
     await page.goto(`${base}/songs/${sp.project.id}?tab=lyrics`);
     await page.waitForSelector("[data-singer-cell]");
     check((await page.$("[data-singing-off]")) === null && (await page.$$("[data-singer-cell]")).length === 2, "Add lip sync: Who sings shows on every line");
