@@ -4,6 +4,15 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Fix: pictures stay on their shot cards ✅ (to verify on the PC)
+- Paul: "my pictures have stopped being saved at each card". From his song's files: (1) a picture dropped on a shot that
+  was already in Creation (same bytes) was skipped as "already on the board" and never tied to the shot; (2) shots 4 and
+  6-11 were filled, but their pictures had no "slot", so the cards looked empty.
+- Now: a dropped picture already in Creation goes on that shot ("<name> was already in Creation: it is now on shot N";
+  shot-production.ts placeDropped). A picture with no shot of its own sits on the shot its clip (or one of its takes)
+  fills (animate.ts effectiveSlot; nothing written). ✕ on a shot stores slot "" so it stays loose.
+- Tests: shot-production.test.ts "pictures and shots (25 Nov 2026)"; creation-production and pictures e2e.
+
 ### ♥ Favourites in Creation and Compare ✅ (to verify on the PC)
 - Paul: "a little Favourite icon on top of any clip in the Creation so that when I'm comparing or reviewing I can easily
   spot my favs on/off". A ♡ on every picture (top right, beside ✕) and every finished take in Creation, and on every

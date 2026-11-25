@@ -83,7 +83,14 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
     return () => clearInterval(t);
   }, [running, load]);
 
-  function added(d: { added?: string[]; skipped?: { name: string; reason: string }[]; placed?: Record<string, number> }) {
+  function added(d: { added?: string[]; skipped?: { name: string; reason: string }[]; placed?: Record<string, number>; onShot?: { file: string; fresh: boolean }[]; shot?: number | null }) {
+    // 25 Nov 2026: a file already in Creation, dropped on a shot, is now on that shot: not a failure.
+    const already = (d.onShot ?? []).filter((o) => !o.fresh);
+    if (already.length) {
+      const text = `${already.map((o) => o.file).join(", ")} ${already.length > 1 ? "were" : "was"} already in Creation: ${already.length > 1 ? "they are" : "it is"} now on shot ${d.shot ?? "?"}.${d.added?.length ? ` ${d.added.length} new file${d.added.length === 1 ? "" : "s"} added.` : ""}`;
+      setNotice({ ok: true, text });
+      return;
+    }
     const skipped = d.skipped?.length ? ` Skipped: ${d.skipped.map((s) => `${s.name} (${s.reason})`).join(", ")}.` : "";
     // Bulk drop by shot: where each file named after a shot went, and how many stay loose.
     const placed = Object.entries(d.placed ?? {});
@@ -102,7 +109,7 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
       for (const f of list) form.append("pictures", f);
       if (slot) form.append("slot", slot);
       const r = await api(`/api/songs/${projectId}/pictures`, { method: "POST", body: form });
-      const d = (await r.json()) as { added?: string[]; skipped?: { name: string; reason: string }[]; placed?: Record<string, number>; error?: string };
+      const d = (await r.json()) as { added?: string[]; skipped?: { name: string; reason: string }[]; placed?: Record<string, number>; onShot?: { file: string; fresh: boolean }[]; shot?: number | null; error?: string };
       if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
       added(d);
       await load();

@@ -14,7 +14,7 @@ import { isWholeStory } from "./song-style";
 import { nameSections, sectionOfLine, type NamedSection } from "../sections";
 import { shotPrompt, type ShotPromptInput } from "../shot-prompt";
 import { slotSpans } from "../shot-grid";
-import { readPictures, sendToStoryboard, songFolder, update, BOARD_FILE } from "./animate";
+import { effectiveSlot, filledClips, readPictures, sendToStoryboard, songFolder, update, BOARD_FILE } from "./animate";
 import { readClipEdits, setClipOmit, writeClipEdits } from "./clip-edits";
 import { filmLookFor, readFilmLook } from "./film-looks";
 import { productionData, type CastCard } from "./production";
@@ -98,6 +98,7 @@ export function productionView(ws: Workspace, projectId: string): ProductionView
   const wornIn = shotLooks(ws, projectId);
   const twoFilms = isWholeStory(readRecipe(songPathsById(ws, projectId).recipe), false);
   const filledWide = list.filledWide ?? {};
+  const filledBy = filledClips(ws, projectId);
   const promptOf = (s: Slot, worn: WornLook[], shape: ShotPromptInput["aspect"] = twoFilms ? "9:16" : aspect) => {
     const scene = s.scene ? card(s.scene) : null;
     return shotPrompt({
@@ -141,7 +142,7 @@ export function productionView(ws: Workspace, projectId: string): ProductionView
       section: secs[i],
       filled: clip && clipsDir && existsSync(path.join(clipsDir, clip)) ? clip : null,
       pictures: Object.entries(pics)
-        .filter(([f, p]) => p.slot === s.id && existsSync(path.join(dir, f)))
+        .filter(([f, p]) => effectiveSlot(p, filledBy) === s.id && existsSync(path.join(dir, f)))
         .map(([f]) => f)
         .sort(),
       prompt: promptOf(s, worn),
@@ -189,6 +190,19 @@ export function placeByName(ws: Workspace, projectId: string, files: readonly st
   return placed;
 }
 
+// A drop on a shot (25 Nov 2026): what was added AND what was already in Creation (same bytes) now sits on the shot.
+// The matched ones leave `skipped` (they are not a failure). Returns the shot's number too.
+export function placeDropped<R extends { added: string[]; skipped: { name: string; reason: string }[]; existing: { name: string; as: string }[] }>(ws: Workspace, projectId: string, r: R, slot: string): R & { onShot: { file: string; fresh: boolean }[]; shot: number | null } {
+  const onShot: { file: string; fresh: boolean }[] = [];
+  for (const f of r.added) onShot.push({ file: f, fresh: true });
+  for (const e of r.existing) if (!onShot.some((o) => o.file === e.as)) onShot.push({ file: e.as, fresh: false });
+  for (const o of onShot) setPictureShot(ws, projectId, o.file, slot);
+  const list = readShotListFile(shotListFile(ws, projectId));
+  const shot = list ? [...list.slots].sort((a, b) => a.order - b.order).findIndex((s) => s.id === slot) + 1 || null : null;
+  const linked = new Set(r.existing.map((e) => e.name));
+  return { ...r, skipped: r.skipped.filter((s) => !linked.has(s.name) || !/^already on the board/.test(s.reason)), onShot, shot };
+}
+
 // A Creation picture belongs to a shot (or to none: null).
 export function setPictureShot(ws: Workspace, projectId: string, file: unknown, slot: unknown): string | null {
   const name = path.basename(String(file ?? ""));
@@ -197,7 +211,7 @@ export function setPictureShot(ws: Workspace, projectId: string, file: unknown, 
   const id = slot === null || slot === undefined || slot === "" ? null : String(slot);
   if (id !== null && !readShotListFile(shotListFile(ws, projectId))?.slots.some((s) => s.id === id)) throw new Error("That shot is not in this song's shot list.");
   update(dir, name, (p) => {
-    if (id === null) delete p.slot;
+    if (id === null) p.slot = ""; // 25 Nov 2026: "" = taken off on purpose (a sent picture is not put back on its shot)
     else p.slot = id;
   });
   return id;
@@ -226,7 +240,7 @@ export async function useForShot(ws: Workspace, projectId: string, o: { file: un
     const fresh = readShotListFile(file)!;
     writeFileSync(file, `${JSON.stringify({ ...fresh, filledWide: { ...(fresh.filledWide ?? {}), [slot.id]: clip } }, null, 2)}\n`);
     const { dir } = songFolder(ws, projectId);
-    if (readPictures(dir).pictures[name]) update(dir, name, (p) => void (p.slot ??= slot.id));
+    if (readPictures(dir).pictures[name]) update(dir, name, (p) => void (p.slot ||= slot.id));
     const shot = [...list.slots].sort((a, b) => a.order - b.order).findIndex((s) => s.id === slot.id) + 1;
     return { clip, shot, line: slot.line, replaced: wideBefore && !same(wideBefore, clip) ? wideBefore : null, note: "A landscape take: it is this shot's take in the Film 16:9 (YouTube); the vertical film keeps its own.", wide: true };
   }
@@ -266,7 +280,7 @@ export async function useForShot(ws: Workspace, projectId: string, o: { file: un
   }
   // The picture's take is marked as used for this shot.
   const { dir } = songFolder(ws, projectId);
-  if (readPictures(dir).pictures[name]) update(dir, name, (p) => void (p.slot ??= slot.id));
+  if (readPictures(dir).pictures[name]) update(dir, name, (p) => void (p.slot ||= slot.id));
   const shot = [...list.slots].sort((a, b) => a.order - b.order).findIndex((s) => s.id === slot.id) + 1;
   return { clip, shot, line: slot.line, replaced, note };
 }

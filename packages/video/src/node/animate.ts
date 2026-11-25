@@ -35,6 +35,7 @@ import { realismRules, type Feel } from "./realism";
 import { cleanFeeling, feelingWords } from "../feelings";
 import { feelingForSlot } from "./section-feelings";
 import { readRecipe } from "./recipe";
+import { readShotList } from "./shotlist";
 import { songPathsById } from "./song-folder";
 
 export const PICTURES_DIR = "pictures";
@@ -301,6 +302,26 @@ export function midjourneyLink(name: string): string | null {
   return `https://www.midjourney.com/jobs/${m[1].toLowerCase()}${m[2] !== undefined ? `?index=${m[2]}` : ""}`;
 }
 
+// The shot a Creation file sits on (25 Nov 2026): its own slot; else, when it (or one of its takes) was sent as the clip
+// that fills a shot, that shot (a picture with another slot stays there). Pure: `filled` is slot id -> clip name.
+export function effectiveSlot(rec: PictureRecord | undefined, filled: Record<string, string>): string | null {
+  if (!rec) return null;
+  if (rec.slot !== undefined) return rec.slot || null; // "": taken off its shot by the user, stays loose
+  const sent = [rec.sent, ...rec.takes.map((t) => t.sent ?? t.clip)].filter((x): x is string => !!x).map((x) => x.toLowerCase());
+  if (!sent.length) return null;
+  return Object.entries(filled).find(([, clip]) => sent.includes(clip.toLowerCase()))?.[0] ?? null;
+}
+// slot id -> filled clip (both films) of the song's shot list; empty without one.
+export function filledClips(ws: Workspace, projectId: string): Record<string, string> {
+  try {
+    const list = readShotList(ws, projectId);
+    const ids = new Set((list?.slots ?? []).map((x) => x.id));
+    return Object.fromEntries(Object.entries({ ...(list?.filledWide ?? {}), ...(list?.filled ?? {}) }).filter(([id]) => ids.has(id)));
+  } catch {
+    return {};
+  }
+}
+
 export function sourceLabel(name: string, from?: string): string {
   if (from) return from;
   return MJ_NAME.test(name) ? "Midjourney" : "Added by you";
@@ -308,11 +329,12 @@ export function sourceLabel(name: string, from?: string): string {
 
 // Pictures and videos dropped on the board: copied into pictures\ under their own names (a free name when one is taken;
 // the same content twice is not copied again). `from`: the source label for all of them (a link's site).
-export async function addPictures(ws: Workspace, projectId: string, files: readonly { file: string; name: string }[], from?: string): Promise<{ added: string[]; skipped: { name: string; reason: string }[] }> {
+export async function addPictures(ws: Workspace, projectId: string, files: readonly { file: string; name: string }[], from?: string): Promise<{ added: string[]; skipped: { name: string; reason: string }[]; existing: { name: string; as: string }[] }> {
   const { dir } = songFolder(ws, projectId);
   mkdirSync(dir, { recursive: true });
   const added: string[] = [];
   const skipped: { name: string; reason: string }[] = [];
+  const matched: { name: string; as: string }[] = []; // 25 Nov 2026: same bytes as a file already in Creation (a drop on a shot links it)
   const existing = readdirSync(dir).filter((f) => BOARD_FILE.test(f));
   for (const f of files) {
     const name = path.basename(f.name);
@@ -330,6 +352,7 @@ export async function addPictures(ws: Workspace, projectId: string, files: reado
     const same = existing.find((e) => statSync(path.join(dir, e)).size === bytes.length && readFileSync(path.join(dir, e)).equals(bytes));
     if (same) {
       skipped.push({ name, reason: `already on the board as ${same}` });
+      matched.push({ name, as: same });
       continue;
     }
     const target = uniqueFileName(dir, name);
@@ -341,12 +364,12 @@ export async function addPictures(ws: Workspace, projectId: string, files: reado
       p.source = source;
     });
   }
-  return { added, skipped };
+  return { added, skipped, existing: matched };
 }
 
 // "Add from a link" (any outside source: a Midjourney, Higgsfield or WaveSpeed download link, a shared file): the file
 // is downloaded once and added like a dropped one, labelled with the site it came from.
-export async function addFromLink(ws: Workspace, projectId: string, link: unknown, f: typeof fetch = (...a) => globalThis.fetch(...a)): Promise<{ added: string[]; skipped: { name: string; reason: string }[] }> {
+export async function addFromLink(ws: Workspace, projectId: string, link: unknown, f: typeof fetch = (...a) => globalThis.fetch(...a)): Promise<{ added: string[]; skipped: { name: string; reason: string }[]; existing: { name: string; as: string }[] }> {
   let url: URL;
   try {
     url = new URL(String(link ?? "").trim());
@@ -440,6 +463,7 @@ export async function picturesView(ws: Workspace, projectId: string, env: NodeJS
   const clipsDir = songPathsById(ws, projectId).clips;
   const stillThere = (c: string | undefined) => !!c && !!clipsDir && existsSync(path.join(clipsDir, c));
   const pictures: PictureView[] = [];
+  const filledBy = filledClips(ws, projectId);
   for (const f of files) {
     const info = await probeMedia(path.join(dir, f)).catch(() => null);
     const rec = all.pictures[f];
@@ -447,12 +471,12 @@ export async function picturesView(ws: Workspace, projectId: string, env: NodeJS
     const takes = (rec?.takes ?? []).map((t) => (t.clip && !t.sent ? { ...t, sent: t.clip } : t)).map((t) => (t.kind !== "lipsync" && t.sent && !stillThere(t.sent) ? { ...t, sent: undefined } : t)).map((t) => (t.kind === "lipsync" ? { ...t, inUse: !!t.sent && singingAnchors.has(`${t.line}:${t.through ?? t.line}:${t.sent.toLowerCase()}`) } : { ...t, onLines: onLines(t.sent) }));
     const cleanable = (rec?.takes ?? []).filter((t) => use.cleanable(t)).map((t) => t.n);
     const removed = [...(rec?.removedTakes ?? [])].sort((a, b) => b.removed_at.localeCompare(a.removed_at)).map((t) => ({ n: t.n, label: t.label ?? `Take ${t.n}`, why: t.kind === "lipsync" ? `lip sync, ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` : t.status === "failed" ? "failed" : t.model, at: t.removed_at }));
-    pictures.push({ file: f, mjLink: midjourneyLink(f), slot: rec?.slot ?? null, label: rec?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? "picture" : "video", source: sourceLabel(f, rec?.source), mood: rec?.mood ?? "", feeling: rec?.feeling ?? "", who: rec?.who ?? null, fav: !!rec?.fav, sectionFeeling: feelingForSlot(ws, projectId, rec?.slot).feeling ?? null, cleanable, removed, takes, width: info?.width ?? null, height: info?.height ?? null, sent: stillThere(rec?.sent) ? rec!.sent! : null });
+    pictures.push({ file: f, mjLink: midjourneyLink(f), slot: effectiveSlot(rec, filledBy), label: rec?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? "picture" : "video", source: sourceLabel(f, rec?.source), mood: rec?.mood ?? "", feeling: rec?.feeling ?? "", who: rec?.who ?? null, fav: !!rec?.fav, sectionFeeling: feelingForSlot(ws, projectId, effectiveSlot(rec, filledBy) ?? undefined).feeling ?? null, cleanable, removed, takes, width: info?.width ?? null, height: info?.height ?? null, sent: stillThere(rec?.sent) ? rec!.sent! : null });
   }
   const stub = !!env.LYRIC_GENERATE_STUB;
   const removedPictures = Object.entries(all.pictures)
     .filter(([, r]) => r.removed && existsSync(path.join(dir, r.removed.file)))
-    .map(([f, r]) => ({ file: f, label: r.label ?? null, at: r.removed!.at, slot: r.slot ?? null }))
+    .map(([f, r]) => ({ file: f, label: r.label ?? null, at: r.removed!.at, slot: r.slot || null }))
     .sort((a, b) => b.at.localeCompare(a.at));
   return {
     removedPictures,
@@ -713,7 +737,7 @@ export function startAnimate(ws: Workspace, projectId: string, file: string, o: 
   const look = filmLookFor(ws, projectId);
   const feel = feelFor(ws, projectId);
   const rec = readPictures(dir).pictures[name];
-  const feeling = rec?.feeling ? { feeling: rec.feeling } : feelingForSlot(ws, projectId, rec?.slot); // its own choice, else its shot's section; a loose picture: none
+  const feeling = rec?.feeling ? { feeling: rec.feeling } : feelingForSlot(ws, projectId, rec?.slot || undefined); // its own choice, else its shot's section; a loose picture: none
   update(dir, name, (p) => {
     const first = nextTakeN(p);
     made = Array.from({ length: takes }, (_, i) => ({ n: first + i, service: o.service, quality, model: e.model, status: "running" as const, started_at: now, cost_usd: e.usdPerTake, seconds, ...(look ? { filmLook: look.name, look: look.line } : {}), feel, ...feeling, pid: process.pid }));

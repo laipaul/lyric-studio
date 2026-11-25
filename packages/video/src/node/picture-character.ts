@@ -86,7 +86,7 @@ export function startPictureAnimate(ws: Workspace, projectId: string, file: stri
   if (e.usd > cap) throw new Error(`${takes} takes of ${seconds} s with ${who.name}'s face sheet cost about $${e.usd.toFixed(2)}, above your cap of $${cap.toFixed(2)}: make fewer takes or raise the cap. Nothing was sent.`);
   const look = filmLookFor(ws, projectId);
   const feel = feelFor(ws, projectId);
-  const feeling = rec?.feeling ? { feeling: rec.feeling } : feelingForSlot(ws, projectId, rec?.slot);
+  const feeling = rec?.feeling ? { feeling: rec.feeling } : feelingForSlot(ws, projectId, rec?.slot || undefined);
   const prompt = faceKeepPrompt(who.name, sheet.panels, motionPrompt(rec?.mood, look?.line, feel, feeling.feeling, feeling.feelingTo));
   const rel = (f: string) => path.relative(ws.dir, f).split(path.sep).join("/");
   const now = new Date().toISOString();

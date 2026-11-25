@@ -12,11 +12,11 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { findOrCreateSongProject, readClipEdits, readRecipe, songPathsById } from "../src/node";
-import { addPictures, picturesView, removePicture, restorePicture } from "../src/node/animate";
+import { addPictures, effectiveSlot, picturesView, removePicture, restorePicture, songFolder, update as updatePicture } from "../src/node/animate";
 import { createCard } from "../src/node/characters/cards";
-import { placeByName, productionView, sectionsOfShots, setPictureShot, shotForFileName, useForShot, withLineStarts } from "../src/node/shot-production";
+import { placeByName, placeDropped, productionView, sectionsOfShots, setPictureShot, shotForFileName, useForShot, withLineStarts } from "../src/node/shot-production";
 import { midjourneyLink } from "../src/node/animate";
-import { importShotList, readShotList, removeSlots, setShotLook, setShotScene, slotKey } from "../src/node/shotlist";
+import { SHOTLIST_FILE, importShotList, readShotList, removeSlots, setShotLook, setShotScene, slotKey } from "../src/node/shotlist";
 import { productionData, setCast } from "../src/node/production";
 import { shotLooks } from "../src/node/shot-looks";
 import { addLook, LOOKS_DIR } from "../src/node/characters/looks";
@@ -342,5 +342,47 @@ describe("Creation → Production", () => {
     expect(size(refs[0].file)).toBe(`${Math.round(1024 * 0.75) * 3},1024`); // three 3:4 panels, 1024 high
     expect(referencePrompt(shot, refs)).toMatch(/@Image 1 is Bride's face reference sheet \(left to right: close-up, 3\/4, smiling, teeth visible\)/);
     expect(referencePrompt(shot, refs)).toMatch(/@Image 2 is Bride's outfit reference sheet \("Autumn City"\) \(left to right: front, back\)/);
+  });
+});
+
+describe("pictures and shots (25 Nov 2026)", () => {
+  it("a picture already in Creation, dropped on a shot again, is linked to it (placeDropped)", async () => {
+    const dup = path.join(root, "dup.png");
+    ffmpeg("-f", "lavfi", "-i", "color=c=pink:s=64x64", "-frames:v", "1", dup);
+    await addPictures(ws, id, [{ file: dup, name: "dup-first.png" }]);
+    const shotId = productionView(ws, id).shots[0].id;
+    const r = await addPictures(ws, id, [{ file: dup, name: "dup-again.png" }]);
+    expect(r.added).toEqual([]);
+    expect(r.existing).toEqual([{ name: "dup-again.png", as: "dup-first.png" }]);
+    const out = placeDropped(ws, id, r, shotId);
+    expect(out.onShot).toEqual([{ file: "dup-first.png", fresh: false }]);
+    expect(out.shot).toBe(1);
+    expect(out.skipped).toEqual([]);
+    expect(productionView(ws, id).shots[0].pictures).toContain("dup-first.png");
+  });
+
+  it("a shot filled with a clip shows the picture (or take) sent as that clip; a picture with another slot stays there", async () => {
+    const file = path.join(songRoot, SHOTLIST_FILE);
+    const original = readFileSync(file, "utf8");
+    try {
+      const shots = productionView(ws, id).shots;
+      const [a, b] = [shots[0].id, shots[1].id];
+      const pic = path.join(root, "sent.png");
+      ffmpeg("-f", "lavfi", "-i", "color=c=orange:s=64x64", "-frames:v", "1", pic);
+      await addPictures(ws, id, [{ file: pic, name: "sent-pic.png" }]);
+      const { dir } = songFolder(ws, id);
+      updatePicture(dir, "sent-pic.png", (p) => void (p.sent = "Clip A.mp4"));
+      const list = JSON.parse(original);
+      writeFileSync(file, JSON.stringify({ ...list, filled: { ...(list.filled ?? {}), [a]: "clip a.mp4" } }));
+      expect(productionView(ws, id).shots[0].pictures).toContain("sent-pic.png");
+      expect((await picturesView(ws, id)).pictures.find((p) => p.file === "sent-pic.png")?.slot).toBe(a);
+      setPictureShot(ws, id, "sent-pic.png", b);
+      expect(productionView(ws, id).shots[0].pictures).not.toContain("sent-pic.png");
+      expect(productionView(ws, id).shots[1].pictures).toContain("sent-pic.png");
+      expect(effectiveSlot({ takes: [{ sent: "CLIP A.mp4" } as never] }, { [a]: "clip a.mp4" })).toBe(a);
+      expect(effectiveSlot({ takes: [] }, { [a]: "clip a.mp4" })).toBeNull();
+    } finally {
+      writeFileSync(file, original);
+    }
   });
 });

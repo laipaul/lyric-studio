@@ -23,7 +23,7 @@ import { REFERENCE_MODEL } from "@lyric/video/animate";
 import { addFromLink, addPictures, picturesView, removePicture, removeTakes, restorePicture, restoreTake, setFavourite, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, setPictureFeeling, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
 import { runFinal, startFinal } from "@lyric/video/final";
 import { runSinging, withSongStarts } from "@lyric/video/singer";
-import { placeByName, productionView, setPictureShot, useForShot, withLineStarts } from "@lyric/video/shot-production";
+import { placeByName, placeDropped, productionView, setPictureShot, useForShot, withLineStarts } from "@lyric/video/shot-production";
 import { timedLines } from "@lyric/video/production";
 import { startShotReferences } from "@lyric/video/shot-references";
 import { eq } from "drizzle-orm";
@@ -84,8 +84,7 @@ export async function POST(request: Request, { params }: Params) {
             const r = await addPictures(ws, id, saved);
             // Dropped on a shot: they belong to it. Dropped anywhere else: a file named after its shot goes to that shot.
             if (typeof slot === "string" && slot) {
-              for (const f of r.added) setPictureShot(ws, id, f, slot);
-              return r;
+              return placeDropped(ws, id, r, slot); // 25 Nov 2026: a picture already in Creation is linked too
             }
             let placed: Record<string, number> = {};
             try {
