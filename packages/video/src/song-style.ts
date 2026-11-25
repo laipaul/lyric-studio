@@ -13,7 +13,7 @@ export type SongStyle = (typeof SONG_STYLES)[number];
 export const SONG_STYLE_LABEL: Record<SongStyle, string> = { cut: "Cut to the song", singing: "Add lip sync", film: "Mini film" };
 export const SONG_STYLE_HINT: Record<SongStyle, string> = {
   cut: "Your clips cut to the beat and the lyrics.",
-  singing: "The same, plus your singer lip-synced on the lines you pick (Lyrics Sync → Who sings).",
+  singing: "The same, plus your singer lip-synced on the lines you pick (Lyrics Sync → Lip sync).",
   film: "The whole song as a short film, shot by shot: Film 9:16 (Instagram) and Film 16:9 (YouTube). For a Reel, switch to Cut to the song.",
 };
 

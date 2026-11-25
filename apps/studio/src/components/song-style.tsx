@@ -114,7 +114,7 @@ export function SongStyleField({ projectId }: { projectId: string }) {
       </div>
       {current.style === "cut" && current.singingLines > 0 ? (
         <p className="text-xs text-amber-200" data-song-style-note>
-          This song still has {current.singingLines === 1 ? "a singing line" : `${current.singingLines} singing lines`}, and they play in its videos, so Lyrics Sync keeps showing Who sings. Choose no singer there to take them out.
+          This song still has {current.singingLines === 1 ? "a singing line" : `${current.singingLines} singing lines`}, and they play in its videos, so Lyrics Sync keeps showing the Lip sync column. Choose no singer there to take them out.
         </p>
       ) : null}
       {current.style === "singing" ? (
@@ -123,11 +123,11 @@ export function SongStyleField({ projectId }: { projectId: string }) {
           <span className="font-medium text-violet-200">How to add the lip sync</span>
           <ol className="text-muted-foreground list-decimal pl-4">
             <li>Have a picture of your singer in Creation (a close, front-facing face works best).</li>
-            <li>In Lyrics Sync, column <b>Who sings (lip-sync)</b>: choose that picture on each line where the singer shows (lines in a row become one clip).</li>
+            <li>In Lyrics Sync, column <b>Lip sync</b>: choose that picture on each line where the singer shows (lines in a row become one clip).</li>
             <li>Press <b>Make singing clips</b> in the bar above the lines: the cost shows first; each clip lands on its lines.</li>
           </ol>
           <button type="button" data-lipsync-open onClick={() => goTo("lyrics")} className="hover:bg-accent flex items-center gap-1 self-start rounded border px-2 py-0.5 text-foreground">
-            Open Lyrics Sync → Who sings <ArrowRight className="size-3" />
+            Open Lyrics Sync → Lip sync <ArrowRight className="size-3" />
           </button>
         </div>
       ) : null}

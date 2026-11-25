@@ -180,7 +180,7 @@ export function SingerBar({ singer }: { singer: Singer }) {
         <Mic className="text-brand size-4" />
         <span className="font-medium">Singer</span>
         <span className="text-muted-foreground" data-singer-summary>
-          {ticked ? `${ticked} line${ticked === 1 ? "" : "s"} where the singer shows` : "Choose a picture or video in the Who sings column on the lines where the singer shows."}
+          {ticked ? `${ticked} line${ticked === 1 ? "" : "s"} where the singer shows` : "Choose a picture or video in the Lip sync column on the lines where the singer shows."}
           {v.toMake.lines.length ? ` · to make: ${v.toMake.lines.length} take${v.toMake.lines.length === 1 ? "" : "s"} (${v.toMake.seconds} s of voice at ${v.resolution}, about ${money(v.toMake.usd)})` : ticked ? " · all made" : ""}
           {over ? ` · above your cap of ${money(singer.cap)} (Creation → Your defaults)` : ""}
         </span>
@@ -531,7 +531,7 @@ function SourcePicker({ sources, value, onChange, line }: { sources: SingerView[
       </button>
       {open ? (
         <div data-singer-picker={line} className="bg-popover absolute right-0 z-30 mt-1 flex max-h-80 w-64 flex-col gap-1 overflow-auto rounded-lg border p-1.5 shadow-lg">
-          <span className="text-muted-foreground px-1 text-[11px] font-medium">Who sings this line? (lip-sync)</span>
+          <span className="text-muted-foreground px-1 text-[11px] font-medium">Lip sync: who sings this line?</span>
           {sources.length > 6 ? <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name" className="bg-background rounded-md border px-2 py-1 text-xs" data-singer-search /> : null}
           {value ? (
             <button type="button" data-singer-option="" onClick={() => { onChange(null); setOpen(false); }} className="hover:bg-accent rounded px-2 py-1 text-left text-xs">

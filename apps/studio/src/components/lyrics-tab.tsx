@@ -233,7 +233,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
       const through = singing.through ?? singing.line;
       const covered = through > singing.line ? `lines ${singing.line}-${through}` : `line ${singing.line}`;
       const ok = window.confirm(
-        `Line ${line} is sung by a singing clip on ${covered}. Showing this clip removes the singer from ${covered} (the singing clip is set to Omit; it stays in Creation, and "Use this take" in Who sings brings it back). Continue?`,
+        `Line ${line} is sung by a singing clip on ${covered}. Showing this clip removes the singer from ${covered} (the singing clip is set to Omit; it stays in Creation, and "Use this take" in Lip sync brings it back). Continue?`,
       );
       if (!ok) return; // the picker stays open
     }
@@ -373,7 +373,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
             </div>
             {film ? <SectionsBar sections={sections} startMs={(n) => data.lines?.find((x) => x.number === n)?.startMs ?? null} /> : null}
             {withSinging ? <SingerBar singer={singer} /> : (
-              <p className="text-muted-foreground text-xs" data-singing-off>Who sings is hidden: this song&apos;s style is Cut to the song. Choose Add lip sync in Song Details to put the singer on lines.</p>
+              <p className="text-muted-foreground text-xs" data-singing-off>The Lip sync column is hidden: this song&apos;s style is Cut to the song. Choose Add lip sync in Song Details to put the singer on lines.</p>
             )}
             {partPlatforms?.length ? (
               <div className="bg-card/60 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs" data-reel-part title={part?.section.reason ?? undefined}>
@@ -410,7 +410,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">On screen</th>
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Confidence</th>
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Adjust</th>
-                    {withSinging ? <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap" title="The lines where the singer shows, each with a picture or video from Creation">Who sings (lip-sync)</th> : null}
+                    {withSinging ? <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap" title="The lines where the singer shows, each with a picture or video from Creation">Lip sync</th> : null}
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap min-w-36">Shows clip (no singing)</th>
                   </tr>
                 </thead>
@@ -552,7 +552,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                                   {anchor.clipIn ? ` · from ${anchor.clipIn} s` : ""}
                                 </div>
                               </div>
-                              <button type="button" disabled={busy} onClick={() => saveAnchor(l.number, null)} className="text-muted-foreground hover:text-foreground shrink-0 rounded-md border p-0.5" aria-label={`Remove the anchor on line ${l.number}`} title={anchor.sync !== undefined ? "Take this singing clip off the line (it is set to Omit and stays in Creation and the Storyboard). Who sings stays as it is: to stop the singer here, choose — no singer in Who sings." : undefined} data-anchor-remove>
+                              <button type="button" disabled={busy} onClick={() => saveAnchor(l.number, null)} className="text-muted-foreground hover:text-foreground shrink-0 rounded-md border p-0.5" aria-label={`Remove the anchor on line ${l.number}`} title={anchor.sync !== undefined ? "Take this singing clip off the line (it is set to Omit and stays in Creation and the Storyboard). Lip sync stays as it is: to stop the singer here, choose — no singer in Lip sync." : undefined} data-anchor-remove>
                                 <X className="size-3.5" />
                               </button>
                             </div>

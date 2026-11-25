@@ -506,7 +506,7 @@ export async function startRetake(ws: Workspace, projectId: string, o: { capUsd:
   if (!view.lines) throw new Error(view.why ?? "This song's lines are not timed yet.");
   const n = Number(o.line);
   const l = view.lines.find((x) => x.number === n);
-  if (!l?.source || !l.run) throw new Error(`Line ${o.line} has no singer: choose a picture or video in Who sings first.`);
+  if (!l?.source || !l.run) throw new Error(`Line ${o.line} has no singer: choose a picture or video in Lip sync first.`);
   if (l.run.first !== n) throw new Error(`Line ${n} is sung with line ${l.run.first}: retake lines ${l.run.first}-${l.run.last} there.`);
   if (!view.ready) singTransportFor(env); // throws the plain-words message
   const cap = Number(o.capUsd);

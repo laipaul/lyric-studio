@@ -65,7 +65,7 @@ async function main() {
     check(true, "a new song starts on Cut to the song, said as not chosen yet");
     await page.goto(`${base}/songs/${sp.project.id}?tab=lyrics`);
     await page.waitForSelector("[data-singing-off]");
-    check((await page.$$("[data-singer-cell]")).length === 0, "Cut to the song: Who sings is hidden in Lyrics Sync, with a line saying why");
+    check((await page.$$("[data-singer-cell]")).length === 0, "Cut to the song: the Lip sync column is hidden in Lyrics Sync, with a line saying why");
 
     // Add lip sync: saved, and Who sings is back.
     await page.goto(`${base}/songs/${sp.project.id}?tab=details`);
@@ -77,10 +77,10 @@ async function main() {
     check(((await page.textContent("[data-lipsync-how]")) ?? "").includes("Make singing clips"), "Add lip sync: the steps show under the choice");
     await page.click("[data-lipsync-open]");
     await page.waitForSelector("[data-singer-cell]");
-    check(true, "Open Lyrics Sync → Who sings: one click");
+    check(true, "Open Lyrics Sync → Lip sync: one click");
     await page.goto(`${base}/songs/${sp.project.id}?tab=lyrics`);
     await page.waitForSelector("[data-singer-cell]");
-    check((await page.$("[data-singing-off]")) === null && (await page.$$("[data-singer-cell]")).length === 2, "Add lip sync: Who sings shows on every line");
+    check((await page.$("[data-singing-off]")) === null && (await page.$$("[data-singer-cell]")).length === 2, "Add lip sync: the Lip sync column shows on every line");
 
     // Mini film: Creation's story tools open; the Library card names it.
     await page.goto(`${base}/songs/${sp.project.id}?tab=details`);
