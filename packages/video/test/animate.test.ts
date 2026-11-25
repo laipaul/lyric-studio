@@ -9,7 +9,7 @@ import { openWorkspace, resolveWorkspaceDir, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { findOrCreateSongProject, readClipEdits, songPathsById } from "../src/node";
-import { nextTakeN, removeTakes, restoreTake } from "../src/node/animate";
+import { nextTakeN, removeTakes, restoreTake, setFavourite } from "../src/node/animate";
 import { addFromLink, addPictures, phraseSeconds, readCreationDefaults, saveCreationDefaults, sourceLabel, sendToStoryboard, estimate, higgsfieldTransport, motionPrompt, picturesView, readPictures, runTakes, setMood, startAnimate, startResume, stubTransport, waveSpeedTransport } from "../src/node/animate";
 import { clearFinishedGenerateTasks, listGenerateTasks, RECENT_MS } from "../src/node/generate-tasks";
 import { takeFacts } from "../src/take-facts";
@@ -507,6 +507,20 @@ describe("Clean up takes (Paul, 21 Nov 2026): put aside, never deleted, with Res
     expect(back.takes.find((t) => t.n === 3)!.file).toBe("takes/tidy take 3.mp4");
     expect(readFileSync(path.join(pics, "takes", "tidy take 3.mp4"), "utf8")).toBe("take 3");
     expect(back.removedTakes!.map((t) => t.n)).toEqual([1]);
+  });
+
+  it("♥ favourites (25 Nov 2026): on a picture or a take, on and off, shown on the board, never tidied by Clean up", async () => {
+    // tidy.png from the test before: take 3 (restored) is done and never sent, so Clean up would put it aside.
+    expect(setFavourite(ws, id, "tidy.png", 3, true)).toBe(true);
+    expect(setFavourite(ws, id, "tidy.png", null, true)).toBe(true);
+    let card = (await picturesView(ws, id, STUB, () => true)).pictures.find((p) => p.file === "tidy.png")!;
+    expect([card.fav, card.takes.find((t) => t.n === 3)!.fav, card.cleanable.includes(3)]).toEqual([true, true, false]);
+    expect(setFavourite(ws, id, "tidy.png", 3, false)).toBe(false);
+    expect(setFavourite(ws, id, "tidy.png", null, false)).toBe(false);
+    card = (await picturesView(ws, id, STUB, () => true)).pictures.find((p) => p.file === "tidy.png")!;
+    expect([card.fav, card.takes.find((t) => t.n === 3)!.fav, card.cleanable.includes(3)]).toEqual([false, undefined, true]);
+    expect(() => setFavourite(ws, id, "tidy.png", 99, true)).toThrow(/No such take/);
+    expect(() => setFavourite(ws, id, "nothing.png", null, true)).toThrow(/No nothing.png/);
   });
 });
 

@@ -162,7 +162,26 @@ async function main() {
     await page.click("[data-shot-compare=s02] [data-compare-use] >> nth=0");
     await page.waitForFunction((k: string) => !!document.querySelector(`[data-compare-tile="${k}"] [data-compare-used]`), pick, { timeout: 15_000 });
     check(true, `Use for shot 2 from the comparison (${pick})`);
+    // ♥ (25 Nov 2026): mark one take a favourite in Compare; "♥ only" plays just that one; Creation shows the heart too.
+    const favKey = await page.getAttribute("[data-shot-compare=s02] [data-compare-tile*='#'] >> nth=1", "data-compare-tile");
+    await page.click(`[data-compare-tile="${favKey}"] [data-fav]`);
+    await page.waitForSelector(`[data-compare-tile="${favKey}"] [data-fav-on=true]`, { timeout: 15_000 });
+    check(true, `♥ in Compare marks the take (${favKey})`);
+    await page.click("[data-compare-fav-only]");
+    await page.waitForFunction(() => document.querySelectorAll("[data-shot-compare=s02] [data-compare-tile]").length === 1, null, { timeout: 5000 });
+    check((await page.getAttribute("[data-shot-compare=s02] [data-compare-tile]", "data-compare-tile")) === favKey, "♥ only: just the favourite");
+    await page.click("[data-compare-fav-only]");
+    check((await page.$$("[data-shot-compare=s02] [data-compare-tile]")).length === 4, "Show all: the 4 again");
     await page.keyboard.press("Escape");
+    const favN = favKey!.split("#")[1];
+    check((await page.getAttribute(`[data-shot=s02] [data-take="${favN}"] [data-fav]`, "data-fav-on")) === "true", "the same take shows ♥ in Creation");
+    await page.click("[data-fav-only]");
+    await page.waitForSelector("[data-fav-only=on]");
+    check((await page.$$("[data-shot=s02] [data-take]")).length === 1, "Creation ♥ only: just the favourite take");
+    await page.click("[data-fav-only]");
+    await page.click(`[data-shot=s02] [data-take="${favN}"] [data-fav]`);
+    await page.waitForSelector(`[data-shot=s02] [data-take="${favN}"] [data-fav-on=false]`, { timeout: 15_000 });
+    check(!(await page.$("[data-fav-only]")), "♥ off again: no favourites, no ♥ only switch");
     if (process.env.PRODUCTION_SHOT) await page.screenshot({ path: process.env.PRODUCTION_SHOT, fullPage: true });
 
     // ✕ on a shot's picture: back to the loose pictures; ✕ there: put aside; Restore brings it back.

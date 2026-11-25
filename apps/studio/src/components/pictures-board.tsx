@@ -7,7 +7,7 @@
 // Paul may add a few words of mood. His own defaults (model, takes, cap) apply to every song; each picture can override
 // them. The cost shows before sending and a press above the cap is refused. Each item shows where it came from. Paul
 // sends his favourites with "Send to Storyboard" (the end of his story line, marked ✓).
-import { Check, Copy, Film, ImagePlus, Link2, Loader2, Play, RotateCw, Send, Sparkles, UserRound, X } from "lucide-react";
+import { Check, Copy, Film, Heart, ImagePlus, Link2, Loader2, Play, RotateCw, Send, Sparkles, UserRound, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { CreationDefaults, PictureView, PicturesView as BoardView, Quality, ServiceId, Take } from "@lyric/video/animate";
@@ -46,6 +46,7 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
   const [board, setBoard] = useState<PicturesView | null>(null);
   const [production, setProduction] = useState<ProductionView | null>(null);
   const [comparing, setComparing] = useState<string | null>(null); // Compare: the shot whose candidates play together
+  const [favOnly, setFavOnly] = useState(false); // ♥ only (25 Nov 2026): just Paul's favourites, pictures and takes
   const [guides, setGuides] = useState<Record<string, string>>({}); // Make with references: each shot's camera guide
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
@@ -158,6 +159,17 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
       setNotice({ ok: false, text: (e as Error).message });
     }
   }
+  // ♥ (25 Nov 2026): mark or unmark a picture (n null) or a take as a favourite; only a mark, nothing is sent.
+  async function favourite(file: string, n: number | null, on: boolean) {
+    try {
+      await post({ action: "fav", file, n, on });
+      await load();
+    } catch (e) {
+      setNotice({ ok: false, text: (e as Error).message });
+    }
+  }
+  const favCount = board.pictures.reduce((k, p) => k + (p.fav ? 1 : 0) + p.takes.filter((t) => t.fav).length, 0);
+  const hasFav = (p: PictureView) => p.fav || p.takes.some((t) => t.fav);
   // Compare: every candidate of a shot (its videos, its finished takes, its pictures as stills).
   const candidatesOf = (shot: ProductionShot): Candidate[] => {
     const same = (a?: string | null, b?: string | null) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
@@ -173,7 +185,7 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
     return board.pictures
       .filter((p) => p.slot === shot.id)
       .flatMap((p): Candidate[] => [
-        ...(p.source === "Character references" ? [] : [{ key: p.file, label: p.label ?? p.file, url: fileUrl(p.url), kind: p.kind, used: same(p.sent, shot.filled), use: () => void useShot(p.file, null, shot), ...ownTag(p) }]),
+        ...(p.source === "Character references" ? [] : [{ key: p.file, label: p.label ?? p.file, url: fileUrl(p.url), kind: p.kind, used: same(p.sent, shot.filled), use: () => void useShot(p.file, null, shot), fav: p.fav, onFav: () => void favourite(p.file, null, !p.fav), ...ownTag(p) }]),
         ...p.takes
           .filter((t) => t.status === "done" && t.kind !== "lipsync" && (t.file || t.clip))
           .map((t): Candidate => ({
@@ -185,6 +197,8 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
             kind: "video",
             used: same(t.sent, shot.filled),
             use: () => void useShot(p.file, t.n, shot),
+            fav: !!t.fav,
+            onFav: () => void favourite(p.file, t.n, !t.fav),
           })),
       ]);
   };
@@ -330,6 +344,11 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
         </p>
       ) : null}
 
+      {favCount || favOnly ? (
+        <button type="button" data-fav-only={favOnly ? "on" : "off"} aria-pressed={favOnly} onClick={() => setFavOnly((v) => !v)} className={cn("flex items-center gap-1.5 self-start rounded-md border px-2 py-1 text-xs", favOnly ? "border-brand bg-brand/15 text-foreground" : "hover:bg-accent")} title="Show only the pictures and takes you marked ♥ (click again for everything)">
+          <Heart className={cn("size-3.5", favOnly ? "fill-brand text-brand" : "text-brand")} /> {favOnly ? `Showing your ${favCount} favourite${favCount === 1 ? "" : "s"} · show all` : `Favourites only (${favCount})`}
+        </button>
+      ) : null}
       {shots.length ? (
         <ShotItems
           shots={shots}
@@ -345,7 +364,7 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
           onPlace={(s, scene, whole) => void setPlace(s, scene, whole)}
           guidesFor={(s) => ({ options: guidesOf(s), value: guideOf(s), set: (v: string) => setGuides((g) => ({ ...g, [s.id]: v })) })}
           compareCount={(s) => candidatesOf(s).length}
-          tile={(p, s) => <PictureTile key={p.file} projectId={projectId} p={p} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title, take) => setPlaying({ url, title, take })} shot={s} useShot={(n) => void useShot(p.file, n, s)} openCompare={candidatesOf(s).length >= 2 ? () => setComparing(s.id) : undefined} />}
+          tile={(p, s) => (favOnly && !hasFav(p) ? null : <PictureTile key={p.file} projectId={projectId} p={p} favOnly={favOnly} onFav={(n, on) => void favourite(p.file, n, on)} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title, take) => setPlaying({ url, title, take })} shot={s} useShot={(n) => void useShot(p.file, n, s)} openCompare={candidatesOf(s).length >= 2 ? () => setComparing(s.id) : undefined} />)}
         />
       ) : null}
       {comparedShot ? <ShotCompare key={comparedShot.id} shot={comparedShot} candidates={candidatesOf(comparedShot)} song={board.song ? fileUrl(board.song) : null} onClose={() => setComparing(null)} /> : null}
@@ -355,8 +374,8 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
         </h3>
       ) : null}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-        {loose.map((p) => (
-          <PictureTile key={p.file} projectId={projectId} p={p} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title, take) => setPlaying({ url, title, take })} />
+        {loose.filter((p) => !favOnly || hasFav(p)).map((p) => (
+          <PictureTile key={p.file} projectId={projectId} p={p} favOnly={favOnly} onFav={(n, on) => void favourite(p.file, n, on)} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title, take) => setPlaying({ url, title, take })} />
         ))}
         <div className="flex min-h-48 flex-col gap-2">
           <button
@@ -730,7 +749,7 @@ function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare
 // compare"): every candidate of one shot side by side (videos, animated takes, pictures as stills), started together
 // and looped in sync; on a shot with a lyric line the song plays from that line, so each one is judged against the
 // same words and beat. One set of controls (space: play / pause); "Use for shot N" under each tile.
-type Candidate = { key: string; label: string; url: string; kind: "video" | "picture"; used: boolean; use: () => void; tag?: string; details?: string }; // tag: the take's short tag (takeTag), label then the picture
+type Candidate = { key: string; label: string; url: string; kind: "video" | "picture"; used: boolean; use: () => void; tag?: string; details?: string; fav?: boolean; onFav?: () => void }; // tag: the take's short tag (takeTag), label then the picture
 
 function ShotCompare({ shot, candidates, song, onClose }: { shot: ProductionShot; candidates: Candidate[]; song: string | null; onClose: () => void }) {
   const videos = useRef<Map<string, HTMLVideoElement>>(new Map());
@@ -789,7 +808,10 @@ function ShotCompare({ shot, candidates, song, onClose }: { shot: ProductionShot
     return () => (clearTimeout(t), window.removeEventListener("keydown", key));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const cols = candidates.length <= 2 ? "grid-cols-2" : candidates.length === 3 ? "grid-cols-3" : "grid-cols-2 md:grid-cols-4";
+  const [favOnly, setFavOnly] = useState(false); // ♥ only: just the favourites play side by side (25 Nov 2026)
+  const favs = candidates.filter((c) => c.fav).length;
+  const shown = favOnly && favs ? candidates.filter((c) => c.fav) : candidates;
+  const cols = shown.length <= 2 ? "grid-cols-2" : shown.length === 3 ? "grid-cols-3" : "grid-cols-2 md:grid-cols-4";
   return (
     <Dialog open onOpenChange={(o) => !o && (pause(), onClose())}>
       <DialogContent data-shot-compare={shot.id} className="w-[min(72rem,96vw)] max-w-none">
@@ -826,11 +848,14 @@ function ShotCompare({ shot, candidates, song, onClose }: { shot: ProductionShot
           ) : (
             <span className="text-muted-foreground">{shot.line === null ? "Music-only shot: the videos play without the song." : "The line is not timed yet: the videos play without the song."}</span>
           )}
+          <button type="button" data-compare-fav-only={favOnly ? "on" : "off"} aria-pressed={favOnly} disabled={!favs} onClick={() => (setFavOnly((v) => !v), setTimeout(() => restart(true), 50))} className={cn("flex items-center gap-1 rounded-md border px-2 py-1 disabled:opacity-50", favOnly && favs ? "border-brand bg-brand/15" : "hover:bg-accent")} title={favs ? "Only your ♥ favourites (click again for all)" : "Click ♡ on a tile to mark a favourite"}>
+            <Heart className={cn("size-3.5 text-brand", favOnly && favs && "fill-brand")} /> {favOnly && favs ? "Show all" : `Favourites only (${favs})`}
+          </button>
           <span className="text-muted-foreground">Space: play / pause · they loop together</span>
         </div>
         <div className={cn("grid max-h-[70vh] gap-3 overflow-y-auto", cols)}>
-          {candidates.map((c) => (
-            <div key={c.key} data-compare-tile={c.key} className={cn("flex flex-col gap-1.5 rounded-lg border p-1.5", c.used && "border-emerald-400/50")}>
+          {shown.map((c) => (
+            <div key={c.key} data-compare-tile={c.key} data-compare-fav={c.fav ? "true" : "false"} className={cn("flex flex-col gap-1.5 rounded-lg border p-1.5", c.used && "border-emerald-400/50")}>
               <div className="relative aspect-[9/16] overflow-hidden rounded bg-black">
                 {c.kind === "video" ? (
                   <video
@@ -849,6 +874,7 @@ function ShotCompare({ shot, candidates, song, onClose }: { shot: ProductionShot
                   <img src={c.url} alt="" className="absolute inset-0 size-full object-cover" />
                 )}
                 {c.kind === "picture" ? <span className="absolute top-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">picture (as a still)</span> : null}
+                {c.onFav ? <FavButton id={c.key} on={!!c.fav} onToggle={c.onFav} className="absolute top-1 right-1" /> : null}
               </div>
               {c.tag ? (
                 <span data-compare-tag className="text-[11px] leading-tight font-medium" title={c.details}>
@@ -930,7 +956,11 @@ function PictureTile({
   shot,
   useShot,
   openCompare,
+  favOnly = false,
+  onFav,
 }: {
+  favOnly?: boolean; // ♥ only: just the favourite takes
+  onFav?: (n: number | null, on: boolean) => void; // ♥ on the picture (n null) or a take
   openCompare?: () => void; // a shot with 2+ candidates: clicking one plays them all side by side (like Midjourney)
   projectId: string;
   p: PictureView;
@@ -1078,6 +1108,7 @@ function PictureTile({
         >
           <X className="size-3.5" />
         </button>
+        {onFav ? <FavButton id={p.file} on={p.fav} onToggle={() => onFav(null, !p.fav)} className="absolute top-1 right-8" /> : null}
       </div>
       <span className="flex items-center justify-between gap-2 text-xs">
         <NameField id={p.file} name={p.label} file={p.file} onSave={async (label) => {
@@ -1192,8 +1223,8 @@ function PictureTile({
       ) : null}
       {p.takes.length ? (
         <ul className="flex flex-col gap-1" data-picture-takes-list>
-          {[...p.takes].reverse().map((t) => (
-            <TakeRow key={t.n} t={t} onRename={async (label) => {
+          {[...p.takes].filter((t) => !favOnly || t.fav).reverse().map((t) => (
+            <TakeRow key={t.n} t={t} onFav={onFav ? () => onFav(t.n, !t.fav) : undefined} onRename={async (label) => {
               await post({ action: "label", file: p.file, n: t.n, label }).catch((e: Error) => setNotice({ ok: false, text: e.message }));
               await reload();
             }} source={`${board.services.find((s) => s.id === t.service)?.label ?? t.service} · ${t.model}${t.kind === "lipsync" ? ` · lip sync, ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` : ""}`} url={takeUrl(t)} onPlay={(url) => {
@@ -1228,7 +1259,7 @@ function PictureTile({
 // Make final (25 Nov 2026): a Draft take upscaled with Video Upscaler Pro to 1080p, $0.04 a second (at least 3 s).
 const finalUsd = (seconds: number | undefined) => Math.max(3, Math.ceil(seconds ?? 5)) * 0.04;
 
-function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onRemove, onResume, onFinal, shot }: { t: Take & { inUse?: boolean; onLines?: string }; source: string; url: string | null; onPlay: (url: string) => void; onRename: (label: string) => Promise<void>; onSend: () => void; onUse: () => void; onRemove?: () => void; onResume: () => void; onFinal?: () => void; shot?: { number: number; used: boolean; use: () => void } }) {
+function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onRemove, onResume, onFinal, shot, onFav }: { t: Take & { inUse?: boolean; onLines?: string }; onFav?: () => void; source: string; url: string | null; onPlay: (url: string) => void; onRename: (label: string) => Promise<void>; onSend: () => void; onUse: () => void; onRemove?: () => void; onResume: () => void; onFinal?: () => void; shot?: { number: number; used: boolean; use: () => void } }) {
   const label = t.finalOf ? `Take ${t.finalOf} final` : `Take ${t.n}`;
   return (
     <li data-take={t.n} data-take-status={t.status} className="flex items-center gap-2 text-[11px]">
@@ -1242,6 +1273,7 @@ function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onRemove, on
       ) : (
         <span className="bg-muted flex size-10 shrink-0 items-center justify-center rounded">{t.status === "running" ? <Loader2 className="text-brand size-4 animate-spin" /> : null}</span>
       )}
+      {onFav && t.status === "done" ? <FavButton id={`take-${t.n}`} on={!!t.fav} onToggle={onFav} className="shrink-0" /> : null}
       <span className="min-w-0 flex-1">
         <NameField id={`take-${t.n}`} name={t.label ?? null} file={label} className="inline-flex max-w-full font-bold" onSave={onRename} />{" "}
         <span data-take-source className="text-muted-foreground" title={`${source}\n${takeDetails(t)}`}>
@@ -1313,5 +1345,26 @@ function TakeRow({ t, source, url, onPlay, onRename, onSend, onUse, onRemove, on
         </button>
       ) : null}
     </li>
+  );
+}
+
+// ♥ Favourite (25 Nov 2026, Paul: "easily spot my favs"): pink and filled when on, an outline when off; one click each way.
+function FavButton({ id, on, onToggle, className }: { id: string; on: boolean; onToggle: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      data-fav={id}
+      data-fav-on={on ? "true" : "false"}
+      aria-pressed={on}
+      aria-label={on ? "Favourite: click to take it off" : "Mark as a favourite"}
+      title={on ? "Your favourite (click to take it off)" : "Mark as a favourite"}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      className={cn("rounded-full bg-black/60 p-1 hover:bg-black/80", className)}
+    >
+      <Heart className={cn("size-3.5", on ? "fill-brand text-brand" : "text-white")} />
+    </button>
   );
 }

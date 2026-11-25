@@ -121,6 +121,7 @@ export type Take = {
   style?: number; // lipsync: 1 = sent with the singing cue (singer.ts SINGING_CUE)
   prompt?: string; // lipsync: the singer's little script sent with the voice (what the singer does)
   label?: string; // the user's short name for this take ("Bride smile"); shown instead of "Take N"
+  fav?: boolean; // Paul's favourite (♥, 25 Nov 2026): only a mark to spot it in Creation and Compare; changes nothing else
   cleared?: boolean; // hidden from the Tasks menu (Clear finished); the take itself stays
   playable?: boolean; // the file was checked (and if needed re-made) to play in the browser: H.264, yuv420p, fast start
   resolution?: string; // lipsync: the resolution asked of InfiniteTalk ("480p" | "720p"; before 21 Nov 2026 always 720p)
@@ -145,12 +146,12 @@ export type Take = {
 export type RemovedTake = Take & { removed_at: string };
 // removed: the picture put aside (Creation ✕ → Put aside, 23 Nov 2026), its file moved to pictures\_removed\ (file:
 // that path); the record stays, so Restore brings it back with its takes, mood and shot. Nothing is ever deleted.
-export type PictureRecord = { removed?: { at: string; file: string }; slot?: string; label?: string; source?: string; mood?: string; feeling?: string; who?: string; takes: Take[]; removedTakes?: RemovedTake[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string }; // sent: the picture itself sent to the Storyboard (its clip name)
+export type PictureRecord = { removed?: { at: string; file: string }; slot?: string; label?: string; source?: string; mood?: string; feeling?: string; who?: string; fav?: boolean; takes: Take[]; removedTakes?: RemovedTake[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string }; // sent: the picture itself sent to the Storyboard (its clip name)
 export type PicturesFile = { _help?: string; pictures: Record<string, PictureRecord> };
 // source: where it came from, a small label ("Added by you", "Midjourney", "From higgsfield.ai"). kind: only a picture can be animated.
 // cleanable: the takes Clean up would put aside (failed, or not chosen: not in use, on no line, not playing in the
 // Storyboard). removed: the takes put aside, newest first (Restore).
-export type PictureView = { file: string; mjLink: string | null; slot: string | null; label: string | null; url: string; kind: "picture" | "video"; source: string; mood: string; feeling: string; sectionFeeling: string | null; who: string | null; cleanable: number[]; removed: { n: number; label: string; why: string; at: string }[]; takes: (Take & { inUse?: boolean; onLines?: string; songFromMs?: number; clipInS?: number; songWhy?: string })[]; width: number | null; height: number | null; sent: string | null };
+export type PictureView = { file: string; mjLink: string | null; slot: string | null; label: string | null; url: string; kind: "picture" | "video"; source: string; mood: string; feeling: string; sectionFeeling: string | null; who: string | null; fav: boolean; cleanable: number[]; removed: { n: number; label: string; why: string; at: string }[]; takes: (Take & { inUse?: boolean; onLines?: string; songFromMs?: number; clipInS?: number; songWhy?: string })[]; width: number | null; height: number | null; sent: string | null };
 // Paul's own defaults for Animate (Creation → Defaults), for every song: the service and model, how many takes, the cap.
 export type CreationDefaults = { service: ServiceId; quality: Quality; takes: number; cap: number; length: TakeLength }; // length: "song" = one phrase of the song, "short" = 5 s
 export const CREATION_FILE = "creation.json"; // in the workspace folder
@@ -446,7 +447,7 @@ export async function picturesView(ws: Workspace, projectId: string, env: NodeJS
     const takes = (rec?.takes ?? []).map((t) => (t.clip && !t.sent ? { ...t, sent: t.clip } : t)).map((t) => (t.kind !== "lipsync" && t.sent && !stillThere(t.sent) ? { ...t, sent: undefined } : t)).map((t) => (t.kind === "lipsync" ? { ...t, inUse: !!t.sent && singingAnchors.has(`${t.line}:${t.through ?? t.line}:${t.sent.toLowerCase()}`) } : { ...t, onLines: onLines(t.sent) }));
     const cleanable = (rec?.takes ?? []).filter((t) => use.cleanable(t)).map((t) => t.n);
     const removed = [...(rec?.removedTakes ?? [])].sort((a, b) => b.removed_at.localeCompare(a.removed_at)).map((t) => ({ n: t.n, label: t.label ?? `Take ${t.n}`, why: t.kind === "lipsync" ? `lip sync, ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` : t.status === "failed" ? "failed" : t.model, at: t.removed_at }));
-    pictures.push({ file: f, mjLink: midjourneyLink(f), slot: rec?.slot ?? null, label: rec?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? "picture" : "video", source: sourceLabel(f, rec?.source), mood: rec?.mood ?? "", feeling: rec?.feeling ?? "", who: rec?.who ?? null, sectionFeeling: feelingForSlot(ws, projectId, rec?.slot).feeling ?? null, cleanable, removed, takes, width: info?.width ?? null, height: info?.height ?? null, sent: stillThere(rec?.sent) ? rec!.sent! : null });
+    pictures.push({ file: f, mjLink: midjourneyLink(f), slot: rec?.slot ?? null, label: rec?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? "picture" : "video", source: sourceLabel(f, rec?.source), mood: rec?.mood ?? "", feeling: rec?.feeling ?? "", who: rec?.who ?? null, fav: !!rec?.fav, sectionFeeling: feelingForSlot(ws, projectId, rec?.slot).feeling ?? null, cleanable, removed, takes, width: info?.width ?? null, height: info?.height ?? null, sent: stillThere(rec?.sent) ? rec!.sent! : null });
   }
   const stub = !!env.LYRIC_GENERATE_STUB;
   const removedPictures = Object.entries(all.pictures)
@@ -890,6 +891,24 @@ export function setItemLabel(ws: Workspace, projectId: string, file: string, n: 
   return text || null;
 }
 
+// ♥ Favourite (25 Nov 2026, Paul: "spot my favs" when comparing or reviewing): on a picture (n null) or one of its takes.
+// Only a mark: nothing is made, sent or moved. Returns the new state.
+export function setFavourite(ws: Workspace, projectId: string, file: string, n: number | null | undefined, on: unknown): boolean {
+  const { dir } = songFolder(ws, projectId);
+  const name = path.basename(String(file ?? ""));
+  if (!name || !existsSync(path.join(dir, name))) throw new Error(`No ${file} in this song's Creation space.`);
+  const fav = on === true || on === "true";
+  update(dir, name, (p) => {
+    if (n === undefined || n === null) p.fav = fav || undefined;
+    else {
+      const t = p.takes.find((x) => x.n === n);
+      if (!t) throw new Error("No such take.");
+      t.fav = fav || undefined;
+    }
+  });
+  return fav;
+}
+
 // "Send to Storyboard": a picture or one of its finished takes is copied into the song's clips and joins the END of the
 // story line (like any dropped clip; Paul orders it there). The board keeps its own copy, marked as sent.
 // forLine (Lyrics Sync picked a take for a line or as a hidden moment's cover): the copy is marked lineOnly in clips.json and
@@ -981,6 +1000,7 @@ export function takeUse(ws: Workspace, projectId: string): { cleanable: (t: Take
     cleanable: (t) => {
       if (t.status === "running") return false;
       if (t.status === "failed") return true;
+      if (t.fav) return false; // a favourite (♥) is never tidied away by Clean up (25 Nov 2026)
       if (t.status === "interrupted") return !t.request_id;
       const sent = t.sent ?? t.clip;
       if (!sent) return true;

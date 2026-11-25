@@ -4,6 +4,15 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### ♥ Favourites in Creation and Compare ✅ (to verify on the PC)
+- Paul: "a little Favourite icon on top of any clip in the Creation so that when I'm comparing or reviewing I can easily
+  spot my favs on/off". A ♡ on every picture (top right, beside ✕) and every finished take in Creation, and on every
+  Compare tile; click = pink ♥, click again = off. Saved in pictures.json ("fav" on the picture or the take).
+- "Favourites only (N)" switches: in Compare (just the favourites play side by side; Show all) and above the Creation
+  shots (only pictures with a favourite, and only their favourite takes). Clean up never puts a favourite take aside.
+- Code: animate.ts setFavourite, Take.fav / PictureRecord.fav / PictureView.fav; pictures route action "fav";
+  pictures-board.tsx FavButton. Tests: animate.test.ts (favourites), creation-production e2e (Compare + Creation).
+
 ### Fix: a song opens where you left it, not on an empty Review ✅ (to verify on the PC)
 - Before: any finished run opened the song on 4 Review, even when all its videos were discarded ("Something About You":
   Reels 0, "No video to show with these filters"), and Review remembered one platform for every song.

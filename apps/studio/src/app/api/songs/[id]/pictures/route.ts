@@ -20,7 +20,7 @@ import { randomUUID } from "node:crypto";
 import { openWorkspace, project as projectTable, resolveWorkspaceDir } from "@lyric/db";
 import { characterChoices, setPictureWho, startPictureAnimate } from "@lyric/video/picture-character";
 import { REFERENCE_MODEL } from "@lyric/video/animate";
-import { addFromLink, addPictures, picturesView, removePicture, removeTakes, restorePicture, restoreTake, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, setPictureFeeling, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
+import { addFromLink, addPictures, picturesView, removePicture, removeTakes, restorePicture, restoreTake, setFavourite, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, setPictureFeeling, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
 import { runFinal, startFinal } from "@lyric/video/final";
 import { runSinging, withSongStarts } from "@lyric/video/singer";
 import { placeByName, productionView, setPictureShot, useForShot, withLineStarts } from "@lyric/video/shot-production";
@@ -106,6 +106,10 @@ export async function POST(request: Request, { params }: Params) {
     if (body.action === "label") {
       const n = body.n === undefined || body.n === null ? null : Number(body.n);
       return Response.json({ label: withWorkspace((ws) => setItemLabel(ws, id, file, n, (body as { label?: unknown }).label)) });
+    }
+    if (body.action === "fav") {
+      const n = body.n === undefined || body.n === null ? null : Number(body.n);
+      return Response.json({ fav: withWorkspace((ws) => setFavourite(ws, id, file, n, (body as { on?: unknown }).on)) });
     }
     if (body.action === "who") return Response.json({ who: withWorkspace((ws) => setPictureWho(ws, id, file, (body as { who?: unknown }).who)) });
     if (body.action === "feeling") return Response.json({ feeling: withWorkspace((ws) => setPictureFeeling(ws, id, file, body.feeling)) });
