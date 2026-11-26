@@ -4,6 +4,43 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Nextgen sprint, step 2: Lip-sync readiness ✅ (to verify on the PC; thresholds to calibrate on your clips)
+- Sprint order: 1 Cast Library ✅ → **2 Lip-sync readiness ✅** → next: **LatentSync spike**, then **Take history**, then
+  **Consistency Score** (1b sheet generation stays planned).
+- **Lip-sync check** (Prepare → Storyboard; local, free): "Check lip sync (all clips)" and "Check lip sync" on each video
+  card. The face engine samples about 3 frames a second (face.py `lipsync`: face share of the frame, head turn, a hand
+  over the mouth, the mouth region's light, face sharpness, face position); src\lipsync-check.ts judges them with every
+  limit in LIPSYNC_LIMITS: ✅ Good / ⚠️ Risky / ❌ Not suitable, plain reasons with the time they start ("side profile
+  from 2.1 s", "face too small (4 % of the frame height)") and the **best window** ("best 0.8–4.6 s"). Cached per clip
+  by its SHA-256 (.studio\lipsync.json), checked again when the file changes. CPU, about 1-2 s a clip.
+- **Singing slots + meter** (src\singing-slots.ts): from the Lyrics Sync sections (else the repetition / `*` hooks):
+  chorus entries first, then peaks (long held lines); each slot starts on a sung line's start and ends on a sung line's
+  end, about 8 s at most (a longer single line stays whole). Targets are **minimums**: 1/6 of a Reel (from just before
+  the first chorus, about 90 s; TikTok / Shorts the same share), 1/3 of the whole song (YouTube, Mini film); never
+  padded: "Singing: 9 s / 15 s · 2 slots need a clip". Each slot gets the best ✅ clip whose best window covers it,
+  else a ⚠️ one, else the **best partial match** ("covers 4.2 of 6.1 s") with **Split after line N** (a sung-line
+  boundary), else "needs a front or 3/4 medium close-up". **Accept** marks the clip in clips.json ("lipsync": slot,
+  lines, times; display only), **Ignore** and **Split** go to .studio\singing.json; all read again after a reload.
+  The Shape timeline shows the slots as bands on the song track (sky: suggested / accepted, amber: needs a clip).
+- **Export performance excerpt** on an accepted slot: performance\<song> · <slot> · line N <first words>\ in the song
+  folder (Windows-illegal characters stripped, parts shortened: paths stay well under 260): **vocal.wav** (the song's
+  vocal stem as the singing clips use it, its offset applied; else the app's Demucs vocals from cache\stems; else none)
+  and **mix.wav** (the song itself), both from 1 s before the first sung word to 1 s after the last, never processed (a
+  WAV is copied sample for sample); **slot.txt** and **slot.json** (lyric lines, sung times, excerpt times and
+  handles, duration, the clip, **which vocal source**, alignTo = the excerpt's start: a returned clip lines up with
+  the song there). **Open folder** next to it.
+- Nothing changes cutting, timing or rendering, nothing is generated: the plan cache key ignores the marks, and the
+  video's props are identical with checks, an accepted slot and decisions (tested).
+- **Calibration on your clips:** `pnpm lipsync:check "D:\path\to\clips"` (8-10 clips, --max 10; --frames prints every
+  measured frame) prints the table (clip, verdict, head turn, face size, reasons, best window) and the current limits:
+  paste it in the chat, the limits are set by eye before they are locked.
+- Tests: lipsync-ready.test.ts (13: front ✅, profile ❌, turning ⚠️ with its window, tiny face ❌, cover / shadow / blur
+  / movement; Reel slots on chorus lines and sung-line boundaries, 15 s target, split, shortfall, matching, partial
+  match, accept / ignore), lipsync-song.test.ts (5: checks cached, slots, accept / ignore / split saved, the excerpt's
+  files and lengths, the same props), lipsync e2e (the whole flow, the Shape bands). The real face engine was run in
+  the cloud on test clips made from a sample portrait (a close-up ✅, a wide shot ❌ face too small, a fast pan ❌).
+- After pulling: nothing to install (the face checks are already set up). Restart the app.
+
 ### Nextgen sprint, step 1: Cast Library ✅ (to verify on the PC)
 - Sprint order (Paul, 26 Nov 2026): **1 Cast Library ✅ → 1b sheet generation (WaveSpeed) → 2 Lip-sync readiness →
   Take history → Consistency Score.** Decisions: no rename ("Characters" = the library, "Cast" = a song's list); face
@@ -603,22 +640,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   (picture.ts grainOffset, deterministic). The same layer in the preview, the Remotion render (Grain.tsx) and the
   HyperFrames composition (hf/compile.ts, moved per frame by the same function). Manifest settings.picture.grain.
 - Tests: vitest picture (+2), hf-compile (+1), hf-network, look-preview, look-patch pass; browser song-stages pass.
-
-### Hide a moment of a singing take ✅ (to verify on the PC)
-- Paul (22 Nov 2026): "the first 5 s are perfect, then 6 to 8 the lips are not in sync, then they get perfect".
-- Lyrics Sync → Shows clip, under a singing clip: **Hide a moment** opens the clip panel with *Hide from __ to __ s of
-  the take* (the seconds the take's own player shows), then the clip that shows meanwhile (Creation takes first; one
-  not in the Storyboard yet is sent there). The line lists "6–8 s hidden by TheEnding · Take 3" with ✕; **Preview**
-  plays the take with the song, the cover clip over the hidden moment.
-- Make and Shape (the same planner): away to the cover clip on the beat at or before the moment, back to the singer
-  on the beat at or after it; the singer's frame is the song's, so the lips are in time again. The song plays on
-  untouched. Several moments per take; overlaps refused; a moment that does not fit is named (QA conflicts / notes).
-  A cover clip set to Omit or removed: the moment is not hidden, said plainly. Choosing another take (Use this take)
-  starts without hidden moments (they belong to a take).
-- Code: anchors.ts HideSpec / ResolvedHide, checkAnchors "hide", planAnchors hide cuts; make.ts resolves the cover
-  clips; lyrics-tab.tsx saveHide / AnchorPicker hide mode; components/hide-preview.tsx.
-- Tests: vitest anchors (+2: cuts on the beats and the singer's frame back in time; song.json checks); browser singer
-  (+3: saved and shown, preview, ✕), lyrics-tab pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

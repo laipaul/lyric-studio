@@ -336,8 +336,8 @@ export function setSingerScript(ws: Workspace, projectId: string, line: unknown,
 
 // The voice sent to the model: the vocal stem (lined up on the song by the stem check) when it follows the song, else
 // the song itself.
-type Voice = { kind: "stem"; file: string; offsetMs: number; speed?: number } | { kind: "song" };
-async function voiceFor(ws: Workspace, projectId: string, project?: typeof projectTable.$inferSelect): Promise<Voice> {
+export type Voice = { kind: "stem"; file: string; offsetMs: number; speed?: number } | { kind: "song" };
+export async function voiceFor(ws: Workspace, projectId: string, project?: typeof projectTable.$inferSelect): Promise<Voice> {
   const p = project ?? ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
   if (!p) return { kind: "song" };
   const paths = songPaths(ws, p);

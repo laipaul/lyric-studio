@@ -63,6 +63,22 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
     return () => setPlatform(null);
   }, [source?.platform, setPlatform]);
   const [view, setView] = useState<StoryboardView | null>(null);
+  // The singing slots of this video (26 Nov 2026, lipsync.ts): bands on the song track, suggestions only.
+  const [slots, setSlots] = useState<{ key: string; label: string; fromMs: number; toMs: number; state: string; text: string }[]>([]);
+  const slotKind = view ? (/^(youtube|film|film-wide)$/.test(view.platform.name) ? "full" : "short") : null;
+  useEffect(() => {
+    if (!slotKind) return;
+    let live = true;
+    void api(`/api/songs/${projectId}/singing?kind=${slotKind}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: { matches?: { slot: { key: string; label: string; fromMs: number; toMs: number }; accepted: boolean; clip: string | null; full: boolean; text: string }[] }) => {
+        if (live) setSlots((d.matches ?? []).map((m) => ({ key: m.slot.key, label: m.slot.label, fromMs: m.slot.fromMs, toMs: m.slot.toMs, state: m.accepted ? "accepted" : m.clip ? (m.full ? "suggested" : "partial") : "none", text: m.text })));
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [projectId, slotKind]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(ZOOMS[1]);
@@ -1294,6 +1310,17 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                 {/* the song track: the whole song (8 Nov 2026), this video's part as the pink window on it */}
                 <div className="relative h-6 border-b" data-song-track data-soundtrack-track>
                   {view.song ? <SongTrackBehind song={view.song} songStartMs={view.songStartMs} zoom={zoom} /> : null}
+                  {slots.map((s) => (
+                    // A singing slot (Storyboard → Singing): where a lip-sync shot belongs; display only.
+                    <div
+                      key={s.key}
+                      data-singing-band={s.key}
+                      data-singing-state={s.state}
+                      title={`Singing · ${s.label}: ${s.text}`}
+                      className={cn("pointer-events-none absolute top-0 h-1.5 rounded-sm", s.state === "accepted" ? "bg-sky-400/80" : s.state === "none" ? "bg-amber-400/60" : "bg-sky-400/40")}
+                      style={{ left: ((s.fromMs - view.songStartMs) / 1000) * zoom, width: Math.max(2, ((s.toMs - s.fromMs) / 1000) * zoom) }}
+                    />
+                  ))}
                   <svg className="relative block h-6" viewBox={`0 0 ${view.waveform.peaks.length} 100`} preserveAspectRatio="none" style={{ width }} data-waveform>
                     {view.waveform.peaks.map((p, i) => (
                       <rect key={i} x={i} y={50 - p * 48} width={0.8} height={Math.max(1, p * 96)} className="fill-brand/60" />

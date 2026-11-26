@@ -570,9 +570,9 @@ function shotListOf(ws: Workspace, projectId: string): ReturnType<typeof readSho
   }
 }
 
-// clips.json without the cast tags (display only: tagging a clip never makes a video plan again).
+// clips.json without the display-only marks (cast tags, the accepted singing slot): they never make a video plan again.
 function withoutCast(edits: ClipEdits): ClipEdits {
-  return { ...edits, clips: Object.fromEntries(Object.entries(edits.clips).flatMap(([n, e]) => { const { cast: _c, ...rest } = e; return Object.keys(rest).length ? [[n, rest]] : []; })) };
+  return { ...edits, clips: Object.fromEntries(Object.entries(edits.clips).flatMap(([n, e]) => { const { cast: _c, lipsync: _l, ...rest } = e; return Object.keys(rest).length ? [[n, rest]] : []; })) };
 }
 
 // "3, 5-9, 12" from shot numbers.

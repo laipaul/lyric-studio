@@ -13,7 +13,20 @@ import { allowedFile, TEMPLATE_FILE } from "@/lib/files";
 import { withWorkspace } from "@/lib/workspace";
 
 export async function POST(request: Request) {
-  const { file, projectId, collection } = (await request.json()) as { file?: string; projectId?: string; collection?: string };
+  const { file, projectId, collection, performance } = (await request.json()) as { file?: string; projectId?: string; collection?: string; performance?: string };
+  // A performance excerpt's folder (Storyboard → an accepted singing slot): songs\<artist>\<title>\performance\<name>\ only.
+  if (projectId && performance) {
+    const folder = withWorkspace((ws) => {
+      const paths = songPathsById(ws, projectId);
+      if (paths.legacy) return null;
+      const base = path.join(paths.root, "performance");
+      const full = path.resolve(base, performance);
+      return path.dirname(full) === path.resolve(base) ? full : null;
+    });
+    if (!folder || !existsSync(folder)) return Response.json({ error: "Export the excerpt first" }, { status: 404 });
+    open(process.platform === "win32" ? ["explorer.exe", [folder]] : process.platform === "darwin" ? ["open", [folder]] : ["xdg-open", [folder]]);
+    return Response.json({ ok: true, folder });
+  }
   if (collection) {
     let folder: string | null = null;
     try {

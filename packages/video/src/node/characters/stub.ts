@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 // Stand-ins for fal and the face checks, for the browser tests only: switched on by LYRIC_CARDS_STUB=<folder of
 // pictures> (closeup.png, three_quarter.png, body_front.png, body_back.png, wide_left.png, … else default.png).
@@ -77,6 +78,18 @@ export function stubFace(): FaceTool {
     cropBody: async (image, out) => {
       copyFileSync(image, out);
       return { file: out, cropped: true, cut_y: 10 };
+    },
+    // The browser tests' lip-sync stand-in: by the clip's name ("profile": turned away, "wide": a tiny face, "turn": front
+    // then profile half-way); else a front medium close-up. Its length from the file.
+    lipsync: async (video) => {
+      const duration = Number(execFileSync(process.env.FFPROBE_PATH ?? "ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", video], { encoding: "utf8" }).trim()) || 4;
+      const n = path.basename(video).toLowerCase();
+      const frames = Array.from({ length: Math.max(1, Math.floor(duration * 3)) }, (_, i) => {
+        const t = i / 3;
+        const yaw = /profile/.test(n) || (/turn/.test(n) && t >= duration / 2) ? 75 : 8;
+        return { t, face: true, face_frac: /wide/.test(n) ? 0.03 : 0.4, yaw, mouth_light: 120, mouth_covered: false, sharp: 120, center: [0.5, 0.4] as [number, number] };
+      });
+      return { duration, frames };
     },
     // A stand-in embedding: 128 numbers from the picture's bytes (the same picture, the same vector).
     embed: async (files) => ({

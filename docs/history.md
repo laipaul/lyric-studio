@@ -4,6 +4,22 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Hide a moment of a singing take ✅ (to verify on the PC)
+- Paul (22 Nov 2026): "the first 5 s are perfect, then 6 to 8 the lips are not in sync, then they get perfect".
+- Lyrics Sync → Shows clip, under a singing clip: **Hide a moment** opens the clip panel with *Hide from __ to __ s of
+  the take* (the seconds the take's own player shows), then the clip that shows meanwhile (Creation takes first; one
+  not in the Storyboard yet is sent there). The line lists "6–8 s hidden by TheEnding · Take 3" with ✕; **Preview**
+  plays the take with the song, the cover clip over the hidden moment.
+- Make and Shape (the same planner): away to the cover clip on the beat at or before the moment, back to the singer
+  on the beat at or after it; the singer's frame is the song's, so the lips are in time again. The song plays on
+  untouched. Several moments per take; overlaps refused; a moment that does not fit is named (QA conflicts / notes).
+  A cover clip set to Omit or removed: the moment is not hidden, said plainly. Choosing another take (Use this take)
+  starts without hidden moments (they belong to a take).
+- Code: anchors.ts HideSpec / ResolvedHide, checkAnchors "hide", planAnchors hide cuts; make.ts resolves the cover
+  clips; lyrics-tab.tsx saveHide / AnchorPicker hide mode; components/hide-preview.tsx.
+- Tests: vitest anchors (+2: cuts on the beats and the singer's frame back in time; song.json checks); browser singer
+  (+3: saved and shown, preview, ✕), lyrics-tab pass.
+
 ### Long singing takes in parts of about 8 s ✅ (to verify on the PC)
 - Paul (22 Nov 2026), from Joey's pipeline ("cut vocals into exact clips between 4 and 10 seconds"): the line 32 take
   (23 s) drifted at 6-8 s. A group's piece of voice longer than 10 s is now made in **parts of about 8 s** (4-10 s),

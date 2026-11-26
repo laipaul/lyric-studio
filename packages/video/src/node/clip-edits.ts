@@ -14,7 +14,9 @@ import type { CutMove, Slip } from "../timeline-edits";
 // label (21 Nov 2026): a short name the user gives the clip ("Bride smile"); shown instead of the file name, which stays.
 // cast (26 Nov 2026, Cast Library): the characters who appear in the clip, by their card id (a renamed character keeps
 // its tags; a removed one shows greyed out). Display only: cutting, timing and rendering never read it.
-export type ClipEdit = { in?: number; out?: number; speed?: number; best?: number; transition?: "cut" | "dissolve"; omit?: true; label?: string; lineOnly?: true; cast?: string[] };
+// lipsync (26 Nov 2026, Nextgen step 2): the singing slot accepted for this clip (lipsync.ts). Display only as well.
+export type LipsyncMark = { slot: string; lines: [number, number]; fromMs: number; toMs: number };
+export type ClipEdit = { in?: number; out?: number; speed?: number; best?: number; transition?: "cut" | "dissolve"; omit?: true; label?: string; lineOnly?: true; cast?: string[]; lipsync?: LipsyncMark };
 export const LABEL_MAX = 60;
 // A short name as typed: spaces tidied, at most 60 characters ("" = no name).
 export const cleanLabel = (raw: unknown) => String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, LABEL_MAX);
@@ -83,6 +85,12 @@ export function checkClipEdits(raw: unknown): { edits: ClipEdits; problems: stri
             const ids = [...new Set((v.cast as string[]).map((x) => x.trim()))];
             if (ids.length) e.cast = ids;
           } else problems.push(`clips["${name}"].cast must be a list of character ids`);
+        }
+        if (v?.lipsync !== undefined && v?.lipsync !== null) {
+          const l = v.lipsync as Partial<LipsyncMark>;
+          if (typeof l.slot === "string" && Array.isArray(l.lines) && l.lines.length === 2 && l.lines.every((n) => Number.isInteger(n)) && typeof l.fromMs === "number" && typeof l.toMs === "number")
+            e.lipsync = { slot: l.slot, lines: [l.lines[0], l.lines[1]], fromMs: l.fromMs, toMs: l.toMs };
+          else problems.push(`clips["${name}"].lipsync must be like { "slot": "L5-6", "lines": [5, 6], "fromMs": 54200, "toMs": 61400 }`);
         }
         if (e.in !== undefined && e.out !== undefined && e.out <= e.in) problems.push(`clips["${name}"]: out must be after in`);
         else if (Object.keys(e).length) edits.clips[name] = e;

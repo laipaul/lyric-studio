@@ -13,6 +13,8 @@ import { CollectionPicker } from "@/components/collection-picker";
 import { ShotListImport } from "@/components/shotlist-import";
 
 import { NameField } from "@/components/name-field";
+import { LipChip, SingingPanel, useSinging } from "@/components/singing-panel";
+import type { SingingView } from "@lyric/video/lipsync";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
@@ -86,6 +88,9 @@ function CastChips({ tags, ids, onChange, clip }: { tags: CastTag[]; ids: string
 }
 export function AssetsTab({ projectId, part = "files" }: { projectId: string; part?: AssetsPart }) {
   const [data, setData] = useState<AssetsData | null>(null);
+  // Lip-sync readiness (26 Nov 2026): the singing slots and the clips' checks (Storyboard only).
+  const singing = useSinging(projectId, part === "clips");
+  const [lipBusy, setLipBusy] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
@@ -541,6 +546,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
             onAdd={addFromCollection}
           />
         </div>
+        {data.clips.some((c) => c.kind === "video") ? <SingingPanel projectId={projectId} singing={singing} labelOf={(clip) => data.clips.find((c) => c.name === clip)?.label ?? clip} /> : null}
         <StoryIdeaField projectId={projectId} idea={data.storyIdea ?? null} />
         <div
           data-dropzone
@@ -814,6 +820,27 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                           ))}
                           {c.transitions.length > 2 ? <span className="block">and {c.transitions.length - 2} more</span> : null}
                         </p>
+                      ) : null}
+                      {!c.collection && c.kind === "video" ? (
+                        <LipChip
+                          clip={c.name}
+                          check={singing.view?.checks[c.name]}
+                          busy={lipBusy !== null}
+                          sings={(() => {
+                            const m = singing.view?.matches.find((x) => x.clip === c.name);
+                            return m ? `${m.accepted ? "sings" : "suggested:"} ${m.slot.label}` : null;
+                          })()}
+                          onCheck={async () => {
+                            setLipBusy(c.name);
+                            try {
+                              const r = await api(`/api/songs/${projectId}/singing`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "check", names: [c.name], kind: singing.kind }) });
+                              const d = (await r.json()) as SingingView & { error?: string };
+                              if (r.ok && !d.error) singing.setView(d);
+                            } finally {
+                              setLipBusy(null);
+                            }
+                          }}
+                        />
                       ) : null}
                       <div data-card-actions className="mt-auto flex items-center justify-between gap-1 pt-0.5">
                         <div data-use-omit={c.name} role="group" aria-label={`Use or omit ${c.name}`} className="flex w-fit overflow-hidden rounded-md border text-[11px]">

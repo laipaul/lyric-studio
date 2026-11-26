@@ -632,6 +632,58 @@ def _frames(path: Path, per_second: float = 1.0, max_frames: int = 12) -> list[n
     return frames
 
 
+# Lip-sync readiness (26 Nov 2026, Nextgen step 2): a clip's frames measured for singing (about 3 per second), the
+# verdict is the app's (src/lipsync-check.ts, thresholds in one place). Per frame: a face or not, its height as a share
+# of the frame, the head turn (MediaPipe), a hand over the mouth (pose), the mouth region's light (0-255), the face's
+# sharpness, and the face centre (the app turns its change into movement).
+LIP_POINTS = [61, 291, 0, 17, 13, 14, 78, 308]  # MediaPipe lip corners, top, bottom, inner lips
+
+
+def lipsync_measure(kit: "FaceKit", video: str, per_second: float = 3.0, max_frames: int = 90) -> dict:
+    import cv2
+
+    path = Path(video)
+    cap = cv2.VideoCapture(str(path))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    duration = total / fps if total else 0.0
+    step = max(1, int(round(fps / per_second)))
+    out = []
+    for i in range(0, max(total, 1), step):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+        ok, img = cap.read()
+        if not ok:
+            break
+        h, w = img.shape[:2]
+        fr: dict = {"t": round(i / fps, 3), "face": False}
+        faces = kit.detect(img, min_score=0.6)
+        if faces:
+            f = faces[0]
+            gray, _ = _face_parts(img, f)
+            fr.update({"face": True, "face_frac": round(f.h / h, 3), "sharp": round(sharpness(gray), 1), "center": [round((f.x + f.w / 2) / w, 3), round((f.y + f.h / 2) / h, 3)]})
+            try:
+                lm = kit.landmarks(img)
+            except Exception:  # noqa: BLE001
+                lm = None
+            if lm:
+                fr["yaw"] = lm["yaw"]
+                pts = lm["points"][LIP_POINTS]
+                x0, y0 = np.maximum(pts.min(axis=0).astype(int), 0)
+                x1, y1 = np.minimum(pts.max(axis=0).astype(int) + 1, [w, h])
+                if x1 > x0 and y1 > y0:
+                    fr["mouth_light"] = round(float(cv2.cvtColor(img[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY).mean()), 1)
+            try:
+                body = kit.pose(img)
+            except Exception:  # noqa: BLE001
+                body = None
+            fr["mouth_covered"] = bool(_hand_over_mouth(body, f.landmarks(), f)) if body else False
+        out.append(fr)
+        if len(out) >= max_frames:
+            break
+    cap.release()
+    return {"file": str(path), "duration": round(duration, 3), "fps": round(fps, 3), "frames": out}
+
+
 def _expand(items: list[str]) -> list[Path]:
     files: list[Path] = []
     for it in items:
@@ -858,6 +910,8 @@ def main(argv: list[str]) -> int:
     a.add_argument("reference")
     a.add_argument("others", nargs="+")
     a.add_argument("--her", action="append", default=[])
+    a = sub.add_parser("lipsync")
+    a.add_argument("video")
     a = sub.add_parser("embed")
     a.add_argument("files", nargs="+")
     a = sub.add_parser("rank-frames")
@@ -886,6 +940,8 @@ def main(argv: list[str]) -> int:
             result = compare(kit, args.reference, args.files)
         elif args.cmd == "calibrate":
             result = calibrate(kit, args.reference, args.others, args.her)
+        elif args.cmd == "lipsync":
+            result = lipsync_measure(kit, args.video)
         elif args.cmd == "embed":
             result = embed_faces(kit, args.files)
         elif args.cmd == "rank-frames":

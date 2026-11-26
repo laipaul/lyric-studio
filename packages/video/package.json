@@ -103,6 +103,8 @@
     "./shotlist": "./src/node/shotlist.ts",
     "./shot-timing": "./src/node/shot-timing.ts",
     "./shot-production": "./src/node/shot-production.ts",
+    "./lipsync": "./src/node/lipsync.ts",
+    "./lipsync-check": "./src/lipsync-check.ts",
     "./shot-script": "./src/node/shot-script.ts",
     "./shot-references": "./src/node/shot-references.ts",
     "./picture-character": "./src/node/picture-character.ts",
