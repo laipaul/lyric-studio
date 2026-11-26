@@ -65,6 +65,11 @@ export const DRAFT_RESOLUTION: LipsyncResolution = "480p";
 export const draftUsd = (seconds: number) => Math.round(seconds * LIPSYNC_USD_PER_SECOND_AT[DRAFT_RESOLUTION] * 100) / 100;
 export const REVIEW_REASONS = ["lips late", "lips early", "mouth too open", "mouth too closed", "wrong expression", "face drifts"] as const;
 export const NUDGE_MAX_MS = 1500;
+// Takes QA (26 Nov 2026, Paul): the longest take each lip-sync model is asked for; a longer group is split at sung-line
+// boundaries into separate takes, each from the original picture (never chained from a generated frame: identity
+// drifts there, e.g. Aiko's face turning into a flat mask at 0:09 of a chained 13 s take).
+export const LIPSYNC_MAX_TAKE_MS: Record<string, number> = { InfiniteTalk: 8000 };
+export const SINGING_TAIL_BARS = 1; // a singing take runs one bar past its last sung line (before: two)
 export const SCRIPT_MAX = 200;
 // Every singing take asks InfiniteTalk to SING, not talk (Paul, 21 Nov 2026: a calm portrait came back "talking"):
 // this cue opens the prompt, then Paul's own script. SINGING_STYLE marks takes made with it; a block made before it
@@ -100,6 +105,7 @@ export type SingerLine = {
   takes: GroupTake[]; // every singing take of this group (its source, its lines), oldest first (only on a run's first line)
   needed: boolean; // ticked and without a finished or running take of this source and piece (only on a run's first line)
   voice?: LipsVoice; // the audio chosen for this group (on a run's first line)
+  splitOf?: { first: number; last: number }; // the lines in a row with this picture, split into takes of at most the model's max
   draftUsd?: number; // what a draft of this group costs (480p)
 };
 export type SingerView = {
@@ -134,12 +140,12 @@ function writeSinger(dir: string, s: SingerSettings): void {
 }
 
 // The vocal piece for a line: from just before the downbeat at or before the line shows, to two bars after it is sung.
-export function singingPiece(line: { shownMs: number; sungEndMs: number }, downbeats: readonly number[], songMs: number, usdPerSecond = LIPSYNC_USD_PER_SECOND): Piece {
+export function singingPiece(line: { shownMs: number; sungEndMs: number }, downbeats: readonly number[], songMs: number, usdPerSecond = LIPSYNC_USD_PER_SECOND, tailBars = TAIL_BARS): Piece {
   const gaps = downbeats.slice(1).map((d, i) => d - downbeats[i]).sort((a, b) => a - b);
   const bar = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 2000;
   const cutAt = downbeats.filter((d) => d <= line.shownMs).at(-1) ?? line.shownMs - bar;
   let fromMs = Math.max(0, Math.round((cutAt - LEAD_MS) / 10) * 10);
-  let toMs = Math.min(songMs, Math.round((line.sungEndMs + TAIL_BARS * bar) / 10) * 10);
+  let toMs = Math.min(songMs, Math.round((line.sungEndMs + tailBars * bar) / 10) * 10);
   if (toMs - fromMs < LIPSYNC_MIN_SECONDS * 1000) {
     toMs = Math.min(songMs, fromMs + LIPSYNC_MIN_SECONDS * 1000);
     fromMs = Math.max(0, toMs - LIPSYNC_MIN_SECONDS * 1000);
@@ -302,6 +308,20 @@ function singingAnchorKeys(ws: Workspace, projectId: string): Set<string> {
 }
 const inUseKey = (t: Take) => (t.sent ? `${t.line}:${t.through ?? t.line}:${t.sent.toLowerCase()}` : "");
 
+// A run longer than the model's max take split at sung-line boundaries (greedy: as many lines as fit; a single line
+// that is longer on its own stays whole and is made in parts).
+export function splitRun(run: { source: string; first: number; last: number }, fits: (first: number, last: number) => boolean): { source: string; first: number; last: number }[] {
+  const out: { source: string; first: number; last: number }[] = [];
+  let first = run.first;
+  while (first <= run.last) {
+    let last = first;
+    while (last < run.last && fits(first, last + 1)) last++;
+    out.push({ source: run.source, first, last });
+    first = last + 1;
+  }
+  return out;
+}
+
 // The runs: ticked lines in a row (by number) with the same source and a short pause between them.
 export function singingRuns(lines: readonly { number: number; shownMs: number; sungEndMs: number }[], settings: SingerSettings, gapMs = RUN_GAP_MS): { source: string; first: number; last: number }[] {
   const runs: { source: string; first: number; last: number; endMs: number }[] = [];
@@ -318,7 +338,7 @@ export function singingRuns(lines: readonly { number: number; shownMs: number; s
 }
 // A group is made when one of its takes (running, done, or sent and waiting for its result) has this vocal piece and
 // the singing cue. A new mood text or resolution does not make a group "to make" again: Retake makes another take.
-const covers = (t: Take, piece: Piece) => (t.status === "running" || t.status === "done" || t.status === "interrupted") && t.sync_ms === piece.fromMs && t.to_ms === piece.toMs && t.style === SINGING_STYLE;
+const covers = (t: Take, piece: Piece) => (t.status === "running" || t.status === "done" || t.status === "interrupted") && t.sync_ms === piece.fromMs && t.style === SINGING_STYLE;
 
 export async function singerView(ws: Workspace, projectId: string, env: NodeJS.ProcessEnv = process.env): Promise<SingerView> {
   const c = await context(ws, projectId);
@@ -331,8 +351,14 @@ export async function singerView(ws: Workspace, projectId: string, env: NodeJS.P
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }))
         .map((f) => ({ file: f, label: board[f]?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? ("picture" as const) : ("video" as const) }))
     : [];
-  const runs = c.lines ? singingRuns(c.lines, settings) : [];
   const byNumber = new Map((c.lines ?? []).map((l) => [l.number, l]));
+  const maxMs = Number(process.env.LYRIC_LIPSYNC_MAX_MS) || (LIPSYNC_MAX_TAKE_MS[LIPSYNC_MODEL] ?? 8000); // (the env: a browser test's longer block)
+  const fits = (first: number, last: number) => {
+    const p = singingPiece({ shownMs: byNumber.get(first)!.shownMs, sungEndMs: byNumber.get(last)!.sungEndMs }, c.downbeats, c.songMs, LIPSYNC_USD_PER_SECOND, SINGING_TAIL_BARS);
+    return p.toMs - p.fromMs <= maxMs;
+  };
+  const whole = c.lines ? singingRuns(c.lines, settings) : [];
+  const runs = whole.flatMap((r) => splitRun(r, fits).map((x) => ({ ...x, ...(x.first !== r.first || x.last !== r.last ? { of: { first: r.first, last: r.last } } : {}) })));
   const resolution = settings.resolution ?? LIPSYNC_RESOLUTION;
   const usdPerSecond = LIPSYNC_USD_PER_SECOND_AT[resolution];
   const anchors = singingAnchorKeys(ws, projectId);
@@ -342,14 +368,14 @@ export async function singerView(ws: Workspace, projectId: string, env: NodeJS.P
     const first = run ? byNumber.get(run.first)! : l;
     const last = run ? byNumber.get(run.last)! : l;
     // A picture's long piece is made in parts (a video source stays one request: its motion cannot be chained).
-    const whole = singingPiece({ shownMs: first.shownMs, sungEndMs: last.sungEndMs }, c.downbeats, c.songMs, usdPerSecond);
+    const whole = singingPiece({ shownMs: first.shownMs, sungEndMs: last.sungEndMs }, c.downbeats, c.songMs, usdPerSecond, SINGING_TAIL_BARS);
     const piece = source && BOARD_VIDEO_FILE.test(source) ? whole : singingParts(whole, c.downbeats, c.lines ?? [], usdPerSecond);
     const all = source && run ? groupTakes(c.dir, source, run.first, run.last) : [];
     const take = all.at(-1) ?? null;
     const script = run ? (settings.scripts?.[String(run.first)] ?? "") : "";
     const takes: GroupTake[] = run?.first === l.number ? all.map((t) => ({ ...t, inUse: t.status === "done" && anchors.has(inUseKey(t)), fresh: !!t.fresh && t.status === "done" })) : [];
         const firstLine = run?.first === l.number;
-    return { number: l.number, text: l.text, source, piece, script, run: run ? { first: run.first, last: run.last } : null, take, takes, needed: !!source && firstLine && !all.some((t) => covers(t, piece)), ...(firstLine ? { voice: settings.voices?.[String(l.number)] ?? "stem", draftUsd: draftUsd(piece.seconds) } : {}) };
+    return { number: l.number, text: l.text, source, piece, script, run: run ? { first: run.first, last: run.last } : null, ...(run && "of" in run && run.of ? { splitOf: run.of } : {}), take, takes, needed: !!source && firstLine && !all.some((t) => covers(t, piece)), ...(firstLine ? { voice: settings.voices?.[String(l.number)] ?? "stem", draftUsd: draftUsd(piece.seconds) } : {}) };
   }) ?? null;
   const toMake = (lines ?? []).filter((l) => l.needed);
   return {
@@ -381,7 +407,7 @@ export function reviewCounts(lines: readonly Pick<SingerLine, "source" | "run" |
     const t = done.find((x) => x.inUse) ?? done.at(-1);
     if (!t) notMade++;
     else if (t.review?.verdict === "approved" || (t.finalOf !== undefined && done.some((d) => d.n === t.finalOf && d.review?.verdict === "approved"))) approved++;
-    else if (t.review?.verdict === "redo") redo++;
+    else if (t.review?.verdict === "redo" || !!t.qa?.segments.length) redo++;
   }
   return { groups: groups.length, approved, redo, notMade };
 }
@@ -839,12 +865,25 @@ export async function placeSingingTake(ws: Workspace, projectId: string, source:
   });
 }
 
+// "Trim to good part" (Takes QA): a new take of the good stretch; it takes the place of the take on its lines when that
+// one is in use (else it waits, like any take, for Use this take).
+export async function trimSingingTake(ws: Workspace, projectId: string, source: unknown, n: unknown): Promise<Take> {
+  const c = await context(ws, projectId);
+  const file = path.basename(String(source ?? ""));
+  const { trimTake } = await import("./take-qa");
+  const t = readPictures(c.dir).pictures[file]?.takes.find((x) => x.n === Number(n));
+  const made = trimTake(c.dir, file, Number(n), (c.lines ?? []).map((l) => ({ number: l.number, sungEndMs: l.sungEndMs })));
+  if (t && singingTakeInUse(ws, projectId, t)) await placeSingingTake(ws, projectId, file, made.n);
+  else setTake(c.dir, file, made.n, { fresh: true });
+  return made;
+}
+
 // Is this singing take on its lines now (its clip is the singing anchor there)?
 export function singingTakeInUse(ws: Workspace, projectId: string, t: Take): boolean {
   return t.kind === "lipsync" && t.status === "done" && singingAnchorKeys(ws, projectId).has(inUseKey(t.clip && !t.sent ? { ...t, sent: t.clip } : t));
 }
 
-export async function runSinging(openWs: () => Workspace, projectId: string, jobsIn: SingJob[], o: { env?: NodeJS.ProcessEnv; transport?: SingTransport; sleep?: (ms: number) => Promise<void>; pollMs?: number; timeoutMs?: number } = {}): Promise<void> {
+export async function runSinging(openWs: () => Workspace, projectId: string, jobsIn: SingJob[], o: { env?: NodeJS.ProcessEnv; transport?: SingTransport; sleep?: (ms: number) => Promise<void>; pollMs?: number; timeoutMs?: number; face?: import("./characters/face").FaceTool } = {}): Promise<void> {
   let jobs = jobsIn;
   const env = o.env ?? process.env;
   const sleep = o.sleep ?? sleepMs;
@@ -958,6 +997,14 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
           }
         } finally {
           ws.close();
+        }
+        // Takes QA: the face checked frame by frame (local, free); a check that cannot run says why on the take.
+        try {
+          const { checkTake } = await import("./take-qa");
+          const { cardFace } = await import("./characters/jobs");
+          await checkTake(dir, j.source, j.n, o.face ?? cardFace(env));
+        } catch {
+          // the take is there either way
         }
       } catch (error) {
         if ((error as { made?: boolean }).made) {

@@ -65,7 +65,7 @@ async function main() {
 
   const server = spawn(process.execPath, [path.join(path.dirname(require.resolve("next/package.json")), "dist", "bin", "next"), "start", "-p", String(port), "-H", "127.0.0.1"], {
     cwd: path.resolve(__dirname, ".."),
-    env: { ...process.env, WORKSPACE_DIR: wsDir, NEXT_TELEMETRY_DISABLED: "1", LYRIC_GENERATE_STUB: "1" },
+    env: { ...process.env, WORKSPACE_DIR: wsDir, NEXT_TELEMETRY_DISABLED: "1", LYRIC_GENERATE_STUB: "1", LYRIC_LIPSYNC_MAX_MS: "14000" }, // (14 s: this test's 2-line block stays one take; the 8 s split: take-qa.test.ts)
     stdio: "ignore",
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -104,8 +104,9 @@ async function main() {
     const summary = (await page.textContent("[data-singer-summary]")) ?? "";
     check(/1 line where the singer shows · to make: 1 take \(\d+ s of voice at 720p, about \$\d+\.\d\d\)/.test(summary), `the cost shows before anything is sent (${summary})`);
     check(((await page.textContent("[data-singer]")) ?? "").includes("the song itself"), "without a vocal stem, the song itself is the voice (said plainly)");
-    // Line 2's piece of voice is 11 s: made in parts of about 8 s at most 10 s (Joey's rule), said before anything is sent.
-    check(((await page.textContent("[data-singer-line='2'] [data-singer-parts]").catch(() => "")) ?? "").includes("in 2 parts"), "a piece of voice longer than 10 s is made in parts (said with the cost)");
+    // Line 2's piece of voice (26 Nov 2026: one bar after the line, not two) is under 10 s: one request from the picture,
+    // never chained from a generated frame.
+    check(!(await page.$("[data-singer-line='2'] [data-singer-parts]")), "a piece of voice under 10 s is made in one request (no parts)");
 
     check(((await page.textContent("[data-singer-line='2'] [data-singer-mood-hint]")) ?? "").includes("Describe the face and mouth, not the voice"), "the mood box says what to write (the face and mouth, not the voice)");
     check((await page.inputValue("[data-singer-resolution]")) === "720p" && summary.includes("at 720p"), "singing clips are made at 720p unless chosen otherwise; the cost says so");
@@ -141,7 +142,7 @@ async function main() {
     check(existsSync(take) && !(await probeMedia(take)).hasAudio, "it is in Creation, without sound (the voice is never kept)");
     const madeTake = (JSON.parse(readFileSync(path.join(pictures, "pictures.json"), "utf8")) as { pictures: Record<string, { takes: { kind?: string; parts?: { request_id?: string }[]; sync_ms?: number; to_ms?: number }[] }> }).pictures["singer close.png"].takes.find((t) => t.kind === "lipsync")!;
     const madeLength = (await probeMedia(take)).durationMs;
-    check(madeTake.parts?.length === 2 && madeTake.parts.every((x) => !!x.request_id) && Math.abs(madeLength - (madeTake.to_ms! - madeTake.sync_ms!)) < 100, `the take was made in 2 parts and joined at its exact song length (${madeLength} ms)`);
+    check(!madeTake.parts && Math.abs(madeLength - (madeTake.to_ms! - madeTake.sync_ms!)) < 100, `the take was made in one request at its exact song length (${madeLength} ms)`);
     const landed = await page.waitForFunction(() => document.querySelector("tr[data-line='2'] [data-anchor-cell]")?.textContent?.includes("Close up sings line 2"), null, { timeout: 15_000 }).then(() => true).catch(() => false);
     check(landed, `the line's Lands on shows the singing clip by its short name (${await page.textContent("tr[data-line='2'] [data-anchor-cell]")})`);
     check(((await page.textContent("[data-singer-summary]")) ?? "").includes("all made"), "nothing left to make: a line is never paid for twice");

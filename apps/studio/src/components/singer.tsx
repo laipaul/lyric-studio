@@ -6,6 +6,7 @@
 // lines, and Make plays it in time with the song. Retake makes another take of the same group: it waits as "New — compare"
 // (never replaces the take in use) until Paul chooses it with "Use this take" (21 Nov 2026). Every take plays with the
 // song from its first frame. API: /api/songs/[id]/singer.
+import { qaWords } from "@lyric/video/take-qa";
 import { Check, Loader2, Mic, Pause, Play, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -23,7 +24,7 @@ const fileUrl = (rel: string) => `/api/files/${rel.split("/").map(encodeURICompo
 // The take being watched: its video (no sound) with the song from the take's first frame.
 // heard (26 Nov 2026, Paul: "display the actual lyrics she's singing, to check what the model thinks she should be
 // singing"): the take's vocal piece (song ms) and where the voice sent to the model was silenced.
-export type Playing = { source: string; n: number; video: string; fromS: number; title: string; heard?: { fromMs: number; toMs: number; rests: { fromMs: number; toMs: number }[] } };
+export type Playing = { source: string; n: number; video: string; fromS: number; title: string; heard?: { fromMs: number; toMs: number; rests: { fromMs: number; toMs: number }[] }; bad?: { fromS: number; toS: number; kind: string }[] };
 export type LyricLine = { number: number; text: string; startMs: number; endMs: number };
 
 export type Singer = {
@@ -43,6 +44,7 @@ export type Singer = {
   nudge: (source: string, t: GroupTake, ms: number) => Promise<void>;
   setVoice: (line: number, voice: "stem" | "song" | "dereverb") => Promise<void>;
   makeFinal: (source: string, t: GroupTake) => Promise<void>;
+  trim: (source: string, t: GroupTake) => Promise<void>;
   chooseTake: (source: string, t: GroupTake) => Promise<void>;
   play: (source: string, t: GroupTake | null) => void;
   panel: number | null; // the line whose takes show in the takes panel (opened by Make, Retake or Takes)
@@ -176,6 +178,12 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
       await post({ action: "voice", line, voice });
       await load();
     }),
+    trim: (source, t) => attempt(async () => {
+      await post({ action: "trim", source, n: t.n });
+      setNotice({ ok: true, text: `A trimmed copy of ${t.label ?? `take ${t.n}`} keeps its good part (nothing deleted). It takes its place on the lines when that take was in use.` });
+      await load();
+      onMade();
+    }),
     makeFinal: (source, t) => attempt(async () => {
       await post({ action: "final", source, n: t.n });
       setNotice({ ok: true, text: `Making the final of ${t.label ?? `take ${t.n}`}: the approved draft upscaled to 1080p (the same lips and expression), about ${money(Math.max(3, Math.ceil(t.seconds ?? ((t.to_ms ?? 0) - (t.sync_ms ?? 0)) / 1000)) * 0.04)}. It takes the draft's place on its lines when it is ready.` });
@@ -189,7 +197,7 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
     }),
     play: (source, t) => {
       if (!t?.file || !view) return setPlaying(null);
-      setPlaying({ source, n: t.n, video: fileUrl(`${view.folder}/${t.file}`), fromS: ((t.sync_ms ?? 0) + (t.nudge_ms ?? 0)) / 1000, ...(t.sync_ms !== undefined && t.to_ms !== undefined ? { heard: { fromMs: t.sync_ms, toMs: t.to_ms, rests: t.rests ?? [] } } : {}), title: `${t.label ?? `Take ${t.n}`} · ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` });
+      setPlaying({ source, n: t.n, video: fileUrl(`${view.folder}/${t.file}`), fromS: ((t.sync_ms ?? 0) + (t.nudge_ms ?? 0)) / 1000, ...(t.sync_ms !== undefined && t.to_ms !== undefined ? { heard: { fromMs: t.sync_ms, toMs: t.to_ms, rests: t.rests ?? [] } } : {}), ...(t.qa?.segments.length ? { bad: t.qa.segments } : {}), title: `${t.label ?? `Take ${t.n}`} · ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` });
       if (t.fresh) void post({ action: "seen", source, n: t.n }).then(load).catch(() => undefined);
     },
   };
@@ -384,6 +392,11 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
   return (
     <div className="flex flex-col gap-1 text-[11px]" data-singer-line={number}>
       <SourcePicker sources={v.sources} value={l.source} onChange={(src) => void singer.setLine(number, src)} line={number} />
+      {l.source && !later && l.splitOf ? (
+        <span className="text-muted-foreground" data-singer-split={number} title="Each take is at most 8 s and starts from your picture (a longer take drifts): the lines in a row are made as several takes, cut where a line ends">
+          lines {l.splitOf.first}-{l.splitOf.last} in takes of at most 8 s: this one sings {l.run!.first === l.run!.last ? `line ${l.run!.first}` : `lines ${l.run!.first}-${l.run!.last}`}
+        </span>
+      ) : null}
       {l.source && !later ? <ScriptField key={l.script} line={number} value={l.script} onSave={(text) => singer.setScript(number, text)} /> : null}
       {l.source && !later ? (
         <label className="text-muted-foreground flex items-center gap-1" title="What drives the lips from the next take on: your vocal stem (clean voice), the stem de-reverbed (the echo removed: crisper syllables; made on this PC the first time, needs pnpm audio:setup --dereverb once) or the whole song (try it when the lips miss words)">
@@ -499,6 +512,14 @@ function TakesList({ singer, source, takes }: { singer: Singer; source: string; 
               <span className="truncate font-medium">{t.label ?? `Take ${t.n}`}</span>
               {t.quality === "draft" ? <span data-singer-take-badge="draft" className="rounded bg-sky-400/15 px-1 text-sky-300">Draft</span> : null}
               {t.finalOf !== undefined ? <span data-singer-take-badge="final" className="rounded bg-violet-400/15 px-1 text-violet-300">Final</span> : null}
+              {t.qa?.segments.length ? (
+                <span data-singer-take-qa className="rounded bg-red-500/15 px-1 text-red-300" title={t.qa.segments.map((s) => `${s.kind} ${s.fromS.toFixed(1)}–${s.toS.toFixed(1)} s`).join(" · ")}>
+                  {qaWords(t.qa)}
+                </span>
+              ) : t.qa && !t.qa.note ? (
+                <span data-singer-take-qa-ok className="text-emerald-300/80" title="Face checked frame by frame against the picture: steady">face ✓</span>
+              ) : null}
+              {t.trimmedOf !== undefined ? <span className="text-muted-foreground" data-singer-take-trimmed>trimmed</span> : null}
               {t.review?.verdict === "approved" ? <span data-singer-take-badge="approved" className="rounded bg-emerald-400/15 px-1 text-emerald-300">✓ Approved</span> : t.review?.verdict === "redo" ? <span data-singer-take-badge="redo" className="rounded bg-amber-400/15 px-1 text-amber-300">Redo</span> : null}
               {t.inUse ? (
                 <span data-singer-take-badge="in-use" className="rounded bg-emerald-400/15 px-1 text-emerald-300">In use</span>
@@ -652,6 +673,11 @@ function TakeReview({ singer, source, t, final }: { singer: Singer; source: stri
         <button type="button" data-singer-nudge-plus={t.n} onClick={() => void singer.nudge(source, t, 100)} className="hover:bg-accent rounded border px-1 py-px" title="The lips are early: place the take 0.1 s later">
           +0.1
         </button>
+        {t.qa?.segments.length && (t.qa.good?.toS ?? 0) >= 0.5 && Math.min(...t.qa.segments.map((s) => s.fromS)) >= 0.5 ? (
+          <button type="button" data-singer-trim={t.n} onClick={() => void singer.trim(source, t)} className="hover:bg-accent rounded border border-red-400/60 px-1 py-px text-red-300" title={`A new take that ends where the face goes wrong (${qaWords(t.qa)}); its start stays in time. Nothing is deleted.`}>
+            Trim to good part
+          </button>
+        ) : null}
         {t.quality === "draft" && approved && !final ? (
           <button type="button" data-singer-final={t.n} onClick={() => void singer.makeFinal(source, t)} className="hover:bg-accent rounded border border-violet-400/60 px-1 py-px text-violet-300" title="Upscale this approved draft to 1080p: the same lips and expression (about $0.04 per second)">
             Make final
@@ -704,6 +730,9 @@ function HeardStrip({ playing, lyrics, videoS }: { playing: Playing; lyrics: Lyr
             {h.rests.map((r) => (
               <div key={`${r.fromMs}`} className="absolute top-0 h-3 bg-zinc-600" style={{ left: pct(r.fromMs), width: `calc(${pct(r.toMs)} - ${pct(r.fromMs)})` }} data-heard-rest />
             ))}
+            {(playing.bad ?? []).map((b) => (
+              <div key={`b${b.fromS}`} className="absolute top-0 h-3 bg-red-500/80" style={{ left: pct(h.fromMs + b.fromS * 1000), width: `calc(${pct(h.fromMs + b.toS * 1000)} - ${pct(h.fromMs + b.fromS * 1000)})` }} title={`${b.kind} ${b.fromS.toFixed(1)}–${b.toS.toFixed(1)} s`} data-heard-bad />
+            ))}
             <div className="absolute top-0 h-3 w-0.5 bg-white" style={{ left: pct(h.fromMs + videoS * 1000) }} />
           </div>
           <div className="text-muted-foreground relative h-4 text-[9px]">
@@ -713,7 +742,7 @@ function HeardStrip({ playing, lyrics, videoS }: { playing: Playing; lyrics: Lyr
               </span>
             ))}
           </div>
-          <span className="text-muted-foreground text-[10px]">Blue: the voice the model heard. Grey: silenced (it breathes). A word on grey was never heard.</span>
+          <span className="text-muted-foreground text-[10px]">Blue: the voice the model heard. Grey: silenced (it breathes). A word on grey was never heard.{playing.bad?.length ? " Red: the face goes wrong there." : ""}</span>
         </div>
       ) : null}
     </div>

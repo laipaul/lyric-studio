@@ -684,6 +684,51 @@ def lipsync_measure(kit: "FaceKit", video: str, per_second: float = 3.0, max_fra
     return {"file": str(path), "duration": round(duration, 3), "fps": round(fps, 3), "frames": out}
 
 
+# Takes QA (26 Nov 2026, Paul: "Aiko take 2 at ~0:09: the face turns into a flat white mask"): every returned take
+# measured about 5 times a second against the picture it was made from: a face or not, its similarity to the
+# reference (SFace cosine), its sharpness, its texture (detail left in the skin: the mean absolute high-pass of the face,
+# scaled to 256 px tall) and its brightness. The app judges the frames (src/take-qa.ts); nothing here decides.
+def face_texture(gray_face: np.ndarray) -> float:
+    import cv2
+
+    h, w = gray_face.shape[:2]
+    if h < 8 or w < 8:
+        return 0.0
+    s = 256 / h
+    g = cv2.resize(gray_face, (max(8, round(w * s)), 256), interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_CUBIC).astype(np.float32)
+    blur = cv2.GaussianBlur(g, (0, 0), 3)
+    return float(np.mean(np.abs(g - blur)))
+
+
+def take_measure(kit: "FaceKit", ref: str, video: str, per_second: float = 5.0, max_frames: int = 200) -> dict:
+    import cv2
+
+    _, ref_f = _reference_print(kit, ref)
+    path = Path(video)
+    cap = cv2.VideoCapture(str(path))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    duration = total / fps if total else 0.0
+    step = max(1, int(round(fps / per_second)))
+    out = []
+    for i in range(0, max(total, 1), step):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+        ok, img = cap.read()
+        if not ok:
+            break
+        fr: dict = {"t": round(i / fps, 3), "face": False}
+        faces = kit.detect(img, min_score=0.5)
+        if faces:
+            f = faces[0]
+            gray, _ = _face_parts(img, f)
+            fr.update({"face": True, "sim": round(kit.similarity(ref_f, kit.embed(img, f)), 3), "sharp": round(sharpness(gray), 1), "texture": round(face_texture(gray), 2), "bright": round(float(gray.mean()), 1)})
+        out.append(fr)
+        if len(out) >= max_frames:
+            break
+    cap.release()
+    return {"file": str(path), "reference": ref, "duration": round(duration, 3), "fps": round(fps, 3), "engine": ENGINE, "frames": out}
+
+
 def _expand(items: list[str]) -> list[Path]:
     files: list[Path] = []
     for it in items:
@@ -914,6 +959,9 @@ def main(argv: list[str]) -> int:
     a.add_argument("video")
     a = sub.add_parser("embed")
     a.add_argument("files", nargs="+")
+    a = sub.add_parser("takecheck")
+    a.add_argument("reference")
+    a.add_argument("video")
     a = sub.add_parser("rank-frames")
     a.add_argument("files", nargs="+")
     a = sub.add_parser("crop")
@@ -944,6 +992,8 @@ def main(argv: list[str]) -> int:
             result = lipsync_measure(kit, args.video)
         elif args.cmd == "embed":
             result = embed_faces(kit, args.files)
+        elif args.cmd == "takecheck":
+            result = take_measure(kit, args.reference, args.video)
         elif args.cmd == "rank-frames":
             result = rank_frames(kit, args.files)
         elif args.cmd == "crop-body":

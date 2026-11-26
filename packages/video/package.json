@@ -112,6 +112,7 @@
     "./card-versions": "./src/node/card-versions.ts",
     "./card-text": "./src/card-text.ts",
     "./persona": "./src/persona.ts",
+    "./take-qa": "./src/take-qa.ts",
     "./persona-node": "./src/node/persona.ts",
     "./music-cues": "./src/node/music-cues.ts",
     "./performance-script": "./src/performance-script.ts",

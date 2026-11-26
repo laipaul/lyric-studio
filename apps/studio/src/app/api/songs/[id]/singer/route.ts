@@ -9,7 +9,7 @@
 //   does not wait); each comes back into Creation, the Storyboard and onto its line, in time with the song.
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import { readCreationDefaults } from "@lyric/video/animate";
-import { runSinging, seenSingingTake, setSingerLine, setSingerResolution, setSingerScript, singerView, startRetake, startSinging, chooseSingingTake, nudgeSingingTake, setSingerVoice, setSingingReview } from "@lyric/video/singer";
+import { runSinging, seenSingingTake, setSingerLine, setSingerResolution, setSingerScript, singerView, startRetake, startSinging, chooseSingingTake, nudgeSingingTake, setSingerVoice, setSingingReview, trimSingingTake } from "@lyric/video/singer";
 import { runFinal, startFinal } from "@lyric/video/final";
 import { connection } from "next/server";
 
@@ -37,6 +37,8 @@ export async function POST(request: Request, { params }: Params) {
     // The lip-sync review (26 Nov 2026): a verdict on a take, the free nudge, the audio per group, Make final.
     if (body.action === "review") return Response.json({ review: withWorkspace((ws) => setSingingReview(ws, id, body.source, body.n, body.verdict, body.reasons, body.note)) });
     if (body.action === "nudge") return Response.json({ nudge_ms: withWorkspace((ws) => nudgeSingingTake(ws, id, body.source, body.n, body.ms)) });
+    // Takes QA: a new take of the good stretch (nothing deleted).
+    if (body.action === "trim") return Response.json({ take: await withWorkspaceAsync((ws) => trimSingingTake(ws, id, body.source, body.n)) });
     if (body.action === "voice") return Response.json({ settings: withWorkspace((ws) => setSingerVoice(ws, id, body.line, body.voice)) });
     if (body.action === "final") {
       const take = withWorkspace((ws) => startFinal(ws, id, String(body.source ?? ""), body.n));

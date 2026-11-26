@@ -32,6 +32,8 @@ export interface FaceTool {
   // A clip's frames measured for lip sync (about 3 a second; lipsync-check.ts judges them).
   lipsync?(video: string): Promise<{ duration: number; frames: { t: number; face: boolean; face_frac?: number; yaw?: number | null; mouth_light?: number | null; mouth_covered?: boolean; sharp?: number; center?: [number, number] }[] }>;
   // The largest face's embedding of each picture (face-prints.ts), with the engine that made them.
+  // Takes QA (26 Nov 2026): a returned take's frames about 5 a second against the picture it was made from.
+  takecheck?(reference: string, video: string): Promise<{ duration: number; frames: { t: number; face: boolean; sim?: number; sharp?: number; texture?: number; bright?: number }[] }>;
   embed?(files: string[]): Promise<{ engine: { detector: string; recognizer: string; version: number }; results: { file: string; vector: number[] | null; face_px?: number; confidence?: number; note?: string }[] }>;
 }
 
@@ -76,6 +78,7 @@ export function localFaceTool(): FaceTool {
     rankFrames: (files) => runFace(["rank-frames", ...files]),
     embed: (files) => runFace(["embed", ...files]),
     lipsync: (video) => runFace(["lipsync", video]),
+    takecheck: (reference, video) => runFace(["takecheck", reference, video]),
     cropBody: (image, out) => runFace(["crop-body", image, out]),
     async sheet(spec) {
       const dir = mkdtempSync(path.join(os.tmpdir(), "sheet-"));

@@ -91,6 +91,16 @@ export function stubFace(): FaceTool {
       });
       return { duration, frames };
     },
+    // Takes QA stand-in: a steady face, unless LYRIC_TAKEQA_COLLAPSE_FROM (seconds) makes it collapse from there on.
+    takecheck: async (_reference, video) => {
+      const duration = Number(execFileSync(process.env.FFPROBE_PATH ?? "ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", video], { encoding: "utf8" }).trim()) || 4;
+      const from = Number(process.env.LYRIC_TAKEQA_COLLAPSE_FROM ?? NaN);
+      const frames = Array.from({ length: Math.max(1, Math.floor(duration * 5)) }, (_, i) => {
+        const t = i / 5;
+        return t >= from ? { t, face: true, sim: 0.2, sharp: 20, texture: 1.2, bright: 230 } : { t, face: true, sim: 0.82, sharp: 160, texture: 8, bright: 120 };
+      });
+      return { duration, frames };
+    },
     // A stand-in embedding: 128 numbers from the picture's bytes (the same picture, the same vector).
     embed: async (files) => ({
       engine: { detector: "stub", recognizer: "stub", version: 1 },

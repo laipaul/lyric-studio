@@ -4,6 +4,33 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Takes QA: takes of at most 8 s, face check on every take, Trim to good part ✅ (to verify on the PC)
+Paul, 26 Nov 2026: "Find out why this take was 13 s when slots are capped at ~8 s" and "Aiko take 2 at ~0:09: the face
+turns into a flat white mask".
+- **Why 13 s:** the ~8 s cap belonged to the Storyboard's singing slots (singing-slots.ts), not to Lyrics Sync's
+  Singer. The Singer's piece was lead-in (≈1.7 s) + line 21 (≈7.8 s) + a 2-bar tail (≈3.4 s), and anything over 10 s
+  was made in parts CHAINED from the last frame of the part before: part 2 started from a generated frame, not from
+  Aiko's picture. The collapse at 0:09 sits in part 2.
+- **At most 8 s per take** (InfiniteTalk; one table per model, LIPSYNC_MAX_TAKE_MS): lines in a row with the same
+  picture are split at sung-line boundaries into separate takes, **each from the original picture**; the Singer says so
+  on the group ("lines 21-24 in takes of at most 8 s: this one sings line 21"). A single line longer than that on its
+  own stays whole (made in parts as before). The tail after the last line is now **1 bar** (was 2). Takes made before
+  still count as made (their end may differ).
+- **Face check on every returned take** (local, free; face.py takecheck: about 5 frames a second against the picture it
+  was made from: face found, SFace similarity, sharpness, skin texture; judged by src/take-qa.ts): **face collapse**
+  (texture or sharpness collapses: a flat, smeared or white face), **face drift** (similarity drops well below the
+  take's own level), **face lost** (no face after it was seen), each at least 0.4 s. Saved on the take (take.qa):
+  a red badge "face collapse from 0:09", a red span on the player's strip; "face ✓" when steady. A take with a face
+  problem counts as "to redo" in the review bar until approved.
+- **Trim to good part**: a new take (nothing deleted) ending where the face goes wrong, its start at the same song
+  time (still in sync); the lines it no longer covers need a take again; it takes the place of the take in use.
+  Refused (in plain words) when the face goes wrong at the start or before the first line is sung: Retake draft.
+- Needs the face packages (pnpm audio:setup --face, already installed for Characters); without them the take says
+  "face checks not installed".
+- Tests: take-qa.test.ts (7: collapse / drift / lost / blip, 8 s split at line boundaries, the check saved, Trim);
+  real face.py run in the cloud: a portrait whose face turns into a white patch at 4.0 s is flagged from 4.2 s;
+  singer.e2e.ts updated (one request under 10 s; its 2-line block test runs with a 14 s max).
+
 ### Fix: the singer missed the first words; the take player shows what the model heard ✅ (to verify on the PC)
 Paul's first draft (line 21 "(Oh) There's something about you and me", 26 Nov 2026): "we hear the previous line before
 she sings, then she takes a big breath and starts; 'Oh there's something' is not good, the rest is good."
@@ -732,23 +759,6 @@ locked cards can't be edited").
   theme-reach-badge.tsx (also used in Shape -> Theme: looks the same for normal badges).
 - Checked in a browser at 1850 and 1280 px. Studio build passes. Known: apps/studio/e2e/themes.e2e.ts "the top menu"
   check is out of date (expects Library · Themes · Collections · Releases; the menu also has Film looks and Characters).
-
-### Soft fade into singing takes ✅ (to verify on the PC)
-- Paul (22 Nov 2026): in Wedding Day's Reel the transitions into clips 4 and 16 felt "a bit hard", only at the
-  start of the lip sync, not at its end. Both are singing takes ("sings lines 15-16", "sings lines 25-27"): the app
-  always hard-cut INTO a singing take (rule from G3, to protect lip sync); every other transition dissolved.
-- Now a singing take fades in (about 1.5 s, the automatic dissolve length) over its own lead-in: the frames the take
-  has before its shot starts (a take is made from 0.5 s before the downbeat before its line). The take is never moved
-  or slowed, so the lips stay in sync to the frame, and the whole fade lies before the cut: the singer is fully there
-  when the cut comes. Less than 0.2 s of lead-in: still a hard cut, with the note "a hard cut into this singing take
-  (the take starts right on the line)". Still a cut when the clip's own "comes in with: cut", the crisp style or an
-  all-cuts variation says so. A take returning after a hidden moment does not fade (its lead-in is out of sync).
-  Out of a singing take: unchanged.
-- Code: src/handles.ts (HandleShot.fadeInBeforeCut, MIN_FADE_IN_FRAMES 6), compose.ts; plan fingerprint v 3 (make.ts):
-  saved shot plans are planned again once (the old one kept as .previous.json).
-- Tests: vitest handles (+4), anchors (lip sync exact on every frame of the fade, no frame past the clip's end, cut
-  choices win, short lead-in); handles, anchors, compose, transition-notes, storyboard-file pass. Full suite: the same
-  7 tests fail with and without this change (they need network / tools the cloud session lacks). Studio build passes.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

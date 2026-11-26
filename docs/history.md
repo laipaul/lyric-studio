@@ -4110,3 +4110,20 @@ D. ✅ (built 29 Oct, to verify) **Title opening** (items 1-8 below).
 - Next.js 16.4.3 -> 16.4.6 (security patch; next and eslint-config-next in apps/studio/package.json). Build passes.
 - Tests: vitest no-remotion-in-routes (5: follows the runtime imports of story-line, transition-notes, assets and
   fails on any path to Remotion); transition-notes, story-line, storyboard-file pass. `pnpm --filter @lyric/studio build` passes.
+
+### Soft fade into singing takes ✅ (to verify on the PC)
+- Paul (22 Nov 2026): in Wedding Day's Reel the transitions into clips 4 and 16 felt "a bit hard", only at the
+  start of the lip sync, not at its end. Both are singing takes ("sings lines 15-16", "sings lines 25-27"): the app
+  always hard-cut INTO a singing take (rule from G3, to protect lip sync); every other transition dissolved.
+- Now a singing take fades in (about 1.5 s, the automatic dissolve length) over its own lead-in: the frames the take
+  has before its shot starts (a take is made from 0.5 s before the downbeat before its line). The take is never moved
+  or slowed, so the lips stay in sync to the frame, and the whole fade lies before the cut: the singer is fully there
+  when the cut comes. Less than 0.2 s of lead-in: still a hard cut, with the note "a hard cut into this singing take
+  (the take starts right on the line)". Still a cut when the clip's own "comes in with: cut", the crisp style or an
+  all-cuts variation says so. A take returning after a hidden moment does not fade (its lead-in is out of sync).
+  Out of a singing take: unchanged.
+- Code: src/handles.ts (HandleShot.fadeInBeforeCut, MIN_FADE_IN_FRAMES 6), compose.ts; plan fingerprint v 3 (make.ts):
+  saved shot plans are planned again once (the old one kept as .previous.json).
+- Tests: vitest handles (+4), anchors (lip sync exact on every frame of the fade, no frame past the clip's end, cut
+  choices win, short lead-in); handles, anchors, compose, transition-notes, storyboard-file pass. Full suite: the same
+  7 tests fail with and without this change (they need network / tools the cloud session lacks). Studio build passes.

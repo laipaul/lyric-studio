@@ -139,6 +139,8 @@ export type Take = {
   nudge_ms?: number; // a singing take placed this much later (+) or earlier (-) on the song than its vocal piece (free fix)
   voice?: "stem" | "song" | "dereverb"; // the audio the lips were driven by (the vocal stem, the whole song, or the stem de-reverbed)
   direction?: string; // the acting direction sent with the singing cue (persona + performance script)
+  qa?: import("../take-qa").TakeQa; // Takes QA (26 Nov 2026): the face checked frame by frame against the picture it was made from
+  trimmedOf?: number; // "Trim to good part": made from take trimmedOf (its good stretch)
   rests?: { fromMs: number; toMs: number }[]; // lipsync: breathing room (singer.ts voiceRests): where the voice sent was quieted, song ms
   feelingTo?: string; // and the one it turns to, when the take runs into a section that feels different
   fresh?: boolean; // lipsync: a later take of lines that already had a take in use: waits for Paul ("New — compare"), never placed by itself
