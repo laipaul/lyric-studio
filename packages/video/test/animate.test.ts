@@ -633,10 +633,18 @@ describe("long singing takes in parts of about 8 s (Joey's 4-10 s rule; Paul 22 
     expect(p.seconds).toBe(parts.reduce((n, x) => n + Math.max(3, Math.ceil((x.toMs - x.fromMs) / 1000)), 0));
     expect(p.usd).toBe(Math.round(p.seconds * 0.06 * 100) / 100);
   });
-  it("a take in parts: part 2 starts from the last frame of part 1, each is cut to its song length, joined into one silent take", async () => {
+  it("with measured rests the cut goes in the middle of a pause, not on a downbeat", () => {
+    const p = singingParts({ fromMs: 0, toMs: 12_000, seconds: 12, usd: 0.72 }, downbeats, [{ shownMs: 0, sungEndMs: 12_000 }], 0.06, [{ fromMs: 6000, toMs: 6800 }]);
+    expect(p.parts!.map((x) => x.toMs)).toEqual([6400, 12_000]);
+    // A pause outside the allowed window (too near the start) is ignored: the downbeat rule applies.
+    const q = singingParts({ fromMs: 0, toMs: 12_000, seconds: 12, usd: 0.72 }, downbeats, [], 0.06, [{ fromMs: 1000, toMs: 1400 }]);
+    expect(q.parts![0].toMs).toBe(8000);
+  });
+  it("a take in parts: every part starts from the picture itself (26 Nov 2026: a chained part 2 turned the face into a white mask), each is cut to its song length, joined into one silent take", async () => {
     const uploaded: string[] = [];
     const stub = stubSingTransport("1");
-    const spy: SingTransport = { ...stub, upload: (f) => (uploaded.push(path.basename(f)), stub.upload(f)) };
+    const images: string[] = [];
+    const spy: SingTransport = { ...stub, upload: (f) => (uploaded.push(path.basename(f)), stub.upload(f)), submit: (r) => (images.push(r.image ?? ""), stub.submit(r)) };
     let n = 0;
     update(pics, "rain street.jpg", (p) => {
       n = nextTakeN(p);
@@ -645,7 +653,10 @@ describe("long singing takes in parts of about 8 s (Joey's 4-10 s rule; Paul 22 
     await runSinging(open, id, [{ source: "rain street.jpg", n }], { transport: spy, sleep: now0 });
     const t = readPictures(pics).pictures["rain street.jpg"].takes.find((x) => x.n === n)!;
     expect(t.status).toBe("done");
-    expect(uploaded).toEqual(["rain street.jpg", "voice-1.wav", "from-2.png", "voice-2.wav"]);
+    expect(uploaded.some((f) => f.startsWith("from-"))).toBe(false); // no frame of a part is ever uploaded
+    expect(uploaded.filter((f) => f === "rain street.jpg")).toHaveLength(1); // the picture goes online once
+    expect(images).toHaveLength(2);
+    expect(images[1]).toBe(images[0]); // part 2 uses the same image url as part 1
     expect(t.parts!.every((x) => !!x.request_id) && t.request_id === t.parts![0].request_id).toBe(true);
     const info = await probeMedia(path.join(pics, t.file!));
     expect(info.hasAudio).toBe(false);

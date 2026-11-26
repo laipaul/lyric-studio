@@ -84,8 +84,8 @@ export const BREATHING = "Between sung lines the mouth closes and the singer tak
 export const singingPrompt = (script: string, look?: string, feel?: Feel, feeling?: string, feelingTo?: string, rests = false) =>
   [SINGING_CUE, feel ? singingRealism(feel) : "", rests ? BREATHING : "", feelingWords(feeling, feelingTo), script.trim().replace(/\.$/, ""), look ? `Film look, the same in every shot: ${look.trim().replace(/\.$/, "")}` : ""].filter(Boolean).join(". ");
 // parts: a vocal piece longer than PART_MAX_MS is made in parts of about PART_TARGET_MS (Joey's 4-10 s rule, Paul 22 Nov
-// 2026: "6 to 8 s the lips are not in sync"), each its own request, chained from the last frame of the one before and
-// joined into one take; seconds / usd are then the parts' (each billed at least 3 s, whole seconds).
+// 2026: "6 to 8 s the lips are not in sync"), each its own request, every part from the picture itself (26 Nov 2026,
+// Paul: a chained part 2 turned Aiko's face into a white mask), joined into one take, the join on a breath where possible; seconds / usd are then the parts' (each billed at least 3 s, whole seconds).
 export type Piece = { fromMs: number; toMs: number; seconds: number; usd: number; parts?: { fromMs: number; toMs: number }[] };
 export const PART_MAX_MS = 10_000; // a piece up to this long is one request
 export const PART_TARGET_MS = 8_000; // else parts of about this long
@@ -243,6 +243,14 @@ async function restsFor(ws: Workspace, projectId: string, l: SingerLine): Promis
   }
 }
 
+// The line with its rests measured, and its parts (if any) cut again on those pauses (price and seconds as before).
+async function withRests(ws: Workspace, projectId: string, l: SingerLine, usdPerSecond: number): Promise<SingerLine> {
+  const rests = await restsFor(ws, projectId, l);
+  if (!rests || !l.piece.parts) return { ...l, rests };
+  const c = await context(ws, projectId);
+  return { ...l, rests, piece: singingParts({ ...l.piece, parts: undefined }, c.downbeats, c.lines ?? [], usdPerSecond, rests) };
+}
+
 // The ffmpeg gain for a voice piece starting at song time fromMs: 0 inside each rest, soft fades at its edges.
 export function restGain(rests: readonly { fromMs: number; toMs: number }[], fromMs: number, toMs = Infinity): string | null {
   const inPiece = rests.map((r) => ({ a: (r.fromMs - fromMs) / 1000, b: (r.toMs - fromMs) / 1000 })).filter((r) => r.b > 0);
@@ -253,9 +261,10 @@ export function restGain(rests: readonly { fromMs: number; toMs: number }[], fro
   return inPiece.map((r) => `(1-clip(min((t-${r.a.toFixed(3)})/${f}+${r.a <= 0 ? 99 : 0},(${r.b.toFixed(3)}-t)/${f}+${r.b >= end ? 99 : 0}),0,1))`).join("*");
 }
 
-// The parts of a long vocal piece: cut on a downbeat near every PART_TARGET_MS (between PART_MIN_MS and PART_MAX_MS from
-// the last cut, leaving at least PART_MIN_MS), a downbeat in a pause between sung lines first. Short pieces: one part.
-export function singingParts(piece: Piece, downbeats: readonly number[], lines: readonly { shownMs: number; sungEndMs: number }[], usdPerSecond = LIPSYNC_USD_PER_SECOND): Piece {
+// The parts of a long vocal piece, a cut near every PART_TARGET_MS (between PART_MIN_MS and PART_MAX_MS from the last cut,
+// leaving at least PART_MIN_MS). Each cut goes, in this order: the middle of a measured pause (`rests`, where the vocal is
+// silent: the join falls on a breath), a downbeat not inside a sung line, any downbeat, the target. Short pieces: one part.
+export function singingParts(piece: Piece, downbeats: readonly number[], lines: readonly { shownMs: number; sungEndMs: number }[], usdPerSecond = LIPSYNC_USD_PER_SECOND, rests: readonly { fromMs: number; toMs: number }[] = []): Piece {
   if (piece.toMs - piece.fromMs <= PART_MAX_MS) return piece;
   const parts: { fromMs: number; toMs: number }[] = [];
   const sung = (t: number) => lines.some((l) => l.shownMs <= t && t <= l.sungEndMs);
@@ -265,7 +274,9 @@ export function singingParts(piece: Piece, downbeats: readonly number[], lines: 
     const hi = Math.min(start + PART_MAX_MS, piece.toMs - PART_MIN_MS);
     const near = (list: number[]) => list.sort((a, b) => Math.abs(a - (start + PART_TARGET_MS)) - Math.abs(b - (start + PART_TARGET_MS)))[0];
     const inWindow = downbeats.filter((d) => d >= lo && d <= hi);
-    const cut = near(inWindow.filter((d) => !sung(d))) ?? near(inWindow) ?? Math.min(hi, start + PART_TARGET_MS);
+    // A pause's middle, when it lies inside the window (the pause nearest the target first).
+    const mids = rests.map((x) => (x.fromMs + x.toMs) / 2).filter((m) => m >= lo && m <= hi);
+    const cut = near(mids) ?? near(inWindow.filter((d) => !sung(d))) ?? near(inWindow) ?? Math.min(hi, start + PART_TARGET_MS);
     parts.push({ fromMs: start, toMs: Math.round(cut) });
     start = Math.round(cut);
   }
@@ -612,7 +623,7 @@ export async function startSinging(ws: Workspace, projectId: string, o: { capUsd
   const feel = feelFor(ws, projectId);
   const jobs: SingJob[] = [];
   for (const l0 of todo) {
-    const l = { ...l0, rests: await restsFor(ws, projectId, l0) };
+    const l = await withRests(ws, projectId, l0, view.usdPerSecond);
     jobs.push(recordTake(dir, l, view.resolution, now, look, feel, feelingForLines(ws, projectId, l.number, l.run?.last), { draft: !!o.draft, direction: await directionOf(ws, projectId, l) }));
   }
   return { jobs, usd, seconds };
@@ -659,7 +670,7 @@ export async function startRetake(ws: Workspace, projectId: string, o: { capUsd:
   const usd = o.draft ? draftUsd(l.piece.seconds) : l.piece.usd;
   if (usd > cap) throw new Error(`A retake (${l.piece.seconds} s of voice) costs about $${usd.toFixed(2)}, above your cap of $${cap.toFixed(2)}: raise the cap in Creation → Your defaults. Nothing was sent.`);
   const { dir } = songFolder(ws, projectId);
-  return { jobs: [recordTake(dir, { ...l, rests: await restsFor(ws, projectId, l) }, view.resolution, new Date().toISOString(), filmLookFor(ws, projectId), feelFor(ws, projectId), feelingForLines(ws, projectId, l.number, l.run.last), { draft: !!o.draft, direction: await directionOf(ws, projectId, l) })], usd, seconds: l.piece.seconds };
+  return { jobs: [recordTake(dir, await withRests(ws, projectId, l, view.usdPerSecond), view.resolution, new Date().toISOString(), filmLookFor(ws, projectId), feelFor(ws, projectId), feelingForLines(ws, projectId, l.number, l.run.last), { draft: !!o.draft, direction: await directionOf(ws, projectId, l) })], usd, seconds: l.piece.seconds };
 }
 
 // The finished take's clip in the Storyboard (added once; a later take waits outside it until it is chosen).
@@ -717,8 +728,8 @@ export function seenSingingTake(ws: Workspace, projectId: string, source: unknow
 }
 
 
-// A take in parts (singingParts): part 1 from the picture, every next part from the last frame of the part before (no jump
-// where they meet: Joey's "extend from the last frame"), each with its own piece of the voice; each part cut to its exact
+// A take in parts (singingParts): every part from the picture itself, the same upload as part 1 (26 Nov 2026, Paul: a
+// part chained from the last frame of the one before turned Aiko's face into a white mask), each with its own piece of the voice; each part cut to its exact
 // song length (a frame short or long would put the next part's lips out of time), then joined into one silent take.
 // A part already sent (its request id kept in the take) is only fetched again (free).
 async function singInParts(c: { dir: string; source: string; n: number; take: Take; tmp: string; voice: Voice; songFile: string; transport: SingTransport; picture: Promise<string>; sleep: (ms: number) => Promise<void>; pollMs?: number; timeoutMs?: number; onSent: (id: string) => void }, out: string): Promise<void> {
@@ -733,7 +744,7 @@ async function singInParts(c: { dir: string; source: string; n: number; take: Ta
       let image: string;
       let audio: string;
       try {
-        image = i === 0 ? await c.picture : await c.transport.upload(lastFrame(files[i - 1], path.join(c.tmp, `from-${i + 1}.png`)));
+        image = await c.picture;
         audio = await c.transport.upload(voiceFile);
       } catch (error) {
         throw Object.assign(new Error(`Part ${i + 1}: the picture or the voice could not be put online: ${errorText(error)}`), { unsent: i === 0 });
@@ -771,11 +782,6 @@ async function singInParts(c: { dir: string; source: string; n: number; take: Ta
   joinParts(files, out, path.join(c.tmp, "parts.txt"));
 }
 
-// The last frame of a part (the next part starts from it).
-function lastFrame(file: string, png: string): string {
-  execFileSync(ffmpegBin(), ["-y", "-v", "error", "-sseof", "-0.1", "-i", file, "-frames:v", "1", "-update", "1", png]);
-  return png;
-}
 // A part at exactly its song length, 30 fps (its last frame held if the model's clip is a little short).
 export function fitLength(file: string, out: string, ms: number): void {
   execFileSync(ffmpegBin(), ["-y", "-v", "error", "-i", file, "-vf", "tpad=stop_mode=clone:stop_duration=3,fps=30,format=yuv420p", "-t", (ms / 1000).toFixed(3), "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", out]);

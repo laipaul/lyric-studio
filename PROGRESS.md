@@ -25,6 +25,13 @@ turns into a flat white mask".
 - **Trim to good part**: a new take (nothing deleted) ending where the face goes wrong, its start at the same song
   time (still in sync); the lines it no longer covers need a take again; it takes the place of the take in use.
   Refused (in plain words) when the face goes wrong at the start or before the first line is sung: Retake draft.
+- **Fix (same day): every part of a long line starts from the picture.** Paul's 720p take of line 21 (12 s, 2 parts)
+  turned Aiko's face into a white mask mid-take: part 2 was generated from the LAST FRAME of part 1 (a generated
+  image, copied again: the model exaggerates its flaws). Now each part is generated from the original picture; the
+  join goes in the middle of a measured breath (the vocal's own pause) inside the window, else a downbeat outside a
+  sung line, else a downbeat. A small re-frame can show at the join; no drift. Same price (a moved join can change a
+  part's rounded seconds slightly). Done by a Sonnet helper, checked (animate.test.ts: same picture for every part,
+  the join in a breath).
 - Needs the face packages (pnpm audio:setup --face, already installed for Characters); without them the take says
   "face checks not installed".
 - Tests: take-qa.test.ts (7: collapse / drift / lost / blip, 8 s split at line boundaries, the check saved, Trim);
