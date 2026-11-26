@@ -37,6 +37,13 @@ locked cards can't be edited").
 - **Reel singing target**: the exact part the Reel plays, from its saved shot plan (storyboards\reels-1.json; else
   TikTok's, else Shorts'). Until a Reel's shot plan exists, the old estimate stays and the note says "exact once the
   Reel's shot plan is made".
+- **Browser tests brought up to date** (same day; done by a Sonnet helper, checked): Storyboard, Style lock, Videos/Post,
+  Pairings, Clip notes, Themes now pass (Textboard passed alone). One was a real bug: the Reels loop ending (↻) was
+  missed when an automatic dissolve led into the last shot, so a false "no seamless loop ending" warning could show
+  (storyboard.ts storyShots, make.ts loopsSeamlessly now count the dissolve's frames). The others followed deliberate
+  app changes (On-screen text switches, the Look viewer's size, the clip card's name field, the header menu).
+  Videos/Post: Next 16.4.6 drops Content-Length from the video route's answers (players cope; noted under Known issues).
+  Still red in the cloud only: new-song-every-platform (renders need remotion.media, blocked here).
 - Tests: test\characters-tidy.test.ts (7); characters.e2e.ts (Locked badge, Edit → new version, outfit warning, Tidy
   texts, thumbnail of a card with a v2 draft).
 
@@ -758,6 +765,8 @@ locked cards can't be edited").
   reactivity; it saves versioned, data-only presets to the effects library. Not scheduled yet.
 
 ## Known issues
+- Video files (Review → Videos) are sent without a Content-Length since Next 16.4.6 (it strips the header; ranges and
+  Accept-Ranges still work, players cope). Pin Next 16.4.3 or serve media another way if a player ever needs the length.
 - **Two stale browser tests (found 22 Nov 2026, not caused by the latest steps):** themes.e2e expects the top menu
   "Library · Themes · Collections · Releases" (Characters was added since); style-lock.e2e looks for
   [data-edit='titleOpening-default'], a row the Look panel no longer shows. Update both tests in a bug-fix pass.

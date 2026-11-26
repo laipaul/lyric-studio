@@ -995,7 +995,8 @@ export function loopsSeamlessly(shots: readonly LyricVideoProps["shots"][number]
   const last = shots[shots.length - 1];
   if (!first || shots.length < 2 || last.src !== first.src) return false;
   if (first.kind === "photo") return last.motion?.toZoom === first.motion?.fromZoom;
-  return last.clipStartFrame + last.duration === first.clipStartFrame && last.playbackRate === 1;
+  // (a dissolve into the last shot starts it `before` frames earlier: it still ends right where the first shot starts)
+  return last.clipStartFrame + last.duration + (last.dissolve?.before ?? 0) === first.clipStartFrame && last.playbackRate === 1;
 }
 
 // "standard" goes straight into the run's folder, every platform into its own subfolder.

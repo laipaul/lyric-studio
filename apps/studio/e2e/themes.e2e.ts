@@ -63,7 +63,7 @@ async function main() {
     const cardThemes = await page.$$eval("[data-card-theme]", (e: Element[]) => e.map((x) => x.getAttribute("data-card-theme")));
     check(cardThemes.length === 2 && cardThemes.every((t: string | null) => t === "Life Lyrics"), `each Library card names its theme (${cardThemes.join(", ")})`);
     const nav = await page.$$eval("header nav a", (e: Element[]) => e.map((x) => x.textContent));
-    check(JSON.stringify(nav) === JSON.stringify(["Library", "Themes", "Collections", "Releases"]), `the top menu: ${nav.join(" · ")}`);
+    check(JSON.stringify(nav) === JSON.stringify(["Library", "Themes", "Film looks", "Collections", "Characters", "Releases"]), `the top menu: ${nav.join(" · ")}`);
     await page.click("header nav a:has-text('Themes')");
     await page.waitForSelector("[data-themes-tile]");
     check((await page.$$("[data-themes-tile]")).length === 1, "the gallery: the brand's theme");

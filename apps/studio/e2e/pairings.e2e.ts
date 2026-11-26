@@ -149,7 +149,8 @@ async function main() {
     // there; a hovered option is tried in it.
     check((await page.$$("[data-look-preview]")).length === 1, "one viewer");
     const lookBox = await page.$eval("[data-look-preview]", (e: Element) => e.getBoundingClientRect().width);
-    check(lookBox >= 300 && lookBox <= 380, `…about 300-380 px wide (${Math.round(lookBox)} px)`);
+    // (Its height now fits the room the screen leaves, 260-760 px, always 9:16: so 146-428 px wide; look-preview.tsx.)
+    check(lookBox >= 146 && lookBox <= 429, `…a phone-sized viewer, 146-428 px wide (${Math.round(lookBox)} px)`);
     check(!!(await page.$("[data-look-preview] img[src*='/api/files/thumbs/']")), "…over a frame of the song's clip");
     check((await page.getAttribute("[data-look-preview]", "data-backing")) === "1" && !!(await page.$("[data-look-preview] [data-lyric-backing]")), "…with the soft backing over the bright frame (readability auto, as the render)");
     check((await page.getAttribute("[data-look-preview]", "data-hook-face")) === "Cormorant Garamond 600 italic", `…in the song's hook face (${await page.getAttribute("[data-look-preview]", "data-hook-face")})`);

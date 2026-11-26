@@ -77,7 +77,7 @@ export function storyShots(
     const outS = s.kind === "photo" ? 0 : (s.clipStartFrame + shown * s.playbackRate) / VIDEO.fps;
     const a = usedAnchors.find((u) => u.shot === i) ?? null;
     // The Reels loop ending: the last shot plays the first clip's frames right before shot 1 (intended).
-    const loop = i > 0 && i === shots.length - 1 && ((s.src === shots[0].src && Math.round(s.clipStartFrame + s.duration * s.playbackRate) === shots[0].clipStartFrame) || !!props.loopInto);
+    const loop = i > 0 && i === shots.length - 1 && ((s.src === shots[0].src && Math.round(s.clipStartFrame + (s.duration + (s.dissolve?.before ?? 0)) * s.playbackRate) === shots[0].clipStartFrame) || !!props.loopInto);
     const heldMs = frameMs(s.duration - shown);
     const held = shown < s.duration && heldMs >= HOLD_NOTICE_MS; // a frame or two cannot be seen
     const warnings: string[] = [];

@@ -103,15 +103,23 @@ async function main() {
     check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { ending?: string }).ending === undefined, "back to auto: the song's own ending setting is gone");
     // Title opening (Step D): off by default; on = title, artist and tagline before the first hook (Shape → Look).
     await openPanel(page, "look");
-    check((await page.$eval("[data-edit='titleOpening-default']", (e: Element) => (e as HTMLSelectElement).value)) === "off", "Title opening: off by default");
-    await page.selectOption("[data-edit='titleOpening-default']", "on");
+    // (Shape → Look → On-screen text: a switch per card, Title / Artist / Credits; the opening is on while any is on.)
+    check((await page.$eval("[data-on-screen='title']", (e: Element) => e.getAttribute("data-on"))) === "0", "Title opening: the title card is off by default");
+    await page.click("[data-on-screen-toggle='title']");
+    await page.waitForSelector("[data-on-screen='title'][data-on='1']");
     await page.waitForSelector("[data-saving=saved]");
-    await sleep(300);
+    await sleep(500);
     check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { titleOpening?: string }).titleOpening === "on", 'song.json holds "titleOpening": "on"');
-    await page.selectOption("[data-edit='titleOpening-default']", "off");
+    // The opening is on while any of the cards is on (the artist card follows it): switch every shown card off.
+    for (const id of ["title", "byline", "tagline"]) {
+      if ((await page.$eval(`[data-on-screen='${id}']`, (e: Element) => e.getAttribute("data-on"))) !== "1") continue;
+      await page.click(`[data-on-screen-toggle='${id}']`);
+      await page.waitForSelector(`[data-on-screen='${id}'][data-on='0']`);
+      await sleep(400);
+    }
     await page.waitForSelector("[data-saving=saved]");
-    await sleep(300);
-    check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { titleOpening?: string }).titleOpening === undefined, "back to off: the song's own title opening setting is gone");
+    await sleep(500);
+    check((JSON.parse(readFileSync(paths.recipe!, "utf8")) as { titleOpening?: string }).titleOpening !== "on", "back to off: the song's title opening is off again (the switch stores \"off\")");
     // The tagline lives in Prepare → Song Details (song.json "tagline"; N1: one place, no longer also in Assets).
     await openPanel(page, "details");
     check(!(await page.$("[data-tagline-input]")), "no second tagline field");

@@ -135,10 +135,11 @@ async function main() {
     await sleep(600);
     check(Object.keys(stored()).length === 0, "clearing the text deletes the note");
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
-    // The card reads as a story (11 Nov 2026): no file name, duration or Remove on it; they are in its ⋯ menu (and the
+    // The card reads as a story (11 Nov 2026): no duration or Remove on it; they are in its ⋯ menu (and the
     // file name in the tooltip); a warning only when something is wrong (these test clips are 216×384: low resolution).
     const card = (await page.textContent("[data-clip='03_green.mp4']")) ?? "";
-    check(!card.includes("03_green.mp4") && !/\d+\.\d s/.test(card) && !card.includes("Remove") && (await page.getAttribute("[data-clip='03_green.mp4']", "title")) === "03_green.mp4", `the card shows no file name, duration or Remove; the file name is its tooltip (${card})`);
+    // (Since then the card also carries its name field - the clip's name, first on the card - cast chips and the lip sync check.)
+    check(!/\d+\.\d s/.test(card) && !card.includes("Remove") && (await page.getAttribute("[data-clip='03_green.mp4']", "title")) === "03_green.mp4", `the card shows no duration or Remove (they are in its ⋯ menu); the file name is its tooltip (${card})`);
     check(((await page.textContent("[data-clip-warning='03_green.mp4']")) ?? "").startsWith("low resolution (216×384)"), "a small warning when something is wrong: low resolution");
     await page.click("[data-card-menu='03_green.mp4']");
     const details = await page.$$eval("[data-card-detail]", (e: Element[]) => e.map((x) => x.textContent));

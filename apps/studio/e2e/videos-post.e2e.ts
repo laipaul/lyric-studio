@@ -257,11 +257,14 @@ async function main() {
     const mp4Url = await page.$eval("[data-post-video] video", (v: HTMLVideoElement) => v.currentSrc);
     const zero = await fetch(mp4Url, { headers: { Range: "bytes=0-" } });
     const total = Number(/\/(\d+)$/.exec(zero.headers.get("content-range") ?? "")?.[1]);
-    check(zero.status === 206 && Number(zero.headers.get("content-length")) === total && (await zero.arrayBuffer()).byteLength === total, "server: bytes=0- gives 206 with the whole file and a correct Content-Range / Content-Length");
+    // (Next 16.4.6 drops a route's Content-Length and streams the body chunked; when one is sent it must be right.)
+    const zeroLength = zero.headers.get("content-length");
+    check(zero.status === 206 && (zeroLength === null || Number(zeroLength) === total) && zero.headers.get("content-range") === `bytes 0-${total - 1}/${total}` && (await zero.arrayBuffer()).byteLength === total, "server: bytes=0- gives 206 with the whole file and a correct Content-Range (and Content-Length when sent)");
     const tail = await fetch(mp4Url, { headers: { Range: `bytes=${total - 100}-` } });
     check(tail.status === 206 && (await tail.arrayBuffer()).byteLength === 100, "server: a range at the end gives exactly those bytes");
     const head = await fetch(mp4Url, { method: "HEAD" });
-    check(head.status === 200 && Number(head.headers.get("content-length")) === total && head.headers.get("accept-ranges") === "bytes", "server: HEAD gives the length and Accept-Ranges");
+    const headLength = head.headers.get("content-length");
+    check(head.status === 200 && (headLength === null || Number(headLength) === total) && head.headers.get("accept-ranges") === "bytes" && head.headers.get("content-type") === "video/mp4", "server: HEAD answers 200 with Accept-Ranges and the video type (and the length when sent)");
 
     // ---- Post downloads (11 Nov 2026): "Save as" in the last folder used for this song and platform; "Save all to…".
     // The browser's pickers are replaced by in-memory stand-ins that record what the app asks for and writes.
