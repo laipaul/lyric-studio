@@ -362,3 +362,20 @@ export function actingDirection(i: ActingInput): string {
   if (i.script?.entry?.camera || i.script?.entry?.pace) out.push([i.script.entry.camera && `Camera: ${i.script.entry.camera}.`, i.script.entry.pace && `Pace: ${i.script.entry.pace}.`].filter(Boolean).join(" "));
   return `Acting direction (show it through the face and body: brows, eyes, breath, mouth, hands; no text on screen): ${out.join(" ")}`;
 }
+
+// ---- Singing takes: the lips first (26 Nov 2026, Paul's first draft: "the emotion lands softer than scripted") ----
+// For lip sync, small mouth movements look like being out of sync: the acting never limits the mouth, and the line's
+// own face direction comes before the persona's restraint. On a head-and-shoulders picture, hands are out of frame.
+export const LIPS_FIRST = "Clear, precise lip shapes on every syllable, in time with the voice";
+const MOUTH_LIMIT = /\b(lips?\s+(barely|hardly|just|slightly|only\s+slightly)\s+(part|open|move)\w*|minimal\s+mouth(\s+movement)?|mouth\s+(barely|hardly)\s+\w+|mouth\s+(stays?\s+)?closed|closed\s+mouth|barely\s+(moving|move)\s+(the\s+)?(lips|mouth))\b/i;
+const HANDS = /\b(hands?|fingers?|fingertips?|palms?|arms?|wrists?|bouquet|necklace|collarbone)\b/i;
+// Drops the comma / semicolon clauses that limit the mouth (and, on a close-up, the ones about hands); keeps the rest.
+export function forSinging(text: string, closeUp = false): string {
+  return text
+    .split(/\s*[,;]\s*/)
+    .filter((c) => c.trim() && !MOUTH_LIMIT.test(c) && !(closeUp && HANDS.test(c)))
+    .join(", ")
+    .trim();
+}
+// A picture that is a head-and-shoulders frame, by its name ("… Close-up …", "closeup", "portrait").
+export const isCloseUpPicture = (name: string) => /close[\s_-]?up|closeup|portrait|head[\s_-]?and[\s_-]?shoulders|face\b/i.test(name);

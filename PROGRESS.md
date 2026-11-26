@@ -19,6 +19,12 @@ she sings, then she takes a big breath and starts; 'Oh there's something' is not
   thinks she should be singing"): under the take, the line being sung now (the next one dimmed) and a strip of the
   take: **blue** where the voice was sent, **grey** where it was silenced (she breathes there), each line's words at
   their time, the playhead. A word on grey was never heard. Browser test singer.e2e.ts (+1).
+- **The lips first** (same day, Paul: yes): every singing take's direction now starts with "Clear, precise lip shapes on
+  every syllable, in time with the voice", then the line's own expression from the script (emotion and intensity,
+  face, body), then the persona's way of singing; clauses that limit the mouth ("lips barely part", "minimal mouth
+  movement") are dropped, and on a close-up picture (its name says close-up / portrait) nothing about hands or
+  gestures is sent (out of frame). src/persona.ts forSinging, isCloseUpPicture, LIPS_FIRST; node/persona.ts
+  singingDirection. Tests: persona.test.ts (+1), performance-script.test.ts (Aiko close-up vs wide).
 - Paul's first impression of the draft: "quite convincing", Aiko's face holds, teeth visible, the breath moves her
   chest.
 

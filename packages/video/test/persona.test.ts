@@ -78,6 +78,19 @@ describe("Paste persona (Claude's answer back into the fields)", () => {
   });
 });
 
+describe("singing takes: the lips first (26 Nov 2026)", () => {
+  it("drops what limits the mouth; on a close-up, what is about hands; keeps eyes, brows, breath and head", async () => {
+    const { forSinging, isCloseUpPicture, LIPS_FIRST } = await import("../src/persona");
+    expect(forSinging("lips barely part, eyes half-lowered, chin slightly down, almost no head movement")).toBe("eyes half-lowered, chin slightly down, almost no head movement");
+    expect(forSinging("rest state, restrained, gaze away, minimal mouth movement")).toBe("rest state, restrained, gaze away");
+    expect(forSinging("breath caught, hand pressed flat to her chest, gaze direct, chin lifts", true)).toBe("breath caught, gaze direct, chin lifts");
+    expect(forSinging("breath caught, hand pressed flat to her chest", false)).toBe("breath caught, hand pressed flat to her chest");
+    expect(isCloseUpPicture("Aiko Lead Vocal - Main look - Close-up face.png")).toBe(true);
+    expect(isCloseUpPicture("wide aisle.mp4")).toBe(false);
+    expect(LIPS_FIRST).toMatch(/precise lip shapes on every syllable/);
+  });
+});
+
 describe("the acting direction for Make with references", () => {
   it("persona + the line's script direction (or the section map); no identity; empty without persona or script", async () => {
     const { actingDirection } = await import("../src/persona");

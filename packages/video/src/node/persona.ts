@@ -8,7 +8,8 @@ import path from "node:path";
 import { card as cardTable, project as projectTable, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
-import { actingDirection, cleanPersona, personaRequest, personaShotPrompt, type Persona, type ShotPromptPerson } from "../persona";
+import { actingDirection, cleanPersona, forSinging, isCloseUpPicture, LIPS_FIRST, personaRequest, personaShotPrompt, type Persona, type ShotPromptPerson } from "../persona";
+const MOUTH_LIKE = /\b(mouth|lips?)\b.*\b(closed|barely|minimal)\b/i;
 import { songsUsingCard } from "./card-versions";
 import { cardRoot, currentVersion, getCard, listCards, readCardFile, usableVersion, writeCardFile } from "./characters/cards";
 import { listLooks } from "./characters/looks";
@@ -214,24 +215,34 @@ export async function shotDirection(ws: Workspace, projectId: string, slotId: st
 export async function singingDirection(ws: Workspace, projectId: string, source: string, first: number, last: number): Promise<string> {
   const { readPictures, songFolder } = await import("./animate");
   const ctx = await songContext(ws, projectId);
-  const who = readPictures(songFolder(ws, projectId).dir).pictures[path.basename(source)]?.who;
+  const record = readPictures(songFolder(ws, projectId).dir).pictures[path.basename(source)];
+  const who = record?.who;
+  const closeUp = isCloseUpPicture(`${record?.label ?? ""} ${path.basename(source)}`);
   const characters = ctx.cast.filter((c) => c.kind === "character");
   const id = who ?? (characters.length === 1 ? characters[0].id : null);
   const card = id ? listCards(ws).find((c) => c.id === id && c.kind === "character") : undefined;
   if (!card) return "";
   const per = readPersona(ws, card.id).persona;
   const cut = (s: string, n = 120) => (s.length > n ? `${s.slice(0, n - 1).replace(/[\s,;]+\S*$/, "")}…` : s);
-  const parts: string[] = [];
-  if (per) {
-    const sing = [per.sing.soft && `soft lines: ${cut(per.sing.soft, 80)}`, per.sing.high && `high notes: ${cut(per.sing.high, 80)}`, per.sing.held && `held notes: ${cut(per.sing.held, 80)}`].filter(Boolean);
-    if (sing.length) parts.push(`${card.name} sings like this: ${sing.join("; ")}`);
-    if (per.gestures.length) parts.push(`Gestures: ${cut(per.gestures.join("; "))}`);
-  }
+  // The lips first; then this line's expression (the script), before the persona's way of singing (its restraint must
+  // not flatten a peak); nothing that limits the mouth; on a close-up, nothing about hands (out of frame).
+  const sing1 = (s: string) => forSinging(s, closeUp);
+  const parts: string[] = [LIPS_FIRST];
   const s = readScript(ctx.paths.root);
   if (s) {
     const d = await directionFor(ws, projectId, first);
     const e = d.entry;
-    if (e) parts.push([e.emotion && `Emotion: ${e.emotion}${e.intensity ? ` (${e.intensity}/5)` : ""}${last > first ? ", growing over the lines" : ""}`, e.face && `Face: ${cut(e.face)}`, e.body && `Body: ${cut(e.body)}`].filter(Boolean).join(". "));
+    if (e) {
+      const face = e.face ? sing1(e.face) : "";
+      const body = e.body ? sing1(e.body) : "";
+      parts.push([e.emotion && `Expression: ${e.emotion}${e.intensity ? ` (${e.intensity}/5)` : ""}${last > first ? ", growing over the lines" : ""}`, face && `Face: ${cut(face)}`, body && `Body: ${cut(body)}`].filter(Boolean).join(". "));
+    }
+  }
+  if (per) {
+    const sing = [per.sing.soft && sing1(per.sing.soft) && `soft lines: ${cut(sing1(per.sing.soft), 80)}`, per.sing.high && sing1(per.sing.high) && `high notes: ${cut(sing1(per.sing.high), 80)}`, per.sing.held && sing1(per.sing.held) && `held notes: ${cut(sing1(per.sing.held), 80)}`].filter(Boolean);
+    if (sing.length) parts.push(`${card.name} sings like this: ${sing.join("; ")}`);
+    const gestures = closeUp ? [] : per.gestures.filter((g) => !MOUTH_LIKE.test(g));
+    if (gestures.length) parts.push(`Gestures: ${cut(gestures.join("; "))}`);
   }
   if (per?.never) parts.push(`Never: ${cut(per.never, 100)}`);
   return parts.filter(Boolean).join(". ");

@@ -15,7 +15,7 @@ import { findOrCreateSongProject, makeVideos, readRecipe, songPathsById, writeRe
 import { createCard } from "../src/node/characters";
 import { cueText, cachedMusicCues, musicCues, songSegments } from "../src/node/music-cues";
 import { reelRange } from "../src/node/lipsync";
-import { clipShotPrompt, setPersona } from "../src/node/persona";
+import { clipShotPrompt, setPersona, singingDirection } from "../src/node/persona";
 import { editScript, pasteScript, readScript, scriptRequestFor, scriptView } from "../src/node/performance-script";
 import { setCast } from "../src/node/production";
 import { setSongSections } from "../src/node/song-sections";
@@ -230,6 +230,16 @@ describe("a song with a script", () => {
     expect(view.entries.find((e) => e.key === "L2")).toMatchObject({ stale: null, action: "to plead", checked: false });
     await editScript(ws, sid, "L2", { checked: true, camera: "hold on her face" });
     expect(readScript(p.root)!.entries.find((e) => e.key === "L2")).toMatchObject({ checked: true, camera: "hold on her face" });
+
+    // A singing take of line 2 from a close-up of Aiko: the lips first, then the line's expression, then her way of
+    // singing; nothing that limits the mouth, nothing about hands (out of frame).
+    const sung = await singingDirection(ws, sid, "aiko close-up.png", 2, 2);
+    expect(sung.startsWith("Clear, precise lip shapes on every syllable, in time with the voice. Expression: longing (3/5)")).toBe(true);
+    expect(sung).toContain("Face: inner brows raised, eyes on the lens, lip corners down, jaw open");
+    expect(sung).not.toMatch(/hand|chest/);
+    expect(sung.indexOf("Expression:")).toBeLessThan(sung.indexOf("Aiko") === -1 ? Infinity : sung.indexOf("Aiko"));
+    const wide = await singingDirection(ws, sid, "aiko on the beach.png", 2, 2);
+    expect(wide).toContain("hand to chest");
 
     // Copy shot prompt on the clip pinned to line 2: the line's direction, not the section default.
     const shot = await clipShotPrompt(ws, sid, "02_red.mp4");
