@@ -8,7 +8,7 @@ import path from "node:path";
 import { card as cardTable, project as projectTable, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
-import { cleanPersona, personaRequest, personaShotPrompt, type Persona, type ShotPromptPerson } from "../persona";
+import { actingDirection, cleanPersona, personaRequest, personaShotPrompt, type Persona, type ShotPromptPerson } from "../persona";
 import { songsUsingCard } from "./card-versions";
 import { cardRoot, currentVersion, getCard, listCards, readCardFile, usableVersion, writeCardFile } from "./characters/cards";
 import { listLooks } from "./characters/looks";
@@ -182,4 +182,28 @@ export async function slotShotPrompt(ws: Workspace, projectId: string, slotKey: 
   const script = await scriptFor(ws, projectId, ctx.paths.root, m.slot.lines[0]);
   const text = personaShotPrompt({ people, section: sectionOf(ctx.sections, m.slot.lines[0]), lyric: linesText(ctx.lines, m.slot.lines), singing: true, song: ctx.title, script });
   return { text };
+}
+
+// The acting direction of a Creation shot (Make with references, 26 Nov 2026): its people's personas and its line's
+// direction (performance script; else the persona's section map). A shot without a line (music only) takes its
+// section's line. source: what it came from, for the page.
+export async function shotDirection(ws: Workspace, projectId: string, slotId: string): Promise<{ text: string; source: "script" | "section" | "none"; stale: string | null }> {
+  const { productionView } = await import("./shot-production");
+  const shot = productionView(ws, projectId).shots.find((s) => s.id === slotId);
+  if (!shot) throw new Error("That shot is not in this song's shot list.");
+  const ctx = await songContext(ws, projectId);
+  const cards = listCards(ws);
+  const people = shot.people.flatMap((w) => {
+    const c = w.card ? cards.find((x) => x.id === w.card) : undefined;
+    return c && c.kind === "character" ? [{ name: c.name, persona: readPersona(ws, c.id).persona, songNote: ctx.prod.personaNotes?.[c.id] ?? null }] : [];
+  });
+  let section = shot.line ? sectionOf(ctx.sections, shot.line) : null;
+  if (!section && shot.section) {
+    const s = ctx.sections.find((x) => x.name === shot.section);
+    if (s) section = sectionOf(ctx.sections, s.line);
+  }
+  const script = shot.line ? await scriptFor(ws, projectId, ctx.paths.root, shot.line) : null;
+  const lyric = shot.line ? (ctx.lines.find((l) => l.number === shot.line)?.text ?? null) : null;
+  const text = actingDirection({ people, section, script, lyric });
+  return { text, source: !text ? "none" : script?.entry ? "script" : "section", stale: script?.stale ?? null };
 }

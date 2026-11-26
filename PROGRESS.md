@@ -4,6 +4,21 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Make with references carries the acting direction ✅ (to verify on the PC)
+Paul, 26 Nov 2026: "I can't do it from my app?" Creation → Production → a shot → **Make with references** now sends,
+after the shot's description, an **Acting direction**: for each person in the shot their persona (traits, gestures,
+movement, gaze, Never) and this line's direction from the performance script (meaning, emotion, action, Laban, face,
+body; Sings to / Objective, camera, pace), else the persona's section map. No identity in it (the reference pictures
+carry the face and outfit). A stale script line is not used (the card says so).
+- On each shot: an **acting direction** tick (on by default; untick to make one take without it and compare in
+  Compare) and **Show the prompt sent** (exactly what goes to Seedance, nothing sent; says whether the acting comes
+  from the script or the section map) with **Copy performance prompt**. The confirm dialog and the notice say with or
+  without. Each take records it (take.acting). Same price per take as before.
+- node/persona.ts shotDirection, src/persona.ts actingDirection, node/shot-references.ts referencePrompt(…, direction),
+  referencePreview; API pictures actions "references" {acting} and "references-preview".
+- Tests: persona.test.ts (acting text: script vs section map, no identity, empty without persona), shot-production
+  .test.ts (shot 3: persona in the direction, preview, takes with / without); browser creation-production.e2e.ts.
+
 ### Music analysis + Performance script (Part B) ✅ (to verify on the PC; cue table to check by ear)
 The chain (Paul, 26 Nov 2026): the app hears the track → Claude reads the lyric's meaning → the persona decides how
 this singer shows it → Paul approves → every shot prompt carries that direction. Lip-sync models move the mouth but do
@@ -727,20 +742,6 @@ locked cards can't be edited").
 - Shape's "not in this video" names the real reason when a singing clip plays to the end (e.g. "the singing on line 32
   plays from 2:12.9 to the end ... Lyrics Sync → line 32 → Hide a moment"), not "the part ends before its turn".
 - Tests: vitest line-only (7), plus animate, clip-order, story-line, compose, shots, lyrics-view, song-files pass.
-
-### Sections in Lyrics Sync (Mini film) ✅ (to verify on the PC)
-- Step 2 of the Scenes plan (Paul, 22 Nov 2026). On a **Mini film** song, Lyrics Sync shows the song's sections:
-  a **Sections** bar above the lines (Verse 1 · Chorus · Verse 2 · ... with start time and lines) and a row above
-  each section's first line with its kind (dropdown: Intro, Verse, Pre-chorus, Chorus, Bridge, Outro) and ✕ (join it
-  to the section before). **+** next to a line number starts a section there. Other song styles: nothing changes.
-- Suggested by the app until changed: stanzas = blocks of lyrics.txt between blank lines; a stanza with a hook line
-  ("* ") is a chorus (no hooks marked: a stanza whose words come back); a returning stanza that leads into a chorus is
-  a pre-chorus; the first other stanza after the 2nd chorus with a chorus still to come is the bridge; after the last
-  chorus, the outro; the rest verses. **Keep these** saves the suggestion; any change saves the whole list in
-  song.json "sections" [{ line, kind }]; **Back to the suggestion** forgets it. lyrics.txt is never changed.
-- Code: sections.ts (pure: suggestSections, cleanSections, nameSections, sectionOfLine), node/song-sections.ts,
-  GET/PUT /api/songs/[id]/sections, components/sections-ui.tsx; recipe.ts "sections".
-- Tests: vitest sections (3); browser sections (8 checks); lyrics-tab, singer, song-style pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

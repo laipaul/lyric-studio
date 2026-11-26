@@ -25,7 +25,8 @@ import { runFinal, startFinal } from "@lyric/video/final";
 import { runSinging, withSongStarts } from "@lyric/video/singer";
 import { placeByName, placeDropped, productionView, setPictureShot, useForShot, withLineStarts } from "@lyric/video/shot-production";
 import { timedLines } from "@lyric/video/production";
-import { startShotReferences } from "@lyric/video/shot-references";
+import { referencePreview, startShotReferences } from "@lyric/video/shot-references";
+import { shotDirection } from "@lyric/video/persona-node";
 import { eq } from "drizzle-orm";
 import { setShotLook, setShotScene } from "@lyric/video/shotlist";
 import { connection } from "next/server";
@@ -114,10 +115,20 @@ export async function POST(request: Request, { params }: Params) {
     if (body.action === "feeling") return Response.json({ feeling: withWorkspace((ws) => setPictureFeeling(ws, id, file, body.feeling)) });
     if (body.action === "mood") return Response.json({ mood: withWorkspace((ws) => setMood(ws, id, file, body.mood)) });
     // Make with references (24 Nov 2026): the shot with its people's and place's pictures, Seedance reference-to-video.
+    // With the acting direction (Persona + performance script, 26 Nov 2026) unless "acting": false (one take without, to compare).
     if (body.action === "references") {
-      const started = withWorkspace((ws) => startShotReferences(ws, id, { slot: body.slot, shape: body.shape, seconds: body.seconds, guide: (body as { guide?: unknown }).guide }));
+      const acting = (body as { acting?: unknown }).acting !== false;
+      const direction = acting ? (await withWorkspaceAsync((ws) => shotDirection(ws, id, String(body.slot ?? "")))).text : "";
+      const started = withWorkspace((ws) => startShotReferences(ws, id, { slot: body.slot, shape: body.shape, seconds: body.seconds, guide: (body as { guide?: unknown }).guide, direction }));
       void runTakes(open, id, started.file, started.takes.map((t) => t.n));
       return Response.json(started);
+    }
+    // What Make with references would send (nothing is sent): the shot card's "Show the prompt sent".
+    if (body.action === "references-preview") {
+      const b = body as { acting?: unknown; guide?: unknown };
+      const d = b.acting !== false ? await withWorkspaceAsync((ws) => shotDirection(ws, id, String(body.slot ?? ""))) : { text: "", source: "none" as const, stale: null };
+      const preview = withWorkspace((ws) => referencePreview(ws, id, String(body.slot ?? ""), { guide: !!b.guide, direction: d.text }));
+      return Response.json({ ...preview, source: d.source, stale: d.stale });
     }
     if (body.action === "animate") {
       const started = withWorkspace((ws) => startPictureAnimate(ws, id, file, { service: body.service as ServiceId, quality: body.quality as Quality, takes: Number(body.takes), capUsd: Number(body.cap) }));

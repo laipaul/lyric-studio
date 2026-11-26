@@ -14,6 +14,8 @@ import { ensureAlignment, findOrCreateSongProject, readClipEdits, readRecipe, so
 import { importShotList } from "@lyric/video/shotlist";
 import { addLook, createCard } from "@lyric/video/characters";
 import { setCast } from "@lyric/video/production";
+import { setPersona } from "@lyric/video/persona-node";
+import { emptyPersona } from "@lyric/video/persona";
 import { eq } from "drizzle-orm";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-creation-production-"));
@@ -54,6 +56,7 @@ async function main() {
   const face = path.join(root, "bride.png");
   ffmpeg("-f", "lavfi", "-i", "color=c=0xE8A3B5:s=300x400", "-frames:v", "1", face);
   const bride = createCard(ws, { kind: "character", name: "Bride", picture: readFileSync(face), fileName: "bride.png" });
+  setPersona(ws, bride.id, { ...emptyPersona(), traits: ["composed", "tender"], gestures: ["fingertips to her collarbone"], never: "no wide grin" });
   setCast(ws, id, [bride.id]);
   addLook(ws, bride.id, { name: "Autumn City", outfit: "A long camel wool coat over a cream turtleneck." });
   await importShotList(
@@ -212,9 +215,14 @@ async function main() {
 
     // Make with references (24 Nov 2026): shot 3 goes to reference-to-video with the Bride's picture; its takes come
     // back on the shot (the stand-in makes them locally), on the shot's reference item.
+    // The acting direction (26 Nov 2026): on by default; "Show the prompt sent" shows it before anything is sent.
+    check((await page.isChecked("[data-shot-acting=s03]")) === true, "the acting direction is on by default");
+    await page.click("[data-sent-prompt=s03] summary");
+    await page.waitForFunction(() => document.querySelector("[data-sent-prompt-text=s03]")?.textContent?.includes("Bride acts: composed, tender."), null, { timeout: 15_000 });
+    check(((await page.textContent("[data-sent-prompt-text=s03]")) ?? "").includes("Never: no wide grin."), "Show the prompt sent: the Bride's persona is in what Make with references sends");
     await page.click("[data-shot-references='s03-9:16']");
     await page.waitForFunction(() => document.querySelector("[data-pictures-notice]")?.textContent?.includes("sent with Bride"), null, { timeout: 15_000 });
-    check(true, "Make with references sends the shot with the Bride's picture");
+    check(((await page.textContent("[data-pictures-notice]")) ?? "").includes("with the acting direction"), "Make with references sends the shot with the Bride's picture and the acting direction");
     await page.waitForSelector("[data-shot=s03] [data-picture='s03 references 9x16.png']", { timeout: 20_000 });
     check(true, "the shot's reference item (the pictures sent) is on shot 3");
 

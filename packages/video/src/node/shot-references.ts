@@ -81,7 +81,7 @@ export function shotReferences(ws: Workspace, shot: ProductionShot): ReferencePi
 
 // The prompt: who each picture is, the rule to keep them, then what happens (the shot's own prompt without Midjourney's
 // --parameters, which a video model does not read). Pure.
-export function referencePrompt(shot: Pick<ProductionShot, "prompt" | "people" | "scene">, refs: readonly ReferencePicture[], guide = false): string {
+export function referencePrompt(shot: Pick<ProductionShot, "prompt" | "people" | "scene">, refs: readonly ReferencePicture[], guide = false, direction = ""): string {
   const lookOf = (who: string) => shot.people.find((w) => w.character === who)?.look ?? "";
   const list = (panels?: string[]) => (panels && panels.length > 1 ? ` (left to right: ${panels.join(", ")})` : "");
   const who = refs.map((r, i) => {
@@ -97,10 +97,11 @@ export function referencePrompt(shot: Pick<ProductionShot, "prompt" | "people" |
   const follow = guide
     ? "@Video 1 is a deliberately blurred guide for the camera only: follow its camera movement, framing, lighting, colours and atmosphere. It shows no one to copy: every person's face, body and clothes come only from their pictures."
     : "";
-  return [...who, keep, follow, action].filter(Boolean).join(" ");
+  // The acting direction (Persona + performance script, 26 Nov 2026): how the people act on this line.
+  return [...who, keep, follow, action, direction].filter(Boolean).join(" ");
 }
 
-export type ReferenceStart = { file: string; takes: Take[]; estimate: Estimate; references: string[]; guide?: string; note?: string };
+export type ReferenceStart = { file: string; takes: Take[]; estimate: Estimate; references: string[]; guide?: string; note?: string; acting?: boolean };
 export const GUIDE_MAX_S = 15; // Seedance: reference videos 15 s at most (together)
 export const GUIDE_BLUR = 24; // the camera guide's blur radius (px at 720p): no face survives it, the movement and light do
 const GUIDE_VERSION = 1; // a new blur: a new file
@@ -121,7 +122,7 @@ function probeSeconds(file: string): number | null {
 export function startShotReferences(
   ws: Workspace,
   projectId: string,
-  o: { slot: unknown; shape?: unknown; seconds?: unknown; takes?: unknown; capUsd?: unknown; guide?: unknown },
+  o: { slot: unknown; shape?: unknown; seconds?: unknown; takes?: unknown; capUsd?: unknown; guide?: unknown; direction?: string | null },
   env: NodeJS.ProcessEnv = process.env,
 ): ReferenceStart {
   const shot = productionView(ws, projectId).shots.find((s) => s.id === String(o.slot ?? ""));
@@ -172,7 +173,8 @@ export function startShotReferences(
     }
     guide = { file: sent, name: guide.name };
   }
-  const prompt = referencePrompt(shot, refs, !!guide);
+  const direction = typeof o.direction === "string" ? o.direction.trim() : "";
+  const prompt = referencePrompt(shot, refs, !!guide, direction);
   const now = new Date().toISOString();
   let made: Take[] = [];
   update(dir, file, (p) => {
@@ -182,11 +184,19 @@ export function startShotReferences(
     const first = nextTakeN(p);
     made = Array.from({ length: takes }, (_, i): Take => ({
       n: first + i, service: "wavespeed", quality: "best", model: REFERENCE_MODEL.label, status: "running", started_at: now, cost_usd: usdPerTake, seconds,
-      kind: "references", prompt, aspect: shape, refFiles: refs.map((r) => path.relative(ws.dir, r.file).split(path.sep).join("/")), refNames: refs.map((r) => r.name), pid: process.pid,
+      kind: "references", prompt, aspect: shape, acting: !!direction, refFiles: refs.map((r) => path.relative(ws.dir, r.file).split(path.sep).join("/")), refNames: refs.map((r) => r.name), pid: process.pid,
       ...(guide ? { guideFile: path.relative(ws.dir, guide.file).split(path.sep).join("/"), guideName: guide.name } : {}),
     }));
     p.takes.push(...made);
   });
   const crowd = new Set(refs.flatMap((r) => (r.who ? [r.who] : []))).size;
-  return { file, takes: made, estimate: e, references: refs.map((r) => r.name), ...(guide ? { guide: guide.name } : {}), ...(crowd >= 3 ? { note: `${crowd} people in one shot: the likeness of each may be weaker; a framing where one or two faces are clearly seen keeps them best.` } : {}) };
+  return { file, takes: made, estimate: e, references: refs.map((r) => r.name), acting: !!direction, ...(guide ? { guide: guide.name } : {}), ...(crowd >= 3 ? { note: `${crowd} people in one shot: the likeness of each may be weaker; a framing where one or two faces are clearly seen keeps them best.` } : {}) };
+}
+
+// What Make with references would send for a shot, without sending anything (the shot card's "Show the prompt sent").
+export function referencePreview(ws: Workspace, projectId: string, slot: string, o: { guide?: boolean; direction?: string | null } = {}): { prompt: string; references: string[] } {
+  const shot = productionView(ws, projectId).shots.find((s) => s.id === slot);
+  if (!shot) throw new Error("That shot is not in this song's shot list.");
+  const refs = shotReferences(ws, shot);
+  return { prompt: referencePrompt(shot, refs, !!o.guide, typeof o.direction === "string" ? o.direction.trim() : ""), references: refs.map((r) => r.name) };
 }

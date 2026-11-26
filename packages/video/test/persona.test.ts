@@ -78,6 +78,25 @@ describe("Paste persona (Claude's answer back into the fields)", () => {
   });
 });
 
+describe("the acting direction for Make with references", () => {
+  it("persona + the line's script direction (or the section map); no identity; empty without persona or script", async () => {
+    const { actingDirection } = await import("../src/persona");
+    const people = [{ name: "Aiko", persona: AIKO, songNote: "more playful in this song" }];
+    const section = { kind: "chorus", name: "Chorus", final: false };
+    const plain = actingDirection({ people, section, script: null, lyric: "Hold on to me" });
+    expect(plain).toContain("In this part of the song: finds the lens, hand drifts to her chest.");
+    expect(plain).toContain("In this song: more playful in this song.");
+    expect(plain).not.toMatch(/identity|late twenties/);
+    const entry = { key: "L2", kind: "line" as const, number: 2, basis: { text: "Hold on to me", startMs: 0, endMs: 1 }, singer: "Aiko", meaning: "She asks him to stay", emotion: "longing", intensity: 3, beatChange: "", action: "to plead", laban: "press", face: "inner brows raised", body: "hand to chest", camera: "push-in", pace: "hold", reaction: null, checked: true };
+    const scripted = actingDirection({ people, section, script: { entry, stale: null, singsTo: "Ken", objective: "to make him stay" }, lyric: "Hold on to me" });
+    expect(scripted).toContain("Action: to plead.");
+    expect(scripted).toContain("Face: inner brows raised.");
+    expect(scripted).not.toContain("In this part of the song");
+    expect(scripted).toContain("Camera: push-in. Pace: hold.");
+    expect(actingDirection({ people: [{ name: "Ken", persona: null, songNote: null }], section, script: null, lyric: null })).toBe("");
+  });
+});
+
 describe("the shot prompt's section line", () => {
   const person = { name: "Aiko", identity: "A woman in her late twenties.", look: "Wedding", outfit: "ivory satin gown", persona: AIKO, songNote: "more playful in this song" };
   it("chorus vs verse vs final chorus; intro and outro rest like a verse", () => {

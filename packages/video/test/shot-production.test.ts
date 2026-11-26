@@ -23,7 +23,9 @@ import { addLook, LOOKS_DIR } from "../src/node/characters/looks";
 import { cardRoot, listCards } from "../src/node/characters/cards";
 import { songStory } from "../src/node/story-line";
 import { shotListScript } from "../src/node/shot-script";
-import { referencePrompt, shotReferences, startShotReferences } from "../src/node/shot-references";
+import { referencePreview, referencePrompt, shotReferences, startShotReferences } from "../src/node/shot-references";
+import { setPersona, shotDirection } from "../src/node/persona";
+import { emptyPersona } from "../src/persona";
 import { runTakes } from "../src/node/animate";
 import { isWholeStory } from "../src/node/make";
 import { folderClips, songClipsCollection } from "../src/node/assets";
@@ -342,6 +344,28 @@ describe("Creation → Production", () => {
     expect(size(refs[0].file)).toBe(`${Math.round(1024 * 0.75) * 3},1024`); // three 3:4 panels, 1024 high
     expect(referencePrompt(shot, refs)).toMatch(/@Image 1 is Bride's face reference sheet \(left to right: close-up, 3\/4, smiling, teeth visible\)/);
     expect(referencePrompt(shot, refs)).toMatch(/@Image 2 is Bride's outfit reference sheet \("Autumn City"\) \(left to right: front, back\)/);
+  });
+
+  it("Make with references carries the acting direction (26 Nov 2026): the persona, the take records it; without it on request; the preview sends nothing", async () => {
+    const bride = listCards(ws).find((c) => c.name === "Bride")!;
+    // No persona yet: no acting direction.
+    expect((await shotDirection(ws, id, "s03")).source).toBe("none");
+    setPersona(ws, bride.id, { ...emptyPersona(), traits: ["composed", "tender"], gestures: ["fingertips to her collarbone"], movement: "glide", never: "no wide grin" });
+    const d = await shotDirection(ws, id, "s03");
+    expect(d.source).not.toBe("none");
+    expect(d.text).toMatch(/^Acting direction \(show it through the face and body/);
+    expect(d.text).toContain("Bride acts: composed, tender. Gestures: fingertips to her collarbone. Movement: glide.");
+    expect(d.text).toContain("Never: no wide grin.");
+    const preview = referencePreview(ws, id, "s03", { direction: d.text });
+    expect(preview.prompt.endsWith(d.text)).toBe(true);
+    expect(referencePreview(ws, id, "s03").prompt).not.toContain("Acting direction");
+    const withActing = startShotReferences(ws, id, { slot: "s03", seconds: 4, takes: 1, direction: d.text }, { LYRIC_GENERATE_STUB: "1" });
+    expect(withActing.acting).toBe(true);
+    expect(withActing.takes[0]).toMatchObject({ acting: true });
+    expect(withActing.takes[0].prompt).toContain("Bride acts:");
+    const without = startShotReferences(ws, id, { slot: "s03", seconds: 4, takes: 1, direction: "" }, { LYRIC_GENERATE_STUB: "1" });
+    expect(without.acting).toBe(false);
+    expect(without.takes[0].prompt).not.toContain("Acting direction");
   });
 });
 

@@ -327,3 +327,38 @@ export function personaShotPrompt(i: PersonaShotInput): string {
   out.push("Show the emotion through what the face and body physically do (brows, eyes, breath, mouth, hands).");
   return `${out.join("\n")}\n`;
 }
+
+// The acting direction for Make with references (26 Nov 2026): the video model gets the people from their reference
+// pictures, so no identity here; only how they act on this line. The persona (gestures, movement, gaze, never) for each
+// person in the shot, then the line's direction from the performance script (or the persona's section map), Sings to /
+// Objective, camera and pace. "" when there is nothing to say (no persona, no script).
+export type ActingInput = {
+  people: { name: string; persona: Persona | null; songNote: string | null }[];
+  section: { kind: string; name: string; final: boolean } | null;
+  script: { entry: ScriptEntry | null; stale: string | null; singsTo?: string; objective?: string } | null;
+  lyric: string | null;
+};
+export function actingDirection(i: ActingInput): string {
+  const out: string[] = [];
+  const key = i.section ? sectionKeyOf(i.section.kind, i.section.final) : null;
+  for (const p of i.people) {
+    const per = p.persona && !personaIsEmpty(p.persona) ? p.persona : null;
+    const scripted = i.script?.entry ? directionLines(i.script.entry, p.name) : [];
+    const lines: string[] = [];
+    if (per) {
+      if (per.traits.length) lines.push(`${per.traits.join(", ")}.`);
+      if (per.gestures.length) lines.push(`Gestures: ${per.gestures.join("; ")}.`);
+      if (per.movement) lines.push(`Movement: ${per.movement}.`);
+      if (per.gaze) lines.push(`Gaze: ${per.gaze}.`);
+    }
+    if (scripted.length) lines.push(...scripted.map((x) => `${x}.`.replace(/\.\.$/, ".")));
+    else if (key && per) lines.push(`In this part of the song: ${per.sections[key] || DEFAULT_SECTION_MAP[key]}.`);
+    if (p.songNote?.trim()) lines.push(`In this song: ${p.songNote.trim()}.`);
+    if (per?.never) lines.push(`Never: ${per.never}.`);
+    if (lines.length) out.push(`${p.name} acts: ${lines.join(" ")}`);
+  }
+  if (!out.length) return "";
+  if (i.script?.entry && (i.script.singsTo || i.script.objective)) out.push([i.script.singsTo && `Sings to: ${i.script.singsTo}.`, i.script.objective && `Objective: ${i.script.objective}.`].filter(Boolean).join(" "));
+  if (i.script?.entry?.camera || i.script?.entry?.pace) out.push([i.script.entry.camera && `Camera: ${i.script.entry.camera}.`, i.script.entry.pace && `Pace: ${i.script.entry.pace}.`].filter(Boolean).join(" "));
+  return `Acting direction (show it through the face and body: brows, eyes, breath, mouth, hands; no text on screen): ${out.join(" ")}`;
+}

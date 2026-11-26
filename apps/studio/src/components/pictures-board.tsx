@@ -48,6 +48,7 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
   const [comparing, setComparing] = useState<string | null>(null); // Compare: the shot whose candidates play together
   const [favOnly, setFavOnly] = useState(false); // ♥ only (25 Nov 2026): just Paul's favourites, pictures and takes
   const [guides, setGuides] = useState<Record<string, string>>({}); // Make with references: each shot's camera guide
+  const [acting, setActing] = useState<Record<string, boolean>>({}); // Make with references: the acting direction per shot (on by default)
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [over, setOver] = useState(false);
@@ -221,15 +222,19 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
         ...p.takes.filter((t) => t.status === "done" && t.file && t.kind !== "lipsync").map((t) => ({ value: t.file!, label: `${p.label ?? p.file} · ${t.label ?? `Take ${t.n}`}` })),
       ]);
   const guideOf = (shot: ProductionShot) => guides[shot.id] ?? guidesOf(shot)[0]?.value ?? "";
+  // The acting direction (Persona + performance script, 26 Nov 2026): on by default; untick on a shot to make one take
+  // without it and compare.
+  const actingOf = (shot: ProductionShot) => acting[shot.id] ?? true;
   async function makeWithReferences(shot: ProductionShot, shape: "9:16" | "16:9") {
     const guide = guideOf(shot);
+    const withActing = actingOf(shot);
     const seconds = shot.span ? Math.min(30, Math.max(4, Math.ceil((shot.span.endMs - shot.span.startMs) / 1000))) : 5;
     const usd = Math.round(0.324 * seconds * defaults.takes * 100) / 100;
     const who = shot.refs.map((r) => r.name).join(", ");
-    if (!window.confirm(`Make ${defaults.takes} take${defaults.takes === 1 ? "" : "s"} of shot ${shot.number} (${shape}, ${seconds} s) with references (${who})${guide ? `, following the camera of ${guide}` : ""} on WaveSpeed, Seedance 2.5? About $${usd.toFixed(2)} (estimate).`)) return;
+    if (!window.confirm(`Make ${defaults.takes} take${defaults.takes === 1 ? "" : "s"} of shot ${shot.number} (${shape}, ${seconds} s) with references (${who})${guide ? `, following the camera of ${guide}` : ""}, ${withActing ? "WITH the acting direction (persona + performance script)" : "WITHOUT the acting direction (to compare)"}, on WaveSpeed, Seedance 2.5? About $${usd.toFixed(2)} (estimate).`)) return;
     try {
-      const d = (await post({ action: "references", slot: shot.id, shape, seconds, ...(guide ? { guide } : {}) })) as { takes: { n: number }[]; references: string[]; estimate: { usd: number }; guide?: string; note?: string };
-      setNotice({ ok: true, text: `Shot ${shot.number}: ${d.takes.length} take${d.takes.length === 1 ? "" : "s"} sent with ${d.references.join(", ")}${d.guide ? `, following the camera of ${d.guide}` : ""} (about $${d.estimate.usd.toFixed(2)}). They appear on the shot when ready (Tasks menu).${d.note ? ` ${d.note}` : ""}` });
+      const d = (await post({ action: "references", slot: shot.id, shape, seconds, acting: withActing, ...(guide ? { guide } : {}) })) as { takes: { n: number }[]; references: string[]; estimate: { usd: number }; guide?: string; note?: string; acting?: boolean };
+      setNotice({ ok: true, text: `Shot ${shot.number}: ${d.takes.length} take${d.takes.length === 1 ? "" : "s"} sent with ${d.references.join(", ")}${d.guide ? `, following the camera of ${d.guide}` : ""}, ${d.acting ? "with the acting direction" : "without the acting direction"} (about $${d.estimate.usd.toFixed(2)}). They appear on the shot when ready (Tasks menu).${d.note ? ` ${d.note}` : ""}` });
       await load();
     } catch (e) {
       setNotice({ ok: false, text: (e as Error).message });
@@ -370,6 +375,8 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
           places={production?.places ?? []}
           onPlace={(s, scene, whole) => void setPlace(s, scene, whole)}
           guidesFor={(s) => ({ options: guidesOf(s), value: guideOf(s), set: (v: string) => setGuides((g) => ({ ...g, [s.id]: v })) })}
+          actingFor={(s) => ({ value: actingOf(s), set: (v: boolean) => setActing((a) => ({ ...a, [s.id]: v })) })}
+          projectId={projectId}
           compareCount={(s) => candidatesOf(s).length}
           tile={(p, s) => (favOnly && !hasFav(p) ? null : <PictureTile key={p.file} projectId={projectId} p={p} favOnly={favOnly} onFav={(n, on) => void favourite(p.file, n, on)} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title, take) => setPlaying({ url, title, take })} shot={s} useShot={(n) => void useShot(p.file, n, s)} openCompare={candidatesOf(s).length >= 2 ? () => setComparing(s.id) : undefined} />)}
         />
@@ -499,10 +506,14 @@ function ShotItems({
   onLook,
   onReferences,
   guidesFor,
+  actingFor,
+  projectId,
   places,
   onPlace,
   tile,
 }: {
+  actingFor: (s: ProductionShot) => { value: boolean; set: (v: boolean) => void };
+  projectId: string;
   places: string[];
   onPlace: (s: ProductionShot, scene: string, whole: boolean) => void;
   guidesFor: (s: ProductionShot) => Guides;
@@ -538,7 +549,7 @@ function ShotItems({
         <section key={`${g.name}-${gi}`} data-shot-section={g.name} className="flex flex-col gap-2">
           <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">{g.name}</h3>
           {g.shots.map((s) => (
-            <ShotRow key={s.id} s={s} pictures={pictures.filter((p) => p.slot === s.id)} loose={loose} adding={adding} onDrop={onDrop} onAttach={onAttach} tile={tile} onCompare={() => onCompare(s)} candidates={compareCount(s)} onLook={(character, look) => onLook(s, character, look)} onReferences={(shape) => onReferences(s, shape)} guides={guidesFor(s)} places={places} onPlace={(scene, whole) => onPlace(s, scene, whole)} />
+            <ShotRow key={s.id} s={s} pictures={pictures.filter((p) => p.slot === s.id)} loose={loose} adding={adding} onDrop={onDrop} onAttach={onAttach} tile={tile} onCompare={() => onCompare(s)} candidates={compareCount(s)} onLook={(character, look) => onLook(s, character, look)} onReferences={(shape) => onReferences(s, shape)} acting={actingFor(s)} projectId={projectId} guides={guidesFor(s)} places={places} onPlace={(scene, whole) => onPlace(s, scene, whole)} />
           ))}
         </section>
       ))}
@@ -563,7 +574,7 @@ function ShotLength({ span }: { span: { startMs: number; endMs: number } }) {
 }
 
 type Guides = { options: { value: string; label: string }[]; value: string; set: (v: string) => void };
-function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare, candidates, onLook, onReferences, guides, places, onPlace }: { s: ProductionShot; pictures: PictureView[]; loose: PictureView[]; adding: boolean; onDrop: (files: FileList, s: ProductionShot) => void; onAttach: (file: string, s: ProductionShot) => void; tile: (p: PictureView, s: ProductionShot) => ReactNode; onCompare: () => void; candidates: number; onLook: (character: string, look: string) => void; onReferences: (shape: "9:16" | "16:9") => void; guides: Guides; places: string[]; onPlace: (scene: string, whole: boolean) => void }) {
+function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare, candidates, onLook, onReferences, acting, projectId, guides, places, onPlace }: { s: ProductionShot; pictures: PictureView[]; loose: PictureView[]; adding: boolean; onDrop: (files: FileList, s: ProductionShot) => void; onAttach: (file: string, s: ProductionShot) => void; tile: (p: PictureView, s: ProductionShot) => ReactNode; onCompare: () => void; candidates: number; onLook: (character: string, look: string) => void; onReferences: (shape: "9:16" | "16:9") => void; acting: { value: boolean; set: (v: boolean) => void }; projectId: string; guides: Guides; places: string[]; onPlace: (scene: string, whole: boolean) => void }) {
   const [over, setOver] = useState(false);
   const [copied, setCopied] = useState<"tall" | "wide" | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -693,6 +704,11 @@ function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare
             </button>
           ))
         ) : null}
+        {s.refs.length ? (
+          <label className="flex shrink-0 items-center gap-1" title="The persona of each person in the shot and this line's direction from the performance script (or the persona's section map) go with Make with references. Untick to make a take without it and compare.">
+            <input type="checkbox" checked={acting.value} onChange={(e) => acting.set(e.target.checked)} data-shot-acting={s.id} /> acting direction
+          </label>
+        ) : null}
         {candidates >= 2 ? (
           <button type="button" data-shot-compare-open={s.id} onClick={onCompare} className="hover:bg-accent border-brand/50 text-brand flex shrink-0 items-center gap-1 rounded border px-2 py-1" title="Play every candidate of this shot side by side, together, with the song from its line">
             <Play className="size-3" /> Compare {candidates}
@@ -706,6 +722,7 @@ function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare
             ))}
           </span>
         ) : null}
+        {s.refs.length ? <SentPrompt projectId={projectId} slot={s.id} acting={acting.value} guide={!!guides.value} /> : null}
         <details className="text-muted-foreground min-w-0 flex-1">
           <summary className="cursor-pointer py-1">Show prompt</summary>
           <p data-shot-prompt={s.id} className="bg-background/60 mt-1 rounded border p-2 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap select-all">
@@ -1373,5 +1390,57 @@ function FavButton({ id, on, onToggle, className }: { id: string; on: boolean; o
     >
       <Heart className={cn("size-3.5", on ? "fill-brand text-brand" : "text-white")} />
     </button>
+  );
+}
+
+// "Show the prompt sent" (26 Nov 2026): exactly what Make with references would send for this shot, with or without
+// the acting direction (Persona + performance script), and Copy. Nothing is sent.
+function SentPrompt({ projectId, slot, acting, guide }: { projectId: string; slot: string; acting: boolean; guide: boolean }) {
+  const [text, setText] = useState<{ prompt: string; source: string; stale: string | null } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const load = async () => {
+    setErr(null);
+    try {
+      const r = await fetch(`/api/songs/${projectId}/pictures`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "references-preview", slot, acting, guide }) });
+      const d = (await r.json()) as { prompt?: string; source?: string; stale?: string | null; error?: string };
+      if (!r.ok || !d.prompt) throw new Error(d.error ?? "Could not show the prompt.");
+      setText({ prompt: d.prompt, source: d.source ?? "none", stale: d.stale ?? null });
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  };
+  const copy = async () => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text.prompt);
+    } catch {
+      const t = document.createElement("textarea");
+      t.value = text.prompt;
+      document.body.appendChild(t);
+      t.select();
+      document.execCommand("copy");
+      t.remove();
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <details className="text-muted-foreground min-w-0" data-sent-prompt={slot} onToggle={(e) => (e.currentTarget as HTMLDetailsElement).open && void load()}>
+      <summary className="cursor-pointer py-1">Show the prompt sent{acting ? " (with acting)" : ""}</summary>
+      {err ? <p className="text-amber-300">{err}</p> : null}
+      {text ? (
+        <div className="mt-1 flex flex-col gap-1">
+          <p data-sent-prompt-source={text.source} className="text-[11px]">
+            {text.source === "script" ? "The acting comes from this line's performance script." : text.source === "section" ? "The acting comes from the persona's section map (no script line for this shot)." : acting ? "No persona or script for the people in this shot: no acting direction." : "Without the acting direction."}
+            {text.stale ? ` The script's line is stale (${text.stale}): its direction is not used.` : ""}
+          </p>
+          <p data-sent-prompt-text={slot} className="bg-background/60 rounded border p-2 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap select-all">{text.prompt}</p>
+          <button type="button" onClick={() => void copy()} className="hover:bg-accent w-fit rounded border px-2 py-0.5 text-[11px]" data-sent-prompt-copy={slot}>
+            {copied ? "Copied" : "Copy performance prompt"}
+          </button>
+        </div>
+      ) : null}
+    </details>
   );
 }

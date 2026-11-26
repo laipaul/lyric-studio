@@ -4036,3 +4036,17 @@ D. ✅ (built 29 Oct, to verify) **Title opening** (items 1-8 below).
 - Tests: vitest song-style (2); browser song-style (7 checks); singer.e2e now sets Add singing; lyrics-tab, singer,
   production, library, song-links pass. Unchanged on main and still failing in the cloud: make, make-reference,
   render, migrate, song-stages, textboard-make (audio / render setup).
+
+### Sections in Lyrics Sync (Mini film) ✅ (to verify on the PC)
+- Step 2 of the Scenes plan (Paul, 22 Nov 2026). On a **Mini film** song, Lyrics Sync shows the song's sections:
+  a **Sections** bar above the lines (Verse 1 · Chorus · Verse 2 · ... with start time and lines) and a row above
+  each section's first line with its kind (dropdown: Intro, Verse, Pre-chorus, Chorus, Bridge, Outro) and ✕ (join it
+  to the section before). **+** next to a line number starts a section there. Other song styles: nothing changes.
+- Suggested by the app until changed: stanzas = blocks of lyrics.txt between blank lines; a stanza with a hook line
+  ("* ") is a chorus (no hooks marked: a stanza whose words come back); a returning stanza that leads into a chorus is
+  a pre-chorus; the first other stanza after the 2nd chorus with a chorus still to come is the bridge; after the last
+  chorus, the outro; the rest verses. **Keep these** saves the suggestion; any change saves the whole list in
+  song.json "sections" [{ line, kind }]; **Back to the suggestion** forgets it. lyrics.txt is never changed.
+- Code: sections.ts (pure: suggestSections, cleanSections, nameSections, sectionOfLine), node/song-sections.ts,
+  GET/PUT /api/songs/[id]/sections, components/sections-ui.tsx; recipe.ts "sections".
+- Tests: vitest sections (3); browser sections (8 checks); lyrics-tab, singer, song-style pass.
