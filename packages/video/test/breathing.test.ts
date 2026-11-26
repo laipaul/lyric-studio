@@ -8,7 +8,7 @@ import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { geminiPackPrompt, VIEWS } from "../src/node/characters/plan";
-import { BREATHING, cutVoice, REST_PAD_MS, restGain, singingPrompt, singingRests } from "../src/node/singer";
+import { BREATHING, cutVoice, REST_PAD_MS, REST_SAFE_MS, restGain, singingPrompt, voiceRests } from "../src/node/singer";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-breath-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -29,18 +29,44 @@ function level(file: string, fromS: number, toS: number): number {
 }
 
 describe("breathing room", () => {
-  it("rests: the lead-in, the gaps between the take's lines and the tail; short gaps stay", () => {
-    const lines = [
-      { shownMs: 11_000, sungEndMs: 13_000 },
-      { shownMs: 15_000, sungEndMs: 17_000 },
-      { shownMs: 17_400, sungEndMs: 19_000 }, // 400 ms after the line before: too short to rest
-    ];
-    expect(singingRests(lines, { fromMs: 10_000, toMs: 22_000 })).toEqual([
-      { fromMs: 10_000, toMs: 11_000 - REST_PAD_MS },
-      { fromMs: 13_000 + REST_PAD_MS, toMs: 15_000 - REST_PAD_MS },
-      { fromMs: 19_000 + REST_PAD_MS, toMs: 22_000 },
-    ]);
-    expect(singingRests([], { fromMs: 0, toMs: 5000 })).toEqual([]);
+  // Measured on the audio (26 Nov 2026, Paul's take of line 21): the previous line's tail in the lead-in and the pickup
+  // "Oh" sung before the line's timed start are sent; only the real silences are quieted (timing-based rests are gone).
+  it("rests are measured on the voice: the previous tail and the pickup stay, only real silence rests", () => {
+    const voice = path.join(root, "vocal.wav");
+    // tone 0-1.0 s (previous line's tail), silence 1.0-1.8 s, tone 1.8-4.0 s (pickup from 1.8 s, line timed at 2.1 s), silence to 6 s
+    ffmpeg("-f", "lavfi", "-i", "sine=frequency=300:duration=6", "-af", "volume='if(between(t,0,1)+between(t,1.8,4),0.5,0)':eval=frame", "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", voice);
+    const piece = { fromMs: 0, toMs: 6000 };
+    const rests = voiceRests({ kind: "song" }, voice, piece, 2100);
+    expect(rests).toHaveLength(2);
+    const near = (x: number, y: number) => expect(Math.abs(x - y)).toBeLessThanOrEqual(80);
+    near(rests[0].fromMs, 1000 + REST_PAD_MS);
+    near(rests[0].toMs, 1800 - REST_PAD_MS);
+    near(rests[1].fromMs, 4000 + REST_PAD_MS);
+    expect(rests[1].toMs).toBe(6000);
+    for (const r of rests) {
+      expect(r.toMs <= 1000 || r.fromMs >= 1000).toBe(true); // the previous tail is in no rest
+      expect(r.toMs <= 1800 - REST_PAD_MS + 80 || r.fromMs >= 4000).toBe(true); // nor the pickup (from 1.8 s)
+    }
+    const sent = path.join(root, "sent.wav");
+    cutVoice({ kind: "song" }, voice, piece, sent, rests);
+    const loud = level(sent, 0.2, 0.8);
+    expect(loud).toBeGreaterThan(1000);
+    expect(level(sent, 1.9, 2.0)).toBeGreaterThan(loud * 0.8); // the pickup is heard
+    expect(level(sent, 0.2, 0.9)).toBeGreaterThan(loud * 0.8); // the previous tail is heard
+    expect(level(sent, 1.4, 1.5)).toBeLessThan(loud * 0.02); // the real pause is quiet
+    expect(level(sent, 5, 5.9)).toBeLessThan(loud * 0.02);
+  });
+
+  it("never within 600 ms before the first line's timed start; no voice or a failure: no rests", () => {
+    const voice = path.join(root, "gap.wav");
+    ffmpeg("-f", "lavfi", "-i", "sine=frequency=300:duration=5", "-af", "volume='if(between(t,0,0.5)+between(t,3.5,5),0.5,0)':eval=frame", "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", voice);
+    const r = voiceRests({ kind: "song" }, voice, { fromMs: 0, toMs: 5000 }, 3000);
+    expect(r.every((x) => x.toMs <= 3000 - REST_SAFE_MS || x.fromMs >= 3000)).toBe(true);
+    expect(r.length).toBeGreaterThan(0);
+    const quiet = path.join(root, "quiet.wav");
+    ffmpeg("-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", "3", "-c:a", "pcm_s16le", quiet);
+    expect(voiceRests({ kind: "song" }, quiet, { fromMs: 0, toMs: 3000 })).toEqual([]);
+    expect(voiceRests({ kind: "song" }, path.join(root, "missing.wav"), { fromMs: 0, toMs: 3000 })).toEqual([]);
   });
 
   it("the voice sent is quiet in a rest and unchanged elsewhere; no rests: as before", () => {

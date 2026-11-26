@@ -21,7 +21,10 @@ const money = (usd: number) => `$${usd.toFixed(2)}`;
 const fileUrl = (rel: string) => `/api/files/${rel.split("/").map(encodeURIComponent).join("/")}`;
 
 // The take being watched: its video (no sound) with the song from the take's first frame.
-export type Playing = { source: string; n: number; video: string; fromS: number; title: string };
+// heard (26 Nov 2026, Paul: "display the actual lyrics she's singing, to check what the model thinks she should be
+// singing"): the take's vocal piece (song ms) and where the voice sent to the model was silenced.
+export type Playing = { source: string; n: number; video: string; fromS: number; title: string; heard?: { fromMs: number; toMs: number; rests: { fromMs: number; toMs: number }[] } };
+export type LyricLine = { number: number; text: string; startMs: number; endMs: number };
 
 export type Singer = {
   view: SingerView | null;
@@ -186,13 +189,13 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
     }),
     play: (source, t) => {
       if (!t?.file || !view) return setPlaying(null);
-      setPlaying({ source, n: t.n, video: fileUrl(`${view.folder}/${t.file}`), fromS: ((t.sync_ms ?? 0) + (t.nudge_ms ?? 0)) / 1000, title: `${t.label ?? `Take ${t.n}`} · ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` });
+      setPlaying({ source, n: t.n, video: fileUrl(`${view.folder}/${t.file}`), fromS: ((t.sync_ms ?? 0) + (t.nudge_ms ?? 0)) / 1000, ...(t.sync_ms !== undefined && t.to_ms !== undefined ? { heard: { fromMs: t.sync_ms, toMs: t.to_ms, rests: t.rests ?? [] } } : {}), title: `${t.label ?? `Take ${t.n}`} · ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` });
       if (t.fresh) void post({ action: "seen", source, n: t.n }).then(load).catch(() => undefined);
     },
   };
 }
 
-export function SingerBar({ singer }: { singer: Singer }) {
+export function SingerBar({ singer, lyrics = [] }: { singer: Singer; lyrics?: LyricLine[] }) {
   const v = singer.view;
   if (singer.error) return <p className="text-destructive text-xs">{singer.error}</p>;
   if (!v?.lines) return null;
@@ -250,7 +253,7 @@ export function SingerBar({ singer }: { singer: Singer }) {
         </p>
       ) : null}
       {singer.panel !== null ? <TakesPanel singer={singer} line={singer.panel} /> : null}
-      {singer.playing && v.song ? <TakePlayer key={`${singer.playing.source}:${singer.playing.n}`} playing={singer.playing} song={fileUrl(v.song)} onClose={() => singer.play("", null)} /> : null}
+      {singer.playing && v.song ? <TakePlayer key={`${singer.playing.source}:${singer.playing.n}`} playing={singer.playing} song={fileUrl(v.song)} lyrics={lyrics} onClose={() => singer.play("", null)} /> : null}
     </div>
   );
 }
@@ -298,10 +301,11 @@ function TakesPanel({ singer, line }: { singer: Singer; line: number }) {
 
 // A take with the song: the take's video (no sound) and the song from the song second of the take's first frame, kept
 // together, so the lips can be judged against the real song. The song file is only read (played).
-function TakePlayer({ playing, song, onClose }: { playing: Playing; song: string; onClose: () => void }) {
+function TakePlayer({ playing, song, lyrics, onClose }: { playing: Playing; song: string; lyrics: LyricLine[]; onClose: () => void }) {
   const video = useRef<HTMLVideoElement>(null);
   const audio = useRef<HTMLAudioElement>(null);
   const [on, setOn] = useState(false);
+  const [videoS, setVideoS] = useState(0); // where the take is (seconds into the video)
   const start = useCallback(() => {
     const v = video.current;
     const a = audio.current;
@@ -354,10 +358,12 @@ function TakePlayer({ playing, song, onClose }: { playing: Playing; song: string
           const a = audio.current;
           const want = playing.fromS + e.currentTarget.currentTime;
           if (a && !a.paused && Math.abs(a.currentTime - want) > 0.08) a.currentTime = want;
+          setVideoS(e.currentTarget.currentTime);
         }}
         onEnded={stop}
       />
       <audio ref={audio} src={song} preload="auto" />
+      <HeardStrip playing={playing} lyrics={lyrics} videoS={videoS} />
       <span className="text-muted-foreground text-[11px]">With the song from {Math.floor(playing.fromS / 60)}:{(playing.fromS % 60).toFixed(1).padStart(4, "0")}: the lips should sing what the song sings.</span>
     </div>
   );
@@ -669,6 +675,45 @@ function TakeReview({ singer, source, t, final }: { singer: Singer; source: stri
             </button>
             <span className="text-muted-foreground">then fix it: nudge, the mood or the line&apos;s direction, Lips follow; and Retake draft</span>
           </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// Under the take (26 Nov 2026): the words being sung now (the song's lyric line at this moment, the next one dimmed),
+// and a strip of the take: coloured where the voice was sent to the model, grey where it was silenced, with each line's
+// words at their time and the playhead. So a word the model never heard shows at once.
+function HeardStrip({ playing, lyrics, videoS }: { playing: Playing; lyrics: LyricLine[]; videoS: number }) {
+  const songMs = playing.fromS * 1000 + videoS * 1000; // what is heard now
+  const current = lyrics.find((l) => songMs >= l.startMs - 150 && songMs < l.endMs) ?? null;
+  const next = lyrics.find((l) => l.startMs > songMs) ?? null;
+  const h = playing.heard;
+  const span = h ? Math.max(1, h.toMs - h.fromMs) : 1;
+  const pct = (ms: number) => `${Math.max(0, Math.min(100, ((ms - (h?.fromMs ?? 0)) / span) * 100))}%`;
+  const inTake = h ? lyrics.filter((l) => l.endMs > h.fromMs && l.startMs < h.toMs) : [];
+  return (
+    <div className="flex flex-col gap-1" data-heard>
+      <p className="min-h-8 text-center text-sm leading-snug" data-heard-line={current?.number ?? ""}>
+        {current ? <span className="font-medium">{current.text}</span> : <span className="text-muted-foreground">(no line sung now)</span>}
+        {next && (!current || next.number !== current.number) ? <span className="text-muted-foreground block text-[11px]">next: {next.text}</span> : null}
+      </p>
+      {h ? (
+        <div className="flex flex-col gap-0.5">
+          <div className="relative h-3 overflow-hidden rounded bg-sky-400/50" data-heard-strip title="What the model heard: blue = the voice sent, grey = silenced (it breathes there)">
+            {h.rests.map((r) => (
+              <div key={`${r.fromMs}`} className="absolute top-0 h-3 bg-zinc-600" style={{ left: pct(r.fromMs), width: `calc(${pct(r.toMs)} - ${pct(r.fromMs)})` }} data-heard-rest />
+            ))}
+            <div className="absolute top-0 h-3 w-0.5 bg-white" style={{ left: pct(h.fromMs + videoS * 1000) }} />
+          </div>
+          <div className="text-muted-foreground relative h-4 text-[9px]">
+            {inTake.map((l) => (
+              <span key={l.number} className="absolute truncate" style={{ left: pct(Math.max(l.startMs, h.fromMs)), maxWidth: "45%" }} title={l.text} data-heard-word={l.number}>
+                {l.number}. {l.text}
+              </span>
+            ))}
+          </div>
+          <span className="text-muted-foreground text-[10px]">Blue: the voice the model heard. Grey: silenced (it breathes). A word on grey was never heard.</span>
         </div>
       ) : null}
     </div>

@@ -373,7 +373,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
               {!data.anchors.clips.length ? <span className="text-amber-200">No clips to choose from: add clips and photos or a collection in Prepare → Storyboard.</span> : null}
             </div>
             {withSections ? <SectionsBar sections={sections} startMs={(n) => data.lines?.find((x) => x.number === n)?.startMs ?? null} /> : null}
-            {withSinging ? <SingerBar singer={singer} /> : (
+            {withSinging ? <SingerBar singer={singer} lyrics={(data.lines ?? []).flatMap((l) => (l.startMs === null || l.startMs === undefined ? [] : [{ number: l.number, text: l.text, startMs: l.startMs, endMs: l.sungEndMs ?? l.startMs + 3000 }]))} /> : (
               <p className="text-muted-foreground text-xs" data-singing-off>The Lip sync column is hidden: this song&apos;s style is Cut to the song. Choose Add lip sync in Song Details to put the singer on lines.</p>
             )}
             {partPlatforms?.length ? (

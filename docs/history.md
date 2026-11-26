@@ -4091,3 +4091,22 @@ D. ✅ (built 29 Oct, to verify) **Title opening** (items 1-8 below).
 - Tests: vitest handles (8: Wedding Day 1-2-3, trims, singing, photos, 116 BPM and 80 BPM songs end to end) and
   transition-notes (1), blend (2: composed 5.04 s clips used to the end; an out point past the file); anchors, compose, pace-transitions, storyboard, storyboard-file, timeline-edits pass. Checked
   against Paul's saved Reel plans: Wedding Day and Familiar Strangers go from 13 and 19 frozen ends to none.
+
+### Fix: Studio build failed ("Failed to collect page data for /api/songs/[id]/assets") ✅ (to verify on the PC)
+- Paul (22 Nov 2026): `pnpm --filter @lyric/studio build` failed after d81d436 (on Linux too, not only Windows).
+- Cause: d81d436 made story-line.ts (used by the Assets tab's API route) import node/transition-notes.ts, which imported
+  readStoryboard from node/storyboard-file.ts. That file imports manifest.ts, which loads Remotion. In a Next.js API
+  route React has no createContext, so loading Remotion there makes the build stop ("Remotion requires
+  React.createContext"). The route itself did nothing at import time.
+- Fix: readStoryboard moved to node/storyboard-read.ts (only reads the JSON; storyboard-file.ts re-exports it, so other
+  code is unchanged); transition-notes.ts imports it from there. No other API route reaches Remotion (all 55 traced;
+  the pages that do only through their "use client" player components, as intended).
+- `export const dynamic` / `runtime` were tried on the route and NOT added: with `cacheComponents: true` (next.config)
+  Next 16 refuses both ("Route segment config ... is not compatible with nextConfig.cacheComponents"). The route is
+  already dynamic (GET awaits connection(); POST/PUT/DELETE are never cached) and Node is the default runtime.
+- song-folder.ts: the "whole project traced" warning is silenced (/*turbopackIgnore: true*/). 16 similar warnings
+  remain in 9 other files (open-folder route, db workspace.ts, animate, captions, file-links, library, migrate,
+  pairings): only warnings; the paths come from the workspace folder at run time, so they cannot be scoped.
+- Next.js 16.4.3 -> 16.4.6 (security patch; next and eslint-config-next in apps/studio/package.json). Build passes.
+- Tests: vitest no-remotion-in-routes (5: follows the runtime imports of story-line, transition-notes, assets and
+  fails on any path to Remotion); transition-notes, story-line, storyboard-file pass. `pnpm --filter @lyric/studio build` passes.

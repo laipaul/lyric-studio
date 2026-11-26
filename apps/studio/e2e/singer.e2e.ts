@@ -172,6 +172,10 @@ async function main() {
     await page.waitForSelector("[data-singer-player] video");
     const player = await page.$eval("[data-singer-player]", (e: Element) => ({ video: (e.querySelector("video") as HTMLVideoElement).src, song: (e.querySelector("audio") as HTMLAudioElement).src, text: e.textContent ?? "" }));
     check(player.video.includes("sings%20line%202") && player.song.includes("A%20Heart%20For%20Two") && /With the song from 1:0\d\.\d/.test(player.text), `the take plays with the song from the group's start (${JSON.stringify(player)})`);
+    // What the model heard (26 Nov 2026): the words under the take and the strip (voice sent / silenced) with the lines.
+    await page.waitForSelector("[data-singer-player] [data-heard-strip]");
+    const words = await page.$$eval("[data-singer-player] [data-heard-word]", (es: Element[]) => es.map((e) => e.textContent ?? ""));
+    check(words.some((w) => w.startsWith("2. ")) && !!(await page.$("[data-singer-player] [data-heard-line]")), `the player shows the sung words and what the model heard (${words.join(" | ")})`);
     await page.click("[data-singer-player-close]");
     // Use this take: the line switches at once (nothing is made again); the first take goes to Omit.
     await page.click(`[data-singer-line='2'] [data-singer-take='${retake.n}'] [data-singer-take-use]`);

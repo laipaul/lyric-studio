@@ -95,7 +95,7 @@ export type SingerLine = {
   piece: Piece; // what would be sent for this line's run (the same on every line of a run)
   script: string; // the block's little script (what the singer does; on every line of the block)
   run: { first: number; last: number } | null; // the run of lines in a row sung from the same source, in one take
-  rests?: { fromMs: number; toMs: number }[]; // breathing room: where the voice sent is quieted (singingRests)
+  rests?: { fromMs: number; toMs: number }[]; // breathing room: where the voice sent is quieted (voiceRests)
   take: (Take & { file?: string }) | null; // the newest singing take of this line's run from its source
   takes: GroupTake[]; // every singing take of this group (its source, its lines), oldest first (only on a run's first line)
   needed: boolean; // ticked and without a finished or running take of this source and piece (only on a run's first line)
@@ -148,25 +148,93 @@ export function singingPiece(line: { shownMs: number; sungEndMs: number }, downb
   return { fromMs, toMs, seconds, usd: Math.round(seconds * usdPerSecond * 100) / 100 };
 }
 
-// Breathing room (25 Nov 2026, realism plan): in the voice SENT to the lip-sync model (never the song or the video's
-// sound), everything outside the take's own sung lines is quieted, with soft fades: the lead-in, the gaps between its
-// lines, the tail (and any line someone else sings in it). Breaths, reverb tails and backing vocals there made the lips
-// keep mumbling; now the mouth closes and the singer breathes. A line's words: from REST_PAD_MS before it is shown to
-// REST_PAD_MS after its sung end; a rest shorter than REST_MIN_MS is left as it is. Song time, ms.
-export const REST_PAD_MS = 200;
+// Breathing room (25 Nov 2026, realism plan; measured 26 Nov 2026): in the voice SENT to the lip-sync model (never the
+// song or the video's sound), the real pauses are quieted with soft fades, so the mouth closes and the singer breathes
+// where nobody sings. Where a pause is is MEASURED on the audio that is sent (the stem or the song, as cutVoice cuts it),
+// never taken from the lyric timing: the lead-in may hold the end of the line before, and a pickup ("Oh") is often sung
+// before the line's timed start. Everything sung in the piece is sent. A pause: at least REST_MIN_MS under a level
+// relative to the piece's own vocal (REST_BELOW_DB under its 95th percentile, and above REST_FLOOR_DB); the rest keeps
+// REST_PAD_MS of the voice around every sung sound. Never within REST_SAFE_MS before the first line's timed start.
+// Song time, ms.
+export const REST_PAD_MS = 250;
 export const REST_MIN_MS = 500;
 export const REST_FADE_MS = 120;
-export function singingRests(sung: readonly { shownMs: number; sungEndMs: number }[], piece: { fromMs: number; toMs: number }): { fromMs: number; toMs: number }[] {
-  const keep = [...sung].sort((a, b) => a.shownMs - b.shownMs).map((l) => ({ from: l.shownMs - REST_PAD_MS, to: l.sungEndMs + REST_PAD_MS }));
-  if (!keep.length) return [];
-  const out: { fromMs: number; toMs: number }[] = [];
-  let at = piece.fromMs;
-  for (const k of keep) {
-    if (k.from - at >= REST_MIN_MS) out.push({ fromMs: Math.round(at), toMs: Math.round(Math.min(k.from, piece.toMs)) });
-    at = Math.max(at, k.to);
+export const REST_WINDOW_MS = 50;
+export const REST_BELOW_DB = 35;
+export const REST_FLOOR_DB = -60;
+export const REST_SAFE_MS = 600;
+export type Rest = { fromMs: number; toMs: number };
+// The rests of a mono 16-bit piece (samples from piece.fromMs at `rate`). protectFromMs: the first line's timed start.
+export function measureRests(samples: Int16Array, rate: number, piece: { fromMs: number; toMs: number }, protectFromMs?: number): Rest[] {
+  const win = Math.max(1, Math.round((rate * REST_WINDOW_MS) / 1000));
+  const n = Math.floor(samples.length / win);
+  if (n < 1) return [];
+  const db: number[] = [];
+  for (let w = 0; w < n; w++) {
+    let sum = 0;
+    for (let i = w * win; i < (w + 1) * win; i++) sum += (samples[i] / 32768) ** 2;
+    db.push(10 * Math.log10(sum / win + 1e-12));
   }
-  if (piece.toMs - at >= REST_MIN_MS) out.push({ fromMs: Math.round(at), toMs: piece.toMs });
-  return out.filter((r) => r.toMs > r.fromMs);
+  const p95 = [...db].sort((x, y) => x - y)[Math.min(n - 1, Math.floor(n * 0.95))];
+  if (p95 < REST_FLOOR_DB) return []; // no voice to measure against
+  const threshold = Math.max(p95 - REST_BELOW_DB, REST_FLOOR_DB);
+  const minWindows = Math.ceil(REST_MIN_MS / REST_WINDOW_MS);
+  const out: Rest[] = [];
+  for (let w = 0; w < n; ) {
+    if (db[w] >= threshold) { w++; continue; }
+    let e = w;
+    while (e < n && db[e] < threshold) e++;
+    if (e - w >= minWindows) {
+      const from = w === 0 ? 0 : w * REST_WINDOW_MS + REST_PAD_MS;
+      const to = e === n ? piece.toMs - piece.fromMs : e * REST_WINDOW_MS - REST_PAD_MS;
+      if (to > from) out.push({ fromMs: piece.fromMs + from, toMs: piece.fromMs + to });
+    }
+    w = e;
+  }
+  if (protectFromMs === undefined) return out;
+  const lo = protectFromMs - REST_SAFE_MS;
+  const safe: Rest[] = [];
+  for (const r of out) {
+    if (r.toMs <= lo || r.fromMs >= protectFromMs) safe.push(r);
+    else {
+      if (r.fromMs < lo) safe.push({ fromMs: r.fromMs, toMs: lo });
+      if (r.toMs > protectFromMs) safe.push({ fromMs: protectFromMs, toMs: r.toMs });
+    }
+  }
+  return safe.filter((r) => r.toMs > r.fromMs).map((r) => ({ fromMs: Math.round(r.fromMs), toMs: Math.round(r.toMs) }));
+}
+// The rests of a piece of the voice sent: the piece is cut exactly as cutVoice cuts it (no rests), decoded and measured.
+// Any failure (no audio, no ffmpeg): no rests, the voice is sent whole.
+export function voiceRests(voice: Voice, songFile: string, piece: { fromMs: number; toMs: number }, protectFromMs?: number): Rest[] {
+  const tmp = mkdtempSync(path.join(os.tmpdir(), "lyric-rests-"));
+  try {
+    const wav = path.join(tmp, "piece.wav");
+    cutVoice(voice, songFile, piece, wav);
+    const b = readFileSync(wav);
+    const at = b.indexOf("data");
+    if (at < 0) return [];
+    const start = at + 8;
+    const samples = new Int16Array(Math.floor((b.length - start) / 2));
+    for (let i = 0; i < samples.length; i++) samples[i] = b.readInt16LE(start + i * 2);
+    return measureRests(samples, 44100, piece, protectFromMs);
+  } catch {
+    return [];
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+// The rests of a group, for the take recorded now (undefined: none, the voice is sent whole and the prompt says nothing).
+async function restsFor(ws: Workspace, projectId: string, l: SingerLine): Promise<Rest[] | undefined> {
+  try {
+    const c = await context(ws, projectId);
+    const first = c.lines?.find((x) => x.number === l.number);
+    const sv = await voiceFor(ws, projectId);
+    const voice: Voice = l.voice === "song" ? { kind: "song" } : sv; // (the de-reverbed copy is made later: the stem measures the same pauses)
+    const r = voiceRests(voice, c.songFile, { fromMs: l.piece.fromMs, toMs: l.piece.toMs }, first?.shownMs);
+    return r.length ? r : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // The ffmpeg gain for a voice piece starting at song time fromMs: 0 inside each rest, soft fades at its edges.
@@ -280,10 +348,8 @@ export async function singerView(ws: Workspace, projectId: string, env: NodeJS.P
     const take = all.at(-1) ?? null;
     const script = run ? (settings.scripts?.[String(run.first)] ?? "") : "";
     const takes: GroupTake[] = run?.first === l.number ? all.map((t) => ({ ...t, inUse: t.status === "done" && anchors.has(inUseKey(t)), fresh: !!t.fresh && t.status === "done" })) : [];
-    const own = (c.lines ?? []).filter((x) => x.number >= first.number && x.number <= last.number);
-    const rests = singingRests(own, whole);
-    const firstLine = run?.first === l.number;
-    return { number: l.number, text: l.text, source, piece, script, run: run ? { first: run.first, last: run.last } : null, rests, take, takes, needed: !!source && firstLine && !all.some((t) => covers(t, piece)), ...(firstLine ? { voice: settings.voices?.[String(l.number)] ?? "stem", draftUsd: draftUsd(piece.seconds) } : {}) };
+        const firstLine = run?.first === l.number;
+    return { number: l.number, text: l.text, source, piece, script, run: run ? { first: run.first, last: run.last } : null, take, takes, needed: !!source && firstLine && !all.some((t) => covers(t, piece)), ...(firstLine ? { voice: settings.voices?.[String(l.number)] ?? "stem", draftUsd: draftUsd(piece.seconds) } : {}) };
   }) ?? null;
   const toMake = (lines ?? []).filter((l) => l.needed);
   return {
@@ -381,7 +447,7 @@ export async function voiceFor(ws: Workspace, projectId: string, project?: typeo
 }
 
 // A piece of the voice as a WAV (song time fromMs → toMs; the stem's offset and speed applied).
-// rests (breathing room, singingRests): quieted in this copy only.
+// rests (breathing room, measured by voiceRests): quieted in this copy only.
 export function cutVoice(voice: Voice, songFile: string, piece: { fromMs: number; toMs: number }, out: string, rests: readonly { fromMs: number; toMs: number }[] = []): void {
   const durS = (piece.toMs - piece.fromMs) / 1000;
   const gain = restGain(rests, piece.fromMs, piece.toMs);
@@ -519,7 +585,10 @@ export async function startSinging(ws: Workspace, projectId: string, o: { capUsd
   const look = filmLookFor(ws, projectId);
   const feel = feelFor(ws, projectId);
   const jobs: SingJob[] = [];
-  for (const l of todo) jobs.push(recordTake(dir, l, view.resolution, now, look, feel, feelingForLines(ws, projectId, l.number, l.run?.last), { draft: !!o.draft, direction: await directionOf(ws, projectId, l) }));
+  for (const l0 of todo) {
+    const l = { ...l0, rests: await restsFor(ws, projectId, l0) };
+    jobs.push(recordTake(dir, l, view.resolution, now, look, feel, feelingForLines(ws, projectId, l.number, l.run?.last), { draft: !!o.draft, direction: await directionOf(ws, projectId, l) }));
+  }
   return { jobs, usd, seconds };
 }
 
@@ -564,7 +633,7 @@ export async function startRetake(ws: Workspace, projectId: string, o: { capUsd:
   const usd = o.draft ? draftUsd(l.piece.seconds) : l.piece.usd;
   if (usd > cap) throw new Error(`A retake (${l.piece.seconds} s of voice) costs about $${usd.toFixed(2)}, above your cap of $${cap.toFixed(2)}: raise the cap in Creation → Your defaults. Nothing was sent.`);
   const { dir } = songFolder(ws, projectId);
-  return { jobs: [recordTake(dir, l, view.resolution, new Date().toISOString(), filmLookFor(ws, projectId), feelFor(ws, projectId), feelingForLines(ws, projectId, l.number, l.run.last), { draft: !!o.draft, direction: await directionOf(ws, projectId, l) })], usd, seconds: l.piece.seconds };
+  return { jobs: [recordTake(dir, { ...l, rests: await restsFor(ws, projectId, l) }, view.resolution, new Date().toISOString(), filmLookFor(ws, projectId), feelFor(ws, projectId), feelingForLines(ws, projectId, l.number, l.run.last), { draft: !!o.draft, direction: await directionOf(ws, projectId, l) })], usd, seconds: l.piece.seconds };
 }
 
 // The finished take's clip in the Storyboard (added once; a later take waits outside it until it is chosen).

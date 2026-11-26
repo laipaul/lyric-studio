@@ -4,6 +4,24 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Fix: the singer missed the first words; the take player shows what the model heard ✅ (to verify on the PC)
+Paul's first draft (line 21 "(Oh) There's something about you and me", 26 Nov 2026): "we hear the previous line before
+she sings, then she takes a big breath and starts; 'Oh there's something' is not good, the rest is good."
+- Cause: the breathing room silenced the voice sent to the model from the LYRIC TIMING: the lead-in (where the end of
+  line 20 is still sung) and the pickup "(Oh)", sung just before line 21's timed start, were silenced, so the model
+  breathed while singing was heard and never heard "Oh there's something".
+- Fix (done by a Sonnet helper, checked): the pauses are now **measured on the vocal that is sent** (50 ms windows,
+  35 dB under the piece's own level, at least 0.5 s, 250 ms of voice kept around every sung sound), never from the
+  timing; nothing is silenced in the 0.6 s before the first line's start; any error → nothing silenced. Everything
+  sung inside the take (a previous line's tail, pickups) reaches the model; it breathes only in real pauses.
+  node/singer.ts measureRests / voiceRests (rests measured when the take is made); test/breathing.test.ts.
+- **The take player** (▶ in Lyrics Sync → Who sings, Paul: "display the lyrics she's singing, to check what the model
+  thinks she should be singing"): under the take, the line being sung now (the next one dimmed) and a strip of the
+  take: **blue** where the voice was sent, **grey** where it was silenced (she breathes there), each line's words at
+  their time, the playhead. A word on grey was never heard. Browser test singer.e2e.ts (+1).
+- Paul's first impression of the draft: "quite convincing", Aiko's face holds, teeth visible, the breath moves her
+  chest.
+
 ### Lip-sync review, step 2: the de-reverbed vocal ✅ (to verify on the PC; install once)
 - **Lips follow** (Lyrics Sync → Who sings, per group) has a third choice: **the stem, de-reverbed**. The echo of the
   vocal removed (UVR DeEcho-DeReverb, local, free), so the model hears crisper syllables. Compare it with "the vocal
@@ -725,25 +743,6 @@ locked cards can't be edited").
 - Tests: vitest handles (+4), anchors (lip sync exact on every frame of the fade, no frame past the clip's end, cut
   choices win, short lead-in); handles, anchors, compose, transition-notes, storyboard-file pass. Full suite: the same
   7 tests fail with and without this change (they need network / tools the cloud session lacks). Studio build passes.
-
-### Fix: Studio build failed ("Failed to collect page data for /api/songs/[id]/assets") ✅ (to verify on the PC)
-- Paul (22 Nov 2026): `pnpm --filter @lyric/studio build` failed after d81d436 (on Linux too, not only Windows).
-- Cause: d81d436 made story-line.ts (used by the Assets tab's API route) import node/transition-notes.ts, which imported
-  readStoryboard from node/storyboard-file.ts. That file imports manifest.ts, which loads Remotion. In a Next.js API
-  route React has no createContext, so loading Remotion there makes the build stop ("Remotion requires
-  React.createContext"). The route itself did nothing at import time.
-- Fix: readStoryboard moved to node/storyboard-read.ts (only reads the JSON; storyboard-file.ts re-exports it, so other
-  code is unchanged); transition-notes.ts imports it from there. No other API route reaches Remotion (all 55 traced;
-  the pages that do only through their "use client" player components, as intended).
-- `export const dynamic` / `runtime` were tried on the route and NOT added: with `cacheComponents: true` (next.config)
-  Next 16 refuses both ("Route segment config ... is not compatible with nextConfig.cacheComponents"). The route is
-  already dynamic (GET awaits connection(); POST/PUT/DELETE are never cached) and Node is the default runtime.
-- song-folder.ts: the "whole project traced" warning is silenced (/*turbopackIgnore: true*/). 16 similar warnings
-  remain in 9 other files (open-folder route, db workspace.ts, animate, captions, file-links, library, migrate,
-  pairings): only warnings; the paths come from the workspace folder at run time, so they cannot be scoped.
-- Next.js 16.4.3 -> 16.4.6 (security patch; next and eslint-config-next in apps/studio/package.json). Build passes.
-- Tests: vitest no-remotion-in-routes (5: follows the runtime imports of story-line, transition-notes, assets and
-  fails on any path to Remotion); transition-notes, story-line, storyboard-file pass. `pnpm --filter @lyric/studio build` passes.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
