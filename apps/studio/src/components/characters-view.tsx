@@ -502,8 +502,13 @@ export function CardPage({ id }: { id: string }) {
   const stamp = report?.updated_at ?? String(card.updated_at);
   const items = report?.items ?? [];
   const missing = items.some((i) => i.tries.some((t) => !t.file && t.request_id && /not downloaded/.test(t.text)));
-  const order = character ? ["closeup", "three_quarter", "body_front", "body_back"] : ["wide_left", "wide_right", "detail"];
-  const labels: Record<string, string> = { closeup: "Close-up face", three_quarter: "3/4 face", body_front: "Full body, front", body_back: "Full body, back", wide_left: "Wide, from the left", wide_right: "Wide, from the right", detail: "Closer detail" };
+  // One pack grid (26 Nov 2026, Paul: "why is the teeth close-up so small and not next to its peers"): the four views
+  // Lock needs, and the extras (side profile, teeth close-up, full body with face) as the same tiles once the close-up
+  // is made. Each extra is still made only when asked, also on a locked card.
+  const extrasShown = character && items.some((i) => i.id === "closeup" && i.chosen !== null);
+  const main = character ? ["closeup", "three_quarter", "body_front", "body_back"] : ["wide_left", "wide_right", "detail"];
+  const order = extrasShown ? ["closeup", "three_quarter", "profile", "closeup_teeth", "body_front", "body_back", "body_full"] : main;
+  const labels: Record<string, string> = { closeup: "Close-up face", three_quarter: "3/4 face", profile: "Side profile", closeup_teeth: "Teeth close-up", body_front: "Full body, front", body_back: "Full body, back", body_full: "Full body with face", wide_left: "Wide, from the left", wide_right: "Wide, from the right", detail: "Closer detail" };
   const check = file.check;
   const lastJob = d.jobs[0];
 
@@ -874,44 +879,6 @@ export function CardPage({ id }: { id: string }) {
                 {packNote}
               </p>
             ) : null}
-            {character && items.some((i) => i.id === "closeup" && i.chosen !== null) ? (
-              // Extra views (25 Nov 2026): each one picture from this card, also on a locked card; they change none of the
-              // views above. The side profile and the full body with face complete the Character sheet.
-              <div className="flex flex-col gap-2" data-extra-views>
-                {EXTRAS.map((x) => {
-                  const it = items.find((i) => i.id === x.id);
-                  const made = !!it && it.chosen !== null;
-                  return (
-                    <div key={x.id} data-extra={x.id} data-made={made ? "made" : "none"} {...(x.id === "closeup_teeth" ? { "data-teeth": made ? "made" : "none" } : {})} className="bg-card/40 flex items-center gap-3 rounded-md border p-2 text-xs">
-                      {made ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- a generated view
-                        <img src={fileUrl(card.id, `v${version.n}/${x.id}.png`, stamp)} alt="" className="h-20 rounded border object-cover" />
-                      ) : null}
-                      <div className="flex flex-col gap-1">
-                        <span className="font-medium">
-                          {x.label}
-                          {made && it?.text ? <> · <WithShortNames text={it.text} /></> : null}
-                        </span>
-                        <span className="text-muted-foreground">{x.why}</span>
-                        <span className="flex flex-wrap items-center gap-1">
-                          <Button size="sm" variant="outline" className="w-fit" disabled={!!running || !!busy} onClick={() => act("remake", { action: "remake", only: [x.id], cap })} {...(x.id === "closeup_teeth" ? { "data-make-teeth": "" } : {})} data-make-extra={x.id}>
-                            <RefreshCw /> {made ? "Make it again" : x.make}
-                          </Button>
-                          <Button size="sm" variant="ghost" className="w-fit" disabled={!!running || !!busy} onClick={() => chooseOwn(x.id)} data-own={x.id} title="Your own picture here: free, nothing sent online">
-                            <Upload /> Use my own picture
-                          </Button>
-                          {made ? (
-                            <Button size="sm" variant="ghost" className="text-muted-foreground w-fit" disabled={!!running || !!busy} onClick={() => quiet("aside", { action: "aside", view: x.id }, setPackNote)} data-aside={x.id} title="Take this picture off the card (kept under Put aside, with Restore)">
-                              <X /> Remove
-                            </Button>
-                          ) : null}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
             {character && d.characterSheet ? (
               // The Character sheet: the views side by side in one picture (made on this PC, free).
               <div data-character-sheet className="bg-card/40 flex flex-col gap-2 rounded-md border p-2 text-xs">
@@ -937,18 +904,20 @@ export function CardPage({ id }: { id: string }) {
                 <RotateCcw /> Get missing pictures (free)
               </Button>
             ) : null}
-            <ul className={cn("grid gap-3", character ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-3")}>
+            <ul className={cn("grid gap-3", character ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-3")} {...(extrasShown ? { "data-extra-views": "" } : {})}>
               {order.map((vid) => {
                 const it = items.find((i) => i.id === vid);
                 const t = it && it.chosen !== null ? it.tries[it.chosen] : null;
+                const extra = EXTRAS.find((x) => x.id === vid);
+                const extraAttrs = extra ? { "data-extra": vid, "data-made": t ? "made" : "none", ...(vid === "closeup_teeth" ? { "data-teeth": t ? "made" : "none" } : {}) } : {};
                 return (
-                  <li key={vid} className="flex flex-col gap-1.5" data-view={vid} data-light={it?.light ?? "none"}>
+                  <li key={vid} className="flex min-w-0 flex-col gap-1.5" data-view={vid} data-light={it?.light ?? "none"} {...extraAttrs}>
                     {t ? (
                       // The whole picture (26 Nov 2026: a tall full body lost its feet in a 3:4 crop); ✕ puts it aside.
                       <div className="relative">
                         {/* eslint-disable-next-line @next/next/no-img-element -- a generated view */}
                         <img src={fileUrl(card.id, `v${version.n}/${vid}.png`, stamp)} alt="" className="bg-muted/30 aspect-[3/4] w-full rounded-md border object-contain" />
-                        {draft ? (
+                        {draft || extra ? (
                           <button
                             type="button"
                             disabled={!!running || !!busy}
@@ -962,7 +931,7 @@ export function CardPage({ id }: { id: string }) {
                         ) : null}
                       </div>
                     ) : (
-                      <div className="text-muted-foreground flex aspect-[3/4] w-full items-center justify-center rounded-md border border-dashed text-xs">not made yet</div>
+                      <div className="text-muted-foreground flex aspect-[3/4] w-full items-center justify-center rounded-md border border-dashed p-3 text-center text-xs">{extra ? extra.why : "not made yet"}</div>
                     )}
                     <div className="flex min-w-0 items-center gap-1.5 text-xs">
                       {it?.light ? <span className={cn("size-2 shrink-0 rounded-full", LIGHT[it.light])} /> : null}
@@ -981,7 +950,16 @@ export function CardPage({ id }: { id: string }) {
                         {file.cover === `v${version.n}/${vid}.png` ? "The card's cover" : "Use as cover"}
                       </button>
                     ) : null}
-                    {draft ? (
+                    {extra ? (
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Button size="sm" variant={t ? "ghost" : "outline"} className="h-auto max-w-full whitespace-normal py-1 text-left" disabled={!!running || !!busy} onClick={() => act("remake", { action: "remake", only: [vid], cap })} {...(vid === "closeup_teeth" ? { "data-make-teeth": "" } : {})} data-make-extra={vid}>
+                          <RefreshCw /> {t ? "Make it again" : extra.make}
+                        </Button>
+                        <Button size="sm" variant="ghost" className="w-fit" disabled={!!running || !!busy} onClick={() => chooseOwn(vid)} data-own={vid} title="Your own picture here: free, nothing sent online">
+                          <Upload /> Use my own picture
+                        </Button>
+                      </div>
+                    ) : draft ? (
                       <div className="flex flex-wrap items-center gap-1">
                         {items.length ? (
                           <Button size="sm" variant="ghost" className="w-fit" disabled={!!running || !!busy} onClick={() => act("remake", { action: "remake", only: [vid], cap })} data-remake={vid}>
@@ -1001,7 +979,7 @@ export function CardPage({ id }: { id: string }) {
                             title="Your picture is in the wrong place? Move it"
                           >
                             <option value="">Move to…</option>
-                            {order
+                            {main
                               .filter((o) => o !== vid)
                               .map((o) => (
                                 <option key={o} value={o}>

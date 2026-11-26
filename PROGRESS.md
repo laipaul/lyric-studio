@@ -27,6 +27,11 @@ locked cards can't be edited").
   the locked close-up. The picture refreshes as soon as its file changes (remade pack).
 - **View tiles**: each face view (close-up, 3/4, side profile, teeth) shows its face score on the tile ("face 0.62";
   "face –" when no face was measured). Long file names: shortened in the middle, whole on hover (earlier today).
+- **One pack grid** (same day, Paul: "why is the teeth close-up so small and not next to its peers"): the side profile,
+  teeth close-up and full body with face are now tiles in the pack grid, next to the four views, the same size, with
+  their light, face score, file name, ✕, "Make …" / "Make it again" and "Use my own picture". Order: Close-up · 3/4 ·
+  Side profile · Teeth close-up · Full body front · Full body back · Full body with face. A not-made extra is a dashed
+  tile saying what it is for. Still made only when asked (also on a locked card); Lock still needs only the four.
 - **Copy character for Claude** (earlier today): description first, then the wardrobe; warnings for empty Notes or
   outfits; only existing reference pictures, then one "Missing: …" line; the closing "Attach …" line.
 - **Reel singing target**: the exact part the Reel plays, from its saved shot plan (storyboards\reels-1.json; else

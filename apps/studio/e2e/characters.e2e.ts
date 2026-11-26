@@ -121,6 +121,11 @@ async function main() {
     await page.waitForSelector("[data-extra=profile][data-made=made]", { timeout: 60_000 });
     await page.click("[data-make-extra=body_full]");
     await page.waitForSelector("[data-extra=body_full][data-made=made]", { timeout: 60_000 });
+    // One pack grid (26 Nov 2026): the extras are tiles next to the four views, the same size, the face ones with a score.
+    const grid = await page.$$eval("[data-extra-views] > [data-view]", (els: Element[]) => els.map((e) => ({ id: e.getAttribute("data-view"), w: Math.round(e.getBoundingClientRect().width), score: !!e.querySelector("[data-view-score]") })));
+    check(grid.map((g) => g.id).join(",") === "closeup,three_quarter,profile,closeup_teeth,body_front,body_back,body_full", `the extras are in the pack grid, in order (${grid.map((g) => g.id).join(", ")})`);
+    check(new Set(grid.map((g) => g.w)).size === 1, `every tile the same width (${[...new Set(grid.map((g) => g.w))].join(", ")} px)`);
+    check(!!grid.find((g) => g.id === "closeup_teeth")?.score && !!grid.find((g) => g.id === "profile")?.score, "the teeth close-up and side profile tiles show their face score");
     await page.waitForFunction(() => document.querySelector("[data-character-sheet]")?.textContent?.includes("close-up · side profile · 3/4 · full body"));
     check(existsSync(path.join(dir, "v1", "character_sheet.png")), "the Character sheet: close-up, side profile, 3/4, full body (v1\\character_sheet.png)");
     check((await page.getAttribute("[data-character-sheet-save]", "download")) === `${await page.textContent("h1") ?? ""}`.trim() + " character sheet.png" || !!(await page.getAttribute("[data-character-sheet-save]", "download")), "Save downloads the sheet");
