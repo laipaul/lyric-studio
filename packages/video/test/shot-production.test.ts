@@ -324,7 +324,7 @@ describe("Creation → Production", () => {
   it("reference sheets (25 Nov 2026): per person a face sheet (close-up, 3/4, teeth) and an outfit sheet (front, back), each one picture", async () => {
     const bride = listCards(ws).find((c) => c.name === "Bride")!;
     const root = cardRoot(ws, bride);
-    const versionDir = path.join(root, path.dirname(bride.thumbnail));
+    const versionDir = path.join(root, bride.viewDir);
     const look = readShotList(ws, id)!.slots.find((x) => x.id === "s03")!;
     // Shot 3 in the Autumn City look (its close-up exists): add the card's 3/4 face and teeth close-up, and the look's front and back.
     setShotLook(ws, id, "s03", "Bride", "Autumn City");

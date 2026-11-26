@@ -3990,3 +3990,12 @@ D. ✅ (built 29 Oct, to verify) **Title opening** (items 1-8 below).
   the way to keep it out.
 - Code: storyboard.ts notInReason, StoryboardClip.notIn (data-story-notin). Tests: vitest story-not-in (2). The Shape
   browser test cannot plan in the cloud container (the audio analysis crashes there, the same before this step).
+
+### Film grain (Look) ✅ (to verify on the PC)
+- Paul (22 Nov 2026), from Joey's finishing step: "overlay real film grain to unify AI textures". Shape → Settings →
+  Look → **Film grain**: Off (default: videos as before) / Light / Medium; per song or in a theme.
+- A fine noise tile drawn in the page (an SVG noise filter as a data URI: no file, no network), in soft-light over
+  the clips, grade and vignette, under the words (the lyrics stay sharp); it moves to another place on every frame
+  (picture.ts grainOffset, deterministic). The same layer in the preview, the Remotion render (Grain.tsx) and the
+  HyperFrames composition (hf/compile.ts, moved per frame by the same function). Manifest settings.picture.grain.
+- Tests: vitest picture (+2), hf-compile (+1), hf-network, look-preview, look-patch pass; browser song-stages pass.

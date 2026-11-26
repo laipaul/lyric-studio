@@ -32,6 +32,7 @@ const EXTRAS = [
 
 const fileUrl = (id: string, rel: string, stamp?: string | number) => `/api/cards/${id}/file/${rel.split("/").map(encodeURIComponent).join("/")}${stamp ? `?t=${encodeURIComponent(String(stamp))}` : ""}`;
 const money = (usd: number) => `$${usd.toFixed(2)}`;
+const FACE_VIEWS = new Set(["closeup", "three_quarter", "profile", "closeup_teeth"]); // the views whose face score shows on the tile
 const KIND_LABEL = { character: "character", scene: "scene card" } as const;
 
 function StatusChip({ status, version }: { status: string; version: number }) {
@@ -111,7 +112,7 @@ export function CharactersList() {
             <li key={c.id}>
               <Link href={`/characters/${c.id}`} data-card={c.name} className="hover:border-brand/60 bg-card flex flex-col overflow-hidden rounded-xl border transition-colors">
                 {/* eslint-disable-next-line @next/next/no-img-element -- a card's own picture */}
-                <img src={fileUrl(c.id, c.thumbnail, new Date(c.updated_at).getTime())} alt="" className="aspect-[3/4] w-full object-cover" />
+                <img src={fileUrl(c.id, c.thumbnail, c.stamp || new Date(c.updated_at).getTime())} alt="" className="aspect-[3/4] w-full object-cover" data-card-thumb={c.thumbnail} />
                 <div className="flex items-center justify-between gap-2 p-3">
                   <span className="truncate text-sm font-medium">{c.name}</span>
                   <span className="flex items-center gap-1">
@@ -343,6 +344,7 @@ export function CardPage({ id }: { id: string }) {
   const [confirm, setConfirm] = useState<"pack" | "lock" | null>(null);
   const [copied, setCopied] = useState(false);
   const [copyWarnings, setCopyWarnings] = useState<string[]>([]);
+  const [answered, setAnswered] = useState(false); // the "Switch these songs?" question, answered
   // Copy character for Claude (26 Nov 2026): the character-lock block on the clipboard; no API call.
   const copyForClaude = async () => {
     try {
@@ -382,6 +384,7 @@ export function CardPage({ id }: { id: string }) {
     setError(null);
     try {
       setD(await call<CardDetail>(`/api/cards/${id}`, { method: "POST", ...json(body) }));
+      if (body.action === "lock") setAnswered(false);
       setViewN(null);
       setConfirm(null);
       if (["pack", "remake", "fetch"].includes(String(body.action))) window.dispatchEvent(new Event("lyric-tasks-changed"));
@@ -523,7 +526,19 @@ export function CardPage({ id }: { id: string }) {
           }}
         />
         <span className="text-muted-foreground text-sm">{KIND_LABEL[card.kind]}</span>
-        <StatusChip status={version.status} version={version.n} />
+        {!draft && version.n === d.latest ? (
+          // Tidy-up (26 Nov 2026): a locked card is edited in a new version; the Locked badge says how.
+          <>
+            <button type="button" disabled={!!busy} onClick={() => act("new-version", { action: "new-version" })} title={`Edit → new version: a v${version.n + 1} draft copied from v${version.n} (texts and pictures); v${version.n} stays locked for the songs that use it`} data-locked-badge>
+              <StatusChip status={version.status} version={version.n} />
+            </button>
+            <Button size="sm" variant="outline" disabled={!!busy} onClick={() => act("new-version", { action: "new-version" })} data-edit-new-version>
+              <Pencil /> Edit → new version
+            </Button>
+          </>
+        ) : (
+          <StatusChip status={version.status} version={version.n} />
+        )}
         {file.versions.length > 1 ? (
           <span className="flex flex-wrap items-center gap-1 text-xs" data-card-versions>
             {file.versions.map((v) => (
@@ -573,6 +588,39 @@ export function CardPage({ id }: { id: string }) {
           ))}
         </ul>
       ) : null}
+      {d.lockAsk && !answered ? (
+        <div className="flex flex-col gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm" data-lock-ask>
+          <p>
+            v{d.lockAsk.to} is locked. {d.lockAsk.songs.length === 1 ? "This song uses" : "These songs use"} v{d.lockAsk.from}: {d.lockAsk.songs.map((s) => s.title).join(", ")}. Switch {d.lockAsk.songs.length === 1 ? "it" : "them"} to v{d.lockAsk.to}?
+          </p>
+          <span className="flex flex-wrap gap-2">
+            <Button size="sm" disabled={!!busy} onClick={() => (setAnswered(true), void act("switch-songs", { action: "switch-songs", songs: d.lockAsk!.songs.map((s) => s.id) }))} data-switch-yes>
+              Switch to v{d.lockAsk.to}
+            </Button>
+            <Button size="sm" variant="outline" disabled={!!busy} onClick={() => setAnswered(true)} data-switch-no>
+              Keep on v{d.lockAsk.from}
+            </Button>
+          </span>
+        </div>
+      ) : null}
+      {d.usedBy.length && file.versions.filter((v) => v.status === "locked").length > 1 ? (
+        <details className="text-xs" data-used-by>
+          <summary className="text-muted-foreground cursor-pointer">Songs using {card.name} ({d.usedBy.length})</summary>
+          <ul className="mt-1 flex flex-col gap-1">
+            {d.usedBy.map((s) => (
+              <li key={s.id} className="flex flex-wrap items-center gap-2" data-used-by-song={s.title}>
+                <span>{s.title}</span>
+                <span className="text-muted-foreground">v{s.version}</span>
+                {d.inUse && s.version !== d.inUse ? (
+                  <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => act("song-version", { action: "song-version", songId: s.id, version: null })} data-song-use-latest>
+                    Use v{d.inUse}
+                  </Button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
       <label className="flex flex-col gap-1 text-xs" title="Your own words: look, outfit, vibe, age range. They go into Copy character for Claude.">
         <span className="font-medium">Notes</span>
         <textarea
@@ -604,6 +652,17 @@ export function CardPage({ id }: { id: string }) {
         <section className="flex flex-col gap-3" data-card-reference>
           {/* eslint-disable-next-line @next/next/no-img-element -- the card's own picture */}
           <img src={fileUrl(card.id, file.reference, card.updated_at.toString())} alt="" className="w-full rounded-lg border" />
+          <p className="text-muted-foreground text-xs" data-cover-note>
+            {d.inUse ? "On the Characters page: the locked close-up." : file.cover ? "On the Characters page: the cover you chose (until a version is locked)." : "On the Characters page: this picture (until a version is locked)."}
+            {!d.inUse && file.cover ? (
+              <>
+                {" "}
+                <button type="button" className="text-foreground underline" disabled={!!busy} onClick={() => act("cover", { action: "cover", file: null })} data-cover-reset>
+                  Use this picture again
+                </button>
+              </>
+            ) : null}
+          </p>
           {check ? (
             <div className="flex flex-col gap-1 text-xs" data-check-verdict={check.verdict}>
               <p className="text-sm font-medium">
@@ -713,6 +772,16 @@ export function CardPage({ id }: { id: string }) {
                   </label>
                 ))}
               </div>
+            ) : null}
+            {character && d.outfitWarning ? (
+              <p className="text-xs text-amber-300" data-outfit-warning>
+                {d.outfitWarning}
+              </p>
+            ) : null}
+            {character && draft ? (
+              <Button size="sm" variant="outline" className="w-fit" disabled={!!busy || !!running} onClick={() => act("tidy", { action: "tidy" })} data-tidy title="Moves face, hair, skin, makeup and age words from the Outfit and its three parts to Notes; only clothes stay (free, nothing sent online)">
+                <Wand2 /> Tidy texts
+              </Button>
             ) : null}
             {d.message ? (
               <p className="text-amber-400 text-xs" data-outfit-message>
@@ -898,9 +967,20 @@ export function CardPage({ id }: { id: string }) {
                     <div className="flex min-w-0 items-center gap-1.5 text-xs">
                       {it?.light ? <span className={cn("size-2 shrink-0 rounded-full", LIGHT[it.light])} /> : null}
                       <span className="truncate font-medium">{labels[vid]}</span>
-                      {t?.score !== null && t?.score !== undefined ? <span className="text-muted-foreground tabular-nums">{t.score.toFixed(2)}</span> : null}
+                      {FACE_VIEWS.has(vid) && t ? (
+                        <span className="text-muted-foreground ml-auto shrink-0 tabular-nums" data-view-score={vid} title="Face match with the reference picture (higher is closer)">
+                          face {t.score !== null && t.score !== undefined ? t.score.toFixed(2) : "–"}
+                        </span>
+                      ) : t?.score !== null && t?.score !== undefined ? (
+                        <span className="text-muted-foreground ml-auto shrink-0 tabular-nums">{t.score.toFixed(2)}</span>
+                      ) : null}
                     </div>
                     {it?.text ? <p className="text-muted-foreground min-w-0 text-[11px] leading-snug break-words" data-view-text={vid}><WithShortNames text={it.text} />{it.angle_note ? ` Angle: ${it.angle_note}.` : ""}</p> : null}
+                    {!d.inUse && t ? (
+                      <button type="button" className={cn("w-fit text-[11px] underline", file.cover === `v${version.n}/${vid}.png` ? "text-emerald-300" : "text-muted-foreground hover:text-foreground")} disabled={!!busy} onClick={() => act("cover", { action: "cover", file: `v${version.n}/${vid}.png` })} data-cover={vid} title="Show this picture on the Characters page until a version is locked">
+                        {file.cover === `v${version.n}/${vid}.png` ? "The card's cover" : "Use as cover"}
+                      </button>
+                    ) : null}
                     {draft ? (
                       <div className="flex flex-wrap items-center gap-1">
                         {items.length ? (
@@ -1172,6 +1252,11 @@ function Wardrobe({ d, id, cap, running, onChanged, reload }: { d: CardDetail; i
               placeholder="e.g. camel wool travel coat over a cream knit dress, ankle boots"
             />
           </label>
+          {look.outfitWarning ? (
+            <p className="text-xs text-amber-300" data-look-outfit-warning>
+              {look.outfitWarning}
+            </p>
+          ) : null}
           {!locked ? (
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <select data-look-model value={look.model} onChange={(e) => void save({ model: e.target.value })} className="bg-background rounded-md border px-2 py-1 text-xs" title="The image model for this look">

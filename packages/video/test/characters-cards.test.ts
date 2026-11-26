@@ -65,7 +65,9 @@ describe("cards", () => {
     expect(rep.items.map((i) => [i.id, i.light])).toEqual([["closeup", "green"], ["three_quarter", "green"], ["body_front", "grey"], ["body_back", "grey"]]);
     expect(r.summary).toMatch(/4 picture\(s\) made · 2 of 2 face views green · about \$0\.18 sent/);
     expect(currentVersion(readCardFile(cardRoot(ws, c))).description).toMatch(/A woman in her twenties/);
-    expect(listCards(ws)[0].thumbnail).toBe("v1/closeup.png");
+    // 26 Nov 2026: the thumbnail is the card's own picture until a version is locked; songs get the draft's close-up meanwhile.
+    expect(listCards(ws)[0].thumbnail).toBe("reference.png");
+    expect(listCards(ws)[0].picture).toBe("v1/closeup.png");
   });
 
   test("the back view gets the front view as an extra reference (the same outfit from behind); face prompts guard brows and hair", async () => {

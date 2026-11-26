@@ -47,6 +47,9 @@ Characters and scene cards (C1, 18 Nov 2026; packages/video src/node/characters/
       `<id>_t<k>_own.png` (for Move to);
   - `looks/<look id>/` (characters, the Wardrobe): the look's tries and chosen `body_front.png`, `body_back.png`
     (+ `closeup.png` when asked) and its `report.json` (no contact sheet). The main look is the version's own views.
+- **A song's card versions** (26 Nov 2026): `production/production.json` `versions` {card id: version n} = the locked
+  version a song is kept on (Keep on v1 after v2 was locked; node/card-versions.ts); missing = the newest locked version.
+  card.json `cover`: the card's thumbnail until a version is locked (a picture in the card folder).
 - **A song's looks:** `production/production.json` `looks` {card id: look id} = which look each cast character wears
   (missing or "main" = the main look); the Song brief uses that look's outfit.
 - **Versions:** a locked version is read-only. New version copies the latest folder into the next one as a draft.

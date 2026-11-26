@@ -6,6 +6,7 @@ import type { FalClient } from "@fal-ai/client";
 import type { Workspace } from "@lyric/db";
 
 import { cardRoot, currentVersion, getCard, readCardFile, writeCardFile } from "./cards";
+import { clothesOnly, describesClothes, describesFace, OUTFIT_FACE_WARNING } from "../../card-text";
 import { callModel, errorText } from "./fal";
 import { splitIsCurrent, TEXT_MODEL, type OutfitSplit } from "./plan";
 
@@ -16,6 +17,7 @@ export function outfitSplitPrompt(outfit: string): string {
 - "closeups": what shows in a head-and-shoulders frame ending at the upper chest: neckline, shoulders, sleeves at the shoulder, veil or hair at the head, earrings, tie or collar. Never skirt, trousers, shoes or anything below the chest.
 - "front": what the FRONT of the whole body shows, from the neck down to the shoes.
 - "back": what the BACK of the whole body shows, from the neck down to the shoes (including a veil or train falling on the back).
+Describe ONLY clothes, shoes, accessories and what is worn on the head (veil, hat, tiara): never the face, eyes, skin, makeup, hairstyle, hair colour, age or expression (the face pictures show those).
 Details the text says are on the back go ONLY to "back". Details that are only on the front (boutonniere, front buttons, brooch, corsage) go ONLY to "front". Do not invent anything that is not in the text; use an empty string if the text says nothing for that part.
 Reply with exactly: {"closeups": "...", "front": "...", "back": "..."}
 
@@ -36,7 +38,9 @@ export function parseSplit(text: string, from: string): OutfitSplit | null {
     const front = part(j.front);
     const back = part(j.back);
     if (closeups === null || front === null || back === null) return null;
-    return { from: from.trim(), closeups, front, back };
+    // Face words the model kept anyway are dropped (card-text.ts): the three parts hold clothes only.
+    const keep = (s: string) => (describesFace(s) ? clothesOnly(s) : s);
+    return { from: from.trim(), closeups: keep(closeups), front: keep(front), back: keep(back) };
   } catch {
     return null;
   }
@@ -61,6 +65,8 @@ export async function ensureSplit(ws: Workspace, cardId: string, fal: FalClient 
   const v = currentVersion(readCardFile(root));
   if (v.status !== "draft" || !splitNeeded(v.outfit, v.outfit_split)) return { made: false, usd: 0, message: null };
   const outfit = v.outfit!;
+  // An outfit that names no clothes (a face description typed there): nothing to split, and the page says so.
+  if (!describesClothes(outfit)) return { made: false, usd: 0, message: `Outfit saved. ${OUTFIT_FACE_WARNING}: describe the clothes (Tidy texts moves the face words to Notes).` };
   const fallback = "The pack will use your outfit text as it is for every view.";
   if (!fal) return { made: false, usd: 0, message: `Outfit saved. It was not split into close-up, front and back parts (no FAL_KEY). ${fallback}` };
   try {

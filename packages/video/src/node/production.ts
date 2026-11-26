@@ -19,7 +19,7 @@ import path from "node:path";
 import { project as projectTable, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
-import { listCards, readCardFile, type CardSummary } from "./characters/cards";
+import { listCards, readCardFile, songPicture, songVersion, type CardSummary } from "./characters/cards";
 import { lookOutfit, MAIN_LOOK, mainLookName } from "./characters/looks";
 import { lyricsView } from "./lyrics-view";
 import { keepReplaced } from "./project-settings";
@@ -36,8 +36,10 @@ export const BIBLE_FILE = "bible.md";
 export const EPS_DIR = "eps";
 
 export type BibleSource = "song" | "ep";
-export type ProductionFile = { _help?: string; cast: string[]; bible: BibleSource; looks?: Record<string, string> }; // looks: card id → the look it wears in this song (the Wardrobe)
-export type CastCard = { id: string; name: string; kind: "character" | "scene"; status: string; locked: boolean; thumbnail: string; updated_at: string; description: string | null; outfit: string | null; props: string | null; looks: { id: string; name: string; locked: boolean }[]; look: string; lookName: string | null; missing?: false };
+// looks: card id → the look it wears in this song (the Wardrobe); versions: card id → the locked version this song is
+// kept on ("Keep on v1" when a newer version was locked, card-versions.ts); missing = the version in use.
+export type ProductionFile = { _help?: string; cast: string[]; bible: BibleSource; looks?: Record<string, string>; versions?: Record<string, number> };
+export type CastCard = { id: string; name: string; kind: "character" | "scene"; status: string; locked: boolean; thumbnail: string; version: number | null; pinned: boolean; updated_at: string; description: string | null; outfit: string | null; props: string | null; looks: { id: string; name: string; locked: boolean }[]; look: string; lookName: string | null; missing?: false };
 export type MissingCard = { id: string; name: string; missing: true };
 export type TimedLine = { number: number; text: string; isHook: boolean; startMs: number | null; endMs: number | null };
 export type ProductionData = {
@@ -76,15 +78,16 @@ export function readProduction(root: string): ProductionFile {
       cast: Array.isArray(raw.cast) ? [...new Set(raw.cast.filter((x): x is string => typeof x === "string" && !!x))] : [],
       bible: raw.bible === "ep" ? "ep" : "song",
       looks,
+      versions: raw.versions && typeof raw.versions === "object" ? Object.fromEntries(Object.entries(raw.versions).filter(([k, v]) => !!k && Number.isInteger(v) && (v as number) > 0)) : {},
     };
   } catch {
     return { cast: [], bible: "song" };
   }
 }
 
-function writeProduction(root: string, p: ProductionFile): void {
+export function writeProduction(root: string, p: ProductionFile): void {
   mkdirSync(path.join(root, PRODUCTION_DIR), { recursive: true });
-  writeFileSync(path.join(root, PRODUCTION_DIR, PRODUCTION_FILE), `${JSON.stringify({ _help: HELP, cast: p.cast, bible: p.bible, ...(p.looks && Object.keys(p.looks).length ? { looks: p.looks } : {}) }, null, 2)}\n`);
+  writeFileSync(path.join(root, PRODUCTION_DIR, PRODUCTION_FILE), `${JSON.stringify({ _help: HELP, cast: p.cast, bible: p.bible, ...(p.looks && Object.keys(p.looks).length ? { looks: p.looks } : {}), ...(p.versions && Object.keys(p.versions).length ? { versions: p.versions } : {}) }, null, 2)}\n`);
 }
 
 function songEp(ws: Workspace, projectId: string): string | null {
@@ -106,7 +109,7 @@ function bibleOf(ws: Workspace, projectId: string): { source: BibleSource; file:
   return { source: "song", file: songBibleFile(root), ep };
 }
 
-function castCard(c: CardSummary, ws: Workspace, lookId: string | null = null): CastCard {
+function castCard(c: CardSummary, ws: Workspace, lookId: string | null = null, pin: number | null = null): CastCard {
   // The outfit / props of the version in use (the latest locked, else the current draft), read from card.json; for a
   // character, the outfit of the look it wears in this song (the Wardrobe; the main look by default).
   let outfit: string | null = null;
@@ -114,12 +117,17 @@ function castCard(c: CardSummary, ws: Workspace, lookId: string | null = null): 
   let looks: CastCard["looks"] = [];
   let look = MAIN_LOOK;
   let lookName: string | null = null;
+  let picture = c.picture;
+  let version: number | null = null;
   try {
-    const file = readCardFile(path.join(ws.dir, c.folder));
-    const used = [...file.versions].reverse().find((v) => v.status === "locked") ?? file.versions[file.versions.length - 1];
+    const root = path.join(ws.dir, c.folder);
+    const file = readCardFile(root);
+    const used = songVersion(file, pin);
+    picture = songPicture(root, file, pin).picture;
+    version = used.n;
     props = used?.props?.trim() || null;
     if (c.kind === "character") {
-      const worn = lookOutfit(file, lookId);
+      const worn = lookOutfit(file, lookId, used);
       outfit = worn.outfit?.trim() || null;
       look = worn.id;
       looks = [{ id: MAIN_LOOK, name: mainLookName(file), locked: used?.status === "locked" }, ...(file.looks ?? []).map((l) => ({ id: l.id, name: l.name, locked: l.status === "locked" }))];
@@ -128,7 +136,7 @@ function castCard(c: CardSummary, ws: Workspace, lookId: string | null = null): 
   } catch {
     // a card folder that cannot be read: shown without outfit
   }
-  return { id: c.id, name: c.name, kind: c.kind, status: c.status, locked: c.status === "locked", thumbnail: c.thumbnail, updated_at: new Date(c.updated_at).toISOString(), description: c.description, outfit, props, looks, look, lookName };
+  return { id: c.id, name: c.name, kind: c.kind, status: c.status, locked: c.status === "locked", thumbnail: picture, version, pinned: !!pin && version === pin, updated_at: new Date(c.updated_at).toISOString(), description: c.description, outfit, props, looks, look, lookName };
 }
 
 // The platforms the song makes, grouped by picture shape (what a generated clip should be).
@@ -154,7 +162,7 @@ export function productionData(ws: Workspace, projectId: string, timed: TimedLin
   const library = cards.map((c) => castCard(c, ws));
   const cast = prod.cast.map((id): CastCard | MissingCard => {
     const c = cards.find((x) => x.id === id);
-    return c ? castCard(c, ws, prod.looks?.[id] ?? null) : { id, name: "A card that is no longer in the library", missing: true };
+    return c ? castCard(c, ws, prod.looks?.[id] ?? null, prod.versions?.[id] ?? null) : { id, name: "A card that is no longer in the library", missing: true };
   });
   const bible = bibleOf(ws, projectId);
   const ep = bible.ep;

@@ -12,7 +12,9 @@ import { cardRoot, currentVersion, getCard, readCardFile, usableVersion, version
 import { listRemovedCards } from "./cleanup";
 import { readShotListFile, SHOTLIST_FILE } from "../shotlist";
 import { songPathsById } from "../song-folder";
+import { describesClothes, OUTFIT_FACE_WARNING, sortCardText } from "../../card-text";
 import { listLooks } from "./looks";
+import { splitIsCurrent } from "./plan";
 
 export const NOTES_MAX = 2000;
 
@@ -58,6 +60,55 @@ export function cardTags(ws: Workspace): CardTag[] {
 
 const one = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
 
+// Tidy texts (26 Nov 2026, Paul: on some cards the Outfit, "Close-ups show", "Front shows" and "Back shows" all held the
+// FACE description): the face, hair, skin, makeup and age words move from the outfit texts to the Notes; only clothing
+// stays in the Outfit and its three parts. Free and local (card-text.ts). On the draft and on draft looks only (a locked
+// version stays as it was locked: Edit → new version first); nothing is lost (what moves is added to the Notes).
+export function tidyCardTexts(ws: Workspace, id: string): { moved: number; note: string } {
+  const row = getCard(ws, id);
+  if (row.kind !== "character") throw new Error("Tidy texts is for characters.");
+  const root = cardRoot(ws, row);
+  const f = readCardFile(root);
+  const v = currentVersion(f);
+  const toNotes: string[] = [];
+  let moved = 0;
+  let lockedFace = false;
+  const tidy = (o: { outfit?: string; outfit_split?: { from: string; closeups: string; front: string; back: string } }, editable: boolean) => {
+    const before = o.outfit?.trim() ?? "";
+    const parts = sortCardText(before);
+    const splitFace = o.outfit_split ? (["closeups", "front", "back"] as const).map((k) => sortCardText(o.outfit_split![k]).face).filter(Boolean) : [];
+    if (!parts.face && !splitFace.length) return;
+    if (!editable) {
+      lockedFace = true;
+      return;
+    }
+    const current = splitIsCurrent(o.outfit_split, o.outfit);
+    if (parts.face) toNotes.push(parts.face);
+    for (const s of splitFace) if (!toNotes.some((n) => n.includes(s))) toNotes.push(s);
+    o.outfit = parts.clothes || undefined;
+    if (o.outfit_split) {
+      for (const k of ["closeups", "front", "back"] as const) o.outfit_split[k] = sortCardText(o.outfit_split[k]).clothes;
+      // Still the split of this outfit (only face words left it); an outfit with no clothes at all: no split.
+      if (current && o.outfit) o.outfit_split.from = o.outfit;
+      if (!o.outfit) delete o.outfit_split;
+    }
+    moved++;
+  };
+  tidy(v, v.status === "draft");
+  for (const l of f.looks ?? []) tidy(l, l.status === "draft");
+  const fresh = toNotes.filter((t) => !(f.notes ?? "").includes(t));
+  if (fresh.length) f.notes = [f.notes?.trim(), ...fresh].filter(Boolean).join("\n").slice(0, NOTES_MAX);
+  if (moved || fresh.length) {
+    writeCardFile(root, f);
+    ws.db.update(cardTable).set({ updated_at: new Date() }).where(eq(cardTable.id, id)).run();
+  }
+  const locked = lockedFace ? " A locked version or look still has face words in its outfit: press Edit → new version (or Change this look) first." : "";
+  const note = moved
+    ? `Face and hair words moved to Notes; the Outfit keeps only the clothes${moved > 1 ? ` (${moved} outfits)` : ""}. Free, nothing sent online.${locked}`
+    : `Nothing to move: the outfit texts describe clothes.${locked}`;
+  return { moved, note };
+}
+
 // "Copy character for Claude": a compact character-lock block to paste into claude.ai when writing shot prompts.
 // (26 Nov 2026, Paul:) the description first: the Notes as its "Look" (face, hair, age range, vibe), then the wardrobe;
 // only the reference pictures that exist, then one "Missing:" line; it ends by asking to attach those pictures.
@@ -88,6 +139,7 @@ export function characterBlock(ws: Workspace, id: string): { block: string; warn
       for (const l of looks) {
         const outfit = one(l.outfit);
         if (!outfit) warnings.push(`The look "${l.name}" has no outfit description yet; add it in the Wardrobe for better prompts`);
+        else if (!describesClothes(outfit)) warnings.push(`The look "${l.name}": ${OUTFIT_FACE_WARNING.toLowerCase()}`);
         out.push(`- ${l.name}${l.status === "locked" ? "" : " (draft)"}: ${outfit || "(no outfit description yet)"}`);
       }
     }

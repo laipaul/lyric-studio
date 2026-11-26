@@ -23,6 +23,8 @@ import { readRecipe } from "./recipe";
 import { songPathsById } from "./song-folder";
 import { songSections } from "./song-sections";
 import { voiceFor } from "./singer";
+import { readStoryboard } from "./storyboard-read";
+import { STORYBOARD_DIR } from "../storyboard-file";
 
 export const LIPSYNC_FILE = "lipsync.json";
 export const SINGING_FILE = "singing.json";
@@ -107,11 +109,22 @@ export async function singingView(ws: Workspace, projectId: string, kind: Singin
   }
   const firstChorus = sections.find((s) => /chorus/i.test(s.kind) && !/pre/i.test(s.kind))?.line ?? lines.find((l) => l.isHook)?.number;
   const chorusAt = lines.find((l) => l.number === firstChorus)?.startMs ?? lines[0]?.startMs ?? 0;
+  // A Reel: the exact part the Reel plays (26 Nov 2026, Paul): its saved shot plan's section; until one is made, about
+  // 90 s from just before the first chorus, and the note says so.
+  const reel = k === "short" ? reelRange(root) : null;
   const window =
     k === "full" || durationMs <= 90_000
       ? { fromMs: 0, toMs: durationMs }
-      : { fromMs: Math.max(0, chorusAt - 4000), toMs: Math.min(durationMs, Math.max(0, chorusAt - 4000) + 90_000) };
-  const windowNote = k === "full" ? "the whole song (YouTube, Mini film): 1/3 of it" : "a Reel of about 90 s from just before the first chorus (TikTok, Shorts the same share): 1/6 of it";
+      : reel
+        ? { fromMs: Math.max(0, reel.startMs), toMs: Math.min(durationMs || reel.endMs, reel.endMs) }
+        : { fromMs: Math.max(0, chorusAt - 4000), toMs: Math.min(durationMs, Math.max(0, chorusAt - 4000) + 90_000) };
+  const clock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
+  const windowNote =
+    k === "full"
+      ? "the whole song (YouTube, Mini film): 1/3 of it"
+      : reel && durationMs > 90_000
+        ? `the ${reel.platform}'s part, ${clock(window.fromMs)} - ${clock(window.toMs)} (its shot plan; TikTok, Shorts the same share): 1/6 of it`
+        : "a Reel of about 90 s from just before the first chorus (TikTok, Shorts the same share; exact once the Reel's shot plan is made): 1/6 of it";
   const target = singingTargetMs(window.toMs - window.fromMs, k);
   const decisions = readDecisions(root);
   const r = singingSlots(lines, sections, window, target, { splits: decisions.splits });
@@ -122,6 +135,17 @@ export async function singingView(ws: Workspace, projectId: string, kind: Singin
   const clips = Object.keys(checks).map((name) => ({ name, label: editOf(edits, name).label ?? null, check: checks[name] }));
   const matches = matchSlots(r.slots, clips, lines, { accepted, ignored: decisions.ignored });
   return { kind: k, window, windowNote, matches, meter: singingMeter(matches, target), linesShortMs: r.linesShortMs, checks, timed: lines.length > 0 };
+}
+
+// The part of the song the Reel plays: its saved shot plan (storyboards\reels-1.json; else TikTok's, else Shorts').
+export function reelRange(songRoot: string): { startMs: number; endMs: number; platform: string } | null {
+  const names: Record<string, string> = { reels: "Reel", tiktok: "TikTok", shorts: "Short" };
+  for (const platform of ["reels", "tiktok", "shorts"]) {
+    const sb = readStoryboard(path.join(songRoot, STORYBOARD_DIR, `${platform}-1.json`));
+    const sec = sb?.output.range;
+    if (sec && Number.isFinite(sec.startMs) && Number.isFinite(sec.endMs) && sec.endMs > sec.startMs) return { startMs: sec.startMs, endMs: sec.endMs, platform: names[platform] };
+  }
+  return null;
 }
 
 // Accept a suggestion: the clip is marked for singing that slot in clips.json (display only); another clip accepted for

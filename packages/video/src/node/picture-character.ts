@@ -24,7 +24,7 @@ export type CharacterChoice = { id: string; name: string };
 // The characters a picture can be: character cards with a close-up (their face sheet's first panel).
 export function characterChoices(ws: Workspace): CharacterChoice[] {
   return listCards(ws)
-    .filter((c) => c.kind === "character" && /closeup\.png$/.test(c.thumbnail))
+    .filter((c) => c.kind === "character" && /closeup\.png$/.test(c.picture))
     .map((c) => ({ id: c.id, name: c.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -71,7 +71,7 @@ export function startPictureAnimate(ws: Workspace, projectId: string, file: stri
   if (!who || !PICTURE_FILE.test(name)) return startAnimate(ws, projectId, file, o, env);
   if (!existsSync(path.join(dir, name))) throw new Error(`No picture ${file} on this song's board.`);
   const card = listCards(ws).find((c) => c.id === who.id)!;
-  const sheet = faceSheet(ws, path.join(cardRoot(ws, card), path.dirname(card.thumbnail)), who.name);
+  const sheet = faceSheet(ws, path.join(cardRoot(ws, card), card.viewDir), who.name);
   if (!sheet) throw new Error(`${who.name} has no close-up yet: make the views in Characters first.`);
   if (!env.LYRIC_GENERATE_STUB) transportFor("wavespeed", "best", env); // no key: the plain-words message, nothing recorded
   const defaults = readCreationDefaults(ws.dir);

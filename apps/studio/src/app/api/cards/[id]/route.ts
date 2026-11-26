@@ -18,15 +18,17 @@ import { connection } from "next/server";
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import {
   asidePictures, putAsideView, removeCard, restoreReference, restoreView, calibrationSongs, cardFace, draftDescription, hasGeminiKey, moveOwnPicture, GEMINI_KEY_MISSING, addLook, getLook, listLooks, lookDir, lookEstimate, lookProblems, setLookLocked, updateLook, MAIN_LOOK, cardTools, ensureSplit, splitNeeded, cardJobsFor, cardRoot, cardThresholds, checkCardPicture, cropCardToFace, currentVersion, enqueueCardJob, getCard, lockCard, lockProblems,
-  MODELS, newVersion, usableVersion, versionByNumber, packEstimate, readCardFile, readReport, repickLegacy, buildSheet, characterSheet, geminiPackPrompt, lookViews, runCardJob, VIEWS, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId, characterBlock, renameCard, setCardNotes,
+  MODELS, newVersion, usableVersion, versionByNumber, packEstimate, readCardFile, readReport, repickLegacy, buildSheet, characterSheet, geminiPackPrompt, lookViews, runCardJob, VIEWS, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId, characterBlock, renameCard, setCardNotes, setCover, tidyCardTexts, cardThumbnail,
 } from "@lyric/video/characters";
+import { lockForSongs, songsUsingCard, switchSongs, setSongCardVersion, type LockAsk } from "@lyric/video/card-versions";
+import { outfitWarning } from "@lyric/video/card-text";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
 type Params = { params: Promise<{ id: string }> };
 const fail = (error: unknown) => Response.json({ error: (error as Error).message }, { status: 400 });
 
-function detail(id: string, message: string | null = null, n: number | null = null) {
+function detail(id: string, message: string | null = null, n: number | null = null, lockAsk: LockAsk = null) {
   return withWorkspace((ws) => {
     const row = getCard(ws, id);
     const root = cardRoot(ws, row);
@@ -42,6 +44,12 @@ function detail(id: string, message: string | null = null, n: number | null = nu
     }
     return {
       message,
+      lockAsk, // just locked: the songs kept on the older version, to ask "Switch these songs to vN?"
+      // Tidy-up (26 Nov 2026): the card's thumbnail (its cover until a version is locked), the songs that use the card and
+      // the version each one uses, and the outfit check of this version and of each look.
+      thumbnail: cardThumbnail(root, file),
+      usedBy: songsUsingCard(ws, id),
+      outfitWarning: row.kind === "character" ? outfitWarning(v.outfit) : null,
       card: row,
       file,
       version: v,
@@ -65,6 +73,7 @@ function detail(id: string, message: string | null = null, n: number | null = nu
           report: look ? readReport(lookDir(root, look.id)) : null,
           estimate: look ? lookEstimate(look) : null,
           problems: look ? lookProblems(root, look) : [],
+          outfitWarning: outfitWarning(l.outfit),
           geminiMissing: look?.model === "gemini" && !hasGeminiKey() ? GEMINI_KEY_MISSING : null,
           // Copy the Gemini prompt: the look's views as the app would send them (outdoors, natural skin).
           geminiPrompt: row.kind === "character" ? geminiPackPrompt(look ? VIEWS.filter((x) => lookViews(look).includes(x.id)) : VIEWS, look ? look.outfit : v.outfit, look ? look.outfit_split : v.outfit_split) : null,
@@ -170,8 +179,27 @@ export async function POST(request: Request, { params }: Params) {
         break;
       case "remove":
         return Response.json({ removed: withWorkspace((ws) => removeCard(ws, id)).summary });
-      case "lock":
-        withWorkspace((ws) => lockCard(ws, id));
+      case "lock": {
+        const ask = withWorkspace((ws) => lockForSongs(ws, id));
+        return Response.json(detail(id, ask ? null : message, null, ask));
+      }
+      case "switch-songs": {
+        const raw = (body as { songs?: unknown }).songs;
+        const songs = Array.isArray(raw) ? (raw.filter((s) => typeof s === "string") as string[]) : [];
+        const n = withWorkspace((ws) => switchSongs(ws, id, songs));
+        message = n ? `${n} song${n === 1 ? "" : "s"} now use${n === 1 ? "s" : ""} the newest locked version.` : "The songs stay on the version they used.";
+        break;
+      }
+      case "song-version": {
+        const b = body as { songId?: unknown; version?: unknown };
+        withWorkspace((ws) => setSongCardVersion(ws, String(b.songId ?? ""), id, b.version === null || b.version === undefined ? null : Number(b.version)));
+        break;
+      }
+      case "cover":
+        withWorkspace((ws) => setCover(ws, id, (body as { file?: string | null }).file ?? null));
+        break;
+      case "tidy":
+        message = withWorkspace((ws) => tidyCardTexts(ws, id)).note;
         break;
       case "new-version":
         withWorkspace((ws) => newVersion(ws, id));

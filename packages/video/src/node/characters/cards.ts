@@ -10,7 +10,7 @@
 //
 // A locked version is read-only. "New version" copies the latest into the next folder as a draft; nothing is ever
 // deleted. The database table `card` lists the cards (for the Characters page and, later, the Storyboard picker).
-import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { absPath, card as cardTable, CARD_SCOPES, type Card, type Workspace } from "@lyric/db";
@@ -49,6 +49,7 @@ export type CardFile = {
   main_look?: string; // the Wardrobe: the name of the pack's own outfit (default "Main look")
   looks?: Look[]; // the Wardrobe: further looks (looks.ts)
   notes?: string; // the user's own words (look, outfit, vibe, age range): library.ts, never sent to a model by itself
+  cover?: string; // the card's thumbnail until a version is locked (a picture in the card folder; default: the reference)
 };
 
 export const CARD_DIRS: Record<CardKind, string> = { character: "characters", scene: "scenes" };
@@ -76,6 +77,27 @@ export const currentVersion = (file: CardFile): CardVersion => file.versions[fil
 // The version scenes, stills and recasts use: the latest locked one (a newer draft does not take its place until it is
 // locked). Null while nothing is locked yet.
 export const usableVersion = (file: CardFile): CardVersion | null => [...file.versions].reverse().find((v) => v.status === "locked") ?? null;
+// The version a song uses: the one it is kept on ("Keep on v1" when v2 was locked), else the version in use, else the
+// draft (a card never locked).
+export const songVersion = (file: CardFile, pin?: number | null): CardVersion =>
+  (pin ? file.versions.find((v) => v.n === pin && v.status === "locked") : undefined) ?? usableVersion(file) ?? currentVersion(file);
+// The picture a song sends for this card (the close-up, or a scene's first angle, of the song's version; else the
+// reference picture) and that version's folder ("v1"). Pure but for existsSync.
+export function songPicture(root: string, file: CardFile, pin?: number | null): { picture: string; viewDir: string } {
+  const v = songVersion(file, pin);
+  const main = file.kind === "character" ? "closeup.png" : "wide_left.png";
+  return { picture: existsSync(path.join(versionDir(root, v.n), main)) ? `v${v.n}/${main}` : file.reference, viewDir: `v${v.n}` };
+}
+// The card's thumbnail (26 Nov 2026, Paul): the locked close-up once a version is locked, else the chosen cover, else the
+// user's own reference picture (a half-made draft pack never stands for the card).
+export function cardThumbnail(root: string, file: CardFile): string {
+  const used = usableVersion(file);
+  const main = file.kind === "character" ? "closeup.png" : "wide_left.png";
+  if (used && existsSync(path.join(versionDir(root, used.n), main))) return `v${used.n}/${main}`;
+  if (file.cover && existsSync(path.join(root, file.cover))) return file.cover;
+  return file.reference;
+}
+
 // One version by number (for viewing an older, read-only version); the current one when n is missing or unknown.
 export const versionByNumber = (file: CardFile, n?: number | null): CardVersion => file.versions.find((v) => v.n === n) ?? currentVersion(file);
 
@@ -94,7 +116,9 @@ export function getCard(ws: Workspace, id: string): Card {
 }
 
 // draft: the number of a newer draft being worked on next to the locked version in use (null when there is none).
-export type CardSummary = Card & { thumbnail: string; views: number; description: string | null; draft: number | null; looks: string[] };
+// thumbnail: what the card looks like on the page (cardThumbnail); stamp: its file's time (a remade picture shows at once);
+// picture / viewDir: what songs send (songPicture, without a song's own version choice).
+export type CardSummary = Card & { thumbnail: string; stamp: number; picture: string; viewDir: string; views: number; description: string | null; draft: number | null; looks: string[] };
 
 // The page's list: every card with its thumbnail (the close-up, or the first location angle, else the picture).
 export function listCards(ws: Workspace): CardSummary[] {
@@ -107,11 +131,16 @@ export function listCards(ws: Workspace): CardSummary[] {
       const v = currentVersion(file);
       const vdir = versionDir(root, v.n);
       const views = existsSync(vdir) ? readdirSync(vdir).filter((f) => IMAGE_EXT.test(f) && !/_full|_try\d/.test(f) && !/^(character_)?sheet/.test(f)) : [];
-      const main = row.kind === "character" ? "closeup.png" : "wide_left.png";
-      const thumbnail = views.includes(main) ? `v${v.n}/${main}` : file.reference;
+      const thumbnail = cardThumbnail(root, file);
       const used = usableVersion(file);
+      let stamp = 0;
+      try {
+        stamp = Math.round(statSync(path.join(root, thumbnail)).mtimeMs);
+      } catch {
+        // no picture file: no stamp
+      }
       const looks = row.kind === "character" && file.looks?.length ? [file.main_look?.trim() || "Main look", ...file.looks.map((l) => l.name)] : [];
-      return { ...row, thumbnail, views: views.length, description: (used ?? v).description ?? null, draft: used && v.status === "draft" ? v.n : null, looks };
+      return { ...row, thumbnail, stamp, ...songPicture(root, file), views: views.length, description: (used ?? v).description ?? null, draft: used && v.status === "draft" ? v.n : null, looks };
     })
     .filter((x): x is CardSummary => x !== null)
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -268,6 +297,23 @@ export function newVersion(ws: Workspace, id: string): CardFile {
   file.versions.push({ n, status: "draft", created_at: now(), model: last.model, outfit: last.outfit, outfit_split: last.outfit_split, props: last.props, description: last.description });
   writeCardFile(root, file);
   touch(ws, id, { status: "locked", version: last.n });
+  return file;
+}
+
+// The card's cover until a version is locked: one of its own pictures (the reference, the second picture, or a view of
+// any version), or null for the reference picture again. Allowed on a locked card too (it shows once nothing is locked).
+export function setCover(ws: Workspace, id: string, rel: string | null): CardFile {
+  const row = getCard(ws, id);
+  const root = cardRoot(ws, row);
+  const file = readCardFile(root);
+  if (rel === null || rel === "" || rel === file.reference) delete file.cover;
+  else {
+    const ok = (rel === file.reference2 || /^v\d+\/[\w-]+\.png$/.test(rel)) && cardFilePath(root, rel);
+    if (!ok) throw new Error("Choose one of this card's own pictures as its cover.");
+    file.cover = rel;
+  }
+  writeCardFile(root, file);
+  touch(ws, id);
   return file;
 }
 

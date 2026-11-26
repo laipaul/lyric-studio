@@ -15,7 +15,7 @@ import path from "node:path";
 
 import type { Workspace } from "@lyric/db";
 
-import { cardRoot, currentVersion, getCard, readCardFile, usableVersion, versionDir, writeCardFile, type CardFile } from "./cards";
+import { cardRoot, currentVersion, getCard, readCardFile, usableVersion, versionDir, writeCardFile, type CardFile, type CardVersion } from "./cards";
 import { estimate, MODELS, safeName, splitIsCurrent, TEXT_MODEL, type ModelId, type OutfitSplit } from "./plan";
 
 export const MAIN_LOOK = "main";
@@ -181,8 +181,9 @@ export function lookEstimate(look: Look): { usd: number; worstUsd: number; text:
 }
 
 // The outfit a song uses for a cast character: the chosen look's, else the main look's.
-export function lookOutfit(file: CardFile, lookId: string | null | undefined): { id: string; name: string; outfit: string | null } {
+// version: the card version a song uses (its own choice, card-versions.ts); default the version in use.
+export function lookOutfit(file: CardFile, lookId: string | null | undefined, version?: CardVersion): { id: string; name: string; outfit: string | null } {
   const look = lookId && lookId !== MAIN_LOOK ? (file.looks ?? []).find((l) => l.id === lookId) : null;
   if (look) return { id: look.id, name: look.name, outfit: look.outfit ?? null };
-  return { id: MAIN_LOOK, name: mainLookName(file), outfit: (usableVersion(file) ?? currentVersion(file)).outfit ?? null };
+  return { id: MAIN_LOOK, name: mainLookName(file), outfit: (version ?? usableVersion(file) ?? currentVersion(file)).outfit ?? null };
 }

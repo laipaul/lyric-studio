@@ -4,6 +4,37 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Characters tidy-up ✅ (to verify on the PC)
+Small urgent step before LatentSync (26 Nov 2026, Paul: "I'm cleaning up all my characters and I'm blocked because
+locked cards can't be edited").
+- **Edit → new version**: on a locked card, next to its name, and on the Locked badge (click it). It starts a v2 draft
+  copied from v1 (texts and pictures; the existing New version, now visible at the top). v1 stays locked and unchanged.
+  While v2 is a draft, **every song keeps v1's pictures** (before, a song's shots and Make with references already took
+  the draft's close-up). Locking v2 keeps every song that uses the card on v1 and asks: "v2 is locked. These songs use
+  v1: … Switch them to v2?" **Switch to v2** / **Keep on v1**. Later, "Songs using <card>" on the card lists each song
+  with its version and a "Use v2" button. Stored per song in production\production.json ("versions": card → version;
+  node/card-versions.ts). A song uses a card when its Cast lists it or its shot list names it.
+- **Rename** (built earlier today): click the name or its pencil; only the display name changes, a duplicate name is
+  refused in plain words.
+- **Outfit texts**: an outfit that names no clothes shows "Outfit describes a face, not clothes" (on the pack's outfit
+  and on each Wardrobe look). **Tidy texts** (draft only, free, local: src\card-text.ts) moves the face, hair, skin,
+  makeup and age words from the Outfit and its "Close-ups show / Front shows / Back shows" to Notes; only clothes stay.
+  The outfit split now never describes the face (its prompt says so, and face words it keeps anyway are dropped); an
+  outfit with no clothes is not split at all. A locked version is left as it was: Edit → new version, then Tidy texts.
+  Copy character for Claude also warns about a look whose outfit describes a face.
+- **Card thumbnail**: your own reference picture until a version is locked (a half-made pack never stands for the
+  card), or a cover you choose ("Use as cover" under any made view; "Use this picture again" to go back); once locked,
+  the locked close-up. The picture refreshes as soon as its file changes (remade pack).
+- **View tiles**: each face view (close-up, 3/4, side profile, teeth) shows its face score on the tile ("face 0.62";
+  "face –" when no face was measured). Long file names: shortened in the middle, whole on hover (earlier today).
+- **Copy character for Claude** (earlier today): description first, then the wardrobe; warnings for empty Notes or
+  outfits; only existing reference pictures, then one "Missing: …" line; the closing "Attach …" line.
+- **Reel singing target**: the exact part the Reel plays, from its saved shot plan (storyboards\reels-1.json; else
+  TikTok's, else Shorts'). Until a Reel's shot plan exists, the old estimate stays and the note says "exact once the
+  Reel's shot plan is made".
+- Tests: test\characters-tidy.test.ts (7); characters.e2e.ts (Locked badge, Edit → new version, outfit warning, Tidy
+  texts, thumbnail of a card with a v2 draft).
+
 ### Nextgen sprint, step 2: Lip-sync readiness ✅ (to verify on the PC; thresholds to calibrate on your clips)
 - Sprint order: 1 Cast Library ✅ → **2 Lip-sync readiness ✅** → next: **LatentSync spike**, then **Take history**, then
   **Consistency Score** (1b sheet generation stays planned).
@@ -643,15 +674,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 - Part 2 (the character sheet sent as a Seedance reference) waits until Scenes exist and a test clip proves it.
 - Tests: vitest film-looks (10), animate, themes, library pass; browser film-looks (11 checks), pictures, singer,
   library pass.
-
-### Film grain (Look) ✅ (to verify on the PC)
-- Paul (22 Nov 2026), from Joey's finishing step: "overlay real film grain to unify AI textures". Shape → Settings →
-  Look → **Film grain**: Off (default: videos as before) / Light / Medium; per song or in a theme.
-- A fine noise tile drawn in the page (an SVG noise filter as a data URI: no file, no network), in soft-light over
-  the clips, grade and vignette, under the words (the lyrics stay sharp); it moves to another place on every frame
-  (picture.ts grainOffset, deterministic). The same layer in the preview, the Remotion render (Grain.tsx) and the
-  HyperFrames composition (hf/compile.ts, moved per frame by the same function). Manifest settings.picture.grain.
-- Tests: vitest picture (+2), hf-compile (+1), hf-network, look-preview, look-patch pass; browser song-stages pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

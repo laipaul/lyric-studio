@@ -69,7 +69,7 @@ export function shotReferences(ws: Workspace, shot: ProductionShot): ReferencePi
       continue;
     }
     const name = `${worn.character}${worn.look ? ` · ${worn.look}` : ""}`;
-    const version = path.join(root, path.dirname(card.thumbnail)); // v<n>\ (the card's views)
+    const version = path.join(root, worn.viewDir ?? card.viewDir); // v<n>\ (the card version this song uses)
     const look = worn.lookId && worn.lookId !== MAIN_LOOK ? path.join(root, LOOKS_DIR, worn.lookId) : version;
     const faces = faceSheet(ws, version, name, worn.character, look, file);
     const outfit = existing([path.join(look, "body_front.png"), path.join(look, "body_back.png")]);

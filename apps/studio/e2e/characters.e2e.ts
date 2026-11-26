@@ -126,12 +126,27 @@ async function main() {
     check((await page.getAttribute("[data-character-sheet-save]", "download")) === `${await page.textContent("h1") ?? ""}`.trim() + " character sheet.png" || !!(await page.getAttribute("[data-character-sheet-save]", "download")), "Save downloads the sheet");
     if (process.env.CHAR_SHOT) await (await page.$("[data-character-sheet]"))!.screenshot({ path: process.env.CHAR_SHOT });
     if (process.env.CHAR_SHOT) await (await page.$("[data-extra-views]"))!.screenshot({ path: process.env.CHAR_SHOT.replace(".png", "-extras.png") });
-    await page.click("[data-new-version]");
+    // Tidy-up (26 Nov 2026): a locked card says how to edit it, on the card and on its Locked badge.
+    check(!!(await page.$("[data-locked-badge] [data-card-status=locked]")) && ((await page.getAttribute("[data-locked-badge]", "title")) ?? "").includes("Edit → new version"), "the Locked badge offers Edit → new version");
+    check(((await page.textContent("[data-edit-new-version]")) ?? "").includes("Edit → new version"), "the card shows Edit → new version");
+    await page.click("[data-edit-new-version]");
     await page.waitForSelector("[data-card-status=draft]");
     check(((await page.textContent("[data-card-status]")) ?? "").includes("Draft v2") && existsSync(path.join(dir, "v2", "closeup.png")), "New version: v2 is a draft, starting from v1's pictures");
     check(((await page.textContent("[data-draft-note]")) ?? "").includes("keep using locked v1"), "the draft says v1 stays in use until v2 is locked");
     check(((await page.textContent("[data-card-version='1']")) ?? "").includes("locked · in use"), "v1 is shown as locked and in use");
     check(((await page.inputValue("[data-card-words]")) ?? "").length > 0, "v2 starts with v1's outfit");
+    // A face description typed as the outfit: warned; Tidy texts moves it to Notes (free, local).
+    const outfitBefore = await page.inputValue("[data-card-words]");
+    await page.fill("[data-card-words]", "Late 20s, warm hazel eyes, long dark wavy hair, natural makeup.");
+    await page.locator("[data-card-words]").blur();
+    await page.waitForSelector("[data-outfit-warning]");
+    check(((await page.textContent("[data-outfit-warning]")) ?? "").startsWith("Outfit describes a face, not clothes"), "an outfit with no clothing words: \"Outfit describes a face, not clothes\"");
+    await page.click("[data-tidy]");
+    await page.waitForFunction(() => (document.querySelector("[data-card-notes]") as HTMLTextAreaElement | null)?.value.includes("hazel eyes"));
+    check((await page.inputValue("[data-card-words]")) === "" && !(await page.$("[data-outfit-warning]")), "Tidy texts: the face words are in Notes, the Outfit is empty, no warning");
+    await page.fill("[data-card-words]", outfitBefore);
+    await page.locator("[data-card-words]").blur();
+    await page.waitForFunction((o) => (document.querySelector("[data-card-words]") as HTMLTextAreaElement | null)?.defaultValue === o, outfitBefore);
     // Remake only the full-body views in the draft: front, then back; the face views are kept.
     await page.click("[data-remake-body]");
     await page.waitForFunction(() => document.querySelector("[data-last-job]")?.textContent?.includes("Remake Full body, front"), null, { timeout: 20_000 });
@@ -145,6 +160,7 @@ async function main() {
     await page.goto(`${base}/characters`);
     await page.waitForSelector("[data-card=bride]");
     check(((await page.textContent("[data-card=bride]")) ?? "").includes("Locked v1") && !!(await page.$("[data-card=bride] [data-card-draft='2']")), "the list: Locked v1, v2 draft");
+    check((await page.getAttribute("[data-card=bride] [data-card-thumb]", "data-card-thumb")) === "v1/closeup.png", "the list shows the locked close-up, not the v2 draft's");
 
     // A scene card with its key props.
     await page.goto(`${base}/characters`);
