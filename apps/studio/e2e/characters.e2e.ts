@@ -112,6 +112,11 @@ async function main() {
     // Persona (26 Nov 2026): editable on the locked card, saved with a history; Paste persona reads Claude's answer.
     check(((await page.textContent("[data-persona-help]")) ?? "").includes("brows, eyes, breath, mouth, hands"), "the Persona section shows its physical-description rule");
     check((await page.inputValue("[data-persona-section=chorus]")) === "finds the lens, signature gesture", "the section map starts from the defaults");
+    // Long answers wrap and the box grows (26 Nov 2026): no text cut off at the edge.
+    await page.fill("[data-persona-camera]", "3/4 from her left at eye level, soft window light from the side, slow push-in on held notes, shallow focus, held shots");
+    const box = await page.$eval("[data-persona-camera]", (e: Element) => ({ tag: e.tagName, scroll: e.scrollWidth, client: e.clientWidth, h: e.clientHeight }));
+    check(box.tag === "TEXTAREA" && box.scroll <= box.client + 1 && box.h > 40, `a long persona field wraps onto several lines (${box.h} px high)`);
+    await page.fill("[data-persona-camera]", "");
     await page.fill("[data-persona-archetype]", "The Quiet Romantic");
     await page.click("[data-persona-save]");
     await page.waitForSelector("[data-persona-edited]");

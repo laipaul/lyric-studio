@@ -31,11 +31,8 @@ function Field({ label, value, onChange, attr, placeholder, rows = 1 }: { label:
   return (
     <label className="flex flex-col gap-1 text-xs">
       <span className="font-medium">{label}</span>
-      {rows > 1 ? (
-        <textarea {...{ [attr]: "" }} value={value} rows={rows} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} className={input} />
-      ) : (
-        <input {...{ [attr]: "" }} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} className={input} />
-      )}
+      {/* Wraps and grows with the text (26 Nov 2026, Paul: long answers were cut off at the box's edge). */}
+      <textarea {...{ [attr]: "" }} value={value} rows={rows} placeholder={placeholder} onChange={(e) => onChange(e.target.value.replace(/\n+/g, " "))} className={`${input} min-h-9 resize-none [field-sizing:content]`} />
     </label>
   );
 }
@@ -139,7 +136,7 @@ export function PersonaSection({ cardId, name, info, busy, onSave, onRestore }: 
         {SECTION_KEYS.map((k) => (
           <label key={k} className="grid grid-cols-[7rem_1fr] items-center gap-2 text-xs">
             <span className="text-muted-foreground">{SECTION_LABEL[k]}</span>
-            <input data-persona-section={k} value={p.sections[k]} placeholder={DEFAULT_SECTION_MAP[k]} onChange={(e) => set((x) => ((x.sections[k] = e.target.value), x))} className={input} />
+            <textarea data-persona-section={k} value={p.sections[k]} rows={1} placeholder={DEFAULT_SECTION_MAP[k]} onChange={(e) => set((x) => ((x.sections[k] = e.target.value.replace(/\n+/g, " ")), x))} className={`${input} min-h-9 resize-none [field-sizing:content]`} />
           </label>
         ))}
       </div>

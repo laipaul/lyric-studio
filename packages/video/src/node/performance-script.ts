@@ -152,6 +152,24 @@ export async function editScript(ws: Workspace, projectId: string, key: string, 
   writeScript(root, s, false);
 }
 
+// Mark all checked (never a stale entry: it waits until Paul looks at it again) or untick all. Returns how many changed.
+export async function setAllChecked(ws: Workspace, projectId: string, checked: boolean): Promise<number> {
+  const root = songPathsById(ws, projectId).root;
+  const s = readScript(root);
+  if (!s) throw new Error("This song has no performance script yet.");
+  const now = await currentSegments(ws, projectId);
+  let n = 0;
+  for (const e of s.entries) {
+    if (checked && staleness(e, now)) continue;
+    if (e.checked !== checked) {
+      e.checked = checked;
+      n++;
+    }
+  }
+  writeScript(root, s, false);
+  return n;
+}
+
 export type ScriptView = { script: ScriptFile | null; entries: (ScriptEntry & { stale: string | null; time: string; text: string; section: string | null })[]; segments: number };
 
 export async function scriptView(ws: Workspace, projectId: string): Promise<ScriptView> {

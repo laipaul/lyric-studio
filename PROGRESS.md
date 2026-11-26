@@ -48,6 +48,16 @@ not understand the lyrics: the feeling must come from the start image and the pr
   26 s found; percentiles relative); packages/video test/performance-script.test.ts (7: request with cues, personas,
   escalation; parser clean and messy; staleness; direction vs section map; cues cached; scopes; render props
   unchanged); browser: e2e/performance-script.e2e.ts (in pnpm test:e2e).
+- **Follow-ups the same day (Paul testing on the PC):**
+  - Fix: **Copy shot prompt** said "Tag who is in this clip first" on a tagged clip. The clip's entry in clips.json
+    was stored under a differently written name (upper / lower case, or accents encoded differently on Windows /
+    macOS); clip names now match regardless of case and Unicode form everywhere (clip-edits.ts clipKey / sameClip;
+    done by a Sonnet helper, checked). Test: a song with two characters, the tag stored as "02_RED.mp4".
+  - The Persona's long fields **wrap and grow** with the text (no more text cut off at the box's edge).
+  - **Sections in Lyrics Sync for every song style** (before: Mini film only), since the Persona's section map and the
+    Performance script use them on Reels too.
+  - Script panel: **Mark all checked** (stale lines wait for a look) and **Untick all**. "Checked" stays your review
+    marker only (Paul, option 1): every fresh line's direction is used in shot prompts, ticked or not.
 - **To validate on your songs** (point 2): `pnpm music:cues "<ballad title>"` and `pnpm music:cues "<build/drop song>"`,
   paste both tables in the chat; the limits get tuned on them.
 

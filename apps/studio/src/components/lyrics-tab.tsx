@@ -6,7 +6,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 
 import { clockTenths, linesInVideo } from "@lyric/video";
 import type { AnchorClip, LyricsLine, LyricsView } from "@lyric/video/lyrics-view";
-import { showsFilm, showsSinging } from "@lyric/video/song-style";
+import { showsSinging } from "@lyric/video/song-style";
 
 import { HidePreview } from "@/components/hide-preview";
 import { SingerBar, SingerCell, useSinger } from "@/components/singer";
@@ -138,9 +138,10 @@ export function LyricsTab({ projectId }: { projectId: string }) {
   const singer = useSinger(projectId, reloadAnchors);
   // Song style (song-style.ts): Who sings shows for Add lip sync and Mini film, and on any song that has singing lines.
   const style = useSongStyle(projectId);
-  // Mini film: the song's sections (sections-ui.tsx), above the lines and as a row before each section.
-  const film = !!style && showsFilm(style.style);
-  const sections = useSections(projectId, film);
+  // The song's sections (sections-ui.tsx), above the lines and as a row before each section: for every song style since
+  // 26 Nov 2026 (the Persona's section map and the Performance script use them on Reels too; before, Mini film only).
+  const withSections = !!style;
+  const sections = useSections(projectId, withSections);
 
   const change = (update: (p: Pending) => void) => {
     setHistory((h) => [...h, pending]);
@@ -371,7 +372,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
               <span>The other shots follow the song&apos;s clip order (Prepare → Storyboard) in every video.</span>
               {!data.anchors.clips.length ? <span className="text-amber-200">No clips to choose from: add clips and photos or a collection in Prepare → Storyboard.</span> : null}
             </div>
-            {film ? <SectionsBar sections={sections} startMs={(n) => data.lines?.find((x) => x.number === n)?.startMs ?? null} /> : null}
+            {withSections ? <SectionsBar sections={sections} startMs={(n) => data.lines?.find((x) => x.number === n)?.startMs ?? null} /> : null}
             {withSinging ? <SingerBar singer={singer} /> : (
               <p className="text-muted-foreground text-xs" data-singing-off>The Lip sync column is hidden: this song&apos;s style is Cut to the song. Choose Add lip sync in Song Details to put the singer on lines.</p>
             )}
@@ -424,7 +425,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                     const sungWith = anchor ? null : (data.anchors.list.find((a) => a.sync !== undefined && a.line < l.number && l.number <= (a.through ?? a.line)) ?? null);
                     const anchorClip = anchor ? data.anchors.clips.find((c) => c.name.toLowerCase() === anchor.clip.toLowerCase()) : undefined;
                     const problems = data.anchors.problems.filter((p) => p.line === l.number);
-                    const sectionHere = film ? (sections.view?.sections.find((x) => x.line === l.number) ?? null) : null;
+                    const sectionHere = withSections ? (sections.view?.sections.find((x) => x.line === l.number) ?? null) : null;
                     return (
                       <Fragment key={l.number}>
                       {sectionHere ? <SectionHeaderRow section={sectionHere} sections={sections} colSpan={withSinging ? 9 : 8} /> : null}
@@ -436,7 +437,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                         className={cn("group border-b align-top last:border-b-0", l.flagged && !l.checkedByEar && "bg-amber-400/5", changed && "bg-brand/5", inPart && !inPart.at.has(l.number) && "opacity-55", inPart?.first === l.number && "border-t-brand border-t-2")}
                       >
                         <td className="text-muted-foreground px-3 py-2 tabular-nums">
-                          {film && !sectionHere && sections.view ? (
+                          {withSections && !sectionHere && sections.view ? (
                             <span className="flex items-center gap-0.5">
                               {l.number}
                               <StartSectionButton line={l.number} sections={sections} />

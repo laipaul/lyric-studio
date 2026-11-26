@@ -143,8 +143,11 @@ export function rankOf(edits: ClipEdits, name: string): number | undefined {
   const i = edits.order.findIndex((n) => n.toLowerCase() === name.toLowerCase());
   return i >= 0 ? i : undefined;
 }
+// Clip names match case-insensitively and regardless of Unicode form (NFC / NFD, as Windows and macOS file names differ).
+export const clipKey = (name: string): string => name.normalize("NFC").toLowerCase();
+export const sameClip = (a: string, b: string): boolean => clipKey(a) === clipKey(b);
 export function editOf(edits: ClipEdits, name: string): ClipEdit {
-  return Object.entries(edits.clips).find(([n]) => n.toLowerCase() === name.toLowerCase())?.[1] ?? {};
+  return Object.entries(edits.clips).find(([n]) => sameClip(n, name))?.[1] ?? {};
 }
 
 // ---- The song's clip order, one sequence for Assets, Shape and Make (2 Nov 2026) ----
@@ -194,7 +197,7 @@ export function isOmitted(edits: ClipEdits, name: string): boolean {
 export function setClipOmit(songRoot: string, name: string, omit: boolean): ClipEdits {
   if (typeof name !== "string" || !name.trim()) throw new Error("Which clip?");
   const edits = readClipEdits(songRoot);
-  const key = Object.keys(edits.clips).find((n) => n.toLowerCase() === name.toLowerCase()) ?? name;
+  const key = Object.keys(edits.clips).find((n) => sameClip(n, name)) ?? name;
   const { omit: _old, ...rest } = edits.clips[key] ?? {};
   const clips = Object.fromEntries(Object.entries(edits.clips).filter(([n]) => n !== key));
   const next: ClipEdit = omit ? { ...rest, omit: true } : rest;
@@ -208,7 +211,7 @@ export function isLineOnly(edits: ClipEdits, name: string): boolean {
 }
 export function setClipLineOnly(songRoot: string, name: string, lineOnly: boolean): ClipEdits {
   const edits = readClipEdits(songRoot);
-  const key = Object.keys(edits.clips).find((n) => n.toLowerCase() === name.toLowerCase()) ?? name;
+  const key = Object.keys(edits.clips).find((n) => sameClip(n, name)) ?? name;
   const { lineOnly: _old, ...rest } = edits.clips[key] ?? {};
   const clips = Object.fromEntries(Object.entries(edits.clips).filter(([n]) => n !== key));
   const next: ClipEdit = lineOnly ? { ...rest, lineOnly: true } : rest;
@@ -220,7 +223,7 @@ export function setClipLineOnly(songRoot: string, name: string, lineOnly: boolea
 export function setClipCast(songRoot: string, name: string, ids: readonly string[]): ClipEdits {
   if (typeof name !== "string" || !name.trim()) throw new Error("Which clip?");
   const edits = readClipEdits(songRoot);
-  const key = Object.keys(edits.clips).find((n) => n.toLowerCase() === name.toLowerCase()) ?? name;
+  const key = Object.keys(edits.clips).find((n) => sameClip(n, name)) ?? name;
   const { cast: _old, ...rest } = edits.clips[key] ?? {};
   const clips = Object.fromEntries(Object.entries(edits.clips).filter(([n]) => n !== key));
   const unique = [...new Set(ids.map((x) => x.trim()).filter(Boolean))];
@@ -233,7 +236,7 @@ export function setClipCast(songRoot: string, name: string, ids: readonly string
 export function setClipLabel(songRoot: string, name: string, label: unknown): ClipEdits {
   if (typeof name !== "string" || !name.trim()) throw new Error("Which clip?");
   const edits = readClipEdits(songRoot);
-  const key = Object.keys(edits.clips).find((n) => n.toLowerCase() === name.toLowerCase()) ?? name;
+  const key = Object.keys(edits.clips).find((n) => sameClip(n, name)) ?? name;
   const { label: _old, ...rest } = edits.clips[key] ?? {};
   const clips = Object.fromEntries(Object.entries(edits.clips).filter(([n]) => n !== key));
   const text = cleanLabel(label);

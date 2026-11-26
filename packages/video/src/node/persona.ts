@@ -12,7 +12,7 @@ import { cleanPersona, personaRequest, personaShotPrompt, type Persona, type Sho
 import { songsUsingCard } from "./card-versions";
 import { cardRoot, currentVersion, getCard, listCards, readCardFile, usableVersion, writeCardFile } from "./characters/cards";
 import { listLooks } from "./characters/looks";
-import { readClipEdits } from "./clip-edits";
+import { editOf, readClipEdits, sameClip } from "./clip-edits";
 import { singingView } from "./lipsync";
 import { productionData, readProduction, timedLines, writeProduction, type CastCard } from "./production";
 import { readRecipe } from "./recipe";
@@ -133,24 +133,24 @@ function lineAt(lines: { number: number; startMs: number | null; endMs: number |
 // shot plan, else its accepted singing slot.
 function placeOfClip(ctx: Awaited<ReturnType<typeof songContext>>, clip: string): Place {
   const anchors = ctx.paths.recipe ? (readRecipe(ctx.paths.recipe).anchors ?? []) : [];
-  const a = anchors.filter((x) => x.clip === clip).sort((x, y) => x.line - y.line)[0];
+  const a = anchors.filter((x) => sameClip(x.clip, clip)).sort((x, y) => x.line - y.line)[0];
   if (a) return { line: a.line, how: "anchor" };
   for (const platform of ["reels", "tiktok", "shorts", "youtube"]) {
     const sb = readStoryboard(path.join(ctx.paths.root, STORYBOARD_DIR, `${platform}-1.json`));
-    const shot = sb?.shots.filter((s) => s.clip === clip).sort((x, y) => x.startMs - y.startMs)[0];
+    const shot = sb?.shots.filter((s) => sameClip(s.clip, clip)).sort((x, y) => x.startMs - y.startMs)[0];
     if (shot) {
       const line = lineAt(ctx.lines, shot.startMs);
       if (line) return { line, how: "plan" };
     }
   }
-  const mark = readClipEdits(ctx.paths.root).clips[clip]?.lipsync;
+  const mark = editOf(readClipEdits(ctx.paths.root), clip).lipsync;
   if (mark) return { line: mark.lines[0], how: "slot" };
   return null;
 }
 
 export async function clipShotPrompt(ws: Workspace, projectId: string, clip: string): Promise<{ text: string; place: Place }> {
   const ctx = await songContext(ws, projectId);
-  const edit = readClipEdits(ctx.paths.root).clips[clip];
+  const edit = editOf(readClipEdits(ctx.paths.root), clip);
   const people = peopleFor(ws, ctx, whoIn(ctx, edit?.cast));
   const place = placeOfClip(ctx, clip);
   const singing = !!edit?.lipsync || place?.how === "slot";
@@ -177,7 +177,7 @@ export async function slotShotPrompt(ws: Workspace, projectId: string, slotKey: 
   const view = await singingView(ws, projectId);
   const m = view.matches.find((x) => x.slot.key === slotKey);
   if (!m) throw new Error("That singing slot is not in this song any more: reload the page.");
-  const edit = m.clip ? readClipEdits(ctx.paths.root).clips[m.clip] : undefined;
+  const edit = m.clip ? editOf(readClipEdits(ctx.paths.root), m.clip) : undefined;
   const people = peopleFor(ws, ctx, whoIn(ctx, edit?.cast));
   const script = await scriptFor(ws, projectId, ctx.paths.root, m.slot.lines[0]);
   const text = personaShotPrompt({ people, section: sectionOf(ctx.sections, m.slot.lines[0]), lyric: linesText(ctx.lines, m.slot.lines), singing: true, song: ctx.title, script });

@@ -163,9 +163,17 @@ export function PerformanceScriptPanel({ projectId }: { projectId: string }) {
       ) : null}
       {v.entries.length ? (
         <>
-          <p className="text-muted-foreground text-xs" data-script-summary>
-            {v.entries.length} lines in the script · {checked} checked{stale ? ` · ${stale} stale (the lyrics or timing changed: not used until you check them)` : ""}
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-muted-foreground text-xs" data-script-summary>
+              {v.entries.length} lines in the script · {checked} checked{stale ? ` · ${stale} stale (the lyrics or timing changed: not used until you check them)` : ""}
+            </p>
+            <Button size="sm" variant="outline" disabled={!!busy || checked === v.entries.length - stale} onClick={async () => { const d = await post<View>("check-all", { action: "check-all", checked: true }); if (d) setV((x) => (x ? { ...x, ...d, cues: x.cues } : x)); }} data-script-check-all title="Every line you have read: checked (stale lines wait for a look)">
+              <Check /> Mark all checked
+            </Button>
+            <Button size="sm" variant="ghost" disabled={!!busy || checked === 0} onClick={async () => { const d = await post<View>("check-all", { action: "check-all", checked: false }); if (d) setV((x) => (x ? { ...x, ...d, cues: x.cues } : x)); }} data-script-uncheck-all>
+              Untick all
+            </Button>
+          </div>
           <ul className="flex flex-col gap-1.5" data-script-entries>
             {v.entries.map((e) => (
               <li key={e.key} data-script-entry={e.key} data-stale={e.stale ? "" : undefined} data-checked={e.checked ? "" : undefined} className={cn("rounded border px-2 py-1.5 text-xs", e.stale ? "border-amber-400/50" : e.checked ? "border-emerald-400/40" : "")}>

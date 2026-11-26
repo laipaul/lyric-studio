@@ -8,7 +8,7 @@
 import { connection } from "next/server";
 
 import { cachedMusicCues, musicCues } from "@lyric/video/music-cues";
-import { editScript, pasteScript, scriptRequestFor, scriptView } from "@lyric/video/performance-script-node";
+import { editScript, pasteScript, scriptRequestFor, scriptView, setAllChecked } from "@lyric/video/performance-script-node";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
@@ -35,7 +35,7 @@ export async function GET(_request: Request, { params }: Params) {
 
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
-  const body = (await request.json().catch(() => ({}))) as { action?: unknown; scope?: unknown; text?: unknown; key?: unknown; patch?: unknown; fresh?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { action?: unknown; scope?: unknown; text?: unknown; key?: unknown; patch?: unknown; fresh?: unknown; checked?: unknown };
   try {
     switch (body.action) {
       case "analyse":
@@ -50,6 +50,9 @@ export async function POST(request: Request, { params }: Params) {
         const r = await withWorkspaceAsync((ws) => pasteScript(ws, id, String(body.text ?? "")));
         return Response.json({ ...r, ...(await withWorkspaceAsync((ws) => scriptView(ws, id))) });
       }
+      case "check-all": // Mark all checked (stale entries excepted) / Untick all
+        await withWorkspaceAsync((ws) => setAllChecked(ws, id, body.checked === true));
+        return Response.json(await withWorkspaceAsync((ws) => scriptView(ws, id)));
       case "edit":
         await withWorkspaceAsync((ws) => editScript(ws, id, String(body.key ?? ""), (body.patch ?? {}) as Record<string, unknown>));
         return Response.json(await withWorkspaceAsync((ws) => scriptView(ws, id)));

@@ -128,6 +128,14 @@ async function main() {
     const saved = JSON.parse(readFileSync(path.join(paths.root, "production", "script.json"), "utf8")) as { entries: { key: string; checked: boolean; camera: string }[] };
     check(saved.entries.find((e) => e.key === "L2")?.checked === true && saved.entries.find((e) => e.key === "L2")?.camera === "hold on her face", "marked checked and edited (production\\script.json)");
 
+    // Mark all checked / Untick all.
+    await page.click("[data-script-uncheck-all]");
+    await page.waitForFunction(() => document.querySelector("[data-script-summary]")?.textContent?.includes("· 0 checked"));
+    await page.click("[data-script-check-all]");
+    await page.waitForFunction(() => !document.querySelector("[data-script-summary]")?.textContent?.includes("· 0 checked"));
+    const all = JSON.parse(readFileSync(path.join(paths.root, "production", "script.json"), "utf8")) as { entries: { checked: boolean }[] };
+    check(all.entries.length > 0 && all.entries.every((e) => e.checked), "Mark all checked ticks every line; Untick all clears them");
+
     // The line changed since the paste: the entry is stale and says why.
     const s = JSON.parse(readFileSync(path.join(paths.root, "production", "script.json"), "utf8")) as { entries: { key: string; basis: { text: string } }[] };
     s.entries.find((e) => e.key === "L2")!.basis.text = "Hold on to you";
@@ -137,6 +145,11 @@ async function main() {
     if (!(await page.$("[data-story-tools][open]"))) await page.click("[data-story-tools] summary");
     await page.waitForSelector("[data-script-entry=L2][data-stale]");
     check(((await page.textContent("[data-script-entry=L2] [data-stale-reason]")) ?? "").includes("words changed"), "a changed line is marked stale, with the reason");
+
+    // Lyrics Sync: the sections bar for every song style (this song is not a Mini film).
+    await page.goto(`${base}/songs/${id}?tab=lyrics`);
+    await page.waitForSelector("[data-sections]", { timeout: 30_000 });
+    check(true, "Lyrics Sync shows the sections bar on a song that is not a Mini film");
 
     // Shape: the energy band under the song track.
     await page.goto(`${base}/songs/${id}?tab=storyboard`);

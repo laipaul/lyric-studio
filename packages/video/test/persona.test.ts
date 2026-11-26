@@ -13,6 +13,7 @@ import { findOrCreateSongProject, makeVideos, readRecipe, songPathsById, writeRe
 import { characterBlock, createCard, getCard, cardRoot, lockCard, makePictures, readCardFile, updateDraft, VIEWS } from "../src/node/characters";
 import { stubFace, stubFal } from "../src/node/characters/stub";
 import { clipShotPrompt, personaRequestFor, readPersona, restorePersona, setPersona, setPersonaNote } from "../src/node/persona";
+import { editOf, setClipCast } from "../src/node/clip-edits";
 import { setCast } from "../src/node/production";
 import { setSongSections } from "../src/node/song-sections";
 import { fakeAlign, ffmpeg, LYRICS, makeClip, makeSong } from "./media-helpers";
@@ -205,4 +206,24 @@ describe("a persona on a card and in a song", () => {
     expect(props).toHaveLength(2);
     expect(props[1]).toBe(props[0]);
   }, 180_000);
+
+  it("finds a clip's cast tag whatever the case of its key in clips.json, with two characters in the song", async () => {
+    const other = createCard(ws, { kind: "character", name: "Ben", picture: readFileSync(path.join(pics, "default.png")), fileName: "ben.png" }).id;
+    setCast(ws, sid, [id, other]);
+    const p = songPathsById(ws, sid);
+    // Untagged: the song has two characters, so the shot prompt must ask for a tag.
+    await expect(clipShotPrompt(ws, sid, "02_red.mp4")).rejects.toThrow(/Tag who is in this clip/);
+    setClipCast(p.root, "02_RED.mp4", [id]);
+    expect(Object.keys(JSON.parse(readFileSync(path.join(p.root, "clips.json"), "utf8")).clips)).toEqual(["02_RED.mp4"]);
+    const red = await clipShotPrompt(ws, sid, "02_red.mp4");
+    expect(red.text).toContain("A woman in her late twenties.");
+  }, 60_000);
+});
+
+describe("clip edit lookup", () => {
+  it("matches a clip name across case and Unicode forms", () => {
+    const edits = { order: [], clips: { ["Café.mp4".normalize("NFD")]: { cast: ["x"] } } } as never;
+    expect(editOf(edits, "Café.mp4".normalize("NFC")).cast).toEqual(["x"]);
+    expect(editOf(edits, "CAFÉ.MP4").cast).toEqual(["x"]);
+  });
 });
