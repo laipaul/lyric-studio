@@ -65,10 +65,17 @@ export const DRAFT_RESOLUTION: LipsyncResolution = "480p";
 export const draftUsd = (seconds: number) => Math.round(seconds * LIPSYNC_USD_PER_SECOND_AT[DRAFT_RESOLUTION] * 100) / 100;
 export const REVIEW_REASONS = ["lips late", "lips early", "mouth too open", "mouth too closed", "wrong expression", "face drifts"] as const;
 export const NUDGE_MAX_MS = 1500;
-// Takes QA (26 Nov 2026, Paul): the longest take each lip-sync model is asked for; a longer group is split at sung-line
-// boundaries into separate takes, each from the original picture (never chained from a generated frame: identity
-// drifts there, e.g. Aiko's face turning into a flat mask at 0:09 of a chained 13 s take).
-export const LIPSYNC_MAX_TAKE_MS: Record<string, number> = { InfiniteTalk: 8000 };
+// Per lip-sync model (26 Nov 2026, Paul: "avoid splitting a continuous singing performance whenever the model supports
+// the required duration"):
+//   LIPSYNC_MAX_TAKE_MS: the longest take; a longer group is split at sung-line boundaries into takes.
+//   LIPSYNC_ONE_REQUEST_MS: the longest piece sent in ONE request; longer ones are made in parts, each from the picture.
+// InfiniteTalk takes up to 10 minutes of audio in one request (WaveSpeed's docs) and keeps continuity and identity itself
+// over long videos (it continues from its own frames with the reference image as the identity anchor, inside the call),
+// so a passage of continuous singing is ONE take in ONE request. The split and the parts stay for a model with a short
+// limit.
+export const LIPSYNC_MAX_TAKE_MS: Record<string, number> = { InfiniteTalk: 600_000 };
+export const LIPSYNC_ONE_REQUEST_MS: Record<string, number> = { InfiniteTalk: 600_000 };
+const oneRequestMs = () => LIPSYNC_ONE_REQUEST_MS[LIPSYNC_MODEL] ?? PART_MAX_MS;
 export const SINGING_TAIL_BARS = 1; // a singing take runs one bar past its last sung line (before: two)
 export const SCRIPT_MAX = 200;
 // Every singing take asks InfiniteTalk to SING, not talk (Paul, 21 Nov 2026: a calm portrait came back "talking"):
@@ -248,7 +255,7 @@ async function withRests(ws: Workspace, projectId: string, l: SingerLine, usdPer
   const rests = await restsFor(ws, projectId, l);
   if (!rests || !l.piece.parts) return { ...l, rests };
   const c = await context(ws, projectId);
-  return { ...l, rests, piece: singingParts({ ...l.piece, parts: undefined }, c.downbeats, c.lines ?? [], usdPerSecond, rests) };
+  return { ...l, rests, piece: singingParts({ ...l.piece, parts: undefined }, c.downbeats, c.lines ?? [], usdPerSecond, rests, oneRequestMs()) };
 }
 
 // The ffmpeg gain for a voice piece starting at song time fromMs: 0 inside each rest, soft fades at its edges.
@@ -264,8 +271,8 @@ export function restGain(rests: readonly { fromMs: number; toMs: number }[], fro
 // The parts of a long vocal piece, a cut near every PART_TARGET_MS (between PART_MIN_MS and PART_MAX_MS from the last cut,
 // leaving at least PART_MIN_MS). Each cut goes, in this order: the middle of a measured pause (`rests`, where the vocal is
 // silent: the join falls on a breath), a downbeat not inside a sung line, any downbeat, the target. Short pieces: one part.
-export function singingParts(piece: Piece, downbeats: readonly number[], lines: readonly { shownMs: number; sungEndMs: number }[], usdPerSecond = LIPSYNC_USD_PER_SECOND, rests: readonly { fromMs: number; toMs: number }[] = []): Piece {
-  if (piece.toMs - piece.fromMs <= PART_MAX_MS) return piece;
+export function singingParts(piece: Piece, downbeats: readonly number[], lines: readonly { shownMs: number; sungEndMs: number }[], usdPerSecond = LIPSYNC_USD_PER_SECOND, rests: readonly { fromMs: number; toMs: number }[] = [], oneRequest = PART_MAX_MS): Piece {
+  if (piece.toMs - piece.fromMs <= oneRequest) return piece;
   const parts: { fromMs: number; toMs: number }[] = [];
   const sung = (t: number) => lines.some((l) => l.shownMs <= t && t <= l.sungEndMs);
   let start = piece.fromMs;
@@ -363,7 +370,7 @@ export async function singerView(ws: Workspace, projectId: string, env: NodeJS.P
         .map((f) => ({ file: f, label: board[f]?.label ?? null, url: `${rel}/${f}`, kind: PICTURE_FILE.test(f) ? ("picture" as const) : ("video" as const) }))
     : [];
   const byNumber = new Map((c.lines ?? []).map((l) => [l.number, l]));
-  const maxMs = Number(process.env.LYRIC_LIPSYNC_MAX_MS) || (LIPSYNC_MAX_TAKE_MS[LIPSYNC_MODEL] ?? 8000); // (the env: a browser test's longer block)
+  const maxMs = LIPSYNC_MAX_TAKE_MS[LIPSYNC_MODEL] ?? 8000;
   const fits = (first: number, last: number) => {
     const p = singingPiece({ shownMs: byNumber.get(first)!.shownMs, sungEndMs: byNumber.get(last)!.sungEndMs }, c.downbeats, c.songMs, LIPSYNC_USD_PER_SECOND, SINGING_TAIL_BARS);
     return p.toMs - p.fromMs <= maxMs;
@@ -380,7 +387,7 @@ export async function singerView(ws: Workspace, projectId: string, env: NodeJS.P
     const last = run ? byNumber.get(run.last)! : l;
     // A picture's long piece is made in parts (a video source stays one request: its motion cannot be chained).
     const whole = singingPiece({ shownMs: first.shownMs, sungEndMs: last.sungEndMs }, c.downbeats, c.songMs, usdPerSecond, SINGING_TAIL_BARS);
-    const piece = source && BOARD_VIDEO_FILE.test(source) ? whole : singingParts(whole, c.downbeats, c.lines ?? [], usdPerSecond);
+    const piece = source && BOARD_VIDEO_FILE.test(source) ? whole : singingParts(whole, c.downbeats, c.lines ?? [], usdPerSecond, [], oneRequestMs());
     const all = source && run ? groupTakes(c.dir, source, run.first, run.last) : [];
     const take = all.at(-1) ?? null;
     const script = run ? (settings.scripts?.[String(run.first)] ?? "") : "";

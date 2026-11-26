@@ -11,7 +11,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { judgeTake, qaWords, type TakeFrame } from "../src/take-qa";
 import { readPictures, update } from "../src/node/animate";
 import { stubFace } from "../src/node/characters/stub";
-import { splitRun } from "../src/node/singer";
+import { LIPSYNC_MAX_TAKE_MS, LIPSYNC_ONE_REQUEST_MS, singingParts, splitRun } from "../src/node/singer";
 import { checkTake, trimTake } from "../src/node/take-qa";
 
 const steady = (t: number): TakeFrame => ({ t, face: true, sim: 0.82, sharp: 160, texture: 8, bright: 120 });
@@ -50,6 +50,13 @@ describe("takes of at most 8 s, split where a line ends", () => {
       { source: "aiko.png", first: 24, last: 24 },
     ]);
     expect(splitRun({ source: "a.png", first: 5, last: 5 }, () => false)).toEqual([{ source: "a.png", first: 5, last: 5 }]);
+  });
+  it("InfiniteTalk: a 12 s passage of continuous singing is ONE take in ONE request (no split, no parts)", () => {
+    expect(LIPSYNC_MAX_TAKE_MS.InfiniteTalk).toBe(600_000);
+    const piece = { fromMs: 125_500, toMs: 137_500, seconds: 12, usd: 0.36 };
+    expect(singingParts(piece, [126_000, 128_000, 130_000, 132_000, 134_000, 136_000], [{ shownMs: 127_000, sungEndMs: 135_000 }], 0.03, [], LIPSYNC_ONE_REQUEST_MS.InfiniteTalk).parts).toBeUndefined();
+    // A model with a short limit still gets parts (each from the picture).
+    expect(singingParts(piece, [126_000, 128_000, 130_000, 132_000, 134_000, 136_000], [{ shownMs: 127_000, sungEndMs: 135_000 }], 0.03).parts?.length).toBe(2);
   });
 });
 

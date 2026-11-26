@@ -32,6 +32,15 @@ turns into a flat white mask".
   sung line, else a downbeat. A small re-frame can show at the join; no drift. Same price (a moved join can change a
   part's rounded seconds slightly). Done by a Sonnet helper, checked (animate.test.ts: same picture for every part,
   the join in a breath).
+- **Then (Paul: "avoid splitting a continuous singing performance whenever the model supports the required
+  duration"): one InfiniteTalk request per passage.** Research (WaveSpeed's docs): InfiniteTalk takes up to 10 minutes
+  of audio in one request, and inside the call it continues from its own frames with the reference picture as a
+  separate identity anchor (MeiGen's sparse-frame design); the WaveSpeed API exposes no way to do that across calls.
+  So a group of lines in a row with the same picture is ONE take in ONE request (LIPSYNC_MAX_TAKE_MS and
+  LIPSYNC_ONE_REQUEST_MS: InfiniteTalk 600 s). The 8 s split and the parts (each from the picture) stay in the code
+  for a model with a short limit. The white-mask diagnosis (chained part 2) is plausible but not confirmed: a
+  take:inspect command (part boundary vs the face check's start, frames around the join) is offered, not built.
+  LongCat-Video-Avatar (continuation + reference identity) has no hosted API found (open weights, too big for 8 GB).
 - Needs the face packages (pnpm audio:setup --face, already installed for Characters); without them the take says
   "face checks not installed".
 - Tests: take-qa.test.ts (7: collapse / drift / lost / blip, 8 s split at line boundaries, the check saved, Trim);

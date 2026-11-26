@@ -65,7 +65,7 @@ async function main() {
 
   const server = spawn(process.execPath, [path.join(path.dirname(require.resolve("next/package.json")), "dist", "bin", "next"), "start", "-p", String(port), "-H", "127.0.0.1"], {
     cwd: path.resolve(__dirname, ".."),
-    env: { ...process.env, WORKSPACE_DIR: wsDir, NEXT_TELEMETRY_DISABLED: "1", LYRIC_GENERATE_STUB: "1", LYRIC_LIPSYNC_MAX_MS: "14000" }, // (14 s: this test's 2-line block stays one take; the 8 s split: take-qa.test.ts)
+    env: { ...process.env, WORKSPACE_DIR: wsDir, NEXT_TELEMETRY_DISABLED: "1", LYRIC_GENERATE_STUB: "1" },
     stdio: "ignore",
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
