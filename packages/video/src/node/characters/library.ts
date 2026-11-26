@@ -5,11 +5,13 @@
 import { existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { card as cardTable, type Workspace } from "@lyric/db";
+import { card as cardTable, project as projectTable, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
 import { cardRoot, currentVersion, getCard, readCardFile, usableVersion, versionDir, type CardFile } from "./cards";
 import { listRemovedCards } from "./cleanup";
+import { readShotListFile, SHOTLIST_FILE } from "../shotlist";
+import { songPathsById } from "../song-folder";
 import { listLooks } from "./looks";
 
 export const NOTES_MAX = 2000;
@@ -108,3 +110,56 @@ export function characterBlock(ws: Workspace, id: string): { block: string; warn
   out.push(`Attach the reference picture${present.length === 1 ? "" : "s"} listed above with this block.`);
   return { block: `${out.join("\n")}\n`, warnings };
 }
+
+// Rename (26 Nov 2026, Paul: "only the display name changes: the character's ID and folder stay the same"): the card's
+// name in the library and its card.json; its folder, id, face prints, pictures, cast chips and songs' Cast lists (all by
+// id) do not move. Shot lists name people and places by their name: every song's shot list is updated with it (who is
+// in each shot, its place, the look per person). Refused when another card of the same kind has that name.
+export function renameCard(ws: Workspace, id: string, name: unknown): { name: string; shots: number; songs: number } {
+  const row = getCard(ws, id);
+  const next = typeof name === "string" ? name.replace(/\s+/g, " ").trim() : "";
+  if (!next) throw new Error("Type a name.");
+  if (next.length > 60) throw new Error("A name of 60 characters at most.");
+  if (/[<>:"/\\|?*]/.test(next)) throw new Error('A name without < > : " / \\ | ? *');
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const what = row.kind === "character" ? "character" : "scene card";
+  const taken = ws.db.select().from(cardTable).all().find((r) => r.id !== id && r.kind === row.kind && same(r.name, next));
+  if (taken) throw new Error(`Another ${what} is already called "${taken.name}": choose another name.`);
+  const old = row.name;
+  if (old === next) return { name: next, shots: 0, songs: 0 };
+  const root = cardRoot(ws, row);
+  const f = readCardFile(root);
+  f.name = next;
+  writeFileSync(path.join(root, "card.json"), `${JSON.stringify(f, null, 2)}\n`);
+  ws.db.update(cardTable).set({ name: next, updated_at: new Date() }).where(eq(cardTable.id, id)).run();
+  // Every song's shot list: the old name becomes the new one (case-insensitive match).
+  let shots = 0;
+  let songs = 0;
+  for (const p of ws.db.select().from(projectTable).all()) {
+    let file: string;
+    try {
+      const paths = songPathsById(ws, p.id);
+      if (paths.legacy) continue;
+      file = path.join(paths.root, SHOTLIST_FILE);
+    } catch {
+      continue;
+    }
+    const list = readShotListFile(file);
+    if (!list) continue;
+    let changed = 0;
+    const slots = list.slots.map((x) => {
+      let hit = false;
+      const characters = x.characters.map((c) => (same(c, old) ? ((hit = true), next) : c));
+      const scene = x.scene && same(x.scene, old) ? ((hit = true), next) : x.scene;
+      const looks = x.looks ? Object.fromEntries(Object.entries(x.looks).map(([k, v]) => (same(k, old) ? ((hit = true), [next, v]) : [k, v]))) : undefined;
+      if (hit) changed++;
+      return hit ? { ...x, characters, scene, ...(looks ? { looks } : {}) } : x;
+    });
+    if (!changed) continue;
+    writeFileSync(file, `${JSON.stringify({ ...list, slots }, null, 2)}\n`);
+    shots += changed;
+    songs++;
+  }
+  return { name: next, shots, songs };
+}
+

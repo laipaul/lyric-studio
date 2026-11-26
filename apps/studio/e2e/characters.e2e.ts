@@ -283,6 +283,16 @@ async function main() {
     await page.waitForFunction(() => document.querySelector("[data-copy-claude]")?.textContent?.includes("Copied"));
     const block = await page.evaluate(() => navigator.clipboard.readText());
     check(block.startsWith("CHARACTER LOCK: singer") && block.includes("Look (face, hair, age range, vibe):\nlate 20s, warm and shy") && block.includes("Reference pictures:") && /Attach the reference pictures? listed above with this block\.$/.test(block.trimEnd()) && block.includes("\nMissing: "), `Copy character for Claude: the Look first, the pictures, the closing line (${block.split("\n")[0]})`);
+
+    // Rename (26 Nov 2026): click the title, type, Enter: the name changes everywhere; the folder stays.
+    await page.click("[data-card-rename]");
+    await page.fill("[data-card-rename-input]", "Singer Two");
+    await page.press("[data-card-rename-input]", "Enter");
+    await page.waitForSelector("[data-card-rename-note]");
+    check(((await page.textContent("[data-card-rename] h1")) ?? "") === "Singer Two" && existsSync(path.join(wsDir, "characters", "singer", "card.json")) && readFileSync(path.join(wsDir, "characters", "singer", "card.json"), "utf8").includes('"name": "Singer Two"'), "Rename: the new name on the page and in card.json; the folder stays characters\\singer\\");
+    await page.goto(`${base}/characters`);
+    await page.waitForSelector("[data-card='Singer Two']");
+    check(!(await page.$("[data-card=singer]")), "the library shows the new name");
     await browser.close();
   } finally {
     server.kill();

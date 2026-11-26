@@ -55,6 +55,11 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
     description), then the wardrobe; only the reference pictures that exist, then one "Missing: …" line; it ends
     "Attach the reference picture(s) listed above with this block." Empty Notes or a look without an outfit: copied all
     the same, with a warning on the page ("No description yet; add Notes for better prompts").
+- **Rename** (same day, Paul): click a card's name (or its pencil), type, Enter (Esc cancels). Only the display name
+  changes: id and folder stay, so cast chips, songs' Cast lists, face prints, pictures' "Who is this" and the Wardrobe
+  choice keep working; **every song's shot list** (who is in each shot, its place, the look per person: stored by
+  name) is updated with the new name, and the page says how many shots. Another card of the same kind with that name:
+  refused, in plain words. The copy block and every screen use the new name at once (library.ts renameCard).
 - **Reference check:** a character's reference picture with a second face at least a quarter the main one's size is
   now "Not suitable: More than one face …" (actions.ts strictFaces; reference pictures only, never clips or shots).
 - **Face prints** (characters\face-prints.ts, face.json in the card folder): one SFace embedding (128 numbers) per face

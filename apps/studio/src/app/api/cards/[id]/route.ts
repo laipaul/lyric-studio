@@ -18,7 +18,7 @@ import { connection } from "next/server";
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import {
   asidePictures, putAsideView, removeCard, restoreReference, restoreView, calibrationSongs, cardFace, draftDescription, hasGeminiKey, moveOwnPicture, GEMINI_KEY_MISSING, addLook, getLook, listLooks, lookDir, lookEstimate, lookProblems, setLookLocked, updateLook, MAIN_LOOK, cardTools, ensureSplit, splitNeeded, cardJobsFor, cardRoot, cardThresholds, checkCardPicture, cropCardToFace, currentVersion, enqueueCardJob, getCard, lockCard, lockProblems,
-  MODELS, newVersion, usableVersion, versionByNumber, packEstimate, readCardFile, readReport, repickLegacy, buildSheet, characterSheet, geminiPackPrompt, lookViews, runCardJob, VIEWS, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId, characterBlock, setCardNotes,
+  MODELS, newVersion, usableVersion, versionByNumber, packEstimate, readCardFile, readReport, repickLegacy, buildSheet, characterSheet, geminiPackPrompt, lookViews, runCardJob, VIEWS, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId, characterBlock, renameCard, setCardNotes,
 } from "@lyric/video/characters";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
@@ -203,6 +203,11 @@ export async function POST(request: Request, { params }: Params) {
       case "notes":
         withWorkspace((ws) => setCardNotes(ws, id, (body as { notes?: unknown }).notes));
         break;
+      case "rename": {
+        const r = withWorkspace((ws) => renameCard(ws, id, (body as { name?: unknown }).name));
+        message = `Renamed "${r.name}".${r.shots ? ` ${r.shots} shot${r.shots === 1 ? "" : "s"} in ${r.songs} song${r.songs === 1 ? "" : "s"}' shot lists now use the new name.` : ""} Its pictures, songs and tags stay as they were.`;
+        break;
+      }
       case "claude":
         return Response.json(withWorkspace((ws) => characterBlock(ws, id)));
       case "describe": {

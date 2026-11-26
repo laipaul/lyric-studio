@@ -5,13 +5,13 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import os from "node:os";
 import path from "node:path";
 
-import { openWorkspace, seedStylePresets, type Workspace } from "@lyric/db";
+import { openWorkspace, project as projectTable, seedStylePresets, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { findOrCreateSongProject, makeVideos, readClipEdits, readRecipe, songPathsById, writeRecipe, type RenderOptions } from "../src/node";
 import { songAssets, setSongClipCast } from "../src/node/assets";
 import {
-  cardRoot, cardTags, characterBlock, checkCardPicture, createCard, getCard, listCards, listRemovedCards, makePictures, readFacePrints, removeCard, restoreCard, setCardNotes, strictFaces, updateFacePrints,
+  cardRoot, cardTags, characterBlock, renameCard, checkCardPicture, createCard, getCard, listCards, listRemovedCards, makePictures, readFacePrints, removeCard, restoreCard, setCardNotes, strictFaces, updateFacePrints,
 } from "../src/node/characters";
 import { stubFace, stubFal } from "../src/node/characters/stub";
 import { fakeAlign, ffmpeg, LYRICS, makeClip, makeSong } from "./media-helpers";
@@ -155,4 +155,29 @@ describe("a character across songs", () => {
     expect(cardTags(ws).find((t) => t.id === id)).toMatchObject({ removed: false });
     expect(listCards(ws).some((c) => c.id === id)).toBe(true);
   }, 300_000);
+
+  it("Rename: only the display name changes; id, folder, prints and tags stay; shot lists follow; a taken name is refused", async () => {
+    const before = getCard(ws, id);
+    const sid = ws.db.select().from(projectTable).all()[0].id;
+    const shotlist = path.join(songPathsById(ws, sid).root, "shotlist.json");
+    writeFileSync(shotlist, JSON.stringify({ imported_at: "", source: "t", slots: [{ id: "s01", order: 1, shows: "She smiles", characters: ["jennifer", "Groom"], scene: null, shot: "close-up", line: 1, looks: { Jennifer: "Main look" } }, { id: "s02", order: 2, shows: "The aisle", characters: [], scene: null, shot: "wide", line: 2 }] }));
+    const r = renameCard(ws, id, "  Jen  Lee ");
+    expect(r).toEqual({ name: "Jen Lee", shots: 1, songs: 1 });
+    const after = getCard(ws, id);
+    expect([after.id, after.folder, after.name]).toEqual([before.id, before.folder, "Jen Lee"]);
+    expect(JSON.parse(readFileSync(path.join(cardRoot(ws, after), "card.json"), "utf8")).name).toBe("Jen Lee");
+    expect(readFacePrints(cardRoot(ws, after))?.prints.reference).toBeTruthy();
+    expect(cardTags(ws).find((x) => x.id === id)?.name).toBe("Jen Lee");
+    expect(characterBlock(ws, id).block).toMatch(/^CHARACTER LOCK: Jen Lee\n/);
+    const list = JSON.parse(readFileSync(shotlist, "utf8"));
+    expect(list.slots[0].characters).toEqual(["Jen Lee", "Groom"]);
+    expect(list.slots[0].looks).toEqual({ "Jen Lee": "Main look" });
+    expect(list.slots[1].characters).toEqual([]);
+    // Another character's name: refused.
+    const other = createCard(ws, { kind: "character", name: "Anna", picture: readFileSync(path.join(pics, "default.png")), fileName: "anna.png" });
+    expect(() => renameCard(ws, other.id, "jen lee")).toThrow(/Another character is already called "Jen Lee"/);
+    expect(() => renameCard(ws, other.id, "  ")).toThrow(/Type a name/);
+    expect(renameCard(ws, id, "Jennifer").name).toBe("Jennifer");
+  });
 });
+

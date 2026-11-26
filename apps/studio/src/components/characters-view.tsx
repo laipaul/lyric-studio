@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Copy, Crop, Download, Film, ImagePlus, Lock, Plus, RefreshCw, RotateCcw, Square, Trash2, Upload, Wand2, X } from "lucide-react";
+import { ArrowLeft, Copy, Crop, Download, Film, ImagePlus, Lock, Pencil, Plus, RefreshCw, RotateCcw, Square, Trash2, Upload, Wand2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -261,6 +261,54 @@ function NewCardDialog({ kind, initialFile, onClose, onCreated }: { kind: "chara
 const LIGHT: Record<string, string> = { green: "bg-emerald-400", amber: "bg-amber-400", red: "bg-red-400", grey: "bg-zinc-400" };
 const ACTIVE = new Set(["queued", "running"]);
 
+// The card's name, editable (26 Nov 2026): click it (or the pencil), Enter saves, Esc cancels. Only the display name
+// changes: the id and the folder stay, so songs, tags and pictures keep finding it (library.ts renameCard).
+function CardTitle({ name, onRename }: { name: string; onRename: (name: string) => Promise<{ ok: boolean; text: string }> }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(name);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    const next = value.trim();
+    if (!next || next === name) return setEditing(false);
+    setSaving(true);
+    const r = await onRename(next);
+    setSaving(false);
+    setNote(r);
+    if (r.ok) setEditing(false);
+  };
+  return (
+    <span className="flex flex-col">
+      {editing ? (
+        <input
+          data-card-rename-input
+          autoFocus
+          value={value}
+          disabled={saving}
+          maxLength={60}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void save();
+            if (e.key === "Escape") (setValue(name), setEditing(false), setNote(null));
+          }}
+          onBlur={() => void save()}
+          className="bg-background rounded-md border px-2 py-0.5 text-xl font-medium"
+        />
+      ) : (
+        <button type="button" data-card-rename onClick={() => (setValue(name), setEditing(true), setNote(null))} className="hover:text-brand group flex items-center gap-1.5 text-left" title="Rename: only the name changes; its pictures, songs and tags stay">
+          <h1 className="text-xl font-medium">{name}</h1>
+          <Pencil className="text-muted-foreground size-3.5 opacity-60 group-hover:opacity-100" />
+        </button>
+      )}
+      {note ? (
+        <span data-card-rename-note className={cn("text-xs", note.ok ? "text-emerald-300" : "text-amber-300")}>
+          {note.text}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export function CardPage({ id }: { id: string }) {
   const [d, setD] = useState<CardDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -436,7 +484,18 @@ export function CardPage({ id }: { id: string }) {
         <Link href="/characters" className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm">
           <ArrowLeft className="size-4" /> Characters
         </Link>
-        <h1 className="text-xl font-medium">{card.name}</h1>
+        <CardTitle
+          name={card.name}
+          onRename={async (name) => {
+            try {
+              const next = await call<CardDetail>(`/api/cards/${id}`, { method: "POST", ...json({ action: "rename", name }) });
+              setD(next);
+              return { ok: true, text: next.message ?? `Renamed "${name}".` };
+            } catch (e) {
+              return { ok: false, text: (e as Error).message };
+            }
+          }}
+        />
         <span className="text-muted-foreground text-sm">{KIND_LABEL[card.kind]}</span>
         <StatusChip status={version.status} version={version.n} />
         {file.versions.length > 1 ? (
