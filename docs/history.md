@@ -3999,3 +3999,25 @@ D. ✅ (built 29 Oct, to verify) **Title opening** (items 1-8 below).
   (picture.ts grainOffset, deterministic). The same layer in the preview, the Remotion render (Grain.tsx) and the
   HyperFrames composition (hf/compile.ts, moved per frame by the same function). Manifest settings.picture.grain.
 - Tests: vitest picture (+2), hf-compile (+1), hf-network, look-preview, look-patch pass; browser song-stages pass.
+
+### Film look: one camera, grain and grade for every clip of a song ✅ (to verify on the PC)
+- Paul (22 Nov 2026), from Rourke's ShotDeck "global look" tip: "the global look is correct like the Theme". Clips feel
+  like one film only when every generation shares the same camera, lens, grain and grade.
+- **Film looks** in the top menu (next to Themes; called "Film look" because "Looks" are Wardrobe outfits): **New film
+  look** (name first), drop a **still** (a ShotDeck screenshot with its data block, a Midjourney frame or a photo),
+  **Write it from the still**: the app writes the look line ("35mm film grain, ARRI Alexa 35 look, warm tungsten …")
+  and the **Midjourney words** (Copy), on Paul's GEMINI_API_KEY (less than a cent; FAL_KEY if there is no Gemini key).
+  The words can be changed. Saving a look several songs use says "Update all N songs", with **Save as new** next to it;
+  a rename takes the songs along; Delete only when no song uses it (to film-looks\_removed\, with Restore).
+- A song picks its look in **Prepare → Creation** (the Film look dropdown at the top); the Library card shows it next
+  to the theme.
+- The line goes into **every Animate take** (after the app's own words, before the mood) and **every singing take**
+  (after the singing cue and the script). Each take keeps the look it was sent with (take "filmLook" and "look"), so
+  changing the look later remakes nothing and spends nothing. The picture still decides colour and light (Animate is
+  image-to-video); the line keeps grain, depth of field and camera feel the same from clip to clip.
+- Data: workspace\film-looks\<name>\look.json + still.<ext>; song.json "filmLook". Code: film-looks.ts (filmLookFor is
+  the one place that picks a take's look, ready for Scenes), film-look-writer.ts; API /api/film-looks,
+  /api/film-looks/still, /api/songs/<id>/film-look.
+- Part 2 (the character sheet sent as a Seedance reference) waits until Scenes exist and a test clip proves it.
+- Tests: vitest film-looks (10), animate, themes, library pass; browser film-looks (11 checks), pictures, singer,
+  library pass.

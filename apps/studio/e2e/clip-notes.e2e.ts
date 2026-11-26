@@ -185,6 +185,11 @@ async function main() {
     await page.reload();
     await page.waitForSelector("[data-cast-chips='02_red.mp4'] [data-cast-chip=Jennifer]");
     check((await page.$$("[data-cast-chip=Jennifer]")).length === 3, "the tags are still there after a reload");
+    // Copy shot prompt (Persona, 26 Nov 2026): on a tagged clip card; copy only.
+    await page.click("[data-copy-shot-prompt='02_red.mp4']");
+    await page.waitForFunction(() => document.querySelector("[data-copy-shot-prompt='02_red.mp4']")?.textContent?.includes("Copied") || !!document.querySelector("[data-copy-shot-prompt-error]"));
+    const shotPrompt = await page.evaluate(async (sid) => (await (await fetch(`/api/songs/${sid}/shot-prompt`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clip: "02_red.mp4" }) })).json()) as { text?: string; error?: string }, id);
+    check(((await page.textContent("[data-copy-shot-prompt='02_red.mp4']")) ?? "").includes("Copied") && !!shotPrompt.text?.includes("Jennifer, identity (keep exactly):"), `Copy shot prompt on a clip card: Jennifer's identity and the shot (${shotPrompt.error ?? "ok"})`);
     // Removed from the library: greyed "(removed)"; restored: back.
     await page.evaluate(async (cid: string) => void (await fetch(`/api/cards/${cid}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "remove" }) })), jennifer.id);
     await page.reload();

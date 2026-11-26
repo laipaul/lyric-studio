@@ -1,0 +1,174 @@
+// Persona on character cards (26 Nov 2026): saving it (with a history), the per-song note, the persona request for
+// claude.ai, and "Copy shot prompt" for a Storyboard clip or an accepted singing slot. The persona lives in card.json
+// `persona`, OUTSIDE the versions: editable on a locked card (the lock protects the look, not the acting) and never read
+// by a picture pack (characters/generate.ts uses only the views and the outfit). Copy only: nothing here changes a cut,
+// the timing or a render.
+import path from "node:path";
+
+import { card as cardTable, project as projectTable, type Workspace } from "@lyric/db";
+import { eq } from "drizzle-orm";
+
+import { cleanPersona, personaRequest, personaShotPrompt, type Persona, type ShotPromptPerson } from "../persona";
+import { songsUsingCard } from "./card-versions";
+import { cardRoot, currentVersion, getCard, listCards, readCardFile, usableVersion, writeCardFile } from "./characters/cards";
+import { listLooks } from "./characters/looks";
+import { readClipEdits } from "./clip-edits";
+import { singingView } from "./lipsync";
+import { productionData, readProduction, timedLines, writeProduction, type CastCard } from "./production";
+import { readRecipe } from "./recipe";
+import { songPathsById } from "./song-folder";
+import { songSections } from "./song-sections";
+import { readStoryboard } from "./storyboard-read";
+import { STORYBOARD_DIR } from "../storyboard-file";
+
+export const PERSONA_HISTORY_MAX = 20;
+export type PersonaHistoryEntry = { at: string; persona: Persona };
+type WithPersona = { persona?: Persona; persona_edited_at?: string; persona_history?: PersonaHistoryEntry[] };
+
+export function readPersona(ws: Workspace, id: string): { persona: Persona | null; editedAt: string | null; history: PersonaHistoryEntry[] } {
+  const f = readCardFile(cardRoot(ws, getCard(ws, id))) as ReturnType<typeof readCardFile> & WithPersona;
+  return { persona: f.persona ? cleanPersona(f.persona) : null, editedAt: f.persona_edited_at ?? null, history: f.persona_history ?? [] };
+}
+
+// Save the persona (also on a locked card). The text it replaces is kept in the history (the last 20, newest first).
+export function setPersona(ws: Workspace, id: string, raw: unknown): Persona {
+  const row = getCard(ws, id);
+  if (row.kind !== "character") throw new Error("A persona is for characters.");
+  const root = cardRoot(ws, row);
+  const f = readCardFile(root) as ReturnType<typeof readCardFile> & WithPersona;
+  const next = cleanPersona(raw);
+  if (f.persona && JSON.stringify(cleanPersona(f.persona)) === JSON.stringify(next)) return next;
+  if (f.persona) f.persona_history = [{ at: f.persona_edited_at ?? new Date().toISOString(), persona: cleanPersona(f.persona) }, ...(f.persona_history ?? [])].slice(0, PERSONA_HISTORY_MAX);
+  f.persona = next;
+  f.persona_edited_at = new Date().toISOString();
+  writeCardFile(root, f);
+  ws.db.update(cardTable).set({ updated_at: new Date() }).where(eq(cardTable.id, id)).run();
+  return next;
+}
+
+// An earlier persona back (the current one goes into the history in its turn).
+export function restorePersona(ws: Workspace, id: string, at: string): Persona {
+  const h = readPersona(ws, id).history.find((x) => x.at === at);
+  if (!h) throw new Error("That earlier persona is not in the history any more.");
+  return setPersona(ws, id, h.persona);
+}
+
+// "Copy persona request": the character's identity, notes, looks and songs, the template and the rule.
+export function personaRequestFor(ws: Workspace, id: string): string {
+  const row = getCard(ws, id);
+  const root = cardRoot(ws, row);
+  const f = readCardFile(root);
+  const v = usableVersion(f) ?? currentVersion(f);
+  return personaRequest({ name: row.name, identity: v.description ?? null, notes: f.notes ?? null, looks: listLooks(root, f).map((l) => l.name), songs: songsUsingCard(ws, id).map((s) => s.title) });
+}
+
+// The per-song note ("more playful in this song"): one line per cast character, in production.json; "" removes it.
+export function setPersonaNote(ws: Workspace, projectId: string, cardId: string, text: unknown): string {
+  const root = songPathsById(ws, projectId).root;
+  const prod = readProduction(root);
+  if (!prod.cast.includes(cardId)) throw new Error("This character is not in the song's cast.");
+  const note = typeof text === "string" ? text.replace(/\s+/g, " ").trim().slice(0, 200) : "";
+  const notes = { ...(prod.personaNotes ?? {}) };
+  if (note) notes[cardId] = note;
+  else delete notes[cardId];
+  writeProduction(root, { ...prod, personaNotes: notes });
+  return note;
+}
+
+// ---- Copy shot prompt ---------------------------------------------------------------------------------------------
+
+type Place = { line: number; how: "anchor" | "plan" | "slot" } | null;
+
+async function songContext(ws: Workspace, projectId: string) {
+  const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
+  if (!p) throw new Error("Song not found.");
+  const paths = songPathsById(ws, projectId);
+  const lines = (await timedLines(ws, projectId).catch(() => null)) ?? [];
+  let sections: { line: number; lastLine: number; kind: string; name: string }[] = [];
+  try {
+    sections = songSections(ws, projectId).sections;
+  } catch {
+    sections = [];
+  }
+  const prod = readProduction(paths.root);
+  const data = productionData(ws, projectId);
+  return { title: p.title, paths, lines, sections, prod, cast: data.cast.filter((c): c is CastCard => !("missing" in c) || !c.missing) as CastCard[] };
+}
+
+function sectionOf(sections: { line: number; lastLine: number; kind: string; name: string }[], line: number) {
+  const s = sections.find((x) => line >= x.line && line <= x.lastLine);
+  if (!s) return null;
+  const lastChorus = [...sections].reverse().find((x) => x.kind === "chorus");
+  return { kind: s.kind, name: s.name, final: s.kind === "chorus" && lastChorus === s };
+}
+
+function peopleFor(ws: Workspace, ctx: Awaited<ReturnType<typeof songContext>>, ids: readonly string[]): ShotPromptPerson[] {
+  const cards = listCards(ws);
+  return ids.flatMap((id) => {
+    const c = cards.find((x) => x.id === id);
+    if (!c || c.kind !== "character") return [];
+    const inCast = ctx.cast.find((x) => x.id === id);
+    return [{ name: c.name, identity: inCast?.description ?? c.description, look: inCast?.lookName ?? null, outfit: inCast?.outfit ?? null, persona: readPersona(ws, id).persona, songNote: ctx.prod.personaNotes?.[id] ?? null }];
+  });
+}
+
+// Who is in the shot: the clip's cast chips, else the song's one character (else: tag the clip first).
+function whoIn(ctx: Awaited<ReturnType<typeof songContext>>, cast: readonly string[] | undefined): string[] {
+  if (cast?.length) return [...cast];
+  const characters = ctx.cast.filter((c) => c.kind === "character");
+  if (characters.length === 1) return [characters[0].id];
+  throw new Error(characters.length ? "Tag who is in this clip first (+ cast on the card): the song has more than one character." : "Add the character to this song's cast first (Prepare → Production → Cast), or tag the clip (+ cast).");
+}
+
+function lineAt(lines: { number: number; startMs: number | null; endMs: number | null }[], ms: number): number | null {
+  const timed = lines.filter((l) => l.startMs !== null);
+  const inside = timed.find((l) => ms >= l.startMs! && ms < (l.endMs ?? l.startMs!));
+  if (inside) return inside.number;
+  const before = [...timed].reverse().find((l) => l.startMs! <= ms);
+  return before?.number ?? null;
+}
+
+// Where a Storyboard clip sits: the line it is pinned to (a story anchor), else its first moment in the saved Reels
+// shot plan, else its accepted singing slot.
+function placeOfClip(ctx: Awaited<ReturnType<typeof songContext>>, clip: string): Place {
+  const anchors = ctx.paths.recipe ? (readRecipe(ctx.paths.recipe).anchors ?? []) : [];
+  const a = anchors.filter((x) => x.clip === clip).sort((x, y) => x.line - y.line)[0];
+  if (a) return { line: a.line, how: "anchor" };
+  for (const platform of ["reels", "tiktok", "shorts", "youtube"]) {
+    const sb = readStoryboard(path.join(ctx.paths.root, STORYBOARD_DIR, `${platform}-1.json`));
+    const shot = sb?.shots.filter((s) => s.clip === clip).sort((x, y) => x.startMs - y.startMs)[0];
+    if (shot) {
+      const line = lineAt(ctx.lines, shot.startMs);
+      if (line) return { line, how: "plan" };
+    }
+  }
+  const mark = readClipEdits(ctx.paths.root).clips[clip]?.lipsync;
+  if (mark) return { line: mark.lines[0], how: "slot" };
+  return null;
+}
+
+export async function clipShotPrompt(ws: Workspace, projectId: string, clip: string): Promise<{ text: string; place: Place }> {
+  const ctx = await songContext(ws, projectId);
+  const edit = readClipEdits(ctx.paths.root).clips[clip];
+  const people = peopleFor(ws, ctx, whoIn(ctx, edit?.cast));
+  const place = placeOfClip(ctx, clip);
+  const singing = !!edit?.lipsync || place?.how === "slot";
+  const lyric = place ? (edit?.lipsync ? linesText(ctx.lines, edit.lipsync.lines) : (ctx.lines.find((l) => l.number === place.line)?.text ?? null)) : null;
+  const text = personaShotPrompt({ people, section: place ? sectionOf(ctx.sections, place.line) : null, lyric, singing, song: ctx.title });
+  return { text, place };
+}
+
+const linesText = (lines: { number: number; text: string }[], [a, b]: [number, number]) =>
+  lines.filter((l) => l.number >= a && l.number <= b).map((l) => l.text).join(" / ") || null;
+
+// An accepted singing slot: its lines, its section, the clip's cast (else the song's one character); always sung.
+export async function slotShotPrompt(ws: Workspace, projectId: string, slotKey: string): Promise<{ text: string }> {
+  const ctx = await songContext(ws, projectId);
+  const view = await singingView(ws, projectId);
+  const m = view.matches.find((x) => x.slot.key === slotKey);
+  if (!m) throw new Error("That singing slot is not in this song any more: reload the page.");
+  const edit = m.clip ? readClipEdits(ctx.paths.root).clips[m.clip] : undefined;
+  const people = peopleFor(ws, ctx, whoIn(ctx, edit?.cast));
+  const text = personaShotPrompt({ people, section: sectionOf(ctx.sections, m.slot.lines[0]), lyric: linesText(ctx.lines, m.slot.lines), singing: true, song: ctx.title });
+  return { text };
+}

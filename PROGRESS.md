@@ -4,6 +4,37 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Persona on character cards (Part A) ✅ (to verify on the PC)
+Paul, 26 Nov 2026: "my songs are mostly romantic; each singer needs her own personality and acting style, like a
+video-game character profile, so shots show expression, not just a face". Three layers kept apart: Identity (card and
+pack, locked), **Persona** (how the character acts and sings, across songs: this step), Performance script (per line,
+Part B, next).
+- **Persona section** on a character's card (components/persona-section.tsx; src/persona.ts; node/persona.ts):
+  Archetype, Personality (3 traits), How she sings (soft lines / high notes / held notes), Signature gestures,
+  Movement quality (Laban efforts: float, glide, dab, flick, press, wring, punch, slash), Favourite actions (action
+  verbs: "to reassure", "to confess"), Gaze, Emotional range (rest → peak), Camera loves, Never, and the Section map
+  (Verse / Pre-chorus / Chorus / Bridge / Final chorus, pre-filled with the defaults). The rule under it: "Describe what
+  the face and body physically do (brows, eyes, breath, mouth, hands), not just feelings." Stored in card.json
+  `persona`, outside the versions: **editable on a locked card**; each save keeps the text it replaces (History, the
+  last 20, Restore); "Last edited" date. It is **never** used for the pack pictures or put in the description (a test
+  checks every pack prompt).
+- **Copy persona request** (for claude.ai, no API): identity, Notes, looks, the songs the character is in, the
+  template and the physical rule. **Paste persona**: Claude's answer read back into the fields (tolerant: bold labels,
+  "->" for "→", bullet lists, "Pre chorus"); what it does not recognise is listed; nothing is saved until Use these,
+  then Save persona.
+- **Per-song note**: Prepare → Production → Cast, one line per character ("Aiko, in this song: more playful");
+  production.json `personaNotes`; used in that song's prompts only.
+- **Copy character for Claude** now ends with the PERSONA block (after identity and wardrobe).
+- **Copy shot prompt** (new) on every Storyboard clip card and on accepted singing slots: identity (description + this
+  song's look) + persona (traits, how they sing, gestures, movement, actions, gaze, never) + the line for this part of
+  the song (Section map: the clip's pinned line, else its first moment in the Reels shot plan, else its singing slot;
+  the song's last chorus = Final chorus; intro / outro = Verse) + the song note + the lyric line + lip-sync framing for
+  a sung shot (front or 3/4 medium close-up, mouth unobstructed, steady camera). Who: the clip's cast chips, else the
+  song's one character. Copy only: no cut, timing or render changes (a test compares the render props).
+- Tests: test\persona.test.ts (6: parser clean and messy, section lines, never in pack prompts, locked card + history,
+  shot prompt chorus / verse / final chorus, render props unchanged); browser: characters.e2e.ts (Persona on a locked
+  card, Paste persona, History → Restore, Copy character for Claude), clip-notes.e2e.ts (Copy shot prompt).
+
 ### Characters tidy-up ✅ (to verify on the PC)
 Small urgent step before LatentSync (26 Nov 2026, Paul: "I'm cleaning up all my characters and I'm blocked because
 locked cards can't be edited").
@@ -664,28 +695,6 @@ locked cards can't be edited").
 - Tests: vitest song-style (2); browser song-style (7 checks); singer.e2e now sets Add singing; lyrics-tab, singer,
   production, library, song-links pass. Unchanged on main and still failing in the cloud: make, make-reference,
   render, migrate, song-stages, textboard-make (audio / render setup).
-
-### Film look: one camera, grain and grade for every clip of a song ✅ (to verify on the PC)
-- Paul (22 Nov 2026), from Rourke's ShotDeck "global look" tip: "the global look is correct like the Theme". Clips feel
-  like one film only when every generation shares the same camera, lens, grain and grade.
-- **Film looks** in the top menu (next to Themes; called "Film look" because "Looks" are Wardrobe outfits): **New film
-  look** (name first), drop a **still** (a ShotDeck screenshot with its data block, a Midjourney frame or a photo),
-  **Write it from the still**: the app writes the look line ("35mm film grain, ARRI Alexa 35 look, warm tungsten …")
-  and the **Midjourney words** (Copy), on Paul's GEMINI_API_KEY (less than a cent; FAL_KEY if there is no Gemini key).
-  The words can be changed. Saving a look several songs use says "Update all N songs", with **Save as new** next to it;
-  a rename takes the songs along; Delete only when no song uses it (to film-looks\_removed\, with Restore).
-- A song picks its look in **Prepare → Creation** (the Film look dropdown at the top); the Library card shows it next
-  to the theme.
-- The line goes into **every Animate take** (after the app's own words, before the mood) and **every singing take**
-  (after the singing cue and the script). Each take keeps the look it was sent with (take "filmLook" and "look"), so
-  changing the look later remakes nothing and spends nothing. The picture still decides colour and light (Animate is
-  image-to-video); the line keeps grain, depth of field and camera feel the same from clip to clip.
-- Data: workspace\film-looks\<name>\look.json + still.<ext>; song.json "filmLook". Code: film-looks.ts (filmLookFor is
-  the one place that picks a take's look, ready for Scenes), film-look-writer.ts; API /api/film-looks,
-  /api/film-looks/still, /api/songs/<id>/film-look.
-- Part 2 (the character sheet sent as a Seedance reference) waits until Scenes exist and a test clip proves it.
-- Tests: vitest film-looks (10), animate, themes, library pass; browser film-looks (11 checks), pictures, singer,
-  library pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

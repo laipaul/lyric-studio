@@ -4,6 +4,7 @@
 // or the whole song for YouTube / a Mini film), its singing slots with the suggested clip (Accept / Ignore / Split at a
 // sung line), "Check lip sync" for all clips, and on an accepted slot "Export performance excerpt" and "Open folder".
 // Suggestions only: nothing here changes cutting, timing or rendering, and nothing is generated.
+import { CopyShotPrompt } from "@/components/copy-shot-prompt";
 import { Check, FolderOpen, Loader2, Mic, Scissors, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -119,6 +120,7 @@ export function SingingPanel({ projectId, singing, labelOf }: { projectId: strin
                   }} className="hover:bg-accent rounded border px-2 py-0.5" title="The vocal and the mix of these lines with 1 s before and after, and a text with the times: the same audio for every lip-sync tool">
                     Export performance excerpt
                   </button>
+                  <CopyShotPrompt projectId={projectId} slot={m.slot.key} className="hover:bg-accent flex items-center gap-1 rounded border px-2 py-0.5" />
                   {exported[m.slot.key] ? (
                     <button type="button" data-slot-open={m.slot.key} onClick={() => void api("/api/open-folder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, performance: exported[m.slot.key] }) })} className="hover:bg-accent flex items-center gap-1 rounded border px-2 py-0.5">
                       <FolderOpen className="size-3" /> Open folder

@@ -302,6 +302,28 @@ export function ProductionTab({ projectId }: { projectId: string }) {
             Make a new character <ExternalLink className="size-3" />
           </Link>
         </div>
+        {data.cast.some((c) => !c.missing && c.kind === "character") ? (
+          // Persona (26 Nov 2026): one line per character for this song only ("more playful in this song"), used in this
+          // song's shot prompts; the persona itself is on the character's card.
+          <div className="flex flex-col gap-1" data-persona-notes>
+            {data.cast.map((c) =>
+              c.missing || c.kind !== "character" ? null : (
+                <label key={c.id} className="grid grid-cols-[minmax(6rem,auto)_1fr] items-center gap-2 text-xs">
+                  <span className="text-muted-foreground truncate">{c.name}, in this song</span>
+                  <input
+                    data-persona-note={c.id}
+                    defaultValue={c.personaNote ?? ""}
+                    key={`${c.id}-${c.personaNote ?? ""}`}
+                    maxLength={200}
+                    placeholder="optional, e.g. more playful in this song"
+                    onBlur={(e) => e.target.value.trim() !== (c.personaNote ?? "") && void run(async () => (await post({ action: "personaNote", card: c.id, text: e.target.value }), e.target.value.trim() ? `${c.name}'s note for this song is saved.` : `${c.name}'s note for this song is cleared.`))}
+                    className="bg-background rounded border px-2 py-1"
+                  />
+                </label>
+              ),
+            )}
+          </div>
+        ) : null}
         {notInCast.length ? (
           <p className="text-xs text-amber-300" data-cast-missing>
             The shot list also uses {notInCast.join(", ")}.{" "}

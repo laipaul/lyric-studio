@@ -8,6 +8,7 @@
 //   "paste" { text }: what a pasted answer is (a shot list, checked like an imported file, or a story bible)
 import { connection } from "next/server";
 
+import { setPersonaNote } from "@lyric/video/persona-node";
 import { productionData, readPasted, saveBible, setBibleSource, setCast, setCastLook, songBrief, timedLines } from "@lyric/video/production";
 import { checkSongShotList } from "@lyric/video/shotlist";
 import { withTiming } from "@lyric/video/shot-timing";
@@ -37,6 +38,8 @@ export async function POST(request: Request, { params }: Params) {
         return Response.json({ cast: withWorkspace((ws) => setCast(ws, id, body.ids)) });
       case "look":
         return Response.json({ look: withWorkspace((ws) => setCastLook(ws, id, body.card, body.look)) });
+      case "personaNote": // the one-line persona note of a cast character for this song (node/persona.ts)
+        return Response.json({ note: withWorkspace((ws) => setPersonaNote(ws, id, String(body.card ?? ""), body.text)) });
       case "bibleSource":
         return Response.json({ source: withWorkspace((ws) => setBibleSource(ws, id, body.source)) });
       case "bible":

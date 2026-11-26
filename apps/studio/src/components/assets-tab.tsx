@@ -1,5 +1,6 @@
 "use client";
 
+import { CopyShotPrompt } from "@/components/copy-shot-prompt";
 import { AudioLines, ChevronDown, Clapperboard, FileAudio, FileJson, FileText, FolderOpen, ImageIcon, Library, ListMusic, MapPin, MoreHorizontal, Shuffle, Trash2, Upload, UserRound } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { useRouter } from "next/navigation";
@@ -821,6 +822,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                           {c.transitions.length > 2 ? <span className="block">and {c.transitions.length - 2} more</span> : null}
                         </p>
                       ) : null}
+                      {!c.collection ? <CopyShotPrompt projectId={projectId} clip={c.name} /> : null}
                       {!c.collection && c.kind === "video" ? (
                         <LipChip
                           clip={c.name}

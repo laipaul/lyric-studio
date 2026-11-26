@@ -38,8 +38,9 @@ export const EPS_DIR = "eps";
 export type BibleSource = "song" | "ep";
 // looks: card id → the look it wears in this song (the Wardrobe); versions: card id → the locked version this song is
 // kept on ("Keep on v1" when a newer version was locked, card-versions.ts); missing = the version in use.
-export type ProductionFile = { _help?: string; cast: string[]; bible: BibleSource; looks?: Record<string, string>; versions?: Record<string, number> };
-export type CastCard = { id: string; name: string; kind: "character" | "scene"; status: string; locked: boolean; thumbnail: string; version: number | null; pinned: boolean; updated_at: string; description: string | null; outfit: string | null; props: string | null; looks: { id: string; name: string; locked: boolean }[]; look: string; lookName: string | null; missing?: false };
+// personaNotes: card id → the one-line persona note for this song ("more playful in this song"; node/persona.ts).
+export type ProductionFile = { _help?: string; cast: string[]; bible: BibleSource; looks?: Record<string, string>; versions?: Record<string, number>; personaNotes?: Record<string, string> };
+export type CastCard = { id: string; name: string; kind: "character" | "scene"; status: string; locked: boolean; thumbnail: string; version: number | null; pinned: boolean; personaNote?: string | null; updated_at: string; description: string | null; outfit: string | null; props: string | null; looks: { id: string; name: string; locked: boolean }[]; look: string; lookName: string | null; missing?: false };
 export type MissingCard = { id: string; name: string; missing: true };
 export type TimedLine = { number: number; text: string; isHook: boolean; startMs: number | null; endMs: number | null };
 export type ProductionData = {
@@ -78,6 +79,7 @@ export function readProduction(root: string): ProductionFile {
       cast: Array.isArray(raw.cast) ? [...new Set(raw.cast.filter((x): x is string => typeof x === "string" && !!x))] : [],
       bible: raw.bible === "ep" ? "ep" : "song",
       looks,
+      personaNotes: raw.personaNotes && typeof raw.personaNotes === "object" ? Object.fromEntries(Object.entries(raw.personaNotes).filter(([k, v]) => !!k && typeof v === "string" && !!v.trim())) : {},
       versions: raw.versions && typeof raw.versions === "object" ? Object.fromEntries(Object.entries(raw.versions).filter(([k, v]) => !!k && Number.isInteger(v) && (v as number) > 0)) : {},
     };
   } catch {
@@ -87,7 +89,7 @@ export function readProduction(root: string): ProductionFile {
 
 export function writeProduction(root: string, p: ProductionFile): void {
   mkdirSync(path.join(root, PRODUCTION_DIR), { recursive: true });
-  writeFileSync(path.join(root, PRODUCTION_DIR, PRODUCTION_FILE), `${JSON.stringify({ _help: HELP, cast: p.cast, bible: p.bible, ...(p.looks && Object.keys(p.looks).length ? { looks: p.looks } : {}), ...(p.versions && Object.keys(p.versions).length ? { versions: p.versions } : {}) }, null, 2)}\n`);
+  writeFileSync(path.join(root, PRODUCTION_DIR, PRODUCTION_FILE), `${JSON.stringify({ _help: HELP, cast: p.cast, bible: p.bible, ...(p.looks && Object.keys(p.looks).length ? { looks: p.looks } : {}), ...(p.versions && Object.keys(p.versions).length ? { versions: p.versions } : {}), ...(p.personaNotes && Object.keys(p.personaNotes).length ? { personaNotes: p.personaNotes } : {}) }, null, 2)}\n`);
 }
 
 function songEp(ws: Workspace, projectId: string): string | null {
@@ -162,7 +164,7 @@ export function productionData(ws: Workspace, projectId: string, timed: TimedLin
   const library = cards.map((c) => castCard(c, ws));
   const cast = prod.cast.map((id): CastCard | MissingCard => {
     const c = cards.find((x) => x.id === id);
-    return c ? castCard(c, ws, prod.looks?.[id] ?? null, prod.versions?.[id] ?? null) : { id, name: "A card that is no longer in the library", missing: true };
+    return c ? { ...castCard(c, ws, prod.looks?.[id] ?? null, prod.versions?.[id] ?? null), personaNote: prod.personaNotes?.[id] ?? null } : { id, name: "A card that is no longer in the library", missing: true };
   });
   const bible = bibleOf(ws, projectId);
   const ep = bible.ep;

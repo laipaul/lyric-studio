@@ -13,6 +13,7 @@ import { listRemovedCards } from "./cleanup";
 import { readShotListFile, SHOTLIST_FILE } from "../shotlist";
 import { songPathsById } from "../song-folder";
 import { describesClothes, OUTFIT_FACE_WARNING, sortCardText } from "../../card-text";
+import { cleanPersona, personaBlock, personaIsEmpty } from "../../persona";
 import { listLooks } from "./looks";
 import { splitIsCurrent } from "./plan";
 
@@ -147,6 +148,12 @@ export function characterBlock(ws: Workspace, id: string): { block: string; warn
   if (v.props) {
     out.push("");
     out.push(`Must not change: ${one(v.props)}`);
+  }
+  // The persona (26 Nov 2026): how this character acts and sings, after identity and wardrobe.
+  const persona = (f as CardFile & { persona?: unknown }).persona;
+  if (character && persona && !personaIsEmpty(cleanPersona(persona))) {
+    out.push("");
+    out.push(personaBlock(row.name, cleanPersona(persona)));
   }
   const pics: [string, boolean][] = character
     ? [["reference picture", true], ["face close-up", has("closeup.png")], ["3/4 face", has("three_quarter.png")], ["teeth close-up", has("closeup_teeth.png")], ["full body front", has("body_front.png")], ["full body back", has("body_back.png")]]

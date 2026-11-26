@@ -22,6 +22,7 @@ import {
 } from "@lyric/video/characters";
 import { lockForSongs, songsUsingCard, switchSongs, setSongCardVersion, type LockAsk } from "@lyric/video/card-versions";
 import { outfitWarning } from "@lyric/video/card-text";
+import { personaRequestFor, readPersona, restorePersona, setPersona } from "@lyric/video/persona-node";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
@@ -50,6 +51,8 @@ function detail(id: string, message: string | null = null, n: number | null = nu
       thumbnail: cardThumbnail(root, file),
       usedBy: songsUsingCard(ws, id),
       outfitWarning: row.kind === "character" ? outfitWarning(v.outfit) : null,
+      // The persona (how this character acts and sings; outside the versions, so editable when locked) and its history.
+      persona: row.kind === "character" ? readPersona(ws, id) : null,
       card: row,
       file,
       version: v,
@@ -198,6 +201,14 @@ export async function POST(request: Request, { params }: Params) {
       case "cover":
         withWorkspace((ws) => setCover(ws, id, (body as { file?: string | null }).file ?? null));
         break;
+      case "persona-save":
+        withWorkspace((ws) => setPersona(ws, id, (body as { persona?: unknown }).persona));
+        break;
+      case "persona-restore":
+        withWorkspace((ws) => restorePersona(ws, id, String((body as { at?: unknown }).at ?? "")));
+        break;
+      case "persona-request":
+        return Response.json({ text: withWorkspace((ws) => personaRequestFor(ws, id)) });
       case "tidy":
         message = withWorkspace((ws) => tidyCardTexts(ws, id)).note;
         break;

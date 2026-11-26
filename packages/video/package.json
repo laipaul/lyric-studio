@@ -111,6 +111,8 @@
     "./production": "./src/node/production.ts",
     "./card-versions": "./src/node/card-versions.ts",
     "./card-text": "./src/card-text.ts",
+    "./persona": "./src/persona.ts",
+    "./persona-node": "./src/node/persona.ts",
     "./animate": "./src/node/animate.ts",
     "./singer": "./src/node/singer.ts",
     "./generate-tasks": "./src/node/generate-tasks.ts",

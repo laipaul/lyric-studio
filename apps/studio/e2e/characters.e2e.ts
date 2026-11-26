@@ -109,6 +109,30 @@ async function main() {
     await page.waitForSelector("[data-card-status=locked]");
     check(await page.isDisabled("[data-card-words]"), "locked: read-only");
     check(!(await page.$("[data-make-pack]")) && !(await page.$("[data-remake=closeup]")), "locked: no Make pack, no Remake");
+    // Persona (26 Nov 2026): editable on the locked card, saved with a history; Paste persona reads Claude's answer.
+    check(((await page.textContent("[data-persona-help]")) ?? "").includes("brows, eyes, breath, mouth, hands"), "the Persona section shows its physical-description rule");
+    check((await page.inputValue("[data-persona-section=chorus]")) === "finds the lens, signature gesture", "the section map starts from the defaults");
+    await page.fill("[data-persona-archetype]", "The Quiet Romantic");
+    await page.click("[data-persona-save]");
+    await page.waitForSelector("[data-persona-edited]");
+    await page.reload();
+    await page.waitForSelector("[data-persona]");
+    check((await page.inputValue("[data-persona-archetype]")) === "The Quiet Romantic" && !!(await page.$("[data-card-status=locked]")), "the persona is saved on the locked card and comes back after a reload");
+    await page.click("[data-persona-paste-open]");
+    await page.fill("[data-persona-paste-text]", "PERSONA: bride\n**Archetype:** The Bold One\nPersonality: brave, bright, warm\nGaze -> into the lens\nFavourite colour: blue\nSection map: Verse: still / Chorus: arms open");
+    await page.click("[data-persona-read]");
+    await page.waitForSelector("[data-persona-unrecognised]");
+    check(((await page.textContent("[data-persona-unrecognised]")) ?? "").includes("Favourite colour: blue"), "Paste persona lists what it did not recognise");
+    await page.click("[data-persona-use]");
+    check((await page.inputValue("[data-persona-archetype]")) === "The Bold One" && (await page.inputValue("[data-persona-section=chorus]")) === "arms open" && !!(await page.$("[data-persona-unsaved]")), "Use these fills the fields (not saved yet)");
+    await page.click("[data-persona-save]");
+    await page.waitForSelector("[data-persona-history]");
+    await page.click("[data-persona-history] summary");
+    await page.click("[data-persona-restore]");
+    await page.waitForFunction(() => (document.querySelector("[data-persona-archetype]") as HTMLInputElement | null)?.value === "The Quiet Romantic");
+    check(true, "History → Restore brings the earlier persona back");
+    const personaCopy = await page.evaluate(async (cid) => (await (await fetch(`/api/cards/${cid}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "claude" }) })).json()).block as string, page.url().split("/").pop());
+    check(personaCopy.includes("PERSONA: ") && personaCopy.indexOf("PERSONA: ") > personaCopy.indexOf("Look ("), "Copy character for Claude ends with the Persona block after identity and wardrobe");
     // The teeth close-up (25 Nov 2026): an extra picture, also on a locked card.
     check((await page.getAttribute("[data-teeth]", "data-teeth")) === "none", "a locked card offers the teeth close-up");
     await page.click("[data-make-teeth]");

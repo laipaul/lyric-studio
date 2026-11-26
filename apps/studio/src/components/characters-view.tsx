@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import { FeatureIcon } from "@/lib/feature-icons";
 import { cn } from "@/lib/utils";
+import { PersonaSection } from "@/components/persona-section";
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await api(url, { cache: "no-store", ...init });
@@ -638,6 +639,16 @@ export function CardPage({ id }: { id: string }) {
           className="bg-background rounded-md border px-2 py-1.5 text-sm"
         />
       </label>
+      {character && d.persona ? (
+        <PersonaSection
+          cardId={card.id}
+          name={card.name}
+          info={d.persona}
+          busy={!!busy}
+          onSave={(persona) => act("persona", { action: "persona-save", persona })}
+          onRestore={(at) => act("persona", { action: "persona-restore", at })}
+        />
+      ) : null}
       {version.n !== d.latest ? (
         <p className="text-muted-foreground rounded-md border px-4 py-2 text-xs" data-old-version>
           You are looking at v{version.n} (read-only{version.n === d.inUse ? ", still in use until v" + d.latest + " is locked" : ""}).{" "}
