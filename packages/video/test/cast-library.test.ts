@@ -80,15 +80,26 @@ describe("a character across songs", () => {
     expect(after.prints.closeup).toEqual(closeup);
   });
 
-  it("notes, and the block for Claude: name, notes, looks, which pictures exist, status; no API call", () => {
-    expect(setCardNotes(ws, id, "  late 20s, warm and shy, classic and soft  ")).toBe("late 20s, warm and shy, classic and soft");
-    const block = characterBlock(ws, id);
-    expect(block).toMatch(/^CHARACTER LOCK: Jennifer\n/);
-    expect(block).toContain("Notes: late 20s, warm and shy, classic and soft");
+  it("the block for Claude: the Look (Notes) first, then the wardrobe; only the pictures that exist, then Missing; warnings when empty", () => {
+    // Without Notes: copied all the same, with the warning.
+    const bare = characterBlock(ws, id);
+    expect(bare.warnings).toContain("No description yet; add Notes for better prompts");
+    expect(setCardNotes(ws, id, "  late 20s, warm and shy, black hair in a low bun  ")).toBe("late 20s, warm and shy, black hair in a low bun");
+    const { block, warnings } = characterBlock(ws, id);
+    expect(warnings).not.toContain("No description yet; add Notes for better prompts");
+    const lines = block.trimEnd().split("\n");
+    expect(lines[0]).toBe("CHARACTER LOCK: Jennifer");
+    expect(lines[2]).toBe("Look (face, hair, age range, vibe):");
+    expect(lines[3]).toBe("late 20s, warm and shy, black hair in a low bun");
+    expect(block.indexOf("Look (face")).toBeLessThan(block.indexOf("Wardrobe (looks):"));
     expect(block).toMatch(/Wardrobe \(looks\):\n- Main look/);
-    expect(block).toMatch(/Reference pictures: reference picture ✓, face close-up ✓, 3\/4 face ✓, teeth close-up –/);
-    expect(block).toMatch(/Status: draft \(version 1, not locked yet\)/);
-    expect(block).toMatch(/keeps exactly this face, hair, body, age and ethnicity/);
+    expect(block).toMatch(/\nReference pictures: reference picture, face close-up, 3\/4 face, full body front, full body back\n/);
+    expect(block).toMatch(/\nMissing: teeth close-up\n/);
+    expect(block).not.toMatch(/✓/);
+    expect(lines.at(-1)).toBe("Attach the reference pictures listed above with this block.");
+    // A look without an outfit description: copied with "(no outfit description yet)" and a warning naming the look.
+    expect(block).toMatch(/- Main look \(draft\): \(no outfit description yet\)/);
+    expect(warnings).toContain('The look "Main look" has no outfit description yet; add it in the Wardrobe for better prompts');
   });
 
   it("tagged on clips of two songs by its id; renamed, removed (greyed) and restored, the tags follow; the video is unchanged", async () => {

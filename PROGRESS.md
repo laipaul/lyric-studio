@@ -51,6 +51,10 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   - **Notes** on each card (look, outfit, vibe, age range: your words; kept on locked cards too).
   - **Copy character for Claude**: a clean character-lock block (name, notes, appearance, each look with its outfit,
     props, which reference pictures exist, locked or draft) on the clipboard. No API call.
+    Reordered the same day (Paul): **Look** first (the Notes: face, hair, age range, vibe; then the card's own
+    description), then the wardrobe; only the reference pictures that exist, then one "Missing: …" line; it ends
+    "Attach the reference picture(s) listed above with this block." Empty Notes or a look without an outfit: copied all
+    the same, with a warning on the page ("No description yet; add Notes for better prompts").
 - **Reference check:** a character's reference picture with a second face at least a quarter the main one's size is
   now "Not suitable: More than one face …" (actions.ts strictFaces; reference pictures only, never clips or shots).
 - **Face prints** (characters\face-prints.ts, face.json in the card folder): one SFace embedding (128 numbers) per face

@@ -268,10 +268,12 @@ export function CardPage({ id }: { id: string }) {
   const [cap, setCap] = useState(3);
   const [confirm, setConfirm] = useState<"pack" | "lock" | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copyWarnings, setCopyWarnings] = useState<string[]>([]);
   // Copy character for Claude (26 Nov 2026): the character-lock block on the clipboard; no API call.
   const copyForClaude = async () => {
     try {
-      const { block } = await call<{ block: string }>(`/api/cards/${id}`, { method: "POST", ...json({ action: "claude" }) });
+      const { block, warnings } = await call<{ block: string; warnings: string[] }>(`/api/cards/${id}`, { method: "POST", ...json({ action: "claude" }) });
+      setCopyWarnings(warnings ?? []); // copied all the same: the warnings say what would make the prompts better
       try {
         await navigator.clipboard.writeText(block);
       } catch {
@@ -478,6 +480,14 @@ export function CardPage({ id }: { id: string }) {
           )}
         </span>
       </div>
+      {copyWarnings.length ? (
+        <ul data-copy-warnings className="rounded-md border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-xs text-amber-100">
+          <li className="font-medium">Copied, but:</li>
+          {copyWarnings.map((w) => (
+            <li key={w}>{w}</li>
+          ))}
+        </ul>
+      ) : null}
       <label className="flex flex-col gap-1 text-xs" title="Your own words: look, outfit, vibe, age range. They go into Copy character for Claude.">
         <span className="font-medium">Notes</span>
         <textarea

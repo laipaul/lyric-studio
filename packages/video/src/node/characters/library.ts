@@ -57,30 +57,54 @@ export function cardTags(ws: Workspace): CardTag[] {
 const one = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
 
 // "Copy character for Claude": a compact character-lock block to paste into claude.ai when writing shot prompts.
-export function characterBlock(ws: Workspace, id: string): string {
+// (26 Nov 2026, Paul:) the description first: the Notes as its "Look" (face, hair, age range, vibe), then the wardrobe;
+// only the reference pictures that exist, then one "Missing:" line; it ends by asking to attach those pictures.
+// `warnings`: what is empty (the copy still happens): no Notes, a look without an outfit description.
+export const NO_NOTES_WARNING = "No description yet; add Notes for better prompts";
+export function characterBlock(ws: Workspace, id: string): { block: string; warnings: string[] } {
   const row = getCard(ws, id);
   const root = cardRoot(ws, row);
   const f = readCardFile(root);
   const v = usableVersion(f) ?? currentVersion(f);
   const dir = versionDir(root, v.n);
   const has = (file: string) => existsSync(path.join(dir, file));
+  const character = row.kind === "character";
+  const warnings: string[] = [];
   const out: string[] = [];
-  out.push(`CHARACTER LOCK: ${row.name}${row.kind === "scene" ? " (a place)" : ""}`);
-  if (f.notes) out.push(`Notes: ${one(f.notes)}`);
-  if (v.description) out.push(`${row.kind === "scene" ? "Looks like" : "Appearance"}: ${one(v.description)}`);
-  if (row.kind === "character") {
+  out.push(`CHARACTER LOCK: ${row.name}${character ? "" : " (a place)"}`);
+  out.push("");
+  out.push(character ? "Look (face, hair, age range, vibe):" : "Look:");
+  if (f.notes) out.push(one(f.notes));
+  else warnings.push(NO_NOTES_WARNING);
+  if (v.description) out.push(`${f.notes ? "Details from the card" : "From the card"}: ${one(v.description)}`);
+  if (!f.notes && !v.description) out.push("(no description yet)");
+  if (character) {
     const looks = listLooks(root, f);
     if (looks.length) {
+      out.push("");
       out.push("Wardrobe (looks):");
-      for (const l of looks) out.push(`- ${l.name}${l.status === "locked" ? "" : " (draft)"}: ${one(l.outfit) || "(no outfit description)"}`);
+      for (const l of looks) {
+        const outfit = one(l.outfit);
+        if (!outfit) warnings.push(`The look "${l.name}" has no outfit description yet; add it in the Wardrobe for better prompts`);
+        out.push(`- ${l.name}${l.status === "locked" ? "" : " (draft)"}: ${outfit || "(no outfit description yet)"}`);
+      }
     }
   }
-  if (v.props) out.push(`Must not change: ${one(v.props)}`);
-  const pics = row.kind === "character"
+  if (v.props) {
+    out.push("");
+    out.push(`Must not change: ${one(v.props)}`);
+  }
+  const pics: [string, boolean][] = character
     ? [["reference picture", true], ["face close-up", has("closeup.png")], ["3/4 face", has("three_quarter.png")], ["teeth close-up", has("closeup_teeth.png")], ["full body front", has("body_front.png")], ["full body back", has("body_back.png")]]
     : [["reference picture", true]];
-  out.push(`Reference pictures: ${pics.map(([n, ok]) => `${n} ${ok ? "✓" : "–"}`).join(", ")}`);
+  const present = pics.filter(([, ok]) => ok).map(([n]) => n);
+  const missing = pics.filter(([, ok]) => !ok).map(([n]) => n);
+  out.push("");
+  out.push(`Reference pictures: ${present.join(", ")}`);
+  if (missing.length) out.push(`Missing: ${missing.join(", ")}`);
   out.push(`Status: ${v.status === "locked" ? `locked (version ${v.n})` : `draft (version ${v.n}, not locked yet)`}`);
-  if (row.kind === "character") out.push(`Rule: ${row.name} keeps exactly this face, hair, body, age and ethnicity in every shot; only the look named for the shot changes the clothes.`);
-  return `${out.join("\n")}\n`;
+  if (character) out.push(`Rule: ${row.name} keeps exactly this face, hair, body, age and ethnicity in every shot; only the look named for the shot changes the clothes.`);
+  out.push("");
+  out.push(`Attach the reference picture${present.length === 1 ? "" : "s"} listed above with this block.`);
+  return { block: `${out.join("\n")}\n`, warnings };
 }

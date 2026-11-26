@@ -282,7 +282,7 @@ async function main() {
     await page.click("[data-copy-claude]");
     await page.waitForFunction(() => document.querySelector("[data-copy-claude]")?.textContent?.includes("Copied"));
     const block = await page.evaluate(() => navigator.clipboard.readText());
-    check(block.startsWith("CHARACTER LOCK: singer") && block.includes("Notes: late 20s, warm and shy") && block.includes("Reference pictures:"), `Copy character for Claude: a clean block (${block.split("\n")[0]})`);
+    check(block.startsWith("CHARACTER LOCK: singer") && block.includes("Look (face, hair, age range, vibe):\nlate 20s, warm and shy") && block.includes("Reference pictures:") && /Attach the reference pictures? listed above with this block\.$/.test(block.trimEnd()) && block.includes("\nMissing: "), `Copy character for Claude: the Look first, the pictures, the closing line (${block.split("\n")[0]})`);
     await browser.close();
   } finally {
     server.kill();

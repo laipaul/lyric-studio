@@ -204,7 +204,7 @@ export async function POST(request: Request, { params }: Params) {
         withWorkspace((ws) => setCardNotes(ws, id, (body as { notes?: unknown }).notes));
         break;
       case "claude":
-        return Response.json({ block: withWorkspace((ws) => characterBlock(ws, id)) });
+        return Response.json(withWorkspace((ws) => characterBlock(ws, id)));
       case "describe": {
         const tools = cardTools();
         if ("error" in tools) throw new Error(tools.error);
