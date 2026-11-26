@@ -172,7 +172,7 @@ async function main() {
     await page.fill("[data-card-name]", "gemini bride");
     await page.click("[data-create-card]");
     await page.waitForSelector("[data-card-page='gemini bride']");
-    const own = [["bride closeup.png", "closeup"], ["bride 3-4 face.png", "three_quarter"], ["full body front.png", "body_front"], ["full body back.png", "body_back"]] as const;
+    const own = [["bride closeup.png", "closeup"], ["bride 3-4 face.png", "three_quarter"], ["full body front lifelyrics_cinematic_portrait_The_bride_5813efa3-57ba-409f-8aa1_1.png", "body_front"], ["full body back.png", "body_back"]] as const;
     for (const [n, from] of own) copyFileSync(path.join(pics, `${from}.png`), path.join(pics, n));
     const chooser = page.waitForEvent("filechooser");
     await page.click("[data-own-pack]");
@@ -182,6 +182,11 @@ async function main() {
     await page.waitForSelector("[data-view=closeup][data-light=green]");
     check(((await page.textContent("[data-view=closeup]")) ?? "").includes("Your picture (bride closeup.png)"), "your own close-up is face-checked like a made one");
     check(["closeup", "three_quarter", "body_front", "body_back"].every((v) => existsSync(path.join(wsDir, "characters", "gemini bride", "v1", `${v}.png`))), "the four places are filled in workspace\\characters\\gemini bride\\v1\\");
+    // A long file name (26 Nov 2026): shortened in the middle, the whole name on hover; no tile runs into the next one.
+    const longName = await page.$eval("[data-view=body_front] [data-file-name]", (e: Element) => ({ text: e.textContent ?? "", title: e.getAttribute("title") ?? "" }));
+    check(longName.title === "full body front lifelyrics_cinematic_portrait_The_bride_5813efa3-57ba-409f-8aa1_1.png" && longName.text.includes("…") && longName.text.length <= 28 && longName.text.endsWith("_1.png"), `a long file name is shortened in the middle, whole on hover (${longName.text})`);
+    const overflow = await page.$$eval("[data-view]", (els: Element[]) => els.filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.getAttribute("data-view")));
+    check(overflow.length === 0, `no view tile runs over its neighbour (${overflow.join(", ") || "none"})`);
     check(((await page.textContent("[data-lock-problems]")) ?? "").includes("description") && !((await page.textContent("[data-lock-problems]")) ?? "").includes("Not made yet"), "only the description is missing before Lock");
     await page.selectOption("[data-own-move=closeup]", "three_quarter");
     await page.waitForFunction(() => document.querySelector("[data-view=three_quarter]")?.textContent?.includes("bride closeup.png"));

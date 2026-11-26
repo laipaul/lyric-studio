@@ -60,6 +60,9 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   choice keep working; **every song's shot list** (who is in each shot, its place, the look per person: stored by
   name) is updated with the new name, and the page says how many shots. Another card of the same kind with that name:
   refused, in plain words. The copy block and every screen use the new name at once (library.ts renameCard).
+- **Long file names on the view tiles** (same day, Paul): an own picture's long name (e.g. Midjourney's
+  "lifelyrics_cinematic_…_5813efa3_1.png") is shortened in the middle, keeping its start and end, so it no longer runs
+  over the next tile's label and score; hover it to see the whole name. Same on the look tiles and the teeth row.
 - **Reference check:** a character's reference picture with a second face at least a quarter the main one's size is
   now "Not suitable: More than one face …" (actions.ts strictFaces; reference pictures only, never clips or shots).
 - **Face prints** (characters\face-prints.ts, face.json in the card folder): one SFace embedding (128 numbers) per face

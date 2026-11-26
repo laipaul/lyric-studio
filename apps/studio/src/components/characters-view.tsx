@@ -3,7 +3,7 @@
 import { ArrowLeft, Copy, Crop, Download, Film, ImagePlus, Lock, Pencil, Plus, RefreshCw, RotateCcw, Square, Trash2, Upload, Wand2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { CardSummary, RemovedCard } from "@lyric/video/characters";
 
@@ -260,6 +260,32 @@ function NewCardDialog({ kind, initialFile, onClose, onCreated }: { kind: "chara
 
 const LIGHT: Record<string, string> = { green: "bg-emerald-400", amber: "bg-amber-400", red: "bg-red-400", grey: "bg-zinc-400" };
 const ACTIVE = new Set(["queued", "running"]);
+
+// A file name shortened in the middle, the whole name on hover (26 Nov 2026: long names of own pictures ran over the next
+// tile's label and score). The start and the end stay: "lifelyrics_cinematic_c…_5813efa3_1.png".
+export function middleName(name: string, max = 28): string {
+  if (name.length <= max) return name;
+  const keep = max - 1;
+  const tail = Math.min(12, Math.floor(keep / 2));
+  return `${name.slice(0, keep - tail)}…${name.slice(-tail)}`;
+}
+const FILE_NAME = /(?<=\()[^()]+?\.(?:png|jpe?g|webp|gif|mp4|mov|m4v|webm)(?=\))|[^\s()]+\.(?:png|jpe?g|webp|gif|mp4|mov|m4v|webm)\b/gi; // "(name with spaces.png)" whole, else a bare name
+function WithShortNames({ text }: { text: string }) {
+  const parts: ReactNode[] = [];
+  let last = 0;
+  for (const m of text.matchAll(FILE_NAME)) {
+    const i = m.index ?? 0;
+    parts.push(text.slice(last, i));
+    parts.push(
+      <span key={i} title={m[0]} data-file-name={m[0]} className="whitespace-nowrap">
+        {middleName(m[0])}
+      </span>,
+    );
+    last = i + m[0].length;
+  }
+  parts.push(text.slice(last));
+  return <>{parts}</>;
+}
 
 // The card's name, editable (26 Nov 2026): click it (or the pencil), Enter saves, Esc cancels. Only the display name
 // changes: the id and the folder stay, so songs, tags and pictures keep finding it (library.ts renameCard).
@@ -795,7 +821,7 @@ export function CardPage({ id }: { id: string }) {
                       <div className="flex flex-col gap-1">
                         <span className="font-medium">
                           {x.label}
-                          {made && it?.text ? ` · ${it.text}` : ""}
+                          {made && it?.text ? <> · <WithShortNames text={it.text} /></> : null}
                         </span>
                         <span className="text-muted-foreground">{x.why}</span>
                         <span className="flex flex-wrap items-center gap-1">
@@ -869,12 +895,12 @@ export function CardPage({ id }: { id: string }) {
                     ) : (
                       <div className="text-muted-foreground flex aspect-[3/4] w-full items-center justify-center rounded-md border border-dashed text-xs">not made yet</div>
                     )}
-                    <div className="flex items-center gap-1.5 text-xs">
-                      {it?.light ? <span className={cn("size-2 rounded-full", LIGHT[it.light])} /> : null}
-                      <span className="font-medium">{labels[vid]}</span>
+                    <div className="flex min-w-0 items-center gap-1.5 text-xs">
+                      {it?.light ? <span className={cn("size-2 shrink-0 rounded-full", LIGHT[it.light])} /> : null}
+                      <span className="truncate font-medium">{labels[vid]}</span>
                       {t?.score !== null && t?.score !== undefined ? <span className="text-muted-foreground tabular-nums">{t.score.toFixed(2)}</span> : null}
                     </div>
-                    {it?.text ? <p className="text-muted-foreground text-[11px] leading-snug">{it.text}{it.angle_note ? ` Angle: ${it.angle_note}.` : ""}</p> : null}
+                    {it?.text ? <p className="text-muted-foreground min-w-0 text-[11px] leading-snug break-words" data-view-text={vid}><WithShortNames text={it.text} />{it.angle_note ? ` Angle: ${it.angle_note}.` : ""}</p> : null}
                     {draft ? (
                       <div className="flex flex-wrap items-center gap-1">
                         {items.length ? (
@@ -1200,7 +1226,7 @@ function Wardrobe({ d, id, cap, running, onChanged, reload }: { d: CardDetail; i
                     {it?.light ? <span className={cn("size-2 rounded-full", LIGHT[it.light])} /> : null}
                     <span className="font-medium">{v.label}</span>
                   </div>
-                  {it?.text ? <p className="text-muted-foreground text-[11px] leading-snug">{it.text}</p> : null}
+                  {it?.text ? <p className="text-muted-foreground min-w-0 text-[11px] leading-snug break-words"><WithShortNames text={it.text} /></p> : null}
                   {!locked ? (
                     <div className="flex flex-wrap items-center gap-1">
                       {look.report?.items.length ? (
