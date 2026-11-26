@@ -33,8 +33,13 @@ export type Singer = {
   setLine: (line: number, source: string | null) => Promise<void>;
   setScript: (line: number, script: string) => Promise<void>;
   setResolution: (resolution: string) => Promise<void>;
-  make: () => Promise<void>;
-  retake: (line: number) => Promise<void>;
+  make: (draft?: boolean) => Promise<void>;
+  retake: (line: number, draft?: boolean) => Promise<void>;
+  // The lip-sync review (26 Nov 2026): a verdict, the free nudge, the audio per group, Make final.
+  review: (source: string, t: GroupTake, verdict: "approved" | "redo" | null, reasons?: string[], note?: string) => Promise<void>;
+  nudge: (source: string, t: GroupTake, ms: number) => Promise<void>;
+  setVoice: (line: number, voice: "stem" | "song") => Promise<void>;
+  makeFinal: (source: string, t: GroupTake) => Promise<void>;
   chooseTake: (source: string, t: GroupTake) => Promise<void>;
   play: (source: string, t: GroupTake | null) => void;
   panel: number | null; // the line whose takes show in the takes panel (opened by Make, Retake or Takes)
@@ -124,14 +129,14 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
       await post({ action: "resolution", resolution });
       await load();
     }),
-    make: async () => {
+    make: async (draft = false) => {
       setBusy(true);
       try {
         await saving.current;
         const first = view?.toMake.lines[0] ?? null;
-        const d = await post({ action: "make" });
+        const d = await post({ action: "make", draft });
         if (first !== null) setPanel(first); // the takes panel follows the first take being made
-        setNotice({ ok: true, text: `${d.jobs?.length ?? 0} singing clip${d.jobs?.length === 1 ? "" : "s"} sent to WaveSpeed (${d.seconds} s of voice, about ${money(d.usd ?? 0)}). The first take of each group lands on its lines by itself when it is ready (a few minutes each); follow it in Tasks.` });
+        setNotice({ ok: true, text: `${d.jobs?.length ?? 0} singing ${draft ? "draft" : "clip"}${d.jobs?.length === 1 ? "" : "s"} sent to WaveSpeed (${d.seconds} s of voice, about ${money(d.usd ?? 0)}${draft ? ", 480p" : ""}). The first take of each group lands on its lines by itself when it is ready (a few minutes each); follow it in Tasks.${draft ? " Then play each one with the song: ✓ Approve it, or Redo with what is wrong." : ""}` });
         window.dispatchEvent(new Event("lyric-tasks-changed")); // the Tasks menu opens with it
       } catch (e) {
         setNotice({ ok: false, text: (e as Error).message });
@@ -140,13 +145,13 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
         setBusy(false);
       }
     },
-    retake: async (line) => {
+    retake: async (line, draft = false) => {
       setBusy(true);
       try {
         await saving.current;
-        const d = await post({ action: "retake", line });
+        const d = await post({ action: "retake", line, draft });
         setPanel(line);
-        setNotice({ ok: true, text: `Retake sent to WaveSpeed (${d.seconds} s of voice, about ${money(d.usd ?? 0)}). It arrives as “New — compare” under its lines; the take in use stays until you choose another.` });
+        setNotice({ ok: true, text: `${draft ? "Draft retake" : "Retake"} sent to WaveSpeed (${d.seconds} s of voice, about ${money(d.usd ?? 0)}). It arrives as “New — compare” under its lines; the take in use stays until you choose another.` });
         window.dispatchEvent(new Event("lyric-tasks-changed"));
       } catch (e) {
         setNotice({ ok: false, text: (e as Error).message });
@@ -155,6 +160,25 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
         setBusy(false);
       }
     },
+    review: (source, t, verdict, reasons = [], note = "") => attempt(async () => {
+      await post({ action: "review", source, n: t.n, verdict, reasons, note });
+      await load();
+    }),
+    nudge: (source, t, ms) => attempt(async () => {
+      await post({ action: "nudge", source, n: t.n, ms });
+      await load();
+      onMade(); // a take in use moved on its lines: the Lyrics tab's anchors changed
+    }),
+    setVoice: (line, voice) => attempt(async () => {
+      await post({ action: "voice", line, voice });
+      await load();
+    }),
+    makeFinal: (source, t) => attempt(async () => {
+      await post({ action: "final", source, n: t.n });
+      setNotice({ ok: true, text: `Making the final of ${t.label ?? `take ${t.n}`}: the approved draft upscaled to 1080p (the same lips and expression), about ${money(Math.max(3, Math.ceil(t.seconds ?? ((t.to_ms ?? 0) - (t.sync_ms ?? 0)) / 1000)) * 0.04)}. It takes the draft's place on its lines when it is ready.` });
+      window.dispatchEvent(new Event("lyric-tasks-changed"));
+      await load();
+    }),
     chooseTake: (source, t) => attempt(async () => {
       await post({ action: "use", source, n: t.n });
       setNotice({ ok: true, text: `${t.label ?? `Take ${t.n}`} is now on ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`} (nothing was made again). The next video uses it.` });
@@ -162,7 +186,7 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
     }),
     play: (source, t) => {
       if (!t?.file || !view) return setPlaying(null);
-      setPlaying({ source, n: t.n, video: fileUrl(`${view.folder}/${t.file}`), fromS: (t.sync_ms ?? 0) / 1000, title: `${t.label ?? `Take ${t.n}`} · ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` });
+      setPlaying({ source, n: t.n, video: fileUrl(`${view.folder}/${t.file}`), fromS: ((t.sync_ms ?? 0) + (t.nudge_ms ?? 0)) / 1000, title: `${t.label ?? `Take ${t.n}`} · ${t.through ? `lines ${t.line}-${t.through}` : `line ${t.line}`}` });
       if (t.fresh) void post({ action: "seen", source, n: t.n }).then(load).catch(() => undefined);
     },
   };
@@ -184,6 +208,11 @@ export function SingerBar({ singer }: { singer: Singer }) {
           {v.toMake.lines.length ? ` · to make: ${v.toMake.lines.length} take${v.toMake.lines.length === 1 ? "" : "s"} (${v.toMake.seconds} s of voice at ${v.resolution}, about ${money(v.toMake.usd)})` : ticked ? " · all made" : ""}
           {over ? ` · above your cap of ${money(singer.cap)} (Creation → Your defaults)` : ""}
         </span>
+        {v.review.groups ? (
+          <span data-singer-review className={cn(v.review.approved === v.review.groups ? "text-emerald-300" : "text-muted-foreground")} title="The lip-sync review: play each take with the song, ✓ Approve it or Redo with what is wrong; approved drafts become finals with Make final">
+            · review: {v.review.approved} of {v.review.groups} approved{v.review.redo ? ` · ${v.review.redo} to redo` : ""}{v.review.notMade ? ` · ${v.review.notMade} not made` : ""}
+          </span>
+        ) : null}
         {v.running ? (
           <span data-singer-running className="text-brand flex items-center gap-1">
             <Loader2 className="size-3 animate-spin" /> {v.running} being made
@@ -196,6 +225,11 @@ export function SingerBar({ singer }: { singer: Singer }) {
             <option value="480p">480p · $0.03/s</option>
           </select>
         </label>
+        {v.toMake.lines.length ? (
+          <Button type="button" size="sm" variant="outline" data-singer-make-drafts disabled={singer.busy || !v.ready || v.toMake.seconds * 0.03 > singer.cap} onClick={() => void singer.make(true)} title={`Drafts first (lip-sync review): 480p at $0.03/s, about ${money(Math.round(v.toMake.seconds * 3) / 100)}. Check each one with the song, then Make final on the approved ones.`}>
+            <Mic /> Make drafts (480p)
+          </Button>
+        ) : null}
         {v.toMake.lines.length ? (
           <Button type="button" size="sm" data-singer-make disabled={singer.busy || !v.ready || over} onClick={() => void singer.make()} title={!v.ready ? "No WaveSpeed key yet" : over ? `Above your cap of ${money(singer.cap)}` : undefined}>
             {singer.busy ? <Loader2 className="animate-spin" /> : <Mic />} Make singing clips
@@ -345,6 +379,15 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
     <div className="flex flex-col gap-1 text-[11px]" data-singer-line={number}>
       <SourcePicker sources={v.sources} value={l.source} onChange={(src) => void singer.setLine(number, src)} line={number} />
       {l.source && !later ? <ScriptField key={l.script} line={number} value={l.script} onSave={(text) => singer.setScript(number, text)} /> : null}
+      {l.source && !later ? (
+        <label className="text-muted-foreground flex items-center gap-1" title="What drives the lips from the next take on: your vocal stem (clean voice) or the whole song (try it when the lips miss words)">
+          Lips follow
+          <select data-singer-voice={number} value={l.voice ?? "stem"} onChange={(e) => void singer.setVoice(number, e.target.value as "stem" | "song")} className="bg-background rounded border px-1 py-0">
+            <option value="stem">the vocal stem</option>
+            <option value="song">the whole song</option>
+          </select>
+        </label>
+      ) : null}
       {l.source && later ? (
         <span className="text-muted-foreground" data-singer-status="run">
           sung with line {l.run!.first} take
@@ -372,6 +415,11 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
           {!l.needed && l.takes.some((x) => x.status === "done" || x.status === "running") ? (
             <button type="button" data-singer-retake={number} disabled={singer.busy || !v.ready || l.piece.usd > singer.cap} onClick={() => void singer.retake(number)} className="hover:bg-accent flex items-center gap-1 rounded border px-1.5 py-0.5 disabled:opacity-50" title={`The same picture and piece of the vocal again, with the mood text and resolution of now (${v.resolution}): ${l.piece.seconds} s${l.piece.parts ? ` in ${l.piece.parts.length} parts of about ${Math.round((l.piece.toMs - l.piece.fromMs) / l.piece.parts.length / 1000)} s` : ""} · about ${money(l.piece.usd)}. Earlier takes stay.`}>
               <RefreshCw className="size-3" /> Retake
+            </button>
+          ) : null}
+          {!l.needed && l.takes.some((x) => x.status === "done" || x.status === "running") ? (
+            <button type="button" data-singer-retake-draft={number} disabled={singer.busy || !v.ready || (l.draftUsd ?? 0) > singer.cap} onClick={() => void singer.retake(number, true)} className="hover:bg-accent flex items-center gap-1 rounded border px-1.5 py-0.5 disabled:opacity-50" title={`A draft of the same lines at 480p (about ${money(l.draftUsd ?? 0)}): check the lips and the expression cheaply, then Make final.`}>
+              <RefreshCw className="size-3" /> Retake draft
             </button>
           ) : null}
           {l.takes.length ? (
@@ -442,6 +490,9 @@ function TakesList({ singer, source, takes }: { singer: Singer; source: string; 
                 <span className="size-3.5 shrink-0" />
               )}
               <span className="truncate font-medium">{t.label ?? `Take ${t.n}`}</span>
+              {t.quality === "draft" ? <span data-singer-take-badge="draft" className="rounded bg-sky-400/15 px-1 text-sky-300">Draft</span> : null}
+              {t.finalOf !== undefined ? <span data-singer-take-badge="final" className="rounded bg-violet-400/15 px-1 text-violet-300">Final</span> : null}
+              {t.review?.verdict === "approved" ? <span data-singer-take-badge="approved" className="rounded bg-emerald-400/15 px-1 text-emerald-300">✓ Approved</span> : t.review?.verdict === "redo" ? <span data-singer-take-badge="redo" className="rounded bg-amber-400/15 px-1 text-amber-300">Redo</span> : null}
               {t.inUse ? (
                 <span data-singer-take-badge="in-use" className="rounded bg-emerald-400/15 px-1 text-emerald-300">In use</span>
               ) : t.fresh ? (
@@ -456,7 +507,11 @@ function TakesList({ singer, source, takes }: { singer: Singer; source: string; 
             <span className="text-muted-foreground pl-5" data-singer-take-facts>
               {[takeWhen(t), t.status === "running" ? "being made…" : t.status === "done" || t.request_id ? `about ${money(t.cost_usd)}` : "nothing spent", t.resolution ?? "720p", takeFeeling(t), t.parts && t.parts.length > 1 ? `${t.parts.length} parts` : ""].filter(Boolean).join(" · ")}
               {t.status === "failed" || t.status === "interrupted" ? <span className={t.status === "failed" ? "text-red-300" : "text-amber-300"}> · {t.error}</span> : null}
+              {t.voice === "song" ? " · lips from the whole song" : ""}
+              {t.nudge_ms ? ` · placed ${t.nudge_ms > 0 ? "+" : ""}${(t.nudge_ms / 1000).toFixed(1)} s` : ""}
+              {t.review?.verdict === "redo" && (t.review.reasons.length || t.review.note) ? <span className="text-amber-300"> · {[...t.review.reasons, t.review.note].filter(Boolean).join(", ")}</span> : null}
             </span>
+            {t.status === "done" && t.file ? <TakeReview singer={singer} source={source} t={t} final={takes.find((x) => x.finalOf === t.n) ?? null} /> : null}
           </li>
         );
       })}
@@ -563,5 +618,58 @@ function SourceThumb({ s, big }: { s: SingerView["sources"][number]; big?: boole
   ) : (
     // eslint-disable-next-line @next/next/no-img-element -- a local picture served by /api/files
     <img src={url} alt="" className={cn("bg-muted shrink-0 rounded object-cover", size)} />
+  );
+}
+
+// The review of one take (26 Nov 2026): ✓ Approve or Redo with what is wrong (the quick reasons of Lyrics Sync's check
+// by ear), the free nudge when the lips are late or early, and Make final on an approved draft.
+const REASONS = ["lips late", "lips early", "mouth too open", "mouth too closed", "wrong expression", "face drifts"];
+function TakeReview({ singer, source, t, final }: { singer: Singer; source: string; t: GroupTake; final: GroupTake | null }) {
+  const [open, setOpen] = useState(false);
+  const [picked, setPicked] = useState<string[]>(t.review?.reasons ?? []);
+  const [note, setNote] = useState(t.review?.note ?? "");
+  const approved = t.review?.verdict === "approved";
+  return (
+    <div className="flex flex-col gap-1 pl-5" data-singer-review-take={t.n}>
+      <div className="flex flex-wrap items-center gap-1">
+        <button type="button" data-singer-approve={t.n} onClick={() => void singer.review(source, t, approved ? null : "approved")} className={cn("rounded border px-1 py-px", approved ? "border-emerald-400/60 text-emerald-300" : "hover:bg-accent")} title={approved ? "Approved: click again to take the mark off" : "The lips and the expression are right"}>
+          ✓ {approved ? "Approved" : "Approve"}
+        </button>
+        <button type="button" data-singer-redo={t.n} onClick={() => setOpen(!open)} className="hover:bg-accent rounded border px-1 py-px" title="Say what is wrong, then Retake draft">
+          Redo…
+        </button>
+        <span className="text-muted-foreground ml-1" title="Lips late or early: move the take on the song (free, nothing is made again)">nudge</span>
+        <button type="button" data-singer-nudge-minus={t.n} onClick={() => void singer.nudge(source, t, -100)} className="hover:bg-accent rounded border px-1 py-px" title="The lips are late: place the take 0.1 s earlier">
+          −0.1
+        </button>
+        <button type="button" data-singer-nudge-plus={t.n} onClick={() => void singer.nudge(source, t, 100)} className="hover:bg-accent rounded border px-1 py-px" title="The lips are early: place the take 0.1 s later">
+          +0.1
+        </button>
+        {t.quality === "draft" && approved && !final ? (
+          <button type="button" data-singer-final={t.n} onClick={() => void singer.makeFinal(source, t)} className="hover:bg-accent rounded border border-violet-400/60 px-1 py-px text-violet-300" title="Upscale this approved draft to 1080p: the same lips and expression (about $0.04 per second)">
+            Make final
+          </button>
+        ) : null}
+        {final ? <span className="text-muted-foreground" data-singer-final-of={t.n}>final: {final.status === "done" ? (final.inUse ? "in use" : "made") : final.status === "running" ? "being made…" : final.status}</span> : null}
+      </div>
+      {open ? (
+        <div className="flex flex-col gap-1 rounded border border-dashed p-1" data-singer-redo-box={t.n}>
+          <div className="flex flex-wrap gap-1">
+            {REASONS.map((r) => (
+              <button key={r} type="button" data-singer-reason={r} onClick={() => setPicked((p) => (p.includes(r) ? p.filter((x) => x !== r) : [...p, r]))} className={cn("rounded border px-1 py-px", picked.includes(r) ? "border-amber-400/60 text-amber-300" : "hover:bg-accent")}>
+                {r}
+              </button>
+            ))}
+          </div>
+          <input data-singer-redo-note={t.n} value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} placeholder="other (a few words)" className="bg-background rounded border px-1 py-0.5" />
+          <div className="flex gap-1">
+            <button type="button" data-singer-redo-save={t.n} onClick={() => void singer.review(source, t, "redo", picked, note).then(() => setOpen(false))} className="hover:bg-accent rounded border border-amber-400/60 px-1 py-px text-amber-300">
+              Mark to redo
+            </button>
+            <span className="text-muted-foreground">then fix it: nudge, the mood or the line&apos;s direction, Lips follow; and Retake draft</span>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }

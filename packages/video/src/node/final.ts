@@ -45,6 +45,10 @@ export function startFinal(ws: Workspace, projectId: string, file: string, n: un
       ...(draft.feel ? { feel: draft.feel } : {}),
       ...(draft.feeling ? { feeling: draft.feeling } : {}),
       ...(draft.feelingTo ? { feelingTo: draft.feelingTo } : {}),
+      // A singing draft (lip-sync review): the final is a singing take of the same lines, at the same place on the song.
+      ...(draft.kind === "lipsync"
+        ? { kind: "lipsync" as const, line: draft.line, ...(draft.through ? { through: draft.through } : {}), sync_ms: draft.sync_ms, to_ms: draft.to_ms, style: draft.style, ...(draft.nudge_ms ? { nudge_ms: draft.nudge_ms } : {}), ...(draft.voice ? { voice: draft.voice } : {}), ...(draft.prompt ? { prompt: draft.prompt } : {}), ...(draft.direction ? { direction: draft.direction } : {}) }
+        : {}),
       pid: process.pid,
     };
     p.takes.push(made);
@@ -72,18 +76,38 @@ export async function runFinal(openWs: () => Workspace, projectId: string, file:
   const t = takes.find((x) => x.n === n);
   const draft = takes.find((x) => x.n === t?.finalOf);
   if (!t || !draft?.file) return;
-  const save = (src: string) => {
+  const save = async (src: string) => {
     const takesDir = path.join(dir, TAKES_DIR);
     mkdirSync(takesDir, { recursive: true });
     const out = uniqueFileName(takesDir, `${path.parse(file).name} take ${draft.n} final.mp4`);
     copyFileSync(src, path.join(takesDir, out));
+    // A singing draft in use on its lines: its final takes its place there BEFORE it shows as done (else the page could
+    // read it "done" and not yet placed, and stop looking). The draft stays in Creation.
+    if (draft.kind === "lipsync") {
+      setTake(dir, file, n, { file: `${TAKES_DIR}/${out}`, playable: true });
+      const ws2 = openWs();
+      let placed = false;
+      try {
+        const { placeSingingTake, singingTakeInUse } = await import("./singer");
+        if (singingTakeInUse(ws2, projectId, draft)) {
+          await placeSingingTake(ws2, projectId, file, n);
+          placed = true;
+        }
+      } catch (error) {
+        setTake(dir, file, n, { error: `Made, but not placed on its lines: ${errorText(error)}. Use this take in Lyrics Sync.` });
+      } finally {
+        ws2.close();
+      }
+      setTake(dir, file, n, { status: "done", ...(placed ? {} : { fresh: true }), ended_at: new Date().toISOString(), pid: undefined });
+      return;
+    }
     setTake(dir, file, n, { status: "done", file: `${TAKES_DIR}/${out}`, playable: true, ended_at: new Date().toISOString(), pid: undefined });
   };
   let id = t.request_id;
   try {
     if (env.LYRIC_GENERATE_STUB) {
       if (env.LYRIC_GENERATE_STUB === "fail") throw new Error("stand-in: the service refused the request");
-      save(path.join(dir, draft.file)); // the browser tests and the cloud: the draft itself stands in for the final
+      await save(path.join(dir, draft.file)); // the browser tests and the cloud: the draft itself stands in for the final
       return;
     }
     const key = keyFor("wavespeed", env);
@@ -113,7 +137,7 @@ export async function runFinal(openWs: () => Workspace, projectId: string, file:
       const out = path.join(tmp, "final.mp4");
       await poller.download(url, out);
       makePlayable(out, false);
-      save(out);
+      await save(out);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

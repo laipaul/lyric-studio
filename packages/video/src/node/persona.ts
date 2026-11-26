@@ -207,3 +207,32 @@ export async function shotDirection(ws: Workspace, projectId: string, slotId: st
   const text = actingDirection({ people, section, script, lyric });
   return { text, source: !text ? "none" : script?.entry ? "script" : "section", stale: script?.stale ?? null };
 }
+
+// The acting direction sent with a singing take (Lip-sync review, 26 Nov 2026): who sings (the picture's "Who is this",
+// else the song's one character), their persona's singing (soft / high / held), gestures and Never, and the first
+// line's performance-script direction (emotion, face, body) when it is fresh. Short: InfiniteTalk's prompt is small.
+export async function singingDirection(ws: Workspace, projectId: string, source: string, first: number, last: number): Promise<string> {
+  const { readPictures, songFolder } = await import("./animate");
+  const ctx = await songContext(ws, projectId);
+  const who = readPictures(songFolder(ws, projectId).dir).pictures[path.basename(source)]?.who;
+  const characters = ctx.cast.filter((c) => c.kind === "character");
+  const id = who ?? (characters.length === 1 ? characters[0].id : null);
+  const card = id ? listCards(ws).find((c) => c.id === id && c.kind === "character") : undefined;
+  if (!card) return "";
+  const per = readPersona(ws, card.id).persona;
+  const cut = (s: string, n = 120) => (s.length > n ? `${s.slice(0, n - 1).replace(/[\s,;]+\S*$/, "")}…` : s);
+  const parts: string[] = [];
+  if (per) {
+    const sing = [per.sing.soft && `soft lines: ${cut(per.sing.soft, 80)}`, per.sing.high && `high notes: ${cut(per.sing.high, 80)}`, per.sing.held && `held notes: ${cut(per.sing.held, 80)}`].filter(Boolean);
+    if (sing.length) parts.push(`${card.name} sings like this: ${sing.join("; ")}`);
+    if (per.gestures.length) parts.push(`Gestures: ${cut(per.gestures.join("; "))}`);
+  }
+  const s = readScript(ctx.paths.root);
+  if (s) {
+    const d = await directionFor(ws, projectId, first);
+    const e = d.entry;
+    if (e) parts.push([e.emotion && `Emotion: ${e.emotion}${e.intensity ? ` (${e.intensity}/5)` : ""}${last > first ? ", growing over the lines" : ""}`, e.face && `Face: ${cut(e.face)}`, e.body && `Body: ${cut(e.body)}`].filter(Boolean).join(". "));
+  }
+  if (per?.never) parts.push(`Never: ${cut(per.never, 100)}`);
+  return parts.filter(Boolean).join(". ");
+}

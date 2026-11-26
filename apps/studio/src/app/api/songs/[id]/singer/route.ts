@@ -9,7 +9,8 @@
 //   does not wait); each comes back into Creation, the Storyboard and onto its line, in time with the song.
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import { readCreationDefaults } from "@lyric/video/animate";
-import { runSinging, seenSingingTake, setSingerLine, setSingerResolution, setSingerScript, singerView, startRetake, startSinging, chooseSingingTake } from "@lyric/video/singer";
+import { runSinging, seenSingingTake, setSingerLine, setSingerResolution, setSingerScript, singerView, startRetake, startSinging, chooseSingingTake, nudgeSingingTake, setSingerVoice, setSingingReview } from "@lyric/video/singer";
+import { runFinal, startFinal } from "@lyric/video/final";
 import { connection } from "next/server";
 
 import { withWorkspaceAsync, withWorkspace } from "@/lib/workspace";
@@ -32,7 +33,16 @@ export async function GET(_request: Request, { params }: Params) {
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
   try {
-    const body = (await request.json().catch(() => ({}))) as { action?: unknown; line?: unknown; source?: unknown; lines?: unknown; script?: unknown; resolution?: unknown; n?: unknown };
+    const body = (await request.json().catch(() => ({}))) as { action?: unknown; line?: unknown; source?: unknown; lines?: unknown; script?: unknown; resolution?: unknown; n?: unknown; draft?: unknown; verdict?: unknown; reasons?: unknown; note?: unknown; ms?: unknown; voice?: unknown };
+    // The lip-sync review (26 Nov 2026): a verdict on a take, the free nudge, the audio per group, Make final.
+    if (body.action === "review") return Response.json({ review: withWorkspace((ws) => setSingingReview(ws, id, body.source, body.n, body.verdict, body.reasons, body.note)) });
+    if (body.action === "nudge") return Response.json({ nudge_ms: withWorkspace((ws) => nudgeSingingTake(ws, id, body.source, body.n, body.ms)) });
+    if (body.action === "voice") return Response.json({ settings: withWorkspace((ws) => setSingerVoice(ws, id, body.line, body.voice)) });
+    if (body.action === "final") {
+      const take = withWorkspace((ws) => startFinal(ws, id, String(body.source ?? ""), body.n));
+      void runFinal(open, id, String(body.source ?? ""), take.n);
+      return Response.json({ take });
+    }
     if (body.action === "line") return Response.json({ settings: withWorkspace((ws) => setSingerLine(ws, id, body.line, body.source)) });
     if (body.action === "script") return Response.json({ settings: withWorkspace((ws) => setSingerScript(ws, id, body.line, body.script)) });
     if (body.action === "resolution") return Response.json({ settings: withWorkspace((ws) => setSingerResolution(ws, id, body.resolution)) });
@@ -40,14 +50,14 @@ export async function POST(request: Request, { params }: Params) {
     if (body.action === "seen") return Response.json({ ok: withWorkspace((ws) => (seenSingingTake(ws, id, body.source, body.n), true)) });
     if (body.action === "retake") {
       const cap = readCreationDefaults(resolveWorkspaceDir()).cap;
-      const started = await withWorkspaceAsync((ws) => startRetake(ws, id, { capUsd: cap, line: body.line }));
+      const started = await withWorkspaceAsync((ws) => startRetake(ws, id, { capUsd: cap, line: body.line, draft: body.draft === true }));
       void runSinging(open, id, started.jobs);
       return Response.json(started);
     }
     if (body.action === "make") {
       const cap = readCreationDefaults(resolveWorkspaceDir()).cap;
       const lines = Array.isArray(body.lines) ? body.lines.map(Number).filter(Number.isInteger) : undefined;
-      const started = await withWorkspaceAsync((ws) => startSinging(ws, id, { capUsd: cap, ...(lines ? { lines } : {}) }));
+      const started = await withWorkspaceAsync((ws) => startSinging(ws, id, { capUsd: cap, draft: body.draft === true, ...(lines ? { lines } : {}) }));
       void runSinging(open, id, started.jobs);
       return Response.json(started);
     }

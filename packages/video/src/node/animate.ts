@@ -134,6 +134,11 @@ export type Take = {
   feel?: Feel; // the realism rules it was sent with (realism.ts); absent on takes made before 25 Nov 2026 (old prompt)
   feeling?: string; // the feeling of its section when it was sent (feelings.ts): a later change remakes nothing
   acting?: boolean; // Make with references: sent with the acting direction (Persona + performance script, 26 Nov 2026)
+  // Lip-sync review (26 Nov 2026, Paul: "verify it like Lyrics Sync, tweak until it's right, then apply"):
+  review?: { verdict: "approved" | "redo"; reasons: string[]; note?: string; at: string }; // Paul's verdict on a singing take
+  nudge_ms?: number; // a singing take placed this much later (+) or earlier (-) on the song than its vocal piece (free fix)
+  voice?: "stem" | "song"; // the audio the lips were driven by (the vocal stem, or the whole song)
+  direction?: string; // the acting direction sent with the singing cue (persona + performance script)
   rests?: { fromMs: number; toMs: number }[]; // lipsync: breathing room (singer.ts singingRests): where the voice sent was quieted, song ms
   feelingTo?: string; // and the one it turns to, when the take runs into a section that feels different
   fresh?: boolean; // lipsync: a later take of lines that already had a take in use: waits for Paul ("New — compare"), never placed by itself

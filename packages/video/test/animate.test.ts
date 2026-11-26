@@ -14,7 +14,8 @@ import { addFromLink, addPictures, phraseSeconds, readCreationDefaults, saveCrea
 import { clearFinishedGenerateTasks, listGenerateTasks, RECENT_MS } from "../src/node/generate-tasks";
 import { takeFacts } from "../src/take-facts";
 import { singingParts, PART_MAX_MS, PART_MIN_MS } from "../src/node/singer";
-import { chooseSingingTake, infiniteTalkTransport, LIPSYNC_USD_PER_SECOND_AT, runSinging, seenSingingTake, singingPrompt, SINGING_CUE, singingPiece, singingRuns, stubSingTransport, type SingTransport } from "../src/node/singer";
+import { chooseSingingTake, draftUsd, infiniteTalkTransport, LIPSYNC_USD_PER_SECOND_AT, nudgeSingingTake, reviewCounts, runSinging, seenSingingTake, setSingerVoice, setSingingReview, singingPrompt, SINGING_CUE, singingPiece, singingRuns, stubSingTransport, type SingTransport } from "../src/node/singer";
+import { runFinal, startFinal } from "../src/node/final";
 import { makePlayable, update } from "../src/node/animate";
 import { execFileSync } from "node:child_process";
 import { probeMedia } from "@lyric/db";
@@ -415,11 +416,71 @@ describe("singing takes: retake, compare, choose (Paul, 21 Nov 2026)", () => {
   });
 });
 
+describe("the lip-sync review (26 Nov 2026): drafts, verdicts, the free nudge, the direction, Make final", () => {
+  const SRC = "rain street.jpg";
+  const paths = () => songPathsById(ws, id);
+  const anchors = () => (JSON.parse(readFileSync(paths().recipe!, "utf8")) as { anchors?: { line: number; clip: string; sync?: number; through?: number }[] }).anchors ?? [];
+  const take = (n: number) => readPictures(pics).pictures[SRC].takes.find((x) => x.n === n)!;
+  const prompts: string[] = [];
+  const spy = (): SingTransport => {
+    const s = stubSingTransport("1");
+    return { ...s, submit: (o) => (prompts.push(String(o.prompt ?? "")), s.submit(o)) };
+  };
+  let draft = 0;
+  it("a draft (480p, half the price) with the acting direction goes onto its lines; the direction is sent after the singing cue", async () => {
+    update(pics, SRC, (p) => {
+      draft = p.takes.reduce((m, x) => Math.max(m, x.n), 0) + 1;
+      p.takes.push({ n: draft, kind: "lipsync", line: 9, sync_ms: 2000, to_ms: 5000, style: 1, resolution: "480p", service: "wavespeed", quality: "draft", model: "InfiniteTalk", status: "running", started_at: new Date().toISOString(), cost_usd: draftUsd(3), voice: "stem", direction: "Emotion: longing (3/5). Face: inner brows raised", pid: process.pid });
+    });
+    expect(draftUsd(3)).toBe(0.09);
+    await runSinging(open, id, [{ source: SRC, n: draft }], { transport: spy(), sleep: now0 });
+    expect(take(draft)).toMatchObject({ status: "done", quality: "draft" });
+    expect(prompts.at(-1)).toContain(SINGING_CUE);
+    expect(prompts.at(-1)).toContain("Emotion: longing (3/5). Face: inner brows raised");
+    expect(anchors().find((a) => a.line === 9)).toMatchObject({ sync: 2 });
+  });
+  it("the nudge moves the take in use on the song (free: nothing is made again), within ±1.5 s", () => {
+    const made = prompts.length;
+    expect(nudgeSingingTake(ws, id, SRC, draft, 100)).toBe(100);
+    expect(anchors().find((a) => a.line === 9)?.sync).toBeCloseTo(2.1, 5);
+    expect(nudgeSingingTake(ws, id, SRC, draft, -300)).toBe(-200);
+    expect(anchors().find((a) => a.line === 9)?.sync).toBeCloseTo(1.8, 5);
+    expect(nudgeSingingTake(ws, id, SRC, draft, 5000)).toBe(1500);
+    nudgeSingingTake(ws, id, SRC, draft, -1600);
+    expect(take(draft).nudge_ms).toBe(-100);
+    expect(prompts.length).toBe(made);
+    expect(() => nudgeSingingTake(ws, id, SRC, draft, 0)).toThrow(/milliseconds/);
+  });
+  it("a verdict: Redo with reasons, then Approve; the review counts follow", () => {
+    expect(setSingingReview(ws, id, SRC, draft, "redo", ["lips late", "wrong expression"], "too happy")).toMatchObject({ verdict: "redo", reasons: ["lips late", "wrong expression"], note: "too happy" });
+    const g = (verdict?: "approved" | "redo") => ({ source: SRC, number: 9, run: { first: 9, last: 9 }, takes: [{ ...take(draft), inUse: true, fresh: false, ...(verdict ? { review: { verdict, reasons: [], at: "" } } : { review: undefined }) }] });
+    expect(reviewCounts([g("redo"), { source: SRC, number: 12, run: { first: 12, last: 12 }, takes: [] }])).toEqual({ groups: 2, approved: 0, redo: 1, notMade: 1 });
+    expect(setSingingReview(ws, id, SRC, draft, "approved", ["lips late"], "")).toMatchObject({ verdict: "approved", reasons: [] });
+    expect(reviewCounts([g("approved")])).toMatchObject({ approved: 1 });
+    expect(() => setSingingReview(ws, id, SRC, draft, "maybe", [], "")).toThrow(/approved" or "redo/);
+  });
+  it("Make final on the approved draft: a singing take of the same lines takes its place, at the same nudged spot", async () => {
+    const fin = startFinal(ws, id, SRC, draft, STUB);
+    expect(fin).toMatchObject({ kind: "lipsync", line: 9, sync_ms: 2000, to_ms: 5000, nudge_ms: -100, finalOf: draft, quality: "best" });
+    await runFinal(open, id, SRC, fin.n, { env: STUB });
+    expect(take(fin.n)).toMatchObject({ status: "done" });
+    const a = anchors().find((x) => x.line === 9)!;
+    expect(a.clip).toBe(take(fin.n).sent);
+    expect(a.sync).toBeCloseTo(1.9, 5);
+    expect(take(draft).final).toBe(fin.n); // the draft stays, pointing at its final
+  });
+  it("the audio per group: the whole song or the vocal stem", () => {
+    expect(setSingerVoice(ws, id, 9, "song").voices).toEqual({ "9": "song" });
+    expect(setSingerVoice(ws, id, 9, "stem").voices).toEqual({});
+    expect(() => setSingerVoice(ws, id, 9, "mix")).toThrow(/stem" or "song/);
+  });
+});
+
 describe("the Tasks menu lists the online takes (Paul, 21 Nov 2026: 'add it to the task in the queue')", () => {
   it("every take of every song, with its song, line or picture, model, length, cost and where it lands; Clear finished hides the finished ones", () => {
     const tasks = listGenerateTasks(ws, Date.now(), () => false);
     expect(tasks.length).toBeGreaterThan(0);
-    const sing = tasks.find((t) => t.kind === "singing");
+    const sing = tasks.find((t) => t.kind === "singing" && /InfiniteTalk/.test(t.model)); // (a singing take's final is listed as singing too, with the upscaler)
     expect(sing).toMatchObject({ project_id: id, href: `/songs/${id}?tab=lyrics`, model: expect.stringMatching(/^WaveSpeed · InfiniteTalk/) });
     expect(sing!.what).toMatch(/^Singing · lines? \d+/);
     const anim = tasks.find((t) => t.kind === "animate");

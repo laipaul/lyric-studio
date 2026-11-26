@@ -55,7 +55,14 @@ const LEAD_MS = 500; // the piece starts this long before the downbeat the shot 
 const TAIL_BARS = 2; // and runs two bars past the line's sung end (the shot holds until the next regular cut)
 export const RUN_GAP_MS = 8000; // lines in a row with the same picture and at most this pause between them: one take
 
-export type SingerSettings = { lines: Record<string, string>; scripts?: Record<string, string>; resolution?: LipsyncResolution };
+// voices: per group (its first line), the audio that drives the lips ("song": the whole mix; default: the vocal stem).
+export type SingerSettings = { lines: Record<string, string>; scripts?: Record<string, string>; resolution?: LipsyncResolution; voices?: Record<string, "stem" | "song"> };
+// A draft (lip-sync review, 26 Nov 2026): 480p at half the price, to check the lips and the expression first; an
+// approved draft becomes the final by Make final (upscaled to 1080p: the same lips and expression).
+export const DRAFT_RESOLUTION: LipsyncResolution = "480p";
+export const draftUsd = (seconds: number) => Math.round(seconds * LIPSYNC_USD_PER_SECOND_AT[DRAFT_RESOLUTION] * 100) / 100;
+export const REVIEW_REASONS = ["lips late", "lips early", "mouth too open", "mouth too closed", "wrong expression", "face drifts"] as const;
+export const NUDGE_MAX_MS = 1500;
 export const SCRIPT_MAX = 200;
 // Every singing take asks InfiniteTalk to SING, not talk (Paul, 21 Nov 2026: a calm portrait came back "talking"):
 // this cue opens the prompt, then Paul's own script. SINGING_STYLE marks takes made with it; a block made before it
@@ -90,6 +97,8 @@ export type SingerLine = {
   take: (Take & { file?: string }) | null; // the newest singing take of this line's run from its source
   takes: GroupTake[]; // every singing take of this group (its source, its lines), oldest first (only on a run's first line)
   needed: boolean; // ticked and without a finished or running take of this source and piece (only on a run's first line)
+  voice?: "stem" | "song"; // the audio chosen for this group (on a run's first line)
+  draftUsd?: number; // what a draft of this group costs (480p)
 };
 export type SingerView = {
   lines: SingerLine[] | null; // null: no timed lines yet
@@ -104,12 +113,15 @@ export type SingerView = {
   song: string | null; // workspace-relative song file (a take plays with the song from its first frame's song time)
   folder: string; // workspace-relative Creation folder (a take's file is <folder>/<take.file>)
   running: number; // singing takes being made now
+  // The lip-sync review: groups (runs) with a source, how many have an approved take in use (or approved), how many
+  // were marked to redo, and how many have no take yet.
+  review: { groups: number; approved: number; redo: number; notMade: number };
 };
 
 export function readSinger(dir: string): SingerSettings {
   try {
     const raw = JSON.parse(readFileSync(path.join(dir, SINGER_FILE), "utf8")) as Partial<SingerSettings>;
-    return { lines: raw.lines && typeof raw.lines === "object" ? raw.lines : {}, ...(raw.scripts && typeof raw.scripts === "object" ? { scripts: raw.scripts } : {}), ...(isLipsyncResolution(raw.resolution) ? { resolution: raw.resolution } : {}) };
+    return { lines: raw.lines && typeof raw.lines === "object" ? raw.lines : {}, ...(raw.scripts && typeof raw.scripts === "object" ? { scripts: raw.scripts } : {}), ...(isLipsyncResolution(raw.resolution) ? { resolution: raw.resolution } : {}), ...(raw.voices && typeof raw.voices === "object" ? { voices: raw.voices } : {}) };
   } catch {
     return { lines: {} };
   }
@@ -268,7 +280,8 @@ export async function singerView(ws: Workspace, projectId: string, env: NodeJS.P
     const takes: GroupTake[] = run?.first === l.number ? all.map((t) => ({ ...t, inUse: t.status === "done" && anchors.has(inUseKey(t)), fresh: !!t.fresh && t.status === "done" })) : [];
     const own = (c.lines ?? []).filter((x) => x.number >= first.number && x.number <= last.number);
     const rests = singingRests(own, whole);
-    return { number: l.number, text: l.text, source, piece, script, run: run ? { first: run.first, last: run.last } : null, rests, take, takes, needed: !!source && run?.first === l.number && !all.some((t) => covers(t, piece)) };
+    const firstLine = run?.first === l.number;
+    return { number: l.number, text: l.text, source, piece, script, run: run ? { first: run.first, last: run.last } : null, rests, take, takes, needed: !!source && firstLine && !all.some((t) => covers(t, piece)), ...(firstLine ? { voice: settings.voices?.[String(l.number)] ?? "stem", draftUsd: draftUsd(piece.seconds) } : {}) };
   }) ?? null;
   const toMake = (lines ?? []).filter((l) => l.needed);
   return {
@@ -284,7 +297,25 @@ export async function singerView(ws: Workspace, projectId: string, env: NodeJS.P
     song: c.songRel,
     folder: rel,
     running: (lines ?? []).reduce((n, l) => n + l.takes.filter((t) => t.status === "running").length, 0),
+    review: reviewCounts(lines ?? []),
   };
+}
+
+// The review progress: a group counts approved when its take in use (else its newest done take) is approved, or is the
+// final of an approved draft; to redo when that take is marked redo; not made when it has no done take.
+export function reviewCounts(lines: readonly Pick<SingerLine, "source" | "run" | "number" | "takes">[]): SingerView["review"] {
+  const groups = lines.filter((l) => l.source && l.run && l.run.first === l.number);
+  let approved = 0;
+  let redo = 0;
+  let notMade = 0;
+  for (const g of groups) {
+    const done = g.takes.filter((t) => t.status === "done");
+    const t = done.find((x) => x.inUse) ?? done.at(-1);
+    if (!t) notMade++;
+    else if (t.review?.verdict === "approved" || (t.finalOf !== undefined && done.some((d) => d.n === t.finalOf && d.review?.verdict === "approved"))) approved++;
+    else if (t.review?.verdict === "redo") redo++;
+  }
+  return { groups: groups.length, approved, redo, notMade };
 }
 
 // The resolution singing clips are made at from now on (this video's singer.json); takes already made keep theirs.
@@ -469,13 +500,14 @@ export type SingJob = { source: string; n: number };
 
 // "Make singing clips": checks the cost against the cap and records a running take for every ticked line that has no
 // clip for its source and piece yet (a line already made is never paid for twice). `lines`: only these.
-export async function startSinging(ws: Workspace, projectId: string, o: { capUsd: number; lines?: number[] }, env: NodeJS.ProcessEnv = process.env): Promise<{ jobs: SingJob[]; usd: number; seconds: number }> {
+export async function startSinging(ws: Workspace, projectId: string, o: { capUsd: number; lines?: number[]; draft?: boolean }, env: NodeJS.ProcessEnv = process.env): Promise<{ jobs: SingJob[]; usd: number; seconds: number }> {
   const view = await singerView(ws, projectId, env);
   if (!view.lines) throw new Error(view.why ?? "This song's lines are not timed yet.");
   const todo = view.lines.filter((l) => l.needed && (!o.lines || o.lines.includes(l.number)));
   if (!todo.length) throw new Error("Nothing to make: tick the lines where the singer shows (each with its picture or video), or they are made already.");
   if (!view.ready) singTransportFor(env); // throws the plain-words message
-  const usd = Math.round(todo.reduce((s, l) => s + l.piece.usd, 0) * 100) / 100;
+  const cost = (l: SingerLine) => (o.draft ? draftUsd(l.piece.seconds) : l.piece.usd);
+  const usd = Math.round(todo.reduce((s, l) => s + cost(l), 0) * 100) / 100;
   const seconds = todo.reduce((s, l) => s + l.piece.seconds, 0);
   const cap = Number(o.capUsd);
   if (!Number.isFinite(cap) || cap <= 0) throw new Error("Set a spending cap above $0.");
@@ -484,24 +516,40 @@ export async function startSinging(ws: Workspace, projectId: string, o: { capUsd
   const now = new Date().toISOString();
   const look = filmLookFor(ws, projectId);
   const feel = feelFor(ws, projectId);
-  const jobs = todo.map((l) => recordTake(dir, l, view.resolution, now, look, feel, feelingForLines(ws, projectId, l.number, l.run?.last)));
+  const jobs: SingJob[] = [];
+  for (const l of todo) jobs.push(recordTake(dir, l, view.resolution, now, look, feel, feelingForLines(ws, projectId, l.number, l.run?.last), { draft: !!o.draft, direction: await directionOf(ws, projectId, l) }));
   return { jobs, usd, seconds };
 }
 
 // A new running take of a group (its picture, its lines, its vocal piece, the mood text and resolution of now).
-function recordTake(dir: string, l: SingerLine, resolution: LipsyncResolution, now: string, look: { name: string; line: string } | null, feel: Feel, feeling: TakeFeeling = {}): SingJob {
+function recordTake(dir: string, l: SingerLine, resolution: LipsyncResolution, now: string, look: { name: string; line: string } | null, feel: Feel, feeling: TakeFeeling = {}, o: { draft?: boolean; direction?: string } = {}): SingJob {
   let n = 0;
+  const res = o.draft ? DRAFT_RESOLUTION : resolution;
+  const usd = o.draft ? draftUsd(l.piece.seconds) : l.piece.usd;
   update(dir, l.source!, (p) => {
     n = nextTakeN(p);
-    p.takes.push({ n, kind: "lipsync", line: l.number, ...(l.run && l.run.last > l.number ? { through: l.run.last } : {}), sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, ...(l.piece.parts ? { parts: l.piece.parts.map((x) => ({ ...x })) } : {}), ...(l.script ? { prompt: l.script } : {}), style: SINGING_STYLE, ...(look ? { filmLook: look.name, look: look.line } : {}), feel, ...feeling, ...(l.rests ? { rests: l.rests.map((r) => ({ ...r })) } : {}), resolution, service: "wavespeed", quality: "best", model: LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: l.piece.usd, pid: process.pid });
+    p.takes.push({ n, kind: "lipsync", line: l.number, ...(l.run && l.run.last > l.number ? { through: l.run.last } : {}), sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, ...(l.piece.parts ? { parts: l.piece.parts.map((x) => ({ ...x })) } : {}), ...(l.script ? { prompt: l.script } : {}), ...(o.direction ? { direction: o.direction } : {}), voice: l.voice ?? "stem", style: SINGING_STYLE, ...(look ? { filmLook: look.name, look: look.line } : {}), feel, ...feeling, ...(l.rests ? { rests: l.rests.map((r) => ({ ...r })) } : {}), resolution: res, service: "wavespeed", quality: o.draft ? "draft" : "best", model: LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: usd, pid: process.pid });
   });
   return { source: l.source!, n };
+}
+
+// The acting direction sent with a group's singing cue (26 Nov 2026): who sings (the picture's "Who is this", else the
+// song's one character), their persona (how they sing, gestures, never) and the first line's performance-script
+// direction (emotion, face, body). "" without a persona or script. Imported lazily (persona.ts reads lipsync.ts, which
+// reads this file).
+async function directionOf(ws: Workspace, projectId: string, l: SingerLine): Promise<string> {
+  try {
+    const { singingDirection } = await import("./persona");
+    return await singingDirection(ws, projectId, l.source!, l.number, l.run?.last ?? l.number);
+  } catch {
+    return "";
+  }
 }
 
 // "Retake" (Lyrics Sync, next to "singing clip on lines X–Y"): the same group again as a new take: the same picture or
 // video, the same piece of the vocal, the mood text and resolution of now. Earlier takes are never touched; the new one
 // arrives as "New — compare" when the group already has a take in use.
-export async function startRetake(ws: Workspace, projectId: string, o: { capUsd: number; line: unknown }, env: NodeJS.ProcessEnv = process.env): Promise<{ jobs: SingJob[]; usd: number; seconds: number }> {
+export async function startRetake(ws: Workspace, projectId: string, o: { capUsd: number; line: unknown; draft?: boolean }, env: NodeJS.ProcessEnv = process.env): Promise<{ jobs: SingJob[]; usd: number; seconds: number }> {
   const view = await singerView(ws, projectId, env);
   if (!view.lines) throw new Error(view.why ?? "This song's lines are not timed yet.");
   const n = Number(o.line);
@@ -511,9 +559,10 @@ export async function startRetake(ws: Workspace, projectId: string, o: { capUsd:
   if (!view.ready) singTransportFor(env); // throws the plain-words message
   const cap = Number(o.capUsd);
   if (!Number.isFinite(cap) || cap <= 0) throw new Error("Set a spending cap above $0.");
-  if (l.piece.usd > cap) throw new Error(`A retake (${l.piece.seconds} s of voice) costs about $${l.piece.usd.toFixed(2)}, above your cap of $${cap.toFixed(2)}: raise the cap in Creation → Your defaults. Nothing was sent.`);
+  const usd = o.draft ? draftUsd(l.piece.seconds) : l.piece.usd;
+  if (usd > cap) throw new Error(`A retake (${l.piece.seconds} s of voice) costs about $${usd.toFixed(2)}, above your cap of $${cap.toFixed(2)}: raise the cap in Creation → Your defaults. Nothing was sent.`);
   const { dir } = songFolder(ws, projectId);
-  return { jobs: [recordTake(dir, l, view.resolution, new Date().toISOString(), filmLookFor(ws, projectId), feelFor(ws, projectId), feelingForLines(ws, projectId, l.number, l.run.last))], usd: l.piece.usd, seconds: l.piece.seconds };
+  return { jobs: [recordTake(dir, l, view.resolution, new Date().toISOString(), filmLookFor(ws, projectId), feelFor(ws, projectId), feelingForLines(ws, projectId, l.number, l.run.last), { draft: !!o.draft, direction: await directionOf(ws, projectId, l) })], usd, seconds: l.piece.seconds };
 }
 
 // The finished take's clip in the Storyboard (added once; a later take waits outside it until it is chosen).
@@ -543,7 +592,7 @@ function placeTake(ws: Workspace, projectId: string, t: Take, clip: string): voi
   } catch {
     // not a song clip (the anchor still names it)
   }
-  saveAnchors(ws, projectId, [...others, { line: t.line!, clip, sync: t.sync_ms! / 1000, ...(t.through ? { through: t.through } : {}) }]);
+  saveAnchors(ws, projectId, [...others, { line: t.line!, clip, sync: (t.sync_ms! + (t.nudge_ms ?? 0)) / 1000, ...(t.through ? { through: t.through } : {}) }]);
 }
 
 // "Use this take": the line switches to this take at once (nothing is made or rendered again). The other takes of the
@@ -593,7 +642,7 @@ async function singInParts(c: { dir: string; source: string; n: number; take: Ta
         throw Object.assign(new Error(`Part ${i + 1}: the picture or the voice could not be put online: ${errorText(error)}`), { unsent: i === 0 });
       }
       const t = c.take;
-      rid = (await c.transport.submit({ image, audio, prompt: t.style === SINGING_STYLE ? singingPrompt(t.prompt ?? "", t.look, t.feel, t.feeling, t.feelingTo, !!t.rests) : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION })).id; // never retried
+      rid = (await c.transport.submit({ image, audio, prompt: t.style === SINGING_STYLE ? singingPrompt(promptOf(t), t.look, t.feel, t.feeling, t.feelingTo, !!t.rests) : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION })).id; // never retried
       const sent = rid;
       update(c.dir, c.source, (p) => {
         const tk = p.takes.find((x) => x.n === c.n);
@@ -643,6 +692,85 @@ export function joinParts(files: string[], out: string, list: string): void {
 // Makes the singing clips (in parallel). Each: the picture or video and its piece of voice go online, the request is
 // sent once, polled, downloaded; the sound is removed; the clip goes to Creation, the Storyboard and onto its line.
 // `resume`: takes that already have a request id are only polled and fetched (free).
+// The mood text and the acting direction, as InfiniteTalk's prompt after the singing cue.
+const promptOf = (t: Take) => [t.prompt?.trim().replace(/\.$/, ""), t.direction?.trim().replace(/\.$/, "")].filter(Boolean).join(". ");
+// The audio that drives the lips: the whole song when the group chose it, else the song's voice (the stem when it fits).
+const voiceOfTake = (t: Take, songVoice: Voice): Voice => (t.voice === "song" ? { kind: "song" } : songVoice);
+
+// ---- The lip-sync review (26 Nov 2026) ----
+
+function takeOf(dir: string, source: unknown, n: unknown): { file: string; t: Take } {
+  const file = path.basename(String(source ?? ""));
+  const t = readPictures(dir).pictures[file]?.takes.find((x) => x.n === Number(n));
+  if (!t || t.kind !== "lipsync" || !t.line) throw new Error("No such singing take.");
+  return { file, t };
+}
+
+// Paul's verdict on a take: approved, or to redo with the reasons (null clears it).
+export function setSingingReview(ws: Workspace, projectId: string, source: unknown, n: unknown, verdict: unknown, reasons: unknown, note: unknown): Take["review"] | null {
+  const { dir } = songFolder(ws, projectId);
+  const { file, t } = takeOf(dir, source, n);
+  if (verdict === null || verdict === "" || verdict === undefined) {
+    setTake(dir, file, t.n, { review: undefined });
+    return null;
+  }
+  if (verdict !== "approved" && verdict !== "redo") throw new Error('A verdict is "approved" or "redo".');
+  const list = Array.isArray(reasons) ? reasons.filter((r): r is string => typeof r === "string" && !!r.trim()).map((r) => r.trim().slice(0, 60)).slice(0, 8) : [];
+  const text = typeof note === "string" ? note.replace(/\s+/g, " ").trim().slice(0, 200) : "";
+  const review = { verdict, reasons: verdict === "redo" ? list : [], ...(text ? { note: text } : {}), at: new Date().toISOString() } as NonNullable<Take["review"]>;
+  setTake(dir, file, t.n, { review });
+  return review;
+}
+
+// Lips late or early: the take sits this much later (+) or earlier (-) on the song. Free: nothing is made again; a take
+// in use moves on its lines at once (its anchor's sync), a take chosen later is placed with it.
+export function nudgeSingingTake(ws: Workspace, projectId: string, source: unknown, n: unknown, deltaMs: unknown): number {
+  const { dir } = songFolder(ws, projectId);
+  const { file, t } = takeOf(dir, source, n);
+  const d = Math.round(Number(deltaMs));
+  if (!Number.isFinite(d) || d === 0) throw new Error("Nudge by a number of milliseconds (e.g. 100 or -100).");
+  const next = Math.max(-NUDGE_MAX_MS, Math.min(NUDGE_MAX_MS, (t.nudge_ms ?? 0) + d));
+  setTake(dir, file, t.n, { nudge_ms: next || undefined });
+  if (t.status === "done" && singingAnchorKeys(ws, projectId).has(inUseKey(t.clip && !t.sent ? { ...t, sent: t.clip } : t))) {
+    const paths = songPathsById(ws, projectId);
+    const recipe = readRecipe(paths.recipe!);
+    const clip = (t.sent ?? t.clip)!.toLowerCase();
+    saveAnchors(ws, projectId, (recipe.anchors ?? []).map((a) => (a.line === t.line && a.clip.toLowerCase() === clip ? { ...a, sync: (t.sync_ms! + next) / 1000 } : a)));
+  }
+  return next;
+}
+
+// The audio that drives the lips of a group from its next take on: the vocal stem (default) or the whole song.
+export function setSingerVoice(ws: Workspace, projectId: string, line: unknown, voice: unknown): SingerSettings {
+  if (voice !== "stem" && voice !== "song") throw new Error('Choose "stem" or "song".');
+  const { dir } = songFolder(ws, projectId);
+  const s = readSinger(dir);
+  const voices = { ...(s.voices ?? {}) };
+  if (voice === "stem") delete voices[String(Number(line))];
+  else voices[String(Number(line))] = voice;
+  const next = { ...s, voices };
+  writeSinger(dir, next);
+  return next;
+}
+
+// A finished take (its file there, its status not yet "done": a final being filed) into the Storyboard and onto its
+// lines, as Use this take does; the group's "New — compare" marks go.
+export async function placeSingingTake(ws: Workspace, projectId: string, source: string, n: number): Promise<void> {
+  const { dir } = songFolder(ws, projectId);
+  const t = readPictures(dir).pictures[source]?.takes.find((x) => x.n === n);
+  if (!t?.file || t.kind !== "lipsync" || !t.line || t.sync_ms === undefined) throw new Error("No such singing take.");
+  const clip = await takeIntoStoryboard(ws, projectId, dir, source, t);
+  placeTake(ws, projectId, t, clip);
+  update(dir, source, (p) => {
+    for (const x of p.takes) if (x.kind === "lipsync" && x.line === t.line && (x.through ?? x.line) === (t.through ?? t.line)) delete x.fresh;
+  });
+}
+
+// Is this singing take on its lines now (its clip is the singing anchor there)?
+export function singingTakeInUse(ws: Workspace, projectId: string, t: Take): boolean {
+  return t.kind === "lipsync" && t.status === "done" && singingAnchorKeys(ws, projectId).has(inUseKey(t.clip && !t.sent ? { ...t, sent: t.clip } : t));
+}
+
 export async function runSinging(openWs: () => Workspace, projectId: string, jobs: SingJob[], o: { env?: NodeJS.ProcessEnv; transport?: SingTransport; sleep?: (ms: number) => Promise<void>; pollMs?: number; timeoutMs?: number } = {}): Promise<void> {
   const env = o.env ?? process.env;
   const sleep = o.sleep ?? sleepMs;
@@ -680,13 +808,13 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
         if (t.parts && t.parts.length > 1 && !BOARD_VIDEO_FILE.test(j.source)) {
           // In parts (a long piece): each from the last frame of the one before, joined into one take.
           if (!uploads.has(j.source)) uploads.set(j.source, transport.upload(path.join(dir, j.source)));
-          await singInParts({ dir, source: j.source, n: j.n, take: t, tmp, voice, songFile, transport, picture: uploads.get(j.source)!, sleep, pollMs: o.pollMs, timeoutMs: o.timeoutMs, onSent: (rid) => (id ??= rid) }, got);
+          await singInParts({ dir, source: j.source, n: j.n, take: t, tmp, voice: voiceOfTake(t, voice), songFile, transport, picture: uploads.get(j.source)!, sleep, pollMs: o.pollMs, timeoutMs: o.timeoutMs, onSent: (rid) => (id ??= rid) }, got);
         } else {
           if (!id) {
             const src = path.join(dir, j.source);
             if (!uploads.has(j.source)) uploads.set(j.source, transport.upload(src));
             const voiceFile = path.join(tmp, "voice.wav");
-            cutVoice(voice, songFile, { fromMs: t.sync_ms, toMs: t.to_ms }, voiceFile, t.rests);
+            cutVoice(voiceOfTake(t, voice), songFile, { fromMs: t.sync_ms, toMs: t.to_ms }, voiceFile, t.rests);
             let media: string;
             let audio: string;
             try {
@@ -694,7 +822,7 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
             } catch (error) {
               throw Object.assign(new Error(`The picture or the voice could not be put online: ${errorText(error)}`), { unsent: true });
             }
-            const sent = await transport.submit({ ...(BOARD_VIDEO_FILE.test(j.source) ? { video: media } : { image: media }), audio, prompt: t.style === SINGING_STYLE ? singingPrompt(t.prompt ?? "", t.look, t.feel, t.feeling, t.feelingTo, !!t.rests) : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION }); // never retried
+            const sent = await transport.submit({ ...(BOARD_VIDEO_FILE.test(j.source) ? { video: media } : { image: media }), audio, prompt: t.style === SINGING_STYLE ? singingPrompt(promptOf(t), t.look, t.feel, t.feeling, t.feelingTo, !!t.rests) : (t.prompt ?? "") || undefined, resolution: isLipsyncResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION }); // never retried
             id = sent.id;
             setTake(dir, j.source, j.n, { request_id: id });
           }

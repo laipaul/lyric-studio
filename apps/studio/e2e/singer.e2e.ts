@@ -318,6 +318,43 @@ async function main() {
     await page.click(`[data-picture='singer close.png'] [data-take-restore='${first}']`);
     await page.waitForSelector(`[data-picture='singer close.png'] [data-take='${first}']`, { timeout: 15_000 });
     check(readdirSync(path.join(pictures, "takes", "_removed")).length === 2, `Restore brings take ${first} back with its file`);
+
+    // The lip-sync review (26 Nov 2026): a draft at 480p, verdicts, the free nudge, Make final.
+    await page.goto(`${base}/songs/${sp.project.id}?tab=lyrics`);
+    await page.waitForSelector("[data-singer-line='1'] [data-singer-source]");
+    await page.click("[data-singer-line='1'] [data-singer-source]");
+    await page.click("[data-singer-picker='1'] [data-singer-option='singer close.png']");
+    await page.waitForSelector("[data-singer-make-drafts]", { timeout: 15_000 });
+    check(((await page.getAttribute("[data-singer-make-drafts]", "title")) ?? "").includes("480p at $0.03/s"), "Make drafts (480p) says its price");
+    await page.waitForSelector("[data-singer-voice='1']", { timeout: 15_000 });
+    check((await page.$$("[data-singer-voice='1'] option")).length === 2, "Lips follow: the vocal stem or the whole song");
+    await page.click("[data-singer-make-drafts]");
+    await page.waitForSelector("[data-singer-line='1'] [data-singer-take-badge='draft']", { timeout: 60_000 });
+    await page.keyboard.press("Escape"); // the takes panel
+    const pj = () => JSON.parse(readFileSync(path.join(pictures, "pictures.json"), "utf8")) as { pictures: Record<string, { takes: { n: number; kind?: string; line?: number; quality?: string; resolution?: string; status: string; review?: { verdict: string; reasons: string[] }; nudge_ms?: number; finalOf?: number; sent?: string }[] }> };
+    await page.waitForSelector("[data-singer-line='1'] [data-singer-review-take]", { timeout: 60_000 }); // shown once the draft is done
+    const dr = pj().pictures["singer close.png"].takes.filter((x) => x.kind === "lipsync" && x.line === 1 && x.quality === "draft").at(-1)!;
+    check(dr.resolution === "480p" && dr.status === "done", `the draft is made at 480p (take ${dr.n})`);
+    // Redo with reasons, then Approve.
+    await page.click(`[data-singer-line='1'] [data-singer-redo='${dr.n}']`);
+    await page.click(`[data-singer-line='1'] [data-singer-redo-box='${dr.n}'] [data-singer-reason='lips late']`);
+    await page.click(`[data-singer-line='1'] [data-singer-redo-save='${dr.n}']`);
+    await page.waitForSelector(`[data-singer-line='1'] [data-singer-take='${dr.n}'] [data-singer-take-badge='redo']`, { timeout: 15_000 });
+    check(pj().pictures["singer close.png"].takes.find((x) => x.n === dr.n)?.review?.reasons.join() === "lips late" && ((await page.textContent("[data-singer-review]")) ?? "").includes("1 to redo"), "Redo with a reason is saved; the bar counts it");
+    // The free nudge: the take in use moves on the song.
+    const syncOf = () => (JSON.parse(readFileSync(paths.recipe!, "utf8")) as { anchors?: { line: number; sync?: number }[] }).anchors?.find((x) => x.line === 1)?.sync ?? NaN;
+    const before = syncOf();
+    await page.click(`[data-singer-line='1'] [data-singer-nudge-minus='${dr.n}']`);
+    await page.waitForFunction(() => document.querySelector("[data-singer-line='1']")?.textContent?.includes("placed -0.1 s"), null, { timeout: 15_000 });
+    check(Math.abs(syncOf() - (before - 0.1)) < 0.001, `−0.1 places the take 0.1 s earlier on the song, nothing made again (${before} → ${syncOf()})`);
+    await page.click(`[data-singer-line='1'] [data-singer-approve='${dr.n}']`);
+    await page.waitForSelector(`[data-singer-line='1'] [data-singer-final='${dr.n}']`, { timeout: 15_000 });
+    check(((await page.textContent("[data-singer-review]")) ?? "").includes("approved"), "Approve: the bar counts the approved group");
+    await page.click(`[data-singer-line='1'] [data-singer-final='${dr.n}']`);
+    await page.waitForFunction((n: number) => document.querySelector(`[data-singer-line='1'] [data-singer-final-of='${n}']`)?.textContent?.includes("in use"), dr.n, { timeout: 60_000 });
+    const fin = pj().pictures["singer close.png"].takes.find((x) => x.finalOf === dr.n)!;
+    const anchor1 = (JSON.parse(readFileSync(paths.recipe!, "utf8")) as { anchors?: { line: number; clip: string; sync?: number }[] }).anchors?.find((x) => x.line === 1);
+    check(!!fin && anchor1?.clip === fin.sent && Math.abs((anchor1?.sync ?? 0) - (before - 0.1)) < 0.001, `Make final: the final takes the draft's place on line 1, at the nudged spot (${JSON.stringify(anchor1)})`);
     await browser.close();
   } finally {
     server.kill();
