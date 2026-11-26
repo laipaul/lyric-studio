@@ -4066,3 +4066,28 @@ D. ✅ (built 29 Oct, to verify) **Title opening** (items 1-8 below).
 - Shape's "not in this video" names the real reason when a singing clip plays to the end (e.g. "the singing on line 32
   plays from 2:12.9 to the end ... Lyrics Sync → line 32 → Hide a moment"), not "the part ends before its turn".
 - Tests: vitest line-only (7), plus animate, clip-order, story-line, compose, shots, lyrics-view, song-files pass.
+
+### Dissolves never freeze a frame; dissolves of about 1.5 s ✅ (to verify on the PC)
+- Paul (22 Nov 2026): "a little pause at scene transitions (frozen frame)", Wedding Day Storyboard clip 2 (mirror, 0.9 s
+  to the end of the file) into clip 3. Cause: a dissolve starts the incoming clip early (it fades in over the outgoing
+  one). The app moved the clip's start back only if ALL the frames were there before its in point; else it started
+  early from the same frame and so ran past its last frame: the last frame held up to 1.1 s. In Wedding Day's Reel
+  13 of 19 shots ended on a held frame (0.2-1.1 s); Familiar Strangers 19 of 24. The out point was not the problem
+  (5.2 s is the file's real end; the planner already clamps out points to the file).
+- Now (src/handles.ts fitHandles, called by compose.ts for anchored and automatic dissolves): the app (1) slides a
+  clip inside the part the user kept (their in / out: handles never show trimmed-off frames), (2) slows it a little,
+  at most 10% (Paul's Canva trick; never a singing clip, a loop shot or a clip already held), (3) else shortens that
+  dissolve, down to a hard cut. The cut stays on the beat and every shot keeps its length on screen. No clip plays
+  past its last frame.
+- Automatic dissolves are now about 1.5 s (Paul's length in Canva) in whole beats (compose.ts autoDissolveFrames: 3
+  beats = 1.55 s at 116 BPM; was half a bar, 1.07 s). Dissolves into an anchored line keep one bar.
+- Prepare → Storyboard: a small grey line on the clip card says what was changed, per video, e.g. "Reel, 0:53:
+  slowed to 90%, starts 0.1 s earlier in the clip to fit the dissolve" or "dissolve into this clip shortened to 1.3 s
+  (the clips have no more spare frames)" (ShotProps.fitNotes in the shot plan; node/transition-notes.ts).
+- Preview and export draw the same saved shot plan. The plan fingerprint changed (make.ts keyBase v 2), so each saved
+  plan is planned again once (the old one kept as .previous.json, the change named in Tasks).
+- Supersedes the first fix pushed earlier the same day (2c2c863, src/blend.ts: no slow-down, half-bar dissolves, saved
+  plans kept as they were); its line in Shape's clip list stays and now shows these notes.
+- Tests: vitest handles (8: Wedding Day 1-2-3, trims, singing, photos, 116 BPM and 80 BPM songs end to end) and
+  transition-notes (1), blend (2: composed 5.04 s clips used to the end; an out point past the file); anchors, compose, pace-transitions, storyboard, storyboard-file, timeline-edits pass. Checked
+  against Paul's saved Reel plans: Wedding Day and Familiar Strangers go from 13 and 19 frozen ends to none.

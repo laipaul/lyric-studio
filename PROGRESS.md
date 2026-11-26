@@ -4,6 +4,23 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Lip-sync review, step 2: the de-reverbed vocal ✅ (to verify on the PC; install once)
+- **Lips follow** (Lyrics Sync → Who sings, per group) has a third choice: **the stem, de-reverbed**. The echo of the
+  vocal removed (UVR DeEcho-DeReverb, local, free), so the model hears crisper syllables. Compare it with "the vocal
+  stem" and "the whole song" on the same line with Retake draft.
+- The rule exception, agreed with Paul, is written into CLAUDE.md: the copy lives in the song's
+  `.studio\lipsync-audio\` (made once per stem content), is sent only to the lip-sync model, the stem itself is never
+  changed and the copy never goes into any video or output (also in docs/audio-and-output.md).
+- **Install once on the PC:** `pnpm audio:setup --dereverb` (after the AI packages; the pinned versions stay: passed as
+  constraints). The model (about 120 MB) downloads on first use into services/audio/models/uvr; the first copy takes
+  seconds on the GPU, minutes on the CPU. Without it, a take asking for it fails in plain words before anything is sent
+  ("run pnpm audio:setup --dereverb once"); the same without a vocal stem.
+- services/audio/app/dereverb.py, scripts/dereverb.mjs, requirements-dereverb.txt (audio-separator 0.48.0), setup.mjs
+  --dereverb; packages/video node/dereverb.ts; singer.ts (voice "dereverb", made once before the takes that ask for it).
+- Tests: services/audio tests/test_dereverb.py (the dry output picked by name; the stand-in never touches the stem);
+  animate.test.ts (+2: the copy made once in .studio\lipsync-audio\, the stem unchanged; no stem → fails, nothing sent);
+  browser singer.e2e.ts (Lips follow has the three choices).
+
 ### Lip-sync review, step 1: drafts, verdicts, the free nudge, Make final ✅ (to verify on the PC)
 Paul, 26 Nov 2026: "run a lip-sync test like my Lyrics Sync works: I visually verify, tweak until the model gets it
 right; once validated apply it". Built into Lyrics Sync → Who sings (the Singer), on InfiniteTalk (chosen 17 Nov).
@@ -727,31 +744,6 @@ locked cards can't be edited").
 - Next.js 16.4.3 -> 16.4.6 (security patch; next and eslint-config-next in apps/studio/package.json). Build passes.
 - Tests: vitest no-remotion-in-routes (5: follows the runtime imports of story-line, transition-notes, assets and
   fails on any path to Remotion); transition-notes, story-line, storyboard-file pass. `pnpm --filter @lyric/studio build` passes.
-
-### Dissolves never freeze a frame; dissolves of about 1.5 s ✅ (to verify on the PC)
-- Paul (22 Nov 2026): "a little pause at scene transitions (frozen frame)", Wedding Day Storyboard clip 2 (mirror, 0.9 s
-  to the end of the file) into clip 3. Cause: a dissolve starts the incoming clip early (it fades in over the outgoing
-  one). The app moved the clip's start back only if ALL the frames were there before its in point; else it started
-  early from the same frame and so ran past its last frame: the last frame held up to 1.1 s. In Wedding Day's Reel
-  13 of 19 shots ended on a held frame (0.2-1.1 s); Familiar Strangers 19 of 24. The out point was not the problem
-  (5.2 s is the file's real end; the planner already clamps out points to the file).
-- Now (src/handles.ts fitHandles, called by compose.ts for anchored and automatic dissolves): the app (1) slides a
-  clip inside the part the user kept (their in / out: handles never show trimmed-off frames), (2) slows it a little,
-  at most 10% (Paul's Canva trick; never a singing clip, a loop shot or a clip already held), (3) else shortens that
-  dissolve, down to a hard cut. The cut stays on the beat and every shot keeps its length on screen. No clip plays
-  past its last frame.
-- Automatic dissolves are now about 1.5 s (Paul's length in Canva) in whole beats (compose.ts autoDissolveFrames: 3
-  beats = 1.55 s at 116 BPM; was half a bar, 1.07 s). Dissolves into an anchored line keep one bar.
-- Prepare → Storyboard: a small grey line on the clip card says what was changed, per video, e.g. "Reel, 0:53:
-  slowed to 90%, starts 0.1 s earlier in the clip to fit the dissolve" or "dissolve into this clip shortened to 1.3 s
-  (the clips have no more spare frames)" (ShotProps.fitNotes in the shot plan; node/transition-notes.ts).
-- Preview and export draw the same saved shot plan. The plan fingerprint changed (make.ts keyBase v 2), so each saved
-  plan is planned again once (the old one kept as .previous.json, the change named in Tasks).
-- Supersedes the first fix pushed earlier the same day (2c2c863, src/blend.ts: no slow-down, half-bar dissolves, saved
-  plans kept as they were); its line in Shape's clip list stays and now shows these notes.
-- Tests: vitest handles (8: Wedding Day 1-2-3, trims, singing, photos, 116 BPM and 80 BPM songs end to end) and
-  transition-notes (1), blend (2: composed 5.04 s clips used to the end; an out point past the file); anchors, compose, pace-transitions, storyboard, storyboard-file, timeline-edits pass. Checked
-  against Paul's saved Reel plans: Wedding Day and Familiar Strangers go from 13 and 19 frozen ends to none.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

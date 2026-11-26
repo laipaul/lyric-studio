@@ -1,0 +1,5 @@
+# "pnpm audio:setup --dereverb" (26 Nov 2026, Lip-sync review step 2): the de-reverb for the lip-sync drafts' vocal
+# (UVR DeEcho-DeReverb through audio-separator). Installed on top of the AI packages (PyTorch comes from there), with
+# requirements.txt and the AI requirements as constraints: it never changes a version the aligner uses. The model
+# (about 120 MB) downloads on first use into services/audio/models/uvr.
+audio-separator==0.48.0

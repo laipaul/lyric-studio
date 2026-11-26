@@ -82,6 +82,21 @@ export function aiReady() {
 // Models download here on first use (inside the project, not the user profile).
 export const modelsDir = path.join(serviceDir, "models");
 
+// De-reverb for the lip-sync drafts (pnpm audio:setup --dereverb, 26 Nov 2026): requirements-dereverb.txt on top of
+// the AI packages.
+export const dereverbRequirementsFile = path.join(serviceDir, "requirements-dereverb.txt");
+export const dereverbInstalledMarker = path.join(venvDir, ".dereverb-requirements-sha256");
+export function dereverbRequirementsHash() {
+  return createHash("sha256").update(readFileSync(dereverbRequirementsFile)).digest("hex");
+}
+export function dereverbReady() {
+  try {
+    return venvReady() && readFileSync(dereverbInstalledMarker, "utf8").trim() === dereverbRequirementsHash();
+  } catch {
+    return false;
+  }
+}
+
 // Face checks for Characters (pnpm audio:setup --face): requirements-face.txt on top of requirements.txt.
 export const faceRequirementsFile = path.join(serviceDir, "requirements-face.txt");
 export const faceInstalledMarker = path.join(venvDir, ".face-requirements-sha256");

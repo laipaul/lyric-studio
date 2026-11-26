@@ -16,6 +16,7 @@ import { takeFacts } from "../src/take-facts";
 import { singingParts, PART_MAX_MS, PART_MIN_MS } from "../src/node/singer";
 import { chooseSingingTake, draftUsd, infiniteTalkTransport, LIPSYNC_USD_PER_SECOND_AT, nudgeSingingTake, reviewCounts, runSinging, seenSingingTake, setSingerVoice, setSingingReview, singingPrompt, SINGING_CUE, singingPiece, singingRuns, stubSingTransport, type SingTransport } from "../src/node/singer";
 import { runFinal, startFinal } from "../src/node/final";
+import { dereverbFile, ensureDereverbed } from "../src/node/dereverb";
 import { makePlayable, update } from "../src/node/animate";
 import { execFileSync } from "node:child_process";
 import { probeMedia } from "@lyric/db";
@@ -469,10 +470,36 @@ describe("the lip-sync review (26 Nov 2026): drafts, verdicts, the free nudge, t
     expect(a.sync).toBeCloseTo(1.9, 5);
     expect(take(draft).final).toBe(fin.n); // the draft stays, pointing at its final
   });
-  it("the audio per group: the whole song or the vocal stem", () => {
+  it("the audio per group: the vocal stem, the whole song, or the stem de-reverbed (step 2)", () => {
     expect(setSingerVoice(ws, id, 9, "song").voices).toEqual({ "9": "song" });
+    expect(setSingerVoice(ws, id, 9, "dereverb").voices).toEqual({ "9": "dereverb" });
     expect(setSingerVoice(ws, id, 9, "stem").voices).toEqual({});
-    expect(() => setSingerVoice(ws, id, 9, "mix")).toThrow(/stem" or "song/);
+    expect(() => setSingerVoice(ws, id, 9, "mix")).toThrow(/stem", "song" or "dereverb/);
+  });
+  it("de-reverbed: the copy is made once per stem content in .studio\\lipsync-audio\\; the stem is only read", async () => {
+    const root = paths().root;
+    const stem = path.join(root, "vocals.wav");
+    ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=1", stem);
+    const before = readFileSync(stem);
+    const env = { ...process.env, LYRIC_DEREVERB_STUB: "1" };
+    const out = await ensureDereverbed(root, stem, env);
+    expect(out).toBe(dereverbFile(root, stem));
+    expect(path.relative(root, out)).toMatch(/^\.studio[\\/]lipsync-audio[\\/][0-9a-f]{16}-dereverb-uvr1\.wav$/);
+    expect(readFileSync(stem).equals(before)).toBe(true);
+    expect(await ensureDereverbed(root, stem, { ...process.env })).toBe(out); // cached: not made again (no stand-in needed)
+    rmSync(stem);
+  });
+  it("de-reverbed on a song without a vocal stem: the take fails in plain words before anything is sent", async () => {
+    let n = 0;
+    update(pics, SRC, (p) => {
+      n = p.takes.reduce((m, x) => Math.max(m, x.n), 0) + 1;
+      p.takes.push({ n, kind: "lipsync", line: 11, sync_ms: 2000, to_ms: 5000, style: 1, resolution: "480p", service: "wavespeed", quality: "draft", model: "InfiniteTalk", status: "running", started_at: new Date().toISOString(), cost_usd: 0.09, voice: "dereverb", pid: process.pid });
+    });
+    const sent = prompts.length;
+    await runSinging(open, id, [{ source: SRC, n }], { transport: spy(), sleep: now0 });
+    expect(take(n)).toMatchObject({ status: "failed" });
+    expect(take(n).error).toMatch(/De-reverbed needs your vocal stem.*Nothing was spent/);
+    expect(prompts.length).toBe(sent);
   });
 });
 

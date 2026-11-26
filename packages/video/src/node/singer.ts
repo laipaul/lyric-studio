@@ -16,6 +16,7 @@
 // The song and the stem are only read (FFmpeg decodes a piece into a temporary file). Requests are never retried.
 // Settings: <song folder>\pictures\singer.json { "lines": { "<line>": "<Creation file>" }, "scripts": { "<first line of a block>": "what the
 // singer does" } }: the little script goes to InfiniteTalk with the voice (its optional prompt: expression and pose).
+import { ensureDereverbed } from "./dereverb";
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -56,7 +57,8 @@ const TAIL_BARS = 2; // and runs two bars past the line's sung end (the shot hol
 export const RUN_GAP_MS = 8000; // lines in a row with the same picture and at most this pause between them: one take
 
 // voices: per group (its first line), the audio that drives the lips ("song": the whole mix; default: the vocal stem).
-export type SingerSettings = { lines: Record<string, string>; scripts?: Record<string, string>; resolution?: LipsyncResolution; voices?: Record<string, "stem" | "song"> };
+export type LipsVoice = "stem" | "song" | "dereverb"; // dereverb (step 2): the stem de-reverbed (dereverb.ts)
+export type SingerSettings = { lines: Record<string, string>; scripts?: Record<string, string>; resolution?: LipsyncResolution; voices?: Record<string, LipsVoice> };
 // A draft (lip-sync review, 26 Nov 2026): 480p at half the price, to check the lips and the expression first; an
 // approved draft becomes the final by Make final (upscaled to 1080p: the same lips and expression).
 export const DRAFT_RESOLUTION: LipsyncResolution = "480p";
@@ -97,7 +99,7 @@ export type SingerLine = {
   take: (Take & { file?: string }) | null; // the newest singing take of this line's run from its source
   takes: GroupTake[]; // every singing take of this group (its source, its lines), oldest first (only on a run's first line)
   needed: boolean; // ticked and without a finished or running take of this source and piece (only on a run's first line)
-  voice?: "stem" | "song"; // the audio chosen for this group (on a run's first line)
+  voice?: LipsVoice; // the audio chosen for this group (on a run's first line)
   draftUsd?: number; // what a draft of this group costs (480p)
 };
 export type SingerView = {
@@ -694,8 +696,10 @@ export function joinParts(files: string[], out: string, list: string): void {
 // `resume`: takes that already have a request id are only polled and fetched (free).
 // The mood text and the acting direction, as InfiniteTalk's prompt after the singing cue.
 const promptOf = (t: Take) => [t.prompt?.trim().replace(/\.$/, ""), t.direction?.trim().replace(/\.$/, "")].filter(Boolean).join(". ");
-// The audio that drives the lips: the whole song when the group chose it, else the song's voice (the stem when it fits).
-const voiceOfTake = (t: Take, songVoice: Voice): Voice => (t.voice === "song" ? { kind: "song" } : songVoice);
+// The audio that drives the lips: the whole song when the group chose it; the de-reverbed copy of the stem (same
+// timing, same offset) when chosen and made; else the song's voice (the stem when it fits).
+const voiceOfTake = (t: Take, songVoice: Voice, dry: string | null = null): Voice =>
+  t.voice === "song" ? { kind: "song" } : t.voice === "dereverb" && dry && songVoice.kind === "stem" ? { ...songVoice, file: dry } : songVoice;
 
 // ---- The lip-sync review (26 Nov 2026) ----
 
@@ -742,7 +746,7 @@ export function nudgeSingingTake(ws: Workspace, projectId: string, source: unkno
 
 // The audio that drives the lips of a group from its next take on: the vocal stem (default) or the whole song.
 export function setSingerVoice(ws: Workspace, projectId: string, line: unknown, voice: unknown): SingerSettings {
-  if (voice !== "stem" && voice !== "song") throw new Error('Choose "stem" or "song".');
+  if (voice !== "stem" && voice !== "song" && voice !== "dereverb") throw new Error('Choose "stem", "song" or "dereverb".');
   const { dir } = songFolder(ws, projectId);
   const s = readSinger(dir);
   const voices = { ...(s.voices ?? {}) };
@@ -771,7 +775,8 @@ export function singingTakeInUse(ws: Workspace, projectId: string, t: Take): boo
   return t.kind === "lipsync" && t.status === "done" && singingAnchorKeys(ws, projectId).has(inUseKey(t.clip && !t.sent ? { ...t, sent: t.clip } : t));
 }
 
-export async function runSinging(openWs: () => Workspace, projectId: string, jobs: SingJob[], o: { env?: NodeJS.ProcessEnv; transport?: SingTransport; sleep?: (ms: number) => Promise<void>; pollMs?: number; timeoutMs?: number } = {}): Promise<void> {
+export async function runSinging(openWs: () => Workspace, projectId: string, jobsIn: SingJob[], o: { env?: NodeJS.ProcessEnv; transport?: SingTransport; sleep?: (ms: number) => Promise<void>; pollMs?: number; timeoutMs?: number } = {}): Promise<void> {
+  let jobs = jobsIn;
   const env = o.env ?? process.env;
   const sleep = o.sleep ?? sleepMs;
   let dir: string;
@@ -795,6 +800,25 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
     for (const j of jobs) setTake(dir, j.source, j.n, { status: "failed", error: errorText(error), ended_at: new Date().toISOString(), pid: undefined });
     return;
   }
+  // Step 2: the de-reverbed stem, made once before any take that asks for it (the stem is only read). Without a stem,
+  // or when it cannot be made, those takes fail in plain words and nothing is spent.
+  let dry: string | null = null;
+  const wantsDry = jobs.filter((j) => readPictures(dir).pictures[j.source]?.takes.find((x) => x.n === j.n)?.voice === "dereverb");
+  if (wantsDry.length) {
+    let why: string | null = null;
+    if (voice.kind !== "stem") why = "De-reverbed needs your vocal stem (add it in Assets), or choose Lips follow: the vocal stem or the whole song";
+    else {
+      try {
+        dry = await ensureDereverbed(path.dirname(dir), voice.file, env);
+      } catch (error) {
+        why = errorText(error);
+      }
+    }
+    if (why) {
+      for (const j of wantsDry) setTake(dir, j.source, j.n, { status: "failed", error: `${why}. Nothing was spent.`, ended_at: new Date().toISOString(), pid: undefined });
+      jobs = jobs.filter((j) => !wantsDry.includes(j));
+    }
+  }
   const uploads = new Map<string, Promise<string>>(); // one upload per picture or video
   await Promise.all(
     jobs.map(async (j) => {
@@ -808,13 +832,13 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
         if (t.parts && t.parts.length > 1 && !BOARD_VIDEO_FILE.test(j.source)) {
           // In parts (a long piece): each from the last frame of the one before, joined into one take.
           if (!uploads.has(j.source)) uploads.set(j.source, transport.upload(path.join(dir, j.source)));
-          await singInParts({ dir, source: j.source, n: j.n, take: t, tmp, voice: voiceOfTake(t, voice), songFile, transport, picture: uploads.get(j.source)!, sleep, pollMs: o.pollMs, timeoutMs: o.timeoutMs, onSent: (rid) => (id ??= rid) }, got);
+          await singInParts({ dir, source: j.source, n: j.n, take: t, tmp, voice: voiceOfTake(t, voice, dry), songFile, transport, picture: uploads.get(j.source)!, sleep, pollMs: o.pollMs, timeoutMs: o.timeoutMs, onSent: (rid) => (id ??= rid) }, got);
         } else {
           if (!id) {
             const src = path.join(dir, j.source);
             if (!uploads.has(j.source)) uploads.set(j.source, transport.upload(src));
             const voiceFile = path.join(tmp, "voice.wav");
-            cutVoice(voiceOfTake(t, voice), songFile, { fromMs: t.sync_ms, toMs: t.to_ms }, voiceFile, t.rests);
+            cutVoice(voiceOfTake(t, voice, dry), songFile, { fromMs: t.sync_ms, toMs: t.to_ms }, voiceFile, t.rests);
             let media: string;
             let audio: string;
             try {

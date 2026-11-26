@@ -327,7 +327,7 @@ async function main() {
     await page.waitForSelector("[data-singer-make-drafts]", { timeout: 15_000 });
     check(((await page.getAttribute("[data-singer-make-drafts]", "title")) ?? "").includes("480p at $0.03/s"), "Make drafts (480p) says its price");
     await page.waitForSelector("[data-singer-voice='1']", { timeout: 15_000 });
-    check((await page.$$("[data-singer-voice='1'] option")).length === 2, "Lips follow: the vocal stem or the whole song");
+    check((await page.$$("[data-singer-voice='1'] option")).length === 3, "Lips follow: the vocal stem, the stem de-reverbed, or the whole song");
     await page.click("[data-singer-make-drafts]");
     await page.waitForSelector("[data-singer-line='1'] [data-singer-take-badge='draft']", { timeout: 60_000 });
     await page.keyboard.press("Escape"); // the takes panel

@@ -38,7 +38,7 @@ export type Singer = {
   // The lip-sync review (26 Nov 2026): a verdict, the free nudge, the audio per group, Make final.
   review: (source: string, t: GroupTake, verdict: "approved" | "redo" | null, reasons?: string[], note?: string) => Promise<void>;
   nudge: (source: string, t: GroupTake, ms: number) => Promise<void>;
-  setVoice: (line: number, voice: "stem" | "song") => Promise<void>;
+  setVoice: (line: number, voice: "stem" | "song" | "dereverb") => Promise<void>;
   makeFinal: (source: string, t: GroupTake) => Promise<void>;
   chooseTake: (source: string, t: GroupTake) => Promise<void>;
   play: (source: string, t: GroupTake | null) => void;
@@ -380,10 +380,11 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
       <SourcePicker sources={v.sources} value={l.source} onChange={(src) => void singer.setLine(number, src)} line={number} />
       {l.source && !later ? <ScriptField key={l.script} line={number} value={l.script} onSave={(text) => singer.setScript(number, text)} /> : null}
       {l.source && !later ? (
-        <label className="text-muted-foreground flex items-center gap-1" title="What drives the lips from the next take on: your vocal stem (clean voice) or the whole song (try it when the lips miss words)">
+        <label className="text-muted-foreground flex items-center gap-1" title="What drives the lips from the next take on: your vocal stem (clean voice), the stem de-reverbed (the echo removed: crisper syllables; made on this PC the first time, needs pnpm audio:setup --dereverb once) or the whole song (try it when the lips miss words)">
           Lips follow
-          <select data-singer-voice={number} value={l.voice ?? "stem"} onChange={(e) => void singer.setVoice(number, e.target.value as "stem" | "song")} className="bg-background rounded border px-1 py-0">
+          <select data-singer-voice={number} value={l.voice ?? "stem"} onChange={(e) => void singer.setVoice(number, e.target.value as "stem" | "song" | "dereverb")} className="bg-background rounded border px-1 py-0">
             <option value="stem">the vocal stem</option>
+            <option value="dereverb">the stem, de-reverbed</option>
             <option value="song">the whole song</option>
           </select>
         </label>
@@ -507,7 +508,7 @@ function TakesList({ singer, source, takes }: { singer: Singer; source: string; 
             <span className="text-muted-foreground pl-5" data-singer-take-facts>
               {[takeWhen(t), t.status === "running" ? "being made…" : t.status === "done" || t.request_id ? `about ${money(t.cost_usd)}` : "nothing spent", t.resolution ?? "720p", takeFeeling(t), t.parts && t.parts.length > 1 ? `${t.parts.length} parts` : ""].filter(Boolean).join(" · ")}
               {t.status === "failed" || t.status === "interrupted" ? <span className={t.status === "failed" ? "text-red-300" : "text-amber-300"}> · {t.error}</span> : null}
-              {t.voice === "song" ? " · lips from the whole song" : ""}
+              {t.voice === "song" ? " · lips from the whole song" : t.voice === "dereverb" ? " · lips from the de-reverbed stem" : ""}
               {t.nudge_ms ? ` · placed ${t.nudge_ms > 0 ? "+" : ""}${(t.nudge_ms / 1000).toFixed(1)} s` : ""}
               {t.review?.verdict === "redo" && (t.review.reasons.length || t.review.note) ? <span className="text-amber-300"> · {[...t.review.reasons, t.review.note].filter(Boolean).join(", ")}</span> : null}
             </span>

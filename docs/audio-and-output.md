@@ -9,3 +9,8 @@ _Part of the project brief (CLAUDE.md links here). The music is never altered; f
 - Every video on every platform gets a .srt (except the Spotify Canvas: no lyrics) with its lyric lines (times from the video's first frame).
 
 - **Music cues** (26 Nov 2026, Performance script): services/audio/app/music_cues.py only READS the song, its Demucs stems (drums, bass, other, vocals, cached in workspace\cache\stems\) and the vocal stem; the cues (.studio\music-cues.json) are analysis only and never go into any output.
+- **De-reverbed vocal for lip-sync drafts** (26 Nov 2026, the exception agreed with Paul, also in CLAUDE.md): when a
+  singing group's "Lips follow" is "the stem, de-reverbed", services/audio/app/dereverb.py (UVR DeEcho-DeReverb through
+  audio-separator; `pnpm audio:setup --dereverb` once, on top of the AI packages) makes a copy of the vocal stem in the
+  song's `.studio\lipsync-audio\` (by the stem's content, made once). The copy is sent only to the lip-sync model; the
+  stem itself is only read, and the copy never goes into any video or any output.

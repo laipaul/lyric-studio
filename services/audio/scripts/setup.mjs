@@ -1,26 +1,7 @@
 // Creates services/audio/.venv with Python 3.12 and installs requirements.txt into it.
 import { spawnSync } from "node:child_process";
 import { existsSync, rmSync, writeFileSync } from "node:fs";
-import {
-  PYTHON_VERSION,
-  TORCH_VERSIONS,
-  aiInstalledMarker,
-  aiRequirementsFile,
-  aiRequirementsHash,
-  faceInstalledMarker,
-  faceRequirementsFile,
-  faceRequirementsHash,
-  torchVariant,
-  installedMarker,
-  isWindows,
-  pythonVersion,
-  requirementsFile,
-  requirementsHash,
-  serviceDir,
-  systemPython,
-  venvDir,
-  venvPython,
-} from "./common.mjs";
+import { PYTHON_VERSION, TORCH_VERSIONS, aiInstalledMarker, aiRequirementsFile, aiRequirementsHash, faceInstalledMarker, faceRequirementsFile, faceRequirementsHash, torchVariant, installedMarker, isWindows, pythonVersion, requirementsFile, requirementsHash, serviceDir, systemPython, venvDir, venvPython, dereverbInstalledMarker, dereverbRequirementsFile, dereverbRequirementsHash, aiReady } from "./common.mjs";
 
 function run(cmd, args) {
   // Output goes to stderr so commands that print JSON on stdout (pnpm cuts) stay clean.
@@ -107,11 +88,26 @@ export function setupFace() {
   console.error("[audio setup] face checks ready. The face models (about 52 MB) download on first use into services/audio/models/face.");
 }
 
+// pnpm audio:setup --dereverb: the de-reverb for the lip-sync drafts (UVR DeEcho-DeReverb via audio-separator), on top
+// of the AI packages (PyTorch). The pinned versions stay: they are passed as constraints.
+export function setupDereverb() {
+  if (!aiReady()) {
+    console.error("[audio setup] install the AI packages first: pnpm audio:setup --ai");
+    process.exit(1);
+  }
+  console.error("[audio setup] installing the de-reverb (audio-separator)");
+  run(venvPython, ["-m", "pip", "install", "--disable-pip-version-check", "-q", "-r", dereverbRequirementsFile, "-c", requirementsFile, "-c", aiRequirementsFile]);
+  writeFileSync(dereverbInstalledMarker, dereverbRequirementsHash());
+  console.error("[audio setup] de-reverb ready. Its model (about 120 MB) downloads on first use into services/audio/models/uvr.");
+}
+
 // Run directly (pnpm audio:setup [--ai] [--torch cpu|cu128]) rather than imported by run.mjs.
 if (process.argv[1]?.endsWith("setup.mjs")) {
   const args = process.argv.slice(2);
   if (args.includes("--face")) {
     setupFace();
+  } else if (args.includes("--dereverb")) {
+    setupDereverb();
   } else if (args.includes("--ai")) {
     const t = args.indexOf("--torch");
     const variant = t >= 0 ? args[t + 1] : undefined;
