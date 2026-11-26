@@ -4,6 +4,32 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Lip-sync review, step 1: drafts, verdicts, the free nudge, Make final ✅ (to verify on the PC)
+Paul, 26 Nov 2026: "run a lip-sync test like my Lyrics Sync works: I visually verify, tweak until the model gets it
+right; once validated apply it". Built into Lyrics Sync → Who sings (the Singer), on InfiniteTalk (chosen 17 Nov).
+- **Make drafts (480p)** in the Singer bar (and **Retake draft** per group): $0.03/s instead of $0.06, marked **Draft**.
+- Each take, with ▶ (with the song): **✓ Approve**, or **Redo…** with quick reasons (lips late / lips early / mouth too
+  open / mouth too closed / wrong expression / face drifts / a few words). The bar: "review: N of M approved · K to
+  redo · L not made".
+- **Nudge −0.1 / +0.1 s** (free: nothing is made again): the take sits that much earlier or later on the song; a take
+  in use moves on its lines at once; a final keeps it. Within ±1.5 s.
+- **Lips follow**: per group, the vocal stem (default) or the whole song, from its next take on (to compare).
+- **The acting direction** goes into InfiniteTalk's prompt automatically after the singing cue: who sings (the
+  picture's Who is this, else the song's one character), their persona's singing (soft / high / held), gestures and
+  Never, and the line's performance-script emotion, face and body (fresh lines only).
+- **Make final** on an approved draft: the existing Draft → Final upscale (Video Upscaler Pro 1080p, $0.04/s) now also
+  for singing takes: the final is a singing take of the same lines at the same (nudged) spot and takes the draft's
+  place on its lines (the draft stays in Creation). It is placed before it shows as done (no stale "made" on the page).
+- Cost for a song with ~77 s of singing: drafts ≈ $2.31, redo half ≈ $1.16, finals ≈ $3.08 (≈ $6.55; before ≈ $6.93
+  with 720p retakes).
+- node/singer.ts (draftUsd, reviewCounts, setSingingReview, nudgeSingingTake, setSingerVoice, placeSingingTake,
+  singingTakeInUse; takes record quality "draft", voice, direction, review, nudge_ms), node/persona.ts
+  singingDirection, node/final.ts (singing finals), API singer actions make/retake {draft}, review, nudge, voice, final.
+- Tests: animate.test.ts (+5: draft price and prompt, nudge in use, verdicts and counts, Make final in place, voice);
+  browser singer.e2e.ts (+8: Make drafts, Lips follow, 480p draft, Redo with reason, nudge, Approve, Make final).
+- **Next (step 2, approved):** a de-reverbed vocal as a third "Lips follow" choice (UVR DeEcho-DeReverb, local), with
+  the exception written into CLAUDE.md first. OmniHuman later.
+
 ### Make with references carries the acting direction ✅ (to verify on the PC)
 Paul, 26 Nov 2026: "I can't do it from my app?" Creation → Production → a shot → **Make with references** now sends,
 after the shot's description, an **Acting direction**: for each person in the shot their persona (traits, gestures,
@@ -726,22 +752,6 @@ locked cards can't be edited").
 - Tests: vitest handles (8: Wedding Day 1-2-3, trims, singing, photos, 116 BPM and 80 BPM songs end to end) and
   transition-notes (1), blend (2: composed 5.04 s clips used to the end; an out point past the file); anchors, compose, pace-transitions, storyboard, storyboard-file, timeline-edits pass. Checked
   against Paul's saved Reel plans: Wedding Day and Familiar Strangers go from 13 and 19 frozen ends to none.
-
-### Storyboard shows only story moments ✅ (to verify on the PC)
-- Paul (22 Nov 2026): "the storyboard is confusing, why has the app duplicated the singing part in so many pages".
-  Singing takes and Creation takes picked in Lyrics Sync were listed as loose Storyboard cards and filled gaps.
-- Rule: a Creation take stays in Creation until "Send to Storyboard" is pressed there. A singing take belongs to its
-  Lyrics Sync line and plays only there. Neither is a Storyboard card.
-- clips.json `lineOnly` (a take copied only for a line or a hidden-moment cover): Lyrics Sync's pick sends it with
-  `forLine` (not in the order); a later Send from Creation makes it a story moment at the END of the order. A sent clip
-  you removed counts as not sent (Send restores it from _removed, no duplicate). The planner never uses it as gap fill.
-- Storyboard and Shape's clip strip list only story clips; one line says "Singing on lines 15-16, 25-27, 32: set in
-  Lyrics Sync". Saving the order keeps the hidden clips' entries in clips.json.
-- Code: node/clip-roles.ts, animate.ts sendToStoryboard, assets.ts (role, singing, importSongClips inOrder),
-  story-line.ts, storyboard.ts, compose.ts anchorOnly, make.ts, lyrics-view.ts, pictures route, assets-tab, lyrics-tab.
-- Shape's "not in this video" names the real reason when a singing clip plays to the end (e.g. "the singing on line 32
-  plays from 2:12.9 to the end ... Lyrics Sync → line 32 → Hide a moment"), not "the part ends before its turn".
-- Tests: vitest line-only (7), plus animate, clip-order, story-line, compose, shots, lyrics-view, song-files pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

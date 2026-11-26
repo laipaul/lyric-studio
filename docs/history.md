@@ -4050,3 +4050,19 @@ D. ✅ (built 29 Oct, to verify) **Title opening** (items 1-8 below).
 - Code: sections.ts (pure: suggestSections, cleanSections, nameSections, sectionOfLine), node/song-sections.ts,
   GET/PUT /api/songs/[id]/sections, components/sections-ui.tsx; recipe.ts "sections".
 - Tests: vitest sections (3); browser sections (8 checks); lyrics-tab, singer, song-style pass.
+
+### Storyboard shows only story moments ✅ (to verify on the PC)
+- Paul (22 Nov 2026): "the storyboard is confusing, why has the app duplicated the singing part in so many pages".
+  Singing takes and Creation takes picked in Lyrics Sync were listed as loose Storyboard cards and filled gaps.
+- Rule: a Creation take stays in Creation until "Send to Storyboard" is pressed there. A singing take belongs to its
+  Lyrics Sync line and plays only there. Neither is a Storyboard card.
+- clips.json `lineOnly` (a take copied only for a line or a hidden-moment cover): Lyrics Sync's pick sends it with
+  `forLine` (not in the order); a later Send from Creation makes it a story moment at the END of the order. A sent clip
+  you removed counts as not sent (Send restores it from _removed, no duplicate). The planner never uses it as gap fill.
+- Storyboard and Shape's clip strip list only story clips; one line says "Singing on lines 15-16, 25-27, 32: set in
+  Lyrics Sync". Saving the order keeps the hidden clips' entries in clips.json.
+- Code: node/clip-roles.ts, animate.ts sendToStoryboard, assets.ts (role, singing, importSongClips inOrder),
+  story-line.ts, storyboard.ts, compose.ts anchorOnly, make.ts, lyrics-view.ts, pictures route, assets-tab, lyrics-tab.
+- Shape's "not in this video" names the real reason when a singing clip plays to the end (e.g. "the singing on line 32
+  plays from 2:12.9 to the end ... Lyrics Sync → line 32 → Hide a moment"), not "the part ends before its turn".
+- Tests: vitest line-only (7), plus animate, clip-order, story-line, compose, shots, lyrics-view, song-files pass.
