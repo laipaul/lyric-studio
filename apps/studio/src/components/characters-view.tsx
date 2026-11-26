@@ -267,6 +267,27 @@ export function CardPage({ id }: { id: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [cap, setCap] = useState(3);
   const [confirm, setConfirm] = useState<"pack" | "lock" | null>(null);
+  const [copied, setCopied] = useState(false);
+  // Copy character for Claude (26 Nov 2026): the character-lock block on the clipboard; no API call.
+  const copyForClaude = async () => {
+    try {
+      const { block } = await call<{ block: string }>(`/api/cards/${id}`, { method: "POST", ...json({ action: "claude" }) });
+      try {
+        await navigator.clipboard.writeText(block);
+      } catch {
+        const t = document.createElement("textarea");
+        t.value = block;
+        document.body.appendChild(t);
+        t.select();
+        document.execCommand("copy");
+        t.remove();
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
   // The version shown: null = the newest; a number = an older, read-only version.
   const [viewN, setViewN] = useState<number | null>(null);
   const load = useCallback(() => call<CardDetail>(`/api/cards/${id}${viewN ? `?v=${viewN}` : ""}`).then(setD).catch((e: Error) => setError(e.message)), [id, viewN]);
@@ -434,6 +455,10 @@ export function CardPage({ id }: { id: string }) {
         ) : null}
         {/* Remove card (cleanup.ts): the whole card to characters\_removed\ (or scenes\_removed\), Restore on the list page. */}
         <span className="ml-auto flex items-center gap-1 text-xs">
+          {/* Cast Library (26 Nov 2026): the character-lock block for claude.ai (no API call). */}
+          <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void copyForClaude()} data-copy-claude title="A compact character-lock text (name, notes, looks, outfits, which reference pictures exist) to paste into claude.ai when writing shot prompts">
+            <Copy /> {copied ? "Copied" : "Copy character for Claude"}
+          </Button>
           {removing ? (
             <>
               <span className="text-muted-foreground" data-remove-note>
@@ -453,6 +478,18 @@ export function CardPage({ id }: { id: string }) {
           )}
         </span>
       </div>
+      <label className="flex flex-col gap-1 text-xs" title="Your own words: look, outfit, vibe, age range. They go into Copy character for Claude.">
+        <span className="font-medium">Notes</span>
+        <textarea
+          data-card-notes
+          defaultValue={file.notes ?? ""}
+          key={`notes-${file.notes ?? ""}`}
+          onBlur={(e) => e.target.value.trim() !== (file.notes ?? "") && void act("notes", { action: "notes", notes: e.target.value })}
+          placeholder="Look, outfit, vibe, age range… (your own words, e.g. late 20s, warm and shy, classic and soft)"
+          rows={2}
+          className="bg-background rounded-md border px-2 py-1.5 text-sm"
+        />
+      </label>
       {version.n !== d.latest ? (
         <p className="text-muted-foreground rounded-md border px-4 py-2 text-xs" data-old-version>
           You are looking at v{version.n} (read-only{version.n === d.inUse ? ", still in use until v" + d.latest + " is locked" : ""}).{" "}

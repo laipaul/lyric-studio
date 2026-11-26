@@ -565,6 +565,29 @@ def _reference_print(kit: FaceKit, ref: str) -> tuple[np.ndarray, np.ndarray]:
     return img, kit.embed(img, faces[0])
 
 
+# The face embeddings of pictures (26 Nov 2026, Cast Library: one stored per face reference of a character, so the
+# Consistency Score can reuse them): the largest face's SFace vector (128 numbers, L2-normalised by the caller's
+# cosine), its size and YuNet confidence; null when no face is found. The engine is named so a later one can redo them.
+ENGINE = {"detector": "YuNet face_detection_yunet_2023mar", "recognizer": "SFace face_recognition_sface_2021dec", "version": 1}
+
+
+def embed_faces(kit: FaceKit, files: list[str]) -> dict:
+    out = []
+    for p in files:
+        try:
+            img = read_image(p)
+            faces = kit.detect(img)
+            if not faces:
+                out.append({"file": p, "vector": None, "note": "no face found"})
+                continue
+            f = faces[0]
+            v = kit.embed(img, f).reshape(-1)
+            out.append({"file": p, "vector": [round(float(x), 6) for x in v], "face_px": int(round(f.h)), "confidence": round(float(f.score), 3)})
+        except Exception as e:  # noqa: BLE001
+            out.append({"file": p, "vector": None, "note": str(e)})
+    return {"engine": ENGINE, "results": out}
+
+
 def compare(kit: FaceKit, ref: str, files: list[str]) -> dict:
     """The reference's face vs the largest face of each picture: cosine similarity, face size, head turn."""
     _, ref_f = _reference_print(kit, ref)
@@ -835,6 +858,8 @@ def main(argv: list[str]) -> int:
     a.add_argument("reference")
     a.add_argument("others", nargs="+")
     a.add_argument("--her", action="append", default=[])
+    a = sub.add_parser("embed")
+    a.add_argument("files", nargs="+")
     a = sub.add_parser("rank-frames")
     a.add_argument("files", nargs="+")
     a = sub.add_parser("crop")
@@ -861,6 +886,8 @@ def main(argv: list[str]) -> int:
             result = compare(kit, args.reference, args.files)
         elif args.cmd == "calibrate":
             result = calibrate(kit, args.reference, args.others, args.her)
+        elif args.cmd == "embed":
+            result = embed_faces(kit, args.files)
         elif args.cmd == "rank-frames":
             result = rank_frames(kit, args.files)
         elif args.cmd == "crop-body":

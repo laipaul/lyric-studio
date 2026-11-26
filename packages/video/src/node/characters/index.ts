@@ -13,3 +13,5 @@ export * from "./gemini";
 export * from "./looks";
 export * from "./character-sheet";
 export * from "./cleanup";
+export * from "./face-prints";
+export * from "./library";

@@ -10,6 +10,7 @@ import path from "node:path";
 
 import { openWorkspace } from "@lyric/db";
 import { createSong, readRecipe, songPathsById, writeRecipe } from "@lyric/video/node";
+import { createCard } from "@lyric/video/characters";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-e2e-notes-"));
 const wsDir = path.join(root, "workspace");
@@ -35,6 +36,16 @@ async function main() {
   mkdirSync(paths.clips!, { recursive: true });
   for (const [i, c] of ["blue", "red", "green"].entries()) ffmpeg("-f", "lavfi", "-i", `color=c=${c}:s=216x384:r=30:d=3`, "-pix_fmt", "yuv420p", path.join(paths.clips!, `0${i + 1}_${c}.mp4`));
   writeRecipe(paths.recipe!, { ...readRecipe(paths.recipe!), platforms: ["reels"] });
+  // Cast Library (26 Nov 2026): a character of the library, and a second song to tag it in too.
+  const face = path.join(root, "jennifer.png");
+  execFileSync(process.env.FFMPEG_PATH ?? "ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", "color=c=white:s=300x400", "-frames:v", "1", face]);
+  const jennifer = createCard(ws, { kind: "character", name: "Jennifer", picture: readFileSync(face), fileName: "jennifer.png" });
+  const song2 = path.join(root, "Second Song.wav");
+  execFileSync(process.env.FFMPEG_PATH ?? "ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=330:duration=20", song2]);
+  const second = await createSong(ws, { song: song2, lyrics });
+  const paths2 = songPathsById(ws, second.id);
+  mkdirSync(paths2.clips!, { recursive: true });
+  ffmpeg("-f", "lavfi", "-i", "color=c=yellow:s=216x384:r=30:d=3", "-pix_fmt", "yuv420p", path.join(paths2.clips!, "01_yellow.mp4"));
   ws.close();
   const notesFile = path.join(paths.root, ".studio", "clip-notes.json");
   const stored = () => (existsSync(notesFile) ? (JSON.parse(readFileSync(notesFile, "utf8")) as { notes: Record<string, { text: string; clip: string }> }).notes : {});
@@ -162,6 +173,35 @@ async function main() {
     const row1 = rows.filter((r) => r.top === rows[0].top);
     check(row1.length > 1 && new Set(row1.map((r) => r.h)).size === 1 && new Set(row1.map((r) => r.b)).size === 1, `one row: one card height, Use / Omit on one line (${JSON.stringify(row1)})`);
     if (process.env.STORY_SHOT) await page.screenshot({ path: process.env.STORY_SHOT.replace(".png", "-frames.png") });
+
+    // Cast chips (26 Nov 2026): Jennifer tagged on three clip cards, saved by her card id, still there after a reload.
+    for (const n of ["sea at dawn.mp4", "02_red.mp4", "03_green.mp4"]) {
+      await page.selectOption(`[data-cast-add='${n}']`, { label: "Jennifer" });
+      await page.waitForSelector(`[data-cast-chips='${n}'] [data-cast-chip=Jennifer]`);
+    }
+    const tagged = JSON.parse(readFileSync(path.join(paths.root, "clips.json"), "utf8")) as { clips: Record<string, { cast?: string[] }> };
+    check(["sea at dawn.mp4", "02_red.mp4", "03_green.mp4"].every((n) => tagged.clips[n]?.cast?.[0] === jennifer.id), "three clips tagged with Jennifer, saved by her card id in clips.json");
+    await page.reload();
+    await page.waitForSelector("[data-cast-chips='02_red.mp4'] [data-cast-chip=Jennifer]");
+    check((await page.$$("[data-cast-chip=Jennifer]")).length === 3, "the tags are still there after a reload");
+    // Removed from the library: greyed "(removed)"; restored: back.
+    await page.evaluate(async (cid: string) => void (await fetch(`/api/cards/${cid}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "remove" }) })), jennifer.id);
+    await page.reload();
+    await page.waitForSelector("[data-cast-chip=Jennifer][data-cast-removed]");
+    check(((await page.textContent("[data-cast-chips='02_red.mp4']")) ?? "").includes("Jennifer (removed)"), "a removed character's tags show greyed out, \"(removed)\"");
+    await page.evaluate(async () => {
+      const list = (await (await fetch("/api/cards")).json()) as { removed: { folder: string; name: string }[] };
+      const folder = list.removed.find((r) => r.name === "Jennifer")!.folder;
+      await fetch("/api/cards", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ restore: folder }) });
+    });
+    await page.reload();
+    await page.waitForSelector("[data-cast-chips='02_red.mp4'] [data-cast-chip=Jennifer]:not([data-cast-removed])");
+    check(true, "restored: the tags show her again");
+    // Another song: Jennifer is there to tag too.
+    await page.goto(`${base}/songs/${second.id}?tab=clips`);
+    await page.waitForSelector("[data-cast-add='01_yellow.mp4']");
+    const offered = await page.$$eval("[data-cast-add='01_yellow.mp4'] option", (o: Element[]) => o.map((x) => x.textContent ?? ""));
+    check(offered.includes("Jennifer"), `another song offers Jennifer too (${offered.join(", ")})`);
     await browser.close();
   } finally {
     server.kill();

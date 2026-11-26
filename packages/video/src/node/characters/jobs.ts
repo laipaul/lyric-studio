@@ -14,6 +14,7 @@ import { cardRoot, cardThresholds, currentVersion, getCard, packEstimate, readCa
 import { localFaceTool, type FaceTool } from "./face";
 import { errorText } from "./fal";
 import { buildSheet, fetchMissing, makePictures, readReport, rescore, type GenDeps } from "./generate";
+import { refreshFacePrints } from "./face-prints";
 import { ALL_VIEWS, ANGLES, isExtraView, money, VIEWS } from "./plan";
 import { stubFace, stubFal } from "./stub";
 
@@ -135,6 +136,7 @@ export async function runCardJob(openWs: () => Workspace, jobId: string, tools: 
     }
     const result = job.kind === "fetch" ? await fetchMissing(ws, job.card_id, deps) : await makePictures(ws, job.card_id, deps, { cap: o.cap ?? DEFAULT_CAP, only: job.kind === "view" ? o.only : undefined, look: o.look });
     const stopped = stops.has(jobId);
+    if (!o.look) await refreshFacePrints(ws, job.card_id, tools.face); // a new close-up or 3/4 face: its print
     set({ status: stopped ? "stopped" : "done", progress: 1, current: null, message: result.summary, cost_usd: Math.round(result.spentUsd * 100) / 100, finished_at: new Date() });
     ws.db.update(cardTable).set({ updated_at: new Date() }).where(eq(cardTable.id, job.card_id)).run();
   } catch (error) {

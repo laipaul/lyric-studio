@@ -14,6 +14,7 @@ import { ffmpegBin, type Workspace } from "@lyric/db";
 
 import { cardRoot, cardThresholds, currentVersion, getCard, readCardFile, referenceFiles, versionDir, writeCardFile } from "./cards";
 import type { FaceTool } from "./face";
+import { refreshFacePrints } from "./face-prints";
 import { callModel, errorText } from "./fal";
 import { buildSheet, finishPicture, judge, readReport, writeReport, type Item, type Try, type VersionReport } from "./generate";
 import { getLook, lookDir, lookViews, MAIN_LOOK } from "./looks";
@@ -156,6 +157,7 @@ export async function useOwnPictures(ws: Workspace, cardId: string, face: FaceTo
     report.items.sort((a, b) => (all.indexOf(a.id) + 99) % 99 - (all.indexOf(b.id) + 99) % 99);
     writeReport(dir, report);
     if (!look) await buildSheet(face, root, readCardFile(root), report);
+    if (!look) await refreshFacePrints(ws, cardId, face); // an own close-up or 3/4 face: its print
     const how = (b: Placed["by"]) => (b === "name" ? " (by its name)" : b === "face" ? " (by the face check)" : b === "order" ? " (first free place)" : "");
     const summary = `${placed.map((x) => `${x.name} → ${x.label}${how(x.by)}`).join(" · ")}. Free, nothing sent online. Wrong place? Use "Move to" under the picture.`;
     return { placed, summary };

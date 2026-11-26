@@ -12,7 +12,8 @@ import { isHandTimeLine } from "../hand-times";
 import { notesForClips, readClipNotes, setClipNote, readStoryIdea, setStoryIdea } from "./clip-notes";
 import { HOOK_MARKER, normalizeLyric } from "../lrc";
 import { clipRoles, songSingingLines, type ClipRole, type SingingLine } from "./clip-roles";
-import { inClipOrder, isOmitted, readClipEdits, saveSongClipOrder, setClipLabel, setClipOmit, type ClipEdits } from "./clip-edits";
+import { editOf, inClipOrder, isOmitted, readClipEdits, saveSongClipOrder, setClipCast, setClipLabel, setClipOmit, type ClipEdits } from "./clip-edits";
+import { cardTags } from "./characters/library";
 
 const labelOf = (edits: ClipEdits, name: string) => Object.entries(edits.clips).find(([n]) => n.toLowerCase() === name.toLowerCase())?.[1].label ?? null;
 import { cachedFileHash, SOURCE_FILE, syncCollection } from "./collection";
@@ -44,6 +45,7 @@ export type ClipAsset = {
   omit?: boolean; // a song's clip set to Omit (clips.json): keeps its place in the order, Make does not use it
   role?: ClipRole; // story: a story moment; singing: a singing take (plays on its Lyrics Sync lines); lineOnly: a Creation take only for a line / hidden moment (clip-roles.ts)
   label?: string | null; // the user's short name for the clip (clips.json "label"), shown instead of the file name
+  cast?: string[]; // the characters tagged on it (clips.json "cast": card ids), display only
 };
 
 export type SongAssets = {
@@ -111,6 +113,8 @@ export async function songAssets(ws: Workspace, projectId: string, options: { ch
   for (const c of listed.clips) {
     c.omit = isOmitted(edits, c.name);
     c.label = labelOf(edits, c.name);
+    const tagged = editOf(edits, c.name).cast;
+    if (tagged?.length) c.cast = tagged;
   }
   const roles = clipRoles(paths.root, paths.recipe, listed.clips.map((c) => c.name));
   for (const c of listed.clips) c.role = roles.get(c.name) ?? "story";
@@ -155,6 +159,19 @@ export function setSongClipOmit(ws: Workspace, projectId: string, name: unknown,
   if (!paths.clips) throw new Error("This song has no folder yet.");
   if (typeof name !== "string" || !songClipFiles(paths.clips).some((f) => f.toLowerCase() === name.toLowerCase())) throw new Error(`No clip ${String(name)} in this song.`);
   return isOmitted(setClipOmit(paths.root, name, omit === true), name);
+}
+
+// Who appears in one of the song's clips (the Storyboard's cast chips, 26 Nov 2026): character card ids of the library.
+// Display only. Returns the ids saved.
+export function setSongClipCast(ws: Workspace, projectId: string, name: unknown, ids: unknown): string[] {
+  const paths = songPathsById(ws, projectId);
+  if (!paths.clips) throw new Error("This song has no folder yet.");
+  if (typeof name !== "string" || !songClipFiles(paths.clips).some((f) => f.toLowerCase() === name.toLowerCase())) throw new Error(`No clip ${String(name)} in this song.`);
+  if (!Array.isArray(ids) || ids.some((x) => typeof x !== "string")) throw new Error("Choose characters from your library.");
+  const known = new Set(cardTags(ws).filter((c) => c.kind === "character").map((c) => c.id));
+  const unknown = (ids as string[]).filter((x) => !known.has(x));
+  if (unknown.length) throw new Error("That character is not in your library.");
+  return editOf(setClipCast(paths.root, name, ids as string[]), name).cast ?? [];
 }
 
 // A short name for one of the song's clips (Storyboard, Creation): shown instead of its file name; the file keeps its name.

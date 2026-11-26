@@ -48,6 +48,7 @@ export type CardFile = {
   versions: CardVersion[];
   main_look?: string; // the Wardrobe: the name of the pack's own outfit (default "Main look")
   looks?: Look[]; // the Wardrobe: further looks (looks.ts)
+  notes?: string; // the user's own words (look, outfit, vibe, age range): library.ts, never sent to a model by itself
 };
 
 export const CARD_DIRS: Record<CardKind, string> = { character: "characters", scene: "scenes" };

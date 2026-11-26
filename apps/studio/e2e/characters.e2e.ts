@@ -271,6 +271,18 @@ async function main() {
     await page.waitForSelector("[data-card-page=singer]");
     check(existsSync(path.join(wsDir, "characters", "singer", "reference.jpg")) || readdirSync(path.join(wsDir, "characters", "singer")).some((f) => f.startsWith("reference")), "workspace\\characters\\singer\\ holds the frame as its picture");
     check(readFileSync(clip).equals(clipBytes) && !readdirSync(path.join(wsDir, "frames")).some((d) => readdirSync(path.join(wsDir, "frames", d)).some((f) => f.startsWith("source"))), "the video is untouched and the app's copy of it is gone");
+
+    // Cast Library (26 Nov 2026): notes, and Copy character for Claude (Remove card / Restore: the Card clean-up checks).
+    await page.fill("[data-card-notes]", "late 20s, warm and shy");
+    await page.click("h1");
+    await page.waitForFunction(() => document.querySelector("[data-card-notes]") && !document.querySelector("[data-card-notes]")?.matches(":focus"));
+    await sleep(800);
+    check(readFileSync(path.join(wsDir, "characters", "singer", "card.json"), "utf8").includes("late 20s, warm and shy"), "the notes are saved in card.json");
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.click("[data-copy-claude]");
+    await page.waitForFunction(() => document.querySelector("[data-copy-claude]")?.textContent?.includes("Copied"));
+    const block = await page.evaluate(() => navigator.clipboard.readText());
+    check(block.startsWith("CHARACTER LOCK: singer") && block.includes("Notes: late 20s, warm and shy") && block.includes("Reference pictures:"), `Copy character for Claude: a clean block (${block.split("\n")[0]})`);
     await browser.close();
   } finally {
     server.kill();

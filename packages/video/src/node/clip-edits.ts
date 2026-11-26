@@ -12,7 +12,9 @@ import type { CutMove, Slip } from "../timeline-edits";
 // lineOnly: the clip is in clips\ only so a Lyrics Sync line (anchor) or a hidden-moment cover can use it; it is not a story moment
 // (not listed in the Storyboard, never gap fill). A normal "Send to Storyboard" from Creation clears it.
 // label (21 Nov 2026): a short name the user gives the clip ("Bride smile"); shown instead of the file name, which stays.
-export type ClipEdit = { in?: number; out?: number; speed?: number; best?: number; transition?: "cut" | "dissolve"; omit?: true; label?: string; lineOnly?: true };
+// cast (26 Nov 2026, Cast Library): the characters who appear in the clip, by their card id (a renamed character keeps
+// its tags; a removed one shows greyed out). Display only: cutting, timing and rendering never read it.
+export type ClipEdit = { in?: number; out?: number; speed?: number; best?: number; transition?: "cut" | "dissolve"; omit?: true; label?: string; lineOnly?: true; cast?: string[] };
 export const LABEL_MAX = 60;
 // A short name as typed: spaces tidied, at most 60 characters ("" = no name).
 export const cleanLabel = (raw: unknown) => String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, LABEL_MAX);
@@ -75,6 +77,12 @@ export function checkClipEdits(raw: unknown): { edits: ClipEdits; problems: stri
             const label = cleanLabel(v.label);
             if (label) e.label = label;
           } else problems.push(`clips["${name}"].label must be a short name (text)`);
+        }
+        if (v?.cast !== undefined && v?.cast !== null) {
+          if (Array.isArray(v.cast) && v.cast.every((x: unknown) => typeof x === "string" && x.trim())) {
+            const ids = [...new Set((v.cast as string[]).map((x) => x.trim()))];
+            if (ids.length) e.cast = ids;
+          } else problems.push(`clips["${name}"].cast must be a list of character ids`);
         }
         if (e.in !== undefined && e.out !== undefined && e.out <= e.in) problems.push(`clips["${name}"]: out must be after in`);
         else if (Object.keys(e).length) edits.clips[name] = e;
@@ -196,6 +204,19 @@ export function setClipLineOnly(songRoot: string, name: string, lineOnly: boolea
   const { lineOnly: _old, ...rest } = edits.clips[key] ?? {};
   const clips = Object.fromEntries(Object.entries(edits.clips).filter(([n]) => n !== key));
   const next: ClipEdit = lineOnly ? { ...rest, lineOnly: true } : rest;
+  if (Object.keys(next).length) clips[key] = next;
+  return writeClipEdits(songRoot, { ...edits, clips });
+}
+
+// Who appears in a clip (the Storyboard's cast chips): character card ids, in the order tagged; [] removes them all.
+export function setClipCast(songRoot: string, name: string, ids: readonly string[]): ClipEdits {
+  if (typeof name !== "string" || !name.trim()) throw new Error("Which clip?");
+  const edits = readClipEdits(songRoot);
+  const key = Object.keys(edits.clips).find((n) => n.toLowerCase() === name.toLowerCase()) ?? name;
+  const { cast: _old, ...rest } = edits.clips[key] ?? {};
+  const clips = Object.fromEntries(Object.entries(edits.clips).filter(([n]) => n !== key));
+  const unique = [...new Set(ids.map((x) => x.trim()).filter(Boolean))];
+  const next: ClipEdit = unique.length ? { ...rest, cast: unique } : rest;
   if (Object.keys(next).length) clips[key] = next;
   return writeClipEdits(songRoot, { ...edits, clips });
 }

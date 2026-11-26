@@ -18,7 +18,7 @@ import { connection } from "next/server";
 import { openWorkspace, resolveWorkspaceDir } from "@lyric/db";
 import {
   asidePictures, putAsideView, removeCard, restoreReference, restoreView, calibrationSongs, cardFace, draftDescription, hasGeminiKey, moveOwnPicture, GEMINI_KEY_MISSING, addLook, getLook, listLooks, lookDir, lookEstimate, lookProblems, setLookLocked, updateLook, MAIN_LOOK, cardTools, ensureSplit, splitNeeded, cardJobsFor, cardRoot, cardThresholds, checkCardPicture, cropCardToFace, currentVersion, enqueueCardJob, getCard, lockCard, lockProblems,
-  MODELS, newVersion, usableVersion, versionByNumber, packEstimate, readCardFile, readReport, repickLegacy, buildSheet, characterSheet, geminiPackPrompt, lookViews, runCardJob, VIEWS, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId,
+  MODELS, newVersion, usableVersion, versionByNumber, packEstimate, readCardFile, readReport, repickLegacy, buildSheet, characterSheet, geminiPackPrompt, lookViews, runCardJob, VIEWS, stopCardJob, toolsFor, updateDraft, versionDir, type CardJobKind, type ModelId, characterBlock, setCardNotes,
 } from "@lyric/video/characters";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
@@ -199,6 +199,12 @@ export async function POST(request: Request, { params }: Params) {
       case "look-unlock":
         withWorkspace((ws) => setLookLocked(ws, id, String(body.look), body.action === "look-lock"));
         break;
+      // Cast Library (26 Nov 2026): the card's notes, and the block for Claude.
+      case "notes":
+        withWorkspace((ws) => setCardNotes(ws, id, (body as { notes?: unknown }).notes));
+        break;
+      case "claude":
+        return Response.json({ block: withWorkspace((ws) => characterBlock(ws, id)) });
       case "describe": {
         const tools = cardTools();
         if ("error" in tools) throw new Error(tools.error);

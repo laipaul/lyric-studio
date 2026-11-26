@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 // Stand-ins for fal and the face checks, for the browser tests only: switched on by LYRIC_CARDS_STUB=<folder of
 // pictures> (closeup.png, three_quarter.png, body_front.png, body_back.png, wide_left.png, … else default.png).
 // Nothing goes to fal.ai and no face models are needed. Never set in normal use.
@@ -77,6 +78,14 @@ export function stubFace(): FaceTool {
       copyFileSync(image, out);
       return { file: out, cropped: true, cut_y: 10 };
     },
+    // A stand-in embedding: 128 numbers from the picture's bytes (the same picture, the same vector).
+    embed: async (files) => ({
+      engine: { detector: "stub", recognizer: "stub", version: 1 },
+      results: files.map((f) => {
+        const h = createHash("sha256").update(readFileSync(f)).digest();
+        return { file: f, vector: Array.from({ length: 128 }, (_, i) => Math.round(((h[i % 32] / 255) * 2 - 1) * 1e6) / 1e6), face_px: 400, confidence: 0.94 };
+      }),
+    }),
     sheet: async (spec) => {
       copyFileSync(spec.rows[0].cells[0].file, spec.out);
       return { file: spec.out };

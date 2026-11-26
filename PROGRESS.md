@@ -4,6 +4,33 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Nextgen sprint, step 1: Cast Library ✅ (to verify on the PC)
+- Sprint order (Paul, 26 Nov 2026): **1 Cast Library ✅ → 1b sheet generation (WaveSpeed) → 2 Lip-sync readiness →
+  Take history → Consistency Score.** Decisions: no rename ("Characters" = the library, "Cast" = a song's list); face
+  engine stays YuNet + SFace (commercial-friendly licences; InsightFace's models are non-commercial); SFace scores are
+  calibrated on real takes in step 3 before they are relied on.
+- The library is the existing **Characters** area (workspace\characters\<name>\card.json + pictures, every song). Remove
+  card / Restore are the Card clean-up's (just below: characters\_removed\, the id kept in card.json). New here:
+  - **Notes** on each card (look, outfit, vibe, age range: your words; kept on locked cards too).
+  - **Copy character for Claude**: a clean character-lock block (name, notes, appearance, each look with its outfit,
+    props, which reference pictures exist, locked or draft) on the clipboard. No API call.
+- **Reference check:** a character's reference picture with a second face at least a quarter the main one's size is
+  now "Not suitable: More than one face …" (actions.ts strictFaces; reference pictures only, never clips or shots).
+- **Face prints** (characters\face-prints.ts, face.json in the card folder): one SFace embedding (128 numbers) per face
+  reference (reference picture, close-up, 3/4 face of the version in use) with the engine (YuNet 2023mar + SFace
+  2021dec, version 1) and each picture's SHA-256: redone when a picture changes (after a check, a pack / remake, own
+  pictures). New face-engine command "embed" (services\audio\app\face.py), tested on a real portrait in the cloud.
+- **Cast chips on the Storyboard** (Prepare → Storyboard, the song's own clips): "+ cast" tags a character of the
+  library; saved by **card id** in the song's clips.json ("cast": [ids]); a renamed character keeps its tags; a
+  removed one shows greyed "(removed)" until restored (its id is read from characters\_removed\). **Display only**: the
+  plan cache key ignores them, the video's props are identical with or without tags (tested).
+- Tests: cast-library.test.ts (prints, rule, notes, block, tags across two songs, removed greyed and restored, same
+  props), characters e2e (notes, copy), clip-notes e2e (3 tags, reload, removed greyed, restored, another song).
+  Known: clip-notes e2e "the card shows no file name" is stale (the name field shows the file name until a short name
+  is given), not from this step.
+- Merged on top of 18 commits another session pushed meanwhile (Card clean-up's Remove card replaced this step's own).
+- After pulling: nothing new to install (the face checks were set up with pnpm audio:setup --face). Restart the app.
+
 ### Card clean-up: ✕ on a picture, Replace picture, Remove card; own pictures for the extra views ✅ (to verify on the PC)
 - Paul: "why can't I delete an old picture" / "I need a delete option". Nothing is ever deleted: each one is kept with
   a Restore (node/characters/cleanup.ts).
@@ -592,20 +619,6 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
   clips; lyrics-tab.tsx saveHide / AnchorPicker hide mode; components/hide-preview.tsx.
 - Tests: vitest anchors (+2: cuts on the beats and the singer's frame back in time; song.json checks); browser singer
   (+3: saved and shown, preview, ✕), lyrics-tab pass.
-
-### Long singing takes in parts of about 8 s ✅ (to verify on the PC)
-- Paul (22 Nov 2026), from Joey's pipeline ("cut vocals into exact clips between 4 and 10 seconds"): the line 32 take
-  (23 s) drifted at 6-8 s. A group's piece of voice longer than 10 s is now made in **parts of about 8 s** (4-10 s),
-  cut on a downbeat, a pause between sung lines first. Each part is its own InfiniteTalk request with its own short
-  vocal; part 2 starts from **the last frame of part 1** (no jump where they meet), and so on; each part is cut to its
-  exact song length and they are joined into **one take**, locked to the song as before (Retake, compare, Use this
-  take, ▶ with the song unchanged).
-- The cost says it before sending: "23 s · 720p · about $1.44 · in 3 parts of about 8 s" (each part billed at least
-  3 s, whole seconds); a take says "3 parts". A video source in Who sings stays one request (its motion cannot be
-  chained). A part already sent is fetched again for free if the studio stops.
-- Code: singer.ts singingParts / singInParts / fitLength / joinParts; take "parts" (each with its request id).
-- Tests: vitest animate (+2: the cuts, the chain from the last frame and the exact joined length); browser singer
-  (+2: "in 2 parts" with the cost, the take made in 2 parts at its exact length), lyrics-tab pass.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

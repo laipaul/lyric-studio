@@ -29,6 +29,8 @@ export interface FaceTool {
   cropBody(image: string, out: string): Promise<{ file: string; cropped: boolean; cut_y: number | null }>;
   sheet(spec: SheetSpec): Promise<{ file: string }>;
   rankFrames?(files: string[]): Promise<{ frames: { file: string; verdict: string; score: number; reasons: string[] }[] }>; // best first
+  // The largest face's embedding of each picture (face-prints.ts), with the engine that made them.
+  embed?(files: string[]): Promise<{ engine: { detector: string; recognizer: string; version: number }; results: { file: string; vector: number[] | null; face_px?: number; confidence?: number; note?: string }[] }>;
 }
 
 function runFace<T>(args: string[]): Promise<T> {
@@ -70,6 +72,7 @@ export function localFaceTool(): FaceTool {
     calibrate: (reference, others, her = []) => runFace(["calibrate", ...her.flatMap((h) => ["--her", h]), reference, ...others]),
     crop: (image, out) => runFace(["crop", image, out]),
     rankFrames: (files) => runFace(["rank-frames", ...files]),
+    embed: (files) => runFace(["embed", ...files]),
     cropBody: (image, out) => runFace(["crop-body", image, out]),
     async sheet(spec) {
       const dir = mkdtempSync(path.join(os.tmpdir(), "sheet-"));

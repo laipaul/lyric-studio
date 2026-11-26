@@ -17,7 +17,8 @@ import path from "node:path";
 import { connection } from "next/server";
 
 import { resolveWorkspaceDir, safeName } from "@lyric/db";
-import { assignSongFile, importSongClips, setSongStoryIdea, removeSongClip, replaceAsset, restoreSongClip, setSongClipNote, setSongClipLabel, setSongClipOmit, setSongClipOrder, songAssets, storeVocalStem, type AssetKind, type AssignRole } from "@lyric/video/assets";
+import { cardTags } from "@lyric/video/characters";
+import { assignSongFile, importSongClips, setSongStoryIdea, removeSongClip, replaceAsset, restoreSongClip, setSongClipNote, setSongClipCast, setSongClipLabel, setSongClipOmit, setSongClipOrder, songAssets, storeVocalStem, type AssetKind, type AssignRole } from "@lyric/video/assets";
 
 import { addFromCollection, isPickedClip, removeFromStory, setPickedClipNote, setPickedClipOmit, setStoryOrder, songStory } from "@lyric/video/story-line";
 
@@ -33,7 +34,8 @@ export async function GET(_request: Request, { params }: Params) {
     return Response.json(
       await withWorkspaceAsync(async (ws) => {
         const assets = await songAssets(ws, id);
-        return { ...assets, story: assets.folder ? (await songStory(ws, id, assets.clips)).items : [] };
+        // castTags: every character card by id, removed ones too (the Storyboard's cast chips).
+        return { ...assets, story: assets.folder ? (await songStory(ws, id, assets.clips)).items : [], castTags: cardTags(ws) };
       }),
     );
   } catch (error) {
@@ -94,6 +96,7 @@ export async function PUT(request: Request, { params }: Params) {
       omit?: { name?: unknown; omit?: unknown };
       note?: { name?: unknown; text?: unknown };
       label?: { name?: unknown; label?: unknown }; // a clip's short name (the file keeps its name)
+      cast?: { name?: unknown; ids?: unknown }; // who appears in a clip: character card ids (display only)
       storyIdea?: unknown; // Prepare → Storyboard's one sentence for the whole video (for the user only)
     };
     if (body.storyIdea !== undefined) return Response.json({ storyIdea: withWorkspace((ws) => setSongStoryIdea(ws, id, body.storyIdea)) });
@@ -102,6 +105,7 @@ export async function PUT(request: Request, { params }: Params) {
       return Response.json({
         note: await withWorkspaceAsync((ws) => (picked(ws, body.note!.name) ? setPickedClipNote(ws, id, String(body.note!.name), String(body.note!.text ?? "")) : setSongClipNote(ws, id, body.note!.name, body.note!.text))),
       });
+    if (body.cast) return Response.json({ cast: withWorkspace((ws) => setSongClipCast(ws, id, body.cast!.name, body.cast!.ids)) });
     if (body.label) return Response.json({ label: withWorkspace((ws) => setSongClipLabel(ws, id, body.label!.name, body.label!.label)) });
     if (body.omit)
       return Response.json({

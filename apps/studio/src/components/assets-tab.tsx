@@ -48,7 +48,42 @@ export type AssetsPart = "files" | "clips";
 const PART_KINDS: Record<Exclude<AssetsPart, "clips">, readonly string[]> = { files: ["song", "vocals", "lyrics", "hints", "backingVocals", "cover"] };
 // story: the story line (Prepare → Storyboard, 11 Nov 2026): the song's own clips, clips picked from a shared
 // collection and "the app picks" cards, in order (story-line.ts).
-type AssetsData = SongAssets & { story: StoryItem[] };
+type CastTag = { id: string; name: string; kind: "character" | "scene"; removed: boolean };
+type AssetsData = SongAssets & { story: StoryItem[]; castTags?: CastTag[] };
+
+// Who appears in a clip (26 Nov 2026, Cast Library): chips of the Characters library, saved by card id in clips.json
+// (a renamed character keeps its tags; a removed one shows greyed out, "(removed)", until it is restored). Display only.
+function CastChips({ tags, ids, onChange, clip }: { tags: CastTag[]; ids: string[]; onChange: (ids: string[]) => void; clip: string }) {
+  const characters = tags.filter((t) => t.kind === "character");
+  const free = characters.filter((t) => !t.removed && !ids.includes(t.id));
+  if (!characters.length && !ids.length) return null;
+  return (
+    <div data-cast-chips={clip} className="flex flex-wrap items-center gap-1 text-[11px]">
+      {ids.map((id) => {
+        const t = characters.find((x) => x.id === id);
+        return (
+          <span key={id} data-cast-chip={t?.name ?? id} data-cast-removed={t?.removed ? "" : undefined} className={cn("flex items-center gap-0.5 rounded-full border px-1.5 py-px", t && !t.removed ? "border-brand/50" : "text-muted-foreground border-dashed opacity-60")} title={t?.removed ? `${t.name} is removed from your library (Characters → Removed): restore it to use it again` : undefined}>
+            <UserRound className="size-3" /> {t ? t.name : "unknown"}
+            {t?.removed ? " (removed)" : ""}
+            <button type="button" aria-label={`Untag ${t?.name ?? "character"}`} data-cast-untag={t?.name ?? id} onClick={() => onChange(ids.filter((x) => x !== id))} className="hover:text-foreground ml-0.5 opacity-70">
+              ×
+            </button>
+          </span>
+        );
+      })}
+      {free.length ? (
+        <select data-cast-add={clip} value="" onChange={(e) => e.target.value && onChange([...ids, e.target.value])} className="bg-background text-muted-foreground rounded-full border border-dashed px-1.5 py-px" title="Tag who appears in this clip (display only)">
+          <option value="">+ cast</option>
+          {free.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+      ) : null}
+    </div>
+  );
+}
 export function AssetsTab({ projectId, part = "files" }: { projectId: string; part?: AssetsPart }) {
   const [data, setData] = useState<AssetsData | null>(null);
   const [picker, setPicker] = useState(false);
@@ -740,6 +775,20 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                             const next = d.label ?? null;
                             setData((x) => (x ? { ...x, clips: x.clips.map((y) => (y.name === c.name ? { ...y, label: next } : y)), story: x.story.map((y) => (y.key === k && y.clip ? { ...y, clip: { ...y.clip, label: next } } : y)) } : x));
                           }}
+                        />
+                      ) : null}
+                      {!c.collection ? (
+                        <CastChips
+                          tags={data.castTags ?? []}
+                          ids={c.cast ?? []}
+                          onChange={async (ids) => {
+                            const r = await api(`/api/songs/${projectId}/assets`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cast: { name: c.name, ids } }) });
+                            const d = (await r.json()) as { cast?: string[]; error?: string };
+                            if (!r.ok || d.error) return;
+                            const next = d.cast ?? [];
+                            setData((x) => (x ? { ...x, clips: x.clips.map((y) => (y.name === c.name ? { ...y, cast: next } : y)), story: x.story.map((y) => (y.key === k && y.clip ? { ...y, clip: { ...y.clip, cast: next } } : y)) } : x));
+                          }}
+                          clip={c.name}
                         />
                       ) : null}
                       <ClipNoteField
