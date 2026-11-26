@@ -79,6 +79,21 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
       live = false;
     };
   }, [projectId, slotKind]);
+  // The music's energy (Performance script, 26 Nov 2026; music-cues.ts): a band under the song track once the song was
+  // listened to (Prepare → Production → Performance script), with its drops, builds and breakdowns. Display only.
+  const [energy, setEnergy] = useState<{ blockMs: number; values: number[]; events: { type: string; at_ms: number }[] } | null>(null);
+  useEffect(() => {
+    let live = true;
+    void api(`/api/songs/${projectId}/script`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: { cues?: { block_s: number; energy: number[]; events: { type: string; at_ms: number }[] } | null }) => {
+        if (live && d.cues?.energy?.length) setEnergy({ blockMs: (d.cues.block_s ?? 0.5) * 1000, values: d.cues.energy, events: d.cues.events ?? [] });
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [projectId]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(ZOOMS[1]);
@@ -1339,6 +1354,25 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                     />
                   ) : null}
                 </div>
+                {energy ? (
+                  // The music's energy over the song (relative to the song itself: 0 = its calmest, 1 = its fullest).
+                  <div className="relative h-3 border-b" data-energy-band title="The music's energy (Performance script: Analyse the music). Marks: drops, builds and breakdowns.">
+                    <svg className="absolute inset-0 block h-3" style={{ width }} preserveAspectRatio="none" viewBox={`0 0 ${width} 100`}>
+                      <polyline
+                        fill="none"
+                        className="stroke-amber-300/80"
+                        strokeWidth={1.5}
+                        vectorEffect="non-scaling-stroke"
+                        points={energy.values.map((e, i) => `${(((i * energy.blockMs) - view.songStartMs) / 1000) * zoom},${100 - e * 95}`).join(" ")}
+                      />
+                    </svg>
+                    {energy.events
+                      .filter((e) => ["drop", "build", "breakdown", "silence"].includes(e.type))
+                      .map((e) => (
+                        <div key={`${e.type}${e.at_ms}`} data-energy-event={e.type} title={`${e.type} at ${both(e.at_ms - view.songStartMs)}`} className={cn("pointer-events-none absolute top-0 h-3 border-l", e.type === "drop" ? "border-red-400" : e.type === "build" ? "border-amber-300 border-dashed" : "border-sky-300")} style={{ left: ((e.at_ms - view.songStartMs) / 1000) * zoom }} />
+                      ))}
+                  </div>
+                ) : null}
                 {view.titleCards.length ? (
                   <div className="relative border-b" data-textboard-titles data-lanes={titleLanes.count} style={{ height: titleLanes.count > 1 ? titleLanes.count * TITLE_LANE_PX + 5 : 20 }}>
                     {view.titleCards.map((c, ci) => (

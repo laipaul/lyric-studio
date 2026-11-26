@@ -10,7 +10,7 @@
 //   shot list check and import, other text can become the story bible.
 // 4 Shot list: the planned slots in the Storyboard (C2). The clips are made from them in the next steps.
 // Nothing here costs anything: no AI service is called.
-import { BookOpen, Check, ClipboardPaste, Copy, Download, ExternalLink, FileJson, Plus, Users } from "lucide-react";
+import { BookOpen, Check, Drama, ClipboardPaste, Copy, Download, ExternalLink, FileJson, Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -22,6 +22,7 @@ import { ShotListImport } from "@/components/shotlist-import";
 import { useGoToTab } from "@/components/song-stages";
 import { useSongStyle } from "@/components/song-style";
 import { Button } from "@/components/ui/button";
+import { PerformanceScriptPanel } from "@/components/performance-script-panel";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -226,7 +227,7 @@ export function ProductionTab({ projectId }: { projectId: string }) {
       {folders ? <PicturesBoard key={shown} projectId={projectId} part={shown === "story" ? "settings" : "production"} /> : <PicturesBoard projectId={projectId} />}
       {storyTools ? (
       <details data-story-tools className="max-w-4xl" open={folders || film || undefined}>
-        <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm">{film ? "Story tools (Mini film): cast, story bible, Song brief for Claude, shot list" : "Story tools (optional): cast, story bible, Song brief for Claude, shot list"}</summary>
+        <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm">{film ? "Story tools (Mini film): cast, story bible, Song brief for Claude, shot list, performance script" : "Story tools (optional): cast, story bible, Song brief for Claude, shot list, performance script"}</summary>
         <div className="mt-3 flex flex-col gap-4">
       {notice ? (
         <p data-production-notice={notice.ok ? "ok" : "error"} className={cn("rounded-md border p-2 text-sm", notice.ok ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-red-400/30 bg-red-400/10 text-red-200")}>
@@ -484,6 +485,9 @@ export function ProductionTab({ projectId }: { projectId: string }) {
             </Button>
           ) : null}
         </div>
+      </Section>
+      <Section n={5} id="script" title="Performance script" optional icon={Drama}>
+        <PerformanceScriptPanel projectId={projectId} />
       </Section>
         </div>
       </details>

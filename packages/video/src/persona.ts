@@ -6,6 +6,7 @@
 // The Persona is NEVER put into the identity / description or any picture-pack prompt ("eyes closed" in an identity
 // made every pack picture eyes-closed). It is used only in the texts copied for Claude and in "Copy shot prompt".
 // Pure: no files, no network (Claude drafts it through the clipboard, per the no-API design rule).
+import { directionLines, type ScriptEntry } from "./performance-script";
 
 export type SectionKey = "verse" | "preChorus" | "chorus" | "bridge" | "finalChorus";
 export type Persona = {
@@ -279,6 +280,9 @@ export type PersonaShotInput = {
   lyric: string | null; // the sung line (null: an instrumental part, or not known)
   singing: boolean;
   song: string;
+  // The performance script's entry for this line (Part B): its direction wins over the section map; stale: why the
+  // line's entry was not used (the lyrics or timing changed since it was pasted).
+  script?: { entry: ScriptEntry | null; stale: string | null; singsTo?: string; objective?: string } | null;
 };
 
 // "Copy shot prompt": identity + persona + the section line + the song's note + the lyric + lip-sync framing for a
@@ -305,10 +309,17 @@ export function personaShotPrompt(i: PersonaShotInput): string {
       if (per.never) out.push(`Never: ${per.never}`);
     }
     const key = i.section ? sectionKeyOf(i.section.kind, i.section.final) : null;
-    if (key) out.push(`In this part (${SECTION_LABEL[key]}${i.section!.name && !new RegExp(`^${SECTION_LABEL[key]}$`, "i").test(i.section!.name) ? `, ${i.section!.name}` : ""}): ${(per?.sections[key] ?? DEFAULT_SECTION_MAP[key]) || DEFAULT_SECTION_MAP[key]}`);
+    const scripted = i.script?.entry ? directionLines(i.script.entry, p.name) : [];
+    if (scripted.length) {
+      out.push(`On this line (performance script${i.section ? `, ${i.section.name}` : ""}):`);
+      out.push(...scripted);
+    } else if (key) out.push(`In this part (${SECTION_LABEL[key]}${i.section!.name && !new RegExp(`^${SECTION_LABEL[key]}$`, "i").test(i.section!.name) ? `, ${i.section!.name}` : ""}): ${(per?.sections[key] ?? DEFAULT_SECTION_MAP[key]) || DEFAULT_SECTION_MAP[key]}`);
     if (p.songNote?.trim()) out.push(`In this song: ${p.songNote.trim()}`);
   }
   out.push("");
+  if (i.script?.entry && (i.script.singsTo || i.script.objective)) out.push([i.script.singsTo && `Sings to: ${i.script.singsTo}`, i.script.objective && `Objective: ${i.script.objective}`].filter(Boolean).join(" · "));
+  if (i.script?.entry && (i.script.entry.camera || i.script.entry.pace)) out.push([i.script.entry.camera && `Camera: ${i.script.entry.camera}`, i.script.entry.pace && `Pace: ${i.script.entry.pace}`].filter(Boolean).join(" · "));
+  if (i.script?.stale) out.push(`(The performance script's direction for this line is stale: ${i.script.stale}. The persona's section line is used instead; check it in the Script panel.)`);
   if (!i.section) out.push("Where the shot sits is not known yet: put the clip on a lyric line for an expression per section.");
   if (i.lyric) out.push(`${i.singing ? "Sung line" : "Lyric line"}: "${i.lyric}"`);
   else if (i.section) out.push("No singing in this shot.");

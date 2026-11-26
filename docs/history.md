@@ -4021,3 +4021,18 @@ D. ✅ (built 29 Oct, to verify) **Title opening** (items 1-8 below).
 - Part 2 (the character sheet sent as a Seedance reference) waits until Scenes exist and a test clip proves it.
 - Tests: vitest film-looks (10), animate, themes, library pass; browser film-looks (11 checks), pictures, singer,
   library pass.
+
+### Song style: Cut to the song, Add singing, Mini film ✅ (to verify on the PC)
+- Paul (22 Nov 2026): his three ways of making a song, named in the app. Step 1 of the Scenes plan (song-first
+  "Mini film": Sections, Scenes in the Storyboard, Reel / YouTube view, scene brief for Claude, still then clip).
+- Prepare → Song Details → **Song style**, three choices: **Cut to the song** (clips cut to the beat and the lyrics),
+  **Add singing** (plus the singer on picked lines), **Mini film** (the song planned as scenes; Creation's story tools
+  open). It only decides which tools show; change it any time, nothing is lost. song.json "songStyle"
+  ("cut" | "singing" | "film"); not chosen yet: Add singing when the song has singing lines, else Cut to the song.
+- Cut to the song hides Lyrics Sync's Who sings column and Singer bar (a line says why), except on a song that still
+  has singing lines (they play in its videos, so they stay visible). Every Library card names the song's style.
+- Code: song-style.ts (pure), node/song-style.ts, GET/PUT /api/songs/[id]/style, components/song-style.tsx
+  (SongStyleField, SongStyleBadge, useSongStyle); recipe.ts songStyle; library.ts SongCard.songStyle.
+- Tests: vitest song-style (2); browser song-style (7 checks); singer.e2e now sets Add singing; lyrics-tab, singer,
+  production, library, song-links pass. Unchanged on main and still failing in the cloud: make, make-reference,
+  render, migrate, song-stages, textboard-make (audio / render setup).

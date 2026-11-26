@@ -64,14 +64,15 @@ def clock(ms: int) -> str:
 
 # --------------------------------------------------------------------------- vocals (Demucs)
 
-def separate_vocals(song: Path, device: Device, log: Callable[[str], None]) -> tuple[Path, Device]:
+def separate_vocals(song: Path, device: Device, log: Callable[[str], None], all_stems: bool = False) -> tuple[Path, Device]:
     """Vocal stem of the song, cached by the song's content hash in <workspace>/cache/stems/."""
     import numpy as np
     import soundfile as sf
 
     stems = workspace_dir() / "cache" / "stems"
     out = stems / f"{file_hash(song)}-{SEPARATION_MODEL}-vocals.wav"
-    if out.exists():
+    others = [stems / f"{file_hash(song)}-{SEPARATION_MODEL}-{n}.wav" for n in ("drums", "bass", "other")]
+    if out.exists() and (not all_stems or all(f.exists() for f in others)):
         log(f"vocals: cached ({out.name})")
         return out, device
 
@@ -85,14 +86,29 @@ def separate_vocals(song: Path, device: Device, log: Callable[[str], None]) -> t
         log(f"separating the vocals with Demucs {SEPARATION_MODEL} on {device_name.upper()} (model downloads on first use)")
         separator = Separator(model=SEPARATION_MODEL, device=device_name, progress=True)
         _, stems_ = separator.separate_tensor(wav, sr)
-        return stems_["vocals"].cpu().numpy().T, separator.samplerate
+        return {name: s.cpu().numpy().T for name, s in stems_.items()}, separator.samplerate
 
-    (vocals, rate), device = with_cpu_fallback(device, "Vocal separation", run, log)
+    (all_stems, rate), device = with_cpu_fallback(device, "Vocal separation", run, log)
     stems.mkdir(parents=True, exist_ok=True)
-    tmp = out.with_suffix(".tmp.wav")
-    sf.write(str(tmp), vocals, rate, subtype="FLOAT")
-    os.replace(tmp, out)
+    # All four stems are kept (26 Nov 2026): the music cues read drums, bass and other (music_cues.py).
+    for name, data in all_stems.items():
+        target = stems / f"{file_hash(song)}-{SEPARATION_MODEL}-{name}.wav"
+        tmp = target.with_suffix(".tmp.wav")
+        sf.write(str(tmp), data, rate, subtype="FLOAT")
+        os.replace(tmp, target)
     return out, device
+
+
+def separate_stems(song: Path, log: Callable[[str], None]) -> dict[str, Path]:
+    """The four Demucs stems (drums, bass, other, vocals) of the song, cached like the vocals; separated when missing."""
+    stems = workspace_dir() / "cache" / "stems"
+    names = ("drums", "bass", "other", "vocals")
+    files = {n: stems / f"{file_hash(song)}-{SEPARATION_MODEL}-{n}.wav" for n in names}
+    if not all(f.exists() for f in files.values()):
+        import torch
+
+        separate_vocals(song, choose_device(torch), log, all_stems=True)
+    return files
 
 
 def vocal_track(song: Path, stem: Path | None, device: Device, log: Callable[[str], None]) -> tuple[Path, Device, VoiceSource]:

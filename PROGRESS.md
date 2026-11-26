@@ -4,6 +4,53 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Music analysis + Performance script (Part B) ✅ (to verify on the PC; cue table to check by ear)
+The chain (Paul, 26 Nov 2026): the app hears the track → Claude reads the lyric's meaning → the persona decides how
+this singer shows it → Paul approves → every shot prompt carries that direction. Lip-sync models move the mouth but do
+not understand the lyrics: the feeling must come from the start image and the prompt.
+- **Music cues** (local, free; services/audio/app/music_cues.py, node/music-cues.ts): per sung line and per
+  instrumental gap (a pause of 2 s or more, the intro, the outro): level 1-5, energy trend (rising / falling / steady),
+  arrangement density (sparse / medium / full), events (build, drop, breakdown, sudden silence, drums in / out,
+  brighter / darker), the vocal-vs-music contrast ("soft vocal over a loud mix", "loud vocal over sparse music") and the
+  vocal cues (loud / soft, a held note at the end). **Everything relative to the song's own range** (percentile ranks
+  of 0.5 s blocks: Suno masters are heavily compressed), and the **density from the stems** (drums / bass / other
+  energy), not the master's loudness. Stems: Demucs htdemucs (the aligner now keeps all four stems in
+  workspace\cache\stems\; separated here when missing and the AI packages are installed), else the mix split by
+  frequency (the result and the panel say which). The vocal: the Suno stem when it lines up as it is, else Demucs's.
+  Cached in <song>\.studio\music-cues.json by the song's content, the vocal and the line timing.
+  **`pnpm music:cues "<song title>"`** prints the cue table (time, section, line, level, trend, density, events,
+  contrast) to check by ear.
+- **Shape**: the music's energy as a band under the song track (data-energy-band), with drops (red), builds (dashed)
+  and breakdowns / silences (blue), once the song was listened to.
+- **Performance script** (Prepare → Production → Story tools → 5 Performance script; production\script.json;
+  src/performance-script.ts, node/performance-script.ts, components/performance-script-panel.tsx):
+  - **Copy script request** for **Whole song / Reel range** (the Reel's shot plan) **/ Singing slots only**: the lines
+    with section and start time, the instrumental gaps, each one's music cues in a few words ("build → drop at 1:12;
+    loud, rising; full; soft vocal over a loud mix"), each cast member's PERSONA and song note, and the rules: physical
+    FACS-style direction; **repeats escalate** (each chorus numbered "chorus 1 of 3" / "final chorus", a repeated line
+    names its first time: chorus 1 is not the final chorus); use the music cues; duets: who sings each line, and a
+    **Reaction** direction for the one sung to (listener shots), through their persona.
+  - Claude answers once per song **Sings to** and **Objective**, and per line / gap: singer, meaning, emotion,
+    intensity 1-5, **beat change**, **action verb** ("to reassure"), **Laban** quality, **Face** (brows, eyes, cheeks,
+    lip corners, jaw), **Body** (breath, hands, gaze, head), reaction, camera and pace.
+  - **Paste script** reads it back (tolerant: bold keys, "Line 12", fields joined by "|", "4/5"); keys the song does
+    not have and unknown labels are listed, never guessed; a new paste replaces only the entries it brings (the old file
+    goes to Replaced files). Each entry is editable and can be marked **checked**.
+  - **Stale**: when the lyrics or the line timing change after the paste (matched by the line's words and position: a
+    timing move over 1 s, other words, or the words renumbered), the entry is marked stale with the reason and is
+    **never** applied; "Still right for this line: use it again" re-attaches it after checking.
+  - **Copy shot prompt** now uses the line's direction (meaning, emotion, beat change, action, Laban, face, body,
+    camera, pace, Sings to / Objective; the reaction for the one sung to) when the script has a fresh entry for it, else
+    the persona's section map, as before. Copy only: no cut, timing or render change (a test compares the render props).
+- Nothing to install: librosa is already there. For the stems (better density), the AI packages: `pnpm audio:setup
+  --ai` (already installed if Lyrics Sync's automatic alignment works on your PC).
+- Tests: services/audio tests/test_music_cues.py (a compressed synthetic song: build, drop at 16 s and breakdown at
+  26 s found; percentiles relative); packages/video test/performance-script.test.ts (7: request with cues, personas,
+  escalation; parser clean and messy; staleness; direction vs section map; cues cached; scopes; render props
+  unchanged); browser: e2e/performance-script.e2e.ts (in pnpm test:e2e).
+- **To validate on your songs** (point 2): `pnpm music:cues "<ballad title>"` and `pnpm music:cues "<build/drop song>"`,
+  paste both tables in the chat; the limits get tuned on them.
+
 ### Persona on character cards (Part A) ✅ (to verify on the PC)
 Paul, 26 Nov 2026: "my songs are mostly romantic; each singer needs her own personality and acting style, like a
 video-game character profile, so shots show expression, not just a face". Three layers kept apart: Identity (card and
@@ -680,21 +727,6 @@ locked cards can't be edited").
 - Code: sections.ts (pure: suggestSections, cleanSections, nameSections, sectionOfLine), node/song-sections.ts,
   GET/PUT /api/songs/[id]/sections, components/sections-ui.tsx; recipe.ts "sections".
 - Tests: vitest sections (3); browser sections (8 checks); lyrics-tab, singer, song-style pass.
-
-### Song style: Cut to the song, Add singing, Mini film ✅ (to verify on the PC)
-- Paul (22 Nov 2026): his three ways of making a song, named in the app. Step 1 of the Scenes plan (song-first
-  "Mini film": Sections, Scenes in the Storyboard, Reel / YouTube view, scene brief for Claude, still then clip).
-- Prepare → Song Details → **Song style**, three choices: **Cut to the song** (clips cut to the beat and the lyrics),
-  **Add singing** (plus the singer on picked lines), **Mini film** (the song planned as scenes; Creation's story tools
-  open). It only decides which tools show; change it any time, nothing is lost. song.json "songStyle"
-  ("cut" | "singing" | "film"); not chosen yet: Add singing when the song has singing lines, else Cut to the song.
-- Cut to the song hides Lyrics Sync's Who sings column and Singer bar (a line says why), except on a song that still
-  has singing lines (they play in its videos, so they stay visible). Every Library card names the song's style.
-- Code: song-style.ts (pure), node/song-style.ts, GET/PUT /api/songs/[id]/style, components/song-style.tsx
-  (SongStyleField, SongStyleBadge, useSongStyle); recipe.ts songStyle; library.ts SongCard.songStyle.
-- Tests: vitest song-style (2); browser song-style (7 checks); singer.e2e now sets Add singing; lyrics-tab, singer,
-  production, library, song-links pass. Unchanged on main and still failing in the cloud: make, make-reference,
-  render, migrate, song-stages, textboard-make (audio / render setup).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

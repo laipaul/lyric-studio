@@ -18,6 +18,7 @@ import { productionData, readProduction, timedLines, writeProduction, type CastC
 import { readRecipe } from "./recipe";
 import { songPathsById } from "./song-folder";
 import { songSections } from "./song-sections";
+import { directionFor, readScript } from "./performance-script";
 import { readStoryboard } from "./storyboard-read";
 import { STORYBOARD_DIR } from "../storyboard-file";
 
@@ -154,8 +155,17 @@ export async function clipShotPrompt(ws: Workspace, projectId: string, clip: str
   const place = placeOfClip(ctx, clip);
   const singing = !!edit?.lipsync || place?.how === "slot";
   const lyric = place ? (edit?.lipsync ? linesText(ctx.lines, edit.lipsync.lines) : (ctx.lines.find((l) => l.number === place.line)?.text ?? null)) : null;
-  const text = personaShotPrompt({ people, section: place ? sectionOf(ctx.sections, place.line) : null, lyric, singing, song: ctx.title });
+  const script = place ? await scriptFor(ws, projectId, ctx.paths.root, place.line) : null;
+  const text = personaShotPrompt({ people, section: place ? sectionOf(ctx.sections, place.line) : null, lyric, singing, song: ctx.title, script });
   return { text, place };
+}
+
+// The performance script's direction for a line (never a stale one) and the song's two lines (Part B).
+async function scriptFor(ws: Workspace, projectId: string, root: string, line: number) {
+  const s = readScript(root);
+  if (!s) return null;
+  const d = await directionFor(ws, projectId, line);
+  return { ...d, singsTo: s.singsTo, objective: s.objective };
 }
 
 const linesText = (lines: { number: number; text: string }[], [a, b]: [number, number]) =>
@@ -169,6 +179,7 @@ export async function slotShotPrompt(ws: Workspace, projectId: string, slotKey: 
   if (!m) throw new Error("That singing slot is not in this song any more: reload the page.");
   const edit = m.clip ? readClipEdits(ctx.paths.root).clips[m.clip] : undefined;
   const people = peopleFor(ws, ctx, whoIn(ctx, edit?.cast));
-  const text = personaShotPrompt({ people, section: sectionOf(ctx.sections, m.slot.lines[0]), lyric: linesText(ctx.lines, m.slot.lines), singing: true, song: ctx.title });
+  const script = await scriptFor(ws, projectId, ctx.paths.root, m.slot.lines[0]);
+  const text = personaShotPrompt({ people, section: sectionOf(ctx.sections, m.slot.lines[0]), lyric: linesText(ctx.lines, m.slot.lines), singing: true, song: ctx.title, script });
   return { text };
 }

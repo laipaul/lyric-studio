@@ -7,3 +7,5 @@ _Part of the project brief (CLAUDE.md links here). The music is never altered; f
 - Audio: the section start snaps to the nearest downbeat (report the adjusted time); a 0.3 s fade-in and a fade-out per platform preset (default 0.5 s; Reels 0.1-0.15 s, ending exactly on a bar, with the last shot continuing into the first clip for a seamless loop), only where the section cuts the music (see the rule above).
 - Video: 30 fps, H.264, AAC 320 kbps at the master's own sample rate, yuv420p, faststart; size and video bitrate per platform preset.
 - Every video on every platform gets a .srt (except the Spotify Canvas: no lyrics) with its lyric lines (times from the video's first frame).
+
+- **Music cues** (26 Nov 2026, Performance script): services/audio/app/music_cues.py only READS the song, its Demucs stems (drums, bass, other, vocals, cached in workspace\cache\stems\) and the vocal stem; the cues (.studio\music-cues.json) are analysis only and never go into any output.
