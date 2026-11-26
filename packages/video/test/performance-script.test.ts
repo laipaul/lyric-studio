@@ -13,7 +13,7 @@ import { directionLines, parseScript, repeatsOf, scriptRequest, staleness, type 
 import { emptyPersona, personaShotPrompt } from "../src/persona";
 import { findOrCreateSongProject, makeVideos, readRecipe, songPathsById, writeRecipe, type RenderOptions } from "../src/node";
 import { createCard } from "../src/node/characters";
-import { cueText, musicCues, songSegments } from "../src/node/music-cues";
+import { cueText, cachedMusicCues, musicCues, songSegments } from "../src/node/music-cues";
 import { reelRange } from "../src/node/lipsync";
 import { clipShotPrompt, setPersona } from "../src/node/persona";
 import { editScript, pasteScript, readScript, scriptRequestFor, scriptView } from "../src/node/performance-script";
@@ -213,6 +213,14 @@ describe("a song with a script", () => {
     expect(reel.text).toContain("for the Reel's part");
     const range = reelRange(p.root)!;
     expect(reel.lines).toBe(c1.segments.filter((s) => s.kind === "line" && s.endMs > range.startMs && s.startMs < range.endMs).length); // exactly the lines the Reel plays
+
+    // Sections changed only: the request shows the new sections at once, the analysis is not run again.
+    const before = cachedMusicCues(ws, sid)!.made_at;
+    setSongSections(ws, sid, [{ line: 1, kind: "verse" }, { line: 2, kind: "chorus" }, { line: 4, kind: "bridge" }, { line: 5, kind: "chorus" }]);
+    const resec = await scriptRequestFor(ws, sid, "song");
+    expect(resec.text).toMatch(/L4 \[[^\]]+\] Bridge/);
+    expect(resec.text).toContain("final chorus (2 of 2)");
+    expect(cachedMusicCues(ws, sid)!.made_at).toBe(before);
 
     // Paste: L2's direction; an unknown key is listed, never guessed.
     const pasted = await pasteScript(ws, sid, ANSWER.replace("L2 [0:06]", "L2 [0:02]").replace("G1 [0:00-0:04] Intro", "G1 [0:00-0:01] Intro") + "\n\nL40 [3:00] Outro\nEmotion: calm\n");

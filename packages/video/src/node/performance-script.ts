@@ -88,7 +88,7 @@ export async function scriptRequestFor(ws: Workspace, projectId: string, scope: 
   const p = ws.db.select().from(projectTable).where(eq(projectTable.id, projectId)).get();
   if (!p) throw new Error("Song not found.");
   const cues = await musicCues(ws, projectId);
-  const chosen = await scopeSegments(ws, projectId, scope, cues.segments);
+  const chosen = await scopeSegments(ws, projectId, scope, await currentSegments(ws, projectId));
   if (!chosen.some((s) => s.kind === "line")) throw new Error("No timed lyric lines in this part yet: time the lyrics first (Lyrics Sync).");
   const byKey = new Map(cues.segments.map((s) => [s.key, s] as const));
   const segments: ScriptSegment[] = chosen.map((s) => ({ ...s, cue: cueText(byKey.get(s.key)?.cue ?? null) }));

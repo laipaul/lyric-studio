@@ -116,7 +116,11 @@ export async function musicCues(ws: Workspace, projectId: string, o: { fresh?: b
     .update(JSON.stringify({ songHash, vocal: vocal ? `${vocal}:${statSync(vocal).size}:${statSync(vocal).mtimeMs}` : null, segments: segments.map((s) => [s.key, s.startMs, s.endMs]), stems: o.stems ?? "auto", engine: 1 }))
     .digest("hex");
   const cached = readMusicCues(paths.root);
-  if (!o.fresh && cached?.key === key) return cached;
+  if (!o.fresh && cached?.key === key) {
+    // The measures stay; the sections and the words may have changed since (they are not part of the key).
+    const fresh = new Map(segments.map((s) => [s.key, s] as const));
+    return { ...cached, segments: cached.segments.map((c) => { const f = fresh.get(c.key); return f ? { ...c, section: f.section, sectionKind: f.sectionKind, text: f.text } : c; }) };
+  }
   const tmp = path.join(os.tmpdir(), `lyric-segments-${process.pid}-${Date.now()}.json`);
   writeFileSync(tmp, JSON.stringify(segments.map((s) => ({ key: s.key, start_ms: s.startMs, end_ms: s.endMs, sung: s.kind === "line" }))));
   try {

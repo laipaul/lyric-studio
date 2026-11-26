@@ -56,6 +56,10 @@ not understand the lyrics: the feeling must come from the start image and the pr
   - The Persona's long fields **wrap and grow** with the text (no more text cut off at the box's edge).
   - **Sections in Lyrics Sync for every song style** (before: Mini film only), since the Persona's section map and the
     Performance script use them on Reels too.
+  - Fix: **Copy script request** showed the OLD sections after they were changed in Lyrics Sync (the cached music
+    analysis kept the section names it was made with). The request now always takes the song's current sections and
+    words; the analysis is kept (sections do not change the audio measures). Done by a Sonnet helper, checked: its
+    regression test fails on the old code.
   - Script panel: **Mark all checked** (stale lines wait for a look) and **Untick all**. "Checked" stays your review
     marker only (Paul, option 1): every fresh line's direction is used in shot prompts, ticked or not.
 - **To validate on your songs** (point 2): `pnpm music:cues "<ballad title>"` and `pnpm music:cues "<build/drop song>"`,
