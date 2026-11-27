@@ -15,8 +15,8 @@ top of Creation (drop a file anywhere on the page outside a shot's box). Now:
   on its lines).
 - **Lyrics Sync:** each line shows its music-video shots (★ the app's pick, why in plain words, "Use on this line"),
   and **Use the best for every line** sits above the lines (it replaces the Best shot panel that was in Creation).
-  Lines you set yourself, including a clip you put on a line, stay as they are; "Use on this line" still lets you put a
-  shot there.
+  A Lyrics Sync singing take or a shot you picked stays as it is; a story clip shown on a line gives way to the best
+  singing shot (Paul: "Yes, replace them"; the clip stays in the Storyboard).
 
 ### Best shot for each line across music videos ✅ (to verify on the PC)
 Paul, 27 Nov 2026: "yes". Make two or three music videos of the same stretch (other pictures or words): each sung line

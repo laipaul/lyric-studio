@@ -13,6 +13,7 @@ import { addPictures, readPictures } from "../src/node/animate";
 import type { FaceTool } from "../src/node/characters/face";
 import { analyseMusicVideo, useMusicVideoShot } from "../src/node/music-video";
 import { bestShotsView, useBestShots } from "../src/node/mv-best";
+import { saveAnchors } from "../src/node/lyrics-view";
 import { fakeAlign, ffmpeg, LYRICS } from "./media-helpers";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-mvbest-"));
@@ -65,6 +66,17 @@ describe("best shot for each line across music videos", () => {
     expect(v.unchecked).toBe(4);
     expect(v.rows.length).toBeGreaterThan(0);
     expect(v.rows.every((r) => r.pick && r.others.length >= 1)).toBe(true);
+  });
+
+  it("a story clip on a line gives way to the best singing shot; a Lyrics Sync singing take stays", async () => {
+    const v = (await bestShotsView(ws, id))!;
+    const [a, b] = [v.rows[0].first, v.rows[v.rows.length - 1].first];
+    saveAnchors(ws, id, [{ line: a, clip: "my story clip.mp4" }, { line: b, clip: "my singing take.mp4", sync: 1 }]);
+    const after = (await bestShotsView(ws, id))!;
+    expect(after.locked[a]).toBeUndefined();
+    expect(after.locked[b]).toBe("own");
+    expect(after.rows.find((r) => r.first === a)?.pick).not.toBeNull();
+    saveAnchors(ws, id, []);
   });
 
   it("Use the best for every line: cut, checked, the bad face left out, placed in time, never overlapping", async () => {

@@ -66,11 +66,14 @@ async function gather(ws: Workspace, projectId: string): Promise<Gathered | null
       });
     });
   }
-  // The lines Paul set himself: any anchor that is not a music-video shot the app placed.
+  // The lines Paul set himself: a singing take on its lines (Lyrics Sync) or a music-video shot he picked. A story clip
+  // shown on a line (no singing) gives way to the best singing shot (27 Nov 2026, Paul: "Yes, replace them"); it stays
+  // in the Storyboard.
   const locked = new Map<number, "own" | "hand">();
   for (const a of readRecipe(songPathsById(ws, projectId).recipe).anchors ?? []) {
     const t = mvClips.get(a.clip.toLowerCase());
     if (t && !t.handPicked) continue;
+    if (!t && a.sync === undefined) continue;
     for (let n = a.line; n <= (a.through ?? a.line); n++) locked.set(n, t ? "hand" : "own");
   }
   return { lines, candidates, locked, videos: videos.map(([file, r]) => ({ file, label: r.label ?? file.replace(/\.[^.]+$/, ""), url: `${path.relative(ws.dir, dir).split(path.sep).join("/")}/${file}`, offsetMs: r.mv!.offsetMs })), unchecked };
