@@ -12,7 +12,7 @@
 // effect with a live preview (saved in textboard.json), save the design as a template or apply one.
 // Pictures: the same textboard over another clip set; an anchor whose clip is missing is a slot.
 import { Player, type PlayerRef } from "@remotion/player";
-import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2, MoveHorizontal, Pencil, Redo2, RefreshCw, Repeat, RotateCcw, Star, Type, Undo2, X } from "lucide-react";
+import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2, Mic, MoveHorizontal, Pencil, Redo2, RefreshCw, Repeat, RotateCcw, Star, Type, Undo2, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 
@@ -20,6 +20,7 @@ import { clockTenths, type TimelineEdits, EFFECT_NAMES, effectTitle, followScrol
 import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node";
 import { tryName } from "@lyric/video/video-names";
 import { ClipMenu } from "./clip-menu";
+import { BrollHere } from "./shape-broll";
 import { SongRange, SongTrackBehind, SongWindow, type SongWindowDrag } from "./soundtrack-window";
 import { useTimelineEditing, ViewerFrame } from "./timeline-editing"; // types only (erased): the data comes from /api/songs/[id]/storyboard
 
@@ -1520,6 +1521,12 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
               <span className="bg-border hidden h-6 w-px sm:block" />
               <TransportBar player={player} frame={frame} playing={playing} songStartMs={songStart} durationInFrames={props.durationInFrames} barFrames={barFrames} rate={rate} onRate={setRate} loop={loop} onLoop={setLoop} />
               <span className="bg-border hidden h-6 w-px sm:block" />
+              {source?.kind === "plan" ? (
+                <>
+                  <BrollHere view={view} playheadMs={playhead} busy={saving || loading} edit={edit} onDone={(text) => setNotice(text)} />
+                  <span className="bg-border hidden h-6 w-px sm:block" />
+                </>
+              ) : null}
               {view.song ? (
                 <>
                   <SongRange song={view.song} window={{ startMs: view.songStartMs, endMs: view.songStartMs + view.durationMs }} drag={songDrag} platformLabel={view.platform.label} editable={view.editable && source?.kind === "plan"} busy={saving || loading} onAutomatic={() => void setSection("auto")} />
@@ -1612,6 +1619,16 @@ function ShotBlock({
       title={`${s.clip} · ${secs(s.endMs - s.startMs)}${slippable ? "\nDrag sideways to slip: another part of the clip in the same shot. Drag the line between two shots to move the cut." : ""}${editable ? "\nDrag it up to lift it, then onto another clip to swap the two." : ""}${s.warnings.length ? `\n${s.warnings.join("\n")}` : ""}`}
     >
       <div className="absolute top-0 right-0 left-0 flex flex-wrap gap-0.5 p-0.5 pr-6 drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">
+        {/* What the viewer sees (27 Nov 2026): the singer, lips in time with the song, or B-roll. */}
+        {s.role === "singing" ? (
+          <span className="flex items-center gap-0.5 rounded bg-emerald-600/85 px-0.5" data-badge="singing" title="Singing · in sync with the song">
+            <Mic className="size-2.5" /> Singing · in sync
+          </span>
+        ) : s.role === "broll" ? (
+          <span className="rounded bg-black/60 px-0.5" data-badge="broll">
+            B-roll
+          </span>
+        ) : null}
         {s.anchor ? (
           <span className="bg-brand/80 flex items-center rounded px-0.5" data-badge="anchor">
             <Anchor className="size-2.5" />

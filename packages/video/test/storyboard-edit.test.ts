@@ -106,6 +106,21 @@ describe("storyboard stage 2", () => {
     expect(existsSync(song)).toBe(true);
   }, 300_000);
 
+  it("B-roll here (27 Nov 2026): an insert is saved in clips.json, shown in the plan on the beat, its end moved, taken out; preview = Make", async () => {
+    storyboardEdit(ws, id, { action: "broll", kind: "insert", from: 6.1, to: 8.2, clip: "04_d.mp4" });
+    expect(readClipEdits(songRoot).inserts).toEqual([{ from: 6.1, to: 8.2, clip: "04_d.mp4" }]);
+    const plan = await storyboardPlan(ws, id, "reels", "v1");
+    const ins = plan.shots.find((s) => s.clip === "04_d.mp4" && Math.abs(s.songMs - 6100) < 800);
+    expect(ins?.role).toBe("broll");
+    expect(plan.broll?.inserts).toEqual([{ from: 6.1, to: 8.2, clip: "04_d.mp4" }]);
+    expect((await rendered()).shots).toEqual(plan.props.shots);
+    storyboardEdit(ws, id, { action: "broll-end", kind: "insert", from: 6.1, to: 9 });
+    expect(readClipEdits(songRoot).inserts?.[0].to).toBe(9);
+    storyboardEdit(ws, id, { action: "broll-remove", kind: "insert", from: 6.1 });
+    expect(readClipEdits(songRoot).inserts).toBeUndefined();
+    expect(() => storyboardEdit(ws, id, { action: "broll", kind: "cutaway", from: 6, to: 8, clip: "04_d.mp4" })).toThrow(/No singing take plays there/);
+  }, 300_000);
+
   it("lift a clip onto another shot: the two swap places, the cuts stay; doing it again gives it back", async () => {
     const before = await storyboardPlan(ws, id, "reels", "v1");
     const [first, , third] = before.shots;

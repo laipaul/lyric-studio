@@ -47,6 +47,9 @@ export type StoryboardView = {
   section: { mode: string; startMs: number; endMs: number; reason: string };
   songStartMs: number; // where the video's audio starts in the song: a moment in the video is this + its time
   timeline: TimelineEdits; // the song's rolls and slips (clips.json), song time: the Shape timeline marks them
+  // The B-roll laid over the edit (27 Nov 2026, Shape's B-roll here), song seconds: inserts (clips.json) and the singing
+  // takes' cut-aways (song.json anchors' hide, as song time).
+  broll?: { inserts: { from: number; to: number; clip: string }[]; cutaways: { from: number; to: number; clip: string; line: number }[] };
   // The whole song as the soundtrack track, with this video as a window on it (plans only; null for a past run).
   song: SongOverview | null;
   durationMs: number;
@@ -407,8 +410,15 @@ function settingsText(spec: { style: string; order: string; rate?: string; trans
 
 // The song's rolls and slips with the view (they live on the song's timeline, in clips.json).
 function withTimeline(ws: Workspace, projectId: string, v: Omit<StoryboardView, "timeline" | "song">, song: SongOverview | null = null): StoryboardView {
-  const edits = readClipEdits(songPathsById(ws, projectId).root);
-  return { ...v, timeline: { cuts: edits.cuts ?? [], slips: edits.slips ?? [] }, song };
+  const paths = songPathsById(ws, projectId);
+  const edits = readClipEdits(paths.root);
+  let cutaways: NonNullable<StoryboardView["broll"]>["cutaways"] = [];
+  try {
+    cutaways = (paths.recipe ? (readRecipe(paths.recipe).anchors ?? []) : []).flatMap((a) => (a.sync === undefined ? [] : (a.hide ?? []).map((h) => ({ from: Math.round((a.sync! + h.from) * 100) / 100, to: Math.round((a.sync! + h.to) * 100) / 100, clip: h.clip, line: a.line }))));
+  } catch {
+    // no recipe: no cut-aways
+  }
+  return { ...v, timeline: { cuts: edits.cuts ?? [], slips: edits.slips ?? [] }, broll: { inserts: edits.inserts ?? [], cutaways }, song };
 }
 
 // The whole song for the timeline's song track: its waveform, bars, lines and clean ends, and whose the section is.

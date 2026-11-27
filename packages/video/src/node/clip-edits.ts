@@ -24,7 +24,8 @@ export const cleanLabel = (raw: unknown) => String(raw ?? "").replace(/\s+/g, " 
 // picked (11 Nov 2026): clips of a shared collection chosen one by one into the story line ({ "Flowers": ["03_rose.mp4"] });
 // "order" names them like the song's own clips, and holds "collection:Flowers" for a whole collection the app picks
 // from (one card in the story line: that collection's clips without a place of their own play there).
-export type ClipEdits = { order: string[]; clips: Record<string, ClipEdit>; cuts?: CutMove[]; slips?: Slip[]; picked?: Record<string, string[]> };
+export type Insert = { from: number; to: number; clip: string }; // song seconds: a B-roll clip over that stretch (Shape's "B-roll here", inserts.ts)
+export type ClipEdits = { order: string[]; clips: Record<string, ClipEdit>; cuts?: CutMove[]; slips?: Slip[]; inserts?: Insert[]; picked?: Record<string, string[]> };
 export const CARD_PREFIX = "collection:";
 export const cardKey = (collection: string) => `${CARD_PREFIX}${collection}`;
 export const cardOf = (entry: string): string | null => (entry.startsWith(CARD_PREFIX) ? entry.slice(CARD_PREFIX.length) : null);
@@ -36,6 +37,7 @@ const HELP =
   '"best" (the best moment, seconds; wins over the automatic one) and "transition" ("cut" or "dissolve": how the clip comes in; left out, the app chooses). ' +
   '"cuts": cuts moved on the Shape timeline (song seconds: the planned cut at "from" goes to "to", on the beat unless "free"). ' +
   '"slips": shots that play another part of their clip ("at": the shot\'s start in the song, "clip", "in": seconds into the clip). ' +
+  '"inserts": B-roll laid over a stretch of the edit (Shape\'s B-roll here: song seconds "from" / "to", "clip"; on the beat). ' +
   '"picked": clips of a shared collection put into the story line one by one ({ "Flowers": ["03_rose.mp4"] }); in "order", ' +
   '"collection:Flowers" is a whole collection the app picks from (its other clips play at that place).';
 
@@ -106,6 +108,11 @@ export function checkClipEdits(raw: unknown): { edits: ClipEdits; problems: stri
     const ok = Array.isArray(r.slips) && r.slips.every((x) => x && typeof x === "object" && typeof x.at === "number" && typeof x.clip === "string" && x.clip.trim() && typeof x.in === "number" && x.at >= 0 && x.in >= 0);
     if (ok) edits.slips = (r.slips as Slip[]).map((x) => ({ at: Math.round(x.at * 100) / 100, clip: x.clip, in: Math.round(x.in * 100) / 100 }));
     else problems.push('slips must be a list like [{ "at": 48.3, "clip": "06_rings.mp4", "in": 1.4 }]');
+  }
+  if (r.inserts !== undefined) {
+    const ok = Array.isArray(r.inserts) && r.inserts.every((x) => x && typeof x === "object" && typeof x.from === "number" && typeof x.to === "number" && x.from >= 0 && x.to > x.from && typeof x.clip === "string" && x.clip.trim());
+    if (ok) edits.inserts = (r.inserts as Insert[]).map((x) => ({ from: Math.round(x.from * 100) / 100, to: Math.round(x.to * 100) / 100, clip: x.clip })).sort((a, b) => a.from - b.from);
+    else problems.push('inserts must be a list like [{ "from": 48.3, "to": 50.2, "clip": "06_rings.mp4" }]');
   }
   if (r.picked !== undefined) {
     const ok = !!r.picked && typeof r.picked === "object" && !Array.isArray(r.picked) && Object.values(r.picked as Record<string, unknown>).every((v) => Array.isArray(v) && v.every((x) => typeof x === "string" && x.trim()));

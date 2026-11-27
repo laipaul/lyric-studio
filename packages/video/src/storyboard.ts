@@ -37,6 +37,9 @@ export type StoryShot = {
   speed: number;
   hold: boolean; // the clip runs out: its last frame is held
   anchor: { line: number; text: string } | null;
+  // What the viewer sees (27 Nov 2026, Shape's labels): the singer (a singing clip, lips in time with the song), B-roll,
+  // or an empty planned shot of a Mini film (its stand-in).
+  role: "singing" | "broll" | "empty";
   dissolve: boolean;
   dip: boolean; // a dip to black into this shot (automatic transitions)
   loop: boolean; // the Reels loop ending: the frames just before shot 1, so the video loops seamlessly
@@ -69,6 +72,7 @@ export function storyShots(
 ): StoryShot[] {
   const shots = props.shots;
   const usedAnchors = (anchors?.uses ?? []).filter((u) => u.used && u.shot !== null);
+  const singing = new Set((anchors?.uses ?? []).filter((u) => u.used && u.lipsync).map((u) => u.clip.toLowerCase()));
   return shots.map((s, i) => {
     const clip = clips.get(s.src);
     const name = clip?.name ?? s.src.split("/").pop() ?? s.src;
@@ -112,6 +116,7 @@ export function storyShots(
       speed: s.playbackRate,
       hold: s.holdLastFrame && held,
       anchor: a ? { line: a.line, text: a.text } : null,
+      role: singing.has(name.toLowerCase()) ? "singing" : / · no take yet$/.test(name) || /-standin-/.test(name) ? "empty" : "broll",
       dissolve: !!s.dissolve,
       dip: (props.dips ?? []).some((d) => d.frame === s.start),
       loop,

@@ -7,6 +7,7 @@ import { VIDEO } from "./config";
 import type { CutPlan } from "./cuts";
 import type { FontFileRef } from "./font-files";
 import { kenBurns } from "./photo";
+import { planInserts, type ResolvedInsert } from "./inserts";
 import { pinsToShots, type ResolvedPin } from "./pins";
 import { DEFAULT_FORMAT, DEFAULT_SAFE_ZONE, lyricArea, type Format, type SafeZone } from "./platform";
 import { areaForLayout, type TextLayout } from "./text-layout";
@@ -70,6 +71,8 @@ export type RenderBase = {
   // A Mini film (node/film-plan.ts): the clip of every shot, in order (the plan's cuts are the film's shots). Each take
   // plays once on its own shot; no variation changes the cuts and nothing fills a shot with another clip.
   filmShots?: string[];
+  // B-roll inserts (inserts.ts; clips.json "inserts", Shape's "B-roll here" → Insert at playhead): a clip over a stretch.
+  inserts?: ResolvedInsert[];
   clips: PreparedClip[];
   audio: LyricVideoProps["audio"];
   durationInFrames: number;
@@ -210,15 +213,39 @@ export function composeProps(
 
   // Story anchors: their cuts go into the plan (they win over the regular cut rate).
   // (With the lines' sung ends: an anchor holds until its line is sung, also without lyric effects.)
-  const anchorPlan =
+  let anchorPlan =
     base.anchors?.length && base.beats && base.clips.length
       ? planAnchors(plan, base.beats, base.anchors, lyricFrames(base, choices.leadMs ?? DEFAULT_LEAD_MS, choices.lyricsOffsetMs ?? 0, true, choices.effects?.gap))
       : null;
   if (anchorPlan) plan = anchorPlan.plan;
   // The user's rolls last: a cut moved by hand is final, also an anchor's (the cuts the user saw are matched).
   if (base.timeline?.cuts.length && base.beats?.length) plan = applyCutMoves(plan, base.beats, base.timeline.cuts).plan;
+  // B-roll inserts last (27 Nov 2026): over the edit as it stands, never over a singing shot; the anchors' shots keep
+  // their clips by time.
+  let insertShots = new Map<number, ResolvedInsert>();
+  const insertNotes: string[] = [];
+  if (base.inserts?.length && base.beats?.length && base.clips.length) {
+    const b0 = [plan.start_frame, ...plan.cuts.map((c) => c.frame)];
+    const shotsBefore = [...(anchorPlan?.shots ?? [])];
+    const protect = shotsBefore.filter(([, a]) => a.syncMs != null).map(([i]) => ({ from: b0[i], to: b0[i + 1] ?? plan.end_frame }));
+    const r = planInserts(plan, base.beats, base.inserts, protect);
+    plan = r.plan;
+    insertShots = r.shots;
+    insertNotes.push(...r.notes);
+    if (anchorPlan) {
+      const b1 = [plan.start_frame, ...plan.cuts.map((c) => c.frame)];
+      const at = (i: number | null) => (i === null ? null : b1.indexOf(b0[i]) >= 0 ? b1.indexOf(b0[i]) : null);
+      anchorPlan = {
+        ...anchorPlan,
+        plan,
+        shots: new Map(shotsBefore.flatMap(([i, a]) => (at(i) === null ? [] : [[at(i)!, a] as [number, ResolvedAnchor]]))),
+        uses: anchorPlan.uses.map((u) => (u.shot === null ? u : { ...u, shot: at(u.shot) })),
+      };
+    }
+  }
   const bounds = [0, ...plan.cuts.map((c) => c.frame - plan.start_frame), base.durationInFrames];
   const { byShot, warnings } = pinsToShots(base.pins, allLines, bounds);
+  warnings.push(...insertNotes);
   if (base.filmShots) {
     // Each shot shows the film shot playing at its start (by time: a singing clip on its lines, an anchor, splits the
     // film's shots and plays over them, in time with the song; 27 Nov 2026).
@@ -257,6 +284,14 @@ export function composeProps(
     }
   }
 
+  const insertIdx = new Set<number>();
+  for (const [frame, ins] of insertShots) {
+    const i = bounds.indexOf(frame - plan.start_frame);
+    if (i < 0) continue;
+    byShot.set(i, ins.clipId);
+    insertIdx.add(i);
+  }
+
   // The user's slips: that shot plays another part of its clip. The story order decides which clip plays
   // in a shot, so a slip counts only while the order still puts the slip's clip there (the order changed in
   // Prepare or Shape: the slip is left aside). On an anchored shot only with the anchor's own clip.
@@ -272,6 +307,7 @@ export function composeProps(
   }
 
   const byId = new Map(base.clips.map((c) => [c.id, c]));
+  const byIdOf = (id: string) => byId.get(id);
   // No clips (YouTube cover / stills layouts): no shots; the background comes from other props.
   const assignWith = (pins: typeof byShot, starts: typeof clipStarts) => assignClips(
     plan,
@@ -281,9 +317,22 @@ export function composeProps(
       ...(c.speed !== undefined ? { speed: c.speed } : {}), ...(c.best_ms !== undefined ? { best_ms: c.best_ms } : {}), ...(c.best_from === "clip editor" ? { best_user: true } : {}),
     })),
     choices.seed,
-    { order: choices.order ?? "story", pins, loopEnding: platform.loopEnding, clipStarts: starts, ...(choices.moment ? { moment: choices.moment } : {}), anchored: new Set(anchorPlan?.shots.keys() ?? []), exact, anchorOnly },
+    { order: choices.order ?? "story", pins, loopEnding: platform.loopEnding, clipStarts: starts, ...(choices.moment ? { moment: choices.moment } : {}), anchored: new Set([...(anchorPlan?.shots.keys() ?? []), ...insertIdx]), exact, anchorOnly },
   );
   let assigned = !base.clips.length ? [] : assignWith(byShot, clipStarts);
+  // After a B-roll insert the shot it interrupted plays on, as if the insert were laid over it (a pro's cut-away).
+  const playOn = () => {
+    for (const k of insertIdx) {
+      const before = assigned[k - 1];
+      const after = assigned[k + 1];
+      const insert = assigned[k];
+      if (!before || !after || !insert || before.clip_id !== after.clip_id || exact.has(k + 1)) continue;
+      const clip = byIdOf(after.clip_id);
+      if (!clip || clip.kind === "photo") continue;
+      const from = before.clip_start_frame + Math.round((before.duration_frames + insert.duration_frames) * before.playback_rate);
+      if (from + after.duration_frames * after.playback_rate <= clip.durationFrames) assigned[k + 1] = { ...after, clip_start_frame: from };
+    }
+  };
   if (slips.length && assigned.length) {
     const kept = slips.filter((x) => assigned[x.shot]?.clip_id === x.clipId);
     if (kept.length) {
@@ -296,6 +345,7 @@ export function composeProps(
       assigned = assignWith(pins, starts);
     }
   }
+  playOn();
   // Photo moves are seeded per shot, so they do not depend on the other clips.
   const motionFor = (index: number) => kenBurns(mulberry32((choices.seed * 7919 + index * 104_729 + 17) >>> 0));
   const shots = assigned.map((s, index) => {

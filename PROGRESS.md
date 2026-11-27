@@ -4,6 +4,17 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Shape: Singing / B-roll labels and "B-roll here" ✅ (to verify on the PC)
+Paul, 27 Nov 2026: "build it" (after asking how pros work). Lyrics Sync is where the singing is aligned; Shape is where
+you decide what the viewer sees, while listening.
+- Every shot on Shape's timeline says **Singing · in sync** or **B-roll** (empty planned shots: "no take yet").
+- **B-roll here**, by the play buttons, for the shot under the playhead: on B-roll, **Insert at playhead** (about a bar,
+  the shot plays on after it from where it was) or **Replace this shot**; on the singer, **Cut away to B-roll** (she
+  comes back in time); on an empty planned shot, **Fill this shot**. Then pick a clip.
+- On B-roll already there: − / + moves its end a beat, **Take out** removes it. Starts and ends land on the beat.
+- Saved in the same edit Make uses (clips.json "inserts", the take's cut-aways): what Shape shows is what you get.
+- A film only uses clips of its own shape: the Film 16:9 has no B-roll until you add 16:9 clips (the picker says so).
+
 ### Synced is not "in the video": honest labels ✅ (to verify on the PC)
 Paul, 27 Nov 2026: "build fix 1", and "are we not mixing two things: lip sync no singer and show clip no singing".
 - Lyrics Sync has two parts (Paul: "only 2 parts: singing clip and no singing, the B-roll"): **Singing (lips in time)**

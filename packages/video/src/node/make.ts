@@ -1553,6 +1553,15 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   const base: RenderBase = {
     plan,
     ...(filmShots ? { filmShots } : {}),
+    // B-roll inserts (clips.json "inserts", Shape's B-roll here): each over its stretch of the song, in every video covering it.
+    ...(usesClips && !canvas && edits.inserts?.length ? { inserts: edits.inserts.flatMap((x) => {
+      const clip = usedClips.find((c) => c.name.toLowerCase() === x.clip.toLowerCase());
+      if (!clip) {
+        warnings.push(`${preset.name}: B-roll ${x.clip} at ${x.from.toFixed(1)}–${x.to.toFixed(1)} s is not among this video's clips (set to Omit, removed, or of the other shape)`);
+        return [];
+      }
+      return [{ fromMs: Math.round(x.from * 1000), toMs: Math.round(x.to * 1000), clipId: clip.id, clipName: clip.name }];
+    }) } : {}),
     clips: usesClips ? usedClips : [],
     audio: preset.audio ? audio : null,
     durationInFrames: plan.end_frame - plan.start_frame,

@@ -24,8 +24,13 @@ export type StoryboardEdit =
   | { action: "roll"; move: CutMove; slips?: Slip[] }
   | { action: "slip"; slip: Slip }
   | { action: "timeline-reset"; startMs: number; endMs: number }
-  | { action: "timeline"; timeline: TimelineEdits };
-export const STORYBOARD_ACTIONS = ["order", "swap", "clip", "omit", "anchor", "unanchor", "canvas", "roll", "slip", "timeline-reset", "timeline"] as const;
+  | { action: "timeline"; timeline: TimelineEdits }
+  // "B-roll here" (27 Nov 2026): a B-roll clip laid over a stretch (song seconds) of a B-roll shot, or over a singing
+  // shot as its cut-away (the take's "hide": the singer comes back in time); "end" moves its end; "remove" takes it out.
+  | { action: "broll"; kind: "insert" | "cutaway"; from: number; to: number; clip: string }
+  | { action: "broll-end"; kind: "insert" | "cutaway"; from: number; to: number }
+  | { action: "broll-remove"; kind: "insert" | "cutaway"; from: number };
+export const STORYBOARD_ACTIONS = ["order", "swap", "clip", "omit", "anchor", "unanchor", "canvas", "roll", "slip", "timeline-reset", "timeline", "broll", "broll-end", "broll-remove"] as const;
 
 // before / after: the timeline edits around a timeline action, for Undo / Redo.
 export type StoryboardEditResult = { edits: ClipEdits; anchors: AnchorSpec[]; before?: TimelineEdits; after?: TimelineEdits };
@@ -79,6 +84,42 @@ export function storyboardEdit(ws: Workspace, projectId: string, e: StoryboardEd
       : { cuts: e.timeline?.cuts ?? [], slips: e.timeline?.slips ?? [] };
     edits = writeClipEdits(paths.root, { ...edits, cuts: after.cuts, slips: after.slips });
     return { edits, anchors, before, after: { cuts: edits.cuts ?? [], slips: edits.slips ?? [] } };
+  } else if (e.action === "broll" || e.action === "broll-end" || e.action === "broll-remove") {
+    const from = Number(e.from);
+    if (!Number.isFinite(from) || from < 0) throw new Error("Where in the song?");
+    const to = "to" in e ? Number(e.to) : NaN;
+    if (e.action !== "broll-remove" && (!Number.isFinite(to) || to <= from + 0.2)) throw new Error("The B-roll needs an end after its start.");
+    if (e.action === "broll" && (typeof e.clip !== "string" || !e.clip.trim())) throw new Error("Which clip?");
+    const near = (a: number, b: number) => Math.abs(a - b) < 0.35;
+    if (e.kind === "insert") {
+      const list = edits.inserts ?? [];
+      const others = list.filter((x) => !near(x.from, from));
+      const before = list.find((x) => near(x.from, from));
+      const next =
+        e.action === "broll" ? [...others.filter((x) => !(from < x.to && x.from < to)), { from, to, clip: e.clip }]
+        : e.action === "broll-end" ? (before ? [...others, { ...before, to }] : list)
+        : others;
+      edits = writeClipEdits(paths.root, { ...edits, inserts: next.length ? next : undefined });
+    } else {
+      // The singing take playing at `from`: the latest singing anchor that starts by then.
+      const sung = anchors.filter((a) => a.sync !== undefined && a.sync <= from + 0.01).sort((a, b) => b.sync! - a.sync!)[0];
+      if (!sung) throw new Error("No singing take plays there: use Insert at playhead instead.");
+      const at = Math.round((from - sung.sync!) * 100) / 100;
+      const hide = [...(sung.hide ?? [])];
+      const k = hide.findIndex((h) => near(h.from, at));
+      if (e.action === "broll") {
+        const end = Math.round((to - sung.sync!) * 100) / 100;
+        const kept = hide.filter((h) => !(at < h.to && h.from < end));
+        kept.push({ from: at, to: end, clip: e.clip });
+        sung.hide = kept.sort((x, y) => x.from - y.from);
+      } else if (k >= 0) {
+        if (e.action === "broll-end") hide[k] = { ...hide[k], to: Math.round((to - sung.sync!) * 100) / 100 };
+        else hide.splice(k, 1);
+        sung.hide = hide.length ? hide : undefined;
+      }
+      if (!sung.hide?.length) delete sung.hide;
+      anchors = saveAnchors(ws, projectId, anchors);
+    }
   } else {
     throw new Error("Unknown shot plan edit.");
   }
