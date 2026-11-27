@@ -314,6 +314,9 @@ async function context(ws: Workspace, projectId: string): Promise<Ctx> {
   };
 }
 
+// The song's file, lines (shown time, sung end) and downbeats, as the Singer reads them (music-video.ts too).
+export const singerContext = (ws: Workspace, projectId: string) => context(ws, projectId);
+
 // Every singing take of a group: the same picture or video, the same first and last line (oldest first).
 function groupTakes(dir: string, source: string, first: number, last: number): Take[] {
   const rec = readPictures(dir).pictures[source];

@@ -4,6 +4,22 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Music videos made elsewhere: their shots on their lines, in time ✅ (to verify on the PC)
+Paul, 27 Nov 2026: WaveSpeed's Music Video Generator made "the same bride singing in different scenes and camera
+angles", lips in time ("the lip sync on this 13 s song extract is very good"). Now in Prepare → Creation, on a video:
+- **"This is a music video of this song"**: the app matches the video's sound against the song file (only read) and
+  finds where it sits in the song, to the sample (checked on Paul's two test videos: the whole song at 0:00, and a
+  13 s extract of Here With Me at 1:01.9, both a perfect match, no drift), then finds its shots (the generator's very
+  short crossfades: 37 shots in the 3:52 test video, 4 in the extract).
+- Each shot shows its song time and its lines; **Use on its lines** cuts it out (without sound) as a singing take of
+  the video and puts it on its lines, locked to the song, exactly like a Lyrics Sync singing take (face check after,
+  local and free). A shot with no sung line: **Send to Storyboard**. **Use every singing shot** does all of them.
+- A video whose sound is not this song says so in plain words and stays an ordinary video.
+- The video's own sound is never kept; the video's audio stays the song. What it cost on WaveSpeed is shown as an
+  estimate ($0.03/s at 480p, $0.06/s at 720p).
+- Known limits: below 720p the shots are soft on a 1080p video (said on the tile); no upscale button for these shots
+  yet; the app does not yet send the request to WaveSpeed itself (Paul makes the video on wavespeed.ai).
+
 ### MAGI-2 as an Animate model ✅ (to verify on the PC)
 Paul, 27 Nov 2026: "add magi-2". WaveSpeed's **MAGI-2 1080p** (sand-ai/magi-2/image-to-video) is a fourth WaveSpeed
 choice in Creation → Model (your defaults and each picture's own Model). The picture is the first frame and its shape

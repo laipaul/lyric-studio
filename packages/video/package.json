@@ -119,6 +119,8 @@
     "./performance-script-node": "./src/node/performance-script.ts",
     "./animate": "./src/node/animate.ts",
     "./singer": "./src/node/singer.ts",
+    "./music-video": "./src/node/music-video.ts",
+    "./music-video-shots": "./src/music-video.ts",
     "./generate-tasks": "./src/node/generate-tasks.ts",
     "./take-facts": "./src/take-facts.ts",
     "./replaced-files": "./src/node/replaced-files.ts",

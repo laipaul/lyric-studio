@@ -12,6 +12,9 @@
 //   slot=<id>: the added pictures belong to that shot; { action: "shot", file, slot }: a picture belongs to a shot
 //   (slot null: to none); { action: "use-shot", file, n?, slot }: Use this take for that shot (its place and its line).
 // { action: "final", file, n }: Make final: draft take n upscaled to 1080p (final.ts), a new take right after it.
+// Music video made elsewhere (music-video.ts, 27 Nov 2026): { action: "mv-check", file }: "This is a music video of this
+//   song" (its place in the song, its shots); { action: "mv-use", file, shot }: that shot on its lines, in time (or to the
+//   Storyboard when it carries no sung line); { action: "mv-use-all", file }: every shot that carries sung lines.
 // { action: "remove-picture", file }: Put aside (to pictures\_removed\, Restore); { action: "restore-picture", file }.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -23,6 +26,7 @@ import { REFERENCE_MODEL } from "@lyric/video/animate";
 import { addFromLink, addPictures, picturesView, removePicture, removeTakes, restorePicture, restoreTake, setFavourite, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, setPictureFeeling, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
 import { runFinal, startFinal } from "@lyric/video/final";
 import { runSinging, withSongStarts } from "@lyric/video/singer";
+import { analyseMusicVideo, checkMusicVideoShots, useAllMusicVideoShots, useMusicVideoShot, withMusicVideos } from "@lyric/video/music-video";
 import { placeByName, placeDropped, productionView, setPictureShot, useForShot, withLineStarts } from "@lyric/video/shot-production";
 import { timedLines } from "@lyric/video/production";
 import { referencePreview, startShotReferences } from "@lyric/video/shot-references";
@@ -45,7 +49,7 @@ export async function GET(_request: Request, { params }: Params) {
     // Each finished take with the song second its first frame belongs to (Creation plays it with the song).
     return Response.json(
       await withWorkspaceAsync(async (ws) => {
-        const board = await withSongStarts(ws, id, await picturesView(ws, id));
+        const board = await withMusicVideos(ws, id, await withSongStarts(ws, id, await picturesView(ws, id)));
         let production = null;
         try {
           production = productionView(ws, id);
@@ -150,6 +154,12 @@ export async function POST(request: Request, { params }: Params) {
     if (body.action === "send") {
       const n = body.n === undefined || body.n === null ? null : Number(body.n);
       return Response.json(await withWorkspaceAsync((ws) => sendToStoryboard(ws, id, file, n, { forLine: (body as { forLine?: unknown }).forLine === true })));
+    }
+    if (body.action === "mv-check") return Response.json({ mv: await withWorkspaceAsync((ws) => analyseMusicVideo(ws, id, file)) });
+    if (body.action === "mv-use" || body.action === "mv-use-all") {
+      const used = await withWorkspaceAsync(async (ws) => (body.action === "mv-use" ? [await useMusicVideoShot(ws, id, file, (body as { shot?: unknown }).shot)] : (await useAllMusicVideoShots(ws, id, file)).used));
+      void checkMusicVideoShots(open, id, path.basename(file)); // the face check of each singing shot (local, free), after the answer
+      return Response.json({ used });
     }
     if (body.action === "remove-picture") return Response.json(withWorkspace((ws) => removePicture(ws, id, file)));
     if (body.action === "restore-picture") return Response.json(withWorkspace((ws) => restorePicture(ws, id, file)));

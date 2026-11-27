@@ -155,18 +155,19 @@ export type Take = {
   aspect?: "9:16" | "16:9"; // references: the shape asked for
   guideFile?: string; // references: the camera guide video sent as @Video 1 (workspace-relative), e.g. a Midjourney take
   guideName?: string; // and its name as shown on the shot
+  mvShot?: number; // a shot of a music video made elsewhere (music-video.ts): its number (0-based) in the video's mv.shots
 };
 // removedTakes: takes put aside by Clean up / Remove (their files in pictures\takes\_removed\), with Restore; nothing is
 // ever deleted. Every screen reads `takes` only, so they are out of sight; take numbers keep counting past them.
 export type RemovedTake = Take & { removed_at: string };
 // removed: the picture put aside (Creation ✕ → Put aside, 23 Nov 2026), its file moved to pictures\_removed\ (file:
 // that path); the record stays, so Restore brings it back with its takes, mood and shot. Nothing is ever deleted.
-export type PictureRecord = { removed?: { at: string; file: string }; slot?: string; label?: string; source?: string; mood?: string; feeling?: string; who?: string; fav?: boolean; takes: Take[]; removedTakes?: RemovedTake[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string }; // sent: the picture itself sent to the Storyboard (its clip name)
+export type PictureRecord = { removed?: { at: string; file: string }; slot?: string; label?: string; source?: string; mood?: string; feeling?: string; who?: string; fav?: boolean; takes: Take[]; removedTakes?: RemovedTake[]; upload?: { service: ServiceId; url: string; at: string }; sent?: string; mv?: import("../music-video").MusicVideoRecord }; // mv: "This is a music video of this song" (music-video.ts); sent: the picture itself sent to the Storyboard (its clip name)
 export type PicturesFile = { _help?: string; pictures: Record<string, PictureRecord> };
 // source: where it came from, a small label ("Added by you", "Midjourney", "From higgsfield.ai"). kind: only a picture can be animated.
 // cleanable: the takes Clean up would put aside (failed, or not chosen: not in use, on no line, not playing in the
 // Storyboard). removed: the takes put aside, newest first (Restore).
-export type PictureView = { file: string; mjLink: string | null; slot: string | null; label: string | null; url: string; kind: "picture" | "video"; source: string; mood: string; feeling: string; sectionFeeling: string | null; who: string | null; fav: boolean; cleanable: number[]; removed: { n: number; label: string; why: string; at: string }[]; takes: (Take & { inUse?: boolean; onLines?: string; songFromMs?: number; clipInS?: number; songWhy?: string })[]; width: number | null; height: number | null; sent: string | null };
+export type PictureView = { file: string; mjLink: string | null; slot: string | null; label: string | null; url: string; kind: "picture" | "video"; source: string; mood: string; feeling: string; sectionFeeling: string | null; who: string | null; fav: boolean; cleanable: number[]; removed: { n: number; label: string; why: string; at: string }[]; takes: (Take & { inUse?: boolean; onLines?: string; songFromMs?: number; clipInS?: number; songWhy?: string })[]; width: number | null; height: number | null; sent: string | null; mv?: import("../music-video").MvView };
 // Paul's own defaults for Animate (Creation → Defaults), for every song: the service and model, how many takes, the cap.
 export type CreationDefaults = { service: ServiceId; quality: Quality; takes: number; cap: number; length: TakeLength }; // length: "song" = one phrase of the song, "short" = 5 s
 export const CREATION_FILE = "creation.json"; // in the workspace folder

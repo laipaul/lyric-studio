@@ -16,6 +16,7 @@ import type { CreationDefaults, PictureView, PicturesView as BoardView, Quality,
 type PicturesView = BoardView & { characters?: { id: string; name: string }[]; faceUsdPerSecond?: number };
 import type { ProductionShot, ProductionView } from "@lyric/video/shot-production";
 
+import { MusicVideoPanel } from "@/components/music-video-panel";
 import { NameField } from "@/components/name-field";
 import { useGoToTab } from "@/components/song-stages";
 import { takeDetails, takeFacts, takeKind, takeTag } from "@lyric/video/take-facts";
@@ -1163,6 +1164,7 @@ function PictureTile({
           </button>
         )}
       </span>
+      {video && p.source !== "Character references" && !shot ? <MusicVideoPanel p={p} url={fileUrl(p.url)} post={post} reload={reload} setNotice={setNotice} play={(u, title) => play(u, title)} /> : null}
       {video || p.source === "Character references" ? null : (
         <>
           <div className="flex items-center gap-1.5 text-xs">
