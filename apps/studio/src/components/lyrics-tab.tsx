@@ -421,7 +421,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Confidence</th>
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Adjust</th>
                     {withSinging ? <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap" title="Who sings this line, lips in time with the song: a lip-sync take made here from a picture or video (InfiniteTalk), or a shot of your music video">Singing (lips in time)</th> : null}
-                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap min-w-36" title="What shows on the line: a story clip, or the singing clip chosen in the Singing column">Shows on the line</th>
+                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap min-w-36" title="The story clip (B-roll) on the line when nobody sings it; on a singing line, the B-roll it cuts away to">{withSinging ? "B-roll (no singing)" : "Shows clip"}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -434,6 +434,25 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                     const sungWith = anchor ? null : (data.anchors.list.find((a) => a.sync !== undefined && a.line < l.number && l.number <= (a.through ?? a.line)) ?? null);
                     const anchorClip = anchor ? data.anchors.clips.find((c) => c.name.toLowerCase() === anchor.clip.toLowerCase()) : undefined;
                     const problems = data.anchors.problems.filter((p) => p.line === l.number);
+                    // The clip on the line (27 Nov 2026, Paul: "only 2 parts: singing clip and no singing, the B-roll"): a singing clip shows in
+                    // the singing column, a story clip (B-roll) in the B-roll column.
+                    const anchorBlock = (
+anchor ? (
+                            <div className="flex max-w-56 min-w-0 items-center gap-2" data-anchor={anchor.clip}>
+                              <Thumb clip={anchorClip} />
+                              <div className="min-w-0 text-xs">
+                                <div className="truncate" title={anchor.clip}>{anchorClip?.label ?? anchor.clip}</div>
+                                <div className="text-muted-foreground">
+                                  {anchor.sync !== undefined ? "singing · in time with the song" : anchor.transition === "dissolve" ? "dissolve" : "cut"}
+                                  {anchor.clipIn ? ` · from ${anchor.clipIn} s` : ""}
+                                </div>
+                              </div>
+                              <button type="button" disabled={busy} onClick={() => saveAnchor(l.number, null)} className="text-muted-foreground hover:text-foreground shrink-0 rounded-md border p-0.5" aria-label={`Remove the anchor on line ${l.number}`} title={anchor.sync !== undefined ? "Take this singing clip off the line (it is set to Omit and stays in Creation and the Storyboard). Lip sync stays as it is: to stop the singer here, choose — no singer in Lip sync." : undefined} data-anchor-remove>
+                                <X className="size-3.5" />
+                              </button>
+                            </div>
+                          ) : null
+                    );
                     const sectionHere = withSections ? (sections.view?.sections.find((x) => x.line === l.number) ?? null) : null;
                     return (
                       <Fragment key={l.number}>
@@ -548,33 +567,21 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                         </td>
                         {withSinging ? (
                           <td className="px-3 py-2" data-singer-cell>
+                            {anchor?.sync !== undefined ? <div className="mb-1">{anchorBlock}</div> : null}
                             <SingerCell singer={singer} number={l.number} />
                             {/* Music-video shots sing too: they belong with the lip sync (27 Nov 2026, Paul: "are we not mixing two things"). */}
                             <LineMvShots mv={mvLines} line={l.number} />
                           </td>
                         ) : null}
                         <td className="w-60 max-w-60 min-w-36 px-3 py-2" data-anchor-cell>
-                          {anchor ? (
-                            <div className="flex max-w-56 min-w-0 items-center gap-2" data-anchor={anchor.clip}>
-                              <Thumb clip={anchorClip} />
-                              <div className="min-w-0 text-xs">
-                                <div className="truncate" title={anchor.clip}>{anchorClip?.label ?? anchor.clip}</div>
-                                <div className="text-muted-foreground">
-                                  {anchor.sync !== undefined ? "singing · in time with the song" : anchor.transition === "dissolve" ? "dissolve" : "cut"}
-                                  {anchor.clipIn ? ` · from ${anchor.clipIn} s` : ""}
-                                </div>
-                              </div>
-                              <button type="button" disabled={busy} onClick={() => saveAnchor(l.number, null)} className="text-muted-foreground hover:text-foreground shrink-0 rounded-md border p-0.5" aria-label={`Remove the anchor on line ${l.number}`} title={anchor.sync !== undefined ? "Take this singing clip off the line (it is set to Omit and stays in Creation and the Storyboard). Lip sync stays as it is: to stop the singer here, choose — no singer in Lip sync." : undefined} data-anchor-remove>
-                                <X className="size-3.5" />
-                              </button>
-                            </div>
-                          ) : null}
+                          {withSinging && anchor?.sync !== undefined ? null : anchorBlock}
                           {anchor && anchor.sync !== undefined ? (
                             <div className="mt-1 flex flex-col gap-0.5 text-[11px]" data-hides={anchor.hide?.length ?? 0}>
+                              {withSinging ? <span className="text-muted-foreground" data-broll-singer>The singer is on this line{anchor.hide?.length ? "; B-roll cuts away:" : "."}</span> : null}
                               {(anchor.hide ?? []).map((h, k) => (
                                 <div key={`${h.from}-${h.to}`} className="flex items-center gap-1" data-hide={`${h.from}-${h.to}`}>
                                   <span className="min-w-0 flex-1 truncate" title={`${h.from}–${h.to} s of the take: ${h.clip} shows meanwhile`}>
-                                    {h.from}–{h.to} s hidden by {data.anchors.clips.find((c) => c.name.toLowerCase() === h.clip.toLowerCase())?.label ?? h.clip}
+                                    {h.from}–{h.to} s of the take: B-roll {data.anchors.clips.find((c) => c.name.toLowerCase() === h.clip.toLowerCase())?.label ?? h.clip}
                                   </span>
                                   <button type="button" disabled={busy} onClick={() => void saveHide(l.number, { remove: k })} className="text-muted-foreground hover:text-foreground shrink-0 rounded p-0.5" aria-label={`Show the singer again at ${h.from}–${h.to} s`} data-hide-remove>
                                     <X className="size-3" />
@@ -582,8 +589,8 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                                 </div>
                               ))}
                               <div className="flex gap-1">
-                                <button type="button" disabled={busy} onClick={() => setHiding(l.number)} className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-md border px-2 py-0.5 whitespace-nowrap" title="A few seconds where the lips are off: another clip shows meanwhile; the song plays on and the singer comes back in time" data-hide-add>
-                                  <EyeOff className="size-3" /> Hide a moment
+                                <button type="button" disabled={busy} onClick={() => setHiding(l.number)} className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-md border px-2 py-0.5 whitespace-nowrap" title="A few seconds of B-roll inside the singing take (a reaction, a detail, or where the lips are off): the song plays on and the singer comes back in time" data-hide-add>
+                                  <EyeOff className="size-3" /> Cut away to B-roll
                                 </button>
                                 {anchor.hide?.length ? (
                                   <button type="button" onClick={() => setPreviewing(previewing === l.number ? null : l.number)} className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-md border px-2 py-0.5" title="Plays the take with the song, the hidden moments covered" data-hide-preview>
@@ -595,12 +602,12 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                           ) : null}
                           {sungWith ? (
                             <div className="text-muted-foreground text-[11px]" data-anchor-continues={sungWith.line}>
-                              the singer from line {sungWith.line} continues (one take)
+                              {withSinging ? `The singer from line ${sungWith.line} continues here (one take): B-roll cut-aways are set on line ${sungWith.line}.` : `the singer from line ${sungWith.line} continues (one take)`}
                             </div>
                           ) : null}
                           {withSinging ? null : <LineMvShots mv={mvLines} line={l.number} />}
                           <button type="button" disabled={busy} onClick={() => setPicking(picking === l.number ? null : l.number)} className="text-muted-foreground hover:text-foreground mt-1 flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] whitespace-nowrap" data-anchor-pick>
-                            <Clapperboard className="size-3" /> {anchor ? "Change" : "Show a clip"}
+                            <Clapperboard className="size-3" /> {!withSinging ? (anchor ? "Change" : "Show a clip") : anchor?.sync !== undefined || sungWith ? "B-roll instead of the singer…" : anchor ? "Change B-roll" : "Add B-roll"}
                           </button>
                           {problems.map((p) => (
                             <p key={p.problem} className="mt-1 flex items-start gap-1 text-[11px] text-amber-200" data-anchor-problem>

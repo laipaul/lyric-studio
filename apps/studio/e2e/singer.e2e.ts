@@ -207,7 +207,7 @@ async function main() {
     await page.click("[data-anchor-picker] [data-anchor-save]");
     await page.waitForSelector("tr[data-line='2'] [data-hide='1-2.5']", { timeout: 15_000 });
     const hidden = (JSON.parse(readFileSync(paths.recipe!, "utf8")) as { anchors?: { line: number; sync?: number; hide?: unknown[] }[] }).anchors?.find((x) => x.line === 2);
-    check(hidden?.sync !== undefined && JSON.stringify(hidden.hide) === JSON.stringify([{ from: 1, to: 2.5, clip: "01_hands.mp4" }]) && ((await page.textContent("tr[data-line='2'] [data-hide='1-2.5']")) ?? "").includes("hidden by"), `Hide a moment: 1-2.5 s of the singing take is saved on its anchor (song.json hide) and shown on the line (${JSON.stringify(hidden?.hide)})`);
+    check(hidden?.sync !== undefined && JSON.stringify(hidden.hide) === JSON.stringify([{ from: 1, to: 2.5, clip: "01_hands.mp4" }]) && ((await page.textContent("tr[data-line='2'] [data-hide='1-2.5']")) ?? "").includes("B-roll"), `Hide a moment: 1-2.5 s of the singing take is saved on its anchor (song.json hide) and shown on the line (${JSON.stringify(hidden?.hide)})`);
     await page.click("tr[data-line='2'] [data-hide-preview]");
     await page.waitForSelector("[data-hide-player] [data-hide-cover='0']", { state: "attached" });
     check((await page.$eval("[data-hide-player] [data-hide-cover='0']", (e: Element) => (e as HTMLVideoElement).src)).includes("01_hands.mp4"), "Preview plays the take with the song, the cover clip ready over the hidden moment");

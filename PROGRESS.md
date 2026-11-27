@@ -6,7 +6,9 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 
 ### Synced is not "in the video": honest labels ✅ (to verify on the PC)
 Paul, 27 Nov 2026: "build fix 1", and "are we not mixing two things: lip sync no singer and show clip no singing".
-- Lyrics Sync: the columns are now **Singing (lips in time)** and **Shows on the line**. The music-video shots sit in the
+- Lyrics Sync has two parts (Paul: "only 2 parts: singing clip and no singing, the B-roll"): **Singing (lips in time)**
+  holds the singing clip on the line and what can sing it; **B-roll (no singing)** holds the story clip, or on a singing
+  line its cut-aways (**Cut away to B-roll**, formerly Hide a moment). The music-video shots sit in the
   singing column, next to the lip-sync choice (which now says "— no lip-sync take made here" when none).
 - A shot on its line says **Synced**, not "In use". A 16:9 shot says "16:9 shot · only in your 16:9 videos (YouTube,
   Film 16:9)"; the music video's tile says it once, with "make it again at 9:16" for the other shape.
