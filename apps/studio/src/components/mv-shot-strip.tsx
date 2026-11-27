@@ -18,6 +18,8 @@ export type MvStripShot = {
   inUse: boolean;
   best?: boolean; // the app's pick for this line
   hd?: boolean;
+  note?: string | null; // e.g. "16:9: plays in your 16:9 videos (YouTube, Film 16:9) only"
+  usedWord?: string; // what "in use" means here (default "Synced": on its line, in time with the song)
 };
 
 // compact: the button under the words (a narrow column, Lyrics Sync).
@@ -45,7 +47,7 @@ export function MvShotStrip({
         data-mv-strip-used
         className="flex shrink-0 items-center gap-1 text-emerald-300"
       >
-        <Check className="size-3" /> In use
+        <Check className="size-3" /> {s.usedWord ?? "Synced"}
       </span>
     ) : (
       <button
@@ -129,6 +131,11 @@ export function MvShotStrip({
               >
                 {s.sub}
               </span>
+              {s.note ? (
+                <span data-mv-strip-note className="text-amber-200/90" title={s.note}>
+                  {s.note}
+                </span>
+              ) : null}
               {compact ? <span className="mt-0.5 flex">{use(s)}</span> : null}
             </span>
             {compact ? null : use(s)}

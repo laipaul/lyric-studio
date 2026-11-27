@@ -610,7 +610,7 @@ function SourcePicker({ sources, value, onChange, line }: { sources: SingerView[
     <div ref={box} className="relative">
       <button type="button" data-singer-source={line} aria-label={`Singer on line ${line}`} onClick={() => setOpen(!open)} className={cn("bg-background flex w-44 items-center gap-1.5 rounded-md border px-1 py-0.5 text-left", chosen && "border-brand/60")} title={chosen ? chosen.file : "Choose what the singer is sung from"}>
         {chosen ? <SourceThumb s={chosen} /> : null}
-        <span className={cn("truncate", !chosen && "text-muted-foreground")}>{chosen ? (chosen.label ?? chosen.file) : "— no singer"}</span>
+        <span className={cn("truncate", !chosen && "text-muted-foreground")}>{chosen ? (chosen.label ?? chosen.file) : "— no lip-sync take made here"}</span>
       </button>
       {open ? (
         <div data-singer-picker={line} className="bg-popover absolute right-0 z-30 mt-1 flex max-h-80 w-64 flex-col gap-1 overflow-auto rounded-lg border p-1.5 shadow-lg">

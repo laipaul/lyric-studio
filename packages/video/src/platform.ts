@@ -274,6 +274,16 @@ export function choosePlatforms(text: string | undefined, presets: Record<string
 // Can a source of this size fill the format by cover-cropping? Vertical outputs take vertical or
 // square sources (and horizontal ones only when at least twice the output height, so the crop still
 // has enough pixels); horizontal outputs the other way round. Otherwise "fill" with --allow-fill.
+// Which of the song's videos a clip of this shape plays in (27 Nov 2026, Paul: "In use should mean it actually appears in
+// the cut"): a landscape clip only in the 16:9 ones, a portrait clip only in the vertical ones, a square one in both
+// (sourceFit). null: it plays in both. Plain words for the screens.
+export function shapeOnly(width: number | null, height: number | null): { shape: "16:9" | "9:16"; playsIn: string; notIn: string } | null {
+  if (!width || !height || width === height) return null;
+  return width > height
+    ? { shape: "16:9", playsIn: "your 16:9 videos (YouTube, Film 16:9)", notIn: "the vertical ones (Reels, TikTok, Shorts, Film 9:16)" }
+    : { shape: "9:16", playsIn: "your vertical videos (Reels, TikTok, Shorts, Film 9:16)", notIn: "the 16:9 ones (YouTube, Film 16:9)" };
+}
+
 export function sourceFit(width: number, height: number, format: Format, allowFill: boolean): "cover" | "fill" | null {
   const vertical = format.height > format.width;
   const matches = vertical ? height >= width : width >= height;

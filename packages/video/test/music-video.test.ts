@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import { bestLag, detectCuts, EDGE_TRIM_MS, findInSong, linesOfShot, matchScore, mvShotsForPlanned, mvUsd, shotPiece, shotsFromCuts } from "../src/music-video";
+import { shapeOnly, sourceFit } from "../src/platform";
 
 // A song-like signal: noise shaped by a slowly changing loudness (seeded, the same every run).
 function song(seconds: number, rate: number, seed = 1): Float32Array {
@@ -108,5 +109,17 @@ describe("music-video shots next to the planned shots", () => {
     expect(mvShotsForPlanned({ line: null, span: { startMs: 0, endMs: 3000 } }, shots).map((s) => s.id)).toEqual(["a"]);
     expect(mvShotsForPlanned({ line: null, span: { startMs: 3500, endMs: 8000 } }, shots).map((s) => s.id)).toEqual(["b"]);
     expect(mvShotsForPlanned({ line: null, span: null }, shots)).toEqual([]);
+  });
+});
+
+describe("which videos a clip of this shape plays in", () => {
+  it("landscape only in the 16:9 videos, portrait only in the vertical ones, square in both", () => {
+    expect(shapeOnly(832, 464)).toMatchObject({ shape: "16:9", playsIn: "your 16:9 videos (YouTube, Film 16:9)" });
+    expect(shapeOnly(720, 1280)?.shape).toBe("9:16");
+    expect(shapeOnly(1080, 1080)).toBeNull();
+    expect(shapeOnly(null, 720)).toBeNull();
+    // The same rule as the clips each video uses.
+    expect(sourceFit(832, 464, { width: 1080, height: 1920 }, false)).toBeNull();
+    expect(sourceFit(832, 464, { width: 1920, height: 1080 }, false)).toBe("cover");
   });
 });

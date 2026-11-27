@@ -4,6 +4,15 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Synced is not "in the video": honest labels ✅ (to verify on the PC)
+Paul, 27 Nov 2026: "build fix 1", and "are we not mixing two things: lip sync no singer and show clip no singing".
+- Lyrics Sync: the columns are now **Singing (lips in time)** and **Shows on the line**. The music-video shots sit in the
+  singing column, next to the lip-sync choice (which now says "— no lip-sync take made here" when none).
+- A shot on its line says **Synced**, not "In use". A 16:9 shot says "16:9 shot · only in your 16:9 videos (YouTube,
+  Film 16:9)"; the music video's tile says it once, with "make it again at 9:16" for the other shape.
+- Shape: on the Film 9:16, a line whose singing shot is 16:9 says "16:9 shot: not in this video" on its dashed box,
+  with the full reason in its tooltip and the notes.
+
 ### Singing shots over the Mini film ✅ (to verify on the PC)
 Paul, 27 Nov 2026: "I don't see the singing clip on my video" → "yes over the film". A Mini film played only the planned
 shots and ignored everything placed on lyric lines, so singing takes and music-video shots never showed. Now a singing

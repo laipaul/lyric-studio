@@ -36,7 +36,7 @@ import { choiceText, parseEffectChoice, type EffectChoice } from "../effects";
 import { cleanLrc } from "../lrc";
 import { areaForLayout, BIG_HOOK_SCALE, type TextLayout } from "../text-layout";
 import { finalHookScales, type FinalHook, type LineBuild, type LineShape } from "../line-shape";
-import { choosePlatforms, platformsForStyle, lyricArea, parsePresets, sectionWindow, STANDARD, type LyricArea, type PlatformPreset } from "../platform";
+import { choosePlatforms, platformsForStyle, lyricArea, parsePresets, sectionWindow, shapeOnly, STANDARD, type LyricArea, type PlatformPreset } from "../platform";
 import { VIDEO } from "../config";
 import { getCutPoints, type CutRate, type Energy, type ShotLength } from "../cuts";
 import { bestMoments } from "./best-moment";
@@ -285,7 +285,7 @@ export type VideoPlan = {
 };
 export type PlatformPlan = {
   videos: VideoPlan[];
-  slots: { line: number; text: string; clip: string }[]; // anchors whose clip is not in this clip set: the line needs a clip
+  slots: { line: number; text: string; clip: string; why?: string }[]; // anchors whose clip is not in this clip set: the line needs a clip (why: e.g. the clip is of the other shape)
   loopSuggestions: LoopSuggestion[] | null; // loop platforms: target lengths with an end that loops well
   media: MediaRoots; // where the props' files are (for a preview)
   // The prepared clips (props' shot src), with the clip editor's edits and the best moment the planner used.
@@ -1465,7 +1465,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   // song's own and its collections). Never dropped silently: what is not found is said (QA too).
   const anchors: ResolvedAnchor[] = [];
   const anchorMissing: string[] = [];
-  const anchorSlots: { line: number; text: string; clip: string }[] = [];
+  const anchorSlots: { line: number; text: string; clip: string; why?: string }[] = [];
   if (usesClips && !canvas && preset.lyrics) {
     const stem = (n: string) => n.toLowerCase().replace(/\.[^.]+$/, "");
     for (const a of sh.anchors) {
@@ -1482,8 +1482,12 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
         anchorSlots.push({ line: a.line, text: lines[i].text, clip: a.clip });
       } else if (!clip) {
         // A slot: the line needs a clip (another clip set, or the clip was removed); refill it in the storyboard.
-        anchorMissing.push(`slot: line ${a.line} "${lines[i].text}" needs a clip (${a.clip} is not among this video's clips: ${sh.picture?.label ?? "the song's clips and its collections"}, ${prepared.kind} for ${preset.label})`);
-        anchorSlots.push({ line: a.line, text: lines[i].text, clip: a.clip });
+        // A clip of the other shape (e.g. a 16:9 music video in a vertical video) says so plainly (27 Nov 2026).
+        const src = sh.collection.sources.find((s) => s.name.toLowerCase() === a.clip.toLowerCase() || stem(s.name) === stem(a.clip));
+        const other = src && prepared.skipped.includes(src.name) ? shapeOnly(src.clip.width, src.clip.height) : null;
+        const why = other ? `its shot is ${other.shape}: it plays in ${other.playsIn}, not in this one (make it at ${prepared.kind === "vertical" ? "9:16" : "16:9"} for this video)` : null;
+        anchorMissing.push(why ? `slot: line ${a.line} "${lines[i].text}": ${why}` : `slot: line ${a.line} "${lines[i].text}" needs a clip (${a.clip} is not among this video's clips: ${sh.picture?.label ?? "the song's clips and its collections"}, ${prepared.kind} for ${preset.label})`);
+        anchorSlots.push({ line: a.line, text: lines[i].text, clip: a.clip, ...(why ? { why } : {}) });
       }
       else {
         // Hidden moments of a singing take (song.json "hide": seconds of the take): their cover clips among this video's.

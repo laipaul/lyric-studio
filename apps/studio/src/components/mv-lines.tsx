@@ -9,6 +9,7 @@
 import { ChevronDown, ChevronRight, Clapperboard, Loader2, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { shapeOnly } from "@lyric/video";
 import type { BestView } from "@lyric/video/mv-best";
 
 import { MvShotStrip, type MvStripShot } from "@/components/mv-shot-strip";
@@ -18,7 +19,12 @@ import { api } from "@/lib/api";
 
 const fileUrl = (rel: string) => `/api/files/${rel.split("/").map(encodeURIComponent).join("/")}`;
 const clock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
-const SHOWN = 3; // shots shown per line before "more"
+const SHOWN = 3;
+// "16:9: plays in your 16:9 videos (YouTube, Film 16:9), not in the vertical ones" (synced is not the same as in every video).
+export const shapeNote = (width: number | null, height: number | null) => {
+  const o = shapeOnly(width, height);
+  return o ? `${o.shape} shot · only in ${o.playsIn}` : null;
+}; // shots shown per line before "more"
 
 export type MvLines = {
   best: BestView | null;
@@ -134,6 +140,7 @@ export function LineMvShots({ mv, line }: { mv: MvLines; line: number }) {
         inUse: c.inUse,
         best: isPick(c) && here.length > 1,
         hd: c.resolution === "1080p",
+        note: shapeNote(v.width, v.height),
       },
     ];
   });

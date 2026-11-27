@@ -9,6 +9,7 @@ import { useState } from "react";
 
 import type { PictureView } from "@lyric/video/animate";
 
+import { shapeNote } from "@/components/mv-lines";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -66,6 +67,11 @@ export function MusicVideoPanel({ p, url, cap, post, reload, setNotice, play }: 
         <Clapperboard className="mr-1 inline size-3" />
         Music video · song {clock(mv.offsetMs)}–{clock(mv.offsetMs + mv.durationMs)} · {mv.shots.length} shots, {mv.singing} with singing{mv.usd !== null ? ` · about $${mv.usd.toFixed(2)} on WaveSpeed` : ""}
       </span>
+      {shapeNote(mv.width, mv.height) ? (
+        <span data-mv-shape className="text-amber-200/90">
+          {shapeNote(mv.width, mv.height)}. For the other shape, make it again at {mv.width! > mv.height! ? "9:16" : "16:9"}.
+        </span>
+      ) : null}
       {mv.height !== null && mv.width !== null && Math.min(mv.height, mv.width) < 700 ? (
         <span data-mv-small className="text-muted-foreground">{mv.width}×{mv.height}: soft on a 1080p video. For a Reel, make it at 9:16 and 720p.</span>
       ) : null}
@@ -106,7 +112,7 @@ export function MusicVideoPanel({ p, url, cap, post, reload, setNotice, play }: 
             </span>
             {s.inUse ? (
               <span data-mv-shot-used className="flex shrink-0 items-center gap-1 text-emerald-300">
-                <Check className="size-3" /> {s.first !== null ? "On its lines" : "In Storyboard"}
+                <Check className="size-3" /> {s.first !== null ? "Synced on its lines" : "In Storyboard"}
                 {s.hd ? <span data-mv-hd={s.hd} className={cn("rounded px-1", s.hd === "done" ? "bg-emerald-400/15" : "bg-sky-400/15 text-sky-200")}>{s.hd === "done" ? "1080p" : s.hd === "running" ? "1080p…" : "1080p: Get result below"}</span> : null}
               </span>
             ) : (

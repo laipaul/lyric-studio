@@ -44,6 +44,7 @@ export type StoryShot = {
   warnings: string[];
 };
 export type StoryLine = {
+  slotWhy?: string | null; // why its anchored clip is not in this video (e.g. a 16:9 shot in a vertical video)
   number: number | null;
   text: string;
   isHook: boolean;
@@ -125,7 +126,7 @@ export function storyLines(
   lyrics: LyricVideoProps["lyrics"],
   numbered: readonly { number: number | null; text: string; isHook: boolean }[], // the same lines, in order, with their numbers when known
   anchors: readonly AnchorUse[],
-  slots: readonly { line: number; clip: string }[] = [],
+  slots: readonly { line: number; clip: string; why?: string }[] = [],
 ): StoryLine[] {
   return lyrics.map((l, k) => {
     const n = numbered[k];
@@ -133,7 +134,7 @@ export function storyLines(
     const slot = slots.find((x) => n?.number != null && x.line === n.number) ?? null;
     return {
       number: n?.number ?? null, text: l.text, isHook: !!l.isHook, startMs: frameMs(l.startFrame), endMs: frameMs(l.endFrame), anchor: anchor?.clip ?? null,
-      card: l.card?.id ?? null, changed: !!l.card && Object.keys(l.card).some((key) => key !== "id"), slot: slot?.clip ?? null,
+      card: l.card?.id ?? null, changed: !!l.card && Object.keys(l.card).some((key) => key !== "id"), slot: slot?.clip ?? null, slotWhy: slot?.why ?? null,
     };
   });
 }

@@ -72,7 +72,7 @@ export type StoryboardView = {
   clips: StoryboardClip[];
   // The textboard: the title / byline / tagline cards on screen; the lyric cards are the lines.
   titleCards: { id: string; type: string; text: string; startMs: number; endMs: number }[];
-  slots: { line: number; text: string; clip: string }[]; // lines that need a clip (picture swap)
+  slots: { line: number; text: string; clip: string; why?: string }[]; // lines that need a clip (picture swap; why: e.g. its clip is of the other shape)
   picture: string | null; // the clip set planned ("city"; null: the recipe's)
   props: Omit<LyricVideoProps, "mediaBaseUrl">; // for the preview (served by the storyboard's media route)
 };

@@ -1432,10 +1432,11 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                         (dropLine !== null && dropLine === l.number) || (cardId !== null && cardId === l.card) ? "ring-brand ring-2" : "",
                       )}
                       style={{ left: x(l.startMs), width: Math.max(4, x(l.endMs - l.startMs) - 2) }}
-                      title={`${l.number ? `line ${l.number}: ` : ""}${l.text}\non screen ${clockTenths(l.startMs)}–${clockTenths(l.endMs)} in the video${songStart > 0 ? ` · ${clockTenths(songTimeMs(l.startMs, songStart))}–${clockTenths(songTimeMs(l.endMs, songStart))} in the song` : ""}${l.anchor ? ` · ⚓ ${l.anchor}` : ""}${l.slot ? ` · needs a clip (was ${l.slot})` : ""}${l.changed ? " · its own look" : ""}`}
+                      title={`${l.number ? `line ${l.number}: ` : ""}${l.text}${l.slotWhy ? `\n${l.slotWhy}` : ""}\non screen ${clockTenths(l.startMs)}–${clockTenths(l.endMs)} in the video${songStart > 0 ? ` · ${clockTenths(songTimeMs(l.startMs, songStart))}–${clockTenths(songTimeMs(l.endMs, songStart))} in the song` : ""}${l.anchor ? ` · ⚓ ${l.anchor}` : ""}${l.slot ? ` · needs a clip (was ${l.slot})` : ""}${l.changed ? " · its own look" : ""}`}
                     >
                       {l.anchor ? <Anchor className="text-brand mr-0.5 inline size-3" aria-label="anchored" /> : null}
                       {l.slot ? <Anchor className="mr-0.5 inline size-3 text-amber-300" aria-label="slot" /> : null}
+                      {l.slotWhy ? <span data-slot-why className="text-amber-200" title={l.slotWhy}>{/its shot is 16:9/.test(l.slotWhy) ? "16:9 shot: not in this video · " : "9:16 shot: not in this video · "}</span> : null}
                       {l.changed ? <Pencil className="mr-0.5 inline size-2.5 text-sky-300" aria-label="own look" /> : null}
                       {l.text}
                     </div>

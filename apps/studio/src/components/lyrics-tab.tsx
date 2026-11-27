@@ -420,8 +420,8 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">On screen</th>
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Confidence</th>
                     <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal">Adjust</th>
-                    {withSinging ? <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap" title="The lines where the singer shows, each with a picture or video from Creation">Lip sync</th> : null}
-                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap min-w-36">Shows clip (no singing)</th>
+                    {withSinging ? <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap" title="Who sings this line, lips in time with the song: a lip-sync take made here from a picture or video (InfiniteTalk), or a shot of your music video">Singing (lips in time)</th> : null}
+                    <th className="bg-background sticky top-0 z-10 border-b px-3 py-2 font-normal whitespace-nowrap min-w-36" title="What shows on the line: a story clip, or the singing clip chosen in the Singing column">Shows on the line</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -549,6 +549,8 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                         {withSinging ? (
                           <td className="px-3 py-2" data-singer-cell>
                             <SingerCell singer={singer} number={l.number} />
+                            {/* Music-video shots sing too: they belong with the lip sync (27 Nov 2026, Paul: "are we not mixing two things"). */}
+                            <LineMvShots mv={mvLines} line={l.number} />
                           </td>
                         ) : null}
                         <td className="w-60 max-w-60 min-w-36 px-3 py-2" data-anchor-cell>
@@ -596,7 +598,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                               the singer from line {sungWith.line} continues (one take)
                             </div>
                           ) : null}
-                          <LineMvShots mv={mvLines} line={l.number} />
+                          {withSinging ? null : <LineMvShots mv={mvLines} line={l.number} />}
                           <button type="button" disabled={busy} onClick={() => setPicking(picking === l.number ? null : l.number)} className="text-muted-foreground hover:text-foreground mt-1 flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] whitespace-nowrap" data-anchor-pick>
                             <Clapperboard className="size-3" /> {anchor ? "Change" : "Show a clip"}
                           </button>

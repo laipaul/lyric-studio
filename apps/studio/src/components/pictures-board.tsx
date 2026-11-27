@@ -19,6 +19,7 @@ import type { MvMakeOptions } from "@lyric/video/music-video";
 
 import { MakeMusicVideo } from "@/components/make-music-video";
 import { MusicVideoPanel } from "@/components/music-video-panel";
+import { shapeNote } from "@/components/mv-lines";
 import { MvShotStrip, type MvStripShot } from "@/components/mv-shot-strip";
 import { mvShotsForPlanned } from "@lyric/video/music-video-shots";
 import { NameField } from "@/components/name-field";
@@ -291,6 +292,8 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
         sub: `${clockMs(m.songFromMs)}–${clockMs(m.songToMs)} · ${m.first !== null ? (m.last !== null && m.last > m.first ? `lines ${m.first}–${m.last}` : `line ${m.first}`) + (m.text ? ` “${m.text}”` : "") : "no sung line"}`,
         inUse: !!m.sent && !!s.filled && m.sent.toLowerCase() === s.filled.toLowerCase(),
         hd: m.hd === "done",
+        note: shapeNote(p.mv!.width, p.mv!.height),
+        usedWord: "Fills this shot",
       })),
     );
   async function useMvForShot(s: ProductionShot, m: MvStripShot) {

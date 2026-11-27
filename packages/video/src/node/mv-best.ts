@@ -15,7 +15,7 @@ import { placeSingingTake, singerContext, singingTakeInUse } from "./singer";
 import { songPathsById } from "./song-folder";
 
 export type BestView = {
-  videos: { file: string; label: string; url: string; offsetMs: number }[]; // the music videos found in the song (url: pictures/<file>, for /api/files)
+  videos: { file: string; label: string; url: string; offsetMs: number; width: number | null; height: number | null }[]; // the music videos found in the song (url: pictures/<file>, for /api/files)
   rows: BestRow[];
   candidates: ScoredCandidate[]; // every singing shot of every music video, scored (Lyrics Sync shows each line's)
   locked: Record<number, "own" | "hand">; // the lines Paul set himself
@@ -76,7 +76,7 @@ async function gather(ws: Workspace, projectId: string): Promise<Gathered | null
     if (!t && a.sync === undefined) continue;
     for (let n = a.line; n <= (a.through ?? a.line); n++) locked.set(n, t ? "hand" : "own");
   }
-  return { lines, candidates, locked, videos: videos.map(([file, r]) => ({ file, label: r.label ?? file.replace(/\.[^.]+$/, ""), url: `${path.relative(ws.dir, dir).split(path.sep).join("/")}/${file}`, offsetMs: r.mv!.offsetMs })), unchecked };
+  return { lines, candidates, locked, videos: videos.map(([file, r]) => ({ file, label: r.label ?? file.replace(/\.[^.]+$/, ""), url: `${path.relative(ws.dir, dir).split(path.sep).join("/")}/${file}`, offsetMs: r.mv!.offsetMs, width: r.mv!.width, height: r.mv!.height })), unchecked };
 }
 
 // The plan for Creation's "Best shot for each line" (null: no music video found in the song, or no timed lines).

@@ -20,6 +20,7 @@ import type { SingerView } from "@lyric/video/singer";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { shapeNote } from "@/components/mv-lines";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,8 @@ type Option = {
   startSongMs: number | null; // the song time of its first frame (locked to the song), else null
   thumbS: number;
   inUse: boolean;
+  usedWord: string; // "Synced" (on its line, in time) or "In use" (fills the planned shot)
+  note: string | null; // the shape it plays in
   best: boolean;
   choose: { to: "pictures" | "singer"; body: Record<string, unknown> };
 };
@@ -109,7 +112,7 @@ function CutWhilePlaying({ projectId, onClose }: { projectId: string; onClose: (
       const group = data.singer?.lines?.find((l) => l.run && l.run.first <= n && n <= l.run.last && l.number === l.run.first) ?? data.singer?.lines?.find((l) => l.number === n);
       for (const t of group?.takes ?? []) {
         if (t.status !== "done" || !t.file || !group?.source || !picturesDir || t.sync_ms === undefined) continue;
-        out.push({ key: `sing:${group.source}#${t.n}`, title: t.label ?? `Singing take ${t.n}`, sub: `${group.source.replace(/\.[^.]+$/, "")} · lip sync`, url: fileUrl(`${picturesDir}/${t.file}`), startSongMs: t.sync_ms + (t.nudge_ms ?? 0), thumbS: 0.5, inUse: t.inUse, best: false, choose: { to: "singer", body: { action: "use", source: group.source, n: t.n } } });
+        out.push({ key: `sing:${group.source}#${t.n}`, title: t.label ?? `Singing take ${t.n}`, sub: `${group.source.replace(/\.[^.]+$/, "")} · lip sync`, url: fileUrl(`${picturesDir}/${t.file}`), startSongMs: t.sync_ms + (t.nudge_ms ?? 0), thumbS: 0.5, inUse: t.inUse, usedWord: "Synced", note: null, best: false, choose: { to: "singer", body: { action: "use", source: group.source, n: t.n } } });
       }
       // Music-video shots of the line, the app's pick first.
       const best = data.best;
@@ -125,6 +128,8 @@ function CutWhilePlaying({ projectId, onClose }: { projectId: string; onClose: (
           startSongMs: v.offsetMs,
           thumbS: Math.max(0, ((c.songFromMs + c.songToMs) / 2 - v.offsetMs) / 1000),
           inUse: c.inUse,
+          usedWord: "Synced",
+          note: shapeNote(v.width, v.height),
           best: !!pick && pick.video === c.video && pick.shot === c.shot && (best?.candidates.filter((x) => x.first <= n && n <= x.last).length ?? 0) > 1,
           choose: { to: "pictures", body: { action: "mv-best-pick", file: c.video, shot: c.shot } },
         });
@@ -139,7 +144,7 @@ function CutWhilePlaying({ projectId, onClose }: { projectId: string; onClose: (
         }
         for (const p of mvVideos)
           for (const m of mvShotsForPlanned(shot, p.mv!.shots))
-            out.push({ key: `mvslot:${p.file}#${m.i}`, title: `${p.label ?? p.file.replace(/\.[^.]+$/, "")} · shot ${m.i + 1}`, sub: m.first !== null ? `sings line ${m.first}` : "music video, no singing", url: fileUrl(p.url), startSongMs: p.mv!.offsetMs, thumbS: (m.fromMs + m.toMs) / 2000, inUse: same(m.sent, shot.filled), best: false, choose: { to: "pictures", body: { action: "mv-use-slot", file: p.file, shot: m.i, slot: shot.id } } });
+            out.push({ key: `mvslot:${p.file}#${m.i}`, title: `${p.label ?? p.file.replace(/\.[^.]+$/, "")} · shot ${m.i + 1}`, sub: m.first !== null ? `sings line ${m.first}` : "music video, no singing", url: fileUrl(p.url), startSongMs: p.mv!.offsetMs, thumbS: (m.fromMs + m.toMs) / 2000, inUse: same(m.sent, shot.filled), usedWord: "In use", note: shapeNote(p.mv!.width, p.mv!.height), best: false, choose: { to: "pictures", body: { action: "mv-use-slot", file: p.file, shot: m.i, slot: shot.id } } });
       }
     }
     return out.slice(0, 9);
@@ -260,9 +265,10 @@ function CutWhilePlaying({ projectId, onClose }: { projectId: string; onClose: (
                   {o.best ? <Star className="absolute top-1.5 right-1.5 size-3.5 fill-amber-300 text-amber-300" aria-label="The app's pick" /> : null}
                   <span className="truncate font-medium">{o.title}</span>
                   <span className="text-muted-foreground line-clamp-2">{o.sub}</span>
+                  {o.note ? <span className="text-amber-200/90 line-clamp-2" data-cut-note>{o.note}</span> : null}
                   {o.inUse ? (
                     <span className="flex items-center gap-1 text-emerald-300" data-cut-used>
-                      <Check className="size-3" /> In use
+                      <Check className="size-3" /> {o.usedWord}
                     </span>
                   ) : busy === o.key ? (
                     <Loader2 className="size-3 animate-spin" />
@@ -279,5 +285,5 @@ function CutWhilePlaying({ projectId, onClose }: { projectId: string; onClose: (
 }
 
 function storyOption(p: PictureView, n: number | null, url: string, slot: string, inUse: boolean, title: string, sub: string): Option {
-  return { key: `story:${p.file}#${n ?? "file"}`, title, sub, url, startSongMs: null, thumbS: 0.5, inUse, best: false, choose: { to: "pictures", body: { action: "use-shot", file: p.file, n, slot } } };
+  return { key: `story:${p.file}#${n ?? "file"}`, title, sub, url, startSongMs: null, thumbS: 0.5, inUse, usedWord: "In use", note: null, best: false, choose: { to: "pictures", body: { action: "use-shot", file: p.file, n, slot } } };
 }
