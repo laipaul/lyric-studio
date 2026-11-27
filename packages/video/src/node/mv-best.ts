@@ -7,7 +7,7 @@ import path from "node:path";
 import type { Workspace } from "@lyric/db";
 
 import { linesOfShot, mvResolution } from "../music-video";
-import { faceBadWhileSung, pickBestShots, type BestCandidate, type BestLine, type BestRow } from "../mv-best";
+import { faceBadWhileSung, pickBestShots, scoreCandidate, type BestCandidate, type BestLine, type BestRow, type ScoredCandidate } from "../mv-best";
 import { readPictures, setTake, songFolder, type Take } from "./animate";
 import { clearOverlapping, cutShotTake, mvRefPicture } from "./music-video";
 import { readRecipe } from "./recipe";
@@ -15,8 +15,10 @@ import { placeSingingTake, singerContext, singingTakeInUse } from "./singer";
 import { songPathsById } from "./song-folder";
 
 export type BestView = {
-  videos: { file: string; label: string }[]; // the music videos found in the song
+  videos: { file: string; label: string; url: string; offsetMs: number }[]; // the music videos found in the song (url: pictures/<file>, for /api/files)
   rows: BestRow[];
+  candidates: ScoredCandidate[]; // every singing shot of every music video, scored (Lyrics Sync shows each line's)
+  locked: Record<number, "own" | "hand">; // the lines Paul set himself
   unchecked: number; // candidates not cut out or face-checked yet (Use the best does it first, locally)
   toPlace: number; // picks not on their lines yet
 };
@@ -71,7 +73,7 @@ async function gather(ws: Workspace, projectId: string): Promise<Gathered | null
     if (t && !t.handPicked) continue;
     for (let n = a.line; n <= (a.through ?? a.line); n++) locked.set(n, t ? "hand" : "own");
   }
-  return { lines, candidates, locked, videos: videos.map(([file, r]) => ({ file, label: r.label ?? file.replace(/\.[^.]+$/, "") })), unchecked };
+  return { lines, candidates, locked, videos: videos.map(([file, r]) => ({ file, label: r.label ?? file.replace(/\.[^.]+$/, ""), url: `${path.relative(ws.dir, dir).split(path.sep).join("/")}/${file}`, offsetMs: r.mv!.offsetMs })), unchecked };
 }
 
 // The plan for Creation's "Best shot for each line" (null: no music video found in the song, or no timed lines).
@@ -79,7 +81,7 @@ export async function bestShotsView(ws: Workspace, projectId: string): Promise<B
   const g = await gather(ws, projectId);
   if (!g) return null;
   const rows = pickBestShots(g.lines, g.candidates, g.locked);
-  return { videos: g.videos, rows, unchecked: g.unchecked, toPlace: rows.filter((r) => r.pick && !r.pick.inUse).length };
+  return { videos: g.videos, rows, candidates: g.candidates.map((c) => scoreCandidate(c, g.lines)), locked: Object.fromEntries(g.locked), unchecked: g.unchecked, toPlace: rows.filter((r) => r.pick && !r.pick.inUse).length };
 }
 
 // "Use the best for every line": every singing shot cut out and face-checked (local, free), then the best of each line

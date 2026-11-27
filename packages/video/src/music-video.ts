@@ -284,3 +284,26 @@ export function mvSection(choice: MvSectionChoice, lines: readonly { number: num
   const after = downbeats.find((d) => d >= b.sungEndMs + bar * 0.75);
   return { fromMs: Math.max(0, before ?? a.shownMs - 1500), toMs: Math.min(durationMs, after ?? b.sungEndMs + bar) };
 }
+
+// ---------------------------------------------------------------- next to the planned shots (27 Nov 2026)
+// Paul: "once I loaded the music video, I should see each video next to each shot planned". A music-video shot belongs
+// next to a planned shot (Production) when:
+//   - it carries sung lines: the planned shot is on one of those lines (her lips match only there), or the planned shot
+//     has no line and they share at least half of the planned shot's time;
+//   - it has no sung line: they share at least half of the shorter of the two.
+// Best overlap first. Pure.
+export type PlannedShot = { line: number | null; span?: { startMs: number; endMs: number } | null };
+export type MvShotLike = { songFromMs: number; songToMs: number; first: number | null; last: number | null };
+export function mvShotsForPlanned<T extends MvShotLike>(planned: PlannedShot, shots: readonly T[]): T[] {
+  const span = planned.span ?? null;
+  const overlap = (s: MvShotLike) => (span ? Math.max(0, Math.min(span.endMs, s.songToMs) - Math.max(span.startMs, s.songFromMs)) : 0);
+  const fits = (s: MvShotLike) => {
+    if (s.first !== null) {
+      if (planned.line !== null) return planned.line >= s.first && planned.line <= (s.last ?? s.first);
+      return !!span && overlap(s) >= 0.5 * (span.endMs - span.startMs);
+    }
+    if (!span) return false;
+    return overlap(s) >= 0.5 * Math.min(span.endMs - span.startMs, s.songToMs - s.songFromMs);
+  };
+  return shots.filter(fits).sort((a, b) => overlap(b) - overlap(a));
+}

@@ -1,7 +1,7 @@
 // A music video made elsewhere (27 Nov 2026): where it sits in the song, its shots, the lines of each shot.
 import { describe, expect, it } from "vitest";
 
-import { bestLag, detectCuts, EDGE_TRIM_MS, findInSong, linesOfShot, matchScore, mvUsd, shotPiece, shotsFromCuts } from "../src/music-video";
+import { bestLag, detectCuts, EDGE_TRIM_MS, findInSong, linesOfShot, matchScore, mvShotsForPlanned, mvUsd, shotPiece, shotsFromCuts } from "../src/music-video";
 
 // A song-like signal: noise shaped by a slowly changing loudness (seeded, the same every run).
 function song(seconds: number, rate: number, seed = 1): Float32Array {
@@ -91,5 +91,22 @@ describe("the lines of a shot", () => {
   it("its cost on WaveSpeed: per second of song, by resolution", () => {
     expect(mvUsd(232_000, 464, 832)).toBe(6.96);
     expect(mvUsd(101_000, 1280, 720)).toBe(6.06);
+  });
+});
+
+describe("music-video shots next to the planned shots", () => {
+  const shots = [
+    { id: "a", songFromMs: 0, songToMs: 4000, first: null, last: null },
+    { id: "b", songFromMs: 4000, songToMs: 9000, first: 1, last: 2 },
+    { id: "c", songFromMs: 9000, songToMs: 12_000, first: 3, last: 3 },
+  ];
+  it("a singing shot only next to a planned shot on its lines", () => {
+    expect(mvShotsForPlanned({ line: 2, span: { startMs: 8000, endMs: 11_000 } }, shots).map((s) => s.id)).toEqual(["b"]);
+    expect(mvShotsForPlanned({ line: 4, span: { startMs: 9000, endMs: 12_000 } }, shots)).toEqual([]);
+  });
+  it("a shot without a line by shared time; a planned shot without a line takes singing shots by time too", () => {
+    expect(mvShotsForPlanned({ line: null, span: { startMs: 0, endMs: 3000 } }, shots).map((s) => s.id)).toEqual(["a"]);
+    expect(mvShotsForPlanned({ line: null, span: { startMs: 3500, endMs: 8000 } }, shots).map((s) => s.id)).toEqual(["b"]);
+    expect(mvShotsForPlanned({ line: null, span: null }, shots)).toEqual([]);
   });
 });

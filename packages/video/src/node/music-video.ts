@@ -455,3 +455,15 @@ export function startMusicVideoFinals(ws: Workspace, projectId: string, file: un
   if (usd > c) throw new Error(`${todo.length} shots at 1080p cost about $${usd.toFixed(2)}, above your cap of $${c.toFixed(2)}: raise the cap or use Make final on single shots. Nothing was sent.`);
   return { takes: todo.map((t) => startFinal(t.n)), usd };
 }
+
+// Production, "Use for this shot" (27 Nov 2026): a music-video shot fills a planned shot. A singing shot goes on its
+// lines in time (a hand pick) and takes the planned shot's place in the story line; a shot without a sung line takes
+// the planned shot's place like any take (Use for shot).
+export async function useMusicVideoShotForSlot(ws: Workspace, projectId: string, file: unknown, shot: unknown, slot: unknown): Promise<{ shot: number; first: number | null; last: number | null; note: string | null }> {
+  const name = path.basename(String(file ?? ""));
+  const { useForShot } = await import("./shot-production");
+  const take = await cutShotTake(ws, projectId, name, shot);
+  if (take.kind === "lipsync") await useMusicVideoShot(ws, projectId, name, shot, { hand: true });
+  const r = await useForShot(ws, projectId, { file: name, n: take.n, slot });
+  return { shot: r.shot, first: take.line ?? null, last: take.through ?? take.line ?? null, note: take.kind === "lipsync" ? null : r.note };
+}

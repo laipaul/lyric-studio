@@ -4,6 +4,20 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Music-video shots where you work ✅ (to verify on the PC)
+Paul, 27 Nov 2026: "once I loaded the music video, I should see each video next to each shot planned and also on the
+lip-sync screen; we don't need a visualizer on the upload screen". Also on 27 Nov: **Add pictures or videos** at the
+top of Creation (drop a file anywhere on the page outside a shot's box). Now:
+- **Creation:** the music video's tile is short: its summary, Use every singing shot, the 1080p button; the shot list is
+  folded under "Show its shots".
+- **Production:** under each planned shot, **From your music videos** lists the shots that play at that moment (a
+  singing shot only on its own lines) with **Use for this shot**: it fills the planned shot (a singing one stays in time
+  on its lines).
+- **Lyrics Sync:** each line shows its music-video shots (★ the app's pick, why in plain words, "Use on this line"),
+  and **Use the best for every line** sits above the lines (it replaces the Best shot panel that was in Creation).
+  Lines you set yourself, including a clip you put on a line, stay as they are; "Use on this line" still lets you put a
+  shot there.
+
 ### Best shot for each line across music videos ✅ (to verify on the PC)
 Paul, 27 Nov 2026: "yes". Make two or three music videos of the same stretch (other pictures or words): each sung line
 then has several shots. In Creation (Story room and Production), **Best shot for each line** shows, per line, the shot
@@ -801,21 +815,6 @@ locked cards can't be edited").
 - Tests: vitest video-counts (+1); browser shape-platforms (4 checks, in test:e2e). make.test's 2 failures are the
   same as before this change (they need network / real rendering). Studio build passes.
 
-### Same look on every platform (themes) ✅ (to verify on the PC)
-- Paul (22 Nov 2026): the YouTube video looked different from the Reel. Cause: the theme Midnight Highway gave
-  YouTube its own verse effect (cinematic-fade; typewriter:15 everywhere else), set through a hidden "Per platform..."
-  menu; changing it back took four screens. Decided: themes look the same on every platform unless asked otherwise.
-- Shape -> Look -> Edit theme: a switch **Same look on every platform** under the save bar. On (every theme without
-  platform differences): the Per platform... options are hidden. A theme that differs shows it off with the
-  difference in words ("Different on YouTube: verse effect cinematic-fade (typewriter:15 everywhere else)");
-  switching on asks once ("YouTube: verse effect becomes typewriter:15" · Make them the same / Keep the differences);
-  Save then makes every platform follow the theme. Switching off brings Per platform... back.
-- Nothing is lost: a Save that takes platform values away keeps theme.json as it was in the theme's
-  `_replaced\theme-<date>.json` (node/themes.ts keepThemeAsItWas). Themes page: a tile says "Differs on YouTube".
-- Code: src/theme-platforms.ts (pure: platformDifferences, differenceLines, platformsThatDiffer), node/themes.ts
-  saveTheme, node/style.ts (ThemeCard differsOn), shape-tools.tsx SamePlatformsSwitch, set-effect.tsx, themes-view.tsx.
-- Tests: vitest theme-platforms (3), themes (+1: the backup, differsOn); browser same-platforms (14 checks, in
-  test:e2e); song-stages (207) pass; themes.e2e passes except its out-of-date top-menu check. Studio build passes.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

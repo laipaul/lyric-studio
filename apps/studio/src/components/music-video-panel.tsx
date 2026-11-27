@@ -4,7 +4,7 @@
 // same bride singing in different scenes and camera angles"). "This is a music video of this song": the app finds where
 // it sits in the song (its sound is the song) and its shots; Paul picks the shots he likes and each goes on its lines
 // in time with the song (a singing take, like Lyrics Sync's), or to the Storyboard when it has no sung line.
-import { Check, Clapperboard, ListChecks, Loader2, Music2, Send, Sparkles } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Clapperboard, ListChecks, Loader2, Music2, Send, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 import type { PictureView } from "@lyric/video/animate";
@@ -17,6 +17,9 @@ const linesName = (first: number, last: number) => (last > first ? `lines ${firs
 
 export function MusicVideoPanel({ p, url, cap, post, reload, setNotice, play }: { p: PictureView; url: string; cap: number; post: (b: Record<string, unknown>) => Promise<unknown>; reload: () => Promise<void>; setNotice: (n: { ok: boolean; text: string }) => void; play: (url: string, title: string) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
+  // Folded by default (27 Nov 2026, Paul: "we don't need a visualizer on the upload screen"): the shots show next to each
+  // planned shot (Production) and on each line (Lyrics Sync).
+  const [showShots, setShowShots] = useState(false);
   const mv = p.mv;
   async function run(key: string, body: Record<string, unknown>, done: (r: unknown) => string) {
     setBusy(key);
@@ -70,7 +73,7 @@ export function MusicVideoPanel({ p, url, cap, post, reload, setNotice, play }: 
         <Button type="button" size="sm" variant="outline" data-mv-use-all disabled={busy !== null || free === 0} onClick={() => void run("all", { action: "mv-use-all" }, (r) => `${(r as { used: unknown[] }).used.length} singing shots are on their lines, in time with the song.`)} title="Every shot where she sings goes on its lines, locked to the song (you can still take any off in Lyrics Sync)">
           {busy === "all" ? <Loader2 className="animate-spin" /> : <ListChecks />} Use every singing shot
         </Button>
-        <span className="text-muted-foreground">or pick the ones you like:</span>
+        <span className="text-muted-foreground">or pick the ones you like below</span>
       </span>
       {toHd.length ? (
         <span className="flex flex-wrap items-center gap-1.5">
@@ -83,6 +86,11 @@ export function MusicVideoPanel({ p, url, cap, post, reload, setNotice, play }: 
           </span>
         </span>
       ) : null}
+      <span className="text-muted-foreground">Its shots show next to each planned shot (Production) and on each line (Prepare → Lyrics Sync).</span>
+      <button type="button" data-mv-show-shots onClick={() => setShowShots((v) => !v)} className="hover:text-foreground text-muted-foreground flex items-center gap-1 self-start">
+        {showShots ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />} Show its shots ({mv.shots.length})
+      </button>
+      {showShots ? (
       <div className="flex max-h-96 flex-col gap-1 overflow-y-auto pr-1">
         {mv.shots.map((s) => (
           <div key={s.i} data-mv-shot={s.i} data-mv-lines={s.first ?? ""} className="flex items-center gap-1.5">
@@ -117,6 +125,7 @@ export function MusicVideoPanel({ p, url, cap, post, reload, setNotice, play }: 
           </div>
         ))}
       </div>
+      ) : null}
     </div>
   );
 }

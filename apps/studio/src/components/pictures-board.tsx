@@ -13,14 +13,14 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import type { CreationDefaults, PictureView, PicturesView as BoardView, Quality, ServiceId, Take } from "@lyric/video/animate";
 
 // characters: "Who is this" (picture-character.ts); faceUsdPerSecond: Animate with a character's face sheet.
-type PicturesView = BoardView & { characters?: { id: string; name: string }[]; faceUsdPerSecond?: number; mvMake?: MvMakeOptions | null; mvBest?: BestView | null };
+type PicturesView = BoardView & { characters?: { id: string; name: string }[]; faceUsdPerSecond?: number; mvMake?: MvMakeOptions | null };
 import type { ProductionShot, ProductionView } from "@lyric/video/shot-production";
 import type { MvMakeOptions } from "@lyric/video/music-video";
 
-import type { BestView } from "@lyric/video/mv-best";
 import { MakeMusicVideo } from "@/components/make-music-video";
 import { MusicVideoPanel } from "@/components/music-video-panel";
-import { BestShotsPanel } from "@/components/best-shots-panel";
+import { MvShotStrip, type MvStripShot } from "@/components/mv-shot-strip";
+import { mvShotsForPlanned } from "@lyric/video/music-video-shots";
 import { NameField } from "@/components/name-field";
 import { useGoToTab } from "@/components/song-stages";
 import { takeDetails, takeFacts, takeKind, takeTag } from "@lyric/video/take-facts";
@@ -41,6 +41,7 @@ type Svc = PicturesView["services"][number];
 // One dropdown for service and model together ("WaveSpeed · Seedance 2.5 Flash"): value "<service>:<quality>".
 const modelOptions = (services: Svc[]) => services.flatMap((s) => s.qualities.map((q) => ({ value: `${s.id}:${q.id}`, label: `${s.label} · ${q.label}${s.ready ? "" : " (no key yet)"}` })));
 const splitModel = (v: string) => v.split(":") as [ServiceId, Quality];
+const clockMs = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
 const fileUrl = (rel: string) => `/api/files/${rel.split("/").map(encodeURIComponent).join("/")}`;
 
 // part (C3 Part 1, 22 Nov 2026): "all" = the board as before (songs without a shot list); "settings" = the Film look and
@@ -63,6 +64,7 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
   // A take or video in the big player; a take with its place in the song (take: played with the song when it has one).
   type Playing = { url: string; title: string; take?: { fromS: number | null; clipInS: number; why: string | null } };
   const [playing, setPlaying] = useState<Playing | null>(null);
+  const [mvBusy, setMvBusy] = useState<string | null>(null); // a music-video shot being used for a planned shot
   const input = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -275,6 +277,36 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
     }
   }
 
+  // A music video's shots next to each planned shot (27 Nov 2026): the ones that play at that moment of the song (a
+  // singing shot only on its own lines, music-video.ts mvShotsForPlanned); "Use for this shot" fills the planned shot.
+  const mvVideos = board.pictures.filter((p) => p.mv?.matched);
+  const mvFor = (s: ProductionShot): MvStripShot[] =>
+    mvVideos.flatMap((p) =>
+      mvShotsForPlanned(s, p.mv!.shots).map((m) => ({
+        key: `${p.file}#${m.i}`,
+        url: fileUrl(p.url),
+        fromS: m.fromMs / 1000,
+        toS: m.toMs / 1000,
+        title: `${p.label ?? p.file.replace(/\.[^.]+$/, "")} · shot ${m.i + 1}`,
+        sub: `${clockMs(m.songFromMs)}–${clockMs(m.songToMs)} · ${m.first !== null ? (m.last !== null && m.last > m.first ? `lines ${m.first}–${m.last}` : `line ${m.first}`) + (m.text ? ` “${m.text}”` : "") : "no sung line"}`,
+        inUse: !!m.sent && !!s.filled && m.sent.toLowerCase() === s.filled.toLowerCase(),
+        hd: m.hd === "done",
+      })),
+    );
+  async function useMvForShot(s: ProductionShot, m: MvStripShot) {
+    const [file, i] = [m.key.slice(0, m.key.lastIndexOf("#")), Number(m.key.slice(m.key.lastIndexOf("#") + 1))];
+    setMvBusy(m.key);
+    try {
+      await post({ action: "mv-use-slot", file, shot: i, slot: s.id });
+      setNotice({ ok: true, text: `Shot ${s.number} is filled with ${m.title}${s.line !== null ? ", in time with the song" : ""}.` });
+      await load();
+    } catch (e) {
+      setNotice({ ok: false, text: (e as Error).message });
+    } finally {
+      setMvBusy(null);
+    }
+  }
+
   return (
     <div
       data-pictures={part}
@@ -370,9 +402,6 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
         ) : null}
         <div className="flex min-w-0 flex-1 flex-col">{board.mvMake ? <MakeMusicVideo opts={board.mvMake} pictures={board.pictures.filter((p) => p.kind === "picture" && p.source !== "Character references").map((p) => ({ file: p.file, url: fileUrl(p.url), label: p.label }))} cap={defaults.cap} post={post} reload={load} setNotice={setNotice} /> : null}</div>
       </div>
-      {board.mvBest && board.mvBest.videos.length >= 2 ? (
-        <BestShotsPanel best={board.mvBest} videos={Object.fromEntries(board.pictures.filter((p) => p.mv?.matched).map((p) => [p.file, { url: fileUrl(p.url), offsetMs: p.mv!.offsetMs }]))} post={post} reload={load} setNotice={setNotice} play={(url, title) => setPlaying({ url, title })} />
-      ) : null}
       {part === "settings" && notice ? (
         <p data-pictures-notice={notice.ok ? "ok" : "error"} className={cn("rounded-md border p-2 text-sm", notice.ok ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-red-400/30 bg-red-400/10 text-red-200")}>
           {notice.text}
@@ -408,6 +437,7 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
           actingFor={(s) => ({ value: actingOf(s), set: (v: boolean) => setActing((a) => ({ ...a, [s.id]: v })) })}
           projectId={projectId}
           compareCount={(s) => candidatesOf(s).length}
+          extra={(s) => <MvShotStrip shots={mvFor(s)} action="Use for this shot" busy={mvBusy} onUse={(m) => void useMvForShot(s, m)} play={(url, title) => setPlaying({ url, title })} />}
           tile={(p, s) => (favOnly && !hasFav(p) ? null : <PictureTile key={p.file} projectId={projectId} p={p} favOnly={favOnly} onFav={(n, on) => void favourite(p.file, n, on)} board={board} post={post} reload={load} setNotice={setNotice} play={(url, title, take) => setPlaying({ url, title, take })} shot={s} useShot={(n) => void useShot(p.file, n, s)} openCompare={candidatesOf(s).length >= 2 ? () => setComparing(s.id) : undefined} />)}
         />
       ) : null}
@@ -541,7 +571,9 @@ function ShotItems({
   places,
   onPlace,
   tile,
+  extra,
 }: {
+  extra?: (s: ProductionShot) => ReactNode; // under each shot: its music-video shots (27 Nov 2026)
   actingFor: (s: ProductionShot) => { value: boolean; set: (v: boolean) => void };
   projectId: string;
   places: string[];
@@ -579,7 +611,7 @@ function ShotItems({
         <section key={`${g.name}-${gi}`} data-shot-section={g.name} className="flex flex-col gap-2">
           <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">{g.name}</h3>
           {g.shots.map((s) => (
-            <ShotRow key={s.id} s={s} pictures={pictures.filter((p) => p.slot === s.id)} loose={loose} adding={adding} onDrop={onDrop} onAttach={onAttach} tile={tile} onCompare={() => onCompare(s)} candidates={compareCount(s)} onLook={(character, look) => onLook(s, character, look)} onReferences={(shape) => onReferences(s, shape)} acting={actingFor(s)} projectId={projectId} guides={guidesFor(s)} places={places} onPlace={(scene, whole) => onPlace(s, scene, whole)} />
+            <ShotRow key={s.id} extra={extra} s={s} pictures={pictures.filter((p) => p.slot === s.id)} loose={loose} adding={adding} onDrop={onDrop} onAttach={onAttach} tile={tile} onCompare={() => onCompare(s)} candidates={compareCount(s)} onLook={(character, look) => onLook(s, character, look)} onReferences={(shape) => onReferences(s, shape)} acting={actingFor(s)} projectId={projectId} guides={guidesFor(s)} places={places} onPlace={(scene, whole) => onPlace(s, scene, whole)} />
           ))}
         </section>
       ))}
@@ -604,7 +636,7 @@ function ShotLength({ span }: { span: { startMs: number; endMs: number } }) {
 }
 
 type Guides = { options: { value: string; label: string }[]; value: string; set: (v: string) => void };
-function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare, candidates, onLook, onReferences, acting, projectId, guides, places, onPlace }: { s: ProductionShot; pictures: PictureView[]; loose: PictureView[]; adding: boolean; onDrop: (files: FileList, s: ProductionShot) => void; onAttach: (file: string, s: ProductionShot) => void; tile: (p: PictureView, s: ProductionShot) => ReactNode; onCompare: () => void; candidates: number; onLook: (character: string, look: string) => void; onReferences: (shape: "9:16" | "16:9") => void; acting: { value: boolean; set: (v: boolean) => void }; projectId: string; guides: Guides; places: string[]; onPlace: (scene: string, whole: boolean) => void }) {
+function ShotRow({ extra, s, pictures, loose, adding, onDrop, onAttach, tile, onCompare, candidates, onLook, onReferences, acting, projectId, guides, places, onPlace }: { extra?: (s: ProductionShot) => ReactNode; s: ProductionShot; pictures: PictureView[]; loose: PictureView[]; adding: boolean; onDrop: (files: FileList, s: ProductionShot) => void; onAttach: (file: string, s: ProductionShot) => void; tile: (p: PictureView, s: ProductionShot) => ReactNode; onCompare: () => void; candidates: number; onLook: (character: string, look: string) => void; onReferences: (shape: "9:16" | "16:9") => void; acting: { value: boolean; set: (v: boolean) => void }; projectId: string; guides: Guides; places: string[]; onPlace: (scene: string, whole: boolean) => void }) {
   const [over, setOver] = useState(false);
   const [copied, setCopied] = useState<"tall" | "wide" | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -795,6 +827,7 @@ function ShotRow({ s, pictures, loose, adding, onDrop, onAttach, tile, onCompare
           <input ref={input} type="file" multiple accept=".jpg,.jpeg,.png,.webp,.mp4,.m4v,.mov,.webm,image/*,video/*" className="hidden" data-shot-input={s.id} onChange={(e) => e.target.files && onDrop(e.target.files, s)} />
         </div>
       </div>
+      {extra?.(s)}
     </div>
   );
 }
@@ -1131,7 +1164,7 @@ function PictureTile({
   }
 
   return (
-    <div data-picture={p.file} data-kind={p.kind} className={cn("bg-card/40 flex flex-col gap-2 rounded-lg border p-2", p.mv?.matched && "col-span-2")}>{/* a music video found in the song: two columns wide, so its shot list reads (27 Nov 2026) */}
+    <div data-picture={p.file} data-kind={p.kind} className="bg-card/40 flex flex-col gap-2 rounded-lg border p-2">
       <div className="relative">
         {video ? (
           <button type="button" data-picture-play onClick={() => (openCompare ? openCompare() : play(fileUrl(p.url), p.file))} className="block w-full cursor-pointer" title={openCompare ? "Click to play every candidate of this shot together" : "Click to watch it big"}>

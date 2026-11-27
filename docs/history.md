@@ -4136,3 +4136,19 @@ D. ✅ (built 29 Oct, to verify) **Title opening** (items 1-8 below).
 - Tests: vitest handles (+4), anchors (lip sync exact on every frame of the fade, no frame past the clip's end, cut
   choices win, short lead-in); handles, anchors, compose, transition-notes, storyboard-file pass. Full suite: the same
   7 tests fail with and without this change (they need network / tools the cloud session lacks). Studio build passes.
+
+### Same look on every platform (themes) ✅ (to verify on the PC)
+- Paul (22 Nov 2026): the YouTube video looked different from the Reel. Cause: the theme Midnight Highway gave
+  YouTube its own verse effect (cinematic-fade; typewriter:15 everywhere else), set through a hidden "Per platform..."
+  menu; changing it back took four screens. Decided: themes look the same on every platform unless asked otherwise.
+- Shape -> Look -> Edit theme: a switch **Same look on every platform** under the save bar. On (every theme without
+  platform differences): the Per platform... options are hidden. A theme that differs shows it off with the
+  difference in words ("Different on YouTube: verse effect cinematic-fade (typewriter:15 everywhere else)");
+  switching on asks once ("YouTube: verse effect becomes typewriter:15" · Make them the same / Keep the differences);
+  Save then makes every platform follow the theme. Switching off brings Per platform... back.
+- Nothing is lost: a Save that takes platform values away keeps theme.json as it was in the theme's
+  `_replaced\theme-<date>.json` (node/themes.ts keepThemeAsItWas). Themes page: a tile says "Differs on YouTube".
+- Code: src/theme-platforms.ts (pure: platformDifferences, differenceLines, platformsThatDiffer), node/themes.ts
+  saveTheme, node/style.ts (ThemeCard differsOn), shape-tools.tsx SamePlatformsSwitch, set-effect.tsx, themes-view.tsx.
+- Tests: vitest theme-platforms (3), themes (+1: the backup, differsOn); browser same-platforms (14 checks, in
+  test:e2e); song-stages (207) pass; themes.e2e passes except its out-of-date top-menu check. Studio build passes.

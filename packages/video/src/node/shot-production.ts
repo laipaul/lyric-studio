@@ -240,7 +240,7 @@ export async function useForShot(ws: Workspace, projectId: string, o: { file: un
     const fresh = readShotListFile(file)!;
     writeFileSync(file, `${JSON.stringify({ ...fresh, filledWide: { ...(fresh.filledWide ?? {}), [slot.id]: clip } }, null, 2)}\n`);
     const { dir } = songFolder(ws, projectId);
-    if (readPictures(dir).pictures[name]) update(dir, name, (p) => void (p.slot ||= slot.id));
+    if (readPictures(dir).pictures[name] && !readPictures(dir).pictures[name].mv) update(dir, name, (p) => void (p.slot ||= slot.id)); // a music video stays loose: its shots fill many planned shots
     const shot = [...list.slots].sort((a, b) => a.order - b.order).findIndex((s) => s.id === slot.id) + 1;
     return { clip, shot, line: slot.line, replaced: wideBefore && !same(wideBefore, clip) ? wideBefore : null, note: "A landscape take: it is this shot's take in the Film 16:9 (YouTube); the vertical film keeps its own.", wide: true };
   }
@@ -280,7 +280,7 @@ export async function useForShot(ws: Workspace, projectId: string, o: { file: un
   }
   // The picture's take is marked as used for this shot.
   const { dir } = songFolder(ws, projectId);
-  if (readPictures(dir).pictures[name]) update(dir, name, (p) => void (p.slot ||= slot.id));
+  if (readPictures(dir).pictures[name] && !readPictures(dir).pictures[name].mv) update(dir, name, (p) => void (p.slot ||= slot.id)); // a music video stays loose: its shots fill many planned shots
   const shot = [...list.slots].sort((a, b) => a.order - b.order).findIndex((s) => s.id === slot.id) + 1;
   return { clip, shot, line: slot.line, replaced, note };
 }

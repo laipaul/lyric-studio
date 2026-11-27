@@ -17,7 +17,8 @@
 //   the song); { action: "mv-final", file, cap }: the shots on their lines made 1080p (Make final); { action: "mv-check", file }: "This is a music video of this
 //   song" (its place in the song, its shots); { action: "mv-use", file, shot }: that shot on its lines, in time (or to the
 //   Storyboard when it carries no sung line; a hand pick the app never replaces); { action: "mv-use-all", file }: every shot that carries sung lines.
-// Best shot for each line across music videos (mv-best.ts): GET board.mvBest (the plan); { action: "mv-best" }: every
+// { action: "mv-use-slot", file, shot, slot }: Production's "Use for this shot". Best shot for each line across music
+// videos (mv-best.ts; the plan: GET /api/songs/[id]/mv-shots, shown in Lyrics Sync); { action: "mv-best" }: every
 //   singing shot cut out and face-checked (local, free), the best of each line placed; { action: "mv-best-pick", file,
 //   shot }: that shot on its lines instead (a hand pick).
 // { action: "remove-picture", file }: Put aside (to pictures\_removed\, Restore); { action: "restore-picture", file }.
@@ -31,8 +32,8 @@ import { REFERENCE_MODEL } from "@lyric/video/animate";
 import { addFromLink, addPictures, picturesView, removePicture, removeTakes, restorePicture, restoreTake, setFavourite, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, setPictureFeeling, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
 import { finalUsd, runFinal, startFinal } from "@lyric/video/final";
 import { runSinging, withSongStarts } from "@lyric/video/singer";
-import { bestShotsView, useBestShots } from "@lyric/video/mv-best";
-import { analyseMusicVideo, checkMusicVideoShots, musicVideoOptions, runMusicVideo, startMusicVideo, startMusicVideoFinals, useAllMusicVideoShots, useMusicVideoShot, withMusicVideos } from "@lyric/video/music-video";
+import { useBestShots } from "@lyric/video/mv-best";
+import { analyseMusicVideo, checkMusicVideoShots, musicVideoOptions, runMusicVideo, startMusicVideo, startMusicVideoFinals, useAllMusicVideoShots, useMusicVideoShot, useMusicVideoShotForSlot, withMusicVideos } from "@lyric/video/music-video";
 import { placeByName, placeDropped, productionView, setPictureShot, useForShot, withLineStarts } from "@lyric/video/shot-production";
 import { timedLines } from "@lyric/video/production";
 import { referencePreview, startShotReferences } from "@lyric/video/shot-references";
@@ -65,8 +66,7 @@ export async function GET(_request: Request, { params }: Params) {
           // a song without a folder yet: no shot list
         }
         const mvMake = await musicVideoOptions(ws, id).catch(() => null); // Make a music video (music-video.ts)
-        const mvBest = await bestShotsView(ws, id).catch(() => null); // Best shot for each line (mv-best.ts)
-        return { board: { ...board, characters: characterChoices(ws), faceUsdPerSecond: REFERENCE_MODEL.usdPerSecond, mvMake, mvBest }, production }; // characters: "Who is this" (picture-character.ts)
+        return { board: { ...board, characters: characterChoices(ws), faceUsdPerSecond: REFERENCE_MODEL.usdPerSecond, mvMake }, production }; // characters: "Who is this" (picture-character.ts)
       }),
     );
   } catch (error) {
@@ -182,6 +182,13 @@ export async function POST(request: Request, { params }: Params) {
       return Response.json({ used });
     }
     if (body.action === "mv-best") return Response.json(await withWorkspaceAsync((ws) => useBestShots(ws, id)));
+    // Production, "Use for this shot": a music-video shot fills a planned shot (a singing one stays on its lines, in time).
+    if (body.action === "mv-use-slot") {
+      const b = body as { shot?: unknown; slot?: unknown };
+      const used = await withWorkspaceAsync((ws) => useMusicVideoShotForSlot(ws, id, file, b.shot, b.slot));
+      void checkMusicVideoShots(open, id, path.basename(file));
+      return Response.json({ used });
+    }
     if (body.action === "mv-best-pick") {
       const used = await withWorkspaceAsync((ws) => useMusicVideoShot(ws, id, file, (body as { shot?: unknown }).shot, { hand: true }));
       void checkMusicVideoShots(open, id, path.basename(file));

@@ -9,6 +9,7 @@ import type { AnchorClip, LyricsLine, LyricsView } from "@lyric/video/lyrics-vie
 import { showsSinging } from "@lyric/video/song-style";
 
 import { HidePreview } from "@/components/hide-preview";
+import { LineMvShots, MvLinesBar, useMvLines } from "@/components/mv-lines";
 import { SingerBar, SingerCell, useSinger } from "@/components/singer";
 import { SectionHeaderRow, SectionsBar, StartSectionButton, useSections } from "@/components/sections-ui";
 import { useSongStyle } from "@/components/song-style";
@@ -136,6 +137,8 @@ export function LyricsTab({ projectId }: { projectId: string }) {
   loadRef.current = load;
   const reloadAnchors = useCallback(() => void loadRef.current(), []);
   const singer = useSinger(projectId, reloadAnchors);
+  // The music-video shots on each line (mv-lines.tsx): a shot placed changes the anchors and the singing lines.
+  const mvLines = useMvLines(projectId, () => (reloadAnchors(), void singer.reload()));
   // Song style (song-style.ts): Who sings shows for Add lip sync and Mini film, and on any song that has singing lines.
   const style = useSongStyle(projectId);
   // The song's sections (sections-ui.tsx), above the lines and as a row before each section: for every song style since
@@ -372,6 +375,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
               <span>The other shots follow the song&apos;s clip order (Prepare → Storyboard) in every video.</span>
               {!data.anchors.clips.length ? <span className="text-amber-200">No clips to choose from: add clips and photos or a collection in Prepare → Storyboard.</span> : null}
             </div>
+            <MvLinesBar mv={mvLines} />
             {withSections ? <SectionsBar sections={sections} startMs={(n) => data.lines?.find((x) => x.number === n)?.startMs ?? null} /> : null}
             {withSinging ? <SingerBar singer={singer} lyrics={(data.lines ?? []).flatMap((l) => (l.startMs === null || l.startMs === undefined ? [] : [{ number: l.number, text: l.text, startMs: l.startMs, endMs: l.sungEndMs ?? l.startMs + 3000 }]))} /> : (
               <p className="text-muted-foreground text-xs" data-singing-off>The Lip sync column is hidden: this song&apos;s style is Cut to the song. Choose Add lip sync in Song Details to put the singer on lines.</p>
@@ -587,6 +591,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                               the singer from line {sungWith.line} continues (one take)
                             </div>
                           ) : null}
+                          <LineMvShots mv={mvLines} line={l.number} />
                           <button type="button" disabled={busy} onClick={() => setPicking(picking === l.number ? null : l.number)} className="text-muted-foreground hover:text-foreground mt-1 flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] whitespace-nowrap" data-anchor-pick>
                             <Clapperboard className="size-3" /> {anchor ? "Change" : "Show a clip"}
                           </button>
