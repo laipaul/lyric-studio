@@ -4,6 +4,15 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Singing shots over the Mini film ✅ (to verify on the PC)
+Paul, 27 Nov 2026: "I don't see the singing clip on my video" → "yes over the film". A Mini film played only the planned
+shots and ignored everything placed on lyric lines, so singing takes and music-video shots never showed. Now a singing
+clip on its lines plays over the film there, in time with the song (the singer on the sung lines, the story shots
+around them, as a performance cut), and the planned shots fill the rest. Checked on Something About You And Me: the
+Film 16:9 shows the bride singing on lines 1–3, 8–19 and 26–30. Its music video is 16:9, so the Film 9:16 cannot use
+it (the film says so): make a 9:16 music video for the vertical film and Reels. A film with a saved shot plan keeps it
+until something it is made from changes.
+
 ### Cut while it plays ✅ (to verify on the PC)
 Paul, 27 Nov 2026: "build it now" (how pros work: multicam). In Prepare → Lyrics Sync, **Cut while it plays** opens a
 player: the song plays, the picture in use plays above it in time, and under it only the options of the moment playing

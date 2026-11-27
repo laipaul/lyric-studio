@@ -30,6 +30,12 @@ describe("the film's shots (pure)", () => {
     ]);
   });
 
+  it("a singing clip on its lines is no story card (it plays over the film, in time)", () => {
+    const items = filmItems(["slot:s01", "sings.mp4", "b.mp4"], ["sings.mp4", "b.mp4"], list, [{ line: 2, clip: "sings.mp4", sync: 12.5 }]);
+    expect(items.map((x) => x.key)).toEqual(["slot:s01", "b.mp4"]);
+    expect(items.some((x) => x.clip === "sings.mp4")).toBe(false);
+  });
+
   it("the two films: each shot's vertical take in the Film 9:16, its landscape take in the Film 16:9, else a stand-in", () => {
     const both = { ...list, filledWide: { s02: "a-wide.mp4", s03: "s03-wide.mp4" } };
     const order = ["slot:s01", "a.mp4", "slot:s03", "c.mp4", "slot:s05"];

@@ -62,6 +62,9 @@ export function filmItems(
     const id = slotOfClip.get(lower(name));
     if (id && slots.has(id)) return addSlot(id);
     if (seen.has(lower(name)) || !usedSet.has(lower(name))) return;
+    // A singing clip on its lines (an anchor with "sync") is no story card: it plays over the film on its lines, in
+    // time with the song (compose.ts; 27 Nov 2026, Paul: "yes over the film").
+    if (anchors.some((a) => a.sync !== undefined && lower(a.clip) === lower(name))) return;
     seen.add(lower(name));
     out.push({ key: name, clip: usedSet.get(lower(name))!, slot: null, line: anchorLine(name) });
   };

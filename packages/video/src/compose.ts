@@ -220,10 +220,15 @@ export function composeProps(
   const bounds = [0, ...plan.cuts.map((c) => c.frame - plan.start_frame), base.durationInFrames];
   const { byShot, warnings } = pinsToShots(base.pins, allLines, bounds);
   if (base.filmShots) {
+    // Each shot shows the film shot playing at its start (by time: a singing clip on its lines, an anchor, splits the
+    // film's shots and plays over them, in time with the song; 27 Nov 2026).
     byShot.clear();
-    base.filmShots.forEach((id, i) => {
-      if (i < bounds.length - 1) byShot.set(i, id);
-    });
+    const film = [0, ...base.plan.cuts.map((c) => c.frame - base.plan.start_frame), base.durationInFrames];
+    for (let i = 0; i < bounds.length - 1; i++) {
+      let j = 0;
+      while (j + 1 < film.length - 1 && film[j + 1] <= bounds[i]) j++;
+      if (base.filmShots[j] !== undefined) byShot.set(i, base.filmShots[j]);
+    }
   }
   const notes: string[] = [];
   const clipStarts = new Map<number, number>();

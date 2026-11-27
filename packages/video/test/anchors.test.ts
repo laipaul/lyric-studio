@@ -192,6 +192,23 @@ describe("singing clips (lip sync, 21 Nov 2026): locked to the song", () => {
   // "sings.mp4" was made from the vocal of 0:13.5 to 0:22.0 (8.5 s): its first frame belongs at song 0:13.5.
   const singer = { id: "sings.mp4", name: "sings.mp4", duration_ms: 8_500, path: "cache/sings.mp4", durationFrames: 255 };
   const withSinger = (anchors: ResolvedAnchor[], over: Partial<RenderBase> = {}) => base(10_500, 40_500, anchors, { clips: [...clips, singer], ...over });
+  it("a Mini film (27 Nov 2026, Paul: \"yes over the film\"): the singing take plays over the film on its lines, in time; the film's shots fill the rest by time", () => {
+    const plan = section(10_500, 40_500);
+    const film = plan.cuts.map((_, i) => clipNames[i % 6]); // one more shot than cuts: the last one below
+    film.push(clipNames[plan.cuts.length % 6]);
+    const filmShots = [clipNames[5], ...film].slice(0, plan.cuts.length + 1);
+    const { props } = composeProps(withSinger([anchor(1, "sings.mp4", { clipInMs: null, syncMs: 13_500 })], { filmShots }), { seed: 1, style: "simple", order: "story" });
+    const sing = props.shots.find((s) => s.src === "cache/sings.mp4")!;
+    expect(sing.start).toBe(rel(14_500));
+    expect(sing.clipStartFrame + (sing.dissolve?.before ?? 0)).toBe(Math.round((14_500 * 30) / 1000) - 2 - Math.round((13_500 * 30) / 1000)); // lips in time
+    // Every other shot is the film's shot playing at its start.
+    const bounds = [0, ...plan.cuts.map((c) => c.frame - plan.start_frame)];
+    for (const s of props.shots.filter((x) => x.src !== "cache/sings.mp4")) {
+      let j = 0;
+      while (j + 1 < bounds.length && bounds[j + 1] <= s.start) j++;
+      expect(s.src).toBe(`cache/${filmShots[j]}`);
+    }
+  });
   it("plays from the frame that matches the song at the cut, at normal speed, with a dissolve into it that lies before the cut", () => {
     const a = anchor(1, "sings.mp4", { clipInMs: null, syncMs: 13_500, transition: "dissolve" });
     const { props, anchors } = composeProps(withSinger([a]), { seed: 1, style: "simple", order: "story", transitions: "dissolve" });

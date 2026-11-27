@@ -1466,9 +1466,12 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   const anchors: ResolvedAnchor[] = [];
   const anchorMissing: string[] = [];
   const anchorSlots: { line: number; text: string; clip: string }[] = [];
-  if (usesClips && !canvas && preset.lyrics && !filmShots) {
+  if (usesClips && !canvas && preset.lyrics) {
     const stem = (n: string) => n.toLowerCase().replace(/\.[^.]+$/, "");
     for (const a of sh.anchors) {
+      // A Mini film keeps only the singing clips on their lines (over the film, in time; 27 Nov 2026): its story
+      // shots come from the shot list, not from line anchors.
+      if (filmShots && a.sync === undefined) continue;
       const i = lines[a.line - 1] ? a.line - 1 : -1;
       const clip = usedClips.find((c) => c.name.toLowerCase() === a.clip.toLowerCase()) ?? usedClips.find((c) => stem(c.name) === stem(a.clip));
       const omitted = !clip && preparedClips.some((c) => (c.name.toLowerCase() === a.clip.toLowerCase() || stem(c.name) === stem(a.clip)) && isOmitted(edits, c.name));
