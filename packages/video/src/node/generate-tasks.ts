@@ -17,7 +17,7 @@ export type GenerateTask = {
   id: string; // <song id>:<picture or video>:<take n>
   project_id: string;
   title: string; // the song
-  kind: "singing" | "animate";
+  kind: "singing" | "animate" | "musicvideo";
   what: string; // "Singing · lines 9-14 · Bride smile" / "Animate · Bride smile · take 3"
   model: string; // "WaveSpeed · InfiniteTalk"
   cost_usd: number;
@@ -70,8 +70,8 @@ function taskOf(p: { id: string; title: string }, file: string, label: string | 
     id: `${p.id}:${file}:${t.n}`,
     project_id: p.id,
     title: p.title,
-    kind: singing ? "singing" : "animate",
-    what: singing ? `Singing · ${lines} · ${name}` : `Animate · ${name} · take ${t.n}${t.label ? ` (${t.label})` : ""}`,
+    kind: singing ? "singing" : t.kind === "musicvideo" ? "musicvideo" : "animate",
+    what: singing ? `Singing · ${lines} · ${name}` : t.kind === "musicvideo" ? `Music video · ${t.section ? `${Math.round((t.section.toMs - t.section.fromMs) / 1000)} s of the song` : ""} · from ${name}` : `Animate · ${name} · take ${t.n}${t.label ? ` (${t.label})` : ""}`,
     model: `${SERVICE[t.service] ?? t.service} · ${t.model}`,
     cost_usd: t.cost_usd,
     seconds: takeSeconds(t),

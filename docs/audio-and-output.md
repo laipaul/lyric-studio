@@ -15,3 +15,4 @@ _Part of the project brief (CLAUDE.md links here). The music is never altered; f
   song's `.studio\lipsync-audio\` (by the stem's content, made once). The copy is sent only to the lip-sync model; the
   stem itself is only read, and the copy never goes into any video or any output.
 - Music videos made elsewhere (27 Nov 2026): their sound (a copy of the song, made by the platform) is only decoded to find where the video sits in the song; it is never kept: each shot taken from it is cut without sound (`-an`). The video's audio stays the song.
+- Make a music video (27 Nov 2026): the stretch of the song sent to WaveSpeed's Music Video Generator is copied by FFmpeg (read only) into a temporary WAV, uploaded once and deleted; the song file is never changed.

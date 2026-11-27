@@ -33,12 +33,15 @@ export function takeFacts(t: TakeFactsInput, locale?: string): string {
 // A take's short tag (25 Nov 2026, Paul: "how do I distinguish which take and run was it?"), the same in Creation and
 // Compare: its name (Paul's or the draft test's own label first), what made it, its feeling and its cost, e.g.
 // "Take 3 · Draft 480p · joy · $0.54", "Take 4 · final of 3 · 1080p · $0.20", "Take 5 · Jennifer's face · $1.62".
-export type TakeTagInput = TakeFactsInput & { n: number; label?: string; quality?: string; model?: string; finalOf?: number; refNames?: string[]; service?: string; filmLook?: string; feel?: string; line?: number; through?: number };
+export type TakeTagInput = TakeFactsInput & { section?: { fromMs: number; toMs: number }; n: number; label?: string; quality?: string; model?: string; finalOf?: number; refNames?: string[]; service?: string; filmLook?: string; feel?: string; line?: number; through?: number };
+
+const clk = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
 
 export function takeKind(t: TakeTagInput): string {
   if (t.finalOf !== undefined) return "1080p";
   if (/upscaler/i.test(t.model ?? "")) return /pro/i.test(t.model ?? "") ? "1080p upscale" : "1080p basic upscale";
   if (t.kind === "lipsync") return `singing, ${t.through && t.through > (t.line ?? 0) ? `lines ${t.line}-${t.through}` : `line ${t.line}`} · ${t.resolution ?? "720p"}`;
+  if (t.kind === "musicvideo") return `music video${t.section ? ` · ${clk(t.section.fromMs)}–${clk(t.section.toMs)}` : ""}${t.resolution ? ` · ${t.resolution}` : ""}`;
   if (t.kind === "references") {
     const face = t.refNames?.find((r) => / · face sheet$/.test(r));
     return face ? `${face.replace(/ · face sheet$/, "")}'s face` : "with references";

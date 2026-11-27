@@ -12,7 +12,9 @@
 //   slot=<id>: the added pictures belong to that shot; { action: "shot", file, slot }: a picture belongs to a shot
 //   (slot null: to none); { action: "use-shot", file, n?, slot }: Use this take for that shot (its place and its line).
 // { action: "final", file, n }: Make final: draft take n upscaled to 1080p (final.ts), a new take right after it.
-// Music video made elsewhere (music-video.ts, 27 Nov 2026): { action: "mv-check", file }: "This is a music video of this
+// Music video made elsewhere (music-video.ts, 27 Nov 2026): { action: "mv-make", pictures, section, aspect, resolution,
+//   words, cap }: Make a music video on WaveSpeed (cost first, under the cap; the video comes back into Creation, found in
+//   the song); { action: "mv-check", file }: "This is a music video of this
 //   song" (its place in the song, its shots); { action: "mv-use", file, shot }: that shot on its lines, in time (or to the
 //   Storyboard when it carries no sung line); { action: "mv-use-all", file }: every shot that carries sung lines.
 // { action: "remove-picture", file }: Put aside (to pictures\_removed\, Restore); { action: "restore-picture", file }.
@@ -26,7 +28,7 @@ import { REFERENCE_MODEL } from "@lyric/video/animate";
 import { addFromLink, addPictures, picturesView, removePicture, removeTakes, restorePicture, restoreTake, setFavourite, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, setPictureFeeling, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
 import { runFinal, startFinal } from "@lyric/video/final";
 import { runSinging, withSongStarts } from "@lyric/video/singer";
-import { analyseMusicVideo, checkMusicVideoShots, useAllMusicVideoShots, useMusicVideoShot, withMusicVideos } from "@lyric/video/music-video";
+import { analyseMusicVideo, checkMusicVideoShots, musicVideoOptions, runMusicVideo, startMusicVideo, useAllMusicVideoShots, useMusicVideoShot, withMusicVideos } from "@lyric/video/music-video";
 import { placeByName, placeDropped, productionView, setPictureShot, useForShot, withLineStarts } from "@lyric/video/shot-production";
 import { timedLines } from "@lyric/video/production";
 import { referencePreview, startShotReferences } from "@lyric/video/shot-references";
@@ -58,7 +60,8 @@ export async function GET(_request: Request, { params }: Params) {
         } catch {
           // a song without a folder yet: no shot list
         }
-        return { board: { ...board, characters: characterChoices(ws), faceUsdPerSecond: REFERENCE_MODEL.usdPerSecond }, production }; // characters: "Who is this" (picture-character.ts)
+        const mvMake = await musicVideoOptions(ws, id).catch(() => null); // Make a music video (music-video.ts)
+        return { board: { ...board, characters: characterChoices(ws), faceUsdPerSecond: REFERENCE_MODEL.usdPerSecond, mvMake }, production }; // characters: "Who is this" (picture-character.ts)
       }),
     );
   } catch (error) {
@@ -155,6 +158,12 @@ export async function POST(request: Request, { params }: Params) {
       const n = body.n === undefined || body.n === null ? null : Number(body.n);
       return Response.json(await withWorkspaceAsync((ws) => sendToStoryboard(ws, id, file, n, { forLine: (body as { forLine?: unknown }).forLine === true })));
     }
+    if (body.action === "mv-make") {
+      const b = body as { pictures?: unknown; section?: unknown; aspect?: unknown; resolution?: unknown; words?: unknown };
+      const started = await withWorkspaceAsync((ws) => startMusicVideo(ws, id, { ...b, cap: body.cap }));
+      void runMusicVideo(open, id, started.file, started.take.n);
+      return Response.json(started);
+    }
     if (body.action === "mv-check") return Response.json({ mv: await withWorkspaceAsync((ws) => analyseMusicVideo(ws, id, file)) });
     if (body.action === "mv-use" || body.action === "mv-use-all") {
       const used = await withWorkspaceAsync(async (ws) => (body.action === "mv-use" ? [await useMusicVideoShot(ws, id, file, (body as { shot?: unknown }).shot)] : (await useAllMusicVideoShots(ws, id, file)).used));
@@ -177,6 +186,7 @@ export async function POST(request: Request, { params }: Params) {
       const n = Number(body.n);
       const take = withWorkspace((ws) => startResume(ws, id, file, n));
       if (take.finalOf) void runFinal(open, id, path.basename(file), take.n);
+      else if (take.kind === "musicvideo") void runMusicVideo(open, id, path.basename(file), take.n);
       else if (take.kind === "lipsync") void runSinging(open, id, [{ source: path.basename(file), n: take.n }]);
       else void runTakes(open, id, path.basename(file), [take.n]);
       return Response.json({ take });

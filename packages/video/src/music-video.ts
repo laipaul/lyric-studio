@@ -251,3 +251,36 @@ export function findInSong(video: Float32Array, song: Float32Array, rate: number
     driftMs: Math.round(((sorted[sorted.length - 1] - sorted[0]) / rate) * 1000),
   };
 }
+
+// ---------------------------------------------------------------- making one (WaveSpeed's Music Video Generator)
+
+export const MV_GENERATOR_PATH = "wavespeed-ai/music-video-generator";
+export const MV_MAX_MS = 600_000; // the generator takes up to 10 minutes of song
+export const MV_MIN_MS = 3_000;
+export const MV_MAX_PICTURES = 3;
+// Always added to the words: one person, no stage (Paul's first test showed a microphone stand even in the garden).
+export const MV_PROMPT_RULES = "The same person in every shot, same face and hair; she sings to herself, with no microphone and no stage.";
+export const MV_DEFAULT_WORDS = "The person in the photos sings this song with real feeling.";
+export type MvSectionChoice = { kind: "whole" } | { kind: "latest"; fromMs: number; toMs: number } | { kind: "lines"; first: number; last: number };
+
+// The prompt sent: Paul's words (or a plain default), the rules, the song's Film look.
+export function mvPrompt(words: string, look?: string | null): string {
+  const w = words.trim().replace(/\s+/g, " ") || MV_DEFAULT_WORDS;
+  return [w.replace(/([^.!?])$/, "$1."), MV_PROMPT_RULES, look ? `${look.trim().replace(/([^.!?])$/, "$1.")}` : ""].filter(Boolean).join(" ");
+}
+
+// The stretch of the song sent (ms), always on musical boundaries: lines a-b run from the downbeat before line a shows
+// (a little lead) to one bar after line b is sung, on a downbeat; the whole song is 0 to its end; the latest Reel's
+// section is used as it was made.
+export function mvSection(choice: MvSectionChoice, lines: readonly { number: number; shownMs: number; sungEndMs: number }[], downbeats: readonly number[], durationMs: number): { fromMs: number; toMs: number } {
+  if (choice.kind === "whole") return { fromMs: 0, toMs: durationMs };
+  if (choice.kind === "latest") return { fromMs: Math.max(0, choice.fromMs), toMs: Math.min(durationMs, choice.toMs) };
+  const a = lines.find((l) => l.number === choice.first);
+  const b = lines.find((l) => l.number === choice.last);
+  if (!a || !b || b.number < a.number) throw new Error("Choose a first and a last sung line (the last one after the first).");
+  const gaps = downbeats.slice(1).map((d, i) => d - downbeats[i]).sort((x, y) => x - y);
+  const bar = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 2000;
+  const before = downbeats.filter((d) => d <= a.shownMs - 300).at(-1);
+  const after = downbeats.find((d) => d >= b.sungEndMs + bar * 0.75);
+  return { fromMs: Math.max(0, before ?? a.shownMs - 1500), toMs: Math.min(durationMs, after ?? b.sungEndMs + bar) };
+}

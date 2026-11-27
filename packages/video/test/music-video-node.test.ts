@@ -10,7 +10,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createSong, ensureAlignment, songPathsById } from "../src/node";
 import { addPictures, picturesView, readPictures } from "../src/node/animate";
-import { analyseMusicVideo, useAllMusicVideoShots, useMusicVideoShot, withMusicVideos } from "../src/node/music-video";
+import { analyseMusicVideo, runMusicVideo, startMusicVideo, useAllMusicVideoShots, useMusicVideoShot, withMusicVideos } from "../src/node/music-video";
+import { MV_DEFAULT_WORDS, MV_PROMPT_RULES, mvPrompt, mvSection } from "../src/music-video";
 import { singerContext } from "../src/node/singer";
 import { fakeAlign, ffmpeg, LYRICS } from "./media-helpers";
 
@@ -106,5 +107,71 @@ describe("a music video made elsewhere", () => {
     expect(mv.matched).toBe(false);
     expect(mv.shots).toEqual([]);
     await expect(useMusicVideoShot(ws, id, "other.mp4", 0)).rejects.toThrow(/Check it first/);
+  });
+});
+
+describe("Make a music video (sent to WaveSpeed from the app)", () => {
+  const STUB = { LYRIC_GENERATE_STUB: "1" } as NodeJS.ProcessEnv;
+  const openWs = () => openWorkspace(wsDir);
+  beforeAll(async () => {
+    ffmpeg("-f", "lavfi", "-i", "color=c=white:s=96x160", "-frames:v", "1", path.join(root, "singer.png"));
+    await addPictures(ws, id, [{ file: path.join(root, "singer.png"), name: "singer.png" }]);
+  });
+
+  it("the stretch: lines on bars, the whole song, the prompt with the rules and the Film look", () => {
+    const lines = [{ number: 1, shownMs: 4100, sungEndMs: 6000 }, { number: 2, shownMs: 6500, sungEndMs: 9000 }];
+    const downbeats = [0, 2000, 4000, 6000, 8000, 10_000, 12_000];
+    expect(mvSection({ kind: "lines", first: 1, last: 2 }, lines, downbeats, 14_000)).toEqual({ fromMs: 2000, toMs: 12_000 });
+    expect(mvSection({ kind: "whole" }, lines, downbeats, 14_000)).toEqual({ fromMs: 0, toMs: 14_000 });
+    expect(() => mvSection({ kind: "lines", first: 2, last: 1 }, lines, downbeats, 14_000)).toThrow(/first and a last/);
+    expect(mvPrompt("", "Shot on 35mm film")).toBe(`${MV_DEFAULT_WORDS} ${MV_PROMPT_RULES} Shot on 35mm film.`);
+    expect(mvPrompt("  the bride sings in a garden ")).toBe(`the bride sings in a garden. ${MV_PROMPT_RULES}`);
+  });
+
+  it("refuses above the cap and without a picture, before anything is sent", async () => {
+    await expect(startMusicVideo(ws, id, { pictures: [], section: { kind: "whole" }, cap: 10 }, STUB)).rejects.toThrow(/at least one picture/);
+    await expect(startMusicVideo(ws, id, { pictures: ["singer.png"], section: { kind: "whole" }, resolution: "720p", cap: 0.2 }, STUB)).rejects.toThrow(/above your cap of \$0\.20.*Nothing was sent/);
+    await expect(startMusicVideo(ws, id, { pictures: ["singer.png"], section: { kind: "latest" }, cap: 10 }, STUB)).rejects.toThrow(/No Reel, TikTok or Shorts video/);
+    expect(readPictures(pics).pictures["singer.png"]?.takes.filter((t) => t.kind === "musicvideo") ?? []).toEqual([]);
+  });
+
+  it("the request WaveSpeed gets: the song's stretch and the pictures uploaded, then the prompt, shape and size; sent once", async () => {
+    const started = await startMusicVideo(ws, id, { pictures: ["singer.png"], section: { kind: "whole" }, aspect: "9:16", resolution: "480p", words: "she sings by the sea", cap: 10 }, { WAVESPEED_API_KEY: "KEY" } as NodeJS.ProcessEnv);
+    expect(started.take).toMatchObject({ kind: "musicvideo", status: "running", seconds: 12, cost_usd: 0.36, resolution: "480p", aspect: "9:16", refFiles: ["singer.png"], section: { fromMs: 0, toMs: 12_000 } });
+    const calls: { url: string; body?: string }[] = [];
+    const uploads: string[] = [];
+    const f = (async (url: string, init?: RequestInit) => {
+      calls.push({ url, body: typeof init?.body === "string" ? init.body : undefined });
+      if (url.endsWith("/media/uploads")) {
+        const name = JSON.parse(String(init?.body)).filename as string;
+        uploads.push(name);
+        return Response.json({ data: { download_url: `https://cdn/${name}`, upload: { method: "PUT", url: `https://put/${name}` } } });
+      }
+      if (url.startsWith("https://put/")) return new Response(null, { status: 200 });
+      if (url.endsWith("/wavespeed-ai/music-video-generator")) return Response.json({ data: { id: "mv-1" } });
+      if (url.includes("/predictions/mv-1/result")) return Response.json({ data: { status: "failed", error: "test stop" } });
+      throw new Error(`unexpected ${url}`);
+    }) as typeof fetch;
+    await runMusicVideo(openWs, id, started.file, started.take.n, { env: { WAVESPEED_API_KEY: "KEY" } as NodeJS.ProcessEnv, f, sleep: async () => undefined });
+    expect(uploads).toEqual(["voice.wav", "picture.png"]);
+    const sent = calls.find((c) => c.url.endsWith("/wavespeed-ai/music-video-generator"))!;
+    expect(JSON.parse(sent.body!)).toEqual({ audio: "https://cdn/voice.wav", images: ["https://cdn/picture.png"], prompt: mvPrompt("she sings by the sea"), aspect_ratio: "9:16", resolution: "480p" });
+    expect(calls.filter((c) => c.url.endsWith("/wavespeed-ai/music-video-generator"))).toHaveLength(1);
+    const t = readPictures(pics).pictures["singer.png"].takes.find((x) => x.n === started.take.n)!;
+    expect(t).toMatchObject({ request_id: "mv-1", status: "interrupted" });
+    expect(t.error).toMatch(/test stop.*get its result later, free/);
+  });
+
+  it("the stand-in end to end: the video lands in Creation, found in the song and split into shots", async () => {
+    const started = await startMusicVideo(ws, id, { pictures: ["singer.png"], section: { kind: "lines", first: 2, last: 4 }, cap: 10 }, STUB);
+    await runMusicVideo(openWs, id, started.file, started.take.n, { env: STUB });
+    const t = readPictures(pics).pictures["singer.png"].takes.find((x) => x.n === started.take.n)!;
+    expect(t.status).toBe("done");
+    expect(t.made).toMatch(/^Music video .+\.mp4$/);
+    const rec = readPictures(pics).pictures[t.made!];
+    expect(rec.source).toBe("WaveSpeed music video");
+    expect(rec.mv?.matched).toBe(true);
+    expect(Math.abs(rec.mv!.offsetMs - t.section!.fromMs)).toBeLessThan(30);
+    expect(rec.mv!.shots.length).toBeGreaterThan(0);
   });
 });

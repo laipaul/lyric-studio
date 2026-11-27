@@ -4,6 +4,16 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Make a music video from the app (WaveSpeed) ✅ (to verify on the PC, needs WAVESPEED_API_KEY)
+Paul, 27 Nov 2026: "go". Prepare → Creation → **Make a music video…**: pick 1 to 3 pictures of the singer, the stretch
+of the song (your latest Reel's section by default, read from its manifest; or "these lines", cut from the bar before
+the first line to a bar after the last; or the whole song), 9:16 or 16:9, 720p or 480p, and the scenes in your words
+(the app adds "the same person in every shot, no microphone" and your Film look). The cost shows first and nothing is
+sent above your cap; the request is sent once, never retried. The song's stretch is copied to a temporary file (the
+song is only read). It runs in the Tasks menu (about 3-6 minutes per minute of song; Get result, free, if the studio
+stops) and comes back as its own video in Creation, already found in the song and split into shots: then "Use every
+singing shot" or pick shots. Not yet sent to WaveSpeed for real from the app (request as WaveSpeed's API page shows it).
+
 ### Music videos made elsewhere: their shots on their lines, in time ✅ (to verify on the PC)
 Paul, 27 Nov 2026: WaveSpeed's Music Video Generator made "the same bride singing in different scenes and camera
 angles", lips in time ("the lip sync on this 13 s song extract is very good"). Now in Prepare → Creation, on a video:

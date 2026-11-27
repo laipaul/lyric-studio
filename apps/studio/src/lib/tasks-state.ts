@@ -5,7 +5,7 @@
 // Creation and Lyrics Sync, 21 Nov 2026).
 import { useSyncExternalStore } from "react";
 
-export type TakeTaskState = { project_id: string; kind: "singing" | "animate"; status: string };
+export type TakeTaskState = { project_id: string; kind: "singing" | "animate" | "musicvideo"; status: string }; // musicvideo: made for Creation, counted with its takes
 
 let takes: readonly TakeTaskState[] = [];
 const listeners = new Set<() => void>();
@@ -24,7 +24,7 @@ const subscribe = (l: () => void) => {
 export function useRunningTakes(projectId: string | undefined, kind: TakeTaskState["kind"]): number {
   return useSyncExternalStore(
     subscribe,
-    () => (projectId ? takes.filter((t) => t.project_id === projectId && t.kind === kind && t.status === "running").length : 0),
+    () => (projectId ? takes.filter((t) => t.project_id === projectId && (t.kind === kind || (kind === "animate" && t.kind === "musicvideo")) && t.status === "running").length : 0),
     () => 0,
   );
 }

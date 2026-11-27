@@ -116,7 +116,7 @@ export type Take = {
   cost_usd: number; // the estimate (the services bill what they bill)
   file?: string; // the finished video, in pictures\ ("takes/<picture> take N.mp4")
   sent?: string; // "Send to Storyboard": the clip it became in the song's clips folder
-  kind?: "lipsync" | "references"; // references: made by reference-to-video from refFiles (Make with references); lipsync: a singing clip (Lyrics Sync → Singer): made from this picture or video and the vocal of one line
+  kind?: "lipsync" | "references" | "musicvideo"; // musicvideo: a music video asked of WaveSpeed (music-video.ts), recorded on its first picture; // references: made by reference-to-video from refFiles (Make with references); lipsync: a singing clip (Lyrics Sync → Singer): made from this picture or video and the vocal of one line
   line?: number; // lipsync: the lyric line (Lyrics tab number); with `through`: the first line of the run
   through?: number; // lipsync: the last line of a run of lines in a row sung from the same picture (one continuous take)
   sync_ms?: number; // lipsync: the song time of the take's first frame (the vocal piece started there)
@@ -155,6 +155,8 @@ export type Take = {
   aspect?: "9:16" | "16:9"; // references: the shape asked for
   guideFile?: string; // references: the camera guide video sent as @Video 1 (workspace-relative), e.g. a Midjourney take
   guideName?: string; // and its name as shown on the shot
+  section?: { fromMs: number; toMs: number }; // musicvideo: the stretch of the song sent
+  made?: string; // musicvideo: the video it became, its own item in Creation (pictures\<file>)
   mvShot?: number; // a shot of a music video made elsewhere (music-video.ts): its number (0-based) in the video's mv.shots
 };
 // removedTakes: takes put aside by Clean up / Remove (their files in pictures\takes\_removed\), with Restore; nothing is
