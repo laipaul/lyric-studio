@@ -1131,7 +1131,7 @@ function PictureTile({
   }
 
   return (
-    <div data-picture={p.file} data-kind={p.kind} className="bg-card/40 flex flex-col gap-2 rounded-lg border p-2">
+    <div data-picture={p.file} data-kind={p.kind} className={cn("bg-card/40 flex flex-col gap-2 rounded-lg border p-2", p.mv?.matched && "col-span-2")}>{/* a music video found in the song: two columns wide, so its shot list reads (27 Nov 2026) */}
       <div className="relative">
         {video ? (
           <button type="button" data-picture-play onClick={() => (openCompare ? openCompare() : play(fileUrl(p.url), p.file))} className="block w-full cursor-pointer" title={openCompare ? "Click to play every candidate of this shot together" : "Click to watch it big"}>

@@ -83,14 +83,18 @@ export function MusicVideoPanel({ p, url, cap, post, reload, setNotice, play }: 
           </span>
         </span>
       ) : null}
-      <div className="flex max-h-72 flex-col gap-1 overflow-y-auto pr-1">
+      <div className="flex max-h-96 flex-col gap-1 overflow-y-auto pr-1">
         {mv.shots.map((s) => (
           <div key={s.i} data-mv-shot={s.i} data-mv-lines={s.first ?? ""} className="flex items-center gap-1.5">
             <button type="button" onClick={() => play(`${url}#t=${(s.fromMs / 1000).toFixed(2)},${(s.toMs / 1000).toFixed(2)}`, `${p.label ?? p.file} · shot ${s.i + 1}`)} className="shrink-0" title="Watch this shot">
               <video src={`${url}#t=${((s.fromMs + s.toMs) / 2000).toFixed(2)}`} muted playsInline preload="metadata" className="bg-muted h-10 w-16 rounded object-cover" />
             </button>
-            <span className="min-w-0 flex-1 truncate" title={s.text ?? undefined}>
-              <b>Shot {s.i + 1}</b> · {clock(s.songFromMs)}–{clock(s.songToMs)} · {s.first !== null ? <>{linesName(s.first, s.last ?? s.first)}{s.text ? <span className="text-muted-foreground"> “{s.text}”</span> : null}</> : <span className="text-muted-foreground">no sung line</span>}
+            {/* Two lines: the shot and its time, then its lines and first words (readable in a narrow tile too). */}
+            <span className="flex min-w-0 flex-1 flex-col leading-tight" title={s.text ?? undefined}>
+              <span className="whitespace-nowrap">
+                <b>Shot {s.i + 1}</b> · {clock(s.songFromMs)}–{clock(s.songToMs)}
+              </span>
+              <span className="line-clamp-2">{s.first !== null ? <>{linesName(s.first, s.last ?? s.first)}{s.text ? <span className="text-muted-foreground"> “{s.text}”</span> : null}</> : <span className="text-muted-foreground">no sung line</span>}</span>
             </span>
             {s.inUse ? (
               <span data-mv-shot-used className="flex shrink-0 items-center gap-1 text-emerald-300">
