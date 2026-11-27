@@ -974,6 +974,15 @@ locked cards can't be edited").
 
 ## Next
 
+**In-app help for every task — MUST HAVE (Paul, 27 Nov 2026: "it is a must have"; next after his current tests of
+the music-video steps).** The app explains itself where Paul is, so he never has to remember a workflow:
+- a **?** on every tab and panel: a short card (what it is for, the steps in order, what it costs, what you should see);
+- **Help** in the header: workflows as guided recipes ("Make a Reel from a new song", "Get a music video from WaveSpeed
+  and use its best shots", "Lip-sync a line", "Post a video"), each step with **Take me there** to the right tab or panel;
+- each step ticked when the app sees it done for this song, the next one highlighted;
+- one help file in the project as the single source: every new feature adds its help card in the same step;
+- local only (part of the app, no network). Start with the music-video recipe, then one recipe per workflow.
+
 **Song creation workflow (Paul, 21 Nov 2026):** pictures, then clips, then play with the order (his real flow: no
 preset storyboard, discovery against the music).
 - ✅ (built 21 Nov, to verify) **G1 Story tools** (optional, folded away in Prepare → Pictures): cast from the shared
