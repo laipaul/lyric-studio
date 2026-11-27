@@ -276,7 +276,19 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
   }
 
   return (
-    <div data-pictures={part} className="flex flex-col gap-3">
+    <div
+      data-pictures={part}
+      className="flex flex-col gap-3"
+      onDragOver={(e) => {
+        if (part !== "settings" && e.dataTransfer.types.includes("Files")) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        // A drop no shot's box or the Loose pictures box took (they handle their own): to Loose pictures.
+        if (e.defaultPrevented || part === "settings" || !e.dataTransfer.files.length) return;
+        e.preventDefault();
+        void add(e.dataTransfer.files);
+      }}
+    >
       {settings ? <FilmLookPicker projectId={projectId} /> : null}
       {settings ? (
       <div data-creation-defaults className="bg-card/40 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border p-2 text-xs">
@@ -348,7 +360,16 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
           {defSvc.id === "higgsfield" ? ' (from open.higgsfield.ai, written as "key id:key secret")' : " (from wavespeed.ai → API keys)"}, then restart Lyric Studio. You pay {defSvc.label} directly.
         </p>
       ) : null}
-      {board.mvMake ? <MakeMusicVideo opts={board.mvMake} pictures={board.pictures.filter((p) => p.kind === "picture" && p.source !== "Character references").map((p) => ({ file: p.file, url: fileUrl(p.url), label: p.label }))} cap={defaults.cap} post={post} reload={load} setNotice={setNotice} /> : null}
+      {/* At the top (27 Nov 2026, Paul: "why is it so far down?"): adding a picture or a video (a music video) without
+          scrolling past every shot; a file dropped anywhere on the page outside a shot's box goes to Loose pictures. */}
+      <div className="flex flex-wrap items-start gap-2">
+        {part !== "settings" ? (
+          <button type="button" data-pictures-add-top onClick={() => input.current?.click()} disabled={adding} className="hover:bg-accent flex items-center gap-1.5 self-start rounded-md border px-2 py-1 text-xs" title="Pictures or videos from Midjourney, WaveSpeed or anywhere (a music video too). Or drop them anywhere on this page outside a shot's box. They go to Loose pictures.">
+            {adding ? <Loader2 className="size-3.5 animate-spin" /> : <ImagePlus className="size-3.5" />} Add pictures or videos
+          </button>
+        ) : null}
+        <div className="flex min-w-0 flex-1 flex-col">{board.mvMake ? <MakeMusicVideo opts={board.mvMake} pictures={board.pictures.filter((p) => p.kind === "picture" && p.source !== "Character references").map((p) => ({ file: p.file, url: fileUrl(p.url), label: p.label }))} cap={defaults.cap} post={post} reload={load} setNotice={setNotice} /> : null}</div>
+      </div>
       {board.mvBest && board.mvBest.videos.length >= 2 ? (
         <BestShotsPanel best={board.mvBest} videos={Object.fromEntries(board.pictures.filter((p) => p.mv?.matched).map((p) => [p.file, { url: fileUrl(p.url), offsetMs: p.mv!.offsetMs }]))} post={post} reload={load} setNotice={setNotice} play={(url, title) => setPlaying({ url, title })} />
       ) : null}
