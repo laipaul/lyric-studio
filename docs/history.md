@@ -4,6 +4,15 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Fix: theme names cut off on the Themes page ✅ (to verify on the PC)
+- Paul (22 Nov 2026): tiles showed "Midnight Hi...", "Mou...", "Paper ..." because the badge ("Shared by 2 songs",
+  "Only Tea with the monk test") shared the name's line and never shrank.
+- Now the full name is shown (up to 2 lines, the full name on hover), the badge on its own line below it; a badge
+  wider than the tile ends in "..." (full text on hover). Tiles and grid unchanged. Code: themes-view.tsx ThemeTile,
+  theme-reach-badge.tsx (also used in Shape -> Theme: looks the same for normal badges).
+- Checked in a browser at 1850 and 1280 px. Studio build passes. Known: apps/studio/e2e/themes.e2e.ts "the top menu"
+  check is out of date (expects Library · Themes · Collections · Releases; the menu also has Film looks and Characters).
+
 ### Hide a moment of a singing take ✅ (to verify on the PC)
 - Paul (22 Nov 2026): "the first 5 s are perfect, then 6 to 8 the lips are not in sync, then they get perfect".
 - Lyrics Sync → Shows clip, under a singing clip: **Hide a moment** opens the clip panel with *Hide from __ to __ s of

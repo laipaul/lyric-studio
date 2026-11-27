@@ -13,7 +13,7 @@ import { BOARD_VIDEO_FILE, nextTakeN, readPictures, setTake, songFolder, TAKES_D
 import type { FaceTool } from "./characters/face";
 
 // The take's frames measured and judged; saved on the take. Never throws (a check that cannot run says why).
-export async function checkTake(dir: string, source: string, n: number, face: FaceTool): Promise<TakeQa | null> {
+export async function checkTake(dir: string, source: string, n: number, face: FaceTool, refPicture?: string): Promise<TakeQa | null> {
   const t = readPictures(dir).pictures[source]?.takes.find((x) => x.n === n);
   if (!t?.file || !existsSync(path.join(dir, t.file))) return null;
   const at = new Date().toISOString();
@@ -24,8 +24,8 @@ export async function checkTake(dir: string, source: string, n: number, face: Fa
   const tmp = mkdtempSync(path.join(os.tmpdir(), "lyric-qa-"));
   try {
     // The reference: the picture the take was made from (a video source: its first frame).
-    let ref = path.join(dir, source);
-    if (BOARD_VIDEO_FILE.test(source)) {
+    let ref = refPicture ?? path.join(dir, source);
+    if (!refPicture && BOARD_VIDEO_FILE.test(source)) {
       ref = path.join(tmp, "ref.png");
       execFileSync(ffmpegBin(), ["-y", "-v", "error", "-i", path.join(dir, source), "-frames:v", "1", ref], { windowsHide: true });
     }

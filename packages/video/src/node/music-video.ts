@@ -20,6 +20,7 @@ import { errorText } from "./characters/fal";
 import { filmLookFor } from "./film-looks";
 import { readRecipe } from "./recipe";
 import { songPathsById } from "./song-folder";
+import { saveAnchors } from "./lyrics-view";
 import { placeSingingTake, singerContext, singingTakeInUse } from "./singer";
 
 export const MV_RATE = 8000; // Hz: enough to line two copies of the same recording up to 1/8000 s
@@ -111,7 +112,32 @@ function mvView(ws: Workspace, projectId: string, mv: MusicVideoRecord, takes: r
 
 // "Use on its lines" (a shot that carries sung lines): cut out as a singing take of the video and placed on its lines,
 // locked to the song. A shot without a sung line: Send to Storyboard (a story clip). A shot cut before stays one take.
-export async function useMusicVideoShot(ws: Workspace, projectId: string, file: unknown, shot: unknown): Promise<{ n: number; placed: "lines" | "storyboard"; first: number | null; last: number | null; clip: string }> {
+export async function useMusicVideoShot(ws: Workspace, projectId: string, file: unknown, shot: unknown, o: { hand?: boolean } = {}): Promise<{ n: number; placed: "lines" | "storyboard"; first: number | null; last: number | null; clip: string }> {
+  const { dir } = songFolder(ws, projectId);
+  const name = path.basename(String(file ?? ""));
+  const take = await cutShotTake(ws, projectId, name, shot);
+  if (take.kind === "lipsync") {
+    clearOverlapping(ws, projectId, take.line!);
+    await placeSingingTake(ws, projectId, name, take.n);
+    setTake(dir, name, take.n, { handPicked: o.hand ? true : undefined });
+    const placed = readPictures(dir).pictures[name]?.takes.find((x) => x.n === take.n);
+    return { n: take.n, placed: "lines", first: take.line ?? null, last: take.through ?? take.line ?? null, clip: placed?.sent ?? "" };
+  }
+  const r = await sendToStoryboard(ws, projectId, name, take.n);
+  return { n: take.n, placed: "storyboard", first: null, last: null, clip: r.clip };
+}
+
+// A singing anchor that starts before these lines but runs into them gives way (placeTake removes the ones that start
+// within them): two singing takes never overlap on the lines.
+export function clearOverlapping(ws: Workspace, projectId: string, first: number): void {
+  const recipe = readRecipe(songPathsById(ws, projectId).recipe);
+  const all = recipe.anchors ?? [];
+  const keep = all.filter((a) => !(a.line < first && (a.through ?? a.line) >= first));
+  if (keep.length !== all.length) saveAnchors(ws, projectId, keep);
+}
+
+// The shot cut out as a take of the video (once; its 1080p final when there is one).
+export async function cutShotTake(ws: Workspace, projectId: string, file: unknown, shot: unknown): Promise<Take> {
   const { dir } = songFolder(ws, projectId);
   const name = path.basename(String(file ?? ""));
   const rec = readPictures(dir).pictures[name];
@@ -124,7 +150,8 @@ export async function useMusicVideoShot(ws: Workspace, projectId: string, file: 
   const l = linesOfShot(s, mv.offsetMs, c.lines ?? []);
   const lastLine = l ? (c.lines ?? []).find((x) => x.number === l.last) : undefined;
   const piece = shotPiece(s, mv.offsetMs, mv.durationMs, lastLine ? lastLine.sungEndMs : null);
-  let t = rec.takes.find((x) => x.mvShot === i && x.status === "done" && x.file && existsSync(path.join(dir, x.file)));
+  const ready = (x: Take) => x.mvShot === i && x.status === "done" && !!x.file && existsSync(path.join(dir, x.file));
+  let t = [...rec.takes].reverse().find((x) => ready(x) && x.finalOf !== undefined) ?? rec.takes.find(ready);
   if (!t) {
     mkdirSync(path.join(dir, TAKES_DIR), { recursive: true });
     const base = name.replace(/\.[^.]+$/, "");
@@ -154,14 +181,19 @@ export async function useMusicVideoShot(ws: Workspace, projectId: string, file: 
       t = take;
     });
   }
-  const take = t!;
-  if (take.kind === "lipsync") {
-    await placeSingingTake(ws, projectId, name, take.n);
-    const placed = readPictures(dir).pictures[name]?.takes.find((x) => x.n === take.n);
-    return { n: take.n, placed: "lines", first: take.line ?? null, last: take.through ?? take.line ?? null, clip: placed?.sent ?? "" };
+  return t!;
+}
+
+// The picture a music video was made from in the app (its first picture), else null (made elsewhere).
+export function mvRefPicture(dir: string, file: string): string | null {
+  for (const [source, rec] of Object.entries(readPictures(dir).pictures)) {
+    const t = rec.takes.find((x) => x.kind === "musicvideo" && x.made === file);
+    if (t) {
+      const p = path.join(dir, t.refFiles?.[0] ?? source);
+      return existsSync(p) ? p : null;
+    }
   }
-  const r = await sendToStoryboard(ws, projectId, name, take.n);
-  return { n: take.n, placed: "storyboard", first: null, last: null, clip: r.clip };
+  return null;
 }
 
 // "Use every singing shot": each shot that carries sung lines, on its lines.
@@ -188,7 +220,8 @@ export async function checkMusicVideoShots(openWs: () => Workspace, projectId: s
     const { checkTake } = await import("./take-qa");
     const { cardFace } = await import("./characters/jobs");
     const face = cardFace();
-    for (const t of readPictures(dir).pictures[file]?.takes ?? []) if (t.mvShot !== undefined && t.kind === "lipsync" && t.status === "done" && !t.qa) await checkTake(dir, file, t.n, face);
+    const ref = mvRefPicture(dir, file) ?? undefined;
+    for (const t of readPictures(dir).pictures[file]?.takes ?? []) if (t.mvShot !== undefined && t.kind === "lipsync" && t.status === "done" && !t.qa) await checkTake(dir, file, t.n, face, ref);
   } catch {
     // the check is extra: the shots are placed already
   }

@@ -13,12 +13,14 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import type { CreationDefaults, PictureView, PicturesView as BoardView, Quality, ServiceId, Take } from "@lyric/video/animate";
 
 // characters: "Who is this" (picture-character.ts); faceUsdPerSecond: Animate with a character's face sheet.
-type PicturesView = BoardView & { characters?: { id: string; name: string }[]; faceUsdPerSecond?: number; mvMake?: MvMakeOptions | null };
+type PicturesView = BoardView & { characters?: { id: string; name: string }[]; faceUsdPerSecond?: number; mvMake?: MvMakeOptions | null; mvBest?: BestView | null };
 import type { ProductionShot, ProductionView } from "@lyric/video/shot-production";
 import type { MvMakeOptions } from "@lyric/video/music-video";
 
+import type { BestView } from "@lyric/video/mv-best";
 import { MakeMusicVideo } from "@/components/make-music-video";
 import { MusicVideoPanel } from "@/components/music-video-panel";
+import { BestShotsPanel } from "@/components/best-shots-panel";
 import { NameField } from "@/components/name-field";
 import { useGoToTab } from "@/components/song-stages";
 import { takeDetails, takeFacts, takeKind, takeTag } from "@lyric/video/take-facts";
@@ -347,6 +349,9 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
         </p>
       ) : null}
       {board.mvMake ? <MakeMusicVideo opts={board.mvMake} pictures={board.pictures.filter((p) => p.kind === "picture" && p.source !== "Character references").map((p) => ({ file: p.file, url: fileUrl(p.url), label: p.label }))} cap={defaults.cap} post={post} reload={load} setNotice={setNotice} /> : null}
+      {board.mvBest && board.mvBest.videos.length >= 2 ? (
+        <BestShotsPanel best={board.mvBest} videos={Object.fromEntries(board.pictures.filter((p) => p.mv?.matched).map((p) => [p.file, { url: fileUrl(p.url), offsetMs: p.mv!.offsetMs }]))} post={post} reload={load} setNotice={setNotice} play={(url, title) => setPlaying({ url, title })} />
+      ) : null}
       {part === "settings" && notice ? (
         <p data-pictures-notice={notice.ok ? "ok" : "error"} className={cn("rounded-md border p-2 text-sm", notice.ok ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-red-400/30 bg-red-400/10 text-red-200")}>
           {notice.text}

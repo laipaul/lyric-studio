@@ -16,7 +16,10 @@
 //   words, cap }: Make a music video on WaveSpeed (cost first, under the cap; the video comes back into Creation, found in
 //   the song); { action: "mv-final", file, cap }: the shots on their lines made 1080p (Make final); { action: "mv-check", file }: "This is a music video of this
 //   song" (its place in the song, its shots); { action: "mv-use", file, shot }: that shot on its lines, in time (or to the
-//   Storyboard when it carries no sung line); { action: "mv-use-all", file }: every shot that carries sung lines.
+//   Storyboard when it carries no sung line; a hand pick the app never replaces); { action: "mv-use-all", file }: every shot that carries sung lines.
+// Best shot for each line across music videos (mv-best.ts): GET board.mvBest (the plan); { action: "mv-best" }: every
+//   singing shot cut out and face-checked (local, free), the best of each line placed; { action: "mv-best-pick", file,
+//   shot }: that shot on its lines instead (a hand pick).
 // { action: "remove-picture", file }: Put aside (to pictures\_removed\, Restore); { action: "restore-picture", file }.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -28,6 +31,7 @@ import { REFERENCE_MODEL } from "@lyric/video/animate";
 import { addFromLink, addPictures, picturesView, removePicture, removeTakes, restorePicture, restoreTake, setFavourite, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, setPictureFeeling, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
 import { finalUsd, runFinal, startFinal } from "@lyric/video/final";
 import { runSinging, withSongStarts } from "@lyric/video/singer";
+import { bestShotsView, useBestShots } from "@lyric/video/mv-best";
 import { analyseMusicVideo, checkMusicVideoShots, musicVideoOptions, runMusicVideo, startMusicVideo, startMusicVideoFinals, useAllMusicVideoShots, useMusicVideoShot, withMusicVideos } from "@lyric/video/music-video";
 import { placeByName, placeDropped, productionView, setPictureShot, useForShot, withLineStarts } from "@lyric/video/shot-production";
 import { timedLines } from "@lyric/video/production";
@@ -61,7 +65,8 @@ export async function GET(_request: Request, { params }: Params) {
           // a song without a folder yet: no shot list
         }
         const mvMake = await musicVideoOptions(ws, id).catch(() => null); // Make a music video (music-video.ts)
-        return { board: { ...board, characters: characterChoices(ws), faceUsdPerSecond: REFERENCE_MODEL.usdPerSecond, mvMake }, production }; // characters: "Who is this" (picture-character.ts)
+        const mvBest = await bestShotsView(ws, id).catch(() => null); // Best shot for each line (mv-best.ts)
+        return { board: { ...board, characters: characterChoices(ws), faceUsdPerSecond: REFERENCE_MODEL.usdPerSecond, mvMake, mvBest }, production }; // characters: "Who is this" (picture-character.ts)
       }),
     );
   } catch (error) {
@@ -172,8 +177,14 @@ export async function POST(request: Request, { params }: Params) {
     }
     if (body.action === "mv-check") return Response.json({ mv: await withWorkspaceAsync((ws) => analyseMusicVideo(ws, id, file)) });
     if (body.action === "mv-use" || body.action === "mv-use-all") {
-      const used = await withWorkspaceAsync(async (ws) => (body.action === "mv-use" ? [await useMusicVideoShot(ws, id, file, (body as { shot?: unknown }).shot)] : (await useAllMusicVideoShots(ws, id, file)).used));
+      const used = await withWorkspaceAsync(async (ws) => (body.action === "mv-use" ? [await useMusicVideoShot(ws, id, file, (body as { shot?: unknown }).shot, { hand: true })] : (await useAllMusicVideoShots(ws, id, file)).used));
       void checkMusicVideoShots(open, id, path.basename(file)); // the face check of each singing shot (local, free), after the answer
+      return Response.json({ used });
+    }
+    if (body.action === "mv-best") return Response.json(await withWorkspaceAsync((ws) => useBestShots(ws, id)));
+    if (body.action === "mv-best-pick") {
+      const used = await withWorkspaceAsync((ws) => useMusicVideoShot(ws, id, file, (body as { shot?: unknown }).shot, { hand: true }));
+      void checkMusicVideoShots(open, id, path.basename(file));
       return Response.json({ used });
     }
     if (body.action === "remove-picture") return Response.json(withWorkspace((ws) => removePicture(ws, id, file)));

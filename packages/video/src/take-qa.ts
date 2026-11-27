@@ -7,7 +7,7 @@
 export type TakeFrame = { t: number; face: boolean; sim?: number; sharp?: number; texture?: number; bright?: number };
 export type QaKind = "face collapse" | "face drift" | "face lost";
 export type QaSegment = { fromS: number; toS: number; kind: QaKind };
-export type TakeQa = { checked_at: string; segments: QaSegment[]; good: { fromS: number; toS: number } | null; duration: number; note?: string };
+export type TakeQa = { checked_at: string; segments: QaSegment[]; good: { fromS: number; toS: number } | null; duration: number; note?: string; sim?: number }; // sim: the face's median likeness to the picture (SFace cosine)
 
 export const QA_LIMITS = {
   simDrop: 0.18, // below the take's median similarity by this much
@@ -63,7 +63,7 @@ export function judgeTake(frames: readonly TakeFrame[], duration: number, at = n
     if (s.fromS - start > (good ? good.toS - good.fromS : 0)) good = { fromS: start, toS: s.fromS };
     start = Math.max(start, s.toS);
   }
-  return { checked_at: at, segments, good: segments.length ? good : { fromS: 0, toS: duration }, duration };
+  return { checked_at: at, segments, good: segments.length ? good : { fromS: 0, toS: duration }, duration, sim: Math.round(mSim * 1000) / 1000 };
 }
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;

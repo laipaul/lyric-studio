@@ -4,6 +4,16 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Best shot for each line across music videos ✅ (to verify on the PC)
+Paul, 27 Nov 2026: "yes". Make two or three music videos of the same stretch (other pictures or words): each sung line
+then has several shots. In Creation (Story room and Production), **Best shot for each line** shows, per line, the shot
+the app picks and why in plain words (same face all along, the whole line in one shot, room before and after, 1080p,
+another video than the line before), with **Other takes (n)** to swap any line ("Use this one": your pick, the app never
+replaces it). **Use the best for every line** cuts every singing shot and checks its face on this PC (free, nothing is
+sent), then puts the best one on each line, in time with the song. Lines you set yourself (a Lyrics Sync take, a story
+clip, a shot you picked) are never touched. Then "Make the shots in use 1080p" on each music video makes them sharp.
+Not measured yet: how good the lips look (swap by eye). Shows once two music videos of the song are found in it.
+
 ### Music-video shots made 1080p ✅ (to verify on the PC, needs WAVESPEED_API_KEY)
 Paul, 27 Nov 2026: "go both". A music video comes at 480p or 720p; its shots are now drafts, so **Make final**
 (WaveSpeed Video Upscaler Pro, about $0.04 a second) makes any of them 1080p, and on the music video's tile **Make the
@@ -806,15 +816,6 @@ locked cards can't be edited").
   saveTheme, node/style.ts (ThemeCard differsOn), shape-tools.tsx SamePlatformsSwitch, set-effect.tsx, themes-view.tsx.
 - Tests: vitest theme-platforms (3), themes (+1: the backup, differsOn); browser same-platforms (14 checks, in
   test:e2e); song-stages (207) pass; themes.e2e passes except its out-of-date top-menu check. Studio build passes.
-
-### Fix: theme names cut off on the Themes page ✅ (to verify on the PC)
-- Paul (22 Nov 2026): tiles showed "Midnight Hi...", "Mou...", "Paper ..." because the badge ("Shared by 2 songs",
-  "Only Tea with the monk test") shared the name's line and never shrank.
-- Now the full name is shown (up to 2 lines, the full name on hover), the badge on its own line below it; a badge
-  wider than the tile ends in "..." (full text on hover). Tiles and grid unchanged. Code: themes-view.tsx ThemeTile,
-  theme-reach-badge.tsx (also used in Shape -> Theme: looks the same for normal badges).
-- Checked in a browser at 1850 and 1280 px. Studio build passes. Known: apps/studio/e2e/themes.e2e.ts "the top menu"
-  check is out of date (expects Library · Themes · Collections · Releases; the menu also has Film looks and Characters).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

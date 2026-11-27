@@ -157,6 +157,7 @@ export type Take = {
   guideName?: string; // and its name as shown on the shot
   section?: { fromMs: number; toMs: number }; // musicvideo: the stretch of the song sent
   made?: string; // musicvideo: the video it became, its own item in Creation (pictures\<file>)
+  handPicked?: boolean; // a music-video shot Paul put on its lines himself (Use on its lines, or swapped in Best shot for each line): the app never replaces it
   mvShot?: number; // a shot of a music video made elsewhere (music-video.ts): its number (0-based) in the video's mv.shots
 };
 // removedTakes: takes put aside by Clean up / Remove (their files in pictures\takes\_removed\), with Restore; nothing is

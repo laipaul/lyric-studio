@@ -121,6 +121,8 @@
     "./singer": "./src/node/singer.ts",
     "./music-video": "./src/node/music-video.ts",
     "./music-video-shots": "./src/music-video.ts",
+    "./mv-best": "./src/node/mv-best.ts",
+    "./mv-best-plan": "./src/mv-best.ts",
     "./generate-tasks": "./src/node/generate-tasks.ts",
     "./take-facts": "./src/take-facts.ts",
     "./replaced-files": "./src/node/replaced-files.ts",
