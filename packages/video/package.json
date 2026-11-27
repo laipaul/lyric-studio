@@ -123,6 +123,7 @@
     "./music-video-shots": "./src/music-video.ts",
     "./mv-best": "./src/node/mv-best.ts",
     "./mv-best-plan": "./src/mv-best.ts",
+    "./cut-while-playing": "./src/cut-while-playing.ts",
     "./generate-tasks": "./src/node/generate-tasks.ts",
     "./take-facts": "./src/take-facts.ts",
     "./replaced-files": "./src/node/replaced-files.ts",

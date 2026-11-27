@@ -9,6 +9,7 @@ import type { AnchorClip, LyricsLine, LyricsView } from "@lyric/video/lyrics-vie
 import { showsSinging } from "@lyric/video/song-style";
 
 import { HidePreview } from "@/components/hide-preview";
+import { CutWhilePlayingButton } from "@/components/cut-while-playing";
 import { LineMvShots, MvLinesBar, useMvLines } from "@/components/mv-lines";
 import { SingerBar, SingerCell, useSinger } from "@/components/singer";
 import { SectionHeaderRow, SectionsBar, StartSectionButton, useSections } from "@/components/sections-ui";
@@ -374,6 +375,10 @@ export function LyricsTab({ projectId }: { projectId: string }) {
               <span>Story anchors: {data.anchors.list.length} line(s) land on a chosen clip.</span>
               <span>The other shots follow the song&apos;s clip order (Prepare → Storyboard) in every video.</span>
               {!data.anchors.clips.length ? <span className="text-amber-200">No clips to choose from: add clips and photos or a collection in Prepare → Storyboard.</span> : null}
+            </div>
+            <div className="flex flex-wrap items-center gap-2" data-cut-bar>
+              <CutWhilePlayingButton projectId={projectId} onChanged={() => (reloadAnchors(), void singer.reload(), void mvLines.reload())} />
+              <span className="text-muted-foreground text-xs">Play the song and pick what shows, moment by moment (singer, then story).</span>
             </div>
             <MvLinesBar mv={mvLines} />
             {withSections ? <SectionsBar sections={sections} startMs={(n) => data.lines?.find((x) => x.number === n)?.startMs ?? null} /> : null}

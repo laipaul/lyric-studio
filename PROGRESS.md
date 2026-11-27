@@ -4,6 +4,14 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Cut while it plays ✅ (to verify on the PC)
+Paul, 27 Nov 2026: "build it now" (how pros work: multicam). In Prepare → Lyrics Sync, **Cut while it plays** opens a
+player: the song plays, the picture in use plays above it in time, and under it only the options of the moment playing
+(at most 9: never the whole song). Click one (or press 1–9) and the song plays on. **Singer** pass: each sung line, its
+singing takes and music-video shots (★ the app's pick); **Story** pass: each planned shot, its takes and videos and the
+music-video shots that play then. Space play / pause, ← → previous / next moment. Every click is your pick; the app
+never replaces it. Start from "Use the best for every line" as the rough cut, then watch and fix.
+
 ### Music-video shots where you work ✅ (to verify on the PC)
 Paul, 27 Nov 2026: "once I loaded the music video, I should see each video next to each shot planned and also on the
 lip-sync screen; we don't need a visualizer on the upload screen". Also on 27 Nov: **Add pictures or videos** at the
@@ -972,17 +980,6 @@ locked cards can't be edited").
   mix has different timing, use Generate -> advanced -> re-align.
 
 ## Next
-
-**"Cut while it plays" (Paul, 27 Nov 2026: "ok go add this", after asking how pros work).** How music-video editors
-work (multicam): everything synced to the song first (the app does it), then a performance pass watching only the
-current moment as a small grid of angles and clicking to cut, then a story pass, then refine (the app's job). Not a
-crowded dashboard (Paul: "I don't want a very crowded screen"):
-- a player of the song with, under it, only the current moment's options (4–9 tiles: singing takes, music-video shots,
-  the planned shot's takes; ★ the app's pick, ✓ in use); click one to put it in, the song plays on;
-- two passes: **Singer** (singing takes and music-video shots, per line, in time) and **Story** (planned shots' takes);
-- starts from "Use the best for every line" as the rough cut; every click is a pick the app never replaces;
-- keyboard: space play / pause, 1–9 choose, ← → previous / next moment; nothing technical to set.
-Where: Prepare → Lyrics Sync or Shape (to agree with Paul when it is built).
 
 **In-app help for every task — MUST HAVE (Paul, 27 Nov 2026: "it is a must have"; next after his current tests of
 the music-video steps).** The app explains itself where Paul is, so he never has to remember a workflow:
