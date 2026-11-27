@@ -346,7 +346,7 @@ export function PicturesBoard({ projectId, part = "all" }: { projectId: string; 
           {defSvc.id === "higgsfield" ? ' (from open.higgsfield.ai, written as "key id:key secret")' : " (from wavespeed.ai → API keys)"}, then restart Lyric Studio. You pay {defSvc.label} directly.
         </p>
       ) : null}
-      {settings && board.mvMake ? <MakeMusicVideo opts={board.mvMake} pictures={board.pictures.filter((p) => p.kind === "picture" && p.source !== "Character references").map((p) => ({ file: p.file, url: fileUrl(p.url), label: p.label }))} cap={defaults.cap} post={post} reload={load} setNotice={setNotice} /> : null}
+      {board.mvMake ? <MakeMusicVideo opts={board.mvMake} pictures={board.pictures.filter((p) => p.kind === "picture" && p.source !== "Character references").map((p) => ({ file: p.file, url: fileUrl(p.url), label: p.label }))} cap={defaults.cap} post={post} reload={load} setNotice={setNotice} /> : null}
       {part === "settings" && notice ? (
         <p data-pictures-notice={notice.ok ? "ok" : "error"} className={cn("rounded-md border p-2 text-sm", notice.ok ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-red-400/30 bg-red-400/10 text-red-200")}>
           {notice.text}
