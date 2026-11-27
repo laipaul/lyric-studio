@@ -4,7 +4,7 @@
 // same bride singing in different scenes and camera angles"). "This is a music video of this song": the app finds where
 // it sits in the song (its sound is the song) and its shots; Paul picks the shots he likes and each goes on its lines
 // in time with the song (a singing take, like Lyrics Sync's), or to the Storyboard when it has no sung line.
-import { Check, Clapperboard, ListChecks, Loader2, Music2, Send } from "lucide-react";
+import { Check, Clapperboard, ListChecks, Loader2, Music2, Send, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 import type { PictureView } from "@lyric/video/animate";
@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 const clock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
 const linesName = (first: number, last: number) => (last > first ? `lines ${first}–${last}` : `line ${first}`);
 
-export function MusicVideoPanel({ p, url, post, reload, setNotice, play }: { p: PictureView; url: string; post: (b: Record<string, unknown>) => Promise<unknown>; reload: () => Promise<void>; setNotice: (n: { ok: boolean; text: string }) => void; play: (url: string, title: string) => void }) {
+export function MusicVideoPanel({ p, url, cap, post, reload, setNotice, play }: { p: PictureView; url: string; cap: number; post: (b: Record<string, unknown>) => Promise<unknown>; reload: () => Promise<void>; setNotice: (n: { ok: boolean; text: string }) => void; play: (url: string, title: string) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const mv = p.mv;
   async function run(key: string, body: Record<string, unknown>, done: (r: unknown) => string) {
@@ -54,6 +54,9 @@ export function MusicVideoPanel({ p, url, post, reload, setNotice, play }: { p: 
     );
   }
   const free = mv.shots.filter((s) => s.first !== null && !s.inUse).length;
+  // Shots on their lines still below 1080p (no final yet): Make final on each (Video Upscaler Pro, $0.04 a second, at least 3 s).
+  const toHd = mv.shots.filter((s) => s.first !== null && s.inUse && !s.hd);
+  const hdUsd = toHd.reduce((sum, s) => sum + Math.max(3, Math.ceil((s.toMs - s.fromMs) / 1000)) * 0.04, 0);
   return (
     <div data-mv className="flex flex-col gap-1.5 rounded-md border border-sky-500/30 bg-sky-500/5 p-1.5 text-[11px]">
       <span data-mv-summary className="text-sky-200" title={`Its sound matches the song ${(mv.score * 100).toFixed(1)}%, the same all along (drift ${mv.driftMs} ms)`}>
@@ -69,6 +72,17 @@ export function MusicVideoPanel({ p, url, post, reload, setNotice, play }: { p: 
         </Button>
         <span className="text-muted-foreground">or pick the ones you like:</span>
       </span>
+      {toHd.length ? (
+        <span className="flex flex-wrap items-center gap-1.5">
+          <Button type="button" size="sm" variant="outline" data-mv-final disabled={busy !== null || hdUsd > cap} onClick={() => void run("hd", { action: "mv-final", cap }, (r) => `${(r as { shots: number }).shots} shots are being made 1080p (about $${(r as { usd: number }).usd.toFixed(2)}): each takes its own place on its lines when it is ready.`)} title="WaveSpeed Video Upscaler Pro: the same shot, sharper, at 1080p; it replaces the shot on its lines, still in time">
+            {busy === "hd" ? <Loader2 className="animate-spin" /> : <Sparkles />} Make the shots in use 1080p
+          </Button>
+          <span data-mv-final-cost className={cn(hdUsd > cap ? "text-amber-300" : "text-muted-foreground")}>
+            {toHd.length} shot{toHd.length === 1 ? "" : "s"} · about ${hdUsd.toFixed(2)}
+            {hdUsd > cap ? ` · above your cap of $${cap.toFixed(2)}` : ""}
+          </span>
+        </span>
+      ) : null}
       <div className="flex max-h-72 flex-col gap-1 overflow-y-auto pr-1">
         {mv.shots.map((s) => (
           <div key={s.i} data-mv-shot={s.i} data-mv-lines={s.first ?? ""} className="flex items-center gap-1.5">
@@ -81,6 +95,7 @@ export function MusicVideoPanel({ p, url, post, reload, setNotice, play }: { p: 
             {s.inUse ? (
               <span data-mv-shot-used className="flex shrink-0 items-center gap-1 text-emerald-300">
                 <Check className="size-3" /> {s.first !== null ? "On its lines" : "In Storyboard"}
+                {s.hd ? <span data-mv-hd={s.hd} className={cn("rounded px-1", s.hd === "done" ? "bg-emerald-400/15" : "bg-sky-400/15 text-sky-200")}>{s.hd === "done" ? "1080p" : s.hd === "running" ? "1080p…" : "1080p: Get result below"}</span> : null}
               </span>
             ) : (
               <button

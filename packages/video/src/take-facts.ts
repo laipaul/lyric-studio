@@ -33,7 +33,7 @@ export function takeFacts(t: TakeFactsInput, locale?: string): string {
 // A take's short tag (25 Nov 2026, Paul: "how do I distinguish which take and run was it?"), the same in Creation and
 // Compare: its name (Paul's or the draft test's own label first), what made it, its feeling and its cost, e.g.
 // "Take 3 · Draft 480p · joy · $0.54", "Take 4 · final of 3 · 1080p · $0.20", "Take 5 · Jennifer's face · $1.62".
-export type TakeTagInput = TakeFactsInput & { section?: { fromMs: number; toMs: number }; n: number; label?: string; quality?: string; model?: string; finalOf?: number; refNames?: string[]; service?: string; filmLook?: string; feel?: string; line?: number; through?: number };
+export type TakeTagInput = TakeFactsInput & { section?: { fromMs: number; toMs: number }; mvShot?: number; n: number; label?: string; quality?: string; model?: string; finalOf?: number; refNames?: string[]; service?: string; filmLook?: string; feel?: string; line?: number; through?: number };
 
 const clk = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
 
@@ -46,6 +46,7 @@ export function takeKind(t: TakeTagInput): string {
     const face = t.refNames?.find((r) => / · face sheet$/.test(r));
     return face ? `${face.replace(/ · face sheet$/, "")}'s face` : "with references";
   }
+  if (t.mvShot !== undefined) return `music video shot ${t.mvShot + 1}${t.resolution ? ` · ${t.resolution}` : ""}`;
   if (t.quality === "draft") return "Draft 480p";
   if (t.quality === "standard") return "Flash 720p";
   if (t.quality === "magi2") return "MAGI-2 1080p";

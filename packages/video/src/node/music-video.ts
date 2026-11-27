@@ -86,7 +86,11 @@ export async function withMusicVideos(ws: Workspace, projectId: string, view: Pi
 function mvView(ws: Workspace, projectId: string, mv: MusicVideoRecord, takes: readonly Take[], lines: readonly { number: number; text: string; shownMs: number }[]): MvView {
   const shots = mv.shots.map((s, i) => {
     const l = linesOfShot(s, mv.offsetMs, lines);
-    const t = [...takes].reverse().find((x) => x.mvShot === i && x.status === "done");
+    const mine = takes.filter((x) => x.mvShot === i);
+    // The take in use (a 1080p final replaces its draft on the lines), else the newest finished one.
+    const used = [...mine].reverse().find((x) => x.status === "done" && (x.kind === "lipsync" ? singingTakeInUse(ws, projectId, x) : !!(x.sent ?? x.clip)));
+    const t = used ?? [...mine].reverse().find((x) => x.status === "done");
+    const final = [...mine].reverse().find((x) => x.finalOf !== undefined && x.status !== "failed");
     const sent = t ? (t.sent ?? t.clip ?? null) : null;
     return {
       ...s,
@@ -97,8 +101,9 @@ function mvView(ws: Workspace, projectId: string, mv: MusicVideoRecord, takes: r
       last: l?.last ?? null,
       text: l ? (lines.find((x) => x.number === l.first)?.text ?? null) : null,
       take: t?.n ?? null,
-      inUse: !!t && (t.kind === "lipsync" ? singingTakeInUse(ws, projectId, t) : !!sent),
+      inUse: !!used,
       sent,
+      hd: final ? (final.status === "done" ? ("done" as const) : final.status === "running" ? ("running" as const) : ("interrupted" as const)) : null,
     };
   });
   return { ...mv, shots, singing: shots.filter((s) => s.first !== null).length };
@@ -131,7 +136,7 @@ export async function useMusicVideoShot(ws: Workspace, projectId: string, file: 
       const take: Take = {
         n: nextTakeN(p),
         service: "wavespeed",
-        quality: "standard",
+        quality: "draft", // at most 720p: Make final upscales it to 1080p (final.ts), in its place on its lines
         model: MV_MODEL,
         status: "done",
         started_at: now,
@@ -401,4 +406,19 @@ export async function runMusicVideo(openWs: () => Workspace, projectId: string, 
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
+}
+
+// "Make the shots in use 1080p": each singing shot on its lines without a final yet is upscaled with Make final
+// (WaveSpeed Video Upscaler Pro); the final takes its place on its lines, in time. Cost first, under the cap.
+export function startMusicVideoFinals(ws: Workspace, projectId: string, file: unknown, cap: unknown, startFinal: (n: number) => Take, usdOf: (seconds: number) => number): { takes: Take[]; usd: number } {
+  const { dir } = songFolder(ws, projectId);
+  const name = path.basename(String(file ?? ""));
+  const takes = readPictures(dir).pictures[name]?.takes ?? [];
+  const todo = takes.filter((t) => t.mvShot !== undefined && t.kind === "lipsync" && t.status === "done" && t.finalOf === undefined && singingTakeInUse(ws, projectId, t) && !takes.some((x) => x.finalOf === t.n && x.status !== "failed"));
+  if (!todo.length) throw new Error("No shot on its lines is waiting for 1080p.");
+  const usd = Math.round(todo.reduce((sum, t) => sum + usdOf(t.seconds ?? 5), 0) * 100) / 100;
+  const c = Number(cap);
+  if (!Number.isFinite(c) || c <= 0) throw new Error("Set a spending cap above $0.");
+  if (usd > c) throw new Error(`${todo.length} shots at 1080p cost about $${usd.toFixed(2)}, above your cap of $${c.toFixed(2)}: raise the cap or use Make final on single shots. Nothing was sent.`);
+  return { takes: todo.map((t) => startFinal(t.n)), usd };
 }

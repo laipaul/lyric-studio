@@ -4,6 +4,12 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Music-video shots made 1080p ✅ (to verify on the PC, needs WAVESPEED_API_KEY)
+Paul, 27 Nov 2026: "go both". A music video comes at 480p or 720p; its shots are now drafts, so **Make final**
+(WaveSpeed Video Upscaler Pro, about $0.04 a second) makes any of them 1080p, and on the music video's tile **Make the
+shots in use 1080p** does every singing shot on its lines at once (cost first, under your cap). Each final takes its
+draft's place on its lines at the same song time, so the lips stay in time; the shot list marks it "1080p".
+
 ### Make a music video from the app (WaveSpeed) ✅ (to verify on the PC, needs WAVESPEED_API_KEY)
 Paul, 27 Nov 2026: "go". Prepare → Creation → **Make a music video…**: pick 1 to 3 pictures of the singer, the stretch
 of the song (your latest Reel's section by default, read from its manifest; or "these lines", cut from the bar before

@@ -19,7 +19,7 @@ export type MusicVideoRecord = {
   usd: number | null; // what it cost on WaveSpeed (per second of song, by its resolution), as an estimate
   shots: MvShot[];
 };
-export type MvShotView = MvShot & { i: number; songFromMs: number; songToMs: number; first: number | null; last: number | null; text: string | null; take: number | null; inUse: boolean; sent: string | null };
+export type MvShotView = MvShot & { i: number; songFromMs: number; songToMs: number; first: number | null; last: number | null; text: string | null; take: number | null; inUse: boolean; sent: string | null; hd: "running" | "done" | "interrupted" | null }; // hd: its 1080p final (Make final)
 export type MvView = Omit<MusicVideoRecord, "shots"> & { shots: MvShotView[]; singing: number };
 
 export const MATCH_MIN = 0.8; // the same recording correlates at about 0.99

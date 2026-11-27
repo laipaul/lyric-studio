@@ -22,7 +22,7 @@ export function startFinal(ws: Workspace, projectId: string, file: string, n: un
   const name = path.basename(String(file ?? ""));
   const draft = readPictures(dir).pictures[name]?.takes.find((t) => t.n === Number(n));
   if (!draft) throw new Error("No such take.");
-  if (draft.quality !== "draft") throw new Error("Only a Draft take can be made final (the others are already full quality).");
+  if (draft.quality !== "draft" && draft.mvShot === undefined) throw new Error("Only a Draft take can be made final (the others are already full quality)."); // a music-video shot (480p / 720p) too
   if (draft.status !== "done" || !draft.file || !existsSync(path.join(dir, draft.file))) throw new Error("This draft is not finished yet.");
   const before = readPictures(dir).pictures[name]?.takes.find((t) => t.finalOf === draft.n && t.status !== "failed");
   if (before) throw new Error(before.status === "running" ? "Its final is being made." : `It already has a final (take ${before.n}).`);
@@ -40,6 +40,7 @@ export function startFinal(ws: Workspace, projectId: string, file: string, n: un
       cost_usd: finalUsd(seconds),
       seconds,
       finalOf: draft.n,
+      ...(draft.mvShot !== undefined ? { mvShot: draft.mvShot } : {}),
       ...(draft.label ? { label: `${draft.label} final` } : {}),
       ...(draft.filmLook ? { filmLook: draft.filmLook, look: draft.look } : {}),
       ...(draft.feel ? { feel: draft.feel } : {}),

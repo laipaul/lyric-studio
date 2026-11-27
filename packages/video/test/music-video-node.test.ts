@@ -10,7 +10,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createSong, ensureAlignment, songPathsById } from "../src/node";
 import { addPictures, picturesView, readPictures } from "../src/node/animate";
-import { analyseMusicVideo, runMusicVideo, startMusicVideo, useAllMusicVideoShots, useMusicVideoShot, withMusicVideos } from "../src/node/music-video";
+import { analyseMusicVideo, runMusicVideo, startMusicVideo, startMusicVideoFinals, useAllMusicVideoShots, useMusicVideoShot, withMusicVideos } from "../src/node/music-video";
+import { finalUsd, runFinal, startFinal } from "../src/node/final";
 import { MV_DEFAULT_WORDS, MV_PROMPT_RULES, mvPrompt, mvSection } from "../src/music-video";
 import { singerContext } from "../src/node/singer";
 import { fakeAlign, ffmpeg, LYRICS } from "./media-helpers";
@@ -173,5 +174,26 @@ describe("Make a music video (sent to WaveSpeed from the app)", () => {
     expect(rec.mv?.matched).toBe(true);
     expect(Math.abs(rec.mv!.offsetMs - t.section!.fromMs)).toBeLessThan(30);
     expect(rec.mv!.shots.length).toBeGreaterThan(0);
+  });
+});
+
+describe("the shots in use made 1080p (Make final)", () => {
+  const STUB = { LYRIC_GENERATE_STUB: "1" } as NodeJS.ProcessEnv;
+  it("cost first under the cap; each final takes its draft's place on its lines, at the same song time", async () => {
+    const file = "WaveSpeed bride.mp4";
+    const before = readPictures(pics).pictures[file].takes.find((t) => t.mvShot === 1 && t.finalOf === undefined)!;
+    expect(before.quality).toBe("draft");
+    expect(() => startMusicVideoFinals(ws, id, file, 0.01, (n) => startFinal(ws, id, file, n, STUB), finalUsd)).toThrow(/above your cap of \$0\.01.*Nothing was sent/);
+    const r = startMusicVideoFinals(ws, id, file, 10, (n) => startFinal(ws, id, file, n, STUB), finalUsd);
+    expect(r.takes.map((t) => t.finalOf)).toContain(before.n);
+    for (const t of r.takes) await runFinal(() => openWorkspace(wsDir), id, file, t.n, { env: STUB });
+    const fin = readPictures(pics).pictures[file].takes.find((t) => t.finalOf === before.n)!;
+    expect(fin).toMatchObject({ status: "done", mvShot: 1, kind: "lipsync", sync_ms: before.sync_ms, line: before.line });
+    const recipe = JSON.parse(readFileSync(songPathsById(ws, id).recipe!, "utf8")) as { anchors?: { line: number; clip: string; sync?: number }[] };
+    expect(recipe.anchors?.find((a) => a.line === before.line)?.clip).toBe(fin.sent);
+    const shot = (await withMusicVideos(ws, id, await picturesView(ws, id))).pictures.find((p) => p.file === file)!.mv!.shots[1];
+    expect([shot.inUse, shot.hd, shot.take]).toEqual([true, "done", fin.n]);
+    // Nothing left to make 1080p.
+    expect(() => startMusicVideoFinals(ws, id, file, 10, (n) => startFinal(ws, id, file, n, STUB), finalUsd)).toThrow(/No shot on its lines is waiting/);
   });
 });

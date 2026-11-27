@@ -14,7 +14,7 @@
 // { action: "final", file, n }: Make final: draft take n upscaled to 1080p (final.ts), a new take right after it.
 // Music video made elsewhere (music-video.ts, 27 Nov 2026): { action: "mv-make", pictures, section, aspect, resolution,
 //   words, cap }: Make a music video on WaveSpeed (cost first, under the cap; the video comes back into Creation, found in
-//   the song); { action: "mv-check", file }: "This is a music video of this
+//   the song); { action: "mv-final", file, cap }: the shots on their lines made 1080p (Make final); { action: "mv-check", file }: "This is a music video of this
 //   song" (its place in the song, its shots); { action: "mv-use", file, shot }: that shot on its lines, in time (or to the
 //   Storyboard when it carries no sung line); { action: "mv-use-all", file }: every shot that carries sung lines.
 // { action: "remove-picture", file }: Put aside (to pictures\_removed\, Restore); { action: "restore-picture", file }.
@@ -26,9 +26,9 @@ import { openWorkspace, project as projectTable, resolveWorkspaceDir } from "@ly
 import { characterChoices, setPictureWho, startPictureAnimate } from "@lyric/video/picture-character";
 import { REFERENCE_MODEL } from "@lyric/video/animate";
 import { addFromLink, addPictures, picturesView, removePicture, removeTakes, restorePicture, restoreTake, setFavourite, setItemLabel, runTakes, saveCreationDefaults, sendToStoryboard, setMood, setPictureFeeling, startResume, type Quality, type ServiceId } from "@lyric/video/animate";
-import { runFinal, startFinal } from "@lyric/video/final";
+import { finalUsd, runFinal, startFinal } from "@lyric/video/final";
 import { runSinging, withSongStarts } from "@lyric/video/singer";
-import { analyseMusicVideo, checkMusicVideoShots, musicVideoOptions, runMusicVideo, startMusicVideo, useAllMusicVideoShots, useMusicVideoShot, withMusicVideos } from "@lyric/video/music-video";
+import { analyseMusicVideo, checkMusicVideoShots, musicVideoOptions, runMusicVideo, startMusicVideo, startMusicVideoFinals, useAllMusicVideoShots, useMusicVideoShot, withMusicVideos } from "@lyric/video/music-video";
 import { placeByName, placeDropped, productionView, setPictureShot, useForShot, withLineStarts } from "@lyric/video/shot-production";
 import { timedLines } from "@lyric/video/production";
 import { referencePreview, startShotReferences } from "@lyric/video/shot-references";
@@ -163,6 +163,12 @@ export async function POST(request: Request, { params }: Params) {
       const started = await withWorkspaceAsync((ws) => startMusicVideo(ws, id, { ...b, cap: body.cap }));
       void runMusicVideo(open, id, started.file, started.take.n);
       return Response.json(started);
+    }
+    // The shots on their lines made 1080p (Make final on each, cost first, under the cap).
+    if (body.action === "mv-final") {
+      const r = withWorkspace((ws) => startMusicVideoFinals(ws, id, file, body.cap, (n) => startFinal(ws, id, file, n), finalUsd));
+      for (const t of r.takes) void runFinal(open, id, path.basename(file), t.n);
+      return Response.json({ shots: r.takes.length, usd: r.usd });
     }
     if (body.action === "mv-check") return Response.json({ mv: await withWorkspaceAsync((ws) => analyseMusicVideo(ws, id, file)) });
     if (body.action === "mv-use" || body.action === "mv-use-all") {

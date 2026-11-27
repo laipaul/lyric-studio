@@ -1167,7 +1167,7 @@ function PictureTile({
           </button>
         )}
       </span>
-      {video && p.source !== "Character references" && !shot ? <MusicVideoPanel p={p} url={fileUrl(p.url)} post={post} reload={reload} setNotice={setNotice} play={(u, title) => play(u, title)} /> : null}
+      {video && p.source !== "Character references" && !shot ? <MusicVideoPanel p={p} url={fileUrl(p.url)} cap={board.defaults.cap} post={post} reload={reload} setNotice={setNotice} play={(u, title) => play(u, title)} /> : null}
       {video || p.source === "Character references" ? null : (
         <>
           <div className="flex items-center gap-1.5 text-xs">
