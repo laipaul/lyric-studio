@@ -977,7 +977,9 @@ locked cards can't be edited").
 **In-app help for every task — MUST HAVE (Paul, 27 Nov 2026: "it is a must have"; next after his current tests of
 the music-video steps).** The app explains itself where Paul is, so he never has to remember a workflow:
 - a **?** on every tab and panel: a short card (what it is for, the steps in order, what it costs, what you should see);
-- **Help** in the header: workflows as guided recipes ("Make a Reel from a new song", "Get a music video from WaveSpeed
+- a **Help** icon at the top right, next to Tasks, with a **search box for how-tos** (Paul, 27 Nov 2026: "a help icon
+  on top right next to tasks where we could search how tos"): type "music video", "lip sync", "1080p"… and get the
+  matching how-tos, each opening its recipe. The how-tos are workflows as guided recipes ("Make a Reel from a new song", "Get a music video from WaveSpeed
   and use its best shots", "Lip-sync a line", "Post a video"), each step with **Take me there** to the right tab or panel;
 - each step ticked when the app sees it done for this song, the next one highlighted;
 - one help file in the project as the single source: every new feature adds its help card in the same step;
