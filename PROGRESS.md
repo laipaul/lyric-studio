@@ -4,6 +4,14 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### MAGI-2 as an Animate model ✅ (to verify on the PC)
+Paul, 27 Nov 2026: "add magi-2". WaveSpeed's **MAGI-2 1080p** (sand-ai/magi-2/image-to-video) is a fourth WaveSpeed
+choice in Creation → Model (your defaults and each picture's own Model). The picture is the first frame and its shape
+picks the aspect ratio; native 1080p (no Make final needed); 4–30 s; $0.08/s ($0.40 for 5 s), cheaper than Seedance
+2.5 Flash at 720p. Sent without sound, so the video's audio stays the song. Takes show "MAGI-2 1080p". Story shots
+only: MAGI-2 cannot lip-sync to a supplied voice (its reference route takes audio only as a style reference), so
+singing stays on InfiniteTalk. Not yet sent to WaveSpeed for real (request shape from its docs, 27 Nov 2026).
+
 ### Takes QA: takes of at most 8 s, face check on every take, Trim to good part ✅ (to verify on the PC)
 Paul, 26 Nov 2026: "Find out why this take was 13 s when slots are capped at ~8 s" and "Aiko take 2 at ~0:09: the face
 turns into a flat white mask".

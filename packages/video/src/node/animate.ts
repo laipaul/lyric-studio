@@ -59,9 +59,11 @@ export const TIMEOUT_MS = 20 * 60 * 1000;
 const UPLOAD_KEEP_MS = 5 * 24 * 3600 * 1000; // WaveSpeed keeps uploads 7 days: reused for 5
 
 export type ServiceId = "wavespeed" | "higgsfield";
-export type Quality = "draft" | "standard" | "best";
+export type Quality = "draft" | "standard" | "best" | "magi2";
 type Model = { label: string; path: string; usdPerSecond: number; priceNote: string; resolution?: string }; // resolution: asked of the service (else RESOLUTION)
 export type Service = { id: ServiceId; label: string; keyName: string; models: Partial<Record<Quality, Model>> };
+
+export const MAGI2_PATH = "sand-ai/magi-2/image-to-video";
 
 // Prices per second at 720p, without sound (WaveSpeed's model pages, 21 Nov 2026). Higgsfield's docs do not list
 // Seedance 2.5's price: WaveSpeed's is used and marked as an estimate (see console.higgsfield.ai for the real one).
@@ -75,6 +77,10 @@ export const SERVICES: Record<ServiceId, Service> = {
       draft: { label: "Draft (cheap preview)", path: "bytedance/seedance-2.5-flash/image-to-video", usdPerSecond: 0.108, priceNote: "WaveSpeed price list, 25 Nov 2026 (480p)", resolution: "480p" },
       standard: { label: "Seedance 2.5 Flash", path: "bytedance/seedance-2.5-flash/image-to-video", usdPerSecond: 0.216, priceNote: "WaveSpeed price list, 21 Nov 2026" },
       best: { label: "Seedance 2.5", path: "bytedance/seedance-2.5/image-to-video", usdPerSecond: 0.324, priceNote: "WaveSpeed price list, 21 Nov 2026" },
+      // MAGI-2 (27 Nov 2026, Paul: "add magi-2"): Sand AI's image-to-video, native 1080p, 4-30 s, $0.08/s (WaveSpeed's
+      // model page). The picture is the first frame; its shape picks the aspect ratio. Story shots only: it cannot
+      // lip-sync to a supplied voice, so singing stays on InfiniteTalk.
+      magi2: { label: "MAGI-2 1080p", path: MAGI2_PATH, usdPerSecond: 0.08, priceNote: "WaveSpeed price list, 27 Nov 2026 (1080p)", resolution: "1080p" },
     },
   },
   higgsfield: {
@@ -617,7 +623,7 @@ export function waveSpeedTransport(key: string, model: string, f: typeof fetch =
   return {
     upload: (file) => waveSpeedUpload(key, file, f),
     submit: async (image, prompt, seconds = TAKE_SECONDS) => {
-      const b = data(await json(await f(`${WAVESPEED}/${model}`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ image, prompt, duration: seconds, resolution, generate_audio: false, output_format: "mp4" }) }), "WaveSpeed"));
+      const b = data(await json(await f(`${WAVESPEED}/${model}`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify(model.startsWith("sand-ai/magi-2/") ? { image, prompt, duration: seconds, generate_audio: false } : { image, prompt, duration: seconds, resolution, generate_audio: false, output_format: "mp4" }) }), "WaveSpeed"));
       if (typeof b.id !== "string") throw new Error("WaveSpeed: no request id in the answer");
       return { id: b.id };
     },

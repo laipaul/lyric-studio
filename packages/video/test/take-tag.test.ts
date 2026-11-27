@@ -12,6 +12,7 @@ describe("take tags", () => {
     expect(takeTag({ ...base, n: 4, quality: "best", model: "Video Upscaler Pro 1080p", finalOf: 3, cost_usd: 0.2 }, "en-GB")).toMatch(/^Take 4 · final of 3 · 1080p · \$0\.20 · /);
     expect(takeTag({ ...base, n: 5, kind: "references", quality: "best", refNames: ["mj.png", "Jennifer · face sheet"], cost_usd: 1.62 }, "en-GB")).toMatch(/^Take 5 · Jennifer's face · \$1\.62/);
     expect(takeTag({ ...base, n: 2, quality: "best", cost_usd: 1.62 }, "en-GB")).toMatch(/^Take 2 · Full quality 720p · \$1\.62/);
+    expect(takeKind({ ...base, n: 7, quality: "magi2" })).toBe("MAGI-2 1080p");
     expect(takeKind({ ...base, n: 6, kind: "lipsync", line: 9, through: 11, resolution: "480p" })).toBe("singing, lines 9-11 · 480p");
   });
 

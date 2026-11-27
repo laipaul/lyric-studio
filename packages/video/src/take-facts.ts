@@ -45,6 +45,7 @@ export function takeKind(t: TakeTagInput): string {
   }
   if (t.quality === "draft") return "Draft 480p";
   if (t.quality === "standard") return "Flash 720p";
+  if (t.quality === "magi2") return "MAGI-2 1080p";
   return "Full quality 720p";
 }
 

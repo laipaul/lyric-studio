@@ -9,7 +9,7 @@ import { openWorkspace, resolveWorkspaceDir, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { findOrCreateSongProject, readClipEdits, songPathsById } from "../src/node";
-import { nextTakeN, removeTakes, restoreTake, setFavourite } from "../src/node/animate";
+import { nextTakeN, removeTakes, restoreTake, setFavourite, MAGI2_PATH, SERVICES } from "../src/node/animate";
 import { addFromLink, addPictures, phraseSeconds, readCreationDefaults, saveCreationDefaults, sourceLabel, sendToStoryboard, estimate, higgsfieldTransport, motionPrompt, picturesView, readPictures, runTakes, setMood, startAnimate, startResume, stubTransport, waveSpeedTransport } from "../src/node/animate";
 import { clearFinishedGenerateTasks, listGenerateTasks, RECENT_MS } from "../src/node/generate-tasks";
 import { takeFacts } from "../src/take-facts";
@@ -113,6 +113,20 @@ describe("the request", () => {
     expect(JSON.parse(String(sent.init?.body))).toEqual({ image: "https://cdn/p.png", prompt: "move", duration: 5, resolution: "720p", generate_audio: false, output_format: "mp4" });
     expect(await t.poll("pred-1")).toEqual({ status: "running" });
     expect(await t.poll("pred-1")).toEqual({ status: "done", url: "https://cdn/v.mp4" });
+  });
+  it("MAGI-2 (27 Nov 2026): its own request (no resolution or output_format: native 1080p, no sound), listed as a WaveSpeed model at $0.08/s", async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    const f = (async (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      if (url.endsWith("/sand-ai/magi-2/image-to-video")) return Response.json({ code: 200, data: { id: "pred-m" } });
+      throw new Error(`unexpected ${url}`);
+    }) as typeof fetch;
+    const t = waveSpeedTransport("KEY", MAGI2_PATH, f, "1080p");
+    expect(await t.submit("https://cdn/p.png", "she turns to the sea", 8)).toEqual({ id: "pred-m" });
+    expect(calls[0].url).toBe("https://api.wavespeed.ai/api/v3/sand-ai/magi-2/image-to-video");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ image: "https://cdn/p.png", prompt: "she turns to the sea", duration: 8, generate_audio: false });
+    expect(SERVICES.wavespeed.models.magi2?.path).toBe(MAGI2_PATH);
+    expect(estimate("wavespeed", "magi2", 2, 10)).toMatchObject({ usdPerTake: 0.8, usd: 1.6, model: "MAGI-2 1080p" });
   });
   it("WaveSpeed with references (24 Nov 2026): Seedance 2.5 reference-to-video, the pictures in @Image order, the shape, no sound", async () => {
     const calls: { url: string; init?: RequestInit }[] = [];
