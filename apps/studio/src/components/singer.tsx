@@ -46,7 +46,8 @@ export type Singer = {
   // The lip-sync review (26 Nov 2026): a verdict, the free nudge, the audio per group, Make final.
   review: (source: string, t: GroupTake, verdict: "approved" | "redo" | null, reasons?: string[], note?: string) => Promise<void>;
   nudge: (source: string, t: GroupTake, ms: number) => Promise<void>;
-  setVoice: (line: number, voice: "stem" | "song" | "dereverb") => Promise<void>;
+  setVoice: (line: number, voice: "stem" | "song" | "dereverb" | "lead") => Promise<void>;
+  prepareDry: (lead: boolean) => Promise<void>; // the dry vocal for lips (28 Nov 2026)
   makeFinal: (source: string, t: GroupTake) => Promise<void>;
   trim: (source: string, t: GroupTake) => Promise<void>;
   chooseTake: (source: string, t: GroupTake) => Promise<void>;
@@ -84,7 +85,8 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the singing lines, read once the tab is shown
     void load();
   }, [load]);
-  const running = !!view?.running;
+  // Takes being made, or the dry vocal being prepared: the view follows by itself.
+  const running = !!view?.running || view?.dryVocal?.dry === "making" || view?.dryVocal?.lead === "making";
   useEffect(() => {
     if (!running) return;
     const t = setInterval(() => void load(), 4000);
@@ -198,6 +200,11 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
       await post({ action: "voice", line, voice });
       await load();
     }),
+    prepareDry: (lead) => attempt(async () => {
+      await post({ action: "prepare", lead });
+      setNotice({ ok: true, text: `Making the dry vocal${lead ? " and the lead only" : ""} from your vocal stem, on this PC (about half a minute per minute of vocal${lead ? ", the lead only about a minute more" : ""}). It is used only to drive the lips, never in a video.` });
+      await load();
+    }),
     trim: (source, t) => attempt(async () => {
       await post({ action: "trim", source, n: t.n });
       setNotice({ ok: true, text: `A trimmed copy of ${t.label ?? `take ${t.n}`} keeps its good part (nothing deleted). It takes its place on the lines when that take was in use.` });
@@ -280,6 +287,7 @@ export function SingerBar({ singer, lyrics = [] }: { singer: Singer; lyrics?: Ly
       <p className="text-muted-foreground">
         Lines in a row with the same picture are sung in one continuous take. Each take&apos;s voice is sent with its picture or video to WaveSpeed InfiniteTalk ({money(v.usdPerSecond)} per second), or, when a group&apos;s Engine is MV Generator, with its picture to the Music Video Generator ({money(v.mvUsdPerSecond)} per second, with 1 s of extra voice before and after, cut off again). The first take of a group comes back into Creation and your Storyboard, lands on its lines and always plays in time with the song: Make cuts to it on the beat. Retake makes another take of the same lines; it waits as “New — compare” until you choose it. The voice is {v.voice === "stem" ? "your vocal stem" : "the song itself (add your vocal stem in Assets for cleaner lips)"}.
       </p>
+      <DryVocalRow singer={singer} />
       {!v.ready ? (
         <p data-singer-nokey className="text-amber-200">
           No WaveSpeed key yet: nothing is sent. Add a line <code>{v.keyName}=…</code> with your own key to the file <code>D:\videomaker\.env</code> (not .env.example), then restart Lyric Studio.
@@ -431,9 +439,10 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
       {l.source && !later ? (
         <label className="text-muted-foreground flex items-center gap-1" title="What drives the lips from the next take on: your vocal stem (clean voice), the stem de-reverbed (the echo removed: crisper syllables; made on this PC the first time, needs pnpm audio:setup --dereverb once) or the whole song (try it when the lips miss words)">
           Lips follow
-          <select data-singer-voice={number} value={l.voice ?? "stem"} onChange={(e) => void singer.setVoice(number, e.target.value as "stem" | "song" | "dereverb")} className="bg-background rounded border px-1 py-0">
+          <select data-singer-voice={number} value={l.voice ?? "stem"} onChange={(e) => void singer.setVoice(number, e.target.value as "stem" | "song" | "dereverb" | "lead")} className="bg-background rounded border px-1 py-0">
             <option value="stem">the vocal stem</option>
-            <option value="dereverb">the stem, de-reverbed</option>
+            <option value="dereverb">the dry vocal (no reverb)</option>
+            <option value="lead">the lead vocal only (dry)</option>
             <option value="song">the whole song</option>
           </select>
         </label>
@@ -586,7 +595,7 @@ function TakesList({ singer, source, takes }: { singer: Singer; source: string; 
             <span className="text-muted-foreground pl-5" data-singer-take-facts>
               {[takeWhen(t), t.status === "running" ? "being made…" : t.status === "done" || t.request_id ? `about ${money(t.cost_usd)}` : "nothing spent", t.resolution ?? "720p", takeFeeling(t), t.parts && t.parts.length > 1 ? `${t.parts.length} parts` : ""].filter(Boolean).join(" · ")}
               {t.status === "failed" || t.status === "interrupted" ? <span className={t.status === "failed" ? "text-red-300" : "text-amber-300"}> · {t.error}</span> : null}
-              {t.voice === "song" ? " · lips from the whole song" : t.voice === "dereverb" ? " · lips from the de-reverbed stem" : ""}
+              {t.voice === "song" ? " · lips from the whole song" : t.voice === "dereverb" ? " · lips from the dry vocal" : t.voice === "lead" ? " · lips from the lead vocal only" : ""}
               {t.nudge_ms ? ` · placed ${t.nudge_ms > 0 ? "+" : ""}${(t.nudge_ms / 1000).toFixed(1)} s` : ""}
               {t.review?.verdict === "redo" && (t.review.reasons.length || t.review.note) ? <span className="text-amber-300"> · {[...t.review.reasons, t.review.note].filter(Boolean).join(", ")}</span> : null}
             </span>
@@ -645,6 +654,42 @@ function ScriptField({ line, value, onSave }: { line: number; value: string; onS
       <span data-singer-mood-hint className="text-muted-foreground text-[10px] leading-tight">
         {MOOD_HINT}
       </span>
+    </div>
+  );
+}
+
+// The dry vocal for lips (28 Nov 2026): made once per song from the vocal stem (the reverb removed; the lead only on
+// request), on this PC, for Lips follow; never in a video.
+function DryVocalRow({ singer }: { singer: Singer }) {
+  const [lead, setLead] = useState(false);
+  const d = singer.view?.dryVocal;
+  if (!d) return null;
+  const word = (s: "ready" | "making" | "none") => (s === "ready" ? "ready" : s === "making" ? "being made…" : "not made");
+  const busy = d.dry === "making" || d.lead === "making";
+  const todo = d.dry === "none" || (lead && d.lead === "none");
+  return (
+    <div data-singer-dry className="text-muted-foreground flex flex-wrap items-center gap-2" title="The voice that drives the lips, without the reverb (and without backing vocals for the lead only), so the mouth follows each syllable cleanly. Made on this PC from your vocal stem; never used in a video: the video always plays your song.">
+      <span>Dry vocal for lips:</span>
+      {!d.stem ? (
+        <span data-singer-dry-state="no-stem">add your vocal stem in Assets first</span>
+      ) : !d.installed ? (
+        <span data-singer-dry-state="not-installed">
+          not installed yet: run <code>pnpm audio:setup --dereverb</code> once
+        </span>
+      ) : (
+        <>
+          <span data-singer-dry-state={d.dry}>dry vocal {word(d.dry)}</span>
+          <span data-singer-lead-state={d.lead}>· lead only {word(d.lead)}</span>
+          {busy ? <Loader2 className="text-brand size-3 animate-spin" /> : null}
+          <label className="flex items-center gap-1">
+            <input type="checkbox" data-singer-dry-lead checked={lead} onChange={(e) => setLead(e.target.checked)} />
+            also the lead only
+          </label>
+          <button type="button" data-singer-dry-prepare disabled={busy || !todo} onClick={() => void singer.prepareDry(lead)} className="hover:bg-accent rounded border px-1.5 py-0.5 disabled:opacity-50">
+            Prepare dry vocal
+          </button>
+        </>
+      )}
     </div>
   );
 }

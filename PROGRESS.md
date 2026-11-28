@@ -4,6 +4,26 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Dry vocal for lips ✅ (to verify on the PC)
+Paul, 28 Nov 2026: "an optional preparation step per song ... Never used for the soundtrack." In Lyrics Sync → Singer,
+**Dry vocal for lips: Prepare dry vocal** (tick **also the lead only**) makes, on this PC and once per stem, the vocal
+stem without its reverb (anvuew's MelBand RoFormer de-reverb) and the lead vocal only (anvuew's BS RoFormer karaoke, then
+the de-reverb), kept in .studio\lipsync-audio\. **Lips follow** now offers: the vocal stem / the dry vocal (no
+reverb) / the lead vocal only (dry) / the whole song. A dry vocal made earlier with UVR is still used. Never in a video:
+the video always plays the song (CLAUDE.md exception extended to the lead only).
+- Models chosen on Wedding Day's stem (RTX 5060 laptop, GPU used): de-reverb 25 s per minute of vocal, pauses 40 dB
+  quieter (UVR DeEcho-DeReverb: 22 dB), the singing kept; lead only 41 s per minute (Wedding Day's backing vocals are
+  24-28 dB under the lead, so it changes little there). Licences: anvuew's models GPL-3.0 (fine for local use);
+  becruily's karaoke model left out (no licence stated).
+- Install fix: `pnpm audio:setup --dereverb` also installs audioread (audio-separator needs it without declaring it).
+- Found while listening: Suno's vocal stem (and Suno's own separation) has already lost the soft end of "beautiful"
+  (1:04.7-1:05.3), so no de-reverb of it can bring it back, and the lips close there. The vocal separated from the
+  master here (Kim's MelBand RoFormer, 22 s per minute) keeps it (-27 dB vs -63 dB after the de-reverb). **Next for
+  this step, after Paul listens** (D:\LifeLyrics\Master\Wedding Day\Dry vocal compare, files 6 and 7): make the dry
+  vocal from the master's separated vocal instead of the stem.
+- Tests: animate (52, incl. lead only, the old UVR copy kept, the state while made, Prepare without a stem),
+  test_dereverb.py (5).
+
 ### Soft entry and exit for every singing clip ✅ (to verify on the PC)
 Paul, 28 Nov 2026: "the transition INTO singing clips is harsh again (hard cut)". Cause: the 22 Nov fix faded a
 singing take in over its OWN lead-in (the frames before its line), so it only worked for InfiniteTalk takes with room
@@ -791,15 +811,6 @@ locked cards can't be edited").
 - On the PC: Shape on "Something About You And Me" (Reels): the readout says "Song Reels: 0:00.0 – <song length>"; if
   it says "chosen by you", press Automatic. Note: Instagram and YouTube Shorts accept up to 3 min per video; a longer
   song is yours to decide (post it, or drag the pink window to a part).
-
-### Get Latest Lyric Studio: one double-click to update ✅ (to verify on the PC)
-- Paul (22 Nov 2026): "can u create a shortcut I can double click instead of doing manually" (git pull lyric main,
-  git push, restart). **Get Latest Lyric Studio.cmd** in D:\videomaker: gets the newest code from the lyric-studio copy
-  on GitHub, copies it to videomaker so both match, protects keys typed into .env.example, runs pnpm install and
-  restarts the app (it rebuilds first). Songs and clips (workspace) are never touched. Run **Create Desktop
-  Shortcut.cmd** once to get a "Lyric Studio - Get Latest" shortcut on the desktop as well.
-- Code: scripts/update.mjs (--from, --copy-to, updateArgs), Get Latest Lyric Studio.cmd, Create Desktop Shortcut.cmd.
-- Tests: vitest update-script (+1); checked with local test repos: pull, copy, and a failed copy that still updates.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

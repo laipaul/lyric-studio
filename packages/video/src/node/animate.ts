@@ -143,7 +143,7 @@ export type Take = {
   // Lip-sync review (26 Nov 2026, Paul: "verify it like Lyrics Sync, tweak until it's right, then apply"):
   review?: { verdict: "approved" | "redo"; reasons: string[]; note?: string; at: string }; // Paul's verdict on a singing take
   nudge_ms?: number; // a singing take placed this much later (+) or earlier (-) on the song than its vocal piece (free fix)
-  voice?: "stem" | "song" | "dereverb"; // the audio the lips were driven by (the vocal stem, the whole song, or the stem de-reverbed)
+  voice?: "stem" | "song" | "dereverb" | "lead"; // the audio the lips were driven by (the vocal stem, the whole song, or the stem de-reverbed)
   direction?: string; // the acting direction sent with the singing cue (persona + performance script)
   qa?: import("../take-qa").TakeQa; // Takes QA (26 Nov 2026): the face checked frame by frame against the picture it was made from
   trimmedOf?: number; // "Trim to good part": made from take trimmedOf (its good stretch)

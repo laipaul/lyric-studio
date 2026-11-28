@@ -4,6 +4,15 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Get Latest Lyric Studio: one double-click to update ✅ (to verify on the PC)
+- Paul (22 Nov 2026): "can u create a shortcut I can double click instead of doing manually" (git pull lyric main,
+  git push, restart). **Get Latest Lyric Studio.cmd** in D:\videomaker: gets the newest code from the lyric-studio copy
+  on GitHub, copies it to videomaker so both match, protects keys typed into .env.example, runs pnpm install and
+  restarts the app (it rebuilds first). Songs and clips (workspace) are never touched. Run **Create Desktop
+  Shortcut.cmd** once to get a "Lyric Studio - Get Latest" shortcut on the desktop as well.
+- Code: scripts/update.mjs (--from, --copy-to, updateArgs), Get Latest Lyric Studio.cmd, Create Desktop Shortcut.cmd.
+- Tests: vitest update-script (+1); checked with local test repos: pull, copy, and a failed copy that still updates.
+
 ### Creation: Story room | Production, each Storyboard item made in its place (C3 Part 1) ✅ (to verify on the PC)
 - Paul (22 Nov 2026), Something About You And Me: "Creation should be creating the pictures and video takes for each
   Storyboard item", with the story tools as the guiding line and "another folder for the actual production engine room".

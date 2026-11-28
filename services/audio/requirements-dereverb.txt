@@ -3,3 +3,5 @@
 # requirements.txt and the AI requirements as constraints: it never changes a version the aligner uses. The model
 # (about 120 MB) downloads on first use into services/audio/models/uvr.
 audio-separator==0.48.0
+# audio-separator imports audioread without declaring it (librosa no longer brings it): pinned here (28 Nov 2026).
+audioread==3.0.1

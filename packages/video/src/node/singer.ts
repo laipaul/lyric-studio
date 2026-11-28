@@ -16,7 +16,7 @@
 // The song and the stem are only read (FFmpeg decodes a piece into a temporary file). Requests are never retried.
 // Settings: <song folder>\pictures\singer.json { "lines": { "<line>": "<Creation file>" }, "scripts": { "<first line of a block>": "what the
 // singer does" } }: the little script goes to InfiniteTalk with the voice (its optional prompt: expression and pose).
-import { ensureDereverbed } from "./dereverb";
+import { dryVocalInstalled, dryVocalState, ensureDereverbed, type DryKind } from "./dereverb";
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -105,7 +105,7 @@ export function mvTakeWarnings(returnedMs: number, sentMs: number, cutsMs: reado
 // voices: per group (its first line), the audio that drives the lips ("song": the whole mix; default: the vocal stem).
 // engine: the last engine chosen in this song (a group without its own choice uses it); engines / scenes: per group
 // (its first line); aspect: the shape asked of the MV Generator.
-export type LipsVoice = "stem" | "song" | "dereverb"; // dereverb (step 2): the stem de-reverbed (dereverb.ts)
+export type LipsVoice = "stem" | "song" | "dereverb" | "lead"; // dereverb: the dry vocal (the stem de-reverbed); lead: the lead vocal only, dry (dereverb.ts)
 export type SingerSettings = { lines: Record<string, string>; scripts?: Record<string, string>; resolution?: SingResolution; voices?: Record<string, LipsVoice>; engine?: SingEngine; engines?: Record<string, SingEngine>; scenes?: Record<string, string>; aspect?: SingAspect };
 // A draft (lip-sync review, 26 Nov 2026): 480p at half the price, to check the lips and the expression first; an
 // approved draft becomes the final by Make final (upscaled to 1080p: the same lips and expression).
@@ -185,6 +185,9 @@ export type SingerView = {
   // The lip-sync review: groups (runs) with a source, how many have an approved take in use (or approved), how many
   // were marked to redo, and how many have no take yet.
   review: { groups: number; approved: number; redo: number; notMade: number };
+  // The dry vocal for lips (28 Nov 2026): whether it can be made (a vocal stem, the de-reverb installed) and the state of
+  // the dry vocal and the lead-only copy of this song's stem.
+  dryVocal: { stem: boolean; installed: boolean; dry: "ready" | "making" | "none"; lead: "ready" | "making" | "none" };
 };
 
 export function readSinger(dir: string): SingerSettings {
@@ -482,6 +485,7 @@ export async function singerView(ws: Workspace, projectId: string, env: NodeJS.P
     folder: rel,
     running: (lines ?? []).reduce((n, l) => n + l.takes.filter((t) => t.status === "running").length, 0),
     review: reviewCounts(lines ?? []),
+    dryVocal: await dryVocalView(ws, projectId, env),
   };
 }
 
@@ -999,8 +1003,39 @@ async function singWithMv(c: { dir: string; source: string; n: number; take: Tak
 const promptOf = (t: Take) => [t.prompt?.trim().replace(/\.$/, ""), t.direction?.trim().replace(/\.$/, "")].filter(Boolean).join(". ");
 // The audio that drives the lips: the whole song when the group chose it; the de-reverbed copy of the stem (same
 // timing, same offset) when chosen and made; else the song's voice (the stem when it fits).
-const voiceOfTake = (t: Take, songVoice: Voice, dry: string | null = null): Voice =>
-  t.voice === "song" ? { kind: "song" } : t.voice === "dereverb" && dry && songVoice.kind === "stem" ? { ...songVoice, file: dry } : songVoice;
+const voiceOfTake = (t: Take, songVoice: Voice, dry: Partial<Record<DryKind, string>> = {}): Voice => {
+  if (t.voice === "song") return { kind: "song" };
+  const kind = dryKindOf(t.voice);
+  const file = kind ? dry[kind] : undefined;
+  return file && songVoice.kind === "stem" ? { ...songVoice, file } : songVoice;
+};
+// The copy a Lips follow choice needs ("dereverb": the dry vocal; "lead": the lead vocal only, dry).
+const dryKindOf = (v: string | undefined): DryKind | null => (v === "dereverb" ? "dry" : v === "lead" ? "lead" : null);
+
+// The dry vocal's state for the Singer bar.
+async function dryVocalView(ws: Workspace, projectId: string, env: NodeJS.ProcessEnv): Promise<SingerView["dryVocal"]> {
+  const voice = await voiceFor(ws, projectId);
+  const installed = dryVocalInstalled(env);
+  if (voice.kind !== "stem") return { stem: false, installed, dry: "none", lead: "none" };
+  const root = path.dirname(songFolder(ws, projectId).dir);
+  return { stem: true, installed, dry: dryVocalState(root, voice.file, "dry"), lead: dryVocalState(root, voice.file, "lead") };
+}
+
+// "Prepare dry vocal" (Lyrics Sync → Singer, 28 Nov 2026): the dry vocal (and the lead only, when asked) of this song's
+// stem made now, on this PC, so the next takes can use them at once. Starts them and returns; each is kept per stem.
+export async function prepareDryVocal(ws: Workspace, projectId: string, o: { lead?: boolean } = {}, env: NodeJS.ProcessEnv = process.env): Promise<{ started: DryKind[] }> {
+  const voice = await voiceFor(ws, projectId);
+  if (voice.kind !== "stem") throw new Error("The dry vocal is made from your vocal stem: add it in Prepare → Assets first.");
+  if (!dryVocalInstalled(env)) throw new Error("The de-reverb is not installed yet: run  pnpm audio:setup --dereverb  once, then try again.");
+  const root = path.dirname(songFolder(ws, projectId).dir);
+  const kinds: DryKind[] = o.lead ? ["dry", "lead"] : ["dry"];
+  const started = kinds.filter((k) => dryVocalState(root, voice.file, k) === "none");
+  // One after the other (each uses the whole GPU); a failure shows on the next take that needs it.
+  void (async () => {
+    for (const k of started) await ensureDereverbed(root, voice.file, env, k).catch(() => undefined);
+  })();
+  return { started };
+}
 
 // ---- The lip-sync review (26 Nov 2026) ----
 
@@ -1047,7 +1082,7 @@ export function nudgeSingingTake(ws: Workspace, projectId: string, source: unkno
 
 // The audio that drives the lips of a group from its next take on: the vocal stem (default) or the whole song.
 export function setSingerVoice(ws: Workspace, projectId: string, line: unknown, voice: unknown): SingerSettings {
-  if (voice !== "stem" && voice !== "song" && voice !== "dereverb") throw new Error('Choose "stem", "song" or "dereverb".');
+  if (voice !== "stem" && voice !== "song" && voice !== "dereverb" && voice !== "lead") throw new Error('Choose "stem", "song", "dereverb" or "lead".');
   const { dir } = songFolder(ws, projectId);
   const s = readSinger(dir);
   const voices = { ...(s.voices ?? {}) };
@@ -1114,23 +1149,24 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
     for (const j of jobs) setTake(dir, j.source, j.n, { status: "failed", error: errorText(error), ended_at: new Date().toISOString(), pid: undefined });
     return;
   }
-  // Step 2: the de-reverbed stem, made once before any take that asks for it (the stem is only read). Without a stem,
+  // The dry vocal / the lead only, made once before any take that asks for it (the stem is only read). Without a stem,
   // or when it cannot be made, those takes fail in plain words and nothing is spent.
-  let dry: string | null = null;
-  const wantsDry = jobs.filter((j) => readPictures(dir).pictures[j.source]?.takes.find((x) => x.n === j.n)?.voice === "dereverb");
-  if (wantsDry.length) {
+  const dry: Partial<Record<DryKind, string>> = {};
+  for (const kind of ["dry", "lead"] as const) {
+    const wants = jobs.filter((j) => dryKindOf(readPictures(dir).pictures[j.source]?.takes.find((x) => x.n === j.n)?.voice) === kind);
+    if (!wants.length) continue;
     let why: string | null = null;
-    if (voice.kind !== "stem") why = "De-reverbed needs your vocal stem (add it in Assets), or choose Lips follow: the vocal stem or the whole song";
+    if (voice.kind !== "stem") why = `${kind === "lead" ? "Lead only" : "The dry vocal"} needs your vocal stem (add it in Assets), or choose Lips follow: the vocal stem or the whole song`;
     else {
       try {
-        dry = await ensureDereverbed(path.dirname(dir), voice.file, env);
+        dry[kind] = await ensureDereverbed(path.dirname(dir), voice.file, env, kind);
       } catch (error) {
         why = errorText(error);
       }
     }
     if (why) {
-      for (const j of wantsDry) setTake(dir, j.source, j.n, { status: "failed", error: `${why}. Nothing was spent.`, ended_at: new Date().toISOString(), pid: undefined });
-      jobs = jobs.filter((j) => !wantsDry.includes(j));
+      for (const j of wants) setTake(dir, j.source, j.n, { status: "failed", error: `${why}. Nothing was spent.`, ended_at: new Date().toISOString(), pid: undefined });
+      jobs = jobs.filter((j) => !wants.includes(j));
     }
   }
   const uploads = new Map<string, Promise<string>>(); // one upload per picture or video
