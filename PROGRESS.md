@@ -1023,6 +1023,20 @@ the music-video steps).** The app explains itself where Paul is, so he never has
 - one help file in the project as the single source: every new feature adds its help card in the same step;
 - local only (part of the app, no network). Start with the music-video recipe, then one recipe per workflow.
 
+**Prompts travel with the shot list (Paul, 28 Nov 2026: "Yes, add it"; after In-app help, exact place to agree).**
+Today a picture made on Midjourney / Higgsfield from a prompt written in a Claude chat (Shotcaller, Scenecraft,
+Castkit) lands in Creation with only a label ("Midjourney"): the prompt, the shot it was made for and its cost stay in
+the chat. Fits the app's purpose (where each asset came from, which prompt and look made it, which shot uses it).
+Paul's spec, 28 Nov 2026: "Keep generation prompts with each shot":
+1. **Import:** a Claude shot list may carry an image prompt and a video prompt per shot, both optional (a shot list
+   without them imports as now). The Song brief's shot list format says so.
+2. **Copy from the planned shot:** each planned shot shows its prompts with **Copy** (image / video).
+3. **Importing a generated asset:** Paul can record the **prompt actually used** (it may differ from the planned one;
+   the planned one offered to start from) and the **generation platform** (Midjourney, Higgsfield, WaveSpeed, …).
+4. **Link to a shot on import or later:** pick the shot when adding the asset, or link / change it afterwards.
+No AI calls, nothing spent. Not the dropped "Shot scripts per slot" (21 Nov): Claude writes the prompts in Paul's
+own chats; the app keeps, shows and files them.
+
 **Song creation workflow (Paul, 21 Nov 2026):** pictures, then clips, then play with the order (his real flow: no
 preset storyboard, discovery against the music).
 - ✅ (built 21 Nov, to verify) **G1 Story tools** (optional, folded away in Prepare → Pictures): cast from the shared
