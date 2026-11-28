@@ -40,7 +40,7 @@ const clk = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms %
 export function takeKind(t: TakeTagInput): string {
   if (t.finalOf !== undefined) return "1080p";
   if (/upscaler/i.test(t.model ?? "")) return /pro/i.test(t.model ?? "") ? "1080p upscale" : "1080p basic upscale";
-  if (t.kind === "lipsync") return `singing, ${t.through && t.through > (t.line ?? 0) ? `lines ${t.line}-${t.through}` : `line ${t.line}`} · ${t.resolution ?? "720p"}`;
+  if (t.kind === "lipsync") return `${t.model === "MV Generator" ? "MV Generator " : ""}singing, ${t.through && t.through > (t.line ?? 0) ? `lines ${t.line}-${t.through}` : `line ${t.line}`} · ${t.resolution ?? "720p"}`;
   if (t.kind === "musicvideo") return `music video${t.section ? ` · ${clk(t.section.fromMs)}–${clk(t.section.toMs)}` : ""}${t.resolution ? ` · ${t.resolution}` : ""}`;
   if (t.kind === "references") {
     const face = t.refNames?.find((r) => / · face sheet$/.test(r));

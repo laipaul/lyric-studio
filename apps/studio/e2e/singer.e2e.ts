@@ -360,6 +360,32 @@ async function main() {
     const fin = pj().pictures["singer close.png"].takes.find((x) => x.finalOf === dr.n)!;
     const anchor1 = (JSON.parse(readFileSync(paths.recipe!, "utf8")) as { anchors?: { line: number; clip: string; sync?: number }[] }).anchors?.find((x) => x.line === 1);
     check(!!fin && anchor1?.clip === fin.sent && Math.abs((anchor1?.sync ?? 0) - (before - 0.1)) < 0.001, `Make final: the final takes the draft's place on line 1, at the nudged spot (${JSON.stringify(anchor1)})`);
+    // The second engine (28 Nov 2026): line 2 again with WaveSpeed's Music Video Generator (stand-in, nothing sent).
+    const singerJson = () => JSON.parse(readFileSync(path.join(pictures, "singer.json"), "utf8")) as { engine?: string; engines?: Record<string, string>; scenes?: Record<string, string>; aspect?: string };
+    check((await page.$$eval("[data-singer-resolution] option", (os: Element[]) => os.map((o) => (o as HTMLOptionElement).value))).join() === "1080p,720p,480p", "Resolution offers 1080p (MV Generator only), 720p and 480p");
+    check((await page.inputValue("[data-singer-engine='2']")) === "infinitetalk", "a group's engine is InfiniteTalk until chosen otherwise");
+    await page.selectOption("[data-singer-engine='2']", "mv");
+    await page.waitForSelector("[data-singer-scene='2']", { timeout: 15_000 });
+    check(singerJson().engine === "mv" && singerJson().engines?.["2"] === "mv", "the engine choice is saved for the group and the song (pictures\\singer.json)");
+    check((await page.inputValue("[data-singer-aspect]")) === "9:16", "the MV Generator's shape shows, 9:16 by default");
+    await page.fill("[data-singer-scene='2']", "soft morning light, quiet joy");
+    await page.press("[data-singer-scene='2']", "Enter");
+    for (let i = 0; i < 20 && !singerJson().scenes?.["2"]; i++) await page.waitForTimeout(200);
+    check(singerJson().scenes?.["2"] === "soft morning light, quiet joy", "the scene and mood box is saved for the group");
+    const mvTitle = (await page.getAttribute("[data-singer-retake='2']", "title")) ?? "";
+    await page.click("[data-singer-retake='2']");
+    await page.waitForSelector("[data-singer-line='2'] [data-singer-take-badge='mv']", { timeout: 90_000 });
+    await page.keyboard.press("Escape");
+    const readMv = () => (JSON.parse(readFileSync(path.join(pictures, "pictures.json"), "utf8")) as { pictures: Record<string, { takes: { n: number; kind?: string; model?: string; engine?: string; scene?: string; handles?: { inMs: number; outMs: number }; aspect?: string; status?: string; file?: string; sync_ms?: number; to_ms?: number; warnings?: string[]; fresh?: boolean; cost_usd?: number }[] }> }).pictures["singer close.png"].takes.filter((t) => t.engine === "mv").at(-1)!;
+    for (let i = 0; i < 300 && readMv().status !== "done"; i++) await page.waitForTimeout(200);
+    const mvTake = readMv();
+    check(mvTake.model === "MV Generator" && mvTake.scene === "soft morning light, quiet joy" && mvTake.aspect === "9:16" && mvTake.handles?.inMs === 1000 && mvTake.handles?.outMs === 1000, `the take records its engine, scene, shape and the 1 s handles (${JSON.stringify(mvTake)})`);
+    check(mvTitle.includes(`about $${(mvTake.cost_usd ?? 0).toFixed(2)}`), `the cost shown before sending is the take's cost, handles included (${mvTitle})`);
+    const mvFile = path.join(pictures, mvTake.file ?? "missing.mp4");
+    const mvInfo = existsSync(mvFile) ? await probeMedia(mvFile) : null;
+    check(!!mvInfo && !mvInfo.hasAudio && Math.abs(mvInfo.durationMs - (mvTake.to_ms! - mvTake.sync_ms!)) < 100, `it comes back silent and trimmed to its song range (${mvInfo?.durationMs} ms for ${mvTake.to_ms! - mvTake.sync_ms!} ms)`);
+    check(mvTake.fresh === true && !mvTake.warnings, "it arrives as New — compare, with no warning (the right length, no cut)");
+    check(((await page.textContent(`[data-singer-line='2'] [data-singer-take='${mvTake.n}']`)) ?? "").includes("MV Generator"), "the takes list labels it MV Generator");
     await browser.close();
   } finally {
     server.kill();

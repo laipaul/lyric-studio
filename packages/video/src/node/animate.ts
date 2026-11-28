@@ -152,7 +152,11 @@ export type Take = {
   fresh?: boolean; // lipsync: a later take of lines that already had a take in use: waits for Paul ("New — compare"), never placed by itself
   refFiles?: string[]; // references: the pictures sent, workspace-relative, in @Image order
   refNames?: string[]; // references: who / what each one is ("Jennifer · Wedding Dress", "Chapel")
-  aspect?: "9:16" | "16:9"; // references: the shape asked for
+  aspect?: "9:16" | "16:9"; // references, musicvideo, a lipsync take of the MV Generator: the shape asked for
+  engine?: "infinitetalk" | "mv"; // lipsync: the engine that made it (absent: InfiniteTalk; "mv": the Music Video Generator, singer.ts)
+  scene?: string; // lipsync (MV Generator): the scene / mood sent with it
+  handles?: { inMs: number; outMs: number }; // lipsync (MV Generator): the extra voice sent before and after, cut off again
+  warnings?: string[]; // lipsync (MV Generator): its length off the voice sent, or a cut the model added (plain words)
   guideFile?: string; // references: the camera guide video sent as @Video 1 (workspace-relative), e.g. a Midjourney take
   guideName?: string; // and its name as shown on the shot
   section?: { fromMs: number; toMs: number }; // musicvideo: the stretch of the song sent

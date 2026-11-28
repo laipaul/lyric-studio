@@ -4,6 +4,28 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Music Video Generator as a second singing engine ✅ (to verify on the PC, needs WAVESPEED_API_KEY)
+Paul, 28 Nov 2026: "In my tests, WaveSpeed's Music Video Generator gives better lip sync than InfiniteTalk." In Prepare →
+Lyrics Sync → Singer, each group (its first line) now has **Engine**: InfiniteTalk (default) or **MV Generator**; the
+choice is remembered for the song. With MV Generator:
+- **Sent** (WaveSpeed's docs read 28 Nov 2026): ONE picture (the line's picture), the voice of Lips follow for the take's
+  song range plus 1 s before and after, the fixed rules ("Keep exactly the woman, face, outfit, setting and light from
+  the image. ONE continuous shot, no cuts, no transitions, no other people, no text.") + the take's lip prompt + a new
+  **Scene and mood** box per group, the **MV shape** (9:16 default, 16:9) and the Resolution (now also **1080p**, MV
+  Generator only). The voice goes as it is (no breathing-room silencing: a silent stretch can make it cut to a story
+  scene). A video as the singer is refused in plain words (it needs a picture).
+- **Cost first:** per second of the voice sent (handles included), whole seconds, at least 3 s: $0.03 / $0.06 / $0.12 a
+  second at 480p / 720p / 1080p; your cap applies; Retake draft = 480p.
+- **Back:** sound removed, the extra second cut off each end, placed at its song time like an InfiniteTalk take (New —
+  compare, nudge, Approve, face check, Make final); labelled **MV Generator** with its cost. A length off the voice sent
+  by more than 0.1 s, or a cut / crossfade inside it, shows as a warning on the take ("The model added a cut at 0:03.2");
+  never stretched.
+- Known: WaveSpeed says the generator is multi-shot by design; one picture and "ONE continuous shot" are asked, but a take
+  may still come back with a cut (the warning says where). Not yet sent to WaveSpeed for real from the app.
+- Tests: mv-singer (12: price, request body, trim and placement, length and cut warnings, a video refused, engine saved);
+  singer.e2e.ts has the MV Generator flow (runs in the cloud check); checked in the browser on a test song (stand-in
+  WaveSpeed): the take came back 8.73 s for its 8.73 s range, silent, on line 2 at 65.77 s.
+
 ### Shape: Singing / B-roll labels and "B-roll here" ✅ (to verify on the PC)
 Paul, 27 Nov 2026: "build it" (after asking how pros work). Lyrics Sync is where the singing is aligned; Shape is where
 you decide what the viewer sees, while listening.
@@ -843,18 +865,6 @@ locked cards can't be edited").
   title-opening and textboard pass. Full suite: only the 7 known failures (network / real rendering). Build passes.
 - Known: hook and end cards that share the lyrics' place use a typical block height, so they can sit a few px off.
 
-### Shape shows every platform with a saved shot plan ✅ (to verify on the PC)
-- Paul (22 Nov 2026): after choosing only YouTube in Make, Shape's platform list had YouTube only, so the Reel
-  could not be opened in Shape. Shape's list followed Make's chips.
-- Now Shape lists Make's platforms first, then every other platform that has a saved shot plan for the song
-  (storyboards\<platform>-<n>.json; not Try other looks or .previous plans, never the Canvas), marked
-  "Reels · not selected in Make" (Make does not make it until its chip is on). It opens and edits as usual, with as
-  many videos as it has saved plans. Make is unchanged.
-- Code: node/storyboard.ts (savedPlanCounts, storyboardChoices notInMake, storyboardPlan's count), shape-board.tsx.
-- Tests: vitest video-counts (+1); browser shape-platforms (4 checks, in test:e2e). make.test's 2 failures are the
-  same as before this change (they need network / real rendering). Studio build passes.
-
-
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -1011,6 +1021,23 @@ locked cards can't be edited").
   mix has different timing, use Generate -> advanced -> re-align.
 
 ## Next
+
+**Agreed order (Paul, 28 Nov 2026), one part at a time, push, wait for his OK:**
+1. **Music Video Generator as a second singing engine** in the Singer panel (Engine per take: InfiniteTalk default /
+   MV Generator; one picture; Lips follow voice + 1 s handles, trimmed back; cost first incl. the 3 s minimum; length
+   and cut checks; "MV Generator" label). The voice goes as it is (no breathing-room silencing: a silent stretch can
+   make the generator cut to a story scene).
+2. **Two-layer timeline, Part A:** tracks.json per song (V1 Singer at song time, 1.00x; V2 B-roll), migration, compose
+   reads the tracks. **Gate:** Paul runs `pnpm tracks:check` on his PC; Part B starts only after he confirms
+   "identical" for all his videos.
+3. **Part B:** Shape shows Lyrics · V2 B-roll · V1 Singer · A1 Song and a "what plays" strip; removing V2 leaves a gap
+   (Close gap explicit); the Storyboard shows V1 markers read-only. Tracks per song; **V2 may be overridden per video**
+   (other B-roll at the same moment in the Reel and the 16:9 YouTube video). A gap with no singer under it: black, a
+   warning, Close gap / Fill, never "Ready to post".
+4. **Part C:** singer angles (several in-sync candidates per V1 segment, MV Generator takes among them).
+5. **Part D:** safety checks (no singing clip on V2, V1 never slowed or frozen, flash frames under 1 s, out-of-sync
+   badge from 0.15 s, the meter counts V1). Where renders change on purpose, `pnpm tracks:check` lists exactly which
+   videos and moments will look different, for Paul to review before accepting.
 
 **In-app help for every task — MUST HAVE (Paul, 27 Nov 2026: "it is a must have"; next after his current tests of
 the music-video steps).** The app explains itself where Paul is, so he never has to remember a workflow:

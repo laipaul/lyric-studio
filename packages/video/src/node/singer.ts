@@ -22,10 +22,11 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFile
 import os from "node:os";
 import path from "node:path";
 
-import { absPath, beat as beatTable, ffmpegBin, project as projectTable, uniqueFileName, type Workspace } from "@lyric/db";
+import { absPath, beat as beatTable, ffmpegBin, probeMedia, project as projectTable, uniqueFileName, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
 import { applyDownbeatOffset } from "../beats";
+import { detectCuts, MV_GENERATOR_PATH } from "../music-video";
 import { type PicturesView } from "./animate";
 import { nextTakeN } from "./animate";
 import { BOARD_VIDEO_FILE, itemLabel, makePlayable, PICTURE_FILE, POLL_MS, TAKES_DIR, TIMEOUT_MS, WAVESPEED, data, json, keyFor, readPictures, setTake, sleepMs, songFolder, update, waveSpeedUpload, type Take } from "./animate";
@@ -56,9 +57,56 @@ const LEAD_MS = 500; // the piece starts this long before the downbeat the shot 
 const TAIL_BARS = 2; // and runs two bars past the line's sung end (the shot holds until the next regular cut)
 export const RUN_GAP_MS = 8000; // lines in a row with the same picture and at most this pause between them: one take
 
+// The second singing engine (28 Nov 2026, Paul: "WaveSpeed's Music Video Generator gives better lip sync than
+// InfiniteTalk"): per group, InfiniteTalk (the default) or the Music Video Generator (wavespeed-ai/music-video-generator,
+// WaveSpeed's docs read 28 Nov 2026: audio, images 0-9, prompt, aspect_ratio 16:9 / 9:16 / 1:1 / 4:3 / 3:4, resolution
+// 480p / 720p / 1080p; billed per second of audio, rounded up, at least 3 s). Sent: ONE picture (one picture = the
+// singer's look; several would cut between set-ups), the voice of Lips follow for the take's song range with
+// MV_HANDLE_MS before and after (cut off again when it comes back), the rules below + the take's lip prompt + its
+// scene. The voice goes as it is: no breathing-room silencing (a silent stretch can make the generator cut to a story
+// scene). It comes back silent, trimmed to the song range, placed like an InfiniteTalk take; a length off by more than
+// MV_LENGTH_TOLERANCE_MS or a cut inside it is said on the take (never stretched).
+export const SING_ENGINES = ["infinitetalk", "mv"] as const;
+export type SingEngine = (typeof SING_ENGINES)[number];
+export const isSingEngine = (v: unknown): v is SingEngine => SING_ENGINES.includes(v as SingEngine);
+export const MV_SING_MODEL = "MV Generator";
+export const SING_RESOLUTIONS = ["480p", "720p", "1080p"] as const; // 1080p: the MV Generator only
+export type SingResolution = (typeof SING_RESOLUTIONS)[number];
+export const isSingResolution = (v: unknown): v is SingResolution => SING_RESOLUTIONS.includes(v as SingResolution);
+export const MV_SING_USD_PER_SECOND: Record<SingResolution, number> = { "480p": 0.03, "720p": 0.06, "1080p": 0.12 };
+export const MV_HANDLE_MS = 1000;
+export const MV_LENGTH_TOLERANCE_MS = 100;
+export const MV_SING_RULES = "Keep exactly the woman, face, outfit, setting and light from the image. ONE continuous shot, no cuts, no transitions, no other people, no text.";
+export const SCENE_MAX = 300;
+export type SingAspect = "9:16" | "16:9";
+// InfiniteTalk makes 480p or 720p: a song set to 1080p (for the MV Generator) gets 720p from it.
+export const itResolution = (r: SingResolution | undefined): LipsyncResolution => (r === "480p" ? "480p" : "720p");
+
+// The MV Generator's piece: the song range of the group, the handles that fit inside the song, and what the voice sent
+// costs (the handles included; whole seconds, at least 3 s).
+export function mvSingPiece(range: { fromMs: number; toMs: number }, songMs: number, resolution: SingResolution): Piece {
+  const handles = { inMs: Math.min(MV_HANDLE_MS, Math.max(0, range.fromMs)), outMs: Math.min(MV_HANDLE_MS, Math.max(0, songMs - range.toMs)) };
+  const seconds = Math.max(LIPSYNC_MIN_SECONDS, Math.ceil((range.toMs - range.fromMs + handles.inMs + handles.outMs) / 1000));
+  return { fromMs: range.fromMs, toMs: range.toMs, seconds, usd: Math.round(seconds * MV_SING_USD_PER_SECOND[resolution] * 100) / 100, handles };
+}
+// The prompt: the fixed rules, the take's lip prompt (the singing cue, mood, direction, look), its scene.
+export const mvSingPrompt = (lip: string, scene?: string) => [MV_SING_RULES, lip.trim().replace(/\.?$/, "."), scene?.trim() ? `Scene and mood: ${scene.trim().replace(/\.?$/, ".")}` : ""].filter(Boolean).join(" ");
+// The request body, as WaveSpeed's docs show it (one picture).
+export const mvSingRequest = (o: { image: string; audio: string; prompt: string; aspect: SingAspect; resolution: SingResolution }) => ({ audio: o.audio, images: [o.image], prompt: o.prompt, aspect_ratio: o.aspect, resolution: o.resolution });
+const clockS = (ms: number) => `${Math.floor(ms / 60_000)}:${((ms % 60_000) / 1000).toFixed(1).padStart(4, "0")}`;
+// What the returned video says, in plain words: its length against the voice sent, and the cuts found inside it.
+export function mvTakeWarnings(returnedMs: number, sentMs: number, cutsMs: readonly number[]): string[] {
+  const out: string[] = [];
+  if (Math.abs(returnedMs - sentMs) > MV_LENGTH_TOLERANCE_MS) out.push(`It came back ${(returnedMs / 1000).toFixed(2)} s long for ${(sentMs / 1000).toFixed(2)} s of voice sent: kept as it is, not stretched. Check the lips with the song, or retake.`);
+  for (const c of cutsMs) out.push(`The model added a cut at ${clockS(c)}: retake it, or use the take up to there.`);
+  return out;
+}
+
 // voices: per group (its first line), the audio that drives the lips ("song": the whole mix; default: the vocal stem).
+// engine: the last engine chosen in this song (a group without its own choice uses it); engines / scenes: per group
+// (its first line); aspect: the shape asked of the MV Generator.
 export type LipsVoice = "stem" | "song" | "dereverb"; // dereverb (step 2): the stem de-reverbed (dereverb.ts)
-export type SingerSettings = { lines: Record<string, string>; scripts?: Record<string, string>; resolution?: LipsyncResolution; voices?: Record<string, LipsVoice> };
+export type SingerSettings = { lines: Record<string, string>; scripts?: Record<string, string>; resolution?: SingResolution; voices?: Record<string, LipsVoice>; engine?: SingEngine; engines?: Record<string, SingEngine>; scenes?: Record<string, string>; aspect?: SingAspect };
 // A draft (lip-sync review, 26 Nov 2026): 480p at half the price, to check the lips and the expression first; an
 // approved draft becomes the final by Make final (upscaled to 1080p: the same lips and expression).
 export const DRAFT_RESOLUTION: LipsyncResolution = "480p";
@@ -93,7 +141,7 @@ export const singingPrompt = (script: string, look?: string, feel?: Feel, feelin
 // parts: a vocal piece longer than PART_MAX_MS is made in parts of about PART_TARGET_MS (Joey's 4-10 s rule, Paul 22 Nov
 // 2026: "6 to 8 s the lips are not in sync"), each its own request, every part from the picture itself (26 Nov 2026,
 // Paul: a chained part 2 turned Aiko's face into a white mask), joined into one take, the join on a breath where possible; seconds / usd are then the parts' (each billed at least 3 s, whole seconds).
-export type Piece = { fromMs: number; toMs: number; seconds: number; usd: number; parts?: { fromMs: number; toMs: number }[] };
+export type Piece = { fromMs: number; toMs: number; seconds: number; usd: number; parts?: { fromMs: number; toMs: number }[]; handles?: { inMs: number; outMs: number } }; // handles: the MV Generator's extra voice before and after
 export const PART_MAX_MS = 10_000; // a piece up to this long is one request
 export const PART_TARGET_MS = 8_000; // else parts of about this long
 export const PART_MIN_MS = 4_000; // and never shorter than this
@@ -114,6 +162,9 @@ export type SingerLine = {
   voice?: LipsVoice; // the audio chosen for this group (on a run's first line)
   splitOf?: { first: number; last: number }; // the lines in a row with this picture, split into takes of at most the model's max
   draftUsd?: number; // what a draft of this group costs (480p)
+  engine?: SingEngine; // the engine of the group's next take (on a run's first line)
+  scene?: string; // the MV Generator's scene / mood for this group (on a run's first line)
+  resolution?: SingResolution; // what this group's next take is made at (InfiniteTalk: at most 720p)
 };
 export type SingerView = {
   lines: SingerLine[] | null; // null: no timed lines yet
@@ -123,8 +174,11 @@ export type SingerView = {
   ready: boolean; // WAVESPEED_API_KEY (or the stand-in)
   keyName: string;
   toMake: { lines: number[]; seconds: number; usd: number };
-  usdPerSecond: number; // at the chosen resolution
-  resolution: LipsyncResolution; // what the next take is made at (singer.json; 720p by default)
+  usdPerSecond: number; // InfiniteTalk's, at the chosen resolution
+  resolution: SingResolution; // what the next take is made at (singer.json; 720p by default; 1080p: the MV Generator only)
+  engine: SingEngine; // the song's last engine choice
+  aspect: SingAspect; // the shape asked of the MV Generator
+  mvUsdPerSecond: number; // the MV Generator's, at the chosen resolution
   song: string | null; // workspace-relative song file (a take plays with the song from its first frame's song time)
   folder: string; // workspace-relative Creation folder (a take's file is <folder>/<take.file>)
   running: number; // singing takes being made now
@@ -136,7 +190,17 @@ export type SingerView = {
 export function readSinger(dir: string): SingerSettings {
   try {
     const raw = JSON.parse(readFileSync(path.join(dir, SINGER_FILE), "utf8")) as Partial<SingerSettings>;
-    return { lines: raw.lines && typeof raw.lines === "object" ? raw.lines : {}, ...(raw.scripts && typeof raw.scripts === "object" ? { scripts: raw.scripts } : {}), ...(isLipsyncResolution(raw.resolution) ? { resolution: raw.resolution } : {}), ...(raw.voices && typeof raw.voices === "object" ? { voices: raw.voices } : {}) };
+    const obj = (v: unknown) => !!v && typeof v === "object";
+    return {
+      lines: obj(raw.lines) ? raw.lines! : {},
+      ...(obj(raw.scripts) ? { scripts: raw.scripts } : {}),
+      ...(isSingResolution(raw.resolution) ? { resolution: raw.resolution } : {}),
+      ...(obj(raw.voices) ? { voices: raw.voices } : {}),
+      ...(isSingEngine(raw.engine) ? { engine: raw.engine } : {}),
+      ...(obj(raw.engines) ? { engines: Object.fromEntries(Object.entries(raw.engines!).filter(([, e]) => isSingEngine(e))) } : {}),
+      ...(obj(raw.scenes) ? { scenes: raw.scenes } : {}),
+      ...(raw.aspect === "9:16" || raw.aspect === "16:9" ? { aspect: raw.aspect } : {}),
+    };
   } catch {
     return { lines: {} };
   }
@@ -380,23 +444,25 @@ export async function singerView(ws: Workspace, projectId: string, env: NodeJS.P
   };
   const whole = c.lines ? singingRuns(c.lines, settings) : [];
   const runs = whole.flatMap((r) => splitRun(r, fits).map((x) => ({ ...x, ...(x.first !== r.first || x.last !== r.last ? { of: { first: r.first, last: r.last } } : {}) })));
-  const resolution = settings.resolution ?? LIPSYNC_RESOLUTION;
-  const usdPerSecond = LIPSYNC_USD_PER_SECOND_AT[resolution];
+  const resolution: SingResolution = settings.resolution ?? LIPSYNC_RESOLUTION;
+  const usdPerSecond = LIPSYNC_USD_PER_SECOND_AT[itResolution(resolution)];
   const anchors = singingAnchorKeys(ws, projectId);
   const lines = c.lines?.map((l) => {
     const source = settings.lines[String(l.number)] ?? null;
     const run = runs.find((r) => r.first <= l.number && l.number <= r.last) ?? null;
     const first = run ? byNumber.get(run.first)! : l;
     const last = run ? byNumber.get(run.last)! : l;
+    const engine = engineOf(settings, run?.first ?? l.number);
     // A picture's long piece is made in parts (a video source stays one request: its motion cannot be chained).
+    // The MV Generator takes up to 10 minutes in one request: never in parts; its handles are in its cost.
     const whole = singingPiece({ shownMs: first.shownMs, sungEndMs: last.sungEndMs }, c.downbeats, c.songMs, usdPerSecond, SINGING_TAIL_BARS);
-    const piece = source && BOARD_VIDEO_FILE.test(source) ? whole : singingParts(whole, c.downbeats, c.lines ?? [], usdPerSecond, [], oneRequestMs());
+    const piece = engine === "mv" ? mvSingPiece(whole, c.songMs, resolution) : source && BOARD_VIDEO_FILE.test(source) ? whole : singingParts(whole, c.downbeats, c.lines ?? [], usdPerSecond, [], oneRequestMs());
     const all = source && run ? groupTakes(c.dir, source, run.first, run.last) : [];
     const take = all.at(-1) ?? null;
     const script = run ? (settings.scripts?.[String(run.first)] ?? "") : "";
     const takes: GroupTake[] = run?.first === l.number ? all.map((t) => ({ ...t, inUse: t.status === "done" && anchors.has(inUseKey(t)), fresh: !!t.fresh && t.status === "done" })) : [];
         const firstLine = run?.first === l.number;
-    return { number: l.number, text: l.text, source, piece, script, run: run ? { first: run.first, last: run.last } : null, ...(run && "of" in run && run.of ? { splitOf: run.of } : {}), take, takes, needed: !!source && firstLine && !all.some((t) => covers(t, piece)), ...(firstLine ? { voice: settings.voices?.[String(l.number)] ?? "stem", draftUsd: draftUsd(piece.seconds) } : {}) };
+    return { number: l.number, text: l.text, source, piece, script, run: run ? { first: run.first, last: run.last } : null, ...(run && "of" in run && run.of ? { splitOf: run.of } : {}), take, takes, needed: !!source && firstLine && !all.some((t) => covers(t, piece)), ...(firstLine ? { voice: settings.voices?.[String(l.number)] ?? "stem", draftUsd: draftUsd(piece.seconds), engine, scene: settings.scenes?.[String(l.number)] ?? "", resolution: engine === "mv" ? resolution : itResolution(resolution) } : {}) };
   }) ?? null;
   const toMake = (lines ?? []).filter((l) => l.needed);
   return {
@@ -409,6 +475,9 @@ export async function singerView(ws: Workspace, projectId: string, env: NodeJS.P
     toMake: { lines: toMake.map((l) => l.number), seconds: toMake.reduce((s, l) => s + l.piece.seconds, 0), usd: Math.round(toMake.reduce((s, l) => s + l.piece.usd, 0) * 100) / 100 },
     usdPerSecond,
     resolution,
+    engine: settings.engine ?? "infinitetalk",
+    aspect: settings.aspect ?? "9:16",
+    mvUsdPerSecond: MV_SING_USD_PER_SECOND[resolution],
     song: c.songRel,
     folder: rel,
     running: (lines ?? []).reduce((n, l) => n + l.takes.filter((t) => t.status === "running").length, 0),
@@ -433,9 +502,49 @@ export function reviewCounts(lines: readonly Pick<SingerLine, "source" | "run" |
   return { groups: groups.length, approved, redo, notMade };
 }
 
+// The engine of a group (its first line): its own choice, else the song's last choice, else InfiniteTalk.
+export const engineOf = (s: SingerSettings, first: number): SingEngine => s.engines?.[String(first)] ?? s.engine ?? "infinitetalk";
+
+// The engine of the group that starts on `line` from its next take on; it is also the song's choice from now on (a
+// group without its own choice uses it).
+export function setSingerEngine(ws: Workspace, projectId: string, line: unknown, engine: unknown): SingerSettings {
+  if (!isSingEngine(engine)) throw new Error("Choose InfiniteTalk or MV Generator.");
+  const { dir } = songFolder(ws, projectId);
+  const n = Number(line);
+  if (!Number.isInteger(n) || n < 1) throw new Error("Choose a line.");
+  const s = readSinger(dir);
+  const next = { ...s, engine, engines: { ...(s.engines ?? {}), [String(n)]: engine } };
+  writeSinger(dir, next);
+  return next;
+}
+
+// The MV Generator's scene / mood for the group that starts on `line` (empty removes it); saved with each take sent.
+export function setSingerScene(ws: Workspace, projectId: string, line: unknown, text: unknown): SingerSettings {
+  const { dir } = songFolder(ws, projectId);
+  const n = Number(line);
+  if (!Number.isInteger(n) || n < 1) throw new Error("Choose a line.");
+  const clean = String(text ?? "").replace(/\s+/g, " ").trim().slice(0, SCENE_MAX);
+  const s = readSinger(dir);
+  const scenes = { ...(s.scenes ?? {}) };
+  if (clean) scenes[String(n)] = clean;
+  else delete scenes[String(n)];
+  const next = { ...s, scenes };
+  writeSinger(dir, next);
+  return next;
+}
+
+// The shape asked of the MV Generator (the video's shape: 9:16 for Reels, TikTok and Shorts; 16:9 for YouTube).
+export function setSingerAspect(ws: Workspace, projectId: string, aspect: unknown): SingerSettings {
+  if (aspect !== "9:16" && aspect !== "16:9") throw new Error("Choose 9:16 or 16:9.");
+  const { dir } = songFolder(ws, projectId);
+  const next = { ...readSinger(dir), aspect: aspect as SingAspect };
+  writeSinger(dir, next);
+  return next;
+}
+
 // The resolution singing clips are made at from now on (this video's singer.json); takes already made keep theirs.
 export function setSingerResolution(ws: Workspace, projectId: string, resolution: unknown): SingerSettings {
-  if (!isLipsyncResolution(resolution)) throw new Error(`Choose ${LIPSYNC_RESOLUTIONS.join(" or ")}.`);
+  if (!isSingResolution(resolution)) throw new Error(`Choose ${SING_RESOLUTIONS.join(", ")}.`);
   const { dir } = songFolder(ws, projectId);
   const next = { ...readSinger(dir), resolution };
   writeSinger(dir, next);
@@ -545,7 +654,8 @@ export async function withSongStarts(ws: Workspace, projectId: string, view: Pic
 
 export type SingTransport = {
   upload: (file: string) => Promise<string>;
-  submit: (o: { image?: string; video?: string; audio: string; prompt?: string; resolution?: LipsyncResolution }) => Promise<{ id: string }>;
+  // mv: the Music Video Generator instead of InfiniteTalk (one picture, its shape).
+  submit: (o: { image?: string; video?: string; audio: string; prompt?: string; resolution?: SingResolution; mv?: { aspect: SingAspect } }) => Promise<{ id: string }>;
   poll: (id: string) => Promise<{ status: "running" } | { status: "done"; url: string } | { status: "failed"; error: string }>;
   download: (url: string, file: string) => Promise<void>;
 };
@@ -555,8 +665,15 @@ export function infiniteTalkTransport(key: string, f: typeof fetch = (...a) => g
   return {
     upload: (file) => waveSpeedUpload(key, file, f),
     submit: async (o) => {
+      if (o.mv) {
+        if (!o.image) throw Object.assign(new Error("The MV Generator needs a picture of the singer"), { unsent: true });
+        const body = mvSingRequest({ image: o.image, audio: o.audio, prompt: o.prompt ?? MV_SING_RULES, aspect: o.mv.aspect, resolution: o.resolution ?? LIPSYNC_RESOLUTION });
+        const b = data(await json(await f(`${WAVESPEED}/${MV_GENERATOR_PATH}`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify(body) }), "WaveSpeed MV Generator"));
+        if (typeof b.id !== "string") throw new Error("WaveSpeed: no request id in the answer");
+        return { id: b.id };
+      }
       const model = o.video ? "wavespeed-ai/infinitetalk/video-to-video" : "wavespeed-ai/infinitetalk";
-      const body = { ...(o.video ? { video: o.video } : { image: o.image }), audio: o.audio, ...(o.prompt ? { prompt: o.prompt } : {}), resolution: o.resolution ?? LIPSYNC_RESOLUTION, seed: -1 };
+      const body = { ...(o.video ? { video: o.video } : { image: o.image }), audio: o.audio, ...(o.prompt ? { prompt: o.prompt } : {}), resolution: itResolution(o.resolution), seed: -1 };
       const b = data(await json(await f(`${WAVESPEED}/${model}`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify(body) }), "WaveSpeed InfiniteTalk"));
       if (typeof b.id !== "string") throw new Error("WaveSpeed: no request id in the answer");
       return { id: b.id };
@@ -597,7 +714,9 @@ export function stubSingTransport(mode: string): SingTransport {
     download: async (url, file) => {
       const { picture, audio, take } = JSON.parse(url) as { picture: string; audio: string; take?: number };
       const still = PICTURE_FILE.test(picture);
-      execFileSync(ffmpegBin(), ["-y", "-v", "error", ...(still ? ["-loop", "1"] : ["-stream_loop", "-1"]), "-i", picture, "-i", audio, "-shortest", "-r", "30", "-vf", `scale=trunc(iw/2)*2:trunc(ih/2)*2,drawbox=x=${(take ?? 0) % 40}:y=0:w=2:h=2:color=white:t=fill,format=yuv420p`, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", file]);
+      // As long as the voice, exactly (-shortest alone lets a looped still run a few frames past it).
+      const voiceMs = (await probeMedia(audio)).durationMs;
+      execFileSync(ffmpegBin(), ["-y", "-v", "error", ...(still ? ["-loop", "1"] : ["-stream_loop", "-1"]), "-i", picture, "-i", audio, "-shortest", "-t", (voiceMs / 1000).toFixed(3), "-r", "30", "-vf", `scale=trunc(iw/2)*2:trunc(ih/2)*2,drawbox=x=${(take ?? 0) % 40}:y=0:w=2:h=2:color=white:t=fill,format=yuv420p`, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", file]);
     },
   };
 }
@@ -620,6 +739,7 @@ export async function startSinging(ws: Workspace, projectId: string, o: { capUsd
   if (!view.lines) throw new Error(view.why ?? "This song's lines are not timed yet.");
   const todo = view.lines.filter((l) => l.needed && (!o.lines || o.lines.includes(l.number)));
   if (!todo.length) throw new Error("Nothing to make: tick the lines where the singer shows (each with its picture or video), or they are made already.");
+  for (const l of todo) mvNeedsPicture(l);
   if (!view.ready) singTransportFor(env); // throws the plain-words message
   const cost = (l: SingerLine) => (o.draft ? draftUsd(l.piece.seconds) : l.piece.usd);
   const usd = Math.round(todo.reduce((s, l) => s + cost(l), 0) * 100) / 100;
@@ -633,20 +753,28 @@ export async function startSinging(ws: Workspace, projectId: string, o: { capUsd
   const feel = feelFor(ws, projectId);
   const jobs: SingJob[] = [];
   for (const l0 of todo) {
-    const l = await withRests(ws, projectId, l0, view.usdPerSecond);
-    jobs.push(recordTake(dir, l, view.resolution, now, look, feel, feelingForLines(ws, projectId, l.number, l.run?.last), { draft: !!o.draft, direction: await directionOf(ws, projectId, l) }));
+    // The MV Generator gets the voice as it is (no breathing room: a silent stretch can make it cut to a story scene).
+    const l = l0.engine === "mv" ? l0 : await withRests(ws, projectId, l0, view.usdPerSecond);
+    jobs.push(recordTake(dir, l, l.resolution ?? view.resolution, now, look, feel, feelingForLines(ws, projectId, l.number, l.run?.last), { draft: !!o.draft, direction: await directionOf(ws, projectId, l), aspect: view.aspect }));
   }
   return { jobs, usd, seconds };
 }
 
-// A new running take of a group (its picture, its lines, its vocal piece, the mood text and resolution of now).
-function recordTake(dir: string, l: SingerLine, resolution: LipsyncResolution, now: string, look: { name: string; line: string } | null, feel: Feel, feeling: TakeFeeling = {}, o: { draft?: boolean; direction?: string } = {}): SingJob {
+// The MV Generator sings from a picture only (it takes images, not a video).
+function mvNeedsPicture(l: SingerLine): void {
+  if (l.engine === "mv" && l.source && !PICTURE_FILE.test(l.source)) throw new Error(`Line ${l.number} is sung from a video: the MV Generator needs a picture of the singer. Choose a picture for it, or InfiniteTalk. Nothing was sent.`);
+}
+
+// A new running take of a group (its picture, its lines, its vocal piece, the mood text and resolution of now; the
+// engine, scene and shape of now).
+function recordTake(dir: string, l: SingerLine, resolution: SingResolution, now: string, look: { name: string; line: string } | null, feel: Feel, feeling: TakeFeeling = {}, o: { draft?: boolean; direction?: string; aspect?: SingAspect } = {}): SingJob {
   let n = 0;
-  const res = o.draft ? DRAFT_RESOLUTION : resolution;
+  const mv = l.engine === "mv";
+  const res = o.draft ? DRAFT_RESOLUTION : mv ? resolution : itResolution(resolution);
   const usd = o.draft ? draftUsd(l.piece.seconds) : l.piece.usd;
   update(dir, l.source!, (p) => {
     n = nextTakeN(p);
-    p.takes.push({ n, kind: "lipsync", line: l.number, ...(l.run && l.run.last > l.number ? { through: l.run.last } : {}), sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, ...(l.piece.parts ? { parts: l.piece.parts.map((x) => ({ ...x })) } : {}), ...(l.script ? { prompt: l.script } : {}), ...(o.direction ? { direction: o.direction } : {}), voice: l.voice ?? "stem", style: SINGING_STYLE, ...(look ? { filmLook: look.name, look: look.line } : {}), feel, ...feeling, ...(l.rests ? { rests: l.rests.map((r) => ({ ...r })) } : {}), resolution: res, service: "wavespeed", quality: o.draft ? "draft" : "best", model: LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: usd, pid: process.pid });
+    p.takes.push({ n, kind: "lipsync", line: l.number, ...(l.run && l.run.last > l.number ? { through: l.run.last } : {}), sync_ms: l.piece.fromMs, to_ms: l.piece.toMs, ...(l.piece.parts && !mv ? { parts: l.piece.parts.map((x) => ({ ...x })) } : {}), ...(l.script ? { prompt: l.script } : {}), ...(o.direction ? { direction: o.direction } : {}), voice: l.voice ?? "stem", style: SINGING_STYLE, ...(look ? { filmLook: look.name, look: look.line } : {}), feel, ...feeling, ...(l.rests && !mv ? { rests: l.rests.map((r) => ({ ...r })) } : {}), ...(mv ? { engine: "mv" as const, handles: { ...(l.piece.handles ?? { inMs: 0, outMs: 0 }) }, aspect: o.aspect ?? "9:16", ...(l.scene ? { scene: l.scene } : {}) } : {}), resolution: res, service: "wavespeed", quality: o.draft ? "draft" : "best", model: mv ? MV_SING_MODEL : LIPSYNC_MODEL, status: "running", started_at: now, cost_usd: usd, pid: process.pid });
   });
   return { source: l.source!, n };
 }
@@ -674,13 +802,14 @@ export async function startRetake(ws: Workspace, projectId: string, o: { capUsd:
   const l = view.lines.find((x) => x.number === n);
   if (!l?.source || !l.run) throw new Error(`Line ${o.line} has no singer: choose a picture or video in Lip sync first.`);
   if (l.run.first !== n) throw new Error(`Line ${n} is sung with line ${l.run.first}: retake lines ${l.run.first}-${l.run.last} there.`);
+  mvNeedsPicture(l);
   if (!view.ready) singTransportFor(env); // throws the plain-words message
   const cap = Number(o.capUsd);
   if (!Number.isFinite(cap) || cap <= 0) throw new Error("Set a spending cap above $0.");
   const usd = o.draft ? draftUsd(l.piece.seconds) : l.piece.usd;
   if (usd > cap) throw new Error(`A retake (${l.piece.seconds} s of voice) costs about $${usd.toFixed(2)}, above your cap of $${cap.toFixed(2)}: raise the cap in Creation → Your defaults. Nothing was sent.`);
   const { dir } = songFolder(ws, projectId);
-  return { jobs: [recordTake(dir, await withRests(ws, projectId, l, view.usdPerSecond), view.resolution, new Date().toISOString(), filmLookFor(ws, projectId), feelFor(ws, projectId), feelingForLines(ws, projectId, l.number, l.run.last), { draft: !!o.draft, direction: await directionOf(ws, projectId, l) })], usd, seconds: l.piece.seconds };
+  return { jobs: [recordTake(dir, l.engine === "mv" ? l : await withRests(ws, projectId, l, view.usdPerSecond), l.resolution ?? view.resolution, new Date().toISOString(), filmLookFor(ws, projectId), feelFor(ws, projectId), feelingForLines(ws, projectId, l.number, l.run.last), { draft: !!o.draft, direction: await directionOf(ws, projectId, l), aspect: view.aspect })], usd, seconds: l.piece.seconds };
 }
 
 // The finished take's clip in the Storyboard (added once; a later take waits outside it until it is chosen).
@@ -800,6 +929,67 @@ export function fitLength(file: string, out: string, ms: number): void {
 export function joinParts(files: string[], out: string, list: string): void {
   writeFileSync(list, files.map((f) => `file '${f.replace(/'/g, "'\\''")}'`).join("\n"));
   execFileSync(ffmpegBin(), ["-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", "-movflags", "+faststart", out]);
+}
+
+// The returned MV Generator video without its handles: from inMs, at most the take's song length (never stretched:
+// a short video stays short), silent, 30 fps, browser-ready.
+export function trimHandles(file: string, out: string, inMs: number, lengthMs: number): void {
+  execFileSync(ffmpegBin(), ["-y", "-v", "error", "-ss", (inMs / 1000).toFixed(3), "-i", file, "-t", (lengthMs / 1000).toFixed(3), "-an", "-vf", "fps=30,format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-movflags", "+faststart", out]);
+}
+
+// The cuts inside a take (FFmpeg's scene score, the same detection as music videos made elsewhere), take ms. The
+// first frame always scores as a change (nothing before it), so the edges are left out.
+export const CUT_EDGE_MS = 200;
+export async function cutsInTake(file: string, lengthMs: number): Promise<number[]> {
+  const { sceneScores } = await import("./music-video"); // lazily: music-video.ts reads this file
+  return detectCuts(sceneScores(file)).filter((c) => c >= CUT_EDGE_MS && c <= lengthMs - CUT_EDGE_MS);
+}
+
+// One take of the MV Generator: the voice of Lips follow for the take's song range plus its handles (as it is, no
+// silencing), one picture, the rules + lip prompt + scene, the video's shape and the resolution; sent once (a take
+// already sent is only fetched again, free). It comes back silent and trimmed to the song range; its length and any
+// cut inside it are said on the take.
+async function singWithMv(c: { dir: string; source: string; n: number; take: Take; tmp: string; voice: Voice; songFile: string; transport: SingTransport; uploads: Map<string, Promise<string>>; sleep: (ms: number) => Promise<void>; pollMs?: number; timeoutMs?: number; onSent: (id: string) => void; sentId?: string }, out: string): Promise<void> {
+  const t = c.take;
+  if (!PICTURE_FILE.test(c.source)) throw Object.assign(new Error("The MV Generator needs a picture of the singer, not a video"), { unsent: true });
+  const h = t.handles ?? { inMs: 0, outMs: 0 };
+  const sent = { fromMs: t.sync_ms! - h.inMs, toMs: t.to_ms! + h.outMs };
+  let id = c.sentId;
+  if (!id) {
+    if (!c.uploads.has(c.source)) c.uploads.set(c.source, c.transport.upload(path.join(c.dir, c.source)));
+    const voiceFile = path.join(c.tmp, "voice.wav");
+    cutVoice(c.voice, c.songFile, sent, voiceFile);
+    let image: string;
+    let audio: string;
+    try {
+      [image, audio] = await Promise.all([c.uploads.get(c.source)!, c.transport.upload(voiceFile)]);
+    } catch (error) {
+      throw Object.assign(new Error(`The picture or the voice could not be put online: ${errorText(error)}`), { unsent: true });
+    }
+    const lip = singingPrompt(promptOf(t), t.look, t.feel, t.feeling, t.feelingTo, false);
+    id = (await c.transport.submit({ image, audio, prompt: mvSingPrompt(lip, t.scene), resolution: isSingResolution(t.resolution) ? t.resolution : LIPSYNC_RESOLUTION, mv: { aspect: t.aspect ?? "9:16" } })).id; // never retried
+    setTake(c.dir, c.source, c.n, { request_id: id });
+    c.onSent(id);
+  }
+  const t0 = Date.now();
+  let url: string;
+  for (;;) {
+    const s = await c.transport.poll(id);
+    if (s.status === "done") {
+      url = s.url;
+      break;
+    }
+    if (s.status === "failed") throw new Error(`WaveSpeed MV Generator: ${s.error}`);
+    if (Date.now() - t0 > (c.timeoutMs ?? TIMEOUT_MS * 3)) throw new Error("no answer within an hour: get its result later (free)");
+    await c.sleep(c.pollMs ?? POLL_MS);
+  }
+  const raw = path.join(c.tmp, "mv-raw.mp4");
+  await c.transport.download(url, raw);
+  makePlayable(raw, false); // its sound removed: the video always plays with the song
+  const returnedMs = (await probeMedia(raw)).durationMs;
+  trimHandles(raw, out, h.inMs, t.to_ms! - t.sync_ms!);
+  const warnings = mvTakeWarnings(returnedMs, sent.toMs - sent.fromMs, await cutsInTake(out, t.to_ms! - t.sync_ms!).catch(() => []));
+  setTake(c.dir, c.source, c.n, { warnings: warnings.length ? warnings : undefined });
 }
 
 // Makes the singing clips (in parallel). Each: the picture or video and its piece of voice go online, the request is
@@ -957,6 +1147,8 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
           // In parts (a long piece): each from the last frame of the one before, joined into one take.
           if (!uploads.has(j.source)) uploads.set(j.source, transport.upload(path.join(dir, j.source)));
           await singInParts({ dir, source: j.source, n: j.n, take: t, tmp, voice: voiceOfTake(t, voice, dry), songFile, transport, picture: uploads.get(j.source)!, sleep, pollMs: o.pollMs, timeoutMs: o.timeoutMs, onSent: (rid) => (id ??= rid) }, got);
+        } else if (t.engine === "mv") {
+          await singWithMv({ dir, source: j.source, n: j.n, take: t, tmp, voice: voiceOfTake(t, voice, dry), songFile, transport, uploads, sleep, pollMs: o.pollMs, timeoutMs: o.timeoutMs, onSent: (rid) => (id = rid), sentId: id }, got);
         } else {
           if (!id) {
             const src = path.join(dir, j.source);

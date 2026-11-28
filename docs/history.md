@@ -4,6 +4,17 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Shape shows every platform with a saved shot plan ✅ (to verify on the PC)
+- Paul (22 Nov 2026): after choosing only YouTube in Make, Shape's platform list had YouTube only, so the Reel
+  could not be opened in Shape. Shape's list followed Make's chips.
+- Now Shape lists Make's platforms first, then every other platform that has a saved shot plan for the song
+  (storyboards\<platform>-<n>.json; not Try other looks or .previous plans, never the Canvas), marked
+  "Reels · not selected in Make" (Make does not make it until its chip is on). It opens and edits as usual, with as
+  many videos as it has saved plans. Make is unchanged.
+- Code: node/storyboard.ts (savedPlanCounts, storyboardChoices notInMake, storyboardPlan's count), shape-board.tsx.
+- Tests: vitest video-counts (+1); browser shape-platforms (4 checks, in test:e2e). make.test's 2 failures are the
+  same as before this change (they need network / real rendering). Studio build passes.
+
 ### Fix: theme names cut off on the Themes page ✅ (to verify on the PC)
 - Paul (22 Nov 2026): tiles showed "Midnight Hi...", "Mou...", "Paper ..." because the badge ("Shared by 2 songs",
   "Only Tea with the monk test") shared the name's line and never shrank.

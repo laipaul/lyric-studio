@@ -37,6 +37,10 @@ export type Singer = {
   setLine: (line: number, source: string | null) => Promise<void>;
   setScript: (line: number, script: string) => Promise<void>;
   setResolution: (resolution: string) => Promise<void>;
+  // The second engine (28 Nov 2026): per group InfiniteTalk or the MV Generator, its scene, the MV Generator's shape.
+  setEngine: (line: number, engine: "infinitetalk" | "mv") => Promise<void>;
+  setScene: (line: number, scene: string) => Promise<void>;
+  setAspect: (aspect: "9:16" | "16:9") => Promise<void>;
   make: (draft?: boolean) => Promise<void>;
   retake: (line: number, draft?: boolean) => Promise<void>;
   // The lip-sync review (26 Nov 2026): a verdict, the free nudge, the audio per group, Make final.
@@ -134,6 +138,22 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
       await post({ action: "resolution", resolution });
       await load();
     }),
+    setEngine: (line, engine) => attempt(async () => {
+      await post({ action: "engine", line, engine });
+      await load();
+    }),
+    setScene: (line, scene) => {
+      const p = attempt(async () => {
+        await post({ action: "scene", line, scene });
+        await load();
+      });
+      saving.current = saving.current.then(() => p);
+      return p;
+    },
+    setAspect: (aspect) => attempt(async () => {
+      await post({ action: "aspect", aspect });
+      await load();
+    }),
     make: async (draft = false) => {
       setBusy(true);
       try {
@@ -229,13 +249,23 @@ export function SingerBar({ singer, lyrics = [] }: { singer: Singer; lyrics?: Ly
             <Loader2 className="size-3 animate-spin" /> {v.running} being made
           </span>
         ) : null}
-        <label className="text-muted-foreground ml-auto flex items-center gap-1" title="The size InfiniteTalk makes the singing clips at (this video; takes already made keep theirs). 720p is sharper; 480p costs half.">
+        <label className="text-muted-foreground ml-auto flex items-center gap-1" title="The size the singing clips are made at (takes already made keep theirs). 720p is sharper; 480p costs half. 1080p: the MV Generator only (InfiniteTalk makes 720p then).">
           Resolution
           <select data-singer-resolution value={v.resolution} onChange={(e) => void singer.setResolution(e.target.value)} className="bg-background rounded-md border px-1 py-0.5">
+            <option value="1080p">1080p · $0.12/s (MV Generator)</option>
             <option value="720p">720p · $0.06/s</option>
             <option value="480p">480p · $0.03/s</option>
           </select>
         </label>
+        {v.lines.some((l) => l.engine === "mv" && l.source) ? (
+          <label className="text-muted-foreground flex items-center gap-1" title="The shape the MV Generator makes: the video's shape (9:16 for Reels, TikTok and Shorts; 16:9 for YouTube). A 16:9 take only plays in your 16:9 videos.">
+            MV shape
+            <select data-singer-aspect value={v.aspect} onChange={(e) => void singer.setAspect(e.target.value as "9:16" | "16:9")} className="bg-background rounded-md border px-1 py-0.5">
+              <option value="9:16">9:16</option>
+              <option value="16:9">16:9</option>
+            </select>
+          </label>
+        ) : null}
         {v.toMake.lines.length ? (
           <Button type="button" size="sm" variant="outline" data-singer-make-drafts disabled={singer.busy || !v.ready || v.toMake.seconds * 0.03 > singer.cap} onClick={() => void singer.make(true)} title={`Drafts first (lip-sync review): 480p at $0.03/s, about ${money(Math.round(v.toMake.seconds * 3) / 100)}. Check each one with the song, then Make final on the approved ones.`}>
             <Mic /> Make drafts (480p)
@@ -248,7 +278,7 @@ export function SingerBar({ singer, lyrics = [] }: { singer: Singer; lyrics?: Ly
         ) : null}
       </div>
       <p className="text-muted-foreground">
-        Lines in a row with the same picture are sung in one continuous take. Each take&apos;s voice is sent with its picture or video to WaveSpeed InfiniteTalk at {v.resolution} ({money(v.usdPerSecond)} per second). The first take of a group comes back into Creation and your Storyboard, lands on its lines and always plays in time with the song: Make cuts to it on the beat. Retake makes another take of the same lines; it waits as “New — compare” until you choose it. The voice is {v.voice === "stem" ? "your vocal stem" : "the song itself (add your vocal stem in Assets for cleaner lips)"}.
+        Lines in a row with the same picture are sung in one continuous take. Each take&apos;s voice is sent with its picture or video to WaveSpeed InfiniteTalk ({money(v.usdPerSecond)} per second), or, when a group&apos;s Engine is MV Generator, with its picture to the Music Video Generator ({money(v.mvUsdPerSecond)} per second, with 1 s of extra voice before and after, cut off again). The first take of a group comes back into Creation and your Storyboard, lands on its lines and always plays in time with the song: Make cuts to it on the beat. Retake makes another take of the same lines; it waits as “New — compare” until you choose it. The voice is {v.voice === "stem" ? "your vocal stem" : "the song itself (add your vocal stem in Assets for cleaner lips)"}.
       </p>
       {!v.ready ? (
         <p data-singer-nokey className="text-amber-200">
@@ -408,6 +438,21 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
           </select>
         </label>
       ) : null}
+      {l.source && !later ? (
+        <label className="text-muted-foreground flex items-center gap-1" title="What makes this group's next take: InfiniteTalk, or WaveSpeed's Music Video Generator (one picture, one continuous shot asked; a cut it adds anyway is said on the take). Earlier takes stay; your choice is remembered for this song.">
+          Engine
+          <select data-singer-engine={number} value={l.engine ?? "infinitetalk"} onChange={(e) => void singer.setEngine(number, e.target.value as "infinitetalk" | "mv")} className="bg-background rounded border px-1 py-0">
+            <option value="infinitetalk">InfiniteTalk</option>
+            <option value="mv">MV Generator</option>
+          </select>
+        </label>
+      ) : null}
+      {l.source && !later && l.engine === "mv" && !v.sources.some((s) => s.file === l.source && s.kind === "picture") ? (
+        <span data-singer-mv-video={number} className="text-amber-200">
+          The MV Generator needs a picture of the singer: choose a picture above, or InfiniteTalk.
+        </span>
+      ) : null}
+      {l.source && !later && l.engine === "mv" ? <SceneField key={l.scene ?? ""} line={number} value={l.scene ?? ""} onSave={(text) => singer.setScene(number, text)} /> : null}
       {l.source && later ? (
         <span className="text-muted-foreground" data-singer-status="run">
           sung with line {l.run!.first} take
@@ -451,7 +496,8 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
       ) : l.source ? (
         <span className="text-muted-foreground" data-singer-status="todo">
           {inRun ? `lines ${l.run!.first}-${l.run!.last} in one take · ` : ""}
-          {l.piece.seconds} s · {v.resolution} · about {money(l.piece.usd)}
+          {l.engine === "mv" ? "MV Generator · " : ""}
+          {l.piece.seconds} s{l.piece.handles ? " with 1 s extra before and after" : ""} · {l.resolution ?? v.resolution} · about {money(l.piece.usd)}
           {l.piece.parts ? (
             <span data-singer-parts={l.piece.parts.length} title="A long piece of singing is made in parts of about 8 s (the lips stay in time better), each from the last frame of the one before, joined into one take">
               {" "}· in {l.piece.parts.length} parts of about {Math.round((l.piece.toMs - l.piece.fromMs) / l.piece.parts.length / 1000)} s
@@ -520,6 +566,11 @@ function TakesList({ singer, source, takes }: { singer: Singer; source: string; 
                 <span data-singer-take-qa-ok className="text-emerald-300/80" title="Face checked frame by frame against the picture: steady">face ✓</span>
               ) : null}
               {t.trimmedOf !== undefined ? <span className="text-muted-foreground" data-singer-take-trimmed>trimmed</span> : null}
+              {t.engine === "mv" ? (
+                <span data-singer-take-badge="mv" className="rounded bg-fuchsia-400/15 px-1 text-fuchsia-300" title="Made by WaveSpeed's Music Video Generator">
+                  MV Generator
+                </span>
+              ) : null}
               {t.review?.verdict === "approved" ? <span data-singer-take-badge="approved" className="rounded bg-emerald-400/15 px-1 text-emerald-300">✓ Approved</span> : t.review?.verdict === "redo" ? <span data-singer-take-badge="redo" className="rounded bg-amber-400/15 px-1 text-amber-300">Redo</span> : null}
               {t.inUse ? (
                 <span data-singer-take-badge="in-use" className="rounded bg-emerald-400/15 px-1 text-emerald-300">In use</span>
@@ -539,6 +590,15 @@ function TakesList({ singer, source, takes }: { singer: Singer; source: string; 
               {t.nudge_ms ? ` · placed ${t.nudge_ms > 0 ? "+" : ""}${(t.nudge_ms / 1000).toFixed(1)} s` : ""}
               {t.review?.verdict === "redo" && (t.review.reasons.length || t.review.note) ? <span className="text-amber-300"> · {[...t.review.reasons, t.review.note].filter(Boolean).join(", ")}</span> : null}
             </span>
+            {t.warnings?.length ? (
+              <ul data-singer-take-warnings className="pl-5 text-amber-300">
+                {t.warnings.map((w) => (
+                  <li key={w} data-singer-take-warning>
+                    {w}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             {t.status === "done" && t.file ? <TakeReview singer={singer} source={source} t={t} final={takes.find((x) => x.finalOf === t.n) ?? null} /> : null}
           </li>
         );
@@ -586,6 +646,34 @@ function ScriptField({ line, value, onSave }: { line: number; value: string; onS
         {MOOD_HINT}
       </span>
     </div>
+  );
+}
+
+// The MV Generator's scene / mood of a group (saved with each take sent), after the fixed rules and the lip prompt.
+function SceneField({ line, value, onSave }: { line: number; value: string; onSave: (text: string) => Promise<void> }) {
+  const [text, setText] = useState(value);
+  const save = () => {
+    const next = text.replace(/\s+/g, " ").trim();
+    if (next !== value) void onSave(next);
+  };
+  return (
+    <textarea
+      rows={2}
+      data-singer-scene={line}
+      value={text}
+      maxLength={300}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={save}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
+      }}
+      placeholder="Scene and mood for the MV Generator (optional), e.g. soft morning light, quiet joy"
+      title="Sent to the MV Generator after its fixed rules (the same woman, setting and light as the picture; one continuous shot) and the lip prompt. Used by the next take."
+      className="bg-background w-56 resize-none rounded-md border px-1.5 py-0.5 leading-snug"
+    />
   );
 }
 
