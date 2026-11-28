@@ -240,13 +240,37 @@ export function bestLag(video: Float64Array, song: Float64Array): number {
     si[k] = i;
   }
   fft(sr, si, true);
+  // 28 Nov 2026 (Paul's Wedding Day Take5, found at 37 s with score 0): the raw correlation
+  // favours the LOUD stretches of the song. When the video fits inside the song the lags are compared as a Pearson
+  // correlation: the raw sum divided by the energy of the song stretch under the video (its own mean taken away).
+  const m = video.length;
+  const full = m <= song.length;
+  let p1: Float64Array | null = null;
+  let p2: Float64Array | null = null;
+  if (full) {
+    p1 = new Float64Array(song.length + 1);
+    p2 = new Float64Array(song.length + 1);
+    for (let i = 0; i < song.length; i++) {
+      p1[i + 1] = p1[i] + song[i];
+      p2[i + 1] = p2[i] + song[i] * song[i];
+    }
+  }
   let best = 0;
   let bestV = -Infinity;
   for (let k = 0; k < n; k++) {
-    const lag = k < n / 2 ? k : k - n;
+    const lag = k < song.length ? k : k - n; // (not k < n / 2: past n / 2 the lags of a long song wrapped round to negative ones)
     if (lag <= -video.length || lag >= song.length) continue;
-    if (sr[k] > bestV) {
-      bestV = sr[k];
+    let v = sr[k];
+    if (full) {
+      if (lag < 0 || lag + m > song.length) continue;
+      const s1 = p1![lag + m] - p1![lag];
+      const s2 = p2![lag + m] - p2![lag];
+      const energy = s2 - (s1 * s1) / m;
+      if (energy <= 1e-12) continue;
+      v = sr[k] / Math.sqrt(energy);
+    }
+    if (v > bestV) {
+      bestV = v;
       best = lag;
     }
   }

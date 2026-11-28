@@ -4,6 +4,15 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### A music video from the end of the song is found again ✅ (to verify on the PC)
+Paul, 28 Nov 2026: his ending take "Wedding DayTake5 Ending.mp4" (made on WaveSpeed from an exact cut of the master,
+3:33.90-3:51.64) was refused: "its sound is not this song (it matches 0%)". Cause: the matcher's FFT read every lag
+past 2:44 (half its window) as a negative lag and threw it away, so any video starting later than 2:44 in the song
+could never be found (src/music-video.ts bestLag). Fixed, and the search now compares like with like (a quiet tail is
+no longer beaten by a loud stretch). Take5: found at 3:33.90, score 1.0, drift 0 (before: 0:37.5, 0.4%). Clips 1-3
+unchanged (1:02.6, 1:22.4, 1:56.1, ~0.99). Tests: music-video (+4: the quiet tail, a short excerpt near the end, two
+from the start); suite 160 files, 1590 passed.
+
 ### "Find its shots again" on a music video ✅ (to verify on the PC)
 Paul, 28 Nov 2026: "this part still blips in the middle" (lines 15-16), then "i don't see the button". A video matched
 to the song showed its panel in Creation with no way to find its shots again, so WeddingDaySingingClip1 kept its old
@@ -785,26 +794,6 @@ locked cards can't be edited").
   way without this change (they need the audio service and network the cloud session lacks). Studio build passes.
 - Next: Draft, then Make final (step 2), after a two-take test on Wedding Day (about $3) that Paul approves first.
 
-### Reference sheets per person, and the teeth close-up ✅ (to verify on the PC)
-- Paul (25 Nov 2026), after comparing two character-consistency tutorials and their comments ("headless outfit + face
-  beats complex character sheets", "the model invents what a reference does not show", "the teeth rule"):
-- **Make with references now sends two sheets per person**, made from the card's own views (never from words), each
-  one picture (workspace\cache\refsheets): a **face sheet** (the look's close-up, the card's 3/4 face, and the teeth
-  close-up when there is one) and an **outfit sheet** (the look's front and back, cropped at the neck: no second,
-  smaller face). The prompt names each panel ("@Image 1 is Jennifer's face reference sheet (left to right: close-up,
-  3/4, smiling, teeth visible) … @Image 2 is Jennifer's outfit reference sheet ("Wedding Dress") (left to right: front,
-  back), cropped at the neck: wear exactly this …"). Three people or more in one shot: the notice says the likeness may
-  be weaker and that a framing with one or two clear faces keeps them best.
-- **Teeth close-up** (Characters → a character card): "Make the teeth close-up": the card's close-up with a gentle smile,
-  lips slightly parted, the upper teeth visible; an extra view (plan.ts EXTRA_VIEWS), made only when asked, **also on a
-  locked card** (v<n>\closeup_teeth.png next to the locked views, which do not change; the face check judges it like
-  the close-up). It joins the face sheet automatically.
-- Code: shot-references.ts (sheets, prompt), characters/plan.ts (EXTRA_VIEWS, ALL_VIEWS), generate.ts and jobs.ts
-  (extras on a locked version), characters-view.tsx. Tests: shot-production.test.ts (the sheets' panels and size),
-  characters-cards.test.ts (teeth on a locked card), characters e2e, creation-production e2e.
-- On the PC: Characters → Jennifer → Make the teeth close-up (one picture, a few cents); then shot 5 → Make with
-  references 9:16, camera guide None, 1 take: compare with the earlier takes (face and dress).
-
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -987,6 +976,15 @@ requests are added at the end and acknowledged with their place.
    to the song, Creation shows its panel and no way to find its shots again, so WeddingDaySingingClip1 keeps its old
    false split (2 shots). A button on the panel re-checks it with today's robust check (Clip1 → 1 shot), keeping takes
    and picks; then "Use on its lines" puts one continuous take on lines 15-16 (no blip between shots 5 and 6).
+1f. ✅ **Done 28 Nov 2026: the music-video matcher said 0% on an exact excerpt** (Paul's "Wedding DayTake5 Ending.mp4", made
+   on WaveSpeed from WeddingDayAudioTrim5 = master 3:33.90-3:51.64 exact: measured sample correlation 1.000 at offset 0,
+   same polarity; the app says "its sound is not this song (it matches 0%)"). Blocks the ending.
+1g. **NEXT: design rethink session** (Paul, 28 Nov 2026: "we need to simplify this assembly line workflow, there has
+   been too many little addons that confuses me"; "the app must identify each asset clearly and be able to assemble
+   them in the right place according to the storyboard"). First an inventory of every button and panel, each marked
+   main path / Advanced / parked against those two jobs (identify, assemble), for Paul to review; the CLAUDE.md wording
+   of the two jobs is decided in that session. Parked meanwhile: one-button Singer, dry vocal from the master, Tools →
+   Remove reverb (nothing removed).
 1d. **Your clips play at the speed you made them** (Paul, 28 Nov 2026: "normally I create the video with the right
    speed by using Canva, I hope the app is not slowing them itself?"; "the dissolve from Canva never alters the speed
    it just blends the clips"). The app never slows or speeds up a clip (today B-roll is slowed to 0.75-1.0x to fit a

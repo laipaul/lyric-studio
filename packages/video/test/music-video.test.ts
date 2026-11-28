@@ -37,6 +37,22 @@ describe("where a music video sits in the song", () => {
     const r = findInSong(song(20, rate, 99), s, rate);
     expect(r.score).toBeLessThan(0.3);
   });
+  // 28 Nov 2026 (Paul's Wedding Day Take5: 17.7 s from 213.9 s of a 242 s song, "matches 0%"): the lags past half the FFT
+  // size wrapped round to negative ones, so a piece from the second half of a long song was never found; and the
+  // loud stretches won over a quiet tail.
+  describe("a piece near the end of a long song", () => {
+    const long = song(120, rate, 7);
+    for (let i = Math.round(0.88 * long.length); i < long.length; i++) long[i] *= 0.05; // the quiet outro
+    const cut = (from: number, secs: number) => long.slice(Math.round(from * rate), Math.round((from + secs) * rate));
+    for (const [name, from, secs] of [["the quiet tail (last 12%)", 105.7, 12], ["a short excerpt near the end", 111.1, 5], ["one from the start", 0, 12], ["a short one from the start", 3.3, 4]] as const) {
+      it(`${name} is found to the sample`, () => {
+        const r = findInSong(cut(from, secs), long, rate);
+        expect(r.offsetMs).toBeCloseTo(from * 1000, 0);
+        expect(r.score).toBeGreaterThan(0.95);
+        expect(r.driftMs).toBe(0);
+      });
+    }
+  });
   it("bestLag and matchScore agree on a known lag", () => {
     const a = new Float64Array([0, 0, 1, 3, 2, 0, 0, 0]);
     const b = new Float64Array([0, 0, 0, 0, 0, 1, 3, 2, 0, 0, 0, 0]);
