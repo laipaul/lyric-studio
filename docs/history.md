@@ -4,6 +4,27 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### A Mini film is the whole song on every platform ✅ (to verify on the PC)
+- **Where am I** (same day, Paul: "then how do I know where I am?"): every stage's header now names the song style
+  next to the stage, e.g. **"Shape · Mini film · whole song · Reels v1 planned"** (or "Cut to the song", "Add singing");
+  a click opens Prepare → Song Details, where it is set. song-style.tsx SongStyleChip; song-style.e2e.ts checks it.
+  Note: storyboard.e2e.ts "the last shot is marked as the Reels loop ending" fails in the cloud; its song has no shot
+  list and no Mini film, so this change does not touch it (to look at separately).
+- Paul (23 Nov 2026): "the shots are not in order in Shape now". The Reel opened on shot 7: a Reel's automatic part of
+  the song starts just before the first chorus, so shots 1-6 were before it. Then, decided by Paul: "the mini film is the
+  equivalent of me wanting to create a video for the whole song … I pick the format Reel, YT, etc and I want the whole
+  song, don't limit me, I decide".
+- Now a story song (song style **Mini film**, or a song with a shot list on lyric lines that is not set to "Cut to the
+  song") plays the **whole song, 0:00 to its own end, on every platform picked** (Reels, TikTok, Shorts, YouTube), with
+  no platform length: no fade at either end (the song's own start and end). The plan's reason says "whole song … (a
+  Mini film: the whole story on every platform)". A part chosen by hand (the pink window) still wins; "Automatic" gives
+  it back. Spotify Canvas keeps its short loop. Cut to the song and Add singing songs without a shot list keep the
+  hook-first part.
+- Code: make.ts isWholeStory, chooseSection (wholeStory). Tests: whole-story.test.ts, shot-production.test.ts.
+- On the PC: Shape on "Something About You And Me" (Reels): the readout says "Song Reels: 0:00.0 – <song length>"; if
+  it says "chosen by you", press Automatic. Note: Instagram and YouTube Shorts accept up to 3 min per video; a longer
+  song is yours to decide (post it, or drag the pink window to a part).
+
 ### Get Latest Lyric Studio: one double-click to update ✅ (to verify on the PC)
 - Paul (22 Nov 2026): "can u create a shortcut I can double click instead of doing manually" (git pull lyric main,
   git push, restart). **Get Latest Lyric Studio.cmd** in D:\videomaker: gets the newest code from the lyric-studio copy

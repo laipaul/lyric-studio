@@ -26,6 +26,7 @@
     "effects:preview": "tsx packages/video/scripts/effects-preview.ts",
     "songs:migrate": "tsx packages/video/scripts/songs-migrate.ts",
     "storyboards": "tsx packages/video/scripts/storyboards.ts",
+    "tracks:check": "tsx packages/video/scripts/tracks-check.ts",
     "versions": "tsx packages/video/scripts/versions.ts",
     "shotlist": "tsx packages/video/scripts/shotlist.ts",
     "draft-test": "tsx packages/video/scripts/draft-test.ts",

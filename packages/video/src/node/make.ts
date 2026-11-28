@@ -44,6 +44,7 @@ import { clipBandLuminances } from "./lyric-band";
 import { isThinFace, lyricBackingFor, type BackingDecision, type Readability } from "../readability";
 import { pictureOf } from "../picture";
 import { editOf, expandCards, isOmitted, rankOf, readClipEdits, storyPick, type ClipEdits } from "./clip-edits";
+import { songEditFromTracks } from "./tracks";
 import { boardForRun, cardFont, cardMeasure, overrideCount, TITLE_MIN_S, TITLE_SIZE_VERTICAL, titleCards, type RunBoard } from "./textboard";
 import { extraCards, fillCardText } from "../extra-cards";
 import { matchPinClips, parsePins } from "../pins";
@@ -177,6 +178,11 @@ export type MakeOptions = {
   // make no output (no run folder, section / job rows, song.json changes or .lrc; never aligns: it needs
   // the stored alignment). Caches are filled as usual (clip import and preparation, analysis).
   dryRun?: boolean;
+  // The two-layer timeline, Part A (28 Nov 2026): Make reads the song's edit through its tracks (tracks.json, made from
+  // song.json "anchors" and clips.json "order" / "inserts"). "files": straight from those files instead (pnpm
+  // tracks:check compares the two). writeTracks false: tracks.json is not written (tracks:check changes nothing).
+  editSource?: "tracks" | "files";
+  writeTracks?: boolean;
   // A lyric-timing run (the studio queues one when vocals.wav is added or replaced): the alignment, the
   // hand-set starts and the vocal-start check (src/node/lyric-timing.ts), no videos. Needs projectId.
   lyricsOnly?: boolean;
@@ -333,7 +339,14 @@ export type MakeResult = {
 // platform that could not be made at all, with what to do. null when everything is finished.
 // Options that do not change a video's plan (where files are, how the run is made, what the run is called) or that
 // the variation itself carries (its spec): left out of the plan fingerprint (2e-1).
-const PLAN_KEY_SKIP = new Set(["now", "runId", "command", "workspaceDir", "song", "lyrics", "songFolder", "dryRun", "frameCheck", "parallel", "resume", "resumeFolder", "engine", "platform", "platforms", "variations", "take", "takes", "pictures", "pairings", "collection", "collectionPath", "title", "artist", "ep", "cover", "hint", "presetsFile", "lyricsOnly", "projectId", "theme", "realign", "variationsBy", "leadMs", "lyricsOffsetMs", "align", "voiceMap", "firstWords", "renderer", "thumbnailRenderer", "coverRenderer", "log", "shouldStop", "onRenderProgress", "onReady", "onRetry"]);
+const PLAN_KEY_SKIP = new Set(["now", "runId", "command", "workspaceDir", "song", "lyrics", "songFolder", "dryRun", "editSource", "writeTracks", "frameCheck", "parallel", "resume", "resumeFolder", "engine", "platform", "platforms", "variations", "take", "takes", "pictures", "pairings", "collection", "collectionPath", "title", "artist", "ep", "cover", "hint", "presetsFile", "lyricsOnly", "projectId", "theme", "realign", "variationsBy", "leadMs", "lyricsOffsetMs", "align", "voiceMap", "firstWords", "renderer", "thumbnailRenderer", "coverRenderer", "log", "shouldStop", "onRenderProgress", "onReady", "onRetry"]);
+// The song's edit Make uses: through its tracks (Part A of the two-layer timeline), or straight from the files.
+function songEditOf(options: Pick<MakeOptions, "editSource" | "writeTracks" | "dryRun">, recipeFile: string | null, root: string): { anchors: AnchorSpec[]; songEdits: ClipEdits } {
+  const files = readClipEdits(root);
+  if (options.editSource === "files") return { anchors: recipeFile ? (readRecipe(recipeFile).anchors ?? []) : [], songEdits: files };
+  const r = songEditFromTracks(recipeFile, root, files, { write: options.writeTracks !== false && !!recipeFile }); // a song still in the old folders: nothing written
+  return { anchors: r.anchors, songEdits: r.edits };
+}
 const withShotPlan = (m: Manifest, shotPlan: Manifest["shot_plan"]): Manifest => (shotPlan ? { ...m, shot_plan: shotPlan } : m);
 export type ShotPlanUsed = { id: string; file: string; status: "new" | "same" | "kept" | "replanned"; note: string | null; props: Omit<LyricVideoProps, "mediaBaseUrl">; try?: SbTry | null };
 
@@ -890,7 +903,7 @@ export async function makeVideos(options: MakeOptions): Promise<MakeResult> {
       ws, options: effective, variationsFor, effectLabels, recipeFor: (platform: string) => resolveRecipe(recipeInput, platform), stylesFor, log, now, leadMs, lyricsOffsetMs, catalog, styles, brand, logo, sp, analysis, alignment, lines, reports, numbers,
       sectionLines, instrumental, collection, collectionNames: runCollections, collectionRemembered, ep, tool, rootDir, getProject: () => project,
       loopAudio: () => (songAudio ??= readLoopAudio(sp.songFile)),
-      anchors: songRecipe.anchors ?? [],
+      ...songEditOf(options, paths.recipe, paths.root),
       wholeStory: isWholeStory(songRecipe, instrumental),
       canvasChoice: songRecipe.canvas ?? null,
       youtubeLinks: pickedLinks(songRecipe.links ?? [], songRecipe.postLinks, "youtube"),
@@ -979,7 +992,8 @@ type Shared = {
   rootDir: string;
   getProject: () => { id: string; title: string; artist: string };
   loopAudio: () => Promise<LoopAudio | null>; // the song decoded once per run, for the loop checks
-  anchors: AnchorSpec[]; // song.json: story anchors
+  anchors: AnchorSpec[]; // song.json: story anchors (read through the song's tracks: songEditFromTracks)
+  songEdits: ClipEdits; // clips.json, its story order and B-roll inserts read through the song's tracks
   wholeStory: boolean; // a Mini film: the whole song on every platform (an automatic part of the song only)
   canvasChoice: { clip: string; at?: number } | null; // song.json "canvas": the clip chosen for the Canvas
   youtubeLinks: SongLink[]; // song.json "links" picked for YouTube (publish.txt)
@@ -1301,7 +1315,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   }
 
   // The clip editor's story order and edits (clips.json).
-  const edits = readClipEdits(songPathsById(ws, project.id).root);
+  const edits = sh.songEdits;
   // A whole-collection card's clips take its place in the story order (those without a place of their own).
   const storyOrder = sh.collection.cards ? expandCards(edits, sh.collection.cards) : edits;
   // Shot length (recipe "shotLength", per platform): "auto" (the default) = automatic pacing from the

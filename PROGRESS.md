@@ -4,6 +4,25 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Two-layer timeline, Part A: the tracks ✅ (Paul to run pnpm tracks:check; gate for Part B)
+Paul, 28 Nov 2026: "go for two layer timeline". No visible change. Every song now has its edit as a pro editor's
+tracks in `<song folder>\tracks.json`: **V1 Singer** (singing clips locked to song time, 1.00x) and **V2 B-roll** (the
+story line, story clips on their lines, B-roll over a stretch, cut-aways over the singer); A1 is the song, read only.
+They are made from song.json "anchors" and clips.json "order" / "inserts" the first time and again whenever those
+change (the screens still write the old fields in Part A), and Make reads its edit back through them. Room for a
+video's own B-roll (Part B) is in the file. The soft change between the layers (today's fix) is a rule of the drawing,
+not stored.
+- **`pnpm tracks:check`**: plans every video of every song twice without rendering (the edit straight from the files,
+  and through the tracks) and compares the render props, the anchor report, the line slots and the plan fingerprint
+  (so saved shot plans stay as they are). Changes no file. Run on Paul's PC on 28 Nov 2026: **identical: all 32
+  video(s) of 10 song(s)** (Wedding Day: 5 singing segments, 31 story clips, 2 on lines; Something About You And Me:
+  18 singing segments, 64 story clips, 4 on lines).
+- Code: src/tracks.ts (fromEdit / toEdit / fingerprint), node/tracks.ts, node/tracks-check.ts, make.ts (editSource,
+  writeTracks), scripts/tracks-check.ts; docs/data-model.md "Tracks".
+- Tests: tracks (5: the edit as tracks and back, exactly), tracks-node (7: made, kept, made again on a change, a video's
+  own B-roll kept, nothing written by the check, the report).
+- **Gate:** Paul runs `pnpm tracks:check` himself and confirms "identical" before Part B starts.
+
 ### Dry vocal for lips ✅ (to verify on the PC)
 Paul, 28 Nov 2026: "an optional preparation step per song ... Never used for the soundtrack." In Lyrics Sync → Singer,
 **Dry vocal for lips: Prepare dry vocal** (tick **also the lead only**) makes, on this PC and once per stem, the vocal
@@ -790,27 +809,6 @@ locked cards can't be edited").
   shots to extend or split. Story room → Copy Song brief: the "Shot grid" section lists the moments for Claude.
 - Next (Step B, agreed): Shape and Make play a Mini film shot by shot: each take once, on its own shot, no cycling;
   an empty shot shows a stand-in.
-
-### A Mini film is the whole song on every platform ✅ (to verify on the PC)
-- **Where am I** (same day, Paul: "then how do I know where I am?"): every stage's header now names the song style
-  next to the stage, e.g. **"Shape · Mini film · whole song · Reels v1 planned"** (or "Cut to the song", "Add singing");
-  a click opens Prepare → Song Details, where it is set. song-style.tsx SongStyleChip; song-style.e2e.ts checks it.
-  Note: storyboard.e2e.ts "the last shot is marked as the Reels loop ending" fails in the cloud; its song has no shot
-  list and no Mini film, so this change does not touch it (to look at separately).
-- Paul (23 Nov 2026): "the shots are not in order in Shape now". The Reel opened on shot 7: a Reel's automatic part of
-  the song starts just before the first chorus, so shots 1-6 were before it. Then, decided by Paul: "the mini film is the
-  equivalent of me wanting to create a video for the whole song … I pick the format Reel, YT, etc and I want the whole
-  song, don't limit me, I decide".
-- Now a story song (song style **Mini film**, or a song with a shot list on lyric lines that is not set to "Cut to the
-  song") plays the **whole song, 0:00 to its own end, on every platform picked** (Reels, TikTok, Shorts, YouTube), with
-  no platform length: no fade at either end (the song's own start and end). The plan's reason says "whole song … (a
-  Mini film: the whole story on every platform)". A part chosen by hand (the pink window) still wins; "Automatic" gives
-  it back. Spotify Canvas keeps its short loop. Cut to the song and Add singing songs without a shot list keep the
-  hook-first part.
-- Code: make.ts isWholeStory, chooseSection (wholeStory). Tests: whole-story.test.ts, shot-production.test.ts.
-- On the PC: Shape on "Something About You And Me" (Reels): the readout says "Song Reels: 0:00.0 – <song length>"; if
-  it says "chosen by you", press Automatic. Note: Instagram and YouTube Shorts accept up to 3 min per video; a longer
-  song is yours to decide (post it, or drag the pink window to a part).
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
