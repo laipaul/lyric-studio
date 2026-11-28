@@ -4,6 +4,21 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Two-layer timeline, Part B1: see the layers ✅ (to verify on the PC)
+Paul, 28 Nov 2026: "go b1" (Part B split: B1 shows the layers, B2 edits by layers). Display only; editing unchanged.
+- **Shape's timeline**, top to bottom: Lyrics · **V2 B-roll** (the story clips and cut-aways, edited as before; where V2
+  is empty over the singer, a dashed "singer shows ↓") · **V1 Singer** (one green segment per singing take, "🔒 1.00×
+  · in time", no dragging; a cut-away over it dimmed; a click opens its shot) · **What plays** (green singer, grey
+  B-roll, black nothing; the soft 0.4 s changes marked) · **A1 Song** (the waveform and this video's window, the energy
+  band under it). Lane names stay at the left while scrolling. Worked out from the planned shots (@lyric/video
+  layers.ts), so the lanes always match the video.
+- **Prepare → Storyboard:** the singer markers ("🔒 line 15", with the take's picture), read only; a click opens Lyrics
+  Sync. The story line below is V2.
+- Checked in the browser on Wedding Day's Reel: 5 singer segments (lines 15, 16, 17, 25, 32), 17 B-roll shots on V2
+  and no singing shot left there, 7 soft changes; the 5 markers in the Storyboard, a click opens Lyrics Sync.
+- Tests: layers (6: one segment per take with its cut-aways, V2, what plays shot by shot with no gap or overlap, the
+  soft changes, a later out-of-time use is its own segment, two takes back to back). Full suite: 155 files pass.
+
 ### Two-layer timeline, Part A: the tracks ✅ (Paul to run pnpm tracks:check; gate for Part B)
 Paul, 28 Nov 2026: "go for two layer timeline". No visible change. Every song now has its edit as a pro editor's
 tracks in `<song folder>\tracks.json`: **V1 Singer** (singing clips locked to song time, 1.00x) and **V2 B-roll** (the
@@ -21,7 +36,7 @@ not stored.
   writeTracks), scripts/tracks-check.ts; docs/data-model.md "Tracks".
 - Tests: tracks (5: the edit as tracks and back, exactly), tracks-node (7: made, kept, made again on a change, a video's
   own B-roll kept, nothing written by the check, the report).
-- **Gate:** Paul runs `pnpm tracks:check` himself and confirms "identical" before Part B starts.
+- **Gate passed:** Paul ran `pnpm tracks:check` himself on 28 Nov 2026: "identical: all 32 video(s) of 10 song(s)".
 
 ### Dry vocal for lips ✅ (to verify on the PC)
 Paul, 28 Nov 2026: "an optional preparation step per song ... Never used for the soundtrack." In Lyrics Sync → Singer,
@@ -786,30 +801,6 @@ locked cards can't be edited").
 - On the PC: Shape on "Something About You And Me": shots 1-6 play your six takes, each once, on its line; from shot 7
   the stand-ins (Jennifer / the Bridegroom dimmed) follow the 45 cards; the Analysis lists the shots without a take.
 
-### Step A: the shot grid: the song decides the timing, the story fills it ✅ (to verify on the PC)
-- Paul (23 Nov 2026): "suppose we had to start again. You need to analyse the full song and plan each shot list
-  according to the length of the song". The Mini film showed takes repeating and drifting off their lines because the
-  shot list did not fit the song's timing (a 14 s intro with one shot, long lines with one 5 s take).
-- **Shot grid** (src/shot-grid.ts shotGrid, pure): the whole song, 0:00 to its end, cut into shot moments: the intro,
-  every lyric line (until the next line starts), instrumental breaks of 4 s or more, the ending. A moment under 2 s
-  joins its neighbour; one over 8 s (one take) is split into parts of about 5 s on whole bars. Each moment has its id
-  (s01…), time, length, section (Intro, Verse 1, Chorus, Instrumental, Ending) and lyric line(s).
-- **Song brief for Claude** (Creation → Story room) now has a "Shot grid" section and asks for one shot per moment,
-  same id, order and line (the second part of a long line has no line: it follows the shot before). The take line
-  says Midjourney video (5 s, extendable) or Seedance (4-10 s), no longer only Seedance.
-- **Checking or importing a shot list** (Story room paste, Storyboard → Import shot list) adds warnings in plain words:
-  "s01: lasts 14.0 s (the intro): one take is about 5 s. Extend its take to 14.0 s, or add 2 shots after it (without a
-  line)", or "only 1.2 s: a flash, join it with a neighbour". Never blocking (node/shot-timing.ts withTiming).
-- **Production**: every shot says how long its take must be on the song, "0:14.0 · needs a 4.8 s take", in amber when
-  it is longer than one take ("needs 10.4 s: extend the take, or add a shot after it") or a flash (slotSpans: a shot
-  on a line lasts until the next shot on a line; shots without a line share the time of the one before them).
-- Tests: shot-grid.test.ts (8), production.test.ts (the brief's grid), creation-production e2e (the length), shotlist
-  and production e2e still pass.
-- On the PC: Creation → Production on "Something About You And Me": each shot shows its length; the amber ones are the
-  shots to extend or split. Story room → Copy Song brief: the "Shot grid" section lists the moments for Claude.
-- Next (Step B, agreed): Shape and Make play a Mini film shot by shot: each take once, on its own shot, no cycling;
-  an empty shot shows a stand-in.
-
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -977,7 +968,7 @@ locked cards can't be edited").
 2. **Two-layer timeline, Part A:** tracks.json per song (V1 Singer at song time, 1.00x; V2 B-roll), migration, compose
    reads the tracks. **Gate:** Paul runs `pnpm tracks:check` on his PC; Part B starts only after he confirms
    "identical" for all his videos.
-3. **Part B:** Shape shows Lyrics · V2 B-roll · V1 Singer · A1 Song and a "what plays" strip; removing V2 leaves a gap
+3. **Part B** (split by Paul, 28 Nov 2026: B1 done, see Latest steps; **B2 next**: editing by layers): Shape shows Lyrics · V2 B-roll · V1 Singer · A1 Song and a "what plays" strip; removing V2 leaves a gap
    (Close gap explicit); the Storyboard shows V1 markers read-only. Tracks per song; **V2 may be overridden per video**
    (other B-roll at the same moment in the Reel and the 16:9 YouTube video). A gap with no singer under it: black, a
    warning, Close gap / Fill, never "Ready to post".

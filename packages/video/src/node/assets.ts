@@ -119,7 +119,7 @@ export async function songAssets(ws: Workspace, projectId: string, options: { ch
   const roles = clipRoles(paths.root, paths.recipe, listed.clips.map((c) => c.name));
   for (const c of listed.clips) c.role = roles.get(c.name) ?? "story";
   const here = new Set(listed.clips.map((c) => c.name.toLowerCase()));
-  out.singing = songSingingLines(paths.recipe).filter((a) => here.has(a.clip.toLowerCase()) && !isOmitted(edits, a.clip)).map(({ line, through }) => ({ line, through })).sort((a, b) => a.line - b.line);
+  out.singing = songSingingLines(paths.recipe).filter((a) => here.has(a.clip.toLowerCase()) && !isOmitted(edits, a.clip)).map(({ line, through, clip }) => ({ line, through, clip })).sort((a, b) => a.line - b.line);
   // The user's story notes (Prepare → Clips): only shown there, never read by the planner or Make.
   const notes = notesForClips(readClipNotes(paths.root), listed.clips);
   for (const c of listed.clips) c.note = notes.get(c.name) ?? null;

@@ -11,7 +11,7 @@ import { editOf, readClipEdits } from "./clip-edits";
 import { readRecipe } from "./recipe";
 
 export type ClipRole = "story" | "singing" | "lineOnly";
-export type SingingLine = { line: number; through: number };
+export type SingingLine = { line: number; through: number; clip?: string }; // clip: the singing take (two-layer timeline B1: V1 markers in the story line)
 
 const PICTURES_PATH = ["pictures", "pictures.json"];
 

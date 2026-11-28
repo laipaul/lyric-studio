@@ -126,7 +126,7 @@ describe("the Storyboard's roles", () => {
     expect(role["sings lines 2-3.mp4"]).toBe("singing");
     expect(role["02_b.mp4"]).toBe("singing");
     expect(role["01_a.mp4"]).toBe("story");
-    expect(a.singing).toEqual([{ line: 2, through: 3 }]);
+    expect(a.singing).toEqual([{ line: 2, through: 3, clip: "sings lines 2-3.mp4" }]); // B1: the clip for the V1 marker
     const story = (await songStory(ws, id, a.clips)).items.map((i) => i.key);
     expect(story).not.toContain("sings lines 2-3.mp4");
     expect(story).not.toContain("02_b.mp4");

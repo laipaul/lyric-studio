@@ -12,13 +12,14 @@
 // effect with a live preview (saved in textboard.json), save the design as a template or apply one.
 // Pictures: the same textboard over another clip set; an anchor whose clip is missing is a slot.
 import { Player, type PlayerRef } from "@remotion/player";
-import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2, Mic, MoveHorizontal, Pencil, Redo2, RefreshCw, Repeat, RotateCcw, Star, Type, Undo2, X } from "lucide-react";
+import { AlertTriangle, Anchor, Blend, ChevronLeft, ChevronRight, Gauge, Loader2, Lock, Mic, MoveHorizontal, Pencil, Redo2, RefreshCw, Repeat, RotateCcw, Star, Type, Undo2, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 
 import { clockTenths, type TimelineEdits, EFFECT_NAMES, effectTitle, followScrollLeft, LyricVideo, playheadLabel, revealScrollLeft, songTimeMs, timeTicks, patchLook, previewCard, previewTitleCard, readableWarning, titleCardMult, titleCardSize, TITLE_SIZE_RANGE, type CardOverrides, type TextCardProps, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
 import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node";
 import { tryName } from "@lyric/video/video-names";
+import { layersOf, SOFT_CHANGE_MS } from "@lyric/video";
 import { ClipMenu } from "./clip-menu";
 import { BrollHere } from "./shape-broll";
 import { SongRange, SongTrackBehind, SongWindow, type SongWindowDrag } from "./soundtrack-window";
@@ -703,6 +704,8 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   useEffect(() => () => setShapeStatus(null), [setShapeStatus]);
   const width = view ? Math.ceil((view.durationMs / 1000) * zoom) : 0;
   const x = (ms: number) => (ms / 1000) * zoom;
+  // The two-layer timeline, Part B1 (28 Nov 2026): the lanes from the planned shots (V1 Singer, V2 B-roll, what plays).
+  const layers = view ? layersOf(view.shots) : null;
   const playhead = (frame * 1000) / 30;
   const titleLanes = titleCardLanes(view?.titleCards ?? [], x);
   // Roll (drag a cut) and slip (drag inside a shot), Undo / Redo: components/timeline-editing.tsx.
@@ -1323,8 +1326,194 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                     </div>
                   ))}
                 </div>
+                {view.titleCards.length ? (
+                  <div className="relative border-b" data-textboard-titles data-lanes={titleLanes.count} style={{ height: titleLanes.count > 1 ? titleLanes.count * TITLE_LANE_PX + 5 : 20 }}>
+                    {view.titleCards.map((c, ci) => (
+                      <button
+                        type="button"
+                        key={c.id}
+                        data-text-card={c.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (c.type === "hook" || c.type === "end") setPanel("theme"); // the theme's card: Edit theme → Cards
+                          else if (view.editable && TITLE_CARD_IDS.has(c.id)) openTitleCard(c.id); // Settings → Look (11 Nov 2026)
+                          else if (view.editable) openCard(c.id);
+                        }}
+                        className={cn("bg-brand/20 absolute overflow-hidden rounded border px-1 text-left text-[10px]", cardId === c.id && "ring-brand ring-2")}
+                        data-lane={titleLanes.lane[ci]}
+                        style={{ left: x(c.startMs), width: Math.max(8, x(c.endMs - c.startMs) - 2), top: titleLanes.count > 1 ? 2 + titleLanes.lane[ci] * TITLE_LANE_PX : 2, height: titleLanes.count > 1 ? TITLE_LANE_PX - 1 : 15, lineHeight: titleLanes.count > 1 ? `${TITLE_LANE_PX - 3}px` : undefined }}
+                        title={`${CARD_TYPE_LABELS[c.type] ?? c.type}: ${c.text}${c.type === "hook" || c.type === "end" ? " (the theme's card: Edit theme → Cards)" : ""}`}
+                      >
+                        <Type className="mr-0.5 inline size-2.5" />
+                        {CARD_TYPE_LABELS[c.type] ?? c.type}: {c.text}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="relative h-8 border-b" data-textboard-row>
+                  <LaneLabel name="Lyrics" />
+                  {view.lines.map((l, i) => (
+                    <div
+                      key={i}
+                      data-story-line={l.number ?? ""}
+                      data-anchored={l.anchor ?? undefined}
+                      onDragOver={(e) => {
+                        if (!view.editable || l.number === null || !e.dataTransfer.types.includes("text/x-lyric-clip")) return;
+                        e.preventDefault();
+                        setDropLine(l.number);
+                      }}
+                      onDragLeave={() => setDropLine(null)}
+                      onDrop={(e) => {
+                        const clip = e.dataTransfer.getData("text/x-lyric-clip");
+                        setDropLine(null);
+                        if (clip && l.number !== null) void edit({ action: "anchor", line: l.number, clip });
+                      }}
+                      data-card={l.card ?? undefined}
+                      data-changed={l.changed || undefined}
+                      data-needs-clip={l.slot ?? undefined}
+                      onClick={(e) => {
+                        if (!view.editable || !l.card) return; // a past run: the timeline plays from here
+                        e.stopPropagation();
+                        openCard(l.card);
+                        player.current?.seekTo(Math.round((l.startMs * 30) / 1000));
+                      }}
+                      className={cn(
+                        "absolute top-1 bottom-1 overflow-hidden rounded border px-1 text-[11px] leading-tight",
+                        view.editable && l.card && "cursor-pointer",
+                        l.isHook ? "border-brand/50 bg-brand/10" : "bg-muted/40",
+                        l.changed && "border-sky-400/70",
+                        l.slot && "border-2 border-dashed border-amber-400 bg-amber-400/15",
+                        (dropLine !== null && dropLine === l.number) || (cardId !== null && cardId === l.card) ? "ring-brand ring-2" : "",
+                      )}
+                      style={{ left: x(l.startMs), width: Math.max(4, x(l.endMs - l.startMs) - 2) }}
+                      title={`${l.number ? `line ${l.number}: ` : ""}${l.text}${l.slotWhy ? `\n${l.slotWhy}` : ""}\non screen ${clockTenths(l.startMs)}–${clockTenths(l.endMs)} in the video${songStart > 0 ? ` · ${clockTenths(songTimeMs(l.startMs, songStart))}–${clockTenths(songTimeMs(l.endMs, songStart))} in the song` : ""}${l.anchor ? ` · ⚓ ${l.anchor}` : ""}${l.slot ? ` · needs a clip (was ${l.slot})` : ""}${l.changed ? " · its own look" : ""}`}
+                    >
+                      {l.anchor ? <Anchor className="text-brand mr-0.5 inline size-3" aria-label="anchored" /> : null}
+                      {l.slot ? <Anchor className="mr-0.5 inline size-3 text-amber-300" aria-label="slot" /> : null}
+                      {l.slotWhy ? <span data-slot-why className="text-amber-200" title={l.slotWhy}>{/its shot is 16:9/.test(l.slotWhy) ? "16:9 shot: not in this video · " : "9:16 shot: not in this video · "}</span> : null}
+                      {l.changed ? <Pencil className="mr-0.5 inline size-2.5 text-sky-300" aria-label="own look" /> : null}
+                      {l.text}
+                    </div>
+                  ))}
+                </div>
+                <div className="relative h-24 select-none border-b" data-shots-row data-lane="v2" onClickCapture={tl.onRowClickCapture}>
+                  <LaneLabel name="V2 B-roll" />
+                  {/* Where V2 is empty over the singer, the singer shows through (V1, below). */}
+                  {layers?.singer.flatMap((g) => {
+                    const open: { fromMs: number; toMs: number }[] = [];
+                    let at = g.fromMs;
+                    for (const c of [...g.covered].sort((p, q) => p.fromMs - q.fromMs)) {
+                      if (c.fromMs > at) open.push({ fromMs: at, toMs: c.fromMs });
+                      at = Math.max(at, c.toMs);
+                    }
+                    if (g.toMs > at) open.push({ fromMs: at, toMs: g.toMs });
+                    return open.map((o) => (
+                      <div key={`open${o.fromMs}`} data-v2-open className="text-muted-foreground pointer-events-none absolute top-1 bottom-1 flex items-center justify-center overflow-hidden rounded border border-dashed border-emerald-400/40 text-[10px]" style={{ left: x(o.fromMs), width: Math.max(4, x(o.toMs - o.fromMs) - 2) }} title="Nothing on V2 here: the singer (V1) shows through">
+                        {x(o.toMs - o.fromMs) > 70 ? "singer shows ↓" : ""}
+                      </div>
+                    ));
+                  })}
+                  {!view.shots.length ? (
+                    <div className="text-muted-foreground sticky left-2 inline-flex h-full max-w-xl items-center px-3 text-xs" data-no-shots>
+                      {view.platform.name === "youtube" ? (
+                        <span>
+                          No clip shots: this YouTube video shows your cover art for the whole song (the cover layout). To build it from your clips instead, open{" "}
+                          <button type="button" className="text-foreground underline underline-offset-2" onClick={(e) => { e.stopPropagation(); setPanel("look"); window.dispatchEvent(new Event("lyric-look-advanced")); }} data-open-song>
+                            Look
+                          </button>{" "}
+                          and set the YouTube layout to clips.
+                        </span>
+                      ) : (
+                        <span>No clip shots in this video.</span>
+                      )}
+                    </div>
+                  ) : null}
+                  {view.shots.filter((s) => s.role !== "singing").map((s) => (
+                    <ShotBlock
+                      key={s.index}
+                      shot={tl.shown(s)}
+                      left={x(s.startMs)}
+                      width={x(s.endMs - s.startMs)}
+                      selected={selected === s.index}
+                      slipped={tl.slipped(s)}
+                      pending={tl.pendingShot(s.index)}
+                      slippable={view.editable && s.kind === "video"}
+                      onPointerDown={(e) => tl.onShotPointerDown(s, e)}
+                      onSelect={() => {
+                        setSelected(s.index);
+                        setPicks((n) => n + 1);
+                        setPanel("shots");
+                      }}
+                      dropTarget={dropShot === s.index || tl.liftOver === s.index}
+                      lifted={tl.liftFrom === s.index}
+                      editable={view.editable && source?.kind === "plan"}
+                      onDragOver={
+                        view.editable
+                          ? (e) => {
+                              if (!e.dataTransfer.types.includes("text/x-lyric-clip")) return;
+                              e.preventDefault();
+                              setDropShot(s.index);
+                            }
+                          : undefined
+                      }
+                      onDragLeave={() => setDropShot(null)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDropShot(null);
+                        const clip = e.dataTransfer.getData("text/x-lyric-clip");
+                        if (clip && view.editable) dropOnShot(s, clip);
+                      }}
+                    />
+                  ))}
+                  {view.shots.filter((s) => s.role !== "singing").map((s) => (x(s.endMs - s.startMs) >= 48 || selected === s.index ? clipMenu(s, "icon", { left: x(s.endMs) - 28, top: 6 }) : null))}
+                  {tl.handles}
+                  {tl.overlay}
+                </div>
+                {/* V1 Singer: singing takes locked to the song, always 1.00x; only the nudge (Lyrics Sync) moves one. */}
+                <div className="relative h-14 border-b" data-lane="v1" data-v1-lane>
+                  <LaneLabel name="V1 Singer" />
+                  {layers?.singer.map((g) => (
+                    <button
+                      type="button"
+                      key={`${g.clip}${g.fromMs}`}
+                      data-v1-segment={g.line ?? ""}
+                      data-v1-shots={g.shots.map((n) => n + 1).join(",")}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelected(g.shots[0]);
+                        setPicks((n) => n + 1);
+                        setPanel("shots");
+                      }}
+                      className={cn("absolute top-1 bottom-1 cursor-default overflow-hidden rounded border border-emerald-400/60 text-left text-[10px] text-white", g.shots.includes(selected ?? -1) && "ring-brand ring-2")}
+                      style={{ left: x(g.fromMs), width: Math.max(6, x(g.toMs - g.fromMs) - 2), backgroundColor: "#03140c", backgroundImage: g.thumb ? `url(/api/files/${g.thumb})` : undefined, backgroundSize: "auto 100%", backgroundRepeat: "repeat-x" }}
+                      title={`${g.clip}${g.line ? ` · line ${g.line}` : ""}\nLocked to the song: always 1.00x, in time; it never moves when you edit the B-roll (the nudge in Lyrics Sync moves it).${g.covered.length ? `\nCovered by B-roll ${g.covered.length === 1 ? "once" : `${g.covered.length} times`} (a cut-away): the singer plays on underneath, in time.` : ""}`}
+                    >
+                      {g.covered.map((c) => (
+                        <span key={c.fromMs} data-v1-covered className="absolute top-0 bottom-0 bg-black/65" style={{ left: x(c.fromMs - g.fromMs), width: x(c.toMs - c.fromMs) }} />
+                      ))}
+                      <span className="relative flex items-center gap-0.5 p-0.5 drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">
+                        <span className="flex items-center gap-0.5 rounded bg-emerald-600/85 px-0.5" data-badge="locked">
+                          <Lock className="size-2.5" /> 1.00× · in time
+                        </span>
+                        {g.line ? <span className="rounded bg-black/60 px-0.5">line {g.line}</span> : null}
+                      </span>
+                      <span className="absolute inset-x-0 bottom-0 truncate bg-black/70 px-1 leading-tight">{g.clip}</span>
+                    </button>
+                  ))}
+                  {!layers?.singer.length ? <span className="text-muted-foreground absolute top-4 left-24 text-[10px]">no singing in this video</span> : null}
+                </div>
+                {/* What plays: the layer the viewer sees, moment by moment, and the soft changes into and out of the singer. */}
+                <div className="relative h-3 border-b" data-what-plays title="What plays: green = the singer (V1), grey = B-roll (V2), black = nothing yet. The light marks: the B-roll fading out over the singer's first 0.4 s, and in over its last 0.4 s.">
+                  {layers?.plays.map((p) => (
+                    <div key={`${p.shot}${p.fromMs}`} data-plays={p.layer} className={cn("absolute top-0 bottom-0", p.layer === "singer" ? "bg-emerald-500/80" : p.layer === "broll" ? "bg-zinc-400/60" : "bg-black")} style={{ left: x(p.fromMs), width: Math.max(1, x(p.toMs - p.fromMs)) }} />
+                  ))}
+                  {layers?.fades.map((f) => (
+                    <div key={`${f.kind}${f.atMs}`} data-fade={f.kind} className={cn("absolute top-0 bottom-0", f.kind === "into-singer" ? "bg-gradient-to-r" : "bg-gradient-to-l", "from-zinc-300/90 to-transparent")} style={{ left: x(f.kind === "into-singer" ? f.atMs : f.atMs - SOFT_CHANGE_MS), width: x(SOFT_CHANGE_MS) }} />
+                  ))}
+                </div>
                 {/* the song track: the whole song (8 Nov 2026), this video's part as the pink window on it */}
-                <div className="relative h-6 border-b" data-song-track data-soundtrack-track>
+                <div className="relative h-6 border-b" data-song-track data-soundtrack-track data-lane="a1">
+                  <LaneLabel name="A1 Song" />
                   {view.song ? <SongTrackBehind song={view.song} songStartMs={view.songStartMs} zoom={zoom} /> : null}
                   {slots.map((s) => (
                     // A singing slot (Storyboard → Singing): where a lip-sync shot belongs; display only.
@@ -1374,132 +1563,6 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                       ))}
                   </div>
                 ) : null}
-                {view.titleCards.length ? (
-                  <div className="relative border-b" data-textboard-titles data-lanes={titleLanes.count} style={{ height: titleLanes.count > 1 ? titleLanes.count * TITLE_LANE_PX + 5 : 20 }}>
-                    {view.titleCards.map((c, ci) => (
-                      <button
-                        type="button"
-                        key={c.id}
-                        data-text-card={c.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (c.type === "hook" || c.type === "end") setPanel("theme"); // the theme's card: Edit theme → Cards
-                          else if (view.editable && TITLE_CARD_IDS.has(c.id)) openTitleCard(c.id); // Settings → Look (11 Nov 2026)
-                          else if (view.editable) openCard(c.id);
-                        }}
-                        className={cn("bg-brand/20 absolute overflow-hidden rounded border px-1 text-left text-[10px]", cardId === c.id && "ring-brand ring-2")}
-                        data-lane={titleLanes.lane[ci]}
-                        style={{ left: x(c.startMs), width: Math.max(8, x(c.endMs - c.startMs) - 2), top: titleLanes.count > 1 ? 2 + titleLanes.lane[ci] * TITLE_LANE_PX : 2, height: titleLanes.count > 1 ? TITLE_LANE_PX - 1 : 15, lineHeight: titleLanes.count > 1 ? `${TITLE_LANE_PX - 3}px` : undefined }}
-                        title={`${CARD_TYPE_LABELS[c.type] ?? c.type}: ${c.text}${c.type === "hook" || c.type === "end" ? " (the theme's card: Edit theme → Cards)" : ""}`}
-                      >
-                        <Type className="mr-0.5 inline size-2.5" />
-                        {CARD_TYPE_LABELS[c.type] ?? c.type}: {c.text}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                <div className="relative h-8 border-b" data-textboard-row>
-                  {view.lines.map((l, i) => (
-                    <div
-                      key={i}
-                      data-story-line={l.number ?? ""}
-                      data-anchored={l.anchor ?? undefined}
-                      onDragOver={(e) => {
-                        if (!view.editable || l.number === null || !e.dataTransfer.types.includes("text/x-lyric-clip")) return;
-                        e.preventDefault();
-                        setDropLine(l.number);
-                      }}
-                      onDragLeave={() => setDropLine(null)}
-                      onDrop={(e) => {
-                        const clip = e.dataTransfer.getData("text/x-lyric-clip");
-                        setDropLine(null);
-                        if (clip && l.number !== null) void edit({ action: "anchor", line: l.number, clip });
-                      }}
-                      data-card={l.card ?? undefined}
-                      data-changed={l.changed || undefined}
-                      data-needs-clip={l.slot ?? undefined}
-                      onClick={(e) => {
-                        if (!view.editable || !l.card) return; // a past run: the timeline plays from here
-                        e.stopPropagation();
-                        openCard(l.card);
-                        player.current?.seekTo(Math.round((l.startMs * 30) / 1000));
-                      }}
-                      className={cn(
-                        "absolute top-1 bottom-1 overflow-hidden rounded border px-1 text-[11px] leading-tight",
-                        view.editable && l.card && "cursor-pointer",
-                        l.isHook ? "border-brand/50 bg-brand/10" : "bg-muted/40",
-                        l.changed && "border-sky-400/70",
-                        l.slot && "border-2 border-dashed border-amber-400 bg-amber-400/15",
-                        (dropLine !== null && dropLine === l.number) || (cardId !== null && cardId === l.card) ? "ring-brand ring-2" : "",
-                      )}
-                      style={{ left: x(l.startMs), width: Math.max(4, x(l.endMs - l.startMs) - 2) }}
-                      title={`${l.number ? `line ${l.number}: ` : ""}${l.text}${l.slotWhy ? `\n${l.slotWhy}` : ""}\non screen ${clockTenths(l.startMs)}–${clockTenths(l.endMs)} in the video${songStart > 0 ? ` · ${clockTenths(songTimeMs(l.startMs, songStart))}–${clockTenths(songTimeMs(l.endMs, songStart))} in the song` : ""}${l.anchor ? ` · ⚓ ${l.anchor}` : ""}${l.slot ? ` · needs a clip (was ${l.slot})` : ""}${l.changed ? " · its own look" : ""}`}
-                    >
-                      {l.anchor ? <Anchor className="text-brand mr-0.5 inline size-3" aria-label="anchored" /> : null}
-                      {l.slot ? <Anchor className="mr-0.5 inline size-3 text-amber-300" aria-label="slot" /> : null}
-                      {l.slotWhy ? <span data-slot-why className="text-amber-200" title={l.slotWhy}>{/its shot is 16:9/.test(l.slotWhy) ? "16:9 shot: not in this video · " : "9:16 shot: not in this video · "}</span> : null}
-                      {l.changed ? <Pencil className="mr-0.5 inline size-2.5 text-sky-300" aria-label="own look" /> : null}
-                      {l.text}
-                    </div>
-                  ))}
-                </div>
-                <div className="relative h-24 select-none" data-shots-row onClickCapture={tl.onRowClickCapture}>
-                  {!view.shots.length ? (
-                    <div className="text-muted-foreground sticky left-2 inline-flex h-full max-w-xl items-center px-3 text-xs" data-no-shots>
-                      {view.platform.name === "youtube" ? (
-                        <span>
-                          No clip shots: this YouTube video shows your cover art for the whole song (the cover layout). To build it from your clips instead, open{" "}
-                          <button type="button" className="text-foreground underline underline-offset-2" onClick={(e) => { e.stopPropagation(); setPanel("look"); window.dispatchEvent(new Event("lyric-look-advanced")); }} data-open-song>
-                            Look
-                          </button>{" "}
-                          and set the YouTube layout to clips.
-                        </span>
-                      ) : (
-                        <span>No clip shots in this video.</span>
-                      )}
-                    </div>
-                  ) : null}
-                  {view.shots.map((s) => (
-                    <ShotBlock
-                      key={s.index}
-                      shot={tl.shown(s)}
-                      left={x(s.startMs)}
-                      width={x(s.endMs - s.startMs)}
-                      selected={selected === s.index}
-                      slipped={tl.slipped(s)}
-                      pending={tl.pendingShot(s.index)}
-                      slippable={view.editable && s.kind === "video"}
-                      onPointerDown={(e) => tl.onShotPointerDown(s, e)}
-                      onSelect={() => {
-                        setSelected(s.index);
-                        setPicks((n) => n + 1);
-                        setPanel("shots");
-                      }}
-                      dropTarget={dropShot === s.index || tl.liftOver === s.index}
-                      lifted={tl.liftFrom === s.index}
-                      editable={view.editable && source?.kind === "plan"}
-                      onDragOver={
-                        view.editable
-                          ? (e) => {
-                              if (!e.dataTransfer.types.includes("text/x-lyric-clip")) return;
-                              e.preventDefault();
-                              setDropShot(s.index);
-                            }
-                          : undefined
-                      }
-                      onDragLeave={() => setDropShot(null)}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        setDropShot(null);
-                        const clip = e.dataTransfer.getData("text/x-lyric-clip");
-                        if (clip && view.editable) dropOnShot(s, clip);
-                      }}
-                    />
-                  ))}
-                  {view.shots.map((s) => (x(s.endMs - s.startMs) >= 48 || selected === s.index ? clipMenu(s, "icon", { left: x(s.endMs) - 28, top: 6 }) : null))}
-                  {tl.handles}
-                  {tl.overlay}
-                </div>
                 {hoverMs !== null && Math.abs(x(hoverMs) - x(playhead)) > 4 ? (
                   <div className="pointer-events-none absolute top-0 bottom-0 w-px bg-white/30" style={{ left: x(hoverMs) }} data-hover-line>
                     <span className="bg-background/90 text-muted-foreground absolute top-0 left-1 rounded border px-1 text-[10px] whitespace-nowrap tabular-nums" data-hover-time>
@@ -1560,6 +1623,15 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
           </>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+// A lane's name, kept in view at the left while the timeline scrolls (it takes no room in the row).
+function LaneLabel({ name }: { name: string }) {
+  return (
+    <div className="pointer-events-none sticky left-0 z-[6] h-0 w-0 overflow-visible" data-lane-label={name}>
+      <span className="absolute top-0.5 left-0.5 rounded bg-black/75 px-1 text-[9px] whitespace-nowrap text-white/80">{name}</span>
     </div>
   );
 }

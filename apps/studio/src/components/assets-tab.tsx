@@ -15,6 +15,7 @@ import { ShotListImport } from "@/components/shotlist-import";
 
 import { NameField } from "@/components/name-field";
 import { LipChip, SingingPanel, useSinging } from "@/components/singing-panel";
+import { useGoToTab } from "@/components/song-stages";
 import type { SingingView } from "@lyric/video/lipsync";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -91,6 +92,7 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
   const [data, setData] = useState<AssetsData | null>(null);
   // Lip-sync readiness (26 Nov 2026): the singing slots and the clips' checks (Storyboard only).
   const singing = useSinging(projectId, part === "clips");
+  const goToTab = useGoToTab(); // the V1 singer markers open Lyrics Sync
   const [lipBusy, setLipBusy] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -495,6 +497,25 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
               <p data-singing-lines className="text-muted-foreground text-xs">
                 Singing on {data.singing.length > 1 || data.singing[0].through > data.singing[0].line ? "lines" : "line"} {data.singing.map((s) => (s.through > s.line ? `${s.line}–${s.through}` : String(s.line))).join(", ")}: set in Lyrics Sync
               </p>
+            ) : null}
+            {data.singing?.length ? (
+              // The two-layer timeline (B1, 28 Nov 2026): the singer (V1) at its place in the song, read only; your story
+              // line below is V2. A marker opens Lyrics Sync, where the singer is set.
+              <div data-v1-markers className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span className="text-muted-foreground">V1 Singer, locked to the song:</span>
+                {data.singing.map((s) => {
+                  const c = s.clip ? data.clips.find((x) => x.name.toLowerCase() === s.clip!.toLowerCase()) : undefined;
+                  return (
+                    <button key={`${s.line}`} type="button" data-v1-marker={s.line} onClick={() => goToTab("lyrics")} title={`${c?.label ?? s.clip ?? "singing take"}: sings ${s.through > s.line ? `lines ${s.line}–${s.through}` : `line ${s.line}`}, in time with the song (always 1.00x). Set in Lyrics Sync: click to open it.`} className="flex items-center gap-1 rounded border border-emerald-400/50 bg-emerald-400/10 py-0.5 pr-1.5 pl-0.5 hover:bg-emerald-400/20">
+                      {c?.thumb ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- a local thumbnail served by /api/files
+                        <img src={`/api/files/${c.thumb}`} alt="" className="h-6 w-4 rounded-sm object-cover" />
+                      ) : null}
+                      <span>🔒 {s.through > s.line ? `lines ${s.line}–${s.through}` : `line ${s.line}`}</span>
+                    </button>
+                  );
+                })}
+              </div>
             ) : null}
             {data.story.length > 1 ? <p data-order-hint className="text-muted-foreground text-xs">
                 Drag the clips into the order you want: Shape shows the same order and every video follows it. Omit leaves a clip out of the videos (it keeps its place). New clips go at the end.{" "}
