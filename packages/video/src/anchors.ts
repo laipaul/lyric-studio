@@ -53,6 +53,11 @@ export type AnchorPlan = {
   uses: AnchorUse[];
   conflicts: string[]; // QA WARN, naming the lines
   notes: string[];
+  // Singing shots that end at their footage end (song frames of those cuts) and which of them the next B-roll shot covers by
+  // starting there itself (the regular cut after the singer's old end is gone: the same clip, entering earlier). The others
+  // (`footCuts` without `joined`) leave a shot of their own, which the caller fills (compose.ts).
+  footCuts?: number[];
+  joined?: number[];
 };
 
 export const SINGER_HOLD_MAX_FRAMES = 6; // a singer may hold its last frame this long (0.2 s) when the next singer follows right after
@@ -71,7 +76,9 @@ export function planAnchors(
   lines: readonly AnchorLine[],
   // singerFade: the soft entry is on (a singing clip is cut in 0.4 s before a beat, so the B-roll fade ends on it); noFade:
   // the singing clips whose own choice says cut (clip ids): their cut stays on the beat.
-  o: { earlyCutFrames?: number; minShotFrames?: number; singerFade?: boolean; noFade?: ReadonlySet<string> } = {},
+  // keepFoot: footage-end cuts (song frames) whose following regular cut stays: no merging into the next B-roll shot (compose.ts asks
+  // for that when the next clip has no footage to enter earlier).
+  o: { earlyCutFrames?: number; minShotFrames?: number; singerFade?: boolean; noFade?: ReadonlySet<string>; keepFoot?: ReadonlySet<number> } = {},
 ): AnchorPlan {
   const fps = plan.fps;
   const early = o.earlyCutFrames ?? 2;
@@ -253,6 +260,8 @@ export function planAnchors(
   // beat. A footage that ends before the sung end says what would fix it (a longer take); no frame is held either way.
   const beatCuts = beats.map((_, i) => cutPointAt(beats, i, fps, early));
   const footCuts: CutPoint[] = [];
+  const joinAt = new Set<number>(); // regular cuts that go: the B-roll shot after them starts at the singer's footage end instead
+  const joined: number[] = [];
   const allFrames = [...regular.map((c) => c.frame), ...placed.map((p) => p.frame), ...hideCuts.map((h) => h.cut.frame)].sort((x, y) => x - y);
   for (const p of placed) {
     if (p.a.syncMs == null || p.a.footageFrames === undefined) continue;
@@ -274,6 +283,12 @@ export function planAnchors(
       const frame = onBeat ? onBeat.frame : Math.max(footEnd, s + 1);
       const mid = beatCuts.find((c) => c.frame === frame);
       footCuts.push(mid ?? { frame, time_ms: msOf(frame), beat_index: 0, beat_time_ms: msOf(frame), bar: 0, beat_in_bar: 0 });
+      // The time this frees belongs to the B-roll that follows (Paul, 28 Nov 2026: the story order and where his clips fall on the
+      // lyrics are his): that shot enters at the footage end, the same clip, so every later clip stays on its line.
+      if (natural < end && frame < natural && !o.keepFoot?.has(frame) && regular.some((c) => c.frame === natural) && !placed.some((q) => q.frame === natural) && !hideCuts.some((h) => h.cut.frame === natural)) {
+        joinAt.add(natural);
+        joined.push(frame);
+      }
       const covered = footEnd - p.sungAt;
       if (!onBeat && footEnd < p.hold) {
         notes.push(`line ${p.a.line}: the singing clip covers only ${(Math.max(0, covered) / fps).toFixed(1)} s of the ${((p.hold - p.sungAt) / fps).toFixed(1)} s line: a longer take or another shot would cover the whole line (the picture goes on with the next clip instead of freezing)`);
@@ -282,7 +297,7 @@ export function planAnchors(
   }
   if (footCuts.length) {
     // The next shot after such a cut is no sliver: a regular cut right behind it gives way.
-    regular = regular.filter((c) => !footCuts.some((f) => c.frame > f.frame && c.frame < f.frame + minShot));
+    regular = regular.filter((c) => !footCuts.some((f) => c.frame > f.frame && c.frame < f.frame + minShot) && !joinAt.has(c.frame));
   }
   const cuts = [...regular, ...placed.flatMap((p) => (p.cut ? [p.cut] : [])), ...hideCuts.map((h) => h.cut), ...footCuts].sort((x, y) => x.frame - y.frame);
   const merged = cuts.filter((c, i) => i === 0 || c.frame !== cuts[i - 1].frame);
@@ -296,7 +311,7 @@ export function planAnchors(
   for (const h of hideCuts) shots.set(bounds.indexOf(h.cut.frame), h.a);
   const outside = uses.filter((u) => !u.used && u.why === "outside this section");
   if (outside.length) notes.push(`not in this section: ${outside.map((u) => `line ${u.line} (${u.clip})`).join(", ")}`);
-  return { plan: { ...plan, cuts: merged }, shots, uses: uses.sort((x, y) => x.line - y.line), conflicts, notes };
+  return { plan: { ...plan, cuts: merged }, shots, uses: uses.sort((x, y) => x.line - y.line), conflicts, notes, footCuts: footCuts.map((c) => c.frame), joined };
 }
 
 // A dissolve into shot `index`: `before` frames over the previous shot, `after` frames into this one

@@ -948,6 +948,14 @@ locked cards can't be edited").
 needed").** One item at a time, never two at once; each is tested, built, pushed, then Paul restarts once. New
 requests are added at the end and acknowledged with their place.
 1. ✅ **Singing shots on the Reel** (done 28 Nov 2026, see Latest steps).
+1b. ✅ (part) **Story clips back on their lyric lines** (Paul: "line 22 used to fall on b roll video 15"; 28 Nov
+   2026): time freed when a singer ends at its footage is covered by the following B-roll starting earlier (no extra
+   shot), else by the B-roll before the singer continuing, else (with a note) the next story clip. Lines 15-17 are back
+   as before. The sliver between shots 5 and 7 came from a saved shot plan kept from a half-finished state (saved 17:02
+   with the same plan key): plan v7 re-plans it once. **Open (Paul to choose): line 17** — Singer2 is 3.6 s shorter
+   than its old frozen version, the next shot is the line-19 anchor (Worried Girl) and the B-roll before has only 1.6 s
+   left, so the next story clip still fills it and every story clip after line 17 is one place early. Tests:
+   singer-freed-time (3). Leftover to delete: the temp copy D:\tmpws_wd (~4 GB, outside the project).
 2. **One-button Singer** (Paul: "it's too complex this workflow"): per line only the picture, one "What she does" box
    and "Make take · cost"; the app picks engine, voice, resolution, shape; the settings folded away. Needs Paul's OK.
 3. **Preview playback**: the song keeps playing steadily instead of pausing while a clip loads (only if Paul confirms

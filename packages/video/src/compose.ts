@@ -196,10 +196,26 @@ export function rawLyric(l: { text: string; start_ms: number; end_ms: number; is
 // A singing clip's footage in frames: what shots.ts can really play (its own floor of the clip's length), never more.
 const singerFootage = (c: { durationFrames: number; duration_ms: number } | undefined) => (c ? Math.min(c.durationFrames, Math.floor((c.duration_ms * VIDEO.fps) / 1000)) : undefined);
 
-export function composeProps(
-  base: RenderBase,
-  choices: ComposeChoices,
-): { props: Omit<LyricVideoProps, "mediaBaseUrl">; warnings: string[]; anchors: AnchorReport | null; transitions: { text: string; kinds: TransitionKind[] } | null } {
+type Composed = { props: Omit<LyricVideoProps, "mediaBaseUrl">; warnings: string[]; anchors: AnchorReport | null; transitions: { text: string; kinds: TransitionKind[] } | null };
+// A joined shot that cannot be played (the clip has no footage to enter earlier than its cut): it plays slowed below this, or holds.
+const JOIN_MIN_RATE = 0.8;
+
+export function composeProps(base: RenderBase, choices: ComposeChoices): Composed {
+  // A singing shot that ends at its footage end frees time up to the next regular cut. The B-roll shot that follows covers it by
+  // starting at the footage end itself (same clip, so every later story clip stays on its line); where that clip cannot (no footage),
+  // the shot is kept apart and composeOnce fills it (the B-roll before the singer again, else the next story clip, with a note).
+  const keep = new Set<number>();
+  for (let round = 0; ; round++) {
+    const r = composeOnce(base, choices, keep);
+    if ("failedJoins" in r && round < 8) {
+      for (const f of r.failedJoins) keep.add(f);
+      continue;
+    }
+    return r as Composed;
+  }
+}
+
+function composeOnce(base: RenderBase, choices: ComposeChoices, keepFoot: ReadonlySet<number>): Composed | { failedJoins: number[] } {
   let plan = base.filmShots ? base.plan : (choices.plan ?? base.plan);
   const platform = base.platform ?? { format: DEFAULT_FORMAT, safeZone: DEFAULT_SAFE_ZONE, lyricsAt: 0.45, textScale: 1 };
   const bars = choices.cinematicBars ?? base.cinematicBars;
@@ -222,7 +238,7 @@ export function composeProps(
   const noFade = new Set((base.anchors ?? []).filter((a) => base.transitions?.byClip?.[a.clipId] === "cut").map((a) => a.clipId));
   let anchorPlan =
     base.anchors?.length && base.beats && base.clips.length
-      ? planAnchors(plan, base.beats, base.anchors.map((a) => (a.syncMs != null && a.footageFrames === undefined ? { ...a, footageFrames: singerFootage(base.clips.find((c) => c.id === a.clipId)) } : a)), lyricFrames(base, choices.leadMs ?? DEFAULT_LEAD_MS, choices.lyricsOffsetMs ?? 0, true, choices.effects?.gap), { singerFade: !hardCuts, noFade })
+      ? planAnchors(plan, base.beats, base.anchors.map((a) => (a.syncMs != null && a.footageFrames === undefined ? { ...a, footageFrames: singerFootage(base.clips.find((c) => c.id === a.clipId)) } : a)), lyricFrames(base, choices.leadMs ?? DEFAULT_LEAD_MS, choices.lyricsOffsetMs ?? 0, true, choices.effects?.gap), { singerFade: !hardCuts, noFade, keepFoot })
       : null;
   if (anchorPlan) plan = anchorPlan.plan;
   // The user's rolls last: a cut moved by hand is final, also an anchor's (the cuts the user saw are matched).
@@ -327,6 +343,44 @@ export function composeProps(
     { order: choices.order ?? "story", pins, loopEnding: platform.loopEnding, clipStarts: starts, ...(choices.moment ? { moment: choices.moment } : {}), anchored: new Set([...(anchorPlan?.shots.keys() ?? []), ...insertIdx]), exact, anchorOnly },
   );
   let assigned = !base.clips.length ? [] : assignWith(byShot, clipStarts);
+  // The time a singing shot frees (it ends at its footage end, anchors.ts): the next B-roll shot covers it by starting there; when
+  // that clip has no footage for it, the shot stays apart and is filled below.
+  if (anchorPlan?.joined?.length && assigned.length) {
+    const failedJoins = anchorPlan.joined.filter((f) => {
+      const s = assigned[bounds.indexOf(f - plan.start_frame)];
+      const clip = s ? byIdOf(s.clip_id) : undefined;
+      return !!s && !!clip && clip.kind !== "photo" && (s.hold_last_frame || s.playback_rate < JOIN_MIN_RATE);
+    });
+    if (failedJoins.length) return { failedJoins };
+  }
+  const freedNotes: string[] = [];
+  if (anchorPlan?.footCuts?.length && assigned.length) {
+    let covered = false;
+    for (const f of anchorPlan.footCuts) {
+      if (anchorPlan.joined?.includes(f)) continue;
+      const i = bounds.indexOf(f - plan.start_frame);
+      const singer = anchorPlan.shots.get(i - 1);
+      if (i < 2 || !singer || singer.syncMs == null || !assigned[i] || exact.has(i) || insertIdx.has(i) || byShot.has(i)) continue;
+      // The B-roll before the singer comes back after it, playing on from where it stopped (a cut-away's return): no story clip moves.
+      const before = assigned[i - 2];
+      const clip = before ? byIdOf(before.clip_id) : undefined;
+      const ok = !!before && !!clip && !exact.has(i - 2) && !anchorPlan.shots.has(i - 2) && !insertIdx.has(i - 2) && assigned[i + 1]?.clip_id !== before.clip_id;
+      if (ok && clip) {
+        const photo = clip.kind === "photo";
+        const from = before.clip_start_frame + Math.round(before.duration_frames * before.playback_rate);
+        const speed = Math.min(1, Math.max(0.5, clip.speed ?? 1));
+        const outF = Math.min(clip.durationFrames, Math.floor(((clip.out_ms ?? clip.duration_ms) * VIDEO.fps) / 1000));
+        if (photo || from + Math.ceil(assigned[i].duration_frames * speed) <= outF) {
+          byShot.set(i, before.clip_id);
+          clipStarts.set(i, photo ? 0 : from);
+          covered = true;
+          continue;
+        }
+      }
+      freedNotes.push(`line ${singer.line}: the singing clip ends before the next cut and no clip of your story could cover the time it frees: the next clip of your story fills it, so the clips after it come one place earlier against the lyrics (a longer take of the singer would keep them where they were)`);
+    }
+    if (covered) assigned = assignWith(byShot, clipStarts);
+  }
   // After a B-roll insert the shot it interrupted plays on, as if the insert were laid over it (a pro's cut-away).
   const playOn = () => {
     for (const k of insertIdx) {
@@ -471,7 +525,7 @@ export function composeProps(
           return { ...u, transition, ...(s && s.playback_rate < 1 ? { playback_rate: s.playback_rate } : {}) };
         }),
         conflicts: anchorPlan.conflicts,
-        notes: [...anchorPlan.notes, ...notes],
+        notes: [...anchorPlan.notes, ...freedNotes, ...notes],
       }
     : null;
 
