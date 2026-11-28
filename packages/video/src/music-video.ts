@@ -61,6 +61,45 @@ export function detectCuts(frames: readonly { t: number; score: number }[], o: {
   return cuts;
 }
 
+// The cuts inside ONE singing take (a still, close portrait: the face and the lips move a little, nothing else). The
+// whole-video detection above compares each frame with its neighbours, so on a portrait it takes the model's own small
+// regular changes (a refresh about every 5 frames, 0.02-0.05 each) for cuts. Here a cut needs an absolute change: the
+// scene scores of the frames within TAKE_CUT_WINDOW_MS add up to at least TAKE_CUT_MIN. On Paul's real take (28 Nov
+// 2026) ordinary motion never adds up to more than 0.06; its one real cut (a quick dissolve into another framing) adds
+// up to 0.17; a hard cut or a short crossfade between different pictures adds up to 0.3 or more. The scores must come
+// from the video as the model returned it (a frame-rate change would only add repeated frames). Times in ms of that
+// video (the time of the frame where the change peaks); cuts closer than CUT_MERGE_MS are one.
+export const TAKE_CUT_MIN = 0.12;
+export const TAKE_CUT_WINDOW_MS = 120;
+export function detectTakeCuts(frames: readonly { t: number; score: number }[], o: { min?: number; windowMs?: number } = {}): number[] {
+  const min = o.min ?? TAKE_CUT_MIN;
+  const win = (o.windowMs ?? TAKE_CUT_WINDOW_MS) / 1000;
+  const sums = frames.map((f, i) => {
+    let sum = 0;
+    for (let j = i; j < frames.length && frames[j].t < f.t + win - 1e-6; j++) sum += frames[j].score;
+    return sum;
+  });
+  const cuts: number[] = [];
+  let i = 0;
+  while (i < frames.length) {
+    if (sums[i] < min) {
+      i++;
+      continue;
+    }
+    // one run of windows over the minimum: the cut is the frame with the biggest change in it
+    let j = i;
+    while (j < frames.length && sums[j] >= min) j++;
+    let end = j; // the frames those windows cover: from i up to the last window's end
+    while (end < frames.length && frames[end].t < frames[j - 1].t + win - 1e-6) end++;
+    let peak = i;
+    for (let k = i; k < end; k++) if (frames[k].score > frames[peak].score) peak = k;
+    const ms = Math.round(frames[peak].t * 1000);
+    if (!cuts.length || ms - cuts[cuts.length - 1] >= CUT_MERGE_MS) cuts.push(ms);
+    i = j;
+  }
+  return cuts;
+}
+
 // The shots between the cuts; a shot shorter than MIN_SHOT_MS joins the one before it.
 export function shotsFromCuts(cutsMs: readonly number[], durationMs: number): MvShot[] {
   const edges = [0, ...cutsMs.filter((c) => c > 0 && c < durationMs), durationMs];

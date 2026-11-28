@@ -4,6 +4,29 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Singer back in the shots row; singing lines that follow each other; Singer panel fixes ✅ (to verify on the PC)
+Paul, 28 Nov 2026, after testing the MV Generator on Wedding Day lines 15-16.
+- **Shape** (Paul: "the singer part shows in same frame but gets an outline colour and the storyboard number stays
+  same"): the singing shots are back in the shots row, in their place and with their shot numbers, with a green outline
+  and "🔒 Singer · in time" (no drag or slip); the separate V1 lane is gone; What plays and the song stay. Each lyric line
+  on the timeline starts with its number ("L15: You're beautiful"), never in the video.
+- **Lines 15-16 "squeezed and late"** (measured: the lips were never out of time): the lead-in rule had picked a later
+  beat for line 15 (0.67 s shorter for nothing) and line 16's clip waited for a beat after its footage began while line
+  15's last frame was held 14 frames. Now the lead-in and the fade can only move a singer's cut EARLIER, and a singing
+  clip that follows another one comes in as soon as its own footage starts (off the beat if needed), the other playing
+  on in time. Held frames on lines 15-16: 14 → 6 (the 0.125 s hole between the generator's two shots + 2 skipped frames).
+  Next for it: cut two shots of the same music video at their shared edge (no 80 ms trim each side), which removes the
+  hole for new shots.
+- **Singer panel:** the MV take's cut check misfired on a still portrait (WaveSpeed's ~24 fps converted to 30 gave a
+  "change" every 5 frames): now measured on the video as returned, summed over 120 ms with a minimum; Paul's take has
+  ONE real cut (a quick dissolve at 0:05.0) instead of 17 warnings; cuts in one warning line. A new take never replaces
+  what already sings on its lines (it waits as "New — compare"). Each take says "from <picture>". **Make this take /
+  Make draft** on each waiting line (its cost on the button). A line sung from a video keeps InfiniteTalk unless chosen;
+  the bar's Make skips a line it cannot make with a note instead of refusing everything.
+- Not made: the before/after render of lines 15-16 (the permission check refused setting up a copy of the older version).
+- Tests: singer-continuity (6), singer-engine (new), mv-singer (cuts on a 25 fps portrait, a crossfade, collapsed
+  warnings, no replacing), and the suite.
+
 ### Singing clips enter with a breath; Shape's lanes tidied ✅ (to verify on the PC)
 Paul, 28 Nov 2026: "Still not fixed: every singing clip starts too sharply." Found on Wedding Day's Reel, line 15 (a
 music-video shot): the fade was there, but the singer was cut in on the first beat after her footage began, while
@@ -20,8 +43,8 @@ source (InfiniteTalk, MV Generator, music-video shots):
 - Before / after (real renders, song 0:59.8-1:05.8): D:\LifeLyrics\Master\Wedding Day\Line 15 before-after\ —
   before: cut at 1:02.77 mid "...be you"; after: cut at 1:03.43, the fade ending on the beat at 1:03.83, the singer
   0.43 s before "You're beautiful".
-- Saved shot plans are planned again once (plan v5). Note: while diagnosing, Wedding Day's storyboards\reels-1.json was
-  saved again by the planner and restored; its older .previous.json (the plan from before 28 Nov's earlier fix) was lost.
+- Saved shot plans are planned again once (plan v5). (Wedding Day's storyboards\reels-1.json was re-saved by the running
+  studio during the diagnosis and briefly restored to an older copy; the studio saved it again at 16:27: nothing lost.)
 - Shape's lanes (Paul: "fix both"): the lane names in their own column beside the timeline (they no longer cover clips
   or lyrics); V1 a compact row (a thin "no singing" row when the video has none); What plays taller and clearer
   (green singer, blue B-roll, black with a red edge for nothing, white fades).
@@ -775,30 +798,6 @@ locked cards can't be edited").
   the place …"). A re-import that names no place keeps the one chosen (shotlist.ts setShotScene; route "shot-scene").
 - On the PC (first real run): one shot, 1 take (Creation → Defaults), check the face against the card. If WaveSpeed
   refuses the request, send me its message: the route's exact fields could not be read from WaveSpeed's own docs here.
-
-### A Mini film makes its two films: Film 9:16 (Instagram) and Film 16:9 (YouTube) ✅ (to verify on the PC)
-- Paul (23 Nov 2026): "if I start with a mini film then there is no option to make reels, shorts etc because this is
-  against the whole purpose … I plan to release the mini films both on IG and YT … Mini film is by default the song's
-  length both planned for IG and YT". Chosen: both formats.
-- **The song style decides the product.** A song in the style **Mini film** makes only its two films, each the whole
-  song shot by shot: **Film 9:16** (1080x1920, Instagram's safe zones) and **Film 16:9** (1920x1080, YouTube's). Make
-  offers only these two chips (both on until the song names one); Shape's dropdown the same; pnpm make turns any other
-  platform asked for into the two films. Cut to the song and Add singing songs never offer them, and make Reels,
-  TikTok, Shorts, YouTube and Canvas as before (presets/platforms.json "film", "film-wide"; platform.ts
-  platformsForStyle; node/song-style.ts isWholeStory: Mini film only; a shot list alone no longer counts).
-- **Two takes per shot.** Production: each shot shows "9:16" and "16:9" (green with a take, grey without), and has
-  "Copy prompt 9:16" and "Copy prompt 16:9" (the same shot, --ar 16:9). "Use for shot N" sees the take's shape: a
-  vertical take fills the 9:16 film (Storyboard, lyric line, as before), a landscape take is the shot's take in the
-  16:9 film (shotlist.json "filledWide"; the one it replaces goes to Omit). Each film plays the same cards with the
-  same timing, its own takes; a shot without a take of that shape shows its stand-in (a film is never refused for
-  having no landscape takes yet).
-- Code: film-plan.ts filmItems (a planned shot is one card, its take per shape), make.ts (filmStandIns), library.ts and
-  storyboard.ts (the offered platforms), shot-production.ts (filledWide, promptWide, useForShot), pictures-board.tsx.
-- Tests: film-plan.test.ts (the two films, the 16:9 film all stand-ins), shot-production.test.ts, song-style e2e (Make's
-  chips).
-- On the PC: Song Details → Mini film, then Make: two chips, Film 9:16 and Film 16:9. Production: Copy prompt 16:9 for a
-  shot, make it in Midjourney, drop it, Use for shot N: the shot's 16:9 badge turns green.
-- Backlog (Paul): a long film (about 10 min) with several songs as its soundtrack.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

@@ -4,6 +4,30 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### A Mini film makes its two films: Film 9:16 (Instagram) and Film 16:9 (YouTube) ✅ (to verify on the PC)
+- Paul (23 Nov 2026): "if I start with a mini film then there is no option to make reels, shorts etc because this is
+  against the whole purpose … I plan to release the mini films both on IG and YT … Mini film is by default the song's
+  length both planned for IG and YT". Chosen: both formats.
+- **The song style decides the product.** A song in the style **Mini film** makes only its two films, each the whole
+  song shot by shot: **Film 9:16** (1080x1920, Instagram's safe zones) and **Film 16:9** (1920x1080, YouTube's). Make
+  offers only these two chips (both on until the song names one); Shape's dropdown the same; pnpm make turns any other
+  platform asked for into the two films. Cut to the song and Add singing songs never offer them, and make Reels,
+  TikTok, Shorts, YouTube and Canvas as before (presets/platforms.json "film", "film-wide"; platform.ts
+  platformsForStyle; node/song-style.ts isWholeStory: Mini film only; a shot list alone no longer counts).
+- **Two takes per shot.** Production: each shot shows "9:16" and "16:9" (green with a take, grey without), and has
+  "Copy prompt 9:16" and "Copy prompt 16:9" (the same shot, --ar 16:9). "Use for shot N" sees the take's shape: a
+  vertical take fills the 9:16 film (Storyboard, lyric line, as before), a landscape take is the shot's take in the
+  16:9 film (shotlist.json "filledWide"; the one it replaces goes to Omit). Each film plays the same cards with the
+  same timing, its own takes; a shot without a take of that shape shows its stand-in (a film is never refused for
+  having no landscape takes yet).
+- Code: film-plan.ts filmItems (a planned shot is one card, its take per shape), make.ts (filmStandIns), library.ts and
+  storyboard.ts (the offered platforms), shot-production.ts (filledWide, promptWide, useForShot), pictures-board.tsx.
+- Tests: film-plan.test.ts (the two films, the 16:9 film all stand-ins), shot-production.test.ts, song-style e2e (Make's
+  chips).
+- On the PC: Song Details → Mini film, then Make: two chips, Film 9:16 and Film 16:9. Production: Copy prompt 16:9 for a
+  shot, make it in Midjourney, drop it, Use for shot N: the shot's 16:9 badge turns green.
+- Backlog (Paul): a long film (about 10 min) with several songs as its soundtrack.
+
 ### Step B: a Mini film plays shot by shot ✅ (to verify on the PC)
 - Paul (23 Nov 2026): "the shots no longer match the lyrics … maybe because we don't have the full 38 shots it goes in
   circle and fills in the gaps". For a music Reel the app cycles the clips over beat cuts; a Mini film is a story.

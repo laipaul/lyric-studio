@@ -41,7 +41,7 @@ export type Singer = {
   setEngine: (line: number, engine: "infinitetalk" | "mv") => Promise<void>;
   setScene: (line: number, scene: string) => Promise<void>;
   setAspect: (aspect: "9:16" | "16:9") => Promise<void>;
-  make: (draft?: boolean) => Promise<void>;
+  make: (draft?: boolean, lines?: number[]) => Promise<void>; // lines: only the groups that start on these lines
   retake: (line: number, draft?: boolean) => Promise<void>;
   // The lip-sync review (26 Nov 2026): a verdict, the free nudge, the audio per group, Make final.
   review: (source: string, t: GroupTake, verdict: "approved" | "redo" | null, reasons?: string[], note?: string) => Promise<void>;
@@ -103,7 +103,7 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
 
   async function post(body: Record<string, unknown>) {
     const r = await api(`/api/songs/${projectId}/singer`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const d = (await r.json()) as { error?: string; usd?: number; seconds?: number; jobs?: unknown[] };
+    const d = (await r.json()) as { error?: string; usd?: number; seconds?: number; jobs?: unknown[]; lines?: number[]; notes?: string[] };
     if (!r.ok || d.error) throw new Error(d.error ?? `The studio answered ${r.status}`);
     return d;
   }
@@ -156,14 +156,15 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
       await post({ action: "aspect", aspect });
       await load();
     }),
-    make: async (draft = false) => {
+    make: async (draft = false, lines) => {
       setBusy(true);
       try {
         await saving.current;
-        const first = view?.toMake.lines[0] ?? null;
-        const d = await post({ action: "make", draft });
+        const first = lines?.[0] ?? view?.toMake.lines[0] ?? null;
+        const d = await post({ action: "make", draft, ...(lines ? { lines } : {}) });
         if (first !== null) setPanel(first); // the takes panel follows the first take being made
-        setNotice({ ok: true, text: `${d.jobs?.length ?? 0} singing ${draft ? "draft" : "clip"}${d.jobs?.length === 1 ? "" : "s"} sent to WaveSpeed (${d.seconds} s of voice, about ${money(d.usd ?? 0)}${draft ? ", 480p" : ""}). The first take of each group lands on its lines by itself when it is ready (a few minutes each); follow it in Tasks.${draft ? " Then play each one with the song: ✓ Approve it, or Redo with what is wrong." : ""}` });
+        const sent = d.lines?.length ? ` for line${d.lines.length === 1 ? "" : "s"} ${d.lines.join(", ")}` : "";
+        setNotice({ ok: true, text: `${d.jobs?.length ?? 0} singing ${draft ? "draft" : "clip"}${d.jobs?.length === 1 ? "" : "s"}${sent} sent to WaveSpeed (${d.seconds} s of voice, about ${money(d.usd ?? 0)}${draft ? ", 480p" : ""}).${d.notes?.length ? ` ${d.notes.join(" ")}` : ""} The first take of each group lands on its lines by itself when it is ready (a few minutes each); follow it in Tasks.${draft ? " Then play each one with the song: ✓ Approve it, or Redo with what is wrong." : ""}` });
         window.dispatchEvent(new Event("lyric-tasks-changed")); // the Tasks menu opens with it
       } catch (e) {
         setNotice({ ok: false, text: (e as Error).message });
@@ -243,7 +244,8 @@ export function SingerBar({ singer, lyrics = [] }: { singer: Singer; lyrics?: Ly
         <span className="font-medium">Singer</span>
         <span className="text-muted-foreground" data-singer-summary>
           {ticked ? `${ticked} line${ticked === 1 ? "" : "s"} where the singer shows` : "Choose a picture or video in the Lip sync column on the lines where the singer shows."}
-          {v.toMake.lines.length ? ` · to make: ${v.toMake.lines.length} take${v.toMake.lines.length === 1 ? "" : "s"} (${v.toMake.seconds} s of voice at ${v.resolution}, about ${money(v.toMake.usd)})` : ticked ? " · all made" : ""}
+          {v.toMake.lines.length ? ` · to make: ${v.toMake.lines.length} take${v.toMake.lines.length === 1 ? "" : "s"} (${v.toMake.seconds} s of voice at ${v.resolution}, about ${money(v.toMake.usd)})` : ticked && !v.blocked.length ? " · all made" : ""}
+          {v.blocked.length ? <span data-singer-blocked className="text-amber-200"> · not sent: {v.blocked.map((b) => b.note).join(" ")}</span> : null}
           {over ? ` · above your cap of ${money(singer.cap)} (Creation → Your defaults)` : ""}
         </span>
         {v.review.groups ? (
@@ -427,6 +429,19 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
   const lines = inRun ? `lines ${l.run!.first}-${l.run!.last}` : "this line";
   const used = l.takes.find((x) => x.inUse) ?? null;
   const madeBefore = l.needed && l.takes.some((x) => x.status === "done");
+  // A group waiting for its take (on its first line): make just this one, or a draft of it first.
+  const blocked = v.blocked.some((b) => b.line === number);
+  const makeThis =
+    l.source && !later && l.needed && !blocked && l.takes.every((x) => x.status !== "running") ? (
+      <span className="flex flex-wrap items-center gap-1.5">
+        <button type="button" data-singer-make-this={number} disabled={singer.busy || !v.ready || l.piece.usd > singer.cap} onClick={() => void singer.make(false, [number])} className="hover:bg-accent flex items-center gap-1 rounded border px-1.5 py-0.5 disabled:opacity-50" title={!v.ready ? "No WaveSpeed key yet" : l.piece.usd > singer.cap ? `Above your cap of ${money(singer.cap)}` : `Makes only ${lines}: ${l.piece.seconds} s of voice · about ${money(l.piece.usd)}. The other lines wait.`}>
+          <Mic className="size-3" /> Make this take
+        </button>
+        <button type="button" data-singer-make-this-draft={number} disabled={singer.busy || !v.ready || (l.draftUsd ?? 0) > singer.cap} onClick={() => void singer.make(true, [number])} className="hover:bg-accent flex items-center gap-1 rounded border px-1.5 py-0.5 disabled:opacity-50" title={`A draft of ${lines} at 480p (about ${money(l.draftUsd ?? 0)}): check the lips and the expression cheaply, then Make final.`}>
+          <Mic className="size-3" /> Make draft
+        </button>
+      </span>
+    ) : null;
   return (
     <div className="flex flex-col gap-1 text-[11px]" data-singer-line={number}>
       <SourcePicker sources={v.sources} value={l.source} onChange={(src) => void singer.setLine(number, src)} line={number} />
@@ -496,6 +511,7 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
               <RefreshCw className="size-3" /> Retake draft
             </button>
           ) : null}
+          {t && l.needed ? makeThis : null}
           {l.takes.length ? (
             <button type="button" data-singer-show-takes={number} onClick={() => singer.showTakes(number)} className="hover:bg-accent rounded border px-1.5 py-0.5">
               Takes
@@ -514,6 +530,7 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
           ) : null}
         </span>
       ) : null}
+      {l.source && !t ? makeThis : null}
       {l.source && l.takes.length ? <TakesList singer={singer} source={l.source} takes={l.takes} /> : null}
       {l.source && !later && l.takes.length ? <CreationNote source={l.source} running={l.takes.some((x) => x.status === "running")} /> : null}
       {!v.sources.length ? <span className="text-muted-foreground">Add pictures in Creation first</span> : null}
@@ -548,6 +565,8 @@ function CreationNote({ source, running }: { source: string; running: boolean })
 
 // Every take of a group, newest first: ▶ plays it with the song; "Use this take" puts it on the lines at once.
 function TakesList({ singer, source, takes }: { singer: Singer; source: string; takes: GroupTake[] }) {
+  // Which face the takes used: the group's picture (a take of a picture the line was sung from before does not show here once the picture is switched).
+  const from = singer.view?.sources.find((x) => x.file === source)?.label?.trim() || source;
   return (
     <ul data-singer-takes className="mt-0.5 flex w-52 flex-col gap-1 border-l pl-1.5">
       {[...takes].reverse().map((t) => {
@@ -593,7 +612,7 @@ function TakesList({ singer, source, takes }: { singer: Singer; source: string; 
               ) : null}
             </div>
             <span className="text-muted-foreground pl-5" data-singer-take-facts>
-              {[takeWhen(t), t.status === "running" ? "being made…" : t.status === "done" || t.request_id ? `about ${money(t.cost_usd)}` : "nothing spent", t.resolution ?? "720p", takeFeeling(t), t.parts && t.parts.length > 1 ? `${t.parts.length} parts` : ""].filter(Boolean).join(" · ")}
+              {[takeWhen(t), t.status === "running" ? "being made…" : t.status === "done" || t.request_id ? `about ${money(t.cost_usd)}` : "nothing spent", t.resolution ?? "720p", takeFeeling(t), t.parts && t.parts.length > 1 ? `${t.parts.length} parts` : "", `from ${from}`].filter(Boolean).join(" · ")}
               {t.status === "failed" || t.status === "interrupted" ? <span className={t.status === "failed" ? "text-red-300" : "text-amber-300"}> · {t.error}</span> : null}
               {t.voice === "song" ? " · lips from the whole song" : t.voice === "dereverb" ? " · lips from the dry vocal" : t.voice === "lead" ? " · lips from the lead vocal only" : ""}
               {t.nudge_ms ? ` · placed ${t.nudge_ms > 0 ? "+" : ""}${(t.nudge_ms / 1000).toFixed(1)} s` : ""}

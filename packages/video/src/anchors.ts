@@ -31,7 +31,7 @@ export type GapOrder = "story" | "shuffle";
 
 // An anchor whose clip was found; `lyric` is the line's index in the render's lyric list.
 export type ResolvedHide = { fromMs: number; toMs: number; clipId: string; clipName: string; clipInMs: number | null }; // song ms
-export type ResolvedAnchor = { line: number; text: string; lyric: number; clipId: string; clipName: string; clipInMs: number | null; transition: AnchorTransition; syncMs?: number | null; throughLyric?: number | null; hides?: ResolvedHide[] }; // throughLyric: a singing take over several lines, the last one's index
+export type ResolvedAnchor = { line: number; text: string; lyric: number; clipId: string; clipName: string; clipInMs: number | null; transition: AnchorTransition; syncMs?: number | null; footageFrames?: number; throughLyric?: number | null; hides?: ResolvedHide[] }; // footageFrames: a singing clip's length in frames (its footage lasts from syncMs to syncMs + this) // throughLyric: a singing take over several lines, the last one's index
 
 export type AnchorUse = {
   line: number;
@@ -102,21 +102,17 @@ export function planAnchors(
     const footage = sing ? Math.ceil((a.syncMs! * fps) / 1000) + F.skip : -Infinity;
     const hold = start + Math.max(last.sungEndFrame ?? last.endFrame, Math.max(0, l.startFrame) + 1);
     const release = sing ? F.release : 0; // the note releases: the singer stays this long after the line's sung end
-    // The soft entry: the singer's cut sits one fade before the beat, so the B-roll's dissolve out ends ON the beat.
-    const fade = sing && o.singerFade && !o.noFade?.has(a.clipId) ? F.entryFade : 0;
-    const sungAt = l.stampFrame !== undefined ? start + l.stampFrame : appear;
-    const leadLimit = Math.min(appear, sungAt - F.leadIn); // the latest cut that still shows the breath in
     const prev = placed.at(-1);
     const after = prev ? prev.frame + minShot : start + minShot;
+    // The soft entry: the singer's cut sits one fade before the beat, so the B-roll's dissolve out ends ON the beat. (Not after
+    // another singing clip: nothing of either is faded, and the singer never loses screen time to the fade.)
+    const prevSings = prev?.a.syncMs != null;
+    const fade = sing && o.singerFade && !o.noFade?.has(a.clipId) && !prevSings ? F.entryFade : 0;
+    const sungAt = l.stampFrame !== undefined ? start + l.stampFrame : appear;
+    const leadLimit = Math.min(appear, sungAt - F.leadIn); // the latest cut that still shows the breath in
     // Candidate cuts at or before the line's on-screen time: downbeats first, then (only when the bar is
     // taken by the previous anchor) any beat.
-    // (A singing clip with the soft entry: one fade before the beat when its footage allows, else on the beat.)
-    const cutAt = (i: number): CutPoint => {
-      const c = cutPointAt(beats, i, fps, early);
-      if (!fade) return c;
-      const frame = Math.round((c.beat_time_ms * fps) / 1000) - fade;
-      return frame >= footage ? { ...c, frame, time_ms: msOf(frame) } : c;
-    };
+    const cutAt = (i: number): CutPoint => cutPointAt(beats, i, fps, early);
     const candidates = (downbeatsOnly: boolean, limit = appear) =>
       beats
         .map((b, i) => ({ b, i }))
@@ -124,9 +120,7 @@ export function planAnchors(
         .map(({ i }) => cutAt(i))
         .filter((c) => c.frame <= limit && c.frame >= footage)
         .reverse();
-    // The lead-in first (the singer on screen 0.4 s before the line is sung), when the bar is free and the footage starts early enough.
-    const withLead = sing ? candidates(true, leadLimit)[0] : undefined;
-    const bar = withLead && withLead.frame >= after ? withLead : candidates(true)[0];
+    const bar = candidates(true)[0];
     let cut: CutPoint | null = null;
     let how: string | null = null;
     const singerLate = a.syncMs != null && !bar && !(start >= footage) ? beats.map((_, i) => cutAt(i)).find((c) => c.frame >= footage && c.frame >= after) : undefined;
@@ -139,7 +133,7 @@ export function planAnchors(
     } else if (bar && bar.frame >= after) {
       cut = bar;
     } else {
-      const beat = (sing ? candidates(false, leadLimit).find((c) => c.frame >= after) : undefined) ?? candidates(false).find((c) => c.frame >= after);
+      const beat = candidates(false).find((c) => c.frame >= after);
       if (beat && prev) {
         cut = beat;
         how = `on the beat at ${clock(beat.beat_time_ms)}: the bar is taken by line ${prev.a.line}`;
@@ -149,6 +143,30 @@ export function planAnchors(
         uses.push({ ...base(a), used: false, shot: null, at_ms: null, why: by });
         conflicts.push(`${lineName(a)} (${a.clipName}) is not shown: ${by}`);
         continue;
+      }
+    }
+    if (sing && cut) {
+      // The cut as it always was (the downbeat at or before the line, else the first beat with footage). Then, in this order, and
+      // only ever EARLIER (the singer never loses screen time to the lead-in rule):
+      //  1. lead-in: when that leaves under 0.4 s before the sung start, the latest earlier beat that gives it (footage allowing);
+      //  2. the soft entry: one fade before the beat, so the B-roll's dissolve ends on the beat (footage allowing);
+      //  3. after another singing clip: when that clip's footage ends before this cut (it would hold its last frame), this one
+      //     cuts in as soon as its own footage allows (never before the other's last frame), in time, off the beat if need be.
+      if (sungAt - cut.frame < F.leadIn) {
+        const e = candidates(true, leadLimit)[0] ?? candidates(false, leadLimit)[0];
+        if (e && e.frame >= after && e.frame < cut.frame) cut = e;
+      }
+      if (fade) {
+        const shifted = Math.round((cut.beat_time_ms * fps) / 1000) - fade;
+        if (shifted >= footage && shifted >= after && shifted < cut.frame) cut = { ...cut, frame: shifted, time_ms: msOf(shifted) };
+      }
+      const prevEnd = prevSings && prev!.a.footageFrames !== undefined ? Math.round((prev!.a.syncMs! * fps) / 1000) + prev!.a.footageFrames : undefined;
+      if (prevEnd !== undefined && prevEnd < cut.frame && appear - prev!.hold <= Math.round(1.5 * fps)) { // (its line follows the other's directly: within 1.5 s of its sung end)
+        const soonest = Math.max(footage, prevEnd, after);
+        if (soonest < cut.frame) {
+          cut = { ...cut, frame: soonest, time_ms: msOf(soonest) };
+          how = `right after line ${prev!.a.line}'s singing clip ends (${clock(msOf(prevEnd))}), as soon as this clip has footage`;
+        }
       }
     }
     const frame = cut ? cut.frame : start;
@@ -166,7 +184,9 @@ export function planAnchors(
       // What the viewer gets before the line: the breath in. A take whose footage starts at the line has none to show.
       const lead = Math.max(0, sungAt - frame);
       use.lead_in_ms = msOf(lead);
-      if (lead < F.leadIn - 1) {
+      if (lead < F.leadIn - 1 && prevSings) {
+        notes.push(`line ${a.line}: follows line ${prev!.a.line}'s singing clip directly: this clip cuts in as soon as its own footage starts (${(lead / fps).toFixed(1)} s before the line is sung), the one before plays on until its footage ends, both in time with the song`);
+      } else if (lead < F.leadIn - 1) {
         const prevLine = lines[a.lyric - 1];
         const midPhrase = !!prevLine && prevLine.sungEndFrame !== undefined && start + prevLine.sungEndFrame > frame;
         notes.push(`line ${a.line}: no breath to show before the line (the singing clip's footage starts ${(lead / fps).toFixed(1)} s before it is sung${midPhrase ? `, while line ${a.line - 1} is still being sung` : ""}): the clip before fades out over its first ${(F.entryFade / fps).toFixed(1)} s`);

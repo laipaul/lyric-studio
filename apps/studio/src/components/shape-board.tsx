@@ -1306,8 +1306,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
               <div className="h-5 border-b" />
               {view.titleCards.length ? <div className="text-muted-foreground border-b px-1 pt-0.5" style={{ height: titleLanes.count > 1 ? titleLanes.count * TITLE_LANE_PX + 5 : 20 }}>Titles</div> : null}
               <LaneName name="Lyrics" className="h-8" />
-              <LaneName name="V2 B-roll" note="story clips" className="h-24" />
-              <LaneName name="V1 Singer" note={layers?.singer.length ? "locked" : "none"} className={layers?.singer.length ? "h-9" : "h-5"} />
+              <LaneName name="Shots" note="singer: green outline" className="h-24" />
               <LaneName name="What plays" className="h-4" />
               <LaneName name="A1 Song" className="h-6" />
               {energy ? <div className="h-3 border-b" /> : null}
@@ -1404,26 +1403,13 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                       {l.slot ? <Anchor className="mr-0.5 inline size-3 text-amber-300" aria-label="slot" /> : null}
                       {l.slotWhy ? <span data-slot-why className="text-amber-200" title={l.slotWhy}>{/its shot is 16:9/.test(l.slotWhy) ? "16:9 shot: not in this video · " : "9:16 shot: not in this video · "}</span> : null}
                       {l.changed ? <Pencil className="mr-0.5 inline size-2.5 text-sky-300" aria-label="own look" /> : null}
+                      {/* The line's number in front (28 Nov 2026, Paul: "L14: You're beautiful"), as in Lyrics Sync; never in the video. */}
+                      {l.number ? <span className="text-muted-foreground mr-1 font-medium tabular-nums" data-line-no={l.number}>L{l.number}:</span> : null}
                       {l.text}
                     </div>
                   ))}
                 </div>
                 <div className="relative h-24 select-none border-b" data-shots-row data-lane="v2" onClickCapture={tl.onRowClickCapture}>
-                  {/* Where V2 is empty over the singer, the singer shows through (V1, below). */}
-                  {layers?.singer.flatMap((g) => {
-                    const open: { fromMs: number; toMs: number }[] = [];
-                    let at = g.fromMs;
-                    for (const c of [...g.covered].sort((p, q) => p.fromMs - q.fromMs)) {
-                      if (c.fromMs > at) open.push({ fromMs: at, toMs: c.fromMs });
-                      at = Math.max(at, c.toMs);
-                    }
-                    if (g.toMs > at) open.push({ fromMs: at, toMs: g.toMs });
-                    return open.map((o) => (
-                      <div key={`open${o.fromMs}`} data-v2-open className="text-muted-foreground pointer-events-none absolute top-1 bottom-1 flex items-center justify-center overflow-hidden rounded border border-dashed border-emerald-400/40 text-[10px]" style={{ left: x(o.fromMs), width: Math.max(4, x(o.toMs - o.fromMs) - 2) }} title="Nothing on V2 here: the singer (V1) shows through">
-                        {x(o.toMs - o.fromMs) > 70 ? "singer shows ↓" : ""}
-                      </div>
-                    ));
-                  })}
                   {!view.shots.length ? (
                     <div className="text-muted-foreground sticky left-2 inline-flex h-full max-w-xl items-center px-3 text-xs" data-no-shots>
                       {view.platform.name === "youtube" ? (
@@ -1439,7 +1425,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                       )}
                     </div>
                   ) : null}
-                  {view.shots.filter((s) => s.role !== "singing").map((s) => (
+                  {view.shots.map((s) => (
                     <ShotBlock
                       key={s.index}
                       shot={tl.shown(s)}
@@ -1448,8 +1434,8 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                       selected={selected === s.index}
                       slipped={tl.slipped(s)}
                       pending={tl.pendingShot(s.index)}
-                      slippable={view.editable && s.kind === "video"}
-                      onPointerDown={(e) => tl.onShotPointerDown(s, e)}
+                      slippable={view.editable && s.kind === "video" && s.role !== "singing"}
+                      onPointerDown={s.role === "singing" ? undefined : (e) => tl.onShotPointerDown(s, e)}
                       onSelect={() => {
                         setSelected(s.index);
                         setPicks((n) => n + 1);
@@ -1476,41 +1462,9 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                       }}
                     />
                   ))}
-                  {view.shots.filter((s) => s.role !== "singing").map((s) => (x(s.endMs - s.startMs) >= 48 || selected === s.index ? clipMenu(s, "icon", { left: x(s.endMs) - 28, top: 6 }) : null))}
+                  {view.shots.map((s) => (x(s.endMs - s.startMs) >= 48 || selected === s.index ? clipMenu(s, "icon", { left: x(s.endMs) - 28, top: 6 }) : null))}
                   {tl.handles}
                   {tl.overlay}
-                </div>
-                {/* V1 Singer: singing takes locked to the song, always 1.00x; only the nudge (Lyrics Sync) moves one. */}
-                <div className={cn("relative border-b", layers?.singer.length ? "h-9" : "h-5")} data-lane="v1" data-v1-lane>
-                  {layers?.singer.map((g) => (
-                    <button
-                      type="button"
-                      key={`${g.clip}${g.fromMs}`}
-                      data-v1-segment={g.line ?? ""}
-                      data-v1-shots={g.shots.map((n) => n + 1).join(",")}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelected(g.shots[0]);
-                        setPicks((n) => n + 1);
-                        setPanel("shots");
-                      }}
-                      className={cn("absolute top-1 bottom-1 cursor-default overflow-hidden rounded border border-emerald-400/60 text-left text-[10px] text-white", g.shots.includes(selected ?? -1) && "ring-brand ring-2")}
-                      style={{ left: x(g.fromMs), width: Math.max(6, x(g.toMs - g.fromMs) - 2), backgroundColor: "#03140c", backgroundImage: g.thumb ? `url(/api/files/${g.thumb})` : undefined, backgroundSize: "auto 100%", backgroundRepeat: "repeat-x" }}
-                      title={`${g.clip}${g.line ? ` · line ${g.line}` : ""}\nLocked to the song: always 1.00x, in time; it never moves when you edit the B-roll (the nudge in Lyrics Sync moves it).${g.covered.length ? `\nCovered by B-roll ${g.covered.length === 1 ? "once" : `${g.covered.length} times`} (a cut-away): the singer plays on underneath, in time.` : ""}`}
-                    >
-                      {g.covered.map((c) => (
-                        <span key={c.fromMs} data-v1-covered className="absolute top-0 bottom-0 bg-black/65" style={{ left: x(c.fromMs - g.fromMs), width: x(c.toMs - c.fromMs) }} />
-                      ))}
-                      <span className="relative flex items-center gap-0.5 p-0.5 drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">
-                        <span className="flex items-center gap-0.5 rounded bg-emerald-600/85 px-0.5" data-badge="locked">
-                          <Lock className="size-2.5" /> 1.00× · in time
-                        </span>
-                        {g.line ? <span className="rounded bg-black/60 px-0.5">line {g.line}</span> : null}
-                      </span>
-                      <span className="relative truncate px-1 leading-tight drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">{g.clip}</span>
-                    </button>
-                  ))}
-                  {!layers?.singer.length ? <span className="text-muted-foreground sticky left-2 inline-block pt-0.5 text-[10px]">no singing in this video</span> : null}
                 </div>
                 {/* What plays: the layer the viewer sees, moment by moment, and the soft changes into and out of the singer. */}
                 <div className="relative h-4 border-b" data-what-plays title="What plays: green = the singer (V1), blue = B-roll (V2), black with a red edge = nothing yet. The white fades: the B-roll fading out over the singer's first 0.4 s, and in over its last 0.4 s.">
@@ -1697,15 +1651,16 @@ function ShotBlock({
         e.stopPropagation();
         onSelect();
       }}
-      className={cn("absolute top-1 bottom-1 overflow-hidden rounded border text-left text-[10px] text-white", s.warnings.length ? "border-amber-400" : "border-white/20", (selected || dropTarget) && "ring-brand ring-2", lifted && "border-brand border-dashed opacity-40")}
+      className={cn("absolute top-1 bottom-1 overflow-hidden rounded border text-left text-[10px] text-white", s.role === "singing" ? "border-2 border-emerald-400" : s.warnings.length ? "border-amber-400" : "border-white/20", (selected || dropTarget) && "ring-brand ring-2", lifted && "border-brand border-dashed opacity-40")}
+      data-singer-shot={s.role === "singing" || undefined}
       style={{ left, width: Math.max(6, width - 2), backgroundColor: "#000", backgroundImage: s.thumb ? `url(/api/files/${s.thumb})` : undefined, backgroundSize: "auto 100%", backgroundRepeat: "repeat-x", backgroundPosition: "left center" }}
       title={`${s.clip} · ${secs(s.endMs - s.startMs)}${slippable ? "\nDrag sideways to slip: another part of the clip in the same shot. Drag the line between two shots to move the cut." : ""}${editable ? "\nDrag it up to lift it, then onto another clip to swap the two." : ""}${s.warnings.length ? `\n${s.warnings.join("\n")}` : ""}`}
     >
       <div className="absolute top-0 right-0 left-0 flex flex-wrap gap-0.5 p-0.5 pr-6 drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">
         {/* What the viewer sees (27 Nov 2026): the singer, lips in time with the song, or B-roll. */}
         {s.role === "singing" ? (
-          <span className="flex items-center gap-0.5 rounded bg-emerald-600/85 px-0.5" data-badge="singing" title="Singing · in sync with the song">
-            <Mic className="size-2.5" /> Singing · in sync
+          <span className="flex items-center gap-0.5 rounded bg-emerald-600/85 px-0.5" data-badge="singing" title="The singer (V1): locked to the song, always 1.00x, in time; it never moves when you edit the B-roll (the nudge in Lyrics Sync moves it)">
+            <Lock className="size-2.5" /> Singer · in time
           </span>
         ) : s.role === "broll" ? (
           <span className="rounded bg-black/60 px-0.5" data-badge="broll">

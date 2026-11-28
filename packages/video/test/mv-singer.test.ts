@@ -2,17 +2,19 @@
 // better lip sync than InfiniteTalk"): the price with its handles and the 3 s minimum, the request body as WaveSpeed's
 // docs show it (one picture, the range + handles, the shape, the resolution), the take trimmed back to its song range
 // and placed at its song time, the length and cut warnings, the engine choice saved per song.
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { openWorkspace, probeMedia, resolveWorkspaceDir, type Workspace } from "@lyric/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { detectCuts, detectTakeCuts } from "../src/music-video";
 import { findOrCreateSongProject, songPathsById } from "../src/node";
 import { readPictures, update } from "../src/node/animate";
 import { engineOf, infiniteTalkTransport, MV_SING_RULES, mvSingPiece, mvSingPrompt, mvTakeWarnings, readSinger, runSinging, setSingerAspect, setSingerEngine, setSingerResolution, setSingerScene, stubSingTransport, BREATHING, type SingTransport } from "../src/node/singer";
 import { takeKind } from "../src/take-facts";
+import { sceneScores } from "../src/node/music-video";
 import { ffmpeg, makeClip, makeSong } from "./media-helpers";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-mv-singer-"));
@@ -139,13 +141,35 @@ describe("a take of the MV Generator", () => {
     const info = await probeMedia(path.join(pics, take(n).file!));
     expect(Math.abs(info.durationMs - 3400)).toBeLessThan(70); // from 0.6 s (1 s handle, 0.4 s of it kept): 3.4 s of the 4 s are there
   });
-  it("a cut the model added inside the take is said, with its time", async () => {
+  it("a cut the model added inside the take is said, with its time (one line, found on the video as returned)", async () => {
     const n = record(PIC, 4);
     const { t } = spy((file) => ffmpeg("-f", "lavfi", "-i", "testsrc2=s=144x256:r=30:d=2.6", "-f", "lavfi", "-i", "color=c=blue:s=144x256:r=30:d=2.4", "-filter_complex", "[0:v][1:v]concat=n=2:v=1[v]", "-map", "[v]", "-c:v", "libx264", "-pix_fmt", "yuv420p", file));
     await runSinging(open, id, [{ source: PIC, n }], { transport: t, sleep: now0 });
     expect(take(n).status).toBe("done");
     expect(take(n).warnings).toHaveLength(1);
-    expect(take(n).warnings![0]).toMatch(/^The model added a cut at 0:0[12]\.0: retake it/);
+    expect(take(n).warnings![0]).toMatch(/^The model added a cut at 0:0[12]\.\d: retake it, or use the take up to there\.$/); // 2.6 s in the video, 0.6 s trimmed off: 2.0 s in the take
+  });
+  it("a short crossfade the model added is found too", async () => {
+    const n = record(PIC, 6);
+    const { t } = spy((file) => ffmpeg("-f", "lavfi", "-i", "testsrc2=s=144x256:r=30:d=2.6", "-f", "lavfi", "-i", "color=c=blue:s=144x256:r=30:d=2.6", "-filter_complex", "[0:v][1:v]xfade=transition=fade:duration=0.2:offset=2.4[v]", "-map", "[v]", "-c:v", "libx264", "-pix_fmt", "yuv420p", file));
+    await runSinging(open, id, [{ source: PIC, n }], { transport: t, sleep: now0 });
+    expect(take(n).warnings).toHaveLength(1);
+    expect(take(n).warnings![0]).toMatch(/^The model added a cut at 0:0[12]\.\d: /);
+  });
+  it("two cuts are ONE line, naming both times", async () => {
+    const n = record(PIC, 7);
+    const { t } = spy((file) => ffmpeg("-f", "lavfi", "-i", "testsrc2=s=144x256:r=30:d=2", "-f", "lavfi", "-i", "color=c=blue:s=144x256:r=30:d=1.5", "-f", "lavfi", "-i", "color=c=red:s=144x256:r=30:d=1.5", "-filter_complex", "[0:v][1:v][2:v]concat=n=3:v=1[v]", "-map", "[v]", "-c:v", "libx264", "-pix_fmt", "yuv420p", file));
+    await runSinging(open, id, [{ source: PIC, n }], { transport: t, sleep: now0 });
+    expect(take(n).warnings).toHaveLength(1);
+    expect(take(n).warnings![0]).toMatch(/^The model added 2 cuts: at 0:0\d\.\d and 0:0\d\.\d: retake it, or use the take up to the first one\.$/);
+  });
+  it("a still, close portrait with small motion, from a 25 fps video converted to 30: no cut is said", async () => {
+    const n = record(PIC, 8);
+    // A flat warm picture with a little grain and a small, steady wobble of the light (the face and the lips moving a little).
+    const { t } = spy((file) => ffmpeg("-f", "lavfi", "-i", "color=c=0xa07860:s=144x256:r=25:d=5", "-vf", "noise=alls=6:allf=t,eq=brightness='0.03*sin(2*PI*t*3)':eval=frame", "-c:v", "libx264", "-pix_fmt", "yuv420p", file));
+    await runSinging(open, id, [{ source: PIC, n }], { transport: t, sleep: now0 });
+    expect(take(n).status).toBe("done");
+    expect(take(n).warnings).toBeUndefined();
   });
   it("a video as the singer: refused in plain words, nothing spent", async () => {
     const n = record("singer video.mp4", 5);
@@ -157,6 +181,64 @@ describe("a take of the MV Generator", () => {
   it("the warnings in plain words", () => {
     expect(mvTakeWarnings(5050, 5000, [])).toEqual([]);
     expect(mvTakeWarnings(5000, 5000, [3200])).toEqual(["The model added a cut at 0:03.2: retake it, or use the take up to there."]);
+    expect(mvTakeWarnings(5000, 5000, [3200, 7900])).toEqual(["The model added 2 cuts: at 0:03.2 and 0:07.9: retake it, or use the take up to the first one."]);
+    expect(mvTakeWarnings(5000, 5000, [1000, 3200, 7900])).toEqual(["The model added 3 cuts: at 0:01.0, 0:03.2 and 0:07.9: retake it, or use the take up to the first one."]);
+    expect(mvTakeWarnings(4000, 5000, [3200])).toHaveLength(2); // the length is its own line
+  });
+});
+
+describe("detectTakeCuts (a cut needs an absolute change; the model's small regular changes are not cuts)", () => {
+  // A portrait at 30 fps made from 24: every 5th frame repeats (score 0) and a refresh about every 5 frames scores 0.026.
+  const portrait = () => Array.from({ length: 300 }, (_, i) => ({ t: i / 30, score: i % 5 === 1 ? 0.026 : i % 5 === 0 ? 0 : 0.002 }));
+  it("finds nothing in it, where the whole-video detection finds a cut about every half second", () => {
+    expect(detectCuts(portrait()).length).toBeGreaterThan(10);
+    expect(detectTakeCuts(portrait())).toEqual([]);
+  });
+  it("finds a hard cut (one frame) and a quick dissolve (a few frames), each once", () => {
+    const f = portrait();
+    f[149].score = 0.4;
+    for (const i of [240, 241, 242, 243]) f[i].score = 0.06; // 0.24 over 4 frames
+    expect(detectTakeCuts(f).length).toBe(2);
+    expect(detectTakeCuts(f)[0]).toBe(4967);
+  });
+  it("the real take's numbers (28 Nov 2026): a dissolve adds up to 0.17, ordinary motion to 0.06 at most", () => {
+    const f = portrait();
+    for (const [i, v] of [[147, 0.024], [148, 0.006], [149, 0.133], [150, 0.031]] as const) f[i].score = v;
+    expect(detectTakeCuts(f)).toEqual([4967]);
+  });
+  it("works on the scene scores of a real file (a 25 fps portrait, no cut: none)", () => {
+    const file = path.join(root, "still25.mp4");
+    ffmpeg("-f", "lavfi", "-i", "color=c=0xa07860:s=144x256:r=25:d=4", "-vf", "noise=alls=6:allf=t,eq=brightness='0.03*sin(2*PI*t*3)':eval=frame", "-c:v", "libx264", "-pix_fmt", "yuv420p", file);
+    expect(detectTakeCuts(sceneScores(file))).toEqual([]);
+  });
+});
+
+describe("a new singing take never replaces what already sings on its lines (Paul, 28 Nov 2026)", () => {
+  const recipePath = () => songPathsById(ws, id).recipe!;
+  const anchors = () => (JSON.parse(readFileSync(recipePath(), "utf8")) as { anchors?: { line: number; clip: string; sync?: number; through?: number }[] }).anchors ?? [];
+  let placed = "";
+  it("a music-video shot on its lines: the new take waits as New — compare, and is not placed", async () => {
+    const recipe = JSON.parse(readFileSync(recipePath(), "utf8")) as { anchors?: unknown[] };
+    writeFileSync(recipePath(), JSON.stringify({ ...recipe, anchors: [...(recipe.anchors ?? []), { line: 20, through: 21, clip: "WeddingDaySingingClip1 shot 4.mp4", sync: 1.2 }] }));
+    const n = record(PIC, 21);
+    await runSinging(open, id, [{ source: PIC, n }], { transport: spy().t, sleep: now0 });
+    expect(take(n)).toMatchObject({ status: "done", fresh: true });
+    expect(take(n).sent).toBeUndefined();
+    expect(anchors().filter((a) => a.line >= 20 && a.line <= 21)).toEqual([{ line: 20, through: 21, clip: "WeddingDaySingingClip1 shot 4.mp4", sync: 1.2 }]);
+  });
+  it("lines with no singing anchor at all: the first take is placed by itself", async () => {
+    const n = record(PIC, 23);
+    await runSinging(open, id, [{ source: PIC, n }], { transport: spy().t, sleep: now0 });
+    expect(take(n).fresh).toBeUndefined();
+    expect(take(n).sent).toBeTruthy(); // (the stand-in's video is the same bytes every time: Creation may name an existing clip)
+    expect(anchors().filter((a) => a.line === 23)).toMatchObject([{ line: 23, clip: take(n).sent }]);
+    placed = take(n).sent!;
+  });
+  it("a take of those lines again waits too (line 23 sings now)", async () => {
+    const n = record(PIC, 23);
+    await runSinging(open, id, [{ source: PIC, n }], { transport: spy().t, sleep: now0 });
+    expect(take(n)).toMatchObject({ fresh: true });
+    expect(anchors().find((a) => a.line === 23)?.clip).toBe(placed);
   });
 });
 

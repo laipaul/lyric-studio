@@ -26,7 +26,7 @@ import { absPath, beat as beatTable, ffmpegBin, probeMedia, project as projectTa
 import { eq } from "drizzle-orm";
 
 import { applyDownbeatOffset } from "../beats";
-import { detectCuts, MV_GENERATOR_PATH } from "../music-video";
+import { detectTakeCuts, MV_GENERATOR_PATH } from "../music-video";
 import { V2_V1_CHANGE } from "../tracks";
 import { type PicturesView } from "./animate";
 import { nextTakeN } from "./animate";
@@ -101,7 +101,8 @@ const clockS = (ms: number) => `${Math.floor(ms / 60_000)}:${((ms % 60_000) / 10
 export function mvTakeWarnings(returnedMs: number, sentMs: number, cutsMs: readonly number[]): string[] {
   const out: string[] = [];
   if (Math.abs(returnedMs - sentMs) > MV_LENGTH_TOLERANCE_MS) out.push(`It came back ${(returnedMs / 1000).toFixed(2)} s long for ${(sentMs / 1000).toFixed(2)} s of voice sent: kept as it is, not stretched. Check the lips with the song, or retake.`);
-  for (const c of cutsMs) out.push(`The model added a cut at ${clockS(c)}: retake it, or use the take up to there.`);
+  if (cutsMs.length === 1) out.push(`The model added a cut at ${clockS(cutsMs[0])}: retake it, or use the take up to there.`);
+  else if (cutsMs.length > 1) out.push(`The model added ${cutsMs.length} cuts: at ${cutsMs.slice(0, -1).map(clockS).join(", ")} and ${clockS(cutsMs.at(-1)!)}: retake it, or use the take up to the first one.`);
   return out;
 }
 
@@ -176,7 +177,8 @@ export type SingerView = {
   voice: "stem" | "song";
   ready: boolean; // WAVESPEED_API_KEY (or the stand-in)
   keyName: string;
-  toMake: { lines: number[]; seconds: number; usd: number };
+  toMake: { lines: number[]; seconds: number; usd: number }; // what Make singing clips would send (a group that cannot be made is not in it)
+  blocked: { line: number; note: string }[]; // groups waiting for a take that cannot be made as chosen, in plain words
   usdPerSecond: number; // InfiniteTalk's, at the chosen resolution
   resolution: SingResolution; // what the next take is made at (singer.json; 720p by default; 1080p: the MV Generator only)
   engine: SingEngine; // the song's last engine choice
@@ -397,6 +399,11 @@ function singingAnchorKeys(ws: Workspace, projectId: string): Set<string> {
   const recipe = songPathsById(ws, projectId).recipe;
   return new Set((recipe ? (readRecipe(recipe).anchors ?? []) : []).filter((a) => a.sync !== undefined).map((a) => `${a.line}:${a.through ?? a.line}:${a.clip.toLowerCase()}`));
 }
+// Does a singing anchor (a clip locked to the song) cover any of these lines, whichever clip or source it is from?
+export function singingAnchorOver(ws: Workspace, projectId: string, first: number, last: number): boolean {
+  const recipe = songPathsById(ws, projectId).recipe;
+  return (recipe ? (readRecipe(recipe).anchors ?? []) : []).some((a) => a.sync !== undefined && a.line <= last && (a.through ?? a.line) >= first);
+}
 const inUseKey = (t: Take) => (t.sent ? `${t.line}:${t.through ?? t.line}:${t.sent.toLowerCase()}` : "");
 
 // A run longer than the model's max take split at sung-line boundaries (greedy: as many lines as fit; a single line
@@ -458,7 +465,7 @@ export async function singerView(ws: Workspace, projectId: string, env: NodeJS.P
     const run = runs.find((r) => r.first <= l.number && l.number <= r.last) ?? null;
     const first = run ? byNumber.get(run.first)! : l;
     const last = run ? byNumber.get(run.last)! : l;
-    const engine = engineOf(settings, run?.first ?? l.number);
+    const engine = engineOf(settings, run?.first ?? l.number, source);
     // A picture's long piece is made in parts (a video source stays one request: its motion cannot be chained).
     // The MV Generator takes up to 10 minutes in one request: never in parts; its handles are in its cost.
     const whole = singingPiece({ shownMs: first.shownMs, sungEndMs: last.sungEndMs }, c.downbeats, c.songMs, usdPerSecond, SINGING_TAIL_BARS);
@@ -470,7 +477,8 @@ export async function singerView(ws: Workspace, projectId: string, env: NodeJS.P
         const firstLine = run?.first === l.number;
     return { number: l.number, text: l.text, source, piece, script, run: run ? { first: run.first, last: run.last } : null, ...(run && "of" in run && run.of ? { splitOf: run.of } : {}), take, takes, needed: !!source && firstLine && !all.some((t) => covers(t, piece)), ...(firstLine ? { voice: settings.voices?.[String(l.number)] ?? "stem", draftUsd: draftUsd(piece.seconds), engine, scene: settings.scenes?.[String(l.number)] ?? "", resolution: engine === "mv" ? resolution : itResolution(resolution) } : {}) };
   }) ?? null;
-  const toMake = (lines ?? []).filter((l) => l.needed);
+  const toMake = (lines ?? []).filter((l) => l.needed && !mvBlocked(l));
+  const blocked = (lines ?? []).filter((l) => l.needed).flatMap((l) => (mvBlocked(l) ? [{ line: l.number, note: mvBlocked(l)! }] : []));
   return {
     lines,
     why: c.lines ? null : c.why,
@@ -478,6 +486,7 @@ export async function singerView(ws: Workspace, projectId: string, env: NodeJS.P
     voice: (await voiceFor(ws, projectId)).kind,
     ready: !!env.LYRIC_GENERATE_STUB || !!keyFor("wavespeed", env),
     keyName: "WAVESPEED_API_KEY",
+    blocked,
     toMake: { lines: toMake.map((l) => l.number), seconds: toMake.reduce((s, l) => s + l.piece.seconds, 0), usd: Math.round(toMake.reduce((s, l) => s + l.piece.usd, 0) * 100) / 100 },
     usdPerSecond,
     resolution,
@@ -509,8 +518,10 @@ export function reviewCounts(lines: readonly Pick<SingerLine, "source" | "run" |
   return { groups: groups.length, approved, redo, notMade };
 }
 
-// The engine of a group (its first line): its own choice, else the song's last choice, else InfiniteTalk.
-export const engineOf = (s: SingerSettings, first: number): SingEngine => s.engines?.[String(first)] ?? s.engine ?? "infinitetalk";
+// The engine of a group (its first line): its own choice, else the song's last choice, else InfiniteTalk. The song's
+// remembered choice only applies to a group sung from a picture (the MV Generator takes pictures only): a group sung
+// from a video uses InfiniteTalk unless the group itself was set to the MV Generator (then "needs a picture" stands).
+export const engineOf = (s: SingerSettings, first: number, source?: string | null): SingEngine => s.engines?.[String(first)] ?? (source && BOARD_VIDEO_FILE.test(source) ? "infinitetalk" : (s.engine ?? "infinitetalk"));
 
 // The engine of the group that starts on `line` from its next take on; it is also the song's choice from now on (a
 // group without its own choice uses it).
@@ -741,12 +752,15 @@ export type SingJob = { source: string; n: number };
 
 // "Make singing clips": checks the cost against the cap and records a running take for every ticked line that has no
 // clip for its source and piece yet (a line already made is never paid for twice). `lines`: only these.
-export async function startSinging(ws: Workspace, projectId: string, o: { capUsd: number; lines?: number[]; draft?: boolean }, env: NodeJS.ProcessEnv = process.env): Promise<{ jobs: SingJob[]; usd: number; seconds: number }> {
+export async function startSinging(ws: Workspace, projectId: string, o: { capUsd: number; lines?: number[]; draft?: boolean }, env: NodeJS.ProcessEnv = process.env): Promise<{ jobs: SingJob[]; usd: number; seconds: number; notes: string[]; lines: number[] }> {
   const view = await singerView(ws, projectId, env);
   if (!view.lines) throw new Error(view.why ?? "This song's lines are not timed yet.");
-  const todo = view.lines.filter((l) => l.needed && (!o.lines || o.lines.includes(l.number)));
-  if (!todo.length) throw new Error("Nothing to make: tick the lines where the singer shows (each with its picture or video), or they are made already.");
-  for (const l of todo) mvNeedsPicture(l);
+  const wanted = view.lines.filter((l) => l.needed && (!o.lines || o.lines.includes(l.number)));
+  if (!wanted.length) throw new Error("Nothing to make: tick the lines where the singer shows (each with its picture or video), or they are made already.");
+  // A group that cannot be made as chosen is left out with a note; the others are made.
+  const todo = wanted.filter((l) => !mvBlocked(l));
+  const notes = wanted.filter((l) => mvBlocked(l)).map((l) => mvBlocked(l)!);
+  if (!todo.length) throw new Error(`${notes.join(" ")} Nothing was sent.`);
   if (!view.ready) singTransportFor(env); // throws the plain-words message
   const cost = (l: SingerLine) => (o.draft ? draftUsd(l.piece.seconds) : l.piece.usd);
   const usd = Math.round(todo.reduce((s, l) => s + cost(l), 0) * 100) / 100;
@@ -764,12 +778,16 @@ export async function startSinging(ws: Workspace, projectId: string, o: { capUsd
     const l = l0.engine === "mv" ? l0 : await withRests(ws, projectId, l0, view.usdPerSecond);
     jobs.push(recordTake(dir, l, l.resolution ?? view.resolution, now, look, feel, feelingForLines(ws, projectId, l.number, l.run?.last), { draft: !!o.draft, direction: await directionOf(ws, projectId, l), aspect: view.aspect }));
   }
-  return { jobs, usd, seconds };
+  return { jobs, usd, seconds, notes, lines: todo.map((l) => l.number) };
 }
 
-// The MV Generator sings from a picture only (it takes images, not a video).
+// The MV Generator sings from a picture only (it takes images, not a video): why a group cannot be made, else null.
+function mvBlocked(l: SingerLine): string | null {
+  return l.engine === "mv" && l.source && !PICTURE_FILE.test(l.source) ? `Line ${l.number} was not made: it is sung from a video and the MV Generator needs a picture: choose a picture or InfiniteTalk.` : null;
+}
+// (a single group asked for by name: the plain refusal)
 function mvNeedsPicture(l: SingerLine): void {
-  if (l.engine === "mv" && l.source && !PICTURE_FILE.test(l.source)) throw new Error(`Line ${l.number} is sung from a video: the MV Generator needs a picture of the singer. Choose a picture for it, or InfiniteTalk. Nothing was sent.`);
+  if (mvBlocked(l)) throw new Error(`Line ${l.number} is sung from a video: the MV Generator needs a picture of the singer. Choose a picture for it, or InfiniteTalk. Nothing was sent.`);
 }
 
 // A new running take of a group (its picture, its lines, its vocal piece, the mood text and resolution of now; the
@@ -947,12 +965,16 @@ export function trimHandles(file: string, out: string, inMs: number, lengthMs: n
   execFileSync(ffmpegBin(), ["-y", "-v", "error", "-ss", (inMs / 1000).toFixed(3), "-i", file, "-t", (lengthMs / 1000).toFixed(3), "-an", "-vf", "fps=30,format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-movflags", "+faststart", out]);
 }
 
-// The cuts inside a take (FFmpeg's scene score, the same detection as music videos made elsewhere), take ms. The
-// first frame always scores as a change (nothing before it), so the edges are left out.
+// The cuts inside a take, found on the video as the model returned it (before any frame-rate change: the 30 fps copy
+// repeats frames and its regular rhythm made ordinary motion look like cuts), with an absolute minimum change
+// (detectTakeCuts). Take ms: the raw video's time minus where the take starts in it; the ones in the trimmed-off handles
+// are dropped. The first frame always scores as a change (nothing before it), so the edges are left out.
 export const CUT_EDGE_MS = 200;
-export async function cutsInTake(file: string, lengthMs: number): Promise<number[]> {
+export async function cutsInTake(raw: string, fromMs: number, lengthMs: number): Promise<number[]> {
   const { sceneScores } = await import("./music-video"); // lazily: music-video.ts reads this file
-  return detectCuts(sceneScores(file)).filter((c) => c >= CUT_EDGE_MS && c <= lengthMs - CUT_EDGE_MS);
+  return detectTakeCuts(sceneScores(raw))
+    .map((c) => c - fromMs)
+    .filter((c) => c >= CUT_EDGE_MS && c <= lengthMs - CUT_EDGE_MS);
 }
 
 // One take of the MV Generator: the voice of Lips follow for the take's song range plus its handles (as it is, no
@@ -1005,7 +1027,7 @@ async function singWithMv(c: { dir: string; source: string; n: number; take: Tak
   const kept = keptHandles(h);
   const takeMs = range.toMs - range.fromMs + kept.inMs + kept.outMs;
   trimHandles(raw, out, h.inMs - kept.inMs, takeMs);
-  const warnings = mvTakeWarnings(returnedMs, sent.toMs - sent.fromMs, await cutsInTake(out, takeMs).catch(() => []));
+  const warnings = mvTakeWarnings(returnedMs, sent.toMs - sent.fromMs, await cutsInTake(raw, h.inMs - kept.inMs, takeMs).catch(() => []));
   setTake(c.dir, c.source, c.n, { warnings: warnings.length ? warnings : undefined, sync_ms: range.fromMs - kept.inMs, to_ms: range.toMs + kept.outMs, kept });
 }
 
@@ -1239,11 +1261,12 @@ export async function runSinging(openWs: () => Workspace, projectId: string, job
         setTake(dir, j.source, j.n, { file: `${TAKES_DIR}/${name}`, playable: true });
         const ws = openWs();
         try {
-          // The group's first take goes into the Storyboard and onto its lines by itself (a take of other lines there,
-          // e.g. line 9 alone before the block 9-11, gives way). A later take of the same group while one is in use
-          // never replaces it: it waits in Creation as "New — compare" until Paul chooses it (Use this take).
-          const anchors = singingAnchorKeys(ws, projectId);
-          const taken = readPictures(dir).pictures[j.source]?.takes.some((x) => x.n !== j.n && x.kind === "lipsync" && x.line === t.line && (x.through ?? x.line) === (t.through ?? t.line) && anchors.has(inUseKey(x.clip && !x.sent ? { ...x, sent: x.clip } : x)));
+          // The group's first take goes into the Storyboard and onto its lines by itself only when NOTHING sings on those
+          // lines yet (Paul, 28 Nov 2026: the user's picks are never replaced by the app).
+          // Any singing anchor over the lines, from any clip (a take of this group, another picture's take, a music-video
+          // shot), is Paul's pick: the new take never replaces it, it waits in Creation as "New — compare" until Paul
+          // chooses it (Use this take).
+          const taken = singingAnchorOver(ws, projectId, t.line!, t.through ?? t.line!);
           if (taken) {
             setTake(dir, j.source, j.n, { status: "done", fresh: true, ended_at: new Date().toISOString(), pid: undefined });
           } else {
