@@ -382,7 +382,7 @@ export function LyricsTab({ projectId }: { projectId: string }) {
             </div>
             <MvLinesBar mv={mvLines} />
             {withSections ? <SectionsBar sections={sections} startMs={(n) => data.lines?.find((x) => x.number === n)?.startMs ?? null} /> : null}
-            {withSinging ? <SingerBar singer={singer} lyrics={(data.lines ?? []).flatMap((l) => (l.startMs === null || l.startMs === undefined ? [] : [{ number: l.number, text: l.text, startMs: l.startMs, endMs: l.sungEndMs ?? l.startMs + 3000 }]))} /> : (
+            {withSinging ? <SingerBar singer={singer} lyrics={(data.lines ?? []).flatMap((l) => (l.startMs === null || l.startMs === undefined ? [] : [{ number: l.number, text: l.text, startMs: l.startMs, endMs: l.sungEndMs ?? l.startMs + 3000 }]))}  panelExtra={(line) => <LineMvShots mv={mvLines} line={line} />} /> : (
               <p className="text-muted-foreground text-xs" data-singing-off>The Lip sync column is hidden: this song&apos;s style is Cut to the song. Choose Add lip sync in Song Details to put the singer on lines.</p>
             )}
             {partPlatforms?.length ? (
@@ -568,9 +568,9 @@ anchor ? (
                         {withSinging ? (
                           <td className="px-3 py-2" data-singer-cell>
                             {anchor?.sync !== undefined ? <div className="mb-1">{anchorBlock}</div> : null}
-                            <SingerCell singer={singer} number={l.number} />
-                            {/* Music-video shots sing too: they belong with the lip sync (27 Nov 2026, Paul: "are we not mixing two things"). */}
-                            <LineMvShots mv={mvLines} line={l.number} />
+                            {/* The line shows only what sings on it; making and every take or music-video shot for it are in its
+                                window, "Takes & making" (28 Nov 2026, Paul: "we must see only the asset in use"). */}
+                            <SingerCell singer={singer} number={l.number} sung={anchor?.sync !== undefined} />
                           </td>
                         ) : null}
                         <td className="w-60 max-w-60 min-w-36 px-3 py-2" data-anchor-cell>

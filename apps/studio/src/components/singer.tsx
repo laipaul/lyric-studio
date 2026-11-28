@@ -7,8 +7,8 @@
 // (never replaces the take in use) until Paul chooses it with "Use this take" (21 Nov 2026). Every take plays with the
 // song from its first frame. API: /api/songs/[id]/singer.
 import { qaWords } from "@lyric/video/take-qa";
-import { Check, Loader2, Mic, Pause, Play, RefreshCw, X } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Check, Loader2, Lock, Mic, Pause, Play, RefreshCw, X } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import type { GroupTake, SingerLine, SingerView } from "@lyric/video/singer";
 import { takeFeeling, takeWhen } from "@lyric/video/take-facts";
@@ -231,7 +231,8 @@ export function useSinger(projectId: string, onMade: () => void): Singer {
   };
 }
 
-export function SingerBar({ singer, lyrics = [] }: { singer: Singer; lyrics?: LyricLine[] }) {
+// panelExtra: more for a line's window (Lyrics Sync passes its music-video shots for that line).
+export function SingerBar({ singer, lyrics = [], panelExtra }: { singer: Singer; lyrics?: LyricLine[]; panelExtra?: (line: number) => ReactNode }) {
   const v = singer.view;
   if (singer.error) return <p className="text-destructive text-xs">{singer.error}</p>;
   if (!v?.lines) return null;
@@ -300,7 +301,7 @@ export function SingerBar({ singer, lyrics = [] }: { singer: Singer; lyrics?: Ly
           {singer.notice.text}
         </p>
       ) : null}
-      {singer.panel !== null ? <TakesPanel singer={singer} line={singer.panel} /> : null}
+      {singer.panel !== null ? <TakesPanel singer={singer} line={singer.panel} extra={panelExtra?.(singer.panel)} /> : null}
       {singer.playing && v.song ? <TakePlayer key={`${singer.playing.source}:${singer.playing.n}`} playing={singer.playing} song={fileUrl(v.song)} lyrics={lyrics} onClose={() => singer.play("", null)} /> : null}
     </div>
   );
@@ -310,7 +311,7 @@ export function SingerBar({ singer, lyrics = [] }: { singer: Singer; lyrics?: Ly
 // opened by Make singing clips, Retake or a line's Takes button, it shows the group's picture and every take as it is
 // made (length, cost, when), ▶ to watch one with the song and Use this take, without leaving Lyrics Sync; Jump to
 // Creation opens the picture's card there. Closes with ✕ or Esc.
-function TakesPanel({ singer, line }: { singer: Singer; line: number }) {
+function TakesPanel({ singer, line, extra }: { singer: Singer; line: number; extra?: ReactNode }) {
   const { showTakes } = singer;
   useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === "Escape" && showTakes(null);
@@ -320,8 +321,8 @@ function TakesPanel({ singer, line }: { singer: Singer; line: number }) {
   const v = singer.view;
   const l = v?.lines?.find((x) => x.number === line);
   const first = l?.run && l.run.first !== l.number ? v?.lines?.find((x) => x.number === l.run!.first) : l;
-  if (!v || !first?.source) return null;
-  const src = v.sources.find((s) => s.file === first.source);
+  if (!v || !first) return null;
+  const src = first.source ? v.sources.find((s) => s.file === first.source) : undefined;
   const lines = first.run && first.run.last > first.run.first ? `Lines ${first.run.first}-${first.run.last}` : `Line ${first.number}`;
   const running = first.takes.some((t) => t.status === "running");
   return (
@@ -329,8 +330,8 @@ function TakesPanel({ singer, line }: { singer: Singer; line: number }) {
       <div className="flex items-center gap-2 text-xs">
         {src ? <SourceThumb s={src} big /> : null}
         <span className="min-w-0 flex-1">
-          <span className="block font-medium">{lines} · singing takes</span>
-          <span className="text-muted-foreground block truncate">{src?.label ?? first.source}</span>
+          <span className="block font-medium">{lines} · takes &amp; making</span>
+          <span className="text-muted-foreground block truncate">{src?.label ?? first.source ?? "choose a picture"}</span>
         </span>
         <button type="button" onClick={() => showTakes(null)} className="text-muted-foreground hover:text-foreground rounded-md p-1" aria-label="Close" data-singer-panel-close>
           <X className="size-3.5" />
@@ -341,8 +342,10 @@ function TakesPanel({ singer, line }: { singer: Singer; line: number }) {
           <Loader2 className="text-brand size-3 animate-spin" /> Being made at WaveSpeed: a few minutes. It shows here when it is ready.
         </span>
       ) : null}
-      {first.takes.length ? <TakesList singer={singer} source={first.source} takes={first.takes} /> : <span className="text-muted-foreground">No take yet.</span>}
-      <CreationNote source={first.source} running={false} />
+      <MakingControls singer={singer} number={first.number} />
+      {first.source && first.takes.length ? <TakesList singer={singer} source={first.source} takes={first.takes} /> : <span className="text-muted-foreground">No take yet.</span>}
+      {extra}
+      {first.source ? <CreationNote source={first.source} running={false} /> : null}
     </div>
   );
 }
@@ -419,7 +422,61 @@ function TakePlayer({ playing, song, lyrics, onClose }: { playing: Playing; song
 
 // The Singer cell of one line: what it is sung from (a dropdown of Creation's pictures and videos), the mood box, and on
 // a group's first line its state, Retake and every take of the group to compare and choose from.
-export function SingerCell({ singer, number }: { singer: Singer; number: number }) {
+// The Singer cell of one line (28 Nov 2026, Paul: "we must see only the asset in use and click a button to see
+// production history or workflow to get WaveSpeed to work"): what sings on this line, and one button that opens the
+// line's window (Takes & making: the picture, what she does, the engine, Make / Retake, every take). Nothing else.
+// sung: the line already shows the clip that sings on it (Lyrics Sync's card, any source): then only the button.
+export function SingerCell({ singer, number, sung = false }: { singer: Singer; number: number; sung?: boolean }) {
+  const v = singer.view;
+  const l: SingerLine | undefined = v?.lines?.find((x) => x.number === number);
+  if (!v || !l) return null;
+  const inRun = !!l.run && l.run.last > l.run.first;
+  const later = inRun && l.run!.first !== l.number;
+  const first = later ? v.lines?.find((x) => x.number === l.run!.first) ?? l : l;
+  const used = first.takes.find((x) => x.inUse) ?? null;
+  const running = first.takes.some((x) => x.status === "running");
+  const src = first.source ? v.sources.find((x) => x.file === first.source) : undefined;
+  const open = () => singer.showTakes(first.number);
+  const count = first.takes.length;
+  return (
+    <div className="flex flex-col gap-1 text-[11px]" data-singer-line={number}>
+      {sung ? null : later ? (
+        <span className="text-muted-foreground" data-singer-status="run">
+          sung with line {l.run!.first}
+        </span>
+      ) : used ? (
+        <div className="flex items-center gap-1.5" data-singer-in-use={used.n}>
+          {src ? <SourceThumb s={src} /> : null}
+          <span className="min-w-0 flex-1 truncate" title={`${src?.label ?? first.source} · ${used.label ?? `Take ${used.n}`}`}>
+            <span className="font-medium">{used.label ?? `Take ${used.n}`}</span>
+            <span className="text-muted-foreground"> · {src?.label ?? first.source}</span>
+          </span>
+          <span className="flex shrink-0 items-center gap-0.5 rounded bg-yellow-400/90 px-1 text-black" title="On its lines, locked to the song (1.00x, in time)">
+            <Lock className="size-2.5" /> in time
+          </span>
+          <button type="button" data-singer-take-play onClick={() => singer.play(first.source!, singer.playing?.n === used.n ? null : used)} className="hover:bg-accent shrink-0 rounded border p-0.5" aria-label="Play the take with the song">
+            {singer.playing?.n === used.n ? <Pause className="size-3" /> : <Play className="size-3" />}
+          </button>
+        </div>
+      ) : running ? (
+        <span className="text-muted-foreground flex items-center gap-1" data-singer-status="running">
+          <Loader2 className="text-brand size-3 animate-spin" /> being made at WaveSpeed…
+        </span>
+      ) : first.source ? (
+        <span className="text-muted-foreground" data-singer-status="none">
+          no singing take yet
+        </span>
+      ) : null}
+      {!later ? (
+        <button type="button" data-singer-show-takes={number} onClick={open} className={cn("hover:bg-accent w-fit rounded border px-1.5 py-0.5", !first.source && !sung && "text-muted-foreground border-dashed")}>
+          {first.source || sung ? <>Takes &amp; making{count ? ` (${count})` : ""}</> : "Add singer"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function MakingControls({ singer, number }: { singer: Singer; number: number }) {
   const v = singer.view;
   const l: SingerLine | undefined = v?.lines?.find((x) => x.number === number);
   if (!v || !l) return null;
@@ -443,7 +500,7 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
       </span>
     ) : null;
   return (
-    <div className="flex flex-col gap-1 text-[11px]" data-singer-line={number}>
+    <div className="flex flex-col gap-1 text-[11px]" data-singer-making={number}>
       <SourcePicker sources={v.sources} value={l.source} onChange={(src) => void singer.setLine(number, src)} line={number} />
       {l.source && !later && l.splitOf ? (
         <span className="text-muted-foreground" data-singer-split={number} title="Each take is at most 8 s and starts from your picture (a longer take drifts): the lines in a row are made as several takes, cut where a line ends">
@@ -512,11 +569,6 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
             </button>
           ) : null}
           {t && l.needed ? makeThis : null}
-          {l.takes.length ? (
-            <button type="button" data-singer-show-takes={number} onClick={() => singer.showTakes(number)} className="hover:bg-accent rounded border px-1.5 py-0.5">
-              Takes
-            </button>
-          ) : null}
         </div>
       ) : l.source ? (
         <span className="text-muted-foreground" data-singer-status="todo">
@@ -531,8 +583,6 @@ export function SingerCell({ singer, number }: { singer: Singer; number: number 
         </span>
       ) : null}
       {l.source && !t ? makeThis : null}
-      {l.source && l.takes.length ? <TakesList singer={singer} source={l.source} takes={l.takes} /> : null}
-      {l.source && !later && l.takes.length ? <CreationNote source={l.source} running={l.takes.some((x) => x.status === "running")} /> : null}
       {!v.sources.length ? <span className="text-muted-foreground">Add pictures in Creation first</span> : null}
     </div>
   );

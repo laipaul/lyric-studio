@@ -984,12 +984,29 @@ requests are added at the end and acknowledged with their place.
    take current again; now a take counts only if its own piece matches the new shot, and wrongly current old takes are
    corrected when the panel loads) (WeddingDaySingingClip1: 1 shot, lines 15-16, but song.json still has line 15 "…shot 1.mp4" and line
    16 "…shot 2.mp4" from the earlier split; no "Use on its lines" button; "Use every singing shot" greyed).
+1i. ✅ **Done 28 Nov 2026: calm singing lines** (Paul: "too many takes pollutes the panel, we must see only the asset
+   in use and click a button to see production history or workflow to get WaveSpeed to work"). Lyrics Sync's Singing
+   column per line: only the clip that sings there + "Takes & making (n)" ("Add singer" when none); the picture, what
+   she does, Lips follow, Engine, scene, the make buttons, every take and the line's music-video shots are in the line's
+   window. Nothing removed, only moved. Known: the browser test singer.e2e.ts still clicks the old in-row controls
+   (it runs in the cloud check): to update so it opens the window first.
 1g. **NEXT: design rethink session** (Paul, 28 Nov 2026: "we need to simplify this assembly line workflow, there has
    been too many little addons that confuses me"; "the app must identify each asset clearly and be able to assemble
    them in the right place according to the storyboard"). First an inventory of every button and panel, each marked
    main path / Advanced / parked against those two jobs (identify, assemble), for Paul to review; the CLAUDE.md wording
    of the two jobs is decided in that session. Parked meanwhile: one-button Singer, dry vocal from the master, Tools →
    Remove reverb (nothing removed).
+   Paul's inputs for the session (28 Nov 2026):
+   - A song overview (areas, not a fixed sequence; each status line opens the work; "out of date" tracked, Paul decides
+     when to render), inspired by n8n's visibility.
+   - One name per asset, shown the same everywhere (TheEnding.jpg was "Jennifer" on its card and "TheEnding.jpg" on a
+     line; the picture for a line is picked in Lyrics Sync, not in Creation).
+   - "I like to keep per line we see clearly the assets linked, but we should have a window that pilots the creation to
+     WaveSpeed and clear all takes or at least organize them so that they don't pollute the lip sync panel": Lyrics
+     Sync shows per line only what is on it (and "n other takes", folded); a creation window queues requests (line,
+     picture, what she does, cost), follows them, reviews what came back with the song, organizes and clears takes
+     (Removed, with Restore), and sends the chosen one to its line. Technical choices (engine, Lips follow, resolution,
+     shape) automatic there, overrides under Advanced.
 1d. **Your clips play at the speed you made them** (Paul, 28 Nov 2026: "normally I create the video with the right
    speed by using Canva, I hope the app is not slowing them itself?"; "the dissolve from Canva never alters the speed
    it just blends the clips"). The app never slows or speeds up a clip (today B-roll is slowed to 0.75-1.0x to fit a
