@@ -4,6 +4,23 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Your clips play in your order, on the same lines ✅ (to verify on the PC; plan v8)
+Paul, 28 Nov 2026: "if I put the clips in a certain sequence I expect them to play in that order, else I'm confused if the
+app makes decisions to cut them for me resulting in lines being not in sync"; then "the dissolve from Canva never alters
+the speed it just blends the clips" (no slow motion the user did not choose). What changed (docs/pacing-and-cuts.md):
+(1) the time a singing shot frees goes to the clip that FOLLOWS it starting earlier, also when that is a story anchor
+(an anchor may start before its line), only at its own speed; else the B-roll before the singer plays on; (2) where
+neither can, nothing is decided silently: the next story clip fills it and a note names the creative choices ("line 17:
+3.6 s to fill after the singing clip: let Worried Girl start earlier (a clip of 8 s), or add a longer singing take");
+(3) when a video is planned again, Shape's notes and Make's run notes list every story clip that now starts on another
+lyric line than in the plan Paul saw ("X: was line 19, now line 18"; normally empty).
+- Wedding Day Reel v1: every story clip up to line 17 is back on its line; no singer frozen (one 0.2 s hold between two
+  singers); no B-roll under 1 s. **Line 17 stays open:** Worried Girl (anchored on line 19) is 5.2 s and would need 8 s
+  at normal speed; the B-roll before has 0.27 s left; so the next story clip fills the 3.6 s and the clips after line 17
+  are still one place early, with the note. A Worried Girl of 8 s or more, or a longer singing take for line 17, puts
+  them back by itself.
+- Plan v8: Paul's saved plan is planned again once; Shape lists the clips that move. Tests: story-lines (6).
+
 ### A singer never freezes; music videos are no longer split on false alarms ✅ (to verify on the PC)
 Paul, 28 Nov 2026: "the end of this singing video freezes a bit", "there is a slight cut too here", "the singing clip 1
 is one video, why was it cut?". Measured on Wedding Day's Reel v1 (dry run): a singing shot was kept on screen until the
@@ -956,6 +973,20 @@ requests are added at the end and acknowledged with their place.
    than its old frozen version, the next shot is the line-19 anchor (Worried Girl) and the B-roll before has only 1.6 s
    left, so the next story clip still fills it and every story clip after line 17 is one place early. Tests:
    singer-freed-time (3). Leftover to delete: the temp copy D:\tmpws_wd (~4 GB, outside the project).
+1c. ✅ **Done 28 Nov 2026 (see Latest steps): your clips play in your order, on the same lines** (Paul: "if I put the clips in a certain sequence
+   I expect them to play in that order, else I'm confused if the app makes decisions to cut them for me resulting in
+   lines being not in sync"; "yes do 1c and start"). (1) Once Shape has shown a video, each story clip keeps its lyric
+   line: a technical change may only lengthen / shorten neighbours, never add, skip or move a clip to another line; if
+   it cannot, a note asks Paul (no silent decision). (2) Nothing changes silently: Shape lists any clip whose line
+   changed against the plan Paul saw. (3) Line 17: the next clip in his order (Worried Girl, anchored on line 19)
+   starts 3.6 s earlier; every later clip back on its line (toca_el_piano on line 22).
+1d. **Your clips play at the speed you made them** (Paul, 28 Nov 2026: "normally I create the video with the right
+   speed by using Canva, I hope the app is not slowing them itself?"; "the dissolve from Canva never alters the speed
+   it just blends the clips"). The app never slows or speeds up a clip (today B-roll is slowed to 0.75-1.0x to fit a
+   shot or a dissolve: "Slowed to 90% to fit the dissolve"). A dissolve blends the two clips' existing footage, like
+   Canva; too little spare footage → a shorter dissolve or a cut. The app adapts the cuts instead (in his order, on his
+   lines). Only a speed Paul sets himself (the clip's ⋯ menu) changes a clip's speed. Where something cannot fit at
+   1.00x, Shape says so in plain words (e.g. "a longer clip would fill it").
 2. **One-button Singer** (Paul: "it's too complex this workflow"): per line only the picture, one "What she does" box
    and "Make take · cost"; the app picks engine, voice, resolution, shape; the settings folded away. Needs Paul's OK.
 3. **Preview playback**: the song keeps playing steadily instead of pausing while a clip loads (only if Paul confirms

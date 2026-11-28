@@ -248,7 +248,7 @@ export async function shotPlanForMake(ws: Workspace, projectId: string, p: { nam
   const id = r.saved.storyboard.id;
   const note =
     r.saved.status === "new" ? "no shot plan yet: saved before making it" :
-    r.saved.status === "replanned" ? `shot plan saved again before making it: ${r.saved.changes.join("; ") || "it changed"} (the song, its clips or its settings changed since it was last planned; the old one is kept as ${path.basename(previousFile(r.saved.file))})` :
+    r.saved.status === "replanned" ? `shot plan saved again before making it: ${r.saved.changes.join("; ") || "it changed"} (the song, its clips or its settings changed since it was last planned; the old one is kept as ${path.basename(previousFile(r.saved.file))})${r.saved.lineChanges.length ? ` ${lineChangesNote(r.saved.lineChanges)}` : ""}` :
     r.saved.status === "kept" ? `made from its saved shot plan as it is; the app would now plan it differently (${r.saved.changes.join("; ")}), but nothing it is made from changed` :
     null;
   return { id, file: r.saved.file, status: r.saved.status, note, props: r.view.props, try: v.try };
@@ -273,9 +273,13 @@ async function settledView(ws: Workspace, projectId: string, p: { name: string; 
     out.notes = [...out.notes, `This is your saved shot plan: the app would now plan it differently (${saved.changes.join("; ")}). Make makes it as saved.`];
   } else if (compiled) out = { ...shown, props: compiled };
   if (saved.status === "replanned") out.notes = [...out.notes, `The shot plan changed since it was last saved: ${saved.changes.join("; ")}. The previous one is kept as ${path.basename(previousFile(saved.file))}.`];
+  if (saved.status === "replanned" && saved.lineChanges.length) out.notes = [...out.notes, lineChangesNote(saved.lineChanges)];
   out.notes = [...out.notes, ...saved.unmatched];
   return { view: out, saved };
 }
+
+// Never silent (Paul, 28 Nov 2026): the story clips that start on another lyric line than in the plan he saw.
+export const lineChangesNote = (changes: readonly string[]) => `Your clips moved against the lyrics since the plan you saw: ${changes.join("; ")}.`;
 
 // A Try other looks video's settings, read from its shot plan file.
 function tryOf(songRoot: string, tryId: string): SbTry {

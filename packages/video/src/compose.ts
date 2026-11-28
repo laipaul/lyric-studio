@@ -197,8 +197,13 @@ export function rawLyric(l: { text: string; start_ms: number; end_ms: number; is
 const singerFootage = (c: { durationFrames: number; duration_ms: number } | undefined) => (c ? Math.min(c.durationFrames, Math.floor((c.duration_ms * VIDEO.fps) / 1000)) : undefined);
 
 type Composed = { props: Omit<LyricVideoProps, "mediaBaseUrl">; warnings: string[]; anchors: AnchorReport | null; transitions: { text: string; kinds: TransitionKind[] } | null };
+const clockOf = (frame: number) => { const ms = Math.round((frame * 1000) / VIDEO.fps); return `${Math.floor(ms / 60_000)}:${((ms % 60_000) / 1000).toFixed(1).padStart(4, "0")}`; };
 // A joined shot that cannot be played (the clip has no footage to enter earlier than its cut): it plays slowed below this, or holds.
 const JOIN_MIN_RATE = 0.8;
+// A story anchor that starts earlier to cover the time a singing clip frees (anchors.ts) plays at its own speed only (Paul, 28 Nov
+// 2026: "the dissolve from Canva never alters the speed"; no slow motion the user did not choose): when it is too short, the old fill
+// stays and a note names the creative choices.
+const ANCHOR_JOIN_MIN_RATE = 1;
 
 export function composeProps(base: RenderBase, choices: ComposeChoices): Composed {
   // A singing shot that ends at its footage end frees time up to the next regular cut. The B-roll shot that follows covers it by
@@ -346,12 +351,22 @@ function composeOnce(base: RenderBase, choices: ComposeChoices, keepFoot: Readon
   // The time a singing shot frees (it ends at its footage end, anchors.ts): the next B-roll shot covers it by starting there; when
   // that clip has no footage for it, the shot stays apart and is filled below.
   if (anchorPlan?.joined?.length && assigned.length) {
+    const isStoryAnchor = (idx: number) => !!anchorPlan!.shots.get(idx) && anchorPlan!.shots.get(idx)!.syncMs == null;
     const failedJoins = anchorPlan.joined.filter((f) => {
-      const s = assigned[bounds.indexOf(f - plan.start_frame)];
+      const idx = bounds.indexOf(f - plan.start_frame);
+      const s = assigned[idx];
       const clip = s ? byIdOf(s.clip_id) : undefined;
-      return !!s && !!clip && clip.kind !== "photo" && (s.hold_last_frame || s.playback_rate < JOIN_MIN_RATE);
+      return !!s && !!clip && clip.kind !== "photo" && (s.hold_last_frame || s.playback_rate < (isStoryAnchor(idx) ? ANCHOR_JOIN_MIN_RATE : JOIN_MIN_RATE));
     });
     if (failedJoins.length) return { failedJoins };
+    for (const f of anchorPlan.joined) {
+      const idx = bounds.indexOf(f - plan.start_frame);
+      const s = assigned[idx];
+      const a = anchorPlan.shots.get(idx);
+      if (!s || !a || a.syncMs != null || s.playback_rate >= JOIN_MIN_RATE) continue;
+      const singer = anchorPlan.shots.get(idx - 1);
+      notes.push(`line ${a.line}: ${a.clipName.replace(/\.[^.]+$/, "")} starts at ${clockOf(plan.start_frame + bounds[idx])}${singer ? `, where line ${singer.line}'s singing clip ends,` : ""} so no other clip of your story moves against the lyrics; to last that long it plays in slow motion (${s.playback_rate.toFixed(2)}x). A clip of ${(s.duration_frames / VIDEO.fps).toFixed(1)} s would play at normal speed`);
+    }
   }
   const freedNotes: string[] = [];
   if (anchorPlan?.footCuts?.length && assigned.length) {
@@ -377,7 +392,12 @@ function composeOnce(base: RenderBase, choices: ComposeChoices, keepFoot: Readon
           continue;
         }
       }
-      freedNotes.push(`line ${singer.line}: the singing clip ends before the next cut and no clip of your story could cover the time it frees: the next clip of your story fills it, so the clips after it come one place earlier against the lyrics (a longer take of the singer would keep them where they were)`);
+      // No silent decision (Paul, 28 Nov 2026): the time is filled the old way (the next clip of his story), and the creative choices that
+      // would keep every clip on its line are named.
+      const next = assigned[i + 1];
+      const nextName = next && !exact.has(i + 1) ? byIdOf(next.clip_id)?.name?.replace(/\.[^.]+$/, "") : undefined;
+      const secs = (assigned[i].duration_frames / VIDEO.fps).toFixed(1);
+      freedNotes.push(`line ${singer.line}: ${secs} s to fill after the singing clip: ${nextName ? `let ${nextName} start earlier (its footage is too short to enter ${secs} s sooner), or ` : ""}add a longer singing take. Until then the next clip of your story fills it, so the clips after it come one place earlier against the lyrics`);
     }
     if (covered) assigned = assignWith(byShot, clipStarts);
   }

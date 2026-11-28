@@ -405,6 +405,53 @@ export function planChanges(before: StoryboardFile, after: StoryboardFile): stri
   return out;
 }
 
+// Where each story clip of a shot plan sits against the lyrics (Paul, 28 Nov 2026: "if I put the clips in a certain sequence I expect
+// them to play in that order, else I'm confused if the app makes decisions to cut them for me resulting in lines being not in sync"):
+// the lyric line its shot starts on. A clip that starts within LINE_TOLERANCE_MS before a line's on-screen start counts as starting on
+// that line (a cut on the beat a hair before the line is on the line). Only the clips of the user's story (not the ones an anchor
+// carries: those have their line by definition, nor the singing clips).
+export const LINE_TOLERANCE_MS = 250;
+export function storyLineMap(sb: StoryboardFile): { clip: string; nth: number; line: number | null; startMs: number }[] {
+  const lines = sb.text.filter((t) => t.kind !== "card" && t.line !== undefined).sort((a, b) => a.startMs - b.startMs);
+  const lineAt = (ms: number) => lines.reduce<number | null>((n, l) => (l.startMs <= ms + LINE_TOLERANCE_MS ? (l.line as number) : n), null);
+  const seen = new Map<string, number>();
+  return sb.shots.flatMap((s) => {
+    const key = s.clip.toLowerCase();
+    const nth = seen.get(key) ?? 0;
+    seen.set(key, nth + 1);
+    return s.carries === null ? [{ clip: s.clip, nth, line: lineAt(s.startMs), startMs: s.startMs }] : [];
+  });
+}
+
+// What a new plan of a video changed against the lyrics, compared with the plan the user saw: every story clip that now starts on
+// another lyric line, in plain words ("Worried Girl: was line 19, now line 18"). Normally empty. Not when the part of the song or the
+// lyric lines themselves changed (planChanges says so; line numbers mean something else then).
+export function lineChanges(before: StoryboardFile, after: StoryboardFile): string[] {
+  const a = before.output.range;
+  const b = after.output.range;
+  if (a.startMs !== b.startMs || a.endMs !== b.endMs) return [];
+  const la = before.text.filter((x) => x.kind !== "card");
+  const lb = after.text.filter((x) => x.kind !== "card");
+  if (la.length !== lb.length || la.some((x, i) => x.text !== lb[i].text)) return [];
+  const name = (clip: string) => {
+    const n = clip.replace(/\.[^.]+$/, "");
+    return n.length > 32 ? `${n.slice(0, 30)}…` : n;
+  };
+  const lineText = (n: number | null) => (n === null ? "before the first line" : `line ${n}`);
+  const was = new Map(storyLineMap(before).map((x) => [`${x.clip.toLowerCase()}#${x.nth}`, x]));
+  const now = storyLineMap(after);
+  const out: string[] = [];
+  for (const x of now) {
+    const key = `${x.clip.toLowerCase()}#${x.nth}`;
+    const w = was.get(key);
+    was.delete(key);
+    if (!w) out.push(`${name(x.clip)}: now ${lineText(x.line)} (it was not in the plan you saw)`);
+    else if (w.line !== x.line) out.push(`${name(x.clip)}: was ${lineText(w.line)}, now ${lineText(x.line)}`);
+  }
+  for (const w of was.values()) out.push(`${name(w.clip)}: was ${lineText(w.line)}, no longer in the video`);
+  return out;
+}
+
 // The unmatched edits in plain words, one line each (Shape's notes, the pnpm storyboards report).
 export function unmatchedText(sb: StoryboardFile): string[] {
   return sb.edits.unmatched.map((u) => {

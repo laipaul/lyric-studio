@@ -12,7 +12,7 @@ import { project as projectTable, type Workspace } from "@lyric/db";
 import { eq } from "drizzle-orm";
 
 import { VIDEO } from "../config";
-import { buildStoryboard, planChanges, sameDecisions, shotPlanComplete, STORYBOARD_DIR, STORYBOARD_SCHEMA, unmatchedText, type PlanForStoryboard, type SbTry, type StoryboardFile } from "../storyboard-file";
+import { buildStoryboard, lineChanges, planChanges, sameDecisions, shotPlanComplete, STORYBOARD_DIR, STORYBOARD_SCHEMA, unmatchedText, type PlanForStoryboard, type SbTry, type StoryboardFile } from "../storyboard-file";
 import type { StoryboardView } from "./storyboard";
 import type { PlatformPlan, VideoPlan } from "./make";
 import { cachedFileHash } from "./collection";
@@ -116,21 +116,22 @@ export async function storyboardOfPlan(
 //     the old one kept as <id>.previous.json, and `changes` says what changed in plain words (never silently).
 //   kept: nothing the plan is made from changed, only the app would plan it differently now: the saved plan is kept
 //     and made as it is (the app's newer plan shows nowhere until something changes).
-export type Settled = { storyboard: StoryboardFile; status: "new" | "same" | "kept" | "replanned"; changes: string[] };
+//     lineChanges: only with replanned: the story clips that start on another lyric line than in the plan the user saw (never silent).
+export type Settled = { storyboard: StoryboardFile; status: "new" | "same" | "kept" | "replanned"; changes: string[]; lineChanges: string[] };
 export function settleShotPlan(file: string, fresh: StoryboardFile): Settled {
   const saved = readStoryboard(file);
   if (!saved) {
     writeStoryboard(file, fresh);
-    return { storyboard: fresh, status: "new", changes: [] };
+    return { storyboard: fresh, status: "new", changes: [], lineChanges: [] };
   }
   if (sameDecisions(saved, fresh)) {
     writeStoryboard(file, fresh);
-    return { storyboard: fresh, status: "same", changes: [] };
+    return { storyboard: fresh, status: "same", changes: [], lineChanges: [] };
   }
-  if (saved.inputs.planKey && saved.inputs.planKey === fresh.inputs.planKey && shotPlanComplete(saved)) return { storyboard: saved, status: "kept", changes: planChanges(fresh, saved) };
+  if (saved.inputs.planKey && saved.inputs.planKey === fresh.inputs.planKey && shotPlanComplete(saved)) return { storyboard: saved, status: "kept", changes: planChanges(fresh, saved), lineChanges: [] };
   writeStoryboard(previousFile(file), saved);
   writeStoryboard(file, fresh);
-  return { storyboard: fresh, status: "replanned", changes: planChanges(saved, fresh) };
+  return { storyboard: fresh, status: "replanned", changes: planChanges(saved, fresh), lineChanges: lineChanges(saved, fresh) };
 }
 
 // The shot plan settleShotPlan would use, without saving anything: the "Make would make this" look-ahead (a duplicate

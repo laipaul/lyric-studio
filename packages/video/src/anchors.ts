@@ -285,9 +285,22 @@ export function planAnchors(
       footCuts.push(mid ?? { frame, time_ms: msOf(frame), beat_index: 0, beat_time_ms: msOf(frame), bar: 0, beat_in_bar: 0 });
       // The time this frees belongs to the B-roll that follows (Paul, 28 Nov 2026: the story order and where his clips fall on the
       // lyrics are his): that shot enters at the footage end, the same clip, so every later clip stays on its line.
-      if (natural < end && frame < natural && !o.keepFoot?.has(frame) && regular.some((c) => c.frame === natural) && !placed.some((q) => q.frame === natural) && !hideCuts.some((h) => h.cut.frame === natural)) {
-        joinAt.add(natural);
-        joined.push(frame);
+      if (natural < end && frame < natural && !o.keepFoot?.has(frame) && !hideCuts.some((h) => h.cut.frame === natural)) {
+        const next = placed.find((q) => q.frame === natural);
+        if (!next && regular.some((c) => c.frame === natural)) {
+          joinAt.add(natural);
+          joined.push(frame);
+        } else if (next && next.a.syncMs == null) {
+          // The next shot is a story anchor (Paul, 28 Nov 2026: "line 17: the next clip in my order is Worried Girl, anchored on
+          // line 19"): that clip starts at the footage end instead (an anchor may start before its line), so no other clip fills
+          // the time and none after it moves. It keeps its line: it still holds until that line is sung.
+          const was = next.frame;
+          next.frame = frame;
+          next.cut = mid ?? { frame, time_ms: msOf(frame), beat_index: 0, beat_time_ms: msOf(frame), bar: 0, beat_in_bar: 0 };
+          next.use.at_ms = msOf(frame);
+          next.use.why = `${next.use.why ? `${next.use.why}; ` : ""}starts ${((was - frame) / fps).toFixed(1)} s early, at ${clock(msOf(frame))}, where line ${p.a.line}'s singing clip ends: no other clip of your story fills that time`;
+          joined.push(frame);
+        }
       }
       const covered = footEnd - p.sungAt;
       if (!onBeat && footEnd < p.hold) {
