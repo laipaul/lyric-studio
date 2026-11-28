@@ -215,7 +215,7 @@ describe("the Style tab, Generate and pnpm make", () => {
     const m = readManifest(r.platforms.find((x) => x.name === "reels")!.variations[0].manifestFile);
     expect((m as unknown as { effects: { from: { verse: string } } }).effects?.from?.verse ?? "theme (reels)").toBe("theme (reels)");
     expect(readdirSync(r.exportDir).sort()).toEqual(expect.arrayContaining(["reels", "shorts", "tiktok"]));
-  });
+  }, 240_000); // real renders (stand-in renderer, but real clip normalising); slow on Windows under a full run
 });
 
 describe("platforms.json never sets the style", () => {

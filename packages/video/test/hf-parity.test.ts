@@ -60,7 +60,7 @@ describe.skipIf(!hfBrowser || !remotionBrowser)("the Reel picture: HyperFrames d
     console.log(`picture check: ${parityText(p)}`);
     expect(p.frames).toBe(240);
     expect(parityPasses(p)).toBe(true);
-    rmSync(ws, { recursive: true, force: true });
+    rmSync(ws, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 }); // Windows: the browser may still hold the folder a moment
   }, 900_000);
 
   it("the Reel text: typewriter verses, a karaoke hook, a typed title card with its byline and a Japanese tagline", async () => {
@@ -109,7 +109,7 @@ describe.skipIf(!hfBrowser || !remotionBrowser)("the Reel picture: HyperFrames d
     expect(wordsPass(words)).toBe(true);
     expect(wordsPass(cards)).toBe(true);
     if (process.env.KEEP_PARITY) console.log(`kept: ${ws}`);
-    else rmSync(ws, { recursive: true, force: true });
+    else rmSync(ws, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 }); // Windows: the browser may still hold the folder a moment
   }, 900_000);
 
   it("step 2b part 2: stacked rows, build up and the bigger final chorus (typewriter verses, karaoke hook)", async () => {
@@ -158,6 +158,6 @@ describe.skipIf(!hfBrowser || !remotionBrowser)("the Reel picture: HyperFrames d
     expect(wordsPass(words)).toBe(true);
     expect(wordsPass(cards)).toBe(true);
     if (process.env.KEEP_PARITY) console.log(`kept: ${ws}`);
-    else rmSync(ws, { recursive: true, force: true });
+    else rmSync(ws, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 }); // Windows: the browser may still hold the folder a moment
   }, 900_000);
 });

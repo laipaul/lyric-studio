@@ -76,8 +76,10 @@ describe("the textboard in the planner", () => {
     // (This test's renderer is a quick stand-in, so the video itself is made by it; the plan is what is checked.)
     const r = await make({ engine: "hyperframes", log: (m: string) => logs.push(m) });
     const m = readManifest(r.platforms[0].variations[0].manifestFile);
-    expect(m.renderer).toMatchObject({ asked: "hyperframes", gaps: [] });
-    expect(logs.some((l) => /HyperFrames cannot draw/.test(l))).toBe(false);
+    // The one gap left is the lights-dim ending (21 Nov 2026): the Reel's automatic fade ending takes the picture to black, which
+    // HyperFrames does not draw yet (src/hf/compile.ts). The lyric effects and title cards are the point of this test.
+    expect(m.renderer).toMatchObject({ asked: "hyperframes", gaps: ["the lights-dim ending"] });
+    expect(logs.filter((l) => /HyperFrames cannot draw/.test(l)).every((l) => /cannot draw the lights-dim ending yet$/.test(l))).toBe(true);
     expect(readManifest(r.platforms[0].variations[0].manifestFile).props.lyrics.length).toBeGreaterThan(0);
   }, 300_000);
 

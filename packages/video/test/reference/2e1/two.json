@@ -25,7 +25,7 @@
      {
       "start": 0,
       "duration": 58,
-      "src": "cache/normalised/7366596c8e9705da4057332b-v1.mp4",
+      "src": "cache/normalised/h1-v1.mp4",
       "clipStartFrame": 97,
       "clipDurationFrames": 180,
       "playbackRate": 1,
@@ -34,54 +34,60 @@
      {
       "start": 58,
       "duration": 120,
-      "src": "cache/normalised/c8e6bca789c3298875a43a15-v1.mp4",
+      "src": "cache/normalised/h2-v1.mp4",
       "clipStartFrame": 66,
       "clipDurationFrames": 210,
       "playbackRate": 1,
       "holdLastFrame": false,
-      "tail": 15
+      "tail": 22
      },
      {
       "start": 178,
       "duration": 120,
-      "src": "cache/normalised/15b53d8e0714dcf32089a5d0-v1.mp4",
-      "clipStartFrame": 105,
+      "src": "cache/normalised/h3-v1.mp4",
+      "clipStartFrame": 97,
       "clipDurationFrames": 240,
       "playbackRate": 1,
       "holdLastFrame": false,
       "dissolve": {
-       "before": 15,
-       "after": 15
+       "before": 23,
+       "after": 22
       }
      },
      {
       "start": 298,
       "duration": 60,
-      "src": "cache/normalised/3dbd9b904ab3884a60c80fb5-v1.mp4",
-      "clipStartFrame": 195,
+      "src": "cache/normalised/h4-v1.mp4",
+      "clipStartFrame": 188,
       "clipDurationFrames": 270,
       "playbackRate": 1,
       "holdLastFrame": false,
-      "tail": 14
+      "tail": 22,
+      "fitNotes": [
+       "starts 0.1 s earlier in the clip to fit the dissolve"
+      ]
      },
      {
       "start": 358,
       "duration": 120,
-      "src": "cache/normalised/2b4d93313d0d50873d021cfa-v1.mp4",
-      "clipStartFrame": 149,
+      "src": "cache/normalised/h5-v1.mp4",
+      "clipStartFrame": 135,
       "clipDurationFrames": 300,
       "playbackRate": 1,
       "holdLastFrame": false,
       "dissolve": {
-       "before": 16,
-       "after": 14
+       "before": 23,
+       "after": 22
       },
-      "tail": 15
+      "tail": 22,
+      "fitNotes": [
+       "starts 0.2 s earlier in the clip to fit the dissolve"
+      ]
      },
      {
       "start": 478,
       "duration": 120,
-      "src": "cache/normalised/7394b557299e1f8562843d63-photo-v1.jpg",
+      "src": "cache/normalised/h6-photo-v1.jpg",
       "clipStartFrame": 0,
       "clipDurationFrames": 120,
       "playbackRate": 1,
@@ -96,22 +102,22 @@
        "toY": 0.0048358354955667275
       },
       "dissolve": {
-       "before": 15,
-       "after": 15
+       "before": 23,
+       "after": 22
       },
-      "tail": 15
+      "tail": 22
      },
      {
       "start": 598,
       "duration": 54,
-      "src": "cache/normalised/7366596c8e9705da4057332b-v1.mp4",
-      "clipStartFrame": 28,
+      "src": "cache/normalised/h1-v1.mp4",
+      "clipStartFrame": 20,
       "clipDurationFrames": 180,
       "playbackRate": 1,
       "holdLastFrame": false,
       "dissolve": {
-       "before": 15,
-       "after": 15
+       "before": 23,
+       "after": 22
       }
      }
     ],
@@ -479,7 +485,7 @@
      {
       "start": 0,
       "duration": 58,
-      "src": "cache/normalised/7366596c8e9705da4057332b-v1.mp4",
+      "src": "cache/normalised/h1-v1.mp4",
       "clipStartFrame": 97,
       "clipDurationFrames": 180,
       "playbackRate": 1,
@@ -488,54 +494,60 @@
      {
       "start": 58,
       "duration": 120,
-      "src": "cache/normalised/c8e6bca789c3298875a43a15-v1.mp4",
+      "src": "cache/normalised/h2-v1.mp4",
       "clipStartFrame": 66,
       "clipDurationFrames": 210,
       "playbackRate": 1,
       "holdLastFrame": false,
-      "tail": 15
+      "tail": 22
      },
      {
       "start": 178,
       "duration": 120,
-      "src": "cache/normalised/15b53d8e0714dcf32089a5d0-v1.mp4",
-      "clipStartFrame": 105,
+      "src": "cache/normalised/h3-v1.mp4",
+      "clipStartFrame": 97,
       "clipDurationFrames": 240,
       "playbackRate": 1,
       "holdLastFrame": false,
       "dissolve": {
-       "before": 15,
-       "after": 15
+       "before": 23,
+       "after": 22
       }
      },
      {
       "start": 298,
       "duration": 60,
-      "src": "cache/normalised/3dbd9b904ab3884a60c80fb5-v1.mp4",
-      "clipStartFrame": 195,
+      "src": "cache/normalised/h4-v1.mp4",
+      "clipStartFrame": 188,
       "clipDurationFrames": 270,
       "playbackRate": 1,
       "holdLastFrame": false,
-      "tail": 14
+      "tail": 22,
+      "fitNotes": [
+       "starts 0.1 s earlier in the clip to fit the dissolve"
+      ]
      },
      {
       "start": 358,
       "duration": 120,
-      "src": "cache/normalised/2b4d93313d0d50873d021cfa-v1.mp4",
-      "clipStartFrame": 149,
+      "src": "cache/normalised/h5-v1.mp4",
+      "clipStartFrame": 135,
       "clipDurationFrames": 300,
       "playbackRate": 1,
       "holdLastFrame": false,
       "dissolve": {
-       "before": 16,
-       "after": 14
+       "before": 23,
+       "after": 22
       },
-      "tail": 15
+      "tail": 22,
+      "fitNotes": [
+       "starts 0.2 s earlier in the clip to fit the dissolve"
+      ]
      },
      {
       "start": 478,
       "duration": 122,
-      "src": "cache/normalised/7394b557299e1f8562843d63-photo-v1.jpg",
+      "src": "cache/normalised/h6-photo-v1.jpg",
       "clipStartFrame": 0,
       "clipDurationFrames": 122,
       "playbackRate": 1,
@@ -550,8 +562,8 @@
        "toY": 0.0048358354955667275
       },
       "dissolve": {
-       "before": 15,
-       "after": 15
+       "before": 23,
+       "after": 22
       }
      }
     ],
@@ -869,6 +881,9 @@
      }
     ],
     "lyricBacking": true,
+    "endDim": {
+     "frames": 60
+    },
     "picture": {
      "grade": "natural",
      "vignette": "off",
@@ -1268,7 +1283,7 @@
      "src": "songs/Life Lyrics/Ref Two/cover.jpg",
      "zoomFrom": 1,
      "zoomTo": 1.08,
-     "backgroundSrc": "cache/coverblur/96f9f7b7e35911b3-1920x1080.jpg",
+     "backgroundSrc": "cache/coverblur/h1-1920x1080.jpg",
      "drift": {
       "fromX": 2.7909031326659024,
       "fromY": 5.494525261802226,

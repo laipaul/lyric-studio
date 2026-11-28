@@ -22,7 +22,7 @@
      {
       "start": 0,
       "duration": 58,
-      "src": "cache/normalised/7366596c8e9705da4057332b-v1.mp4",
+      "src": "cache/normalised/h1-v1.mp4",
       "clipStartFrame": 114,
       "clipDurationFrames": 180,
       "playbackRate": 1,
@@ -31,39 +31,45 @@
      {
       "start": 58,
       "duration": 120,
-      "src": "cache/normalised/c8e6bca789c3298875a43a15-v1.mp4",
+      "src": "cache/normalised/h2-v1.mp4",
       "clipStartFrame": 66,
       "clipDurationFrames": 210,
       "playbackRate": 1,
       "holdLastFrame": false,
-      "tail": 15
+      "tail": 22
      },
      {
       "start": 178,
       "duration": 120,
-      "src": "cache/normalised/15b53d8e0714dcf32089a5d0-v1.mp4",
-      "clipStartFrame": 105,
+      "src": "cache/normalised/h3-v1.mp4",
+      "clipStartFrame": 75,
       "clipDurationFrames": 240,
       "playbackRate": 1,
       "holdLastFrame": false,
       "dissolve": {
-       "before": 15,
-       "after": 15
+       "before": 23,
+       "after": 22
       },
-      "tail": 14
+      "tail": 22,
+      "fitNotes": [
+       "starts 0.7 s earlier in the clip to fit the dissolve"
+      ]
      },
      {
       "start": 298,
       "duration": 114,
-      "src": "cache/normalised/7366596c8e9705da4057332b-v1.mp4",
+      "src": "cache/normalised/h1-v1.mp4",
       "clipStartFrame": 0,
       "clipDurationFrames": 180,
       "playbackRate": 1,
       "holdLastFrame": false,
       "dissolve": {
-       "before": 16,
-       "after": 14
-      }
+       "before": 0,
+       "after": 22
+      },
+      "fitNotes": [
+       "dissolve into this clip shortened to 0.7 s (the clips have no more spare frames)"
+      ]
      }
     ],
     "lyrics": [
@@ -313,6 +319,9 @@
      }
     },
     "lyricBacking": true,
+    "endDim": {
+     "frames": 9
+    },
     "picture": {
      "grade": "natural",
      "vignette": "off",
@@ -411,7 +420,7 @@
      {
       "start": 0,
       "duration": 58,
-      "src": "cache/normalised/7366596c8e9705da4057332b-v1.mp4",
+      "src": "cache/normalised/h1-v1.mp4",
       "clipStartFrame": 114,
       "clipDurationFrames": 180,
       "playbackRate": 1,
@@ -420,39 +429,45 @@
      {
       "start": 58,
       "duration": 120,
-      "src": "cache/normalised/c8e6bca789c3298875a43a15-v1.mp4",
+      "src": "cache/normalised/h2-v1.mp4",
       "clipStartFrame": 66,
       "clipDurationFrames": 210,
       "playbackRate": 1,
       "holdLastFrame": false,
-      "tail": 15
+      "tail": 22
      },
      {
       "start": 178,
       "duration": 120,
-      "src": "cache/normalised/15b53d8e0714dcf32089a5d0-v1.mp4",
-      "clipStartFrame": 105,
+      "src": "cache/normalised/h3-v1.mp4",
+      "clipStartFrame": 75,
       "clipDurationFrames": 240,
       "playbackRate": 1,
       "holdLastFrame": false,
       "dissolve": {
-       "before": 15,
-       "after": 15
+       "before": 23,
+       "after": 22
       },
-      "tail": 14
+      "tail": 22,
+      "fitNotes": [
+       "starts 0.7 s earlier in the clip to fit the dissolve"
+      ]
      },
      {
       "start": 298,
       "duration": 114,
-      "src": "cache/normalised/7366596c8e9705da4057332b-v1.mp4",
+      "src": "cache/normalised/h1-v1.mp4",
       "clipStartFrame": 0,
       "clipDurationFrames": 180,
       "playbackRate": 1,
       "holdLastFrame": false,
       "dissolve": {
-       "before": 16,
-       "after": 14
-      }
+       "before": 0,
+       "after": 22
+      },
+      "fitNotes": [
+       "dissolve into this clip shortened to 0.7 s (the clips have no more spare frames)"
+      ]
      }
     ],
     "lyrics": [
@@ -702,6 +717,9 @@
      }
     },
     "lyricBacking": true,
+    "endDim": {
+     "frames": 9
+    },
     "picture": {
      "grade": "natural",
      "vignette": "off",
@@ -800,7 +818,7 @@
      {
       "start": 0,
       "duration": 58,
-      "src": "cache/normalised/5f3dc518e4e4fb5afe5ef3d0-cover1920x1080-v1.mp4",
+      "src": "cache/normalised/h1-cover1920x1080-v1.mp4",
       "clipStartFrame": 100,
       "clipDurationFrames": 210,
       "playbackRate": 1,
@@ -809,39 +827,48 @@
      {
       "start": 58,
       "duration": 120,
-      "src": "cache/normalised/fbe1b279f0ec4d20f9befc8f-cover1920x1080-v1.mp4",
-      "clipStartFrame": 120,
+      "src": "cache/normalised/h2-cover1920x1080-v1.mp4",
+      "clipStartFrame": 98,
       "clipDurationFrames": 240,
       "playbackRate": 1,
       "holdLastFrame": false,
-      "tail": 0
+      "tail": 22,
+      "fitNotes": [
+       "starts 0.7 s earlier in the clip to fit the dissolve"
+      ]
      },
      {
       "start": 178,
       "duration": 120,
-      "src": "cache/normalised/5f3dc518e4e4fb5afe5ef3d0-cover1920x1080-v1.mp4",
+      "src": "cache/normalised/h1-cover1920x1080-v1.mp4",
       "clipStartFrame": 0,
       "clipDurationFrames": 210,
       "playbackRate": 1,
       "holdLastFrame": false,
       "dissolve": {
-       "before": 30,
-       "after": 0
+       "before": 23,
+       "after": 22
       },
-      "tail": 15
+      "tail": 22,
+      "fitNotes": [
+       "starts 0.8 s later in the clip to fit the dissolve"
+      ]
      },
      {
       "start": 298,
       "duration": 114,
-      "src": "cache/normalised/fbe1b279f0ec4d20f9befc8f-cover1920x1080-v1.mp4",
+      "src": "cache/normalised/h2-cover1920x1080-v1.mp4",
       "clipStartFrame": 0,
       "clipDurationFrames": 240,
       "playbackRate": 1,
       "holdLastFrame": false,
       "dissolve": {
-       "before": 15,
-       "after": 15
-      }
+       "before": 23,
+       "after": 22
+      },
+      "fitNotes": [
+       "starts 0.8 s later in the clip to fit the dissolve"
+      ]
      }
     ],
     "lyrics": [

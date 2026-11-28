@@ -68,6 +68,16 @@ const normal = (v: unknown, songRoot: string, id: string): unknown =>
       .split(id).join("<id>"),
   );
 type Props = { durationInFrames: number; shots: { start: number; duration: number; src?: string; startFrom?: number; playbackRate?: number; dissolve?: unknown; kind?: string }[]; cutFrames?: number[]; lyrics: { text: string; startFrame: number; endFrame: number; isHook?: boolean; enterFrame?: number; stampFrame?: number; sungEndFrame?: number }[]; audio?: unknown };
+// The hash in a cached file's name (cache/normalised/<hash>-v1.mp4, cache/coverblur/<hash>-1920x1080.jpg) comes from the file's bytes, which differ
+// between FFmpeg builds; REF_WRITE stores the references with the hashes already renamed. Each distinct hash becomes h1, h2, ... in order of first
+// appearance, so which clip is used where (and that a clip repeats) is still compared exactly.
+export const unhashed = (v: unknown): unknown => {
+  const seen = new Map<string, string>();
+  return JSON.parse(JSON.stringify(v).replace(/(?:normalised|coverblur)[/]([0-9a-f]{12,})-/g, (m, h: string) => {
+    if (!seen.has(h)) seen.set(h, `h${seen.size + 1}`);
+    return `${m.split("/")[0]}/${seen.get(h)}-`;
+  }));
+};
 // The cuts and the lyric timing, the two things 2e-1 must keep exactly.
 export const cutsAndTiming = (p: Props) => ({
   durationInFrames: p.durationInFrames,
@@ -136,16 +146,16 @@ describe("2e-1 reference: cuts and lyric timing of Make's videos", () => {
       const file = path.join(REF_DIR, `${s.key}.json`);
       if (WRITE) {
         mkdirSync(REF_DIR, { recursive: true });
-        writeFileSync(file, `${JSON.stringify({ song: s.title, platforms: s.platforms, captured: "before 2e-1 (Make planned at render time)", videos: now }, null, 1)}\n`);
+        writeFileSync(file, `${JSON.stringify({ song: s.title, platforms: s.platforms, captured: "before 2e-1 (Make planned at render time)", videos: now.map((r) => ({ ...r, props: unhashed(r.props) })) }, null, 1)}\n`);
       }
       expect(existsSync(file)).toBe(true);
       const before = (JSON.parse(readFileSync(file, "utf8")) as { videos: Recorded[] }).videos;
       expect(now.map((r) => r.video)).toEqual(before.map((r) => r.video));
       for (const [k, b] of before.entries()) {
         // The cuts and the lyric timing: identical, frame for frame.
-        expect(cutsAndTiming(now[k].props as Props), `${s.title} ${b.video}: cuts and lyric timing`).toEqual(cutsAndTiming(b.props as Props));
+        expect(unhashed(cutsAndTiming(now[k].props as Props)), `${s.title} ${b.video}: cuts and lyric timing`).toEqual(unhashed(cutsAndTiming(b.props as Props)));
         // Everything else Make hands the renderer: the same too.
-        expect(now[k].props, `${s.title} ${b.video}: the whole props`).toEqual(b.props);
+        expect(unhashed(now[k].props), `${s.title} ${b.video}: the whole props`).toEqual(unhashed(b.props));
       }
     });
   }

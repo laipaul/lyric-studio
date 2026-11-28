@@ -27,7 +27,10 @@ describe("song links on the server", () => {
     makeSong(song, 2);
     id = (await findOrCreateSongProject(ws, song)).project.id;
   });
-  afterAll(() => rmSync(root, { recursive: true, force: true }));
+  afterAll(() => {
+    ws?.close(); // Windows will not delete the folder while the database file is still open
+    rmSync(root, { recursive: true, force: true });
+  });
 
   const services = () => songLinks(ws, id).links.map((l) => l.service).join(",");
 

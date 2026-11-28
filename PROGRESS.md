@@ -4,6 +4,20 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Clean test baseline on Windows ✅
+Paul, 28 Nov 2026: "I want a clean baseline before the migration." The full suite on his PC went from 24 failing tests
+to none: 152 test files, 1510 tests pass, 2 skipped (the HyperFrames network check needs Linux strace: it runs in the
+cloud check). No product bug was found; only tests changed:
+- Slow real renders under load: longer timeouts (performance-script, style).
+- PC setup / Windows: the database closed before a temp folder is deleted (song-links), temp-folder cleanup retried
+  while the browser lets go (hf-parity), line endings compared without CRLF (update-script), the network render check
+  only on Linux (hf-network), a stream-copied WAV excerpt may end up to 0.08 s long on this FFmpeg build (lipsync-song;
+  the excerpt's times in slot.json are exact).
+- Outdated tests: to-dos now open Assets (song-stages, since 11 Nov), the YouTube hashtags are the song's tags
+  (make, since 11 Nov), a changed section saves the shot plan again with a note (make, since 2e-1), the lights-dim
+  ending is a known HyperFrames gap (textboard-make). The 2e-1 reference videos were recorded again (dissolve handles of
+  22 Nov and the lights-dim ending), with machine-specific cache names left out, every prop compared.
+
 ### Music Video Generator as a second singing engine ✅ (to verify on the PC, needs WAVESPEED_API_KEY)
 Paul, 28 Nov 2026: "In my tests, WaveSpeed's Music Video Generator gives better lip sync than InfiniteTalk." In Prepare →
 Lyrics Sync → Singer, each group (its first line) now has **Engine**: InfiniteTalk (default) or **MV Generator**; the
@@ -851,20 +865,6 @@ locked cards can't be edited").
   creation-production (14 checks, in test:e2e); pictures, production, shotlist, singer, song-style, song-stages pass.
   Studio build passes.
 
-### Fix: "Lower third" really sits low ✅ (to verify on the PC)
-- Paul (22 Nov 2026), The House My Heart Built and Wedding Day: with the theme's Text layout on Lower third the lyrics
-  still sat in the middle, across the faces. Cause: "lower" put the block's centre at 0.68 of the area left by the
-  platform's safe zone; Reels keeps its bottom 35% clear (Instagram's guidance), so that was 49% of the screen
-  (TikTok 51%, Shorts 55%, YouTube 63%).
-- Now "lower" puts the block's bottom edge (its last row, the waiting next line, a text box's padding) 1.75% of the
-  frame above the safe-zone line; lines of 1-3 rows grow upward. Block bottom: Reels ~63%, TikTok ~68%, Shorts ~73%,
-  YouTube ~88% of the screen. Centred and Big hook unchanged. Preview and render share the same code (LyricScene).
-- Code: platform.ts (LyricArea anchor, lyricCenterY), text-layout.ts (LOWER_MARGIN), LyricScene.tsx, effects/scene.ts
-  (a glide's waiting line keeps its place), qa.ts / node/qa-check.ts (the safe-zone check measures the real block).
-- Tests: vitest text-layout (7: every platform, 1-3 rows, Big hook, next-line preview), 280 related tests pass; browser
-  title-opening and textboard pass. Full suite: only the 7 known failures (network / real rendering). Build passes.
-- Known: hook and end cards that share the lyrics' place use a typical block height, so they can sit a few px off.
-
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -881,6 +881,8 @@ locked cards can't be edited").
 - http://localhost:3000 (Home / Studio / Library) and http://127.0.0.1:8001/health.
 
 ## Backlog (not scheduled yet)
+- **MV Generator: "Silence pauses" per take** (Paul, 28 Nov 2026: keep the voice as it is for now; "if I later see the
+  mouth moving between lines, add an option Silence pauses per take, off by default"). Only if his real takes show it.
 - Characters, outfit split: hairstyle always to "Close-ups show" (and "Back shows" when visible from behind), earrings only to "Close-ups show" (seen on Bride No 1, 18 Nov 2026; Paul corrects by hand for now).
 - **A shot ends where your trimmed clip ends** (2 Nov 2026): when a clip you trimmed in Edit clip is shorter than its shot, move the cut earlier to the last bar (else beat) the clip covers, the next shot starting earlier; needs the cut plan to know the clips (today cuts are fixed first).
 - **Delete a song (cleanup; asked 30 Oct, after the freeze)**: the song card's ⋯ menu -> Delete (asks first), exactly like Collections (the user, 30 Oct):

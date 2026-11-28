@@ -432,7 +432,9 @@ describe("pnpm make + pnpm rerender (real renders)", () => {
     // The section starts at the bar at ~4.25 s (as detected). Line 3 (4.0-5.1 s) is still being sung
     // there, so it is shown from the first frame; nothing is hidden.
     expect(Math.abs(m.section.start_ms - 4250)).toBeLessThan(30);
-    expect(notes).toEqual([]);
+    // Nothing hidden or dropped. (Since 2e-1 a different part of the song than the first make's is a changed input: the shot plan
+    // is saved again and the run says so, which is the one note expected here.)
+    expect(notes.filter((n) => !/shot plan saved again before making it: the part of the song/.test(n))).toEqual([]);
     expect(m.lyric_timings.map((l) => [l.text, l.start_frame])).toEqual([["Through the night", 0], ["Verse two here", m.lyric_timings[1].start_frame]]);
     expect(sha256File(lrcFile)).toBe(lrcHash);
   }, 300_000);
@@ -862,7 +864,7 @@ describe("platform presets (stand-in renderer)", () => {
     expect(publish).toContain("== Title ==\nLong Song (Lyrics) - Life Lyrics");
     expect(publish).toContain("Hold on to me\nThrough the night"); // the full lyrics, without "* "
     expect(publish).not.toContain("* Hold");
-    expect(publish).toContain("#LifeLyrics #LongSong");
+    expect(publish).toContain("\n#lifelyrics\n"); // since 11 Nov (Tags): the description's hashtag line is the song's top tags; with none set, the artist's name
     expect(publish).toContain('Long Song by Life Lyrics - the official lyric video.\nFrom the EP "In The Mood for Life"\n\nVerse 1 line one');
     expect(publish).toContain("== Tags ==");
     expect(existsSync(path.join(wsDir, "brand", "publish-template.txt"))).toBe(true);

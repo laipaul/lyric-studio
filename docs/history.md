@@ -4,6 +4,20 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Fix: "Lower third" really sits low ✅ (to verify on the PC)
+- Paul (22 Nov 2026), The House My Heart Built and Wedding Day: with the theme's Text layout on Lower third the lyrics
+  still sat in the middle, across the faces. Cause: "lower" put the block's centre at 0.68 of the area left by the
+  platform's safe zone; Reels keeps its bottom 35% clear (Instagram's guidance), so that was 49% of the screen
+  (TikTok 51%, Shorts 55%, YouTube 63%).
+- Now "lower" puts the block's bottom edge (its last row, the waiting next line, a text box's padding) 1.75% of the
+  frame above the safe-zone line; lines of 1-3 rows grow upward. Block bottom: Reels ~63%, TikTok ~68%, Shorts ~73%,
+  YouTube ~88% of the screen. Centred and Big hook unchanged. Preview and render share the same code (LyricScene).
+- Code: platform.ts (LyricArea anchor, lyricCenterY), text-layout.ts (LOWER_MARGIN), LyricScene.tsx, effects/scene.ts
+  (a glide's waiting line keeps its place), qa.ts / node/qa-check.ts (the safe-zone check measures the real block).
+- Tests: vitest text-layout (7: every platform, 1-3 rows, Big hook, next-line preview), 280 related tests pass; browser
+  title-opening and textboard pass. Full suite: only the 7 known failures (network / real rendering). Build passes.
+- Known: hook and end cards that share the lyrics' place use a typical block height, so they can sit a few px off.
+
 ### Shape shows every platform with a saved shot plan ✅ (to verify on the PC)
 - Paul (22 Nov 2026): after choosing only YouTube in Make, Shape's platform list had YouTube only, so the Reel
   could not be opened in Shape. Shape's list followed Make's chips.

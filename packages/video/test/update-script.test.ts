@@ -26,6 +26,7 @@ function repo(example: string): string {
   git(d, "commit", "-qm", "base");
   return d;
 }
+const lf = (s: string) => s.replace(/\r\n/g, "\n");
 const BASE = "# Copy this file to .env\nWORKSPACE_DIR=./workspace\n# WAVESPEED_API_KEY=\n";
 
 describe("the update script", () => {
@@ -43,7 +44,7 @@ describe("the update script", () => {
     const said = rescueEnvExample(d, new Date("2026-11-21T10:00:00Z"));
     expect(said[0]).toMatch(/Moved WAVESPEED_API_KEY from \.env\.example into \.env/);
     expect(readFileSync(path.join(d, ".env"), "utf8")).toBe("FAL_KEY=f\n# Moved from .env.example by the update (2026-11-21)\nWAVESPEED_API_KEY=abc123\n");
-    expect(readFileSync(path.join(d, ".env.example"), "utf8")).toBe(BASE);
+    expect(lf(readFileSync(path.join(d, ".env.example"), "utf8"))).toBe(BASE); // a Windows checkout may turn LF into CRLF (autocrlf)
     const kept = readdirSync(d).find((f) => f.startsWith(".env.example.mine-"))!;
     expect(readFileSync(path.join(d, kept), "utf8")).toContain("abc123");
     expect(git(d, "status", "--porcelain")).toBe(""); // the kept copy and .env are ignored: nothing to commit
@@ -55,7 +56,7 @@ describe("the update script", () => {
     const said = rescueEnvExample(d);
     expect(said.join(" ")).toMatch(/WORKSPACE_DIR was changed in \.env\.example, which the app never reads/);
     expect(existsSync(path.join(d, ".env"))).toBe(false);
-    expect(readFileSync(path.join(d, ".env.example"), "utf8")).toBe(BASE);
+    expect(lf(readFileSync(path.join(d, ".env.example"), "utf8"))).toBe(BASE); // a Windows checkout may turn LF into CRLF (autocrlf)
   });
   it("nothing changed: nothing happens", () => {
     const d = repo(BASE);

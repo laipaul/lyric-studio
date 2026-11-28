@@ -268,5 +268,5 @@ describe("a song with a script", () => {
     await make();
     expect(props).toHaveLength(2);
     expect(props[1]).toBe(props[0]);
-  }, 240_000);
+  }, 600_000); // real renders; slow on Windows, especially when the whole suite runs at once
 });

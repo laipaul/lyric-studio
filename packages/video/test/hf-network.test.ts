@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import { REPO_ROOT } from "@lyric/db";
 
 const hasStrace = (() => {
+  if (process.platform !== "linux") return false; // strace is a Linux tool: elsewhere another program of that name may exist
   try {
     execFileSync("strace", ["-V"], { stdio: "ignore" });
     return true;
@@ -48,7 +49,7 @@ describe("strace log reader", () => {
   });
 });
 
-describe.skipIf(!hasStrace || !hasBrowser)("a HyperFrames render", () => {
+describe.skipIf(!hasStrace || !hasBrowser)("a HyperFrames render (needs Linux strace and the HyperFrames browser: runs in the cloud check)", () => {
   it("makes no network call, uses only our font file, and shows every planned frame", () => {
     const work = mkdtempSync(path.join(os.tmpdir(), "lyric-hf-check-"));
     const trace = path.join(work, "strace.log");
