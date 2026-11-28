@@ -12,6 +12,8 @@
 // Shots that must not slide: a singing (lip-sync) shot, the loop shot and the shot it loops into, and a shot whose
 // clip already runs out by design (holdLastFrame: slowed to the minimum and held). Pure.
 
+import { v2v1Frames } from "./tracks";
+
 export type HandleShot = {
   video: boolean; // false: a photo (any length; its move is fitted to the shot)
   duration: number; // shot frames on screen
@@ -40,8 +42,11 @@ export type FittedShot = { clipStartFrame: number; playbackRate: number; dissolv
 export const MIN_DISSOLVE_FRAMES = 4;
 // A soft entry into / exit out of a singing take needs at least this many frames (0.2 s at 30 fps), else a hard cut.
 export const MIN_FADE_IN_FRAMES = 6;
-// How long the B-roll dissolves over a singing take's first / last frames: 0.4 s (Paul: about 0.3 to 0.5 s).
-export const SOFT_SINGING_FRAMES = 12;
+// How long the B-roll dissolves over a singing take's first frames (entry) and over its release (exit): the V2 → V1
+// change (tracks.ts V2_V1_CHANGE; Paul: about 0.3 to 0.5 s). 12 and 9 frames at 30 fps.
+export const SOFT_ENTRY_FRAMES = v2v1Frames(30).entryFade;
+export const SOFT_EXIT_FRAMES = v2v1Frames(30).exitFade;
+export const SOFT_SINGING_FRAMES = SOFT_ENTRY_FRAMES; // (the entry; older name)
 export const SINGING_CUT_NOTE = "a hard cut into this singing take (the clip before it has no footage left to play on)";
 export const SINGING_EXIT_CUT_NOTE = "a hard cut out of this singing take (this clip has no footage before its start)";
 // The most a clip is slowed to make room for a dissolve (0.9 = 10% slower), and never below this speed.

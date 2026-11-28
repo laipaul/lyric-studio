@@ -27,6 +27,7 @@ import { eq } from "drizzle-orm";
 
 import { applyDownbeatOffset } from "../beats";
 import { detectCuts, MV_GENERATOR_PATH } from "../music-video";
+import { V2_V1_CHANGE } from "../tracks";
 import { type PicturesView } from "./animate";
 import { nextTakeN } from "./animate";
 import { BOARD_VIDEO_FILE, itemLabel, makePlayable, PICTURE_FILE, POLL_MS, TAKES_DIR, TIMEOUT_MS, WAVESPEED, data, json, keyFor, readPictures, setTake, sleepMs, songFolder, update, waveSpeedUpload, type Take } from "./animate";
@@ -53,7 +54,9 @@ export const LIPSYNC_USD_PER_SECOND = LIPSYNC_USD_PER_SECOND_AT[LIPSYNC_RESOLUTI
 export const isLipsyncResolution = (v: unknown): v is LipsyncResolution => LIPSYNC_RESOLUTIONS.includes(v as LipsyncResolution);
 export const LIPSYNC_MIN_SECONDS = 3; // billed at least 3 s, rounded up to whole seconds
 export const LIPSYNC_MODEL = "InfiniteTalk";
-const LEAD_MS = 500; // the piece starts this long before the downbeat the shot cuts in on
+// The piece starts this long before the downbeat the shot cuts in on: room for the soft entry (the singer is cut in 0.4 s before the
+// beat the B-roll fade ends on, V2 → V1 change in tracks.ts) and the 2 skipped frames (tested: LEAD_MS >= entry fade + skipped frames).
+export const LEAD_MS = 500;
 const TAIL_BARS = 2; // and runs two bars past the line's sung end (the shot holds until the next regular cut)
 export const RUN_GAP_MS = 8000; // lines in a row with the same picture and at most this pause between them: one take
 
@@ -426,7 +429,7 @@ export function singingRuns(lines: readonly { number: number; shownMs: number; s
 }
 // A group is made when one of its takes (running, done, or sent and waiting for its result) has this vocal piece and
 // the singing cue. A new mood text or resolution does not make a group "to make" again: Retake makes another take.
-const covers = (t: Take, piece: Piece) => (t.status === "running" || t.status === "done" || t.status === "interrupted") && t.sync_ms === piece.fromMs && t.style === SINGING_STYLE;
+const covers = (t: Take, piece: Piece) => (t.status === "running" || t.status === "done" || t.status === "interrupted") && t.sync_ms !== undefined && t.sync_ms + (t.kept?.inMs ?? 0) === piece.fromMs && t.style === SINGING_STYLE; // (an MV take that kept its breath in starts earlier than the piece)
 
 export async function singerView(ws: Workspace, projectId: string, env: NodeJS.ProcessEnv = process.env): Promise<SingerView> {
   const c = await context(ws, projectId);
@@ -935,6 +938,9 @@ export function joinParts(files: string[], out: string, list: string): void {
   execFileSync(ffmpegBin(), ["-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", "-movflags", "+faststart", out]);
 }
 
+// How much of an MV Generator take's handles is kept: the breath in and the release of the note (the V2 → V1 change, tracks.ts).
+export const keptHandles = (h: { inMs: number; outMs: number }) => ({ inMs: Math.min(h.inMs, V2_V1_CHANGE.mvHandleInMs), outMs: Math.min(h.outMs, V2_V1_CHANGE.mvHandleOutMs) });
+
 // The returned MV Generator video without its handles: from inMs, at most the take's song length (never stretched:
 // a short video stays short), silent, 30 fps, browser-ready.
 export function trimHandles(file: string, out: string, inMs: number, lengthMs: number): void {
@@ -957,7 +963,9 @@ async function singWithMv(c: { dir: string; source: string; n: number; take: Tak
   const t = c.take;
   if (!PICTURE_FILE.test(c.source)) throw Object.assign(new Error("The MV Generator needs a picture of the singer, not a video"), { unsent: true });
   const h = t.handles ?? { inMs: 0, outMs: 0 };
-  const sent = { fromMs: t.sync_ms! - h.inMs, toMs: t.to_ms! + h.outMs };
+  // The song range of the group (a take already finished with kept handles starts earlier: its range is without them).
+  const range = { fromMs: t.sync_ms! + (t.kept?.inMs ?? 0), toMs: t.to_ms! - (t.kept?.outMs ?? 0) };
+  const sent = { fromMs: range.fromMs - h.inMs, toMs: range.toMs + h.outMs };
   let id = c.sentId;
   if (!id) {
     if (!c.uploads.has(c.source)) c.uploads.set(c.source, c.transport.upload(path.join(c.dir, c.source)));
@@ -991,9 +999,14 @@ async function singWithMv(c: { dir: string; source: string; n: number; take: Tak
   await c.transport.download(url, raw);
   makePlayable(raw, false); // its sound removed: the video always plays with the song
   const returnedMs = (await probeMedia(raw)).durationMs;
-  trimHandles(raw, out, h.inMs, t.to_ms! - t.sync_ms!);
-  const warnings = mvTakeWarnings(returnedMs, sent.toMs - sent.fromMs, await cutsInTake(out, t.to_ms! - t.sync_ms!).catch(() => []));
-  setTake(c.dir, c.source, c.n, { warnings: warnings.length ? warnings : undefined });
+  // Not all of the handles are cut off (V2 → V1 change, 28 Nov 2026): the take keeps the singer's breath in (0.4 s of the
+  // handle before the song range) and the release of the note (0.3 s after it), at song time, never stretched; the take then
+  // starts at sync_ms - kept.inMs, which is written on the take (existing takes stay as they are).
+  const kept = keptHandles(h);
+  const takeMs = range.toMs - range.fromMs + kept.inMs + kept.outMs;
+  trimHandles(raw, out, h.inMs - kept.inMs, takeMs);
+  const warnings = mvTakeWarnings(returnedMs, sent.toMs - sent.fromMs, await cutsInTake(out, takeMs).catch(() => []));
+  setTake(c.dir, c.source, c.n, { warnings: warnings.length ? warnings : undefined, sync_ms: range.fromMs - kept.inMs, to_ms: range.toMs + kept.outMs, kept });
 }
 
 // Makes the singing clips (in parallel). Each: the picture or video and its piece of voice go online, the request is

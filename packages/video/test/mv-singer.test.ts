@@ -123,9 +123,11 @@ describe("a take of the MV Generator", () => {
     expect(asked[0].o.prompt).not.toContain(BREATHING); // the voice goes as it is
     const info = await probeMedia(path.join(pics, take(n).file!));
     expect(info.hasAudio).toBe(false);
-    expect(Math.abs(info.durationMs - 3000)).toBeLessThan(70);
+    // Of its 1 s handles it keeps 0.4 s before and 0.3 s after (V2 -> V1 change, tracks.ts): 3.0 + 0.7 s, starting 0.4 s earlier in the song.
+    expect(Math.abs(info.durationMs - 3700)).toBeLessThan(70);
+    expect(take(n)).toMatchObject({ sync_ms: 1600, to_ms: 5300, kept: { inMs: 400, outMs: 300 }, handles: { inMs: 1000, outMs: 1000 } });
     const recipe = JSON.parse(readFileSync(songPathsById(ws, id).recipe!, "utf8")) as { anchors?: unknown[] };
-    expect(recipe.anchors).toContainEqual({ line: 2, clip: "bride sings line 2.mp4", sync: 2 });
+    expect(recipe.anchors).toContainEqual({ line: 2, clip: "bride sings line 2.mp4", sync: 1.6 });
     expect(takeKind({ ...take(n) })).toBe("MV Generator singing, line 2 · 720p");
   });
   it("a video of another length than the voice sent: a warning, never stretched", async () => {
@@ -135,7 +137,7 @@ describe("a take of the MV Generator", () => {
     expect(take(n).status).toBe("done");
     expect(take(n).warnings).toEqual(["It came back 4.00 s long for 5.00 s of voice sent: kept as it is, not stretched. Check the lips with the song, or retake."]);
     const info = await probeMedia(path.join(pics, take(n).file!));
-    expect(Math.abs(info.durationMs - 3000)).toBeLessThan(70); // from 1 s: 3 s still there
+    expect(Math.abs(info.durationMs - 3400)).toBeLessThan(70); // from 0.6 s (1 s handle, 0.4 s of it kept): 3.4 s of the 4 s are there
   });
   it("a cut the model added inside the take is said, with its time", async () => {
     const n = record(PIC, 4);
@@ -143,7 +145,7 @@ describe("a take of the MV Generator", () => {
     await runSinging(open, id, [{ source: PIC, n }], { transport: t, sleep: now0 });
     expect(take(n).status).toBe("done");
     expect(take(n).warnings).toHaveLength(1);
-    expect(take(n).warnings![0]).toMatch(/^The model added a cut at 0:01\.[56]: retake it/);
+    expect(take(n).warnings![0]).toMatch(/^The model added a cut at 0:0[12]\.0: retake it/);
   });
   it("a video as the singer: refused in plain words, nothing spent", async () => {
     const n = record("singer video.mp4", 5);

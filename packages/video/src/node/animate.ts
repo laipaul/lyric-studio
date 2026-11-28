@@ -156,6 +156,7 @@ export type Take = {
   engine?: "infinitetalk" | "mv"; // lipsync: the engine that made it (absent: InfiniteTalk; "mv": the Music Video Generator, singer.ts)
   scene?: string; // lipsync (MV Generator): the scene / mood sent with it
   handles?: { inMs: number; outMs: number }; // lipsync (MV Generator): the extra voice sent before and after, cut off again
+  kept?: { inMs: number; outMs: number }; // lipsync (MV Generator, from 28 Nov 2026): of those handles, this much was KEPT in the take (the singer's breath in / note released): sync_ms and to_ms already include it (the file starts at sync_ms); the sent piece is sync_ms + kept.inMs .. to_ms - kept.outMs (V2 → V1 change, tracks.ts)
   warnings?: string[]; // lipsync (MV Generator): its length off the voice sent, or a cut the model added (plain words)
   guideFile?: string; // references: the camera guide video sent as @Video 1 (workspace-relative), e.g. a Midjourney take
   guideName?: string; // and its name as shown on the shot

@@ -6,11 +6,21 @@
 //              song (Shape's "B-roll here"), and cut-aways over a singing segment. Where V2 has a clip it covers V1;
 //              where V2 is empty over a singing segment, the singer shows through.
 // Lyrics / text stay drawn on top of everything, as today (not a track here).
-// The V2 → V1 change (Paul, 28 Nov 2026): V1 is never moved, slowed or faded, so the soft entry comes from the B-roll
-// side: the B-roll before a singing segment dissolves OUT over the singer's first 0.3-0.5 s (the B-roll plays on past
-// its cut for that), the cut on a beat when possible; the same on exit (the B-roll after it dissolves IN over the
-// singer's last 0.3-0.5 s). For every singing source alike (InfiniteTalk, MV Generator, music-video shots). It is a
-// rule of the change between the layers, worked out where the edit is drawn (compose / handles), never stored here.
+// The V2 → V1 change (Paul, 28 Nov 2026, twice): V1 is never moved, slowed, frozen, faded or stretched, so the soft
+// entry and exit come from the B-roll side and from where the singer's cut is placed. ONE rule, defined below
+// (V2_V1_CHANGE) and used by every place that needs it (anchors.ts cut placement, handles / compose for the dissolves,
+// singer.ts for the MV Generator handles, music-video.ts and singer.ts for the skipped first frames):
+//   lead-in  the singer enters ~0.4 s BEFORE the line's sung start (her breath in), still at song time and 1.00x; the
+//            cut is placed on the beat that gives this, never before the footage starts (+ the skipped frames);
+//   entry    the B-roll before plays on past the cut, on top, and dissolves OUT over the singer's first 0.4 s; the
+//            dissolve ENDS on a beat when the footage allows (the singer's cut is then 0.4 s before that beat);
+//   release  the singer stays ~0.3 s after the line's sung end (the note releases), and the B-roll after dissolves IN
+//            over that release (it starts early, the cut after the release stays on the grid);
+//   pop      the first 2 frames of every generated take are never shown (the clip's in-point moves, never its song time).
+// For every singing source alike (InfiniteTalk, MV Generator, music-video shots). A source whose footage starts at the
+// line (a music-video shot) has no breath to show: the B-roll fade alone softens it and the plan says so in plain words.
+// The clip's own "comes in with: cut", the crisp style and an all-cuts variation still win. It is a rule of the change
+// between the layers, worked out where the edit is drawn (anchors / compose / handles), never stored in the tracks.
 //
 // Part A changes nothing visible: the tracks are made from the song's existing edit (song.json "anchors", clips.json
 // "order" and "inserts") by fromEdit, and turned back into exactly that edit by toEdit, which is what Make reads.
@@ -21,6 +31,22 @@
 import type { AnchorSpec, AnchorTransition, HideSpec } from "./anchors";
 
 export const TRACKS_VERSION = 1;
+
+// The V2 → V1 change, defined once (ms unless it says frames; 30 fps frames come from `v2v1Frames`).
+export const V2_V1_CHANGE = {
+  leadInMs: 400, // the singer enters this long before the line's sung start
+  releaseMs: 300, // ... and stays this long after the line's sung end
+  entryFadeMs: 400, // the B-roll before dissolves out over the singer's lead-in (0.3 to 0.5 s)
+  exitFadeMs: 300, // the B-roll after dissolves in over the singer's release
+  skipFrames: 2, // the first frames of a generated take are never shown (some models "pop" there)
+  mvHandleInMs: 400, // MV Generator: of the 1 s handle before the song range, this much is kept (the take starts earlier)
+  mvHandleOutMs: 300, // ... and this much of the handle after it
+} as const;
+// The same in frames at `fps` (whole frames, never fewer than one).
+export const v2v1Frames = (fps = 30) => {
+  const f = (ms: number) => Math.max(1, Math.round((ms * fps) / 1000));
+  return { leadIn: f(V2_V1_CHANGE.leadInMs), release: f(V2_V1_CHANGE.releaseMs), entryFade: f(V2_V1_CHANGE.entryFadeMs), exitFade: f(V2_V1_CHANGE.exitFadeMs), skip: V2_V1_CHANGE.skipFrames };
+};
 
 // V1: one singing segment (a singing take or a music-video shot on its lines).
 export type SingerSegment = {

@@ -1,13 +1,19 @@
-// The soft entry into and exit out of singing clips (28 Nov 2026, Paul: "the transition into singing clips is harsh again").
-// A singing clip is locked to the song at 1.00x: never moved, slowed, frozen or faded. The B-roll beside it carries the
-// dissolve: the shot before plays on past the cut and fades out over the singer's first 0.4 s; the shot after starts early and
-// fades in over the singer's last 0.4 s. Every source alike: all of them are anchors with a sync time.
+// The soft entry into and exit out of singing clips, the V2 -> V1 change (tracks.ts V2_V1_CHANGE; 28 Nov 2026, Paul: "every
+// singing clip starts too sharply"). A singing clip is locked to the song at 1.00x: never moved, slowed, frozen or faded.
+//   lead-in:  it is on screen ~0.4 s before the line's sung start when its footage allows (its breath in);
+//   entry:    the B-roll before plays on past the cut and fades out over its first 0.4 s, the dissolve ENDING ON A BEAT;
+//   release:  it stays ~0.3 s after the line's sung end; the B-roll after fades in over that release;
+//   pop:      its first 2 frames are never shown (the in-point, never its song time).
+// Every source alike: all of them are anchors with a sync time. The constants live in one place (tracks.ts).
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import { compileHyperframes, composeProps, getCutPoints, type LyricVideoProps, type RawLyric, type RenderBase, type ResolvedAnchor } from "../src";
+import { SOFT_ENTRY_FRAMES, SOFT_EXIT_FRAMES, SOFT_SINGING_FRAMES } from "../src/handles";
+import { keptHandles, LEAD_MS, MV_HANDLE_MS } from "../src/node/singer";
+import { V2_V1_CHANGE, v2v1Frames } from "../src/tracks";
 import { grid } from "./helpers";
 
 // 120 BPM from 0:00.5: a bar every 2 s (downbeats at 0:00.5, 0:02.5, ... 0:14.5, 0:16.5, ...).
@@ -49,12 +55,19 @@ const hide = { fromMs: 19_500, toMs: 21_500, clipId: "hands.mp4", clipName: "han
 type Props = ReturnType<typeof composeProps>["props"];
 
 // Each way a singing clip gets here: the same anchor with a sync time (the song time of the clip's first frame).
-const SOURCES: { name: string; sync: number }[] = [
-  { name: "an InfiniteTalk take with a long lead-in (starts 1 s before the cut)", sync: 13_433 },
-  { name: "an InfiniteTalk take with half a second of lead-in", sync: 14_000 },
-  { name: "a shot of a music video, cut out exactly at the cut (no lead-in)", sync: 14_433 },
-  { name: "an MV Generator take trimmed exactly to the song range (starts after the downbeat)", sync: 14_450 },
+// (Line 5 is on screen from 0:15.2 and sung from 0:15.45; its bar is at 0:14.5; beats every 0.5 s.)
+const SOURCES: { name: string; sync: number; breath: boolean }[] = [
+  { name: "an InfiniteTalk take with a long lead-in (starts 1 s before the bar)", sync: 13_433, breath: true },
+  { name: "an InfiniteTalk take with LEAD_MS of lead-in before the bar", sync: 14_500 - LEAD_MS, breath: true },
+  { name: "an MV Generator take that kept its 0.4 s of handle before the song range", sync: 14_500 - LEAD_MS - V2_V1_CHANGE.mvHandleInMs, breath: true },
+  { name: "a shot of a music video that starts a little after the bar (the generator's own cut)", sync: 14_433, breath: true },
+  { name: "a shot of a music video that starts exactly at the line (no breath in its footage)", sync: 15_450, breath: false },
 ];
+const SUNG_START = Math.round((15_450 * 30) / 1000); // line 5, song frames
+const SUNG_END = Math.round((19_000 * 30) / 1000);
+const F = v2v1Frames(30);
+// The beats are every 15 frames from frame 15 (0:00.5).
+const onBeat = (songFrame: number) => (songFrame - 15) % 15 === 0;
 
 // The singing shots of a composition, with the checks that hold for every source.
 function singingShots(props: Props, sync: number): number[] {
@@ -78,29 +91,62 @@ const playsUntil = (s: Props["shots"][number]) => s.clipStartFrame + Math.ceil((
 
 describe("a soft entry into and exit out of every kind of singing clip", () => {
   for (const src of SOURCES) {
-    it(`${src.name}: the shot before dissolves out over its first 0.4 s, the shot after dissolves in over its last 0.4 s`, () => {
+    it(`${src.name}: lead-in before the line, the B-roll dissolves out over its first 0.4 s ending on a beat, 0.3 s release, the first frames skipped`, () => {
       const a = anchor(1, "sings.mp4", { clipInMs: null, syncMs: src.sync });
       const { props, anchors } = composeProps(withSinger([a]), choices);
       const [i] = singingShots(props, src.sync);
+      const sing = props.shots[i];
       const before = props.shots[i - 1];
       const after = props.shots[i + 1];
-      // Entry: the B-roll before plays on 12 frames (0.4 s) past the cut, on top, and fades out; the cut did not move.
-      expect(before.tail).toBe(12);
+      const cutSong = songFrame0 + sing.start;
+      // Entry: the B-roll before plays on 12 frames (0.4 s) past the cut, on top, and fades out.
+      expect(before.tail).toBe(SOFT_ENTRY_FRAMES);
       expect(before.tailOver).toBe(true);
-      expect(before.start + before.duration).toBe(props.shots[i].start);
+      expect(before.start + before.duration).toBe(sing.start);
+      // ... and that dissolve ENDS on a beat (the singer's cut is one fade before it) whenever the footage allows.
+      expect(onBeat(cutSong + SOFT_ENTRY_FRAMES)).toBe(true);
+      // The first 2 frames of the take are never shown (its in-point, never its song time).
+      expect(sing.clipStartFrame).toBeGreaterThanOrEqual(F.skip);
+      // Lead-in: on screen 0.4 s before the line is sung when the footage has it; else the plan says so in plain words.
+      const lead = SUNG_START - cutSong;
+      if (src.breath) {
+        expect(lead).toBeGreaterThanOrEqual(F.leadIn);
+        expect(anchors!.uses[0].lead_in_ms).toBeGreaterThanOrEqual(V2_V1_CHANGE.leadInMs - 40);
+        expect(anchors!.notes.some((n) => /no breath/.test(n))).toBe(false);
+      } else {
+        expect(lead).toBeLessThan(F.leadIn);
+        expect(anchors!.uses[0].lead_in_ms).toBeLessThan(V2_V1_CHANGE.leadInMs);
+        expect(anchors!.notes.join(" ")).toMatch(/line 5: no breath to show before the line.*the clip before fades out over its first 0\.4 s/);
+      }
       // It plays real footage the whole time (never past the clip's last frame, never a frozen frame).
       expect(before.holdLastFrame).toBe(false);
       expect(playsUntil(before)).toBeLessThanOrEqual(before.clipDurationFrames);
-      // Exit: the B-roll after starts 12 frames early and fades in over the singer's last 12 frames; the singer is not touched.
-      expect(after.dissolve).toEqual({ before: 12, after: 0 });
-      expect(after.start).toBe(props.shots[i].start + props.shots[i].duration);
+      // Release: the singer stays 0.3 s after the line's sung end, and the B-roll after starts early and fades in over it.
+      expect(sing.start + sing.duration + songFrame0).toBeGreaterThanOrEqual(SUNG_END + F.release);
+      expect(after.dissolve).toEqual({ before: SOFT_EXIT_FRAMES, after: 0 });
+      expect(after.start).toBe(sing.start + sing.duration);
+      expect(after.start - SOFT_EXIT_FRAMES + songFrame0).toBeGreaterThanOrEqual(SUNG_END); // the fade-in begins after the line is sung
       expect(after.clipStartFrame).toBeGreaterThanOrEqual(0);
       expect(playsUntil(after)).toBeLessThanOrEqual(after.clipDurationFrames);
-      // Both dissolves lie inside the singer's own span (0.3 to 0.5 s of its first / last frames).
-      expect(props.shots[i].duration).toBeGreaterThanOrEqual(24);
+      expect(sing.duration).toBeGreaterThanOrEqual(24);
       expect(anchors!.uses[0].transition).toBe("dissolve");
     });
   }
+
+  it("the constants live in one place: the V2 -> V1 change in tracks.ts, and every user of them follows it", () => {
+    expect(V2_V1_CHANGE).toMatchObject({ leadInMs: 400, releaseMs: 300, entryFadeMs: 400, exitFadeMs: 300, skipFrames: 2 });
+    expect(F).toEqual({ leadIn: 12, release: 9, entryFade: 12, exitFade: 9, skip: 2 });
+    expect(SOFT_ENTRY_FRAMES).toBe(F.entryFade);
+    expect(SOFT_EXIT_FRAMES).toBe(F.exitFade);
+    expect(SOFT_SINGING_FRAMES).toBe(F.entryFade);
+    // InfiniteTalk: the piece starts far enough before the bar for the soft entry (the cut one fade before the beat) and the skipped frames.
+    expect(LEAD_MS).toBeGreaterThanOrEqual(V2_V1_CHANGE.entryFadeMs + (V2_V1_CHANGE.skipFrames * 1000) / 30 - 1);
+    // MV Generator: of its 1 s handles, 0.4 s before and 0.3 s after are kept (less when the song has less there).
+    expect(keptHandles({ inMs: MV_HANDLE_MS, outMs: MV_HANDLE_MS })).toEqual({ inMs: V2_V1_CHANGE.mvHandleInMs, outMs: V2_V1_CHANGE.mvHandleOutMs });
+    expect(keptHandles({ inMs: 100, outMs: 0 })).toEqual({ inMs: 100, outMs: 0 });
+    expect(V2_V1_CHANGE.mvHandleInMs).toBe(V2_V1_CHANGE.leadInMs);
+    expect(V2_V1_CHANGE.mvHandleOutMs).toBe(V2_V1_CHANGE.releaseMs);
+  });
 
   it("the singer coming back after a hidden moment: the cut-away dissolves in over the singer's end, and out over the returning singer", () => {
     const a = anchor(1, "sings.mp4", { clipInMs: null, syncMs: 13_500, throughLyric: 4, hides: [hide] });
@@ -111,8 +157,8 @@ describe("a soft entry into and exit out of every kind of singing clip", () => {
     const cover = props.shots[first + 1];
     expect(cover.src).toBe("cache/hands.mp4");
     expect(second).toBe(first + 2);
-    expect(cover.dissolve).toEqual({ before: 12, after: 0 });
-    expect(cover.tail).toBe(12);
+    expect(cover.dissolve).toEqual({ before: SOFT_EXIT_FRAMES, after: 0 }); // in over the singer's release
+    expect(cover.tail).toBe(SOFT_ENTRY_FRAMES); // out over the returning singer's first 0.4 s
     expect(cover.tailOver).toBe(true);
     expect(playsUntil(cover)).toBeLessThanOrEqual(cover.clipDurationFrames);
     for (const i of idx) {
@@ -131,7 +177,7 @@ describe("a soft entry into and exit out of every kind of singing clip", () => {
     const { props } = composeProps(withSinger([anchor(1, "sings.mp4", { clipInMs: null, syncMs: 13_500 })], { filmShots }), choices);
     const [i] = singingShots(props, 13_500);
     expect(props.shots[i - 1]).toMatchObject({ tail: 12, tailOver: true });
-    expect(props.shots[i + 1].dissolve).toEqual({ before: 12, after: 0 });
+    expect(props.shots[i + 1].dissolve).toEqual({ before: SOFT_EXIT_FRAMES, after: 0 });
   });
 
   it("a B-roll with no footage left to play on: no frozen frame from the dissolve, a hard cut with a note in plain words", () => {
@@ -140,7 +186,7 @@ describe("a soft entry into and exit out of every kind of singing clip", () => {
     const { props } = composeProps(withSinger([anchor(1, "sings.mp4", { clipInMs: null, syncMs: 13_500 })], { clips: [...tiny, singer] }), choices);
     const [i] = singingShots(props, 13_500);
     const before = props.shots[i - 1];
-    expect(playsUntil(before)).toBeGreaterThanOrEqual(before.clipDurationFrames - 1); // the shot already uses the clip to its last frame (slowed to the limit)
+    expect(before.clipDurationFrames - playsUntil(before)).toBeLessThan(6); // the clip has under 6 frames (0.2 s) left to play on: not enough for a fade
     expect(before.tail).toBeUndefined();
     expect(before.tailOver).toBeUndefined();
     expect(props.shots[i].dissolve).toBeUndefined();
@@ -151,14 +197,21 @@ describe("a soft entry into and exit out of every kind of singing clip", () => {
     const a = () => anchor(1, "sings.mp4", { clipInMs: null, syncMs: 13_500 });
     const tr = { feel: "calm" as const, hooks: [], sung: [] };
     const none = (props: Props) => props.shots.every((s) => !s.tailOver && !s.dissolve);
-    expect(none(composeProps(withSinger([a()]), { ...choices, transitions: "cut" }).props)).toBe(true);
-    expect(none(composeProps(withSinger([a()], { transitions: { style: "crisp", ...tr } }), choices).props)).toBe(true);
+    // (and the singer's cut stays ON its beat, 2 frames early as every cut: the fade shift is only for the soft entry)
+    const cutAt = (props: Props) => props.shots.find((s) => s.src === "cache/sings.mp4")!.start + songFrame0;
+    const crisp = composeProps(withSinger([a()], { transitions: { style: "crisp", ...tr } }), choices).props;
+    const allCuts = composeProps(withSinger([a()]), { ...choices, transitions: "cut" }).props;
+    expect(none(allCuts)).toBe(true);
+    expect(none(crisp)).toBe(true);
+    expect(onBeat(cutAt(allCuts) + 2)).toBe(true);
+    expect(onBeat(cutAt(crisp) + 2)).toBe(true);
     // The singing clip's own choice: no soft entry (the shot before has no tail).
     const own = composeProps(withSinger([a()], { transitions: { style: "auto", ...tr, byClip: { "sings.mp4": "cut" } } }), choices).props;
     const i = own.shots.findIndex((s) => s.src === "cache/sings.mp4");
     expect(own.shots[i - 1].tailOver).toBeUndefined();
     expect(own.shots[i - 1].tail).toBeUndefined();
     expect(own.shots[i].dissolve).toBeUndefined();
+    expect(onBeat(cutAt(own) + 2)).toBe(true);
     // The clip coming in after the singer says cut: no early start.
     const after = composeProps(withSinger([a()]), choices).props.shots[i + 1];
     const afterCut = composeProps(withSinger([a()], { transitions: { style: "auto", ...tr, byClip: { [after.src.replace("cache/", "")]: "cut" } } }), choices).props;
@@ -177,12 +230,13 @@ describe("a soft entry into and exit out of every kind of singing clip", () => {
     }
   });
 
-  it("lyric timing and the cuts do not change", () => {
+  it("lyric timing does not change; only the singer's cut moves, one fade (minus the early cut's 2 frames) before its beat", () => {
     const soft = composeProps(withSinger([anchor(1, "sings.mp4", { clipInMs: null, syncMs: 13_500 })]), choices).props;
     const hard = composeProps(withSinger([anchor(1, "sings.mp4", { clipInMs: null, syncMs: 13_500 })]), { ...choices, transitions: "cut" }).props;
     expect(soft.lyrics).toEqual(hard.lyrics);
-    expect(soft.cutFrames).toEqual(hard.cutFrames);
-    expect(soft.shots.map((s) => [s.start, s.duration])).toEqual(hard.shots.map((s) => [s.start, s.duration]));
+    const moved = soft.cutFrames.map((f, k) => f - hard.cutFrames[k]).filter((d) => d !== 0);
+    expect(soft.cutFrames).toHaveLength(hard.cutFrames.length);
+    expect(moved).toEqual([-(SOFT_ENTRY_FRAMES - 2)]); // the one cut of the singer: 12 frames before the beat instead of 2
   });
 
   it("HyperFrames draws it from the same props: the shot fades out on top of the singer, which has no fade", () => {

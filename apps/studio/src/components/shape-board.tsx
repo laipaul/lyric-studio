@@ -19,7 +19,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { clockTenths, type TimelineEdits, EFFECT_NAMES, effectTitle, followScrollLeft, LyricVideo, playheadLabel, revealScrollLeft, songTimeMs, timeTicks, patchLook, previewCard, previewTitleCard, readableWarning, titleCardMult, titleCardSize, TITLE_SIZE_RANGE, type CardOverrides, type TextCardProps, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
 import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node";
 import { tryName } from "@lyric/video/video-names";
-import { layersOf, SOFT_CHANGE_MS } from "@lyric/video";
+import { layersOf, SOFT_CHANGE_MS, SOFT_EXIT_MS } from "@lyric/video";
 import { ClipMenu } from "./clip-menu";
 import { BrollHere } from "./shape-broll";
 import { SongRange, SongTrackBehind, SongWindow, type SongWindowDrag } from "./soundtrack-window";
@@ -1299,7 +1299,20 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
           <>
             {/* 2. the soundtrack (bars, waveform, lyric lines) and 3. the shots, then 4. the command bar: measured, the viewer gets the rest */}
             <div ref={belowViewer} className="flex flex-col gap-3" data-below-viewer>
-            <div ref={timeline} onScroll={onTimelineScroll} className="overflow-x-auto rounded-lg border" data-storyboard-timeline>
+            <div className="flex rounded-lg border" data-timeline-frame>
+            {/* The lanes' names in their own column (28 Nov 2026, Paul: they covered the clips and the lyrics); each row is
+                exactly as tall as its lane in the timeline. */}
+            <div className="bg-card/60 flex w-[70px] shrink-0 flex-col border-r text-[10px] leading-tight" data-lane-names>
+              <div className="h-5 border-b" />
+              {view.titleCards.length ? <div className="text-muted-foreground border-b px-1 pt-0.5" style={{ height: titleLanes.count > 1 ? titleLanes.count * TITLE_LANE_PX + 5 : 20 }}>Titles</div> : null}
+              <LaneName name="Lyrics" className="h-8" />
+              <LaneName name="V2 B-roll" note="story clips" className="h-24" />
+              <LaneName name="V1 Singer" note={layers?.singer.length ? "locked" : "none"} className={layers?.singer.length ? "h-9" : "h-5"} />
+              <LaneName name="What plays" className="h-4" />
+              <LaneName name="A1 Song" className="h-6" />
+              {energy ? <div className="h-3 border-b" /> : null}
+            </div>
+            <div ref={timeline} onScroll={onTimelineScroll} className="min-w-0 flex-1 overflow-x-auto" data-storyboard-timeline>
               <div style={{ width: width + 16 + 2 * followPad + songPre + songPost, paddingLeft: lead, paddingRight: followPad + songPost }} data-follow-pad={followPad || undefined} data-song-pre={songPre || undefined}>
               <div
                 className="relative"
@@ -1351,7 +1364,6 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                   </div>
                 ) : null}
                 <div className="relative h-8 border-b" data-textboard-row>
-                  <LaneLabel name="Lyrics" />
                   {view.lines.map((l, i) => (
                     <div
                       key={i}
@@ -1397,7 +1409,6 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                   ))}
                 </div>
                 <div className="relative h-24 select-none border-b" data-shots-row data-lane="v2" onClickCapture={tl.onRowClickCapture}>
-                  <LaneLabel name="V2 B-roll" />
                   {/* Where V2 is empty over the singer, the singer shows through (V1, below). */}
                   {layers?.singer.flatMap((g) => {
                     const open: { fromMs: number; toMs: number }[] = [];
@@ -1470,8 +1481,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                   {tl.overlay}
                 </div>
                 {/* V1 Singer: singing takes locked to the song, always 1.00x; only the nudge (Lyrics Sync) moves one. */}
-                <div className="relative h-14 border-b" data-lane="v1" data-v1-lane>
-                  <LaneLabel name="V1 Singer" />
+                <div className={cn("relative border-b", layers?.singer.length ? "h-9" : "h-5")} data-lane="v1" data-v1-lane>
                   {layers?.singer.map((g) => (
                     <button
                       type="button"
@@ -1497,23 +1507,22 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                         </span>
                         {g.line ? <span className="rounded bg-black/60 px-0.5">line {g.line}</span> : null}
                       </span>
-                      <span className="absolute inset-x-0 bottom-0 truncate bg-black/70 px-1 leading-tight">{g.clip}</span>
+                      <span className="relative truncate px-1 leading-tight drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">{g.clip}</span>
                     </button>
                   ))}
-                  {!layers?.singer.length ? <span className="text-muted-foreground absolute top-4 left-24 text-[10px]">no singing in this video</span> : null}
+                  {!layers?.singer.length ? <span className="text-muted-foreground sticky left-2 inline-block pt-0.5 text-[10px]">no singing in this video</span> : null}
                 </div>
                 {/* What plays: the layer the viewer sees, moment by moment, and the soft changes into and out of the singer. */}
-                <div className="relative h-3 border-b" data-what-plays title="What plays: green = the singer (V1), grey = B-roll (V2), black = nothing yet. The light marks: the B-roll fading out over the singer's first 0.4 s, and in over its last 0.4 s.">
+                <div className="relative h-4 border-b" data-what-plays title="What plays: green = the singer (V1), blue = B-roll (V2), black with a red edge = nothing yet. The white fades: the B-roll fading out over the singer's first 0.4 s, and in over its last 0.4 s.">
                   {layers?.plays.map((p) => (
-                    <div key={`${p.shot}${p.fromMs}`} data-plays={p.layer} className={cn("absolute top-0 bottom-0", p.layer === "singer" ? "bg-emerald-500/80" : p.layer === "broll" ? "bg-zinc-400/60" : "bg-black")} style={{ left: x(p.fromMs), width: Math.max(1, x(p.toMs - p.fromMs)) }} />
+                    <div key={`${p.shot}${p.fromMs}`} data-plays={p.layer} className={cn("absolute top-0 bottom-0", p.layer === "singer" ? "bg-emerald-500" : p.layer === "broll" ? "bg-sky-500/70" : "border-y-2 border-red-500/80 bg-black")} style={{ left: x(p.fromMs), width: Math.max(1, x(p.toMs - p.fromMs)) }} />
                   ))}
                   {layers?.fades.map((f) => (
-                    <div key={`${f.kind}${f.atMs}`} data-fade={f.kind} className={cn("absolute top-0 bottom-0", f.kind === "into-singer" ? "bg-gradient-to-r" : "bg-gradient-to-l", "from-zinc-300/90 to-transparent")} style={{ left: x(f.kind === "into-singer" ? f.atMs : f.atMs - SOFT_CHANGE_MS), width: x(SOFT_CHANGE_MS) }} />
+                    <div key={`${f.kind}${f.atMs}`} data-fade={f.kind} className={cn("absolute top-0 bottom-0", f.kind === "into-singer" ? "bg-gradient-to-r" : "bg-gradient-to-l", "from-white/90 to-transparent")} style={{ left: x(f.kind === "into-singer" ? f.atMs : f.atMs - SOFT_EXIT_MS), width: x(f.kind === "into-singer" ? SOFT_CHANGE_MS : SOFT_EXIT_MS) }} />
                   ))}
                 </div>
                 {/* the song track: the whole song (8 Nov 2026), this video's part as the pink window on it */}
                 <div className="relative h-6 border-b" data-song-track data-soundtrack-track data-lane="a1">
-                  <LaneLabel name="A1 Song" />
                   {view.song ? <SongTrackBehind song={view.song} songStartMs={view.songStartMs} zoom={zoom} /> : null}
                   {slots.map((s) => (
                     // A singing slot (Storyboard → Singing): where a lip-sync shot belongs; display only.
@@ -1578,6 +1587,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
               </div>
               </div>
             </div>
+            </div>
             {/* 4. one command bar under the timeline: which video, the transport, follow / zoom (the verdict and Next are in the top line) */}
             <div className="bg-card/60 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-2 py-1 text-xs" data-command-bar>
               <div className="flex items-center gap-2">{sourceControls}</div>
@@ -1627,11 +1637,12 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   );
 }
 
-// A lane's name, kept in view at the left while the timeline scrolls (it takes no room in the row).
-function LaneLabel({ name }: { name: string }) {
+// A lane's name in the column beside the timeline (as tall as its lane).
+function LaneName({ name, note, className }: { name: string; note?: string; className: string }) {
   return (
-    <div className="pointer-events-none sticky left-0 z-[6] h-0 w-0 overflow-visible" data-lane-label={name}>
-      <span className="absolute top-0.5 left-0.5 rounded bg-black/75 px-1 text-[9px] whitespace-nowrap text-white/80">{name}</span>
+    <div className={cn("flex flex-col justify-center overflow-hidden border-b px-1", className)} data-lane-label={name}>
+      <span className="font-medium whitespace-nowrap text-white/85">{name}</span>
+      {note ? <span className="text-muted-foreground whitespace-nowrap">{note}</span> : null}
     </div>
   );
 }

@@ -4,6 +4,31 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### Singing clips enter with a breath; Shape's lanes tidied ✅ (to verify on the PC)
+Paul, 28 Nov 2026: "Still not fixed: every singing clip starts too sharply." Found on Wedding Day's Reel, line 15 (a
+music-video shot): the fade was there, but the singer was cut in on the first beat after her footage began, while
+line 14 was still being sung, so she appeared mid-phrase; the fade ended off the beat; the take's first frame
+"popped". Now, one rule for the change from B-roll to the singer (src/tracks.ts V2_V1_CHANGE), for every singing
+source (InfiniteTalk, MV Generator, music-video shots):
+- the singer comes in about 0.4 s before the line's first sung word (her breath in), at song time and 1.00x, on the
+  latest beat that allows it, never before her footage (+2 frames: the first 2 frames of a generated take are
+  skipped); she holds about 0.3 s after the line so the note releases;
+- the B-roll before her fades out over that lead-in and the fade ENDS on the beat; the B-roll after her fades in
+  over the release; the singer is never moved, slowed, frozen or faded;
+- new MV Generator takes keep 0.4 s / 0.3 s of the extra second they are made with (earlier takes stay as they are);
+- a clip whose footage starts right on the line has no breath to show: a plain-words note says so, the fade softens it.
+- Before / after (real renders, song 0:59.8-1:05.8): D:\LifeLyrics\Master\Wedding Day\Line 15 before-after\ —
+  before: cut at 1:02.77 mid "...be you"; after: cut at 1:03.43, the fade ending on the beat at 1:03.83, the singer
+  0.43 s before "You're beautiful".
+- Saved shot plans are planned again once (plan v5). Note: while diagnosing, Wedding Day's storyboards\reels-1.json was
+  saved again by the planner and restored; its older .previous.json (the plan from before 28 Nov's earlier fix) was lost.
+- Shape's lanes (Paul: "fix both"): the lane names in their own column beside the timeline (they no longer cover clips
+  or lyrics); V1 a compact row (a thin "no singing" row when the video has none); What plays taller and clearer
+  (green singer, blue B-roll, black with a red edge for nothing, white fades).
+- Tests: singing-soft-transitions (five source kinds: lead-in, the fade ending on a beat, release, skipped frames, the
+  singer exact on every frame, the no-breath note, cut choices win), anchors, mv-singer. Known, for Part D: this music-
+  video shot holds its last frame about 0.5 s before the next cut.
+
 ### Two-layer timeline, Part B1: see the layers ✅ (to verify on the PC)
 Paul, 28 Nov 2026: "go b1" (Part B split: B1 shows the layers, B2 edits by layers). Display only; editing unchanged.
 - **Shape's timeline**, top to bottom: Lyrics · **V2 B-roll** (the story clips and cut-aways, edited as before; where V2
@@ -774,32 +799,6 @@ locked cards can't be edited").
 - On the PC: Song Details → Mini film, then Make: two chips, Film 9:16 and Film 16:9. Production: Copy prompt 16:9 for a
   shot, make it in Midjourney, drop it, Use for shot N: the shot's 16:9 badge turns green.
 - Backlog (Paul): a long film (about 10 min) with several songs as its soundtrack.
-
-### Step B: a Mini film plays shot by shot ✅ (to verify on the PC)
-- Paul (23 Nov 2026): "the shots no longer match the lyrics … maybe because we don't have the full 38 shots it goes in
-  circle and fills in the gaps". For a music Reel the app cycles the clips over beat cuts; a Mini film is a story.
-- Now, for a story song (Mini film, or a shot list on lyric lines not set to "Cut to the song"), on every platform
-  except Canvas, **every card of the story line (Prepare → Storyboard) is ONE shot**, in that order:
-  - a card on a lyric line (its shot's line, else the line its clip is anchored on) starts when the line appears, cut
-    on the beat at or just before it (at most 0.2 s after it); cards without a line share the time of the card before
-    them (before the first line: the intro): the shot grid's rule;
-  - **each take plays once, on its own card**: no cycling, no repeats, no take filling another card's moment; the
-    variations (v2, v3) keep the same cuts (they differ in look and transitions);
-  - a planned shot **with no take yet shows a stand-in**: its first person's reference picture, dimmed and softened
-    (else a dark frame), named "Shot N · no take yet" on the Shape timeline; the plan says "Mini film: 39 of 45 shots
-    have no take yet (shots 7-45): they show a stand-in until you use a take for them in Creation → Production";
-  - a card with no room of its own (too close to the one before, or to the end) is left out and said; a card on a line
-    wins over a card without one just before it.
-  - a **part of the song chosen by hand** (the pink window, e.g. a 60 s chorus Reel) plays only the cards inside it, in
-    order; the card already playing when the part starts opens it (Paul: "I still can use my mini film and create a
-    normal reel right").
-- Code: node/film-plan.ts (filmItems, filmCuts, standInPicture), make.ts (the film block: the plan's cuts, stand-in
-  clips, no anchors / gap filling / loop blend), compose.ts (RenderBase.filmShots), storyboard.ts (stand-in names).
-  The plan cache key includes the shot list. Singing takes (lip sync) in a Mini film are placed as ordinary shots for
-  now (not frame-locked to the song): to look at when a Mini film uses one.
-- Tests: film-plan.test.ts (pure rules, a real plan and Make with 2 variations, Shape's shot names).
-- On the PC: Shape on "Something About You And Me": shots 1-6 play your six takes, each once, on its line; from shot 7
-  the stand-ins (Jennifer / the Bridegroom dimmed) follow the 45 cards; the Analysis lists the shots without a take.
 
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.

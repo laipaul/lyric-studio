@@ -199,8 +199,8 @@ describe("singing clips (lip sync, 21 Nov 2026): locked to the song", () => {
     const filmShots = [clipNames[5], ...film].slice(0, plan.cuts.length + 1);
     const { props } = composeProps(withSinger([anchor(1, "sings.mp4", { clipInMs: null, syncMs: 13_500 })], { filmShots }), { seed: 1, style: "simple", order: "story" });
     const sing = props.shots.find((s) => s.src === "cache/sings.mp4")!;
-    expect(sing.start).toBe(rel(14_500));
-    expect(sing.clipStartFrame + (sing.dissolve?.before ?? 0)).toBe(Math.round((14_500 * 30) / 1000) - 2 - Math.round((13_500 * 30) / 1000)); // lips in time
+    expect(sing.start).toBe(rel(14_500) - 10); // the soft entry (28 Nov 2026): 12 frames before the beat (the cut is 2 early), so the B-roll's fade ends ON the beat
+    expect(sing.clipStartFrame + (sing.dissolve?.before ?? 0)).toBe(Math.round((14_500 * 30) / 1000) - 12 - Math.round((13_500 * 30) / 1000)); // lips in time
     // Every other shot is the film's shot playing at its start.
     const bounds = [0, ...plan.cuts.map((c) => c.frame - plan.start_frame)];
     for (const s of props.shots.filter((x) => x.src !== "cache/sings.mp4")) {
@@ -214,9 +214,9 @@ describe("singing clips (lip sync, 21 Nov 2026): locked to the song", () => {
     const { props, anchors } = composeProps(withSinger([a]), { seed: 1, style: "simple", order: "story", transitions: "dissolve" });
     const at = props.shots.findIndex((s) => s.src === "cache/sings.mp4");
     const shot = props.shots[at];
-    expect(shot.start).toBe(rel(14_500)); // the downbeat before the line, as every anchor
-    // song frame of the cut (14.5 s - 2 frames) minus the clip's first frame (13.5 s) = clip frame 28
-    expect(shot.clipStartFrame).toBe(Math.round((14_500 * 30) / 1000) - 2 - Math.round((13_500 * 30) / 1000));
+    expect(shot.start).toBe(rel(14_500) - 10); // the downbeat before the line, one fade (12 frames) before the beat: the B-roll's dissolve ends on it
+    // song frame of the cut (14.5 s - 12 frames) minus the clip's first frame (13.5 s) = clip frame 18
+    expect(shot.clipStartFrame).toBe(Math.round((14_500 * 30) / 1000) - 12 - Math.round((13_500 * 30) / 1000));
     expect(shot.playbackRate).toBe(1);
     // The singing clip itself is never faded (28 Nov 2026): the shot before plays on over it and fades out (0.4 s).
     expect(shot.dissolve).toBeUndefined();
@@ -309,8 +309,8 @@ describe("singing clips (lip sync, 21 Nov 2026): locked to the song", () => {
     const { props, anchors } = composeProps(base(10_500, 40_500, [a], { clips: [...clips, run] }), { seed: 1, style: "simple", order: "story" });
     const shots = props.shots.filter((s) => s.src === "cache/run.mp4");
     expect(shots).toHaveLength(1);
-    expect(shots[0].start).toBe(rel(14_500));
-    // Line 9 is sung until 0:33.0: the next cut is the bar at 0:34.5.
+    expect(shots[0].start).toBe(rel(14_500) - 10); // (the soft entry: one fade before the beat)
+    // Line 9 is sung until 0:33.0 (and the singer stays 0.3 s after it): the next cut is the bar at 0:34.5.
     expect(shots[0].start + shots[0].duration).toBe(rel(34_500));
     expect(shots[0].playbackRate).toBe(1);
     expect(anchors!.conflicts).toEqual([]);

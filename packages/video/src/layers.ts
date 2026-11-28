@@ -7,12 +7,14 @@
 //              the soft changes between them (the B-roll fades out over the singer's first 0.4 s, in over its last).
 // Pure.
 import type { StoryShot } from "./storyboard";
+import { V2_V1_CHANGE } from "./tracks";
 
 export type SingerLane = { clip: string; thumb: string | null; fromMs: number; toMs: number; line: number | null; shots: number[]; covered: { fromMs: number; toMs: number }[] };
 export type PlaySpan = { fromMs: number; toMs: number; layer: "broll" | "singer" | "none"; shot: number };
 export type Layers = { singer: SingerLane[]; broll: number[]; plays: PlaySpan[]; fades: { atMs: number; kind: "into-singer" | "out-of-singer" }[] };
 
-export const SOFT_CHANGE_MS = 400; // compose.ts: SOFT_SINGING_FRAMES (12) at 30 fps
+export const SOFT_CHANGE_MS = V2_V1_CHANGE.entryFadeMs; // the B-roll fades out over the singer's first 0.4 s (tracks.ts: the V2 → V1 change)
+export const SOFT_EXIT_MS = V2_V1_CHANGE.exitFadeMs; // and in over its release (0.3 s)
 const CONTINUITY_MS = 120; // the singer's clip time and the video time move together (in time), within a few frames
 
 // Two singing shots of the same clip are one segment when the clip plays on in time between them (a cut-away).

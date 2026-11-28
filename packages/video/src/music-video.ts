@@ -86,6 +86,9 @@ export function linesOfShot(shot: MvShot, offsetMs: number, lines: readonly { nu
   return inShot.length ? { first: Math.min(...inShot), last: Math.max(...inShot) } : null;
 }
 
+// (V2 → V1 change, tracks.ts: the frames before a shot belong to another shot of the generator, so a music-video shot has no
+// breath in to keep: it is cut exactly at the generator's own change, and the planner (anchors.ts) never shows its first 2 frames
+// (V2_V1_CHANGE.skipFrames, as the clip's in-point) and says "no breath to show": the B-roll fade alone softens the entry.)
 // The piece of the video a shot becomes (video ms): its crossfade frames left out, and on to the end of its last line
 // when the generator cut before that line was sung to its end (its own cut then plays, still in time).
 export function shotPiece(shot: MvShot, offsetMs: number, durationMs: number, lastSungEndMs: number | null): { fromMs: number; toMs: number } {

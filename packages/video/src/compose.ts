@@ -17,7 +17,7 @@ import type { PictureProps } from "./picture";
 import { assignClips, BEST_WINDOW_MS, type ClipOrder } from "./shots";
 import { applyCutMoves, slipFor, type TimelineEdits } from "./timeline-edits";
 import { withCard, type CardStyle } from "./textboard";
-import { fitHandles, SOFT_SINGING_FRAMES } from "./handles";
+import { fitHandles, SOFT_ENTRY_FRAMES, SOFT_EXIT_FRAMES } from "./handles";
 import { planTransitions, type TransitionKind, type TransitionStyle } from "./transitions";
 import type { Feel } from "./pace";
 
@@ -213,9 +213,13 @@ export function composeProps(
 
   // Story anchors: their cuts go into the plan (they win over the regular cut rate).
   // (With the lines' sung ends: an anchor holds until its line is sung, also without lyric effects.)
+  // The soft entry into a singing clip (the V2 → V1 change, tracks.ts): off with the cut variation, the crisp style, or the
+  // clip's own "comes in with: cut", which win; then the singer's cut stays on its beat.
+  const hardCuts = choices.transitions === "cut" || base.transitions?.style === "crisp";
+  const noFade = new Set((base.anchors ?? []).filter((a) => base.transitions?.byClip?.[a.clipId] === "cut").map((a) => a.clipId));
   let anchorPlan =
     base.anchors?.length && base.beats && base.clips.length
-      ? planAnchors(plan, base.beats, base.anchors, lyricFrames(base, choices.leadMs ?? DEFAULT_LEAD_MS, choices.lyricsOffsetMs ?? 0, true, choices.effects?.gap))
+      ? planAnchors(plan, base.beats, base.anchors, lyricFrames(base, choices.leadMs ?? DEFAULT_LEAD_MS, choices.lyricsOffsetMs ?? 0, true, choices.effects?.gap), { singerFade: !hardCuts, noFade })
       : null;
   if (anchorPlan) plan = anchorPlan.plan;
   // The user's rolls last: a cut moved by hand is final, also an anchor's (the cuts the user saw are matched).
@@ -381,13 +385,13 @@ export function composeProps(
   // take, an MV Generator take, a shot of a music video, the singer coming back after a hidden moment, a singing clip over a
   // Mini film): all of them are anchors with a sync time, so they all come here. The softness comes from the B-roll beside it:
   //   in:  the shot BEFORE the singing clip plays on past the cut and dissolves OUT over the singer's first 0.4 s (the singer
-  //        is full underneath from its cut frame; the cut stays on its beat);
-  //   out: the shot AFTER it starts 0.4 s early and dissolves IN over the singer's last 0.4 s.
+  //        is full underneath from its cut frame; the cut sits 0.4 s before a beat, so the dissolve ENDS on the beat);
+  //   out: the shot AFTER it starts early and dissolves IN over the singer's release (0.3 s after the line's sung end).
+  // (One rule for every source, defined once: tracks.ts V2_V1_CHANGE; the cut is placed in anchors.ts.)
   // Where the B-roll has no footage to give, fitHandles (src/handles.ts) shortens that or leaves a hard cut with a note; it
   // never freezes a frame. Not when the variation, the crisp style or the clip's own "comes in with: cut" says cut, and not
   // between two singing clips (nothing of either may be faded).
   const singingShots = new Set<number>([...(anchorPlan?.shots ?? [])].filter(([, a]) => a.syncMs != null).map(([i]) => i));
-  const hardCuts = choices.transitions === "cut" || base.transitions?.style === "crisp";
   const softIn = new Set<number>(); // singing shots entered softly
   const softOut = new Set<number>(); // B-roll shots after a singing shot, coming in early over its end
   const comesInCut = (i: number) => base.transitions?.byClip?.[assigned[i].clip_id] === "cut";
@@ -419,10 +423,10 @@ export function composeProps(
     transitionPlan = { text: planned.text, kinds: [] };
   }
   // (After the automatic transitions, which must not override them; a dip to black into a shot is as soft as it needs to be.)
-  for (const i of softIn) wanted.set(i, SOFT_SINGING_FRAMES);
+  for (const i of softIn) wanted.set(i, SOFT_ENTRY_FRAMES);
   for (const i of [...softOut]) {
     if (dips.some((d) => d.frame === shots[i].start)) softOut.delete(i);
-    else wanted.set(i, SOFT_SINGING_FRAMES);
+    else wanted.set(i, SOFT_EXIT_FRAMES);
   }
   if (wanted.size) {
     const loops = assigned.some((s) => s.loop) || !!base.loopInto;

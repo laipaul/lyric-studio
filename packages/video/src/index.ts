@@ -62,4 +62,4 @@ export * from "./storyboard-file";
 export * from "./song-tags";
 export * from "./video-names";
 export * from "./shot-grid";
-export { layersOf, SOFT_CHANGE_MS, type Layers, type PlaySpan, type SingerLane } from "./layers";
+export { layersOf, SOFT_CHANGE_MS, SOFT_EXIT_MS, type Layers, type PlaySpan, type SingerLane } from "./layers";

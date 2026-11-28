@@ -4,6 +4,32 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Step B: a Mini film plays shot by shot ✅ (to verify on the PC)
+- Paul (23 Nov 2026): "the shots no longer match the lyrics … maybe because we don't have the full 38 shots it goes in
+  circle and fills in the gaps". For a music Reel the app cycles the clips over beat cuts; a Mini film is a story.
+- Now, for a story song (Mini film, or a shot list on lyric lines not set to "Cut to the song"), on every platform
+  except Canvas, **every card of the story line (Prepare → Storyboard) is ONE shot**, in that order:
+  - a card on a lyric line (its shot's line, else the line its clip is anchored on) starts when the line appears, cut
+    on the beat at or just before it (at most 0.2 s after it); cards without a line share the time of the card before
+    them (before the first line: the intro): the shot grid's rule;
+  - **each take plays once, on its own card**: no cycling, no repeats, no take filling another card's moment; the
+    variations (v2, v3) keep the same cuts (they differ in look and transitions);
+  - a planned shot **with no take yet shows a stand-in**: its first person's reference picture, dimmed and softened
+    (else a dark frame), named "Shot N · no take yet" on the Shape timeline; the plan says "Mini film: 39 of 45 shots
+    have no take yet (shots 7-45): they show a stand-in until you use a take for them in Creation → Production";
+  - a card with no room of its own (too close to the one before, or to the end) is left out and said; a card on a line
+    wins over a card without one just before it.
+  - a **part of the song chosen by hand** (the pink window, e.g. a 60 s chorus Reel) plays only the cards inside it, in
+    order; the card already playing when the part starts opens it (Paul: "I still can use my mini film and create a
+    normal reel right").
+- Code: node/film-plan.ts (filmItems, filmCuts, standInPicture), make.ts (the film block: the plan's cuts, stand-in
+  clips, no anchors / gap filling / loop blend), compose.ts (RenderBase.filmShots), storyboard.ts (stand-in names).
+  The plan cache key includes the shot list. Singing takes (lip sync) in a Mini film are placed as ordinary shots for
+  now (not frame-locked to the song): to look at when a Mini film uses one.
+- Tests: film-plan.test.ts (pure rules, a real plan and Make with 2 variations, Shape's shot names).
+- On the PC: Shape on "Something About You And Me": shots 1-6 play your six takes, each once, on its line; from shot 7
+  the stand-ins (Jennifer / the Bridegroom dimmed) follow the 45 cards; the Analysis lists the shots without a take.
+
 ### Step A: the shot grid: the song decides the timing, the story fills it ✅ (to verify on the PC)
 - Paul (23 Nov 2026): "suppose we had to start again. You need to analyse the full song and plan each shot list
   according to the length of the song". The Mini film showed takes repeating and drifting off their lines because the
