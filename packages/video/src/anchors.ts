@@ -55,6 +55,7 @@ export type AnchorPlan = {
   notes: string[];
 };
 
+export const SINGER_HOLD_MAX_FRAMES = 6; // a singer may hold its last frame this long (0.2 s) when the next singer follows right after
 export const ANCHOR_REPEAT_MS = 8000; // the same clip anchored twice this close: the repeat is visible
 const clock = (ms: number) => `${Math.floor(ms / 60_000)}:${((ms % 60_000) / 1000).toFixed(1).padStart(4, "0")}`;
 const lineName = (a: { line: number; text: string }) => `line ${a.line} "${a.text}"`;
@@ -84,7 +85,7 @@ export function planAnchors(
   const base = (a: ResolvedAnchor) => ({ line: a.line, text: a.text, clip: a.clipName, transition: a.syncMs != null ? ("cut" as const) : a.transition, ...(a.syncMs != null ? { lipsync: true } : {}) });
 
   const F = v2v1Frames(fps);
-  type Placed = { a: ResolvedAnchor; cut: CutPoint | null; frame: number; hold: number; release: number; use: AnchorUse };
+  type Placed = { a: ResolvedAnchor; cut: CutPoint | null; frame: number; hold: number; release: number; use: AnchorUse; sungAt: number };
   const placed: Placed[] = [];
   const byTime = [...anchors].sort((x, y) => (lines[x.lyric]?.startFrame ?? 0) - (lines[y.lyric]?.startFrame ?? 0) || x.line - y.line);
   for (const a of byTime) {
@@ -193,7 +194,7 @@ export function planAnchors(
       }
     }
     uses.push(use);
-    placed.push({ a, cut, frame, hold: Math.max(hold, frame + minShot), release, use });
+    placed.push({ a, cut, frame, hold: Math.max(hold, frame + minShot), release, use, sungAt });
   }
 
   // The same clip anchored twice close together.
@@ -209,7 +210,7 @@ export function planAnchors(
 
   // Regular cuts inside an anchored shot (or too close before it) give way; an anchor's shot lasts until
   // the first regular cut after its line ends (or the next anchor).
-  const regular = plan.cuts.filter((c) => !placed.some((p) => c.frame > p.frame - minShot && c.frame < p.hold + p.release));
+  let regular = plan.cuts.filter((c) => !placed.some((p) => c.frame > p.frame - minShot && c.frame < p.hold + p.release));
   // Hidden moments of a singing take: away to the cover clip on the beat at or before the moment, back to the singer on
   // the beat at or after it (the singer's frame is the song's: the lips are in time again). Within the take's shot.
   const hideCuts: { cut: CutPoint; a: ResolvedAnchor }[] = [];
@@ -245,7 +246,45 @@ export function planAnchors(
       }
     }
   }
-  const cuts = [...regular, ...placed.flatMap((p) => (p.cut ? [p.cut] : [])), ...hideCuts.map((h) => h.cut)].sort((x, y) => x.frame - y.frame);
+  // A singing shot never plays past its own footage (Paul, 28 Nov 2026: "the end of this singing video freezes"): when the
+  // next cut would come after the clip's last frame, the shot ends where the footage ends instead (the next shot, the story
+  // order's next B-roll, takes the rest, and dissolves in over the singer's last 0.3 s). Preferably on the latest beat at or
+  // before the footage end that still covers the line's sung end plus its release; else exactly at the footage end, off the
+  // beat. A footage that ends before the sung end says what would fix it (a longer take); no frame is held either way.
+  const beatCuts = beats.map((_, i) => cutPointAt(beats, i, fps, early));
+  const footCuts: CutPoint[] = [];
+  const allFrames = [...regular.map((c) => c.frame), ...placed.map((p) => p.frame), ...hideCuts.map((h) => h.cut.frame)].sort((x, y) => x - y);
+  for (const p of placed) {
+    if (p.a.syncMs == null || p.a.footageFrames === undefined) continue;
+    const footEnd = Math.round((p.a.syncMs * fps) / 1000) + p.a.footageFrames;
+    const segments = [p.frame, ...hideCuts.filter((h) => h.a === p.a).map((h) => h.cut.frame)];
+    for (const s of segments) {
+      const natural = allFrames.find((f) => f > s) ?? end;
+      if (natural <= footEnd || s >= footEnd) continue;
+      // The next singing clip follows within HOLD_MAX_FRAMES of this one's last frame (e.g. two shots of one music video on
+      // consecutive lines, trimmed apart): no flash of B-roll between two singers; this one holds its last frame until the
+      // next singer's cut (at most 0.2 s), with a note.
+      const nextSinger = placed.find((q) => q.frame === natural && q.a.syncMs != null);
+      if (nextSinger && natural - footEnd <= SINGER_HOLD_MAX_FRAMES) {
+        notes.push(`line ${p.a.line}: line ${nextSinger.a.line}'s singing clip starts ${((natural - footEnd) / fps).toFixed(1)} s after this one's last frame: that frame is held until then, both in time with the song`);
+        continue;
+      }
+      const need = Math.max(p.hold + p.release, s + minShot);
+      const onBeat = beatCuts.filter((c) => c.frame <= footEnd && c.frame >= need).at(-1);
+      const frame = onBeat ? onBeat.frame : Math.max(footEnd, s + 1);
+      const mid = beatCuts.find((c) => c.frame === frame);
+      footCuts.push(mid ?? { frame, time_ms: msOf(frame), beat_index: 0, beat_time_ms: msOf(frame), bar: 0, beat_in_bar: 0 });
+      const covered = footEnd - p.sungAt;
+      if (!onBeat && footEnd < p.hold) {
+        notes.push(`line ${p.a.line}: the singing clip covers only ${(Math.max(0, covered) / fps).toFixed(1)} s of the ${((p.hold - p.sungAt) / fps).toFixed(1)} s line: a longer take or another shot would cover the whole line (the picture goes on with the next clip instead of freezing)`);
+      }
+    }
+  }
+  if (footCuts.length) {
+    // The next shot after such a cut is no sliver: a regular cut right behind it gives way.
+    regular = regular.filter((c) => !footCuts.some((f) => c.frame > f.frame && c.frame < f.frame + minShot));
+  }
+  const cuts = [...regular, ...placed.flatMap((p) => (p.cut ? [p.cut] : [])), ...hideCuts.map((h) => h.cut), ...footCuts].sort((x, y) => x.frame - y.frame);
   const merged = cuts.filter((c, i) => i === 0 || c.frame !== cuts[i - 1].frame);
   const bounds = [start, ...merged.map((c) => c.frame)];
   const shots = new Map<number, ResolvedAnchor>();
@@ -305,7 +344,7 @@ export function anchorProblems(
       else if (downbeats.length && from > cutAt + 1) out.push({ line: a.line, problem: `the singing clip ${a.clip} starts after the downbeat before line ${a.line}: it cuts in a little later, on a beat` });
       const lastLine = (a.through !== undefined ? lines.get(a.through) : undefined) ?? l;
       const lastN = a.through !== undefined && lines.has(a.through) ? a.through : a.line;
-      if (to < lastLine.sungEndMs) out.push({ line: a.line, problem: `the singing clip ${a.clip} ends ${((lastLine.sungEndMs - to) / 1000).toFixed(1)} s before line ${lastN} is sung: its last frame holds` });
+      if (to < lastLine.sungEndMs) out.push({ line: a.line, problem: `the singing clip ${a.clip} ends ${((lastLine.sungEndMs - to) / 1000).toFixed(1)} s before line ${lastN} is sung: the picture goes on with the next clip instead (a longer take or another shot would cover the whole line)` });
     } else if (length !== null && length !== undefined) {
       const left = length - (a.clipIn ?? 0) * 1000;
       if (left < lineMs) {

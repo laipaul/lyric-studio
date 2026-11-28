@@ -4,6 +4,27 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### A singer never freezes; music videos are no longer split on false alarms ✅ (to verify on the PC)
+Paul, 28 Nov 2026: "the end of this singing video freezes a bit", "there is a slight cut too here", "the singing clip 1
+is one video, why was it cut?". Measured on Wedding Day's Reel v1 (dry run): a singing shot was kept on screen until the
+next regular cut after its line, longer than its footage, so its last frame froze (line 17: 8.13 s on screen for 4.50 s
+of footage, 109 frames frozen; line 25: 16; line 15: 6).
+- A singing shot now ends where its footage ends: on the latest beat that still covers the line's sung end plus the
+  0.3 s release, else exactly at its last frame; the B-roll of the story order takes the rest with the soft fade. If the
+  footage ends before the line is sung, a note says what would fix it ("a longer take or another shot would cover the
+  whole line"). After: 0 frozen frames on lines 16, 17, 25, 32; a bridge of at most 6 frames (0.2 s) between two
+  different singing clips instead of a B-roll flash (lines 15-16).
+- Music videos: WeddingDaySingingClip1 is ONE continuous shot; its split at 3.6 s was a false alarm (picture change
+  0.017, like ordinary movement, on a ~24 fps clip). Shot finding now needs a real change (summed over 120 ms, at least
+  0.2). "Use on its lines" on a shot whose neighbouring shot of the same video is on the next line cuts them as ONE take
+  (the generator's own change kept); new shot cuts no longer trim 80 ms on an edge shared with a neighbour. Existing
+  records are not rewritten: Paul presses "This is a music video of this song" on Clip1 again (one shot), then "Use on
+  its lines" for lines 15-16.
+- Lip sync audited per singing shot (lines 15, 16, 17, 25, 32): every one starts exactly on its take's frame for that
+  song time, at 1.00x. Saved shot plans are planned again once (plan v6).
+- Tests: singer-footage-end (new), music-video (a 24 fps portrait = one shot), music-video-node (joined take); suite
+  158 files, 1575 passed.
+
 ### Singer back in the shots row; singing lines that follow each other; Singer panel fixes ✅ (to verify on the PC)
 Paul, 28 Nov 2026, after testing the MV Generator on Wedding Day lines 15-16.
 - **Shape** (Paul: "the singer part shows in same frame but gets an outline colour and the storyboard number stays
@@ -764,42 +785,6 @@ locked cards can't be edited").
   happens, people (and looks) and lyric. Read-only. node/shot-script.ts; production route action "script";
   shot-production.test.ts.
 
-### Make with references: the character sheets go to the video platform ✅ (to verify on the PC, needs WAVESPEED_API_KEY)
-- Paul (24 Nov 2026): "I need to provide to the video platform my character sheets in order to create the video with
-  constant characters. Currently I can't do that in Midjourney" (Midjourney's Omni Reference is one picture, images only).
-- Creation → Production: every shot with people or a place has **Make with references** (a Mini film: "9:16" and
-  "16:9"). It sends the shot to **Seedance 2.5 reference-to-video on WaveSpeed** with the pictures of the people in the
-  look they wear in this shot (wardrobe close-up, else front view, else the card's picture) and the scene card, named in
-  the prompt "@Image 1 is Jennifer, wearing their "Wedding Dress" look. … Keep each person's face, hair and outfit exactly
-  as in their picture." followed by the shot's own prompt (without Midjourney's --parameters). Length: the shot's time on
-  the song (4-30 s); takes and cap: Creation's defaults; a confirm shows the estimate.
-- The takes come back on the shot like every take (Tasks menu, Get result, Compare, Use for shot N), on the shot's
-  **reference item** "s05 references 9x16.png" (the pictures sent, side by side); each take records its pictures
-  (refFiles, refNames), prompt and shape. Request (WaveSpeed v3): { prompt, reference_images, aspect_ratio, resolution
-  720p, duration, generate_audio: false } at bytedance/seedance-2.5/reference-to-video, as public integrations call it
-  (WaveSpeed's own pages cannot be read from the cloud). Price: the 720p Seedance 2.5 price ($0.324/s) as the estimate.
-- Code: node/shot-references.ts, animate.ts (REFERENCE_MODEL, Transport.submitRefs, runTakes), pictures route action
-  "references", pictures-board.tsx. Also fixed: a take whose picture could not be put online stayed "running".
-- Tests: shot-production.test.ts (refs, prompt, cap, a stand-in run end to end), animate.test.ts (the exact request),
-  creation-production e2e (the button, the reference item on the shot).
-- First real run (Paul, 24 Nov 2026, shot 5): the face was Jennifer's, but "the dress is not the same anymore". Fixed the
-  same day: each person now goes as **two pictures**, the look's close-up (face, hair, makeup) and its full-length front
-  view (body_front: "complete outfit, head to toe: wear exactly this … never change or invent clothing").
-- **Camera guide** (same day; Paul: "MJ as a reference video will certainly help Seedance quality"): each shot has a
-  "Camera guide" choice (its videos and finished takes, the first one by default, or None); it goes as @Video 1
-  (reference_videos; over 15 s: its first 15 s): "Follow the camera movement, framing, lighting and atmosphere of
-  @Video 1, but the people and their clothes must look exactly like their pictures". The take records it (guideFile).
-- Second real run (Paul, shot 5): with the Midjourney take as camera guide, Seedance copied Midjourney's woman, not
-  Jennifer. Fixed: the guide is sent **blurred** (boxblur 24 at 720p, "<name> (camera guide v1).mp4" in pictures\takes):
-  camera movement, framing, light and colour survive, no face does; the prompt says it shows no one to copy.
-- The reference item ("pictures sent") has no Use / Animate of its own and is not a Compare candidate; its takes are.
-- **Place per shot** (same day; Paul: "we have scene cards already simply not used yet"): Production shows "Place" on
-  every shot (the cast's scene cards, or None) and "all of <section>" to give the whole section that place. The scene
-  card's picture then goes with the shot: the prompt's place, the Omni Reference, Make with references ("@Image N is
-  the place …"). A re-import that names no place keeps the one chosen (shotlist.ts setShotScene; route "shot-scene").
-- On the PC (first real run): one shot, 1 take (Creation → Defaults), check the face against the card. If WaveSpeed
-  refuses the request, send me its message: the route's exact fields could not be read from WaveSpeed's own docs here.
-
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -958,6 +943,20 @@ locked cards can't be edited").
   mix has different timing, use Generate -> advanced -> re-align.
 
 ## Next
+
+**Request queue (Paul, 28 Nov 2026: "put in a queue my change request and don't overlap and tell me to wait if
+needed").** One item at a time, never two at once; each is tested, built, pushed, then Paul restarts once. New
+requests are added at the end and acknowledged with their place.
+1. ✅ **Singing shots on the Reel** (done 28 Nov 2026, see Latest steps).
+2. **One-button Singer** (Paul: "it's too complex this workflow"): per line only the picture, one "What she does" box
+   and "Make take · cost"; the app picks engine, voice, resolution, shape; the settings folded away. Needs Paul's OK.
+3. **Preview playback**: the song keeps playing steadily instead of pausing while a clip loads (only if Paul confirms
+   the problem is in the preview, not in a made MP4).
+4. **Two-layer timeline, Part B2**: editing by layers (removing a B-roll leaves a gap, Close gap, a video's own B-roll).
+5. **Dry vocal from the master** (vocal separated from the master, then de-reverbed) once Paul has listened to files 6
+   and 7 in D:\LifeLyrics\Master\Wedding Day\Dry vocal compare; then **Tools → Remove reverb**.
+6. **Save / Show in folder** for a take in Creation (asked, not yet confirmed).
+7. Then the order below: keep generation prompts with each shot, in-app help, Parts C and D.
 
 **Agreed order (Paul, 28 Nov 2026), one part at a time, push, wait for his OK:**
 1. **Music Video Generator as a second singing engine** in the Singer panel (Engine per take: InfiniteTalk default /

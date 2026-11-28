@@ -37,7 +37,14 @@ export const MV_MODEL = "WaveSpeed Music Video Generator";
 // Scene-change scores per frame (FFmpeg's scene score, 0-1): a cut where two frames in a row together change at least
 // `pairMin` and many times more than the frames around them (`ratio` × their median, within ±1 s). Cuts closer than
 // CUT_MERGE_MS are one cut. Returns the cut times in ms (the first frame of the new shot is about there).
-export function detectCuts(frames: readonly { t: number; score: number }[], o: { pairMin?: number; ratio?: number } = {}): number[] {
+// `absMin` (28 Nov 2026, Paul's Wedding Day Clip1: ONE continuous portrait shot at 23.6 fps was split at 3.6 s by an ordinary
+// 0.016 + 0.015 flicker, which stood out only against its very quiet neighbours): a cut also needs an absolute change, the
+// scene scores within MV_CUT_WINDOW_MS adding up to at least this. analyseMusicVideo passes MV_CUT_MIN: a real shot change of the
+// generator (a hard cut or its short crossfade between two pictures) adds up to more; on that clip the biggest ordinary motion
+// (a burst at 3.1 s, 0.18) stays below it. Without absMin (the tests of the plain rule) nothing changes.
+export const MV_CUT_MIN = 0.2;
+export const MV_CUT_WINDOW_MS = 120;
+export function detectCuts(frames: readonly { t: number; score: number }[], o: { pairMin?: number; ratio?: number; absMin?: number } = {}): number[] {
   const pairMin = o.pairMin ?? 0.02;
   const ratio = o.ratio ?? 12;
   const cuts: number[] = [];
@@ -54,6 +61,11 @@ export function detectCuts(frames: readonly { t: number; score: number }[], o: {
     around.sort((a, b) => a - b);
     const median = around.length ? around[Math.floor(around.length / 2)] : 0;
     if (pair < ratio * Math.max(median, 0.0005)) continue;
+    if (o.absMin !== undefined) {
+      let sum = 0;
+      for (let j = i; j < frames.length && frames[j].t < t + MV_CUT_WINDOW_MS / 1000 - 1e-6; j++) sum += frames[j].score;
+      if (sum < o.absMin) continue;
+    }
     const ms = Math.round(t * 1000);
     if (cuts.length && ms - cuts[cuts.length - 1] < CUT_MERGE_MS) continue;
     cuts.push(ms);
@@ -130,11 +142,24 @@ export function linesOfShot(shot: MvShot, offsetMs: number, lines: readonly { nu
 // (V2_V1_CHANGE.skipFrames, as the clip's in-point) and says "no breath to show": the B-roll fade alone softens the entry.)
 // The piece of the video a shot becomes (video ms): its crossfade frames left out, and on to the end of its last line
 // when the generator cut before that line was sung to its end (its own cut then plays, still in time).
-export function shotPiece(shot: MvShot, offsetMs: number, durationMs: number, lastSungEndMs: number | null): { fromMs: number; toMs: number } {
-  const fromMs = shot.fromMs === 0 ? 0 : shot.fromMs + EDGE_TRIM_MS;
-  let toMs = shot.toMs >= durationMs ? durationMs : shot.toMs - EDGE_TRIM_MS;
+// `shared` (28 Nov 2026): this shot's edge is shared with the neighbouring shot of the same video, used on the very next line:
+// that edge is not trimmed, so the second shot starts where the first ends (no hole of 2 x EDGE_TRIM_MS between the two).
+export function shotPiece(shot: MvShot, offsetMs: number, durationMs: number, lastSungEndMs: number | null, shared: { before?: boolean; after?: boolean } = {}): { fromMs: number; toMs: number } {
+  const fromMs = shot.fromMs === 0 || shared.before ? shot.fromMs : shot.fromMs + EDGE_TRIM_MS;
+  let toMs = shot.toMs >= durationMs || shared.after ? Math.min(shot.toMs, durationMs) : shot.toMs - EDGE_TRIM_MS;
   if (lastSungEndMs !== null) toMs = Math.max(toMs, Math.min(durationMs, lastSungEndMs - offsetMs + 300));
   return { fromMs, toMs: Math.max(fromMs + 200, toMs) };
+}
+
+// Which edges of shot `i` are shared with its neighbours: the shot before / after is used on the line right before / after this
+// shot's own lines (consecutive lines, one music video: the two pieces meet at the generator's cut).
+export function sharedEdges(shots: readonly MvShot[], i: number, offsetMs: number, lines: readonly { number: number; shownMs: number }[]): { before: boolean; after: boolean } {
+  const mine = shots[i] ? linesOfShot(shots[i], offsetMs, lines) : null;
+  const prev = i > 0 ? linesOfShot(shots[i - 1], offsetMs, lines) : null;
+  const next = shots[i + 1] ? linesOfShot(shots[i + 1], offsetMs, lines) : null;
+  const order = lines.map((l) => l.number).sort((x, y) => x - y);
+  const follows = (a: number, b: number) => order.indexOf(b) === order.indexOf(a) + 1 && order.indexOf(a) >= 0;
+  return { before: !!mine && !!prev && follows(prev.last, mine.first), after: !!mine && !!next && follows(mine.last, next.first) };
 }
 
 export const mvResolution = (height: number | null, width: number | null): "480p" | "720p" => (Math.min(height ?? 0, width ?? 0) >= 700 ? "720p" : "480p");

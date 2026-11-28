@@ -1794,7 +1794,7 @@ async function makePlatform(shared: Shared, basePreset: PlatformPreset, position
   // v4 (28 Nov 2026): the soft entry into and exit out of singing clips changes the shots (tail, tailOver, early starts): old plans are made again once.
   // v5 (28 Nov 2026): the V2 -> V1 change (tracks.ts): the singer cut in 0.4 s before the line (the B-roll's dissolve ends on a beat), kept 0.3 s after it, its first 2 frames skipped.
   const keyOptions = Object.fromEntries(Object.entries(options).filter(([k, v]) => !PLAN_KEY_SKIP.has(k) && v !== undefined && v !== false && typeof v !== "function"));
-  const keyBase = { v: 5, options: keyOptions, preset, song: sh.sp.project.audio_hash ?? null, lrc: alignment.lrcHash, leadMs, lyricsOffsetMs, edits: withoutCast(edits), clips: prepared.clips.map((c) => [c.name, c.hash]), anchors: sh.anchors, film: sh.wholeStory ? shotListOf(ws, project.id) : null, canvas: sh.canvasChoice, board: sh.textboard.board, picture: sh.picture ?? null };
+  const keyBase = { v: 6, options: keyOptions, preset, song: sh.sp.project.audio_hash ?? null, lrc: alignment.lrcHash, leadMs, lyricsOffsetMs, edits: withoutCast(edits), clips: prepared.clips.map((c) => [c.name, c.hash]), anchors: sh.anchors, film: sh.wholeStory ? shotListOf(ws, project.id) : null, canvas: sh.canvasChoice, board: sh.textboard.board, picture: sh.picture ?? null };
   const planKeyOf = (spec: VariationSpec) => createHash("sha256").update(JSON.stringify({ ...keyBase, spec })).digest("hex");
   const tryOf = (spec: VariationSpec): SbTry | null =>
     sh.picture

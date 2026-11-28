@@ -193,6 +193,9 @@ export function rawLyric(l: { text: string; start_ms: number; end_ms: number; is
   };
 }
 
+// A singing clip's footage in frames: what shots.ts can really play (its own floor of the clip's length), never more.
+const singerFootage = (c: { durationFrames: number; duration_ms: number } | undefined) => (c ? Math.min(c.durationFrames, Math.floor((c.duration_ms * VIDEO.fps) / 1000)) : undefined);
+
 export function composeProps(
   base: RenderBase,
   choices: ComposeChoices,
@@ -219,7 +222,7 @@ export function composeProps(
   const noFade = new Set((base.anchors ?? []).filter((a) => base.transitions?.byClip?.[a.clipId] === "cut").map((a) => a.clipId));
   let anchorPlan =
     base.anchors?.length && base.beats && base.clips.length
-      ? planAnchors(plan, base.beats, base.anchors.map((a) => (a.syncMs != null && a.footageFrames === undefined ? { ...a, footageFrames: base.clips.find((c) => c.id === a.clipId)?.durationFrames } : a)), lyricFrames(base, choices.leadMs ?? DEFAULT_LEAD_MS, choices.lyricsOffsetMs ?? 0, true, choices.effects?.gap), { singerFade: !hardCuts, noFade })
+      ? planAnchors(plan, base.beats, base.anchors.map((a) => (a.syncMs != null && a.footageFrames === undefined ? { ...a, footageFrames: singerFootage(base.clips.find((c) => c.id === a.clipId)) } : a)), lyricFrames(base, choices.leadMs ?? DEFAULT_LEAD_MS, choices.lyricsOffsetMs ?? 0, true, choices.effects?.gap), { singerFade: !hardCuts, noFade })
       : null;
   if (anchorPlan) plan = anchorPlan.plan;
   // The user's rolls last: a cut moved by hand is final, also an anchor's (the cuts the user saw are matched).

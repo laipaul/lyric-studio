@@ -42,7 +42,7 @@ async function gather(ws: Workspace, projectId: string): Promise<Gathered | null
     mv.shots.forEach((s, i) => {
       const l = linesOfShot(s, mv.offsetMs, lines);
       if (!l) return;
-      const mine = rec.takes.filter((t) => t.mvShot === i && t.kind === "lipsync" && t.status === "done" && t.file && existsSync(path.join(dir, t.file)));
+      const mine = rec.takes.filter((t) => t.mvShot === i && t.mvShotTo === undefined && t.kind === "lipsync" && t.status === "done" && t.file && existsSync(path.join(dir, t.file)));
       const draft = mine.find((t) => t.finalOf === undefined);
       const final = [...mine].reverse().find((t) => t.finalOf !== undefined);
       const take = final ?? draft;

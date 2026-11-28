@@ -4,6 +4,42 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Make with references: the character sheets go to the video platform ✅ (to verify on the PC, needs WAVESPEED_API_KEY)
+- Paul (24 Nov 2026): "I need to provide to the video platform my character sheets in order to create the video with
+  constant characters. Currently I can't do that in Midjourney" (Midjourney's Omni Reference is one picture, images only).
+- Creation → Production: every shot with people or a place has **Make with references** (a Mini film: "9:16" and
+  "16:9"). It sends the shot to **Seedance 2.5 reference-to-video on WaveSpeed** with the pictures of the people in the
+  look they wear in this shot (wardrobe close-up, else front view, else the card's picture) and the scene card, named in
+  the prompt "@Image 1 is Jennifer, wearing their "Wedding Dress" look. … Keep each person's face, hair and outfit exactly
+  as in their picture." followed by the shot's own prompt (without Midjourney's --parameters). Length: the shot's time on
+  the song (4-30 s); takes and cap: Creation's defaults; a confirm shows the estimate.
+- The takes come back on the shot like every take (Tasks menu, Get result, Compare, Use for shot N), on the shot's
+  **reference item** "s05 references 9x16.png" (the pictures sent, side by side); each take records its pictures
+  (refFiles, refNames), prompt and shape. Request (WaveSpeed v3): { prompt, reference_images, aspect_ratio, resolution
+  720p, duration, generate_audio: false } at bytedance/seedance-2.5/reference-to-video, as public integrations call it
+  (WaveSpeed's own pages cannot be read from the cloud). Price: the 720p Seedance 2.5 price ($0.324/s) as the estimate.
+- Code: node/shot-references.ts, animate.ts (REFERENCE_MODEL, Transport.submitRefs, runTakes), pictures route action
+  "references", pictures-board.tsx. Also fixed: a take whose picture could not be put online stayed "running".
+- Tests: shot-production.test.ts (refs, prompt, cap, a stand-in run end to end), animate.test.ts (the exact request),
+  creation-production e2e (the button, the reference item on the shot).
+- First real run (Paul, 24 Nov 2026, shot 5): the face was Jennifer's, but "the dress is not the same anymore". Fixed the
+  same day: each person now goes as **two pictures**, the look's close-up (face, hair, makeup) and its full-length front
+  view (body_front: "complete outfit, head to toe: wear exactly this … never change or invent clothing").
+- **Camera guide** (same day; Paul: "MJ as a reference video will certainly help Seedance quality"): each shot has a
+  "Camera guide" choice (its videos and finished takes, the first one by default, or None); it goes as @Video 1
+  (reference_videos; over 15 s: its first 15 s): "Follow the camera movement, framing, lighting and atmosphere of
+  @Video 1, but the people and their clothes must look exactly like their pictures". The take records it (guideFile).
+- Second real run (Paul, shot 5): with the Midjourney take as camera guide, Seedance copied Midjourney's woman, not
+  Jennifer. Fixed: the guide is sent **blurred** (boxblur 24 at 720p, "<name> (camera guide v1).mp4" in pictures\takes):
+  camera movement, framing, light and colour survive, no face does; the prompt says it shows no one to copy.
+- The reference item ("pictures sent") has no Use / Animate of its own and is not a Compare candidate; its takes are.
+- **Place per shot** (same day; Paul: "we have scene cards already simply not used yet"): Production shows "Place" on
+  every shot (the cast's scene cards, or None) and "all of <section>" to give the whole section that place. The scene
+  card's picture then goes with the shot: the prompt's place, the Omni Reference, Make with references ("@Image N is
+  the place …"). A re-import that names no place keeps the one chosen (shotlist.ts setShotScene; route "shot-scene").
+- On the PC (first real run): one shot, 1 take (Creation → Defaults), check the face against the card. If WaveSpeed
+  refuses the request, send me its message: the route's exact fields could not be read from WaveSpeed's own docs here.
+
 ### A Mini film makes its two films: Film 9:16 (Instagram) and Film 16:9 (YouTube) ✅ (to verify on the PC)
 - Paul (23 Nov 2026): "if I start with a mini film then there is no option to make reels, shorts etc because this is
   against the whole purpose … I plan to release the mini films both on IG and YT … Mini film is by default the song's

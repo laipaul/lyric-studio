@@ -163,6 +163,7 @@ export type Take = {
   section?: { fromMs: number; toMs: number }; // musicvideo: the stretch of the song sent
   made?: string; // musicvideo: the video it became, its own item in Creation (pictures\<file>)
   handPicked?: boolean; // a music-video shot Paul put on its lines himself (Use on its lines, or swapped in Best shot for each line): the app never replaces it
+  mvShotTo?: number; // a take of several adjacent shots of the video at once (cutShotsTake): the last one, mvShot is the first
   mvShot?: number; // a shot of a music video made elsewhere (music-video.ts): its number (0-based) in the video's mv.shots
 };
 // removedTakes: takes put aside by Clean up / Remove (their files in pictures\takes\_removed\), with Restore; nothing is

@@ -98,6 +98,15 @@ describe("a music video made elsewhere", () => {
   it("Use every singing shot places each shot that carries sung lines", async () => {
     const r = await useAllMusicVideoShots(ws, id, "WaveSpeed bride.mp4");
     expect(r.used).toContain(1);
+    // Shots 1 and 2 of the video are sung on consecutive lines and meet at the generator's own cut: they play as ONE take (one
+    // singing shot, its crossfade kept), not two trimmed pieces.
+    const takes = readPictures(pics).pictures["WaveSpeed bride.mp4"].takes;
+    const joined = takes.find((t) => t.mvShot === 0 && t.mvShotTo === 1 && t.finalOf === undefined);
+    expect(joined).toBeDefined();
+    {
+      const mv = readPictures(pics).pictures["WaveSpeed bride.mp4"].mv!;
+      expect(Math.abs(joined!.seconds! * 1000 - (mv.shots[1].toMs - mv.shots[0].fromMs))).toBeLessThan(400); // the whole piece, nothing cut out between
+    }
   });
 
   it("a video whose sound is another recording is not matched (it stays an ordinary video)", async () => {
@@ -181,14 +190,15 @@ describe("the shots in use made 1080p (Make final)", () => {
   const STUB = { LYRIC_GENERATE_STUB: "1" } as NodeJS.ProcessEnv;
   it("cost first under the cap; each final takes its draft's place on its lines, at the same song time", async () => {
     const file = "WaveSpeed bride.mp4";
-    const before = readPictures(pics).pictures[file].takes.find((t) => t.mvShot === 1 && t.finalOf === undefined)!;
+    // (Use every singing shot joined shots 1 and 2 of the video, sung on consecutive lines, into one take.)
+    const before = readPictures(pics).pictures[file].takes.find((t) => t.mvShotTo === 1 && t.finalOf === undefined)!;
     expect(before.quality).toBe("draft");
     expect(() => startMusicVideoFinals(ws, id, file, 0.01, (n) => startFinal(ws, id, file, n, STUB), finalUsd)).toThrow(/above your cap of \$0\.01.*Nothing was sent/);
     const r = startMusicVideoFinals(ws, id, file, 10, (n) => startFinal(ws, id, file, n, STUB), finalUsd);
     expect(r.takes.map((t) => t.finalOf)).toContain(before.n);
     for (const t of r.takes) await runFinal(() => openWorkspace(wsDir), id, file, t.n, { env: STUB });
     const fin = readPictures(pics).pictures[file].takes.find((t) => t.finalOf === before.n)!;
-    expect(fin).toMatchObject({ status: "done", mvShot: 1, kind: "lipsync", sync_ms: before.sync_ms, line: before.line });
+    expect(fin).toMatchObject({ status: "done", mvShot: 0, mvShotTo: 1, kind: "lipsync", sync_ms: before.sync_ms, line: before.line });
     const recipe = JSON.parse(readFileSync(songPathsById(ws, id).recipe!, "utf8")) as { anchors?: { line: number; clip: string; sync?: number }[] };
     expect(recipe.anchors?.find((a) => a.line === before.line)?.clip).toBe(fin.sent);
     const shot = (await withMusicVideos(ws, id, await picturesView(ws, id))).pictures.find((p) => p.file === file)!.mv!.shots[1];

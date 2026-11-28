@@ -1,7 +1,7 @@
 // A music video made elsewhere (27 Nov 2026): where it sits in the song, its shots, the lines of each shot.
 import { describe, expect, it } from "vitest";
 
-import { bestLag, detectCuts, EDGE_TRIM_MS, findInSong, linesOfShot, matchScore, mvShotsForPlanned, mvUsd, shotPiece, shotsFromCuts } from "../src/music-video";
+import { bestLag, detectCuts, MV_CUT_MIN, EDGE_TRIM_MS, findInSong, linesOfShot, matchScore, mvShotsForPlanned, mvUsd, shotPiece, shotsFromCuts } from "../src/music-video";
 import { shapeOnly, sourceFit } from "../src/platform";
 
 // A song-like signal: noise shaped by a slowly changing loudness (seeded, the same every run).
@@ -56,6 +56,21 @@ describe("its shots", () => {
   });
   it("finds the crossfade cuts and the soft cut, once each, not the motion", () => {
     expect(detectCuts(frames)).toEqual([4000, 9000, 13000]);
+  });
+  it("a portrait at ~24 fps (one continuous shot): a small flicker and a motion burst are no cut, a real change still is", () => {
+    // 23.6 fps, very quiet (0.002) with a flicker pair (0.016 + 0.015) at 3.6 s and a burst (0.063 + 0.119) at 3.1 s: ONE shot.
+    const fps = 283 / 12;
+    const portrait = Array.from({ length: 162 }, (_, i) => {
+      const t = i / fps;
+      const near = (x: number) => Math.abs(t - x) < 0.02;
+      return { t, score: near(3.1) ? 0.063 : near(3.14) ? 0.119 : near(3.6) ? 0.016 : near(3.64) ? 0.015 : 0.002 };
+    });
+    expect(detectCuts(portrait).length).toBeGreaterThan(0); // the plain rule is fooled
+    expect(detectCuts(portrait, { absMin: MV_CUT_MIN })).toEqual([]);
+    expect(shotsFromCuts(detectCuts(portrait, { absMin: MV_CUT_MIN }), 6873)).toEqual([{ fromMs: 0, toMs: 6873 }]);
+    // a generator's real change (a hard cut / short crossfade between two pictures) is still found
+    const real = portrait.map((f) => (Math.abs(f.t - 3.6) < 0.02 ? { ...f, score: 0.2 } : Math.abs(f.t - 3.64) < 0.02 ? { ...f, score: 0.15 } : f));
+    expect(detectCuts(real, { absMin: MV_CUT_MIN }).length).toBe(1);
   });
   it("shots between the cuts; a sliver under a second joins the shot before", () => {
     expect(shotsFromCuts([4000, 9000, 13000], 16000)).toEqual([

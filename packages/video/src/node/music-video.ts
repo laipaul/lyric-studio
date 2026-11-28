@@ -14,7 +14,7 @@ import path from "node:path";
 
 import { ffmpegBin, probeMedia, uniqueFileName, type Workspace } from "@lyric/db";
 
-import { detectCuts, findInSong, linesOfShot, MATCH_MIN, DRIFT_MAX_MS, MV_GENERATOR_PATH, MV_MAX_MS, MV_MAX_PICTURES, MV_MIN_MS, MV_MODEL, MV_USD_PER_SECOND, mvPrompt, mvResolution, mvSection, mvUsd, shotPiece, shotsFromCuts, type MusicVideoRecord, type MvSectionChoice, type MvView } from "../music-video";
+import { detectCuts, MV_CUT_MIN, findInSong, linesOfShot, MATCH_MIN, DRIFT_MAX_MS, MV_GENERATOR_PATH, MV_MAX_MS, MV_MAX_PICTURES, MV_MIN_MS, MV_MODEL, MV_USD_PER_SECOND, mvPrompt, mvResolution, mvSection, mvUsd, sharedEdges, shotPiece, shotsFromCuts, type MusicVideoRecord, type MvSectionChoice, type MvView } from "../music-video";
 import { BOARD_VIDEO_FILE, data, json, keyFor, nextTakeN, PICTURE_FILE, POLL_MS, readPictures, sendToStoryboard, setTake, songFolder, TAKES_DIR, update, WAVESPEED, waveSpeedTransport, waveSpeedUpload, type PicturesView, type Take } from "./animate";
 import { errorText } from "./characters/fal";
 import { filmLookFor } from "./film-looks";
@@ -60,7 +60,7 @@ export async function analyseMusicVideo(ws: Workspace, projectId: string, file: 
   if (!info.hasAudio) throw new Error("This video has no sound, so the app cannot tell where it sits in the song. Use the video WaveSpeed gave you as it came (with its sound).");
   const found = findInSong(decodeMono(path.join(dir, name)), decodeMono(c.songFile), MV_RATE);
   const matched = found.score >= MATCH_MIN && found.driftMs <= DRIFT_MAX_MS;
-  const shots = matched ? shotsFromCuts(detectCuts(sceneScores(path.join(dir, name))), info.durationMs) : [];
+  const shots = matched ? shotsFromCuts(detectCuts(sceneScores(path.join(dir, name)), { absMin: MV_CUT_MIN }), info.durationMs) : [];
   const rec: MusicVideoRecord = { at: new Date().toISOString(), matched, score: found.score, offsetMs: found.offsetMs, driftMs: found.driftMs, durationMs: info.durationMs, width: info.width, height: info.height, usd: mvUsd(info.durationMs, info.height, info.width), shots };
   update(dir, name, (p) => {
     p.mv = rec;
@@ -87,7 +87,7 @@ export async function withMusicVideos(ws: Workspace, projectId: string, view: Pi
 function mvView(ws: Workspace, projectId: string, mv: MusicVideoRecord, takes: readonly Take[], lines: readonly { number: number; text: string; shownMs: number }[]): MvView {
   const shots = mv.shots.map((s, i) => {
     const l = linesOfShot(s, mv.offsetMs, lines);
-    const mine = takes.filter((x) => x.mvShot === i);
+    const mine = takes.filter((x) => x.mvShot !== undefined && (x.mvShot === i || (x.mvShotTo !== undefined && x.mvShot <= i && i <= x.mvShotTo)));
     // The take in use (a 1080p final replaces its draft on the lines), else the newest finished one.
     const used = [...mine].reverse().find((x) => x.status === "done" && (x.kind === "lipsync" ? singingTakeInUse(ws, projectId, x) : !!(x.sent ?? x.clip)));
     const t = used ?? [...mine].reverse().find((x) => x.status === "done");
@@ -115,8 +115,12 @@ function mvView(ws: Workspace, projectId: string, mv: MusicVideoRecord, takes: r
 export async function useMusicVideoShot(ws: Workspace, projectId: string, file: unknown, shot: unknown, o: { hand?: boolean } = {}): Promise<{ n: number; placed: "lines" | "storyboard"; first: number | null; last: number | null; clip: string }> {
   const { dir } = songFolder(ws, projectId);
   const name = path.basename(String(file ?? ""));
-  const take = await cutShotTake(ws, projectId, name, shot);
+  let take = await cutShotTake(ws, projectId, name, shot);
   if (take.kind === "lipsync") {
+    // Shots of the same video that follow each other on consecutive lines play as ONE piece (the generator's own crossfade kept):
+    // when the shot next to this one is already on its lines, the two (or more) are cut as one take and take its place.
+    const run = await adjacentRun(ws, projectId, name, Number(shot));
+    if (run && run.first < run.last) take = await cutShotsTake(ws, projectId, name, run.first, run.last);
     clearOverlapping(ws, projectId, take.line!);
     await placeSingingTake(ws, projectId, name, take.n);
     setTake(dir, name, take.n, { handPicked: o.hand ? true : undefined });
@@ -125,6 +129,27 @@ export async function useMusicVideoShot(ws: Workspace, projectId: string, file: 
   }
   const r = await sendToStoryboard(ws, projectId, name, take.n);
   return { n: take.n, placed: "storyboard", first: null, last: null, clip: r.clip };
+}
+
+// The run of shots around `shot` that sit next to each other in the video, are sung on consecutive lines, and are on their lines
+// now (the shot itself counts as it is about to be): null when it stands alone.
+// Is shot k of the video on its lines now (a singing take of it, or of a run it belongs to, is the singing anchor there)?
+function shotOnLines(ws: Workspace, projectId: string, takes: readonly Take[], k: number): boolean {
+  return takes.some((x) => x.kind === "lipsync" && x.status === "done" && x.mvShot !== undefined && x.mvShot <= k && k <= (x.mvShotTo ?? x.mvShot) && singingTakeInUse(ws, projectId, x));
+}
+
+async function adjacentRun(ws: Workspace, projectId: string, name: string, shot: number): Promise<{ first: number; last: number } | null> {
+  const { dir } = songFolder(ws, projectId);
+  const mv = readPictures(dir).pictures[name]?.mv;
+  const rec = readPictures(dir).pictures[name];
+  if (!mv?.matched || !rec) return null;
+  const c = await singerContext(ws, projectId);
+  const onLines = (k: number) => shotOnLines(ws, projectId, rec.takes, k);
+  let first = shot;
+  let last = shot;
+  while (last + 1 < mv.shots.length && sharedEdges(mv.shots, last, mv.offsetMs, c.lines ?? []).after && onLines(last + 1)) last++;
+  while (first > 0 && sharedEdges(mv.shots, first, mv.offsetMs, c.lines ?? []).before && onLines(first - 1)) first--;
+  return first < last ? { first, last } : null;
 }
 
 // A singing anchor that starts before these lines but runs into them gives way (placeTake removes the ones that start
@@ -138,24 +163,34 @@ export function clearOverlapping(ws: Workspace, projectId: string, first: number
 
 // The shot cut out as a take of the video (once; its 1080p final when there is one).
 export async function cutShotTake(ws: Workspace, projectId: string, file: unknown, shot: unknown): Promise<Take> {
+  return cutShotsTake(ws, projectId, file, shot, shot);
+}
+
+// Shots `first`..`last` of the video cut out as ONE take (28 Nov 2026, Paul: "a slight cut" between two shots of one video on
+// consecutive lines): the generator's own short crossfade between them stays exactly as it is in the video, and the piece is one
+// singing shot in time with the song. Only the outer edges are trimmed (and not even those when shared with a neighbour).
+export async function cutShotsTake(ws: Workspace, projectId: string, file: unknown, firstShot: unknown, lastShot: unknown): Promise<Take> {
   const { dir } = songFolder(ws, projectId);
   const name = path.basename(String(file ?? ""));
   const rec = readPictures(dir).pictures[name];
   const mv = rec?.mv;
   if (!mv?.matched) throw new Error("Check it first: This is a music video of this song.");
-  const i = Number(shot);
-  const s = mv.shots[i];
-  if (!s) throw new Error("No such shot.");
+  const i = Number(firstShot);
+  const j = Number(lastShot);
+  const first = mv.shots[i];
+  const lastS = mv.shots[j];
+  if (!first || !lastS || j < i) throw new Error("No such shot.");
+  const s = j > i ? { fromMs: first.fromMs, toMs: lastS.toMs } : first;
   const c = await singerContext(ws, projectId);
   const l = linesOfShot(s, mv.offsetMs, c.lines ?? []);
   const lastLine = l ? (c.lines ?? []).find((x) => x.number === l.last) : undefined;
-  const piece = shotPiece(s, mv.offsetMs, mv.durationMs, lastLine ? lastLine.sungEndMs : null);
-  const ready = (x: Take) => x.mvShot === i && x.status === "done" && !!x.file && existsSync(path.join(dir, x.file));
+  const piece = shotPiece(s, mv.offsetMs, mv.durationMs, lastLine ? lastLine.sungEndMs : null, (() => { const b = sharedEdges(mv.shots, i, mv.offsetMs, c.lines ?? []); const e = sharedEdges(mv.shots, j, mv.offsetMs, c.lines ?? []); return { before: b.before && shotOnLines(ws, projectId, rec.takes, i - 1), after: e.after && shotOnLines(ws, projectId, rec.takes, j + 1) }; })());
+  const ready = (x: Take) => x.mvShot === i && (x.mvShotTo ?? i) === j && x.status === "done" && !!x.file && existsSync(path.join(dir, x.file));
   let t = [...rec.takes].reverse().find((x) => ready(x) && x.finalOf !== undefined) ?? rec.takes.find(ready);
   if (!t) {
     mkdirSync(path.join(dir, TAKES_DIR), { recursive: true });
     const base = name.replace(/\.[^.]+$/, "");
-    const out = uniqueFileName(path.join(dir, TAKES_DIR), `${base} shot ${i + 1}.mp4`);
+    const out = uniqueFileName(path.join(dir, TAKES_DIR), j > i ? `${base} shots ${i + 1}-${j + 1}.mp4` : `${base} shot ${i + 1}.mp4`);
     // Cut exactly (re-encoded), without its sound: the video's audio stays the song.
     execFileSync(ffmpegBin(), ["-y", "-v", "error", "-ss", (piece.fromMs / 1000).toFixed(3), "-i", path.join(dir, name), "-t", ((piece.toMs - piece.fromMs) / 1000).toFixed(3), "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-pix_fmt", "yuv420p", "-movflags", "+faststart", path.join(dir, TAKES_DIR, out)], { windowsHide: true });
     const now = new Date().toISOString();
@@ -171,9 +206,10 @@ export async function cutShotTake(ws: Workspace, projectId: string, file: unknow
         cost_usd: 0, // the video's cost is on the video (mv.usd), once
         file: `${TAKES_DIR}/${out}`,
         seconds: Math.round((piece.toMs - piece.fromMs) / 100) / 10,
-        label: `Shot ${i + 1}`,
+        label: j > i ? `Shots ${i + 1}-${j + 1}` : `Shot ${i + 1}`,
         playable: true,
         mvShot: i,
+        ...(j > i ? { mvShotTo: j } : {}),
         resolution: mvResolution(mv.height, mv.width),
         ...(l ? { kind: "lipsync" as const, line: l.first, ...(l.last > l.first ? { through: l.last } : {}), sync_ms: Math.round(mv.offsetMs + piece.fromMs), to_ms: Math.round(mv.offsetMs + piece.toMs), voice: "song" as const } : {}),
       };
