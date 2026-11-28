@@ -21,20 +21,29 @@ export type HandleShot = {
   lo: number; // the first clip frame it may use (the user's in point)
   hi: number; // one past the last clip frame it may use: min(the user's out point, the clip's real length)
   fixed?: boolean; // must not slide (singing, loop)
-  // Incoming singing take (lip sync): its dissolve lies wholly BEFORE the cut (the previous shot gets no tail), made only of
-  // the take's own lead-in (the frames before its clip start, the take is never slid or slowed). Under MIN_FADE_IN_FRAMES
-  // of lead-in it stays a hard cut. Use with `fixed`.
+  // The shot comes right AFTER a singing take (soft exit, 28 Nov 2026): its dissolve lies wholly BEFORE the cut: it starts
+  // that many frames early (its own footage before its start, or slid inside the part kept) and fades in over the take's last
+  // frames. The take gets no tail and is never touched. Under MIN_FADE_IN_FRAMES it stays a hard cut.
   fadeInBeforeCut?: boolean;
+  // A singing take (lip sync) right AFTER another kind of shot (soft entry, 28 Nov 2026): the dissolve lies wholly AFTER the
+  // cut. The take is never faded, slid or slowed (it is full from its cut frame, in time with the song); the shot before it
+  // plays on past the cut (its `tail`, on top) and dissolves OUT over the take's first frames. Without footage to play on
+  // (under MIN_FADE_IN_FRAMES) it stays a hard cut. Use with `fixed`.
+  singingIn?: boolean;
 };
 
 export type HandleNote = { shot: number; text: string };
-export type FittedShot = { clipStartFrame: number; playbackRate: number; dissolve?: { before: number; after: number }; tail?: number };
+// tailOver: the tail lies on top of the next shot (a singing take) and fades out, instead of the next shot fading in over it.
+export type FittedShot = { clipStartFrame: number; playbackRate: number; dissolve?: { before: number; after: number }; tail?: number; tailOver?: boolean };
 
 // Below this a dissolve is not worth it: a hard cut.
 export const MIN_DISSOLVE_FRAMES = 4;
-// A fade into a singing take needs at least this much lead-in (0.2 s at 30 fps), else a hard cut.
+// A soft entry into / exit out of a singing take needs at least this many frames (0.2 s at 30 fps), else a hard cut.
 export const MIN_FADE_IN_FRAMES = 6;
-export const SINGING_CUT_NOTE = "a hard cut into this singing take (the take starts right on the line)";
+// How long the B-roll dissolves over a singing take's first / last frames: 0.4 s (Paul: about 0.3 to 0.5 s).
+export const SOFT_SINGING_FRAMES = 12;
+export const SINGING_CUT_NOTE = "a hard cut into this singing take (the clip before it has no footage left to play on)";
+export const SINGING_EXIT_CUT_NOTE = "a hard cut out of this singing take (this clip has no footage before its start)";
 // The most a clip is slowed to make room for a dissolve (0.9 = 10% slower), and never below this speed.
 export const MAX_SLOWDOWN = 0.9;
 const MIN_RATE = 0.75; // storyboard.ts CHOPPY_RATE: slower than this a 30 fps clip repeats frames visibly
@@ -85,8 +94,10 @@ export function fitHandles(
     const cur = shots[k];
     const p = k - 1;
     // The outgoing shot: picture after what it already plays (its own dissolve in included).
-    const fadeIn = !!cur.fadeInBeforeCut;
-    const halfWant = fadeIn ? 0 : Math.min(Math.floor(want / 2), Math.floor(cur.duration / 2));
+    const exit = !!cur.fadeInBeforeCut;
+    const entry = !!cur.singingIn;
+    const soft = exit || entry;
+    const halfWant = exit ? 0 : entry ? Math.min(want, Math.floor(cur.duration / 2)) : Math.min(Math.floor(want / 2), Math.floor(cur.duration / 2));
     let prevRoom: number;
     if (!prev.video) prevRoom = Infinity;
     else if (free[p]) {
@@ -95,7 +106,7 @@ export function fitHandles(
     } else prevRoom = prev.holdLastFrame ? 0 : Math.max(0, span(p, prev.hi - start[p]) - before[p] - prev.duration);
     const a0 = Math.max(0, Math.min(halfWant, prevRoom));
     // The incoming shot: picture before (or, sliding, around) what it plays.
-    const bWant = Math.max(0, Math.min(want - a0, Math.floor(prev.duration / 2)));
+    const bWant = entry ? 0 : Math.max(0, Math.min(want - a0, Math.floor(prev.duration / 2)));
     let curRoom: number;
     if (!cur.video) curRoom = Infinity;
     else if (free[k]) {
@@ -104,12 +115,12 @@ export function fitHandles(
     } else curRoom = cur.holdLastFrame ? 0 : Math.max(0, Math.floor((start[k] - cur.lo) / rate[k]));
     let a = a0;
     let b = Math.min(bWant, curRoom);
-    if (a + b < (fadeIn ? MIN_FADE_IN_FRAMES : MIN_DISSOLVE_FRAMES)) {
+    if (a + b < (soft ? MIN_FADE_IN_FRAMES : MIN_DISSOLVE_FRAMES)) {
       a = 0;
       b = 0;
-      if (fadeIn) notes.push({ shot: k, text: SINGING_CUT_NOTE });
+      if (soft) notes.push({ shot: k, text: entry ? SINGING_CUT_NOTE : SINGING_EXIT_CUT_NOTE });
     }
-    if (!fadeIn && want - (a + b) > NOTE_SLIDE_FRAMES) {
+    if (!soft && want - (a + b) > NOTE_SLIDE_FRAMES) {
       notes.push({ shot: k, text: a + b === 0 ? `a hard cut into this clip instead of a ${secs(want, fps)} dissolve (the clips have no spare frames)` : `dissolve into this clip shortened to ${secs(a + b, fps)} (the clips have no more spare frames)` });
     }
 
@@ -141,7 +152,11 @@ export function fitHandles(
     const over = start[i] + used(i, before[i] + s.duration + tail[i]) - s.hi;
     if (over > 0 && tail[i] > 0) {
       tail[i] -= Math.min(tail[i], Math.ceil(over / rate[i]));
-      if (i + 1 < shots.length && !notes.some((n) => n.shot === i + 1)) notes.push({ shot: i + 1, text: `dissolve into this clip shortened to ${secs(before[i + 1] + tail[i], fps)} (the clips have no more spare frames)` });
+      const into = shots[i + 1];
+      if (into?.singingIn && tail[i] < MIN_FADE_IN_FRAMES) {
+        tail[i] = 0;
+        notes.push({ shot: i + 1, text: SINGING_CUT_NOTE });
+      } else if (i + 1 < shots.length && !notes.some((n) => n.shot === i + 1)) notes.push({ shot: i + 1, text: `dissolve into this clip shortened to ${secs(before[i + 1] + tail[i], fps)} (the clips have no more spare frames)` });
     }
   }
 
@@ -160,8 +175,10 @@ export function fitHandles(
   const out: FittedShot[] = shots.map((_, i) => ({
     clipStartFrame: start[i],
     playbackRate: rate[i],
-    ...(i > 0 && (before[i] || tail[i - 1]) ? { dissolve: { before: before[i], after: tail[i - 1] } } : {}),
+    // Into a singing take the shot is never faded: the shot before lies on top and fades out (tailOver).
+    ...(i > 0 && !shots[i].singingIn && (before[i] || tail[i - 1]) ? { dissolve: { before: before[i], after: tail[i - 1] } } : {}),
     ...(tail[i] ? { tail: tail[i] } : {}),
+    ...(tail[i] && shots[i + 1]?.singingIn ? { tailOver: true } : {}),
   }));
   return { shots: out, notes: merged };
 }

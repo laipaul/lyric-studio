@@ -209,58 +209,55 @@ describe("singing clips (lip sync, 21 Nov 2026): locked to the song", () => {
       expect(s.src).toBe(`cache/${filmShots[j]}`);
     }
   });
-  it("plays from the frame that matches the song at the cut, at normal speed, with a dissolve into it that lies before the cut", () => {
+  it("plays from the frame that matches the song at the cut, at normal speed; the shot before dissolves out over its first frames", () => {
     const a = anchor(1, "sings.mp4", { clipInMs: null, syncMs: 13_500, transition: "dissolve" });
     const { props, anchors } = composeProps(withSinger([a]), { seed: 1, style: "simple", order: "story", transitions: "dissolve" });
     const at = props.shots.findIndex((s) => s.src === "cache/sings.mp4");
     const shot = props.shots[at];
     expect(shot.start).toBe(rel(14_500)); // the downbeat before the line, as every anchor
     // song frame of the cut (14.5 s - 2 frames) minus the clip's first frame (13.5 s) = clip frame 28
-    expect(shot.clipStartFrame + shot.dissolve!.before).toBe(Math.round((14_500 * 30) / 1000) - 2 - Math.round((13_500 * 30) / 1000));
+    expect(shot.clipStartFrame).toBe(Math.round((14_500 * 30) / 1000) - 2 - Math.round((13_500 * 30) / 1000));
     expect(shot.playbackRate).toBe(1);
-    // Its own lead-in (28 frames) fades in over the end of the previous shot; the previous shot plays no tail.
-    expect(shot.dissolve).toEqual({ before: 28 < 45 ? 28 : 45, after: 0 });
-    expect(props.shots[at - 1].tail).toBeUndefined();
+    // The singing clip itself is never faded (28 Nov 2026): the shot before plays on over it and fades out (0.4 s).
+    expect(shot.dissolve).toBeUndefined();
+    expect(props.shots[at - 1]).toMatchObject({ tail: 12, tailOver: true });
     expect(anchors!.uses[0]).toMatchObject({ line: 5, used: true, transition: "dissolve", lipsync: true });
     expect(anchors!.uses[0].playback_rate).toBeUndefined();
   });
-  describe("a dissolve into a singing take (23 Nov 2026)", () => {
+  describe("the soft entry into a singing take (28 Nov 2026): see singing-soft-transitions.test.ts", () => {
     const a = () => anchor(1, "sings.mp4", { clipInMs: null, syncMs: 13_500 });
     const songFrame0 = Math.round((10_500 * 30) / 1000);
     const syncFrames = Math.round((13_500 * 30) / 1000);
-    it("lip sync is exact on every frame, the dissolve frames included, and nothing plays past the clip's end", () => {
+    it("lip sync is exact on every frame and nothing plays past the clip's end", () => {
       const { props } = composeProps(withSinger([a()]), { seed: 1, style: "simple", order: "story" });
       const at = props.shots.findIndex((s) => s.src === "cache/sings.mp4");
       const shot = props.shots[at];
-      const before = shot.dissolve!.before;
-      expect(before).toBeGreaterThanOrEqual(6);
+      expect(shot.dissolve).toBeUndefined();
+      expect(shot.tail ?? 0).toBe(0);
       expect(shot.playbackRate).toBe(1);
-      for (let f = -before; f < shot.duration; f++) {
-        const clipFrame = shot.clipStartFrame + f + before; // the frame it shows f frames from the cut (clipStartFrame already includes the early start)
-        expect(clipFrame).toBe(songFrame0 + shot.start + f - syncFrames);
-      }
-      expect(shot.clipStartFrame + before + shot.duration).toBeLessThanOrEqual(singer.durationFrames);
-      expect(props.shots[at - 1].tail ?? 0).toBe(0);
-      expect(props.shots[at + 1]?.dissolve?.after ?? 0).toBeGreaterThanOrEqual(0);
+      for (let f = 0; f < shot.duration; f++) expect(shot.clipStartFrame + f).toBe(songFrame0 + shot.start + f - syncFrames);
+      expect(shot.clipStartFrame + shot.duration).toBeLessThanOrEqual(singer.durationFrames);
     });
     it("stays a hard cut when the variation says cut, the style is crisp, or the clip's own choice is a cut", () => {
       const cut = composeProps(withSinger([a()]), { seed: 1, style: "simple", order: "story", transitions: "cut" });
-      expect(cut.props.shots.find((s) => s.src === "cache/sings.mp4")!.dissolve).toBeUndefined();
+      expect(cut.props.shots.some((s) => s.tailOver || s.dissolve)).toBe(false);
       expect(cut.anchors!.uses[0].transition).toBe("cut");
       const tr = { feel: "calm" as const, hooks: [], sung: [] };
       const crisp = composeProps(withSinger([a()], { transitions: { style: "crisp", ...tr } }), { seed: 1, style: "simple", order: "story" });
-      expect(crisp.props.shots.find((s) => s.src === "cache/sings.mp4")!.dissolve).toBeUndefined();
+      expect(crisp.props.shots.some((s) => s.tailOver || s.dissolve)).toBe(false);
       const own = composeProps(withSinger([a()], { transitions: { style: "auto", ...tr, byClip: { "sings.mp4": "cut" } } }), { seed: 1, style: "simple", order: "story" });
-      expect(own.props.shots.find((s) => s.src === "cache/sings.mp4")!.dissolve).toBeUndefined();
+      const i = own.props.shots.findIndex((s) => s.src === "cache/sings.mp4");
+      expect(own.props.shots[i - 1].tailOver).toBeUndefined(); // "comes in with: cut" wins for the entry
       expect(own.anchors!.uses[0].transition).toBe("cut");
     });
-    it("a take with almost no lead-in keeps a hard cut, with a note", () => {
-      // The take's first frame is at 14.4 s: the cut at 14.5 s - 2 frames leaves 1 frame of lead-in.
+    it("a take with no lead-in at all is just as soft: the softness comes from the B-roll, not from the take", () => {
+      // The take's first frame is at 14.4 s: the cut at 14.5 s - 2 frames leaves 1 frame of lead-in (the old fade fell back to a hard cut).
       const { props, anchors } = composeProps(withSinger([anchor(1, "sings.mp4", { clipInMs: null, syncMs: 14_400 })]), { seed: 1, style: "simple", order: "story" });
-      const shot = props.shots.find((s) => s.src === "cache/sings.mp4")!;
-      expect(shot.dissolve).toBeUndefined();
-      expect(shot.fitNotes).toContain("a hard cut into this singing take (the take starts right on the line)");
-      expect(anchors!.uses[0].transition).toBe("cut");
+      const at = props.shots.findIndex((s) => s.src === "cache/sings.mp4");
+      expect(props.shots[at].dissolve).toBeUndefined();
+      expect(props.shots[at - 1]).toMatchObject({ tail: 12, tailOver: true });
+      expect(props.shots[at].fitNotes).toBeUndefined();
+      expect(anchors!.uses[0].transition).toBe("dissolve");
     });
   });
   it("hide a moment (Paul, 22 Nov 2026): away to the cover clip on the beat, back to the singer on the beat, lips in time again", () => {

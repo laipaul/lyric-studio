@@ -17,7 +17,7 @@ import type { PictureProps } from "./picture";
 import { assignClips, BEST_WINDOW_MS, type ClipOrder } from "./shots";
 import { applyCutMoves, slipFor, type TimelineEdits } from "./timeline-edits";
 import { withCard, type CardStyle } from "./textboard";
-import { fitHandles } from "./handles";
+import { fitHandles, SOFT_SINGING_FRAMES } from "./handles";
 import { planTransitions, type TransitionKind, type TransitionStyle } from "./transitions";
 import type { Feel } from "./pace";
 
@@ -376,22 +376,28 @@ export function composeProps(
   // the dissolve, so no frame is ever frozen.
   const bar = barFrames(base.beats ?? []);
   const wanted = new Map<number, number>();
-  // A dissolve INTO a singing take (22 Nov 2026): wanted ~1.5 s, made only of the take's own lead-in and lying wholly before the
-  // cut (fadeInBeforeCut), so lip sync stays frame-exact and the singer is fully there from the cut. Not when the variation,
-  // the crisp style or the clip's own "comes in with: cut" says cut. The first shot of a take only (not its return from a hidden moment).
-  const fadeIn = new Set<number>();
-  const seenTakes = new Set<unknown>();
-  const singingCuts = choices.transitions === "cut" || base.transitions?.style === "crisp";
+  // The soft entry into and exit out of a singing take (28 Nov 2026, Paul: "the transition into singing clips is harsh again").
+  // A singing clip stays locked to the song at 1.00x: never moved, slowed, frozen or faded, whatever made it (an InfiniteTalk
+  // take, an MV Generator take, a shot of a music video, the singer coming back after a hidden moment, a singing clip over a
+  // Mini film): all of them are anchors with a sync time, so they all come here. The softness comes from the B-roll beside it:
+  //   in:  the shot BEFORE the singing clip plays on past the cut and dissolves OUT over the singer's first 0.4 s (the singer
+  //        is full underneath from its cut frame; the cut stays on its beat);
+  //   out: the shot AFTER it starts 0.4 s early and dissolves IN over the singer's last 0.4 s.
+  // Where the B-roll has no footage to give, fitHandles (src/handles.ts) shortens that or leaves a hard cut with a note; it
+  // never freezes a frame. Not when the variation, the crisp style or the clip's own "comes in with: cut" says cut, and not
+  // between two singing clips (nothing of either may be faded).
+  const singingShots = new Set<number>([...(anchorPlan?.shots ?? [])].filter(([, a]) => a.syncMs != null).map(([i]) => i));
+  const hardCuts = choices.transitions === "cut" || base.transitions?.style === "crisp";
+  const softIn = new Set<number>(); // singing shots entered softly
+  const softOut = new Set<number>(); // B-roll shots after a singing shot, coming in early over its end
+  const comesInCut = (i: number) => base.transitions?.byClip?.[assigned[i].clip_id] === "cut";
+  for (const i of [...singingShots].sort((x, y) => x - y)) {
+    if (hardCuts) break;
+    if (i > 0 && shots[i - 1] && !singingShots.has(i - 1) && !comesInCut(i)) softIn.add(i);
+    if (shots[i + 1] && !singingShots.has(i + 1) && !comesInCut(i + 1)) softOut.add(i + 1);
+  }
   for (const [index, a] of [...(anchorPlan?.shots ?? [])].sort((x, y) => x[0] - y[0])) {
-    if (a.syncMs != null) {
-      const first = !seenTakes.has(a);
-      seenTakes.add(a);
-      if (first && !singingCuts && base.transitions?.byClip?.[a.clipId] !== "cut" && index > 0 && shots[index] && shots[index - 1]) {
-        fadeIn.add(index);
-        wanted.set(index, autoDissolveFrames(bar));
-      }
-      continue;
-    }
+    if (a.syncMs != null) continue;
     const transition = choices.transitions === "cut" || choices.transitions === "dissolve" ? choices.transitions : a.transition;
     if (transition === "dissolve" && index > 0 && shots[index] && shots[index - 1]) wanted.set(index, bar);
   }
@@ -412,6 +418,12 @@ export function composeProps(
     }
     transitionPlan = { text: planned.text, kinds: [] };
   }
+  // (After the automatic transitions, which must not override them; a dip to black into a shot is as soft as it needs to be.)
+  for (const i of softIn) wanted.set(i, SOFT_SINGING_FRAMES);
+  for (const i of [...softOut]) {
+    if (dips.some((d) => d.frame === shots[i].start)) softOut.delete(i);
+    else wanted.set(i, SOFT_SINGING_FRAMES);
+  }
   if (wanted.size) {
     const loops = assigned.some((s) => s.loop) || !!base.loopInto;
     const toFrames = (ms: number) => Math.floor((ms * VIDEO.fps) / 1000);
@@ -430,24 +442,25 @@ export function composeProps(
           lo,
           hi,
           fixed: exact.has(i) || !!assigned[i].loop || (loops && i === 0),
-          ...(fadeIn.has(i) ? { fadeInBeforeCut: true } : {}),
+          ...(softIn.has(i) ? { singingIn: true } : {}),
+          ...(softOut.has(i) ? { fadeInBeforeCut: true } : {}),
         };
       }),
       wanted,
       VIDEO.fps,
     );
     fitted.shots.forEach((f, i) => {
-      const { dissolve: _d, tail: _t, ...rest } = shots[i];
-      shots[i] = { ...rest, clipStartFrame: f.clipStartFrame, playbackRate: f.playbackRate, ...(f.dissolve ? { dissolve: f.dissolve } : {}), ...(f.tail ? { tail: f.tail } : {}) };
+      const { dissolve: _d, tail: _t, tailOver: _o, ...rest } = shots[i];
+      shots[i] = { ...rest, clipStartFrame: f.clipStartFrame, playbackRate: f.playbackRate, ...(f.dissolve ? { dissolve: f.dissolve } : {}), ...(f.tail ? { tail: f.tail } : {}), ...(f.tailOver ? { tailOver: true } : {}) };
     });
     for (const n of fitted.notes) shots[n.shot] = { ...shots[n.shot], fitNotes: [...(shots[n.shot].fitNotes ?? []), n.text] };
   }
-  if (transitionPlan) transitionPlan.kinds = shots.map((s, i) => (i === 0 ? "cut" : dips.some((d) => d.frame === s.start) ? "dip" : s.dissolve ? "dissolve" : "cut"));
+  if (transitionPlan) transitionPlan.kinds = shots.map((s, i) => (i === 0 ? "cut" : dips.some((d) => d.frame === s.start) ? "dip" : s.dissolve || shots[i - 1]?.tailOver ? "dissolve" : "cut"));
   const anchors: AnchorReport | null = anchorPlan
     ? {
         uses: anchorPlan.uses.map((u) => {
           const s = u.shot !== null ? assigned[u.shot] : undefined;
-          const transition = u.lipsync ? (u.shot !== null && fadeIn.has(u.shot) && !!shots[u.shot]?.dissolve?.before ? "dissolve" : "cut") : choices.transitions === "cut" || choices.transitions === "dissolve" ? choices.transitions : u.transition;
+          const transition = u.lipsync ? (u.shot !== null && !!shots[u.shot - 1]?.tailOver ? "dissolve" : "cut") : choices.transitions === "cut" || choices.transitions === "dissolve" ? choices.transitions : u.transition;
           return { ...u, transition, ...(s && s.playback_rate < 1 ? { playback_rate: s.playback_rate } : {}) };
         }),
         conflicts: anchorPlan.conflicts,

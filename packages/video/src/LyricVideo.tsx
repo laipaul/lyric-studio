@@ -104,6 +104,14 @@ function DissolveIn({ frames, children }: { frames: number; children: React.Reac
   return <AbsoluteFill style={{ opacity }}>{children}</AbsoluteFill>;
 }
 
+// Soft entry into a singing take: after its own frames the shot plays on over the next shot (the singer, full underneath) and
+// fades out over `frames` frames (the same curve as DissolveIn, backwards).
+function TailFadeOut({ from, frames, children }: { from: number; frames: number; children: React.ReactNode }) {
+  const frame = useCurrentFrame();
+  const opacity = interpolate(frame, [from, from + Math.max(1, frames)], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.ease) });
+  return <AbsoluteFill style={{ opacity }}>{children}</AbsoluteFill>;
+}
+
 // A dip to black between two shots (automatic transitions): under the lyrics, darkest on the cut.
 function DipOverlay({ dips }: { dips: NonNullable<LyricVideoProps["dips"]> }) {
   const opacity = dipOpacity(useCurrentFrame(), dips);
@@ -130,7 +138,7 @@ function LoopIntoFirst({ first, frames, durationInFrames, mediaBaseUrl }: { firs
 }
 function LoopIntoFade({ frames, children }: { frames: number; children: React.ReactNode }) {
   const opacity = Math.min(1, (useCurrentFrame() + 1) / frames);
-  return <AbsoluteFill style={{ opacity }}>{children}</AbsoluteFill>;
+  return <AbsoluteFill style={{ opacity, zIndex: 2 }}>{children}</AbsoluteFill>;
 }
 
 // Seamless loop: the clip plays from clipStartFrame; over the last `blend.frames` frames the frames
@@ -450,24 +458,21 @@ export const LyricVideo: React.FC<LyricVideoProps> = (props) => {
     <AbsoluteFill style={{ background: picture ? fallbackBackground(picture) : "#000" }}>
       {picture?.fallback === "cover" && picture.coverSrc ? <Img src={mediaUrl(mediaBaseUrl, picture.coverSrc)} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
       {props.layout === "cover" && props.cover ? <CoverLayout cover={props.cover} mediaBaseUrl={mediaBaseUrl} format={format} mood={mood} /> : null}
-      <AbsoluteFill style={{ filter: grade.filter }}>
+      <AbsoluteFill style={{ filter: grade.filter, isolation: "isolate" }}>
       {props.layout === "stills" && props.stills ? <StillsLayout stills={props.stills} mediaBaseUrl={mediaBaseUrl} /> : null}
-      {shots.map((shot) => (
-        <Sequence
-          key={shot.start}
-          from={shot.start - (shot.dissolve?.before ?? 0)}
-          durationInFrames={shot.duration + (shot.dissolve?.before ?? 0) + (shot.tail ?? 0)}
-          premountFor={30}
-        >
-          {shot.dissolve ? (
-            <DissolveIn frames={shot.dissolve.before + shot.dissolve.after}>
-              <Shot shot={shot} mediaBaseUrl={mediaBaseUrl} />
-            </DissolveIn>
-          ) : (
-            <Shot shot={shot} mediaBaseUrl={mediaBaseUrl} />
-          )}
-        </Sequence>
-      ))}
+      {shots.map((shot) => {
+        const before = shot.dissolve?.before ?? 0;
+        const over = !!shot.tailOver && !!shot.tail;
+        // A shot that fades out on top of a singing take sits above the next shot; the others keep the shot order.
+        const style = over ? { zIndex: 1 } : undefined;
+        const clip = <Shot shot={shot} mediaBaseUrl={mediaBaseUrl} />;
+        const faded = over ? <TailFadeOut from={before + shot.duration} frames={shot.tail!}>{clip}</TailFadeOut> : clip;
+        return (
+          <Sequence key={shot.start} from={shot.start - before} durationInFrames={shot.duration + before + (shot.tail ?? 0)} premountFor={30} {...(style ? { style } : {})}>
+            {shot.dissolve ? <DissolveIn frames={shot.dissolve.before + shot.dissolve.after}>{faded}</DissolveIn> : faded}
+          </Sequence>
+        );
+      })}
 
       {props.loopInto && shots.length > 1 ? <LoopIntoFirst first={shots[0]} frames={props.loopInto.frames} durationInFrames={durationInFrames} mediaBaseUrl={mediaBaseUrl} /> : null}
       </AbsoluteFill>

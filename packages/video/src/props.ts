@@ -30,6 +30,9 @@ export type ShotProps = {
   // playing `after` frames into this one: its `tail`). Without them: a hard cut.
   dissolve?: { before: number; after: number };
   tail?: number;
+  // Soft entry into a singing take (28 Nov 2026): the `tail` frames lie ON TOP of the next shot (the singing take, which is
+  // never faded, slowed or moved) and this shot fades OUT over them, instead of the next shot fading in. Needs `tail`.
+  tailOver?: boolean;
   // What the app changed so a dissolve never freezes a frame (src/handles.ts), in plain words: "slowed to 97% to fit
   // the dissolve", "dissolve shortened to 0.5 s ...". For the user (Storyboard cards, Shape); the renderer ignores it.
   fitNotes?: string[];

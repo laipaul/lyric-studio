@@ -117,7 +117,7 @@ export function storyShots(
       hold: s.holdLastFrame && held,
       anchor: a ? { line: a.line, text: a.text } : null,
       role: singing.has(name.toLowerCase()) ? "singing" : / · no take yet$/.test(name) || /-standin-/.test(name) ? "empty" : "broll",
-      dissolve: !!s.dissolve,
+      dissolve: !!s.dissolve || !!shots[i - 1]?.tailOver, // (into a singing take: the shot before fades out over it)
       dip: (props.dips ?? []).some((d) => d.frame === s.start),
       loop,
       best: overlap >= BEST_WINDOW_S / 2,

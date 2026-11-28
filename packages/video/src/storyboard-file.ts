@@ -101,7 +101,7 @@ export type PlanForStoryboard = {
   durationInFrames: number;
   bpm: number;
   beats: readonly { time_ms: number; is_downbeat: boolean }[]; // song time
-  shots: readonly { start: number; duration: number; kind?: "video" | "photo"; playbackRate: number; dissolve?: unknown }[]; // props.shots
+  shots: readonly { start: number; duration: number; kind?: "video" | "photo"; playbackRate: number; dissolve?: unknown; tailOver?: boolean }[]; // props.shots
   shotInfo: readonly { clip: string; inS: number; outS: number; dip: boolean; anchorLine: number | null; warnings: string[] }[]; // storyShots, same order
   lyrics: readonly { text: string; startFrame: number; endFrame: number; isHook?: boolean; stampFrame?: number; sungEndFrame?: number; enterFrame?: number }[]; // props.lyrics
   lineNumbers: readonly (number | null)[]; // the Lyrics tab's number per props line
@@ -228,7 +228,7 @@ export function buildStoryboard(p: PlanForStoryboard): StoryboardFile {
       speed: s.playbackRate,
       startMs: base[i].startMs,
       endMs: base[i].endMs,
-      transitionIn: { type: info.dip ? "dip" : s.dissolve ? "dissolve" : "cut" },
+      transitionIn: { type: info.dip ? "dip" : s.dissolve || p.shots[i - 1]?.tailOver ? "dissolve" : "cut" },
       motion: "theme",
       effects: [],
       carries: info.anchorLine !== null ? `line-${info.anchorLine}` : null,

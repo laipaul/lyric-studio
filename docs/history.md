@@ -4,6 +4,86 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Creation: Story room | Production, each Storyboard item made in its place (C3 Part 1) ✅ (to verify on the PC)
+- Paul (22 Nov 2026), Something About You And Me: "Creation should be creating the pictures and video takes for each
+  Storyboard item", with the story tools as the guiding line and "another folder for the actual production engine room".
+- A Mini film song, or any song with a shot list: Prepare → Creation has two folders. **Story room**: Film look, your
+  defaults, cast, story bible, Song brief, shot list. **Production**: the shot list's items in story order, grouped by
+  the song's sections (Intro, Verse 1, Chorus...), each with its number, line and words, people, what happens, and
+  "To make" / "Filled". Drop a picture on a shot (or pick one already in Creation): it belongs to that shot. Animate
+  there as usual; **Use for shot N** fills the Storyboard item: the take takes the slot's place in the story line and
+  goes on its lyric line (a line a singing take covers keeps its singer). Another take for the same shot replaces it
+  there (the earlier one set to Omit, kept). "N of M shots filled" at the top; loose pictures below. Opens on Production
+  when the song has a shot list; the last folder is remembered per song. Other songs: Creation exactly as before.
+- A re-import of the shot list keeps filled shots filled (shotlist.json "filled"); Remove all planned slots takes out
+  the empty ones only.
+- **Copy prompt** (Part 2a, same day; Paul: "that doesn't give me the prompt for MJ"): every shot has its Midjourney
+  first-frame prompt, written by the app (src/shot-prompt.ts): framing + what happens (names replaced by "the woman" /
+  "the man"), each person's locked description and the outfit of the look they wear (or the shot's own outfit), the
+  scene card, a memory's softer feel (#memory), the Film look's Midjourney words, --ar from the song's platforms,
+  --style raw; "Never …" sentences become --no; reference-model instructions ("Preserve…", "Match … reference
+  image") and behaviour sentences ("resting expression…") are left out; two people are labelled. Copy prompt +
+  Show prompt on each shot. Tests: vitest shot-prompt (5), browser creation-production (+2 checks).
+  Fix the same day: a Film look's own Midjourney settings (--ar 9:16 --style raw --stylize 100) were added twice; now
+  merged, each once (the song's --ar wins, its others kept, its --no items joined). vitest shot-prompt (6).
+  Fix the same evening (Paul: "all your prompts are being rejected by MJ"): the person descriptions (age, ethnicity,
+  build, lips, skin) made Midjourney's moderator refuse the prompts. Now the prompt has NO face or body words, only
+  what happens, each person's outfit (the look they wear, or the shot's own), the place, the memory feel and the Film
+  look; the face comes from the person's locked picture as Midjourney's Omni Reference: each shot shows it next to
+  Copy prompt (the look's close-up, else its front view, else the card's picture; click copies the picture to paste
+  into Midjourney). Paul's test prompt without descriptions passed. Tests: shot-prompt (6), creation-production (+2).
+  23 Nov 2026: still refused on the navy cocktail look ("nude pointed heels", "thin straps", "cowl neckline"):
+  outfit and action words now go through a Midjourney-safe pass (shot-prompt.ts mjSafe: nude -> soft beige, sheer ->
+  delicate, thin straps -> delicate straps, slip dress -> satin dress, corset -> structured, off one shoulder ->
+  off-shoulder, open to the waist -> open; sentences about makeup, lips, skin, body, and "Barefoot." left out).
+  vitest shot-prompt (7).
+- 23 Nov 2026 (Paul: "once I move the shot it loses the story line"; "we have to be careful when sending a shot to the
+  storyboard"): a filled Storyboard card keeps its shot's story (what happens, Shot N, type, people, line, #tag;
+  story-line.ts StoryItem.shot, assets-tab data-clip-shot). On a shot in Production there is no Send any more: a
+  still picture has **Use picture for shot N** (it fills the shot as a photo), a video or take **Use for shot N**, both
+  in the shot's place; Send to Storyboard stays on the loose pictures only. Tests: shot-production (7),
+  creation-production (+2 checks).
+- 23 Nov 2026 (Paul: "how can I remove a picture here"): **✕ on every Creation picture**. On a shot: "not for this
+  shot", the picture goes back to the loose pictures. On a loose picture: **Put aside** (confirm): its file moves to
+  pictures\_removed\, its record (takes, mood, shot) stays; **Put-aside pictures → Restore** brings it back on its
+  shot. Clips already in the Storyboard stay. Nothing is deleted. animate.ts removePicture / restorePicture, API
+  remove-picture / restore-picture. Tests: shot-production (8), creation-production (+3 checks); pictures.e2e passes.
+- 23 Nov 2026 (Paul: "a viewer that automatically plays all shot 1 takes at once", "like in MJ, clicking one video
+  plays all 4"): **Compare a shot**. A shot with 2+ candidates has "Compare N", and clicking any of its videos or takes
+  opens the same viewer: every candidate side by side (videos and finished takes playing, pictures as stills),
+  started together and looped in sync when the longest ends; on a timed lyric line the song plays from half a second
+  before the line (switchable); Play / Pause all, From the start, Space; "Use for shot N" under each tile, ✓ on the
+  one in use. pictures-board.tsx ShotCompare; shot-production.ts withLineStarts (API adds lineStartMs). Tests:
+  shot-production (+1), creation-production (+4 checks).
+- 23 Nov 2026 (Paul: "on the storyboard I should see the right wardrobe of each character"): **a look per shot**.
+  One helper (node/shot-looks.ts) decides which look each person wears in a shot: shotlist.json slot "looks"
+  ({ "Jennifer": "Wedding Dress" }, from the shot list or chosen in Production), else the song's cast look, else the
+  main look. The Storyboard's planned cards show each person's picture in that look with its name on the tile, the
+  people line reads "Jennifer · Wedding Dress", 5+ people show 3 and "+N"; Production has a look dropdown per person
+  per shot; the Midjourney prompt's outfit and the Omni Reference picture follow (a look chosen for the shot wins over
+  the shot's "outfit" text, which then applies to people without one). Problems said on the shot and the card (no
+  such look, look not locked). The shot list check accepts "looks" (names as the card spells them; unknown looks
+  warned), a re-import keeps looks chosen in Production, the Song brief lists each character's wardrobe and the field.
+  Tests: shot-production (11), shotlist / production / story-line / shot-prompt pass; browser creation-production
+  (+4 checks), shotlist and production pass.
+- 23 Nov 2026 (Paul: "the father's hand shot is not very good": Midjourney drew the back of the gown and an embrace):
+  the prompt keeps only the part of an outfit the framing shows (shot-prompt.ts outfitFor): detail = sleeves, cuffs,
+  gloves, rings, bracelets, watch, bouquet; close-up = no skirt, train, trousers or shoes; medium / wide / motion =
+  all of it. The action stays first. vitest shot-prompt (+2).
+- 23 Nov 2026 (Paul: "the pictures and videos from MJ are still the best"; both asked for): **Open in Midjourney ↗**
+  on every picture or video whose name holds a Midjourney job id (animate.ts midjourneyLink:
+  midjourney.com/jobs/<id>?index=<n>). **Bulk drop by shot**: files dropped anywhere in Creation whose name starts with
+  their shot ("s05 …", "S05_", "s5", "shot 5 …", "Shot1Chapel…") land on that shot (shot-production.ts
+  shotForFileName / placeByName); others stay loose; dropping on a shot still wins; the notice says where each went.
+  Tests: shot-production (14), creation-production (+2 checks), pictures.e2e passes.
+- Part 2 (next): cost so far / to go.
+- Code: node/shot-production.ts (productionView, setPictureShot, useForShot, sectionsOfShots), shotlist.ts (filled),
+  animate.ts (pictures.json "slot"), API /api/songs/<id>/pictures (production, slot, shot, use-shot),
+  pictures-board.tsx (part: all | settings | production; ShotItems, ShotRow, Use for shot), production-tab.tsx (folders).
+- Tests: vitest shot-production (6); shotlist, animate, line-only, story-line, production, no-remotion pass. Browser
+  creation-production (14 checks, in test:e2e); pictures, production, shotlist, singer, song-style, song-stages pass.
+  Studio build passes.
+
 ### Fix: "Lower third" really sits low ✅ (to verify on the PC)
 - Paul (22 Nov 2026), The House My Heart Built and Wedding Day: with the theme's Text layout on Lower third the lyrics
   still sat in the middle, across the faces. Cause: "lower" put the block's centre at 0.68 of the area left by the

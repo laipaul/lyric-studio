@@ -1,7 +1,7 @@
 // Transition handles (22 Nov 2026): a dissolve never freezes a frame (src/handles.ts).
 import { describe, expect, it } from "vitest";
 
-import { fitHandles, MIN_DISSOLVE_FRAMES, SINGING_CUT_NOTE, type HandleShot } from "../src/handles";
+import { fitHandles, MIN_DISSOLVE_FRAMES, SINGING_CUT_NOTE, SINGING_EXIT_CUT_NOTE, type HandleShot } from "../src/handles";
 
 const video = (o: Partial<HandleShot> & { duration: number; clipStartFrame: number; hi: number }): HandleShot => ({
   video: true, playbackRate: 1, holdLastFrame: false, lo: 0, ...o,
@@ -136,39 +136,81 @@ describe("composeProps: dissolves never freeze a frame", () => {
     }
   });
 
-  describe("a dissolve into a singing take (fadeInBeforeCut)", () => {
-    const take = (lead: number, extra: Partial<HandleShot> = {}) =>
-      video({ duration: 120, clipStartFrame: lead, lo: 0, hi: 400, fixed: true, fadeInBeforeCut: true, ...extra });
-    it("20 lead-in frames, 46 wanted: the take starts 20 frames early at the same speed, the previous shot has no tail", () => {
-      const shots = [video({ duration: 150, clipStartFrame: 0, hi: 300 }), take(20)];
-      const fit = fitHandles(shots, new Map([[1, 46]]));
-      expect(fit.shots[1].dissolve).toEqual({ before: 20, after: 0 }); // min(46, 150/2, 20)
-      expect(fit.shots[1].clipStartFrame).toBe(0); // 20 - 20: no slide, same picture on the cut
+  // Soft entry / exit of a singing take (28 Nov 2026): the take is fixed (never moved, slowed or faded); the B-roll beside it
+  // carries the dissolve: before the take it plays on and fades out over the take's first frames (singingIn), after it
+  // it starts early and fades in over the take's last frames (fadeInBeforeCut).
+  describe("the soft entry into a singing take (singingIn)", () => {
+    const take = (extra: Partial<HandleShot> = {}) => video({ duration: 120, clipStartFrame: 0, lo: 0, hi: 400, fixed: true, singingIn: true, ...extra });
+    it("the shot before plays on 12 frames over the take; the take gets no dissolve and does not move", () => {
+      const shots = [video({ duration: 150, clipStartFrame: 0, hi: 300 }), take()];
+      const fit = fitHandles(shots, new Map([[1, 12]]));
+      expect(fit.shots[0].tail).toBe(12);
+      expect(fit.shots[0].tailOver).toBe(true);
+      expect(fit.shots[1].dissolve).toBeUndefined();
+      expect(fit.shots[1].clipStartFrame).toBe(0);
       expect(fit.shots[1].playbackRate).toBe(1);
-      expect(fit.shots[0].tail).toBeUndefined();
-      expect(fit.notes).toEqual([]); // shorter than wanted is expected for a take
+      expect(fit.notes).toEqual([]);
       noFreeze(shots, fit);
     });
-    it("a long lead-in gives the whole wanted dissolve, limited by half the previous shot", () => {
-      const fit = fitHandles([video({ duration: 150, clipStartFrame: 0, hi: 300 }), take(100)], new Map([[1, 46]]));
-      expect(fit.shots[1].dissolve).toEqual({ before: 46, after: 0 });
-      expect(fit.shots[1].clipStartFrame).toBe(54);
-      const short = fitHandles([video({ duration: 60, clipStartFrame: 0, hi: 300 }), take(100)], new Map([[1, 46]]));
-      expect(short.shots[1].dissolve).toEqual({ before: 30, after: 0 });
+    it("slides the shot before earlier inside its clip when its end has no room; never past its last frame", () => {
+      const shots = [video({ duration: 150, clipStartFrame: 140, hi: 300 }), take()];
+      const fit = fitHandles(shots, new Map([[1, 12]]));
+      expect(fit.shots[0].tail).toBe(12);
+      expect(fit.shots[0].clipStartFrame).toBeLessThan(140 + 1);
+      noFreeze(shots, fit);
     });
-    it("3 lead-in frames: a hard cut, with the note", () => {
-      const shots = [video({ duration: 150, clipStartFrame: 0, hi: 300 }), take(3)];
-      const fit = fitHandles(shots, new Map([[1, 46]]));
-      expect(fit.shots[1].dissolve).toBeUndefined();
-      expect(fit.shots[1].clipStartFrame).toBe(3);
-      expect(fit.notes).toEqual([{ shot: 1, text: SINGING_CUT_NOTE }]);
-      expect(SINGING_CUT_NOTE).toBe("a hard cut into this singing take (the take starts right on the line)");
+    it("a clip with no footage left: a hard cut with the note, no tail, no frozen frame", () => {
+      const shots = [video({ duration: 150, clipStartFrame: 0, hi: 150 }), take()];
+      const fit = fitHandles(shots, new Map([[1, 12]]));
+      // (it is slid or slowed first where it can; here the clip is exactly as long as the shot, so only a slowdown helps)
+      noFreeze(shots, fit);
+      expect(fit.shots[0].tail ?? 0).toBeGreaterThanOrEqual(0);
+      const held = fitHandles([video({ duration: 150, clipStartFrame: 0, hi: 150, holdLastFrame: true }), take()], new Map([[1, 12]]));
+      expect(held.shots[0].tail).toBeUndefined();
+      expect(held.shots[0].tailOver).toBeUndefined();
+      expect(held.shots[1].dissolve).toBeUndefined();
+      expect(held.notes).toEqual([{ shot: 1, text: SINGING_CUT_NOTE }]);
+      expect(SINGING_CUT_NOTE).toBe("a hard cut into this singing take (the clip before it has no footage left to play on)");
     });
-    it("uses only frames after the user's in point; a take that leaves less than 6 stays a cut", () => {
-      const shots = [video({ duration: 150, clipStartFrame: 0, hi: 300 }), take(20, { lo: 15, hi: 140 })];
-      const fit = fitHandles(shots, new Map([[1, 46]]));
-      expect(fit.shots[1].dissolve).toBeUndefined(); // 5 lead-in frames < 6: a cut
-      expect(fit.notes[0].text).toBe(SINGING_CUT_NOTE);
+    it("a fixed shot before it (a loop) with 3 frames left shortens to what it has, under 6 frames it is a hard cut", () => {
+      const three = fitHandles([video({ duration: 150, clipStartFrame: 0, hi: 153, fixed: true }), take()], new Map([[1, 12]]));
+      expect(three.shots[0].tail).toBeUndefined();
+      expect(three.notes[0].text).toBe(SINGING_CUT_NOTE);
+      const ten = fitHandles([video({ duration: 150, clipStartFrame: 0, hi: 160, fixed: true }), take()], new Map([[1, 12]]));
+      expect(ten.shots[0].tail).toBe(10);
+      expect(ten.shots[0].tailOver).toBe(true);
+    });
+    it("a photo before it can always play on", () => {
+      const fit = fitHandles([{ video: false, duration: 90, clipStartFrame: 0, playbackRate: 1, holdLastFrame: false, lo: 0, hi: 1 }, take()], new Map([[1, 12]]));
+      expect(fit.shots[0].tail).toBe(12);
+      expect(fit.shots[0].tailOver).toBe(true);
+    });
+    it("at most half of a short take", () => {
+      const fit = fitHandles([video({ duration: 150, clipStartFrame: 0, hi: 300 }), take({ duration: 16 })], new Map([[1, 12]]));
+      expect(fit.shots[0].tail).toBe(8);
+    });
+  });
+
+  describe("the soft exit out of a singing take (fadeInBeforeCut)", () => {
+    const take = video({ duration: 120, clipStartFrame: 0, lo: 0, hi: 400, fixed: true });
+    const after = (extra: Partial<HandleShot> = {}) => video({ duration: 90, clipStartFrame: 100, lo: 0, hi: 400, fadeInBeforeCut: true, ...extra });
+    it("the shot after starts 12 frames early and fades in over the take's last frames; the take gets no tail", () => {
+      const shots = [take, after()];
+      const fit = fitHandles(shots, new Map([[1, 12]]));
+      expect(fit.shots[1].dissolve).toEqual({ before: 12, after: 0 });
+      expect(fit.shots[1].clipStartFrame).toBe(88); // the same picture on the cut: 12 frames earlier in its clip
+      expect(fit.shots[0].tail).toBeUndefined();
+      expect(fit.shots[0].clipStartFrame).toBe(0);
+      expect(fit.shots[0].playbackRate).toBe(1);
+      noFreeze(shots, fit);
+    });
+    it("a clip that starts at its first frame slides inside the part kept; with no room at all it is a hard cut with the note", () => {
+      const slid = fitHandles([take, after({ clipStartFrame: 0 })], new Map([[1, 12]]));
+      expect(slid.shots[1].dissolve).toEqual({ before: 12, after: 0 });
+      expect(slid.shots[1].clipStartFrame).toBe(0);
+      const none = fitHandles([take, after({ clipStartFrame: 0, hi: 90, fixed: true })], new Map([[1, 12]]));
+      expect(none.shots[1].dissolve).toBeUndefined();
+      expect(none.notes).toEqual([{ shot: 1, text: SINGING_EXIT_CUT_NOTE }]);
     });
   });
 });

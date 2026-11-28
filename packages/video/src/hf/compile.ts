@@ -144,10 +144,13 @@ export function compileHyperframes(props: Props, o: { gsapSrc?: string } = {}): 
       // A clip that runs out holds its last frame (HyperFrames does this when the media ends inside its slot).
       inner.push(`        <video id="${id}" class="clip" src="${src}" muted playsinline data-start="${at(from)}" data-duration="${span(from, from + length)}" data-media-start="${mediaAt(s.clipStartFrame)}"${s.playbackRate !== 1 ? ` data-playback-rate="${s.playbackRate}"` : ""} data-track-index="0" style="${full}object-fit:cover;z-index:${z++}${extra}"></video>`);
     };
+    // A shot whose tail fades out on top of the next one (a soft entry into a singing take) is drawn just above it.
+    const over = (i: number) => !!props.shots[i]?.tailOver && !!props.shots[i].tail;
+    const zBase = z;
     props.shots.forEach((s, i) => {
       const before = s.dissolve?.before ?? 0;
       const from = s.start - before;
-      shot(s, `s${i}`, from, s.duration + before + (s.tail ?? 0));
+      shot(s, `s${i}`, from, s.duration + before + (s.tail ?? 0), over(i) ? `;z-index:${zBase + i + 1}` : over(i - 1) ? `;z-index:${zBase + i - 1}` : "");
       // A photo's move: spread over exactly the shot (a dissolve starts it early, a tail keeps it on after:
       // it stays still there); a looping photo moves out and back.
       if (moves(s)) {
@@ -155,6 +158,8 @@ export function compileHyperframes(props: Props, o: { gsapSrc?: string } = {}): 
       }
       // A dissolve: the shot fades in over the previous one (which keeps playing underneath for `tail` frames).
       if (s.dissolve) script.push(`tl.fromTo("#s${i}", { opacity: 0 }, { opacity: 1, duration: ${secs(s.dissolve.before + s.dissolve.after)}, ease: "power1.inOut" }, ${secs(from)});`);
+      // A soft entry into a singing take: the shot plays on over the take (which is never faded) and fades out over its tail.
+      if (over(i)) script.push(`tl.fromTo("#s${i}", { opacity: 1 }, { opacity: 0, duration: ${secs(s.tail!)}, ease: "power1.inOut", immediateRender: false }, ${secs(s.start + s.duration)});`);
     });
     // The loop ending (Reels, TikTok, Shorts): over the last frames the first shot's opening fades in on top, so
     // the last frame leads straight into the first: the frames just before it, or its first frame held.
