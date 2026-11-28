@@ -182,7 +182,7 @@ async function main() {
       check(true, "no shot needs a warning in this plan");
     }
     await page.click("[data-shot='1']");
-    check(((await page.textContent("[data-shot-details]")) ?? "").includes("Shot 1:"), "a shot's details: clip, in / out, speed");
+    check(((await page.textContent("[data-shot-details]")) ?? "").includes("Shot 1 of this video"), "a shot's details: clip, in / out, speed");
     check(!!(await page.$("[data-shot-details] [data-shot-omit]")), "a shot's details offer Omit this clip (the same switch as the clips row)");
     // The transport bar under the viewer: start, back / forward one bar, play / pause, stop, end; keys too.
     check((await page.$$("[data-transport-button]")).length === 9, "the transport bar: start, back, play, stop, forward, end, loop, mute, full screen");

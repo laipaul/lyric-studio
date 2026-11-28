@@ -6,12 +6,15 @@
 // Make syncs). Before 11 Nov 2026 a ticked collection mixed in all of its clips after the story line: such a song is
 // shown, and saved once, as one card at the end of its line (its clips Shape had placed keep their places as picked
 // clips), so its videos stay the same. No rendering code is imported here, so the studio's server can use it.
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import type { Workspace } from "@lyric/db";
 
 import { folderClips, songClipsCollection, type ClipAsset } from "./assets";
-import { clipRoles } from "./clip-roles";
+import { assetLabels, NO_LABELS, type AssetLabels, type StoryEntry } from "../labels";
+import { clipRoles, songSingingLines } from "./clip-roles";
+import { SOURCE_FILE } from "./collection";
 import { cardKey, cardOf, inClipOrder, isOmitted, readClipEdits, setClipOmit, withSongOrder, writeClipEdits, type ClipEdits } from "./clip-edits";
 import { notesForClips, readClipNotes, setClipNote } from "./clip-notes";
 import { collectionFolder } from "./collections";
@@ -103,7 +106,6 @@ export async function songStory(ws: Workspace, projectId: string, ownAll: readon
     return byCollection.get(c)!;
   };
   const items: StoryItem[] = [];
-  const shown = new Set<string>();
   const shotList = readShotListFile(path.join(root, SHOTLIST_FILE));
   const slots = shotList?.slots ?? [];
   const slotView = slots.length ? slotViews(ws, projectId) : null;
@@ -114,40 +116,130 @@ export async function songStory(ws: Workspace, projectId: string, ownAll: readon
     const slot = id ? slots.find((x) => x.id === id) : undefined;
     return slot && slotView ? { ...slotView(slot), number: numbered.indexOf(slot) + 1 } : undefined;
   };
+  // The collections the line uses, loaded once (a card's clips, picked clips).
+  for (const c of new Set([...edits.order.flatMap((e) => { const card = cardOf(e); return card !== null ? [card] : []; }), ...Object.keys(edits.picked ?? {})])) await clipsOfCollection(c);
+  const entries = storyOrderEntries(edits, ownNames, slots.map((x) => x.id), (c, name) => byCollection.get(c)?.find((x) => same(x.name, name))?.name ?? null);
+  for (const entry of entries) {
+    if (entry.kind === "slot") {
+      const slot = slots.find((x) => x.id === entry.id);
+      if (slot && slotView) items.push({ key: entry.key, slot: slotView(slot) });
+      continue;
+    }
+    if (entry.kind === "card") {
+      const list = (byCollection.get(entry.collection) ?? []).filter((x) => !x.duplicateOf);
+      const placed = list.filter((x) => edits.order.some((o) => same(o, x.name)));
+      const rest = list.filter((x) => !placed.includes(x));
+      items.push({ key: entry.key, card: { collection: entry.collection, clips: rest.length, thumbs: rest.flatMap((x) => (x.thumb ? [x.thumb] : [])).slice(0, 4) } });
+      continue;
+    }
+    if (entry.kind === "own") {
+      const mine = own.find((c) => same(c.name, entry.name))!;
+      const shot = shotOf(mine.name);
+      items.push({ key: mine.name, clip: withFits(mine), ...(shot ? { shot } : {}) });
+      continue;
+    }
+    const asset = (byCollection.get(entry.collection) ?? []).find((x) => same(x.name, entry.name))!;
+    const note = notesForClips(notes, [asset]).get(asset.name) ?? null;
+    items.push({ key: asset.name, clip: withFits({ ...asset, collection: entry.collection, omit: isOmitted(edits, asset.name), note }) });
+  }
+  return { items, collections: songCollections(ws, projectId) };
+}
+
+// The story line's order (Prepare → Storyboard's cards, in order): clips.json "order" (planned slots, "the app picks"
+// cards, own clips, clips picked from a collection), then the song's own clips without a place yet (as Make plays
+// them). Names left from an older order (a removed clip or collection) are skipped. One function for the Storyboard's
+// cards and the labels (songLabels), so both always count the same cards.
+// inCollection(collection, name): the clip's file name in that collection, null when it is not there (any more).
+export type OrderEntry =
+  | { kind: "slot"; key: string; id: string }
+  | { kind: "card"; key: string; collection: string }
+  | { kind: "own"; key: string; name: string }
+  | { kind: "picked"; key: string; name: string; collection: string };
+export function storyOrderEntries(edits: ClipEdits, ownNames: readonly string[], slotIds: readonly string[], inCollection: (collection: string, name: string) => string | null): OrderEntry[] {
+  const out: OrderEntry[] = [];
+  const shown = new Set<string>();
   const ownInOrder = inClipOrder(edits, ownNames);
-  // Own clips without a place yet follow at the end (as Make plays them).
   for (const e of [...edits.order, ...ownInOrder.filter((n) => !edits.order.some((o) => same(o, n)))]) {
     const slotId = slotOf(e);
     if (slotId !== null) {
-      const slot = slots.find((x) => x.id.toLowerCase() === slotId.toLowerCase());
-      if (slot && slotView) items.push({ key: e, slot: slotView(slot) });
+      const id = slotIds.find((x) => x.toLowerCase() === slotId.toLowerCase());
+      if (id !== undefined) out.push({ kind: "slot", key: e, id });
       continue;
     }
     const card = cardOf(e);
     if (card !== null) {
-      const list = (await clipsOfCollection(card)).filter((x) => !x.duplicateOf);
-      const placed = list.filter((x) => edits.order.some((o) => same(o, x.name)));
-      const rest = list.filter((x) => !placed.includes(x));
-      items.push({ key: e, card: { collection: card, clips: rest.length, thumbs: rest.flatMap((x) => (x.thumb ? [x.thumb] : [])).slice(0, 4) } });
+      out.push({ kind: "card", key: e, collection: card });
       continue;
     }
     if (shown.has(e.toLowerCase())) continue;
-    const mine = own.find((c) => same(c.name, e));
+    const mine = ownNames.find((n) => same(n, e));
     if (mine) {
-      const shot = shotOf(mine.name);
-      items.push({ key: mine.name, clip: withFits(mine), ...(shot ? { shot } : {}) });
+      out.push({ kind: "own", key: mine, name: mine });
       shown.add(e.toLowerCase());
       continue;
     }
     const from = Object.entries(edits.picked ?? {}).find(([, names]) => names.some((n) => same(n, e)))?.[0];
-    if (!from) continue; // a name left from an older order (a removed clip or collection): not shown
-    const asset = (await clipsOfCollection(from)).find((x) => same(x.name, e));
-    if (!asset) continue; // removed from the collection since
-    const note = notesForClips(notes, [asset]).get(asset.name) ?? null;
-    items.push({ key: asset.name, clip: withFits({ ...asset, collection: from, omit: isOmitted(edits, asset.name), note }) });
+    if (!from) continue;
+    const name = inCollection(from, e);
+    if (!name) continue; // removed from the collection since
+    out.push({ kind: "picked", key: name, name, collection: from });
     shown.add(e.toLowerCase());
   }
-  return { items, collections: songCollections(ws, projectId) };
+  return out;
+}
+
+// The song's labels (labels.ts): B-roll = its Storyboard card number, singers S1, S2… by line. Read from the files
+// only (clips.json, song.json, the shot list, the clips and collection folders), no hashing or probing, so every view
+// can add them cheaply. Never throws: a song without a folder has no labels.
+export function songLabels(ws: Workspace, projectId: string): AssetLabels {
+  try {
+    const paths = songPathsById(ws, projectId);
+    if (paths.legacy || !paths.clips) return NO_LABELS;
+    const root = paths.root;
+    const files = (folder: string) => (existsSync(folder) ? readdirSync(folder).filter((f) => SOURCE_FILE.test(f) && statSync(path.join(folder, f)).isFile()) : []);
+    const all = files(paths.clips);
+    const roles = clipRoles(root, paths.recipe, all);
+    const ownNames = all.filter((n) => (roles.get(n) ?? "story") === "story");
+    const edits = readClipEdits(root);
+    const slots = readShotListFile(path.join(root, SHOTLIST_FILE))?.slots ?? [];
+    const shared = sharedCollections(ws);
+    const inFolder = new Map<string, string[]>();
+    const collectionFiles = (c: string) => {
+      if (!inFolder.has(c)) inFolder.set(c, shared.includes(c) ? files(collectionFolder(ws, c)) : []);
+      return inFolder.get(c)!;
+    };
+    const entries = storyOrderEntries(edits, ownNames, slots.map((x) => x.id), (c, name) => collectionFiles(c).find((x) => same(x, name)) ?? null);
+    const storyOrder: StoryEntry[] = entries.map((e) =>
+      e.kind === "slot" ? { kind: "slot", id: e.id } : e.kind === "card" ? { kind: "card", collection: e.collection, clips: collectionFiles(e.collection).filter((x) => !edits.order.some((o) => same(o, x))) } : { kind: "clip", name: e.name },
+    );
+    const source = singingSources(root);
+    return assetLabels({ storyOrder, singingAnchors: songSingingLines(paths.recipe).map((a) => ({ ...a, source: source.get(a.clip.toLowerCase()) ?? path.parse(a.clip).name })) });
+  } catch {
+    return NO_LABELS;
+  }
+}
+
+// Where each singing clip comes from (Creation's lip-sync takes in pictures\pictures.json, read here without importing
+// animate.ts): "<music video or picture> · 1:02–1:09" (the part of the song it sings), by the clip it was sent as.
+const songClock = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}`;
+function singingSources(songRoot: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const file = path.join(songRoot, "pictures", "pictures.json");
+  if (!existsSync(file)) return out;
+  try {
+    const raw = JSON.parse(readFileSync(file, "utf8")) as { pictures?: Record<string, { takes?: { kind?: string; sent?: string; clip?: string; sync_ms?: number; to_ms?: number }[] }> };
+    for (const [picture, rec] of Object.entries(raw.pictures ?? {})) {
+      for (const t of rec?.takes ?? []) {
+        const sent = t.sent ?? t.clip;
+        if (t.kind !== "lipsync" || !sent) continue;
+        const when = typeof t.sync_ms === "number" && typeof t.to_ms === "number" && t.to_ms > t.sync_ms ? ` · ${songClock(t.sync_ms)}–${songClock(t.to_ms)}` : "";
+        out.set(sent.toLowerCase(), `${path.parse(picture).name}${when}`); // the newest take sent as that clip
+      }
+    }
+  } catch {
+    // an unreadable file: the clip's own name is shown
+  }
+  return out;
 }
 
 // How a slot shows: its characters' and scene's cards (thumbnail, locked or not; a name with no card any more shows

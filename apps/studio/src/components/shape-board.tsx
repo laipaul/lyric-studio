@@ -18,6 +18,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 
 import { clockTenths, type TimelineEdits, EFFECT_NAMES, effectTitle, followScrollLeft, LyricVideo, playheadLabel, revealScrollLeft, songTimeMs, timeTicks, patchLook, previewCard, previewTitleCard, readableWarning, titleCardMult, titleCardSize, TITLE_SIZE_RANGE, type CardOverrides, type TextCardProps, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
 import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node";
+import { clipLabel, type AssetLabels } from "@lyric/video/labels";
 import { tryName } from "@lyric/video/video-names";
 import { ClipMenu } from "./clip-menu";
 import { BrollHere } from "./shape-broll";
@@ -855,6 +856,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
         {view && shot ? (
           <ShotDetails
             shot={shot}
+            label={shot.role === "empty" ? null : clipLabel(view.labels, shot.clip)}
             editable={view.editable}
             menu={clipMenu(shot, "button")}
             onUnanchor={shot.anchor ? () => void edit({ action: "unanchor", line: shot.anchor!.line }) : undefined}
@@ -868,7 +870,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
       </div>
       <div className="flex flex-col gap-3" data-clips-panel>
         {view?.editable && view.clips.length ? (
-          <StoryStrip clips={view.clips.filter((c) => (c.role ?? "story") === "story")} busy={saving || loading} onOpen={openClip} onOmit={(clip, omit) => void edit({ action: "omit", clip, omit })} current={shot?.clip ?? null} />
+          <StoryStrip clips={view.clips.filter((c) => (c.role ?? "story") === "story")} labels={view.labels} busy={saving || loading} onOpen={openClip} onOmit={(clip, omit) => void edit({ action: "omit", clip, omit })} current={shot?.clip ?? null} />
         ) : (
           <p className="text-muted-foreground text-xs">{view && !view.editable ? "A past run: its clips cannot be changed." : "The clips show once the video is planned."}</p>
         )}
@@ -1425,6 +1427,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                     <ShotBlock
                       key={s.index}
                       shot={tl.shown(s)}
+                      label={s.role === "empty" ? null : clipLabel(view.labels, s.clip)}
                       left={x(s.startMs)}
                       width={x(s.endMs - s.startMs)}
                       selected={selected === s.index}
@@ -1590,6 +1593,7 @@ function LaneName({ name, note, className }: { name: string; note?: string; clas
 
 function ShotBlock({
   shot: s,
+  label,
   left,
   width,
   selected,
@@ -1606,6 +1610,7 @@ function ShotBlock({
   onDrop,
 }: {
   shot: StoryShot;
+  label: string | null; // its label (labels.ts): the Storyboard card number of a B-roll clip, S1, S2… of a singer; null: no card
   left: number;
   width: number;
   selected: boolean;
@@ -1625,6 +1630,7 @@ function ShotBlock({
     <button
       type="button"
       data-shot={s.index + 1}
+      data-shot-label-text={label ?? ""}
       data-slipped={slipped || undefined}
       data-pending={pending || undefined}
       data-lifted={lifted || undefined}
@@ -1674,7 +1680,9 @@ function ShotBlock({
         {s.warnings.length ? <AlertTriangle className="size-3 text-amber-300" data-badge="warning" /> : null}
       </div>
       <div className="absolute inset-x-0 bottom-0 truncate bg-black/70 px-1 py-px leading-tight" data-shot-label>
-        {s.index + 1} · {s.clip}
+        {/* The same label as Prepare → Storyboard and Lyrics Sync (28 Nov 2026), never the shot's position. */}
+        {label ? `${label} · ` : ""}
+        {s.clip}
         <br />
         <span className="text-white/75">{secs(s.endMs - s.startMs)} · {s.inS.toFixed(1)}–{s.outS.toFixed(1)} s</span>
       </div>
@@ -1682,12 +1690,14 @@ function ShotBlock({
   );
 }
 
-function ShotDetails({ shot: s, editable, menu, onUnanchor, onOmit, onResetTimeline, onClose }: { shot: StoryShot; editable: boolean; menu: ReactNode; onUnanchor?: () => void; onOmit?: () => void; onResetTimeline?: () => void; onClose: () => void }) {
+function ShotDetails({ shot: s, label, editable, menu, onUnanchor, onOmit, onResetTimeline, onClose }: { shot: StoryShot; label: string | null; editable: boolean; menu: ReactNode; onUnanchor?: () => void; onOmit?: () => void; onResetTimeline?: () => void; onClose: () => void }) {
   return (
     <div className="bg-card border-brand/40 rounded-lg border p-3 text-xs" data-shot-details={s.index + 1}>
       <div className="mb-1 flex items-start gap-2">
         <p className="min-w-0 flex-1 text-sm font-medium break-words">
-          Shot {s.index + 1}: {s.clip}
+          {label ? <span data-shot-details-label>{label} · </span> : null}
+          {s.clip}
+          <span className="text-muted-foreground block text-xs font-normal">Shot {s.index + 1} of this video</span>
         </p>
         <button type="button" onClick={onClose} aria-label="close the shot details" className="text-muted-foreground hover:text-foreground rounded p-1">
           <X className="size-4" />
@@ -1743,7 +1753,7 @@ function ShotDetails({ shot: s, editable, menu, onUnanchor, onOmit, onResetTimel
 // The story order: every clip of the run (the song's own and the collections') in the order story
 // videos use them. The order itself is set in Prepare → Storyboard (11 Nov 2026: one place, collection clips
 // included); here: drag a card onto a lyric line or a shot to put it there; click it to find it on the timeline.
-function StoryStrip({ clips, busy, onOpen, onOmit, current }: { clips: StoryboardClip[]; busy: boolean; onOpen: (name: string) => void; onOmit: (name: string, omit: boolean) => void; current: string | null }) {
+function StoryStrip({ clips, labels, busy, onOpen, onOmit, current }: { clips: StoryboardClip[]; labels: AssetLabels | undefined; busy: boolean; onOpen: (name: string) => void; onOmit: (name: string, omit: boolean) => void; current: string | null }) {
   const goToTab = useGoToTab();
   return (
     <div data-story-strip>
@@ -1760,6 +1770,7 @@ function StoryStrip({ clips, busy, onOpen, onOmit, current }: { clips: Storyboar
             key={c.name}
             data-story-clip={c.name}
             data-story-index={i + 1}
+            data-story-label={clipLabel(labels, c.name) ?? ""}
             data-omit={c.omit ? "1" : "0"}
             draggable={!busy}
             onDragStart={(e) => {
@@ -1772,7 +1783,9 @@ function StoryStrip({ clips, busy, onOpen, onOmit, current }: { clips: Storyboar
               <div className={cn("aspect-video bg-black bg-cover bg-center", c.omit && "opacity-30 grayscale")} style={{ backgroundImage: c.thumb ? `url(/api/files/${c.thumb})` : undefined }} />
               <div className={cn("p-1", c.omit && "opacity-60")}>
                 <p className="truncate font-medium">
-                  {i + 1}. {c.name}
+                  {/* Its Storyboard card number (labels.ts), the same as on Shape's shots. */}
+                  {clipLabel(labels, c.name) ? `${clipLabel(labels, c.name)}. ` : ""}
+                  {c.name}
                 </p>
                 <p className="text-muted-foreground">
                   {c.omit ? "omitted" : `${c.shots} shot${c.shots === 1 ? "" : "s"}`}

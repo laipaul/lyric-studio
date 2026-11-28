@@ -29,6 +29,7 @@ import {
   type RenderOptions,
 } from "../src/node";
 import { renameCollection } from "../src/node/collections";
+import { songLabels } from "../src/node/story-line";
 import { LYRICS, fakeAlign, ffmpeg, makeClip, makeSong } from "./media-helpers";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "lyric-story-line-"));
@@ -112,6 +113,10 @@ describe("shared-collection clips in the story line", () => {
     await setStoryOrder(ws, id, ["f3.mp4", "a.mp4", cardKey("Flowers"), "f2.mp4", "b.mp4", "c.mp4"]);
     expect(await story()).toEqual(["f3.mp4 (Flowers)", "a.mp4", "[Flowers · app picks · 1]", "f2.mp4 (Flowers)", "b.mp4", "c.mp4"]);
     expect((await plan()).clips).toEqual(["f3.mp4", "a.mp4", "f1.mp4", "f2.mp4", "b.mp4", "c.mp4"]);
+    // Labels (28 Nov 2026): every clip reads as its Storyboard card's number; f1 (the app picks it) as the card's.
+    const labels = songLabels(ws, id);
+    expect(["f3.mp4", "a.mp4", "f1.mp4", "f2.mp4", "b.mp4", "c.mp4"].map((n) => labels.clips[n])).toEqual(["1", "2", "3", "4", "5", "6"]);
+    expect(labels.singers).toEqual([]);
   }, 120_000);
 
   it("removing every Flowers item takes the collection off the song; the collection keeps its clips", async () => {

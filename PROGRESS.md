@@ -990,6 +990,13 @@ requests are added at the end and acknowledged with their place.
    she does, Lips follow, Engine, scene, the make buttons, every take and the line's music-video shots are in the line's
    window. Nothing removed, only moved. Known: the browser test singer.e2e.ts still clicks the old in-row controls
    (it runs in the cloud check): to update so it opens the window first.
+1k. ✅ **Done 28 Nov 2026: labels everywhere** (Paul, 28 Nov 2026: "let's build the storyboard with new naming"): B-roll =
+   its Prepare → Storyboard card number (1, 2, 3… in story order), singers = S1, S2, S3… in song order; the same
+   label on Storyboard cards and singer markers, Shape's shots (instead of the shot position) and Lyrics Sync's lines.
+1j. **Bug: decimal comma** (Paul, 28 Nov 2026, line 32's cut-away "Hide from 10 to 13,8": Save greyed, nothing
+   happens): every seconds field accepts "13,8" as well as "13.8" (Windows with a comma decimal); when Save cannot work
+   the dialog says why next to the button; errors show in the dialog, not at the top of the page behind it. Also: the
+   greyed Save gives no reason when no clip is picked yet ("Click a clip, then Save" is easy to miss): say "pick a clip".
 1g. **NEXT: design rethink session** (Paul, 28 Nov 2026: "we need to simplify this assembly line workflow, there has
    been too many little addons that confuses me"; "the app must identify each asset clearly and be able to assemble
    them in the right place according to the storyboard"). First an inventory of every button and panel, each marked
@@ -1007,6 +1014,19 @@ requests are added at the end and acknowledged with their place.
      picture, what she does, cost), follows them, reviews what came back with the song, organizes and clears takes
      (Removed, with Restore), and sends the chosen one to its line. Technical choices (engine, Lips follow, resolution,
      shape) automatic there, overrides under Advanced.
+   - "this workflow too is not clear between draft, then approve then make final": one creative choice ("Use this
+     take"); quality handled by the app: when Make finds a draft (480p) take in a video, it says so once with the cost
+     ("line 32's take is a 480p draft: make it 1080p for this video, about $1.00?") and upscales it before rendering;
+     no separate Draft / Approve / Make final buttons. Also: one readable name per asset ("Shot 1" on L15 and L17 are
+     two different videos; take names cut to "T…"), and the timing details (readable / leaves / in the Reels, nudges)
+     in a timing view, not in the assembly view. A final replacing a draft must keep the line's cut-aways.
+   - "why is my storyboard then not aligned?": Prepare → Storyboard shows only the B-roll order (V2), numbered 1..n,
+     while the singers sit by song time on their lines; whole music videos, an unmatched take and a picture sent there
+     earlier sat at the end as story clips (could play as B-roll). The Storyboard should read like the video (song order,
+     singers shown at their places) and a singing video should never land among the B-roll by accident.
+   - Labels (Paul, 28 Nov 2026: "the cards keep their number while the singing cards have a different sequence", "call
+     them S1, S2 etc"): B-roll cards 1, 2, 3… in his story order; singing clips S1, S2, S3… in song order; the same label
+     on Shape's yellow shots, Lyrics Sync's lines and the Storyboard's singer markers. First step of the rethink.
 1d. **Your clips play at the speed you made them** (Paul, 28 Nov 2026: "normally I create the video with the right
    speed by using Canva, I hope the app is not slowing them itself?"; "the dissolve from Canva never alters the speed
    it just blends the clips"). The app never slows or speeds up a clip (today B-roll is slowed to 0.75-1.0x to fit a
@@ -1014,6 +1034,10 @@ requests are added at the end and acknowledged with their place.
    Canva; too little spare footage → a shorter dissolve or a cut. The app adapts the cuts instead (in his order, on his
    lines). Only a speed Paul sets himself (the clip's ⋯ menu) changes a clip's speed. Where something cannot fit at
    1.00x, Shape says so in plain words (e.g. "a longer clip would fill it").
+   Also in 1d: the cut-away dialog (Hide a moment of the singing take) offers one clip for the whole stretch and slows it
+   when it is short ("will be slowed to cover the line"): Paul's line 32 ending needed 10.9 s with 5.2 s clips (three
+   cut-aways by hand). Instead: "hide from X to the end" fills the stretch at normal speed with clips of his story order,
+   one after another (no slowing).
    Also in 1d (Paul: "the transitions at the start of the singing is still a bit rough but overall much better"): a
    longer, Canva-like soft entry into a singer (about 0.6-0.8 s instead of 0.4 s) where the B-roll before has spare
    footage, still ending on the beat; Paul to name the roughest singing starts (shot numbers).

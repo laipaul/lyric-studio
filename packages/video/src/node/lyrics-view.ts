@@ -23,6 +23,8 @@ import { CHECKED_BY_EAR_FILE, checkedByEar, type EarCheck } from "../checked-by-
 import { loadBrand } from "./brand";
 import { loadFontCatalog } from "./font-catalog";
 import { songAssets } from "./assets";
+import type { AssetLabels } from "../labels";
+import { songLabels } from "./story-line";
 import { syncCollection } from "./collection";
 import { keepReplaced, rememberedCollection } from "./project-settings";
 import { setClipOmit } from "./clip-edits";
@@ -72,6 +74,7 @@ export type LyricsView = {
   replaced: { file: string; at: string; lines: number }[]; // earlier lyrics.txt versions (newest first)
   instrumental: boolean; // the text is the story.txt of an instrumental (timed by the app, never aligned)
   anchors: AnchorsView;
+  assetLabels: AssetLabels; // the song's labels (labels.ts): S1, S2… on the singing lines, a B-roll anchor its Storyboard number
   voice: "stem" | "demucs" | null; // what the timing listens to (null: no stored alignment)
   handReset: HandReset | null; // hand-set starts just reset (notice with Undo)
 };
@@ -245,6 +248,7 @@ export async function lyricsView(ws: Workspace, projectId: string): Promise<Lyri
     gap,
     hintsFile: paths.hints ? path.relative(ws.dir, paths.hints).split(path.sep).join("/") : null,
     replaced,
+    assetLabels: songLabels(ws, projectId),
     voice: null as LyricsView["voice"],
     handReset: null as HandReset | null,
   };

@@ -7,6 +7,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { clockTenths, linesInVideo } from "@lyric/video";
 import type { AnchorClip, LyricsLine, LyricsView } from "@lyric/video/lyrics-view";
 import { showsSinging } from "@lyric/video/song-style";
+import { clipLabel, singerOnLine } from "@lyric/video/labels";
 
 import { HidePreview } from "@/components/hide-preview";
 import { CutWhilePlayingButton } from "@/components/cut-while-playing";
@@ -434,6 +435,8 @@ export function LyricsTab({ projectId }: { projectId: string }) {
                     const sungWith = anchor ? null : (data.anchors.list.find((a) => a.sync !== undefined && a.line < l.number && l.number <= (a.through ?? a.line)) ?? null);
                     const anchorClip = anchor ? data.anchors.clips.find((c) => c.name.toLowerCase() === anchor.clip.toLowerCase()) : undefined;
                     const problems = data.anchors.problems.filter((p) => p.line === l.number);
+                    const singerHere = anchor?.sync !== undefined ? singerOnLine(data.assetLabels, l.number) : null;
+                    const anchorLabel = anchor ? (anchor.sync !== undefined ? (singerHere?.label ?? null) : clipLabel(data.assetLabels, anchor.clip)) : null;
                     // The clip on the line (27 Nov 2026, Paul: "only 2 parts: singing clip and no singing, the B-roll"): a singing clip shows in
                     // the singing column, a story clip (B-roll) in the B-roll column.
                     const anchorBlock = (
@@ -441,7 +444,12 @@ anchor ? (
                             <div className="flex max-w-56 min-w-0 items-center gap-2" data-anchor={anchor.clip}>
                               <Thumb clip={anchorClip} />
                               <div className="min-w-0 text-xs">
-                                <div className="truncate" title={anchor.clip}>{anchorClip?.label ?? anchor.clip}</div>
+                                {/* Its label (labels.ts, 28 Nov 2026): S1, S2… for a singer with where it comes from, a B-roll clip its
+                                    Storyboard card number: the same as on Shape's shots and the Storyboard. */}
+                                <div className="truncate" title={anchor.clip} data-anchor-label={anchorLabel ?? ""}>
+                                  {anchorLabel ? `${anchorLabel} · ` : ""}
+                                  {anchor.sync !== undefined ? (singerHere?.source ?? anchorClip?.label ?? anchor.clip) : (anchorClip?.label ?? anchor.clip)}
+                                </div>
                                 <div className="text-muted-foreground">
                                   {anchor.sync !== undefined ? "singing · in time with the song" : anchor.transition === "dissolve" ? "dissolve" : "cut"}
                                   {anchor.clipIn ? ` · from ${anchor.clipIn} s` : ""}
@@ -581,7 +589,7 @@ anchor ? (
                               {(anchor.hide ?? []).map((h, k) => (
                                 <div key={`${h.from}-${h.to}`} className="flex items-center gap-1" data-hide={`${h.from}-${h.to}`}>
                                   <span className="min-w-0 flex-1 truncate" title={`${h.from}–${h.to} s of the take: ${h.clip} shows meanwhile`}>
-                                    {h.from}–{h.to} s of the take: B-roll {data.anchors.clips.find((c) => c.name.toLowerCase() === h.clip.toLowerCase())?.label ?? h.clip}
+                                    {h.from}–{h.to} s of the take: B-roll {clipLabel(data.assetLabels, h.clip) ? `${clipLabel(data.assetLabels, h.clip)} · ` : ""}{data.anchors.clips.find((c) => c.name.toLowerCase() === h.clip.toLowerCase())?.label ?? h.clip}
                                   </span>
                                   <button type="button" disabled={busy} onClick={() => void saveHide(l.number, { remove: k })} className="text-muted-foreground hover:text-foreground shrink-0 rounded p-0.5" aria-label={`Show the singer again at ${h.from}–${h.to} s`} data-hide-remove>
                                     <X className="size-3" />

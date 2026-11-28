@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AssetKind, SongAssets } from "@lyric/video/assets";
 import type { ReplacedFile } from "@lyric/video/replaced-files";
 import type { StoryItem } from "@lyric/video/story-line";
+import { singerLines, singerOnLine, type AssetLabels } from "@lyric/video/labels";
 
 import { CollectionPicker } from "@/components/collection-picker";
 import { ShotListImport } from "@/components/shotlist-import";
@@ -53,7 +54,7 @@ const PART_KINDS: Record<Exclude<AssetsPart, "clips">, readonly string[]> = { fi
 // story: the story line (Prepare → Storyboard, 11 Nov 2026): the song's own clips, clips picked from a shared
 // collection and "the app picks" cards, in order (story-line.ts).
 type CastTag = { id: string; name: string; kind: "character" | "scene"; removed: boolean };
-type AssetsData = SongAssets & { story: StoryItem[]; castTags?: CastTag[] };
+type AssetsData = SongAssets & { story: StoryItem[]; castTags?: CastTag[]; labels?: AssetLabels };
 
 // Who appears in a clip (26 Nov 2026, Cast Library): chips of the Characters library, saved by card id in clips.json
 // (a renamed character keeps its tags; a removed one shows greyed out, "(removed)", until it is restored). Display only.
@@ -505,13 +506,15 @@ export function AssetsTab({ projectId, part = "files" }: { projectId: string; pa
                 <span className="text-muted-foreground">V1 Singer, locked to the song:</span>
                 {data.singing.map((s) => {
                   const c = s.clip ? data.clips.find((x) => x.name.toLowerCase() === s.clip!.toLowerCase()) : undefined;
+                  // Its label (S1, S2… in song order: labels.ts), the same as on Shape's shots and Lyrics Sync's lines.
+                  const singer = singerOnLine(data.labels, s.line);
                   return (
-                    <button key={`${s.line}`} type="button" data-v1-marker={s.line} onClick={() => goToTab("lyrics")} title={`${c?.label ?? s.clip ?? "singing take"}: sings ${s.through > s.line ? `lines ${s.line}–${s.through}` : `line ${s.line}`}, in time with the song (always 1.00x). Set in Lyrics Sync: click to open it.`} className="flex items-center gap-1 rounded border border-emerald-400/50 bg-emerald-400/10 py-0.5 pr-1.5 pl-0.5 hover:bg-emerald-400/20">
+                    <button key={`${s.line}`} type="button" data-v1-marker={s.line} data-v1-label={singer?.label} onClick={() => goToTab("lyrics")} title={`${singer ? `${singer.label}: ` : ""}${singer?.source ?? c?.label ?? s.clip ?? "singing take"}: sings ${s.through > s.line ? `lines ${s.line}–${s.through}` : `line ${s.line}`}, in time with the song (always 1.00x). Set in Lyrics Sync: click to open it.`} className="flex items-center gap-1 rounded border border-emerald-400/50 bg-emerald-400/10 py-0.5 pr-1.5 pl-0.5 hover:bg-emerald-400/20">
                       {c?.thumb ? (
                         // eslint-disable-next-line @next/next/no-img-element -- a local thumbnail served by /api/files
                         <img src={`/api/files/${c.thumb}`} alt="" className="h-6 w-4 rounded-sm object-cover" />
                       ) : null}
-                      <span>🔒 {s.through > s.line ? `lines ${s.line}–${s.through}` : `line ${s.line}`}</span>
+                      <span data-v1-marker-text>{singer ? `${singer.label} · ${singerLines(s)}` : `🔒 ${s.through > s.line ? `lines ${s.line}–${s.through}` : `line ${s.line}`}`}</span>
                     </button>
                   );
                 })}

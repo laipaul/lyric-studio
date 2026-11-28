@@ -20,7 +20,7 @@ import { resolveWorkspaceDir, safeName } from "@lyric/db";
 import { cardTags } from "@lyric/video/characters";
 import { assignSongFile, importSongClips, setSongStoryIdea, removeSongClip, replaceAsset, restoreSongClip, setSongClipNote, setSongClipCast, setSongClipLabel, setSongClipOmit, setSongClipOrder, songAssets, storeVocalStem, type AssetKind, type AssignRole } from "@lyric/video/assets";
 
-import { addFromCollection, isPickedClip, removeFromStory, setPickedClipNote, setPickedClipOmit, setStoryOrder, songStory } from "@lyric/video/story-line";
+import { addFromCollection, isPickedClip, removeFromStory, setPickedClipNote, setPickedClipOmit, setStoryOrder, songLabels, songStory } from "@lyric/video/story-line";
 
 import { withWorkspace, withWorkspaceAsync } from "@/lib/workspace";
 
@@ -35,7 +35,8 @@ export async function GET(_request: Request, { params }: Params) {
       await withWorkspaceAsync(async (ws) => {
         const assets = await songAssets(ws, id);
         // castTags: every character card by id, removed ones too (the Storyboard's cast chips).
-        return { ...assets, story: assets.folder ? (await songStory(ws, id, assets.clips)).items : [], castTags: cardTags(ws) };
+        // labels: the song's labels (S1, S2… for the singers; the same everywhere: Shape, Lyrics Sync).
+        return { ...assets, story: assets.folder ? (await songStory(ws, id, assets.clips)).items : [], castTags: cardTags(ws), labels: songLabels(ws, id) };
       }),
     );
   } catch (error) {

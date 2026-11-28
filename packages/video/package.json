@@ -100,6 +100,7 @@
     "./run-worker": "./src/node/run-worker.ts",
     "./assets": "./src/node/assets.ts",
     "./story-line": "./src/node/story-line.ts",
+    "./labels": "./src/labels.ts",
     "./shotlist": "./src/node/shotlist.ts",
     "./shot-timing": "./src/node/shot-timing.ts",
     "./shot-production": "./src/node/shot-production.ts",

@@ -4,6 +4,8 @@
 // (the clip editor's, else the strongest 2 s by motion, colour and contrast, as the Spotify Canvas picks
 // them; cached).
 import { clipRoles } from "./clip-roles";
+import type { AssetLabels } from "../labels";
+import { songLabels } from "./story-line";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -77,6 +79,8 @@ export type StoryboardView = {
   titleCards: { id: string; type: string; text: string; startMs: number; endMs: number }[];
   slots: { line: number; text: string; clip: string; why?: string }[]; // lines that need a clip (picture swap; why: e.g. its clip is of the other shape)
   picture: string | null; // the clip set planned ("city"; null: the recipe's)
+  // The song's labels (labels.ts, 28 Nov 2026): a B-roll shot shows its Storyboard card number, a singing shot S1, S2…
+  labels: AssetLabels;
   props: Omit<LyricVideoProps, "mediaBaseUrl">; // for the preview (served by the storyboard's media route)
 };
 
@@ -352,7 +356,7 @@ async function planView(ws: Workspace, projectId: string, p: { name: string; lab
   }));
   const overview = await songOverview(ws, projectId, p.name, paths.audio, plan.analysis, plan.lines);
   const shown = withTimeline(ws, projectId, await view(ws, {
-    editable: !paths.legacy, storyboardClips, slots: plan.slots, picture,
+    editable: !paths.legacy, storyboardClips, slots: plan.slots, picture, labels: songLabels(ws, projectId),
     source: "plan", run: null, platform: { name: p.name, label: p.label }, video: v.spec.name, videos: plan.videos.map((x) => x.spec.name),
     settings: settingsText(v.spec),
     section: { mode: plan.section.mode, startMs: plan.section.start_ms, endMs: plan.section.end_ms, reason: plan.section.reason },
@@ -389,7 +393,7 @@ export async function storyboardRun(ws: Workspace, projectId: string, folder: st
   const videos = shown.filter((v) => existsSync(path.join(dir, `${v.file}.manifest.json`))).map((v) => v.name);
   const used = m.anchors?.used ?? [];
   return withTimeline(ws, projectId, await view(ws, {
-    editable: false, storyboardClips: [], slots: [], picture: m.picture?.label ?? null,
+    editable: false, storyboardClips: [], slots: [], picture: m.picture?.label ?? null, labels: songLabels(ws, projectId),
     source: "run", run: folder, platform: { name: platform, label: SHORT_LABELS[platform] ?? m.platform?.preset.label ?? platform }, video: shown.find((v) => v.file === stem)?.name ?? video, videos,
     settings: `${m.variation.style}, ${m.variation.order}${(m.settings.cut_rate as string) ? `, ${m.settings.cut_rate}` : ""}${m.settings.transitions ? `, ${m.settings.transitions}` : ""}`,
     section: { mode: m.section.mode, startMs: m.section.start_ms, endMs: m.section.end_ms, reason: m.section.reason },
@@ -463,7 +467,7 @@ async function view(
     clips: Map<string, StoryClip>; numbered: { number: number | null; text: string; isHook: boolean }[];
     anchors: { uses: AnchorUse[]; conflicts: string[]; notes: string[]; missing: string[] } | null; anchorsOutside: StoryboardView["anchorsOutside"]; notes: string[]; songFile: string;
     loop: LoopResult | null; loopSuggestions: LoopSuggestion[]; decisions: string[]; editable: boolean; storyboardClips: StoryboardClip[];
-    slots: StoryboardView["slots"]; picture: string | null;
+    slots: StoryboardView["slots"]; picture: string | null; labels: AssetLabels;
   },
 ): Promise<Omit<StoryboardView, "timeline" | "song">> {
   const durationMs = frameMs(c.props.durationInFrames);
@@ -496,6 +500,7 @@ async function view(
     titleCards: storyTitleCards(c.props),
     slots: c.slots,
     picture: c.picture,
+    labels: c.labels,
     props: c.props,
   };
 }
