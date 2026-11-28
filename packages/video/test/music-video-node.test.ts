@@ -9,8 +9,8 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createSong, ensureAlignment, songPathsById } from "../src/node";
-import { addPictures, picturesView, readPictures } from "../src/node/animate";
-import { analyseMusicVideo, runMusicVideo, startMusicVideo, startMusicVideoFinals, useAllMusicVideoShots, useMusicVideoShot, withMusicVideos } from "../src/node/music-video";
+import { addPictures, picturesView, readPictures, update } from "../src/node/animate";
+import { analyseMusicVideo, markStaleTakes, runMusicVideo, startMusicVideo, startMusicVideoFinals, useAllMusicVideoShots, useMusicVideoShot, withMusicVideos } from "../src/node/music-video";
 import { finalUsd, runFinal, startFinal } from "../src/node/final";
 import { MV_DEFAULT_WORDS, MV_PROMPT_RULES, mvPrompt, mvSection } from "../src/music-video";
 import { singerContext } from "../src/node/singer";
@@ -205,5 +205,66 @@ describe("the shots in use made 1080p (Make final)", () => {
     expect([shot.inUse, shot.hd, shot.take]).toEqual([true, "done", fin.n]);
     // Nothing left to make 1080p.
     expect(() => startMusicVideoFinals(ws, id, file, 10, (n) => startFinal(ws, id, file, n, STUB), finalUsd)).toThrow(/No shot on its lines is waiting/);
+  });
+});
+
+describe("Find its shots again (28 Nov 2026)", () => {
+  const file = "One shot.mp4";
+  const anchorsOf = () => (JSON.parse(readFileSync(songPathsById(ws, id).recipe!, "utf8")) as { anchors?: { line: number; clip: string; sync?: number; through?: number }[] }).anchors ?? [];
+  beforeAll(async () => {
+    // The same song stretch under ONE continuous shot (the old check had split such a video in two).
+    const one = path.join(root, "one.mp4");
+    ffmpeg("-f", "lavfi", "-i", "color=c=green:s=160x96:r=25:d=9", "-ss", "2", "-t", "9", "-i", songPathsById(ws, id).audio!, "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", one);
+    await addPictures(ws, id, [{ file: one, name: file }]);
+  }, 60_000);
+
+  it("only the shots change: takes and anchors stay; a take of the old split is shown as earlier; Use on its lines of the whole shot replaces both anchors", async () => {
+    const first = await analyseMusicVideo(ws, id, file);
+    expect(first.shots).toHaveLength(1);
+    // The old false split, written as the old check left it, and both halves used on their lines (two takes, two anchors).
+    update(pics, file, (p) => {
+      p.mv!.shots = [{ fromMs: 0, toMs: 4500 }, { fromMs: 4500, toMs: 9000 }];
+    });
+    const a = await useMusicVideoShot(ws, id, file, 0);
+    const b = await useMusicVideoShot(ws, id, file, 1);
+    expect(a.placed).toBe("lines");
+    const before = anchorsOf();
+    expect(before.filter((x) => x.clip === a.clip || x.clip === b.clip).length).toBeGreaterThan(0);
+    const takesBefore = readPictures(pics).pictures[file].takes.map((t) => ({ ...t }));
+
+    const again = await analyseMusicVideo(ws, id, file);
+    expect(again.shots).toHaveLength(1);
+    const rec = readPictures(pics).pictures[file];
+    expect(rec.mv!.shots).toHaveLength(1);
+    // Every take is kept exactly as it was (only marked as from the earlier split); the anchors are untouched.
+    expect(rec.takes.map(({ mvStale: _s, ...t }) => t)).toEqual(takesBefore.map(({ mvStale: _s, ...t }) => t));
+    expect(rec.takes.filter((t) => t.mvShot !== undefined).every((t) => t.mvStale)).toBe(true);
+    expect(anchorsOf()).toEqual(before);
+    // The panel still shows them (no crash, no shot index out of range).
+    const view = (await withMusicVideos(ws, id, await picturesView(ws, id))).pictures.find((p) => p.file === file)!.mv!;
+    expect(view.shots).toHaveLength(1);
+    expect(view.shots[0].inUse).toBe(false);
+    expect(view.earlier?.length).toBeGreaterThan(0);
+    expect(view.earlier!.some((e) => e.n === a.n)).toBe(true);
+
+    // Use on its lines: ONE new take over the whole shot, ONE anchor (through), the two old ones gone, old clips untouched.
+    const r = await useMusicVideoShot(ws, id, file, 0, { hand: true });
+    expect([a.n, b.n]).not.toContain(r.n);
+    expect(r.last!).toBeGreaterThan(r.first!);
+    const t = readPictures(pics).pictures[file].takes.find((x) => x.n === r.n)!;
+    expect(t.through).toBe(r.last);
+    expect(Math.abs(t.seconds! * 1000 - 9000)).toBeLessThan(400);
+    const after = anchorsOf();
+    const mine = after.filter((x) => x.line >= r.first! && x.line <= r.last!);
+    expect(mine).toHaveLength(1);
+    expect(mine[0]).toMatchObject({ line: r.first, through: r.last, clip: r.clip });
+    expect(after.filter((x) => x.clip !== r.clip)).toEqual([]); // (an identical cut is the same clip: the Storyboard keeps one copy)
+    expect(after.some((x) => x.clip === a.clip)).toBe(false);
+  });
+
+  it("a take still current after a re-check keeps counting as its shot", () => {
+    const takes = [{ n: 1, mvShot: 0 }, { n: 2, mvShot: 1, mvShotTo: 2 }, { n: 3, mvShot: 3, mvStale: true }] as never[];
+    markStaleTakes(takes, [{ fromMs: 0, toMs: 3000 }, { fromMs: 3000, toMs: 6000 }, { fromMs: 6000, toMs: 9000 }], [{ fromMs: 0, toMs: 3010 }, { fromMs: 3010, toMs: 6000 }, { fromMs: 6000, toMs: 9000 }]);
+    expect(takes.map((t: { mvStale?: boolean }) => !!t.mvStale)).toEqual([false, false, true]);
   });
 });

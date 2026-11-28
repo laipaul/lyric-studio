@@ -4,7 +4,7 @@
 // same bride singing in different scenes and camera angles"). "This is a music video of this song": the app finds where
 // it sits in the song (its sound is the song) and its shots; Paul picks the shots he likes and each goes on its lines
 // in time with the song (a singing take, like Lyrics Sync's), or to the Storyboard when it has no sung line.
-import { Check, ChevronDown, ChevronRight, Clapperboard, ListChecks, Loader2, Music2, Send, Sparkles } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Clapperboard, ListChecks, Loader2, Music2, RefreshCw, Send, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 import type { PictureView } from "@lyric/video/animate";
@@ -57,6 +57,11 @@ export function MusicVideoPanel({ p, url, cap, post, reload, setNotice, play }: 
       </div>
     );
   }
+  const reanalyse = () =>
+    void run("reanalyse", { action: "mv-reanalyse" }, (r) => {
+      const m = (r as { mv: { shots: unknown[] } }).mv;
+      return `Looked again: ${m.shots.length} shot${m.shots.length === 1 ? "" : "s"}. Your takes and picks stay as they are.`;
+    });
   const free = mv.shots.filter((s) => s.first !== null && !s.inUse).length;
   // Shots on their lines still below 1080p (no final yet): Make final on each (Video Upscaler Pro, $0.04 a second, at least 3 s).
   const toHd = mv.shots.filter((s) => s.first !== null && s.inUse && !s.hd);
@@ -93,6 +98,9 @@ export function MusicVideoPanel({ p, url, cap, post, reload, setNotice, play }: 
         </span>
       ) : null}
       <span className="text-muted-foreground">Its shots show next to each planned shot (Production) and on each line (Prepare → Lyrics Sync).</span>
+      <button type="button" data-mv-reanalyse onClick={reanalyse} disabled={busy !== null} className="hover:text-foreground text-muted-foreground flex items-center gap-1 self-start" title="Looks for the video's shots again with the newest check; your takes and picks stay">
+        {busy === "reanalyse" ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />} Find its shots again
+      </button>
       <button type="button" data-mv-show-shots onClick={() => setShowShots((v) => !v)} className="hover:text-foreground text-muted-foreground flex items-center gap-1 self-start">
         {showShots ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />} Show its shots ({mv.shots.length})
       </button>
@@ -131,6 +139,11 @@ export function MusicVideoPanel({ p, url, cap, post, reload, setNotice, play }: 
           </div>
         ))}
       </div>
+      ) : null}
+      {mv.earlier?.length ? (
+        <span data-mv-earlier className="text-muted-foreground">
+          From an earlier split of the video (they stay where they are): {mv.earlier.map((e) => `${e.label}${e.first !== null ? `, ${linesName(e.first, e.last ?? e.first)}` : ""}${e.inUse ? " (in use)" : ""}`).join("; ")}.
+        </span>
       ) : null}
     </div>
   );

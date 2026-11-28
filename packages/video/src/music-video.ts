@@ -20,7 +20,8 @@ export type MusicVideoRecord = {
   shots: MvShot[];
 };
 export type MvShotView = MvShot & { i: number; songFromMs: number; songToMs: number; first: number | null; last: number | null; text: string | null; take: number | null; inUse: boolean; sent: string | null; hd: "running" | "done" | "interrupted" | null }; // hd: its 1080p final (Make final)
-export type MvView = Omit<MusicVideoRecord, "shots"> & { shots: MvShotView[]; singing: number };
+export type MvEarlierTake = { n: number; label: string; inUse: boolean; first: number | null; last: number | null }; // a take cut from an earlier split of the video ("Find its shots again")
+export type MvView = Omit<MusicVideoRecord, "shots"> & { shots: MvShotView[]; singing: number; earlier?: MvEarlierTake[] };
 
 export const MATCH_MIN = 0.8; // the same recording correlates at about 0.99
 export const DRIFT_MAX_MS = 25; // under one frame

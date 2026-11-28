@@ -4,6 +4,17 @@
 
 _The most recent steps (keep about 5). Everything earlier, in full: docs/history.md._
 
+### "Find its shots again" on a music video ✅ (to verify on the PC)
+Paul, 28 Nov 2026: "this part still blips in the middle" (lines 15-16), then "i don't see the button". A video matched
+to the song showed its panel in Creation with no way to find its shots again, so WeddingDaySingingClip1 kept its old
+false split (2 shots, a 0.2 s held-frame bridge between them on lines 15-16). Now the panel has **Find its shots again**:
+it re-checks the video with the robust check (Clip1 → 1 shot), rewriting only the video's shots; takes and anchors stay,
+the takes of the old split listed under "From an earlier split of the video (they stay where they are)". Then **Use on
+its lines** on the single shot cuts ONE take for lines 15-16 ("WeddingDaySingingClip1 shot 1-2.mp4", line 15 through 16)
+in place of the two old anchors (the old clips set to Omit, never deleted). Checked on a copy of Wedding Day: Reel v1
+then has one singing shot across lines 15-16 (6.4 s, the whole clip, no hold, no B-roll between). Tests: music-video-node
+(+2); suite 160 files, 1586 passed.
+
 ### Your clips play in your order, on the same lines ✅ (to verify on the PC; plan v8)
 Paul, 28 Nov 2026: "if I put the clips in a certain sequence I expect them to play in that order, else I'm confused if the
 app makes decisions to cut them for me resulting in lines being not in sync"; then "the dissolve from Canva never alters
@@ -794,14 +805,6 @@ locked cards can't be edited").
 - On the PC: Characters → Jennifer → Make the teeth close-up (one picture, a few cents); then shot 5 → Make with
   references 9:16, camera guide None, 1 take: compare with the earlier takes (face and dress).
 
-### Shot list → "Save as script (.md)" ✅ (to verify on the PC)
-- Paul (24 Nov 2026), for Higgsfield's Short Drama ("Upload your script: PDF, DOCX, FDX, TXT or MD"): Story room → 4 Shot
-  list → **Save as script (.md)** writes the shot list as a readable script, never the app's JSON: the cast (each person's
-  description and every look they wear in this film, with its outfit; also people a shot names who are not in the
-  cast), the places, the story bible, then every shot by section with its time on the song, framing, place, what
-  happens, people (and looks) and lyric. Read-only. node/shot-script.ts; production route action "script";
-  shot-production.test.ts.
-
 ## What works
 - `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm --filter @lyric/studio build`.
 - `pnpm db:show` / `db:setup` / `db:migrate` / `db:seed`.
@@ -973,13 +976,17 @@ requests are added at the end and acknowledged with their place.
    than its old frozen version, the next shot is the line-19 anchor (Worried Girl) and the B-roll before has only 1.6 s
    left, so the next story clip still fills it and every story clip after line 17 is one place early. Tests:
    singer-freed-time (3). Leftover to delete: the temp copy D:\tmpws_wd (~4 GB, outside the project).
-1c. ✅ **Done 28 Nov 2026 (see Latest steps): your clips play in your order, on the same lines** (Paul: "if I put the clips in a certain sequence
+1c. ✅ **Done 28 Nov 2026, verified by Paul ("now the timing is fixed and the lyrics stay on the right b roll"): your clips play in your order, on the same lines** (Paul: "if I put the clips in a certain sequence
    I expect them to play in that order, else I'm confused if the app makes decisions to cut them for me resulting in
    lines being not in sync"; "yes do 1c and start"). (1) Once Shape has shown a video, each story clip keeps its lyric
    line: a technical change may only lengthen / shorten neighbours, never add, skip or move a clip to another line; if
    it cannot, a note asks Paul (no silent decision). (2) Nothing changes silently: Shape lists any clip whose line
    changed against the plan Paul saw. (3) Line 17: the next clip in his order (Worried Girl, anchored on line 19)
    starts 3.6 s earlier; every later clip back on its line (toca_el_piano on line 22).
+1e. ✅ **Done 28 Nov 2026: "Find its shots again" on a music video** (Paul: "i don't see the button"): once a video is matched
+   to the song, Creation shows its panel and no way to find its shots again, so WeddingDaySingingClip1 keeps its old
+   false split (2 shots). A button on the panel re-checks it with today's robust check (Clip1 → 1 shot), keeping takes
+   and picks; then "Use on its lines" puts one continuous take on lines 15-16 (no blip between shots 5 and 6).
 1d. **Your clips play at the speed you made them** (Paul, 28 Nov 2026: "normally I create the video with the right
    speed by using Canva, I hope the app is not slowing them itself?"; "the dissolve from Canva never alters the speed
    it just blends the clips"). The app never slows or speeds up a clip (today B-roll is slowed to 0.75-1.0x to fit a
@@ -987,6 +994,9 @@ requests are added at the end and acknowledged with their place.
    Canva; too little spare footage → a shorter dissolve or a cut. The app adapts the cuts instead (in his order, on his
    lines). Only a speed Paul sets himself (the clip's ⋯ menu) changes a clip's speed. Where something cannot fit at
    1.00x, Shape says so in plain words (e.g. "a longer clip would fill it").
+   Also in 1d (Paul: "the transitions at the start of the singing is still a bit rough but overall much better"): a
+   longer, Canva-like soft entry into a singer (about 0.6-0.8 s instead of 0.4 s) where the B-roll before has spare
+   footage, still ending on the beat; Paul to name the roughest singing starts (shot numbers).
 2. **One-button Singer** (Paul: "it's too complex this workflow"): per line only the picture, one "What she does" box
    and "Make take · cost"; the app picks engine, voice, resolution, shape; the settings folded away. Needs Paul's OK.
 3. **Preview playback**: the song keeps playing steadily instead of pausing while a clip loads (only if Paul confirms

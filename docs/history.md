@@ -4,6 +4,14 @@ _Moved from PROGRESS.md on 30 Oct 2026 (tidy-up), word for word. PROGRESS.md kee
 
 ## Steps done
 
+### Shot list → "Save as script (.md)" ✅ (to verify on the PC)
+- Paul (24 Nov 2026), for Higgsfield's Short Drama ("Upload your script: PDF, DOCX, FDX, TXT or MD"): Story room → 4 Shot
+  list → **Save as script (.md)** writes the shot list as a readable script, never the app's JSON: the cast (each person's
+  description and every look they wear in this film, with its outfit; also people a shot names who are not in the
+  cast), the places, the story bible, then every shot by section with its time on the song, framing, place, what
+  happens, people (and looks) and lyric. Read-only. node/shot-script.ts; production route action "script";
+  shot-production.test.ts.
+
 ### Make with references: the character sheets go to the video platform ✅ (to verify on the PC, needs WAVESPEED_API_KEY)
 - Paul (24 Nov 2026): "I need to provide to the video platform my character sheets in order to create the video with
   constant characters. Currently I can't do that in Midjourney" (Midjourney's Omni Reference is one picture, images only).

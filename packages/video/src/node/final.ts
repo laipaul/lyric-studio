@@ -42,6 +42,7 @@ export function startFinal(ws: Workspace, projectId: string, file: string, n: un
       finalOf: draft.n,
       ...(draft.mvShot !== undefined ? { mvShot: draft.mvShot } : {}),
       ...(draft.mvShotTo !== undefined ? { mvShotTo: draft.mvShotTo } : {}),
+      ...(draft.mvStale ? { mvStale: true } : {}),
       ...(draft.label ? { label: `${draft.label} final` } : {}),
       ...(draft.filmLook ? { filmLook: draft.filmLook, look: draft.look } : {}),
       ...(draft.feel ? { feel: draft.feel } : {}),

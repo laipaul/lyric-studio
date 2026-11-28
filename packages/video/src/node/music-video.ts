@@ -63,10 +63,31 @@ export async function analyseMusicVideo(ws: Workspace, projectId: string, file: 
   const shots = matched ? shotsFromCuts(detectCuts(sceneScores(path.join(dir, name)), { absMin: MV_CUT_MIN }), info.durationMs) : [];
   const rec: MusicVideoRecord = { at: new Date().toISOString(), matched, score: found.score, offsetMs: found.offsetMs, driftMs: found.driftMs, durationMs: info.durationMs, width: info.width, height: info.height, usd: mvUsd(info.durationMs, info.height, info.width), shots };
   update(dir, name, (p) => {
+    // "Find its shots again" (28 Nov 2026): only the shots change. A take whose shots are no longer the same stretch of the video
+    // (the older, finer split) stays exactly as it is, on its lines, but no longer counts as a shot of the new split (mvStale).
+    markStaleTakes(p.takes, p.mv?.shots ?? [], shots);
     p.mv = rec;
     if (!p.source) p.source = "WaveSpeed music video";
   });
   return rec;
+}
+
+const SAME_EDGE_MS = 60;
+// A take of shots a..b (old split) is still current when the new split has the same shots a..b with the same outer edges
+// and the same number of shots between; otherwise it is "from an earlier split".
+export function markStaleTakes(takes: Take[], oldShots: readonly { fromMs: number; toMs: number }[], newShots: readonly { fromMs: number; toMs: number }[]): void {
+  for (const t of takes) {
+    if (t.mvShot === undefined) continue;
+    const a = t.mvShot;
+    const b = t.mvShotTo ?? a;
+    const o1 = oldShots[a];
+    const o2 = oldShots[b];
+    const n1 = newShots[a];
+    const n2 = newShots[b];
+    const same = !!(o1 && o2 && n1 && n2) && Math.abs(o1.fromMs - n1.fromMs) <= SAME_EDGE_MS && Math.abs(o2.toMs - n2.toMs) <= SAME_EDGE_MS;
+    if (same) delete t.mvStale;
+    else if (oldShots.length) t.mvStale = true;
+  }
 }
 
 // The video's shots with their lines and takes, for Creation.
@@ -87,7 +108,7 @@ export async function withMusicVideos(ws: Workspace, projectId: string, view: Pi
 function mvView(ws: Workspace, projectId: string, mv: MusicVideoRecord, takes: readonly Take[], lines: readonly { number: number; text: string; shownMs: number }[]): MvView {
   const shots = mv.shots.map((s, i) => {
     const l = linesOfShot(s, mv.offsetMs, lines);
-    const mine = takes.filter((x) => x.mvShot !== undefined && (x.mvShot === i || (x.mvShotTo !== undefined && x.mvShot <= i && i <= x.mvShotTo)));
+    const mine = takes.filter((x) => x.mvShot !== undefined && !x.mvStale && (x.mvShot === i || (x.mvShotTo !== undefined && x.mvShot <= i && i <= x.mvShotTo)));
     // The take in use (a 1080p final replaces its draft on the lines), else the newest finished one.
     const used = [...mine].reverse().find((x) => x.status === "done" && (x.kind === "lipsync" ? singingTakeInUse(ws, projectId, x) : !!(x.sent ?? x.clip)));
     const t = used ?? [...mine].reverse().find((x) => x.status === "done");
@@ -107,7 +128,9 @@ function mvView(ws: Workspace, projectId: string, mv: MusicVideoRecord, takes: r
       hd: final ? (final.status === "done" ? ("done" as const) : final.status === "running" ? ("running" as const) : ("interrupted" as const)) : null,
     };
   });
-  return { ...mv, shots, singing: shots.filter((s) => s.first !== null).length };
+  // Takes cut from an earlier split of the video ("Find its shots again"): still where they are, listed so none is lost.
+  const earlier = takes.filter((x) => x.mvShot !== undefined && x.mvStale && x.status === "done" && x.finalOf === undefined).map((x) => ({ n: x.n, label: x.label ?? `Shot ${(x.mvShot ?? 0) + 1}`, inUse: x.kind === "lipsync" ? singingTakeInUse(ws, projectId, x) : !!(x.sent ?? x.clip), first: x.line ?? null, last: x.through ?? x.line ?? null }));
+  return { ...mv, shots, singing: shots.filter((s) => s.first !== null).length, earlier };
 }
 
 // "Use on its lines" (a shot that carries sung lines): cut out as a singing take of the video and placed on its lines,
@@ -135,7 +158,7 @@ export async function useMusicVideoShot(ws: Workspace, projectId: string, file: 
 // now (the shot itself counts as it is about to be): null when it stands alone.
 // Is shot k of the video on its lines now (a singing take of it, or of a run it belongs to, is the singing anchor there)?
 function shotOnLines(ws: Workspace, projectId: string, takes: readonly Take[], k: number): boolean {
-  return takes.some((x) => x.kind === "lipsync" && x.status === "done" && x.mvShot !== undefined && x.mvShot <= k && k <= (x.mvShotTo ?? x.mvShot) && singingTakeInUse(ws, projectId, x));
+  return takes.some((x) => x.kind === "lipsync" && x.status === "done" && !x.mvStale && x.mvShot !== undefined && x.mvShot <= k && k <= (x.mvShotTo ?? x.mvShot) && singingTakeInUse(ws, projectId, x));
 }
 
 async function adjacentRun(ws: Workspace, projectId: string, name: string, shot: number): Promise<{ first: number; last: number } | null> {
@@ -185,7 +208,7 @@ export async function cutShotsTake(ws: Workspace, projectId: string, file: unkno
   const l = linesOfShot(s, mv.offsetMs, c.lines ?? []);
   const lastLine = l ? (c.lines ?? []).find((x) => x.number === l.last) : undefined;
   const piece = shotPiece(s, mv.offsetMs, mv.durationMs, lastLine ? lastLine.sungEndMs : null, (() => { const b = sharedEdges(mv.shots, i, mv.offsetMs, c.lines ?? []); const e = sharedEdges(mv.shots, j, mv.offsetMs, c.lines ?? []); return { before: b.before && shotOnLines(ws, projectId, rec.takes, i - 1), after: e.after && shotOnLines(ws, projectId, rec.takes, j + 1) }; })());
-  const ready = (x: Take) => x.mvShot === i && (x.mvShotTo ?? i) === j && x.status === "done" && !!x.file && existsSync(path.join(dir, x.file));
+  const ready = (x: Take) => !x.mvStale && x.mvShot === i && (x.mvShotTo ?? i) === j && x.status === "done" && !!x.file && existsSync(path.join(dir, x.file));
   let t = [...rec.takes].reverse().find((x) => ready(x) && x.finalOf !== undefined) ?? rec.takes.find(ready);
   if (!t) {
     mkdirSync(path.join(dir, TAKES_DIR), { recursive: true });
@@ -483,7 +506,7 @@ export function startMusicVideoFinals(ws: Workspace, projectId: string, file: un
   const { dir } = songFolder(ws, projectId);
   const name = path.basename(String(file ?? ""));
   const takes = readPictures(dir).pictures[name]?.takes ?? [];
-  const todo = takes.filter((t) => t.mvShot !== undefined && t.kind === "lipsync" && t.status === "done" && t.finalOf === undefined && singingTakeInUse(ws, projectId, t) && !takes.some((x) => x.finalOf === t.n && x.status !== "failed"));
+  const todo = takes.filter((t) => t.mvShot !== undefined && !t.mvStale && t.kind === "lipsync" && t.status === "done" && t.finalOf === undefined && singingTakeInUse(ws, projectId, t) && !takes.some((x) => x.finalOf === t.n && x.status !== "failed"));
   if (!todo.length) throw new Error("No shot on its lines is waiting for 1080p.");
   const usd = Math.round(todo.reduce((sum, t) => sum + usdOf(t.seconds ?? 5), 0) * 100) / 100;
   const c = Number(cap);

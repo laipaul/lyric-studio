@@ -14,7 +14,7 @@
 // { action: "final", file, n }: Make final: draft take n upscaled to 1080p (final.ts), a new take right after it.
 // Music video made elsewhere (music-video.ts, 27 Nov 2026): { action: "mv-make", pictures, section, aspect, resolution,
 //   words, cap }: Make a music video on WaveSpeed (cost first, under the cap; the video comes back into Creation, found in
-//   the song); { action: "mv-final", file, cap }: the shots on their lines made 1080p (Make final); { action: "mv-check", file }: "This is a music video of this
+//   the song); { action: "mv-final", file, cap }: the shots on their lines made 1080p (Make final); { action: "mv-check" | "mv-reanalyse", file }: "This is a music video of this
 //   song" (its place in the song, its shots); { action: "mv-use", file, shot }: that shot on its lines, in time (or to the
 //   Storyboard when it carries no sung line; a hand pick the app never replaces); { action: "mv-use-all", file }: every shot that carries sung lines.
 // { action: "mv-use-slot", file, shot, slot }: Production's "Use for this shot". Best shot for each line across music
@@ -175,7 +175,7 @@ export async function POST(request: Request, { params }: Params) {
       for (const t of r.takes) void runFinal(open, id, path.basename(file), t.n);
       return Response.json({ shots: r.takes.length, usd: r.usd });
     }
-    if (body.action === "mv-check") return Response.json({ mv: await withWorkspaceAsync((ws) => analyseMusicVideo(ws, id, file)) });
+    if (body.action === "mv-check" || body.action === "mv-reanalyse") return Response.json({ mv: await withWorkspaceAsync((ws) => analyseMusicVideo(ws, id, file)) });
     if (body.action === "mv-use" || body.action === "mv-use-all") {
       const used = await withWorkspaceAsync(async (ws) => (body.action === "mv-use" ? [await useMusicVideoShot(ws, id, file, (body as { shot?: unknown }).shot, { hand: true })] : (await useAllMusicVideoShots(ws, id, file)).used));
       void checkMusicVideoShots(open, id, path.basename(file)); // the face check of each singing shot (local, free), after the answer
