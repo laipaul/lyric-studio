@@ -19,7 +19,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { clockTenths, type TimelineEdits, EFFECT_NAMES, effectTitle, followScrollLeft, LyricVideo, playheadLabel, revealScrollLeft, songTimeMs, timeTicks, patchLook, previewCard, previewTitleCard, readableWarning, titleCardMult, titleCardSize, TITLE_SIZE_RANGE, type CardOverrides, type TextCardProps, type CardStyle, type StoryShot, type TextCard } from "@lyric/video";
 import type { StoryboardChoices, StoryboardClip, StoryboardView, TextboardData } from "@lyric/video/node";
 import { tryName } from "@lyric/video/video-names";
-import { layersOf, SOFT_CHANGE_MS, SOFT_EXIT_MS } from "@lyric/video";
 import { ClipMenu } from "./clip-menu";
 import { BrollHere } from "./shape-broll";
 import { SongRange, SongTrackBehind, SongWindow, type SongWindowDrag } from "./soundtrack-window";
@@ -704,8 +703,6 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
   useEffect(() => () => setShapeStatus(null), [setShapeStatus]);
   const width = view ? Math.ceil((view.durationMs / 1000) * zoom) : 0;
   const x = (ms: number) => (ms / 1000) * zoom;
-  // The two-layer timeline, Part B1 (28 Nov 2026): the lanes from the planned shots (V1 Singer, V2 B-roll, what plays).
-  const layers = view ? layersOf(view.shots) : null;
   const playhead = (frame * 1000) / 30;
   const titleLanes = titleCardLanes(view?.titleCards ?? [], x);
   // Roll (drag a cut) and slip (drag inside a shot), Undo / Redo: components/timeline-editing.tsx.
@@ -1306,8 +1303,7 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
               <div className="h-5 border-b" />
               {view.titleCards.length ? <div className="text-muted-foreground border-b px-1 pt-0.5" style={{ height: titleLanes.count > 1 ? titleLanes.count * TITLE_LANE_PX + 5 : 20 }}>Titles</div> : null}
               <LaneName name="Lyrics" className="h-8" />
-              <LaneName name="Shots" note="singer: green outline" className="h-24" />
-              <LaneName name="What plays" className="h-4" />
+              <LaneName name="Shots" note="singer: yellow outline" className="h-24" />
               <LaneName name="A1 Song" className="h-6" />
               {energy ? <div className="h-3 border-b" /> : null}
             </div>
@@ -1465,15 +1461,6 @@ export function ShapeBoard({ projectId, tools, look, replan, onPlanned }: { proj
                   {view.shots.map((s) => (x(s.endMs - s.startMs) >= 48 || selected === s.index ? clipMenu(s, "icon", { left: x(s.endMs) - 28, top: 6 }) : null))}
                   {tl.handles}
                   {tl.overlay}
-                </div>
-                {/* What plays: the layer the viewer sees, moment by moment, and the soft changes into and out of the singer. */}
-                <div className="relative h-4 border-b" data-what-plays title="What plays: green = the singer (V1), blue = B-roll (V2), black with a red edge = nothing yet. The white fades: the B-roll fading out over the singer's first 0.4 s, and in over its last 0.4 s.">
-                  {layers?.plays.map((p) => (
-                    <div key={`${p.shot}${p.fromMs}`} data-plays={p.layer} className={cn("absolute top-0 bottom-0", p.layer === "singer" ? "bg-emerald-500" : p.layer === "broll" ? "bg-sky-500/70" : "border-y-2 border-red-500/80 bg-black")} style={{ left: x(p.fromMs), width: Math.max(1, x(p.toMs - p.fromMs)) }} />
-                  ))}
-                  {layers?.fades.map((f) => (
-                    <div key={`${f.kind}${f.atMs}`} data-fade={f.kind} className={cn("absolute top-0 bottom-0", f.kind === "into-singer" ? "bg-gradient-to-r" : "bg-gradient-to-l", "from-white/90 to-transparent")} style={{ left: x(f.kind === "into-singer" ? f.atMs : f.atMs - SOFT_EXIT_MS), width: x(f.kind === "into-singer" ? SOFT_CHANGE_MS : SOFT_EXIT_MS) }} />
-                  ))}
                 </div>
                 {/* the song track: the whole song (8 Nov 2026), this video's part as the pink window on it */}
                 <div className="relative h-6 border-b" data-song-track data-soundtrack-track data-lane="a1">
@@ -1651,7 +1638,7 @@ function ShotBlock({
         e.stopPropagation();
         onSelect();
       }}
-      className={cn("absolute top-1 bottom-1 overflow-hidden rounded border text-left text-[10px] text-white", s.role === "singing" ? "border-2 border-emerald-400" : s.warnings.length ? "border-amber-400" : "border-white/20", (selected || dropTarget) && "ring-brand ring-2", lifted && "border-brand border-dashed opacity-40")}
+      className={cn("absolute top-1 bottom-1 overflow-hidden rounded border text-left text-[10px] text-white", s.role === "singing" ? "border-2 border-yellow-300" : s.warnings.length ? "border-amber-400" : "border-white/20", (selected || dropTarget) && "ring-brand ring-2", lifted && "border-brand border-dashed opacity-40")}
       data-singer-shot={s.role === "singing" || undefined}
       style={{ left, width: Math.max(6, width - 2), backgroundColor: "#000", backgroundImage: s.thumb ? `url(/api/files/${s.thumb})` : undefined, backgroundSize: "auto 100%", backgroundRepeat: "repeat-x", backgroundPosition: "left center" }}
       title={`${s.clip} · ${secs(s.endMs - s.startMs)}${slippable ? "\nDrag sideways to slip: another part of the clip in the same shot. Drag the line between two shots to move the cut." : ""}${editable ? "\nDrag it up to lift it, then onto another clip to swap the two." : ""}${s.warnings.length ? `\n${s.warnings.join("\n")}` : ""}`}
@@ -1659,7 +1646,7 @@ function ShotBlock({
       <div className="absolute top-0 right-0 left-0 flex flex-wrap gap-0.5 p-0.5 pr-6 drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">
         {/* What the viewer sees (27 Nov 2026): the singer, lips in time with the song, or B-roll. */}
         {s.role === "singing" ? (
-          <span className="flex items-center gap-0.5 rounded bg-emerald-600/85 px-0.5" data-badge="singing" title="The singer (V1): locked to the song, always 1.00x, in time; it never moves when you edit the B-roll (the nudge in Lyrics Sync moves it)">
+          <span className="flex items-center gap-0.5 rounded bg-yellow-400/90 px-0.5 text-black" data-badge="singing" title="The singer (V1): locked to the song, always 1.00x, in time; it never moves when you edit the B-roll (the nudge in Lyrics Sync moves it)">
             <Lock className="size-2.5" /> Singer · in time
           </span>
         ) : s.role === "broll" ? (

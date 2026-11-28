@@ -7,8 +7,9 @@ _The most recent steps (keep about 5). Everything earlier, in full: docs/history
 ### Singer back in the shots row; singing lines that follow each other; Singer panel fixes ✅ (to verify on the PC)
 Paul, 28 Nov 2026, after testing the MV Generator on Wedding Day lines 15-16.
 - **Shape** (Paul: "the singer part shows in same frame but gets an outline colour and the storyboard number stays
-  same"): the singing shots are back in the shots row, in their place and with their shot numbers, with a green outline
-  and "🔒 Singer · in time" (no drag or slip); the separate V1 lane is gone; What plays and the song stay. Each lyric line
+  same"; then "only a yellow line around the singing clips"): the singing shots are back in the shots row, in their place
+  and with their shot numbers, with a yellow outline and "🔒 Singer · in time" (no drag or slip); the separate V1 lane
+  and the What plays strip are gone. Each lyric line
   on the timeline starts with its number ("L15: You're beautiful"), never in the video.
 - **Lines 15-16 "squeezed and late"** (measured: the lips were never out of time): the lead-in rule had picked a later
   beat for line 15 (0.67 s shorter for nothing) and line 16's clip waited for a beat after its footage began while line
